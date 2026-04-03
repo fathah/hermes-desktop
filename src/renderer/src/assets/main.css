@@ -636,6 +636,7 @@ body {
   justify-content: center;
   gap: 10px;
   padding: 20px 10px;
+  margin-top: 25px;
 }
 
 .sidebar-brand-icon {
