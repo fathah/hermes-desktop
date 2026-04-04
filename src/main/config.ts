@@ -157,7 +157,9 @@ export function getHermesHome(profile?: string): string {
 
 // ── Credential Pool (auth.json) ──────────────────────────
 
-const AUTH_FILE = join(HERMES_HOME, 'auth.json')
+function authFilePath(): string {
+  return join(HERMES_HOME, 'auth.json')
+}
 
 interface CredentialEntry {
   key: string
@@ -166,15 +168,16 @@ interface CredentialEntry {
 
 function readAuthStore(): Record<string, unknown> {
   try {
-    if (!existsSync(AUTH_FILE)) return {}
-    return JSON.parse(readFileSync(AUTH_FILE, 'utf-8'))
+    const p = authFilePath()
+    if (!existsSync(p)) return {}
+    return JSON.parse(readFileSync(p, 'utf-8'))
   } catch {
     return {}
   }
 }
 
 function writeAuthStore(store: Record<string, unknown>): void {
-  writeFileSync(AUTH_FILE, JSON.stringify(store, null, 2), 'utf-8')
+  writeFileSync(authFilePath(), JSON.stringify(store, null, 2), 'utf-8')
 }
 
 export function getCredentialPool(): Record<string, CredentialEntry[]> {

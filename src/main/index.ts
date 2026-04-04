@@ -35,7 +35,7 @@ import {
 import { listSessions, getSessionMessages, searchSessions } from './sessions'
 import { listModels, addModel, removeModel, updateModel } from './models'
 import { listProfiles, createProfile, deleteProfile, setActiveProfile } from './profiles'
-import { readMemory } from './memory'
+import { readMemory, addMemoryEntry, updateMemoryEntry, removeMemoryEntry, writeUserProfile } from './memory'
 import { readSoul, writeSoul, resetSoul } from './soul'
 import { getToolsets, setToolsetEnabled } from './tools'
 import {
@@ -210,6 +210,18 @@ function setupIPC(): void {
 
   // Memory
   ipcMain.handle('read-memory', (_event, profile?: string) => readMemory(profile))
+  ipcMain.handle('add-memory-entry', (_event, content: string, profile?: string) =>
+    addMemoryEntry(content, profile)
+  )
+  ipcMain.handle('update-memory-entry', (_event, index: number, content: string, profile?: string) =>
+    updateMemoryEntry(index, content, profile)
+  )
+  ipcMain.handle('remove-memory-entry', (_event, index: number, profile?: string) =>
+    removeMemoryEntry(index, profile)
+  )
+  ipcMain.handle('write-user-profile', (_event, content: string, profile?: string) =>
+    writeUserProfile(content, profile)
+  )
 
   // Soul
   ipcMain.handle('read-soul', (_event, profile?: string) => readSoul(profile))

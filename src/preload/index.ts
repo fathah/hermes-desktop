@@ -154,6 +154,15 @@ const hermesAPI = {
     stats: { totalSessions: number; totalMessages: number }
   }> => ipcRenderer.invoke('read-memory', profile),
 
+  addMemoryEntry: (content: string, profile?: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('add-memory-entry', content, profile),
+  updateMemoryEntry: (index: number, content: string, profile?: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('update-memory-entry', index, content, profile),
+  removeMemoryEntry: (index: number, profile?: string): Promise<boolean> =>
+    ipcRenderer.invoke('remove-memory-entry', index, profile),
+  writeUserProfile: (content: string, profile?: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('write-user-profile', content, profile),
+
   // Soul
   readSoul: (profile?: string): Promise<string> => ipcRenderer.invoke('read-soul', profile),
   writeSoul: (content: string, profile?: string): Promise<boolean> =>

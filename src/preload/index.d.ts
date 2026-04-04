@@ -96,6 +96,11 @@ interface HermesAPI {
     stats: { totalSessions: number; totalMessages: number }
   }>
 
+  addMemoryEntry: (content: string, profile?: string) => Promise<{ success: boolean; error?: string }>
+  updateMemoryEntry: (index: number, content: string, profile?: string) => Promise<{ success: boolean; error?: string }>
+  removeMemoryEntry: (index: number, profile?: string) => Promise<boolean>
+  writeUserProfile: (content: string, profile?: string) => Promise<{ success: boolean; error?: string }>
+
   // Soul
   readSoul: (profile?: string) => Promise<string>
   writeSoul: (content: string, profile?: string) => Promise<boolean>

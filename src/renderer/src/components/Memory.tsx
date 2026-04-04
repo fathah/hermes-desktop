@@ -1,201 +1,301 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Refresh } from '../assets/icons'
-import { AgentMarkdown } from './Chat'
+import { Plus, Trash, Refresh } from '../assets/icons'
 
-interface FileInfo {
+interface MemoryEntry {
+  index: number
   content: string
-  exists: boolean
-  lastModified: number | null
 }
 
 interface MemoryData {
-  memory: FileInfo
-  user: FileInfo
+  memory: {
+    content: string
+    exists: boolean
+    lastModified: number | null
+    entries: MemoryEntry[]
+    charCount: number
+    charLimit: number
+  }
+  user: {
+    content: string
+    exists: boolean
+    lastModified: number | null
+    charCount: number
+    charLimit: number
+  }
   stats: { totalSessions: number; totalMessages: number }
 }
 
-interface MemoryProps {
-  profile?: string
-}
-
-function formatRelativeTime(ts: number): string {
-  const now = Math.floor(Date.now() / 1000)
-  const diff = now - ts
-
+function timeAgo(ts: number | null): string {
+  if (!ts) return ''
+  const diff = Math.floor(Date.now() / 1000) - ts
   if (diff < 60) return 'just now'
-  if (diff < 3600) return `${Math.floor(diff / 60)} min ago`
-  if (diff < 86400) return `${Math.floor(diff / 3600)} hours ago`
-  if (diff < 604800) return `${Math.floor(diff / 86400)} days ago`
-
-  const d = new Date(ts * 1000)
-  return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
+  return `${Math.floor(diff / 86400)}d ago`
 }
 
-function Memory({ profile }: MemoryProps): React.JSX.Element {
-  const [data, setData] = useState<MemoryData | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  const loadMemory = useCallback(async (): Promise<void> => {
-    setLoading(true)
-    const info = await window.hermesAPI.readMemory(profile)
-    setData(info)
-    setLoading(false)
-  }, [profile])
-
-  useEffect(() => {
-    loadMemory()
-  }, [loadMemory])
-
-  if (loading || !data) {
-    return (
-      <div className="memory-container">
-        <div className="memory-loading">
-          <div className="loading-spinner" />
-        </div>
-      </div>
-    )
-  }
-
-  const { stats } = data
-  const hasMemoryFiles = data.memory.exists || data.user.exists
-  const hasStats = stats.totalSessions > 0 || stats.totalMessages > 0
-
+function CapacityBar({ used, limit, label }: { used: number; limit: number; label: string }): React.JSX.Element {
+  const pct = Math.min(100, Math.round((used / limit) * 100))
+  const color = pct > 90 ? 'var(--error)' : pct > 70 ? 'var(--warning)' : 'var(--success)'
   return (
-    <div className="memory-container">
-      <div className="memory-header">
-        <div>
-          <h2 className="memory-title">Memory</h2>
-          <p className="memory-subtitle">
-            What the agent remembers about you and past conversations
-          </p>
-        </div>
-        <button className="btn btn-secondary btn-sm" onClick={loadMemory} title="Refresh">
-          <Refresh size={14} />
-          Refresh
-        </button>
+    <div className="memory-capacity">
+      <div className="memory-capacity-header">
+        <span className="memory-capacity-label">{label}</span>
+        <span className="memory-capacity-value">{used.toLocaleString()} / {limit.toLocaleString()} chars ({pct}%)</span>
       </div>
-
-      {/* Stats bar — always show if there are sessions */}
-      {hasStats && (
-        <div className="memory-stats">
-          <div className="memory-stat">
-            <span className="memory-stat-value">{stats.totalSessions}</span>
-            <span className="memory-stat-label">sessions</span>
-          </div>
-          <div className="memory-stat-divider" />
-          <div className="memory-stat">
-            <span className="memory-stat-value">{stats.totalMessages}</span>
-            <span className="memory-stat-label">messages</span>
-          </div>
-          <div className="memory-stat-divider" />
-          <div className="memory-stat">
-            <span className="memory-stat-value">
-              {data.memory.exists ? data.memory.content.split('\n').filter((l) => l.startsWith('- ')).length : 0}
-            </span>
-            <span className="memory-stat-label">memories</span>
-          </div>
-        </div>
-      )}
-
-      {/* Memory file sections */}
-      {hasMemoryFiles && (
-        <div className="memory-sections">
-          {data.user.exists && (
-            <div className="memory-section">
-              <div className="memory-section-header">
-                <span className="memory-section-title">User Profile</span>
-                {data.user.lastModified && (
-                  <span className="memory-meta">
-                    Updated {formatRelativeTime(data.user.lastModified)}
-                  </span>
-                )}
-              </div>
-              <div className="memory-section-hint">
-                What the agent has learned about you from conversations
-              </div>
-              <div className="memory-content">
-                <AgentMarkdown>{data.user.content}</AgentMarkdown>
-              </div>
-            </div>
-          )}
-
-          {data.memory.exists && (
-            <div className="memory-section">
-              <div className="memory-section-header">
-                <span className="memory-section-title">Agent Memory</span>
-                {data.memory.lastModified && (
-                  <span className="memory-meta">
-                    Updated {formatRelativeTime(data.memory.lastModified)}
-                  </span>
-                )}
-              </div>
-              <div className="memory-section-hint">
-                Facts and knowledge the agent has saved for future reference
-              </div>
-              <div className="memory-content">
-                <AgentMarkdown>{data.memory.content}</AgentMarkdown>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Empty state — only when no memory files AND no stats */}
-      {!hasMemoryFiles && !hasStats && (
-        <div className="memory-empty">
-          <div className="memory-empty-icon">
-            <BrainIcon />
-          </div>
-          <p className="memory-empty-text">No memories yet</p>
-          <p className="memory-empty-hint">
-            As you chat with Hermes, it automatically saves important facts, your preferences, and
-            useful context to remember across sessions. Start a conversation to build your
-            agent&apos;s memory.
-          </p>
-        </div>
-      )}
-
-      {/* Hint when stats exist but no memory files yet */}
-      {!hasMemoryFiles && hasStats && (
-        <div className="memory-empty">
-          <div className="memory-empty-icon">
-            <BrainIcon />
-          </div>
-          <p className="memory-empty-text">No saved memories yet</p>
-          <p className="memory-empty-hint">
-            You have {stats.totalSessions} sessions and {stats.totalMessages} messages, but
-            Hermes hasn&apos;t saved any memories to MEMORY.md or USER.md yet. This happens
-            automatically as the agent learns important facts about you and your preferences.
-            Make sure the <strong>memory</strong> toolset is enabled in Tools.
-          </p>
-        </div>
-      )}
+      <div className="memory-capacity-track">
+        <div className="memory-capacity-fill" style={{ width: `${pct}%`, background: color }} />
+      </div>
     </div>
   )
 }
 
-function BrainIcon(): React.JSX.Element {
+function Memory({ profile }: { profile?: string }): React.JSX.Element {
+  const [data, setData] = useState<MemoryData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [tab, setTab] = useState<'entries' | 'profile'>('entries')
+  const [error, setError] = useState('')
+
+  // Entry management
+  const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  const [editContent, setEditContent] = useState('')
+  const [showAdd, setShowAdd] = useState(false)
+  const [newEntry, setNewEntry] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState<number | null>(null)
+
+  // User profile editing
+  const [userContent, setUserContent] = useState('')
+  const [userEditing, setUserEditing] = useState(false)
+  const [userSaved, setUserSaved] = useState(false)
+
+  const loadData = useCallback(async () => {
+    const d = await window.hermesAPI.readMemory(profile)
+    setData(d as MemoryData)
+    setUserContent(d.user.content)
+    setLoading(false)
+  }, [profile])
+
+  useEffect(() => {
+    setLoading(true)
+    loadData()
+  }, [loadData])
+
+  async function handleAddEntry(): Promise<void> {
+    if (!newEntry.trim()) return
+    setError('')
+    const result = await window.hermesAPI.addMemoryEntry(newEntry.trim(), profile)
+    if (result.success) {
+      setNewEntry('')
+      setShowAdd(false)
+      await loadData()
+    } else {
+      setError(result.error || 'Failed to add entry')
+    }
+  }
+
+  async function handleSaveEdit(): Promise<void> {
+    if (editingIndex === null) return
+    setError('')
+    const result = await window.hermesAPI.updateMemoryEntry(editingIndex, editContent.trim(), profile)
+    if (result.success) {
+      setEditingIndex(null)
+      setEditContent('')
+      await loadData()
+    } else {
+      setError(result.error || 'Failed to update entry')
+    }
+  }
+
+  async function handleDeleteEntry(index: number): Promise<void> {
+    await window.hermesAPI.removeMemoryEntry(index, profile)
+    setConfirmDelete(null)
+    await loadData()
+  }
+
+  async function handleSaveUserProfile(): Promise<void> {
+    setError('')
+    const result = await window.hermesAPI.writeUserProfile(userContent, profile)
+    if (result.success) {
+      setUserEditing(false)
+      setUserSaved(true)
+      setTimeout(() => setUserSaved(false), 2000)
+      await loadData()
+    } else {
+      setError(result.error || 'Failed to save')
+    }
+  }
+
+  if (loading || !data) {
+    return (
+      <div className="settings-container">
+        <h1 className="settings-header">Memory</h1>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}><div className="loading-spinner" /></div>
+      </div>
+    )
+  }
+
   return (
-    <svg
-      width={40}
-      height={40}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z" />
-      <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z" />
-      <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4" />
-      <path d="M17.599 6.5a3 3 0 0 0 .399-1.375" />
-      <path d="M6.003 5.125A3 3 0 0 0 6.401 6.5" />
-      <path d="M3.477 10.896a4 4 0 0 1 .585-.396" />
-      <path d="M19.938 10.5a4 4 0 0 1 .585.396" />
-      <path d="M6 18a4 4 0 0 1-1.967-.516" />
-      <path d="M19.967 17.484A4 4 0 0 1 18 18" />
-    </svg>
+    <div className="settings-container">
+      <div className="memory-header">
+        <div>
+          <h1 className="settings-header" style={{ marginBottom: 4 }}>Memory</h1>
+          <p className="memory-subtitle">
+            What Hermes remembers about you and your environment across sessions.
+          </p>
+        </div>
+        <button className="btn btn-secondary btn-sm" onClick={loadData}>
+          <Refresh size={13} />
+        </button>
+      </div>
+
+      {/* Stats */}
+      <div className="memory-stats">
+        <div className="memory-stat">
+          <span className="memory-stat-value">{data.stats.totalSessions}</span>
+          <span className="memory-stat-label">Sessions</span>
+        </div>
+        <div className="memory-stat">
+          <span className="memory-stat-value">{data.stats.totalMessages}</span>
+          <span className="memory-stat-label">Messages</span>
+        </div>
+        <div className="memory-stat">
+          <span className="memory-stat-value">{data.memory.entries.length}</span>
+          <span className="memory-stat-label">Memories</span>
+        </div>
+      </div>
+
+      {/* Capacity */}
+      <div className="memory-capacities">
+        <CapacityBar used={data.memory.charCount} limit={data.memory.charLimit} label="Agent Memory" />
+        <CapacityBar used={data.user.charCount} limit={data.user.charLimit} label="User Profile" />
+      </div>
+
+      {/* Tabs */}
+      <div className="memory-tabs">
+        <button className={`memory-tab ${tab === 'entries' ? 'active' : ''}`} onClick={() => setTab('entries')}>
+          Agent Memory
+          {data.memory.lastModified && <span className="memory-tab-time">{timeAgo(data.memory.lastModified)}</span>}
+        </button>
+        <button className={`memory-tab ${tab === 'profile' ? 'active' : ''}`} onClick={() => setTab('profile')}>
+          User Profile
+          {data.user.lastModified && <span className="memory-tab-time">{timeAgo(data.user.lastModified)}</span>}
+        </button>
+      </div>
+
+      {error && <div className="memory-error">{error}</div>}
+
+      {/* Agent Memory Entries */}
+      {tab === 'entries' && (
+        <div className="memory-entries">
+          <div className="memory-entries-header">
+            <span className="memory-entries-count">{data.memory.entries.length} entries</span>
+            <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(!showAdd)}>
+              <Plus size={13} />
+              Add Memory
+            </button>
+          </div>
+
+          {showAdd && (
+            <div className="memory-entry-form">
+              <textarea
+                className="memory-entry-textarea"
+                value={newEntry}
+                onChange={(e) => setNewEntry(e.target.value)}
+                placeholder="e.g. User prefers TypeScript over JavaScript. Always use strict mode."
+                rows={3}
+                autoFocus
+              />
+              <div className="memory-entry-form-actions">
+                <span className="memory-entry-chars">{newEntry.length} chars</span>
+                <button className="btn btn-secondary btn-sm" onClick={() => { setShowAdd(false); setNewEntry('') }}>Cancel</button>
+                <button className="btn btn-primary btn-sm" onClick={handleAddEntry} disabled={!newEntry.trim()}>Save</button>
+              </div>
+            </div>
+          )}
+
+          {data.memory.entries.length === 0 ? (
+            <div className="memory-empty">
+              <p>No memories yet. Hermes will save important facts as you chat.</p>
+              <p className="memory-empty-hint">You can also add memories manually using the button above.</p>
+            </div>
+          ) : (
+            data.memory.entries.map((entry) => (
+              <div key={entry.index} className="memory-entry-card">
+                {editingIndex === entry.index ? (
+                  <div className="memory-entry-form">
+                    <textarea
+                      className="memory-entry-textarea"
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                      rows={3}
+                      autoFocus
+                    />
+                    <div className="memory-entry-form-actions">
+                      <span className="memory-entry-chars">{editContent.length} chars</span>
+                      <button className="btn btn-secondary btn-sm" onClick={() => setEditingIndex(null)}>Cancel</button>
+                      <button className="btn btn-primary btn-sm" onClick={handleSaveEdit}>Save</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="memory-entry-content">{entry.content}</div>
+                    <div className="memory-entry-actions">
+                      <button
+                        className="btn-ghost memory-entry-btn"
+                        onClick={() => { setEditingIndex(entry.index); setEditContent(entry.content) }}
+                      >
+                        Edit
+                      </button>
+                      {confirmDelete === entry.index ? (
+                        <span className="memory-entry-confirm">
+                          Delete?
+                          <button className="btn-ghost" style={{ color: 'var(--error)' }} onClick={() => handleDeleteEntry(entry.index)}>Yes</button>
+                          <button className="btn-ghost" onClick={() => setConfirmDelete(null)}>No</button>
+                        </span>
+                      ) : (
+                        <button
+                          className="btn-ghost memory-entry-btn"
+                          onClick={() => setConfirmDelete(entry.index)}
+                        >
+                          <Trash size={13} />
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* User Profile */}
+      {tab === 'profile' && (
+        <div className="memory-profile">
+          <div className="memory-profile-header">
+            <span className="memory-profile-hint">
+              Tell Hermes about yourself — name, role, preferences, communication style.
+            </span>
+            {userSaved && <span style={{ color: 'var(--success)', fontSize: 12, fontWeight: 600 }}>Saved</span>}
+          </div>
+          <textarea
+            className="memory-profile-textarea"
+            value={userContent}
+            onChange={(e) => { setUserContent(e.target.value); setUserEditing(true) }}
+            placeholder="e.g. Name: Alex. Senior developer. Prefers concise answers. Uses macOS with zsh. Timezone: PST."
+            rows={8}
+          />
+          <div className="memory-profile-footer">
+            <span className="memory-entry-chars">{userContent.length} / {data.user.charLimit} chars</span>
+            {userEditing && (
+              <button className="btn btn-primary btn-sm" onClick={handleSaveUserProfile}>
+                Save Profile
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 

@@ -345,6 +345,7 @@ export async function sendMessage(
   profile?: string,
   resumeSessionId?: string
 ): Promise<ChatHandle> {
+  ensureInitialized()
   // Check API server availability (cache the result, re-check periodically)
   if (apiServerAvailable === null || apiServerAvailable === false) {
     apiServerAvailable = await isApiServerReady()
@@ -358,13 +359,16 @@ export async function sendMessage(
   return sendMessageViaCli(message, cb, profile, resumeSessionId)
 }
 
-// Re-check API server availability periodically
-setInterval(async () => {
-  apiServerAvailable = await isApiServerReady()
-}, 15000)
-
-// Ensure API server is configured on module load
-ensureApiServerConfig()
+// Lazy init — called on first sendMessage or gateway start
+let _initialized = false
+function ensureInitialized(): void {
+  if (_initialized) return
+  _initialized = true
+  ensureApiServerConfig()
+  setInterval(async () => {
+    apiServerAvailable = await isApiServerReady()
+  }, 15000)
+}
 
 // ────────────────────────────────────────────────────
 //  Gateway management
@@ -373,6 +377,7 @@ ensureApiServerConfig()
 let gatewayProcess: ChildProcess | null = null
 
 export function startGateway(): boolean {
+  ensureInitialized()
   if (gatewayProcess && !gatewayProcess.killed) return false
 
   gatewayProcess = spawn(HERMES_PYTHON, [HERMES_SCRIPT, 'gateway'], {
