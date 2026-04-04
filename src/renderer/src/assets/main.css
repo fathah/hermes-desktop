@@ -843,8 +843,14 @@ body {
 }
 
 @keyframes chatEmptyFadeIn {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .chat-empty-icon {
@@ -896,7 +902,10 @@ body {
   color: var(--text-secondary);
   font-size: 13px;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .chat-suggestion svg {
@@ -3672,7 +3681,7 @@ body {
 .splash-logo {
   position: relative;
   z-index: 1;
-  width: 450px;
+  width: 600px;
   max-width: 60%;
   opacity: 0;
   animation: splashFadeIn 2.5s ease-in-out forwards;
