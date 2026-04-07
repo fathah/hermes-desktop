@@ -1,5 +1,5 @@
 import { ChildProcess, spawn } from "child_process";
-import { existsSync, readFileSync, appendFileSync } from "fs";
+import { existsSync, readFileSync, appendFileSync, writeFileSync, openSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import http from "http";
@@ -393,6 +393,19 @@ export function startGateway(): boolean {
   ensureInitialized();
   if (isGatewayRunning()) return false;
 
+  const logFile = join(HERMES_HOME, "gateway.log");
+
+  // Write log header before spawning
+  try {
+    writeFileSync(logFile, `[start] gateway started at ${new Date().toISOString()}\n`);
+  } catch {
+    // ignore
+  }
+
+  // Open file descriptors for stdout/stderr so output is captured even if app exits
+  const outFd = openSync(logFile, "a");
+  const errFd = openSync(logFile, "a");
+
   gatewayProcess = spawn(HERMES_PYTHON, [HERMES_SCRIPT, "gateway"], {
     cwd: HERMES_REPO,
     env: {
@@ -402,13 +415,32 @@ export function startGateway(): boolean {
       HERMES_HOME: HERMES_HOME,
       API_SERVER_ENABLED: "true", // Ensure API server starts with gateway
     },
-    stdio: "ignore",
+    stdio: ["ignore", outFd, errFd],
     detached: true,
   });
 
   gatewayProcess.unref();
 
-  gatewayProcess.on("close", () => {
+  gatewayProcess.on("error", (err) => {
+    try {
+      appendFileSync(logFile, `[error] spawn error: ${err.message}\n`);
+    } catch {
+      // ignore
+    }
+    gatewayProcess = null;
+    gatewayStartedByApp = false;
+    apiServerAvailable = false;
+  });
+
+  gatewayProcess.on("close", (code, signal) => {
+    try {
+      appendFileSync(
+        logFile,
+        `[close] gateway exited with code=${code} signal=${signal}\n`,
+      );
+    } catch {
+      // ignore
+    }
     gatewayProcess = null;
     gatewayStartedByApp = false;
     apiServerAvailable = false;

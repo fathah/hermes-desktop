@@ -32,8 +32,13 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
       await window.hermesAPI.stopGateway();
       setGatewayRunning(false);
     } else {
-      await window.hermesAPI.startGateway();
-      setGatewayRunning(true);
+      const started = await window.hermesAPI.startGateway();
+      setGatewayRunning(started);
+      // Re-check status after a short delay to confirm it stayed up
+      setTimeout(async () => {
+        const status = await window.hermesAPI.gatewayStatus();
+        setGatewayRunning(status);
+      }, 2000);
     }
   }
 
