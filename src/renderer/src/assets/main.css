@@ -409,20 +409,46 @@ body {
 }
 
 .welcome-recheck-btn {
+  padding: 10px 24px;
+}
+
+.welcome-remote-card {
   width: 100%;
-  padding: 10px;
+  max-width: 420px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.welcome-remote-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.welcome-remote-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 .welcome-remote-input {
-  width: 100%;
-  padding: 10px 14px;
-  border-radius: var(--radius-md);
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
-  background: var(--bg-input, var(--bg-secondary));
+  background: var(--bg-primary);
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: 13px;
   font-family: var(--font-mono);
   outline: none;
+  transition: border-color var(--transition);
 }
 
 .welcome-remote-input:focus {
@@ -430,8 +456,14 @@ body {
 }
 
 .welcome-remote-error {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--error, #ef4444);
+  margin: 0;
+}
+
+.welcome-remote-hint {
+  font-size: 12px;
+  color: var(--text-muted);
   margin: 0;
 }
 

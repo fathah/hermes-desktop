@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Plus, Trash, ChatBubble } from "../assets/icons";
-import icon from "../assets/icon.png";
+import HermesLogo from "./common/HermesLogo";
 
 interface ProfileInfo {
   name: string;
@@ -25,7 +25,7 @@ function AgentAvatar({ name }: { name: string }): React.JSX.Element {
   if (name === "default") {
     return (
       <div className="agents-card-avatar agents-card-avatar-icon">
-        <img src={icon} width={22} height={22} alt="" />
+        <HermesLogo size={22} />
       </div>
     );
   }

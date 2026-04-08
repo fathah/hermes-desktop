@@ -1,6 +1,12 @@
 import { useState } from "react";
-import icon from "../assets/icon.png";
-import { ArrowRight, Refresh, Copy, Globe, Check, Spinner } from "../assets/icons";
+import HermesLogo from "./common/HermesLogo";
+import {
+  ArrowRight,
+  Refresh,
+  Copy,
+  Globe,
+  Spinner,
+} from "../assets/icons";
 import { INSTALL_CMD } from "../constants";
 
 interface WelcomeProps {
@@ -45,15 +51,17 @@ function Welcome({
   if (showRemote) {
     return (
       <div className="screen welcome-screen">
-        <img src={icon} height={40} width={40} alt="" />
-        <h1 className="welcome-title">Connect to Remote Hermes</h1>
-        <p className="welcome-subtitle">
-          Enter the URL of a Hermes API server running on your network or cloud.
+        <HermesLogo size={36} />
+        <h1 className="welcome-title" style={{ fontSize: 22 }}>
+          Connect to Remote Hermes
+        </h1>
+        <p className="welcome-subtitle" style={{ marginBottom: 24 }}>
+          Enter the URL of a running Hermes API server.
         </p>
 
-        <div className="welcome-actions">
-          <div className="welcome-terminal-option">
-            <p className="welcome-terminal-label">Hermes API URL</p>
+        <div className="welcome-remote-card">
+          <label className="welcome-remote-label">Server URL</label>
+          <div className="welcome-remote-row">
             <input
               type="url"
               className="welcome-remote-input"
@@ -65,44 +73,42 @@ function Welcome({
               }}
               autoFocus
             />
+            <button
+              className="btn btn-primary"
+              onClick={handleConnectRemote}
+              disabled={testing}
+              style={{ whiteSpace: "nowrap" }}
+            >
+              {testing ? (
+                <>
+                  Testing...
+                  <Spinner size={14} className="animate-spin" />
+                </>
+              ) : (
+                "Connect"
+              )}
+            </button>
           </div>
-
-          {remoteError && (
-            <p className="welcome-remote-error">{remoteError}</p>
-          )}
-
-          <button
-            className="btn btn-primary welcome-button"
-            onClick={handleConnectRemote}
-            disabled={testing}
-          >
-            {testing ? (
-              <>
-                Testing connection...
-                <Spinner size={16} className="animate-spin" />
-              </>
-            ) : (
-              <>
-                Connect
-                <Check size={16} />
-              </>
-            )}
-          </button>
-
-          <button
-            className="btn btn-secondary welcome-recheck-btn"
-            onClick={() => setShowRemote(false)}
-          >
-            Back
-          </button>
+          {remoteError && <p className="welcome-remote-error">{remoteError}</p>}
+          <p className="welcome-remote-hint">
+            e.g. http://your-server:8642 or via SSH tunnel at localhost:8642
+          </p>
         </div>
+
+        <button
+          className="btn-ghost"
+          onClick={() => setShowRemote(false)}
+          style={{ marginTop: 8, fontSize: 13, color: "var(--text-muted)" }}
+        >
+          Back
+        </button>
       </div>
     );
   }
 
   return (
     <div className="screen welcome-screen">
-      <img src={icon} height={40} width={40} alt="" />
+      <HermesLogo size={40} />
 
       {error ? (
         <>

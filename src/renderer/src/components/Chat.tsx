@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import icon from "../assets/icon.png";
+import HermesLogo from "./common/HermesLogo";
 
 // Lazy-load the heavy syntax highlighter — only imported when a code block renders
 let _highlighterMod: typeof import("react-syntax-highlighter") | null = null;
@@ -38,7 +38,7 @@ import {
 function HermesAvatar({ size = 30 }: { size?: number }): React.JSX.Element {
   return (
     <div className="chat-avatar chat-avatar-agent">
-      <img src={icon} width={size} height={size} alt="" />
+      <HermesLogo size={size} />
     </div>
   );
 }
@@ -554,7 +554,7 @@ function Chat({
         {messages.length === 0 ? (
           <div className="chat-empty">
             <div className="chat-empty-icon">
-              <img src={icon} width={64} height={64} alt="" />
+              <HermesLogo size={64} />
             </div>
             <div className="chat-empty-text">How can I help you today?</div>
             <div className="chat-empty-hint">
