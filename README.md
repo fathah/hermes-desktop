@@ -69,6 +69,23 @@ On first launch, the app:
 
 Chat requests are sent through the local Hermes CLI, and the desktop app streams the response back into the UI.
 
+## Connecting to Hermes on a VPS ##
+The connection model: hermes-desktop (Electron app on your home Mac/Linux) talks to Hermes's built-in API server on port 8642 (http://127.0.0.1:8642). This is hardcoded to localhost in the app.
+
+You need something to bridge your home machine to the VPS. There are a few options:
+
+**Option 1: Tailscale (easiest, recommended)**
+- Install on both VPS + Mac + Linux
+- Creates a mesh VPN — all machines get stable IPs (e.g., 100.x.y.z)
+- Zero port forwarding, works behind NAT
+- Then just change 127.0.0.1 to your VPS's Tailscale IP in the desktop app config
+
+**Option 2: SSH tunnel (no install needed)**
+Replace your-vps-ip below with your VPS public IP. If you can SSH into your server, this is the same IP address.
+```
+ssh -L 8642:127.0.0.1:8642 your-vps-ip
+```
+
 ## Development
 
 ### Prerequisites
