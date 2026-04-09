@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Trash, Refresh, X, Play, Pause, Alert } from "../assets/icons";
+import { Plus, Trash, Refresh, X, Play, Pause, Zap, Alert } from "../assets/icons";
 
 const DELIVER_TARGETS = [
   { value: "local", label: "Local" },
@@ -547,7 +547,7 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
                   {job.state !== "completed" && (
                     <button
                       className="btn-ghost schedules-action-btn"
-                      title={job.state === "paused" ? "Resume" : "Pause"}
+                      data-tooltip={job.state === "paused" ? "Resume" : "Pause"}
                       onClick={() => handleToggle(job)}
                       disabled={actionInProgress === job.id}
                     >
@@ -561,16 +561,16 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
                   {job.state === "active" && (
                     <button
                       className="btn-ghost schedules-action-btn"
-                      title="Run now"
+                      data-tooltip="Run now"
                       onClick={() => handleTrigger(job.id)}
                       disabled={actionInProgress === job.id}
                     >
-                      <Play size={14} />
+                      <Zap size={14} />
                     </button>
                   )}
                   <button
                     className="btn-ghost schedules-action-btn schedules-action-danger"
-                    title="Remove"
+                    data-tooltip="Remove"
                     onClick={() => setConfirmDelete(job.id)}
                     disabled={actionInProgress === job.id}
                   >
