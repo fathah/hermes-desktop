@@ -1,5 +1,6 @@
 import { Component } from "react";
 import type { ErrorInfo, ReactNode } from "react";
+import { useI18n, type TFunction } from "../i18n";
 
 interface Props {
   children: ReactNode;
@@ -11,8 +12,12 @@ interface State {
   error: Error | null;
 }
 
-class ErrorBoundary extends Component<Props, State> {
-  constructor(props: Props) {
+interface BoundaryProps extends Props {
+  t: TFunction;
+}
+
+class ErrorBoundaryImpl extends Component<BoundaryProps, State> {
+  constructor(props: BoundaryProps) {
     super(props);
     this.state = { hasError: false, error: null };
   }
@@ -32,15 +37,18 @@ class ErrorBoundary extends Component<Props, State> {
       return (
         <div className="error-boundary">
           <div className="error-boundary-card">
-            <h2 className="error-boundary-title">Something went wrong</h2>
+            <h2 className="error-boundary-title">
+              {this.props.t("errorBoundary.title")}
+            </h2>
             <p className="error-boundary-message">
-              {this.state.error?.message || "An unexpected error occurred."}
+              {this.state.error?.message ||
+                this.props.t("errorBoundary.message")}
             </p>
             <button
               className="btn btn-primary"
               onClick={() => this.setState({ hasError: false, error: null })}
             >
-              Try Again
+              {this.props.t("errorBoundary.tryAgain")}
             </button>
           </div>
         </div>
@@ -49,6 +57,11 @@ class ErrorBoundary extends Component<Props, State> {
 
     return this.props.children;
   }
+}
+
+function ErrorBoundary(props: Props): React.JSX.Element {
+  const { t } = useI18n();
+  return <ErrorBoundaryImpl {...props} t={t} />;
 }
 
 export default ErrorBoundary;

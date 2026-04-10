@@ -551,15 +551,12 @@ function setupIPC(): void {
   ipcMain.handle("pause-cron-job", (_event, jobId: string, profile?: string) =>
     pauseCronJob(jobId, profile),
   );
-  ipcMain.handle(
-    "resume-cron-job",
-    (_event, jobId: string, profile?: string) =>
-      resumeCronJob(jobId, profile),
+  ipcMain.handle("resume-cron-job", (_event, jobId: string, profile?: string) =>
+    resumeCronJob(jobId, profile),
   );
   ipcMain.handle(
     "trigger-cron-job",
-    (_event, jobId: string, profile?: string) =>
-      triggerCronJob(jobId, profile),
+    (_event, jobId: string, profile?: string) => triggerCronJob(jobId, profile),
   );
 
   // Shell
@@ -570,6 +567,10 @@ function setupIPC(): void {
 
 function buildMenu(): void {
   const isMac = process.platform === "darwin";
+  const isChinese = app
+    .getPreferredSystemLanguages()
+    .some((lang) => lang.toLowerCase().startsWith("zh"));
+  const tr = (en: string, zh: string): string => (isChinese ? zh : en);
 
   const template: Electron.MenuItemConstructorOptions[] = [
     ...(isMac
@@ -591,10 +592,10 @@ function buildMenu(): void {
         ]
       : []),
     {
-      label: "Chat",
+      label: tr("Chat", "聊天"),
       submenu: [
         {
-          label: "New Chat",
+          label: tr("New Chat", "新聊天"),
           accelerator: "CmdOrCtrl+N",
           click: (): void => {
             mainWindow?.webContents.send("menu-new-chat");
@@ -602,7 +603,7 @@ function buildMenu(): void {
         },
         { type: "separator" },
         {
-          label: "Search Sessions",
+          label: tr("Search Sessions", "搜索会话"),
           accelerator: "CmdOrCtrl+K",
           click: (): void => {
             mainWindow?.webContents.send("menu-search-sessions");
@@ -611,7 +612,7 @@ function buildMenu(): void {
       ],
     },
     {
-      label: "Edit",
+      label: tr("Edit", "编辑"),
       submenu: [
         { role: "undo" },
         { role: "redo" },
@@ -623,7 +624,7 @@ function buildMenu(): void {
       ],
     },
     {
-      label: "View",
+      label: tr("View", "视图"),
       submenu: [
         { role: "resetZoom" },
         { role: "zoomIn" },
@@ -640,7 +641,7 @@ function buildMenu(): void {
       ],
     },
     {
-      label: "Window",
+      label: tr("Window", "窗口"),
       submenu: [
         { role: "minimize" },
         { role: "zoom" },
@@ -650,16 +651,16 @@ function buildMenu(): void {
       ],
     },
     {
-      label: "Help",
+      label: tr("Help", "帮助"),
       submenu: [
         {
-          label: "Hermes Agent on GitHub",
+          label: tr("Hermes Agent on GitHub", "Hermes Agent GitHub"),
           click: (): void => {
             shell.openExternal("https://github.com/fathah/Hermes-Agent");
           },
         },
         {
-          label: "Report an Issue",
+          label: tr("Report an Issue", "报告问题"),
           click: (): void => {
             shell.openExternal("https://github.com/fathah/Hermes-Agent/issues");
           },

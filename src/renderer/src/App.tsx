@@ -6,10 +6,12 @@ import Install from "./screens/Install/Install";
 import Setup from "./screens/Setup/Setup";
 import Layout from "./screens/Layout/Layout";
 import SplashScreen from "./screens/SplashScreen/SplashScreen";
+import { I18nProvider, useI18n } from "./i18n";
 
 type Screen = "splash" | "welcome" | "installing" | "setup" | "main";
 
-function App(): React.JSX.Element {
+function AppContent(): React.JSX.Element {
+  const { t } = useI18n();
   const [screen, setScreen] = useState<Screen>("splash");
   const [installError, setInstallError] = useState<string | null>(null);
   const [nextScreen, setNextScreen] = useState<Screen | null>(null);
@@ -23,9 +25,7 @@ function App(): React.JSX.Element {
         if (!status.installed) {
           setNextScreen("welcome");
         } else if (!status.verified) {
-          setInstallError(
-            "Hermes is installed but appears to be broken. Try reinstalling to fix it.",
-          );
+          setInstallError(t("app.installBroken"));
           setNextScreen("welcome");
         } else if (!status.hasApiKey) {
           setNextScreen("setup");
@@ -112,6 +112,14 @@ function App(): React.JSX.Element {
         </div>
       </ErrorBoundary>
     </ThemeProvider>
+  );
+}
+
+function App(): React.JSX.Element {
+  return (
+    <I18nProvider>
+      <AppContent />
+    </I18nProvider>
   );
 }
 

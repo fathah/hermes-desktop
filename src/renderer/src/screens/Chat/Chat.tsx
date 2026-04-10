@@ -15,6 +15,7 @@ import {
   Bell,
   Slash,
 } from "lucide-react";
+import { getProviderLabel, useI18n, type TFunction } from "../../i18n";
 
 // ── Slash Commands ──────────────────────────────────────
 
@@ -26,35 +27,75 @@ interface SlashCommand {
   local?: boolean;
 }
 
-const SLASH_COMMANDS: SlashCommand[] = [
-  // Chat control
-  { name: "/new", description: "Start a new chat", category: "chat", local: true },
-  { name: "/clear", description: "Clear conversation history", category: "chat", local: true },
-  // Agent commands (sent to backend)
-  { name: "/btw", description: "Ask a side question without affecting context", category: "agent" },
-  { name: "/approve", description: "Approve a pending action", category: "agent" },
-  { name: "/deny", description: "Deny a pending action", category: "agent" },
-  { name: "/status", description: "Show current agent status", category: "agent" },
-  { name: "/reset", description: "Reset conversation context", category: "agent" },
-  { name: "/compact", description: "Compact and summarize the conversation", category: "agent" },
-  { name: "/undo", description: "Undo the last action", category: "agent" },
-  { name: "/retry", description: "Retry the last failed action", category: "agent" },
-  // Tools & capabilities
-  { name: "/web", description: "Search the web", category: "tools" },
-  { name: "/image", description: "Generate an image", category: "tools" },
-  { name: "/browse", description: "Browse a URL", category: "tools" },
-  { name: "/code", description: "Write or execute code", category: "tools" },
-  { name: "/file", description: "Read or write files", category: "tools" },
-  { name: "/shell", description: "Run a shell command", category: "tools" },
-  // Info
-  { name: "/help", description: "Show available commands and help", category: "info" },
-  { name: "/tools", description: "List available tools", category: "info" },
-  { name: "/skills", description: "List installed skills", category: "info" },
-  { name: "/model", description: "Show or switch the current model", category: "info" },
-  { name: "/memory", description: "Show agent memory", category: "info" },
-  { name: "/persona", description: "Show current persona", category: "info" },
-  { name: "/version", description: "Show Hermes version", category: "info" },
-];
+function buildSlashCommands(t: TFunction): SlashCommand[] {
+  return [
+    {
+      name: "/new",
+      description: t("chat.command.new"),
+      category: "chat",
+      local: true,
+    },
+    {
+      name: "/clear",
+      description: t("chat.command.clear"),
+      category: "chat",
+      local: true,
+    },
+    { name: "/btw", description: t("chat.command.btw"), category: "agent" },
+    {
+      name: "/approve",
+      description: t("chat.command.approve"),
+      category: "agent",
+    },
+    { name: "/deny", description: t("chat.command.deny"), category: "agent" },
+    {
+      name: "/status",
+      description: t("chat.command.status"),
+      category: "agent",
+    },
+    { name: "/reset", description: t("chat.command.reset"), category: "agent" },
+    {
+      name: "/compact",
+      description: t("chat.command.compact"),
+      category: "agent",
+    },
+    { name: "/undo", description: t("chat.command.undo"), category: "agent" },
+    { name: "/retry", description: t("chat.command.retry"), category: "agent" },
+    { name: "/web", description: t("chat.command.web"), category: "tools" },
+    { name: "/image", description: t("chat.command.image"), category: "tools" },
+    {
+      name: "/browse",
+      description: t("chat.command.browse"),
+      category: "tools",
+    },
+    { name: "/code", description: t("chat.command.code"), category: "tools" },
+    { name: "/file", description: t("chat.command.file"), category: "tools" },
+    { name: "/shell", description: t("chat.command.shell"), category: "tools" },
+    { name: "/help", description: t("chat.command.help"), category: "info" },
+    { name: "/tools", description: t("chat.command.tools"), category: "info" },
+    {
+      name: "/skills",
+      description: t("chat.command.skills"),
+      category: "info",
+    },
+    { name: "/model", description: t("chat.command.model"), category: "info" },
+    {
+      name: "/memory",
+      description: t("chat.command.memory"),
+      category: "info",
+    },
+    {
+      name: "/persona",
+      description: t("chat.command.persona"),
+      category: "info",
+    },
+    {
+      name: "/version",
+      description: t("chat.command.version"),
+      category: "info",
+    },
+  ];
+}
 
 function HermesAvatar({ size = 30 }: { size?: number }): React.JSX.Element {
   return (
@@ -97,6 +138,7 @@ function Chat({
   onSessionStarted,
   onNewChat,
 }: ChatProps): React.JSX.Element {
+  const { t } = useI18n();
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [hermesSessionId, setHermesSessionId] = useState<string | null>(null);
@@ -127,10 +169,11 @@ function Chat({
 
   // Keep ref in sync for use in IPC callbacks
   isLoadingRef.current = isLoading;
+  const slashCommands = buildSlashCommands(t);
 
   // Filtered slash commands based on current input
   const filteredSlashCommands = slashMenuOpen
-    ? SLASH_COMMANDS.filter((cmd) =>
+    ? slashCommands.filter((cmd) =>
         cmd.name.toLowerCase().startsWith(slashFilter.toLowerCase()),
       )
     : [];
@@ -161,7 +204,11 @@ function Chat({
       if (!groupMap.has(m.provider)) {
         groupMap.set(m.provider, {
           provider: m.provider,
-          providerLabel: PROVIDERS.labels[m.provider] || m.provider,
+          providerLabel: getProviderLabel(
+            t,
+            m.provider,
+            PROVIDERS.labels[m.provider] || m.provider,
+          ),
           models: [],
         });
       }
@@ -172,7 +219,7 @@ function Chat({
       });
     }
     setModelGroups(Array.from(groupMap.values()));
-  }, [profile]);
+  }, [profile, t]);
 
   // Load model config and build available models list
   useEffect(() => {
@@ -209,7 +256,9 @@ function Chat({
   // Scroll active slash menu item into view
   useEffect(() => {
     if (!slashMenuOpen) return;
-    const active = slashMenuRef.current?.querySelector(".slash-menu-item-active");
+    const active = slashMenuRef.current?.querySelector(
+      ".slash-menu-item-active",
+    );
     active?.scrollIntoView({ block: "nearest" });
   }, [slashSelectedIndex, slashMenuOpen]);
 
@@ -328,7 +377,7 @@ function Chat({
     // Intercept slash commands that can be handled locally
     if (text.startsWith("/")) {
       const cmd = text.split(/\s+/)[0].toLowerCase();
-      const isLocal = SLASH_COMMANDS.some(
+      const isLocal = slashCommands.some(
         (c) => c.name === cmd && (c.local || c.category === "info"),
       );
       if (isLocal) {
@@ -357,10 +406,7 @@ function Chat({
         hermesSessionId || undefined,
       );
     } catch (err) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : "Something went wrong. Please try again.";
+      const msg = err instanceof Error ? err.message : t("chat.error.generic");
       setMessages((prev) => [
         ...prev,
         { id: `error-${Date.now()}`, role: "agent", content: `Error: ${msg}` },
@@ -387,10 +433,7 @@ function Chat({
         hermesSessionId || undefined,
       );
     } catch (err) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : "Something went wrong. Please try again.";
+      const msg = err instanceof Error ? err.message : t("chat.error.generic");
       setMessages((prev) => [
         ...prev,
         { id: `error-${Date.now()}`, role: "agent", content: `Error: ${msg}` },
@@ -483,24 +526,39 @@ function Chat({
 
       case "/model": {
         const mc = await window.hermesAPI.getModelConfig(profile);
-        const display = mc.model || "Not set";
-        const prov = mc.provider || "auto";
-        pushLocalResponse(
-          `**Current model:** \`${display}\`\n**Provider:** ${prov}${mc.baseUrl ? `\n**Base URL:** ${mc.baseUrl}` : ""}`,
+        const display = mc.model || t("chat.local.notSet");
+        const prov = getProviderLabel(
+          t,
+          mc.provider || "auto",
+          mc.provider || "auto",
         );
+        const lines = [
+          t("chat.local.currentModel", {
+            model: display,
+          }),
+          t("chat.local.provider", { provider: prov }),
+        ];
+        if (mc.baseUrl) {
+          lines.push(t("chat.local.baseUrl", { baseUrl: mc.baseUrl }));
+        }
+        pushLocalResponse(lines.join("\n"));
         return true;
       }
 
       case "/memory": {
         const mem = await window.hermesAPI.readMemory(profile);
-        const lines: string[] = ["**Agent Memory**\n"];
+        const lines: string[] = [t("chat.local.memoryTitle"), ""];
         if (mem.memory.exists && mem.memory.content.trim()) {
           lines.push(mem.memory.content.trim());
         } else {
-          lines.push("_No memory entries yet._");
+          lines.push(t("chat.local.noMemory"));
         }
         lines.push(
-          `\n**Stats:** ${mem.stats.totalSessions} sessions, ${mem.stats.totalMessages} messages`,
+          "",
+          t("chat.local.memoryStats", {
+            sessions: mem.stats.totalSessions,
+            messages: mem.stats.totalMessages,
+          }),
         );
         pushLocalResponse(lines.join("\n"));
         return true;
@@ -509,15 +567,19 @@ function Chat({
       case "/tools": {
         const tools = await window.hermesAPI.getToolsets(profile);
         if (!tools.length) {
-          pushLocalResponse("No toolsets found.");
+          pushLocalResponse(t("chat.local.noToolsets"));
         } else {
           const rows = tools
             .map(
-              (t) =>
-                `- **${t.label}** — ${t.description} ${t.enabled ? "*(enabled)*" : "*(disabled)*"}`,
+              (tool) =>
+                `- **${tool.label}** — ${tool.description} ${
+                  tool.enabled
+                    ? `*(${t("chat.local.enabled")})*`
+                    : `*(${t("chat.local.disabled")})*`
+                }`,
             )
             .join("\n");
-          pushLocalResponse(`**Available Toolsets**\n\n${rows}`);
+          pushLocalResponse(`${t("chat.local.toolsetsTitle")}\n\n${rows}`);
         }
         return true;
       }
@@ -525,12 +587,12 @@ function Chat({
       case "/skills": {
         const skills = await window.hermesAPI.listInstalledSkills(profile);
         if (!skills.length) {
-          pushLocalResponse("No skills installed.");
+          pushLocalResponse(t("chat.local.noSkills"));
         } else {
           const rows = skills
             .map((s) => `- **${s.name}** (${s.category}) — ${s.description}`)
             .join("\n");
-          pushLocalResponse(`**Installed Skills**\n\n${rows}`);
+          pushLocalResponse(`${t("chat.local.skillsTitle")}\n\n${rows}`);
         }
         return true;
       }
@@ -539,8 +601,8 @@ function Chat({
         const soul = await window.hermesAPI.readSoul(profile);
         pushLocalResponse(
           soul.trim()
-            ? `**Current Persona**\n\n${soul.trim()}`
-            : "_No persona configured._",
+            ? `${t("chat.local.personaTitle")}\n\n${soul.trim()}`
+            : t("chat.local.noPersona"),
         );
         return true;
       }
@@ -551,23 +613,26 @@ function Chat({
           window.hermesAPI.getAppVersion(),
         ]);
         pushLocalResponse(
-          `**Hermes Agent:** ${hermesVer || "unknown"}\n**Desktop App:** v${appVer}`,
+          t("chat.local.version", {
+            hermes: hermesVer || "unknown",
+            desktop: appVer,
+          }),
         );
         return true;
       }
 
       case "/help": {
         const grouped: Record<string, SlashCommand[]> = {};
-        for (const c of SLASH_COMMANDS) {
+        for (const c of slashCommands) {
           (grouped[c.category] ||= []).push(c);
         }
         const categoryLabels: Record<string, string> = {
-          chat: "Chat",
-          agent: "Agent",
-          tools: "Tools",
-          info: "Info",
+          chat: t("chat.category.chat"),
+          agent: t("chat.category.agent"),
+          tools: t("chat.category.tools"),
+          info: t("chat.category.info"),
         };
-        let md = "**Available Commands**\n";
+        let md = `${t("chat.local.availableCommands")}\n`;
         for (const cat of ["chat", "agent", "tools", "info"]) {
           if (!grouped[cat]) continue;
           md += `\n**${categoryLabels[cat]}**\n`;
@@ -630,8 +695,8 @@ function Chat({
   const displayModel = currentModel
     ? currentModel.split("/").pop() || currentModel
     : currentProvider === "auto"
-      ? "Auto"
-      : "No model set";
+      ? t("chat.auto")
+      : t("chat.noModel");
 
   const lastMessageIsAgent =
     messages.length > 0 && messages[messages.length - 1].role === "agent";
@@ -641,14 +706,21 @@ function Chat({
       <div className="chat-header">
         <div className="chat-header-left">
           <div className="chat-header-title">
-            {sessionId ? `Session ${sessionId.slice(-6)}` : "New Chat"}
+            {sessionId
+              ? t("chat.sessionTitle", { id: sessionId.slice(-6) })
+              : t("chat.newChat")}
           </div>
           {usage && (
             <span
               className="chat-token-counter"
-              title={`Prompt: ${usage.promptTokens} | Completion: ${usage.completionTokens}`}
+              title={t("chat.tokensTitle", {
+                prompt: usage.promptTokens,
+                completion: usage.completionTokens,
+              })}
             >
-              {usage.totalTokens.toLocaleString()} tokens
+              {t("chat.tokens", {
+                count: usage.totalTokens.toLocaleString(),
+              })}
             </span>
           )}
         </div>
@@ -657,7 +729,7 @@ function Chat({
             <button
               className="btn-ghost chat-clear-btn"
               onClick={onNewChat}
-              title="New chat (Cmd+N)"
+              title={t("chat.actions.newChat")}
             >
               <Plus size={16} />
             </button>
@@ -666,7 +738,7 @@ function Chat({
             <button
               className="btn-ghost chat-clear-btn"
               onClick={handleClear}
-              title="Clear chat"
+              title={t("chat.actions.clearChat")}
             >
               <Trash size={16} />
             </button>
@@ -680,74 +752,68 @@ function Chat({
             <div className="chat-empty-icon">
               <img src={icon} width={64} height={64} alt="" />
             </div>
-            <div className="chat-empty-text">How can I help you today?</div>
-            <div className="chat-empty-hint">
-              Ask me to write code, answer questions, search the web, and more
-            </div>
+            <div className="chat-empty-text">{t("chat.emptyTitle")}</div>
+            <div className="chat-empty-hint">{t("chat.emptyHint")}</div>
             <div className="chat-empty-suggestions">
               <button
                 className="chat-suggestion"
                 onClick={() => {
-                  setInput("Search the web for today's top tech news");
+                  setInput(t("chat.suggestion.searchPrompt"));
                   inputRef.current?.focus();
                 }}
               >
                 <Search size={16} />
-                Search the web
+                {t("chat.suggestion.searchLabel")}
               </button>
               <button
                 className="chat-suggestion"
                 onClick={() => {
-                  setInput("Set a reminder to check emails every day at 9 AM");
+                  setInput(t("chat.suggestion.reminderPrompt"));
                   inputRef.current?.focus();
                 }}
               >
                 <Bell size={16} />
-                Set a reminder
+                {t("chat.suggestion.reminderLabel")}
               </button>
               <button
                 className="chat-suggestion"
                 onClick={() => {
-                  setInput("Read my latest emails and summarize them");
+                  setInput(t("chat.suggestion.emailPrompt"));
                   inputRef.current?.focus();
                 }}
               >
                 <Mail size={16} />
-                Summarize emails
+                {t("chat.suggestion.emailLabel")}
               </button>
               <button
                 className="chat-suggestion"
                 onClick={() => {
-                  setInput(
-                    "Write a Python script to rename all files in a folder",
-                  );
+                  setInput(t("chat.suggestion.scriptPrompt"));
                   inputRef.current?.focus();
                 }}
               >
                 <Code size={16} />
-                Write a script
+                {t("chat.suggestion.scriptLabel")}
               </button>
               <button
                 className="chat-suggestion"
                 onClick={() => {
-                  setInput(
-                    "Schedule a cron job to back up my database every night",
-                  );
+                  setInput(t("chat.suggestion.cronPrompt"));
                   inputRef.current?.focus();
                 }}
               >
                 <Clock size={16} />
-                Schedule a cron job
+                {t("chat.suggestion.cronLabel")}
               </button>
               <button
                 className="chat-suggestion"
                 onClick={() => {
-                  setInput("Analyze this CSV file and show key insights");
+                  setInput(t("chat.suggestion.dataPrompt"));
                   inputRef.current?.focus();
                 }}
               >
                 <ChartLine size={16} />
-                Analyze data
+                {t("chat.suggestion.dataLabel")}
               </button>
             </div>
           </div>
@@ -801,7 +867,7 @@ function Chat({
                             .catch(() => setIsLoading(false));
                         }}
                       >
-                        Approve
+                        {t("chat.approval.approve")}
                       </button>
                       <button
                         className="chat-approval-btn chat-deny"
@@ -825,7 +891,7 @@ function Chat({
                             .catch(() => setIsLoading(false));
                         }}
                       >
-                        Deny
+                        {t("chat.approval.deny")}
                       </button>
                     </div>
                   )}
@@ -862,7 +928,7 @@ function Chat({
           <div className="slash-menu" ref={slashMenuRef}>
             <div className="slash-menu-header">
               <Slash size={12} />
-              Commands
+              {t("chat.slash.header")}
             </div>
             <div className="slash-menu-list">
               {filteredSlashCommands.map((cmd, i) => (
@@ -873,7 +939,9 @@ function Chat({
                   onClick={() => handleSlashSelect(cmd)}
                 >
                   <span className="slash-menu-item-name">{cmd.name}</span>
-                  <span className="slash-menu-item-desc">{cmd.description}</span>
+                  <span className="slash-menu-item-desc">
+                    {cmd.description}
+                  </span>
                 </button>
               ))}
             </div>
@@ -883,7 +951,7 @@ function Chat({
           <textarea
             ref={inputRef}
             className="chat-input"
-            placeholder="Type a message... (Shift+Enter for new line)"
+            placeholder={t("chat.input.placeholder")}
             value={input}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
@@ -895,7 +963,7 @@ function Chat({
             <button
               className="chat-send-btn chat-stop-btn"
               onClick={handleAbort}
-              title="Stop"
+              title={t("chat.stop")}
             >
               <Stop size={14} />
             </button>
@@ -905,7 +973,7 @@ function Chat({
                 <button
                   className="chat-btw-btn"
                   onClick={handleQuickAsk}
-                  title="Quick Ask (/btw) — side question that won't affect conversation context"
+                  title={t("chat.quickAsk")}
                 >
                   💭
                 </button>
@@ -914,7 +982,7 @@ function Chat({
                 className="chat-send-btn"
                 onClick={handleSend}
                 disabled={!input.trim()}
-                title="Send"
+                title={t("chat.send")}
               >
                 <Send size={16} />
               </button>
@@ -955,7 +1023,9 @@ function Chat({
               ))}
 
               <div className="chat-model-group">
-                <div className="chat-model-group-label">Custom</div>
+                <div className="chat-model-group-label">
+                  {t("chat.model.custom")}
+                </div>
                 <div className="chat-model-custom">
                   <input
                     className="chat-model-custom-input"
@@ -965,7 +1035,7 @@ function Chat({
                     onKeyDown={(e) => {
                       if (e.key === "Enter") handleCustomModelSubmit();
                     }}
-                    placeholder="Type model name..."
+                    placeholder={t("chat.model.typeName")}
                   />
                 </div>
               </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Search, X, Download, Trash, Refresh } from "../../assets/icons";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
+import { useI18n } from "../../i18n";
 
 interface InstalledSkill {
   name: string;
@@ -24,6 +25,7 @@ interface SkillsProps {
 type Tab = "installed" | "browse";
 
 function Skills({ profile }: SkillsProps): React.JSX.Element {
+  const { t } = useI18n();
   const [tab, setTab] = useState<Tab>("installed");
   const [installedSkills, setInstalledSkills] = useState<InstalledSkill[]>([]);
   const [bundledSkills, setBundledSkills] = useState<BundledSkill[]>([]);
@@ -70,7 +72,7 @@ function Skills({ profile }: SkillsProps): React.JSX.Element {
     if (result.success) {
       await loadInstalled();
     } else {
-      setError(result.error || "Failed to install skill");
+      setError(result.error || t("skills.error.install"));
     }
   }
 
@@ -83,7 +85,7 @@ function Skills({ profile }: SkillsProps): React.JSX.Element {
       setDetailSkill(null);
       await loadInstalled();
     } else {
-      setError(result.error || "Failed to uninstall skill");
+      setError(result.error || t("skills.error.uninstall"));
     }
   }
 
@@ -157,11 +159,11 @@ function Skills({ profile }: SkillsProps): React.JSX.Element {
                   disabled={actionInProgress === detailSkill.name}
                 >
                   {actionInProgress === detailSkill.name ? (
-                    "Removing..."
+                    t("common.removing")
                   ) : (
                     <>
                       <Trash size={13} />
-                      Uninstall
+                      {t("skills.uninstall")}
                     </>
                   )}
                 </button>
@@ -182,14 +184,12 @@ function Skills({ profile }: SkillsProps): React.JSX.Element {
 
       <div className="skills-header">
         <div>
-          <h2 className="skills-title">Skills</h2>
-          <p className="skills-subtitle">
-            Extend your agent with reusable skills and workflows
-          </p>
+          <h2 className="skills-title">{t("skills.title")}</h2>
+          <p className="skills-subtitle">{t("skills.subtitle")}</p>
         </div>
         <button className="btn btn-secondary btn-sm" onClick={loadAll}>
           <Refresh size={14} />
-          Refresh
+          {t("common.refresh")}
         </button>
       </div>
 
@@ -208,13 +208,13 @@ function Skills({ profile }: SkillsProps): React.JSX.Element {
           className={`skills-tab ${tab === "installed" ? "active" : ""}`}
           onClick={() => setTab("installed")}
         >
-          Installed ({installedSkills.length})
+          {t("skills.tabs.installed", { count: installedSkills.length })}
         </button>
         <button
           className={`skills-tab ${tab === "browse" ? "active" : ""}`}
           onClick={() => setTab("browse")}
         >
-          Browse ({bundledSkills.length})
+          {t("skills.tabs.browse", { count: bundledSkills.length })}
         </button>
       </div>
 
@@ -227,8 +227,8 @@ function Skills({ profile }: SkillsProps): React.JSX.Element {
           type="text"
           placeholder={
             tab === "installed"
-              ? "Filter installed skills..."
-              : "Search skills..."
+              ? t("skills.search.installed")
+              : t("skills.search.browse")
           }
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -253,7 +253,7 @@ function Skills({ profile }: SkillsProps): React.JSX.Element {
             className={`skills-pill ${categoryFilter === null ? "active" : ""}`}
             onClick={() => setCategoryFilter(null)}
           >
-            All
+            {t("skills.allCategories")}
           </button>
           {categories.map((cat) => (
             <button
@@ -274,12 +274,12 @@ function Skills({ profile }: SkillsProps): React.JSX.Element {
         filteredInstalled.length === 0 ? (
           <div className="skills-empty">
             <p className="skills-empty-text">
-              {search ? "No matching skills found" : "No skills installed yet"}
+              {search ? t("skills.noMatching") : t("skills.noInstalled")}
             </p>
             <p className="skills-empty-hint">
               {search
-                ? "Try a different search term"
-                : "Browse available skills and install them to extend your agent"}
+                ? t("skills.tryDifferentSearch")
+                : t("skills.noInstalledHint")}
             </p>
           </div>
         ) : (
@@ -303,10 +303,8 @@ function Skills({ profile }: SkillsProps): React.JSX.Element {
         )
       ) : filteredBundled.length === 0 ? (
         <div className="skills-empty">
-          <p className="skills-empty-text">No skills found</p>
-          <p className="skills-empty-hint">
-            Try a different search term or category filter
-          </p>
+          <p className="skills-empty-text">{t("skills.noneFound")}</p>
+          <p className="skills-empty-hint">{t("skills.tryDifferentFilter")}</p>
         </div>
       ) : (
         <div className="skills-grid">
@@ -328,7 +326,7 @@ function Skills({ profile }: SkillsProps): React.JSX.Element {
                 <div className="skills-card-footer">
                   {isInstalled ? (
                     <span className="skills-card-installed-badge">
-                      Installed
+                      {t("skills.installedBadge")}
                     </span>
                   ) : (
                     <button
@@ -340,11 +338,11 @@ function Skills({ profile }: SkillsProps): React.JSX.Element {
                       disabled={isActioning}
                     >
                       {isActioning ? (
-                        "Installing..."
+                        t("skills.installing")
                       ) : (
                         <>
                           <Download size={13} />
-                          Install
+                          {t("skills.install")}
                         </>
                       )}
                     </button>

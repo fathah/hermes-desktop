@@ -1,6 +1,7 @@
 import icon from "../../assets/icon.png";
 import { ArrowRight, Refresh, Copy } from "../../assets/icons";
 import { INSTALL_CMD } from "../../constants";
+import { useI18n } from "../../i18n";
 
 interface WelcomeProps {
   error: string | null;
@@ -13,13 +14,15 @@ function Welcome({
   onStart,
   onRecheck,
 }: WelcomeProps): React.JSX.Element {
+  const { t } = useI18n();
+
   return (
     <div className="screen welcome-screen">
       <img src={icon} height={40} width={40} alt="" />
 
       {error ? (
         <>
-          <h1 className="welcome-title">Installation Issue</h1>
+          <h1 className="welcome-title">{t("welcome.issueTitle")}</h1>
           <p className="welcome-subtitle">{error}</p>
 
           <div className="welcome-actions">
@@ -27,24 +30,24 @@ function Welcome({
               className="btn btn-primary welcome-button"
               onClick={onStart}
             >
-              Retry Installation
+              {t("welcome.retryInstallation")}
               <Refresh size={16} />
             </button>
 
             <div className="welcome-divider">
-              <span>or</span>
+              <span>{t("welcome.or")}</span>
             </div>
 
             <div className="welcome-terminal-option">
               <p className="welcome-terminal-label">
-                Install via terminal, then come back:
+                {t("welcome.installViaTerminal")}
               </p>
               <div className="welcome-terminal-box">
                 <code>{INSTALL_CMD}</code>
                 <button
                   className="btn-ghost welcome-copy-btn"
                   onClick={() => navigator.clipboard.writeText(INSTALL_CMD)}
-                  title="Copy to clipboard"
+                  title={t("welcome.copyToClipboard")}
                 >
                   <Copy size={14} />
                 </button>
@@ -55,24 +58,19 @@ function Welcome({
               className="btn btn-secondary welcome-recheck-btn"
               onClick={onRecheck}
             >
-              I&apos;ve installed it — check again
+              {t("welcome.recheck")}
             </button>
           </div>
         </>
       ) : (
         <>
-          <h1 className="welcome-title">Welcome to Hermes</h1>
-          <p className="welcome-subtitle">
-            Your self-improving AI assistant that runs locally on your machine.
-            Private, powerful, and always learning.
-          </p>
+          <h1 className="welcome-title">{t("welcome.title")}</h1>
+          <p className="welcome-subtitle">{t("welcome.subtitle")}</p>
           <button className="btn btn-primary welcome-button" onClick={onStart}>
-            Get Started
+            {t("welcome.getStarted")}
             <ArrowRight size={16} />
           </button>
-          <p className="welcome-note">
-            This will install required components (~2 GB)
-          </p>
+          <p className="welcome-note">{t("welcome.note")}</p>
         </>
       )}
     </div>

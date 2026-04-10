@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback, memo } from "react";
 import { Plus, Search, X, ChatBubble } from "../../assets/icons";
+import { useI18n } from "../../i18n";
 
 interface CachedSession {
   id: string;
@@ -26,21 +27,24 @@ interface SessionsProps {
   currentSessionId: string | null;
 }
 
-function formatTime(ts: number): string {
+function formatTime(ts: number, locale: string): string {
   const d = new Date(ts * 1000);
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleTimeString(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
-function formatFullDate(ts: number): string {
+function formatFullDate(ts: number, locale: string): string {
   const d = new Date(ts * 1000);
   return (
-    d.toLocaleDateString([], { month: "short", day: "numeric" }) +
+    d.toLocaleDateString(locale, { month: "short", day: "numeric" }) +
     ", " +
-    d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })
   );
 }
 
-type DateGroup = "Today" | "Yesterday" | "This Week" | "Earlier";
+type DateGroup = "today" | "yesterday" | "thisWeek" | "earlier";
 
 function getDateGroup(ts: number): DateGroup {
   const d = new Date(ts * 1000);
@@ -50,7 +54,7 @@ function getDateGroup(ts: number): DateGroup {
     d.getDate() === now.getDate() &&
     d.getMonth() === now.getMonth() &&
     d.getFullYear() === now.getFullYear();
-  if (isToday) return "Today";
+  if (isToday) return "today";
 
   const yesterday = new Date(now);
   yesterday.setDate(yesterday.getDate() - 1);
@@ -58,13 +62,13 @@ function getDateGroup(ts: number): DateGroup {
     d.getDate() === yesterday.getDate() &&
     d.getMonth() === yesterday.getMonth() &&
     d.getFullYear() === yesterday.getFullYear();
-  if (isYesterday) return "Yesterday";
+  if (isYesterday) return "yesterday";
 
   const weekAgo = new Date(now);
   weekAgo.setDate(weekAgo.getDate() - 7);
-  if (d >= weekAgo) return "This Week";
+  if (d >= weekAgo) return "thisWeek";
 
-  return "Earlier";
+  return "earlier";
 }
 
 function groupSessions(
@@ -76,7 +80,7 @@ function groupSessions(
     if (!groups.has(group)) groups.set(group, []);
     groups.get(group)!.push(s);
   }
-  const order: DateGroup[] = ["Today", "Yesterday", "This Week", "Earlier"];
+  const order: DateGroup[] = ["today", "yesterday", "thisWeek", "earlier"];
   return order
     .filter((label) => groups.has(label))
     .map((label) => ({ label, sessions: groups.get(label)! }));
@@ -107,11 +111,17 @@ const SessionCard = memo(function SessionCard({
   session,
   isActive,
   showFullDate,
+  locale,
+  newConversationLabel,
+  formatMessageCount,
   onClick,
 }: {
   session: CachedSession;
   isActive: boolean;
   showFullDate: boolean;
+  locale: string;
+  newConversationLabel: string;
+  formatMessageCount: (count: number) => string;
   onClick: () => void;
 }) {
   return (
@@ -121,12 +131,12 @@ const SessionCard = memo(function SessionCard({
     >
       <div className="sessions-card-main">
         <span className="sessions-card-title">
-          {session.title || "New conversation"}
+          {session.title || newConversationLabel}
         </span>
         <span className="sessions-card-time">
           {showFullDate
-            ? formatFullDate(session.startedAt)
-            : formatTime(session.startedAt)}
+            ? formatFullDate(session.startedAt, locale)
+            : formatTime(session.startedAt, locale)}
         </span>
       </div>
       <div className="sessions-card-tags">
@@ -134,7 +144,7 @@ const SessionCard = memo(function SessionCard({
           {session.source}
         </span>
         <span className="sessions-tag">
-          {session.messageCount} msg{session.messageCount !== 1 ? "s" : ""}
+          {formatMessageCount(session.messageCount)}
         </span>
         {session.model && (
           <span className="sessions-tag sessions-tag--model">
@@ -151,6 +161,7 @@ function Sessions({
   onNewChat,
   currentSessionId,
 }: SessionsProps): React.JSX.Element {
+  const { t, locale } = useI18n();
   const [sessions, setSessions] = useState<CachedSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -195,16 +206,24 @@ function Sessions({
 
   const isShowingSearch = searchQuery.trim().length > 0;
   const grouped = groupSessions(sessions);
+  const localeTag = locale === "zh-CN" ? "zh-CN" : "en";
+
+  function formatMessageCount(count: number): string {
+    return t(
+      count === 1 ? "sessions.messageCount.one" : "sessions.messageCount.other",
+      { count },
+    );
+  }
 
   return (
     <div className="sessions-container">
       {/* Header with integrated search */}
       <div className="sessions-header">
         <div className="sessions-header-top">
-          <h2 className="sessions-title">Sessions</h2>
+          <h2 className="sessions-title">{t("sessions.title")}</h2>
           <button className="btn btn-primary " onClick={onNewChat}>
             <Plus size={14} />
-            New Chat
+            {t("sessions.newChat")}
           </button>
         </div>
         <div className="sessions-searchbar">
@@ -213,7 +232,7 @@ function Sessions({
             ref={searchRef}
             className="sessions-searchbar-input"
             type="text"
-            placeholder="Search conversations..."
+            placeholder={t("sessions.searchPlaceholder")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -244,8 +263,10 @@ function Sessions({
         ) : searchResults.length === 0 ? (
           <div className="sessions-empty">
             <Search size={32} className="sessions-empty-icon" />
-            <p className="sessions-empty-text">No results found</p>
-            <p className="sessions-empty-hint">Try different search terms</p>
+            <p className="sessions-empty-text">{t("sessions.noResults")}</p>
+            <p className="sessions-empty-hint">
+              {t("sessions.tryDifferentTerms")}
+            </p>
           </div>
         ) : (
           <div className="sessions-list">
@@ -257,10 +278,13 @@ function Sessions({
               >
                 <div className="sessions-card-main">
                   <span className="sessions-card-title">
-                    {r.title || `Session ${r.sessionId.slice(-6)}`}
+                    {r.title ||
+                      t("sessions.sessionFallback", {
+                        id: r.sessionId.slice(-6),
+                      })}
                   </span>
                   <span className="sessions-card-time">
-                    {formatFullDate(r.startedAt)}
+                    {formatFullDate(r.startedAt, localeTag)}
                   </span>
                 </div>
                 {r.snippet && (
@@ -273,7 +297,7 @@ function Sessions({
                     {r.source}
                   </span>
                   <span className="sessions-tag">
-                    {r.messageCount} msg{r.messageCount !== 1 ? "s" : ""}
+                    {formatMessageCount(r.messageCount)}
                   </span>
                   {r.model && (
                     <span className="sessions-tag sessions-tag--model">
@@ -288,24 +312,29 @@ function Sessions({
       ) : sessions.length === 0 ? (
         <div className="sessions-empty">
           <ChatBubble size={32} className="sessions-empty-icon" />
-          <p className="sessions-empty-text">No sessions yet</p>
+          <p className="sessions-empty-text">{t("sessions.noSessions")}</p>
           <p className="sessions-empty-hint">
-            Start a chat to create your first session
+            {t("sessions.firstSessionHint")}
           </p>
         </div>
       ) : (
         <div className="sessions-list">
           {grouped.map((group) => (
             <div key={group.label} className="sessions-group">
-              <div className="sessions-group-label">{group.label}</div>
+              <div className="sessions-group-label">
+                {t(`sessions.group.${group.label}`)}
+              </div>
               {group.sessions.map((s) => (
                 <SessionCard
                   key={s.id}
                   session={s}
                   isActive={currentSessionId === s.id}
                   showFullDate={
-                    group.label === "This Week" || group.label === "Earlier"
+                    group.label === "thisWeek" || group.label === "earlier"
                   }
+                  locale={localeTag}
+                  newConversationLabel={t("sessions.newConversation")}
+                  formatMessageCount={formatMessageCount}
                   onClick={() => onResumeSession(s.id)}
                 />
               ))}

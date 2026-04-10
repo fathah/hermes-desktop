@@ -1,5 +1,20 @@
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Trash, Refresh, X, Play, Pause, Zap, Alert } from "../../assets/icons";
+import {
+  Plus,
+  Trash,
+  Refresh,
+  X,
+  Play,
+  Pause,
+  Zap,
+  Alert,
+} from "../../assets/icons";
+import {
+  getScheduleDeliveryLabel,
+  getScheduleFrequencyLabel,
+  getScheduleStateLabel,
+  useI18n,
+} from "../../i18n";
 
 const DELIVER_TARGETS = [
   { value: "local", label: "Local" },
@@ -44,6 +59,7 @@ interface SchedulesProps {
 }
 
 function Schedules({ profile }: SchedulesProps): React.JSX.Element {
+  const { t, locale } = useI18n();
   const [jobs, setJobs] = useState<CronJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -70,11 +86,11 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
       const list = await window.hermesAPI.listCronJobs(true, profile);
       setJobs(list);
     } catch {
-      setError("Failed to load scheduled tasks");
+      setError(t("schedules.error.load"));
     } finally {
       setLoading(false);
     }
-  }, [profile]);
+  }, [profile, t]);
 
   useEffect(() => {
     loadJobs();
@@ -153,10 +169,10 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
         closeCreateModal();
         await loadJobs();
       } else {
-        setError(result.error || "Failed to create job");
+        setError(result.error || t("schedules.error.create"));
       }
     } catch {
-      setError("Failed to create job");
+      setError(t("schedules.error.create"));
     } finally {
       setActionInProgress(null);
     }
@@ -171,10 +187,10 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
       if (result.success) {
         await loadJobs();
       } else {
-        setError(result.error || "Failed to remove job");
+        setError(result.error || t("schedules.error.remove"));
       }
     } catch {
-      setError("Failed to remove job");
+      setError(t("schedules.error.remove"));
     } finally {
       setActionInProgress(null);
     }
@@ -191,10 +207,10 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
       if (result.success) {
         await loadJobs();
       } else {
-        setError(result.error || "Failed to update job");
+        setError(result.error || t("schedules.error.update"));
       }
     } catch {
-      setError("Failed to update job");
+      setError(t("schedules.error.update"));
     } finally {
       setActionInProgress(null);
     }
@@ -208,10 +224,10 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
       if (result.success) {
         await loadJobs();
       } else {
-        setError(result.error || "Failed to trigger job");
+        setError(result.error || t("schedules.error.trigger"));
       }
     } catch {
-      setError("Failed to trigger job");
+      setError(t("schedules.error.trigger"));
     } finally {
       setActionInProgress(null);
     }
@@ -222,7 +238,7 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
     try {
       const d = new Date(iso);
       if (isNaN(d.getTime())) return iso;
-      return d.toLocaleString(undefined, {
+      return d.toLocaleString(locale === "zh-CN" ? "zh-CN" : "en", {
         month: "short",
         day: "numeric",
         hour: "2-digit",
@@ -250,25 +266,28 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
         <div className="skills-detail-overlay" onClick={closeCreateModal}>
           <div className="schedules-modal" onClick={(e) => e.stopPropagation()}>
             <div className="schedules-modal-header">
-              <h3>New Scheduled Task</h3>
+              <h3>{t("schedules.modal.newTitle")}</h3>
               <button className="btn-ghost" onClick={closeCreateModal}>
                 <X size={18} />
               </button>
             </div>
             <div className="schedules-modal-body">
               <div className="schedules-field">
-                <label className="schedules-field-label">Name</label>
+                <label className="schedules-field-label">
+                  {t("schedules.field.name")}
+                </label>
                 <input
                   className="input"
                   type="text"
-                  placeholder="e.g. Daily backup reminder"
+                  placeholder={t("schedules.field.namePlaceholder")}
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                 />
               </div>
               <div className="schedules-field">
                 <label className="schedules-field-label">
-                  Frequency <span className="schedules-required">*</span>
+                  {t("schedules.field.frequency")}{" "}
+                  <span className="schedules-required">*</span>
                 </label>
                 <div className="schedules-freq-pills">
                   {(
@@ -286,7 +305,7 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
                       className={`schedules-freq-pill ${frequency === val ? "active" : ""}`}
                       onClick={() => setFrequency(val)}
                     >
-                      {label}
+                      {getScheduleFrequencyLabel(t, val, label)}
                     </button>
                   ))}
                 </div>
@@ -295,7 +314,7 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
               {frequency === "minutes" && (
                 <div className="schedules-field">
                   <label className="schedules-field-label">
-                    Every how many minutes?
+                    {t("schedules.field.everyMinutes")}
                   </label>
                   <select
                     className="input"
@@ -304,7 +323,7 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
                   >
                     {["5", "10", "15", "30", "45"].map((v) => (
                       <option key={v} value={v}>
-                        Every {v} minutes
+                        {t("schedule.everyMinutes", { value: v })}
                       </option>
                     ))}
                   </select>
@@ -314,7 +333,7 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
               {frequency === "hourly" && (
                 <div className="schedules-field">
                   <label className="schedules-field-label">
-                    Every how many hours?
+                    {t("schedules.field.everyHours")}
                   </label>
                   <select
                     className="input"
@@ -323,7 +342,12 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
                   >
                     {["1", "2", "3", "4", "6", "8", "12"].map((v) => (
                       <option key={v} value={v}>
-                        Every {v} hour{v !== "1" ? "s" : ""}
+                        {t(
+                          v === "1"
+                            ? "schedule.everyHours.one"
+                            : "schedule.everyHours.other",
+                          { value: v },
+                        )}
                       </option>
                     ))}
                   </select>
@@ -332,7 +356,9 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
 
               {frequency === "daily" && (
                 <div className="schedules-field">
-                  <label className="schedules-field-label">Time of day</label>
+                  <label className="schedules-field-label">
+                    {t("schedules.field.timeOfDay")}
+                  </label>
                   <input
                     className="input"
                     type="time"
@@ -345,7 +371,9 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
               {frequency === "weekly" && (
                 <>
                   <div className="schedules-field">
-                    <label className="schedules-field-label">Day of week</label>
+                    <label className="schedules-field-label">
+                      {t("schedules.field.dayOfWeek")}
+                    </label>
                     <select
                       className="input"
                       value={weeklyDay}
@@ -361,13 +389,15 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
                         ["0", "Sunday"],
                       ].map(([val, label]) => (
                         <option key={val} value={val}>
-                          {label}
+                          {t(`schedule.day.${val}`, undefined, label)}
                         </option>
                       ))}
                     </select>
                   </div>
                   <div className="schedules-field">
-                    <label className="schedules-field-label">Time of day</label>
+                    <label className="schedules-field-label">
+                      {t("schedules.field.timeOfDay")}
+                    </label>
                     <input
                       className="input"
                       type="time"
@@ -381,58 +411,64 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
               {frequency === "custom" && (
                 <div className="schedules-field">
                   <label className="schedules-field-label">
-                    Cron expression
+                    {t("schedules.field.cron")}
                   </label>
                   <input
                     className="input"
                     type="text"
-                    placeholder="e.g. 0 9 * * 1-5"
+                    placeholder={t("schedules.field.cronPlaceholder")}
                     value={customCron}
                     onChange={(e) => setCustomCron(e.target.value)}
                   />
                   <div className="schedules-field-hint">
-                    Standard cron format: minute hour day month weekday
+                    {t("schedules.field.cronHint")}
                   </div>
                 </div>
               )}
               <div className="schedules-field">
-                <label className="schedules-field-label">Prompt</label>
+                <label className="schedules-field-label">
+                  {t("schedules.field.prompt")}
+                </label>
                 <textarea
                   className="input schedules-textarea"
-                  placeholder="Task instruction for the agent..."
+                  placeholder={t("schedules.field.promptPlaceholder")}
                   value={newPrompt}
                   onChange={(e) => setNewPrompt(e.target.value)}
                   rows={3}
                 />
               </div>
               <div className="schedules-field">
-                <label className="schedules-field-label">Deliver to</label>
+                <label className="schedules-field-label">
+                  {t("schedules.field.deliverTo")}
+                </label>
                 <select
                   className="input"
                   value={newDeliver}
                   onChange={(e) => setNewDeliver(e.target.value)}
                 >
-                  {DELIVER_TARGETS.map((t) => (
-                    <option key={t.value} value={t.value}>
-                      {t.label}
+                  {DELIVER_TARGETS.map((target) => (
+                    <option key={target.value} value={target.value}>
+                      {getScheduleDeliveryLabel(t, target.value, target.label)}
                     </option>
                   ))}
                 </select>
                 <div className="schedules-field-hint">
-                  Where to send the result when the task completes
+                  {t("schedules.field.deliverHint")}
                 </div>
               </div>
             </div>
             <div className="schedules-modal-footer">
               <button className="btn btn-secondary" onClick={closeCreateModal}>
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 className="btn btn-primary"
                 onClick={handleCreate}
                 disabled={!isScheduleValid() || actionInProgress === "creating"}
               >
-                {actionInProgress === "creating" ? "Creating..." : "Create"}
+                {actionInProgress === "creating"
+                  ? t("common.creating")
+                  : t("common.create")}
               </button>
             </div>
           </div>
@@ -450,7 +486,7 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="schedules-modal-header">
-              <h3>Remove Job</h3>
+              <h3>{t("schedules.modal.removeTitle")}</h3>
               <button
                 className="btn-ghost"
                 onClick={() => setConfirmDelete(null)}
@@ -460,8 +496,7 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
             </div>
             <div className="schedules-modal-body">
               <p className="schedules-confirm-text">
-                Are you sure you want to remove this scheduled task? This cannot
-                be undone.
+                {t("schedules.modal.removeText")}
               </p>
             </div>
             <div className="schedules-modal-footer">
@@ -469,14 +504,16 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
                 className="btn btn-secondary btn-sm"
                 onClick={() => setConfirmDelete(null)}
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 className="btn btn-danger btn-sm"
                 onClick={() => handleRemove(confirmDelete)}
                 disabled={actionInProgress === confirmDelete}
               >
-                {actionInProgress === confirmDelete ? "Removing..." : "Remove"}
+                {actionInProgress === confirmDelete
+                  ? t("common.removing")
+                  : t("common.remove")}
               </button>
             </div>
           </div>
@@ -485,22 +522,20 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
 
       <div className="schedules-header">
         <div>
-          <h2 className="schedules-title">Schedules</h2>
-          <p className="schedules-subtitle">
-            Automate tasks with scheduled agent runs
-          </p>
+          <h2 className="schedules-title">{t("schedules.title")}</h2>
+          <p className="schedules-subtitle">{t("schedules.subtitle")}</p>
         </div>
         <div className="schedules-header-actions">
           <button className="btn btn-secondary" onClick={loadJobs}>
             <Refresh size={14} />
-            Refresh
+            {t("common.refresh")}
           </button>
           <button
             className="btn btn-primary"
             onClick={() => setShowCreate(true)}
           >
             <Plus size={14} />
-            New Task
+            {t("schedules.newTask")}
           </button>
         </div>
       </div>
@@ -516,17 +551,15 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
 
       {jobs.length === 0 ? (
         <div className="schedules-empty">
-          <p className="schedules-empty-text">No scheduled tasks yet</p>
-          <p className="schedules-empty-hint">
-            Create a scheduled task to run your agent automatically on a timer
-          </p>
+          <p className="schedules-empty-text">{t("schedules.empty")}</p>
+          <p className="schedules-empty-hint">{t("schedules.emptyHint")}</p>
           <button
             className="btn btn-primary"
             style={{ marginTop: 12 }}
             onClick={() => setShowCreate(true)}
           >
             <Plus size={14} />
-            Create your first task
+            {t("schedules.emptyCta")}
           </button>
         </div>
       ) : (
@@ -542,12 +575,16 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
                   <span
                     className={`schedules-badge schedules-badge-${job.state}`}
                   >
-                    {job.state}
+                    {getScheduleStateLabel(t, job.state, job.state)}
                   </span>
                   {job.state !== "completed" && (
                     <button
                       className="btn-ghost schedules-action-btn"
-                      data-tooltip={job.state === "paused" ? "Resume" : "Pause"}
+                      data-tooltip={
+                        job.state === "paused"
+                          ? t("schedules.tooltip.resume")
+                          : t("schedules.tooltip.pause")
+                      }
                       onClick={() => handleToggle(job)}
                       disabled={actionInProgress === job.id}
                     >
@@ -561,7 +598,7 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
                   {job.state === "active" && (
                     <button
                       className="btn-ghost schedules-action-btn"
-                      data-tooltip="Run now"
+                      data-tooltip={t("schedules.tooltip.runNow")}
                       onClick={() => handleTrigger(job.id)}
                       disabled={actionInProgress === job.id}
                     >
@@ -570,7 +607,7 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
                   )}
                   <button
                     className="btn-ghost schedules-action-btn schedules-action-danger"
-                    data-tooltip="Remove"
+                    data-tooltip={t("schedules.tooltip.remove")}
                     onClick={() => setConfirmDelete(job.id)}
                     disabled={actionInProgress === job.id}
                   >
@@ -584,10 +621,16 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
               )}
 
               <div className="schedules-card-meta">
-                <span>Next: {formatTime(job.next_run_at)}</span>
+                <span>
+                  {t("schedules.meta.next", {
+                    time: formatTime(job.next_run_at),
+                  })}
+                </span>
                 {job.last_run_at && (
                   <span>
-                    Last: {formatTime(job.last_run_at)}
+                    {t("schedules.meta.last", {
+                      time: formatTime(job.last_run_at),
+                    })}
                     {job.last_status && job.last_status !== "ok" && (
                       <span className="schedules-card-error-icon">
                         <Alert size={12} />
@@ -597,15 +640,30 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
                 )}
                 {job.repeat && job.repeat.times && (
                   <span>
-                    Runs: {job.repeat.completed}/{job.repeat.times}
+                    {t("schedules.meta.runs", {
+                      completed: job.repeat.completed,
+                      total: job.repeat.times,
+                    })}
                   </span>
                 )}
                 {job.deliver.length > 0 &&
                   !(job.deliver.length === 1 && job.deliver[0] === "local") && (
-                    <span>Deliver: {job.deliver.join(", ")}</span>
+                    <span>
+                      {t("schedules.meta.deliver", {
+                        targets: job.deliver
+                          .map((value) =>
+                            getScheduleDeliveryLabel(t, value, value),
+                          )
+                          .join(", "),
+                      })}
+                    </span>
                   )}
                 {job.skills.length > 0 && (
-                  <span>Skills: {job.skills.join(", ")}</span>
+                  <span>
+                    {t("schedules.meta.skills", {
+                      skills: job.skills.join(", "),
+                    })}
+                  </span>
                 )}
               </div>
 

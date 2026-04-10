@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { getToolsetDescription, getToolsetLabel, useI18n } from "../../i18n";
 
 interface ToolsetInfo {
   key: string;
@@ -249,6 +250,7 @@ function ToolIcon({ toolKey }: { toolKey: string }): React.JSX.Element {
 }
 
 function Tools({ profile }: ToolsProps): React.JSX.Element {
+  const { t } = useI18n();
   const [toolsets, setToolsets] = useState<ToolsetInfo[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -286,35 +288,37 @@ function Tools({ profile }: ToolsProps): React.JSX.Element {
   return (
     <div className="tools-container">
       <div className="tools-header">
-        <h2 className="tools-title">Tools</h2>
-        <p className="tools-subtitle">
-          Enable or disable toolsets available to the agent during conversations
-        </p>
+        <h2 className="tools-title">{t("tools.title")}</h2>
+        <p className="tools-subtitle">{t("tools.subtitle")}</p>
       </div>
 
       <div className="tools-grid">
-        {toolsets.map((t) => (
+        {toolsets.map((tool) => (
           <div
-            key={t.key}
-            className={`tools-card ${t.enabled ? "tools-card-enabled" : "tools-card-disabled"}`}
-            onClick={() => handleToggle(t.key, t.enabled)}
+            key={tool.key}
+            className={`tools-card ${tool.enabled ? "tools-card-enabled" : "tools-card-disabled"}`}
+            onClick={() => handleToggle(tool.key, tool.enabled)}
           >
             <div className="tools-card-top">
-              <ToolIcon toolKey={t.key} />
+              <ToolIcon toolKey={tool.key} />
               <label
                 className="tools-toggle"
                 onClick={(e) => e.stopPropagation()}
               >
                 <input
                   type="checkbox"
-                  checked={t.enabled}
-                  onChange={() => handleToggle(t.key, t.enabled)}
+                  checked={tool.enabled}
+                  onChange={() => handleToggle(tool.key, tool.enabled)}
                 />
                 <span className="tools-toggle-track" />
               </label>
             </div>
-            <div className="tools-card-label">{t.label}</div>
-            <div className="tools-card-description">{t.description}</div>
+            <div className="tools-card-label">
+              {getToolsetLabel(t, tool.key, tool.label)}
+            </div>
+            <div className="tools-card-description">
+              {getToolsetDescription(t, tool.key, tool.description)}
+            </div>
           </div>
         ))}
       </div>
