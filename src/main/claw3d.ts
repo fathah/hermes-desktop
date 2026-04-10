@@ -1,4 +1,5 @@
 import { spawn, ChildProcess, execSync } from "child_process";
+import { request as httpRequest } from "http";
 import {
   existsSync,
   readFileSync,
@@ -20,6 +21,9 @@ const WS_URL_FILE = join(HERMES_HOME, "claw3d-ws-url");
 const DEFAULT_PORT = 3000;
 const DEFAULT_WS_URL = "ws://localhost:18789";
 const CLAW3D_SETTINGS_DIR = join(homedir(), ".openclaw", "claw3d");
+const CLAW3D_HTTP_READY_TIMEOUT_MS = 45_000;
+const CLAW3D_HTTP_STATUS_TIMEOUT_MS = 1_500;
+const CLAW3D_HTTP_POLL_INTERVAL_MS = 500;
 
 let devServerProcess: ChildProcess | null = null;
 let adapterProcess: ChildProcess | null = null;
@@ -27,6 +31,10 @@ let devServerLogs = "";
 let adapterLogs = "";
 let devServerError = "";
 let adapterError = "";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
 
 function getSavedPort(): number {
   try {
@@ -86,12 +94,31 @@ function writeClaw3dSettings(wsUrl?: string): void {
       /* fresh */
     }
 
-    const settings = {
+    const existingGateway = isRecord(existing.gateway) ? existing.gateway : {};
+    const existingLastKnownGood = isRecord(existingGateway.lastKnownGood)
+      ? existingGateway.lastKnownGood
+      : {};
+
+    const settings: Record<string, unknown> = {
       ...existing,
-      adapter: "hermes",
-      url,
-      token: "",
+      gateway: {
+        ...existingGateway,
+        url,
+        token:
+          typeof existingGateway.token === "string" ? existingGateway.token : "",
+        adapterType: "hermes",
+        lastKnownGood: {
+          ...existingLastKnownGood,
+          url,
+          token: "",
+          adapterType: "hermes",
+        },
+      },
     };
+
+    delete settings.adapter;
+    delete settings.url;
+    delete settings.token;
     safeWriteFile(settingsPath, JSON.stringify(settings, null, 2));
   } catch {
     /* non-fatal */
@@ -109,6 +136,7 @@ function writeClaw3dSettings(wsUrl?: string): void {
         `NEXT_PUBLIC_GATEWAY_URL=${url}`,
         `CLAW3D_GATEWAY_URL=${url}`,
         `CLAW3D_GATEWAY_TOKEN=`,
+        `CLAW3D_GATEWAY_ADAPTER_TYPE=hermes`,
         `HERMES_ADAPTER_PORT=18789`,
         `HERMES_MODEL=hermes`,
         `HERMES_AGENT_NAME=Hermes`,
@@ -121,9 +149,9 @@ function writeClaw3dSettings(wsUrl?: string): void {
   }
 }
 
-function checkPort(port: number): Promise<boolean> {
+function checkPortWithHost(port: number, host = "127.0.0.1"): Promise<boolean> {
   return new Promise((resolve) => {
-    const socket = createConnection({ port, host: "127.0.0.1" });
+    const socket = createConnection({ port, host });
     socket.setTimeout(300); // 300ms is plenty for localhost
     socket.on("connect", () => {
       socket.destroy();
@@ -138,6 +166,123 @@ function checkPort(port: number): Promise<boolean> {
       resolve(false);
     });
   });
+}
+
+function checkPort(port: number): Promise<boolean> {
+  return checkPortWithHost(port);
+}
+
+function normalizeProbeHost(hostname: string): string {
+  const host = hostname.trim().toLowerCase();
+  if (
+    host === "localhost" ||
+    host === "0.0.0.0" ||
+    host === "::" ||
+    host === "::1"
+  ) {
+    return "127.0.0.1";
+  }
+  return hostname;
+}
+
+function resolveLocalGatewayProbe(
+  wsUrl: string,
+): { host: string; port: number } | null {
+  try {
+    const parsed = new URL(wsUrl.trim());
+    if (!/^wss?:$/i.test(parsed.protocol)) return null;
+    const host = normalizeProbeHost(parsed.hostname);
+    if (host !== "127.0.0.1") return null;
+    const port = parsed.port
+      ? parseInt(parsed.port, 10)
+      : parsed.protocol === "wss:"
+        ? 443
+        : 80;
+    if (!Number.isFinite(port) || port <= 0) return null;
+    return { host, port };
+  } catch {
+    return null;
+  }
+}
+
+function probeHttpOfficeReady(
+  port: number,
+  timeoutMs: number,
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    const req = httpRequest(
+      {
+        host: "127.0.0.1",
+        port,
+        path: "/office",
+        method: "HEAD",
+        timeout: timeoutMs,
+      },
+      (res) => {
+        res.resume();
+        const statusCode = res.statusCode ?? 0;
+        resolve(statusCode >= 200 && statusCode < 400);
+      },
+    );
+
+    req.on("timeout", () => {
+      req.destroy();
+      resolve(false);
+    });
+    req.on("error", () => resolve(false));
+    req.end();
+  });
+}
+
+async function waitForCondition(
+  check: () => Promise<boolean>,
+  timeoutMs: number,
+  intervalMs = CLAW3D_HTTP_POLL_INTERVAL_MS,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await check()) return true;
+    await new Promise<void>((resolve) => {
+      setTimeout(
+        resolve,
+        Math.min(intervalMs, Math.max(50, deadline - Date.now())),
+      );
+    });
+  }
+  return await check();
+}
+
+async function isClaw3dReady(
+  timeoutMs = CLAW3D_HTTP_STATUS_TIMEOUT_MS,
+): Promise<boolean> {
+  const port = getSavedPort();
+  const wsUrl = getSavedWsUrl();
+  const gatewayProbe = resolveLocalGatewayProbe(wsUrl);
+  const [httpReady, gatewayReady] = await Promise.all([
+    probeHttpOfficeReady(port, timeoutMs),
+    gatewayProbe
+      ? checkPortWithHost(gatewayProbe.port, gatewayProbe.host)
+      : Promise.resolve(true),
+  ]);
+  return httpReady && gatewayReady;
+}
+
+async function waitForClaw3dReady(
+  timeoutMs = CLAW3D_HTTP_READY_TIMEOUT_MS,
+): Promise<boolean> {
+  const port = getSavedPort();
+  const wsUrl = getSavedWsUrl();
+  const gatewayProbe = resolveLocalGatewayProbe(wsUrl);
+
+  return await waitForCondition(async () => {
+    const [httpReady, gatewayReady] = await Promise.all([
+      probeHttpOfficeReady(port, CLAW3D_HTTP_STATUS_TIMEOUT_MS),
+      gatewayProbe
+        ? checkPortWithHost(gatewayProbe.port, gatewayProbe.host)
+        : Promise.resolve(true),
+    ]);
+    return httpReady && gatewayReady;
+  }, timeoutMs);
 }
 
 export interface Claw3dStatus {
@@ -214,13 +359,14 @@ export async function getClaw3dStatus(): Promise<Claw3dStatus> {
   // Only check port conflict when dev server is NOT running
   const portInUse = devRunning ? false : await checkPort(port);
   const adapterUp = isAdapterRunning();
+  const ready = devRunning && adapterUp ? await isClaw3dReady() : false;
   const error = devServerError || adapterError;
   return {
     cloned,
     installed,
     devServerRunning: devRunning,
     adapterRunning: adapterUp,
-    running: devRunning && adapterUp,
+    running: ready,
     port,
     portInUse,
     wsUrl: getSavedWsUrl(),
@@ -559,7 +705,7 @@ export function stopAdapter(): void {
   cleanupPid(ADAPTER_PID_FILE);
 }
 
-export function startAll(): { success: boolean; error?: string } {
+export async function startAll(): Promise<{ success: boolean; error?: string }> {
   if (!existsSync(join(HERMES_OFFICE_DIR, "node_modules"))) {
     return {
       success: false,
@@ -582,6 +728,15 @@ export function startAll(): { success: boolean; error?: string } {
   const adapterOk = startAdapter();
   if (!adapterOk) {
     return { success: false, error: "Failed to start Hermes adapter" };
+  }
+
+  const ready = await waitForClaw3dReady();
+  if (!ready) {
+    return {
+      success: false,
+      error:
+        "Claw3D services started, but the Office page did not become ready in time. Try again and check the process logs if it still happens.",
+    };
   }
 
   return { success: true };
