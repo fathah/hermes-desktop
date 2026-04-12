@@ -2,7 +2,7 @@ import { spawn, execSync, execFile } from "child_process";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
-import { getModelConfig } from "./config";
+import { getModelConfig, hasOAuthCredentials } from "./config";
 import { stripAnsi } from "./utils";
 
 export const HERMES_HOME = join(homedir(), ".hermes");
@@ -41,9 +41,35 @@ export function getEnhancedPath(): string {
   return [...extra, process.env.PATH || ""].join(":");
 }
 
-export function checkInstallStatus(): InstallStatus {
+function getActiveProfileNameSync(): string {
+  try {
+    const activeFile = join(HERMES_HOME, "active_profile");
+    if (!existsSync(activeFile)) return "default";
+    const name = readFileSync(activeFile, "utf-8").trim();
+    return name || "default";
+  } catch {
+    return "default";
+  }
+}
+
+function activeEnvFile(profile: string): string {
+  return profile === "default"
+    ? HERMES_ENV_FILE
+    : join(HERMES_HOME, "profiles", profile, ".env");
+}
+
+function activeAuthFile(profile: string): string {
+  return profile === "default"
+    ? join(HERMES_HOME, "auth.json")
+    : join(HERMES_HOME, "profiles", profile, "auth.json");
+}
+
+export function checkInstallStatus(): InstallStatus & { activeProfile?: string } {
   const installed = existsSync(HERMES_PYTHON) && existsSync(HERMES_SCRIPT);
-  const configured = existsSync(HERMES_ENV_FILE);
+  const activeProfile = getActiveProfileNameSync();
+  const envFile = activeEnvFile(activeProfile);
+  const authFile = activeAuthFile(activeProfile);
+  const configured = existsSync(envFile) || existsSync(authFile);
   let hasApiKey = false;
   let verified = false;
 
@@ -66,20 +92,19 @@ export function checkInstallStatus(): InstallStatus {
     }
   }
 
-  // Local/custom providers don't need an API key
   try {
-    const mc = getModelConfig();
+    const mc = getModelConfig(activeProfile);
     const localProviders = ["custom", "lmstudio", "ollama", "vllm", "llamacpp"];
-    if (localProviders.includes(mc.provider)) {
+    if (localProviders.includes(mc.provider) || hasOAuthCredentials(mc.provider, activeProfile)) {
       hasApiKey = true;
     }
   } catch {
     /* ignore */
   }
 
-  if (!hasApiKey && configured) {
+  if (!hasApiKey && configured && existsSync(envFile)) {
     try {
-      const content = readFileSync(HERMES_ENV_FILE, "utf-8");
+      const content = readFileSync(envFile, "utf-8");
       for (const line of content.split("\n")) {
         const trimmed = line.trim();
         if (trimmed.startsWith("#")) continue;
@@ -100,7 +125,7 @@ export function checkInstallStatus(): InstallStatus {
     }
   }
 
-  return { installed, configured, hasApiKey, verified };
+  return { installed, configured, hasApiKey, verified, activeProfile };
 }
 
 // Cached version to avoid re-running the Python process
