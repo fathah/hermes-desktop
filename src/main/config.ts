@@ -222,6 +222,22 @@ export function getHermesHome(profile?: string): string {
   return profilePaths(profile).home;
 }
 
+export function getApiServerKey(profile?: string): string {
+  const candidates = [
+    getConfigValue("API_SERVER_KEY", profile),
+    profile && profile !== "default" ? getConfigValue("API_SERVER_KEY") : null,
+    readEnv(profile).API_SERVER_KEY || null,
+    profile && profile !== "default" ? readEnv().API_SERVER_KEY || null : null,
+  ];
+
+  for (const candidate of candidates) {
+    const value = String(candidate || "").trim();
+    if (value) return value;
+  }
+
+  return "";
+}
+
 // ── Platform enabled/disabled in config.yaml ────────────
 
 const SUPPORTED_PLATFORMS = ["telegram", "discord", "slack", "whatsapp", "signal"];

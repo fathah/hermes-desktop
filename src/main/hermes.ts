@@ -10,7 +10,7 @@ import {
   HERMES_SCRIPT,
   getEnhancedPath,
 } from "./installer";
-import { getModelConfig, readEnv } from "./config";
+import { getApiServerKey, getModelConfig, readEnv } from "./config";
 import { stripAnsi } from "./utils";
 
 const API_URL = "http://127.0.0.1:8642";
@@ -126,6 +126,10 @@ function sendMessageViaApi(
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
+  const apiServerKey = getApiServerKey(profile);
+  if (apiServerKey) {
+    headers.Authorization = `Bearer ${apiServerKey}`;
+  }
 
   let sessionId = _resumeSessionId || "";
   let hasContent = false;
@@ -153,7 +157,7 @@ function sendMessageViaApi(
     });
     const probeReq = http.request(
       `${API_URL}/v1/chat/completions`,
-      { method: "POST", headers: { "Content-Type": "application/json" } },
+      { method: "POST", headers },
       (res) => {
         let raw = "";
         res.on("data", (d) => {
