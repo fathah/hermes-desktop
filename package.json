@@ -1,6 +1,6 @@
 {
   "name": "hermes-desktop",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Hermes Agent Desktop — self-improving AI assistant",
   "main": "./out/main/index.js",
   "author": "fathah",
