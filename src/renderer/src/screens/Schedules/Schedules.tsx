@@ -1,5 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Trash, Refresh, X, Play, Pause, Zap, Alert } from "../../assets/icons";
+import {
+  Plus,
+  Trash,
+  Refresh,
+  X,
+  Play,
+  Pause,
+  Zap,
+  Alert,
+} from "../../assets/icons";
+import { useI18n } from "../../components/useI18n";
 
 const DELIVER_TARGETS = [
   { value: "local", label: "Local" },
@@ -44,6 +54,7 @@ interface SchedulesProps {
 }
 
 function Schedules({ profile }: SchedulesProps): React.JSX.Element {
+  const { t } = useI18n();
   const [jobs, setJobs] = useState<CronJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -70,7 +81,7 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
       const list = await window.hermesAPI.listCronJobs(true, profile);
       setJobs(list);
     } catch {
-      setError("Failed to load scheduled tasks");
+      setError("加载计划任务失败");
     } finally {
       setLoading(false);
     }
@@ -250,34 +261,37 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
         <div className="skills-detail-overlay" onClick={closeCreateModal}>
           <div className="schedules-modal" onClick={(e) => e.stopPropagation()}>
             <div className="schedules-modal-header">
-              <h3>New Scheduled Task</h3>
+              <h3>{t("schedules.newTask")}</h3>
               <button className="btn-ghost" onClick={closeCreateModal}>
                 <X size={18} />
               </button>
             </div>
             <div className="schedules-modal-body">
               <div className="schedules-field">
-                <label className="schedules-field-label">Name</label>
+                <label className="schedules-field-label">
+                  {t("schedules.name")}
+                </label>
                 <input
                   className="input"
                   type="text"
-                  placeholder="e.g. Daily backup reminder"
+                  placeholder="例如：每日备份提醒"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                 />
               </div>
               <div className="schedules-field">
                 <label className="schedules-field-label">
-                  Frequency <span className="schedules-required">*</span>
+                  {t("schedules.frequency")}{" "}
+                  <span className="schedules-required">*</span>
                 </label>
                 <div className="schedules-freq-pills">
                   {(
                     [
-                      ["minutes", "Minutes"],
-                      ["hourly", "Hourly"],
-                      ["daily", "Daily"],
-                      ["weekly", "Weekly"],
-                      ["custom", "Custom"],
+                      ["minutes", "按分钟"],
+                      ["hourly", "按小时"],
+                      ["daily", "每天"],
+                      ["weekly", "每周"],
+                      ["custom", "自定义"],
                     ] as const
                   ).map(([val, label]) => (
                     <button
@@ -295,7 +309,7 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
               {frequency === "minutes" && (
                 <div className="schedules-field">
                   <label className="schedules-field-label">
-                    Every how many minutes?
+                    每隔多少分钟？
                   </label>
                   <select
                     className="input"
@@ -304,7 +318,7 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
                   >
                     {["5", "10", "15", "30", "45"].map((v) => (
                       <option key={v} value={v}>
-                        Every {v} minutes
+                        每 {v} 分钟
                       </option>
                     ))}
                   </select>
@@ -314,7 +328,7 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
               {frequency === "hourly" && (
                 <div className="schedules-field">
                   <label className="schedules-field-label">
-                    Every how many hours?
+                    每隔多少小时？
                   </label>
                   <select
                     className="input"
@@ -323,7 +337,7 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
                   >
                     {["1", "2", "3", "4", "6", "8", "12"].map((v) => (
                       <option key={v} value={v}>
-                        Every {v} hour{v !== "1" ? "s" : ""}
+                        每 {v} 小时
                       </option>
                     ))}
                   </select>
@@ -332,7 +346,7 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
 
               {frequency === "daily" && (
                 <div className="schedules-field">
-                  <label className="schedules-field-label">Time of day</label>
+                  <label className="schedules-field-label">执行时间</label>
                   <input
                     className="input"
                     type="time"
@@ -345,20 +359,20 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
               {frequency === "weekly" && (
                 <>
                   <div className="schedules-field">
-                    <label className="schedules-field-label">Day of week</label>
+                    <label className="schedules-field-label">星期几</label>
                     <select
                       className="input"
                       value={weeklyDay}
                       onChange={(e) => setWeeklyDay(e.target.value)}
                     >
                       {[
-                        ["1", "Monday"],
-                        ["2", "Tuesday"],
-                        ["3", "Wednesday"],
-                        ["4", "Thursday"],
-                        ["5", "Friday"],
-                        ["6", "Saturday"],
-                        ["0", "Sunday"],
+                        ["1", "周一"],
+                        ["2", "周二"],
+                        ["3", "周三"],
+                        ["4", "周四"],
+                        ["5", "周五"],
+                        ["6", "周六"],
+                        ["0", "周日"],
                       ].map(([val, label]) => (
                         <option key={val} value={val}>
                           {label}
@@ -367,7 +381,7 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
                     </select>
                   </div>
                   <div className="schedules-field">
-                    <label className="schedules-field-label">Time of day</label>
+                    <label className="schedules-field-label">执行时间</label>
                     <input
                       className="input"
                       type="time"
@@ -380,33 +394,31 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
 
               {frequency === "custom" && (
                 <div className="schedules-field">
-                  <label className="schedules-field-label">
-                    Cron expression
-                  </label>
+                  <label className="schedules-field-label">Cron 表达式</label>
                   <input
                     className="input"
                     type="text"
-                    placeholder="e.g. 0 9 * * 1-5"
+                    placeholder="例如：0 9 * * 1-5"
                     value={customCron}
                     onChange={(e) => setCustomCron(e.target.value)}
                   />
                   <div className="schedules-field-hint">
-                    Standard cron format: minute hour day month weekday
+                    标准 cron 格式：分钟 小时 日期 月份 星期
                   </div>
                 </div>
               )}
               <div className="schedules-field">
-                <label className="schedules-field-label">Prompt</label>
+                <label className="schedules-field-label">提示词</label>
                 <textarea
                   className="input schedules-textarea"
-                  placeholder="Task instruction for the agent..."
+                  placeholder="输入要交给代理执行的任务说明..."
                   value={newPrompt}
                   onChange={(e) => setNewPrompt(e.target.value)}
                   rows={3}
                 />
               </div>
               <div className="schedules-field">
-                <label className="schedules-field-label">Deliver to</label>
+                <label className="schedules-field-label">发送到</label>
                 <select
                   className="input"
                   value={newDeliver}
@@ -419,20 +431,20 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
                   ))}
                 </select>
                 <div className="schedules-field-hint">
-                  Where to send the result when the task completes
+                  任务完成后将结果发送到哪里
                 </div>
               </div>
             </div>
             <div className="schedules-modal-footer">
               <button className="btn btn-secondary" onClick={closeCreateModal}>
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 className="btn btn-primary"
                 onClick={handleCreate}
                 disabled={!isScheduleValid() || actionInProgress === "creating"}
               >
-                {actionInProgress === "creating" ? "Creating..." : "Create"}
+                {actionInProgress === "creating" ? "创建中..." : "创建"}
               </button>
             </div>
           </div>
@@ -450,7 +462,7 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="schedules-modal-header">
-              <h3>Remove Job</h3>
+              <h3>删除任务</h3>
               <button
                 className="btn-ghost"
                 onClick={() => setConfirmDelete(null)}
@@ -460,8 +472,7 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
             </div>
             <div className="schedules-modal-body">
               <p className="schedules-confirm-text">
-                Are you sure you want to remove this scheduled task? This cannot
-                be undone.
+                确定要删除这条计划任务吗？此操作无法撤销。
               </p>
             </div>
             <div className="schedules-modal-footer">
@@ -469,14 +480,14 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
                 className="btn btn-secondary btn-sm"
                 onClick={() => setConfirmDelete(null)}
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 className="btn btn-danger btn-sm"
                 onClick={() => handleRemove(confirmDelete)}
                 disabled={actionInProgress === confirmDelete}
               >
-                {actionInProgress === confirmDelete ? "Removing..." : "Remove"}
+                {actionInProgress === confirmDelete ? "删除中..." : "删除"}
               </button>
             </div>
           </div>
@@ -485,22 +496,20 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
 
       <div className="schedules-header">
         <div>
-          <h2 className="schedules-title">Schedules</h2>
-          <p className="schedules-subtitle">
-            Automate tasks with scheduled agent runs
-          </p>
+          <h2 className="schedules-title">{t("schedules.title")}</h2>
+          <p className="schedules-subtitle">{t("schedules.subtitle")}</p>
         </div>
         <div className="schedules-header-actions">
           <button className="btn btn-secondary" onClick={loadJobs}>
             <Refresh size={14} />
-            Refresh
+            {t("schedules.refresh")}
           </button>
           <button
             className="btn btn-primary"
             onClick={() => setShowCreate(true)}
           >
             <Plus size={14} />
-            New Task
+            {t("schedules.newTask")}
           </button>
         </div>
       </div>
@@ -516,17 +525,15 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
 
       {jobs.length === 0 ? (
         <div className="schedules-empty">
-          <p className="schedules-empty-text">No scheduled tasks yet</p>
-          <p className="schedules-empty-hint">
-            Create a scheduled task to run your agent automatically on a timer
-          </p>
+          <p className="schedules-empty-text">{t("schedules.empty")}</p>
+          <p className="schedules-empty-hint">{t("schedules.emptyHint")}</p>
           <button
             className="btn btn-primary"
             style={{ marginTop: 12 }}
             onClick={() => setShowCreate(true)}
           >
             <Plus size={14} />
-            Create your first task
+            {t("schedules.firstTask")}
           </button>
         </div>
       ) : (
@@ -542,12 +549,16 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
                   <span
                     className={`schedules-badge schedules-badge-${job.state}`}
                   >
-                    {job.state}
+                    {job.state === "active"
+                      ? "运行中"
+                      : job.state === "paused"
+                        ? "已暂停"
+                        : "已完成"}
                   </span>
                   {job.state !== "completed" && (
                     <button
                       className="btn-ghost schedules-action-btn"
-                      data-tooltip={job.state === "paused" ? "Resume" : "Pause"}
+                      data-tooltip={job.state === "paused" ? "继续" : "暂停"}
                       onClick={() => handleToggle(job)}
                       disabled={actionInProgress === job.id}
                     >
@@ -561,7 +572,7 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
                   {job.state === "active" && (
                     <button
                       className="btn-ghost schedules-action-btn"
-                      data-tooltip="Run now"
+                      data-tooltip="立即执行"
                       onClick={() => handleTrigger(job.id)}
                       disabled={actionInProgress === job.id}
                     >
@@ -570,7 +581,7 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
                   )}
                   <button
                     className="btn-ghost schedules-action-btn schedules-action-danger"
-                    data-tooltip="Remove"
+                    data-tooltip="删除"
                     onClick={() => setConfirmDelete(job.id)}
                     disabled={actionInProgress === job.id}
                   >
@@ -584,10 +595,10 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
               )}
 
               <div className="schedules-card-meta">
-                <span>Next: {formatTime(job.next_run_at)}</span>
+                <span>下次：{formatTime(job.next_run_at)}</span>
                 {job.last_run_at && (
                   <span>
-                    Last: {formatTime(job.last_run_at)}
+                    上次：{formatTime(job.last_run_at)}
                     {job.last_status && job.last_status !== "ok" && (
                       <span className="schedules-card-error-icon">
                         <Alert size={12} />
@@ -597,15 +608,15 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
                 )}
                 {job.repeat && job.repeat.times && (
                   <span>
-                    Runs: {job.repeat.completed}/{job.repeat.times}
+                    运行次数：{job.repeat.completed}/{job.repeat.times}
                   </span>
                 )}
                 {job.deliver.length > 0 &&
                   !(job.deliver.length === 1 && job.deliver[0] === "local") && (
-                    <span>Deliver: {job.deliver.join(", ")}</span>
+                    <span>发送到：{job.deliver.join(", ")}</span>
                   )}
                 {job.skills.length > 0 && (
-                  <span>Skills: {job.skills.join(", ")}</span>
+                  <span>技能：{job.skills.join(", ")}</span>
                 )}
               </div>
 

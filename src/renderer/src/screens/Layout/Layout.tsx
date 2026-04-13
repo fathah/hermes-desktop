@@ -28,6 +28,7 @@ import {
   Download,
 } from "../../assets/icons";
 import type { LucideIcon } from "lucide-react";
+import { useI18n } from "../../components/useI18n";
 
 type View =
   | "chat"
@@ -43,22 +44,23 @@ type View =
   | "gateway"
   | "settings";
 
-const NAV_ITEMS: { view: View; icon: LucideIcon; label: string }[] = [
-  { view: "chat", icon: ChatBubble, label: "Chat" },
-  { view: "sessions", icon: Clock, label: "Sessions" },
-  { view: "agents", icon: Users, label: "Profiles" },
-  { view: "office", icon: Building, label: "Office" },
-  { view: "models", icon: Layers, label: "Models" },
-  { view: "skills", icon: Puzzle, label: "Skills" },
-  { view: "soul", icon: Sparkles, label: "Persona" },
-  { view: "memory", icon: Brain, label: "Memory" },
-  { view: "tools", icon: Wrench, label: "Tools" },
-  { view: "schedules", icon: Timer, label: "Schedules" },
-  { view: "gateway", icon: Signal, label: "Gateway" },
-  { view: "settings", icon: SettingsIcon, label: "Settings" },
+const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string }[] = [
+  { view: "chat", icon: ChatBubble, labelKey: "navigation.chat" },
+  { view: "sessions", icon: Clock, labelKey: "navigation.sessions" },
+  { view: "agents", icon: Users, labelKey: "navigation.agents" },
+  { view: "office", icon: Building, labelKey: "navigation.office" },
+  { view: "models", icon: Layers, labelKey: "navigation.models" },
+  { view: "skills", icon: Puzzle, labelKey: "navigation.skills" },
+  { view: "soul", icon: Sparkles, labelKey: "navigation.soul" },
+  { view: "memory", icon: Brain, labelKey: "navigation.memory" },
+  { view: "tools", icon: Wrench, labelKey: "navigation.tools" },
+  { view: "schedules", icon: Timer, labelKey: "navigation.schedules" },
+  { view: "gateway", icon: Signal, labelKey: "navigation.gateway" },
+  { view: "settings", icon: SettingsIcon, labelKey: "navigation.settings" },
 ];
 
 function Layout(): React.JSX.Element {
+  const { t } = useI18n();
   const [view, setView] = useState<View>("chat");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -150,7 +152,7 @@ function Layout(): React.JSX.Element {
         </div>
 
         <nav className="sidebar-nav">
-          {NAV_ITEMS.map(({ view: v, icon: Icon, label }) => (
+          {NAV_ITEMS.map(({ view: v, icon: Icon, labelKey }) => (
             <button
               key={v}
               className={`sidebar-nav-item ${view === v ? "active" : ""}`}
@@ -160,7 +162,7 @@ function Layout(): React.JSX.Element {
               }}
             >
               <Icon size={16} />
-              {label}
+              {t(labelKey)}
             </button>
           ))}
         </nav>
@@ -179,7 +181,7 @@ function Layout(): React.JSX.Element {
             </button>
           )}
           <div className="sidebar-footer-text">
-            {activeProfile === "default" ? "Hermes Agent" : activeProfile}
+            {activeProfile === "default" ? t("common.appName") : activeProfile}
           </div>
         </div>
       </aside>

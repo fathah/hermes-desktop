@@ -3,6 +3,8 @@ import { join } from "path";
 import { HERMES_HOME } from "./installer";
 import { safeWriteFile } from "./utils";
 import Database from "better-sqlite3";
+import { t } from "../shared/i18n";
+import { getAppLocale } from "./locale";
 
 const CACHE_DIR = join(HERMES_HOME, "desktop");
 const CACHE_FILE = join(CACHE_DIR, "sessions.json");
@@ -24,19 +26,20 @@ interface CacheData {
 
 // Generate a short, readable title from the first user message (like ChatGPT/Claude)
 function generateTitle(message: string): string {
-  if (!message || !message.trim()) return "New conversation";
+  if (!message || !message.trim())
+    return t("sessions.newConversation", getAppLocale());
 
   // Clean up the message
   let text = message.trim();
 
   // Remove markdown formatting
-  text = text.replace(/[#*_`~\[\]()]/g, "");
+  text = text.replace(/[#*_`~[\]()]/g, "");
   // Remove URLs
   text = text.replace(/https?:\/\/\S+/g, "");
   // Remove extra whitespace
   text = text.replace(/\s+/g, " ").trim();
 
-  if (!text) return "New conversation";
+  if (!text) return t("sessions.newConversation", getAppLocale());
 
   // If short enough, use as-is
   if (text.length <= 50) return text;
@@ -99,7 +102,7 @@ export function syncSessionCache(): CachedSession[] {
     }>;
 
     const existingIds = new Set(cache.sessions.map((s) => s.id));
-    let newSessions: CachedSession[] = [];
+    const newSessions: CachedSession[] = [];
 
     for (const row of rows) {
       if (existingIds.has(row.id)) {
@@ -122,9 +125,11 @@ export function syncSessionCache(): CachedSession[] {
                ORDER BY timestamp, id LIMIT 1`,
             )
             .get(row.id) as { content: string } | undefined;
-          title = msg ? generateTitle(msg.content) : "New conversation";
+          title = msg
+            ? generateTitle(msg.content)
+            : t("sessions.newConversation", getAppLocale());
         } catch {
-          title = "New conversation";
+          title = t("sessions.newConversation", getAppLocale());
         }
       }
 
@@ -157,19 +162,13 @@ export function syncSessionCache(): CachedSession[] {
 }
 
 // Fast read from cache only (no DB access)
-export function listCachedSessions(
-  limit = 50,
-  offset = 0,
-): CachedSession[] {
+export function listCachedSessions(limit = 50, offset = 0): CachedSession[] {
   const cache = readCache();
   return cache.sessions.slice(offset, offset + limit);
 }
 
 // Update title for a specific session
-export function updateSessionTitle(
-  sessionId: string,
-  title: string,
-): void {
+export function updateSessionTitle(sessionId: string, title: string): void {
   const cache = readCache();
   const idx = cache.sessions.findIndex((s) => s.id === sessionId);
   if (idx >= 0) {

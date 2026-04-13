@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { ArrowRight, ExternalLink } from "../../assets/icons";
 import { PROVIDERS, LOCAL_PRESETS } from "../../constants";
+import { useI18n } from "../../components/useI18n";
 
 function Setup({ onComplete }: { onComplete: () => void }): React.JSX.Element {
+  const { t } = useI18n();
   const [selectedProvider, setSelectedProvider] = useState("openrouter");
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("http://localhost:1234/v1");
@@ -20,11 +22,11 @@ function Setup({ onComplete }: { onComplete: () => void }): React.JSX.Element {
 
   async function handleContinue(): Promise<void> {
     if (provider.needsKey && !apiKey.trim()) {
-      setError("Please enter an API key");
+      setError(t("setup.missingApiKey"));
       return;
     }
     if (isLocal && !baseUrl.trim()) {
-      setError("Please enter the server URL");
+      setError(t("setup.missingServerUrl"));
       return;
     }
 
@@ -47,17 +49,15 @@ function Setup({ onComplete }: { onComplete: () => void }): React.JSX.Element {
 
       onComplete();
     } catch {
-      setError("Failed to save configuration");
+      setError(t("setup.saveFailed"));
       setSaving(false);
     }
   }
 
   return (
     <div className="screen setup-screen">
-      <h1 className="setup-title">Set Up Your AI Provider</h1>
-      <p className="setup-subtitle">
-        Choose a provider and configure it to get started
-      </p>
+      <h1 className="setup-title">{t("setup.title")}</h1>
+      <p className="setup-subtitle">{t("setup.subtitle")}</p>
 
       <div className="setup-provider-grid">
         {PROVIDERS.setup.map((p) => (
@@ -69,9 +69,17 @@ function Setup({ onComplete }: { onComplete: () => void }): React.JSX.Element {
               setError("");
             }}
           >
-            <div className="setup-provider-name">{p.name}</div>
-            <div className="setup-provider-desc">{p.desc}</div>
-            {p.tag && <div className="setup-provider-tag">{p.tag}</div>}
+            <div className="setup-provider-name">
+              {t(`setup.providerCards.${p.id}.name`)}
+            </div>
+            <div className="setup-provider-desc">
+              {t(`setup.providerCards.${p.id}.desc`)}
+            </div>
+            {p.tag && (
+              <div className="setup-provider-tag">
+                {t(`setup.providerCards.${p.id}.tag`)}
+              </div>
+            )}
           </button>
         ))}
       </div>
@@ -79,7 +87,7 @@ function Setup({ onComplete }: { onComplete: () => void }): React.JSX.Element {
       <div className="setup-form">
         {isLocal ? (
           <>
-            <label className="setup-label">Server Preset</label>
+            <label className="setup-label">{t("setup.serverPreset")}</label>
             <div className="setup-local-presets">
               {LOCAL_PRESETS.map((preset) => (
                 <button
@@ -87,12 +95,12 @@ function Setup({ onComplete }: { onComplete: () => void }): React.JSX.Element {
                   className={`setup-local-preset ${baseUrl.includes(`:${preset.port}/`) ? "active" : ""}`}
                   onClick={() => applyLocalPreset(preset.port)}
                 >
-                  {preset.name}
+                  {t(`setup.localPresets.${preset.id}`)}
                 </button>
               ))}
             </div>
 
-            <label className="setup-label">Server URL</label>
+            <label className="setup-label">{t("setup.serverUrl")}</label>
             <input
               className="input"
               type="text"
@@ -104,12 +112,13 @@ function Setup({ onComplete }: { onComplete: () => void }): React.JSX.Element {
               }}
               autoFocus
             />
-            <div className="setup-field-hint">
-              Make sure your local server is running before continuing
-            </div>
+            <div className="setup-field-hint">{t("setup.localServerHint")}</div>
 
             <label className="setup-label" style={{ marginTop: 16 }}>
-              Model Name <span className="setup-label-optional">optional</span>
+              {t("setup.modelName")}{" "}
+              <span className="setup-label-optional">
+                {t("common.optional")}
+              </span>
             </label>
             <input
               className="input"
@@ -119,12 +128,16 @@ function Setup({ onComplete }: { onComplete: () => void }): React.JSX.Element {
               onChange={(e) => setModelName(e.target.value)}
             />
             <div className="setup-field-hint">
-              Leave blank to use the server&apos;s default model
+              {t("setup.defaultModelHint")}
             </div>
           </>
         ) : (
           <>
-            <label className="setup-label">{provider.name} API Key</label>
+            <label className="setup-label">
+              {t("setup.apiKeyLabel", {
+                provider: t(`setup.providerCards.${provider.id}.name`),
+              })}
+            </label>
             <div className="setup-input-group">
               <input
                 className="input"
@@ -143,7 +156,7 @@ function Setup({ onComplete }: { onComplete: () => void }): React.JSX.Element {
                 onClick={() => setShowKey(!showKey)}
                 type="button"
               >
-                {showKey ? "Hide" : "Show"}
+                {showKey ? t("common.hide") : t("common.show")}
               </button>
             </div>
 
@@ -151,7 +164,7 @@ function Setup({ onComplete }: { onComplete: () => void }): React.JSX.Element {
               className="setup-link"
               onClick={() => window.hermesAPI.openExternal(provider.url)}
             >
-              Don&apos;t have a key? Get one here
+              {t("setup.noKeyHint")}
               <ExternalLink size={12} />
             </button>
           </>
@@ -169,7 +182,7 @@ function Setup({ onComplete }: { onComplete: () => void }): React.JSX.Element {
           }
           style={{ marginTop: isLocal ? 20 : 0 }}
         >
-          {saving ? "Saving..." : "Continue"}
+          {saving ? t("setup.saving") : t("setup.continue")}
           {!saving && <ArrowRight size={16} />}
         </button>
       </div>

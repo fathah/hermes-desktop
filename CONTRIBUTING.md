@@ -2,6 +2,11 @@
 
 Thanks for your interest in contributing to Hermes Desktop! Whether it's a bug fix, a new feature, improved docs, or just a typo — every contribution helps.
 
+## Languages
+
+- English: `CONTRIBUTING.md`
+- 简体中文: `CONTRIBUTING.zh-CN.md`
+
 ## Getting Started
 
 1. **Fork** the repository and clone your fork locally.

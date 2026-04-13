@@ -24,6 +24,24 @@ import agentsEn from "./locales/en/agents";
 import soulEn from "./locales/en/soul";
 import memoryEn from "./locales/en/memory";
 import installEn from "./locales/en/install";
+import commonZh from "./locales/zh-CN/common";
+import navigationZh from "./locales/zh-CN/navigation";
+import welcomeZh from "./locales/zh-CN/welcome";
+import setupZh from "./locales/zh-CN/setup";
+import chatZh from "./locales/zh-CN/chat";
+import settingsZh from "./locales/zh-CN/settings";
+import toolsZh from "./locales/zh-CN/tools";
+import sessionsZh from "./locales/zh-CN/sessions";
+import modelsZh from "./locales/zh-CN/models";
+import officeZh from "./locales/zh-CN/office";
+import errorsZh from "./locales/zh-CN/errors";
+import schedulesZh from "./locales/zh-CN/schedules";
+import skillsZh from "./locales/zh-CN/skills";
+import gatewayZh from "./locales/zh-CN/gateway";
+import agentsZh from "./locales/zh-CN/agents";
+import soulZh from "./locales/zh-CN/soul";
+import memoryZh from "./locales/zh-CN/memory";
+import installZh from "./locales/zh-CN/install";
 
 export const resources = {
   en: {
@@ -46,6 +64,28 @@ export const resources = {
       soul: soulEn,
       memory: memoryEn,
       install: installEn,
+    },
+  },
+  "zh-CN": {
+    translation: {
+      common: commonZh,
+      navigation: navigationZh,
+      welcome: welcomeZh,
+      setup: setupZh,
+      chat: chatZh,
+      settings: settingsZh,
+      tools: toolsZh,
+      sessions: sessionsZh,
+      models: modelsZh,
+      office: officeZh,
+      errors: errorsZh,
+      schedules: schedulesZh,
+      skills: skillsZh,
+      gateway: gatewayZh,
+      agents: agentsZh,
+      soul: soulZh,
+      memory: memoryZh,
+      install: installZh,
     },
   },
 } satisfies Resource;
@@ -91,7 +131,7 @@ export function t(
   lang: AppLocale = locale,
   options?: Record<string, unknown>,
 ): string {
-  const translated = readKey(resources[lang]?.translation, key);
+  const translated = readKey(resources[lang].translation, key);
   const fallback = readKey(resources[FALLBACK_LOCALE].translation, key);
   const base = translated ?? fallback ?? key;
 

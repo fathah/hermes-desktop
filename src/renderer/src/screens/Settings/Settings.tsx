@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useTheme } from "../../components/ThemeProvider";
 import { SETTINGS_SECTIONS, PROVIDERS, THEME_OPTIONS } from "../../constants";
+import { useI18n } from "../../components/useI18n";
 
 // Read cached values from localStorage for instant display
 function getCachedVersion(): string | null {
@@ -20,7 +21,14 @@ function getCachedOpenClaw(): { found: boolean; path: string | null } | null {
   }
 }
 
-function Settings({ profile, visible }: { profile?: string; visible?: boolean }): React.JSX.Element {
+function Settings({
+  profile,
+  visible,
+}: {
+  profile?: string;
+  visible?: boolean;
+}): React.JSX.Element {
+  const { t } = useI18n();
   const [env, setEnv] = useState<Record<string, string>>({});
   const [savedKey, setSavedKey] = useState<string | null>(null);
   const [hermesHome, setHermesHome] = useState("");
@@ -36,6 +44,9 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
   const [doctorRunning, setDoctorRunning] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [updateResult, setUpdateResult] = useState<string | null>(null);
+  const [updateResultType, setUpdateResultType] = useState<
+    "success" | "error" | null
+  >(null);
 
   // OpenClaw migration — initialize from localStorage cache
   const cachedClaw = getCachedOpenClaw();
@@ -51,6 +62,9 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
   const [migrating, setMigrating] = useState(false);
   const [migrationLog, setMigrationLog] = useState("");
   const [migrationResult, setMigrationResult] = useState<string | null>(null);
+  const [migrationResultType, setMigrationResultType] = useState<
+    "success" | "error" | null
+  >(null);
   const migrationLogRef = useRef<HTMLPreElement>(null);
 
   // Model config
@@ -97,7 +111,9 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
       if (v) {
         try {
           localStorage.setItem("hermes-version-cache", v);
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
       }
     });
 
@@ -107,7 +123,9 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
         setOpenclawPath(claw.path);
         try {
           localStorage.setItem("hermes-openclaw-cache", JSON.stringify(claw));
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
       });
     }
   }, [profile]);
@@ -225,16 +243,17 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
       const result = await window.hermesAPI.runClawMigrate();
       cleanup();
       if (result.success) {
-        setMigrationResult(
-          "Migration complete! Your config, keys, and data have been imported.",
-        );
+        setMigrationResult("迁移完成！你的配置、密钥和数据已导入。");
+        setMigrationResultType("success");
         setOpenclawFound(false);
       } else {
-        setMigrationResult(result.error || "Migration failed.");
+        setMigrationResult(result.error || "迁移失败。");
+        setMigrationResultType("error");
       }
     } catch (err) {
       cleanup();
-      setMigrationResult((err as Error).message || "Migration failed.");
+      setMigrationResult((err as Error).message || "迁移失败。");
+      setMigrationResultType("error");
     }
     setMigrating(false);
   }
@@ -257,7 +276,11 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
     window.hermesAPI.refreshHermesVersion().then((v) => {
       setHermesVersion(v);
       if (v) {
-        try { localStorage.setItem("hermes-version-cache", v); } catch { /* ignore */ }
+        try {
+          localStorage.setItem("hermes-version-cache", v);
+        } catch {
+          /* ignore */
+        }
       }
     });
   }
@@ -268,10 +291,12 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
     const result = await window.hermesAPI.runHermesUpdate();
     setUpdating(false);
     if (result.success) {
-      setUpdateResult("Updated successfully!");
+      setUpdateResult("更新成功！");
+      setUpdateResultType("success");
       refreshVersion();
     } else {
-      setUpdateResult(result.error || "Update failed.");
+      setUpdateResult(result.error || "更新失败。");
+      setUpdateResultType("error");
     }
   }
 
@@ -292,24 +317,32 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
 
   return (
     <div className="settings-container">
-      <h1 className="settings-header">Settings</h1>
+      <h1 className="settings-header">{t("settings.title")}</h1>
 
       <div className="settings-section">
-        <div className="settings-section-title">Hermes Agent</div>
+        <div className="settings-section-title">
+          {t("settings.sections.hermesAgent")}
+        </div>
         <div className="settings-hermes-info">
           <div className="settings-hermes-row">
             <div className="settings-hermes-detail">
-              <span className="settings-hermes-label">Engine</span>
+              <span className="settings-hermes-label">
+                {t("common.engine")}
+              </span>
               {hermesVersion === null ? (
                 <span className="skeleton skeleton-sm" />
               ) : (
                 <span className="settings-hermes-value">
-                  {parsedVersion ? `v${parsedVersion.version}` : "Not detected"}
+                  {parsedVersion
+                    ? `v${parsedVersion.version}`
+                    : t("settings.notDetected")}
                 </span>
               )}
             </div>
             <div className="settings-hermes-detail">
-              <span className="settings-hermes-label">Released</span>
+              <span className="settings-hermes-label">
+                {t("common.released")}
+              </span>
               {hermesVersion === null ? (
                 <span className="skeleton skeleton-sm" />
               ) : (
@@ -319,7 +352,9 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
               )}
             </div>
             <div className="settings-hermes-detail">
-              <span className="settings-hermes-label">Desktop</span>
+              <span className="settings-hermes-label">
+                {t("common.desktop")}
+              </span>
               {!appVersion ? (
                 <span className="skeleton skeleton-sm" />
               ) : (
@@ -347,7 +382,7 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
               )}
             </div>
             <div className="settings-hermes-detail">
-              <span className="settings-hermes-label">Home</span>
+              <span className="settings-hermes-label">{t("common.home")}</span>
               {!hermesHome ? (
                 <span className="skeleton skeleton-md" />
               ) : (
@@ -369,11 +404,11 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
                 onClick={handleUpdateHermes}
                 disabled={updating}
               >
-                {updating ? "Updating..." : "Update Engine"}
+                {updating ? "更新中..." : "更新引擎"}
               </button>
             ) : (
               <button className="btn btn-secondary" disabled>
-                Up to date
+                已是最新版本
               </button>
             )}
             <button
@@ -381,12 +416,12 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
               onClick={handleDoctor}
               disabled={doctorRunning}
             >
-              {doctorRunning ? "Running..." : "Run Doctor"}
+              {doctorRunning ? "运行中..." : "运行诊断"}
             </button>
           </div>
           {updateResult && (
             <div
-              className={`settings-hermes-result ${updateResult.includes("success") ? "success" : "error"}`}
+              className={`settings-hermes-result ${updateResultType || "error"}`}
             >
               {updateResult}
             </div>
@@ -402,17 +437,17 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
           <div className="settings-migration-header">
             <div>
               <div className="settings-migration-title">
-                OpenClaw Installation Detected
+                检测到 OpenClaw 安装
               </div>
               <div className="settings-migration-desc">
-                Found at <code>{openclawPath}</code>. You can migrate your
-                config, API keys, sessions, and skills to Hermes.
+                在 <code>{openclawPath}</code> 发现 OpenClaw。你可以将配置、API
+                Key、会话和技能迁移到 Hermes。
               </div>
             </div>
             <button
               className="btn-ghost settings-migration-dismiss"
               onClick={handleDismissMigration}
-              title="Don't show again"
+              title="不再显示"
             >
               &times;
             </button>
@@ -424,7 +459,7 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
           )}
           {migrationResult && (
             <div
-              className={`settings-hermes-result ${migrationResult.includes("complete") ? "success" : "error"}`}
+              className={`settings-hermes-result ${migrationResultType || "error"}`}
             >
               {migrationResult}
             </div>
@@ -435,22 +470,26 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
               onClick={handleMigrate}
               disabled={migrating}
             >
-              {migrating ? "Migrating..." : "Migrate to Hermes"}
+              {migrating ? "迁移中..." : "迁移到 Hermes"}
             </button>
             <button
               className="btn btn-secondary "
               onClick={handleDismissMigration}
             >
-              Skip
+              跳过
             </button>
           </div>
         </div>
       )}
 
       <div className="settings-section">
-        <div className="settings-section-title">Appearance</div>
+        <div className="settings-section-title">
+          {t("settings.sections.appearance")}
+        </div>
         <div className="settings-field">
-          <label className="settings-field-label">Theme</label>
+          <label className="settings-field-label">
+            {t("settings.theme.label")}
+          </label>
           <div className="settings-theme-options">
             {THEME_OPTIONS.map((opt) => (
               <button
@@ -458,28 +497,30 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
                 className={`settings-theme-option ${theme === opt.value ? "active" : ""}`}
                 onClick={() => setTheme(opt.value)}
               >
-                {opt.label}
+                {opt.value === "system"
+                  ? t("settings.theme.system")
+                  : opt.value === "light"
+                    ? t("settings.theme.light")
+                    : t("settings.theme.dark")}
               </button>
             ))}
           </div>
-          <div className="settings-field-hint">
-            Choose your preferred appearance
-          </div>
+          <div className="settings-field-hint">选择你偏好的界面外观</div>
         </div>
       </div>
 
       <div className="settings-section">
         <div className="settings-section-title">
-          Model
+          {t("common.model")}
           {modelSaved && (
             <span className="settings-saved" style={{ marginLeft: 8 }}>
-              Saved
+              {t("common.saved")}
             </span>
           )}
         </div>
 
         <div className="settings-field">
-          <label className="settings-field-label">Provider</label>
+          <label className="settings-field-label">{t("common.provider")}</label>
           <select
             className="input settings-select"
             value={modelProvider}
@@ -499,13 +540,13 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
           </select>
           <div className="settings-field-hint">
             {isCustomProvider
-              ? "Use any OpenAI-compatible endpoint (LM Studio, Ollama, vLLM, etc.)"
-              : "Select your inference provider, or auto-detect from API keys"}
+              ? "使用任何兼容 OpenAI 的接口（LM Studio、Ollama、vLLM 等）"
+              : "选择推理提供商，或根据 API Key 自动识别"}
           </div>
         </div>
 
         <div className="settings-field">
-          <label className="settings-field-label">Model</label>
+          <label className="settings-field-label">{t("common.model")}</label>
           <input
             className="input"
             type="text"
@@ -514,13 +555,15 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
             placeholder="e.g. anthropic/claude-opus-4.6"
           />
           <div className="settings-field-hint">
-            Default model name (leave blank for provider default)
+            默认模型名（留空则使用提供商默认值）
           </div>
         </div>
 
         {isCustomProvider && (
           <div className="settings-field">
-            <label className="settings-field-label">Base URL</label>
+            <label className="settings-field-label">
+              {t("common.baseUrl")}
+            </label>
             <input
               className="input"
               type="text"
@@ -528,19 +571,19 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
               onChange={(e) => setModelBaseUrl(e.target.value)}
               placeholder="http://localhost:1234/v1"
             />
-            <div className="settings-field-hint">
-              OpenAI-compatible API endpoint
-            </div>
+            <div className="settings-field-hint">兼容 OpenAI 的 API 地址</div>
           </div>
         )}
       </div>
 
       <div className="settings-section">
-        <div className="settings-section-title">Credential Pool</div>
+        <div className="settings-section-title">
+          {t("settings.sections.credentialPool")}
+        </div>
         <div className="settings-field">
           <div className="settings-field-hint" style={{ marginBottom: 10 }}>
-            Add multiple API keys per provider for automatic rotation and load
-            balancing. Hermes will cycle through them.
+            为同一提供商添加多个 API Key，以便自动轮换和负载均衡。Hermes
+            会在它们之间轮流使用。
           </div>
           <div className="settings-pool-add">
             <select
@@ -549,7 +592,7 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
               onChange={(e) => setPoolProvider(e.target.value)}
               style={{ width: 140 }}
             >
-              <option value="">Provider</option>
+              <option value="">{t("common.provider")}</option>
               {PROVIDERS.options
                 .filter((p) => p.value !== "auto")
                 .map((p) => (
@@ -563,7 +606,7 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
               type="password"
               value={poolNewKey}
               onChange={(e) => setPoolNewKey(e.target.value)}
-              placeholder="API key"
+              placeholder="API Key"
               style={{ flex: 1 }}
             />
             <input
@@ -571,7 +614,7 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
               type="text"
               value={poolNewLabel}
               onChange={(e) => setPoolNewLabel(e.target.value)}
-              placeholder="Label (optional)"
+              placeholder={`标签（${t("common.optional")})`}
               style={{ width: 120 }}
             />
             <button
@@ -579,7 +622,7 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
               onClick={handleAddPoolKey}
               disabled={!poolProvider || !poolNewKey.trim()}
             >
-              Add
+              添加
             </button>
           </div>
           {Object.entries(credPool).map(
@@ -605,7 +648,7 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
                         style={{ color: "var(--error)", fontSize: 11 }}
                         onClick={() => handleRemovePoolKey(provider, idx)}
                       >
-                        Remove
+                        移除
                       </button>
                     </div>
                   ))}
@@ -623,7 +666,7 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
               <label className="settings-field-label">
                 {field.label}
                 {savedKey === field.key && (
-                  <span className="settings-saved">Saved</span>
+                  <span className="settings-saved">{t("common.saved")}</span>
                 )}
               </label>
               <div className="settings-input-row">
@@ -637,14 +680,16 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
                   value={env[field.key] || ""}
                   onChange={(e) => handleChange(field.key, e.target.value)}
                   onBlur={() => handleBlur(field.key)}
-                  placeholder={`Enter ${field.label.toLowerCase()}`}
+                  placeholder={`输入 ${field.label}`}
                 />
                 {field.type === "password" && (
                   <button
                     className="btn-ghost settings-toggle-btn"
                     onClick={() => toggleVisibility(field.key)}
                   >
-                    {visibleKeys.has(field.key) ? "Hide" : "Show"}
+                    {visibleKeys.has(field.key)
+                      ? t("common.hide")
+                      : t("common.show")}
                   </button>
                 )}
               </div>

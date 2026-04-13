@@ -10,6 +10,11 @@
 
 > **This project is in active development.** Features may change, and some things might break. If you run into a problem or have an idea, [open an issue](https://github.com/fathah/hermes-desktop/issues). Contributions are welcome!
 
+## Languages
+
+- English: `README.md`
+- 简体中文: `README.zh-CN.md`
+
 Hermes Desktop is a desktop app for installing, configuring, and chatting with [Hermes Agent](https://github.com/NousResearch/hermes-agent) from a native desktop interface.
 
 Instead of asking you to manage the CLI by hand, the app walks through install, provider setup, and day-to-day usage in one place. It uses the official Hermes install script, stores Hermes in `~/.hermes`, and gives you a GUI for chat, sessions, profiles, memory, skills, tools, and settings.
@@ -18,15 +23,17 @@ Instead of asking you to manage the CLI by hand, the app walks through install, 
 
 Download the latest build from the [Releases](https://github.com/fathah/hermes-desktop/releases/) page.
 
-| Platform | File |
-|----------|------|
-| macOS | `.dmg` |
-| Linux | `.AppImage` or `.deb` |
+| Platform | File                  |
+| -------- | --------------------- |
+| macOS    | `.dmg`                |
+| Linux    | `.AppImage` or `.deb` |
 
 > **macOS users:** The app is not code-signed or notarized. macOS will block it on first launch. To fix this, run the following after installing:
+>
 > ```bash
 > xattr -cr "/Applications/Hermes Agent.app"
 > ```
+>
 > Or right-click the app → **Open** → click **Open** in the confirmation dialog.
 
 ## What It Includes

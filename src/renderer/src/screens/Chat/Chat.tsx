@@ -28,17 +28,51 @@ interface SlashCommand {
 
 const SLASH_COMMANDS: SlashCommand[] = [
   // Chat control
-  { name: "/new", description: "Start a new chat", category: "chat", local: true },
-  { name: "/clear", description: "Clear conversation history", category: "chat", local: true },
+  {
+    name: "/new",
+    description: "Start a new chat",
+    category: "chat",
+    local: true,
+  },
+  {
+    name: "/clear",
+    description: "Clear conversation history",
+    category: "chat",
+    local: true,
+  },
   // Agent commands (sent to backend)
-  { name: "/btw", description: "Ask a side question without affecting context", category: "agent" },
-  { name: "/approve", description: "Approve a pending action", category: "agent" },
+  {
+    name: "/btw",
+    description: "Ask a side question without affecting context",
+    category: "agent",
+  },
+  {
+    name: "/approve",
+    description: "Approve a pending action",
+    category: "agent",
+  },
   { name: "/deny", description: "Deny a pending action", category: "agent" },
-  { name: "/status", description: "Show current agent status", category: "agent" },
-  { name: "/reset", description: "Reset conversation context", category: "agent" },
-  { name: "/compact", description: "Compact and summarize the conversation", category: "agent" },
+  {
+    name: "/status",
+    description: "Show current agent status",
+    category: "agent",
+  },
+  {
+    name: "/reset",
+    description: "Reset conversation context",
+    category: "agent",
+  },
+  {
+    name: "/compact",
+    description: "Compact and summarize the conversation",
+    category: "agent",
+  },
   { name: "/undo", description: "Undo the last action", category: "agent" },
-  { name: "/retry", description: "Retry the last failed action", category: "agent" },
+  {
+    name: "/retry",
+    description: "Retry the last failed action",
+    category: "agent",
+  },
   // Tools & capabilities
   { name: "/web", description: "Search the web", category: "tools" },
   { name: "/image", description: "Generate an image", category: "tools" },
@@ -47,10 +81,18 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { name: "/file", description: "Read or write files", category: "tools" },
   { name: "/shell", description: "Run a shell command", category: "tools" },
   // Info
-  { name: "/help", description: "Show available commands and help", category: "info" },
+  {
+    name: "/help",
+    description: "Show available commands and help",
+    category: "info",
+  },
   { name: "/tools", description: "List available tools", category: "info" },
   { name: "/skills", description: "List installed skills", category: "info" },
-  { name: "/model", description: "Show or switch the current model", category: "info" },
+  {
+    name: "/model",
+    description: "Show or switch the current model",
+    category: "info",
+  },
   { name: "/memory", description: "Show agent memory", category: "info" },
   { name: "/persona", description: "Show current persona", category: "info" },
   { name: "/version", description: "Show Hermes version", category: "info" },
@@ -84,6 +126,7 @@ const MessageRow = memo(function MessageRow({
   onApprove,
   onDeny,
 }: MessageRowProps): React.JSX.Element {
+  const { t } = useI18n();
   return (
     <div className={`chat-message chat-message-${msg.role}`}>
       {msg.role === "user" ? (
@@ -103,11 +146,14 @@ const MessageRow = memo(function MessageRow({
         isLast &&
         APPROVAL_RE.test(msg.content) && (
           <div className="chat-approval-bar">
-            <button className="chat-approval-btn chat-approve" onClick={onApprove}>
-              Approve
+            <button
+              className="chat-approval-btn chat-approve"
+              onClick={onApprove}
+            >
+              {t("chat.approve")}
             </button>
             <button className="chat-approval-btn chat-deny" onClick={onDeny}>
-              Deny
+              {t("chat.deny")}
             </button>
           </div>
         )}
@@ -128,6 +174,7 @@ interface ModelGroup {
 }
 
 import { PROVIDERS } from "../../constants";
+import { useI18n } from "../../components/useI18n";
 
 interface ChatProps {
   messages: ChatMessage[];
@@ -146,6 +193,7 @@ function Chat({
   onSessionStarted,
   onNewChat,
 }: ChatProps): React.JSX.Element {
+  const { t } = useI18n();
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [hermesSessionId, setHermesSessionId] = useState<string | null>(null);
@@ -279,11 +327,17 @@ function Chat({
   // Scroll active slash menu item into view
   useEffect(() => {
     if (!slashMenuOpen) return;
-    const active = slashMenuRef.current?.querySelector(".slash-menu-item-active");
+    const active = slashMenuRef.current?.querySelector(
+      ".slash-menu-item-active",
+    );
     active?.scrollIntoView({ block: "nearest" });
   }, [slashSelectedIndex, slashMenuOpen]);
 
-  async function selectModel(provider: string, model: string, baseUrl: string): Promise<void> {
+  async function selectModel(
+    provider: string,
+    model: string,
+    baseUrl: string,
+  ): Promise<void> {
     await window.hermesAPI.setModelConfig(provider, model, baseUrl, profile);
     setCurrentModel(model);
     setCurrentProvider(provider);
@@ -735,8 +789,8 @@ function Chat({
       currentModel
         ? currentModel.split("/").pop() || currentModel
         : currentProvider === "auto"
-          ? "Auto"
-          : "No model set",
+          ? t("chat.auto")
+          : t("chat.noModel"),
     [currentModel, currentProvider],
   );
 
@@ -750,7 +804,9 @@ function Chat({
       <div className="chat-header">
         <div className="chat-header-left">
           <div className="chat-header-title">
-            {sessionId ? `Session ${sessionId.slice(-6)}` : "New Chat"}
+            {sessionId
+              ? t("chat.sessionTitle", { id: sessionId.slice(-6) })
+              : t("chat.title")}
           </div>
           {usage && (
             <span
@@ -789,10 +845,8 @@ function Chat({
             <div className="chat-empty-icon">
               <img src={icon} width={64} height={64} alt="" />
             </div>
-            <div className="chat-empty-text">How can I help you today?</div>
-            <div className="chat-empty-hint">
-              Ask me to write code, answer questions, search the web, and more
-            </div>
+            <div className="chat-empty-text">{t("chat.emptyTitle")}</div>
+            <div className="chat-empty-hint">{t("chat.emptyHint")}</div>
             <div className="chat-empty-suggestions">
               <button
                 className="chat-suggestion"
@@ -802,7 +856,7 @@ function Chat({
                 }}
               >
                 <Search size={16} />
-                Search the web
+                {t("chat.suggestionSearch")}
               </button>
               <button
                 className="chat-suggestion"
@@ -812,7 +866,7 @@ function Chat({
                 }}
               >
                 <Bell size={16} />
-                Set a reminder
+                {t("chat.suggestionReminder")}
               </button>
               <button
                 className="chat-suggestion"
@@ -822,7 +876,7 @@ function Chat({
                 }}
               >
                 <Mail size={16} />
-                Summarize emails
+                {t("chat.suggestionEmail")}
               </button>
               <button
                 className="chat-suggestion"
@@ -834,7 +888,7 @@ function Chat({
                 }}
               >
                 <Code size={16} />
-                Write a script
+                {t("chat.suggestionScript")}
               </button>
               <button
                 className="chat-suggestion"
@@ -846,7 +900,7 @@ function Chat({
                 }}
               >
                 <Clock size={16} />
-                Schedule a cron job
+                {t("chat.suggestionSchedule")}
               </button>
               <button
                 className="chat-suggestion"
@@ -856,21 +910,21 @@ function Chat({
                 }}
               >
                 <ChartLine size={16} />
-                Analyze data
+                {t("chat.suggestionAnalyze")}
               </button>
             </div>
           </div>
         ) : (
           visibleMessages.map((msg, i) => (
-              <MessageRow
-                key={msg.id}
-                msg={msg}
-                isLast={i === visibleMessages.length - 1}
-                isLoading={isLoading}
-                onApprove={handleApprove}
-                onDeny={handleDeny}
-              />
-            ))
+            <MessageRow
+              key={msg.id}
+              msg={msg}
+              isLast={i === visibleMessages.length - 1}
+              isLoading={isLoading}
+              onApprove={handleApprove}
+              onDeny={handleDeny}
+            />
+          ))
         )}
 
         {isLoading && !lastMessageIsAgent && (
@@ -902,7 +956,7 @@ function Chat({
           <div className="slash-menu" ref={slashMenuRef}>
             <div className="slash-menu-header">
               <Slash size={12} />
-              Commands
+              {t("chat.commandsTitle")}
             </div>
             <div className="slash-menu-list">
               {filteredSlashCommands.map((cmd, i) => (
@@ -913,7 +967,9 @@ function Chat({
                   onClick={() => handleSlashSelect(cmd)}
                 >
                   <span className="slash-menu-item-name">{cmd.name}</span>
-                  <span className="slash-menu-item-desc">{cmd.description}</span>
+                  <span className="slash-menu-item-desc">
+                    {cmd.description}
+                  </span>
                 </button>
               ))}
             </div>
@@ -923,7 +979,7 @@ function Chat({
           <textarea
             ref={inputRef}
             className="chat-input"
-            placeholder="Type a message... (Shift+Enter for new line)"
+            placeholder={t("chat.typeMessage")}
             value={input}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
@@ -945,7 +1001,7 @@ function Chat({
                 <button
                   className="chat-btw-btn"
                   onClick={handleQuickAsk}
-                  title="Quick Ask (/btw) — side question that won't affect conversation context"
+                  title={t("chat.quickAskTitle")}
                 >
                   💭
                 </button>
@@ -954,7 +1010,7 @@ function Chat({
                 className="chat-send-btn"
                 onClick={handleSend}
                 disabled={!input.trim()}
-                title="Send"
+                title={t("chat.send")}
               >
                 <Send size={16} />
               </button>
@@ -985,7 +1041,9 @@ function Chat({
                     <button
                       key={`${m.provider}:${m.model}`}
                       className={`chat-model-option ${currentModel === m.model && currentProvider === m.provider ? "active" : ""}`}
-                      onClick={() => selectModel(m.provider, m.model, m.baseUrl)}
+                      onClick={() =>
+                        selectModel(m.provider, m.model, m.baseUrl)
+                      }
                     >
                       <span className="chat-model-option-label">{m.label}</span>
                       <span className="chat-model-option-id">{m.model}</span>
@@ -995,7 +1053,7 @@ function Chat({
               ))}
 
               <div className="chat-model-group">
-                <div className="chat-model-group-label">Custom</div>
+                <div className="chat-model-group-label">{t("chat.custom")}</div>
                 <div className="chat-model-custom">
                   <input
                     className="chat-model-custom-input"
@@ -1005,7 +1063,7 @@ function Chat({
                     onKeyDown={(e) => {
                       if (e.key === "Enter") handleCustomModelSubmit();
                     }}
-                    placeholder="Type model name..."
+                    placeholder={t("chat.typeModelName")}
                   />
                 </div>
               </div>
