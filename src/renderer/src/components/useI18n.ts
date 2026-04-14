@@ -1,6 +1,6 @@
 import { useContext } from "react";
 import { useTranslation } from "react-i18next";
-import { I18nContext } from "./I18nProvider";
+import { I18nContext } from "./I18nContext";
 
 export function useI18n(): {
   locale: "en" | "zh-CN";

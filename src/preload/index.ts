@@ -94,13 +94,7 @@ const hermesAPI = {
     resumeSessionId?: string,
     history?: Array<{ role: string; content: string }>,
   ): Promise<{ response: string; sessionId?: string }> =>
-    ipcRenderer.invoke(
-      "send-message",
-      message,
-      profile,
-      resumeSessionId,
-      history,
-    ),
+    ipcRenderer.invoke("send-message", message, profile, resumeSessionId, history),
 
   abortChat: (): Promise<void> => ipcRenderer.invoke("abort-chat"),
 
@@ -528,14 +522,7 @@ const hermesAPI = {
     deliver?: string,
     profile?: string,
   ): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke(
-      "create-cron-job",
-      schedule,
-      prompt,
-      name,
-      deliver,
-      profile,
-    ),
+    ipcRenderer.invoke("create-cron-job", schedule, prompt, name, deliver, profile),
 
   removeCronJob: (
     jobId: string,

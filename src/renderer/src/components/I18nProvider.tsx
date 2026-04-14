@@ -1,4 +1,4 @@
-import { createContext, useMemo } from "react";
+import { useMemo } from "react";
 import { I18nextProvider, initReactI18next } from "react-i18next";
 import {
   DEFAULT_ACTIVE_LOCALE,
@@ -7,15 +7,9 @@ import {
   sharedI18n,
   type AppLocale,
 } from "../../../shared/i18n";
+import { I18nContext, type I18nContextValue } from "./I18nContext";
 
 void sharedI18n.use(initReactI18next);
-
-type I18nContextValue = {
-  locale: AppLocale;
-  setLocale: (locale: AppLocale) => void;
-};
-
-export const I18nContext = createContext<I18nContextValue | null>(null);
 
 export function I18nProvider({
   children,
