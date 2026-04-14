@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Plus, Trash, Refresh } from "../../assets/icons";
+import { Check, ExternalLink } from "lucide-react";
 
 interface MemoryEntry {
   index: number;
@@ -64,11 +65,35 @@ function CapacityBar({
   );
 }
 
+interface MemoryProviderInfo {
+  name: string;
+  description: string;
+  installed: boolean;
+  active: boolean;
+  envVars: string[];
+}
+
+const PROVIDER_URLS: Record<string, string> = {
+  honcho: "https://app.honcho.dev",
+  hindsight: "https://ui.hindsight.vectorize.io",
+  mem0: "https://app.mem0.ai",
+  retaindb: "https://retaindb.com",
+  supermemory: "https://supermemory.ai",
+  byterover: "https://app.byterover.dev",
+};
+
 function Memory({ profile }: { profile?: string }): React.JSX.Element {
   const [data, setData] = useState<MemoryData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"entries" | "profile">("entries");
+  const [tab, setTab] = useState<"entries" | "profile" | "providers">(
+    "entries",
+  );
   const [error, setError] = useState("");
+  const [memoryProvider, setMemoryProvider] = useState<string | null>(null);
+  const [providers, setProviders] = useState<MemoryProviderInfo[]>([]);
+  const [providerEnv, setProviderEnv] = useState<Record<string, string>>({});
+  const [providerSavedKey, setProviderSavedKey] = useState<string | null>(null);
+  const [activating, setActivating] = useState<string | null>(null);
 
   // Entry management
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -83,9 +108,17 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
   const [userSaved, setUserSaved] = useState(false);
 
   const loadData = useCallback(async () => {
-    const d = await window.hermesAPI.readMemory(profile);
+    const [d, provider, provs, env] = await Promise.all([
+      window.hermesAPI.readMemory(profile),
+      window.hermesAPI.getConfig("memory.provider", profile),
+      window.hermesAPI.discoverMemoryProviders(profile),
+      window.hermesAPI.getEnv(profile),
+    ]);
     setData(d as MemoryData);
     setUserContent(d.user.content);
+    setMemoryProvider(provider);
+    setProviders(provs);
+    setProviderEnv(env);
     setLoading(false);
   }, [profile]);
 
@@ -231,6 +264,15 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
             <span className="memory-tab-time">
               {timeAgo(data.user.lastModified)}
             </span>
+          )}
+        </button>
+        <button
+          className={`memory-tab ${tab === "providers" ? "active" : ""}`}
+          onClick={() => setTab("providers")}
+        >
+          Providers
+          {memoryProvider && (
+            <span className="memory-tab-time">{memoryProvider}</span>
           )}
         </button>
       </div>
@@ -416,6 +458,157 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
               </button>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Memory Providers */}
+      {tab === "providers" && (
+        <div className="memory-providers">
+          <div className="memory-providers-hint">
+            Pluggable memory providers give Hermes advanced long-term memory.
+            Built-in memory (above) is always active alongside the selected
+            provider.
+            {memoryProvider ? (
+              <span>
+                {" "}
+                Active: <strong>{memoryProvider}</strong>
+              </span>
+            ) : (
+              <span> No external provider active — using built-in only.</span>
+            )}
+          </div>
+
+          {providers.length === 0 ? (
+            <div className="memory-empty">
+              <p>No memory providers found in this installation.</p>
+            </div>
+          ) : (
+            <div className="memory-providers-grid">
+              {providers.map((p) => (
+                <div
+                  key={p.name}
+                  className={`memory-provider-card ${p.active ? "memory-provider-active" : ""}`}
+                >
+                  <div className="memory-provider-header">
+                    <div className="memory-provider-name">
+                      {p.name}
+                      {p.active && (
+                        <span className="memory-provider-badge">
+                          <Check size={10} /> Active
+                        </span>
+                      )}
+                    </div>
+                    {PROVIDER_URLS[p.name] && (
+                      <button
+                        className="btn-ghost"
+                        style={{ padding: 2, opacity: 0.6 }}
+                        onClick={() =>
+                          window.hermesAPI.openExternal(PROVIDER_URLS[p.name])
+                        }
+                        title="Open provider website"
+                      >
+                        <ExternalLink size={12} />
+                      </button>
+                    )}
+                  </div>
+                  <div className="memory-provider-desc">{p.description}</div>
+
+                  {/* Env var config fields */}
+                  {p.envVars.length > 0 && (
+                    <div className="memory-provider-fields">
+                      {p.envVars.map((envKey) => (
+                        <div key={envKey} className="memory-provider-field">
+                          <label className="memory-provider-field-label">
+                            {envKey}
+                            {providerSavedKey === envKey && (
+                              <span
+                                style={{
+                                  color: "var(--success)",
+                                  fontSize: 10,
+                                  marginLeft: 6,
+                                }}
+                              >
+                                Saved
+                              </span>
+                            )}
+                          </label>
+                          <input
+                            className="input"
+                            type="password"
+                            value={providerEnv[envKey] || ""}
+                            onChange={(e) =>
+                              setProviderEnv((prev) => ({
+                                ...prev,
+                                [envKey]: e.target.value,
+                              }))
+                            }
+                            onBlur={async () => {
+                              await window.hermesAPI.setEnv(
+                                envKey,
+                                providerEnv[envKey] || "",
+                                profile,
+                              );
+                              setProviderSavedKey(envKey);
+                              setTimeout(() => setProviderSavedKey(null), 2000);
+                            }}
+                            placeholder={`Enter ${envKey}`}
+                            style={{ fontSize: 12 }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="memory-provider-actions">
+                    {p.active ? (
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={async () => {
+                          setActivating(p.name);
+                          await window.hermesAPI.setConfig(
+                            "memory.provider",
+                            "",
+                            profile,
+                          );
+                          setMemoryProvider(null);
+                          setProviders((prev) =>
+                            prev.map((pr) => ({ ...pr, active: false })),
+                          );
+                          setActivating(null);
+                        }}
+                        disabled={activating !== null}
+                      >
+                        Deactivate
+                      </button>
+                    ) : (
+                      <button
+                        className="btn btn-primary btn-sm"
+                        onClick={async () => {
+                          setActivating(p.name);
+                          await window.hermesAPI.setConfig(
+                            "memory.provider",
+                            p.name,
+                            profile,
+                          );
+                          setMemoryProvider(p.name);
+                          setProviders((prev) =>
+                            prev.map((pr) => ({
+                              ...pr,
+                              active: pr.name === p.name,
+                            })),
+                          );
+                          setActivating(null);
+                        }}
+                        disabled={activating !== null}
+                      >
+                        {activating === p.name ? "Activating..." : "Activate"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

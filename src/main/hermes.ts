@@ -92,6 +92,9 @@ export interface ChatCallbacks {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
+    cost?: number;
+    rateLimitRemaining?: number;
+    rateLimitReset?: number;
   }) => void;
 }
 
@@ -186,6 +189,20 @@ function sendMessageViaApi(
     probeReq.end();
   }
 
+  /** Handle a custom SSE event (non-data lines with `event:` prefix). */
+  function processCustomEvent(eventType: string, data: string): void {
+    if (eventType === "hermes.tool.progress" && cb.onToolProgress) {
+      try {
+        const payload = JSON.parse(data);
+        const label = payload.label || payload.tool || "";
+        const emoji = payload.emoji || "";
+        cb.onToolProgress(emoji ? `${emoji} ${label}` : label);
+      } catch {
+        /* malformed — skip */
+      }
+    }
+  }
+
   function processSseData(data: string): boolean {
     if (data === "[DONE]") {
       if (hasContent) {
@@ -210,18 +227,21 @@ function sendMessageViaApi(
       const choice = parsed.choices?.[0];
       const delta = choice?.delta;
 
-      // Extract usage from final chunk
+      // Extract usage from final chunk (with optional cost + rate limit info)
       if (parsed.usage && cb.onUsage) {
         cb.onUsage({
           promptTokens: parsed.usage.prompt_tokens || 0,
           completionTokens: parsed.usage.completion_tokens || 0,
           totalTokens: parsed.usage.total_tokens || 0,
+          cost: parsed.usage.cost,
+          rateLimitRemaining: parsed.usage.rate_limit_remaining,
+          rateLimitReset: parsed.usage.rate_limit_reset,
         });
       }
 
       if (delta?.content) {
         const content = delta.content.trim();
-        // Detect tool progress lines: `🔍 search_web`
+        // Legacy: Detect tool progress lines injected into content: `🔍 search_web`
         const match = toolProgressRe.exec(content);
         if (match && cb.onToolProgress) {
           cb.onToolProgress(`${match[1]} ${match[2]}`);
@@ -267,24 +287,40 @@ function sendMessageViaApi(
 
       let buffer = "";
 
+      /** Parse an SSE block which may contain `event:` and `data:` lines. */
+      function processSseBlock(block: string): boolean {
+        let eventType = "";
+        let dataLine = "";
+        for (const line of block.split("\n")) {
+          if (line.startsWith("event: ")) {
+            eventType = line.slice(7).trim();
+          } else if (line.startsWith("data: ")) {
+            dataLine = line.slice(6);
+          }
+        }
+        if (!dataLine) return false;
+        if (eventType) {
+          // Custom event (e.g. hermes.tool.progress) — never signals [DONE]
+          processCustomEvent(eventType, dataLine);
+          return false;
+        }
+        return processSseData(dataLine);
+      }
+
       res.on("data", (chunk: Buffer) => {
         buffer += chunk.toString();
         const parts = buffer.split("\n\n");
         buffer = parts.pop() || "";
 
         for (const part of parts) {
-          for (const line of part.split("\n")) {
-            if (!line.startsWith("data: ")) continue;
-            if (processSseData(line.slice(6))) return;
-          }
+          if (processSseBlock(part)) return;
         }
       });
 
       res.on("end", () => {
         if (buffer.trim()) {
-          for (const line of buffer.split("\n")) {
-            if (!line.startsWith("data: ")) continue;
-            if (processSseData(line.slice(6))) return;
+          for (const part of buffer.split("\n\n")) {
+            if (processSseBlock(part)) return;
           }
         }
         // Signal completion — even when no content was received

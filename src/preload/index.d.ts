@@ -65,6 +65,9 @@ interface HermesAPI {
       promptTokens: number;
       completionTokens: number;
       totalTokens: number;
+      cost?: number;
+      rateLimitRemaining?: number;
+      rateLimitReset?: number;
     }) => void,
   ) => () => void;
   onChatError: (callback: (error: string) => void) => () => void;
@@ -353,13 +356,61 @@ interface HermesAPI {
     deliver?: string,
     profile?: string,
   ) => Promise<{ success: boolean; error?: string }>;
-  removeCronJob: (jobId: string, profile?: string) => Promise<{ success: boolean; error?: string }>;
-  pauseCronJob: (jobId: string, profile?: string) => Promise<{ success: boolean; error?: string }>;
-  resumeCronJob: (jobId: string, profile?: string) => Promise<{ success: boolean; error?: string }>;
-  triggerCronJob: (jobId: string, profile?: string) => Promise<{ success: boolean; error?: string }>;
+  removeCronJob: (
+    jobId: string,
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+  pauseCronJob: (
+    jobId: string,
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+  resumeCronJob: (
+    jobId: string,
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+  triggerCronJob: (
+    jobId: string,
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
 
   // Shell
   openExternal: (url: string) => Promise<void>;
+
+  // Backup / Import
+  runHermesBackup: (
+    profile?: string,
+  ) => Promise<{ success: boolean; path?: string; error?: string }>;
+  runHermesImport: (
+    archivePath: string,
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+
+  // Debug dump
+  runHermesDump: () => Promise<string>;
+
+  // Memory providers
+  discoverMemoryProviders: (profile?: string) => Promise<
+    Array<{
+      name: string;
+      description: string;
+      installed: boolean;
+      active: boolean;
+      envVars: string[];
+    }>
+  >;
+
+  // MCP servers
+  listMcpServers: (
+    profile?: string,
+  ) => Promise<
+    Array<{ name: string; type: string; enabled: boolean; detail: string }>
+  >;
+
+  // Log viewer
+  readLogs: (
+    logFile?: string,
+    lines?: number,
+  ) => Promise<{ content: string; path: string }>;
 }
 
 declare global {

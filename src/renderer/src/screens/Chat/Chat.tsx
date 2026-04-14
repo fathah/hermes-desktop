@@ -14,6 +14,7 @@ import {
   ChartLine,
   Bell,
   Slash,
+  Zap,
 } from "lucide-react";
 
 // ── Slash Commands ──────────────────────────────────────
@@ -28,17 +29,73 @@ interface SlashCommand {
 
 const SLASH_COMMANDS: SlashCommand[] = [
   // Chat control
-  { name: "/new", description: "Start a new chat", category: "chat", local: true },
-  { name: "/clear", description: "Clear conversation history", category: "chat", local: true },
+  {
+    name: "/new",
+    description: "Start a new chat",
+    category: "chat",
+    local: true,
+  },
+  {
+    name: "/clear",
+    description: "Clear conversation history",
+    category: "chat",
+    local: true,
+  },
   // Agent commands (sent to backend)
-  { name: "/btw", description: "Ask a side question without affecting context", category: "agent" },
-  { name: "/approve", description: "Approve a pending action", category: "agent" },
+  {
+    name: "/btw",
+    description: "Ask a side question without affecting context",
+    category: "agent",
+  },
+  {
+    name: "/approve",
+    description: "Approve a pending action",
+    category: "agent",
+  },
   { name: "/deny", description: "Deny a pending action", category: "agent" },
-  { name: "/status", description: "Show current agent status", category: "agent" },
-  { name: "/reset", description: "Reset conversation context", category: "agent" },
-  { name: "/compact", description: "Compact and summarize the conversation", category: "agent" },
+  {
+    name: "/status",
+    description: "Show current agent status",
+    category: "agent",
+  },
+  {
+    name: "/reset",
+    description: "Reset conversation context",
+    category: "agent",
+  },
+  {
+    name: "/compact",
+    description: "Compact and summarize the conversation",
+    category: "agent",
+  },
   { name: "/undo", description: "Undo the last action", category: "agent" },
-  { name: "/retry", description: "Retry the last failed action", category: "agent" },
+  {
+    name: "/retry",
+    description: "Retry the last failed action",
+    category: "agent",
+  },
+  {
+    name: "/fast",
+    description: "Toggle priority processing (lower latency)",
+    category: "agent",
+    local: true,
+  },
+  {
+    name: "/compress",
+    description: "Compress conversation with optional focus topic",
+    category: "agent",
+  },
+  {
+    name: "/usage",
+    description: "Show token usage, cost, and rate limits",
+    category: "agent",
+    local: true,
+  },
+  {
+    name: "/debug",
+    description: "Show diagnostics and debug info",
+    category: "agent",
+  },
   // Tools & capabilities
   { name: "/web", description: "Search the web", category: "tools" },
   { name: "/image", description: "Generate an image", category: "tools" },
@@ -47,10 +104,18 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { name: "/file", description: "Read or write files", category: "tools" },
   { name: "/shell", description: "Run a shell command", category: "tools" },
   // Info
-  { name: "/help", description: "Show available commands and help", category: "info" },
+  {
+    name: "/help",
+    description: "Show available commands and help",
+    category: "info",
+  },
   { name: "/tools", description: "List available tools", category: "info" },
   { name: "/skills", description: "List installed skills", category: "info" },
-  { name: "/model", description: "Show or switch the current model", category: "info" },
+  {
+    name: "/model",
+    description: "Show or switch the current model",
+    category: "info",
+  },
   { name: "/memory", description: "Show agent memory", category: "info" },
   { name: "/persona", description: "Show current persona", category: "info" },
   { name: "/version", description: "Show Hermes version", category: "info" },
@@ -103,7 +168,10 @@ const MessageRow = memo(function MessageRow({
         isLast &&
         APPROVAL_RE.test(msg.content) && (
           <div className="chat-approval-bar">
-            <button className="chat-approval-btn chat-approve" onClick={onApprove}>
+            <button
+              className="chat-approval-btn chat-approve"
+              onClick={onApprove}
+            >
               Approve
             </button>
             <button className="chat-approval-btn chat-deny" onClick={onDeny}>
@@ -154,7 +222,9 @@ function Chat({
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
+    cost?: number;
   } | null>(null);
+  const [fastMode, setFastMode] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -249,6 +319,13 @@ function Chat({
     loadModelConfig();
   }, [loadModelConfig]);
 
+  // Load fast mode state from config
+  useEffect(() => {
+    window.hermesAPI.getConfig("agent.service_tier", profile).then((val) => {
+      setFastMode(val === "fast" || val === "priority");
+    });
+  }, [profile]);
+
   // Close picker on click outside
   useEffect(() => {
     if (!showModelPicker) return;
@@ -279,11 +356,17 @@ function Chat({
   // Scroll active slash menu item into view
   useEffect(() => {
     if (!slashMenuOpen) return;
-    const active = slashMenuRef.current?.querySelector(".slash-menu-item-active");
+    const active = slashMenuRef.current?.querySelector(
+      ".slash-menu-item-active",
+    );
     active?.scrollIntoView({ block: "nearest" });
   }, [slashSelectedIndex, slashMenuOpen]);
 
-  async function selectModel(provider: string, model: string, baseUrl: string): Promise<void> {
+  async function selectModel(
+    provider: string,
+    model: string,
+    baseUrl: string,
+  ): Promise<void> {
     await window.hermesAPI.setModelConfig(provider, model, baseUrl, profile);
     setCurrentModel(model);
     setCurrentProvider(provider);
@@ -351,6 +434,7 @@ function Chat({
         promptTokens: (prev?.promptTokens || 0) + u.promptTokens,
         completionTokens: (prev?.completionTokens || 0) + u.completionTokens,
         totalTokens: (prev?.totalTokens || 0) + u.totalTokens,
+        cost: u.cost != null ? (prev?.cost || 0) + u.cost : prev?.cost,
       }));
     });
 
@@ -628,6 +712,43 @@ function Chat({
         return true;
       }
 
+      case "/fast": {
+        const current = await window.hermesAPI.getConfig(
+          "agent.service_tier",
+          profile,
+        );
+        const isOn = current === "fast" || current === "priority";
+        const next = !isOn;
+        setFastMode(next);
+        await window.hermesAPI.setConfig(
+          "agent.service_tier",
+          next ? "fast" : "normal",
+          profile,
+        );
+        pushLocalResponse(
+          next
+            ? "**Fast Mode: ON** — Priority processing enabled for lower latency."
+            : "**Fast Mode: OFF** — Standard processing restored.",
+        );
+        return true;
+      }
+
+      case "/usage": {
+        if (usage) {
+          let md = `**Token Usage**\n\n`;
+          md += `- **Prompt:** ${usage.promptTokens.toLocaleString()} tokens\n`;
+          md += `- **Completion:** ${usage.completionTokens.toLocaleString()} tokens\n`;
+          md += `- **Total:** ${usage.totalTokens.toLocaleString()} tokens\n`;
+          if (usage.cost != null) {
+            md += `- **Cost:** $${usage.cost.toFixed(4)}\n`;
+          }
+          pushLocalResponse(md);
+        } else {
+          pushLocalResponse("_No usage data yet. Send a message first._");
+        }
+        return true;
+      }
+
       case "/help": {
         const grouped: Record<string, SlashCommand[]> = {};
         for (const c of SLASH_COMMANDS) {
@@ -755,13 +876,40 @@ function Chat({
           {usage && (
             <span
               className="chat-token-counter"
-              title={`Prompt: ${usage.promptTokens} | Completion: ${usage.completionTokens}`}
+              title={`Prompt: ${usage.promptTokens.toLocaleString()} | Completion: ${usage.completionTokens.toLocaleString()}${usage.cost != null ? ` | Cost: $${usage.cost.toFixed(4)}` : ""}`}
             >
               {usage.totalTokens.toLocaleString()} tokens
+              {usage.cost != null && (
+                <span className="chat-cost"> · ${usage.cost.toFixed(4)}</span>
+              )}
             </span>
           )}
         </div>
         <div className="chat-header-actions">
+          <div className="chat-fast-wrapper">
+            <button
+              className={`btn-ghost chat-fast-btn ${fastMode ? "chat-fast-active" : ""}`}
+              onClick={async () => {
+                const next = !fastMode;
+                setFastMode(next);
+                await window.hermesAPI.setConfig(
+                  "agent.service_tier",
+                  next ? "fast" : "normal",
+                  profile,
+                );
+              }}
+            >
+              <Zap size={14} />
+            </button>
+            <div className="chat-fast-popover">
+              <strong>{fastMode ? "Fast Mode ON" : "Fast Mode"}</strong>
+              <span>
+                {fastMode
+                  ? "Priority processing active — lower latency on supported models. Click to disable."
+                  : "Enable priority processing for lower latency on OpenAI and Anthropic models."}
+              </span>
+            </div>
+          </div>
           {onNewChat && (
             <button
               className="btn-ghost chat-clear-btn"
@@ -862,15 +1010,15 @@ function Chat({
           </div>
         ) : (
           visibleMessages.map((msg, i) => (
-              <MessageRow
-                key={msg.id}
-                msg={msg}
-                isLast={i === visibleMessages.length - 1}
-                isLoading={isLoading}
-                onApprove={handleApprove}
-                onDeny={handleDeny}
-              />
-            ))
+            <MessageRow
+              key={msg.id}
+              msg={msg}
+              isLast={i === visibleMessages.length - 1}
+              isLoading={isLoading}
+              onApprove={handleApprove}
+              onDeny={handleDeny}
+            />
+          ))
         )}
 
         {isLoading && !lastMessageIsAgent && (
@@ -913,7 +1061,9 @@ function Chat({
                   onClick={() => handleSlashSelect(cmd)}
                 >
                   <span className="slash-menu-item-name">{cmd.name}</span>
-                  <span className="slash-menu-item-desc">{cmd.description}</span>
+                  <span className="slash-menu-item-desc">
+                    {cmd.description}
+                  </span>
                 </button>
               ))}
             </div>
@@ -985,7 +1135,9 @@ function Chat({
                     <button
                       key={`${m.provider}:${m.model}`}
                       className={`chat-model-option ${currentModel === m.model && currentProvider === m.provider ? "active" : ""}`}
-                      onClick={() => selectModel(m.provider, m.model, m.baseUrl)}
+                      onClick={() =>
+                        selectModel(m.provider, m.model, m.baseUrl)
+                      }
                     >
                       <span className="chat-model-option-label">{m.label}</span>
                       <span className="chat-model-option-id">{m.model}</span>

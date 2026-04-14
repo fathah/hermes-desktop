@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useTheme } from "../../components/ThemeProvider";
 import { SETTINGS_SECTIONS, PROVIDERS, THEME_OPTIONS } from "../../constants";
+import { Download, Upload, FileText } from "lucide-react";
 
 // Read cached values from localStorage for instant display
 function getCachedVersion(): string | null {
@@ -20,7 +21,13 @@ function getCachedOpenClaw(): { found: boolean; path: string | null } | null {
   }
 }
 
-function Settings({ profile, visible }: { profile?: string; visible?: boolean }): React.JSX.Element {
+function Settings({
+  profile,
+  visible,
+}: {
+  profile?: string;
+  visible?: boolean;
+}): React.JSX.Element {
   const [env, setEnv] = useState<Record<string, string>>({});
   const [savedKey, setSavedKey] = useState<string | null>(null);
   const [hermesHome, setHermesHome] = useState("");
@@ -69,6 +76,27 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
   const [poolNewKey, setPoolNewKey] = useState("");
   const [poolNewLabel, setPoolNewLabel] = useState("");
 
+  // Backup / Import state
+  const [backingUp, setBackingUp] = useState(false);
+  const [backupResult, setBackupResult] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<string | null>(null);
+
+  // Log viewer state
+  const [logContent, setLogContent] = useState("");
+  const [logFile, setLogFile] = useState("gateway.log");
+  const [logPath, setLogPath] = useState("");
+  const [logsExpanded, setLogsExpanded] = useState(false);
+
+  // Network settings
+  const [forceIpv4, setForceIpv4] = useState(false);
+  const [httpProxy, setHttpProxy] = useState("");
+  const [networkSaved, setNetworkSaved] = useState(false);
+
+  // Debug dump
+  const [dumpOutput, setDumpOutput] = useState<string | null>(null);
+  const [dumpRunning, setDumpRunning] = useState(false);
+
   const loadConfig = useCallback(async (): Promise<void> => {
     // Load fast config first (cached in main process)
     const [envData, home, mc, pool, aVersion] = await Promise.all([
@@ -91,13 +119,23 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
       modelLoaded.current = true;
     });
 
+    // Load network settings from config.yaml
+    window.hermesAPI.getConfig("network.force_ipv4", profile).then((v) => {
+      setForceIpv4(v === "true" || v === "True");
+    });
+    window.hermesAPI.getConfig("network.proxy", profile).then((v) => {
+      setHttpProxy(v || "");
+    });
+
     // Defer slow calls — background refresh, cached values show instantly
     window.hermesAPI.getHermesVersion().then((v) => {
       setHermesVersion(v);
       if (v) {
         try {
           localStorage.setItem("hermes-version-cache", v);
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
       }
     });
 
@@ -107,7 +145,9 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
         setOpenclawPath(claw.path);
         try {
           localStorage.setItem("hermes-openclaw-cache", JSON.stringify(claw));
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
       });
     }
   }, [profile]);
@@ -244,6 +284,47 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
     setMigrationDismissed(true);
   }
 
+  async function handleBackup(): Promise<void> {
+    setBackingUp(true);
+    setBackupResult(null);
+    const result = await window.hermesAPI.runHermesBackup(profile);
+    setBackingUp(false);
+    if (result.success) {
+      setBackupResult(`Backup created: ${result.path || "success"}`);
+    } else {
+      setBackupResult(result.error || "Backup failed.");
+    }
+  }
+
+  async function handleImport(): Promise<void> {
+    // Use a file input to select the archive
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".tar.gz,.tgz,.zip";
+    input.onchange = async (): Promise<void> => {
+      const file = input.files?.[0];
+      if (!file) return;
+      setImporting(true);
+      setImportResult(null);
+      // Electron extends File with a `path` property (full filesystem path)
+      const filePath = (file as File & { path: string }).path;
+      const result = await window.hermesAPI.runHermesImport(filePath, profile);
+      setImporting(false);
+      if (result.success) {
+        setImportResult("Import complete! Restart the app to apply changes.");
+      } else {
+        setImportResult(result.error || "Import failed.");
+      }
+    };
+    input.click();
+  }
+
+  async function loadLogs(): Promise<void> {
+    const result = await window.hermesAPI.readLogs(logFile, 300);
+    setLogContent(result.content);
+    setLogPath(result.path);
+  }
+
   async function handleDoctor(): Promise<void> {
     setDoctorRunning(true);
     setDoctorOutput(null);
@@ -257,7 +338,11 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
     window.hermesAPI.refreshHermesVersion().then((v) => {
       setHermesVersion(v);
       if (v) {
-        try { localStorage.setItem("hermes-version-cache", v); } catch { /* ignore */ }
+        try {
+          localStorage.setItem("hermes-version-cache", v);
+        } catch {
+          /* ignore */
+        }
       }
     });
   }
@@ -377,11 +462,24 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
               </button>
             )}
             <button
-              className="btn btn-secondary "
+              className="btn btn-secondary"
               onClick={handleDoctor}
               disabled={doctorRunning}
             >
               {doctorRunning ? "Running..." : "Run Doctor"}
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={async () => {
+                setDumpRunning(true);
+                setDumpOutput(null);
+                const output = await window.hermesAPI.runHermesDump();
+                setDumpOutput(output);
+                setDumpRunning(false);
+              }}
+              disabled={dumpRunning}
+            >
+              {dumpRunning ? "Running..." : "Debug Dump"}
             </button>
           </div>
           {updateResult && (
@@ -393,6 +491,9 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
           )}
           {doctorOutput && (
             <pre className="settings-hermes-doctor">{doctorOutput}</pre>
+          )}
+          {dumpOutput && (
+            <pre className="settings-hermes-doctor">{dumpOutput}</pre>
           )}
         </div>
       </div>
@@ -464,6 +565,69 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
           </div>
           <div className="settings-field-hint">
             Choose your preferred appearance
+          </div>
+        </div>
+      </div>
+
+      <div className="settings-section">
+        <div className="settings-section-title">
+          Network
+          {networkSaved && (
+            <span className="settings-saved" style={{ marginLeft: 8 }}>
+              Saved
+            </span>
+          )}
+        </div>
+        <div className="settings-field">
+          <label className="settings-field-label">
+            Force IPv4
+            <label
+              className="tools-toggle"
+              style={{ marginLeft: 12, verticalAlign: "middle" }}
+            >
+              <input
+                type="checkbox"
+                checked={forceIpv4}
+                onChange={async (e) => {
+                  const val = e.target.checked;
+                  setForceIpv4(val);
+                  await window.hermesAPI.setConfig(
+                    "network.force_ipv4",
+                    val ? "true" : "false",
+                    profile,
+                  );
+                  setNetworkSaved(true);
+                  setTimeout(() => setNetworkSaved(false), 2000);
+                }}
+              />
+              <span className="tools-toggle-track" />
+            </label>
+          </label>
+          <div className="settings-field-hint">
+            Disable IPv6 to fix connection timeout issues on some networks
+          </div>
+        </div>
+        <div className="settings-field">
+          <label className="settings-field-label">HTTP Proxy</label>
+          <input
+            className="input"
+            type="text"
+            value={httpProxy}
+            onChange={(e) => setHttpProxy(e.target.value)}
+            onBlur={async () => {
+              await window.hermesAPI.setConfig(
+                "network.proxy",
+                httpProxy.trim(),
+                profile,
+              );
+              setNetworkSaved(true);
+              setTimeout(() => setNetworkSaved(false), 2000);
+            }}
+            placeholder="e.g. socks5://127.0.0.1:1080 or http://proxy:8080"
+          />
+          <div className="settings-field-hint">
+            SOCKS or HTTP proxy for all outgoing connections (leave blank for
+            auto-detect)
           </div>
         </div>
       </div>
@@ -613,6 +777,110 @@ function Settings({ profile, visible }: { profile?: string; visible?: boolean })
               ),
           )}
         </div>
+      </div>
+
+      <div className="settings-section">
+        <div className="settings-section-title">Data</div>
+        <div className="settings-field">
+          <div className="settings-field-hint" style={{ marginBottom: 10 }}>
+            Export or import your Hermes configuration, sessions, skills, and
+            memory.
+          </div>
+          <div className="settings-hermes-actions">
+            <button
+              className="btn btn-secondary"
+              onClick={handleBackup}
+              disabled={backingUp}
+            >
+              <Download size={14} style={{ marginRight: 6 }} />
+              {backingUp ? "Backing up..." : "Export Backup"}
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={handleImport}
+              disabled={importing}
+            >
+              <Upload size={14} style={{ marginRight: 6 }} />
+              {importing ? "Importing..." : "Import Backup"}
+            </button>
+          </div>
+          {backupResult && (
+            <div
+              className={`settings-hermes-result ${backupResult.includes("created") || backupResult.includes("success") ? "success" : "error"}`}
+              style={{ marginTop: 8 }}
+            >
+              {backupResult}
+            </div>
+          )}
+          {importResult && (
+            <div
+              className={`settings-hermes-result ${importResult.includes("complete") ? "success" : "error"}`}
+              style={{ marginTop: 8 }}
+            >
+              {importResult}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="settings-section">
+        <div className="settings-section-title">
+          <span
+            style={{ cursor: "pointer" }}
+            onClick={() => {
+              const next = !logsExpanded;
+              setLogsExpanded(next);
+              if (next) loadLogs();
+            }}
+          >
+            <FileText
+              size={14}
+              style={{ marginRight: 6, verticalAlign: "middle" }}
+            />
+            Logs {logsExpanded ? "▾" : "▸"}
+          </span>
+        </div>
+        {logsExpanded && (
+          <div className="settings-field">
+            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+              {["gateway.log", "agent.log", "errors.log"].map((f) => (
+                <button
+                  key={f}
+                  className={`btn btn-sm ${logFile === f ? "btn-primary" : "btn-secondary"}`}
+                  onClick={() => {
+                    setLogFile(f);
+                    window.hermesAPI.readLogs(f, 300).then((r) => {
+                      setLogContent(r.content);
+                      setLogPath(r.path);
+                    });
+                  }}
+                >
+                  {f.replace(".log", "")}
+                </button>
+              ))}
+              <button className="btn btn-sm btn-secondary" onClick={loadLogs}>
+                Refresh
+              </button>
+            </div>
+            {logPath && (
+              <div className="settings-field-hint" style={{ marginBottom: 4 }}>
+                {logPath}
+              </div>
+            )}
+            <pre
+              className="settings-hermes-doctor"
+              style={{
+                maxHeight: 300,
+                overflow: "auto",
+                fontSize: 11,
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-all",
+              }}
+            >
+              {logContent || "(empty)"}
+            </pre>
+          </div>
+        )}
       </div>
 
       {SETTINGS_SECTIONS.map((section) => (
