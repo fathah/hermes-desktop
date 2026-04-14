@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useI18n } from "../../components/useI18n";
 
 interface ToolsetInfo {
   key: string;
@@ -249,6 +250,7 @@ function ToolIcon({ toolKey }: { toolKey: string }): React.JSX.Element {
 }
 
 function Tools({ profile }: ToolsProps): React.JSX.Element {
+  const { t } = useI18n();
   const [toolsets, setToolsets] = useState<ToolsetInfo[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -286,10 +288,8 @@ function Tools({ profile }: ToolsProps): React.JSX.Element {
   return (
     <div className="tools-container">
       <div className="tools-header">
-        <h2 className="tools-title">Tools</h2>
-        <p className="tools-subtitle">
-          Enable or disable toolsets available to the agent during conversations
-        </p>
+        <h2 className="tools-title">{t("tools.title")}</h2>
+        <p className="tools-subtitle">启用或禁用代理在对话期间可使用的工具集</p>
       </div>
 
       <div className="tools-grid">

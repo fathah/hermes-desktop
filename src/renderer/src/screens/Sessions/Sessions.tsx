@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback, memo } from "react";
 import { Plus, Search, X, ChatBubble } from "../../assets/icons";
+import { useI18n } from "../../components/useI18n";
 
 interface CachedSession {
   id: string;
@@ -151,6 +152,7 @@ function Sessions({
   onNewChat,
   currentSessionId,
 }: SessionsProps): React.JSX.Element {
+  const { t } = useI18n();
   const [sessions, setSessions] = useState<CachedSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -201,10 +203,10 @@ function Sessions({
       {/* Header with integrated search */}
       <div className="sessions-header">
         <div className="sessions-header-top">
-          <h2 className="sessions-title">Sessions</h2>
+          <h2 className="sessions-title">{t("sessions.title")}</h2>
           <button className="btn btn-primary " onClick={onNewChat}>
             <Plus size={14} />
-            New Chat
+            新建聊天
           </button>
         </div>
         <div className="sessions-searchbar">
@@ -213,7 +215,7 @@ function Sessions({
             ref={searchRef}
             className="sessions-searchbar-input"
             type="text"
-            placeholder="Search conversations..."
+            placeholder={t("sessions.searchPlaceholder")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -244,8 +246,8 @@ function Sessions({
         ) : searchResults.length === 0 ? (
           <div className="sessions-empty">
             <Search size={32} className="sessions-empty-icon" />
-            <p className="sessions-empty-text">No results found</p>
-            <p className="sessions-empty-hint">Try different search terms</p>
+            <p className="sessions-empty-text">{t("sessions.noResults")}</p>
+            <p className="sessions-empty-hint">{t("sessions.noResultsHint")}</p>
           </div>
         ) : (
           <div className="sessions-list">
@@ -257,7 +259,8 @@ function Sessions({
               >
                 <div className="sessions-card-main">
                   <span className="sessions-card-title">
-                    {r.title || `Session ${r.sessionId.slice(-6)}`}
+                    {r.title ||
+                      `${t("sessions.title")} ${r.sessionId.slice(-6)}`}
                   </span>
                   <span className="sessions-card-time">
                     {formatFullDate(r.startedAt)}
@@ -288,10 +291,8 @@ function Sessions({
       ) : sessions.length === 0 ? (
         <div className="sessions-empty">
           <ChatBubble size={32} className="sessions-empty-icon" />
-          <p className="sessions-empty-text">No sessions yet</p>
-          <p className="sessions-empty-hint">
-            Start a chat to create your first session
-          </p>
+          <p className="sessions-empty-text">{t("sessions.empty")}</p>
+          <p className="sessions-empty-hint">开始聊天以创建第一条会话</p>
         </div>
       ) : (
         <div className="sessions-list">

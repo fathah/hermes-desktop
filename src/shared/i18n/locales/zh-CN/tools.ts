@@ -1,0 +1,22 @@
+export default {
+  title: "工具",
+  web: { label: "网络搜索", description: "搜索网页并提取 URL 内容" },
+  browser: { label: "浏览器", description: "浏览、点击、输入并与网页交互" },
+  terminal: { label: "终端", description: "执行 shell 命令和脚本" },
+  file: { label: "文件操作", description: "读取、写入、搜索和管理文件" },
+  code_execution: {
+    label: "代码执行",
+    description: "直接执行 Python 和 shell 代码",
+  },
+  vision: { label: "视觉", description: "分析图片和视觉内容" },
+  image_gen: { label: "图像生成", description: "使用 DALL-E 等模型生成图片" },
+  tts: { label: "文本转语音", description: "把文本转换为语音音频" },
+  skills: { label: "技能", description: "创建、管理并执行可复用技能" },
+  memory: { label: "记忆", description: "存储并召回持久知识" },
+  session_search: { label: "会话搜索", description: "搜索历史会话内容" },
+  clarify: { label: "澄清提问", description: "在需要时向用户发起澄清" },
+  delegation: { label: "任务委派", description: "为并行任务派生子代理" },
+  cronjob: { label: "计划任务", description: "创建和管理定时任务" },
+  moa: { label: "多代理协作", description: "协调多个 AI 模型协同工作" },
+  todo: { label: "任务规划", description: "为复杂任务创建和管理待办列表" },
+} as const;

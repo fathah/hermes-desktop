@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Plus, Trash, Refresh } from "../../assets/icons";
+import { useI18n } from "../../components/useI18n";
 
 interface MemoryEntry {
   index: number;
@@ -65,6 +66,7 @@ function CapacityBar({
 }
 
 function Memory({ profile }: { profile?: string }): React.JSX.Element {
+  const { t } = useI18n();
   const [data, setData] = useState<MemoryData | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"entries" | "profile">("entries");
@@ -106,7 +108,7 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
       setShowAdd(false);
       await loadData();
     } else {
-      setError(result.error || "Failed to add entry");
+      setError(result.error || t("memory.addFailed"));
     }
   }
 
@@ -123,7 +125,7 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
       setEditContent("");
       await loadData();
     } else {
-      setError(result.error || "Failed to update entry");
+      setError(result.error || t("memory.updateFailed"));
     }
   }
 
@@ -145,14 +147,14 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
       setTimeout(() => setUserSaved(false), 2000);
       await loadData();
     } else {
-      setError(result.error || "Failed to save");
+      setError(result.error || t("memory.saveFailed"));
     }
   }
 
   if (loading || !data) {
     return (
       <div className="settings-container">
-        <h1 className="settings-header">Memory</h1>
+        <h1 className="settings-header">{t("memory.title")}</h1>
         <div style={{ display: "flex", justifyContent: "center", padding: 48 }}>
           <div className="loading-spinner" />
         </div>
@@ -165,12 +167,9 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
       <div className="memory-header">
         <div>
           <h1 className="settings-header" style={{ marginBottom: 4 }}>
-            Memory
+            {t("memory.title")}
           </h1>
-          <p className="memory-subtitle">
-            What Hermes remembers about you and your environment across
-            sessions.
-          </p>
+          <p className="memory-subtitle">{t("memory.subtitle")}</p>
         </div>
         <button className="btn btn-secondary btn-sm" onClick={loadData}>
           <Refresh size={13} />
@@ -181,17 +180,17 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
       <div className="memory-stats">
         <div className="memory-stat">
           <span className="memory-stat-value">{data.stats.totalSessions}</span>
-          <span className="memory-stat-label">Sessions</span>
+          <span className="memory-stat-label">{t("memory.sessions")}</span>
         </div>
         <div className="memory-stat">
           <span className="memory-stat-value">{data.stats.totalMessages}</span>
-          <span className="memory-stat-label">Messages</span>
+          <span className="memory-stat-label">{t("memory.messages")}</span>
         </div>
         <div className="memory-stat">
           <span className="memory-stat-value">
             {data.memory.entries.length}
           </span>
-          <span className="memory-stat-label">Memories</span>
+          <span className="memory-stat-label">{t("memory.memories")}</span>
         </div>
       </div>
 
@@ -200,12 +199,12 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
         <CapacityBar
           used={data.memory.charCount}
           limit={data.memory.charLimit}
-          label="Agent Memory"
+          label={t("memory.agentMemory")}
         />
         <CapacityBar
           used={data.user.charCount}
           limit={data.user.charLimit}
-          label="User Profile"
+          label={t("memory.userProfile")}
         />
       </div>
 
@@ -215,7 +214,7 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
           className={`memory-tab ${tab === "entries" ? "active" : ""}`}
           onClick={() => setTab("entries")}
         >
-          Agent Memory
+          {t("memory.agentMemory")}
           {data.memory.lastModified && (
             <span className="memory-tab-time">
               {timeAgo(data.memory.lastModified)}
@@ -226,7 +225,7 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
           className={`memory-tab ${tab === "profile" ? "active" : ""}`}
           onClick={() => setTab("profile")}
         >
-          User Profile
+          {t("memory.userProfile")}
           {data.user.lastModified && (
             <span className="memory-tab-time">
               {timeAgo(data.user.lastModified)}
@@ -242,14 +241,14 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
         <div className="memory-entries">
           <div className="memory-entries-header">
             <span className="memory-entries-count">
-              {data.memory.entries.length} entries
+              {t("memory.entries", { count: data.memory.entries.length })}
             </span>
             <button
               className="btn btn-primary btn-sm"
               onClick={() => setShowAdd(!showAdd)}
             >
               <Plus size={13} />
-              Add Memory
+              {t("memory.addMemory")}
             </button>
           </div>
 

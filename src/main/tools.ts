@@ -1,6 +1,8 @@
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { profileHome, safeWriteFile } from "./utils";
+import { t } from "../shared/i18n";
+import { getAppLocale } from "./locale";
 
 export interface ToolsetInfo {
   key: string;
@@ -9,88 +11,104 @@ export interface ToolsetInfo {
   enabled: boolean;
 }
 
-const TOOLSET_DEFS: { key: string; label: string; description: string }[] = [
+const TOOLSET_DEFS: {
+  key: string;
+  labelKey: string;
+  descriptionKey: string;
+}[] = [
   {
     key: "web",
-    label: "Web Search",
-    description: "Search the web and extract content from URLs",
+    labelKey: "tools.web.label",
+    descriptionKey: "tools.web.description",
   },
   {
     key: "browser",
-    label: "Browser",
-    description: "Navigate, click, type, and interact with web pages",
+    labelKey: "tools.browser.label",
+    descriptionKey: "tools.browser.description",
   },
   {
     key: "terminal",
-    label: "Terminal",
-    description: "Execute shell commands and scripts",
+    labelKey: "tools.terminal.label",
+    descriptionKey: "tools.terminal.description",
   },
   {
     key: "file",
-    label: "File Operations",
-    description: "Read, write, search, and manage files",
+    labelKey: "tools.file.label",
+    descriptionKey: "tools.file.description",
   },
   {
     key: "code_execution",
-    label: "Code Execution",
-    description: "Execute Python and shell code directly",
+    labelKey: "tools.code_execution.label",
+    descriptionKey: "tools.code_execution.description",
   },
   {
     key: "vision",
-    label: "Vision",
-    description: "Analyze images and visual content",
+    labelKey: "tools.vision.label",
+    descriptionKey: "tools.vision.description",
   },
   {
     key: "image_gen",
-    label: "Image Generation",
-    description: "Generate images with DALL-E and other models",
+    labelKey: "tools.image_gen.label",
+    descriptionKey: "tools.image_gen.description",
   },
   {
     key: "tts",
-    label: "Text-to-Speech",
-    description: "Convert text to spoken audio",
+    labelKey: "tools.tts.label",
+    descriptionKey: "tools.tts.description",
   },
   {
     key: "skills",
-    label: "Skills",
-    description: "Create, manage, and execute reusable skills",
+    labelKey: "tools.skills.label",
+    descriptionKey: "tools.skills.description",
   },
   {
     key: "memory",
-    label: "Memory",
-    description: "Store and recall persistent knowledge",
+    labelKey: "tools.memory.label",
+    descriptionKey: "tools.memory.description",
   },
   {
     key: "session_search",
-    label: "Session Search",
-    description: "Search across past conversations",
+    labelKey: "tools.session_search.label",
+    descriptionKey: "tools.session_search.description",
   },
   {
     key: "clarify",
-    label: "Clarifying Questions",
-    description: "Ask the user for clarification when needed",
+    labelKey: "tools.clarify.label",
+    descriptionKey: "tools.clarify.description",
   },
   {
     key: "delegation",
-    label: "Delegation",
-    description: "Spawn sub-agents for parallel tasks",
+    labelKey: "tools.delegation.label",
+    descriptionKey: "tools.delegation.description",
   },
   {
     key: "cronjob",
-    label: "Cron Jobs",
-    description: "Create and manage scheduled tasks",
+    labelKey: "tools.cronjob.label",
+    descriptionKey: "tools.cronjob.description",
   },
   {
     key: "moa",
-    label: "Mixture of Agents",
-    description: "Coordinate multiple AI models together",
+    labelKey: "tools.moa.label",
+    descriptionKey: "tools.moa.description",
   },
   {
     key: "todo",
-    label: "Task Planning",
-    description: "Create and manage to-do lists for complex tasks",
+    labelKey: "tools.todo.label",
+    descriptionKey: "tools.todo.description",
   },
 ];
+
+function localizeToolDefs(
+  enabled: boolean | ((key: string) => boolean),
+): ToolsetInfo[] {
+  const locale = getAppLocale();
+  return TOOLSET_DEFS.map((toolDef) => ({
+    key: toolDef.key,
+    label: t(toolDef.labelKey, locale),
+    description: t(toolDef.descriptionKey, locale),
+    enabled: typeof enabled === "function" ? enabled(toolDef.key) : enabled,
+  }));
+}
 
 /**
  * Parse the platform_toolsets.cli list from config.yaml.
@@ -154,7 +172,7 @@ export function getToolsets(profile?: string): ToolsetInfo[] {
 
   // If no config, assume all toolsets are enabled (hermes default behavior)
   if (!existsSync(configFile)) {
-    return TOOLSET_DEFS.map((t) => ({ ...t, enabled: true }));
+    return localizeToolDefs(true);
   }
 
   try {
@@ -163,15 +181,12 @@ export function getToolsets(profile?: string): ToolsetInfo[] {
 
     // If no platform_toolsets.cli section exists, all are enabled by default
     if (enabledSet.size === 0 && !content.includes("platform_toolsets")) {
-      return TOOLSET_DEFS.map((t) => ({ ...t, enabled: true }));
+      return localizeToolDefs(true);
     }
 
-    return TOOLSET_DEFS.map((t) => ({
-      ...t,
-      enabled: enabledSet.has(t.key),
-    }));
+    return localizeToolDefs((key) => enabledSet.has(key));
   } catch {
-    return TOOLSET_DEFS.map((t) => ({ ...t, enabled: true }));
+    return localizeToolDefs(true);
   }
 }
 

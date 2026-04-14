@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Plus, Trash, Search, X } from "../../assets/icons";
 import { PROVIDERS } from "../../constants";
+import { useI18n } from "../../components/useI18n";
 
 interface SavedModel {
   id: string;
@@ -16,6 +17,7 @@ function providerLabel(value: string): string {
 }
 
 function Models(): React.JSX.Element {
+  const { t } = useI18n();
   const [models, setModels] = useState<SavedModel[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -70,7 +72,7 @@ function Models(): React.JSX.Element {
     const name = formName.trim();
     const model = formModel.trim();
     if (!name || !model) {
-      setFormError("Name and Model ID are required");
+      setFormError("名称和模型 ID 为必填项");
       return;
     }
     setFormError("");
@@ -114,7 +116,7 @@ function Models(): React.JSX.Element {
   if (loading) {
     return (
       <div className="settings-container">
-        <h1 className="settings-header">Models</h1>
+        <h1 className="settings-header">{t("models.title")}</h1>
         <div className="models-loading">
           <div className="loading-spinner" />
         </div>
@@ -127,16 +129,15 @@ function Models(): React.JSX.Element {
       <div className="models-header">
         <div>
           <h1 className="settings-header" style={{ marginBottom: 4 }}>
-            Models
+            {t("models.title")}
           </h1>
           <p className="models-subtitle">
-            Manage your model library. These models appear in the chat model
-            picker.
+            管理你的模型库。这些模型会出现在聊天页面的模型选择器中。
           </p>
         </div>
         <button className="btn btn-primary btn-sm" onClick={openAddModal}>
           <Plus size={14} />
-          Add Model
+          添加模型
         </button>
       </div>
 
@@ -148,7 +149,7 @@ function Models(): React.JSX.Element {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search models..."
+            placeholder={t("models.searchPlaceholder")}
           />
         </div>
       )}
@@ -157,14 +158,13 @@ function Models(): React.JSX.Element {
         <div className="models-empty">
           {models.length === 0 ? (
             <>
-              <p className="models-empty-text">No models yet</p>
+              <p className="models-empty-text">{t("models.empty")}</p>
               <p className="models-empty-hint">
-                Add models here to use them in the chat model picker. Models are
-                also auto-added when you configure one in Settings.
+                在这里添加模型后，就能在聊天页面的模型选择器中使用。你在设置页配置的模型也会自动加入这里。
               </p>
             </>
           ) : (
-            <p className="models-empty-text">No models match your search</p>
+            <p className="models-empty-text">{t("models.noMatch")}</p>
           )}
         </div>
       ) : (
@@ -189,19 +189,19 @@ function Models(): React.JSX.Element {
                     className="models-card-confirm"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <span>Delete?</span>
+                    <span>{t("models.deleteConfirm")}</span>
                     <button
                       className="btn btn-sm"
                       style={{ color: "var(--error)" }}
                       onClick={() => handleDelete(m.id)}
                     >
-                      Yes
+                      是
                     </button>
                     <button
                       className="btn btn-sm"
                       onClick={() => setConfirmDelete(null)}
                     >
-                      No
+                      否
                     </button>
                   </div>
                 ) : (
@@ -211,7 +211,7 @@ function Models(): React.JSX.Element {
                       e.stopPropagation();
                       setConfirmDelete(m.id);
                     }}
-                    title="Delete model"
+                    title="删除模型"
                   >
                     <Trash size={14} />
                   </button>
@@ -227,7 +227,7 @@ function Models(): React.JSX.Element {
           <div className="models-modal" onClick={(e) => e.stopPropagation()}>
             <div className="models-modal-header">
               <h2 className="models-modal-title">
-                {editingModel ? "Edit Model" : "Add Model"}
+                {editingModel ? "编辑模型" : "添加模型"}
               </h2>
               <button className="btn-ghost" onClick={closeModal}>
                 <X size={18} />
@@ -236,7 +236,9 @@ function Models(): React.JSX.Element {
 
             <div className="models-modal-body">
               <div className="models-modal-field">
-                <label className="models-modal-label">Display Name</label>
+                <label className="models-modal-label">
+                  {t("models.displayName")}
+                </label>
                 <input
                   className="input"
                   type="text"
@@ -248,7 +250,9 @@ function Models(): React.JSX.Element {
               </div>
 
               <div className="models-modal-field">
-                <label className="models-modal-label">Provider</label>
+                <label className="models-modal-label">
+                  {t("common.provider")}
+                </label>
                 <select
                   className="input"
                   value={formProvider}
@@ -263,7 +267,9 @@ function Models(): React.JSX.Element {
               </div>
 
               <div className="models-modal-field">
-                <label className="models-modal-label">Model ID</label>
+                <label className="models-modal-label">
+                  {t("models.modelId")}
+                </label>
                 <input
                   className="input"
                   type="text"
@@ -275,7 +281,7 @@ function Models(): React.JSX.Element {
 
               <div className="models-modal-field">
                 <label className="models-modal-label">
-                  Base URL (optional)
+                  {t("common.baseUrl")} ({t("common.optional")})
                 </label>
                 <input
                   className="input"
@@ -285,7 +291,7 @@ function Models(): React.JSX.Element {
                   placeholder="http://localhost:1234/v1"
                 />
                 <span className="models-modal-hint">
-                  Only needed for custom/local providers
+                  仅在自定义或本地提供商时需要填写
                 </span>
               </div>
 
@@ -294,10 +300,10 @@ function Models(): React.JSX.Element {
 
             <div className="models-modal-footer">
               <button className="btn btn-secondary btn-sm" onClick={closeModal}>
-                Cancel
+                {t("common.cancel")}
               </button>
               <button className="btn btn-primary btn-sm" onClick={handleSave}>
-                {editingModel ? "Update" : "Add Model"}
+                {editingModel ? "更新" : "添加模型"}
               </button>
             </div>
           </div>

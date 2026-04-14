@@ -54,8 +54,8 @@ const hermesAPI = {
   runClawMigrate: (): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke("run-claw-migrate"),
 
-  getLocale: (): Promise<"en"> => ipcRenderer.invoke("get-locale"),
-  setLocale: (locale: "en"): Promise<"en"> =>
+  getLocale: (): Promise<"en" | "zh-CN"> => ipcRenderer.invoke("get-locale"),
+  setLocale: (locale: "en" | "zh-CN"): Promise<"en" | "zh-CN"> =>
     ipcRenderer.invoke("set-locale", locale),
 
   // Configuration (profile-aware)
