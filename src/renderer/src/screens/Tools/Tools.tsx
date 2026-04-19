@@ -248,14 +248,26 @@ function ToolIcon({ toolKey }: { toolKey: string }): React.JSX.Element {
   );
 }
 
+interface McpServer {
+  name: string;
+  type: string;
+  enabled: boolean;
+  detail: string;
+}
+
 function Tools({ profile }: ToolsProps): React.JSX.Element {
   const [toolsets, setToolsets] = useState<ToolsetInfo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
 
   const loadToolsets = useCallback(async (): Promise<void> => {
     setLoading(true);
-    const list = await window.hermesAPI.getToolsets(profile);
+    const [list, mcp] = await Promise.all([
+      window.hermesAPI.getToolsets(profile),
+      window.hermesAPI.listMcpServers(profile),
+    ]);
     setToolsets(list);
+    setMcpServers(mcp);
     setLoading(false);
   }, [profile]);
 
@@ -318,6 +330,59 @@ function Tools({ profile }: ToolsProps): React.JSX.Element {
           </div>
         ))}
       </div>
+
+      {mcpServers.length > 0 && (
+        <>
+          <div className="tools-header" style={{ marginTop: 32 }}>
+            <h2 className="tools-title">MCP Servers</h2>
+            <p className="tools-subtitle">
+              Model Context Protocol servers configured in config.yaml. Manage
+              via <code>hermes mcp add/remove</code> in the terminal.
+            </p>
+          </div>
+          <div className="tools-grid">
+            {mcpServers.map((s) => (
+              <div
+                key={s.name}
+                className={`tools-card ${s.enabled ? "tools-card-enabled" : "tools-card-disabled"}`}
+              >
+                <div className="tools-card-top">
+                  <div className="tools-card-icon">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <rect x="2" y="2" width="20" height="8" rx="2" />
+                      <rect x="2" y="14" width="20" height="8" rx="2" />
+                      <circle cx="6" cy="6" r="1" />
+                      <circle cx="6" cy="18" r="1" />
+                    </svg>
+                  </div>
+                  <span
+                    className="tools-card-description"
+                    style={{ fontSize: 10 }}
+                  >
+                    {s.type === "http" ? "HTTP" : "stdio"}
+                  </span>
+                </div>
+                <div className="tools-card-label">{s.name}</div>
+                <div className="tools-card-description">
+                  {s.detail}
+                  {!s.enabled && (
+                    <span style={{ color: "var(--error)", marginLeft: 6 }}>
+                      (disabled)
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

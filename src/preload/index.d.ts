@@ -34,8 +34,11 @@ interface HermesAPI {
   runHermesUpdate: () => Promise<{ success: boolean; error?: string }>;
 
   // OpenClaw migration
-  checkOpenClaw: () => Promise<{ found: boolean; path: string | null }>;
+  checkOpenClaw: () => Promise<{ found: boolean; path: string | null }>; 
   runClawMigrate: () => Promise<{ success: boolean; error?: string }>;
+
+  getLocale: () => Promise<"en">;
+  setLocale: (locale: "en") => Promise<"en">;
 
   // Configuration (profile-aware)
   getEnv: (profile?: string) => Promise<Record<string, string>>;
@@ -69,6 +72,9 @@ interface HermesAPI {
       promptTokens: number;
       completionTokens: number;
       totalTokens: number;
+      cost?: number;
+      rateLimitRemaining?: number;
+      rateLimitReset?: number;
     }) => void,
   ) => () => void;
   onChatError: (callback: (error: string) => void) => () => void;
@@ -376,6 +382,42 @@ interface HermesAPI {
 
   // Shell
   openExternal: (url: string) => Promise<void>;
+
+  // Backup / Import
+  runHermesBackup: (
+    profile?: string,
+  ) => Promise<{ success: boolean; path?: string; error?: string }>;
+  runHermesImport: (
+    archivePath: string,
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+
+  // Debug dump
+  runHermesDump: () => Promise<string>;
+
+  // Memory providers
+  discoverMemoryProviders: (profile?: string) => Promise<
+    Array<{
+      name: string;
+      description: string;
+      installed: boolean;
+      active: boolean;
+      envVars: string[];
+    }>
+  >;
+
+  // MCP servers
+  listMcpServers: (
+    profile?: string,
+  ) => Promise<
+    Array<{ name: string; type: string; enabled: boolean; detail: string }>
+  >;
+
+  // Log viewer
+  readLogs: (
+    logFile?: string,
+    lines?: number,
+  ) => Promise<{ content: string; path: string }>;
 }
 
 declare global {

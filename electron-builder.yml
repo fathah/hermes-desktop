@@ -1,4 +1,3 @@
-afterPack: build/afterPack.js
 appId: com.nousresearch.hermes
 productName: Hermes Agent
 directories:

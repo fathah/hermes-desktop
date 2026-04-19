@@ -1,0 +1,14 @@
+export default {
+  title: "Office",
+  checkingStatus: "Checking Claw3D status...",
+  setupTitle: "Set Up Claw3D",
+  installTitle: "Setting Up Claw3D",
+  processLogs: "Process Logs",
+  noLogs: "No logs yet. Start the services to see output.",
+  loadingClaw3d: "Loading Claw3D...",
+  installClaw3d: "Install Claw3D",
+  setupFailed: "Setup failed",
+  startFailed: "Failed to start Claw3D",
+  portInUse: "Port {{port}} is in use. Change it in settings to start.",
+  websocketUrl: "WebSocket URL",
+} as const;

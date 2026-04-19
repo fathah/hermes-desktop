@@ -10,9 +10,9 @@
 
 > **This project is in active development.** Features may change, and some things might break. If you run into a problem or have an idea, [open an issue](https://github.com/fathah/hermes-desktop/issues). Contributions are welcome!
 
-Hermes Desktop is a desktop app for installing, configuring, and chatting with [Hermes Agent](https://github.com/NousResearch/hermes-agent) from a native desktop interface.
+Hermes Desktop is a native desktop app for installing, configuring, and chatting with [Hermes Agent](https://github.com/NousResearch/hermes-agent) — a self-improving AI assistant with tool use, multi-platform messaging, and a closed learning loop.
 
-Instead of asking you to manage the CLI by hand, the app walks through install, provider setup, and day-to-day usage in one place. It uses the official Hermes install script, stores Hermes in `~/.hermes`, and gives you a GUI for chat, sessions, profiles, memory, skills, tools, and settings.
+Instead of managing the CLI by hand, the app walks through install, provider setup, and day-to-day usage in one place. It uses the official Hermes install script, stores Hermes in `~/.hermes`, and gives you a GUI for chat, sessions, profiles, memory, skills, tools, scheduling, messaging gateways, and more.
 
 ## Install
 
@@ -29,16 +29,27 @@ Download the latest build from the [Releases](https://github.com/fathah/hermes-d
 > ```
 > Or right-click the app → **Open** → click **Open** in the confirmation dialog.
 
-## What It Includes
+## Features
 
-- Guided first-run install for Hermes Agent
-- Provider setup for OpenRouter, Anthropic, OpenAI, or local OpenAI-compatible endpoints
-- Streaming chat UI backed by the Hermes CLI
-- Session history with resume and search support
-- Profile switching for separate Hermes environments
-- GUI access to persona, memory, tools, and installed skills
-- Gateway controls for Hermes messaging integrations
-- Desktop packaging with Electron Builder
+- **Guided first-run install** for Hermes Agent with progress tracking and dependency resolution
+- **Multi-provider support** — OpenRouter, Anthropic, OpenAI, Google (Gemini), xAI (Grok), Nous Portal, Qwen, MiniMax, Hugging Face, Groq, and local OpenAI-compatible endpoints (LM Studio, Ollama, vLLM, llama.cpp)
+- **Streaming chat UI** with SSE streaming, tool progress indicators, markdown rendering, and syntax highlighting
+- **Token usage tracking** — live prompt/completion token counts and cost display in the chat footer, plus a `/usage` slash command
+- **22 slash commands** — `/new`, `/clear`, `/fast`, `/web`, `/image`, `/browse`, `/code`, `/shell`, `/usage`, `/help`, `/tools`, `/skills`, `/model`, `/memory`, `/persona`, `/version`, `/compact`, `/compress`, `/undo`, `/retry`, `/debug`, `/status`, and more
+- **Session management** — full-text search (SQLite FTS5), date-grouped history, resume and search across conversations
+- **Profile switching** — create, delete, and switch between separate Hermes environments with isolated config
+- **14 toolsets** — web, browser, terminal, file, code execution, vision, image gen, TTS, skills, memory, session search, clarify, delegation, MoA, and task planning
+- **Memory system** — view/edit memory entries, user profile memory, capacity tracking, and discoverable memory providers (Honcho, Hindsight, Mem0, RetainDB, Supermemory, ByteRover)
+- **Persona editor** — edit and reset your agent's SOUL.md personality
+- **Saved models** — CRUD management for model configurations across providers
+- **Scheduled tasks** — cron job builder (minutes, hourly, daily, weekly, custom cron) with 15 delivery targets
+- **16 messaging gateways** — Telegram, Discord, Slack, WhatsApp, Signal, Matrix, Mattermost, Email (IMAP/SMTP), SMS (Twilio/Vonage), iMessage (BlueBubbles), DingTalk, Feishu/Lark, WeCom, WeChat (iLink Bot), Webhooks, Home Assistant
+- **Hermes Office (Claw3d)** — visual 3D interface with dev server and adapter management
+- **Backup, import & debug dump** — full data backup/restore and system diagnostics from Settings
+- **Log viewer** — view gateway and agent logs directly from the Settings screen
+- **Auto-updater** — check for and install updates via electron-updater
+- **i18n ready** — internationalization framework with English locale covering all screens, ready for community translations
+- **Test suite** — SSE parser, IPC handlers, preload API surface, installer utilities, and constants validation with Vitest
 
 ## Preview
 
@@ -62,12 +73,57 @@ Download the latest build from the [Releases](https://github.com/fathah/hermes-d
 On first launch, the app:
 
 1. Checks whether Hermes is already installed in `~/.hermes`.
-2. If not installed, runs the official Hermes installer.
+2. If not installed, runs the official Hermes installer with dependency resolution (Git, uv, Python 3.11+).
 3. Prompts for an API provider or local model endpoint.
 4. Saves provider config and API keys through Hermes config files.
 5. Launches the main workspace once setup is complete.
 
-Chat requests are sent through the local Hermes CLI, and the desktop app streams the response back into the UI.
+Chat requests go through a local API server (`http://127.0.0.1:8642`) with SSE streaming. The desktop app parses the stream in real time, rendering tool progress, markdown content, and token usage as it arrives.
+
+## Screens
+
+| Screen | Description |
+|--------|-------------|
+| **Chat** | Streaming conversation UI with slash commands, tool progress, and token tracking |
+| **Sessions** | Browse, search, and resume past conversations |
+| **Agents** | Create, delete, and switch between Hermes profiles |
+| **Skills** | Browse, install, and manage bundled and installed skills |
+| **Models** | Manage saved model configurations per provider |
+| **Memory** | View/edit memory entries, user profile, and configure memory providers |
+| **Soul** | Edit the active profile's persona (SOUL.md) |
+| **Tools** | Enable or disable individual toolsets |
+| **Schedules** | Create and manage cron jobs with delivery targets |
+| **Gateway** | Configure and control messaging platform integrations |
+| **Office** | Claw3d visual interface setup and management |
+| **Settings** | Provider config, credential pools, backup/import, log viewer, network settings, theme |
+
+## Supported Providers
+
+### LLM Providers
+
+| Provider | Notes |
+|----------|-------|
+| **OpenRouter** | 200+ models via single API (recommended) |
+| **Anthropic** | Direct Claude access |
+| **OpenAI** | Direct GPT access |
+| **Google (Gemini)** | Google AI Studio |
+| **xAI (Grok)** | Grok models |
+| **Nous Portal** | Free tier available |
+| **Qwen** | QwenAI models |
+| **MiniMax** | Global and China endpoints |
+| **Hugging Face** | 20+ open models via HF Inference |
+| **Groq** | Fast inference (voice/STT) |
+| **Local/Custom** | Any OpenAI-compatible endpoint |
+
+Local presets are included for LM Studio, Ollama, vLLM, and llama.cpp.
+
+### Messaging Platforms
+
+Telegram, Discord, Slack, WhatsApp, Signal, Matrix/Element, Mattermost, Email (IMAP/SMTP), SMS (Twilio & Vonage), iMessage (BlueBubbles), DingTalk, Feishu/Lark, WeCom, WeChat (iLink Bot), Webhooks, and Home Assistant.
+
+### Tool Integrations
+
+Exa Search, Parallel API, Tavily, Firecrawl, FAL.ai (image generation), Honcho, Browserbase, Weights & Biases, and Tinker.
 
 ## Development
 
@@ -94,6 +150,13 @@ npm run dev
 ```bash
 npm run lint
 npm run typecheck
+```
+
+### Run tests
+
+```bash
+npm run test
+npm run test:watch
 ```
 
 ### Build the desktop app
@@ -134,23 +197,27 @@ Hermes files are managed in:
 - `~/.hermes/.env`
 - `~/.hermes/config.yaml`
 - `~/.hermes/hermes-agent`
+- `~/.hermes/profiles/` — named profile directories
+- `~/.hermes/state.db` — session history database
+- `~/.hermes/cron/jobs.json` — scheduled tasks
 
-## Main Screens
+## Tech Stack
 
-- `Chat`: talk to Hermes with streamed responses
-- `Sessions`: browse and reopen past conversations
-- `Agents`: manage and switch active profiles
-- `Skills`: inspect bundled and installed skills
-- `Persona`: edit the active profile's soul/persona
-- `Memory`: view profile memory files
-- `Tools`: enable or disable toolsets
-- `Settings`: provider and gateway-related configuration
+- **Electron** 39 — cross-platform desktop shell
+- **React** 19 — UI framework
+- **TypeScript** 5.9 — type safety across main and renderer processes
+- **Tailwind CSS** 4 — utility-first styling
+- **Vite** 7 + electron-vite — fast dev server and build tooling
+- **better-sqlite3** — local session storage with FTS5 full-text search
+- **i18next** — internationalization framework
+- **Vitest** — test runner
 
 ## Notes
 
 - The desktop app depends on the upstream Hermes Agent project for agent behavior and tool execution.
 - The built-in installer runs the official Hermes install script with `--skip-setup`, then completes provider configuration in the GUI.
 - Local model providers do not require an API key, but the compatible server must already be running.
+- Alternative npm registry routes are supported for environments with restricted network access.
 
 ## Contributing
 
