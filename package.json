@@ -29,6 +29,7 @@
     "lucide-react": "^1.7.0",
     "react-markdown": "^10.1.0",
     "react-syntax-highlighter": "^16.1.1",
+    "react-textarea-autosize": "^8.5.9",
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
