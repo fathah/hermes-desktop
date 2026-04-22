@@ -649,45 +649,45 @@ export function discoverMemoryProviders(
   > = {
     honcho: {
       description:
-        "AI-native cross-session user modeling with dialectic Q&A and semantic search",
+        "memory.providers.honcho",
       envVars: ["HONCHO_API_KEY"],
       pip: "honcho-ai",
     },
     hindsight: {
       description:
-        "Long-term memory with knowledge graph and multi-strategy retrieval",
+        "memory.providers.hindsight",
       envVars: ["HINDSIGHT_API_KEY", "HINDSIGHT_API_URL", "HINDSIGHT_BANK_ID"],
       pip: "hindsight-client",
     },
     mem0: {
       description:
-        "Server-side LLM fact extraction with semantic search and auto-deduplication",
+        "memory.providers.mem0",
       envVars: ["MEM0_API_KEY"],
       pip: "mem0ai",
     },
     retaindb: {
-      description: "Cloud memory API with hybrid search and 7 memory types",
+      description: "memory.providers.retaindb",
       envVars: ["RETAINDB_API_KEY"],
     },
     supermemory: {
       description:
-        "Semantic long-term memory with profile recall and entity extraction",
+        "memory.providers.supermemory",
       envVars: ["SUPERMEMORY_API_KEY"],
       pip: "supermemory",
     },
     holographic: {
       description:
-        "Local SQLite fact store with FTS5 search and trust scoring (no API key needed)",
+        "memory.providers.holographic",
       envVars: [],
     },
     openviking: {
       description:
-        "Session-managed memory with tiered retrieval and knowledge browsing",
+        "memory.providers.openviking",
       envVars: ["OPENVIKING_ENDPOINT", "OPENVIKING_API_KEY"],
     },
     byterover: {
       description:
-        "Persistent knowledge tree with tiered retrieval via brv CLI",
+        "memory.providers.byterover",
       envVars: ["BRV_API_KEY"],
     },
   };

@@ -337,7 +337,7 @@ function Settings({
     setConnRemoteUrl("");
     setConnApiKey("");
     await window.hermesAPI.setConnectionConfig("local", "", "");
-    setConnStatus("Switched to local mode");
+    setConnStatus(t("settings.switchedToLocal"));
     setTimeout(() => setConnStatus(null), 2000);
   }
 
@@ -569,7 +569,7 @@ function Settings({
 
       <div className="settings-section">
         <div className="settings-section-title">
-          Connection
+          {t("settings.connectionSection")}
           {connStatus && (
             <span className="settings-saved" style={{ marginLeft: 8 }}>
               {connStatus}
@@ -578,7 +578,7 @@ function Settings({
         </div>
 
         <div className="settings-field">
-          <label className="settings-field-label">Mode</label>
+          <label className="settings-field-label">{t("settings.connectionMode")}</label>
           <div className="settings-theme-options">
             <button
               className={`settings-theme-option ${connMode === "local" ? "active" : ""}`}
@@ -587,26 +587,26 @@ function Settings({
                 if (connLoaded.current) handleSwitchToLocal();
               }}
             >
-              Local
+              {t("settings.modeLocal")}
             </button>
             <button
               className={`settings-theme-option ${connMode === "remote" ? "active" : ""}`}
               onClick={() => setConnMode("remote")}
             >
-              Remote
+              {t("settings.modeRemote")}
             </button>
           </div>
           <div className="settings-field-hint">
             {connMode === "local"
-              ? "Using Hermes installed on this device"
-              : "Connect to a Hermes API server on your network or cloud"}
+              ? t("settings.modeLocalHint")
+              : t("settings.modeRemoteHint")}
           </div>
         </div>
 
         {connMode === "remote" && (
           <>
             <div className="settings-field">
-              <label className="settings-field-label">Remote URL</label>
+              <label className="settings-field-label">{t("settings.remoteUrl")}</label>
               <input
                 className="input"
                 type="url"
@@ -616,23 +616,21 @@ function Settings({
                 onBlur={handleSaveConnection}
               />
               <div className="settings-field-hint">
-                The Hermes API server URL (must expose /health and
-                /v1/chat/completions)
+                {t("settings.remoteUrlHint")}
               </div>
             </div>
             <div className="settings-field">
-              <label className="settings-field-label">API Key</label>
+              <label className="settings-field-label">{t("settings.remoteApiKey")}</label>
               <input
                 className="input"
                 type="password"
                 value={connApiKey}
                 onChange={(e) => setConnApiKey(e.target.value)}
-                placeholder="Bearer token (API_SERVER_KEY)"
+                placeholder={t("settings.remoteApiKey")}
                 onBlur={handleSaveConnection}
               />
               <div className="settings-field-hint">
-                Matches API_SERVER_KEY on the remote host. Leave empty if the
-                server accepts unauthenticated requests.
+                {t("settings.remoteApiKeyHint")}
               </div>
             </div>
             <div className="settings-hermes-actions">
@@ -641,13 +639,13 @@ function Settings({
                 onClick={handleTestConnection}
                 disabled={connTesting}
               >
-                {connTesting ? "Testing..." : "Test Connection"}
+                {connTesting ? t("settings.testingConnection") : t("settings.testConnection")}
               </button>
               <button
                 className="btn btn-primary"
                 onClick={handleSaveConnection}
               >
-                Save
+                {t("settings.save")}
               </button>
             </div>
           </>
@@ -792,14 +790,8 @@ function Settings({
 
       {connMode === "remote" && (
         <div className="settings-section">
-          <div className="settings-section-title">Server Configuration</div>
-          <div className="settings-field-hint">
-            You&apos;re connected to a remote Hermes server. Model selection,
-            provider API keys, and credentials are managed on the server&apos;s{" "}
-            <code>~/.hermes/.env</code> and <code>config.yaml</code>. Edit them
-            on the host (e.g. <code>docker exec -it hermes vi /opt/data/.env</code>)
-            and restart the container.
-          </div>
+          <div className="settings-section-title">{t("settings.serverConfigTitle")}</div>
+          <div className="settings-field-hint" dangerouslySetInnerHTML={{ __html: t("settings.serverConfigHint") }} />
         </div>
       )}
 

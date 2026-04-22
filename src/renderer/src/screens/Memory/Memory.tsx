@@ -269,7 +269,7 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
           className={`memory-tab ${tab === "providers" ? "active" : ""}`}
           onClick={() => setTab("providers")}
         >
-          Providers
+          {t("memory.providersTitle")}
           {memoryProvider && (
             <span className="memory-tab-time">{memoryProvider}</span>
           )}
@@ -504,7 +504,7 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
                       </button>
                     )}
                   </div>
-                  <div className="memory-provider-desc">{p.description}</div>
+                  <div className="memory-provider-desc">{t(p.description)}</div>
 
                   {/* Env var config fields */}
                   {p.envVars.length > 0 && (

@@ -5,6 +5,7 @@ export default {
   sessions: "Sessions",
   messages: "Messages",
   memories: "Memories",
+  providersTitle: "Providers",
   agentMemory: "Agent Memory",
   userProfile: "User Profile",
   entries: "{{count}} entries",
@@ -39,4 +40,14 @@ export default {
   deactivate: "Deactivate",
   activating: "Activating...",
   activate: "Activate",
+  providers: {
+    honcho: "AI-native cross-session user modeling with dialectic Q&A and semantic search",
+    hindsight: "Long-term memory with knowledge graph and multi-strategy retrieval",
+    mem0: "Server-side LLM fact extraction with semantic search and auto-deduplication",
+    retaindb: "Cloud memory API with hybrid search and 7 memory types",
+    supermemory: "Semantic long-term memory with profile recall and entity extraction",
+    holographic: "Local SQLite fact store with FTS5 search and trust scoring (no API key needed)",
+    openviking: "Session-managed memory with tiered retrieval and knowledge browsing",
+    byterover: "Persistent knowledge tree with tiered retrieval via brv CLI",
+  },
 } as const;
