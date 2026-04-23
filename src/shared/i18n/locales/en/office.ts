@@ -11,4 +11,10 @@ export default {
   startFailed: "Failed to start Claw3D",
   portInUse: "Port {{port}} is in use. Change it in settings to start.",
   websocketUrl: "WebSocket URL",
+  port: "Port",
+  running: "Running",
+  stopped: "Stopped",
+  start: "Start",
+  stop: "Stop",
+  restart: "Restart",
 } as const;

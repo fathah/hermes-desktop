@@ -1,4 +1,4 @@
-import i18next, { type Resource } from "i18next";
+import i18next, { type Resource, type i18n } from "i18next";
 import {
   APP_LOCALES,
   DEFAULT_ACTIVE_LOCALE,
@@ -24,6 +24,24 @@ import agentsEn from "./locales/en/agents";
 import soulEn from "./locales/en/soul";
 import memoryEn from "./locales/en/memory";
 import installEn from "./locales/en/install";
+import commonZh from "./locales/zh-CN/common";
+import navigationZh from "./locales/zh-CN/navigation";
+import welcomeZh from "./locales/zh-CN/welcome";
+import setupZh from "./locales/zh-CN/setup";
+import chatZh from "./locales/zh-CN/chat";
+import settingsZh from "./locales/zh-CN/settings";
+import toolsZh from "./locales/zh-CN/tools";
+import sessionsZh from "./locales/zh-CN/sessions";
+import modelsZh from "./locales/zh-CN/models";
+import officeZh from "./locales/zh-CN/office";
+import errorsZh from "./locales/zh-CN/errors";
+import schedulesZh from "./locales/zh-CN/schedules";
+import skillsZh from "./locales/zh-CN/skills";
+import gatewayZh from "./locales/zh-CN/gateway";
+import agentsZh from "./locales/zh-CN/agents";
+import soulZh from "./locales/zh-CN/soul";
+import memoryZh from "./locales/zh-CN/memory";
+import installZh from "./locales/zh-CN/install";
 
 export const resources = {
   en: {
@@ -48,6 +66,28 @@ export const resources = {
       install: installEn,
     },
   },
+  "zh-CN": {
+    translation: {
+      common: commonZh,
+      navigation: navigationZh,
+      welcome: welcomeZh,
+      setup: setupZh,
+      chat: chatZh,
+      settings: settingsZh,
+      tools: toolsZh,
+      sessions: sessionsZh,
+      models: modelsZh,
+      office: officeZh,
+      errors: errorsZh,
+      schedules: schedulesZh,
+      skills: skillsZh,
+      gateway: gatewayZh,
+      agents: agentsZh,
+      soul: soulZh,
+      memory: memoryZh,
+      install: installZh,
+    },
+  },
 } satisfies Resource;
 
 function readKey(node: unknown, path: string): string | undefined {
@@ -61,7 +101,7 @@ function readKey(node: unknown, path: string): string | undefined {
 
 let locale: AppLocale = DEFAULT_ACTIVE_LOCALE;
 
-export const sharedI18n = i18next.createInstance();
+export const sharedI18n: i18n = i18next.createInstance();
 
 void sharedI18n.init({
   lng: locale,

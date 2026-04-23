@@ -28,6 +28,7 @@ mac:
     - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
     - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
   notarize: false
+  identity: null
 dmg:
   artifactName: ${name}-${version}.${ext}
 linux:

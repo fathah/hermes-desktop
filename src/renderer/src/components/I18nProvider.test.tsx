@@ -8,13 +8,13 @@ function Probe(): React.JSX.Element {
 }
 
 describe("I18nProvider", () => {
-  it("renders English translations by default", () => {
+  it("renders Chinese translations by default", () => {
     render(
       <I18nProvider>
         <Probe />
       </I18nProvider>,
     );
 
-    expect(screen.getByText("Welcome to Hermes")).toBeInTheDocument();
+    expect(screen.getByText("欢迎使用 Hermes")).toBeInTheDocument();
   });
 });

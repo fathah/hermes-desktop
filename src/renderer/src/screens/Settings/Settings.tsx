@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useTheme } from "../../components/ThemeProvider";
+import { useI18n } from "../../components/useI18n";
 import { SETTINGS_SECTIONS, PROVIDERS, THEME_OPTIONS } from "../../constants";
 import { Download, Upload, FileText } from "lucide-react";
+import type { AppLocale } from "../../../../shared/i18n";
 
 // Read cached values from localStorage for instant display
 function getCachedVersion(): string | null {
@@ -33,6 +35,7 @@ function Settings({
   const [hermesHome, setHermesHome] = useState("");
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set());
   const { theme, setTheme } = useTheme();
+  const { locale, setLocale, t } = useI18n();
 
   // Hermes engine info — initialize from localStorage cache for instant display
   const [hermesVersion, setHermesVersion] = useState<string | null>(
@@ -546,7 +549,7 @@ function Settings({
 
       <div className="settings-section">
         <div className="settings-section-title">
-          Connection
+          {t("settings.connection.title")}
           {connStatus && (
             <span className="settings-saved" style={{ marginLeft: 8 }}>
               {connStatus}
@@ -555,7 +558,7 @@ function Settings({
         </div>
 
         <div className="settings-field">
-          <label className="settings-field-label">Mode</label>
+          <label className="settings-field-label">{t("settings.connection.mode")}</label>
           <div className="settings-theme-options">
             <button
               className={`settings-theme-option ${connMode === "local" ? "active" : ""}`}
@@ -564,19 +567,19 @@ function Settings({
                 if (connLoaded.current) handleSwitchToLocal();
               }}
             >
-              Local
+              {t("settings.connection.local")}
             </button>
             <button
               className={`settings-theme-option ${connMode === "remote" ? "active" : ""}`}
               onClick={() => setConnMode("remote")}
             >
-              Remote
+              {t("settings.connection.remote")}
             </button>
           </div>
           <div className="settings-field-hint">
             {connMode === "local"
-              ? "Using Hermes installed on this device"
-              : "Connect to a Hermes API server on your network or cloud"}
+              ? t("settings.connection.localHint")
+              : t("settings.connection.remoteHint")}
           </div>
         </div>
 
@@ -682,9 +685,29 @@ function Settings({
       )}
 
       <div className="settings-section">
-        <div className="settings-section-title">Appearance</div>
+        <div className="settings-section-title">{t("settings.sections.appearance")}</div>
         <div className="settings-field">
-          <label className="settings-field-label">Theme</label>
+          <label className="settings-field-label">{t("settings.language.label")}</label>
+          <div className="settings-theme-options">
+            <button
+              className={`settings-theme-option ${locale === "zh-CN" ? "active" : ""}`}
+              onClick={() => setLocale("zh-CN" as AppLocale)}
+            >
+              中文
+            </button>
+            <button
+              className={`settings-theme-option ${locale === "en" ? "active" : ""}`}
+              onClick={() => setLocale("en" as AppLocale)}
+            >
+              English
+            </button>
+          </div>
+          <div className="settings-field-hint">
+            {t("settings.language.hint")}
+          </div>
+        </div>
+        <div className="settings-field">
+          <label className="settings-field-label">{t("settings.theme.label")}</label>
           <div className="settings-theme-options">
             {THEME_OPTIONS.map((opt) => (
               <button
@@ -692,12 +715,12 @@ function Settings({
                 className={`settings-theme-option ${theme === opt.value ? "active" : ""}`}
                 onClick={() => setTheme(opt.value)}
               >
-                {opt.label}
+                {t(`settings.theme.${opt.value}`)}
               </button>
             ))}
           </div>
           <div className="settings-field-hint">
-            Choose your preferred appearance
+            {t("settings.theme.hint")}
           </div>
         </div>
       </div>

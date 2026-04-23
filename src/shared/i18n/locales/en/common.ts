@@ -38,4 +38,9 @@ export default {
   noData: "No data yet",
   optional: "optional",
   devOnly: "Developer only",
+  edit: "Edit",
+  yes: "Yes",
+  no: "No",
+  update: "Update",
+  requiredFields: "Name and Model ID are required",
 } as const;

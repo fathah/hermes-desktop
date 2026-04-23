@@ -1,0 +1,17 @@
+export default {
+  title: "模型",
+  subtitle: "管理您的模型库。这些模型会出现在聊天模型选择器中。",
+  addModel: "添加模型",
+  searchPlaceholder: "搜索模型...",
+  empty: "暂无模型",
+  emptyHint: "在此处添加模型以在聊天模型选择器中使用它们。当您在设置中配置模型时，也会自动添加。",
+  noMatch: "没有匹配的模型",
+  deleteConfirm: "删除？",
+  displayName: "显示名称",
+  modelId: "模型 ID",
+  provider: "提供商",
+  baseUrl: "基础 URL",
+  customProviderHint: "仅自定义/本地提供商需要",
+  save: "保存",
+  cancel: "取消",
+} as const;

@@ -14,6 +14,7 @@
     "baseUrl": ".",
     "paths": {
       "@renderer/*": ["src/renderer/src/*"]
-    }
+    },
+    "lib": ["ES2021", "DOM", "DOM.Iterable"]
   }
 }

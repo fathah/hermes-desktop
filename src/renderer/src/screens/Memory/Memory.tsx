@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Plus, Trash, Refresh } from "../../assets/icons";
 import { Check, ExternalLink } from "lucide-react";
+import { useI18n } from "../../components/useI18n";
 
 interface MemoryEntry {
   index: number;
@@ -83,6 +84,7 @@ const PROVIDER_URLS: Record<string, string> = {
 };
 
 function Memory({ profile }: { profile?: string }): React.JSX.Element {
+  const { t } = useI18n();
   const [data, setData] = useState<MemoryData | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"entries" | "profile" | "providers">(
@@ -185,7 +187,7 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
   if (loading || !data) {
     return (
       <div className="settings-container">
-        <h1 className="settings-header">Memory</h1>
+        <h1 className="settings-header">{t("memory.title")}</h1>
         <div style={{ display: "flex", justifyContent: "center", padding: 48 }}>
           <div className="loading-spinner" />
         </div>
@@ -198,11 +200,10 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
       <div className="memory-header">
         <div>
           <h1 className="settings-header" style={{ marginBottom: 4 }}>
-            Memory
+            {t("memory.title")}
           </h1>
           <p className="memory-subtitle">
-            What Hermes remembers about you and your environment across
-            sessions.
+            {t("memory.subtitle")}
           </p>
         </div>
         <button className="btn btn-secondary btn-sm" onClick={loadData}>
@@ -214,17 +215,17 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
       <div className="memory-stats">
         <div className="memory-stat">
           <span className="memory-stat-value">{data.stats.totalSessions}</span>
-          <span className="memory-stat-label">Sessions</span>
+          <span className="memory-stat-label">{t("memory.sessions")}</span>
         </div>
         <div className="memory-stat">
           <span className="memory-stat-value">{data.stats.totalMessages}</span>
-          <span className="memory-stat-label">Messages</span>
+          <span className="memory-stat-label">{t("memory.messages")}</span>
         </div>
         <div className="memory-stat">
           <span className="memory-stat-value">
             {data.memory.entries.length}
           </span>
-          <span className="memory-stat-label">Memories</span>
+          <span className="memory-stat-label">{t("memory.memories")}</span>
         </div>
       </div>
 
@@ -233,12 +234,12 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
         <CapacityBar
           used={data.memory.charCount}
           limit={data.memory.charLimit}
-          label="Agent Memory"
+          label={t("memory.agentMemory")}
         />
         <CapacityBar
           used={data.user.charCount}
           limit={data.user.charLimit}
-          label="User Profile"
+          label={t("memory.userProfile")}
         />
       </div>
 
@@ -248,7 +249,7 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
           className={`memory-tab ${tab === "entries" ? "active" : ""}`}
           onClick={() => setTab("entries")}
         >
-          Agent Memory
+          {t("memory.agentMemory")}
           {data.memory.lastModified && (
             <span className="memory-tab-time">
               {timeAgo(data.memory.lastModified)}
@@ -259,7 +260,7 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
           className={`memory-tab ${tab === "profile" ? "active" : ""}`}
           onClick={() => setTab("profile")}
         >
-          User Profile
+          {t("memory.userProfile")}
           {data.user.lastModified && (
             <span className="memory-tab-time">
               {timeAgo(data.user.lastModified)}
@@ -270,7 +271,7 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
           className={`memory-tab ${tab === "providers" ? "active" : ""}`}
           onClick={() => setTab("providers")}
         >
-          Providers
+          {t("memory.providers")}
           {memoryProvider && (
             <span className="memory-tab-time">{memoryProvider}</span>
           )}
@@ -284,14 +285,14 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
         <div className="memory-entries">
           <div className="memory-entries-header">
             <span className="memory-entries-count">
-              {data.memory.entries.length} entries
+              {t("memory.entries", { count: data.memory.entries.length })}
             </span>
             <button
               className="btn btn-primary btn-sm"
               onClick={() => setShowAdd(!showAdd)}
             >
               <Plus size={13} />
-              Add Memory
+              {t("memory.addMemory")}
             </button>
           </div>
 
@@ -316,14 +317,14 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
                     setNewEntry("");
                   }}
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </button>
                 <button
                   className="btn btn-primary btn-sm"
                   onClick={handleAddEntry}
                   disabled={!newEntry.trim()}
                 >
-                  Save
+                  {t("common.save")}
                 </button>
               </div>
             </div>
@@ -332,10 +333,10 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
           {data.memory.entries.length === 0 ? (
             <div className="memory-empty">
               <p>
-                No memories yet. Hermes will save important facts as you chat.
+                {t("memory.noMemoriesYet")}
               </p>
               <p className="memory-empty-hint">
-                You can also add memories manually using the button above.
+                {t("memory.addManuallyHint")}
               </p>
             </div>
           ) : (
@@ -358,13 +359,13 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
                         className="btn btn-secondary btn-sm"
                         onClick={() => setEditingIndex(null)}
                       >
-                        Cancel
+                        {t("common.cancel")}
                       </button>
                       <button
                         className="btn btn-primary btn-sm"
                         onClick={handleSaveEdit}
                       >
-                        Save
+                        {t("common.save")}
                       </button>
                     </div>
                   </div>
@@ -379,23 +380,23 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
                           setEditContent(entry.content);
                         }}
                       >
-                        Edit
+                        {t("common.edit")}
                       </button>
                       {confirmDelete === entry.index ? (
                         <span className="memory-entry-confirm">
-                          Delete?
+                          {t("memory.confirmDelete")}
                           <button
                             className="btn-ghost"
                             style={{ color: "var(--error)" }}
                             onClick={() => handleDeleteEntry(entry.index)}
                           >
-                            Yes
+                            {t("common.yes")}
                           </button>
                           <button
                             className="btn-ghost"
                             onClick={() => setConfirmDelete(null)}
                           >
-                            No
+                            {t("common.no")}
                           </button>
                         </span>
                       ) : (
@@ -420,8 +421,7 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
         <div className="memory-profile">
           <div className="memory-profile-header">
             <span className="memory-profile-hint">
-              Tell Hermes about yourself — name, role, preferences,
-              communication style.
+              {t("memory.profileHint")}
             </span>
             {userSaved && (
               <span
@@ -431,7 +431,7 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
                   fontWeight: 600,
                 }}
               >
-                Saved
+                {t("common.saved")}
               </span>
             )}
           </div>
@@ -454,7 +454,7 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
                 className="btn btn-primary btn-sm"
                 onClick={handleSaveUserProfile}
               >
-                Save Profile
+                {t("memory.saveProfile")}
               </button>
             )}
           </div>
@@ -465,22 +465,20 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
       {tab === "providers" && (
         <div className="memory-providers">
           <div className="memory-providers-hint">
-            Pluggable memory providers give Hermes advanced long-term memory.
-            Built-in memory (above) is always active alongside the selected
-            provider.
+            {t("memory.providersHint")}
             {memoryProvider ? (
               <span>
                 {" "}
-                Active: <strong>{memoryProvider}</strong>
+                {t("memory.active")}: <strong>{memoryProvider}</strong>
               </span>
             ) : (
-              <span> No external provider active — using built-in only.</span>
+              <span> {t("memory.noProviderActive")}</span>
             )}
           </div>
 
           {providers.length === 0 ? (
             <div className="memory-empty">
-              <p>No memory providers found in this installation.</p>
+              <p>{t("memory.noProvidersFound")}</p>
             </div>
           ) : (
             <div className="memory-providers-grid">
@@ -494,7 +492,7 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
                       {p.name}
                       {p.active && (
                         <span className="memory-provider-badge">
-                          <Check size={10} /> Active
+                          <Check size={10} /> {t("memory.active")}
                         </span>
                       )}
                     </div>
@@ -528,7 +526,7 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
                                   marginLeft: 6,
                                 }}
                               >
-                                Saved
+                                {t("common.saved")}
                               </span>
                             )}
                           </label>
@@ -578,7 +576,7 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
                         }}
                         disabled={activating !== null}
                       >
-                        Deactivate
+                        {t("memory.deactivate")}
                       </button>
                     ) : (
                       <button
@@ -601,7 +599,7 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
                         }}
                         disabled={activating !== null}
                       >
-                        {activating === p.name ? "Activating..." : "Activate"}
+                        {activating === p.name ? t("memory.activating") : t("memory.activate")}
                       </button>
                     )}
                   </div>

@@ -1,9 +1,17 @@
 export default {
   title: "Models",
+  subtitle: "Manage your model library. These models appear in the chat model picker.",
+  addModel: "Add Model",
   searchPlaceholder: "Search models...",
   empty: "No models yet",
+  emptyHint: "Add models here to use them in the chat model picker. Models are also auto-added when you configure one in Settings.",
   noMatch: "No models match your search",
   deleteConfirm: "Delete?",
   displayName: "Display Name",
   modelId: "Model ID",
+  provider: "Provider",
+  baseUrl: "Base URL",
+  customProviderHint: "Only needed for custom/local providers",
+  save: "Save",
+  cancel: "Cancel",
 } as const;

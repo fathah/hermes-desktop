@@ -8,6 +8,7 @@
   ],
   "compilerOptions": {
     "composite": true,
-    "types": ["electron-vite/node"]
+    "types": ["electron-vite/node"],
+    "lib": ["ES2021"]
   }
 }

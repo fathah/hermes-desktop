@@ -16,6 +16,7 @@ import {
   Slash,
   Zap,
 } from "lucide-react";
+import { useI18n } from "../../components/useI18n";
 
 // ── Slash Commands ──────────────────────────────────────
 
@@ -149,6 +150,7 @@ const MessageRow = memo(function MessageRow({
   onApprove,
   onDeny,
 }: MessageRowProps): React.JSX.Element {
+  const { t } = useI18n();
   return (
     <div className={`chat-message chat-message-${msg.role}`}>
       {msg.role === "user" ? (
@@ -172,10 +174,10 @@ const MessageRow = memo(function MessageRow({
               className="chat-approval-btn chat-approve"
               onClick={onApprove}
             >
-              Approve
+              {t("chat.approve")}
             </button>
             <button className="chat-approval-btn chat-deny" onClick={onDeny}>
-              Deny
+              {t("chat.deny")}
             </button>
           </div>
         )}
@@ -214,6 +216,7 @@ function Chat({
   onSessionStarted,
   onNewChat,
 }: ChatProps): React.JSX.Element {
+  const { t } = useI18n();
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [hermesSessionId, setHermesSessionId] = useState<string | null>(null);
@@ -937,9 +940,9 @@ function Chat({
             <div className="chat-empty-icon">
               <img src={icon} width={64} height={64} alt="" />
             </div>
-            <div className="chat-empty-text">How can I help you today?</div>
+            <div className="chat-empty-text">{t("chat.emptyTitle")}</div>
             <div className="chat-empty-hint">
-              Ask me to write code, answer questions, search the web, and more
+              {t("chat.emptyHint")}
             </div>
             <div className="chat-empty-suggestions">
               <button
@@ -950,7 +953,7 @@ function Chat({
                 }}
               >
                 <Search size={16} />
-                Search the web
+                {t("chat.suggestionSearch")}
               </button>
               <button
                 className="chat-suggestion"
@@ -960,7 +963,7 @@ function Chat({
                 }}
               >
                 <Bell size={16} />
-                Set a reminder
+                {t("chat.suggestionReminder")}
               </button>
               <button
                 className="chat-suggestion"
@@ -970,7 +973,7 @@ function Chat({
                 }}
               >
                 <Mail size={16} />
-                Summarize emails
+                {t("chat.suggestionEmail")}
               </button>
               <button
                 className="chat-suggestion"
@@ -982,7 +985,7 @@ function Chat({
                 }}
               >
                 <Code size={16} />
-                Write a script
+                {t("chat.suggestionScript")}
               </button>
               <button
                 className="chat-suggestion"
@@ -1004,7 +1007,7 @@ function Chat({
                 }}
               >
                 <ChartLine size={16} />
-                Analyze data
+                {t("chat.suggestionAnalyze")}
               </button>
             </div>
           </div>

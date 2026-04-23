@@ -1,10 +1,11 @@
 import { useContext } from "react";
 import { useTranslation } from "react-i18next";
 import { I18nContext } from "./I18nContext";
+import type { AppLocale } from "../../../shared/i18n";
 
 export function useI18n(): {
-  locale: "en";
-  setLocale: (locale: "en") => void;
+  locale: AppLocale;
+  setLocale: (locale: AppLocale) => void;
   t: (key: string, options?: Record<string, unknown>) => string;
 } {
   const value = useContext(I18nContext);

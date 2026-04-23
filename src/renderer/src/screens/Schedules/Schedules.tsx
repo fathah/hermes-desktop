@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Plus, Trash, Refresh, X, Play, Pause, Zap, Alert } from "../../assets/icons";
+import { useI18n } from "../../components/useI18n";
 
 const DELIVER_TARGETS = [
   { value: "local", label: "Local" },
@@ -44,6 +45,7 @@ interface SchedulesProps {
 }
 
 function Schedules({ profile }: SchedulesProps): React.JSX.Element {
+  const { t } = useI18n();
   const [jobs, setJobs] = useState<CronJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -70,7 +72,7 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
       const list = await window.hermesAPI.listCronJobs(true, profile);
       setJobs(list);
     } catch {
-      setError("Failed to load scheduled tasks");
+      setError(t("schedules.failedToLoad"));
     } finally {
       setLoading(false);
     }
@@ -257,7 +259,7 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
             </div>
             <div className="schedules-modal-body">
               <div className="schedules-field">
-                <label className="schedules-field-label">Name</label>
+                <label className="schedules-field-label">{t("schedules.name")}</label>
                 <input
                   className="input"
                   type="text"
@@ -396,7 +398,7 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
                 </div>
               )}
               <div className="schedules-field">
-                <label className="schedules-field-label">Prompt</label>
+                <label className="schedules-field-label">{t("schedules.prompt")}</label>
                 <textarea
                   className="input schedules-textarea"
                   placeholder="Task instruction for the agent..."
@@ -450,7 +452,7 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="schedules-modal-header">
-              <h3>Remove Job</h3>
+              <h3>{t("common.delete")}</h3>
               <button
                 className="btn-ghost"
                 onClick={() => setConfirmDelete(null)}
@@ -460,8 +462,7 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
             </div>
             <div className="schedules-modal-body">
               <p className="schedules-confirm-text">
-                Are you sure you want to remove this scheduled task? This cannot
-                be undone.
+                {t("schedules.confirmDeleteText")}
               </p>
             </div>
             <div className="schedules-modal-footer">
@@ -469,7 +470,7 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
                 className="btn btn-secondary btn-sm"
                 onClick={() => setConfirmDelete(null)}
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 className="btn btn-danger btn-sm"
@@ -485,22 +486,22 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
 
       <div className="schedules-header">
         <div>
-          <h2 className="schedules-title">Schedules</h2>
+          <h2 className="schedules-title">{t("schedules.title")}</h2>
           <p className="schedules-subtitle">
-            Automate tasks with scheduled agent runs
+            {t("schedules.subtitle")}
           </p>
         </div>
         <div className="schedules-header-actions">
           <button className="btn btn-secondary" onClick={loadJobs}>
             <Refresh size={14} />
-            Refresh
+            {t("schedules.refresh")}
           </button>
           <button
             className="btn btn-primary"
             onClick={() => setShowCreate(true)}
           >
             <Plus size={14} />
-            New Task
+            {t("schedules.newTask")}
           </button>
         </div>
       </div>

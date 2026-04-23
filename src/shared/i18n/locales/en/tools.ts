@@ -1,5 +1,8 @@
 export default {
   title: "Tools",
+  subtitle: "Enable or disable toolsets available to the agent during conversations",
+  mcpServers: "MCP Servers",
+  mcpSubtitle: "Model Context Protocol servers configured in config.yaml. Manage via hermes mcp add/remove in the terminal.",
   web: {
     label: "Web Search",
     description: "Search the web and extract content from URLs",

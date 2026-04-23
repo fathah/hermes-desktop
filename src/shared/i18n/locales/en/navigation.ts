@@ -1,11 +1,11 @@
 export default {
   chat: "Chat",
   sessions: "Sessions",
-  agents: "Profiles",
+  profiles: "Profiles",
   office: "Office",
   models: "Models",
   skills: "Skills",
-  soul: "Persona",
+  persona: "Persona",
   memory: "Memory",
   tools: "Tools",
   schedules: "Schedules",
