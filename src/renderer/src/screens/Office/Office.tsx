@@ -17,6 +17,8 @@ interface SetupProgress {
   log: string;
 }
 
+type Claw3dStatus = Awaited<ReturnType<typeof window.hermesAPI.claw3dStatus>>;
+
 function Office({ visible }: { visible?: boolean }): React.JSX.Element {
   const { t } = useI18n();
   const [state, setState] = useState<OfficeState>("checking");
@@ -50,21 +52,30 @@ function Office({ visible }: { visible?: boolean }): React.JSX.Element {
   runningRef.current = running;
   errorRef.current = error;
 
-  const checkStatus = useCallback(async (): Promise<void> => {
-    setState("checking");
-    const status = await window.hermesAPI.claw3dStatus();
+  const applyStatus = useCallback((status: Claw3dStatus): void => {
     setRunning(status.running);
     setPort(status.port);
     setPortInput(String(status.port));
     setPortInUse(status.portInUse);
     setWsUrlInput(status.wsUrl || "ws://localhost:18789");
-    if (status.error) setError(status.error);
+    if (!status.running) {
+      setWebviewReady(false);
+    }
+    if (status.error) {
+      setError(status.error);
+    }
+  }, []);
+
+  const checkStatus = useCallback(async (): Promise<void> => {
+    setState("checking");
+    const status = await window.hermesAPI.claw3dStatus();
+    applyStatus(status);
     if (status.installed) {
       setState("ready");
     } else {
       setState("not-installed");
     }
-  }, []);
+  }, [applyStatus]);
 
   useEffect(() => {
     checkStatus();
@@ -75,9 +86,7 @@ function Office({ visible }: { visible?: boolean }): React.JSX.Element {
     if (state !== "ready" || !visible) return;
     const interval = setInterval(async () => {
       const status = await window.hermesAPI.claw3dStatus();
-      setRunning(status.running);
-      setPort(status.port);
-      setPortInUse(status.portInUse);
+      applyStatus(status);
       if (status.error && !errorRef.current) {
         setError(status.error);
       }
@@ -90,7 +99,7 @@ function Office({ visible }: { visible?: boolean }): React.JSX.Element {
       }
     }, 5000);
     return () => clearInterval(interval);
-  }, [state, visible]);
+  }, [applyStatus, state, visible]);
 
   // Auto-scroll log
   useEffect(() => {
@@ -173,10 +182,9 @@ function Office({ visible }: { visible?: boolean }): React.JSX.Element {
         setError(result.error || "Failed to start Claw3D");
         setStarting(false);
       } else {
-        // Give processes a moment to actually start, polling will confirm
-        setTimeout(() => {
-          setRunning(true);
-        }, 2000);
+        const status = await window.hermesAPI.claw3dStatus();
+        applyStatus(status);
+        setStarting(false);
       }
     }
   }
@@ -213,7 +221,7 @@ function Office({ visible }: { visible?: boolean }): React.JSX.Element {
       ? Math.round((progress.step / progress.totalSteps) * 100)
       : 0;
 
-  const claw3dUrl = `http://localhost:${port}`;
+  const claw3dUrl = `http://localhost:${port}/office`;
 
   // --- Checking ---
   if (state === "checking") {
