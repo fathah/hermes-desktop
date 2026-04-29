@@ -19,12 +19,15 @@ export default {
     "e.g. Name: Alex. Senior developer. Prefers concise answers. Uses macOS with zsh. Timezone: PST.",
   noProvidersFound: "No memory providers found in this installation.",
   openProviderWebsite: "Open provider website",
-  noMemoriesYet: "No memories yet. Hermes will save important facts as you chat.",
+  noMemoriesYet:
+    "No memories yet. Hermes will save important facts as you chat.",
   noMemoryEntries: "No memory entries yet.",
   noToolsetsFound: "No toolsets found.",
   addManuallyHint: "You can also add memories manually using the button above.",
-  userProfileHint: "Tell Hermes about yourself — name, role, preferences, communication style.",
-  providersHint: "Pluggable memory providers give Hermes advanced long-term memory. Built-in memory (above) is always active alongside the selected provider.",
+  userProfileHint:
+    "Tell Hermes about yourself — name, role, preferences, communication style.",
+  providersHint:
+    "Pluggable memory providers give Hermes advanced long-term memory. Built-in memory (above) is always active alongside the selected provider.",
   providersHintActive: "Active: <strong>{{provider}}</strong>",
   providersHintInactive: "No external provider active — using built-in only.",
   enterEnvKey: "Enter {{key}}",
@@ -41,13 +44,18 @@ export default {
   activating: "Activating...",
   activate: "Activate",
   providers: {
-    honcho: "AI-native cross-session user modeling with dialectic Q&A and semantic search",
-    hindsight: "Long-term memory with knowledge graph and multi-strategy retrieval",
+    honcho:
+      "AI-native cross-session user modeling with dialectic Q&A and semantic search",
+    hindsight:
+      "Long-term memory with knowledge graph and multi-strategy retrieval",
     mem0: "Server-side LLM fact extraction with semantic search and auto-deduplication",
     retaindb: "Cloud memory API with hybrid search and 7 memory types",
-    supermemory: "Semantic long-term memory with profile recall and entity extraction",
-    holographic: "Local SQLite fact store with FTS5 search and trust scoring (no API key needed)",
-    openviking: "Session-managed memory with tiered retrieval and knowledge browsing",
+    supermemory:
+      "Semantic long-term memory with profile recall and entity extraction",
+    holographic:
+      "Local SQLite fact store with FTS5 search and trust scoring (no API key needed)",
+    openviking:
+      "Session-managed memory with tiered retrieval and knowledge browsing",
     byterover: "Persistent knowledge tree with tiered retrieval via brv CLI",
   },
 } as const;

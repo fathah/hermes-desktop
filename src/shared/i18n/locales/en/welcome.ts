@@ -18,5 +18,6 @@ export default {
   remoteApiKeyPlaceholder: "Bearer token (API_SERVER_KEY)",
   testingConnection: "Testing",
   connect: "Connect",
-  remoteHint: "Leave the key empty if the server accepts unauthenticated requests (e.g. via SSH tunnel to localhost).",
+  remoteHint:
+    "Leave the key empty if the server accepts unauthenticated requests (e.g. via SSH tunnel to localhost).",
 } as const;

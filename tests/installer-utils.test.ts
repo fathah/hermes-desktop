@@ -69,7 +69,8 @@ describe("MCP server YAML parsing", () => {
       const serverBlock = block.slice(start, next ? next.index : undefined);
       const hasUrl = /url:/.test(serverBlock);
       const enabledMatch = serverBlock.match(/enabled:\s*(true|false)/i);
-      const enabled = enabledMatch === null || enabledMatch[1].toLowerCase() === "true";
+      const enabled =
+        enabledMatch === null || enabledMatch[1].toLowerCase() === "true";
       servers.push({ name, type: hasUrl ? "http" : "stdio", enabled });
     }
     return servers;
@@ -83,7 +84,11 @@ describe("MCP server YAML parsing", () => {
 `;
     const servers = parseMcpBlock(yaml);
     expect(servers).toHaveLength(1);
-    expect(servers[0]).toEqual({ name: "github", type: "stdio", enabled: true });
+    expect(servers[0]).toEqual({
+      name: "github",
+      type: "stdio",
+      enabled: true,
+    });
   });
 
   it("parses HTTP MCP servers", () => {
@@ -206,11 +211,7 @@ describe("Memory provider discovery", () => {
 describe("Backward compatibility", () => {
   it("getEnhancedPath logic includes standard paths", () => {
     // Simulate getEnhancedPath extra paths
-    const extra = [
-      "/usr/local/bin",
-      "/opt/homebrew/bin",
-      "/opt/homebrew/sbin",
-    ];
+    const extra = ["/usr/local/bin", "/opt/homebrew/bin", "/opt/homebrew/sbin"];
     const result = [...extra, process.env.PATH || ""].join(":");
     expect(result).toContain("/usr/local/bin");
     expect(result).toContain("/opt/homebrew/bin");

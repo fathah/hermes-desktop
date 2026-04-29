@@ -1,12 +1,6 @@
 import { useState } from "react";
 import HermesLogo from "../../components/common/HermesLogo";
-import {
-  ArrowRight,
-  Refresh,
-  Copy,
-  Globe,
-  Spinner,
-} from "../../assets/icons";
+import { ArrowRight, Refresh, Copy, Globe, Spinner } from "../../assets/icons";
 import { INSTALL_CMD } from "../../constants";
 import { useI18n } from "../../components/useI18n";
 
@@ -81,10 +75,7 @@ function Welcome({
             autoFocus
           />
 
-          <label
-            className="welcome-remote-label"
-            style={{ marginTop: 12 }}
-          >
+          <label className="welcome-remote-label" style={{ marginTop: 12 }}>
             {t("welcome.remoteApiKey")}
           </label>
           <input
@@ -116,9 +107,7 @@ function Welcome({
             </button>
           </div>
           {remoteError && <p className="welcome-remote-error">{remoteError}</p>}
-          <p className="welcome-remote-hint">
-            {t("welcome.remoteHint")}
-          </p>
+          <p className="welcome-remote-hint">{t("welcome.remoteHint")}</p>
         </div>
 
         <button

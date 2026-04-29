@@ -16,9 +16,13 @@ function App(): React.JSX.Element {
   const [installError, setInstallError] = useState<string | null>(null);
   const [nextScreen, setNextScreen] = useState<Screen | null>(null);
   const [splashDone, setSplashDone] = useState(false);
+  const [installCompleted, setInstallCompleted] = useState(false);
   const isMac = window.electron?.process?.platform === "darwin";
 
   const runInstallCheck = useCallback(async () => {
+    // Skip re-check if we just completed installation
+    if (installCompleted) return;
+    
     try {
       const conn = await window.hermesAPI.getConnectionConfig();
 
@@ -54,7 +58,7 @@ function App(): React.JSX.Element {
     } catch {
       setNextScreen("welcome");
     }
-  }, [t]);
+  }, [t, installCompleted]);
 
   // Run install check during splash
   useEffect(() => {
@@ -72,10 +76,17 @@ function App(): React.JSX.Element {
     setSplashDone(true);
   }, []);
 
-  function handleInstallComplete(): void {
-    setInstallError(null);
+function handleInstallComplete(): void {
+  console.log("Installation complete - navigating to setup");
+  setInstallError(null);
+  setInstallCompleted(true);
+  // Go directly to setup without re-checking
+  try {
     setScreen("setup");
+  } catch (err) {
+    console.error("Error setting screen to setup:", err);
   }
+}
 
   function handleInstallFailed(error: string): void {
     setInstallError(error);

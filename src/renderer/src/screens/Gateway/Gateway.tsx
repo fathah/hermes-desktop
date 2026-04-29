@@ -153,7 +153,9 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
                       <label className="settings-field-label">
                         {t(field.label)}
                         {savedKey === field.key && (
-                          <span className="settings-saved">{t("common.saved")}</span>
+                          <span className="settings-saved">
+                            {t("common.saved")}
+                          </span>
                         )}
                       </label>
                       <div className="settings-input-row">
@@ -177,7 +179,9 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
                             className="btn-ghost settings-toggle-btn"
                             onClick={() => toggleVisibility(field.key)}
                           >
-                            {visibleKeys.has(field.key) ? t("common.hide") : t("common.show")}
+                            {visibleKeys.has(field.key)
+                              ? t("common.hide")
+                              : t("common.show")}
                           </button>
                         )}
                       </div>
@@ -220,7 +224,9 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
                     className="btn-ghost settings-toggle-btn"
                     onClick={() => toggleVisibility(field.key)}
                   >
-                    {visibleKeys.has(field.key) ? t("common.hide") : t("common.show")}
+                    {visibleKeys.has(field.key)
+                      ? t("common.hide")
+                      : t("common.show")}
                   </button>
                 )}
               </div>

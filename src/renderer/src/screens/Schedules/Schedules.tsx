@@ -346,7 +346,9 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
 
               {frequency === "daily" && (
                 <div className="schedules-field">
-                  <label className="schedules-field-label">{t("schedules.executionTime")}</label>
+                  <label className="schedules-field-label">
+                    {t("schedules.executionTime")}
+                  </label>
                   <input
                     className="input"
                     type="time"
@@ -359,7 +361,9 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
               {frequency === "weekly" && (
                 <>
                   <div className="schedules-field">
-                    <label className="schedules-field-label">{t("schedules.weekday")}</label>
+                    <label className="schedules-field-label">
+                      {t("schedules.weekday")}
+                    </label>
                     <select
                       className="input"
                       value={weeklyDay}
@@ -381,7 +385,9 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
                     </select>
                   </div>
                   <div className="schedules-field">
-                    <label className="schedules-field-label">{t("schedules.executionTime")}</label>
+                    <label className="schedules-field-label">
+                      {t("schedules.executionTime")}
+                    </label>
                     <input
                       className="input"
                       type="time"
@@ -394,7 +400,9 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
 
               {frequency === "custom" && (
                 <div className="schedules-field">
-                  <label className="schedules-field-label">{t("schedules.cronExpression")}</label>
+                  <label className="schedules-field-label">
+                    {t("schedules.cronExpression")}
+                  </label>
                   <input
                     className="input"
                     type="text"
@@ -408,7 +416,9 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
                 </div>
               )}
               <div className="schedules-field">
-                <label className="schedules-field-label">{t("schedules.prompt")}</label>
+                <label className="schedules-field-label">
+                  {t("schedules.prompt")}
+                </label>
                 <textarea
                   className="input schedules-textarea"
                   placeholder={t("schedules.promptPlaceholder")}
@@ -418,7 +428,9 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
                 />
               </div>
               <div className="schedules-field">
-                <label className="schedules-field-label">{t("schedules.deliverTo")}</label>
+                <label className="schedules-field-label">
+                  {t("schedules.deliverTo")}
+                </label>
                 <select
                   className="input"
                   value={newDeliver}
@@ -444,7 +456,9 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
                 onClick={handleCreate}
                 disabled={!isScheduleValid() || actionInProgress === "creating"}
               >
-                {actionInProgress === "creating" ? t("schedules.creating") : t("schedules.create")}
+                {actionInProgress === "creating"
+                  ? t("schedules.creating")
+                  : t("schedules.create")}
               </button>
             </div>
           </div>
@@ -487,7 +501,9 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
                 onClick={() => handleRemove(confirmDelete)}
                 disabled={actionInProgress === confirmDelete}
               >
-                {actionInProgress === confirmDelete ? t("schedules.deleting") : t("schedules.delete")}
+                {actionInProgress === confirmDelete
+                  ? t("schedules.deleting")
+                  : t("schedules.delete")}
               </button>
             </div>
           </div>
@@ -558,7 +574,11 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
                   {job.state !== "completed" && (
                     <button
                       className="btn-ghost schedules-action-btn"
-                      data-tooltip={job.state === "paused" ? t("schedules.resume") : t("schedules.pause")}
+                      data-tooltip={
+                        job.state === "paused"
+                          ? t("schedules.resume")
+                          : t("schedules.pause")
+                      }
                       onClick={() => handleToggle(job)}
                       disabled={actionInProgress === job.id}
                     >
@@ -595,7 +615,9 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
               )}
 
               <div className="schedules-card-meta">
-                <span>{t("schedules.nextRun")}: {formatTime(job.next_run_at)}</span>
+                <span>
+                  {t("schedules.nextRun")}: {formatTime(job.next_run_at)}
+                </span>
                 {job.last_run_at && (
                   <span>
                     {t("schedules.lastRun")}: {formatTime(job.last_run_at)}
@@ -608,15 +630,20 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
                 )}
                 {job.repeat && job.repeat.times && (
                   <span>
-                    {t("schedules.runCount")}: {job.repeat.completed}/{job.repeat.times}
+                    {t("schedules.runCount")}: {job.repeat.completed}/
+                    {job.repeat.times}
                   </span>
                 )}
                 {job.deliver.length > 0 &&
                   !(job.deliver.length === 1 && job.deliver[0] === "local") && (
-                    <span>{t("schedules.deliveredTo")}: {job.deliver.join(", ")}</span>
+                    <span>
+                      {t("schedules.deliveredTo")}: {job.deliver.join(", ")}
+                    </span>
                   )}
                 {job.skills.length > 0 && (
-                  <span>{t("schedules.skills")}: {job.skills.join(", ")}</span>
+                  <span>
+                    {t("schedules.skills")}: {job.skills.join(", ")}
+                  </span>
                 )}
               </div>
 

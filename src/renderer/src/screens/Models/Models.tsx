@@ -131,9 +131,7 @@ function Models(): React.JSX.Element {
           <h1 className="settings-header" style={{ marginBottom: 4 }}>
             {t("models.title")}
           </h1>
-          <p className="models-subtitle">
-            {t("models.subtitle")}
-          </p>
+          <p className="models-subtitle">{t("models.subtitle")}</p>
         </div>
         <button className="btn btn-primary btn-sm" onClick={openAddModal}>
           <Plus size={14} />
@@ -159,9 +157,7 @@ function Models(): React.JSX.Element {
           {models.length === 0 ? (
             <>
               <p className="models-empty-text">{t("models.empty")}</p>
-              <p className="models-empty-hint">
-                {t("models.emptyHint")}
-              </p>
+              <p className="models-empty-hint">{t("models.emptyHint")}</p>
             </>
           ) : (
             <p className="models-empty-text">{t("models.noMatch")}</p>
