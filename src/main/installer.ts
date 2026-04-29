@@ -7,12 +7,15 @@ import { stripAnsi } from "./utils";
 
 const isWindows = platform() === "win32";
 
-// On Windows, Hermes installs to LOCALAPPDATA\hermes instead of ~/.hermes
+// On Windows, Hermes installs to LOCALAPPDATA\hermes (not LOCALAPPDATA\.hermes)
 const hermesHomeBase = isWindows
-  ? process.env.LOCALAPPDATA || join(homedir(), ".hermes")
+  ? process.env.LOCALAPPDATA || homedir()
   : homedir();
 
-export const HERMES_HOME = join(hermesHomeBase, ".hermes");
+// HERMES_HOME is ~/.hermes on Unix, but on Windows it's %LOCALAPPDATA%\hermes
+export const HERMES_HOME = isWindows
+  ? join(hermesHomeBase, "hermes")
+  : join(hermesHomeBase, ".hermes");
 export const HERMES_REPO = join(HERMES_HOME, "hermes-agent");
 export const HERMES_VENV = join(HERMES_REPO, "venv");
 // Windows uses Scripts/python.exe instead of bin/python
