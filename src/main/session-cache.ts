@@ -76,83 +76,91 @@ function getDb(): Database.Database | null {
 
 // Sync from hermes DB to local cache — only fetches new/updated sessions
 export function syncSessionCache(): CachedSession[] {
-  const cache = readCache();
-  const db = getDb();
-  if (!db) return cache.sessions;
-
+  _cacheLock = true;
   try {
-    // Fetch sessions newer than last sync, or all if first sync
-    const rows = db
-      .prepare(
-        `SELECT s.id, s.started_at, s.source, s.message_count, s.model, s.title
-         FROM sessions s
-         WHERE s.started_at > ?
-         ORDER BY s.started_at DESC`,
-      )
-      .all(cache.lastSync > 0 ? cache.lastSync - 300 : 0) as Array<{
-      id: string;
-      started_at: number;
-      source: string;
-      message_count: number;
-      model: string;
-      title: string | null;
-    }>;
-
-    const existingIds = new Set(cache.sessions.map((s) => s.id));
-    let newSessions: CachedSession[] = [];
-
-    for (const row of rows) {
-      if (existingIds.has(row.id)) {
-        // Update existing entry (message count may have changed)
-        const idx = cache.sessions.findIndex((s) => s.id === row.id);
-        if (idx >= 0) {
-          cache.sessions[idx].messageCount = row.message_count;
-        }
-        continue;
-      }
-
-      // Generate title from first user message
-      let title = row.title || "";
-      if (!title) {
-        try {
-          const msg = db
-            .prepare(
-              `SELECT content FROM messages
-               WHERE session_id = ? AND role = 'user' AND content IS NOT NULL
-               ORDER BY timestamp, id LIMIT 1`,
-            )
-            .get(row.id) as { content: string } | undefined;
-          title = msg ? generateTitle(msg.content) : "New conversation";
-        } catch {
-          title = "New conversation";
-        }
-      }
-
-      newSessions.push({
-        id: row.id,
-        title,
-        startedAt: row.started_at,
-        source: row.source,
-        messageCount: row.message_count,
-        model: row.model || "",
-      });
+    const cache = readCache();
+    const db = getDb();
+    if (!db) {
+      _cacheLock = false;
+      return cache.sessions;
     }
 
-    // Merge: new sessions first (most recent), then existing
-    const allSessions = [...newSessions, ...cache.sessions];
-    // Sort by startedAt descending
-    allSessions.sort((a, b) => b.startedAt - a.startedAt);
+    try {
+      // Fetch sessions newer than last sync, or all if first sync
+      const rows = db
+        .prepare(
+          `SELECT s.id, s.started_at, s.source, s.message_count, s.model, s.title
+           FROM sessions s
+           WHERE s.started_at > ?
+           ORDER BY s.started_at DESC`,
+        )
+        .all(cache.lastSync > 0 ? cache.lastSync - 300 : 0) as Array<{
+        id: string;
+        started_at: number;
+        source: string;
+        message_count: number;
+        model: string;
+        title: string | null;
+      }>;
 
-    const updated: CacheData = {
-      sessions: allSessions,
-      lastSync: Math.floor(Date.now() / 1000),
-    };
-    writeCache(updated);
-    return updated.sessions;
-  } catch {
-    return cache.sessions;
+      const existingIds = new Set(cache.sessions.map((s) => s.id));
+      let newSessions: CachedSession[] = [];
+
+      for (const row of rows) {
+        if (existingIds.has(row.id)) {
+          // Update existing entry (message count may have changed)
+          const idx = cache.sessions.findIndex((s) => s.id === row.id);
+          if (idx >= 0) {
+            cache.sessions[idx].messageCount = row.message_count;
+          }
+          continue;
+        }
+
+        // Generate title from first user message
+        let title = row.title || "";
+        if (!title) {
+          try {
+            const msg = db
+              .prepare(
+                `SELECT content FROM messages
+                 WHERE session_id = ? AND role = 'user' AND content IS NOT NULL
+                 ORDER BY timestamp, id LIMIT 1`,
+              )
+              .get(row.id) as { content: string } | undefined;
+            title = msg ? generateTitle(msg.content) : "New conversation";
+          } catch {
+            title = "New conversation";
+          }
+        }
+
+        newSessions.push({
+          id: row.id,
+          title,
+          startedAt: row.started_at,
+          source: row.source,
+          messageCount: row.message_count,
+          model: row.model || "",
+        });
+      }
+
+      // Merge: new sessions first (most recent), then existing
+      const allSessions = [...newSessions, ...cache.sessions];
+      // Sort by startedAt descending
+      allSessions.sort((a, b) => b.startedAt - a.startedAt);
+
+      const updated: CacheData = {
+        sessions: allSessions,
+        lastSync: Math.floor(Date.now() / 1000),
+      };
+      writeCache(updated);
+      return updated.sessions;
+    } catch {
+      return cache.sessions;
+    } finally {
+      db.close();
+    }
   } finally {
-    db.close();
+    _cacheLock = false;
   }
 }
 
@@ -165,15 +173,23 @@ export function listCachedSessions(
   return cache.sessions.slice(offset, offset + limit);
 }
 
+let _cacheLock = false;
+
 // Update title for a specific session
 export function updateSessionTitle(
   sessionId: string,
   title: string,
 ): void {
-  const cache = readCache();
-  const idx = cache.sessions.findIndex((s) => s.id === sessionId);
-  if (idx >= 0) {
-    cache.sessions[idx].title = title;
-    writeCache(cache);
+  if (_cacheLock) return;
+  _cacheLock = true;
+  try {
+    const cache = readCache();
+    const idx = cache.sessions.findIndex((s) => s.id === sessionId);
+    if (idx >= 0) {
+      cache.sessions[idx].title = title;
+      writeCache(cache);
+    }
+  } finally {
+    _cacheLock = false;
   }
 }
