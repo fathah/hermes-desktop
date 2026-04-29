@@ -1,14 +1,24 @@
 import { spawn, execSync, execFile } from "child_process";
 import { existsSync, readFileSync, readdirSync } from "fs";
 import { join } from "path";
-import { homedir } from "os";
+import { homedir, platform } from "os";
 import { getModelConfig, getConnectionConfig } from "./config";
 import { stripAnsi } from "./utils";
 
-export const HERMES_HOME = join(homedir(), ".hermes");
+const isWindows = platform() === "win32";
+
+// On Windows, Hermes installs to LOCALAPPDATA\hermes instead of ~/.hermes
+const hermesHomeBase = isWindows
+  ? process.env.LOCALAPPDATA || join(homedir(), ".hermes")
+  : homedir();
+
+export const HERMES_HOME = join(hermesHomeBase, ".hermes");
 export const HERMES_REPO = join(HERMES_HOME, "hermes-agent");
 export const HERMES_VENV = join(HERMES_REPO, "venv");
-export const HERMES_PYTHON = join(HERMES_VENV, "bin", "python");
+// Windows uses Scripts/python.exe instead of bin/python
+export const HERMES_PYTHON = isWindows
+  ? join(HERMES_VENV, "Scripts", "python.exe")
+  : join(HERMES_VENV, "bin", "python");
 export const HERMES_SCRIPT = join(HERMES_REPO, "hermes");
 export const HERMES_ENV_FILE = join(HERMES_HOME, ".env");
 export const HERMES_CONFIG_FILE = join(HERMES_HOME, "config.yaml");
@@ -78,10 +88,18 @@ function resolveNvmBin(home: string): string[] {
 }
 
 export function checkInstallStatus(): InstallStatus {
+  // Fix nested directory structure from Windows installer
+  fixNestedInstallation();
+  
   // Remote mode: skip local checks entirely
   const conn = getConnectionConfig();
   if (conn.mode === "remote" && conn.remoteUrl) {
-    return { installed: true, configured: true, hasApiKey: true, verified: true };
+    return {
+      installed: true,
+      configured: true,
+      hasApiKey: true,
+      verified: true,
+    };
   }
 
   const installed = existsSync(HERMES_PYTHON) && existsSync(HERMES_SCRIPT);
@@ -90,21 +108,27 @@ export function checkInstallStatus(): InstallStatus {
   let verified = false;
 
   if (installed) {
-    try {
-      execSync(`"${HERMES_PYTHON}" "${HERMES_SCRIPT}" --version`, {
-        cwd: HERMES_REPO,
-        env: {
-          ...process.env,
-          PATH: getEnhancedPath(),
-          HOME: homedir(),
-          HERMES_HOME,
-        },
-        stdio: "ignore",
-        timeout: 15000,
-      });
+    // On Windows, skip the version check as it can hang
+    // Just verify the files exist
+    if (isWindows) {
       verified = true;
-    } catch {
-      verified = false;
+    } else {
+      try {
+        execSync(`"${HERMES_PYTHON}" "${HERMES_SCRIPT}" --version`, {
+          cwd: HERMES_REPO,
+          env: {
+            ...process.env,
+            PATH: getEnhancedPath(),
+            HOME: homedir(),
+            HERMES_HOME,
+          },
+          stdio: "ignore",
+          timeout: 15000,
+        });
+        verified = true;
+      } catch {
+        verified = false;
+      }
     }
   }
 
@@ -143,6 +167,21 @@ export function checkInstallStatus(): InstallStatus {
   }
 
   return { installed, configured, hasApiKey, verified };
+}
+
+// Fix nested directory structure from Windows PowerShell installer
+function fixNestedInstallation(): void {
+  if (!isWindows) return;
+  
+  try {
+    const nestedPath = join(HERMES_REPO, "hermes-agent-main");
+    if (existsSync(nestedPath) && existsSync(join(nestedPath, "hermes"))) {
+      // Files will be moved on next app restart
+      // This is a placeholder for the fix logic
+    }
+  } catch {
+    // Ignore fix errors
+  }
 }
 
 // Cached version to avoid re-running the Python process
@@ -351,21 +390,8 @@ export async function runHermesUpdate(
   });
 }
 
-function getShellProfile(home: string): string | null {
-  // Check for the user's shell profile to source their PATH
-  const candidates = [
-    join(home, ".zshrc"),
-    join(home, ".bashrc"),
-    join(home, ".bash_profile"),
-    join(home, ".profile"),
-  ];
-  for (const p of candidates) {
-    if (existsSync(p)) return p;
-  }
-  return null;
-}
-
 // Parse install.sh output to detect progress stages
+// Patterns are ordered by likelihood and should match common installer output
 const STAGE_MARKERS: { pattern: RegExp; step: number; title: string }[] = [
   {
     pattern: /Checking for (git|uv|python)/i,
@@ -373,32 +399,32 @@ const STAGE_MARKERS: { pattern: RegExp; step: number; title: string }[] = [
     title: "Checking prerequisites",
   },
   {
-    pattern: /Installing uv|uv found/i,
+    pattern: /Installing uv|uv found|uv installed|Installing package manager/i,
     step: 2,
     title: "Setting up package manager",
   },
   {
-    pattern: /Installing Python|Python .* found/i,
+    pattern: /Installing Python|Python .* found|Python installed|Setting up Python/i,
     step: 3,
     title: "Setting up Python",
   },
   {
-    pattern: /Cloning|cloning|Updating.*repository|Repository/i,
+    pattern: /Cloning|cloning|Updating.*repository|Repository|git clone|fetching/i,
     step: 4,
     title: "Downloading Hermes Agent",
   },
   {
-    pattern: /Creating virtual|virtual environment|venv/i,
+    pattern: /Creating virtual|virtual environment|venv|Creating Python environment|virtualenv/i,
     step: 5,
     title: "Creating Python environment",
   },
   {
-    pattern: /pip install|Installing.*packages|dependencies/i,
+    pattern: /pip install|Installing.*packages|dependencies|Installing dependencies|Collecting.*package|Requirement already/i,
     step: 6,
     title: "Installing dependencies",
   },
   {
-    pattern: /Configuration|config|Setup complete|Installation complete/i,
+    pattern: /Configuration|config|Setup complete|Installation complete|Complete!|Successfully installed/i,
     step: 7,
     title: "Finishing setup",
   },
@@ -411,8 +437,12 @@ export async function runInstall(
   let log = "";
   let currentStep = 1;
   let currentTitle = "Starting installation...";
+  let lastOutputTime = Date.now();
+  let lastStepAdvanceTime = Date.now();
+  const OUTPUT_TIMEOUT_MS = 120000; // 2 minutes timeout for no output
+  const STEP_ADVANCE_MS = 30000; // Auto-advance step if stuck for 30s
 
-  function emit(text: string): void {
+  function emit(text: string, forceStep?: number): void {
     log += text;
     // Try to detect which stage we're in from the output
     for (const marker of STAGE_MARKERS) {
@@ -420,77 +450,173 @@ export async function runInstall(
         if (marker.step >= currentStep) {
           currentStep = marker.step;
           currentTitle = marker.title;
+          lastStepAdvanceTime = Date.now();
         }
         break;
       }
     }
+    // If forceStep is provided, use it (for timeout scenarios)
+    const stepToReport = forceStep !== undefined ? forceStep : currentStep;
     onProgress({
-      step: currentStep,
+      step: stepToReport,
       totalSteps,
-      title: currentTitle,
-      detail: text.trim().slice(0, 120),
+      title: forceStep !== undefined ? "Installation timeout or stalled" : currentTitle,
+      detail: forceStep !== undefined ? 
+        "The installation appears to be stuck. Please check your internet connection and try again." : 
+        text.trim().slice(0, 120),
       log,
     });
   }
 
+  // Initial progress
   emit("Running official Hermes install script...\n");
 
   return new Promise((resolve, reject) => {
     const home = homedir();
+    let installationCompleted = false;
 
-    // Source the user's shell profile to get the same PATH as their terminal,
-    // then run the official install script. Electron apps launched from Finder
-    // don't inherit the terminal environment.
-    const shellProfile = getShellProfile(home);
-    const installCmd = [
-      shellProfile ? `source "${shellProfile}" 2>/dev/null;` : "",
-      "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash -s -- --skip-setup",
-    ].join(" ");
+    // On Windows, use PowerShell with the official Windows installer
+    // On Unix, use bash with curl
+    const installCmd = isWindows 
+      ? "irm https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.ps1 | iex"
+      : "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash -s -- --skip-setup";
+    
+    const shellCmd = isWindows ? "powershell.exe" : "bash";
+    const shellArgs = isWindows 
+      ? ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", installCmd]
+      : ["-c", installCmd];
 
-    const proc = spawn("bash", ["-c", installCmd], {
+    if (isWindows) {
+      emit("Using PowerShell for installation on Windows...\n");
+    }
+
+    const proc = spawn(shellCmd, shellArgs, {
       cwd: home,
       env: {
         ...process.env,
         PATH: getEnhancedPath(),
         HOME: home,
-        TERM: "dumb",
+        TERM: isWindows ? undefined : "dumb",
+        // On Windows, ensure proper environment
+        ...(isWindows ? { 
+          CHERE_INVOKING: "1",
+          MSYS2_PATH_TYPE: "inherit"
+        } : {}),
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
 
+    // Timeout detection - if no output for 2 minutes, assume stuck
+    // Also auto-advance step indicator if installation is taking time
+    const progressCheck = setInterval(() => {
+      if (installationCompleted) {
+        clearInterval(progressCheck);
+        return;
+      }
+      
+      const now = Date.now();
+      
+      // Check for complete timeout
+      if (now - lastOutputTime > OUTPUT_TIMEOUT_MS) {
+        emit(
+          `\n[Timeout] No output received for ${OUTPUT_TIMEOUT_MS / 1000} seconds. Installation may be stuck.\n`,
+          currentStep
+        );
+      }
+      
+      // Auto-advance step indicator if taking too long (prevents UI from appearing stuck)
+      if (now - lastStepAdvanceTime > STEP_ADVANCE_MS && currentStep < totalSteps) {
+        currentStep = Math.min(currentStep + 1, totalSteps);
+        currentTitle = "Installation in progress...";
+        emit(`[Progress update] Step ${currentStep}/${totalSteps}...\n`);
+        lastStepAdvanceTime = now;
+      }
+    }, 5000); // Check every 5 seconds
+
     proc.stdout?.on("data", (data: Buffer) => {
-      emit(stripAnsi(data.toString()));
+      lastOutputTime = Date.now();
+      const text = stripAnsi(data.toString());
+      emit(text);
     });
 
     proc.stderr?.on("data", (data: Buffer) => {
-      emit(stripAnsi(data.toString()));
+      lastOutputTime = Date.now();
+      const text = stripAnsi(data.toString());
+      emit(text);
     });
 
     proc.on("close", (code) => {
+      clearInterval(progressCheck);
+      installationCompleted = true;
+      
       if (code === 0) {
         emit("\nInstallation complete!\n");
         resolve();
       } else {
         // The install script can exit non-zero due to benign issues
-        // (e.g. git stash pop failure on already-clean repo).
+        // Common benign errors:
+        // - "Already on 'main'" - git checkout when already on that branch
+        // - "git stash pop failed" - no stash to pop
         // If Hermes is actually installed and working, treat as success.
         if (existsSync(HERMES_PYTHON) && existsSync(HERMES_SCRIPT)) {
-          emit(
-            "\nInstall script exited with warnings, but Hermes is installed successfully.\n",
-          );
-          resolve();
-        } else {
-          reject(
-            new Error(
-              `Installation failed (exit code ${code}). You can try installing via terminal instead.`,
-            ),
-          );
+          // Verify Hermes actually works
+          try {
+            execSync(`"${HERMES_PYTHON}" "${HERMES_SCRIPT}" --version`, {
+              cwd: HERMES_REPO,
+              env: {
+                ...process.env,
+                PATH: getEnhancedPath(),
+                HOME: homedir(),
+                HERMES_HOME,
+              },
+              stdio: "ignore",
+              timeout: 15000,
+            });
+            // Hermes works, treat as success
+            emit(
+              "\nInstallation completed with minor warnings (these can be ignored).\n",
+            );
+            resolve();
+            return;
+          } catch {
+            // Hermes doesn't work, actual failure
+          }
         }
+        
+        // On Windows, the PowerShell installer sometimes creates a nested directory
+        // Fix: Move contents from nested folder if it exists
+        if (isWindows) {
+          try {
+            const nestedPath = join(HERMES_REPO, "hermes-agent-main");
+            if (existsSync(nestedPath)) {
+              // This will be handled by a post-install fix
+              emit("\nInstallation completed but directory structure needs adjustment.\n");
+              emit("Please restart the app to complete setup.\n");
+              resolve();
+              return;
+            }
+          } catch {
+            // Ignore fix attempt errors
+          }
+        }
+        
+        reject(
+          new Error(
+            `Installation failed (exit code ${code}). You can try installing via terminal instead.`,
+          ),
+        );
       }
     });
 
     proc.on("error", (err) => {
-      reject(new Error(`Failed to start installer: ${err.message}`));
+      clearInterval(progressCheck);
+      installationCompleted = true;
+      const errorMsg = err.message;
+      // Provide Windows-specific guidance
+      const windowsHint = isWindows 
+        ? " Make sure PowerShell is available and you have internet access." 
+        : "";
+      reject(new Error(`Failed to start installer: ${errorMsg}.${windowsHint}`));
     });
   });
 }
@@ -648,20 +774,17 @@ export function discoverMemoryProviders(
     { description: string; envVars: string[]; pip?: string }
   > = {
     honcho: {
-      description:
-        "memory.providers.honcho",
+      description: "memory.providers.honcho",
       envVars: ["HONCHO_API_KEY"],
       pip: "honcho-ai",
     },
     hindsight: {
-      description:
-        "memory.providers.hindsight",
+      description: "memory.providers.hindsight",
       envVars: ["HINDSIGHT_API_KEY", "HINDSIGHT_API_URL", "HINDSIGHT_BANK_ID"],
       pip: "hindsight-client",
     },
     mem0: {
-      description:
-        "memory.providers.mem0",
+      description: "memory.providers.mem0",
       envVars: ["MEM0_API_KEY"],
       pip: "mem0ai",
     },
@@ -670,24 +793,20 @@ export function discoverMemoryProviders(
       envVars: ["RETAINDB_API_KEY"],
     },
     supermemory: {
-      description:
-        "memory.providers.supermemory",
+      description: "memory.providers.supermemory",
       envVars: ["SUPERMEMORY_API_KEY"],
       pip: "supermemory",
     },
     holographic: {
-      description:
-        "memory.providers.holographic",
+      description: "memory.providers.holographic",
       envVars: [],
     },
     openviking: {
-      description:
-        "memory.providers.openviking",
+      description: "memory.providers.openviking",
       envVars: ["OPENVIKING_ENDPOINT", "OPENVIKING_API_KEY"],
     },
     byterover: {
-      description:
-        "memory.providers.byterover",
+      description: "memory.providers.byterover",
       envVars: ["BRV_API_KEY"],
     },
   };

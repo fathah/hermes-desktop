@@ -34,9 +34,7 @@ describe("parseSseBlock", () => {
   });
 
   it("handles extra whitespace in event type", () => {
-    const result = parseSseBlock(
-      "event:  hermes.tool.progress \ndata: {}",
-    );
+    const result = parseSseBlock("event:  hermes.tool.progress \ndata: {}");
     expect(result).toEqual({
       eventType: "hermes.tool.progress",
       data: "{}",
@@ -80,22 +78,18 @@ describe("processCustomEvent", () => {
 
   it("ignores unknown event types", () => {
     const onToolProgress = vi.fn();
-    const handled = processCustomEvent(
-      "unknown.event",
-      "{}",
-      { onToolProgress },
-    );
+    const handled = processCustomEvent("unknown.event", "{}", {
+      onToolProgress,
+    });
     expect(handled).toBe(false);
     expect(onToolProgress).not.toHaveBeenCalled();
   });
 
   it("ignores malformed JSON data", () => {
     const onToolProgress = vi.fn();
-    const handled = processCustomEvent(
-      "hermes.tool.progress",
-      "not-json",
-      { onToolProgress },
-    );
+    const handled = processCustomEvent("hermes.tool.progress", "not-json", {
+      onToolProgress,
+    });
     expect(handled).toBe(false);
     expect(onToolProgress).not.toHaveBeenCalled();
   });
@@ -120,7 +114,11 @@ describe("processSseData", () => {
   it("signals done on [DONE] with content", () => {
     const onDone = vi.fn();
     const state = { hasContent: true, lastError: "" };
-    const result = processSseData("[DONE]", { onChunk: vi.fn(), onDone }, state);
+    const result = processSseData(
+      "[DONE]",
+      { onChunk: vi.fn(), onDone },
+      state,
+    );
     expect(result.done).toBe(true);
     expect(onDone).toHaveBeenCalled();
   });

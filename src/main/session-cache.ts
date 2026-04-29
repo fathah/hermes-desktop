@@ -102,7 +102,7 @@ export function syncSessionCache(): CachedSession[] {
     }>;
 
     const existingIds = new Set(cache.sessions.map((s) => s.id));
-    let newSessions: CachedSession[] = [];
+    const newSessions: CachedSession[] = [];
 
     for (const row of rows) {
       if (existingIds.has(row.id)) {
@@ -162,19 +162,13 @@ export function syncSessionCache(): CachedSession[] {
 }
 
 // Fast read from cache only (no DB access)
-export function listCachedSessions(
-  limit = 50,
-  offset = 0,
-): CachedSession[] {
+export function listCachedSessions(limit = 50, offset = 0): CachedSession[] {
   const cache = readCache();
   return cache.sessions.slice(offset, offset + limit);
 }
 
 // Update title for a specific session
-export function updateSessionTitle(
-  sessionId: string,
-  title: string,
-): void {
+export function updateSessionTitle(sessionId: string, title: string): void {
   const cache = readCache();
   const idx = cache.sessions.findIndex((s) => s.id === sessionId);
   if (idx >= 0) {

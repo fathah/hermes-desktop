@@ -72,8 +72,7 @@ export function processSseData(
 
     // Capture error responses forwarded through SSE
     if (parsed.error) {
-      state.lastError =
-        parsed.error.message || JSON.stringify(parsed.error);
+      state.lastError = parsed.error.message || JSON.stringify(parsed.error);
       return { done: false, hasContent: state.hasContent };
     }
 

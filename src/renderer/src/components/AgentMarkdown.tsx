@@ -124,7 +124,11 @@ function CodeBlock({
 }
 
 // Shared Markdown renderer that opens links externally
-const AgentMarkdown = memo(function AgentMarkdown({ children }: { children: string }): React.JSX.Element {
+const AgentMarkdown = memo(function AgentMarkdown({
+  children,
+}: {
+  children: string;
+}): React.JSX.Element {
   return (
     <Markdown
       remarkPlugins={[remarkGfm]}

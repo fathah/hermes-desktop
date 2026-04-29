@@ -9,9 +9,11 @@ export default {
   namePlaceholder: "e.g. Claude Sonnet 4",
   modelIdPlaceholder: "e.g. anthropic/claude-sonnet-4-20250514",
   baseUrlPlaceholder: "http://localhost:1234/v1",
-  subtitle: "Manage your model library. These models will appear in the chat page model selector.",
+  subtitle:
+    "Manage your model library. These models will appear in the chat page model selector.",
   addModel: "Add Model",
-  emptyHint: "After adding models here, you can use them in the chat page model selector. Models you configure in settings will also be automatically added here.",
+  emptyHint:
+    "After adding models here, you can use them in the chat page model selector. Models you configure in settings will also be automatically added here.",
   editModel: "Edit Model",
   update: "Update",
   deleteModelTitle: "Delete Model",
