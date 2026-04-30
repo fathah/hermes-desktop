@@ -277,11 +277,11 @@ function Office({ visible }: { visible?: boolean }): React.JSX.Element {
               </p>
               <button
                 className="btn btn-secondary"
-                onClick={() =>
-                  window.hermesAPI.openExternal(
-                    "https://github.com/fathah/hermes-desktop/blob/main/docs/guides/office-on-docker.md",
-                  )
-                }
+                onClick={async () => {
+                  const url =
+                    await window.hermesAPI.getDocUrl("office-on-docker");
+                  await window.hermesAPI.openExternal(url);
+                }}
               >
                 <ExternalLink size={14} />
                 {t("office.viewDockerGuide")}

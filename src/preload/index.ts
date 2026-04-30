@@ -589,6 +589,10 @@ const hermesAPI = {
   openExternal: (url: string): Promise<void> =>
     ipcRenderer.invoke("open-external", url),
 
+  // Bundled docs (resolves to a file:// URL of an asarUnpack'd doc)
+  getDocUrl: (name: string): Promise<string> =>
+    ipcRenderer.invoke("get-doc-url", name),
+
   // Backup / Import
   runHermesBackup: (
     profile?: string,

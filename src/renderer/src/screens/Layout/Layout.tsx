@@ -252,7 +252,12 @@ function Layout(): React.JSX.Element {
             <Office visible={view === "office"} />
           </div>
         )}
-        {view === "models" && <Models />}
+        {view === "models" &&
+          (remoteMode ? (
+            <RemoteNotice feature="Models" />
+          ) : (
+            <Models />
+          ))}
         {view === "skills" &&
           (remoteMode ? (
             <RemoteNotice feature="Skills" />

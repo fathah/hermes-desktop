@@ -393,6 +393,9 @@ interface HermesAPI {
   // Shell
   openExternal: (url: string) => Promise<void>;
 
+  // Bundled docs (resolves to a file:// URL of an asarUnpack'd doc)
+  getDocUrl: (name: string) => Promise<string>;
+
   // Backup / Import
   runHermesBackup: (
     profile?: string,
