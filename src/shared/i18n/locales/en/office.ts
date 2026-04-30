@@ -23,4 +23,18 @@ export default {
   clickToStart: "Click \"Start\" to run Claw3D",
   setupDesc1: "Claw3D is a 3D visualization environment for your Hermes agents. It lets you see your agents working in an interactive office space.",
   setupDesc2: "Click below to automatically download and set up Claw3D. This will clone the repository and install all dependencies.",
+  remoteModeTitle: "Office requires Local connection mode",
+  remoteModeDesc1:
+    "Hermes Office (Claw3D) bridges the 3D UI to a local Hermes Agent process via a WebSocket adapter (hermes-adapter) that runs on this machine. The desktop Office tab does not currently support pointing at a remote Hermes server.",
+  remoteModeDesc2:
+    "You're connected in Remote mode, so the Office tab can't start. You have two options:",
+  remoteModeOption1Title: "Option 1 — Switch to Local mode (recommended)",
+  remoteModeOption1Desc:
+    "Run Hermes Agent on this machine. Office will then install and run automatically. You can switch back to Remote mode later from Settings → Connection.",
+  remoteModeOption2Title:
+    "Option 2 — Run Office alongside Hermes Agent in Docker",
+  remoteModeOption2Desc:
+    "Deploy hermes-office as a sibling service in your Docker compose, alongside Hermes Agent. The 3D UI then lives at http://<docker-host>:3000 — open it directly in a browser. The desktop Office tab will not connect to it (this is a known limitation).",
+  switchToLocal: "Switch to Local mode",
+  viewDockerGuide: "Docker setup guide",
 } as const;

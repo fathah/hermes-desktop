@@ -4,6 +4,7 @@ import { useI18n } from "../../components/useI18n";
 
 type OfficeState =
   | "checking"
+  | "remote-mode"
   | "not-installed"
   | "installing"
   | "ready"
@@ -52,6 +53,15 @@ function Office({ visible }: { visible?: boolean }): React.JSX.Element {
 
   const checkStatus = useCallback(async (): Promise<void> => {
     setState("checking");
+    // Office (Claw3D) requires a local Hermes Agent process via the local
+    // hermes-adapter. Remote mode bypasses the local agent, so the local
+    // Office stack would have nothing to talk to. Surface guidance instead
+    // of silently failing the install/start.
+    const remote = await window.hermesAPI.isRemoteMode();
+    if (remote) {
+      setState("remote-mode");
+      return;
+    }
     const status = await window.hermesAPI.claw3dStatus();
     setRunning(status.running);
     setPort(status.port);
@@ -65,6 +75,11 @@ function Office({ visible }: { visible?: boolean }): React.JSX.Element {
       setState("not-installed");
     }
   }, []);
+
+  async function handleSwitchToLocal(): Promise<void> {
+    await window.hermesAPI.setConnectionConfig("local", "", "");
+    await checkStatus();
+  }
 
   useEffect(() => {
     checkStatus();
@@ -228,6 +243,56 @@ function Office({ visible }: { visible?: boolean }): React.JSX.Element {
     );
   }
 
+  // --- Remote mode (Office requires local Hermes Agent) ---
+  if (state === "remote-mode") {
+    return (
+      <div className="settings-container">
+        <h1 className="settings-header">{t("office.title")}</h1>
+        <div className="office-center">
+          <div className="office-setup-card">
+            <h2 className="office-setup-title">
+              {t("office.remoteModeTitle")}
+            </h2>
+            <p className="office-setup-desc">{t("office.remoteModeDesc1")}</p>
+            <p className="office-setup-desc">{t("office.remoteModeDesc2")}</p>
+
+            <div className="office-remote-option">
+              <h3 className="office-remote-option-title">
+                {t("office.remoteModeOption1Title")}
+              </h3>
+              <p className="office-setup-desc">
+                {t("office.remoteModeOption1Desc")}
+              </p>
+              <button className="btn btn-primary" onClick={handleSwitchToLocal}>
+                {t("office.switchToLocal")}
+              </button>
+            </div>
+
+            <div className="office-remote-option">
+              <h3 className="office-remote-option-title">
+                {t("office.remoteModeOption2Title")}
+              </h3>
+              <p className="office-setup-desc">
+                {t("office.remoteModeOption2Desc")}
+              </p>
+              <button
+                className="btn btn-secondary"
+                onClick={() =>
+                  window.hermesAPI.openExternal(
+                    "https://github.com/fathah/hermes-desktop/blob/main/docs/guides/office-on-docker.md",
+                  )
+                }
+              >
+                <ExternalLink size={14} />
+                {t("office.viewDockerGuide")}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // --- Not installed ---
   if (state === "not-installed" || state === "error") {
     return (
@@ -236,12 +301,8 @@ function Office({ visible }: { visible?: boolean }): React.JSX.Element {
         <div className="office-center">
           <div className="office-setup-card">
             <h2 className="office-setup-title">{t("office.setupTitle")}</h2>
-            <p className="office-setup-desc">
-              {t("office.setupDesc1")}
-            </p>
-            <p className="office-setup-desc">
-              {t("office.setupDesc2")}
-            </p>
+            <p className="office-setup-desc">{t("office.setupDesc1")}</p>
+            <p className="office-setup-desc">{t("office.setupDesc2")}</p>
             {error && <div className="office-error">{error}</div>}
             <div className="office-setup-actions">
               <button className="btn btn-primary" onClick={handleInstall}>
@@ -255,7 +316,8 @@ function Office({ visible }: { visible?: boolean }): React.JSX.Element {
                   )
                 }
               >
-                <ExternalLink size={14} />{t("office.viewOnGithub")}
+                <ExternalLink size={14} />
+                {t("office.viewOnGithub")}
               </button>
             </div>
           </div>

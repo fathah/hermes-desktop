@@ -23,4 +23,17 @@ export default {
   clickToStart: "点击\"启动\"来运行 Claw3D",
   setupDesc1: "Claw3D 是你的 Hermes 代理的 3D 可视化环境。它让你可以看到代理在交互式办公空间中工作。",
   setupDesc2: "点击下方自动下载并设置 Claw3D。这将克隆仓库并安装所有依赖。",
+  remoteModeTitle: "工作区需要本地连接模式",
+  remoteModeDesc1:
+    "Hermes 工作区（Claw3D）通过运行在本机上的 WebSocket 适配器（hermes-adapter）将 3D 界面连接到本地的 Hermes Agent 进程。桌面工作区目前不支持指向远程 Hermes 服务器。",
+  remoteModeDesc2: "你正处于远程连接模式，因此工作区无法启动。可选方案：",
+  remoteModeOption1Title: "方案 1 — 切换到本地模式（推荐）",
+  remoteModeOption1Desc:
+    "在本机运行 Hermes Agent。工作区将会自动安装并运行。之后可以从 设置 → 连接 切换回远程模式。",
+  remoteModeOption2Title:
+    "方案 2 — 在 Docker 中与 Hermes Agent 并行部署 Office",
+  remoteModeOption2Desc:
+    "在 Docker compose 中将 hermes-office 与 Hermes Agent 部署为同级服务，3D 界面会在 http://<docker-host>:3000 提供，直接在浏览器中打开。桌面工作区标签页不会连接到它（这是已知限制）。",
+  switchToLocal: "切换到本地模式",
+  viewDockerGuide: "Docker 部署指南",
 } as const;
