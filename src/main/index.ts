@@ -7,6 +7,7 @@ import {
   Notification,
 } from "electron";
 import { join } from "path";
+import { pathToFileURL } from "url";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import type { AppUpdater } from "electron-updater";
 import icon from "../../resources/icon.png?asset";
@@ -315,6 +316,25 @@ function setupIPC(): void {
     "test-remote-connection",
     (_event, url: string, apiKey?: string) => testRemoteConnection(url, apiKey),
   );
+
+  // Bundled documentation — exposed via file:// so help links work offline
+  // and don't depend on the upstream repo's branch state. Files are kept on
+  // disk via electron-builder asarUnpack (docs/guides/**).
+  ipcMain.handle("get-doc-url", (_event, name: string) => {
+    const allowed: Record<string, string> = {
+      "office-on-docker": "docs/guides/office-on-docker.md",
+    };
+    const relPath = allowed[name];
+    if (!relPath) throw new Error(`Unknown bundled doc: ${name}`);
+    const appPath = app.getAppPath();
+    // In dev (electron-vite), appPath is the project root.
+    // In production, appPath is the asar; asarUnpack puts the file in
+    // a sibling app.asar.unpacked/ directory.
+    const onDisk = appPath.endsWith(".asar")
+      ? join(appPath.replace(/\.asar$/, ".asar.unpacked"), relPath)
+      : join(appPath, relPath);
+    return pathToFileURL(onDisk).href;
+  });
 
   // Chat — lazy-start gateway on first message
   ipcMain.handle(
