@@ -760,13 +760,17 @@ function buildMenu(): void {
         {
           label: "Hermes Agent on GitHub",
           click: (): void => {
-            shell.openExternal("https://github.com/fathah/Hermes-Agent");
+            shell.openExternal(
+              "https://github.com/NousResearch/hermes-agent",
+            );
           },
         },
         {
           label: "Report an Issue",
           click: (): void => {
-            shell.openExternal("https://github.com/fathah/Hermes-Agent/issues");
+            shell.openExternal(
+              "https://github.com/NousResearch/hermes-agent/issues",
+            );
           },
         },
       ],
