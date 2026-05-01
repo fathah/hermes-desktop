@@ -28,13 +28,15 @@ function Install({ onComplete, onFailed }: InstallProps): React.JSX.Element {
   const logRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    let isMounted = true;
     const cleanup = window.hermesAPI.onInstallProgress((p) => {
-      setProgress(p);
+      if (isMounted) setProgress(p);
     });
 
     window.hermesAPI
       .startInstall()
       .then((result) => {
+        if (!isMounted) return;
         if (result.success) {
           setDone(true);
         } else {
@@ -45,13 +47,17 @@ function Install({ onComplete, onFailed }: InstallProps): React.JSX.Element {
         }
       })
       .catch((err) => {
+        if (!isMounted) return;
         setFailed(
           err.message ||
             "Installation failed. Please try again or install via terminal.",
         );
       });
 
-    return cleanup;
+    return () => {
+      isMounted = false;
+      cleanup();
+    };
   }, []);
 
   useEffect(() => {
