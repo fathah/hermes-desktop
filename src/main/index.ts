@@ -189,12 +189,9 @@ function setupIPC(): void {
 
   ipcMain.handle("start-install", async (event) => {
     try {
-      await runInstall(
-        (progress: InstallProgress) => {
-          event.sender.send("install-progress", progress);
-        },
-        mainWindow,
-      );
+      await runInstall((progress: InstallProgress) => {
+        event.sender.send("install-progress", progress);
+      }, mainWindow);
       return { success: true };
     } catch (err) {
       return { success: false, error: (err as Error).message };
@@ -760,13 +757,15 @@ function buildMenu(): void {
         {
           label: "Hermes Agent on GitHub",
           click: (): void => {
-            shell.openExternal("https://github.com/fathah/Hermes-Agent");
+            shell.openExternal("https://github.com/NousResearch/hermes-agent/");
           },
         },
         {
           label: "Report an Issue",
           click: (): void => {
-            shell.openExternal("https://github.com/fathah/Hermes-Agent/issues");
+            shell.openExternal(
+              "https://github.com/fathah/hermes-desktop/issues",
+            );
           },
         },
       ],
