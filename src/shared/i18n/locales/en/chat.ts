@@ -24,8 +24,10 @@ export default {
   clearChat: "Clear chat",
   fastMode: "Fast Mode",
   fastModeOn: "Fast Mode ON",
-  fastModeActive: "Priority processing active — lower latency on supported models. Click to disable.",
-  fastModeInactive: "Enable priority processing for lower latency on OpenAI and Anthropic models.",
+  fastModeActive:
+    "Priority processing active — lower latency on supported models. Click to disable.",
+  fastModeInactive:
+    "Enable priority processing for lower latency on OpenAI and Anthropic models.",
   availableCommands: "Available Commands",
   categoryChat: "Chat",
   categoryAgent: "Agent",

@@ -33,7 +33,9 @@ class ErrorBoundary extends Component<Props, State> {
       return (
         <div className="error-boundary">
           <div className="error-boundary-card">
-            <h2 className="error-boundary-title">{i18n.t("common.errorTitle")}</h2>
+            <h2 className="error-boundary-title">
+              {i18n.t("common.errorTitle")}
+            </h2>
             <p className="error-boundary-message">
               {this.state.error?.message || i18n.t("common.errorMessage")}
             </p>

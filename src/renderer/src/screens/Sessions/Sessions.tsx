@@ -276,7 +276,10 @@ function Sessions({
                     {r.source}
                   </span>
                   <span className="sessions-tag">
-                    {r.messageCount} {r.messageCount !== 1 ? t("sessions.messages") : t("sessions.messageSingular")}
+                    {r.messageCount}{" "}
+                    {r.messageCount !== 1
+                      ? t("sessions.messages")
+                      : t("sessions.messageSingular")}
                   </span>
                   {r.model && (
                     <span className="sessions-tag sessions-tag--model">
@@ -298,7 +301,9 @@ function Sessions({
         <div className="sessions-list">
           {grouped.map((group) => (
             <div key={group.label} className="sessions-group">
-              <div className="sessions-group-label">{t(`sessions.${group.label}`)}</div>
+              <div className="sessions-group-label">
+                {t(`sessions.${group.label}`)}
+              </div>
               {group.sessions.map((s) => (
                 <SessionCard
                   key={s.id}

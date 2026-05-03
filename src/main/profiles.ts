@@ -108,14 +108,19 @@ export async function listProfiles(): Promise<ProfileInfo[]> {
   const profiles: ProfileInfo[] = [];
 
   // Default profile is HERMES_HOME itself
-  const [defaultConfig, defaultHasEnv, defaultHasSoul, defaultSkills, defaultGw] =
-    await Promise.all([
-      readProfileConfig(HERMES_HOME),
-      fileExists(join(HERMES_HOME, ".env")),
-      fileExists(join(HERMES_HOME, "SOUL.md")),
-      countSkills(HERMES_HOME),
-      isGatewayRunning(HERMES_HOME),
-    ]);
+  const [
+    defaultConfig,
+    defaultHasEnv,
+    defaultHasSoul,
+    defaultSkills,
+    defaultGw,
+  ] = await Promise.all([
+    readProfileConfig(HERMES_HOME),
+    fileExists(join(HERMES_HOME, ".env")),
+    fileExists(join(HERMES_HOME, "SOUL.md")),
+    countSkills(HERMES_HOME),
+    isGatewayRunning(HERMES_HOME),
+  ]);
 
   profiles.push({
     name: "default",

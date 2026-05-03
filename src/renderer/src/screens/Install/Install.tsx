@@ -39,6 +39,8 @@ function Install({ onComplete, onFailed }: InstallProps): React.JSX.Element {
       .then((result) => {
         if (result.success) {
           setDone(true);
+          // Don't auto-continue - let user click the button
+          // This prevents navigation issues and lets user see completion
         } else {
           setFailed(result.error || t("install.installationFailedHint"));
         }
@@ -48,7 +50,7 @@ function Install({ onComplete, onFailed }: InstallProps): React.JSX.Element {
       });
 
     return cleanup;
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (logRef.current) {
