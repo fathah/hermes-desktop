@@ -736,6 +736,19 @@ const hermesAPI = {
           ipcRenderer.invoke("insights:stop-log-tail", key);
         };
       }),
+
+  listOllamaModels: (
+    baseUrl?: string,
+  ): Promise<
+    Array<{
+      name: string;
+      sizeBytes: number;
+      modified: string | null;
+      family: string | null;
+      quantization: string | null;
+      parameterSize: string | null;
+    }>
+  > => ipcRenderer.invoke("insights:list-ollama-models", baseUrl),
 };
 
 if (process.contextIsolated) {

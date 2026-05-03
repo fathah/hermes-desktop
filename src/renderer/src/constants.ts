@@ -25,6 +25,7 @@ export const PROVIDERS = {
     { value: "nous", label: "constants.nousName" },
     { value: "qwen", label: "Qwen" },
     { value: "minimax", label: "MiniMax" },
+    { value: "ollama", label: "constants.ollamaName" },
     { value: "custom", label: "Local / Custom" },
   ],
 
@@ -37,6 +38,7 @@ export const PROVIDERS = {
     nous: "constants.nousName",
     qwen: "Qwen",
     minimax: "MiniMax",
+    ollama: "constants.ollamaName",
     custom: "Custom",
   } as Record<string, string>,
 

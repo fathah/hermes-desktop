@@ -28,6 +28,11 @@ function Providers({
   const [credPool, setCredPool] = useState<
     Record<string, Array<{ key: string; label: string }>>
   >({});
+
+  // Ollama models discovered live
+  const [ollamaModels, setOllamaModels] = useState<
+    Array<{ name: string; parameterSize: string | null; quantization: string | null }>
+  >([]);
   const [poolProvider, setPoolProvider] = useState("");
   const [poolNewKey, setPoolNewKey] = useState("");
   const [poolNewLabel, setPoolNewLabel] = useState("");
@@ -53,6 +58,27 @@ function Providers({
     modelLoaded.current = false;
     loadConfig();
   }, [loadConfig]);
+
+  // Discover local Ollama models when ollama provider is selected
+  useEffect(() => {
+    if (modelProvider !== "ollama") return;
+    let cancelled = false;
+    const baseUrl = (modelBaseUrl || "http://127.0.0.1:11434/v1").replace(
+      /\/v1\/?$/,
+      "",
+    );
+    window.hermesAPI
+      .listOllamaModels(baseUrl)
+      .then((m) => {
+        if (!cancelled) setOllamaModels(m);
+      })
+      .catch(() => {
+        if (!cancelled) setOllamaModels([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [modelProvider, modelBaseUrl]);
 
   // Refresh model config when the screen becomes visible
   useEffect(() => {
@@ -148,7 +174,7 @@ function Providers({
     });
   }
 
-  const isCustomProvider = modelProvider === "custom";
+  const isCustomProvider = modelProvider === "custom" || modelProvider === "ollama";
 
   return (
     <div className="settings-container">
@@ -175,7 +201,11 @@ function Providers({
             onChange={(e) => {
               const v = e.target.value;
               setModelProvider(v);
-              if (v === "custom" && !modelBaseUrl) {
+              if (v === "ollama") {
+                // Ollama default — local OpenAI-compatible endpoint
+                setModelBaseUrl("http://127.0.0.1:11434/v1");
+                if (!modelName) setModelName("qwen2.5:14b");
+              } else if (v === "custom" && !modelBaseUrl) {
                 setModelBaseUrl("http://localhost:1234/v1");
               }
             }}
@@ -201,8 +231,75 @@ function Providers({
             value={modelName}
             onChange={(e) => setModelName(e.target.value)}
             placeholder={t("settings.modelNamePlaceholder")}
+            list={modelProvider === "ollama" ? "ollama-models-list" : undefined}
           />
           <div className="settings-field-hint">{t("settings.modelHint")}</div>
+          {modelProvider === "ollama" && (
+            <>
+              <datalist id="ollama-models-list">
+                {ollamaModels.map((m) => (
+                  <option key={m.name} value={m.name} />
+                ))}
+              </datalist>
+              {ollamaModels.length > 0 ? (
+                <div
+                  style={{
+                    marginTop: 10,
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 6,
+                  }}
+                >
+                  {ollamaModels.map((m) => (
+                    <button
+                      key={m.name}
+                      type="button"
+                      onClick={() => setModelName(m.name)}
+                      style={{
+                        padding: "4px 10px",
+                        borderRadius: 999,
+                        border:
+                          modelName === m.name
+                            ? "1px solid #d97757"
+                            : "1px solid var(--border, #2a2a2a)",
+                        background:
+                          modelName === m.name
+                            ? "rgba(217,119,87,.15)"
+                            : "rgba(255,255,255,.04)",
+                        color:
+                          modelName === m.name
+                            ? "#d97757"
+                            : "var(--text, #ddd)",
+                        fontSize: 11,
+                        fontFamily: "monospace",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {m.name}
+                      {m.parameterSize && (
+                        <span style={{ opacity: 0.6, marginLeft: 6 }}>
+                          {m.parameterSize}
+                          {m.quantization ? ` ${m.quantization}` : ""}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div
+                  className="settings-field-hint"
+                  style={{
+                    marginTop: 8,
+                    color: "#fbbf24",
+                    fontSize: 12,
+                  }}
+                >
+                  Ollama daemon unreachable at {modelBaseUrl || "127.0.0.1:11434"} —
+                  make sure `ollama serve` is running, then re-select Ollama.
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         {isCustomProvider && (

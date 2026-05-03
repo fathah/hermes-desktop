@@ -445,6 +445,54 @@ export function budgetTotals(days = 30): BudgetTotals {
   }
 }
 
+// ── Ollama discovery ──────────────────────────────────────────────────
+
+export interface OllamaModel {
+  name: string;
+  sizeBytes: number;
+  modified: string | null;
+  family: string | null;
+  quantization: string | null;
+  parameterSize: string | null;
+}
+
+/**
+ * Lists models installed on the local Ollama daemon.
+ * Returns [] if Ollama isn't running (no daemon, port closed).
+ */
+export async function listOllamaModels(
+  baseUrl = "http://127.0.0.1:11434",
+): Promise<OllamaModel[]> {
+  try {
+    const res = await fetch(`${baseUrl}/api/tags`, {
+      signal: AbortSignal.timeout(2500),
+    });
+    if (!res.ok) return [];
+    const data = (await res.json()) as {
+      models?: Array<{
+        name: string;
+        size?: number;
+        modified_at?: string;
+        details?: {
+          family?: string;
+          parameter_size?: string;
+          quantization_level?: string;
+        };
+      }>;
+    };
+    return (data.models ?? []).map((m) => ({
+      name: m.name,
+      sizeBytes: m.size ?? 0,
+      modified: m.modified_at ?? null,
+      family: m.details?.family ?? null,
+      quantization: m.details?.quantization_level ?? null,
+      parameterSize: m.details?.parameter_size ?? null,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 // ── Live log tail ─────────────────────────────────────────────────────
 
 export type LogChannel = "agent" | "gateway" | "errors";

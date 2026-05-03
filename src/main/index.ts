@@ -117,6 +117,7 @@ import {
   readLogTail,
   startLogTail,
   stopLogTail,
+  listOllamaModels,
   type LogChannel,
 } from "./insights";
 
@@ -711,6 +712,9 @@ function setupIPC(): void {
     stopLogTail(key);
     return true;
   });
+  ipcMain.handle("insights:list-ollama-models", (_event, baseUrl?: string) =>
+    listOllamaModels(baseUrl),
+  );
 }
 
 function buildMenu(): void {

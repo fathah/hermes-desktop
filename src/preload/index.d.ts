@@ -517,6 +517,19 @@ interface HermesAPI {
     channel: "agent" | "gateway" | "errors",
     onAppend: (chunk: string) => void,
   ) => Promise<() => void>;
+
+  listOllamaModels: (
+    baseUrl?: string,
+  ) => Promise<
+    Array<{
+      name: string;
+      sizeBytes: number;
+      modified: string | null;
+      family: string | null;
+      quantization: string | null;
+      parameterSize: string | null;
+    }>
+  >;
 }
 
 declare global {
