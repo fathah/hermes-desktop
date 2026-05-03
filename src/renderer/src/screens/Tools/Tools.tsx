@@ -301,7 +301,7 @@ function Tools({ profile }: ToolsProps): React.JSX.Element {
     <div className="tools-container">
       <div className="tools-header">
         <h2 className="tools-title">{t("tools.title")}</h2>
-        <p className="tools-subtitle">启用或禁用代理在对话期间可使用的工具集</p>
+        <p className="tools-subtitle">{t("tools.subtitle")}</p>
       </div>
 
       <div className="tools-grid">

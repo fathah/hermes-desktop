@@ -32,11 +32,11 @@ export interface MemoryInfo {
 }
 
 function memoryPath(profile?: string): string {
-  return join(profileHome(profile), "MEMORY.md");
+  return join(profileHome(profile), "memories", "MEMORY.md");
 }
 
 function userPath(profile?: string): string {
-  return join(profileHome(profile), "USER.md");
+  return join(profileHome(profile), "memories", "USER.md");
 }
 
 function readFileSafe(filePath: string): {
@@ -99,7 +99,8 @@ function getSessionStats(profile?: string): {
     } finally {
       db.close();
     }
-  } catch {
+  } catch (err) {
+    console.error("[memory] getSessionStats failed:", err);
     return { totalSessions: 0, totalMessages: 0 };
   }
 }

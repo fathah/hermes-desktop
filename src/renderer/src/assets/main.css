@@ -4666,7 +4666,7 @@ body {
   width: 600px;
   max-width: 60%;
   opacity: 0;
-  animation: splashFadeIn 2.5s ease-in-out forwards;
+  animation: splashFadeIn 1.1s ease-out forwards;
 }
 
 @keyframes splashFadeIn {

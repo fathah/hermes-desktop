@@ -18,6 +18,8 @@ nsis:
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
+  oneClick: true
+  perMachine: false
 mac:
   icon: build/icon.icns
   entitlements: build/entitlements.mac.plist
@@ -35,9 +37,18 @@ linux:
     - AppImage
     - snap
     - deb
+    - rpm
   maintainer: electronjs.org
+  vendor: Nous Research
   category: Utility
+  synopsis: Self-improving AI assistant desktop app
+  description: >-
+    Hermes Desktop is a native desktop app for installing, configuring, and chatting
+    with Hermes Agent — a self-improving AI assistant with tool use, multi-platform
+    messaging, and a closed learning loop.
 appImage:
+  artifactName: ${name}-${version}.${ext}
+rpm:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
 publish:

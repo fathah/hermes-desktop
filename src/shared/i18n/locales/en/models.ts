@@ -21,4 +21,7 @@ export default {
   no: "No",
   nameRequired: "Name and Model ID are required",
   customProviderHint: "Only required for custom or local providers",
+  apiKeyLabel: "API Key",
+  apiKeyHint:
+    "Stored as an environment variable. Picks the matching env key based on the URL, or CUSTOM_API_KEY otherwise.",
 } as const;

@@ -6,6 +6,9 @@
   <a href="https://discord.gg/NousResearch"><img src="https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a>
   <a href="https://github.com/fathah/hermes-desktop/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License: MIT"></a>
   <a href="https://github.com/fathah/hermes-desktop/releases/"><img src="https://img.shields.io/badge/Download-Releases-FF6600?style=for-the-badge" alt="Releases"></a>
+<a href="https://github.com/fathah/hermes-desktop/releases/">
+  <img src="https://img.shields.io/github/downloads/fathah/hermes-desktop/total?style=for-the-badge&color=00B496&label=Total%20Downloads" alt="Downloads">
+</a>
 </p>
 
 > **This project is in active development.** Features may change, and some things might break. If you run into a problem or have an idea, [open an issue](https://github.com/fathah/hermes-desktop/issues). Contributions are welcome!
@@ -23,10 +26,35 @@ Instead of managing the CLI by hand, the app walks through install, provider set
 
 Download the latest build from the [Releases](https://github.com/fathah/hermes-desktop/releases/) page.
 
-| Platform | File                  |
-| -------- | --------------------- |
-| macOS    | `.dmg`                |
-| Linux    | `.AppImage` or `.deb` |
+| Platform       | File                    |
+| -------------- | ----------------------- |
+| macOS          | `.dmg`                  |
+| Linux (any)    | `.AppImage`             |
+| Linux (Debian) | `.deb`                  |
+| Linux (Fedora) | `.rpm`                  |
+| Windows        | `.exe` (NSIS installer) |
+
+### Windows (winget)
+
+Once the manifest has been accepted into [`microsoft/winget-pkgs`](https://github.com/microsoft/winget-pkgs), you can install with:
+
+```powershell
+winget install NousResearch.HermesDesktop
+```
+
+Until then, download the `.exe` from the Releases page.
+
+> **Windows users:** The installer is not code-signed. Windows SmartScreen will warn on first launch — click "More info" → "Run anyway".
+
+### Fedora (RPM)
+
+```bash
+sudo dnf install ./hermes-desktop-<version>.rpm
+```
+
+> **Fedora users:** The `.rpm` is not GPG-signed. If your system enforces signature checking, append `--nogpgcheck` to the install command. Auto-update is not supported for `.rpm` builds (limitation of `electron-updater`); reinstall the new `.rpm` to update.
+
+### macOS
 
 > **macOS users:** The app is not code-signed or notarized. macOS will block it on first launch. To fix this, run the following after installing:
 >
@@ -39,6 +67,7 @@ Download the latest build from the [Releases](https://github.com/fathah/hermes-d
 ## Features
 
 - **Guided first-run install** for Hermes Agent with progress tracking and dependency resolution
+- **Local or remote backend** — run Hermes locally on `127.0.0.1:8642`, or connect the desktop app to a remote Hermes API server with URL + API key
 - **Multi-provider support** — OpenRouter, Anthropic, OpenAI, Google (Gemini), xAI (Grok), Nous Portal, Qwen, MiniMax, Hugging Face, Groq, and local OpenAI-compatible endpoints (LM Studio, Ollama, vLLM, llama.cpp)
 - **Streaming chat UI** with SSE streaming, tool progress indicators, markdown rendering, and syntax highlighting
 - **Token usage tracking** — live prompt/completion token counts and cost display in the chat footer, plus a `/usage` slash command
@@ -79,48 +108,49 @@ Download the latest build from the [Releases](https://github.com/fathah/hermes-d
 
 On first launch, the app:
 
-1. Checks whether Hermes is already installed in `~/.hermes`.
-2. If not installed, runs the official Hermes installer with dependency resolution (Git, uv, Python 3.11+).
-3. Prompts for an API provider or local model endpoint.
-4. Saves provider config and API keys through Hermes config files.
-5. Launches the main workspace once setup is complete.
+1. Asks whether you want to run Hermes **locally** or connect to a **remote** Hermes API server.
+2. **Local mode:** checks whether Hermes is already installed in `~/.hermes`; if not, runs the official Hermes installer with dependency resolution (Git, uv, Python 3.11+).
+3. **Remote mode:** prompts for the remote API URL and API key, validates the connection, and skips local install.
+4. Prompts for an API provider or local model endpoint.
+5. Saves provider config and API keys through Hermes config files.
+6. Launches the main workspace once setup is complete.
 
-Chat requests go through a local API server (`http://127.0.0.1:8642`) with SSE streaming. The desktop app parses the stream in real time, rendering tool progress, markdown content, and token usage as it arrives.
+In local mode, chat requests go through `http://127.0.0.1:8642` with SSE streaming. In remote mode, the app talks to your configured remote URL with the same streaming protocol. The desktop app parses the stream in real time, rendering tool progress, markdown content, and token usage as it arrives.
 
 ## Screens
 
-| Screen | Description |
-|--------|-------------|
-| **Chat** | Streaming conversation UI with slash commands, tool progress, and token tracking |
-| **Sessions** | Browse, search, and resume past conversations |
-| **Agents** | Create, delete, and switch between Hermes profiles |
-| **Skills** | Browse, install, and manage bundled and installed skills |
-| **Models** | Manage saved model configurations per provider |
-| **Memory** | View/edit memory entries, user profile, and configure memory providers |
-| **Soul** | Edit the active profile's persona (SOUL.md) |
-| **Tools** | Enable or disable individual toolsets |
-| **Schedules** | Create and manage cron jobs with delivery targets |
-| **Gateway** | Configure and control messaging platform integrations |
-| **Office** | Claw3d visual interface setup and management |
-| **Settings** | Provider config, credential pools, backup/import, log viewer, network settings, theme |
+| Screen        | Description                                                                           |
+| ------------- | ------------------------------------------------------------------------------------- |
+| **Chat**      | Streaming conversation UI with slash commands, tool progress, and token tracking      |
+| **Sessions**  | Browse, search, and resume past conversations                                         |
+| **Agents**    | Create, delete, and switch between Hermes profiles                                    |
+| **Skills**    | Browse, install, and manage bundled and installed skills                              |
+| **Models**    | Manage saved model configurations per provider                                        |
+| **Memory**    | View/edit memory entries, user profile, and configure memory providers                |
+| **Soul**      | Edit the active profile's persona (SOUL.md)                                           |
+| **Tools**     | Enable or disable individual toolsets                                                 |
+| **Schedules** | Create and manage cron jobs with delivery targets                                     |
+| **Gateway**   | Configure and control messaging platform integrations                                 |
+| **Office**    | Claw3d visual interface setup and management                                          |
+| **Settings**  | Provider config, credential pools, backup/import, log viewer, network settings, theme |
 
 ## Supported Providers
 
 ### LLM Providers
 
-| Provider | Notes |
-|----------|-------|
-| **OpenRouter** | 200+ models via single API (recommended) |
-| **Anthropic** | Direct Claude access |
-| **OpenAI** | Direct GPT access |
-| **Google (Gemini)** | Google AI Studio |
-| **xAI (Grok)** | Grok models |
-| **Nous Portal** | Free tier available |
-| **Qwen** | QwenAI models |
-| **MiniMax** | Global and China endpoints |
-| **Hugging Face** | 20+ open models via HF Inference |
-| **Groq** | Fast inference (voice/STT) |
-| **Local/Custom** | Any OpenAI-compatible endpoint |
+| Provider            | Notes                                    |
+| ------------------- | ---------------------------------------- |
+| **OpenRouter**      | 200+ models via single API (recommended) |
+| **Anthropic**       | Direct Claude access                     |
+| **OpenAI**          | Direct GPT access                        |
+| **Google (Gemini)** | Google AI Studio                         |
+| **xAI (Grok)**      | Grok models                              |
+| **Nous Portal**     | Free tier available                      |
+| **Qwen**            | QwenAI models                            |
+| **MiniMax**         | Global and China endpoints               |
+| **Hugging Face**    | 20+ open models via HF Inference         |
+| **Groq**            | Fast inference (voice/STT)               |
+| **Local/Custom**    | Any OpenAI-compatible endpoint           |
 
 Local presets are included for LM Studio, Ollama, vLLM, and llama.cpp.
 
@@ -178,6 +208,7 @@ Platform packaging:
 npm run build:mac
 npm run build:win
 npm run build:linux
+npm run build:rpm    # Fedora/RHEL .rpm only
 ```
 
 ## First-Time Setup

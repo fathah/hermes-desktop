@@ -4,6 +4,7 @@ export default {
   agents: "档案",
   office: "工作区",
   models: "模型",
+  providers: "提供商",
   skills: "技能",
   soul: "人格",
   memory: "记忆",

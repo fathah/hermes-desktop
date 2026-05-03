@@ -1,5 +1,6 @@
 export default {
   title: "工具",
+  subtitle: "启用或禁用代理在对话期间可使用的工具集",
   web: { label: "网络搜索", description: "搜索网页并提取 URL 内容" },
   browser: { label: "浏览器", description: "浏览、点击、输入并与网页交互" },
   terminal: { label: "终端", description: "执行 shell 命令和脚本" },

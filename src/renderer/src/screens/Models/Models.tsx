@@ -30,7 +30,25 @@ function Models(): React.JSX.Element {
   const [formProvider, setFormProvider] = useState("openrouter");
   const [formModel, setFormModel] = useState("");
   const [formBaseUrl, setFormBaseUrl] = useState("");
+  const [formApiKey, setFormApiKey] = useState("");
+  const [showApiKey, setShowApiKey] = useState(false);
   const [formError, setFormError] = useState("");
+
+  function resolveCustomEnvKey(url: string): string {
+    if (!url) return "CUSTOM_API_KEY";
+    if (/openrouter\.ai/i.test(url)) return "OPENROUTER_API_KEY";
+    if (/anthropic\.com/i.test(url)) return "ANTHROPIC_API_KEY";
+    if (/openai\.com/i.test(url)) return "OPENAI_API_KEY";
+    if (/huggingface\.co/i.test(url)) return "HF_TOKEN";
+    if (/api\.groq\.com/i.test(url)) return "GROQ_API_KEY";
+    if (/api\.deepseek\.com/i.test(url)) return "DEEPSEEK_API_KEY";
+    if (/api\.together\.xyz/i.test(url)) return "TOGETHER_API_KEY";
+    if (/api\.fireworks\.ai/i.test(url)) return "FIREWORKS_API_KEY";
+    if (/api\.cerebras\.ai/i.test(url)) return "CEREBRAS_API_KEY";
+    if (/api\.mistral\.ai/i.test(url)) return "MISTRAL_API_KEY";
+    if (/api\.perplexity\.ai/i.test(url)) return "PERPLEXITY_API_KEY";
+    return "CUSTOM_API_KEY";
+  }
 
   const loadModels = useCallback(async () => {
     const list = await window.hermesAPI.listModels();
@@ -48,6 +66,8 @@ function Models(): React.JSX.Element {
     setFormProvider("openrouter");
     setFormModel("");
     setFormBaseUrl("");
+    setFormApiKey("");
+    setShowApiKey(false);
     setFormError("");
     setShowModal(true);
   }
@@ -58,6 +78,8 @@ function Models(): React.JSX.Element {
     setFormProvider(m.provider);
     setFormModel(m.model);
     setFormBaseUrl(m.baseUrl);
+    setFormApiKey("");
+    setShowApiKey(false);
     setFormError("");
     setShowModal(true);
   }
@@ -91,6 +113,11 @@ function Models(): React.JSX.Element {
         model,
         formBaseUrl.trim(),
       );
+    }
+
+    if (formApiKey.trim() && formProvider === "custom") {
+      const envKey = resolveCustomEnvKey(formBaseUrl.trim());
+      await window.hermesAPI.setEnv(envKey, formApiKey.trim());
     }
 
     closeModal();
@@ -290,6 +317,33 @@ function Models(): React.JSX.Element {
                   {t("models.customProviderHint")}
                 </span>
               </div>
+
+              {formProvider === "custom" && (
+                <div className="models-modal-field">
+                  <label className="models-modal-label">
+                    {t("models.apiKeyLabel")} ({t("common.optional")})
+                  </label>
+                  <div className="setup-input-group">
+                    <input
+                      className="input"
+                      type={showApiKey ? "text" : "password"}
+                      value={formApiKey}
+                      onChange={(e) => setFormApiKey(e.target.value)}
+                      placeholder="sk-..."
+                    />
+                    <button
+                      className="setup-toggle-visibility"
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      type="button"
+                    >
+                      {showApiKey ? t("common.hide") : t("common.show")}
+                    </button>
+                  </div>
+                  <span className="models-modal-hint">
+                    {t("models.apiKeyHint")}
+                  </span>
+                </div>
+              )}
 
               {formError && <div className="models-error">{formError}</div>}
             </div>

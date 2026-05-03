@@ -5,6 +5,11 @@ on:
     branches:
       - release
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Run all build jobs but skip publish (no tag, no GitHub Release)"
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -21,6 +26,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
       tag_exists: ${{ steps.check.outputs.exists }}
+      is_dry_run: ${{ steps.mode.outputs.is_dry_run }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -41,6 +47,17 @@ jobs:
             echo "Tag v${{ steps.version.outputs.version }} already exists — skipping."
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compute dry-run flag
+        id: mode
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "is_dry_run=true" >> "$GITHUB_OUTPUT"
+            echo "Dry run: builds will run, publish will be skipped."
+          else
+            echo "is_dry_run=false" >> "$GITHUB_OUTPUT"
+            echo "Real release: publish will run if tag does not exist."
           fi
 
   release_mac:
@@ -103,8 +120,11 @@ jobs:
       - name: Build app
         run: npm run build
 
+      - name: Install rpmbuild
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
       - name: Package Linux artifacts
-        run: npx electron-builder --linux AppImage deb --publish never
+        run: npx electron-builder --linux AppImage deb rpm --publish never
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -113,12 +133,78 @@ jobs:
           path: |
             dist/*.AppImage
             dist/*.deb
+            dist/*.rpm
             dist/latest-linux.yml
+
+  release_windows:
+    name: Build Windows
+    needs: prepare
+    if: needs.prepare.outputs.tag_exists == 'false'
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build app
+        run: npm run build
+
+      - name: Package Windows artifacts
+        run: npx electron-builder --win nsis --x64 --publish never
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-artifacts
+          path: |
+            dist/*.exe
+            dist/*.exe.blockmap
+            dist/latest.yml
+
+  generate_winget:
+    name: Generate winget manifests
+    needs: [prepare, release_windows]
+    if: needs.prepare.outputs.tag_exists == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Download Windows installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-artifacts
+          path: dist/
+
+      - name: Generate winget manifests
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          PUBLISH_OWNER: fathah
+        run: node scripts/generate-winget-manifests.mjs
+
+      - name: Upload winget manifests artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: winget-manifests-${{ needs.prepare.outputs.version }}
+          path: dist/winget/
 
   publish:
     name: Publish Release
-    needs: [prepare, release_mac, release_linux]
-    if: needs.prepare.outputs.tag_exists == 'false'
+    needs: [prepare, release_mac, release_linux, release_windows, generate_winget]
+    if: needs.prepare.outputs.is_dry_run == 'false' && needs.prepare.outputs.tag_exists == 'false'
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -143,4 +229,14 @@ jobs:
           tag_name: ${{ needs.prepare.outputs.tag }}
           name: Hermes Desktop ${{ needs.prepare.outputs.tag }}
           generate_release_notes: true
-          files: artifacts/*
+          files: |
+            artifacts/*.dmg
+            artifacts/*.zip
+            artifacts/*.AppImage
+            artifacts/*.deb
+            artifacts/*.rpm
+            artifacts/*.exe
+            artifacts/*.blockmap
+            artifacts/latest.yml
+            artifacts/latest-linux.yml
+            artifacts/latest-mac.yml

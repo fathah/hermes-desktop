@@ -12,6 +12,7 @@ import type { AppUpdater } from "electron-updater";
 import icon from "../../resources/icon.png?asset";
 import {
   checkInstallStatus,
+  verifyInstall,
   runInstall,
   getHermesVersion,
   clearVersionCache,
@@ -184,11 +185,13 @@ function setupIPC(): void {
     return checkInstallStatus();
   });
 
+  ipcMain.handle("verify-install", () => verifyInstall());
+
   ipcMain.handle("start-install", async (event) => {
     try {
       await runInstall((progress: InstallProgress) => {
         event.sender.send("install-progress", progress);
-      });
+      }, mainWindow);
       return { success: true };
     } catch (err) {
       return { success: false, error: (err as Error).message };
@@ -754,13 +757,15 @@ function buildMenu(): void {
         {
           label: "Hermes Agent on GitHub",
           click: (): void => {
-            shell.openExternal("https://github.com/fathah/Hermes-Agent");
+            shell.openExternal("https://github.com/NousResearch/hermes-agent/");
           },
         },
         {
           label: "Report an Issue",
           click: (): void => {
-            shell.openExternal("https://github.com/fathah/Hermes-Agent/issues");
+            shell.openExternal(
+              "https://github.com/fathah/hermes-desktop/issues",
+            );
           },
         },
       ],

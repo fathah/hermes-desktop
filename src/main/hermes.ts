@@ -50,6 +50,13 @@ const URL_KEY_MAP: Array<{ pattern: RegExp; envKey: string }> = [
   { pattern: /anthropic\.com/i, envKey: "ANTHROPIC_API_KEY" },
   { pattern: /openai\.com/i, envKey: "OPENAI_API_KEY" },
   { pattern: /huggingface\.co/i, envKey: "HF_TOKEN" },
+  { pattern: /api\.groq\.com/i, envKey: "GROQ_API_KEY" },
+  { pattern: /api\.deepseek\.com/i, envKey: "DEEPSEEK_API_KEY" },
+  { pattern: /api\.together\.xyz/i, envKey: "TOGETHER_API_KEY" },
+  { pattern: /api\.fireworks\.ai/i, envKey: "FIREWORKS_API_KEY" },
+  { pattern: /api\.cerebras\.ai/i, envKey: "CEREBRAS_API_KEY" },
+  { pattern: /api\.mistral\.ai/i, envKey: "MISTRAL_API_KEY" },
+  { pattern: /api\.perplexity\.ai/i, envKey: "PERPLEXITY_API_KEY" },
 ];
 
 interface ChatHandle {
@@ -469,7 +476,12 @@ function sendMessageViaCli(
       }
     }
     if (!resolvedKey) {
-      resolvedKey = profileEnv.OPENAI_API_KEY || env.OPENAI_API_KEY || "";
+      resolvedKey =
+        profileEnv.CUSTOM_API_KEY ||
+        env.CUSTOM_API_KEY ||
+        profileEnv.OPENAI_API_KEY ||
+        env.OPENAI_API_KEY ||
+        "";
     }
     // Local servers (localhost/127.0.0.1) don't need a real key
     if (!resolvedKey && /localhost|127\.0\.0\.1/i.test(mc.baseUrl)) {

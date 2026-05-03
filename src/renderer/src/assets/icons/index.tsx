@@ -8,6 +8,7 @@ export {
   Copy,
   Download,
   ExternalLink,
+  KeyRound,
   Layers,
   Monitor,
   Moon,

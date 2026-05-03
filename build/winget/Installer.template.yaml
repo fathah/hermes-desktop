@@ -1,0 +1,16 @@
+# Generated from this template by scripts/generate-winget-manifests.mjs.
+# Placeholders ({{...}}) are replaced at build time. Do not edit the generated copy in dist/.
+PackageIdentifier: NousResearch.HermesDesktop
+PackageVersion: {{VERSION}}
+InstallerLocale: en-US
+InstallerType: nullsoft
+Scope: user
+MinimumOSVersion: 10.0.17763.0
+ReleaseDate: {{RELEASE_DATE}}
+Installers:
+  - Architecture: x64
+    InstallerUrl: {{INSTALLER_URL}}
+    InstallerSha256: {{INSTALLER_SHA256}}
+    UpgradeBehavior: install
+ManifestType: installer
+ManifestVersion: 1.6.0

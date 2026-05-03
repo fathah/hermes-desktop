@@ -15,6 +15,7 @@ import settingsEn from "./locales/en/settings";
 import toolsEn from "./locales/en/tools";
 import sessionsEn from "./locales/en/sessions";
 import modelsEn from "./locales/en/models";
+import providersEn from "./locales/en/providers";
 import officeEn from "./locales/en/office";
 import errorsEn from "./locales/en/errors";
 import schedulesEn from "./locales/en/schedules";
@@ -34,6 +35,7 @@ import settingsZh from "./locales/zh-CN/settings";
 import toolsZh from "./locales/zh-CN/tools";
 import sessionsZh from "./locales/zh-CN/sessions";
 import modelsZh from "./locales/zh-CN/models";
+import providersZh from "./locales/zh-CN/providers";
 import officeZh from "./locales/zh-CN/office";
 import errorsZh from "./locales/zh-CN/errors";
 import schedulesZh from "./locales/zh-CN/schedules";
@@ -57,6 +59,7 @@ export const resources = {
       tools: toolsEn,
       sessions: sessionsEn,
       models: modelsEn,
+      providers: providersEn,
       office: officeEn,
       errors: errorsEn,
       schedules: schedulesEn,
@@ -80,6 +83,7 @@ export const resources = {
       tools: toolsZh,
       sessions: sessionsZh,
       models: modelsZh,
+      providers: providersZh,
       office: officeZh,
       errors: errorsZh,
       schedules: schedulesZh,

@@ -1,5 +1,6 @@
 export default {
   title: "Tools",
+  subtitle: "Enable or disable the toolsets your agent can use during conversations",
   web: {
     label: "Web Search",
     description: "Search the web and extract content from URLs",

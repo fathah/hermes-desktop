@@ -16,8 +16,25 @@ function Setup({ onComplete }: { onComplete: () => void }): React.JSX.Element {
   const provider = PROVIDERS.setup.find((p) => p.id === selectedProvider)!;
   const isLocal = selectedProvider === "local";
 
-  function applyLocalPreset(port: string): void {
-    setBaseUrl(`http://localhost:${port}/v1`);
+  function applyLocalPreset(presetBaseUrl: string): void {
+    setBaseUrl(presetBaseUrl);
+  }
+
+  function resolveCustomEnvKey(url: string): string {
+    const preset = LOCAL_PRESETS.find((p) => p.baseUrl === url);
+    if (preset?.envKey) return preset.envKey;
+    if (/openrouter\.ai/i.test(url)) return "OPENROUTER_API_KEY";
+    if (/anthropic\.com/i.test(url)) return "ANTHROPIC_API_KEY";
+    if (/openai\.com/i.test(url)) return "OPENAI_API_KEY";
+    if (/huggingface\.co/i.test(url)) return "HF_TOKEN";
+    if (/api\.groq\.com/i.test(url)) return "GROQ_API_KEY";
+    if (/api\.deepseek\.com/i.test(url)) return "DEEPSEEK_API_KEY";
+    if (/api\.together\.xyz/i.test(url)) return "TOGETHER_API_KEY";
+    if (/api\.fireworks\.ai/i.test(url)) return "FIREWORKS_API_KEY";
+    if (/api\.cerebras\.ai/i.test(url)) return "CEREBRAS_API_KEY";
+    if (/api\.mistral\.ai/i.test(url)) return "MISTRAL_API_KEY";
+    if (/api\.perplexity\.ai/i.test(url)) return "PERPLEXITY_API_KEY";
+    return "CUSTOM_API_KEY";
   }
 
   async function handleContinue(): Promise<void> {
@@ -36,6 +53,9 @@ function Setup({ onComplete }: { onComplete: () => void }): React.JSX.Element {
     try {
       if (provider.needsKey && provider.envKey) {
         await window.hermesAPI.setEnv(provider.envKey, apiKey.trim());
+      } else if (isLocal && apiKey.trim()) {
+        const envKey = resolveCustomEnvKey(baseUrl.trim());
+        await window.hermesAPI.setEnv(envKey, apiKey.trim());
       }
 
       const configProvider = isLocal ? "custom" : provider.configProvider;
@@ -69,17 +89,9 @@ function Setup({ onComplete }: { onComplete: () => void }): React.JSX.Element {
               setError("");
             }}
           >
-            <div className="setup-provider-name">
-              {t(`setup.providerCards.${p.id}.name`)}
-            </div>
-            <div className="setup-provider-desc">
-              {t(`setup.providerCards.${p.id}.desc`)}
-            </div>
-            {p.tag && (
-              <div className="setup-provider-tag">
-                {t(`setup.providerCards.${p.id}.tag`)}
-              </div>
-            )}
+            <div className="setup-provider-name">{t(p.name)}</div>
+            <div className="setup-provider-desc">{t(p.desc)}</div>
+            {p.tag && <div className="setup-provider-tag">{t(p.tag)}</div>}
           </button>
         ))}
       </div>
@@ -87,20 +99,41 @@ function Setup({ onComplete }: { onComplete: () => void }): React.JSX.Element {
       <div className="setup-form">
         {isLocal ? (
           <>
-            <label className="setup-label">{t("setup.serverPreset")}</label>
+            <label className="setup-label">{t("setup.localGroupLabel")}</label>
             <div className="setup-local-presets">
-              {LOCAL_PRESETS.map((preset) => (
-                <button
-                  key={preset.id}
-                  className={`setup-local-preset ${baseUrl.includes(`:${preset.port}/`) ? "active" : ""}`}
-                  onClick={() => applyLocalPreset(preset.port)}
-                >
-                  {t(`setup.localPresets.${preset.id}`)}
-                </button>
-              ))}
+              {LOCAL_PRESETS.filter((p) => p.group === "local").map(
+                (preset) => (
+                  <button
+                    key={preset.id}
+                    className={`setup-local-preset ${baseUrl === preset.baseUrl ? "active" : ""}`}
+                    onClick={() => applyLocalPreset(preset.baseUrl)}
+                  >
+                    {t(`setup.localPresets.${preset.id}`)}
+                  </button>
+                ),
+              )}
             </div>
 
-            <label className="setup-label">{t("setup.serverUrl")}</label>
+            <label className="setup-label" style={{ marginTop: 12 }}>
+              {t("setup.remoteGroupLabel")}
+            </label>
+            <div className="setup-local-presets">
+              {LOCAL_PRESETS.filter((p) => p.group === "remote").map(
+                (preset) => (
+                  <button
+                    key={preset.id}
+                    className={`setup-local-preset ${baseUrl === preset.baseUrl ? "active" : ""}`}
+                    onClick={() => applyLocalPreset(preset.baseUrl)}
+                  >
+                    {t(`setup.localPresets.${preset.id}`)}
+                  </button>
+                ),
+              )}
+            </div>
+
+            <label className="setup-label" style={{ marginTop: 16 }}>
+              {t("setup.serverUrl")}
+            </label>
             <input
               className="input"
               type="text"
@@ -112,7 +145,38 @@ function Setup({ onComplete }: { onComplete: () => void }): React.JSX.Element {
               }}
               autoFocus
             />
-            <div className="setup-field-hint">{t("setup.localServerHint")}</div>
+            <div className="setup-field-hint">
+              {t("setup.customServerHint")}
+            </div>
+
+            <label className="setup-label" style={{ marginTop: 16 }}>
+              {t("setup.customApiKeyLabel")}{" "}
+              <span className="setup-label-optional">
+                {t("common.optional")}
+              </span>
+            </label>
+            <div className="setup-input-group">
+              <input
+                className="input"
+                type={showKey ? "text" : "password"}
+                placeholder="sk-..."
+                value={apiKey}
+                onChange={(e) => {
+                  setApiKey(e.target.value);
+                  setError("");
+                }}
+              />
+              <button
+                className="setup-toggle-visibility"
+                onClick={() => setShowKey(!showKey)}
+                type="button"
+              >
+                {showKey ? t("common.hide") : t("common.show")}
+              </button>
+            </div>
+            <div className="setup-field-hint">
+              {t("setup.customApiKeyHint")}
+            </div>
 
             <label className="setup-label" style={{ marginTop: 16 }}>
               {t("setup.modelName")}{" "}
@@ -134,9 +198,7 @@ function Setup({ onComplete }: { onComplete: () => void }): React.JSX.Element {
         ) : (
           <>
             <label className="setup-label">
-              {t("setup.apiKeyLabel", {
-                provider: t(`setup.providerCards.${provider.id}.name`),
-              })}
+              {t("setup.apiKeyLabel", { provider: t(provider.name) })}
             </label>
             <div className="setup-input-group">
               <input

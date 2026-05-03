@@ -8,8 +8,7 @@ interface SplashScreenProps {
 
 function SplashScreen({ onFinished }: SplashScreenProps): React.JSX.Element {
   useEffect(() => {
-    const doneTimer = setTimeout(() => onFinished(), 4000);
-    return () => clearTimeout(doneTimer);
+    onFinished();
   }, [onFinished]);
 
   return (

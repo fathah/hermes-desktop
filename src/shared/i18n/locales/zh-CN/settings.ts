@@ -11,6 +11,12 @@ export default {
     light: "浅色",
     dark: "深色",
   },
+  language: {
+    label: "语言",
+    english: "English",
+    chinese: "中文",
+    hint: "选择界面语言",
+  },
   notDetected: "未检测到",
   updatedSuccessfully: "更新成功！",
   updateFailed: "更新失败。",
