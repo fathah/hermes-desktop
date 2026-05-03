@@ -11,5 +11,9 @@ export default {
   tools: "工具",
   schedules: "计划任务",
   gateway: "网关",
+  reasoning: "推理",
+  analytics: "分析",
+  budget: "预算",
+  live: "实时日志",
   settings: "设置",
 } as const;
