@@ -24,9 +24,11 @@ function App(): React.JSX.Element {
     const startedAt = Date.now();
     let next: Screen = "welcome";
     let error: string | null = null;
+    let connMode: "remote" | "local" | null = null;
 
     try {
       const conn = await window.hermesAPI.getConnectionConfig();
+      connMode = conn.mode ?? null;
 
       if (conn.mode === "remote" && conn.remoteUrl) {
         const ok = await window.hermesAPI.testRemoteConnection(
@@ -70,7 +72,7 @@ function App(): React.JSX.Element {
     // which don't exist on machines that only use a remote backend. Without
     // this guard the user is bounced back to Welcome with an "installBroken"
     // error immediately after a successful remote connect. (#47, #41, #30)
-    if ((next === "main" || next === "setup") && conn.mode !== "remote") {
+    if ((next === "main" || next === "setup") && connMode !== "remote") {
       window.hermesAPI.verifyInstall().then((ok) => {
         if (!ok) {
           setInstallError(t("errors.installBroken"));

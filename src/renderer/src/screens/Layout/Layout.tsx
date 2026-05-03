@@ -12,6 +12,10 @@ import Office from "../Office/Office";
 import Models from "../Models/Models";
 import Providers from "../Providers/Providers";
 import Schedules from "../Schedules/Schedules";
+import Reasoning from "../Reasoning/Reasoning";
+import Analytics from "../Analytics/Analytics";
+import Budget from "../Budget/Budget";
+import Live from "../Live/Live";
 import RemoteNotice from "../../components/RemoteNotice";
 import hermeslogo from "../../assets/hermes.png";
 import {
@@ -29,6 +33,10 @@ import {
   KeyRound,
   Timer,
   Download,
+  Lightbulb,
+  Activity,
+  BarChart3,
+  Wallet,
 } from "../../assets/icons";
 import type { LucideIcon } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
@@ -46,6 +54,10 @@ type View =
   | "tools"
   | "schedules"
   | "gateway"
+  | "reasoning"
+  | "analytics"
+  | "budget"
+  | "live"
   | "settings";
 
 const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string }[] = [
@@ -61,6 +73,10 @@ const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string }[] = [
   { view: "tools", icon: Wrench, labelKey: "navigation.tools" },
   { view: "schedules", icon: Timer, labelKey: "navigation.schedules" },
   { view: "gateway", icon: Signal, labelKey: "navigation.gateway" },
+  { view: "reasoning", icon: Lightbulb, labelKey: "navigation.reasoning" },
+  { view: "analytics", icon: BarChart3, labelKey: "navigation.analytics" },
+  { view: "budget", icon: Wallet, labelKey: "navigation.budget" },
+  { view: "live", icon: Activity, labelKey: "navigation.live" },
   { view: "settings", icon: SettingsIcon, labelKey: "navigation.settings" },
 ];
 
@@ -306,6 +322,30 @@ function Layout(): React.JSX.Element {
             <RemoteNotice feature="Gateway" />
           ) : (
             <Gateway profile={activeProfile} />
+          ))}
+        {view === "reasoning" &&
+          (remoteMode ? (
+            <RemoteNotice feature="Reasoning" />
+          ) : (
+            <Reasoning />
+          ))}
+        {view === "analytics" &&
+          (remoteMode ? (
+            <RemoteNotice feature="Analytics" />
+          ) : (
+            <Analytics />
+          ))}
+        {view === "budget" &&
+          (remoteMode ? (
+            <RemoteNotice feature="Budget" />
+          ) : (
+            <Budget />
+          ))}
+        {view === "live" &&
+          (remoteMode ? (
+            <RemoteNotice feature="Live log" />
+          ) : (
+            <Live />
           ))}
         <div
           style={{

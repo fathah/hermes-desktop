@@ -25,6 +25,7 @@ export const PROVIDERS = {
     { value: "nous", label: "constants.nousName" },
     { value: "qwen", label: "Qwen" },
     { value: "minimax", label: "MiniMax" },
+    { value: "ollama", label: "constants.ollamaName" },
     { value: "custom", label: "Local / Custom" },
   ],
 
@@ -37,6 +38,7 @@ export const PROVIDERS = {
     nous: "constants.nousName",
     qwen: "Qwen",
     minimax: "MiniMax",
+    ollama: "constants.ollamaName",
     custom: "Custom",
   } as Record<string, string>,
 
@@ -647,6 +649,66 @@ export const GATEWAY_SECTIONS: SectionDef[] = [
         type: "password",
         hint: "constants.haTokenHint",
       },
+      {
+        key: "TWITTER_BEARER_TOKEN",
+        label: "constants.twitterBearerToken",
+        type: "password",
+        hint: "constants.twitterBearerHint",
+      },
+      {
+        key: "TWITTER_API_KEY",
+        label: "constants.twitterApiKey",
+        type: "password",
+        hint: "constants.twitterApiKeyHint",
+      },
+      {
+        key: "TWITTER_API_SECRET",
+        label: "constants.twitterApiSecret",
+        type: "password",
+        hint: "constants.twitterApiSecretHint",
+      },
+      {
+        key: "TWITTER_ACCESS_TOKEN",
+        label: "constants.twitterAccessToken",
+        type: "password",
+        hint: "constants.twitterAccessTokenHint",
+      },
+      {
+        key: "TWITTER_ACCESS_TOKEN_SECRET",
+        label: "constants.twitterAccessTokenSecret",
+        type: "password",
+        hint: "constants.twitterAccessTokenSecretHint",
+      },
+      {
+        key: "TWITTER_CLIENT_ID",
+        label: "constants.twitterClientId",
+        type: "text",
+        hint: "constants.twitterClientIdHint",
+      },
+      {
+        key: "TWITTER_CLIENT_SECRET",
+        label: "constants.twitterClientSecret",
+        type: "password",
+        hint: "constants.twitterClientSecretHint",
+      },
+      {
+        key: "TWITTER_MENTIONS_ONLY",
+        label: "constants.twitterMentionsOnly",
+        type: "text",
+        hint: "constants.twitterMentionsOnlyHint",
+      },
+      {
+        key: "TWITTER_DM_ENABLED",
+        label: "constants.twitterDmEnabled",
+        type: "text",
+        hint: "constants.twitterDmEnabledHint",
+      },
+      {
+        key: "TWITTER_ALLOWED_USERS",
+        label: "constants.twitterAllowedUsers",
+        type: "text",
+        hint: "constants.twitterAllowedUsersHint",
+      },
     ],
   },
 ];
@@ -764,6 +826,23 @@ export const GATEWAY_PLATFORMS: PlatformDef[] = [
     label: "constants.platformHomeAssistant",
     description: "constants.platformHomeAssistantDesc",
     fields: ["HA_URL", "HA_TOKEN"],
+  },
+  {
+    key: "twitter",
+    label: "constants.platformTwitter",
+    description: "constants.platformTwitterDesc",
+    fields: [
+      "TWITTER_BEARER_TOKEN",
+      "TWITTER_API_KEY",
+      "TWITTER_API_SECRET",
+      "TWITTER_ACCESS_TOKEN",
+      "TWITTER_ACCESS_TOKEN_SECRET",
+      "TWITTER_CLIENT_ID",
+      "TWITTER_CLIENT_SECRET",
+      "TWITTER_MENTIONS_ONLY",
+      "TWITTER_DM_ENABLED",
+      "TWITTER_ALLOWED_USERS",
+    ],
   },
 ];
 

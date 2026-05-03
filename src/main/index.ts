@@ -107,6 +107,19 @@ import {
   triggerCronJob,
 } from "./cronjobs";
 import { getAppLocale, setAppLocale } from "./locale";
+import {
+  listReasoning,
+  reasoningStats,
+  dailyTokens,
+  bySource,
+  budgetByModel,
+  budgetTotals,
+  readLogTail,
+  startLogTail,
+  stopLogTail,
+  listOllamaModels,
+  type LogChannel,
+} from "./insights";
 
 process.on("uncaughtException", (err) => {
   console.error("[MAIN UNCAUGHT]", err);
@@ -667,6 +680,40 @@ function setupIPC(): void {
   // Log viewer
   ipcMain.handle("read-logs", (_event, logFile?: string, lines?: number) =>
     readLogs(logFile, lines),
+  );
+
+  // ── Insights — Reasoning, Analytics, Budget, Live log tail ──────
+  ipcMain.handle(
+    "insights:list-reasoning",
+    (_event, limit?: number, offset?: number) =>
+      listReasoning(limit ?? 100, offset ?? 0),
+  );
+  ipcMain.handle("insights:reasoning-stats", () => reasoningStats());
+  ipcMain.handle("insights:daily-tokens", (_event, days?: number) =>
+    dailyTokens(days ?? 30),
+  );
+  ipcMain.handle("insights:by-source", () => bySource());
+  ipcMain.handle("insights:budget-by-model", (_event, days?: number) =>
+    budgetByModel(days ?? 30),
+  );
+  ipcMain.handle("insights:budget-totals", (_event, days?: number) =>
+    budgetTotals(days ?? 30),
+  );
+  ipcMain.handle(
+    "insights:read-log-tail",
+    (_event, channel: LogChannel, bytes?: number) =>
+      readLogTail(channel, bytes ?? 65536),
+  );
+  ipcMain.handle(
+    "insights:start-log-tail",
+    (event, channel: LogChannel) => startLogTail(event.sender, channel),
+  );
+  ipcMain.handle("insights:stop-log-tail", (_event, key: string) => {
+    stopLogTail(key);
+    return true;
+  });
+  ipcMain.handle("insights:list-ollama-models", (_event, baseUrl?: string) =>
+    listOllamaModels(baseUrl),
   );
 }
 

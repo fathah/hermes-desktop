@@ -429,6 +429,107 @@ interface HermesAPI {
     logFile?: string,
     lines?: number,
   ) => Promise<{ content: string; path: string }>;
+
+  // ── Insights ────────────────────────────────────────────────────
+  listReasoning: (
+    limit?: number,
+    offset?: number,
+  ) => Promise<
+    Array<{
+      id: number;
+      sessionId: string;
+      source: string;
+      model: string | null;
+      timestamp: number;
+      reasoning: string;
+      reasoningTokens: number;
+      preview: string;
+    }>
+  >;
+
+  reasoningStats: () => Promise<{
+    totalEntries: number;
+    totalTokens: number;
+    byModel: Array<{ model: string; entries: number; tokens: number }>;
+  }>;
+
+  dailyTokens: (
+    days?: number,
+  ) => Promise<
+    Array<{
+      day: string;
+      inputTokens: number;
+      outputTokens: number;
+      cacheReadTokens: number;
+      cacheWriteTokens: number;
+      reasoningTokens: number;
+      sessions: number;
+      cost: number;
+    }>
+  >;
+
+  bySource: () => Promise<
+    Array<{
+      source: string;
+      sessions: number;
+      inputTokens: number;
+      outputTokens: number;
+      cost: number;
+    }>
+  >;
+
+  budgetByModel: (
+    days?: number,
+  ) => Promise<
+    Array<{
+      model: string;
+      sessions: number;
+      inputTokens: number;
+      outputTokens: number;
+      cacheReadTokens: number;
+      cacheWriteTokens: number;
+      reasoningTokens: number;
+      cost: number;
+      pricingKnown: boolean;
+    }>
+  >;
+
+  budgetTotals: (
+    days?: number,
+  ) => Promise<{
+    windowDays: number;
+    totalSessions: number;
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    totalCacheReadTokens: number;
+    totalCacheWriteTokens: number;
+    totalReasoningTokens: number;
+    totalCost: number;
+    cacheHitRatio: number;
+  }>;
+
+  readLogTail: (
+    channel: "agent" | "gateway" | "errors",
+    bytes?: number,
+  ) => Promise<string>;
+
+  startLogTail: (
+    channel: "agent" | "gateway" | "errors",
+    onAppend: (chunk: string) => void,
+  ) => Promise<() => void>;
+
+  listOllamaModels: (
+    baseUrl?: string,
+  ) => Promise<
+    Array<{
+      name: string;
+      sizeBytes: number;
+      modified: string | null;
+      family: string | null;
+      quantization: string | null;
+      parameterSize: string | null;
+    }>
+  >;
 }
 
 declare global {

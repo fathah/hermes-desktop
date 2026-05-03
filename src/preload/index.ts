@@ -632,6 +632,123 @@ const hermesAPI = {
     lines?: number,
   ): Promise<{ content: string; path: string }> =>
     ipcRenderer.invoke("read-logs", logFile, lines),
+
+  // ── Insights ────────────────────────────────────────────────────
+  listReasoning: (
+    limit?: number,
+    offset?: number,
+  ): Promise<
+    Array<{
+      id: number;
+      sessionId: string;
+      source: string;
+      model: string | null;
+      timestamp: number;
+      reasoning: string;
+      reasoningTokens: number;
+      preview: string;
+    }>
+  > => ipcRenderer.invoke("insights:list-reasoning", limit, offset),
+
+  reasoningStats: (): Promise<{
+    totalEntries: number;
+    totalTokens: number;
+    byModel: Array<{ model: string; entries: number; tokens: number }>;
+  }> => ipcRenderer.invoke("insights:reasoning-stats"),
+
+  dailyTokens: (
+    days?: number,
+  ): Promise<
+    Array<{
+      day: string;
+      inputTokens: number;
+      outputTokens: number;
+      cacheReadTokens: number;
+      cacheWriteTokens: number;
+      reasoningTokens: number;
+      sessions: number;
+      cost: number;
+    }>
+  > => ipcRenderer.invoke("insights:daily-tokens", days),
+
+  bySource: (): Promise<
+    Array<{
+      source: string;
+      sessions: number;
+      inputTokens: number;
+      outputTokens: number;
+      cost: number;
+    }>
+  > => ipcRenderer.invoke("insights:by-source"),
+
+  budgetByModel: (
+    days?: number,
+  ): Promise<
+    Array<{
+      model: string;
+      sessions: number;
+      inputTokens: number;
+      outputTokens: number;
+      cacheReadTokens: number;
+      cacheWriteTokens: number;
+      reasoningTokens: number;
+      cost: number;
+      pricingKnown: boolean;
+    }>
+  > => ipcRenderer.invoke("insights:budget-by-model", days),
+
+  budgetTotals: (
+    days?: number,
+  ): Promise<{
+    windowDays: number;
+    totalSessions: number;
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    totalCacheReadTokens: number;
+    totalCacheWriteTokens: number;
+    totalReasoningTokens: number;
+    totalCost: number;
+    cacheHitRatio: number;
+  }> => ipcRenderer.invoke("insights:budget-totals", days),
+
+  readLogTail: (
+    channel: "agent" | "gateway" | "errors",
+    bytes?: number,
+  ): Promise<string> =>
+    ipcRenderer.invoke("insights:read-log-tail", channel, bytes),
+
+  startLogTail: (
+    channel: "agent" | "gateway" | "errors",
+    onAppend: (chunk: string) => void,
+  ): Promise<() => void> =>
+    ipcRenderer
+      .invoke("insights:start-log-tail", channel)
+      .then((key: string) => {
+        if (!key) return () => {};
+        const handler = (
+          _e: Electron.IpcRendererEvent,
+          payload: { channel: string; chunk: string },
+        ): void => onAppend(payload.chunk);
+        const eventName = `log-tail:${key}`;
+        ipcRenderer.on(eventName, handler);
+        return () => {
+          ipcRenderer.removeListener(eventName, handler);
+          ipcRenderer.invoke("insights:stop-log-tail", key);
+        };
+      }),
+
+  listOllamaModels: (
+    baseUrl?: string,
+  ): Promise<
+    Array<{
+      name: string;
+      sizeBytes: number;
+      modified: string | null;
+      family: string | null;
+      quantization: string | null;
+      parameterSize: string | null;
+    }>
+  > => ipcRenderer.invoke("insights:list-ollama-models", baseUrl),
 };
 
 if (process.contextIsolated) {

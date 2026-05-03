@@ -11,5 +11,9 @@ export default {
   tools: "Tools",
   schedules: "Schedules",
   gateway: "Gateway",
+  reasoning: "Reasoning",
+  analytics: "Analytics",
+  budget: "Budget",
+  live: "Live log",
   settings: "Settings",
 } as const;
