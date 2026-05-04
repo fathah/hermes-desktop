@@ -1,5 +1,4 @@
 import { contextBridge, ipcRenderer } from "electron";
-import { electronAPI } from "@electron-toolkit/preload";
 
 const hermesAPI = {
   // Installation
@@ -636,14 +635,24 @@ const hermesAPI = {
 
 if (process.contextIsolated) {
   try {
-    contextBridge.exposeInMainWorld("electron", electronAPI);
+    contextBridge.exposeInMainWorld("electron", {
+      process: {
+        versions: process.versions,
+        type: process.type,
+      },
+    });
     contextBridge.exposeInMainWorld("hermesAPI", hermesAPI);
   } catch (error) {
     console.error(error);
   }
 } else {
   // @ts-ignore (define in dts)
-  window.electron = electronAPI;
+  window.electron = {
+    process: {
+      versions: process.versions,
+      type: process.type,
+    },
+  };
   // @ts-ignore (define in dts)
   window.hermesAPI = hermesAPI;
 }
