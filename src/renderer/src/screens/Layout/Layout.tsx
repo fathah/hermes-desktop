@@ -295,12 +295,7 @@ function Layout(): React.JSX.Element {
           ) : (
             <Tools profile={activeProfile} />
           ))}
-        {view === "schedules" &&
-          (remoteMode ? (
-            <RemoteNotice feature="Schedules" />
-          ) : (
-            <Schedules profile={activeProfile} />
-          ))}
+        {view === "schedules" && <Schedules profile={activeProfile} />}
         {view === "gateway" &&
           (remoteMode ? (
             <RemoteNotice feature="Gateway" />

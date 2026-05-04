@@ -4,6 +4,7 @@ import { join } from "path";
 import { execFile } from "child_process";
 import { HERMES_HOME, HERMES_PYTHON, HERMES_SCRIPT } from "./installer";
 import { profileHome } from "./utils";
+import { isRemoteMode, getApiUrl, getRemoteAuthHeader } from "./hermes";
 
 export interface CronJob {
   id: string;
@@ -26,13 +27,91 @@ function jobsFilePath(profile?: string): string {
   return join(profileHome(profile), "cron", "jobs.json");
 }
 
+function normalizeJob(job: Record<string, unknown>): CronJob | null {
+  if (!job.id) return null;
+  const enabled = job.enabled !== false;
+  let state: CronJob["state"] = "active";
+  if (job.state === "paused" || !enabled) state = "paused";
+  else if (job.state === "completed") state = "completed";
+  const schedule = job.schedule as { value?: string } | string | undefined;
+  return {
+    id: String(job.id),
+    name: (job.name as string) || "(unnamed)",
+    schedule:
+      (job.schedule_display as string) ||
+      (typeof schedule === "object" ? schedule?.value : schedule) ||
+      "?",
+    prompt: (job.prompt as string) || "",
+    state,
+    enabled,
+    next_run_at: (job.next_run_at as string) || null,
+    last_run_at: (job.last_run_at as string) || null,
+    last_status: (job.last_status as string) || null,
+    last_error: (job.last_error as string) || null,
+    repeat: (job.repeat as CronJob["repeat"]) || null,
+    deliver: Array.isArray(job.deliver)
+      ? (job.deliver as string[])
+      : job.deliver
+        ? [job.deliver as string]
+        : ["local"],
+    skills:
+      (job.skills as string[]) || (job.skill ? [job.skill as string] : []),
+    script: (job.script as string) || null,
+  };
+}
+
+async function remoteFetch(
+  path: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  const headers: Record<string, string> = {
+    ...getRemoteAuthHeader(),
+    ...((init.headers as Record<string, string>) || {}),
+  };
+  return fetch(`${getApiUrl()}${path}`, { ...init, headers });
+}
+
+async function remoteJsonError(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as { error?: string };
+    return body.error || `HTTP ${res.status}`;
+  } catch {
+    return `HTTP ${res.status}`;
+  }
+}
+
 /**
  * Read cron jobs from the jobs.json file (async to avoid blocking the main process).
+ * In remote mode, fetches from the Hermes API server's /api/jobs endpoint instead.
  */
 export async function listCronJobs(
   includeDisabled = true,
   profile?: string,
 ): Promise<CronJob[]> {
+  if (isRemoteMode()) {
+    try {
+      const qs = includeDisabled ? "?include_disabled=true" : "";
+      const res = await remoteFetch(`/api/jobs${qs}`);
+      if (!res.ok) {
+        console.error("[CRON] remote list failed:", await remoteJsonError(res));
+        return [];
+      }
+      const body = (await res.json()) as { jobs?: Record<string, unknown>[] };
+      const raw = body.jobs || [];
+      const jobs: CronJob[] = [];
+      for (const job of raw) {
+        const normalized = normalizeJob(job);
+        if (!normalized) continue;
+        if (!includeDisabled && !normalized.enabled) continue;
+        jobs.push(normalized);
+      }
+      return jobs;
+    } catch (err) {
+      console.error("[CRON] remote list error:", err);
+      return [];
+    }
+  }
+
   const filePath = jobsFilePath(profile);
   if (!existsSync(filePath)) return [];
 
@@ -43,35 +122,10 @@ export async function listCronJobs(
     const jobs: CronJob[] = [];
 
     for (const job of raw) {
-      if (!job.id) continue; // skip malformed entries
-
-      const enabled = job.enabled !== false;
-      if (!includeDisabled && !enabled) continue;
-
-      let state: CronJob["state"] = "active";
-      if (job.state === "paused" || !enabled) state = "paused";
-      else if (job.state === "completed") state = "completed";
-
-      jobs.push({
-        id: job.id,
-        name: job.name || "(unnamed)",
-        schedule: job.schedule_display || job.schedule?.value || "?",
-        prompt: job.prompt || "",
-        state,
-        enabled,
-        next_run_at: job.next_run_at || null,
-        last_run_at: job.last_run_at || null,
-        last_status: job.last_status || null,
-        last_error: job.last_error || null,
-        repeat: job.repeat || null,
-        deliver: Array.isArray(job.deliver)
-          ? job.deliver
-          : job.deliver
-            ? [job.deliver]
-            : ["local"],
-        skills: job.skills || (job.skill ? [job.skill] : []),
-        script: job.script || null,
-      });
+      const normalized = normalizeJob(job);
+      if (!normalized) continue;
+      if (!includeDisabled && !normalized.enabled) continue;
+      jobs.push(normalized);
     }
 
     return jobs;
@@ -121,6 +175,27 @@ export async function createCronJob(
   deliver?: string,
   profile?: string,
 ): Promise<{ success: boolean; error?: string }> {
+  if (isRemoteMode()) {
+    try {
+      const res = await remoteFetch("/api/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name || "",
+          schedule,
+          prompt: prompt || "",
+          deliver: deliver || "local",
+        }),
+      });
+      if (!res.ok) {
+        return { success: false, error: await remoteJsonError(res) };
+      }
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: (err as Error).message };
+    }
+  }
+
   // Use -- to prevent prompt from being parsed as a flag
   const args = ["create", schedule];
   if (name) args.push("--name", name);
@@ -139,8 +214,39 @@ export async function removeCronJob(
   profile?: string,
 ): Promise<{ success: boolean; error?: string }> {
   if (!jobId) return { success: false, error: "Missing job ID" };
+  if (isRemoteMode()) {
+    try {
+      const res = await remoteFetch(`/api/jobs/${encodeURIComponent(jobId)}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        return { success: false, error: await remoteJsonError(res) };
+      }
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: (err as Error).message };
+    }
+  }
   const result = await runCronCommand(["remove", jobId], profile);
   return { success: result.success, error: result.error };
+}
+
+async function remoteJobAction(
+  jobId: string,
+  action: "pause" | "resume" | "run",
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await remoteFetch(
+      `/api/jobs/${encodeURIComponent(jobId)}/${action}`,
+      { method: "POST" },
+    );
+    if (!res.ok) {
+      return { success: false, error: await remoteJsonError(res) };
+    }
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
+  }
 }
 
 export async function pauseCronJob(
@@ -148,6 +254,7 @@ export async function pauseCronJob(
   profile?: string,
 ): Promise<{ success: boolean; error?: string }> {
   if (!jobId) return { success: false, error: "Missing job ID" };
+  if (isRemoteMode()) return remoteJobAction(jobId, "pause");
   const result = await runCronCommand(["pause", jobId], profile);
   return { success: result.success, error: result.error };
 }
@@ -157,6 +264,7 @@ export async function resumeCronJob(
   profile?: string,
 ): Promise<{ success: boolean; error?: string }> {
   if (!jobId) return { success: false, error: "Missing job ID" };
+  if (isRemoteMode()) return remoteJobAction(jobId, "resume");
   const result = await runCronCommand(["resume", jobId], profile);
   return { success: result.success, error: result.error };
 }
@@ -166,6 +274,7 @@ export async function triggerCronJob(
   profile?: string,
 ): Promise<{ success: boolean; error?: string }> {
   if (!jobId) return { success: false, error: "Missing job ID" };
+  if (isRemoteMode()) return remoteJobAction(jobId, "run");
   const result = await runCronCommand(["run", jobId], profile);
   return { success: result.success, error: result.error };
 }

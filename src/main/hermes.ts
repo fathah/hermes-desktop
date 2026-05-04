@@ -16,7 +16,7 @@ import { stripAnsi } from "./utils";
 
 const LOCAL_API_URL = "http://127.0.0.1:8642";
 
-function getApiUrl(): string {
+export function getApiUrl(): string {
   const conn = getConnectionConfig();
   if (conn.mode === "remote" && conn.remoteUrl) {
     return conn.remoteUrl.replace(/\/+$/, "");
@@ -28,7 +28,7 @@ export function isRemoteMode(): boolean {
   return getConnectionConfig().mode === "remote";
 }
 
-function getRemoteAuthHeader(): Record<string, string> {
+export function getRemoteAuthHeader(): Record<string, string> {
   const conn = getConnectionConfig();
   if (conn.mode === "remote" && conn.apiKey) {
     return { Authorization: `Bearer ${conn.apiKey}` };
