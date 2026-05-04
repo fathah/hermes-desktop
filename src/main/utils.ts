@@ -1,5 +1,12 @@
 import { join, dirname } from "path";
-import { existsSync, mkdirSync, writeFileSync } from "fs";
+import {
+  existsSync,
+  mkdirSync,
+  writeFileSync,
+  renameSync,
+  unlinkSync,
+} from "fs";
+import { randomUUID } from "crypto";
 import { HERMES_HOME } from "./installer";
 
 /**
@@ -36,9 +43,24 @@ export function escapeRegex(str: string): string {
 /**
  * Write a file, creating parent directories if they don't exist.
  * Prevents ENOENT crashes when ~/.hermes has been deleted or doesn't exist yet.
+ * [SECURITY FIX] Uses write-to-temp + rename for atomic writes, reducing
+ * the risk of data corruption from concurrent writes or crashes mid-write.
  */
 export function safeWriteFile(filePath: string, content: string): void {
   const dir = dirname(filePath);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  writeFileSync(filePath, content, "utf-8");
+  const tmpPath = join(dir, `.tmp-${randomUUID()}`);
+  try {
+    writeFileSync(tmpPath, content, "utf-8");
+    renameSync(tmpPath, filePath); // atomic on same filesystem
+  } catch {
+    // Clean up temp file if rename fails (e.g. cross-device link)
+    try {
+      if (existsSync(tmpPath)) unlinkSync(tmpPath);
+    } catch {
+      /* best-effort cleanup */
+    }
+    // Fallback to direct write
+    writeFileSync(filePath, content, "utf-8");
+  }
 }

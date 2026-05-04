@@ -122,6 +122,16 @@ async function showPasswordDialog(
   prompt: string,
 ): Promise<string | null> {
   return new Promise((resolve) => {
+    const channel = `askpass-result-${randomBytes(8).toString("hex")}`;
+
+    // Build the HTML template before creating the window so we can inject
+    // the channel name securely as a data attribute instead of exposing it
+    // via require("electron") with nodeIntegration.
+    const html = buildDialogHtml(prompt);
+
+    // [SECURITY FIX] Use contextIsolation + sandbox instead of nodeIntegration.
+    // The channel name is passed to the preload via the URL hash fragment,
+    // so the renderer HTML never has direct access to it or to ipcRenderer.
     const win = new BrowserWindow({
       width: 460,
       height: 240,
@@ -133,12 +143,13 @@ async function showPasswordDialog(
       fullscreenable: false,
       title: "Administrator Password Required",
       webPreferences: {
-        nodeIntegration: true,
-        contextIsolation: false,
+        sandbox: true,
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: join(__dirname, "../preload/askpass-preload.js"),
       },
     });
 
-    const channel = `askpass-result-${randomBytes(8).toString("hex")}`;
     let settled = false;
     const finish = (value: string | null): void => {
       if (settled) return;
@@ -155,21 +166,24 @@ async function showPasswordDialog(
     ipcMain.on(channel, (_e, value: string | null) => finish(value));
     win.on("closed", () => finish(null));
 
-    const html = buildDialogHtml(prompt, channel);
+    // Pass channel via URL hash so the preload can read it safely
     win.loadURL(
       "data:text/html;charset=UTF-8;base64," +
-        Buffer.from(html).toString("base64"),
+        Buffer.from(html).toString("base64") +
+        `#askpass-channel-${channel}`,
     );
   });
 }
 
-function buildDialogHtml(prompt: string, channel: string): string {
+function buildDialogHtml(prompt: string): string {
   const safePrompt = prompt
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
-  const safeChannel = channel.replace(/[^a-zA-Z0-9-]/g, "");
+  // [SECURITY FIX] No longer inject require("electron") or the channel name
+  // into the HTML. The preload script reads the channel from additionalData
+  // and exposes a safe API via contextBridge.
   return `<!doctype html>
 <html><head><meta charset="utf-8"><style>
   html, body { margin:0; padding:0; height:100%; }
@@ -192,9 +206,9 @@ function buildDialogHtml(prompt: string, channel: string): string {
   <button id="ok" class="primary">OK</button>
 </div>
 <script>
-  const { ipcRenderer } = require("electron");
+  // [SECURITY FIX] Use contextBridge-exposed API instead of require("electron")
   const pw = document.getElementById("pw");
-  const submit = (val) => ipcRenderer.send(${JSON.stringify(safeChannel)}, val);
+  const submit = (val) => window.askpassAPI.submit(val);
   document.getElementById("ok").onclick = () => submit(pw.value);
   document.getElementById("cancel").onclick = () => submit(null);
   pw.addEventListener("keydown", (e) => {

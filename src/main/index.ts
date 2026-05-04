@@ -7,6 +7,7 @@ import {
   Notification,
 } from "electron";
 import { join } from "path";
+import { URL as NodeURL } from "url";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import type { AppUpdater } from "electron-updater";
 import icon from "../../resources/icon.png?asset";
@@ -108,6 +109,30 @@ import {
 } from "./cronjobs";
 import { getAppLocale, setAppLocale } from "./locale";
 
+/**
+ * [SECURITY FIX] Validate URLs before opening them externally.
+ * Only http:, https:, and mailto: protocols are allowed.
+ * Prevents abuse via file://, javascript:, or custom protocol handlers.
+ */
+const ALLOWED_EXTERNAL_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
+
+function safeOpenExternal(urlStr: string): boolean {
+  try {
+    const url = new NodeURL(urlStr);
+    if (!ALLOWED_EXTERNAL_PROTOCOLS.has(url.protocol)) {
+      console.warn(
+        `[SECURITY] Blocked openExternal for disallowed protocol: ${url.protocol} (${urlStr})`,
+      );
+      return false;
+    }
+    shell.openExternal(urlStr);
+    return true;
+  } catch {
+    console.warn(`[SECURITY] Blocked invalid URL for openExternal: ${urlStr}`);
+    return false;
+  }
+}
+
 process.on("uncaughtException", (err) => {
   console.error("[MAIN UNCAUGHT]", err);
 });
@@ -134,8 +159,12 @@ function createWindow(): void {
     ...(process.platform === "linux" ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
-      sandbox: false,
-      webviewTag: true,
+      sandbox: true,
+      // [SECURITY FIX] webviewTag disabled — no validation was in place.
+      // If webviews are needed in the future, add a strict
+      // will-attach-webview handler that forces nodeIntegration:false,
+      // contextIsolation:true, sandbox:true, and allowlist origins.
+      webviewTag: false,
     },
   });
 
@@ -168,7 +197,10 @@ function createWindow(): void {
   );
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url);
+    // [SECURITY FIX] Validate URL protocol before opening externally
+    if (safeOpenExternal(details.url)) {
+      return { action: "deny" };
+    }
     return { action: "deny" };
   });
 
@@ -638,7 +670,8 @@ function setupIPC(): void {
 
   // Shell
   ipcMain.handle("open-external", (_event, url: string) => {
-    shell.openExternal(url);
+    // [SECURITY FIX] Validate URL protocol before opening
+    safeOpenExternal(url);
   });
 
   // Backup / Import

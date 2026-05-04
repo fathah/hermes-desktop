@@ -1,6 +1,6 @@
 import { execFileSync } from "child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "fs";
-import { join } from "path";
+import { join, resolve, relative } from "path";
 import { homedir } from "os";
 import {
   HERMES_HOME,
@@ -118,9 +118,25 @@ export function listInstalledSkills(profile?: string): InstalledSkill[] {
 
 /**
  * Get the full content of a SKILL.md for the detail view.
+ * [SECURITY FIX] Validate that skillPath stays within the skills directory
+ * to prevent path traversal via IPC (e.g. reading arbitrary files with
+ * skillPath="../../etc").
  */
 export function getSkillContent(skillPath: string): string {
-  const skillFile = join(skillPath, "SKILL.md");
+  // Resolve to absolute and verify it stays under the skills root
+  const skillsRoot = resolve(join(HERMES_HOME, "skills"));
+  const absoluteSkillPath = resolve(skillPath);
+  const rel = relative(skillsRoot, absoluteSkillPath);
+
+  // If the relative path starts with ".." or is absolute, it escapes the skills dir
+  if (rel.startsWith("..") || resolve(rel) === rel) {
+    console.warn(
+      `[SECURITY] Blocked skill path traversal attempt: ${skillPath} resolves outside ${skillsRoot}`,
+    );
+    return "";
+  }
+
+  const skillFile = join(absoluteSkillPath, "SKILL.md");
   if (!existsSync(skillFile)) return "";
 
   try {
