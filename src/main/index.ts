@@ -29,11 +29,12 @@ import {
   InstallProgress,
 } from "./installer";
 import {
+  isRemoteMode,
+  isRemoteOnlyMode,
   sendMessage,
   startGateway,
   stopGateway,
   isGatewayRunning,
-  isRemoteMode,
   testRemoteConnection,
   stopHealthPolling,
   restartGateway,
@@ -114,6 +115,36 @@ import {
   triggerCronJob,
 } from "./cronjobs";
 import { getAppLocale, setAppLocale } from "./locale";
+import {
+  sshListInstalledSkills,
+  sshGetSkillContent,
+  sshInstallSkill,
+  sshUninstallSkill,
+  sshListBundledSkills,
+  sshReadMemory,
+  sshAddMemoryEntry,
+  sshUpdateMemoryEntry,
+  sshRemoveMemoryEntry,
+  sshWriteUserProfile,
+  sshReadSoul,
+  sshWriteSoul,
+  sshResetSoul,
+  sshGetToolsets,
+  sshSetToolsetEnabled,
+  sshReadEnv,
+  sshSetEnvValue,
+  sshGetConfigValue,
+  sshSetConfigValue,
+  sshListSessions,
+  sshGetSessionMessages,
+  sshSearchSessions,
+  sshListProfiles,
+  sshCreateProfile,
+  sshDeleteProfile,
+  sshGatewayStatus,
+  sshStartGateway,
+  sshStopGateway,
+} from "./ssh-remote";
 
 process.on("uncaughtException", (err) => {
   console.error("[MAIN UNCAUGHT]", err);
@@ -242,11 +273,20 @@ function setupIPC(): void {
     setAppLocale(locale),
   );
 
-  ipcMain.handle("get-env", (_event, profile?: string) => readEnv(profile));
+  ipcMain.handle("get-env", (_event, profile?: string) => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" && conn.ssh) return sshReadEnv(conn.ssh, profile);
+    return readEnv(profile);
+  });
 
   ipcMain.handle(
     "set-env",
     (_event, key: string, value: string, profile?: string) => {
+      const conn = getConnectionConfig();
+      if (conn.mode === "ssh" && conn.ssh) {
+        sshSetEnvValue(conn.ssh, key, value, profile);
+        return true;
+      }
       setEnvValue(key, value, profile);
       // Restart gateway so it picks up the new API key
       if (
@@ -260,13 +300,20 @@ function setupIPC(): void {
     },
   );
 
-  ipcMain.handle("get-config", (_event, key: string, profile?: string) =>
-    getConfigValue(key, profile),
-  );
+  ipcMain.handle("get-config", (_event, key: string, profile?: string) => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" && conn.ssh) return sshGetConfigValue(conn.ssh, key, profile);
+    return getConfigValue(key, profile);
+  });
 
   ipcMain.handle(
     "set-config",
     (_event, key: string, value: string, profile?: string) => {
+      const conn = getConnectionConfig();
+      if (conn.mode === "ssh" && conn.ssh) {
+        sshSetConfigValue(conn.ssh, key, value, profile);
+        return true;
+      }
       setConfigValue(key, value, profile);
       return true;
     },
@@ -308,6 +355,7 @@ function setupIPC(): void {
 
   // Connection mode (local / remote / ssh)
   ipcMain.handle("is-remote-mode", () => isRemoteMode());
+  ipcMain.handle("is-remote-only-mode", () => isRemoteOnlyMode());
   ipcMain.handle("get-connection-config", () => getConnectionConfig());
   ipcMain.handle("is-ssh-tunnel-active", () => isSshTunnelActive());
 
@@ -463,12 +511,22 @@ function setupIPC(): void {
   });
 
   // Gateway
-  ipcMain.handle("start-gateway", () => startGateway());
+  ipcMain.handle("start-gateway", () => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" && conn.ssh) { sshStartGateway(conn.ssh); return true; }
+    return startGateway();
+  });
   ipcMain.handle("stop-gateway", () => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" && conn.ssh) { sshStopGateway(conn.ssh); return true; }
     stopGateway(true);
     return true;
   });
-  ipcMain.handle("gateway-status", () => isGatewayRunning());
+  ipcMain.handle("gateway-status", () => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" && conn.ssh) return sshGatewayStatus(conn.ssh);
+    return isGatewayRunning();
+  });
 
   // Platform toggles (config.yaml platforms section)
   ipcMain.handle("get-platform-enabled", (_event, profile?: string) =>
@@ -488,87 +546,138 @@ function setupIPC(): void {
 
   // Sessions
   ipcMain.handle("list-sessions", (_event, limit?: number, offset?: number) => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" && conn.ssh) return sshListSessions(conn.ssh, limit, offset);
     return listSessions(limit, offset);
   });
 
   ipcMain.handle("get-session-messages", (_event, sessionId: string) => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" && conn.ssh) return sshGetSessionMessages(conn.ssh, sessionId);
     return getSessionMessages(sessionId);
   });
 
   // Profiles
-  ipcMain.handle("list-profiles", async () => listProfiles());
-  ipcMain.handle("create-profile", (_event, name: string, clone: boolean) =>
-    createProfile(name, clone),
-  );
-  ipcMain.handle("delete-profile", (_event, name: string) =>
-    deleteProfile(name),
-  );
+  ipcMain.handle("list-profiles", async () => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" && conn.ssh) return sshListProfiles(conn.ssh);
+    return listProfiles();
+  });
+  ipcMain.handle("create-profile", (_event, name: string, clone: boolean) => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" && conn.ssh) return sshCreateProfile(conn.ssh, name, clone);
+    return createProfile(name, clone);
+  });
+  ipcMain.handle("delete-profile", (_event, name: string) => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" && conn.ssh) return sshDeleteProfile(conn.ssh, name);
+    return deleteProfile(name);
+  });
   ipcMain.handle("set-active-profile", (_event, name: string) => {
-    setActiveProfile(name);
+    if (getConnectionConfig().mode !== "ssh") setActiveProfile(name);
     return true;
   });
 
   // Memory
-  ipcMain.handle("read-memory", (_event, profile?: string) =>
-    readMemory(profile),
-  );
+  ipcMain.handle("read-memory", (_event, profile?: string) => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" && conn.ssh) return sshReadMemory(conn.ssh, profile);
+    return readMemory(profile);
+  });
   ipcMain.handle(
     "add-memory-entry",
-    (_event, content: string, profile?: string) =>
-      addMemoryEntry(content, profile),
+    (_event, content: string, profile?: string) => {
+      const conn = getConnectionConfig();
+      if (conn.mode === "ssh" && conn.ssh) return sshAddMemoryEntry(conn.ssh, content, profile);
+      return addMemoryEntry(content, profile);
+    },
   );
   ipcMain.handle(
     "update-memory-entry",
-    (_event, index: number, content: string, profile?: string) =>
-      updateMemoryEntry(index, content, profile),
+    (_event, index: number, content: string, profile?: string) => {
+      const conn = getConnectionConfig();
+      if (conn.mode === "ssh" && conn.ssh) return sshUpdateMemoryEntry(conn.ssh, index, content, profile);
+      return updateMemoryEntry(index, content, profile);
+    },
   );
   ipcMain.handle(
     "remove-memory-entry",
-    (_event, index: number, profile?: string) =>
-      removeMemoryEntry(index, profile),
+    (_event, index: number, profile?: string) => {
+      const conn = getConnectionConfig();
+      if (conn.mode === "ssh" && conn.ssh) return sshRemoveMemoryEntry(conn.ssh, index, profile);
+      return removeMemoryEntry(index, profile);
+    },
   );
   ipcMain.handle(
     "write-user-profile",
-    (_event, content: string, profile?: string) =>
-      writeUserProfile(content, profile),
+    (_event, content: string, profile?: string) => {
+      const conn = getConnectionConfig();
+      if (conn.mode === "ssh" && conn.ssh) return sshWriteUserProfile(conn.ssh, content, profile);
+      return writeUserProfile(content, profile);
+    },
   );
 
   // Soul
-  ipcMain.handle("read-soul", (_event, profile?: string) => readSoul(profile));
+  ipcMain.handle("read-soul", (_event, profile?: string) => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" && conn.ssh) return sshReadSoul(conn.ssh, profile);
+    return readSoul(profile);
+  });
   ipcMain.handle("write-soul", (_event, content: string, profile?: string) => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" && conn.ssh) return sshWriteSoul(conn.ssh, content, profile);
     return writeSoul(content, profile);
   });
-  ipcMain.handle("reset-soul", (_event, profile?: string) =>
-    resetSoul(profile),
-  );
+  ipcMain.handle("reset-soul", (_event, profile?: string) => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" && conn.ssh) return sshResetSoul(conn.ssh, profile);
+    return resetSoul(profile);
+  });
 
   // Tools
-  ipcMain.handle("get-toolsets", (_event, profile?: string) =>
-    getToolsets(profile),
-  );
+  ipcMain.handle("get-toolsets", (_event, profile?: string) => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" && conn.ssh) return sshGetToolsets(conn.ssh, profile);
+    return getToolsets(profile);
+  });
   ipcMain.handle(
     "set-toolset-enabled",
     (_event, key: string, enabled: boolean, profile?: string) => {
+      const conn = getConnectionConfig();
+      if (conn.mode === "ssh" && conn.ssh) return sshSetToolsetEnabled(conn.ssh, key, enabled, profile);
       return setToolsetEnabled(key, enabled, profile);
     },
   );
 
   // Skills
-  ipcMain.handle("list-installed-skills", (_event, profile?: string) =>
-    listInstalledSkills(profile),
-  );
-  ipcMain.handle("list-bundled-skills", () => listBundledSkills());
-  ipcMain.handle("get-skill-content", (_event, skillPath: string) =>
-    getSkillContent(skillPath),
-  );
+  ipcMain.handle("list-installed-skills", (_event, profile?: string) => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" && conn.ssh) return sshListInstalledSkills(conn.ssh);
+    return listInstalledSkills(profile);
+  });
+  ipcMain.handle("list-bundled-skills", () => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" && conn.ssh) return sshListBundledSkills(conn.ssh);
+    return listBundledSkills();
+  });
+  ipcMain.handle("get-skill-content", (_event, skillPath: string) => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" && conn.ssh) return sshGetSkillContent(conn.ssh, skillPath);
+    return getSkillContent(skillPath);
+  });
   ipcMain.handle(
     "install-skill",
-    (_event, identifier: string, profile?: string) =>
-      installSkill(identifier, profile),
+    (_event, identifier: string, _profile?: string) => {
+      const conn = getConnectionConfig();
+      if (conn.mode === "ssh" && conn.ssh) return sshInstallSkill(conn.ssh, identifier);
+      return installSkill(identifier, _profile);
+    },
   );
-  ipcMain.handle("uninstall-skill", (_event, name: string, profile?: string) =>
-    uninstallSkill(name, profile),
-  );
+  ipcMain.handle("uninstall-skill", (_event, name: string, _profile?: string) => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" && conn.ssh) return sshUninstallSkill(conn.ssh, name);
+    return uninstallSkill(name, _profile);
+  });
 
   // Session cache (fast local cache with generated titles)
   ipcMain.handle(
@@ -584,9 +693,11 @@ function setupIPC(): void {
   );
 
   // Session search
-  ipcMain.handle("search-sessions", (_event, query: string, limit?: number) =>
-    searchSessions(query, limit),
-  );
+  ipcMain.handle("search-sessions", (_event, query: string, limit?: number) => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" && conn.ssh) return sshSearchSessions(conn.ssh, query, limit);
+    return searchSessions(query, limit);
+  });
 
   // Credential Pool
   ipcMain.handle("get-credential-pool", () => getCredentialPool());

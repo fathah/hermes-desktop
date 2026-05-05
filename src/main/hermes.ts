@@ -33,6 +33,11 @@ export function isRemoteMode(): boolean {
   return mode === "remote" || mode === "ssh";
 }
 
+/** True only for pure remote HTTP — SSH tunnel has full local access via SSH exec */
+export function isRemoteOnlyMode(): boolean {
+  return getConnectionConfig().mode === "remote";
+}
+
 export function getRemoteAuthHeader(): Record<string, string> {
   const conn = getConnectionConfig();
   // SSH tunnel is localhost — no auth header needed

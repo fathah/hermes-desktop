@@ -55,6 +55,7 @@ interface HermesAPI {
 
   // Connection mode (local / remote / ssh)
   isRemoteMode: () => Promise<boolean>;
+  isRemoteOnlyMode: () => Promise<boolean>;
   getConnectionConfig: () => Promise<{
     mode: "local" | "remote" | "ssh";
     remoteUrl: string;
