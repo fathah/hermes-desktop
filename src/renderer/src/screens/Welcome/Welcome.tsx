@@ -34,10 +34,10 @@ function Welcome({
 
   // SSH state
   const [sshHost, setSshHost] = useState("");
-  const [sshPort, setSshPort] = useState("22");
+  const [sshPort, setSshPort] = useState("");
   const [sshUser, setSshUser] = useState("");
   const [sshKeyPath, setSshKeyPath] = useState("");
-  const [sshRemotePort, setSshRemotePort] = useState("8642");
+  const [sshRemotePort, setSshRemotePort] = useState("");
   const [sshError, setSshError] = useState<string | null>(null);
   const [sshTesting, setSshTesting] = useState(false);
 
