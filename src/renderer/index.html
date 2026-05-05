@@ -6,7 +6,7 @@
     <meta
       http-equiv="Content-Security-Policy"
       content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' http://127.0.0.1:8642 https://127.0.0.1:8642 ws://127.0.0.1:8642 wss://127.0.0.1:8642; font-src 'self'; frame-src 'self' http://localhost:* http://127.0.0.1:*; object-src 'none'; worker-src 'self'; base-uri 'self'; form-action 'none'"
-    />
+    /><!-- frame-src allows localhost for the Office (Claw3D) webview -->
   </head>
   <body>
     <div id="root"></div>

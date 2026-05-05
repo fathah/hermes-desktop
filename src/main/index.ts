@@ -211,9 +211,7 @@ function createWindow(): void {
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
     // [SECURITY FIX] Validate URL protocol before opening externally
-    if (safeOpenExternal(details.url)) {
-      return { action: "deny" };
-    }
+    safeOpenExternal(details.url);
     return { action: "deny" };
   });
 

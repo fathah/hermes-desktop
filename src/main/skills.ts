@@ -1,6 +1,6 @@
 import { execFileSync } from "child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "fs";
-import { join, resolve, relative } from "path";
+import { join, resolve, relative, isAbsolute } from "path";
 import { homedir } from "os";
 import {
   HERMES_HOME,
@@ -129,7 +129,7 @@ export function getSkillContent(skillPath: string): string {
   const rel = relative(skillsRoot, absoluteSkillPath);
 
   // If the relative path starts with ".." or is absolute, it escapes the skills dir
-  if (rel.startsWith("..") || resolve(rel) === rel) {
+  if (rel.startsWith("..") || isAbsolute(rel)) {
     console.warn(
       `[SECURITY] Blocked skill path traversal attempt: ${skillPath} resolves outside ${skillsRoot}`,
     );

@@ -639,6 +639,7 @@ if (process.contextIsolated) {
       process: {
         versions: process.versions,
         type: process.type,
+        platform: process.platform,
       },
     });
     contextBridge.exposeInMainWorld("hermesAPI", hermesAPI);
@@ -651,6 +652,7 @@ if (process.contextIsolated) {
     process: {
       versions: process.versions,
       type: process.type,
+      platform: process.platform,
     },
   };
   // @ts-ignore (define in dts)
