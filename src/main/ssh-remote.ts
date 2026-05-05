@@ -381,8 +381,8 @@ function localizeToolDefs(enabled: boolean | ((key: string) => boolean)): Toolse
 }
 
 function remoteConfigPath(profile?: string): string {
-  if (profile && profile !== "default") return `~/.hermes/profiles/${profile}/config.yaml`;
-  return "~/.hermes/config.yaml";
+  if (profile && profile !== "default") return `$HOME/.hermes/profiles/${profile}/config.yaml`;
+  return `$HOME/.hermes/config.yaml`;
 }
 
 export function sshGetToolsets(config: SshConfig, profile?: string): ToolsetInfo[] {
@@ -738,4 +738,124 @@ export function sshStopGateway(config: SshConfig): void {
   } catch {
     // best effort
   }
+}
+
+// ── Remote API key (for chat auth through SSH tunnel) ─────────────────────────
+
+export function sshReadRemoteApiKey(config: SshConfig): string {
+  try {
+    const env = sshReadEnv(config);
+    return env["API_SERVER_KEY"] || "";
+  } catch {
+    return "";
+  }
+}
+
+// ── Versions ──────────────────────────────────────────────────────────────────
+
+export function sshGetHermesVersion(config: SshConfig): string | null {
+  try {
+    const out = sshExec(config, `hermes --version 2>/dev/null || hermes version 2>/dev/null || echo ""`);
+    return out.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+// ── Logs ──────────────────────────────────────────────────────────────────────
+
+export function sshReadLogs(
+  config: SshConfig,
+  logFile?: string,
+  lines = 300,
+): { log: string; error?: string } {
+  try {
+    const file = logFile
+      ? `$HOME/.hermes/logs/${logFile}`
+      : `$HOME/.hermes/logs/gateway.log`;
+    const out = sshExec(config, `tail -n ${lines} "${file}" 2>/dev/null || echo ""`);
+    return { log: out };
+  } catch (err) {
+    return { log: "", error: (err as Error).message };
+  }
+}
+
+// ── Platform toggles (Gateway page) ──────────────────────────────────────────
+
+const SSH_SUPPORTED_PLATFORMS = ["telegram", "discord", "slack", "whatsapp", "signal"];
+
+export function sshGetPlatformEnabled(
+  config: SshConfig,
+  profile?: string,
+): Record<string, boolean> {
+  const content = sshReadFile(config, remoteConfigPath(profile));
+  const result: Record<string, boolean> = {};
+  for (const platform of SSH_SUPPORTED_PLATFORMS) {
+    const re = new RegExp(
+      `^[ \\t]+${platform}:\\s*\\n[ \\t]+enabled:\\s*(true|false)`,
+      "m",
+    );
+    const match = content.match(re);
+    result[platform] = match ? match[1] === "true" : false;
+  }
+  return result;
+}
+
+export function sshSetPlatformEnabled(
+  config: SshConfig,
+  platform: string,
+  enabled: boolean,
+  profile?: string,
+): void {
+  if (!SSH_SUPPORTED_PLATFORMS.includes(platform)) return;
+  const configPath = remoteConfigPath(profile);
+  const content = sshReadFile(config, configPath);
+  if (!content) return;
+
+  let updated = content;
+  const existingRe = new RegExp(
+    `^([ \\t]+${platform}:\\s*\\n[ \\t]+enabled:\\s*)(?:true|false)`,
+    "m",
+  );
+
+  if (existingRe.test(updated)) {
+    updated = updated.replace(existingRe, `$1${enabled}`);
+  } else {
+    const platformsIdx = updated.indexOf("\nplatforms:");
+    if (platformsIdx === -1) {
+      updated += `\nplatforms:\n  ${platform}:\n    enabled: ${enabled}\n`;
+    } else {
+      const after = updated.substring(platformsIdx + 1);
+      const lines = after.split("\n");
+      let insertOffset = platformsIdx + 1 + lines[0].length + 1;
+      for (let i = 1; i < lines.length; i++) {
+        if (lines[i].trim() === "" || /^\s/.test(lines[i])) insertOffset += lines[i].length + 1;
+        else break;
+      }
+      const entry = `  ${platform}:\n    enabled: ${enabled}\n`;
+      updated = updated.substring(0, insertOffset) + entry + updated.substring(insertOffset);
+    }
+  }
+
+  sshWriteFile(config, configPath, updated);
+}
+
+// ── Cached sessions (Sessions screen uses listCachedSessions) ─────────────────
+
+import type { CachedSession } from "./session-cache";
+
+export function sshListCachedSessions(
+  config: SshConfig,
+  limit = 50,
+  _offset = 0,
+): CachedSession[] {
+  const sessions = sshListSessions(config, limit, 0);
+  return sessions.map((s) => ({
+    id: s.id,
+    title: s.title || s.id,
+    startedAt: s.startedAt,
+    source: s.source,
+    messageCount: s.messageCount,
+    model: s.model,
+  }));
 }

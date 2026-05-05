@@ -38,10 +38,19 @@ export function isRemoteOnlyMode(): boolean {
   return getConnectionConfig().mode === "remote";
 }
 
+// Cached API key read from the remote .env when SSH tunnel starts
+let _sshRemoteApiKey = "";
+
+export function setSshRemoteApiKey(key: string): void {
+  _sshRemoteApiKey = key;
+}
+
 export function getRemoteAuthHeader(): Record<string, string> {
   const conn = getConnectionConfig();
-  // SSH tunnel is localhost — no auth header needed
-  if (conn.mode === "ssh") return {};
+  if (conn.mode === "ssh") {
+    if (_sshRemoteApiKey) return { Authorization: `Bearer ${_sshRemoteApiKey}` };
+    return {};
+  }
   if (conn.mode === "remote" && conn.apiKey) {
     return { Authorization: `Bearer ${conn.apiKey}` };
   }

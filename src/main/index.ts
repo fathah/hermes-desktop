@@ -39,6 +39,7 @@ import {
   stopHealthPolling,
   restartGateway,
   ensureSshTunnelIfNeeded,
+  setSshRemoteApiKey,
 } from "./hermes";
 import {
   startSshTunnel,
@@ -144,6 +145,12 @@ import {
   sshGatewayStatus,
   sshStartGateway,
   sshStopGateway,
+  sshReadRemoteApiKey,
+  sshGetHermesVersion,
+  sshReadLogs,
+  sshGetPlatformEnabled,
+  sshSetPlatformEnabled,
+  sshListCachedSessions,
 } from "./ssh-remote";
 
 process.on("uncaughtException", (err) => {
@@ -237,8 +244,14 @@ function setupIPC(): void {
   });
 
   // Hermes engine info
-  ipcMain.handle("get-hermes-version", async () => getHermesVersion());
+  ipcMain.handle("get-hermes-version", async () => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" && conn.ssh) return sshGetHermesVersion(conn.ssh);
+    return getHermesVersion();
+  });
   ipcMain.handle("refresh-hermes-version", async () => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" && conn.ssh) return sshGetHermesVersion(conn.ssh);
     clearVersionCache();
     return getHermesVersion();
   });
@@ -408,6 +421,11 @@ function setupIPC(): void {
     const conn = getConnectionConfig();
     if (conn.mode !== "ssh") return false;
     await startSshTunnel(conn.ssh);
+    // Cache the remote API key so chat auth works through the tunnel
+    if (conn.ssh) {
+      const key = sshReadRemoteApiKey(conn.ssh);
+      setSshRemoteApiKey(key);
+    }
     return true;
   });
 
@@ -529,12 +547,19 @@ function setupIPC(): void {
   });
 
   // Platform toggles (config.yaml platforms section)
-  ipcMain.handle("get-platform-enabled", (_event, profile?: string) =>
-    getPlatformEnabled(profile),
-  );
+  ipcMain.handle("get-platform-enabled", (_event, profile?: string) => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" && conn.ssh) return sshGetPlatformEnabled(conn.ssh, profile);
+    return getPlatformEnabled(profile);
+  });
   ipcMain.handle(
     "set-platform-enabled",
     (_event, platform: string, enabled: boolean, profile?: string) => {
+      const conn = getConnectionConfig();
+      if (conn.mode === "ssh" && conn.ssh) {
+        sshSetPlatformEnabled(conn.ssh, platform, enabled, profile);
+        return true;
+      }
       setPlatformEnabled(platform, enabled, profile);
       // Restart gateway so it picks up the new platform config
       if (isGatewayRunning()) {
@@ -682,10 +707,17 @@ function setupIPC(): void {
   // Session cache (fast local cache with generated titles)
   ipcMain.handle(
     "list-cached-sessions",
-    (_event, limit?: number, offset?: number) =>
-      listCachedSessions(limit, offset),
+    (_event, limit?: number, offset?: number) => {
+      const conn = getConnectionConfig();
+      if (conn.mode === "ssh" && conn.ssh) return sshListCachedSessions(conn.ssh, limit, offset);
+      return listCachedSessions(limit, offset);
+    },
   );
-  ipcMain.handle("sync-session-cache", () => syncSessionCache());
+  ipcMain.handle("sync-session-cache", () => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh") return []; // no local cache to sync in SSH mode
+    return syncSessionCache();
+  });
   ipcMain.handle(
     "update-session-title",
     (_event, sessionId: string, title: string) =>
@@ -830,9 +862,11 @@ function setupIPC(): void {
   );
 
   // Log viewer
-  ipcMain.handle("read-logs", (_event, logFile?: string, lines?: number) =>
-    readLogs(logFile, lines),
-  );
+  ipcMain.handle("read-logs", (_event, logFile?: string, lines?: number) => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" && conn.ssh) return sshReadLogs(conn.ssh, logFile, lines);
+    return readLogs(logFile, lines);
+  });
 }
 
 function buildMenu(): void {
