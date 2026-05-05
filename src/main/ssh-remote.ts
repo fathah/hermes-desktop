@@ -782,21 +782,30 @@ export function sshReadLogs(
 
 // ── Platform toggles (Gateway page) ──────────────────────────────────────────
 
-const SSH_SUPPORTED_PLATFORMS = ["telegram", "discord", "slack", "whatsapp", "signal"];
+const SSH_SUPPORTED_PLATFORMS = [
+  "telegram", "discord", "slack", "whatsapp", "signal",
+  "matrix", "mattermost", "email", "sms", "bluebubbles",
+  "dingtalk", "feishu", "wecom", "weixin", "webhooks", "home_assistant",
+];
+
+// Map from app platform keys to gateway_state.json keys (where they differ)
+const PLATFORM_STATE_KEY: Record<string, string> = {
+  home_assistant: "homeassistant",
+};
 
 export function sshGetPlatformEnabled(
   config: SshConfig,
   _profile?: string,
 ): Record<string, boolean> {
-  // Read live state from gateway_state.json which reflects actual running platforms
   try {
     const raw = sshReadFile(config, "$HOME/.hermes/gateway_state.json");
-    if (raw) {
+    if (raw.trim()) {
       const state = JSON.parse(raw);
       const platforms = state.platforms || {};
       const result: Record<string, boolean> = {};
       for (const platform of SSH_SUPPORTED_PLATFORMS) {
-        const p = platforms[platform];
+        const stateKey = PLATFORM_STATE_KEY[platform] || platform;
+        const p = platforms[stateKey];
         result[platform] = p ? p.state === "connected" || p.state === "running" : false;
       }
       return result;
