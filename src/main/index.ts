@@ -160,12 +160,25 @@ function createWindow(): void {
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       sandbox: true,
-      // [SECURITY FIX] webviewTag disabled — no validation was in place.
-      // If webviews are needed in the future, add a strict
-      // will-attach-webview handler that forces nodeIntegration:false,
-      // contextIsolation:true, sandbox:true, and allowlist origins.
-      webviewTag: false,
+      webviewTag: true,
     },
+  });
+
+  // [SECURITY FIX] Secure webview attachments
+  mainWindow.webContents.on("will-attach-webview", (event, webPreferences, params) => {
+    const url = new NodeURL(params.src);
+    // Only allow localhost/127.0.0.1 origins
+    if (url.hostname !== "localhost" && url.hostname !== "127.0.0.1") {
+      event.preventDefault();
+      return;
+    }
+    // Force security settings for the webview
+    webPreferences.nodeIntegration = false;
+    webPreferences.contextIsolation = true;
+    webPreferences.sandbox = true;
+    // Strip dangerous params
+    delete (webPreferences as any).preload;
+    delete (webPreferences as any).preloadURL;
   });
 
   mainWindow.on("ready-to-show", () => {
