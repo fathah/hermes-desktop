@@ -89,23 +89,59 @@ const hermesAPI = {
   ): Promise<boolean> =>
     ipcRenderer.invoke("set-model-config", provider, model, baseUrl, profile),
 
-  // Connection mode (local vs remote)
+  // Connection mode (local / remote / ssh)
   isRemoteMode: (): Promise<boolean> => ipcRenderer.invoke("is-remote-mode"),
   getConnectionConfig: (): Promise<{
-    mode: "local" | "remote";
+    mode: "local" | "remote" | "ssh";
     remoteUrl: string;
     apiKey: string;
+    ssh: {
+      host: string;
+      port: number;
+      username: string;
+      keyPath: string;
+      remotePort: number;
+      localPort: number;
+    };
   }> => ipcRenderer.invoke("get-connection-config"),
 
   setConnectionConfig: (
-    mode: "local" | "remote",
+    mode: "local" | "remote" | "ssh",
     remoteUrl: string,
     apiKey?: string,
   ): Promise<boolean> =>
     ipcRenderer.invoke("set-connection-config", mode, remoteUrl, apiKey),
 
+  setSshConfig: (
+    host: string,
+    port: number,
+    username: string,
+    keyPath: string,
+    remotePort: number,
+    localPort: number,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("set-ssh-config", host, port, username, keyPath, remotePort, localPort),
+
   testRemoteConnection: (url: string, apiKey?: string): Promise<boolean> =>
     ipcRenderer.invoke("test-remote-connection", url, apiKey),
+
+  testSshConnection: (
+    host: string,
+    port: number,
+    username: string,
+    keyPath: string,
+    remotePort: number,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("test-ssh-connection", host, port, username, keyPath, remotePort),
+
+  isSshTunnelActive: (): Promise<boolean> =>
+    ipcRenderer.invoke("is-ssh-tunnel-active"),
+
+  startSshTunnel: (): Promise<boolean> =>
+    ipcRenderer.invoke("start-ssh-tunnel"),
+
+  stopSshTunnel: (): Promise<boolean> =>
+    ipcRenderer.invoke("stop-ssh-tunnel"),
 
   // Chat
   sendMessage: (

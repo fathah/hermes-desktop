@@ -3,12 +3,22 @@ import { join } from "path";
 import { HERMES_HOME } from "./installer";
 import { profileHome, escapeRegex, safeWriteFile } from "./utils";
 
-// ── Connection Config (local vs remote) ─────────────────
+// ── Connection Config (local / remote / ssh) ─────────────
+
+export interface SshConnectionConfig {
+  host: string;
+  port: number;
+  username: string;
+  keyPath: string;
+  remotePort: number;
+  localPort: number;
+}
 
 export interface ConnectionConfig {
-  mode: "local" | "remote";
+  mode: "local" | "remote" | "ssh";
   remoteUrl: string;
   apiKey: string;
+  ssh: SshConnectionConfig;
 }
 
 // Lazy getter — avoids circular dependency with installer.ts
@@ -36,10 +46,19 @@ function writeDesktopConfig(data: Record<string, unknown>): void {
 
 export function getConnectionConfig(): ConnectionConfig {
   const data = readDesktopConfig();
+  const ssh = (data.sshConfig as Partial<SshConnectionConfig>) ?? {};
   return {
-    mode: (data.connectionMode as "local" | "remote") || "local",
+    mode: (data.connectionMode as "local" | "remote" | "ssh") || "local",
     remoteUrl: (data.remoteUrl as string) || "",
     apiKey: (data.remoteApiKey as string) || "",
+    ssh: {
+      host: (ssh.host as string) || "",
+      port: (ssh.port as number) || 22,
+      username: (ssh.username as string) || "",
+      keyPath: (ssh.keyPath as string) || "",
+      remotePort: (ssh.remotePort as number) || 8642,
+      localPort: (ssh.localPort as number) || 18642,
+    },
   };
 }
 
@@ -48,6 +67,9 @@ export function setConnectionConfig(config: ConnectionConfig): void {
   data.connectionMode = config.mode;
   data.remoteUrl = config.remoteUrl;
   data.remoteApiKey = config.apiKey;
+  if (config.mode === "ssh") {
+    data.sshConfig = config.ssh;
+  }
   writeDesktopConfig(data);
 }
 

@@ -67,7 +67,7 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
   const migrationLogRef = useRef<HTMLPreElement>(null);
 
   // Connection mode
-  const [connMode, setConnMode] = useState<"local" | "remote">("local");
+  const [connMode, setConnMode] = useState<"local" | "remote" | "ssh">("local");
   const [connRemoteUrl, setConnRemoteUrl] = useState("");
   const [connApiKey, setConnApiKey] = useState("");
   const [connTesting, setConnTesting] = useState(false);

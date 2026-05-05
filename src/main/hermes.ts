@@ -12,12 +12,16 @@ import {
   getEnhancedPath,
 } from "./installer";
 import { getModelConfig, readEnv, getConnectionConfig } from "./config";
+import { getSshTunnelUrl, isSshTunnelActive, startSshTunnel } from "./ssh-tunnel";
 import { stripAnsi } from "./utils";
 
 const LOCAL_API_URL = "http://127.0.0.1:8642";
 
 export function getApiUrl(): string {
   const conn = getConnectionConfig();
+  if (conn.mode === "ssh") {
+    return getSshTunnelUrl();
+  }
   if (conn.mode === "remote" && conn.remoteUrl) {
     return conn.remoteUrl.replace(/\/+$/, "");
   }
@@ -25,15 +29,25 @@ export function getApiUrl(): string {
 }
 
 export function isRemoteMode(): boolean {
-  return getConnectionConfig().mode === "remote";
+  const mode = getConnectionConfig().mode;
+  return mode === "remote" || mode === "ssh";
 }
 
 export function getRemoteAuthHeader(): Record<string, string> {
   const conn = getConnectionConfig();
+  // SSH tunnel is localhost — no auth header needed
+  if (conn.mode === "ssh") return {};
   if (conn.mode === "remote" && conn.apiKey) {
     return { Authorization: `Bearer ${conn.apiKey}` };
   }
   return {};
+}
+
+export async function ensureSshTunnelIfNeeded(): Promise<void> {
+  const conn = getConnectionConfig();
+  if (conn.mode === "ssh" && !isSshTunnelActive()) {
+    await startSshTunnel(conn.ssh);
+  }
 }
 
 const LOCAL_PROVIDERS = new Set([

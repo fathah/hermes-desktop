@@ -37,7 +37,14 @@ import {
   testRemoteConnection,
   stopHealthPolling,
   restartGateway,
+  ensureSshTunnelIfNeeded,
 } from "./hermes";
+import {
+  startSshTunnel,
+  stopSshTunnel,
+  testSshConnection,
+  isSshTunnelActive,
+} from "./ssh-tunnel";
 import {
   getClaw3dStatus,
   setupClaw3d,
@@ -299,14 +306,41 @@ function setupIPC(): void {
     },
   );
 
-  // Connection mode (local vs remote)
+  // Connection mode (local / remote / ssh)
   ipcMain.handle("is-remote-mode", () => isRemoteMode());
   ipcMain.handle("get-connection-config", () => getConnectionConfig());
+  ipcMain.handle("is-ssh-tunnel-active", () => isSshTunnelActive());
 
   ipcMain.handle(
     "set-connection-config",
-    (_event, mode: "local" | "remote", remoteUrl: string, apiKey?: string) => {
-      setConnectionConfig({ mode, remoteUrl, apiKey: apiKey || "" });
+    (_event, mode: "local" | "remote" | "ssh", remoteUrl: string, apiKey?: string) => {
+      setConnectionConfig({
+        mode,
+        remoteUrl,
+        apiKey: apiKey || "",
+        ssh: getConnectionConfig().ssh, // preserve existing ssh config
+      });
+      return true;
+    },
+  );
+
+  ipcMain.handle(
+    "set-ssh-config",
+    (
+      _event,
+      host: string,
+      port: number,
+      username: string,
+      keyPath: string,
+      remotePort: number,
+      localPort: number,
+    ) => {
+      const current = getConnectionConfig();
+      setConnectionConfig({
+        ...current,
+        mode: "ssh",
+        ssh: { host, port, username, keyPath, remotePort, localPort },
+      });
       return true;
     },
   );
@@ -315,6 +349,24 @@ function setupIPC(): void {
     "test-remote-connection",
     (_event, url: string, apiKey?: string) => testRemoteConnection(url, apiKey),
   );
+
+  ipcMain.handle(
+    "test-ssh-connection",
+    (_event, host: string, port: number, username: string, keyPath: string, remotePort: number) =>
+      testSshConnection({ host, port, username, keyPath, remotePort, localPort: 19642 }),
+  );
+
+  ipcMain.handle("start-ssh-tunnel", async () => {
+    const conn = getConnectionConfig();
+    if (conn.mode !== "ssh") return false;
+    await startSshTunnel(conn.ssh);
+    return true;
+  });
+
+  ipcMain.handle("stop-ssh-tunnel", () => {
+    stopSshTunnel();
+    return true;
+  });
 
   // Chat — lazy-start gateway on first message
   ipcMain.handle(
@@ -329,6 +381,8 @@ function setupIPC(): void {
       if (!isRemoteMode() && !isGatewayRunning()) {
         startGateway(profile);
       }
+
+      await ensureSshTunnelIfNeeded();
 
       if (currentChatAbort) {
         currentChatAbort();
@@ -854,6 +908,14 @@ app.whenReady().then(() => {
   createWindow();
   setupUpdater();
 
+  // Auto-start SSH tunnel if configured
+  const conn = getConnectionConfig();
+  if (conn.mode === "ssh" && conn.ssh.host) {
+    startSshTunnel(conn.ssh).catch((err) => {
+      console.error("[SSH TUNNEL] Failed to start on launch:", err);
+    });
+  }
+
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -862,6 +924,7 @@ app.whenReady().then(() => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     stopGateway();
+    stopSshTunnel();
     stopClaw3d();
     app.quit();
   }
@@ -874,5 +937,6 @@ app.on("before-quit", () => {
     currentChatAbort = null;
   }
   stopGateway();
+  stopSshTunnel();
   stopClaw3d();
 });
