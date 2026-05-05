@@ -151,6 +151,8 @@ import {
   sshGetPlatformEnabled,
   sshSetPlatformEnabled,
   sshListCachedSessions,
+  sshRunDoctor,
+  sshListModels,
 } from "./ssh-remote";
 
 process.on("uncaughtException", (err) => {
@@ -255,7 +257,11 @@ function setupIPC(): void {
     clearVersionCache();
     return getHermesVersion();
   });
-  ipcMain.handle("run-hermes-doctor", () => runHermesDoctor());
+  ipcMain.handle("run-hermes-doctor", () => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" && conn.ssh) return sshRunDoctor(conn.ssh);
+    return runHermesDoctor();
+  });
   ipcMain.handle("run-hermes-update", async (event) => {
     try {
       await runHermesUpdate((progress: InstallProgress) => {
@@ -715,7 +721,7 @@ function setupIPC(): void {
   );
   ipcMain.handle("sync-session-cache", () => {
     const conn = getConnectionConfig();
-    if (conn.mode === "ssh") return []; // no local cache to sync in SSH mode
+    if (conn.mode === "ssh" && conn.ssh) return sshListCachedSessions(conn.ssh, 50);
     return syncSessionCache();
   });
   ipcMain.handle(
@@ -746,7 +752,11 @@ function setupIPC(): void {
   );
 
   // Models
-  ipcMain.handle("list-models", () => listModels());
+  ipcMain.handle("list-models", () => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" && conn.ssh) return sshListModels(conn.ssh);
+    return listModels();
+  });
   ipcMain.handle(
     "add-model",
     (_event, name: string, provider: string, model: string, baseUrl: string) =>

@@ -768,15 +768,15 @@ export function sshReadLogs(
   config: SshConfig,
   logFile?: string,
   lines = 300,
-): { log: string; error?: string } {
+): { content: string; path: string } {
+  const allowed = ["agent.log", "errors.log", "gateway.log"];
+  const file = logFile && allowed.includes(logFile) ? logFile : "agent.log";
+  const remotePath = `$HOME/.hermes/logs/${file}`;
   try {
-    const file = logFile
-      ? `$HOME/.hermes/logs/${logFile}`
-      : `$HOME/.hermes/logs/gateway.log`;
-    const out = sshExec(config, `tail -n ${lines} "${file}" 2>/dev/null || echo ""`);
-    return { log: out };
-  } catch (err) {
-    return { log: "", error: (err as Error).message };
+    const content = sshExec(config, `tail -n ${lines} "${remotePath}" 2>/dev/null || echo ""`);
+    return { content: content.trim(), path: `~/.hermes/logs/${file}` };
+  } catch {
+    return { content: "", path: `~/.hermes/logs/${file}` };
   }
 }
 
@@ -786,19 +786,25 @@ const SSH_SUPPORTED_PLATFORMS = ["telegram", "discord", "slack", "whatsapp", "si
 
 export function sshGetPlatformEnabled(
   config: SshConfig,
-  profile?: string,
+  _profile?: string,
 ): Record<string, boolean> {
-  const content = sshReadFile(config, remoteConfigPath(profile));
-  const result: Record<string, boolean> = {};
-  for (const platform of SSH_SUPPORTED_PLATFORMS) {
-    const re = new RegExp(
-      `^[ \\t]+${platform}:\\s*\\n[ \\t]+enabled:\\s*(true|false)`,
-      "m",
-    );
-    const match = content.match(re);
-    result[platform] = match ? match[1] === "true" : false;
+  // Read live state from gateway_state.json which reflects actual running platforms
+  try {
+    const raw = sshReadFile(config, "$HOME/.hermes/gateway_state.json");
+    if (raw) {
+      const state = JSON.parse(raw);
+      const platforms = state.platforms || {};
+      const result: Record<string, boolean> = {};
+      for (const platform of SSH_SUPPORTED_PLATFORMS) {
+        const p = platforms[platform];
+        result[platform] = p ? p.state === "connected" || p.state === "running" : false;
+      }
+      return result;
+    }
+  } catch {
+    // fall through
   }
-  return result;
+  return Object.fromEntries(SSH_SUPPORTED_PLATFORMS.map((p) => [p, false]));
 }
 
 export function sshSetPlatformEnabled(
@@ -858,4 +864,33 @@ export function sshListCachedSessions(
     messageCount: s.messageCount,
     model: s.model,
   }));
+}
+
+// ── Doctor / diagnostics ──────────────────────────────────────────────────────
+
+export function sshRunDoctor(config: SshConfig): string {
+  try {
+    const out = sshExec(config, `hermes doctor 2>&1 || echo "hermes not found in PATH"`);
+    return out.trim() || "No output from doctor.";
+  } catch (err) {
+    return `SSH doctor failed: ${(err as Error).message}`;
+  }
+}
+
+// ── Models library ─────────────────────────────────────────────────────────────
+
+import type { SavedModel } from "./models";
+
+export function sshListModels(config: SshConfig): SavedModel[] {
+  try {
+    const raw = sshReadFile(config, "$HOME/.hermes/models.json");
+    if (raw.trim()) return JSON.parse(raw);
+  } catch {
+    // no models.json on remote yet
+  }
+  return [];
+}
+
+export function sshSaveModels(config: SshConfig, models: SavedModel[]): void {
+  sshWriteFile(config, "$HOME/.hermes/models.json", JSON.stringify(models, null, 2));
 }
