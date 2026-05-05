@@ -56,18 +56,19 @@ function sshPython(config: SshConfig, script: string): string {
 }
 
 function sshReadFile(config: SshConfig, remotePath: string): string {
+  // ~ doesn't expand inside double quotes — use $HOME instead
+  const p = remotePath.replace(/^~\//, "$HOME/");
   try {
-    return sshExec(config, `cat "${remotePath}" 2>/dev/null || true`);
+    return sshExec(config, `cat "${p}" 2>/dev/null || true`);
   } catch {
     return "";
   }
 }
 
 function sshWriteFile(config: SshConfig, remotePath: string, content: string): void {
-  const dir = remotePath.includes("/")
-    ? remotePath.substring(0, remotePath.lastIndexOf("/"))
-    : ".";
-  sshExec(config, `mkdir -p "${dir}" && cat > "${remotePath}"`, content);
+  const p = remotePath.replace(/^~\//, "$HOME/");
+  const dir = p.includes("/") ? p.substring(0, p.lastIndexOf("/")) : ".";
+  sshExec(config, `mkdir -p "${dir}" && cat > "${p}"`, content);
 }
 
 // ── Skills ───────────────────────────────────────────────────────────────────
@@ -704,7 +705,13 @@ export function sshDeleteProfile(config: SshConfig, name: string): boolean {
 
 export function sshGatewayStatus(config: SshConfig): boolean {
   try {
-    const out = sshExec(config, `if [ -f ~/.hermes/gateway.pid ]; then pid=$(cat ~/.hermes/gateway.pid); kill -0 $pid 2>/dev/null && echo "running" || echo "stopped"; else echo "stopped"; fi`);
+    const out = sshExec(
+      config,
+      `if [ -f $HOME/.hermes/gateway.pid ]; then ` +
+      `pid=$(python3 -c "import json,sys; d=json.load(open('$HOME/.hermes/gateway.pid')); print(d.get('pid',d) if isinstance(d,dict) else d)" 2>/dev/null || cat $HOME/.hermes/gateway.pid); ` +
+      `kill -0 $pid 2>/dev/null && echo "running" || echo "stopped"; ` +
+      `else echo "stopped"; fi`,
+    );
     return out.trim() === "running";
   } catch {
     return false;
@@ -713,7 +720,7 @@ export function sshGatewayStatus(config: SshConfig): boolean {
 
 export function sshStartGateway(config: SshConfig): void {
   try {
-    sshExec(config, `nohup hermes gateway start > ~/.hermes/gateway.log 2>&1 &`);
+    sshExec(config, `nohup hermes gateway start > $HOME/.hermes/gateway.log 2>&1 &`);
   } catch {
     // best effort
   }
@@ -721,7 +728,13 @@ export function sshStartGateway(config: SshConfig): void {
 
 export function sshStopGateway(config: SshConfig): void {
   try {
-    sshExec(config, `hermes gateway stop 2>/dev/null || ([ -f ~/.hermes/gateway.pid ] && kill $(cat ~/.hermes/gateway.pid) 2>/dev/null); true`);
+    sshExec(
+      config,
+      `hermes gateway stop 2>/dev/null || ` +
+      `(if [ -f $HOME/.hermes/gateway.pid ]; then ` +
+      `pid=$(python3 -c "import json; d=json.load(open('$HOME/.hermes/gateway.pid')); print(d['pid'] if isinstance(d,dict) else d)" 2>/dev/null); ` +
+      `[ -n "$pid" ] && kill $pid 2>/dev/null; fi); true`,
+    );
   } catch {
     // best effort
   }
