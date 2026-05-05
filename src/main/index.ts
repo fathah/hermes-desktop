@@ -71,6 +71,11 @@ import {
 } from "./config";
 import { listSessions, getSessionMessages, searchSessions } from "./sessions";
 import {
+  listSessionsRemote,
+  getSessionMessagesRemote,
+  searchSessionsRemote,
+} from "./sessions-remote";
+import {
   syncSessionCache,
   listCachedSessions,
   updateSessionTitle,
@@ -434,10 +439,12 @@ function setupIPC(): void {
 
   // Sessions
   ipcMain.handle("list-sessions", (_event, limit?: number, offset?: number) => {
+    if (isRemoteMode()) return listSessionsRemote(limit, offset);
     return listSessions(limit, offset);
   });
 
   ipcMain.handle("get-session-messages", (_event, sessionId: string) => {
+    if (isRemoteMode()) return getSessionMessagesRemote(sessionId);
     return getSessionMessages(sessionId);
   });
 
@@ -531,7 +538,7 @@ function setupIPC(): void {
 
   // Session search
   ipcMain.handle("search-sessions", (_event, query: string, limit?: number) =>
-    searchSessions(query, limit),
+    isRemoteMode() ? searchSessionsRemote(query, limit) : searchSessions(query, limit),
   );
 
   // Credential Pool
