@@ -450,6 +450,15 @@ export function sshReadEnv(config: SshConfig, profile?: string): Record<string, 
     if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
     if (v) result[k] = v;
   }
+  // Alias alternate env var names so the app can display them regardless of which name the server uses
+  const ENV_ALIASES: Array<[string, string]> = [
+    ["HA_URL", "HOMEASSISTANT_URL"],
+    ["HA_TOKEN", "HOMEASSISTANT_TOKEN"],
+  ];
+  for (const [appKey, serverKey] of ENV_ALIASES) {
+    if (!result[appKey] && result[serverKey]) result[appKey] = result[serverKey];
+    if (!result[serverKey] && result[appKey]) result[serverKey] = result[appKey];
+  }
   return result;
 }
 
