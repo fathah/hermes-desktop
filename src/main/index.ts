@@ -108,6 +108,7 @@ import {
   triggerCronJob,
 } from "./cronjobs";
 import { getAppLocale, setAppLocale } from "./locale";
+import type { AppLocale } from "../shared/i18n/types";
 
 /**
  * [SECURITY FIX] Validate URLs before opening them externally.
@@ -274,7 +275,7 @@ function setupIPC(): void {
 
   // Configuration (profile-aware)
   ipcMain.handle("get-locale", () => getAppLocale());
-  ipcMain.handle("set-locale", (_event, locale: "en" | "es" | "zh-CN") =>
+  ipcMain.handle("set-locale", (_event, locale: AppLocale) =>
     setAppLocale(locale),
   );
 

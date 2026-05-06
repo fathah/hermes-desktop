@@ -8,6 +8,7 @@ import { Download, Upload, FileText } from "lucide-react";
 const LANGUAGE_LABEL_KEYS: Record<AppLocale, string> = {
   en: "settings.language.english",
   es: "settings.language.spanish",
+  "pt-BR": "settings.language.portuguese",
   "zh-CN": "settings.language.chinese",
 };
 

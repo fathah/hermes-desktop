@@ -66,6 +66,26 @@ import soulZh from "./locales/zh-CN/soul";
 import memoryZh from "./locales/zh-CN/memory";
 import installZh from "./locales/zh-CN/install";
 import constantsZh from "./locales/zh-CN/constants";
+import commonPt from "./locales/pt-BR/common";
+import navigationPt from "./locales/pt-BR/navigation";
+import welcomePt from "./locales/pt-BR/welcome";
+import setupPt from "./locales/pt-BR/setup";
+import chatPt from "./locales/pt-BR/chat";
+import settingsPt from "./locales/pt-BR/settings";
+import toolsPt from "./locales/pt-BR/tools";
+import sessionsPt from "./locales/pt-BR/sessions";
+import modelsPt from "./locales/pt-BR/models";
+import providersPt from "./locales/pt-BR/providers";
+import officePt from "./locales/pt-BR/office";
+import errorsPt from "./locales/pt-BR/errors";
+import schedulesPt from "./locales/pt-BR/schedules";
+import skillsPt from "./locales/pt-BR/skills";
+import gatewayPt from "./locales/pt-BR/gateway";
+import agentsPt from "./locales/pt-BR/agents";
+import soulPt from "./locales/pt-BR/soul";
+import memoryPt from "./locales/pt-BR/memory";
+import installPt from "./locales/pt-BR/install";
+import constantsPt from "./locales/pt-BR/constants";
 
 export const resources = {
   en: {
@@ -138,6 +158,30 @@ export const resources = {
       memory: memoryZh,
       install: installZh,
       constants: constantsZh,
+    },
+  },
+  "pt-BR": {
+    translation: {
+      common: commonPt,
+      navigation: navigationPt,
+      welcome: welcomePt,
+      setup: setupPt,
+      chat: chatPt,
+      settings: settingsPt,
+      tools: toolsPt,
+      sessions: sessionsPt,
+      models: modelsPt,
+      providers: providersPt,
+      office: officePt,
+      errors: errorsPt,
+      schedules: schedulesPt,
+      skills: skillsPt,
+      gateway: gatewayPt,
+      agents: agentsPt,
+      soul: soulPt,
+      memory: memoryPt,
+      install: installPt,
+      constants: constantsPt,
     },
   },
 } satisfies Resource;

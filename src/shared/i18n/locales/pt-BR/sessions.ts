@@ -1,0 +1,16 @@
+export default {
+  title: "Sessões",
+  searchPlaceholder: "Pesquisar conversas...",
+  noResults: "Nenhum resultado encontrado",
+  noResultsHint: "Tente termos de pesquisa diferentes",
+  empty: "Nenhuma sessão ainda",
+  newConversation: "Nova conversa",
+  newChat: "Novo Chat",
+  today: "Hoje",
+  yesterday: "Ontem",
+  thisWeek: "Esta Semana",
+  earlier: "Mais antigo",
+  emptyHint: "Comece a conversar para criar sua primeira sessão",
+  messages: "msg",
+  messageSingular: "msg",
+} as const;

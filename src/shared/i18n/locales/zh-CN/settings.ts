@@ -16,6 +16,7 @@ export default {
     english: "English",
     spanish: "Español",
     chinese: "中文",
+    portuguese: "葡萄牙语",
     hint: "选择界面语言",
   },
   notDetected: "未检测到",

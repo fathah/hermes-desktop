@@ -283,7 +283,7 @@ export function uninstallSkill(
   profile?: string,
 ): { success: boolean; error?: string } {
   try {
-    const args = [HERMES_SCRIPT, "skills", "uninstall", name, "--yes"];
+    const args = [HERMES_SCRIPT, "skills", "uninstall", name];
     if (profile && profile !== "default") {
       args.splice(1, 0, "-p", profile);
     }
