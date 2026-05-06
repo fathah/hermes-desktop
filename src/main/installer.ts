@@ -1,6 +1,6 @@
-import { spawn, execSync, execFile } from "child_process";
-import { existsSync, readFileSync, readdirSync } from "fs";
-import { join } from "path";
+import { spawn, execFile, execFileSync } from "child_process";
+import { existsSync, readFileSync, readdirSync, statSync } from "fs";
+import { join, resolve } from "path";
 import { homedir } from "os";
 import type { BrowserWindow } from "electron";
 import { getModelConfig, getConnectionConfig } from "./config";
@@ -226,7 +226,9 @@ export function runHermesDoctor(): string {
     return "Hermes is not installed.";
   }
   try {
-    const output = execSync(`"${HERMES_PYTHON}" "${HERMES_SCRIPT}" doctor`, {
+    // [SECURITY FIX] Use execFileSync instead of execSync with template literal
+    // to avoid shell injection via path variables.
+    const output = execFileSync(HERMES_PYTHON, [HERMES_SCRIPT, "doctor"], {
       cwd: HERMES_REPO,
       env: {
         ...process.env,
@@ -598,7 +600,22 @@ export async function runHermesImport(
   if (!existsSync(HERMES_PYTHON) || !existsSync(HERMES_SCRIPT)) {
     return { success: false, error: "Hermes is not installed." };
   }
-  const args = [HERMES_SCRIPT, "import", archivePath];
+  // [SECURITY FIX] Validate that the archive path exists and is a regular file
+  const resolvedPath = resolve(archivePath);
+  if (!existsSync(resolvedPath)) {
+    return { success: false, error: "Import file not found." };
+  }
+  let stat;
+  try {
+    stat = statSync(resolvedPath);
+  } catch {
+    return { success: false, error: "Cannot read import file." };
+  }
+  if (!stat.isFile()) {
+    return { success: false, error: "Import path is not a regular file." };
+  }
+
+  const args = [HERMES_SCRIPT, "import", resolvedPath];
   if (profile && profile !== "default") args.push("-p", profile);
 
   return new Promise((resolve) => {
