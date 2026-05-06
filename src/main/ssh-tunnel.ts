@@ -64,11 +64,15 @@ function waitForPort(port: number, timeoutMs: number): Promise<void> {
 
 function buildSshArgs(config: SshConfig, localPort: number): string[] {
   const keyPath = config.keyPath || join(homedir(), ".ssh", "id_rsa");
+  const socket = `/tmp/hermes_tunnel_${config.username}_${config.host}_${config.port}.sock`;
   return [
     "-N",
     "-L", `${localPort}:127.0.0.1:${config.remotePort}`,
     "-p", String(config.port),
     "-i", keyPath,
+    "-o", `ControlPath=${socket}`,
+    "-o", "ControlMaster=yes",
+    "-o", "ControlPersist=300",
     "-o", "StrictHostKeyChecking=accept-new",
     "-o", "BatchMode=yes",
     "-o", "ExitOnForwardFailure=yes",

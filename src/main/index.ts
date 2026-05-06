@@ -300,10 +300,10 @@ function setupIPC(): void {
 
   ipcMain.handle(
     "set-env",
-    (_event, key: string, value: string, profile?: string) => {
+    async (_event, key: string, value: string, profile?: string) => {
       const conn = getConnectionConfig();
       if (conn.mode === "ssh" && conn.ssh) {
-        sshSetEnvValue(conn.ssh, key, value, profile);
+        await sshSetEnvValue(conn.ssh, key, value, profile);
         return true;
       }
       setEnvValue(key, value, profile);
@@ -327,10 +327,10 @@ function setupIPC(): void {
 
   ipcMain.handle(
     "set-config",
-    (_event, key: string, value: string, profile?: string) => {
+    async (_event, key: string, value: string, profile?: string) => {
       const conn = getConnectionConfig();
       if (conn.mode === "ssh" && conn.ssh) {
-        sshSetConfigValue(conn.ssh, key, value, profile);
+        await sshSetConfigValue(conn.ssh, key, value, profile);
         return true;
       }
       setConfigValue(key, value, profile);
@@ -429,7 +429,7 @@ function setupIPC(): void {
     await startSshTunnel(conn.ssh);
     // Cache the remote API key so chat auth works through the tunnel
     if (conn.ssh) {
-      const key = sshReadRemoteApiKey(conn.ssh);
+      const key = await sshReadRemoteApiKey(conn.ssh);
       setSshRemoteApiKey(key);
     }
     return true;
@@ -535,14 +535,14 @@ function setupIPC(): void {
   });
 
   // Gateway
-  ipcMain.handle("start-gateway", () => {
+  ipcMain.handle("start-gateway", async () => {
     const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh) { sshStartGateway(conn.ssh); return true; }
+    if (conn.mode === "ssh" && conn.ssh) { await sshStartGateway(conn.ssh); return true; }
     return startGateway();
   });
-  ipcMain.handle("stop-gateway", () => {
+  ipcMain.handle("stop-gateway", async () => {
     const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh) { sshStopGateway(conn.ssh); return true; }
+    if (conn.mode === "ssh" && conn.ssh) { await sshStopGateway(conn.ssh); return true; }
     stopGateway(true);
     return true;
   });
@@ -560,10 +560,10 @@ function setupIPC(): void {
   });
   ipcMain.handle(
     "set-platform-enabled",
-    (_event, platform: string, enabled: boolean, profile?: string) => {
+    async (_event, platform: string, enabled: boolean, profile?: string) => {
       const conn = getConnectionConfig();
       if (conn.mode === "ssh" && conn.ssh) {
-        sshSetPlatformEnabled(conn.ssh, platform, enabled, profile);
+        await sshSetPlatformEnabled(conn.ssh, platform, enabled, profile);
         return true;
       }
       setPlatformEnabled(platform, enabled, profile);
