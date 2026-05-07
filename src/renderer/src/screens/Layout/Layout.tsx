@@ -221,16 +221,13 @@ function Layout(): React.JSX.Element {
             onNewChat={handleNewChat}
           />
         </div>
-        {view === "sessions" &&
-          (remoteMode ? (
-            <RemoteNotice feature="Sessions" />
-          ) : (
-            <Sessions
-              onResumeSession={handleResumeSession}
-              onNewChat={handleNewChat}
-              currentSessionId={currentSessionId}
-            />
-          ))}
+        {view === "sessions" && (
+          <Sessions
+            onResumeSession={handleResumeSession}
+            onNewChat={handleNewChat}
+            currentSessionId={currentSessionId}
+          />
+        )}
         {view === "agents" &&
           (remoteMode ? (
             <RemoteNotice feature="Profiles" />
