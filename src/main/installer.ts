@@ -15,6 +15,7 @@ export const HERMES_PYTHON = join(HERMES_VENV, "bin", "python");
 export const HERMES_SCRIPT = join(HERMES_REPO, "hermes");
 export const HERMES_ENV_FILE = join(HERMES_HOME, ".env");
 export const HERMES_CONFIG_FILE = join(HERMES_HOME, "config.yaml");
+export const HERMES_AUTH_FILE = join(HERMES_HOME, "auth.json");
 
 export interface InstallStatus {
   installed: boolean;
@@ -80,6 +81,23 @@ function resolveNvmBin(home: string): string[] {
   return [];
 }
 
+export function hasHermesAuthCredential(provider: string): boolean {
+  if (!provider || !existsSync(HERMES_AUTH_FILE)) return false;
+  try {
+    const auth = JSON.parse(readFileSync(HERMES_AUTH_FILE, "utf-8")) as {
+      active_provider?: string;
+      credential_pool?: Record<string, unknown[]>;
+      providers?: Record<string, unknown>;
+    };
+    const pool = auth.credential_pool?.[provider];
+    if (Array.isArray(pool) && pool.length > 0) return true;
+    if (auth.active_provider === provider) return true;
+    return Boolean(auth.providers?.[provider]);
+  } catch {
+    return false;
+  }
+}
+
 export function checkInstallStatus(): InstallStatus {
   // Remote mode: skip local checks entirely
   const conn = getConnectionConfig();
@@ -101,11 +119,15 @@ export function checkInstallStatus(): InstallStatus {
   let hasApiKey = false;
   const verified = installed;
 
-  // Local/custom providers don't need an API key
+  // Local/custom providers don't need an API key. OAuth-backed providers
+  // can be configured through Hermes auth.json instead of .env.
   try {
     const mc = getModelConfig();
     const localProviders = ["custom", "lmstudio", "ollama", "vllm", "llamacpp"];
-    if (localProviders.includes(mc.provider)) {
+    if (
+      localProviders.includes(mc.provider) ||
+      hasHermesAuthCredential(mc.provider)
+    ) {
       hasApiKey = true;
     }
   } catch {

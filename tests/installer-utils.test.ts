@@ -201,6 +201,62 @@ describe("Memory provider discovery", () => {
   });
 });
 
+// ─── Hermes auth credential discovery ─────────────────
+
+describe("Hermes auth credential discovery", () => {
+  async function importInstallerWithHome(
+    home: string,
+  ): Promise<typeof import("../src/main/installer")> {
+    vi.resetModules();
+    process.env.HERMES_HOME = home;
+    return await import("../src/main/installer");
+  }
+
+  afterEach(() => {
+    delete process.env.HERMES_HOME;
+    vi.resetModules();
+  });
+
+  it("detects OAuth credentials stored in auth.json credential_pool", async () => {
+    writeFileSync(
+      join(TEST_DIR, "auth.json"),
+      JSON.stringify({ credential_pool: { "openai-codex": [{ id: "acct" }] } }),
+    );
+
+    const { HERMES_AUTH_FILE, hasHermesAuthCredential } =
+      await importInstallerWithHome(TEST_DIR);
+
+    expect(HERMES_AUTH_FILE).toBe(join(TEST_DIR, "auth.json"));
+    expect(hasHermesAuthCredential("openai-codex")).toBe(true);
+    expect(hasHermesAuthCredential("anthropic")).toBe(false);
+  });
+
+  it("accepts active_provider and providers entries as configured credentials", async () => {
+    writeFileSync(
+      join(TEST_DIR, "auth.json"),
+      JSON.stringify({
+        active_provider: "openrouter",
+        providers: { anthropic: {} },
+      }),
+    );
+
+    const { hasHermesAuthCredential } = await importInstallerWithHome(TEST_DIR);
+
+    expect(hasHermesAuthCredential("openrouter")).toBe(true);
+    expect(hasHermesAuthCredential("anthropic")).toBe(true);
+    expect(hasHermesAuthCredential("openai-codex")).toBe(false);
+  });
+
+  it("returns false when auth.json is missing or malformed", async () => {
+    const missing = await importInstallerWithHome(TEST_DIR);
+    expect(missing.hasHermesAuthCredential("openai-codex")).toBe(false);
+
+    writeFileSync(join(TEST_DIR, "auth.json"), "{not-json");
+    const malformed = await importInstallerWithHome(TEST_DIR);
+    expect(malformed.hasHermesAuthCredential("openai-codex")).toBe(false);
+  });
+});
+
 // ─── Backward compatibility checks ─────────────────────
 
 describe("Backward compatibility", () => {
