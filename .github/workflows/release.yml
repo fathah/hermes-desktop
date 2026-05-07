@@ -136,6 +136,38 @@ jobs:
             dist/*.rpm
             dist/latest-linux.yml
 
+  release_linux_arm64:
+    name: Build Linux arm64
+    needs: prepare
+    if: needs.prepare.outputs.tag_exists == 'false'
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build app
+        run: npm run build
+
+      - name: Package Linux arm64 deb
+        run: npx electron-builder --linux deb --arm64 --publish never
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-arm64-artifacts
+          path: |
+            dist/*_arm64.deb
+            dist/latest-linux-arm64.yml
+
   release_windows:
     name: Build Windows
     needs: prepare
@@ -203,7 +235,7 @@ jobs:
 
   publish:
     name: Publish Release
-    needs: [prepare, release_mac, release_linux, release_windows, generate_winget]
+    needs: [prepare, release_mac, release_linux, release_linux_arm64, release_windows, generate_winget]
     if: needs.prepare.outputs.is_dry_run == 'false' && needs.prepare.outputs.tag_exists == 'false'
     runs-on: ubuntu-latest
     steps:
@@ -239,4 +271,5 @@ jobs:
             artifacts/*.blockmap
             artifacts/latest.yml
             artifacts/latest-linux.yml
+            artifacts/latest-linux-arm64.yml
             artifacts/latest-mac.yml
