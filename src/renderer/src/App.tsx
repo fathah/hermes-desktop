@@ -28,9 +28,18 @@ function App(): React.JSX.Element {
 
     try {
       const conn = await window.hermesAPI.getConnectionConfig();
-      isRemote = conn.mode === "remote";
+      isRemote = conn.mode === "remote" || conn.mode === "ssh";
 
-      if (isRemote && conn.remoteUrl) {
+      if (conn.mode === "ssh" && conn.ssh) {
+        // Start (or ensure) the SSH tunnel, then go straight to main
+        try {
+          await window.hermesAPI.startSshTunnel();
+          next = "main";
+        } catch (tunnelErr) {
+          error = `SSH tunnel failed to start: ${(tunnelErr as Error).message}`;
+          next = "welcome";
+        }
+      } else if (conn.mode === "remote" && conn.remoteUrl) {
         const ok = await window.hermesAPI.testRemoteConnection(
           conn.remoteUrl,
           conn.apiKey,

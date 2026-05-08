@@ -850,7 +850,7 @@ function Chat({
   }, [profile, hermesSessionId, setMessages, messages]);
 
   const visibleMessages = useMemo(
-    () => messages.filter((m) => m.content.trim()),
+    () => messages.filter((m) => (m.content || "").trim()),
     [messages],
   );
 

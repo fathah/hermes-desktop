@@ -72,12 +72,12 @@ function Layout(): React.JSX.Element {
   const [activeProfile, setActiveProfile] = useState("default");
   // Lazy mount: only render Office after first visit, then keep mounted
   const [officeVisited, setOfficeVisited] = useState(false);
-  // Remote mode — many screens show "not available" instead of empty data
+  // Remote-only mode — SSH tunnel has full access; only pure HTTP remote mode restricts screens
   const [remoteMode, setRemoteMode] = useState(false);
 
   // Re-check remote mode on tab switch (picks up Settings changes)
   useEffect(() => {
-    window.hermesAPI.isRemoteMode().then(setRemoteMode);
+    window.hermesAPI.isRemoteOnlyMode().then(setRemoteMode);
   }, [view]);
 
   // Auto-update state
