@@ -58,6 +58,13 @@ import {
   getRemoteAuthHeader,
 } from "./hermes";
 import {
+  askSafeHouseToolBridge,
+  callSafeHouseTool,
+  getSafeHouseToolBridgeHealth,
+  listSafeHouseTools,
+  routeSafeHousePrompt,
+} from "./safehouse-tools";
+import {
   startSshTunnel,
   stopSshTunnel,
   testSshConnection,
@@ -954,6 +961,33 @@ function setupIPC(): void {
       });
       Menu.buildFromTemplate(template).popup({ window: win });
     },
+  );
+
+  // SafeHouse local tool bridge — loopback-only HTTP bridge for approved
+  // SafeHouse platform tools. The bridge owns SafeHouse admin auth; Desktop
+  // never receives service-role keys or raw database credentials.
+  ipcMain.handle("safehouse-bridge-status", (_event, bridgeUrl?: string) =>
+    getSafeHouseToolBridgeHealth(bridgeUrl),
+  );
+  ipcMain.handle("safehouse-bridge-tools", (_event, bridgeUrl?: string) =>
+    listSafeHouseTools(bridgeUrl),
+  );
+  ipcMain.handle(
+    "safehouse-bridge-call",
+    (
+      _event,
+      tool: string,
+      input?: Record<string, unknown>,
+      bridgeUrl?: string,
+    ) => callSafeHouseTool(tool, input ?? {}, bridgeUrl),
+  );
+  ipcMain.handle("safehouse-route-prompt", (_event, prompt: string) =>
+    routeSafeHousePrompt(prompt),
+  );
+  ipcMain.handle(
+    "safehouse-ask",
+    (_event, prompt: string, bridgeUrl?: string) =>
+      askSafeHouseToolBridge(prompt, bridgeUrl),
   );
 
   // Attachment staging — for pasted blobs that have no filesystem origin.

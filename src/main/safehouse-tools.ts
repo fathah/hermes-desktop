@@ -1,0 +1,605 @@
+const DEFAULT_SAFEHOUSE_TOOL_BRIDGE_URL = "http://127.0.0.1:57109";
+const BRIDGE_TIMEOUT_MS = 15_000;
+
+export interface SafeHouseTool {
+  name: string;
+  description: string;
+  classification: "read_only" | "proposal_only" | "blocked";
+  risk_level: string;
+  approval_required: boolean;
+  action: string;
+  endpoint?: unknown;
+  input_schema?: unknown;
+  output_schema?: unknown;
+  safety_notes?: string[];
+}
+
+export interface SafeHouseToolManifest {
+  name: string;
+  version: string;
+  tools: SafeHouseTool[];
+  bridge?: Record<string, unknown>;
+}
+
+export interface SafeHouseBridgeHealth {
+  ok: boolean;
+  service?: string;
+  version?: string;
+  bind?: string;
+  mode?: string;
+  tools_count?: number;
+  mutations_blocked?: boolean;
+  direct_db_access?: boolean;
+  service_role_key_required?: boolean;
+  error?: string;
+  bridge_url: string;
+  local_only: boolean;
+}
+
+export interface SafeHousePromptRoute {
+  tool: string;
+  action: string;
+  classification: "read_only" | "proposal_only" | "blocked";
+  reason: string;
+}
+
+export interface SafeHouseToolCallEnvelope {
+  ok: boolean;
+  tool?: string;
+  action?: string;
+  classification?: "read_only" | "proposal_only" | "blocked";
+  risk_level?: string;
+  approval_required?: boolean;
+  source?: string;
+  status?: string;
+  result?: Record<string, unknown>;
+  mutation_performed?: boolean;
+  strict_json?: boolean;
+  error?: string;
+}
+
+export interface SafeHouseAskResult {
+  matched: boolean;
+  route: SafeHousePromptRoute | null;
+  response?: SafeHouseToolCallEnvelope;
+  markdown?: string;
+  error?: string;
+}
+
+function bridgeUrlFromEnv(): string {
+  return (
+    process.env.SAFEHOUSE_TOOL_BRIDGE_URL || DEFAULT_SAFEHOUSE_TOOL_BRIDGE_URL
+  );
+}
+
+export function isLoopbackBridgeUrl(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl);
+    const host = parsed.hostname.toLowerCase();
+    return (
+      (parsed.protocol === "http:" || parsed.protocol === "https:") &&
+      (host === "127.0.0.1" || host === "localhost" || host === "::1")
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function resolveSafeHouseBridgeUrl(rawUrl?: string): string {
+  const candidate = (rawUrl || bridgeUrlFromEnv()).trim().replace(/\/+$/, "");
+  if (!candidate) return DEFAULT_SAFEHOUSE_TOOL_BRIDGE_URL;
+  if (!isLoopbackBridgeUrl(candidate)) {
+    throw new Error(
+      "SafeHouse Tool Bridge URL must be a loopback HTTP(S) URL such as http://127.0.0.1:57109.",
+    );
+  }
+  return candidate;
+}
+
+export function redactSafeHouseBridgeValue(value: unknown): unknown {
+  if (typeof value === "string") {
+    return value
+      .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/giu, "Bearer [redacted]")
+      .replace(/sk-[A-Za-z0-9._-]+/giu, "sk-[redacted]")
+      .replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/giu, "[redacted-email]");
+  }
+  if (Array.isArray(value)) return value.map(redactSafeHouseBridgeValue);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nested]) => [
+        key,
+        /(password|secret|token|service[_-]?role|api[_-]?key|authorization|cookie)/iu.test(
+          key,
+        )
+          ? "[redacted]"
+          : redactSafeHouseBridgeValue(nested),
+      ]),
+    );
+  }
+  return value;
+}
+
+async function fetchBridgeJson<T>(
+  path: string,
+  options: RequestInit = {},
+  rawUrl?: string,
+): Promise<T> {
+  const baseUrl = resolveSafeHouseBridgeUrl(rawUrl);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), BRIDGE_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${baseUrl}${path}`, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers ?? {}),
+      },
+    });
+    const text = await response.text();
+    let data: unknown = {};
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      data = { ok: false, error: "SafeHouse bridge returned non-JSON." };
+    }
+    if (!response.ok) {
+      const error =
+        typeof data === "object" &&
+        data &&
+        "error" in data &&
+        typeof (data as { error: unknown }).error === "string"
+          ? (data as { error: string }).error
+          : `SafeHouse bridge returned HTTP ${response.status}.`;
+      throw new Error(error);
+    }
+    return redactSafeHouseBridgeValue(data) as T;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export async function getSafeHouseToolBridgeHealth(
+  rawUrl?: string,
+): Promise<SafeHouseBridgeHealth> {
+  const bridgeUrl = resolveSafeHouseBridgeUrl(rawUrl);
+  try {
+    const health = await fetchBridgeJson<Record<string, unknown>>(
+      "/health",
+      {},
+      bridgeUrl,
+    );
+    return {
+      ...(health as Omit<SafeHouseBridgeHealth, "bridge_url" | "local_only">),
+      bridge_url: bridgeUrl,
+      local_only: true,
+      ok: health.ok === true,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      bridge_url: bridgeUrl,
+      local_only: true,
+      error:
+        error instanceof Error
+          ? String(redactSafeHouseBridgeValue(error.message))
+          : "SafeHouse bridge unavailable.",
+    };
+  }
+}
+
+export async function listSafeHouseTools(
+  rawUrl?: string,
+): Promise<SafeHouseToolManifest> {
+  return fetchBridgeJson<SafeHouseToolManifest>("/tools", {}, rawUrl);
+}
+
+export async function callSafeHouseTool(
+  tool: string,
+  input: Record<string, unknown> = {},
+  rawUrl?: string,
+): Promise<SafeHouseToolCallEnvelope> {
+  return fetchBridgeJson<SafeHouseToolCallEnvelope>(
+    "/tools/call",
+    {
+      method: "POST",
+      body: JSON.stringify(
+        redactSafeHouseBridgeValue({
+          tool,
+          ...input,
+        }),
+      ),
+    },
+    rawUrl,
+  );
+}
+
+function includesAny(text: string, terms: string[]): boolean {
+  return terms.some((term) => text.includes(term));
+}
+
+function route(
+  tool: string,
+  action: string,
+  classification: SafeHousePromptRoute["classification"],
+  reason: string,
+): SafeHousePromptRoute {
+  return { tool, action, classification, reason };
+}
+
+export function routeSafeHousePrompt(
+  prompt: string,
+): SafeHousePromptRoute | null {
+  const text = prompt.toLowerCase().replace(/\s+/g, " ").trim();
+  if (!text) return null;
+
+  if (
+    includesAny(text, [
+      "docker prune",
+      "delete docker volume",
+      "remove docker volume",
+    ])
+  ) {
+    return route(
+      "safehouse.block.docker_prune",
+      "docker_prune",
+      "blocked",
+      "Docker destructive request.",
+    );
+  }
+  if (
+    includesAny(text, [
+      "run migration",
+      "run a migration",
+      "apply migration",
+      "database migration",
+      "deploy migration",
+    ])
+  ) {
+    return route(
+      "safehouse.block.migration",
+      "migration",
+      "blocked",
+      "Migration/deploy command is blocked.",
+    );
+  }
+  if (
+    includesAny(text, [
+      "production deploy",
+      "deploy production",
+      "switch dns",
+      "dns cutover",
+    ])
+  ) {
+    return route(
+      "safehouse.block.production_deploy",
+      "production_deploy",
+      "blocked",
+      "Production deployment is blocked.",
+    );
+  }
+  if (includesAny(text, ["payment", "refund", "invoice", "billing mutation"])) {
+    return route(
+      "safehouse.block.payment_mutation",
+      "payment_mutation",
+      "blocked",
+      "Payment mutation is blocked.",
+    );
+  }
+  if (
+    includesAny(text, [
+      "account mutation",
+      "delete user",
+      "disable account",
+      "change account",
+    ])
+  ) {
+    return route(
+      "safehouse.block.account_mutation",
+      "account_mutation",
+      "blocked",
+      "Account mutation is blocked.",
+    );
+  }
+  if (includesAny(text, ["provision vpn", "wireguard", "vpn provisioning"])) {
+    return route(
+      "safehouse.block.vpn_provisioning",
+      "vpn_provisioning",
+      "blocked",
+      "VPN provisioning is blocked.",
+    );
+  }
+  if (includesAny(text, ["voice routing", "route voice", "call routing"])) {
+    return route(
+      "safehouse.block.voice_routing",
+      "voice_routing",
+      "blocked",
+      "Voice routing mutation is blocked.",
+    );
+  }
+  if (
+    includesAny(text, [
+      "direct db",
+      "database credential",
+      "service role",
+      "service-role",
+      "show secret",
+      "read secret",
+    ])
+  ) {
+    return route(
+      "safehouse.block.secret_access",
+      "secret_access",
+      "blocked",
+      "Direct secret or DB access is blocked.",
+    );
+  }
+
+  if (
+    includesAny(text, [
+      "replay failed queue",
+      "retry failed queue",
+      "replay queue",
+      "queue retry",
+    ])
+  ) {
+    return route(
+      "safehouse.propose.queue.retry",
+      "propose_queue_retry",
+      "proposal_only",
+      "Queue retry requires approval.",
+    );
+  }
+  if (includesAny(text, ["turn off feed", "disable feed", "enable feed"])) {
+    return route(
+      "safehouse.propose.feed.disable",
+      "propose_feed_disable",
+      "proposal_only",
+      "Feed state changes require approval.",
+    );
+  }
+  if (includesAny(text, ["update playbook", "change playbook"])) {
+    return route(
+      "safehouse.propose.playbook.update",
+      "propose_playbook_update",
+      "proposal_only",
+      "Playbook mutation requires approval.",
+    );
+  }
+  if (
+    includesAny(text, [
+      "change runtime setting",
+      "set hermes primary",
+      "runtime setting",
+    ])
+  ) {
+    return route(
+      "safehouse.propose.runtime.setting.change",
+      "propose_runtime_setting_change",
+      "proposal_only",
+      "Runtime setting changes require approval.",
+    );
+  }
+
+  if (
+    includesAny(text, [
+      "extension store",
+      "store readiness",
+      "chrome store",
+      "edge store",
+    ])
+  ) {
+    return route(
+      "safehouse.extension.store.readiness",
+      "extension_store_readiness",
+      "read_only",
+      "Extension/store readiness summary.",
+    );
+  }
+  if (includesAny(text, ["docker status", "local docker"])) {
+    return route(
+      "safehouse.docker.status",
+      "docker_status",
+      "read_only",
+      "Docker status summary.",
+    );
+  }
+  if (includesAny(text, ["local runtime", "runtime status", "local stack"])) {
+    return route(
+      "safehouse.local.runtime.status",
+      "local_runtime_status",
+      "read_only",
+      "Local runtime status summary.",
+    );
+  }
+  if (includesAny(text, ["openclaw status", "openclaw fallback"])) {
+    return route(
+      "safehouse.openclaw.status",
+      "openclaw_status",
+      "read_only",
+      "OpenClaw fallback status.",
+    );
+  }
+  if (includesAny(text, ["strict eval", "strict json", "model strict"])) {
+    return route(
+      "safehouse.hermes.strict.eval.status",
+      "hermes_strict_eval_status",
+      "read_only",
+      "Hermes strict eval status.",
+    );
+  }
+  if (includesAny(text, ["api usage", "cost risk", "provider usage"])) {
+    return route(
+      "safehouse.api.usage.summary",
+      "api_usage_summary",
+      "read_only",
+      "API usage summary.",
+    );
+  }
+  if (
+    includesAny(text, [
+      "agents are failing",
+      "agent failures",
+      "agent operations",
+      "agents failing",
+    ])
+  ) {
+    return route(
+      "safehouse.agent.operations.summary",
+      "agent_operations_summary",
+      "read_only",
+      "Agent operations summary.",
+    );
+  }
+  if (includesAny(text, ["run failure", "explain failure", "failed run"])) {
+    return route(
+      "safehouse.run.failure.explain",
+      "run_failure_explanation",
+      "read_only",
+      "Run failure explanation.",
+    );
+  }
+  if (
+    includesAny(text, ["feed health", "feed management", "ingestion health"])
+  ) {
+    return route(
+      "safehouse.feed.health.summary",
+      "feed_health_summary",
+      "read_only",
+      "Feed health summary.",
+    );
+  }
+  if (includesAny(text, ["outbound queue", "queue health", "stuck queue"])) {
+    return route(
+      "safehouse.outbound.queue.summary",
+      "outbound_queue_summary",
+      "read_only",
+      "Outbound queue summary.",
+    );
+  }
+  if (
+    includesAny(text, [
+      "draft a playbook",
+      "draft playbook",
+      "playbook recommendation",
+    ])
+  ) {
+    return route(
+      "safehouse.playbook.draft.recommendation",
+      "playbook_draft_recommendation",
+      "read_only",
+      "Draft playbook recommendation.",
+    );
+  }
+  if (
+    includesAny(text, [
+      "platform status",
+      "platform health",
+      "safehouse health",
+      "summarize safehouse",
+    ])
+  ) {
+    return route(
+      "safehouse.platform.status",
+      "platform_status",
+      "read_only",
+      "Platform status summary.",
+    );
+  }
+
+  return null;
+}
+
+function arrayLines(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => `- ${String(item)}`);
+}
+
+export function formatSafeHouseToolResponse(
+  routeInfo: SafeHousePromptRoute,
+  envelope: SafeHouseToolCallEnvelope,
+): string {
+  const result = (envelope.result ?? {}) as Record<string, unknown>;
+  const summary =
+    typeof result.summary === "string"
+      ? result.summary
+      : (envelope.error ?? "No summary returned.");
+  const status = String(result.status ?? envelope.status ?? "unknown");
+  const risks = arrayLines(result.risks ?? result.ingestion_risks);
+  const actions = arrayLines(
+    result.recommended_next_actions ?? result.safe_remediation_steps,
+  );
+  const findings = arrayLines(
+    result.key_findings ??
+      result.notable_findings ??
+      result.evidence ??
+      result.likely_causes,
+  );
+  const runtimeNotes = arrayLines(result.runtime_notes);
+
+  const lines = [
+    `### SafeHouse Tool Result`,
+    `- Tool: \`${envelope.tool ?? routeInfo.tool}\``,
+    `- Action: \`${envelope.action ?? routeInfo.action}\``,
+    `- Source: ${envelope.source ?? "SafeHouse Tool Bridge"}`,
+    `- Classification: ${envelope.classification ?? routeInfo.classification}`,
+    `- Status: ${status}`,
+    `- Approval required: ${envelope.approval_required === true ? "yes" : "no"}`,
+    `- Mutation performed: ${envelope.mutation_performed === true ? "yes" : "no"}`,
+    `- Strict JSON: ${envelope.strict_json === true ? "yes" : "unknown"}`,
+    "",
+    summary,
+  ];
+
+  if (findings.length) lines.push("", "**Findings**", ...findings);
+  if (risks.length) lines.push("", "**Risks**", ...risks);
+  if (actions.length)
+    lines.push("", "**Recommended next actions**", ...actions);
+  if (runtimeNotes.length) lines.push("", "**Runtime notes**", ...runtimeNotes);
+  if (routeInfo.classification === "blocked") {
+    lines.push(
+      "",
+      "**Blocked by policy. No SafeHouse mutation was dispatched.**",
+    );
+  }
+  if (routeInfo.classification === "proposal_only") {
+    lines.push(
+      "",
+      "**Proposal only. Human approval is required before any future execution.**",
+    );
+  }
+
+  return lines.join("\n");
+}
+
+export async function askSafeHouseToolBridge(
+  prompt: string,
+  rawUrl?: string,
+): Promise<SafeHouseAskResult> {
+  const routeInfo = routeSafeHousePrompt(prompt);
+  if (!routeInfo) return { matched: false, route: null };
+
+  try {
+    const response = await callSafeHouseTool(
+      routeInfo.tool,
+      { prompt, payload: { source: "hermes-desktop-chat" } },
+      rawUrl,
+    );
+    return {
+      matched: true,
+      route: routeInfo,
+      response,
+      markdown: formatSafeHouseToolResponse(routeInfo, response),
+    };
+  } catch (error) {
+    return {
+      matched: true,
+      route: routeInfo,
+      error:
+        error instanceof Error
+          ? String(redactSafeHouseBridgeValue(error.message))
+          : "SafeHouse bridge call failed.",
+      markdown: `### SafeHouse Tool Bridge Unavailable\n- Tool: \`${routeInfo.tool}\`\n- Classification: ${routeInfo.classification}\n- Mutation performed: no\n\n${error instanceof Error ? String(redactSafeHouseBridgeValue(error.message)) : "SafeHouse bridge call failed."}`,
+    };
+  }
+}

@@ -1715,6 +1715,54 @@ body {
   flex-shrink: 0;
 }
 
+.safehouse-tool-bridge-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  margin-bottom: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.safehouse-tool-bridge-status.connected {
+  border-color: rgba(34, 197, 94, 0.25);
+  background: var(--success-bg);
+}
+
+.safehouse-tool-bridge-status.offline {
+  border-color: rgba(245, 158, 11, 0.25);
+  background: var(--warning-bg);
+}
+
+.safehouse-tool-bridge-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warning);
+  flex-shrink: 0;
+}
+
+.safehouse-tool-bridge-status.connected .safehouse-tool-bridge-dot {
+  background: var(--success);
+}
+
+.safehouse-tool-bridge-label {
+  color: var(--text-primary);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.safehouse-tool-bridge-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .chat-input-wrapper {
   display: flex;
   align-items: flex-end;

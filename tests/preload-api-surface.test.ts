@@ -92,6 +92,19 @@ describe("New APIs from v0.8/v0.9 features", () => {
     expect(preloadMethods).toContain("discoverMemoryProviders");
     expect(typeMethods).toContain("discoverMemoryProviders");
   });
+
+  it("has SafeHouse Tool Bridge APIs", () => {
+    for (const method of [
+      "getSafeHouseToolBridgeStatus",
+      "listSafeHouseTools",
+      "callSafeHouseTool",
+      "routeSafeHousePrompt",
+      "askSafeHouseToolBridge",
+    ]) {
+      expect(preloadMethods).toContain(method);
+      expect(typeMethods).toContain(method);
+    }
+  });
 });
 
 // ─── Legacy APIs still present ──────────────────────────

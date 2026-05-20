@@ -265,6 +265,78 @@ const hermesAPI = {
     ipcRenderer.send("show-media-menu", src, name, labels);
   },
 
+  // SafeHouse Tool Bridge
+  getSafeHouseToolBridgeStatus: (
+    bridgeUrl?: string,
+  ): Promise<{
+    ok: boolean;
+    bridge_url: string;
+    local_only: boolean;
+    service?: string;
+    version?: string;
+    mode?: string;
+    tools_count?: number;
+    mutations_blocked?: boolean;
+    error?: string;
+  }> => ipcRenderer.invoke("safehouse-bridge-status", bridgeUrl),
+
+  listSafeHouseTools: (
+    bridgeUrl?: string,
+  ): Promise<{
+    name: string;
+    version: string;
+    tools: Array<{
+      name: string;
+      description: string;
+      classification: "read_only" | "proposal_only" | "blocked";
+      risk_level: string;
+      approval_required: boolean;
+      action: string;
+    }>;
+  }> => ipcRenderer.invoke("safehouse-bridge-tools", bridgeUrl),
+
+  callSafeHouseTool: (
+    tool: string,
+    input?: Record<string, unknown>,
+    bridgeUrl?: string,
+  ): Promise<{
+    ok: boolean;
+    tool?: string;
+    action?: string;
+    classification?: "read_only" | "proposal_only" | "blocked";
+    source?: string;
+    status?: string;
+    result?: Record<string, unknown>;
+    mutation_performed?: boolean;
+    strict_json?: boolean;
+    error?: string;
+  }> => ipcRenderer.invoke("safehouse-bridge-call", tool, input, bridgeUrl),
+
+  routeSafeHousePrompt: (
+    prompt: string,
+  ): Promise<{
+    tool: string;
+    action: string;
+    classification: "read_only" | "proposal_only" | "blocked";
+    reason: string;
+  } | null> => ipcRenderer.invoke("safehouse-route-prompt", prompt),
+
+  askSafeHouseToolBridge: (
+    prompt: string,
+    bridgeUrl?: string,
+  ): Promise<{
+    matched: boolean;
+    route: {
+      tool: string;
+      action: string;
+      classification: "read_only" | "proposal_only" | "blocked";
+      reason: string;
+    } | null;
+    response?: Record<string, unknown>;
+    markdown?: string;
+    error?: string;
+  }> => ipcRenderer.invoke("safehouse-ask", prompt, bridgeUrl),
+
   // Resolve the absolute filesystem path for a File coming from drag-drop
   // or the file picker.  Returns "" for blobs that have no origin path
   // (e.g. clipboard paste) — caller should stageAttachment for those.
