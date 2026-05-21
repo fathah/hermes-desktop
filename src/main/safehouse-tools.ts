@@ -106,14 +106,21 @@ export function redactSafeHouseBridgeValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(redactSafeHouseBridgeValue);
   if (value && typeof value === "object") {
     return Object.fromEntries(
-      Object.entries(value).map(([key, nested]) => [
-        key,
-        /(password|secret|token|service[_-]?role|api[_-]?key|authorization|cookie)/iu.test(
-          key,
-        )
-          ? "[redacted]"
-          : redactSafeHouseBridgeValue(nested),
-      ]),
+      Object.entries(value).map(([key, nested]) => {
+        const sensitiveKey =
+          /(password|secret|token|service[_-]?role|api[_-]?key|authorization|cookie)/iu.test(
+            key,
+          );
+        if (
+          sensitiveKey &&
+          nested !== false &&
+          nested !== null &&
+          nested !== undefined
+        ) {
+          return [key, "[redacted]"];
+        }
+        return [key, redactSafeHouseBridgeValue(nested)];
+      }),
     );
   }
   return value;
@@ -321,6 +328,9 @@ export function routeSafeHousePrompt(
     includesAny(text, [
       "direct db",
       "database credential",
+      "direct database",
+      "access database",
+      "database directly",
       "service role",
       "service-role",
       "show secret",
@@ -383,6 +393,133 @@ export function routeSafeHousePrompt(
 
   if (
     includesAny(text, [
+      "can you see",
+      "see the platform",
+      "what can you see",
+      "platform visibility",
+    ])
+  ) {
+    return route(
+      "safehouse.platform.visibility",
+      "platform_visibility",
+      "read_only",
+      "Platform visibility boundaries.",
+    );
+  }
+  if (
+    includesAny(text, [
+      "what modules",
+      "modules are",
+      "module map",
+      "modules can you inspect",
+      "can you inspect",
+      "inspect modules",
+    ])
+  ) {
+    return route(
+      "safehouse.platform.map",
+      "platform_map",
+      "read_only",
+      "SafeHouse module map.",
+    );
+  }
+  if (
+    includesAny(text, [
+      "admin pages",
+      "admin routes",
+      "admin route",
+      "admin menu",
+      "pages exist",
+    ])
+  ) {
+    return route(
+      "safehouse.admin.routes",
+      "admin_routes",
+      "read_only",
+      "SafeHouse admin route boundaries.",
+    );
+  }
+  if (
+    includesAny(text, [
+      "what is running locally",
+      "running locally",
+      "current runtime state",
+      "runtime snapshot",
+      "local ports",
+    ])
+  ) {
+    return route(
+      "safehouse.runtime.snapshot",
+      "runtime_snapshot",
+      "read_only",
+      "SafeHouse local runtime snapshot.",
+    );
+  }
+  if (
+    includesAny(text, [
+      "agent runs",
+      "runtime runs",
+      "recent runs",
+      "recent agent runtime",
+      "run records",
+    ])
+  ) {
+    return route(
+      "safehouse.agent.runs.recent",
+      "agent_runs_recent",
+      "read_only",
+      "Recent agent runtime state.",
+    );
+  }
+  if (
+    includesAny(text, [
+      "edge functions",
+      "functions are available",
+      "function status",
+      "available functions",
+    ])
+  ) {
+    return route(
+      "safehouse.edge.functions.status",
+      "edge_functions_status",
+      "read_only",
+      "Edge Function status summary.",
+    );
+  }
+  if (
+    includesAny(text, [
+      "what can you control",
+      "what can you do",
+      "list blocked actions",
+      "blocked actions",
+      "control",
+    ])
+  ) {
+    return route(
+      "safehouse.action.permissions",
+      "action_permissions",
+      "read_only",
+      "SafeHouse action permission boundaries.",
+    );
+  }
+  if (
+    includesAny(text, [
+      "what docs",
+      "docs should",
+      "documentation",
+      "docs define",
+      "read docs",
+    ])
+  ) {
+    return route(
+      "safehouse.docs.index",
+      "docs_index",
+      "read_only",
+      "SafeHouse docs index.",
+    );
+  }
+  if (
+    includesAny(text, [
       "extension store",
       "store readiness",
       "chrome store",
@@ -442,6 +579,8 @@ export function routeSafeHousePrompt(
       "agent failures",
       "agent operations",
       "agents failing",
+      "agents running",
+      "agents are running",
     ])
   ) {
     return route(
@@ -497,6 +636,8 @@ export function routeSafeHousePrompt(
       "platform health",
       "safehouse health",
       "summarize safehouse",
+      "what is broken",
+      "broken",
     ])
   ) {
     return route(
@@ -519,6 +660,22 @@ function recordOrNull(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
+}
+
+function dataHighlights(value: unknown): string[] {
+  const data = recordOrNull(value);
+  if (!data) return [];
+  const lines: string[] = [];
+  for (const [key, nested] of Object.entries(data).slice(0, 8)) {
+    if (Array.isArray(nested)) {
+      lines.push(`- ${key}: ${nested.length} item(s)`);
+    } else if (nested && typeof nested === "object") {
+      lines.push(`- ${key}: ${Object.keys(nested).length} field(s)`);
+    } else {
+      lines.push(`- ${key}: ${String(nested)}`);
+    }
+  }
+  return lines;
 }
 
 function extractGatewayRun(
@@ -545,6 +702,7 @@ export function formatSafeHouseToolResponse(
     result.status ?? bridgeResult.status ?? envelope.status ?? "unknown",
   );
   const risks = arrayLines(result.risks ?? result.ingestion_risks);
+  const limitations = arrayLines(result.limitations);
   const actions = arrayLines(
     result.recommended_next_actions ?? result.safe_remediation_steps,
   );
@@ -588,7 +746,10 @@ export function formatSafeHouseToolResponse(
   ];
 
   if (findings.length) lines.push("", "**Findings**", ...findings);
+  const data = dataHighlights(result.data);
+  if (data.length) lines.push("", "**Tool data**", ...data);
   if (risks.length) lines.push("", "**Risks**", ...risks);
+  if (limitations.length) lines.push("", "**Limitations**", ...limitations);
   if (actions.length)
     lines.push("", "**Recommended next actions**", ...actions);
   if (runtimeNotes.length) lines.push("", "**Runtime notes**", ...runtimeNotes);

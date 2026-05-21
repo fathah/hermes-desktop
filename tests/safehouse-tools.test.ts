@@ -157,6 +157,18 @@ describe("SafeHouse Tool Bridge client", () => {
   });
 
   it("routes plain-English SafeHouse prompts to approved tools", () => {
+    expect(routeSafeHousePrompt("Can you see the platform?")?.tool).toBe(
+      "safehouse.platform.visibility",
+    );
+    expect(
+      routeSafeHousePrompt("What SafeHouse modules can you inspect?")?.tool,
+    ).toBe("safehouse.platform.map");
+    expect(routeSafeHousePrompt("What can you control?")?.tool).toBe(
+      "safehouse.action.permissions",
+    );
+    expect(routeSafeHousePrompt("What is running locally?")?.tool).toBe(
+      "safehouse.runtime.snapshot",
+    );
     expect(
       routeSafeHousePrompt("Summarize SafeHouse platform health")?.tool,
     ).toBe("safehouse.platform.status");
@@ -169,6 +181,9 @@ describe("SafeHouse Tool Bridge client", () => {
     expect(routeSafeHousePrompt("Can you run a migration?")?.tool).toBe(
       "safehouse.block.migration",
     );
+    expect(
+      routeSafeHousePrompt("Can you access the database directly?")?.tool,
+    ).toBe("safehouse.block.secret_access");
     expect(routeSafeHousePrompt("write a poem")).toBeNull();
   });
 
@@ -233,6 +248,45 @@ describe("SafeHouse Tool Bridge client", () => {
     expect(markdown).toContain("Provider mode: real_hermes_model");
     expect(markdown).toContain("Strict JSON: yes");
     expect(markdown).not.toContain("No summary returned");
+  });
+
+  it("renders visibility tool data and limitations", () => {
+    const markdown = formatSafeHouseToolResponse(
+      {
+        tool: "safehouse.platform.visibility",
+        action: "platform_visibility",
+        classification: "read_only",
+        reason: "test",
+      },
+      {
+        ok: true,
+        tool: "safehouse.platform.visibility",
+        action: "platform_visibility",
+        classification: "read_only",
+        source: "safehouse_tool_bridge_visibility",
+        status: "completed",
+        result: {
+          summary: "Hermes sees SafeHouse through approved tools.",
+          status: "healthy",
+          data: {
+            visible_modules: ["platform health", "agent runs"],
+            available_tools: ["safehouse.platform.map"],
+          },
+          risks: ["Visibility is bounded."],
+          limitations: ["No direct DB console."],
+          recommended_next_actions: ["Use safehouse.action.permissions."],
+          runtime_notes: ["mutation=false"],
+        },
+        mutation_performed: false,
+        strict_json: true,
+      },
+    );
+
+    expect(markdown).toContain("Hermes sees SafeHouse through approved tools.");
+    expect(markdown).toContain("**Tool data**");
+    expect(markdown).toContain("visible_modules: 2 item(s)");
+    expect(markdown).toContain("**Limitations**");
+    expect(markdown).toContain("No direct DB console.");
   });
 
   it("renders blocked tool responses as policy-blocked with no mutation", async () => {
