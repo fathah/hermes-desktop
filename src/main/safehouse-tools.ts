@@ -515,16 +515,35 @@ function arrayLines(value: unknown): string[] {
   return value.map((item) => `- ${String(item)}`);
 }
 
+function recordOrNull(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function extractGatewayRun(
+  result: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const gateway = recordOrNull(result.gateway);
+  const data = recordOrNull(gateway?.data);
+  return recordOrNull(data?.run);
+}
+
 export function formatSafeHouseToolResponse(
   routeInfo: SafeHousePromptRoute,
   envelope: SafeHouseToolCallEnvelope,
 ): string {
-  const result = (envelope.result ?? {}) as Record<string, unknown>;
+  const bridgeResult = (envelope.result ?? {}) as Record<string, unknown>;
+  const gatewayRun = extractGatewayRun(bridgeResult);
+  const gatewayOutput = recordOrNull(gatewayRun?.output);
+  const result = gatewayOutput ?? bridgeResult;
   const summary =
     typeof result.summary === "string"
       ? result.summary
       : (envelope.error ?? "No summary returned.");
-  const status = String(result.status ?? envelope.status ?? "unknown");
+  const status = String(
+    result.status ?? bridgeResult.status ?? envelope.status ?? "unknown",
+  );
   const risks = arrayLines(result.risks ?? result.ingestion_risks);
   const actions = arrayLines(
     result.recommended_next_actions ?? result.safe_remediation_steps,
@@ -536,6 +555,14 @@ export function formatSafeHouseToolResponse(
       result.likely_causes,
   );
   const runtimeNotes = arrayLines(result.runtime_notes);
+  const schemaValid =
+    envelope.strict_json === true ||
+    bridgeResult.schema_valid === true ||
+    gatewayRun?.schema_valid === true;
+  const mutationPerformed =
+    envelope.mutation_performed === true ||
+    bridgeResult.mutation_performed === true;
+  const providerTruth = recordOrNull(gatewayRun?.provider_truth);
 
   const lines = [
     `### SafeHouse Tool Result`,
@@ -544,9 +571,18 @@ export function formatSafeHouseToolResponse(
     `- Source: ${envelope.source ?? "SafeHouse Tool Bridge"}`,
     `- Classification: ${envelope.classification ?? routeInfo.classification}`,
     `- Status: ${status}`,
+    ...(typeof gatewayRun?.run_id === "string"
+      ? [`- Run ID: \`${gatewayRun.run_id}\``]
+      : []),
+    ...(typeof gatewayRun?.runtime === "string"
+      ? [`- Runtime: ${gatewayRun.runtime}`]
+      : []),
+    ...(typeof providerTruth?.provider_mode === "string"
+      ? [`- Provider mode: ${providerTruth.provider_mode}`]
+      : []),
     `- Approval required: ${envelope.approval_required === true ? "yes" : "no"}`,
-    `- Mutation performed: ${envelope.mutation_performed === true ? "yes" : "no"}`,
-    `- Strict JSON: ${envelope.strict_json === true ? "yes" : "unknown"}`,
+    `- Mutation performed: ${mutationPerformed ? "yes" : "no"}`,
+    `- Strict JSON: ${schemaValid ? "yes" : "unknown"}`,
     "",
     summary,
   ];

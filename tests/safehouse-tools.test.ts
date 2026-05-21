@@ -9,6 +9,7 @@ import {
   redactSafeHouseBridgeValue,
   resolveSafeHouseBridgeUrl,
   routeSafeHousePrompt,
+  formatSafeHouseToolResponse,
 } from "../src/main/safehouse-tools";
 
 const servers: http.Server[] = [];
@@ -182,6 +183,56 @@ describe("SafeHouse Tool Bridge client", () => {
     expect(result.response?.mutation_performed).toBe(false);
     expect(result.markdown).toContain("SafeHouse Tool Result");
     expect(result.markdown).toContain("Mutation performed: no");
+  });
+
+  it("renders live gateway-backed run output instead of the bridge envelope", () => {
+    const markdown = formatSafeHouseToolResponse(
+      {
+        tool: "safehouse.platform.status",
+        action: "platform_status",
+        classification: "read_only",
+        reason: "test",
+      },
+      {
+        ok: true,
+        tool: "safehouse.platform.status",
+        action: "platform_status",
+        classification: "read_only",
+        source: "safehouse_agent_runtime_gateway",
+        status: "completed",
+        result: {
+          ok: true,
+          status: "completed",
+          gateway: {
+            data: {
+              run: {
+                run_id: "run-123",
+                runtime: "hermes",
+                schema_valid: true,
+                output: {
+                  summary: "Live platform summary.",
+                  status: "degraded",
+                  key_findings: ["Gateway output rendered."],
+                  risks: ["Provider can be unavailable."],
+                  recommended_next_actions: ["Keep fallback available."],
+                  runtime_notes: ["No mutation."],
+                },
+                provider_truth: {
+                  provider_mode: "real_hermes_model",
+                },
+              },
+            },
+          },
+        },
+      },
+    );
+
+    expect(markdown).toContain("Live platform summary.");
+    expect(markdown).toContain("Run ID: `run-123`");
+    expect(markdown).toContain("Runtime: hermes");
+    expect(markdown).toContain("Provider mode: real_hermes_model");
+    expect(markdown).toContain("Strict JSON: yes");
+    expect(markdown).not.toContain("No summary returned");
   });
 
   it("renders blocked tool responses as policy-blocked with no mutation", async () => {
