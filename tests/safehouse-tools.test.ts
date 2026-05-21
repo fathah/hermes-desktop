@@ -184,6 +184,35 @@ describe("SafeHouse Tool Bridge client", () => {
     expect(
       routeSafeHousePrompt("Can you access the database directly?")?.tool,
     ).toBe("safehouse.block.secret_access");
+    expect(routeSafeHousePrompt("Show operations board.")?.tool).toBe(
+      "safehouse.ops.cards.list",
+    );
+    expect(
+      routeSafeHousePrompt("Create a task to review threat feed failures.")
+        ?.tool,
+    ).toBe("safehouse.ops.cards.create");
+    expect(
+      routeSafeHousePrompt(
+        "Propose a skill for checking extension store readiness.",
+      )?.tool,
+    ).toBe("safehouse.skills.propose");
+    expect(
+      routeSafeHousePrompt(
+        "Remember that GitHub Actions minutes must be conserved.",
+      )?.tool,
+    ).toBe("safehouse.memory.candidates.propose");
+    expect(
+      routeSafeHousePrompt("Run all read-only watchdog checks.")?.tool,
+    ).toBe("safehouse.watchdog.run_all_readonly");
+    expect(
+      routeSafeHousePrompt("Spin up an agent to inspect outbound queue.")?.tool,
+    ).toBe("safehouse.agents.delegate_readonly");
+    expect(routeSafeHousePrompt("Can you prune Docker?")?.tool).toBe(
+      "safehouse.block.docker_prune",
+    );
+    expect(routeSafeHousePrompt("Can you remove OpenClaw?")?.tool).toBe(
+      "safehouse.block.openclaw_removal",
+    );
     expect(routeSafeHousePrompt("write a poem")).toBeNull();
   });
 
@@ -287,6 +316,42 @@ describe("SafeHouse Tool Bridge client", () => {
     expect(markdown).toContain("visible_modules: 2 item(s)");
     expect(markdown).toContain("**Limitations**");
     expect(markdown).toContain("No direct DB console.");
+  });
+
+  it("renders local-safe operations tool responses", () => {
+    const markdown = formatSafeHouseToolResponse(
+      {
+        tool: "safehouse.ops.cards.create",
+        action: "ops_cards_create",
+        classification: "local_safe_write",
+        reason: "test",
+      },
+      {
+        ok: true,
+        tool: "safehouse.ops.cards.create",
+        action: "ops_cards_create",
+        classification: "local_safe_write",
+        source: "safehouse_ops_autopilot",
+        status: "completed",
+        result: {
+          summary: "Created local operations card.",
+          status: "healthy",
+          data: { card: { title: "Review threat feed failures" } },
+          risks: ["No execution authority."],
+          limitations: ["No production system changed."],
+          recommended_next_actions: ["Review card."],
+          local_record_written: true,
+          runtime_notes: ["platform_mutation=false"],
+        },
+        mutation_performed: false,
+        strict_json: true,
+      },
+    );
+
+    expect(markdown).toContain("Created local operations card.");
+    expect(markdown).toContain("Classification: local_safe_write");
+    expect(markdown).toContain("Mutation performed: no");
+    expect(markdown).toContain("local_record_written: true");
   });
 
   it("renders blocked tool responses as policy-blocked with no mutation", async () => {

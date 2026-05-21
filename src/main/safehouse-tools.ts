@@ -4,7 +4,11 @@ const BRIDGE_TIMEOUT_MS = 15_000;
 export interface SafeHouseTool {
   name: string;
   description: string;
-  classification: "read_only" | "proposal_only" | "blocked";
+  classification:
+    | "read_only"
+    | "local_safe_write"
+    | "proposal_only"
+    | "blocked";
   risk_level: string;
   approval_required: boolean;
   action: string;
@@ -39,7 +43,11 @@ export interface SafeHouseBridgeHealth {
 export interface SafeHousePromptRoute {
   tool: string;
   action: string;
-  classification: "read_only" | "proposal_only" | "blocked";
+  classification:
+    | "read_only"
+    | "local_safe_write"
+    | "proposal_only"
+    | "blocked";
   reason: string;
 }
 
@@ -47,13 +55,18 @@ export interface SafeHouseToolCallEnvelope {
   ok: boolean;
   tool?: string;
   action?: string;
-  classification?: "read_only" | "proposal_only" | "blocked";
+  classification?:
+    | "read_only"
+    | "local_safe_write"
+    | "proposal_only"
+    | "blocked";
   risk_level?: string;
   approval_required?: boolean;
   source?: string;
   status?: string;
   result?: Record<string, unknown>;
   mutation_performed?: boolean;
+  local_record_written?: boolean;
   strict_json?: boolean;
   error?: string;
 }
@@ -243,8 +256,10 @@ export function routeSafeHousePrompt(
   if (
     includesAny(text, [
       "docker prune",
+      "prune docker",
       "delete docker volume",
       "remove docker volume",
+      "delete database",
     ])
   ) {
     return route(
@@ -283,6 +298,20 @@ export function routeSafeHousePrompt(
       "production_deploy",
       "blocked",
       "Production deployment is blocked.",
+    );
+  }
+  if (
+    includesAny(text, [
+      "remove openclaw",
+      "disable openclaw",
+      "delete openclaw",
+    ])
+  ) {
+    return route(
+      "safehouse.block.openclaw_removal",
+      "openclaw_removal",
+      "blocked",
+      "OpenClaw removal is blocked.",
     );
   }
   if (includesAny(text, ["payment", "refund", "invoice", "billing mutation"])) {
@@ -342,6 +371,133 @@ export function routeSafeHousePrompt(
       "secret_access",
       "blocked",
       "Direct secret or DB access is blocked.",
+    );
+  }
+
+  if (includesAny(text, ["create a task", "add a task", "create ops card"])) {
+    return route(
+      "safehouse.ops.cards.create",
+      "ops_cards_create",
+      "local_safe_write",
+      "Create local SafeHouse operations card.",
+    );
+  }
+  if (
+    includesAny(text, [
+      "show operations board",
+      "show my operations board",
+      "list operations board",
+    ])
+  ) {
+    return route(
+      "safehouse.ops.cards.list",
+      "ops_cards_list",
+      "read_only",
+      "SafeHouse operations board.",
+    );
+  }
+  if (
+    includesAny(text, [
+      "what tasks are blocked",
+      "blocked tasks",
+      "what is blocked",
+    ])
+  ) {
+    return route(
+      "safehouse.ops.cards.summarize",
+      "ops_cards_summarize",
+      "read_only",
+      "SafeHouse operations board summary.",
+    );
+  }
+  if (includesAny(text, ["propose a skill", "create a skill", "add a skill"])) {
+    return route(
+      "safehouse.skills.propose",
+      "skills_propose",
+      "local_safe_write",
+      "Create local SafeHouse skill proposal.",
+    );
+  }
+  if (includesAny(text, ["what skills", "list skills", "skill registry"])) {
+    return route(
+      "safehouse.skills.list",
+      "skills_list",
+      "read_only",
+      "SafeHouse skill registry.",
+    );
+  }
+  if (
+    includesAny(text, [
+      "remember that",
+      "add this to platform memory",
+      "troubleshooting pattern",
+    ])
+  ) {
+    return route(
+      "safehouse.memory.candidates.propose",
+      "memory_candidates_propose",
+      "local_safe_write",
+      "Create reviewed memory candidate.",
+    );
+  }
+  if (
+    includesAny(text, [
+      "show memory candidates",
+      "what have you learned",
+      "review memory candidates",
+    ])
+  ) {
+    return route(
+      "safehouse.memory.candidates.list",
+      "memory_candidates_list",
+      "read_only",
+      "SafeHouse memory candidates.",
+    );
+  }
+  if (includesAny(text, ["check threat feeds", "threat feed freshness"])) {
+    return route(
+      "safehouse.watchdog.threat_feeds",
+      "watchdog_threat_feeds",
+      "read_only",
+      "Threat feed watchdog.",
+    );
+  }
+  if (
+    includesAny(text, [
+      "run all read-only watchdog",
+      "run all watchdog",
+      "run platform checks",
+    ])
+  ) {
+    return route(
+      "safehouse.watchdog.run_all_readonly",
+      "watchdog_run_all_readonly",
+      "read_only",
+      "Read-only watchdog checks.",
+    );
+  }
+  if (
+    includesAny(text, [
+      "spin up an agent",
+      "delegate a read-only check",
+      "delegate",
+    ])
+  ) {
+    return route(
+      "safehouse.agents.delegate_readonly",
+      "agents_delegate_readonly",
+      "local_safe_write",
+      "Create read-only delegation record.",
+    );
+  }
+  if (
+    includesAny(text, ["show sub-agent results", "show delegation results"])
+  ) {
+    return route(
+      "safehouse.agents.delegations.list",
+      "agent_delegations_list",
+      "read_only",
+      "Read-only delegation records.",
     );
   }
 
@@ -720,6 +876,10 @@ export function formatSafeHouseToolResponse(
   const mutationPerformed =
     envelope.mutation_performed === true ||
     bridgeResult.mutation_performed === true;
+  const localRecordWritten =
+    envelope.local_record_written === true ||
+    bridgeResult.local_record_written === true ||
+    result.local_record_written === true;
   const providerTruth = recordOrNull(gatewayRun?.provider_truth);
 
   const lines = [
@@ -740,6 +900,9 @@ export function formatSafeHouseToolResponse(
       : []),
     `- Approval required: ${envelope.approval_required === true ? "yes" : "no"}`,
     `- Mutation performed: ${mutationPerformed ? "yes" : "no"}`,
+    ...(localRecordWritten
+      ? ["- Local record written: yes", "- local_record_written: true"]
+      : []),
     `- Strict JSON: ${schemaValid ? "yes" : "unknown"}`,
     "",
     summary,
