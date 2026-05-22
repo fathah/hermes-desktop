@@ -166,6 +166,9 @@ describe("SafeHouse Tool Bridge client", () => {
     expect(routeSafeHousePrompt("What can you control?")?.tool).toBe(
       "safehouse.action.permissions",
     );
+    expect(routeSafeHousePrompt("What are you blocked from doing?")?.tool).toBe(
+      "safehouse.action.permissions",
+    );
     expect(routeSafeHousePrompt("What is running locally?")?.tool).toBe(
       "safehouse.runtime.snapshot",
     );

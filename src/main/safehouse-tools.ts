@@ -646,6 +646,8 @@ export function routeSafeHousePrompt(
     includesAny(text, [
       "what can you control",
       "what can you do",
+      "what are you blocked",
+      "blocked from doing",
       "list blocked actions",
       "blocked actions",
       "control",
