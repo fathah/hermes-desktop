@@ -33,7 +33,11 @@ interface ChatInputProps {
   hasSession: boolean;
   sessionId?: string | null;
   remoteMode?: boolean;
+  /** Number of messages waiting to send after the current turn finishes. */
+  queuedCount?: number;
   onSubmit: (text: string, attachments: Attachment[]) => void;
+  /** Called instead of onSubmit when the agent is busy — queues a follow-up. */
+  onEnqueue: (text: string, attachments: Attachment[]) => void;
   onQuickAsk: (text: string, attachments: Attachment[]) => void;
   onAbort: () => void;
 }
@@ -45,7 +49,9 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       hasSession,
       sessionId,
       remoteMode,
+      queuedCount = 0,
       onSubmit,
+      onEnqueue,
       onQuickAsk,
       onAbort,
     },
@@ -210,11 +216,17 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     function handleSend(): void {
       const text = input.trim();
       const hasPayload = text.length > 0 || attachments.length > 0;
-      if (!hasPayload || isLoading) return;
+      if (!hasPayload) return;
       setSlashMenuOpen(false);
       const sendAttachments = attachments;
       clearAfterSend(text);
-      onSubmit(text, sendAttachments);
+      // While the agent is busy, queue the message instead of dropping it —
+      // it sends automatically once the current turn finishes.
+      if (isLoading) {
+        onEnqueue(text, sendAttachments);
+      } else {
+        onSubmit(text, sendAttachments);
+      }
     }
 
     function handleQuickAsk(): void {
@@ -382,6 +394,11 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             )}
           </div>
         )}
+        {queuedCount > 0 && (
+          <div className="chat-queue-indicator" role="status">
+            {t("chat.queued", { count: queuedCount })}
+          </div>
+        )}
         <div className="chat-input-wrapper">
           <input
             ref={fileInputRef}
@@ -412,13 +429,26 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             autoFocus
           />
           {isLoading ? (
-            <button
-              className="chat-send-btn chat-stop-btn"
-              onClick={onAbort}
-              title={t("common.stop")}
-            >
-              <Stop size={14} />
-            </button>
+            <>
+              {(input.trim().length > 0 || attachments.length > 0) && (
+                <button
+                  className="chat-send-btn chat-queue-btn"
+                  onClick={handleSend}
+                  title={t("chat.queueForNext")}
+                  aria-label={t("chat.queueForNext")}
+                  type="button"
+                >
+                  <Send size={16} />
+                </button>
+              )}
+              <button
+                className="chat-send-btn chat-stop-btn"
+                onClick={onAbort}
+                title={t("common.stop")}
+              >
+                <Stop size={14} />
+              </button>
+            </>
           ) : (
             <>
               {input.trim() && hasSession && (

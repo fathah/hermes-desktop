@@ -8,6 +8,8 @@ export default {
   quickAskTitle:
     "Quick Ask (/btw) — side question that won't affect conversation context",
   send: "Send",
+  queueForNext: "Queue — sends after the current turn finishes",
+  queued: "{{count}} queued for next turn",
   custom: "Custom",
   typeModelName: "Type model name...",
   emptyTitle: "How can I help you today?",

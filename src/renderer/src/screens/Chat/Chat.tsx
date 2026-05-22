@@ -12,8 +12,14 @@ import { useFastMode } from "./hooks/useFastMode";
 import { useLocalCommands } from "./hooks/useLocalCommands";
 import { useI18n } from "../../components/useI18n";
 import type { ChatMessage, UsageState } from "./types";
+import type { Attachment } from "../../../../shared/attachments";
 
 export type { ChatMessage } from "./types";
+
+interface QueuedMessage {
+  text: string;
+  attachments: Attachment[];
+}
 
 interface ChatProps {
   messages: ChatMessage[];
@@ -41,6 +47,23 @@ function Chat({
   const [remoteMode, setRemoteMode] = useState(false);
   const dragCounter = useRef(0);
   const chatInputRef = useRef<ChatInputHandle>(null);
+  // Follow-up messages typed while the agent is busy. They send automatically,
+  // one per turn, once the current turn finishes.
+  const queueRef = useRef<QueuedMessage[]>([]);
+  const [queuedCount, setQueuedCount] = useState(0);
+
+  const handleEnqueue = useCallback(
+    (text: string, attachments: Attachment[]) => {
+      queueRef.current.push({ text, attachments });
+      setQueuedCount(queueRef.current.length);
+    },
+    [],
+  );
+
+  const clearQueue = useCallback(() => {
+    queueRef.current = [];
+    setQueuedCount(0);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -115,7 +138,8 @@ function Chat({
     setHermesSessionId(null);
     setUsage(null);
     setToolProgress(null);
-  }, [isLoading, hermesSessionId, sessionId, setMessages]);
+    clearQueue();
+  }, [isLoading, hermesSessionId, sessionId, setMessages, clearQueue]);
 
   const localCommands = useLocalCommands({
     profile,
@@ -137,6 +161,23 @@ function Chat({
     chatInputRef,
     localCommands,
   });
+  const { handleSend } = actions;
+
+  // Drain the follow-up queue: once a turn finishes, send the next queued
+  // message as a fresh turn. One item per completion; the chain continues
+  // until the queue empties.
+  useEffect(() => {
+    if (isLoading || queueRef.current.length === 0) return;
+    const next = queueRef.current.shift();
+    setQueuedCount(queueRef.current.length);
+    if (next) void handleSend(next.text, next.attachments);
+  }, [isLoading, handleSend]);
+
+  // Stop = stop everything: abort the current turn and drop queued follow-ups.
+  function handleAbort(): void {
+    clearQueue();
+    actions.handleAbort();
+  }
 
   const handleSuggestion = useCallback((text: string) => {
     chatInputRef.current?.setText(text);
@@ -231,9 +272,11 @@ function Chat({
           hasSession={!!hermesSessionId}
           sessionId={hermesSessionId}
           remoteMode={remoteMode}
+          queuedCount={queuedCount}
           onSubmit={actions.handleSend}
+          onEnqueue={handleEnqueue}
           onQuickAsk={actions.handleQuickAsk}
-          onAbort={actions.handleAbort}
+          onAbort={handleAbort}
         />
         <ModelPicker
           currentModel={modelConfig.currentModel}

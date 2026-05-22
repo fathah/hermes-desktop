@@ -7,6 +7,8 @@ export default {
   typeMessage: "メッセージを入力...（Shift+Enter で改行）",
   quickAskTitle: "Quick Ask (/btw) — 会話コンテキストに影響しないサイド質問",
   send: "送信",
+  queueForNext: "キューに追加 — 現在のターン完了後に送信",
+  queued: "{{count}} 件キュー中",
   custom: "カスタム",
   typeModelName: "モデル名を入力...",
   emptyTitle: "今日はどんなお手伝いを？",

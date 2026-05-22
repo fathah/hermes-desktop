@@ -1657,6 +1657,29 @@ body {
   background: #dc2626;
 }
 
+/* Send button shown while the agent is busy — queues a follow-up rather
+   than sending immediately, so it reads as secondary, not a primary send. */
+.chat-queue-btn {
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+}
+
+.chat-queue-btn:hover:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* "N queued for next turn" hint above the input. */
+.chat-queue-indicator {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 4px 10px;
+  margin-bottom: 6px;
+  background: var(--accent-subtle);
+  border-radius: var(--radius-md);
+}
+
 .chat-btw-btn {
   width: 34px;
   height: 34px;
