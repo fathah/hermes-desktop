@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   Brain,
@@ -79,6 +79,16 @@ function readCollapsed(): Record<string, boolean> {
   }
 }
 
+/** Keyboard handler that activates a click-like control on Enter / Space. */
+function activateOnKey(handler: () => void) {
+  return (e: React.KeyboardEvent): void => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      handler();
+    }
+  };
+}
+
 function Sidebar({
   view,
   goTo,
@@ -100,6 +110,26 @@ function Sidebar({
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [collapsed, setCollapsed] =
     useState<Record<string, boolean>>(readCollapsed);
+  const profileRef = useRef<HTMLDivElement>(null);
+
+  // Dismiss the profile dropdown on outside click or Escape.
+  useEffect(() => {
+    if (!profileMenuOpen) return;
+    function onPointerDown(e: MouseEvent): void {
+      if (!profileRef.current?.contains(e.target as Node)) {
+        setProfileMenuOpen(false);
+      }
+    }
+    function onKey(e: KeyboardEvent): void {
+      if (e.key === "Escape") setProfileMenuOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [profileMenuOpen]);
 
   const toggleSection = useCallback((id: string) => {
     setCollapsed((prev) => {
@@ -185,11 +215,13 @@ function Sidebar({
   return (
     <aside className="sidebar">
       {/* Profile switcher chip */}
-      <div className="sidebar-profile">
+      <div className="sidebar-profile" ref={profileRef}>
         <button
           className="sidebar-profile-chip"
           onClick={openProfileMenu}
           title={t("navigation.agents")}
+          aria-haspopup="true"
+          aria-expanded={profileMenuOpen}
         >
           <span className="sidebar-profile-avatar">{profileInitial}</span>
           <span className="sidebar-profile-name">{activeProfile}</span>
@@ -256,6 +288,9 @@ function Sidebar({
                   activeWorkspace === w.path ? "active" : ""
                 }`}
                 onClick={() => selectWorkspace(w.path)}
+                onKeyDown={activateOnKey(() => selectWorkspace(w.path))}
+                role="button"
+                tabIndex={0}
                 title={w.path}
               >
                 <span
@@ -312,6 +347,9 @@ function Sidebar({
                     currentSessionId === s.id ? "active" : ""
                   }`}
                   onClick={() => onResumeSession(s.id)}
+                  onKeyDown={activateOnKey(() => onResumeSession(s.id))}
+                  role="button"
+                  tabIndex={0}
                   title={s.title || s.preview || s.id}
                 >
                   <span
@@ -413,7 +451,10 @@ function Section({
       <div
         className="sidebar-section-header"
         onClick={() => onToggle(id)}
+        onKeyDown={activateOnKey(() => onToggle(id))}
         role="button"
+        tabIndex={0}
+        aria-expanded={!collapsed}
       >
         <ChevronRight
           size={14}

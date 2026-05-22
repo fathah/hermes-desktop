@@ -1248,6 +1248,19 @@ body {
   color: var(--text-primary);
 }
 
+/* Keyboard focus ring for all interactive sidebar controls */
+.sidebar-profile-chip:focus-visible,
+.sidebar-profile-menu-item:focus-visible,
+.sidebar-nav-item:focus-visible,
+.sidebar-newworkspace:focus-visible,
+.sidebar-section-header:focus-visible,
+.sidebar-section-action:focus-visible,
+.sidebar-row:focus-visible,
+.sidebar-help-btn:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
+}
+
 .sidebar-update-btn {
   display: flex;
   align-items: center;
