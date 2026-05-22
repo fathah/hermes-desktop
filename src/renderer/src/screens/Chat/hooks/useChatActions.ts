@@ -9,6 +9,7 @@ interface LocalCommands {
 
 interface UseChatActionsArgs {
   profile?: string;
+  workspace?: string | null;
   hermesSessionId: string | null;
   messages: ChatMessage[];
   isLoading: boolean;
@@ -35,6 +36,7 @@ interface UseChatActionsResult {
  */
 export function useChatActions({
   profile,
+  workspace,
   hermesSessionId,
   messages,
   isLoading,
@@ -78,12 +80,13 @@ export function useChatActions({
             content: m.content,
           })),
           attachments,
+          workspace || undefined,
         );
       } catch {
         // onChatError IPC already surfaces this to the user
       }
     },
-    [profile, hermesSessionId],
+    [profile, workspace, hermesSessionId],
   );
 
   const handleSend = useCallback(

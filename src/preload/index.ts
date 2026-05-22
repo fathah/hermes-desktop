@@ -178,6 +178,7 @@ const hermesAPI = {
     resumeSessionId?: string,
     history?: Array<{ role: string; content: string }>,
     attachments?: Attachment[],
+    workspace?: string,
   ): Promise<{ response: string; sessionId?: string }> =>
     ipcRenderer.invoke(
       "send-message",
@@ -186,6 +187,7 @@ const hermesAPI = {
       resumeSessionId,
       history,
       attachments,
+      workspace,
     ),
 
   abortChat: (): Promise<void> => ipcRenderer.invoke("abort-chat"),
@@ -752,6 +754,23 @@ const hermesAPI = {
   ) => ipcRenderer.invoke("kanban-create-task", input, profile),
   selectFolder: (): Promise<string | null> =>
     ipcRenderer.invoke("select-folder"),
+
+  // Workspaces (local folders surfaced in the sidebar)
+  listWorkspaces: (): Promise<
+    Array<{ path: string; name: string; addedAt: number }>
+  > => ipcRenderer.invoke("list-workspaces"),
+  addWorkspace: (): Promise<{
+    workspaces: Array<{ path: string; name: string; addedAt: number }>;
+    activeWorkspace: string;
+  } | null> => ipcRenderer.invoke("add-workspace"),
+  removeWorkspace: (
+    path: string,
+  ): Promise<Array<{ path: string; name: string; addedAt: number }>> =>
+    ipcRenderer.invoke("remove-workspace", path),
+  getActiveWorkspace: (): Promise<string | null> =>
+    ipcRenderer.invoke("get-active-workspace"),
+  setActiveWorkspace: (path: string | null): Promise<boolean> =>
+    ipcRenderer.invoke("set-active-workspace", path),
   kanbanAssignTask: (
     taskId: string,
     assignee: string | null,

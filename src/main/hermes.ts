@@ -282,6 +282,7 @@ function sendMessageViaApi(
   _resumeSessionId?: string,
   history?: Array<{ role: string; content: string }>,
   attachments?: Attachment[],
+  workspace?: string,
 ): ChatHandle {
   const mc = getModelConfig(profile);
   const controller = new AbortController();
@@ -290,6 +291,15 @@ function sendMessageViaApi(
   // History items are kept text-only — attachments from prior turns live in
   // the gateway's session state when resuming via session_id.
   const messages: Array<{ role: string; content: ChatContent }> = [];
+  // The OpenAI-compatible endpoint has no working-directory field, so the
+  // active workspace is surfaced as a system-message hint. The agent can use
+  // it for context; it does not chdir the gateway process.
+  if (workspace) {
+    messages.push({
+      role: "system",
+      content: `The user's active workspace directory is: ${workspace}`,
+    });
+  }
   if (history && history.length > 0) {
     for (const msg of history) {
       messages.push({
@@ -566,6 +576,7 @@ function sendMessageViaCli(
   profile?: string,
   resumeSessionId?: string,
   attachments?: Attachment[],
+  workspace?: string,
 ): ChatHandle {
   // CLI fallback can't pipe multimodal content; inline text-file attachments
   // and ignore images.  The gateway is the supported attachment path; this
@@ -706,8 +717,12 @@ function sendMessageViaCli(
     delete env.OPENROUTER_BASE_URL;
   }
 
+  // Run the agent in the active workspace folder when one is set and still
+  // exists on disk; otherwise fall back to the Hermes repo directory.
+  const cwd = workspace && existsSync(workspace) ? workspace : HERMES_REPO;
+
   const proc = spawn(HERMES_PYTHON, args, {
-    cwd: HERMES_REPO,
+    cwd,
     env,
     stdio: ["ignore", "pipe", "pipe"],
     ...HIDDEN_SUBPROCESS_OPTIONS,
@@ -806,6 +821,7 @@ export async function sendMessage(
   resumeSessionId?: string,
   history?: Array<{ role: string; content: string }>,
   attachments?: Attachment[],
+  workspace?: string,
 ): Promise<ChatHandle> {
   ensureInitialized();
 
@@ -818,6 +834,7 @@ export async function sendMessage(
       resumeSessionId,
       history,
       attachments,
+      workspace,
     );
   }
 
@@ -834,11 +851,19 @@ export async function sendMessage(
       resumeSessionId,
       history,
       attachments,
+      workspace,
     );
   }
 
   // Fallback to CLI
-  return sendMessageViaCli(message, cb, profile, resumeSessionId, attachments);
+  return sendMessageViaCli(
+    message,
+    cb,
+    profile,
+    resumeSessionId,
+    attachments,
+    workspace,
+  );
 }
 
 // Lazy init — called on first sendMessage or gateway start

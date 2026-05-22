@@ -85,6 +85,11 @@ import {
   setConnectionConfig,
   getPlatformEnabled,
   setPlatformEnabled,
+  listWorkspaces,
+  addWorkspace,
+  removeWorkspace,
+  getActiveWorkspace,
+  setActiveWorkspace,
 } from "./config";
 import {
   listSessions,
@@ -618,6 +623,7 @@ function setupIPC(): void {
       resumeSessionId?: string,
       history?: Array<{ role: string; content: string }>,
       attachments?: Attachment[],
+      workspace?: string,
     ) => {
       if (!isRemoteMode() && !isGatewayRunning()) {
         startGateway(profile);
@@ -701,6 +707,7 @@ function setupIPC(): void {
         resumeSessionId,
         history,
         attachments,
+        workspace,
       );
 
       currentChatAbort = handle.abort;
@@ -1189,6 +1196,27 @@ function setupIPC(): void {
     if (result.canceled || result.filePaths.length === 0) return null;
     return result.filePaths[0];
   });
+
+  // ── Workspaces (local folders for the sidebar) ──────────
+  ipcMain.handle("list-workspaces", () => listWorkspaces());
+  ipcMain.handle("add-workspace", async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const result = win
+      ? await dialog.showOpenDialog(win, { properties: ["openDirectory"] })
+      : await dialog.showOpenDialog({ properties: ["openDirectory"] });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    const path = result.filePaths[0];
+    addWorkspace(path);
+    setActiveWorkspace(path);
+    return { workspaces: listWorkspaces(), activeWorkspace: path };
+  });
+  ipcMain.handle("remove-workspace", (_event, path: string) =>
+    removeWorkspace(path),
+  );
+  ipcMain.handle("get-active-workspace", () => getActiveWorkspace());
+  ipcMain.handle("set-active-workspace", (_event, path: string | null) =>
+    setActiveWorkspace(path),
+  );
   ipcMain.handle(
     "kanban-assign-task",
     (_event, taskId: string, assignee: string | null, profile?: string) =>

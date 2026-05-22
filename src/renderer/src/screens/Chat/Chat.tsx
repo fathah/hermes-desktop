@@ -20,6 +20,7 @@ interface ChatProps {
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   sessionId: string | null;
   profile?: string;
+  workspace?: string | null;
   onSessionStarted?: () => void;
   onNewChat?: () => void;
 }
@@ -29,6 +30,7 @@ function Chat({
   setMessages,
   sessionId,
   profile,
+  workspace,
   onSessionStarted,
   onNewChat,
 }: ChatProps): React.JSX.Element {
@@ -128,6 +130,7 @@ function Chat({
 
   const actions = useChatActions({
     profile,
+    workspace,
     hermesSessionId,
     messages,
     isLoading,

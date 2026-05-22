@@ -13,4 +13,9 @@ export default {
   kanban: "Kanban",
   gateway: "Gateway",
   settings: "Pengaturan",
+  newWorkspace: "Workspace Baru",
+  sectionWorkspaces: "Workspace",
+  sectionSessions: "Sesi",
+  sectionConfiguration: "Konfigurasi",
+  help: "Bantuan",
 } as const;

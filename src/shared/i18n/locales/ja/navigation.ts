@@ -13,4 +13,9 @@ export default {
   kanban: "カンバン",
   gateway: "ゲートウェイ",
   settings: "設定",
+  newWorkspace: "新しいワークスペース",
+  sectionWorkspaces: "ワークスペース",
+  sectionSessions: "セッション",
+  sectionConfiguration: "設定項目",
+  help: "ヘルプ",
 } as const;

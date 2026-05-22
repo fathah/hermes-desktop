@@ -13,4 +13,9 @@ export default {
   kanban: "看板",
   gateway: "網關",
   settings: "設定",
+  newWorkspace: "新增工作區",
+  sectionWorkspaces: "工作區",
+  sectionSessions: "工作階段",
+  sectionConfiguration: "設定項目",
+  help: "說明",
 } as const;

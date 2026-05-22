@@ -13,4 +13,9 @@ export default {
   kanban: "Kanban",
   gateway: "Gateway",
   settings: "Configuración",
+  newWorkspace: "Nuevo espacio de trabajo",
+  sectionWorkspaces: "Espacios de trabajo",
+  sectionSessions: "Sesiones",
+  sectionConfiguration: "Configuración",
+  help: "Ayuda",
 } as const;

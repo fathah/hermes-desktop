@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
-import { join } from "path";
+import { basename, join } from "path";
 import { HERMES_HOME, expectedEnvKeyForModel } from "./installer";
 import {
   escapeRegex,
@@ -60,6 +60,58 @@ export function writeDesktopConfig(data: Record<string, unknown>): void {
     mkdirSync(HERMES_HOME, { recursive: true });
   }
   writeFileSync(desktopConfigFile(), JSON.stringify(data, null, 2), "utf-8");
+}
+
+// ── Workspaces (local folders the agent can run in) ──────
+//
+// A "workspace" is a local directory the user registers via the sidebar's
+// "New Workspace" action. The active workspace is passed to the CLI chat
+// path as the agent's working directory (cwd). Persisted in desktop.json.
+
+export interface Workspace {
+  path: string;
+  name: string;
+  addedAt: number;
+}
+
+export function listWorkspaces(): Workspace[] {
+  const ws = readDesktopConfig().workspaces;
+  return Array.isArray(ws) ? (ws as Workspace[]) : [];
+}
+
+/** Append a folder to the workspace list. No-op if the path is already present. */
+export function addWorkspace(path: string): Workspace[] {
+  const data = readDesktopConfig();
+  const list = listWorkspaces();
+  if (list.some((w) => w.path === path)) return list;
+  const next = [
+    ...list,
+    { path, name: basename(path) || path, addedAt: Date.now() },
+  ];
+  data.workspaces = next;
+  writeDesktopConfig(data);
+  return next;
+}
+
+export function removeWorkspace(path: string): Workspace[] {
+  const data = readDesktopConfig();
+  const next = listWorkspaces().filter((w) => w.path !== path);
+  data.workspaces = next;
+  if (data.activeWorkspace === path) data.activeWorkspace = null;
+  writeDesktopConfig(data);
+  return next;
+}
+
+export function getActiveWorkspace(): string | null {
+  const v = readDesktopConfig().activeWorkspace;
+  return typeof v === "string" ? v : null;
+}
+
+export function setActiveWorkspace(path: string | null): boolean {
+  const data = readDesktopConfig();
+  data.activeWorkspace = path;
+  writeDesktopConfig(data);
+  return true;
 }
 
 export function getConnectionConfig(): ConnectionConfig {
@@ -724,7 +776,11 @@ export function setModelConfig(
   // Scope all api_key add/update/remove operations to the `model:` block —
   // `auxiliary.*` subsections each carry their own `api_key:` line and must
   // not be touched.
-  const autoApiKey = pickAutoApiKeyForCustomProvider(provider, baseUrl, profile);
+  const autoApiKey = pickAutoApiKeyForCustomProvider(
+    provider,
+    baseUrl,
+    profile,
+  );
   const body = findModelBlockBody(content);
   if (body) {
     const block = content.slice(body.start, body.end);
@@ -764,7 +820,8 @@ export function setModelConfig(
       newBlock = block.replace(apiKeyInBlock, "");
     }
     if (newBlock !== block) {
-      content = content.slice(0, body.start) + newBlock + content.slice(body.end);
+      content =
+        content.slice(0, body.start) + newBlock + content.slice(body.end);
     }
   }
 

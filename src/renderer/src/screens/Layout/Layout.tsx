@@ -15,28 +15,11 @@ import Schedules from "../Schedules/Schedules";
 import Kanban from "../Kanban/Kanban";
 import RemoteNotice from "../../components/RemoteNotice";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
-import hermeslogo from "../../assets/hermes.png";
-import {
-  ChatBubble,
-  Clock,
-  Users,
-  Settings as SettingsIcon,
-  Puzzle,
-  Sparkles,
-  Brain,
-  Wrench,
-  Signal,
-  Building,
-  Layers,
-  KeyRound,
-  Timer,
-  Kanban as KanbanIcon,
-  Download,
-} from "../../assets/icons";
-import type { LucideIcon } from "lucide-react";
+import Sidebar from "./Sidebar";
+import { Download } from "../../assets/icons";
 import { useI18n } from "../../components/useI18n";
 
-type View =
+export type View =
   | "chat"
   | "sessions"
   | "agents"
@@ -51,23 +34,6 @@ type View =
   | "kanban"
   | "gateway"
   | "settings";
-
-const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string }[] = [
-  { view: "chat", icon: ChatBubble, labelKey: "navigation.chat" },
-  { view: "sessions", icon: Clock, labelKey: "navigation.sessions" },
-  { view: "agents", icon: Users, labelKey: "navigation.agents" },
-  { view: "office", icon: Building, labelKey: "navigation.office" },
-  { view: "kanban", icon: KanbanIcon, labelKey: "navigation.kanban" },
-  { view: "models", icon: Layers, labelKey: "navigation.models" },
-  { view: "providers", icon: KeyRound, labelKey: "navigation.providers" },
-  { view: "skills", icon: Puzzle, labelKey: "navigation.skills" },
-  { view: "soul", icon: Sparkles, labelKey: "navigation.soul" },
-  { view: "memory", icon: Brain, labelKey: "navigation.memory" },
-  { view: "tools", icon: Wrench, labelKey: "navigation.tools" },
-  { view: "schedules", icon: Timer, labelKey: "navigation.schedules" },
-  { view: "gateway", icon: Signal, labelKey: "navigation.gateway" },
-  { view: "settings", icon: SettingsIcon, labelKey: "navigation.settings" },
-];
 
 interface LayoutProps {
   verifyWarning?: boolean;
@@ -85,6 +51,7 @@ function Layout({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [activeProfile, setActiveProfile] = useState("default");
+  const [activeWorkspace, setActiveWorkspace] = useState<string | null>(null);
   // Tabs lazy-mount on first visit, then stay mounted (display:none toggle).
   // Keeps IPC refetch / DOM rebuild off the tab-switch hot path.
   const [visitedViews, setVisitedViews] = useState<Set<View>>(
@@ -109,6 +76,11 @@ function Layout({
   useEffect(() => {
     window.hermesAPI.isRemoteOnlyMode().then(setRemoteMode);
   }, [view]);
+
+  // Load the persisted active workspace once on mount
+  useEffect(() => {
+    window.hermesAPI.getActiveWorkspace().then(setActiveWorkspace);
+  }, []);
 
   // Auto-update state
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
@@ -212,26 +184,18 @@ function Layout({
 
   return (
     <div className="layout">
-      <aside className="sidebar">
-        <div className="sidebar-brand">
-          <img src={hermeslogo} height={30} alt="" />
-        </div>
-
-        <nav className="sidebar-nav">
-          {NAV_ITEMS.map(({ view: v, icon: Icon, labelKey }) => (
-            <button
-              key={v}
-              className={`sidebar-nav-item ${view === v ? "active" : ""}`}
-              onClick={() => goTo(v)}
-            >
-              <Icon size={16} />
-              {t(labelKey)}
-            </button>
-          ))}
-        </nav>
-
-        <div className="sidebar-footer">
-          {updateState && (
+      <Sidebar
+        view={view}
+        goTo={goTo}
+        activeProfile={activeProfile}
+        onSelectProfile={handleSelectProfile}
+        currentSessionId={currentSessionId}
+        onResumeSession={handleResumeSession}
+        onNewChat={handleNewChat}
+        activeWorkspace={activeWorkspace}
+        onWorkspaceChange={setActiveWorkspace}
+        footerSlot={
+          updateState && (
             <button
               className={`sidebar-update-btn ${
                 updateState === "error" ? "error" : ""
@@ -258,12 +222,9 @@ function Layout({
                 <span>{t("common.updateFailed")}</span>
               )}
             </button>
-          )}
-          <div className="sidebar-footer-text">
-            {activeProfile === "default" ? t("common.appName") : activeProfile}
-          </div>
-        </div>
-      </aside>
+          )
+        }
+      />
 
       <main className="content">
         {verifyWarning && onReinstall && onDismissVerifyWarning && (
@@ -278,6 +239,7 @@ function Layout({
             setMessages={setMessages}
             sessionId={currentSessionId}
             profile={activeProfile}
+            workspace={activeWorkspace}
             onNewChat={handleNewChat}
           />
         </div>

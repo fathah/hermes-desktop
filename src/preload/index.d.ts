@@ -112,6 +112,12 @@ interface KanbanCreateTaskInput {
   maxRetries?: number;
 }
 
+interface Workspace {
+  path: string;
+  name: string;
+  addedAt: number;
+}
+
 interface HermesAPI {
   // Installation
   checkInstall: () => Promise<InstallStatus>;
@@ -199,6 +205,7 @@ interface HermesAPI {
     resumeSessionId?: string,
     history?: Array<{ role: string; content: string }>,
     attachments?: Attachment[],
+    workspace?: string,
   ) => Promise<{ response: string; sessionId?: string }>;
   abortChat: () => Promise<void>;
   getPathForFile: (file: File) => string;
@@ -661,6 +668,16 @@ interface HermesAPI {
     logFile?: string,
     lines?: number,
   ) => Promise<{ content: string; path: string }>;
+
+  // Workspaces (local folders surfaced in the sidebar)
+  listWorkspaces: () => Promise<Workspace[]>;
+  addWorkspace: () => Promise<{
+    workspaces: Workspace[];
+    activeWorkspace: string;
+  } | null>;
+  removeWorkspace: (path: string) => Promise<Workspace[]>;
+  getActiveWorkspace: () => Promise<string | null>;
+  setActiveWorkspace: (path: string | null) => Promise<boolean>;
 }
 
 declare global {
