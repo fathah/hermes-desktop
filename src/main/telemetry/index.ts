@@ -35,6 +35,15 @@ import {
   type CronJobInput,
   type CronJobPatch,
 } from "./cron";
+import {
+  completeTask,
+  createBoard,
+  createTask,
+  deleteTask,
+  removeBoard,
+  type CreateBoardInput,
+  type CreateTaskInput,
+} from "./kanban-mutations";
 
 export function registerTelemetryHandlers(ipcMain: IpcMain): void {
   ipcMain.handle("telemetry-gateway-status", () => fetchGatewayStatus());
@@ -86,4 +95,26 @@ export function registerTelemetryHandlers(ipcMain: IpcMain): void {
     (_event, jobId: string) => resumeCronJob(jobId),
   );
   ipcMain.handle("cron-run", (_event, jobId: string) => runCronJob(jobId));
+
+  // ---- Phase 4 (PR-E2): kanban CRUD mutations ----------------
+  ipcMain.handle(
+    "kanban-create-board",
+    (_event, input: CreateBoardInput) => createBoard(input),
+  );
+  ipcMain.handle(
+    "kanban-remove-board",
+    (_event, slug: string, hard?: boolean) => removeBoard(slug, !!hard),
+  );
+  ipcMain.handle(
+    "kanban-create-task",
+    (_event, input: CreateTaskInput) => createTask(input),
+  );
+  ipcMain.handle(
+    "kanban-delete-task",
+    (_event, taskId: string, board?: string) => deleteTask(taskId, board),
+  );
+  ipcMain.handle(
+    "kanban-complete-task",
+    (_event, taskId: string, board?: string) => completeTask(taskId, board),
+  );
 }
