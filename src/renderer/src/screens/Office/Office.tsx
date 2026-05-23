@@ -123,11 +123,17 @@ function Office({
     const ONBOARDING_JS = `try { localStorage.setItem("claw3d:onboarding:completed", "true") } catch(e) {}`;
 
     // Inject onboarding flag as early as possible (before Claw3D's scripts run).
-    // did-start-loading fires before any page resources load, so the injection
-    // is queued early enough that Claw3D's useOnboardingState hook sees it.
+    // did-start-loading fires before any page resources load, so the first
+    // attempt may run before the webview is attached + dom-ready has fired.
+    // Electron throws *synchronously* in that case ("WebView must be attached
+    // to the DOM and the dom-ready event emitted before this method can be
+    // called"). Catch that — the dom-ready handler below re-injects.
     const injectOnboardingFlag = (): void => {
-      if (wv.executeJavaScript) {
+      if (!wv.executeJavaScript) return;
+      try {
         wv.executeJavaScript(ONBOARDING_JS).catch(() => {});
+      } catch {
+        // Pre-dom-ready synchronous throw; safe to ignore — re-injected on dom-ready.
       }
     };
 
