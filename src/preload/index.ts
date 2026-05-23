@@ -5,6 +5,8 @@ import type {
   CronJobInput,
   CronJobPatch,
   GatewayStatusTelemetry,
+  KanbanBoardCreateRequest,
+  KanbanTaskCreateRequest,
   KanbanTelemetry,
   MemoryTelemetry,
   MutationResult,
@@ -934,6 +936,33 @@ const hermesAPI = {
       since?: string,
     ): Promise<TelemetryEnvelope<UsageSummaryTelemetry>> =>
       ipcRenderer.invoke("telemetry-usage-summary", since),
+  },
+
+  // Kanban mutations (Phase-4 / PR-E2).
+  kanban: {
+    createBoard: (
+      input: KanbanBoardCreateRequest,
+    ): Promise<MutationResult> =>
+      ipcRenderer.invoke("kanban-create-board", input),
+    removeBoard: (
+      slug: string,
+      hard?: boolean,
+    ): Promise<MutationResult> =>
+      ipcRenderer.invoke("kanban-remove-board", slug, hard),
+    createTask: (
+      input: KanbanTaskCreateRequest,
+    ): Promise<MutationResult> =>
+      ipcRenderer.invoke("kanban-create-task", input),
+    deleteTask: (
+      taskId: string,
+      board?: string,
+    ): Promise<MutationResult> =>
+      ipcRenderer.invoke("kanban-delete-task", taskId, board),
+    completeTask: (
+      taskId: string,
+      board?: string,
+    ): Promise<MutationResult> =>
+      ipcRenderer.invoke("kanban-complete-task", taskId, board),
   },
 
   // Cron mutations (Phase-4 / PR-E1) — write-path against the

@@ -4,6 +4,8 @@ import type {
   CronJobInput,
   CronJobPatch,
   GatewayStatusTelemetry,
+  KanbanBoardCreateRequest,
+  KanbanTaskCreateRequest,
   KanbanTelemetry,
   MemoryTelemetry,
   MutationResult,
@@ -778,6 +780,17 @@ interface HermesAPI {
     pause: (jobId: string) => Promise<MutationResult>;
     resume: (jobId: string) => Promise<MutationResult>;
     run: (jobId: string) => Promise<MutationResult>;
+  };
+
+  kanban: {
+    createBoard: (input: KanbanBoardCreateRequest) => Promise<MutationResult>;
+    removeBoard: (slug: string, hard?: boolean) => Promise<MutationResult>;
+    createTask: (input: KanbanTaskCreateRequest) => Promise<MutationResult>;
+    deleteTask: (taskId: string, board?: string) => Promise<MutationResult>;
+    completeTask: (
+      taskId: string,
+      board?: string,
+    ) => Promise<MutationResult>;
   };
 }
 
