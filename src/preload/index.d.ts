@@ -2,7 +2,11 @@ import type { AppLocale } from "../shared/i18n/types";
 import type { Attachment } from "../shared/attachments";
 import type {
   GatewayStatusTelemetry,
+  KanbanTelemetry,
+  MemoryTelemetry,
+  SchedulesTelemetry,
   TelemetryEnvelope,
+  ToolsTelemetry,
 } from "../shared/telemetry-types";
 
 interface ElectronAPI {
@@ -746,6 +750,10 @@ interface HermesAPI {
   // Telemetry (read-only)
   telemetry: {
     gatewayStatus: () => Promise<TelemetryEnvelope<GatewayStatusTelemetry>>;
+    tools: (profile?: string) => Promise<TelemetryEnvelope<ToolsTelemetry>>;
+    memory: () => Promise<TelemetryEnvelope<MemoryTelemetry>>;
+    schedules: () => Promise<TelemetryEnvelope<SchedulesTelemetry>>;
+    kanban: () => Promise<TelemetryEnvelope<KanbanTelemetry>>;
   };
 }
 
