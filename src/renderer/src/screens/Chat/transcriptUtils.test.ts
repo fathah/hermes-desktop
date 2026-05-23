@@ -38,4 +38,40 @@ describe("buildChatTranscript (issue #298)", () => {
     expect(buildChatTranscript([msg("agent", "x")], "text")).toBe("Hermes: x");
     expect(buildChatTranscript([msg("user", "x")], "text")).toBe("You: x");
   });
+
+  it("filters out history-only sub-rows (reasoning, tool_call, tool_result)", () => {
+    // PR #327 widened ChatMessage to a union — only ChatBubbleMessage has
+    // the `.content` shape transcripts care about. The other variants must
+    // not appear in the user-visible copy/paste output, or they'd render
+    // as `Hermes: undefined` (TS error before this fix; nonsense after).
+    const mixed: ChatMessage[] = [
+      { id: "u1", role: "user", content: "hi" },
+      {
+        id: "r1",
+        kind: "reasoning",
+        role: "agent",
+        text: "internal monologue, not for transcript",
+      },
+      {
+        id: "tc1",
+        kind: "tool_call",
+        role: "agent",
+        callId: "c1",
+        name: "search",
+        args: "{}",
+      },
+      {
+        id: "tr1",
+        kind: "tool_result",
+        role: "agent",
+        callId: "c1",
+        name: "search",
+        content: "raw search blob",
+      },
+      { id: "a1", role: "agent", content: "hello there" },
+    ];
+    expect(buildChatTranscript(mixed, "text")).toBe(
+      "You: hi\n\nHermes: hello there",
+    );
+  });
 });

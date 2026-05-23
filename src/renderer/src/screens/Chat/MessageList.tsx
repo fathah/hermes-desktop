@@ -2,6 +2,7 @@ import { memo, useMemo } from "react";
 import { HermesAvatar, MessageRow } from "./MessageRow";
 import { ReasoningRow, ToolCallRow, ToolResultRow } from "./HistoryRow";
 import type { ChatMessage } from "./types";
+import { isBubbleMessage } from "./types";
 
 interface MessageListProps {
   messages: ChatMessage[];
@@ -34,17 +35,12 @@ function TypingIndicator({
   );
 }
 
-/**
- * Bubble messages are filtered to "has content". History items (reasoning,
- * tool_call, tool_result) are *always* shown — they're collapsed by default
- * and the user opens them. Filtering them by content would defeat the point.
- */
-function isBubble(m: ChatMessage): m is import("./types").ChatBubbleMessage {
-  // Bubble messages have no `kind` field (or kind === "user"/"assistant").
-  // History items have kind === "reasoning" | "tool_call" | "tool_result".
-  const k = (m as { kind?: string }).kind;
-  return !k || k === "user" || k === "assistant";
-}
+// Bubble messages are filtered to "has content". History items (reasoning,
+// tool_call, tool_result) are *always* shown — they're collapsed by default
+// and the user opens them. Filtering them by content would defeat the point.
+// The `isBubbleMessageMessage` type guard lives in `./types` so the other consumers
+// (transcript builder, send-to-agent history, live-stream chunk append) can
+// share the exact same narrowing rule.
 
 export const MessageList = memo(function MessageList({
   messages,
@@ -58,48 +54,35 @@ export const MessageList = memo(function MessageList({
   const visibleMessages = useMemo(
     () =>
       messages.filter((m) => {
-        if (!isBubble(m)) return true;
+        if (!isBubbleMessage(m)) return true;
         return ((m.content as string) || "").trim().length > 0;
       }),
     [messages],
   );
 
-  const lastBubble = [...messages].reverse().find(isBubble);
+  const lastBubble = [...messages].reverse().find(isBubbleMessage);
   const lastMessageIsAgent = !!lastBubble && lastBubble.role === "agent";
 
   return (
     <>
       {visibleMessages.map((msg, i) => {
-        const k = (msg as { kind?: string }).kind;
-        if (k === "reasoning") {
-          return (
-            <ReasoningRow
-              key={msg.id}
-              msg={msg as Extract<ChatMessage, { kind: "reasoning" }>}
-            />
-          );
+        // Discriminated-union dispatch — TS narrows `msg` to each variant
+        // exhaustively, so the per-row component receives the correctly
+        // typed value with no manual cast.
+        if (msg.kind === "reasoning") {
+          return <ReasoningRow key={msg.id} msg={msg} />;
         }
-        if (k === "tool_call") {
-          return (
-            <ToolCallRow
-              key={msg.id}
-              msg={msg as Extract<ChatMessage, { kind: "tool_call" }>}
-            />
-          );
+        if (msg.kind === "tool_call") {
+          return <ToolCallRow key={msg.id} msg={msg} />;
         }
-        if (k === "tool_result") {
-          return (
-            <ToolResultRow
-              key={msg.id}
-              msg={msg as Extract<ChatMessage, { kind: "tool_result" }>}
-            />
-          );
+        if (msg.kind === "tool_result") {
+          return <ToolResultRow key={msg.id} msg={msg} />;
         }
-        const bubble = msg as Extract<ChatMessage, { role: "user" | "agent" }>;
+        // After the discriminant checks above, `msg` is `ChatBubbleMessage`.
         return (
           <MessageRow
             key={msg.id}
-            msg={bubble}
+            msg={msg}
             isLast={i === visibleMessages.length - 1}
             isLoading={isLoading}
             onApprove={onApprove}

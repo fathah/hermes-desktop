@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { ChatInputHandle } from "../ChatInput";
 import type { Attachment, ChatMessage } from "../types";
+import { isBubbleMessage } from "../types";
 
 interface LocalCommands {
   isLocal: (text: string) => boolean;
@@ -76,7 +77,10 @@ export function useChatActions({
           text,
           profile,
           hermesSessionId || undefined,
-          messagesRef.current.map((m) => ({
+          // Drop history-only sub-rows (reasoning / tool_call / tool_result)
+          // before sending — the agent has them in its own state already and
+          // they don't share the bubble `.content` shape.
+          messagesRef.current.filter(isBubbleMessage).map((m) => ({
             role: m.role,
             content: m.content,
           })),

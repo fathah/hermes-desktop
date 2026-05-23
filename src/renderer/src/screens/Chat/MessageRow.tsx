@@ -3,7 +3,7 @@ import icon from "../../assets/icon.png";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
 import { AttachmentChip } from "../../components/AttachmentChip";
 import { useI18n } from "../../components/useI18n";
-import type { Attachment, ChatMessage } from "./types";
+import type { Attachment, ChatBubbleMessage } from "./types";
 
 export const APPROVAL_RE =
   /⚠️.*dangerous|requires? (your )?approval|\/approve.*\/deny|do you want (me )?to (proceed|continue|run|execute)/i;
@@ -21,7 +21,11 @@ export const HermesAvatar = memo(function HermesAvatar({
 });
 
 interface MessageRowProps {
-  msg: ChatMessage;
+  // MessageRow renders the visible chat-bubble UI; non-bubble variants
+  // (reasoning, tool_call, tool_result) have their own dedicated rows in
+  // MessageList and never reach here. Narrowing the prop type makes that
+  // contract explicit so `.content` / `.attachments` are safe to read.
+  msg: ChatBubbleMessage;
   isLast: boolean;
   isLoading: boolean;
   onApprove: () => void;

@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import type { ChatMessage, UsageState } from "../types";
+import { isBubbleMessage } from "../types";
 
 interface UseChatIPCArgs {
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
@@ -26,7 +27,10 @@ export function useChatIPC({
     const cleanupChunk = window.hermesAPI.onChatChunk((chunk) => {
       setMessages((prev) => {
         const last = prev[prev.length - 1];
-        if (last && last.role === "agent") {
+        // Live chunks only ever append to an agent CHAT BUBBLE — never to
+        // a reasoning / tool_call / tool_result sub-row (those have no
+        // `.content` shape and aren't streamed into).
+        if (last && last.role === "agent" && isBubbleMessage(last)) {
           return [
             ...prev.slice(0, -1),
             { ...last, content: last.content + chunk },
