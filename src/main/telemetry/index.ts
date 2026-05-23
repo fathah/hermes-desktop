@@ -25,6 +25,16 @@ import {
   fetchTools,
   fetchUsageSummary,
 } from "./subsystems";
+import {
+  createCronJob,
+  deleteCronJob,
+  pauseCronJob,
+  resumeCronJob,
+  runCronJob,
+  updateCronJob,
+  type CronJobInput,
+  type CronJobPatch,
+} from "./cron";
 
 export function registerTelemetryHandlers(ipcMain: IpcMain): void {
   ipcMain.handle("telemetry-gateway-status", () => fetchGatewayStatus());
@@ -52,4 +62,28 @@ export function registerTelemetryHandlers(ipcMain: IpcMain): void {
     "telemetry-usage-summary",
     (_event, since?: string) => fetchUsageSummary(since),
   );
+
+  // ---- Phase 4 (PR-E1): cron CRUD mutations -------------------
+  ipcMain.handle(
+    "cron-create",
+    (_event, input: CronJobInput) => createCronJob(input),
+  );
+  ipcMain.handle(
+    "cron-update",
+    (_event, jobId: string, patch: CronJobPatch) =>
+      updateCronJob(jobId, patch),
+  );
+  ipcMain.handle(
+    "cron-delete",
+    (_event, jobId: string) => deleteCronJob(jobId),
+  );
+  ipcMain.handle(
+    "cron-pause",
+    (_event, jobId: string) => pauseCronJob(jobId),
+  );
+  ipcMain.handle(
+    "cron-resume",
+    (_event, jobId: string) => resumeCronJob(jobId),
+  );
+  ipcMain.handle("cron-run", (_event, jobId: string) => runCronJob(jobId));
 }
