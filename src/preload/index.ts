@@ -1,6 +1,10 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { AppLocale } from "../shared/i18n/types";
 import type { Attachment } from "../shared/attachments";
+import type {
+  GatewayStatusTelemetry,
+  TelemetryEnvelope,
+} from "../shared/telemetry-types";
 
 const electronAPI = {
   process: {
@@ -904,6 +908,13 @@ const hermesAPI = {
     lines?: number,
   ): Promise<{ content: string; path: string }> =>
     ipcRenderer.invoke("read-logs", logFile, lines),
+
+  // Telemetry (read-only). Step 0: capability probe only; per-feature
+  // endpoints come in PR-A2.
+  telemetry: {
+    gatewayStatus: (): Promise<TelemetryEnvelope<GatewayStatusTelemetry>> =>
+      ipcRenderer.invoke("telemetry-gateway-status"),
+  },
 };
 
 if (process.contextIsolated) {

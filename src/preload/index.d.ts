@@ -1,5 +1,9 @@
 import type { AppLocale } from "../shared/i18n/types";
 import type { Attachment } from "../shared/attachments";
+import type {
+  GatewayStatusTelemetry,
+  TelemetryEnvelope,
+} from "../shared/telemetry-types";
 
 interface ElectronAPI {
   process: {
@@ -738,6 +742,11 @@ interface HermesAPI {
     logFile?: string,
     lines?: number,
   ) => Promise<{ content: string; path: string }>;
+
+  // Telemetry (read-only)
+  telemetry: {
+    gatewayStatus: () => Promise<TelemetryEnvelope<GatewayStatusTelemetry>>;
+  };
 }
 
 declare global {
