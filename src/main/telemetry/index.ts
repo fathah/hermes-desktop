@@ -15,7 +15,12 @@ import { fetchGatewayStatus } from "./gateway-status";
 import {
   fetchKanban,
   fetchMemory,
+  fetchPersona,
+  fetchProfiles,
+  fetchProviders,
   fetchSchedules,
+  fetchSessions,
+  fetchSkills,
   fetchTools,
 } from "./subsystems";
 
@@ -28,4 +33,12 @@ export function registerTelemetryHandlers(ipcMain: IpcMain): void {
   ipcMain.handle("telemetry-memory", () => fetchMemory());
   ipcMain.handle("telemetry-schedules", () => fetchSchedules());
   ipcMain.handle("telemetry-kanban", () => fetchKanban());
+  ipcMain.handle(
+    "telemetry-sessions",
+    (_event, limit?: number) => fetchSessions(limit),
+  );
+  ipcMain.handle("telemetry-skills", () => fetchSkills());
+  ipcMain.handle("telemetry-profiles", () => fetchProfiles());
+  ipcMain.handle("telemetry-providers", () => fetchProviders());
+  ipcMain.handle("telemetry-persona", () => fetchPersona());
 }

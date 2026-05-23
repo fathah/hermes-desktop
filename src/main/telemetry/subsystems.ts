@@ -12,7 +12,12 @@ import { telemetryGet } from "./client";
 import type {
   KanbanTelemetry,
   MemoryTelemetry,
+  PersonaTelemetry,
+  ProfilesTelemetry,
+  ProvidersTelemetry,
   SchedulesTelemetry,
+  SessionsTelemetry,
+  SkillsTelemetry,
   TelemetryEnvelope,
   ToolsTelemetry,
 } from "../../shared/telemetry-types";
@@ -40,4 +45,35 @@ export async function fetchKanban(): Promise<
   TelemetryEnvelope<KanbanTelemetry>
 > {
   return telemetryGet<KanbanTelemetry>("/v1/telemetry/kanban");
+}
+
+export async function fetchSessions(
+  limit?: number,
+): Promise<TelemetryEnvelope<SessionsTelemetry>> {
+  const qs = limit ? `?limit=${encodeURIComponent(String(limit))}` : "";
+  return telemetryGet<SessionsTelemetry>(`/v1/telemetry/sessions${qs}`);
+}
+
+export async function fetchSkills(): Promise<
+  TelemetryEnvelope<SkillsTelemetry>
+> {
+  return telemetryGet<SkillsTelemetry>("/v1/telemetry/skills");
+}
+
+export async function fetchProfiles(): Promise<
+  TelemetryEnvelope<ProfilesTelemetry>
+> {
+  return telemetryGet<ProfilesTelemetry>("/v1/telemetry/profiles");
+}
+
+export async function fetchProviders(): Promise<
+  TelemetryEnvelope<ProvidersTelemetry>
+> {
+  return telemetryGet<ProvidersTelemetry>("/v1/telemetry/providers");
+}
+
+export async function fetchPersona(): Promise<
+  TelemetryEnvelope<PersonaTelemetry>
+> {
+  return telemetryGet<PersonaTelemetry>("/v1/telemetry/persona");
 }
