@@ -59,3 +59,49 @@ export interface GatewayStatusTelemetry {
     reachable: boolean;
   }>;
 }
+
+/** GET /v1/telemetry/tools — read-only toolset status. */
+export interface ToolsTelemetry {
+  toolsets: Array<{
+    key: string;
+    label: string;
+    description: string;
+    enabled: boolean;
+    source: "builtin" | "mcp";
+    mcpServer?: { name: string; status: "connected" | "disconnected" };
+  }>;
+}
+
+/** GET /v1/telemetry/memory — provider status, never contents. */
+export interface MemoryTelemetry {
+  provider: string;
+  configured: boolean;
+  itemCount?: number;
+  sizeBytes?: number;
+  lastUpdatedAt?: string;
+}
+
+/** GET /v1/telemetry/schedules — cron / interval / one-shot job summary. */
+export interface SchedulesTelemetry {
+  jobs: Array<{
+    id: string;
+    name: string;
+    kind: "cron" | "interval" | "at";
+    schedule: string;
+    agentId?: string;
+    nextRunAt?: string;
+    lastRunAt?: string;
+    lastStatus?: "ok" | "error" | "skipped";
+    enabled: boolean;
+  }>;
+}
+
+/** GET /v1/telemetry/kanban — boards + per-column card counts. */
+export interface KanbanTelemetry {
+  boards: Array<{
+    id: string;
+    name: string;
+    columns: Array<{ id: string; name: string; cardCount: number }>;
+  }>;
+  totalCards: number;
+}
