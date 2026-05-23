@@ -76,6 +76,41 @@ describe("telemetry IPC surface", () => {
     expect(ALL_CHANNELS.length).toBe(ALL_METHODS.length);
   });
 
+  it("cron mutation surface wires every channel", () => {
+    const cronHandlersSrc = readFileSync(
+      join(ROOT, "src/main/telemetry/index.ts"),
+      "utf-8",
+    );
+    const CRON_CHANNELS = [
+      "cron-create",
+      "cron-update",
+      "cron-delete",
+      "cron-pause",
+      "cron-resume",
+      "cron-run",
+    ];
+    for (const channel of CRON_CHANNELS) {
+      const re = new RegExp(
+        `ipcMain\\.handle\\(\\s*"${channel.replace(/-/g, "\\-")}"`,
+      );
+      expect(cronHandlersSrc).toMatch(re);
+    }
+    // Preload exposes the matching cron.<method> calls.
+    const CRON_METHODS = [
+      "create",
+      "update",
+      "remove",
+      "pause",
+      "resume",
+      "run",
+    ];
+    expect(preloadSrc).toMatch(/cron\s*:\s*\{/);
+    for (const m of CRON_METHODS) {
+      expect(preloadSrc).toContain(m + ":");
+    }
+    expect(preloadDts).toMatch(/cron\s*:\s*\{/);
+  });
+
   it("registerTelemetryHandlers wires every telemetry channel", () => {
     for (const channel of ALL_CHANNELS) {
       // Matches both single-line `ipcMain.handle("ch", fn)` and the
