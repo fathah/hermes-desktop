@@ -105,3 +105,66 @@ export interface KanbanTelemetry {
   }>;
   totalCards: number;
 }
+
+/** GET /v1/telemetry/sessions — recent sessions metadata. No bodies. */
+export interface SessionsTelemetry {
+  recent: Array<{
+    id: string;
+    source: string;
+    model: string;
+    title: string;
+    startedAt?: string;
+    lastActiveAt?: string;
+    status: "active" | "idle" | "closed";
+    messageCount: number;
+  }>;
+  activeCount: number;
+  totalCount: number;
+}
+
+/** GET /v1/telemetry/skills — installed skills inventory (no body content). */
+export interface SkillsTelemetry {
+  installed: Array<{
+    id: string;
+    name: string;
+    version: string;
+    description: string;
+    enabled: boolean;
+    status: "ready" | "error" | "loading";
+  }>;
+  total: number;
+  enabledCount: number;
+}
+
+/** GET /v1/telemetry/profiles — multi-instance profile list. */
+export interface ProfilesTelemetry {
+  profiles: Array<{
+    name: string;
+    isDefault: boolean;
+    isActive: boolean;
+    model: string;
+    provider: string;
+    gatewayRunning: boolean;
+    hasEnv: boolean;
+    skillCount: number;
+    description: string;
+  }>;
+  active: string;
+}
+
+/** GET /v1/telemetry/providers — known providers + configured flag. NEVER keys. */
+export interface ProvidersTelemetry {
+  providers: Array<{
+    key: string;
+    label: string;
+    configured: boolean;
+  }>;
+}
+
+/** GET /v1/telemetry/persona — Soul / Persona markdown body (capped). */
+export interface PersonaTelemetry {
+  configured: boolean;
+  content: string;
+  sizeBytes?: number;
+  truncated?: boolean;
+}
