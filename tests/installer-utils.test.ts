@@ -244,6 +244,7 @@ describe("OAuth credential discovery", () => {
       JSON.stringify({
         credential_pool: {
           "openai-codex": [{ access_token: "sk-test-token" }],
+          "claude-code": [{ access_token: "sk-test-token" }],
         },
       }),
     );
@@ -251,6 +252,7 @@ describe("OAuth credential discovery", () => {
     const { hasOAuthCredentials } = await importConfigWithHome(TEST_DIR);
 
     expect(hasOAuthCredentials("openai-codex")).toBe(true);
+    expect(hasOAuthCredentials("claude-code")).toBe(true);
     expect(hasOAuthCredentials("anthropic")).toBe(false);
   });
 

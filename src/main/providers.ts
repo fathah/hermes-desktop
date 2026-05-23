@@ -5,6 +5,7 @@ export const PROVIDERS_WITHOUT_API_KEYS = new Set([
   "vllm",
   "llamacpp",
   "openai-codex",
+  "claude-code",
 ]);
 
 export function providerDoesNotNeedApiKey(provider: string): boolean {

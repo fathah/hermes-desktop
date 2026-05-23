@@ -6,6 +6,10 @@ describe("providerDoesNotNeedApiKey", () => {
     expect(providerDoesNotNeedApiKey("openai-codex")).toBe(true);
   });
 
+  it("treats Claude Code CLI as no-key because it uses local OAuth", () => {
+    expect(providerDoesNotNeedApiKey("claude-code")).toBe(true);
+  });
+
   it("keeps API-key providers gated", () => {
     expect(providerDoesNotNeedApiKey("openai")).toBe(false);
     expect(providerDoesNotNeedApiKey("anthropic")).toBe(false);

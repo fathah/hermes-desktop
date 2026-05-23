@@ -46,6 +46,7 @@ const NON_DISCOVERABLE_PROVIDERS = new Set<string>([
   "google",
   "xai",
   "openai-codex",
+  "claude-code",
   "xai-oauth",
   "qwen-oauth",
   "qwen",

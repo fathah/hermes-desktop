@@ -24,6 +24,7 @@ describe("PROVIDERS", () => {
     expect(values).toContain("anthropic");
     expect(values).toContain("openai");
     expect(values).toContain("openai-codex");
+    expect(values).toContain("claude-code");
     expect(values).toContain("google");
     expect(values).toContain("xai");
     expect(values).toContain("nous");
