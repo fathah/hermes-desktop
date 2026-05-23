@@ -14,9 +14,13 @@ import Providers from "../Providers/Providers";
 import Schedules from "../Schedules/Schedules";
 import Kanban from "../Kanban/Kanban";
 import RemoteNotice from "../../components/RemoteNotice";
-import CapabilityNotice from "../../components/CapabilityNotice";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
 import { CapabilitiesProvider } from "../../components/CapabilitiesProvider";
+import MemoryTelemetryView from "../../components/telemetry-views/MemoryTelemetryView";
+import ToolsTelemetryView from "../../components/telemetry-views/ToolsTelemetryView";
+import SchedulesTelemetryView from "../../components/telemetry-views/SchedulesTelemetryView";
+import KanbanTelemetryView from "../../components/telemetry-views/KanbanTelemetryView";
+import GatewayTelemetryView from "../../components/telemetry-views/GatewayTelemetryView";
 import hermeslogo from "../../assets/hermes.png";
 import {
   ChatBubble,
@@ -413,7 +417,7 @@ function Layout({
           {visitedViews.has("memory") && (
             <div style={paneStyle("memory")}>
               {remoteMode ? (
-                <CapabilityNotice capability="memory" feature="Memory" />
+                <MemoryTelemetryView />
               ) : (
                 <Memory profile={activeProfile} />
               )}
@@ -423,7 +427,7 @@ function Layout({
           {visitedViews.has("tools") && (
             <div style={paneStyle("tools")}>
               {remoteMode ? (
-                <CapabilityNotice capability="tools" feature="Tools" />
+                <ToolsTelemetryView profile={activeProfile} />
               ) : (
                 <Tools profile={activeProfile} />
               )}
@@ -433,7 +437,7 @@ function Layout({
           {visitedViews.has("schedules") && (
             <div style={paneStyle("schedules")}>
               {remoteMode ? (
-                <CapabilityNotice capability="schedules" feature="Schedules" />
+                <SchedulesTelemetryView />
               ) : (
                 <Schedules profile={activeProfile} />
               )}
@@ -443,7 +447,7 @@ function Layout({
           {visitedViews.has("kanban") && (
             <div style={paneStyle("kanban")}>
               {remoteMode ? (
-                <CapabilityNotice capability="kanban" feature="Kanban" />
+                <KanbanTelemetryView />
               ) : (
                 <Kanban profile={activeProfile} visible={view === "kanban"} />
               )}
@@ -453,11 +457,7 @@ function Layout({
           {visitedViews.has("gateway") && (
             <div style={paneStyle("gateway")}>
               {remoteMode ? (
-                // Gateway tab will be wired to the gateway-status probe
-                // directly in PR-A2 (capability-self-reference: the probe
-                // *is* the data this tab shows). Until then, keep the
-                // historic remote-mode notice.
-                <RemoteNotice feature="Gateway" />
+                <GatewayTelemetryView />
               ) : (
                 <Gateway profile={activeProfile} />
               )}
