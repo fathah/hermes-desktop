@@ -15,6 +15,7 @@ import Schedules from "../Schedules/Schedules";
 import Kanban from "../Kanban/Kanban";
 import RemoteNotice from "../../components/RemoteNotice";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
+import { CapabilitiesProvider } from "../../components/CapabilitiesProvider";
 import hermeslogo from "../../assets/hermes.png";
 import {
   ChatBubble,
@@ -257,207 +258,211 @@ function Layout({
   );
 
   return (
-    <div className="layout">
-      <aside className="sidebar">
-        <div className="sidebar-brand">
-          <img src={hermeslogo} height={30} alt="" />
-        </div>
+    <CapabilitiesProvider probeKey={remoteMode}>
+      <div className="layout">
+        <aside className="sidebar">
+          <div className="sidebar-brand">
+            <img src={hermeslogo} height={30} alt="" />
+          </div>
 
-        <nav className="sidebar-nav">
-          {NAV_ITEMS.map(({ view: v, icon: Icon, labelKey }) => (
-            <button
-              key={v}
-              className={`sidebar-nav-item ${view === v ? "active" : ""}`}
-              onClick={() => goTo(v)}
-            >
-              <Icon size={16} />
-              {t(labelKey)}
-            </button>
-          ))}
-        </nav>
+          <nav className="sidebar-nav">
+            {NAV_ITEMS.map(({ view: v, icon: Icon, labelKey }) => (
+              <button
+                key={v}
+                className={`sidebar-nav-item ${view === v ? "active" : ""}`}
+                onClick={() => goTo(v)}
+              >
+                <Icon size={16} />
+                {t(labelKey)}
+              </button>
+            ))}
+          </nav>
 
-        <div className="sidebar-footer">
-          {updateState && (
-            <button
-              className={`sidebar-update-btn ${
-                updateState === "error" ? "error" : ""
-              }`}
-              onClick={handleUpdate}
-              disabled={updateState === "downloading"}
-              title={updateError ?? undefined}
-            >
-              <Download size={13} />
-              {updateState === "available" && (
-                <span>
-                  {t("common.updateAvailable", { version: updateVersion })}
-                </span>
-              )}
-              {updateState === "downloading" && (
-                <span>
-                  {t("common.downloading", { percent: downloadPercent })}
-                </span>
-              )}
-              {updateState === "ready" && (
-                <span>{t("common.restartToUpdate")}</span>
-              )}
-              {updateState === "error" && (
-                <span>{t("common.updateFailed")}</span>
-              )}
-            </button>
+          <div className="sidebar-footer">
+            {updateState && (
+              <button
+                className={`sidebar-update-btn ${
+                  updateState === "error" ? "error" : ""
+                }`}
+                onClick={handleUpdate}
+                disabled={updateState === "downloading"}
+                title={updateError ?? undefined}
+              >
+                <Download size={13} />
+                {updateState === "available" && (
+                  <span>
+                    {t("common.updateAvailable", { version: updateVersion })}
+                  </span>
+                )}
+                {updateState === "downloading" && (
+                  <span>
+                    {t("common.downloading", { percent: downloadPercent })}
+                  </span>
+                )}
+                {updateState === "ready" && (
+                  <span>{t("common.restartToUpdate")}</span>
+                )}
+                {updateState === "error" && (
+                  <span>{t("common.updateFailed")}</span>
+                )}
+              </button>
+            )}
+            <div className="sidebar-footer-text">
+              {activeProfile === "default"
+                ? t("common.appName")
+                : activeProfile}
+            </div>
+          </div>
+        </aside>
+
+        <main className="content">
+          {verifyWarning && onReinstall && onDismissVerifyWarning && (
+            <VerifyWarningBanner
+              onReinstall={onReinstall}
+              onDismiss={onDismissVerifyWarning}
+            />
           )}
-          <div className="sidebar-footer-text">
-            {activeProfile === "default" ? t("common.appName") : activeProfile}
+          <div style={paneStyle("chat")}>
+            <Chat
+              messages={messages}
+              setMessages={setMessages}
+              sessionId={currentSessionId}
+              profile={activeProfile}
+              onNewChat={handleNewChat}
+            />
           </div>
-        </div>
-      </aside>
 
-      <main className="content">
-        {verifyWarning && onReinstall && onDismissVerifyWarning && (
-          <VerifyWarningBanner
-            onReinstall={onReinstall}
-            onDismiss={onDismissVerifyWarning}
-          />
-        )}
-        <div style={paneStyle("chat")}>
-          <Chat
-            messages={messages}
-            setMessages={setMessages}
-            sessionId={currentSessionId}
-            profile={activeProfile}
-            onNewChat={handleNewChat}
-          />
-        </div>
+          {visitedViews.has("sessions") && (
+            <div style={paneStyle("sessions")}>
+              {remoteMode ? (
+                <RemoteNotice feature="Sessions" />
+              ) : (
+                <Sessions
+                  onResumeSession={handleResumeSession}
+                  onNewChat={handleNewChat}
+                  currentSessionId={currentSessionId}
+                  visible={view === "sessions"}
+                />
+              )}
+            </div>
+          )}
 
-        {visitedViews.has("sessions") && (
-          <div style={paneStyle("sessions")}>
-            {remoteMode ? (
-              <RemoteNotice feature="Sessions" />
-            ) : (
-              <Sessions
-                onResumeSession={handleResumeSession}
-                onNewChat={handleNewChat}
-                currentSessionId={currentSessionId}
-                visible={view === "sessions"}
-              />
-            )}
-          </div>
-        )}
+          {visitedViews.has("agents") && (
+            <div style={paneStyle("agents")}>
+              {remoteMode ? (
+                <RemoteNotice feature="Profiles" />
+              ) : (
+                <Agents
+                  activeProfile={activeProfile}
+                  onSelectProfile={handleSelectProfile}
+                  onChatWith={(name: string) => {
+                    handleSelectProfile(name);
+                    goTo("chat");
+                  }}
+                />
+              )}
+            </div>
+          )}
 
-        {visitedViews.has("agents") && (
-          <div style={paneStyle("agents")}>
-            {remoteMode ? (
-              <RemoteNotice feature="Profiles" />
-            ) : (
-              <Agents
-                activeProfile={activeProfile}
-                onSelectProfile={handleSelectProfile}
-                onChatWith={(name: string) => {
-                  handleSelectProfile(name);
-                  goTo("chat");
-                }}
-              />
-            )}
-          </div>
-        )}
+          {visitedViews.has("office") && (
+            <div style={paneStyle("office")}>
+              <Office profile={activeProfile} visible={view === "office"} />
+            </div>
+          )}
 
-        {visitedViews.has("office") && (
-          <div style={paneStyle("office")}>
-            <Office profile={activeProfile} visible={view === "office"} />
-          </div>
-        )}
+          {visitedViews.has("models") && (
+            <div style={paneStyle("models")}>
+              <Models visible={view === "models"} />
+            </div>
+          )}
 
-        {visitedViews.has("models") && (
-          <div style={paneStyle("models")}>
-            <Models visible={view === "models"} />
-          </div>
-        )}
+          {visitedViews.has("providers") && (
+            <div style={paneStyle("providers")}>
+              {remoteMode ? (
+                <RemoteNotice feature="Providers" />
+              ) : (
+                <Providers
+                  profile={activeProfile}
+                  visible={view === "providers"}
+                />
+              )}
+            </div>
+          )}
 
-        {visitedViews.has("providers") && (
-          <div style={paneStyle("providers")}>
-            {remoteMode ? (
-              <RemoteNotice feature="Providers" />
-            ) : (
-              <Providers
-                profile={activeProfile}
-                visible={view === "providers"}
-              />
-            )}
-          </div>
-        )}
+          {visitedViews.has("skills") && (
+            <div style={paneStyle("skills")}>
+              {remoteMode ? (
+                <RemoteNotice feature="Skills" />
+              ) : (
+                <Skills profile={activeProfile} />
+              )}
+            </div>
+          )}
 
-        {visitedViews.has("skills") && (
-          <div style={paneStyle("skills")}>
-            {remoteMode ? (
-              <RemoteNotice feature="Skills" />
-            ) : (
-              <Skills profile={activeProfile} />
-            )}
-          </div>
-        )}
+          {visitedViews.has("soul") && (
+            <div style={paneStyle("soul")}>
+              {remoteMode ? (
+                <RemoteNotice feature="Persona" />
+              ) : (
+                <Soul profile={activeProfile} />
+              )}
+            </div>
+          )}
 
-        {visitedViews.has("soul") && (
-          <div style={paneStyle("soul")}>
-            {remoteMode ? (
-              <RemoteNotice feature="Persona" />
-            ) : (
-              <Soul profile={activeProfile} />
-            )}
-          </div>
-        )}
+          {visitedViews.has("memory") && (
+            <div style={paneStyle("memory")}>
+              {remoteMode ? (
+                <RemoteNotice feature="Memory" />
+              ) : (
+                <Memory profile={activeProfile} />
+              )}
+            </div>
+          )}
 
-        {visitedViews.has("memory") && (
-          <div style={paneStyle("memory")}>
-            {remoteMode ? (
-              <RemoteNotice feature="Memory" />
-            ) : (
-              <Memory profile={activeProfile} />
-            )}
-          </div>
-        )}
+          {visitedViews.has("tools") && (
+            <div style={paneStyle("tools")}>
+              {remoteMode ? (
+                <RemoteNotice feature="Tools" />
+              ) : (
+                <Tools profile={activeProfile} />
+              )}
+            </div>
+          )}
 
-        {visitedViews.has("tools") && (
-          <div style={paneStyle("tools")}>
-            {remoteMode ? (
-              <RemoteNotice feature="Tools" />
-            ) : (
-              <Tools profile={activeProfile} />
-            )}
-          </div>
-        )}
+          {visitedViews.has("schedules") && (
+            <div style={paneStyle("schedules")}>
+              <Schedules profile={activeProfile} />
+            </div>
+          )}
 
-        {visitedViews.has("schedules") && (
-          <div style={paneStyle("schedules")}>
-            <Schedules profile={activeProfile} />
-          </div>
-        )}
+          {visitedViews.has("kanban") && (
+            <div style={paneStyle("kanban")}>
+              {remoteMode ? (
+                <RemoteNotice feature="Kanban" />
+              ) : (
+                <Kanban profile={activeProfile} visible={view === "kanban"} />
+              )}
+            </div>
+          )}
 
-        {visitedViews.has("kanban") && (
-          <div style={paneStyle("kanban")}>
-            {remoteMode ? (
-              <RemoteNotice feature="Kanban" />
-            ) : (
-              <Kanban profile={activeProfile} visible={view === "kanban"} />
-            )}
-          </div>
-        )}
+          {visitedViews.has("gateway") && (
+            <div style={paneStyle("gateway")}>
+              {remoteMode ? (
+                <RemoteNotice feature="Gateway" />
+              ) : (
+                <Gateway profile={activeProfile} />
+              )}
+            </div>
+          )}
 
-        {visitedViews.has("gateway") && (
-          <div style={paneStyle("gateway")}>
-            {remoteMode ? (
-              <RemoteNotice feature="Gateway" />
-            ) : (
-              <Gateway profile={activeProfile} />
-            )}
-          </div>
-        )}
-
-        {visitedViews.has("settings") && (
-          <div style={paneStyle("settings")}>
-            <Settings profile={activeProfile} />
-          </div>
-        )}
-      </main>
-    </div>
+          {visitedViews.has("settings") && (
+            <div style={paneStyle("settings")}>
+              <Settings profile={activeProfile} />
+            </div>
+          )}
+        </main>
+      </div>
+    </CapabilitiesProvider>
   );
 }
 
