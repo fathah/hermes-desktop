@@ -31,6 +31,8 @@ const ALL_CHANNELS = [
   "telemetry-profiles",
   "telemetry-providers",
   "telemetry-persona",
+  "telemetry-recent-events",
+  "telemetry-usage-summary",
 ];
 
 const ALL_METHODS = [
@@ -44,6 +46,8 @@ const ALL_METHODS = [
   "profiles",
   "providers",
   "persona",
+  "recentEvents",
+  "usageSummary",
 ];
 
 const ALL_TYPES = [
@@ -58,12 +62,18 @@ const ALL_TYPES = [
   "ProfilesTelemetry",
   "ProvidersTelemetry",
   "PersonaTelemetry",
+  "RecentEventsTelemetry",
+  "UsageSummaryTelemetry",
 ];
 
 describe("telemetry IPC surface", () => {
   it("main/index.ts registers the telemetry handler bundle", () => {
     expect(indexSrc).toContain("registerTelemetryHandlers(ipcMain)");
     expect(indexSrc).toContain("./telemetry");
+  });
+
+  it("ALL_CHANNELS and ALL_METHODS stay aligned", () => {
+    expect(ALL_CHANNELS.length).toBe(ALL_METHODS.length);
   });
 
   it("registerTelemetryHandlers wires every telemetry channel", () => {
