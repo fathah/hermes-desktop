@@ -546,6 +546,136 @@ body {
   font-family: var(--font-mono, ui-monospace, monospace);
 }
 
+/* ── Telemetry mutation surface (buttons, dialogs, forms) ── */
+
+.telemetry-summary-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+
+.telemetry-summary-header-row .telemetry-summary-title {
+  margin: 0;
+}
+
+.telemetry-button-primary,
+.telemetry-button-danger {
+  background: var(--accent, #4ea1ff);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.telemetry-button-primary:disabled,
+.telemetry-button-danger:disabled,
+.telemetry-row-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.telemetry-button-danger {
+  background: #c0392b;
+}
+
+.telemetry-row-actions {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.telemetry-row-actions button {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  border: 1px solid var(--border-faint, rgba(255, 255, 255, 0.08));
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.telemetry-row-actions button.telemetry-button-danger {
+  background: #c0392b;
+  color: white;
+  border-color: #c0392b;
+}
+
+.telemetry-row-error {
+  color: #e74c3c;
+  font-size: 11px;
+  margin: 4px 0 0;
+}
+
+.telemetry-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.telemetry-dialog {
+  background: var(--bg-primary, #1f1f23);
+  border: 1px solid var(--border-bright, rgba(255, 255, 255, 0.1));
+  border-radius: 8px;
+  padding: 24px 28px;
+  width: min(560px, 90vw);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.telemetry-form-row {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 12px;
+  align-items: start;
+  margin-bottom: 12px;
+}
+
+.telemetry-form-row > span {
+  color: var(--text-muted);
+  font-size: 12px;
+  padding-top: 6px;
+}
+
+.telemetry-form-row input,
+.telemetry-form-row textarea {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-bright, rgba(255, 255, 255, 0.1));
+  color: var(--text-primary);
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.telemetry-form-row textarea {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  resize: vertical;
+}
+
+.telemetry-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.telemetry-dialog-actions button {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+  border: 1px solid var(--border-faint, rgba(255, 255, 255, 0.08));
+  border-radius: 4px;
+  padding: 6px 16px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
 /* ========================================================================
    WELCOME SCREEN
    ======================================================================== */
