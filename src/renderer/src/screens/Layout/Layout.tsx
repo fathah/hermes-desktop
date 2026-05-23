@@ -14,6 +14,7 @@ import Providers from "../Providers/Providers";
 import Schedules from "../Schedules/Schedules";
 import Kanban from "../Kanban/Kanban";
 import RemoteNotice from "../../components/RemoteNotice";
+import CapabilityNotice from "../../components/CapabilityNotice";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
 import { CapabilitiesProvider } from "../../components/CapabilitiesProvider";
 import hermeslogo from "../../assets/hermes.png";
@@ -412,7 +413,7 @@ function Layout({
           {visitedViews.has("memory") && (
             <div style={paneStyle("memory")}>
               {remoteMode ? (
-                <RemoteNotice feature="Memory" />
+                <CapabilityNotice capability="memory" feature="Memory" />
               ) : (
                 <Memory profile={activeProfile} />
               )}
@@ -422,7 +423,7 @@ function Layout({
           {visitedViews.has("tools") && (
             <div style={paneStyle("tools")}>
               {remoteMode ? (
-                <RemoteNotice feature="Tools" />
+                <CapabilityNotice capability="tools" feature="Tools" />
               ) : (
                 <Tools profile={activeProfile} />
               )}
@@ -431,14 +432,18 @@ function Layout({
 
           {visitedViews.has("schedules") && (
             <div style={paneStyle("schedules")}>
-              <Schedules profile={activeProfile} />
+              {remoteMode ? (
+                <CapabilityNotice capability="schedules" feature="Schedules" />
+              ) : (
+                <Schedules profile={activeProfile} />
+              )}
             </div>
           )}
 
           {visitedViews.has("kanban") && (
             <div style={paneStyle("kanban")}>
               {remoteMode ? (
-                <RemoteNotice feature="Kanban" />
+                <CapabilityNotice capability="kanban" feature="Kanban" />
               ) : (
                 <Kanban profile={activeProfile} visible={view === "kanban"} />
               )}
@@ -448,6 +453,10 @@ function Layout({
           {visitedViews.has("gateway") && (
             <div style={paneStyle("gateway")}>
               {remoteMode ? (
+                // Gateway tab will be wired to the gateway-status probe
+                // directly in PR-A2 (capability-self-reference: the probe
+                // *is* the data this tab shows). Until then, keep the
+                // historic remote-mode notice.
                 <RemoteNotice feature="Gateway" />
               ) : (
                 <Gateway profile={activeProfile} />
