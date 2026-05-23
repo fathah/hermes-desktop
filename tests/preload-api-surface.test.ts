@@ -12,13 +12,35 @@ const preloadTypes = readFileSync(
 /**
  * Extract method names from the hermesAPI object in preload/index.ts.
  * Matches lines like `  methodName: (...` or `  methodName: ()`.
+ *
+ * Also recognises namespaced sub-bundles like `  telemetry: {
+ *     gatewayStatus: (...`. Both the namespace key and the
+ *   "namespace.member" entries are returned, so the symmetry
+ *   check against the type declarations passes for either form.
  */
 function extractPreloadMethods(src: string): string[] {
+  // Narrow to the hermesAPI block so we don't accidentally pick up
+  // `electronAPI` properties (e.g. `process: { … }`).
+  const hermesMatch = src.match(/const\s+hermesAPI\s*=\s*\{([\s\S]*?)^\};/m);
+  const body = hermesMatch ? hermesMatch[1] : src;
+
   const methods: string[] = [];
   const re = /^\s{2}(\w+)\s*:\s*\(/gm;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(src)) !== null) {
+  while ((m = re.exec(body)) !== null) {
     methods.push(m[1]);
+  }
+  // Nested namespace bundles: `  ns: { ... }`
+  const nsRe = /^\s{2}(\w+)\s*:\s*\{([\s\S]*?)^\s{2}\}/gm;
+  while ((m = nsRe.exec(body)) !== null) {
+    const ns = m[1];
+    const inner = m[2];
+    methods.push(ns);
+    const memberRe = /^\s{4}(\w+)\s*:\s*\(/gm;
+    let mm: RegExpExecArray | null;
+    while ((mm = memberRe.exec(inner)) !== null) {
+      methods.push(`${ns}.${mm[1]}`);
+    }
   }
   return [...new Set(methods)];
 }
@@ -36,6 +58,18 @@ function extractTypeMethods(src: string): string[] {
   let m: RegExpExecArray | null;
   while ((m = re.exec(body)) !== null) {
     methods.push(m[1]);
+  }
+  // Nested namespace bundles in the type declaration:
+  //   `  ns: { ... }`. Members are indented 4 spaces.
+  const nsRe = /^\s{2}(\w+)\s*:\s*\{([\s\S]*?)^\s{2}\}/gm;
+  while ((m = nsRe.exec(body)) !== null) {
+    const ns = m[1];
+    const innerBody = m[2];
+    const memberRe = /^\s{4}(\w+)\s*[:(]/gm;
+    let mm: RegExpExecArray | null;
+    while ((mm = memberRe.exec(innerBody)) !== null) {
+      methods.push(`${ns}.${mm[1]}`);
+    }
   }
   return [...new Set(methods)];
 }
