@@ -180,3 +180,41 @@ export interface PersonaTelemetry {
   sizeBytes?: number;
   truncated?: boolean;
 }
+
+/** GET /v1/telemetry/recent-events — structured activity feed. */
+export interface RecentEventsTelemetry {
+  events: Array<{
+    id: string;
+    at: string;
+    kind:
+      | "session.start"
+      | "session.end"
+      | "skill.load"
+      | "tool.call"
+      | "schedule.fire"
+      | "gateway.warn"
+      | "gateway.error";
+    summary: string;
+    sessionId?: string;
+    jobId?: string;
+    agentId?: string;
+  }>;
+}
+
+/** GET /v1/telemetry/usage-summary — token + cost aggregates. */
+export interface UsageSummaryTelemetry {
+  windowStart?: string | null;
+  windowEnd?: string | null;
+  tokens: {
+    input: number;
+    output: number;
+    cacheRead?: number;
+    cacheWrite?: number;
+  };
+  estimatedCostUsd?: number | null;
+  byModel: Array<{
+    modelId: string;
+    requests: number;
+    tokens: number;
+  }>;
+}
