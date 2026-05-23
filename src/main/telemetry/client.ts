@@ -24,7 +24,7 @@ const DEFAULT_TIMEOUT_MS = 8000;
 
 /**
  * Build a full URL for a telemetry path. Caller passes the path
- * without the base — e.g. `/api/v1/telemetry/gateway-status`.
+ * without the base — e.g. `/v1/telemetry/gateway-status`.
  *
  * Throws if no API base can be resolved (rare; e.g. SSH tunnel
  * configured but not started). Callers catch and map to an

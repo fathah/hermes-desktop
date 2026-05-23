@@ -1,7 +1,7 @@
 /**
  * Unit tests for `src/main/telemetry/client.ts` — the
  * Node-side HTTP fetcher that talks to the backend's
- * `/api/v1/telemetry/*` endpoints and translates errors into
+ * `/v1/telemetry/*` endpoints and translates errors into
  * TelemetryEnvelope shapes.
  *
  * We spin up a tiny http.Server inside each test and point the
@@ -52,7 +52,7 @@ afterEach(async () => {
 
 describe("telemetryGet", () => {
   it("returns the parsed envelope on 200", async () => {
-    routes["/api/v1/telemetry/gateway-status"] = (res) => {
+    routes["/v1/telemetry/gateway-status"] = (res) => {
       res.statusCode = 200;
       res.setHeader("content-type", "application/json");
       res.end(
@@ -69,7 +69,7 @@ describe("telemetryGet", () => {
       );
     };
 
-    const env = await telemetryGet("/api/v1/telemetry/gateway-status");
+    const env = await telemetryGet("/v1/telemetry/gateway-status");
     expect(env.available).toBe(true);
     if (env.available) {
       expect(env.data).toMatchObject({ version: "0.14.0" });
@@ -77,7 +77,7 @@ describe("telemetryGet", () => {
   });
 
   it("forwards an available:false envelope unchanged", async () => {
-    routes["/api/v1/telemetry/kanban"] = (res) => {
+    routes["/v1/telemetry/kanban"] = (res) => {
       res.statusCode = 200;
       res.setHeader("content-type", "application/json");
       res.end(
@@ -89,7 +89,7 @@ describe("telemetryGet", () => {
       );
     };
 
-    const env = await telemetryGet("/api/v1/telemetry/kanban");
+    const env = await telemetryGet("/v1/telemetry/kanban");
     expect(env.available).toBe(false);
     if (!env.available) {
       expect(env.reason).toBe("not-configured");
@@ -99,7 +99,7 @@ describe("telemetryGet", () => {
 
   it("maps 404 to not-implemented", async () => {
     // No route registered → default 404
-    const env = await telemetryGet("/api/v1/telemetry/missing");
+    const env = await telemetryGet("/v1/telemetry/missing");
     expect(env.available).toBe(false);
     if (!env.available) {
       expect(env.reason).toBe("not-implemented");
@@ -107,11 +107,11 @@ describe("telemetryGet", () => {
   });
 
   it("maps 500 to upstream-error", async () => {
-    routes["/api/v1/telemetry/boom"] = (res) => {
+    routes["/v1/telemetry/boom"] = (res) => {
       res.statusCode = 500;
       res.end("kaboom");
     };
-    const env = await telemetryGet("/api/v1/telemetry/boom");
+    const env = await telemetryGet("/v1/telemetry/boom");
     expect(env.available).toBe(false);
     if (!env.available) {
       expect(env.reason).toBe("upstream-error");
@@ -120,11 +120,11 @@ describe("telemetryGet", () => {
   });
 
   it("maps 401 to upstream-error with auth detail", async () => {
-    routes["/api/v1/telemetry/restricted"] = (res) => {
+    routes["/v1/telemetry/restricted"] = (res) => {
       res.statusCode = 401;
       res.end("nope");
     };
-    const env = await telemetryGet("/api/v1/telemetry/restricted");
+    const env = await telemetryGet("/v1/telemetry/restricted");
     expect(env.available).toBe(false);
     if (!env.available) {
       expect(env.reason).toBe("upstream-error");
@@ -137,7 +137,7 @@ describe("telemetryGet", () => {
       Authorization: "Bearer test-token",
     });
     let seenAuth: string | undefined;
-    routes["/api/v1/telemetry/gateway-status"] = (res) => {
+    routes["/v1/telemetry/gateway-status"] = (res) => {
       // Headers are visible on the req we don't have here; capture via a
       // wrapper server. Instead, use the request listener directly.
       res.statusCode = 200;
@@ -154,14 +154,14 @@ describe("telemetryGet", () => {
       res.end();
     });
 
-    await telemetryGet("/api/v1/telemetry/gateway-status");
+    await telemetryGet("/v1/telemetry/gateway-status");
     expect(seenAuth).toBe("Bearer test-token");
   });
 
   it("returns upstream-error on connection refused", async () => {
     // Stop the server first; the client will fail to connect.
     await new Promise<void>((resolve) => server.close(() => resolve()));
-    const env = await telemetryGet("/api/v1/telemetry/anything");
+    const env = await telemetryGet("/v1/telemetry/anything");
     expect(env.available).toBe(false);
     if (!env.available) {
       expect(env.reason).toBe("upstream-error");
