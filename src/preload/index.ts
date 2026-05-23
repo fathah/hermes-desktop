@@ -2,9 +2,12 @@ import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { AppLocale } from "../shared/i18n/types";
 import type { Attachment } from "../shared/attachments";
 import type {
+  CronJobInput,
+  CronJobPatch,
   GatewayStatusTelemetry,
   KanbanTelemetry,
   MemoryTelemetry,
+  MutationResult,
   PersonaTelemetry,
   ProfilesTelemetry,
   ProvidersTelemetry,
@@ -931,6 +934,27 @@ const hermesAPI = {
       since?: string,
     ): Promise<TelemetryEnvelope<UsageSummaryTelemetry>> =>
       ipcRenderer.invoke("telemetry-usage-summary", since),
+  },
+
+  // Cron mutations (Phase-4 / PR-E1) — write-path against the
+  // backend's existing /api/jobs/* endpoints. Each call returns
+  // a discriminated MutationResult; consumers branch on `ok`.
+  cron: {
+    create: (input: CronJobInput): Promise<MutationResult> =>
+      ipcRenderer.invoke("cron-create", input),
+    update: (
+      jobId: string,
+      patch: CronJobPatch,
+    ): Promise<MutationResult> =>
+      ipcRenderer.invoke("cron-update", jobId, patch),
+    remove: (jobId: string): Promise<MutationResult> =>
+      ipcRenderer.invoke("cron-delete", jobId),
+    pause: (jobId: string): Promise<MutationResult> =>
+      ipcRenderer.invoke("cron-pause", jobId),
+    resume: (jobId: string): Promise<MutationResult> =>
+      ipcRenderer.invoke("cron-resume", jobId),
+    run: (jobId: string): Promise<MutationResult> =>
+      ipcRenderer.invoke("cron-run", jobId),
   },
 };
 

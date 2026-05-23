@@ -1,9 +1,12 @@
 import type { AppLocale } from "../shared/i18n/types";
 import type { Attachment } from "../shared/attachments";
 import type {
+  CronJobInput,
+  CronJobPatch,
   GatewayStatusTelemetry,
   KanbanTelemetry,
   MemoryTelemetry,
+  MutationResult,
   PersonaTelemetry,
   ProfilesTelemetry,
   ProvidersTelemetry,
@@ -766,6 +769,15 @@ interface HermesAPI {
     usageSummary: (
       since?: string,
     ) => Promise<TelemetryEnvelope<UsageSummaryTelemetry>>;
+  };
+
+  cron: {
+    create: (input: CronJobInput) => Promise<MutationResult>;
+    update: (jobId: string, patch: CronJobPatch) => Promise<MutationResult>;
+    remove: (jobId: string) => Promise<MutationResult>;
+    pause: (jobId: string) => Promise<MutationResult>;
+    resume: (jobId: string) => Promise<MutationResult>;
+    run: (jobId: string) => Promise<MutationResult>;
   };
 }
 
