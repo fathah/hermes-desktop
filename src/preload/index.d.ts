@@ -4,7 +4,12 @@ import type {
   GatewayStatusTelemetry,
   KanbanTelemetry,
   MemoryTelemetry,
+  PersonaTelemetry,
+  ProfilesTelemetry,
+  ProvidersTelemetry,
   SchedulesTelemetry,
+  SessionsTelemetry,
+  SkillsTelemetry,
   TelemetryEnvelope,
   ToolsTelemetry,
 } from "../shared/telemetry-types";
@@ -745,6 +750,13 @@ interface HermesAPI {
     memory: () => Promise<TelemetryEnvelope<MemoryTelemetry>>;
     schedules: () => Promise<TelemetryEnvelope<SchedulesTelemetry>>;
     kanban: () => Promise<TelemetryEnvelope<KanbanTelemetry>>;
+    sessions: (
+      limit?: number,
+    ) => Promise<TelemetryEnvelope<SessionsTelemetry>>;
+    skills: () => Promise<TelemetryEnvelope<SkillsTelemetry>>;
+    profiles: () => Promise<TelemetryEnvelope<ProfilesTelemetry>>;
+    providers: () => Promise<TelemetryEnvelope<ProvidersTelemetry>>;
+    persona: () => Promise<TelemetryEnvelope<PersonaTelemetry>>;
   };
 }
 

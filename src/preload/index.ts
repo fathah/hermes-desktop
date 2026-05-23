@@ -5,7 +5,12 @@ import type {
   GatewayStatusTelemetry,
   KanbanTelemetry,
   MemoryTelemetry,
+  PersonaTelemetry,
+  ProfilesTelemetry,
+  ProvidersTelemetry,
   SchedulesTelemetry,
+  SessionsTelemetry,
+  SkillsTelemetry,
   TelemetryEnvelope,
   ToolsTelemetry,
 } from "../shared/telemetry-types";
@@ -903,6 +908,18 @@ const hermesAPI = {
       ipcRenderer.invoke("telemetry-schedules"),
     kanban: (): Promise<TelemetryEnvelope<KanbanTelemetry>> =>
       ipcRenderer.invoke("telemetry-kanban"),
+    sessions: (
+      limit?: number,
+    ): Promise<TelemetryEnvelope<SessionsTelemetry>> =>
+      ipcRenderer.invoke("telemetry-sessions", limit),
+    skills: (): Promise<TelemetryEnvelope<SkillsTelemetry>> =>
+      ipcRenderer.invoke("telemetry-skills"),
+    profiles: (): Promise<TelemetryEnvelope<ProfilesTelemetry>> =>
+      ipcRenderer.invoke("telemetry-profiles"),
+    providers: (): Promise<TelemetryEnvelope<ProvidersTelemetry>> =>
+      ipcRenderer.invoke("telemetry-providers"),
+    persona: (): Promise<TelemetryEnvelope<PersonaTelemetry>> =>
+      ipcRenderer.invoke("telemetry-persona"),
   },
 };
 
