@@ -322,6 +322,194 @@ body {
   line-height: 1.5;
 }
 
+/* ── Telemetry summary cards (Memory / Tools / Schedules / Kanban / Gateway in remote mode) ── */
+.telemetry-summary {
+  padding: 24px 28px;
+  overflow-y: auto;
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.telemetry-summary-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 16px;
+}
+
+.telemetry-summary-subtitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 20px 0 10px;
+}
+
+.telemetry-summary-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 16px;
+  margin: 0;
+}
+
+.telemetry-summary-list > div {
+  display: contents;
+}
+
+.telemetry-summary-list dt {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.telemetry-summary-list dd {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.telemetry-summary-hint {
+  margin-top: 18px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.telemetry-toolset-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.telemetry-toolset-list > li {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-faint, rgba(255, 255, 255, 0.05));
+}
+
+.telemetry-toolset-list > li:last-child {
+  border-bottom: none;
+}
+
+.telemetry-toolset-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.telemetry-toolset-label {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.telemetry-toolset-status {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.telemetry-toolset-status.enabled {
+  color: var(--accent, #4ea1ff);
+}
+
+.telemetry-toolset-status.disabled {
+  color: var(--text-muted);
+}
+
+.telemetry-toolset-source {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.telemetry-toolset-desc,
+.telemetry-toolset-mcp {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.telemetry-schedules-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.telemetry-schedules-table th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--text-muted);
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-bright, rgba(255, 255, 255, 0.1));
+}
+
+.telemetry-schedules-table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--border-faint, rgba(255, 255, 255, 0.05));
+}
+
+.telemetry-schedules-table code {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.telemetry-kanban-board-list,
+.telemetry-kanban-column-list,
+.telemetry-provider-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.telemetry-kanban-board-list > li {
+  margin-bottom: 18px;
+}
+
+.telemetry-kanban-board-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 8px;
+}
+
+.telemetry-kanban-column-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 6px;
+}
+
+.telemetry-kanban-column-list > li {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.telemetry-kanban-column-name {
+  color: var(--text-secondary);
+}
+
+.telemetry-kanban-column-count {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.telemetry-provider-list > li {
+  display: flex;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 4px 0;
+}
+
+.telemetry-provider-name {
+  font-weight: 500;
+}
+
+.telemetry-provider-flag {
+  color: var(--text-muted);
+}
+
 /* ========================================================================
    WELCOME SCREEN
    ======================================================================== */
