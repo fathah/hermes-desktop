@@ -13,7 +13,6 @@ import Models from "../Models/Models";
 import Providers from "../Providers/Providers";
 import Schedules from "../Schedules/Schedules";
 import Kanban from "../Kanban/Kanban";
-import RemoteNotice from "../../components/RemoteNotice";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
 import { CapabilitiesProvider } from "../../components/CapabilitiesProvider";
 import MemoryTelemetryView from "../../components/telemetry-views/MemoryTelemetryView";
@@ -21,6 +20,11 @@ import ToolsTelemetryView from "../../components/telemetry-views/ToolsTelemetryV
 import SchedulesTelemetryView from "../../components/telemetry-views/SchedulesTelemetryView";
 import KanbanTelemetryView from "../../components/telemetry-views/KanbanTelemetryView";
 import GatewayTelemetryView from "../../components/telemetry-views/GatewayTelemetryView";
+import SessionsTelemetryView from "../../components/telemetry-views/SessionsTelemetryView";
+import SkillsTelemetryView from "../../components/telemetry-views/SkillsTelemetryView";
+import ProfilesTelemetryView from "../../components/telemetry-views/ProfilesTelemetryView";
+import ProvidersTelemetryView from "../../components/telemetry-views/ProvidersTelemetryView";
+import PersonaTelemetryView from "../../components/telemetry-views/PersonaTelemetryView";
 import hermeslogo from "../../assets/hermes.png";
 import {
   ChatBubble,
@@ -340,7 +344,7 @@ function Layout({
           {visitedViews.has("sessions") && (
             <div style={paneStyle("sessions")}>
               {remoteMode ? (
-                <RemoteNotice feature="Sessions" />
+                <SessionsTelemetryView />
               ) : (
                 <Sessions
                   onResumeSession={handleResumeSession}
@@ -355,7 +359,7 @@ function Layout({
           {visitedViews.has("agents") && (
             <div style={paneStyle("agents")}>
               {remoteMode ? (
-                <RemoteNotice feature="Profiles" />
+                <ProfilesTelemetryView />
               ) : (
                 <Agents
                   activeProfile={activeProfile}
@@ -384,7 +388,7 @@ function Layout({
           {visitedViews.has("providers") && (
             <div style={paneStyle("providers")}>
               {remoteMode ? (
-                <RemoteNotice feature="Providers" />
+                <ProvidersTelemetryView />
               ) : (
                 <Providers
                   profile={activeProfile}
@@ -397,7 +401,7 @@ function Layout({
           {visitedViews.has("skills") && (
             <div style={paneStyle("skills")}>
               {remoteMode ? (
-                <RemoteNotice feature="Skills" />
+                <SkillsTelemetryView />
               ) : (
                 <Skills profile={activeProfile} />
               )}
@@ -407,7 +411,7 @@ function Layout({
           {visitedViews.has("soul") && (
             <div style={paneStyle("soul")}>
               {remoteMode ? (
-                <RemoteNotice feature="Persona" />
+                <PersonaTelemetryView />
               ) : (
                 <Soul profile={activeProfile} />
               )}
