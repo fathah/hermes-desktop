@@ -15,11 +15,13 @@ import type {
   PersonaTelemetry,
   ProfilesTelemetry,
   ProvidersTelemetry,
+  RecentEventsTelemetry,
   SchedulesTelemetry,
   SessionsTelemetry,
   SkillsTelemetry,
   TelemetryEnvelope,
   ToolsTelemetry,
+  UsageSummaryTelemetry,
 } from "../../shared/telemetry-types";
 
 export async function fetchTools(
@@ -76,4 +78,26 @@ export async function fetchPersona(): Promise<
   TelemetryEnvelope<PersonaTelemetry>
 > {
   return telemetryGet<PersonaTelemetry>("/v1/telemetry/persona");
+}
+
+export async function fetchRecentEvents(
+  limit?: number,
+  since?: string,
+): Promise<TelemetryEnvelope<RecentEventsTelemetry>> {
+  const params: string[] = [];
+  if (limit) params.push(`limit=${encodeURIComponent(String(limit))}`);
+  if (since) params.push(`since=${encodeURIComponent(since)}`);
+  const qs = params.length ? "?" + params.join("&") : "";
+  return telemetryGet<RecentEventsTelemetry>(
+    `/v1/telemetry/recent-events${qs}`,
+  );
+}
+
+export async function fetchUsageSummary(
+  since?: string,
+): Promise<TelemetryEnvelope<UsageSummaryTelemetry>> {
+  const qs = since ? `?since=${encodeURIComponent(since)}` : "";
+  return telemetryGet<UsageSummaryTelemetry>(
+    `/v1/telemetry/usage-summary${qs}`,
+  );
 }

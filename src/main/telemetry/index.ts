@@ -18,10 +18,12 @@ import {
   fetchPersona,
   fetchProfiles,
   fetchProviders,
+  fetchRecentEvents,
   fetchSchedules,
   fetchSessions,
   fetchSkills,
   fetchTools,
+  fetchUsageSummary,
 } from "./subsystems";
 
 export function registerTelemetryHandlers(ipcMain: IpcMain): void {
@@ -41,4 +43,13 @@ export function registerTelemetryHandlers(ipcMain: IpcMain): void {
   ipcMain.handle("telemetry-profiles", () => fetchProfiles());
   ipcMain.handle("telemetry-providers", () => fetchProviders());
   ipcMain.handle("telemetry-persona", () => fetchPersona());
+  ipcMain.handle(
+    "telemetry-recent-events",
+    (_event, limit?: number, since?: string) =>
+      fetchRecentEvents(limit, since),
+  );
+  ipcMain.handle(
+    "telemetry-usage-summary",
+    (_event, since?: string) => fetchUsageSummary(since),
+  );
 }
