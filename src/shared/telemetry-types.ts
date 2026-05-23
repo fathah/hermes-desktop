@@ -201,6 +201,27 @@ export interface RecentEventsTelemetry {
   }>;
 }
 
+/**
+ * Discriminated result type returned by every mutation IPC.
+ * Callers branch on `ok` — no thrown errors crossing the bridge.
+ */
+export type MutationResult<T = unknown> =
+  | { ok: true; data: T }
+  | { ok: false; status: number; error: string };
+
+/** Body shape for POST /api/jobs (Phase-4 cron create). */
+export interface CronJobInput {
+  name: string;
+  schedule: string;
+  prompt?: string;
+  deliver?: string;
+  skills?: string[];
+  repeat?: number;
+}
+
+/** PATCH /api/jobs/{id} — same fields, all optional. */
+export type CronJobPatch = Partial<CronJobInput>;
+
 /** GET /v1/telemetry/usage-summary — token + cost aggregates. */
 export interface UsageSummaryTelemetry {
   windowStart?: string | null;
