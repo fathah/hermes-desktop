@@ -8,7 +8,7 @@
  * fetch or render the "not available" empty-state immediately.
  *
  * Step 0 (PR-A1): the backend doesn't yet implement
- * `/api/v1/telemetry/gateway-status`, so this provider will land
+ * `/v1/telemetry/gateway-status`, so this provider will land
  * in a `not-implemented` state by default, and every consumer
  * tab will see `useCapability(...) === 'absent'`. This is by
  * design — it lets us ship the state-system without a backend

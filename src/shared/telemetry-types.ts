@@ -2,7 +2,7 @@
  * Shared types for the read-only telemetry surface.
  *
  * The same Envelope shape is produced by the Hermes Agent backend
- * (`/api/v1/telemetry/*`) and consumed by both the Electron main
+ * (`/v1/telemetry/*`) and consumed by both the Electron main
  * process (HTTP client) and the renderer (React hooks).
  *
  * Keep this file free of runtime imports — it is pulled into both
@@ -38,7 +38,7 @@ export type TelemetryEnvelope<T> =
     };
 
 /**
- * GET /api/v1/telemetry/gateway-status
+ * GET /v1/telemetry/gateway-status
  *
  * Capability-probe response. The `capabilities` array is the
  * source of truth for which other telemetry endpoints the app
