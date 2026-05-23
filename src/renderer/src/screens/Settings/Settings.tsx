@@ -169,14 +169,40 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
     });
 
     // Defer slow calls — background refresh, cached values show instantly
-    window.hermesAPI.getHermesVersion().then((v) => {
-      setHermesVersion(v);
+    window.hermesAPI.getHermesVersion().then(async (v) => {
       if (v) {
+        setHermesVersion(v);
         try {
           localStorage.setItem("hermes-version-cache", v);
         } catch {
           /* ignore */
         }
+        return;
+      }
+      // Local hermes not installed (typical in remote mode). Fall
+      // back to the gateway-status telemetry probe — synthesise a
+      // version string in the same shape the regex parser below
+      // expects, so the Engine/Released/Python/OpenAI SDK columns
+      // light up against the remote backend's metadata.
+      try {
+        const env = await window.hermesAPI.telemetry.gatewayStatus();
+        if (env.available) {
+          const d = env.data;
+          const released = d.released ? ` (${d.released})` : "";
+          const py = d.pythonVersion ? ` Python: ${d.pythonVersion}` : "";
+          const sdk = d.openaiSdkVersion
+            ? ` OpenAI SDK: ${d.openaiSdkVersion}`
+            : "";
+          const synth = `Hermes Agent v${d.version}${released}${py}${sdk}`;
+          setHermesVersion(synth);
+          try {
+            localStorage.setItem("hermes-version-cache", synth);
+          } catch {
+            /* ignore */
+          }
+        }
+      } catch {
+        /* remote also unreachable — leave hermesVersion null */
       }
     });
 

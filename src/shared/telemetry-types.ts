@@ -50,6 +50,12 @@ export type TelemetryEnvelope<T> =
 export interface GatewayStatusTelemetry {
   service: "hermes-agent";
   version: string;
+  /** Most recent dated release tag on the backend (e.g. "2026.5.16"). */
+  released?: string | null;
+  /** Backend Python interpreter version (e.g. "3.13.12"). */
+  pythonVersion?: string;
+  /** Installed `openai` SDK version on the backend. */
+  openaiSdkVersion?: string | null;
   uptimeSeconds: number;
   /** Known keys: "tools" | "memory" | "schedules" | "kanban". Backend may add more later. */
   capabilities: string[];
@@ -127,6 +133,8 @@ export interface SkillsTelemetry {
   installed: Array<{
     id: string;
     name: string;
+    /** First path segment when the skill is nested (e.g. "apple"). */
+    category?: string | null;
     version: string;
     description: string;
     enabled: boolean;
@@ -158,7 +166,11 @@ export interface ProvidersTelemetry {
     key: string;
     label: string;
     configured: boolean;
+    /** True iff this provider is the active `model.provider`. */
+    active?: boolean;
   }>;
+  /** Currently selected `model.provider` from config.yaml, if any. */
+  active?: string | null;
 }
 
 /** GET /v1/telemetry/persona — Soul / Persona markdown body (capped). */
