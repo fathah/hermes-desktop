@@ -222,6 +222,30 @@ export interface CronJobInput {
 /** PATCH /api/jobs/{id} — same fields, all optional. */
 export type CronJobPatch = Partial<CronJobInput>;
 
+/**
+ * Body for POST /api/kanban/boards (Phase-4 telemetry API).
+ *
+ * Renamed away from `KanbanCreateBoardInput` to avoid colliding
+ * with the existing `KanbanCreateBoardInput` interface that lives
+ * in preload/index.d.ts for the legacy `kanbanCreateBoard` IPC.
+ */
+export interface KanbanBoardCreateRequest {
+  slug: string;
+  name?: string;
+  description?: string;
+}
+
+/** Body for POST /api/kanban/tasks (Phase-4 telemetry API). */
+export interface KanbanTaskCreateRequest {
+  title: string;
+  body?: string;
+  board?: string;
+  assignee?: string;
+  priority?: number;
+  skills?: string[];
+  triage?: boolean;
+}
+
 /** GET /v1/telemetry/usage-summary — token + cost aggregates. */
 export interface UsageSummaryTelemetry {
   windowStart?: string | null;
