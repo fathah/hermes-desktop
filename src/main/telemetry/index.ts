@@ -12,7 +12,20 @@
 
 import type { IpcMain } from "electron";
 import { fetchGatewayStatus } from "./gateway-status";
+import {
+  fetchKanban,
+  fetchMemory,
+  fetchSchedules,
+  fetchTools,
+} from "./subsystems";
 
 export function registerTelemetryHandlers(ipcMain: IpcMain): void {
   ipcMain.handle("telemetry-gateway-status", () => fetchGatewayStatus());
+  ipcMain.handle(
+    "telemetry-tools",
+    (_event, profile?: string) => fetchTools(profile),
+  );
+  ipcMain.handle("telemetry-memory", () => fetchMemory());
+  ipcMain.handle("telemetry-schedules", () => fetchSchedules());
+  ipcMain.handle("telemetry-kanban", () => fetchKanban());
 }
