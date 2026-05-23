@@ -1,6 +1,10 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { AppLocale } from "../shared/i18n/types";
 import type { Attachment } from "../shared/attachments";
+import type {
+  GatewayStatusTelemetry,
+  TelemetryEnvelope,
+} from "../shared/telemetry-types";
 
 const electronAPI = {
   process: {
@@ -92,10 +96,8 @@ const hermesAPI = {
   cancelOAuthLogin: (): Promise<boolean> =>
     ipcRenderer.invoke("oauth-login-cancel"),
   onOAuthLoginProgress: (callback: (chunk: string) => void): (() => void) => {
-    const handler = (
-      _event: Electron.IpcRendererEvent,
-      chunk: unknown,
-    ): void => callback(String(chunk));
+    const handler = (_event: Electron.IpcRendererEvent, chunk: unknown): void =>
+      callback(String(chunk));
     ipcRenderer.on("oauth-login-progress", handler);
     return () => ipcRenderer.removeListener("oauth-login-progress", handler);
   },
@@ -881,6 +883,13 @@ const hermesAPI = {
     lines?: number,
   ): Promise<{ content: string; path: string }> =>
     ipcRenderer.invoke("read-logs", logFile, lines),
+
+  // Telemetry (read-only). Step 0: capability probe only; per-feature
+  // endpoints come in PR-A2.
+  telemetry: {
+    gatewayStatus: (): Promise<TelemetryEnvelope<GatewayStatusTelemetry>> =>
+      ipcRenderer.invoke("telemetry-gateway-status"),
+  },
 };
 
 if (process.contextIsolated) {
