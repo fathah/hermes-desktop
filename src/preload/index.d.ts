@@ -7,11 +7,13 @@ import type {
   PersonaTelemetry,
   ProfilesTelemetry,
   ProvidersTelemetry,
+  RecentEventsTelemetry,
   SchedulesTelemetry,
   SessionsTelemetry,
   SkillsTelemetry,
   TelemetryEnvelope,
   ToolsTelemetry,
+  UsageSummaryTelemetry,
 } from "../shared/telemetry-types";
 
 interface ElectronAPI {
@@ -757,6 +759,13 @@ interface HermesAPI {
     profiles: () => Promise<TelemetryEnvelope<ProfilesTelemetry>>;
     providers: () => Promise<TelemetryEnvelope<ProvidersTelemetry>>;
     persona: () => Promise<TelemetryEnvelope<PersonaTelemetry>>;
+    recentEvents: (
+      limit?: number,
+      since?: string,
+    ) => Promise<TelemetryEnvelope<RecentEventsTelemetry>>;
+    usageSummary: (
+      since?: string,
+    ) => Promise<TelemetryEnvelope<UsageSummaryTelemetry>>;
   };
 }
 

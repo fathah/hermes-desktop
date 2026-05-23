@@ -8,11 +8,13 @@ import type {
   PersonaTelemetry,
   ProfilesTelemetry,
   ProvidersTelemetry,
+  RecentEventsTelemetry,
   SchedulesTelemetry,
   SessionsTelemetry,
   SkillsTelemetry,
   TelemetryEnvelope,
   ToolsTelemetry,
+  UsageSummaryTelemetry,
 } from "../shared/telemetry-types";
 
 const electronAPI = {
@@ -920,6 +922,15 @@ const hermesAPI = {
       ipcRenderer.invoke("telemetry-providers"),
     persona: (): Promise<TelemetryEnvelope<PersonaTelemetry>> =>
       ipcRenderer.invoke("telemetry-persona"),
+    recentEvents: (
+      limit?: number,
+      since?: string,
+    ): Promise<TelemetryEnvelope<RecentEventsTelemetry>> =>
+      ipcRenderer.invoke("telemetry-recent-events", limit, since),
+    usageSummary: (
+      since?: string,
+    ): Promise<TelemetryEnvelope<UsageSummaryTelemetry>> =>
+      ipcRenderer.invoke("telemetry-usage-summary", since),
   },
 };
 
