@@ -359,7 +359,10 @@ function Layout({
           {visitedViews.has("agents") && (
             <div style={paneStyle("agents")}>
               {remoteMode ? (
-                <ProfilesTelemetryView />
+                <ProfilesTelemetryView
+                  activeProfile={activeProfile}
+                  onSelectProfile={handleSelectProfile}
+                />
               ) : (
                 <Agents
                   activeProfile={activeProfile}
