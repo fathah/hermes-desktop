@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { ChatInputHandle } from "../ChatInput";
-import type { ChatMessage, Attachment } from "../types";
+import type { Attachment, ChatMessage, ChatBubbleMessage } from "../types";
+
+function hasContent(msg: ChatMessage): msg is ChatBubbleMessage {
+  return (
+    msg.kind === "user" ||
+    msg.kind === "assistant" ||
+    (!msg.kind && (msg.role === "user" || msg.role === "agent"))
+  );
+}
 
 interface LocalCommands {
   isLocal: (text: string) => boolean;
@@ -17,11 +25,13 @@ interface UseChatActionsArgs {
   onSessionStarted?: () => void;
   chatInputRef: React.RefObject<ChatInputHandle | null>;
   localCommands: LocalCommands;
+  /** Working folder bound to this conversation (issue #27), or null. */
+  contextFolder: string | null;
 }
 
 interface UseChatActionsResult {
   handleSend: (text: string, attachments?: Attachment[]) => Promise<void>;
-  handleQuickAsk: (text: string) => Promise<void>;
+  handleQuickAsk: (text: string, attachments?: Attachment[]) => Promise<void>;
   handleAbort: () => void;
   handleApprove: () => void;
   handleDeny: () => void;
@@ -43,6 +53,7 @@ export function useChatActions({
   onSessionStarted,
   chatInputRef,
   localCommands,
+  contextFolder,
 }: UseChatActionsArgs): UseChatActionsResult {
   const messagesRef = useRef(messages);
   const isLoadingRef = useRef(isLoading);
@@ -59,7 +70,7 @@ export function useChatActions({
           id: `${idPrefix}-${Date.now()}`,
           role: "user",
           content,
-          attachments,
+          ...(attachments && attachments.length > 0 ? { attachments } : {}),
         },
       ]);
     },
@@ -69,33 +80,28 @@ export function useChatActions({
   const sendToAgent = useCallback(
     async (text: string, attachments?: Attachment[]): Promise<void> => {
       try {
-        // Build serialisable attachment payload — strip the heavy dataUrl
-        // (data is the raw base64 we need; dataUrl is just for display)
-        const serialisableAtts = attachments?.map(({ id, name, mimeType, data, isImage }) => ({
-          id, name, mimeType, data, isImage,
-        }));
-
         await window.hermesAPI.sendMessage(
           text,
           profile,
           hermesSessionId || undefined,
-          messagesRef.current.map((m) => ({
+          messagesRef.current.filter(hasContent).map((m) => ({
             role: m.role,
             content: m.content,
           })),
-          serialisableAtts,
+          attachments,
+          contextFolder ?? undefined,
         );
       } catch {
         // onChatError IPC already surfaces this to the user
       }
     },
-    [profile, hermesSessionId],
+    [profile, hermesSessionId, contextFolder],
   );
 
   const handleSend = useCallback(
     async (text: string, attachments?: Attachment[]): Promise<void> => {
-      if (!text && (!attachments || attachments.length === 0)) return;
-      if (isLoadingRef.current) return;
+      const hasPayload = text.length > 0 || (attachments?.length ?? 0) > 0;
+      if (!hasPayload || isLoadingRef.current) return;
 
       if (text && localCommands.isLocal(text)) {
         const cmd = text.split(/\s+/)[0].toLowerCase();
@@ -113,11 +119,11 @@ export function useChatActions({
   );
 
   const handleQuickAsk = useCallback(
-    async (text: string): Promise<void> => {
+    async (text: string, attachments?: Attachment[]): Promise<void> => {
       if (!text || isLoadingRef.current) return;
       setIsLoading(true);
-      pushUser(`💭 ${text}`, "user-btw");
-      await sendToAgent(`/btw ${text}`);
+      pushUser(`💭 ${text}`, "user-btw", attachments);
+      await sendToAgent(`/btw ${text}`, attachments);
     },
     [pushUser, sendToAgent, setIsLoading],
   );

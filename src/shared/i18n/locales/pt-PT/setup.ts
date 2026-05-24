@@ -1,0 +1,55 @@
+export default {
+  title: "Configure o seu Fornecedor de IA",
+  subtitle: "Escolha um fornecedor e configure-o para começar",
+  providerCards: {
+    openrouter: {
+      name: "OpenRouter",
+      desc: "Mais de 200 modelos",
+      tag: "Recomendado",
+    },
+    anthropic: { name: "Anthropic", desc: "Modelos Claude", tag: "" },
+    openai: { name: "OpenAI", desc: "Modelos GPT", tag: "" },
+    local: {
+      name: "Local / Compatível com OpenAI",
+      desc: "LM Studio, Ollama, Groq, DeepSeek, Together…",
+      tag: "",
+    },
+  },
+  localPresets: {
+    lmstudio: "LM Studio",
+    ollama: "Ollama",
+    vllm: "vLLM",
+    llamacpp: "llama.cpp",
+    groq: "Groq",
+    deepseek: "DeepSeek",
+    together: "Together AI",
+    fireworks: "Fireworks",
+    cerebras: "Cerebras",
+    mistral: "Mistral",
+  },
+  serverPreset: "Predefinição do Servidor",
+  localGroupLabel: "Servidores Locais",
+  remoteGroupLabel: "APIs Remotas Compatíveis com OpenAI",
+  serverUrl: "URL Base",
+  modelName: "Nome do Modelo",
+  localServerHint:
+    "Certifique-se de que o seu servidor local está em execução antes de continuar",
+  customServerHint:
+    "Escolha uma predefinição ou cole qualquer URL base compatível com OpenAI",
+  customApiKeyLabel: "Chave da API",
+  customApiKeyHint:
+    "Obrigatório para APIs remotas. Deixe em branco para localhost.",
+  defaultModelHint:
+    "Deixe em branco para usar o modelo predefinido do servidor",
+  missingApiKey: "Por favor, introduza uma chave de API",
+  missingServerUrl: "Por favor, introduza o URL do servidor",
+  saveFailed: "Falha ao guardar a configuração",
+  noKeyHint: "Não tem uma chave? Obtenha uma aqui",
+  continue: "Continuar",
+  saving: "A guardar...",
+  apiKeyLabel: "Chave da API {{provider}}",
+  localNoKeyNeeded: "Não é necessária chave de API",
+  localLlm: "LLM Local",
+  modelBaseUrlPlaceholder: "http://localhost:1234/v1",
+  modelNamePlaceholder: "ex: llama-3.1-8b",
+} as const;

@@ -32,13 +32,15 @@ export default {
   cronPlaceholder: "ex: 0 9 * * 1-5",
   cronHint: "Formato cron padrão: minuto hora dia mês dia-da-semana",
   prompt: "Prompt",
-  promptPlaceholder: "Digite a descrição da tarefa a ser executada pelo agente...",
+  promptPlaceholder:
+    "Digite a descrição da tarefa a ser executada pelo agente...",
   deliverTo: "Entregar Para",
   deliverHint: "Onde enviar os resultados após a conclusão da tarefa",
   creating: "Criando...",
   create: "Criar",
   deleteTaskTitle: "Excluir Tarefa",
-  deleteConfirmText: "Tem certeza de que deseja excluir esta tarefa agendada? Esta ação não pode ser desfeita.",
+  deleteConfirmText:
+    "Tem certeza de que deseja excluir esta tarefa agendada? Esta ação não pode ser desfeita.",
   deleting: "Excluindo...",
   delete: "Excluir",
   loadFailed: "Falha ao carregar as tarefas agendadas",

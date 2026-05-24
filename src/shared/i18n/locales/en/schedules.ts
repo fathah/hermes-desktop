@@ -38,7 +38,8 @@ export default {
   creating: "Creating...",
   create: "Create",
   deleteTaskTitle: "Delete Task",
-  deleteConfirmText: "Are you sure you want to delete this scheduled task? This action cannot be undone.",
+  deleteConfirmText:
+    "Are you sure you want to delete this scheduled task? This action cannot be undone.",
   deleting: "Deleting...",
   delete: "Delete",
   loadFailed: "Failed to load scheduled tasks",

@@ -1,0 +1,44 @@
+name: CI
+
+# Runs the type checker and test suite on every PR and on pushes to main,
+# so broken code is caught before it merges. Mirrors the Node version and
+# install step already used by release.yml.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A newer commit on the same ref supersedes an in-flight run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      # Lint is informational for now — the codebase has a large backlog of
+      # prettier/line-ending warnings (no errors). Surfaced but not gating,
+      # so a warning backlog doesn't block merges.
+      - name: Lint
+        run: npm run lint
+        continue-on-error: true

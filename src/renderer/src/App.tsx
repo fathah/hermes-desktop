@@ -6,6 +6,7 @@ import Install from "./screens/Install/Install";
 import Setup from "./screens/Setup/Setup";
 import Layout from "./screens/Layout/Layout";
 import SplashScreen from "./screens/SplashScreen/SplashScreen";
+import { captureScreenView } from "./utils/analytics";
 
 type Screen = "splash" | "welcome" | "installing" | "setup" | "main";
 
@@ -48,10 +49,7 @@ function App(): React.JSX.Element {
           next = "welcome";
         }
       } else if (conn.mode === "remote" && conn.remoteUrl) {
-        const ok = await window.hermesAPI.testRemoteConnection(
-          conn.remoteUrl,
-          conn.apiKey,
-        );
+        const ok = await window.hermesAPI.testRemoteConnection(conn.remoteUrl);
         if (ok) {
           next = "main";
         } else {
@@ -101,6 +99,11 @@ function App(): React.JSX.Element {
   useEffect(() => {
     runInstallCheck();
   }, [runInstallCheck]);
+
+  // Track screen views for analytics
+  useEffect(() => {
+    captureScreenView(screen);
+  }, [screen]);
 
   const handleSplashFinished = useCallback(() => {
     /* splash transition is driven by the install check, not a timer */
@@ -162,6 +165,7 @@ function App(): React.JSX.Element {
           <Install
             onComplete={handleInstallComplete}
             onFailed={handleInstallFailed}
+            onCancel={() => setScreen("welcome")}
           />
         );
       case "setup":

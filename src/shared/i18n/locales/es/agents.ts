@@ -4,7 +4,8 @@ export default {
     "Cada perfil es un espacio de trabajo aislado de Hermes con su propia configuración, memoria y habilidades",
   newAgent: "Nuevo agente",
   namePlaceholder: "Nombre del agente (p. ej. coder)",
-  cloneConfig: "Clonar la configuración y las API keys del perfil predeterminado",
+  cloneConfig:
+    "Clonar la configuración y las API keys del perfil predeterminado",
   createFailed: "No se pudo crear el perfil",
   creating: "Creando...",
   create: "Crear",

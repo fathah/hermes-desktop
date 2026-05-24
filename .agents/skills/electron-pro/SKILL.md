@@ -19,6 +19,7 @@ Provides cross-platform desktop application development expertise specializing i
 - Signing and notarizing apps for app stores
 
 ---
+
 ---
 
 ## 2. Decision Framework
@@ -46,19 +47,21 @@ How to structure the app?
 
 ### IPC Communication Patterns
 
-| Pattern | Method | Use Case |
-|---------|--------|----------|
-| **One-Way (Renderer → Main)** | `ipcRenderer.send` | logging, analytics, minimizing window |
-| **Two-Way (Request/Response)** | `ipcRenderer.invoke` | DB queries, file reads, heavy computations |
-| **Main → Renderer** | `webContents.send` | Menu actions, system events, push notifications |
+| Pattern                        | Method               | Use Case                                        |
+| ------------------------------ | -------------------- | ----------------------------------------------- |
+| **One-Way (Renderer → Main)**  | `ipcRenderer.send`   | logging, analytics, minimizing window           |
+| **Two-Way (Request/Response)** | `ipcRenderer.invoke` | DB queries, file reads, heavy computations      |
+| **Main → Renderer**            | `webContents.send`   | Menu actions, system events, push notifications |
 
 **Red Flags → Escalate to `security-auditor`:**
+
 - Enabling `nodeIntegration: true` in production
 - Disabling `contextIsolation`
 - Loading remote content (`https://`) without strict CSP
 - Using `remote` module (Deprecated & insecure)
 
 ---
+
 ---
 
 ### Workflow 2: Performance Optimization (Startup)
@@ -68,25 +71,27 @@ How to structure the app?
 **Steps:**
 
 1.  **V8 Snapshot**
-    -   Use `electron-link` or `v8-compile-cache` to pre-compile JS.
+    - Use `electron-link` or `v8-compile-cache` to pre-compile JS.
 
 2.  **Lazy Loading Modules**
-    -   Don't `require()` everything at top of `main.ts`.
+    - Don't `require()` everything at top of `main.ts`.
+
     ```javascript
     // Bad
-    import { heavyLib } from 'heavy-lib';
-    
+    import { heavyLib } from "heavy-lib";
+
     // Good
-    ipcMain.handle('do-work', () => {
-      const heavyLib = require('heavy-lib');
+    ipcMain.handle("do-work", () => {
+      const heavyLib = require("heavy-lib");
       heavyLib.process();
     });
     ```
 
 3.  **Bundle Main Process**
-    -   Use `esbuild` or `webpack` for Main process (not just Renderer) to tree-shake unused code and minify.
+    - Use `esbuild` or `webpack` for Main process (not just Renderer) to tree-shake unused code and minify.
 
 ---
+
 ---
 
 ## 4. Patterns & Templates
@@ -97,13 +102,13 @@ How to structure the app?
 
 ```typescript
 // main.ts
-import { Worker } from 'worker_threads';
+import { Worker } from "worker_threads";
 
-ipcMain.handle('process-image', (event, data) => {
+ipcMain.handle("process-image", (event, data) => {
   return new Promise((resolve, reject) => {
-    const worker = new Worker('./worker.js', { workerData: data });
-    worker.on('message', resolve);
-    worker.on('error', reject);
+    const worker = new Worker("./worker.js", { workerData: data });
+    worker.on("message", resolve);
+    worker.on("error", reject);
   });
 });
 ```
@@ -116,37 +121,43 @@ ipcMain.handle('process-image', (event, data) => {
 // main.ts
 if (process.defaultApp) {
   if (process.argv.length >= 2) {
-    app.setAsDefaultProtocolClient('myapp', process.execPath, [path.resolve(process.argv[1])]);
+    app.setAsDefaultProtocolClient("myapp", process.execPath, [
+      path.resolve(process.argv[1]),
+    ]);
   }
 } else {
-  app.setAsDefaultProtocolClient('myapp');
+  app.setAsDefaultProtocolClient("myapp");
 }
 
-app.on('open-url', (event, url) => {
+app.on("open-url", (event, url) => {
   event.preventDefault();
   // Parse url 'myapp://...' and navigate renderer
-  mainWindow.webContents.send('navigate', url);
+  mainWindow.webContents.send("navigate", url);
 });
 ```
 
 ---
+
 ---
 
 ## 6. Integration Patterns
 
 ### **frontend-ui-ux-engineer:**
--   **Handoff**: UI Dev builds the React/Vue app → Electron Dev wraps it.
--   **Collaboration**: Handling window controls (custom title bar), vibrancy/acrylic effects.
--   **Tools**: CSS `app-region: drag`.
+
+- **Handoff**: UI Dev builds the React/Vue app → Electron Dev wraps it.
+- **Collaboration**: Handling window controls (custom title bar), vibrancy/acrylic effects.
+- **Tools**: CSS `app-region: drag`.
 
 ### **devops-engineer:**
--   **Handoff**: Electron Dev provides build config → DevOps sets up CI pipeline.
--   **Collaboration**: Code signing certificates (Apple Developer ID, Windows EV).
--   **Tools**: Electron Builder, Notarization scripts.
+
+- **Handoff**: Electron Dev provides build config → DevOps sets up CI pipeline.
+- **Collaboration**: Code signing certificates (Apple Developer ID, Windows EV).
+- **Tools**: Electron Builder, Notarization scripts.
 
 ### **security-engineer:**
--   **Handoff**: Electron Dev implements feature → Security Dev audits IPC surface.
--   **Collaboration**: Defining Content Security Policy (CSP) headers.
--   **Tools**: Electronegativity (Scanner).
+
+- **Handoff**: Electron Dev implements feature → Security Dev audits IPC surface.
+- **Collaboration**: Defining Content Security Policy (CSP) headers.
+- **Tools**: Electronegativity (Scanner).
 
 ---

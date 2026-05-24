@@ -11,9 +11,8 @@
     "composite": true,
     "jsx": "react-jsx",
     "types": ["vitest/globals"],
-    "baseUrl": ".",
     "paths": {
-      "@renderer/*": ["src/renderer/src/*"]
+      "@renderer/*": ["./src/renderer/src/*"]
     }
   }
 }

@@ -1,6 +1,7 @@
 export default {
   title: "Herramientas",
-  subtitle: "Activa o desactiva los conjuntos de herramientas que tu agente puede usar durante las conversaciones",
+  subtitle:
+    "Activa o desactiva los conjuntos de herramientas que tu agente puede usar durante las conversaciones",
   web: {
     label: "Búsqueda web",
     description: "Busca en la web y extrae contenido de URLs",
@@ -21,12 +22,18 @@ export default {
     label: "Ejecución de código",
     description: "Ejecuta código de Python y shell directamente",
   },
-  vision: { label: "Visión", description: "Analiza imágenes y contenido visual" },
+  vision: {
+    label: "Visión",
+    description: "Analiza imágenes y contenido visual",
+  },
   image_gen: {
     label: "Generación de imágenes",
     description: "Genera imágenes con DALL-E y otros modelos",
   },
-  tts: { label: "Texto a voz", description: "Convierte texto en audio hablado" },
+  tts: {
+    label: "Texto a voz",
+    description: "Convierte texto en audio hablado",
+  },
   skills: {
     label: "Habilidades",
     description: "Crea, administra y ejecuta habilidades reutilizables",
@@ -60,7 +67,8 @@ export default {
     description: "Crea y administra listas de tareas para trabajos complejos",
   },
   mcpServers: "Servidores MCP",
-  mcpDescription: "Servidores Model Context Protocol configurados en config.yaml. Adminístralos con <code>hermes mcp add/remove</code> en la terminal.",
+  mcpDescription:
+    "Servidores Model Context Protocol configurados en config.yaml. Adminístralos con <code>hermes mcp add/remove</code> en la terminal.",
   http: "HTTP",
   stdio: "stdio",
   disabled: "desactivado",

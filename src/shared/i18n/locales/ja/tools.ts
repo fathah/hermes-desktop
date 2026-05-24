@@ -60,7 +60,8 @@ export default {
     description: "複雑なタスク用の TODO リストを作成・管理",
   },
   mcpServers: "MCP サーバ",
-  mcpDescription: "config.yaml で構成された Model Context Protocol サーバ。ターミナルで <code>hermes mcp add/remove</code> から管理します。",
+  mcpDescription:
+    "config.yaml で構成された Model Context Protocol サーバ。ターミナルで <code>hermes mcp add/remove</code> から管理します。",
   http: "HTTP",
   stdio: "stdio",
   disabled: "無効",

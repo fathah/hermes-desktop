@@ -2,7 +2,11 @@ export default {
   title: "Configure seu Provedor de IA",
   subtitle: "Escolha um provedor e configure-o para começar",
   providerCards: {
-    openrouter: { name: "OpenRouter", desc: "Mais de 200 modelos", tag: "Recomendado" },
+    openrouter: {
+      name: "OpenRouter",
+      desc: "Mais de 200 modelos",
+      tag: "Recomendado",
+    },
     anthropic: { name: "Anthropic", desc: "Modelos Claude", tag: "" },
     openai: { name: "OpenAI", desc: "Modelos GPT", tag: "" },
     local: {
@@ -28,10 +32,13 @@ export default {
   remoteGroupLabel: "APIs Remotas Compatíveis com OpenAI",
   serverUrl: "URL Base",
   modelName: "Nome do Modelo",
-  localServerHint: "Certifique-se de que seu servidor local está rodando antes de continuar",
-  customServerHint: "Escolha um preset ou cole qualquer URL base compatível com OpenAI",
+  localServerHint:
+    "Certifique-se de que seu servidor local está rodando antes de continuar",
+  customServerHint:
+    "Escolha um preset ou cole qualquer URL base compatível com OpenAI",
   customApiKeyLabel: "Chave da API",
-  customApiKeyHint: "Obrigatório para APIs remotas. Deixe em branco para localhost.",
+  customApiKeyHint:
+    "Obrigatório para APIs remotas. Deixe em branco para localhost.",
   defaultModelHint: "Deixe em branco para usar o modelo padrão do servidor",
   missingApiKey: "Por favor, insira uma chave de API",
   missingServerUrl: "Por favor, insira a URL do servidor",
@@ -40,6 +47,8 @@ export default {
   continue: "Continuar",
   saving: "Salvando...",
   apiKeyLabel: "Chave da API {{provider}}",
+  noApiKeyRequired:
+    "{{provider}} não requer API key. O Hermes usará sua configuração local de CLI/OAuth.",
   localNoKeyNeeded: "Nenhuma chave de API necessária",
   localLlm: "LLM Local",
   modelBaseUrlPlaceholder: "http://localhost:1234/v1",

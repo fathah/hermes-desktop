@@ -22,7 +22,8 @@ export default {
   noToolsetsFound: "未找到工具集。",
   addManuallyHint: "你也可以使用上面的按钮手动添加记忆。",
   userProfileHint: "告诉 Hermes 关于你的信息 — 姓名、角色、偏好、沟通风格。",
-  providersHint: "可插拔的记忆提供商为 Hermes 提供高级长期记忆。内置记忆(上方)始终与所选提供商一起激活。",
+  providersHint:
+    "可插拔的记忆提供商为 Hermes 提供高级长期记忆。内置记忆(上方)始终与所选提供商一起激活。",
   providersHintActive: "当前激活: <strong>{{provider}}</strong>",
   providersHintInactive: "没有外部提供商激活 — 仅使用内置记忆。",
   enterEnvKey: "输入 {{key}}",
@@ -44,7 +45,8 @@ export default {
     mem0: "服务端 LLM 事实提取，支持语义搜索和自动去重",
     retaindb: "云端记忆 API，支持混合搜索和 7 种记忆类型",
     supermemory: "语义长期记忆，支持档案回忆和实体提取",
-    holographic: "本地 SQLite 事实存储，支持 FTS5 搜索和信任评分（无需 API Key）",
+    holographic:
+      "本地 SQLite 事实存储，支持 FTS5 搜索和信任评分（无需 API Key）",
     openviking: "会话管理的记忆，支持分层检索和知识浏览",
     byterover: "持久化知识树，通过 brv CLI 进行分层检索",
   },

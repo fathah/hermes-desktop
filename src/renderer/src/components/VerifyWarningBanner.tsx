@@ -27,11 +27,7 @@ function VerifyWarningBanner({
         >
           {t("errors.verifyReinstall")}
         </button>
-        <button
-          className="btn-ghost btn-sm"
-          onClick={onDismiss}
-          type="button"
-        >
+        <button className="btn-ghost btn-sm" onClick={onDismiss} type="button">
           {t("errors.verifyDismiss")}
         </button>
       </div>

@@ -1,0 +1,9 @@
+BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null)
+if [[ "$BRANCH" != "release" && "$BRANCH" != release/* ]]; then
+  exit 0
+fi
+
+echo "→ [pre-push] Release branch — running build..."
+bun run build || { echo "✗ Build failed. Push aborted."; exit 1; }
+
+echo "✓ [pre-push] Build passed."

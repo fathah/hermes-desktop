@@ -1,6 +1,7 @@
 export default {
   title: "Habilidades",
-  subtitle: "Estenda seu agente com habilidades e fluxos de trabalho reutilizáveis",
+  subtitle:
+    "Estenda seu agente com habilidades e fluxos de trabalho reutilizáveis",
   refresh: "Atualizar",
   installedTab: "Instaladas",
   browseTab: "Explorar",
@@ -13,7 +14,8 @@ export default {
     "Explore as habilidades disponíveis e instale-as para estender seu agente",
   noMatchingHint: "Tente um termo de pesquisa diferente",
   noBrowseResults: "Nenhuma habilidade encontrada",
-  noBrowseResultsHint: "Tente um termo de pesquisa ou filtro de categoria diferente",
+  noBrowseResultsHint:
+    "Tente um termo de pesquisa ou filtro de categoria diferente",
   installFailed: "Falha ao instalar a habilidade",
   uninstallFailed: "Falha ao desinstalar a habilidade",
   removing: "Removendo...",

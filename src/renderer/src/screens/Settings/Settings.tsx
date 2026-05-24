@@ -3,7 +3,18 @@ import { useTheme } from "../../components/ThemeProvider";
 import { THEME_OPTIONS } from "../../constants";
 import { useI18n } from "../../components/useI18n";
 import { APP_LOCALES, type AppLocale } from "../../../../shared/i18n";
-import { Check, ChevronDown, Download, Upload, FileText, Send } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Download,
+  Upload,
+  FileText,
+  Send,
+} from "lucide-react";
+import {
+  getAnalyticsConsent,
+  setAnalyticsConsent,
+} from "../../utils/analytics";
 
 const TELEGRAM_COMMUNITY_URL = "https://t.me/hermes_agent_desktop";
 
@@ -12,9 +23,22 @@ const LANGUAGE_NATIVE_NAMES: Record<AppLocale, string> = {
   es: "Español",
   id: "Bahasa Indonesia",
   ja: "日本語",
-  "pt-BR": "Português",
-  "zh-CN": "中文",
+  "pt-BR": "Português (BR)",
+  "pt-PT": "Português (PT)",
+  "zh-CN": "简体中文",
+  "zh-TW": "繁體中文（台灣）",
 };
+
+// Build a mask string the same width as the stored API key so the
+// "saved" state of the input looks like a key, not a constant blob.
+// Length is exposed by the main process via PublicConnectionConfig.
+// 0 falls back to 8 dots so the user gets a visible "set" indicator
+// even if main didn't report a length yet. Capped to keep absurdly
+// long keys from blowing up the field.
+function makeApiKeyMask(length: number): string {
+  const n = Math.min(Math.max(length, 8), 128);
+  return "*".repeat(n);
+}
 
 // Read cached values from localStorage for instant display
 function getCachedVersion(): string | null {
@@ -75,6 +99,8 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
   const [connMode, setConnMode] = useState<"local" | "remote" | "ssh">("local");
   const [connRemoteUrl, setConnRemoteUrl] = useState("");
   const [connApiKey, setConnApiKey] = useState("");
+  const [connApiKeyMask, setConnApiKeyMask] = useState("");
+  const [connHasApiKey, setConnHasApiKey] = useState(false);
   const [connTesting, setConnTesting] = useState(false);
   const [connStatus, setConnStatus] = useState<string | null>(null);
   const connLoaded = useRef(false);
@@ -107,6 +133,11 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
   const [dumpOutput, setDumpOutput] = useState<string | null>(null);
   const [dumpRunning, setDumpRunning] = useState(false);
 
+  // Analytics consent
+  const [analyticsEnabled, setAnalyticsEnabled] = useState(() =>
+    getAnalyticsConsent(),
+  );
+
   const loadConfig = useCallback(async (): Promise<void> => {
     // Load fast config first (cached in main process)
     const [home, aVersion, conn] = await Promise.all([
@@ -118,7 +149,10 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
     setAppVersion(aVersion);
     setConnMode(conn.mode);
     setConnRemoteUrl(conn.remoteUrl);
-    setConnApiKey(conn.apiKey);
+    setConnHasApiKey(conn.hasApiKey);
+    const mask = conn.hasApiKey ? makeApiKeyMask(conn.apiKeyLength) : "";
+    setConnApiKeyMask(mask);
+    setConnApiKey(mask);
     setSshHost(conn.ssh?.host || "");
     setSshPort(conn.ssh?.port ? String(conn.ssh.port) : "");
     setSshUser(conn.ssh?.username || "");
@@ -198,6 +232,19 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
     setMigrationDismissed(true);
   }
 
+  function getConnectionApiKeyForSave(): string | undefined {
+    // Mask sentinel in the field means "the secret is still server-side
+    // and the user hasn't touched it" — always preserve the stored key.
+    // The old code wiped the key whenever the URL changed, so a one-
+    // character URL edit (fix typo, add /v1) silently dropped the saved
+    // credential. To clear the key, the user must explicitly erase the
+    // field.
+    if (connHasApiKey && connApiKey === connApiKeyMask) {
+      return undefined;
+    }
+    return connApiKey.trim();
+  }
+
   async function handleSaveConnection(): Promise<void> {
     if (connMode === "ssh") {
       await window.hermesAPI.setSshConfig(
@@ -209,7 +256,23 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
         18642,
       );
     } else {
-      await window.hermesAPI.setConnectionConfig(connMode, connRemoteUrl, connApiKey);
+      const apiKey = getConnectionApiKeyForSave();
+      await window.hermesAPI.setConnectionConfig(
+        connMode,
+        connRemoteUrl,
+        apiKey,
+      );
+      if (apiKey !== undefined) {
+        const hasApiKey = apiKey.length > 0;
+        setConnHasApiKey(hasApiKey);
+        if (hasApiKey) {
+          const mask = makeApiKeyMask(apiKey.length);
+          setConnApiKeyMask(mask);
+          setConnApiKey(mask);
+        } else {
+          setConnApiKeyMask("");
+        }
+      }
     }
     setConnStatus("Saved");
     setTimeout(() => setConnStatus(null), 2000);
@@ -234,10 +297,16 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
       setConnStatus(ok ? "SSH tunnel connected!" : "Could not connect via SSH");
     } else {
       const url = connRemoteUrl.trim();
-      if (!url) { setConnStatus("Please enter a URL"); return; }
+      if (!url) {
+        setConnStatus("Please enter a URL");
+        return;
+      }
       setConnTesting(true);
       setConnStatus(null);
-      const ok = await window.hermesAPI.testRemoteConnection(url, connApiKey.trim());
+      const ok = await window.hermesAPI.testRemoteConnection(
+        url,
+        getConnectionApiKeyForSave(),
+      );
       setConnTesting(false);
       setConnStatus(ok ? "Connected successfully!" : "Could not reach server");
     }
@@ -247,6 +316,8 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
     setConnMode("local");
     setConnRemoteUrl("");
     setConnApiKey("");
+    setConnApiKeyMask("");
+    setConnHasApiKey(false);
     await window.hermesAPI.setConnectionConfig("local", "", "");
     setConnStatus(t("settings.switchedToLocal"));
     setTimeout(() => setConnStatus(null), 2000);
@@ -541,8 +612,8 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
             {connMode === "local"
               ? t("settings.modeLocalHint")
               : connMode === "ssh"
-              ? "Tunnel to a remote Hermes over SSH — no exposed ports or API keys needed."
-              : t("settings.modeRemoteHint")}
+                ? "Tunnel to a remote Hermes over SSH — no exposed ports or API keys needed."
+                : t("settings.modeRemoteHint")}
           </div>
         </div>
 
@@ -573,6 +644,11 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
                 type="password"
                 value={connApiKey}
                 onChange={(e) => setConnApiKey(e.target.value)}
+                onFocus={(e) => {
+                  if (connApiKey === connApiKeyMask) {
+                    e.currentTarget.select();
+                  }
+                }}
                 placeholder={t("settings.remoteApiKey")}
                 onBlur={handleSaveConnection}
               />
@@ -586,9 +662,14 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
                 onClick={handleTestConnection}
                 disabled={connTesting}
               >
-                {connTesting ? t("settings.testingConnection") : t("settings.testConnection")}
+                {connTesting
+                  ? t("settings.testingConnection")
+                  : t("settings.testConnection")}
               </button>
-              <button className="btn btn-primary" onClick={handleSaveConnection}>
+              <button
+                className="btn btn-primary"
+                onClick={handleSaveConnection}
+              >
                 {t("settings.save")}
               </button>
             </div>
@@ -630,7 +711,9 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
             <div className="settings-field">
               <label className="settings-field-label">
                 Private Key Path{" "}
-                <span style={{ fontWeight: 400, opacity: 0.6 }}>(optional, defaults to ~/.ssh/id_rsa)</span>
+                <span style={{ fontWeight: 400, opacity: 0.6 }}>
+                  (optional, defaults to ~/.ssh/id_rsa)
+                </span>
               </label>
               <input
                 className="input"
@@ -643,7 +726,9 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
             <div className="settings-field">
               <label className="settings-field-label">
                 Remote Hermes Port{" "}
-                <span style={{ fontWeight: 400, opacity: 0.6 }}>(default 8642)</span>
+                <span style={{ fontWeight: 400, opacity: 0.6 }}>
+                  (default 8642)
+                </span>
               </label>
               <input
                 className="input"
@@ -653,8 +738,16 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
                 placeholder="8642"
               />
               <div className="settings-field-hint">
-                Make sure you can run <code style={{ fontFamily: "monospace" }}>ssh {sshUser || "user"}@{sshHost || "host"}</code> without a password prompt.
-                The first connection trusts the host key and stores it in <code style={{ fontFamily: "monospace" }}>~/.ssh/known_hosts</code>; SSH will fail closed if that key changes later.
+                Make sure you can run{" "}
+                <code style={{ fontFamily: "monospace" }}>
+                  ssh {sshUser || "user"}@{sshHost || "host"}
+                </code>{" "}
+                without a password prompt. The first connection trusts the host
+                key and stores it in{" "}
+                <code style={{ fontFamily: "monospace" }}>
+                  ~/.ssh/known_hosts
+                </code>
+                ; SSH will fail closed if that key changes later.
               </div>
             </div>
             <div className="settings-hermes-actions">
@@ -665,7 +758,10 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
               >
                 {connTesting ? "Testing SSH…" : "Test SSH Connection"}
               </button>
-              <button className="btn btn-primary" onClick={handleSaveConnection}>
+              <button
+                className="btn btn-primary"
+                onClick={handleSaveConnection}
+              >
                 {t("settings.save")}
               </button>
             </div>
@@ -763,6 +859,29 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
           <LanguageSelect locale={locale} onSelect={setLocale} />
           <div className="settings-field-hint">
             {t("settings.language.hint")}
+          </div>
+        </div>
+        <div className="settings-field">
+          <label className="settings-field-label">
+            {t("settings.analytics.label")}
+            <label
+              className="tools-toggle"
+              style={{ marginLeft: 12, verticalAlign: "middle" }}
+            >
+              <input
+                type="checkbox"
+                checked={analyticsEnabled}
+                onChange={(e) => {
+                  const enabled = e.target.checked;
+                  setAnalyticsEnabled(enabled);
+                  setAnalyticsConsent(enabled);
+                }}
+              />
+              <span className="tools-toggle-track" />
+            </label>
+          </label>
+          <div className="settings-field-hint">
+            {t("settings.analytics.hint")}
           </div>
         </div>
       </div>

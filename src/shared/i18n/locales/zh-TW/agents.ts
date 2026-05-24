@@ -1,0 +1,23 @@
+export default {
+  title: "Agent 檔案",
+  subtitle:
+    "每個 Agent 檔案都是獨立的 Hermes 工作區，擁有自己的設定、記憶和技能",
+  newAgent: "新增 Agent",
+  namePlaceholder: "Agent 名稱（例如 coder）",
+  cloneConfig: "複製預設 Agent 檔案的設定與 API Key",
+  createFailed: "建立 Agent 檔案失敗",
+  creating: "建立中...",
+  create: "建立",
+  active: "目前使用",
+  noModel: "尚未設定模型",
+  skillsCount: "{{count}} 個技能",
+  gatewayRunning: "網關執行中",
+  gatewayOff: "網關已關閉",
+  chat: "聊天",
+  deleteConfirm: "刪除？",
+  yes: "是",
+  no: "否",
+  deleteTitle: "刪除 Agent",
+  auto: "自動",
+  local: "本機",
+} as const;

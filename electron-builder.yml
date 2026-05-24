@@ -13,6 +13,11 @@ asarUnpack:
   - resources/**
 win:
   executableName: hermes-agent
+  target:
+    - nsis
+    - portable
+portable:
+  artifactName: ${name}-${version}-portable.${ext}
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}

@@ -265,6 +265,11 @@ const SessionCard = memo(function SessionCard({
   );
 });
 
+// How often the Sessions tab re-syncs from state.db while it is open, so
+// sessions created in the background (cron jobs, gateway platforms, another
+// device) surface without the user navigating away and back. (refs #322)
+export const SESSIONS_REFRESH_MS = 30_000;
+
 function Sessions({
   onResumeSession,
   onNewChat,
@@ -280,27 +285,23 @@ function Sessions({
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  /** Deduplicate by id — guards against stale cache having duplicate entries */
-  function dedupe(list: CachedSession[]): CachedSession[] {
-    const seen = new Set<string>();
-    return list.filter((s) => {
-      if (seen.has(s.id)) return false;
-      seen.add(s.id);
-      return true;
-    });
-  }
+  // Quiet re-sync from state.db — refreshes the list WITHOUT flipping the
+  // loading state, so it can run on a timer or on focus with no spinner flash.
+  const refreshSessions = useCallback(async (): Promise<void> => {
+    const synced = await window.hermesAPI.syncSessionCache();
+    setSessions(synced.slice(0, 50));
+  }, []);
 
   const loadSessions = useCallback(async (): Promise<void> => {
     setLoading(true);
     const cached = await window.hermesAPI.listCachedSessions(50);
     if (cached.length > 0) {
-      setSessions(dedupe(cached));
+      setSessions(cached);
       setLoading(false);
     }
-    const synced = await window.hermesAPI.syncSessionCache();
-    setSessions(dedupe(synced.slice(0, 50)));
+    await refreshSessions();
     setLoading(false);
-  }, []);
+  }, [refreshSessions]);
 
   const handleDeleteSession = useCallback(async (sessionId: string): Promise<void> => {
     // Optimistically remove from local list first
@@ -339,6 +340,26 @@ function Sessions({
       loadSessions();
     }
   }, [visible, loadSessions]);
+
+  // While the Sessions tab is actually showing, periodically re-sync so
+  // sessions created in the background — cron jobs, gateway platforms, or
+  // another device writing the same state.db — surface even if the user
+  // just leaves this tab open. Also refresh when the window regains focus.
+  // Gated on `visible`: no timer and no DB reads while another screen shows.
+  useEffect(() => {
+    if (!visible) return;
+    const timer = setInterval(() => {
+      void refreshSessions();
+    }, SESSIONS_REFRESH_MS);
+    const onFocus = (): void => {
+      void refreshSessions();
+    };
+    window.addEventListener("focus", onFocus);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [visible, refreshSessions]);
 
   useEffect(() => {
     if (searchTimer.current) clearTimeout(searchTimer.current);
@@ -439,7 +460,10 @@ function Sessions({
                     {r.source}
                   </span>
                   <span className="sessions-tag">
-                    {r.messageCount} {r.messageCount !== 1 ? t("sessions.messages") : t("sessions.messageSingular")}
+                    {r.messageCount}{" "}
+                    {r.messageCount !== 1
+                      ? t("sessions.messages")
+                      : t("sessions.messageSingular")}
                   </span>
                   {r.model && (
                     <span className="sessions-tag sessions-tag--model">
@@ -461,7 +485,9 @@ function Sessions({
         <div className="sessions-list">
           {grouped.map((group) => (
             <div key={group.label} className="sessions-group">
-              <div className="sessions-group-label">{t(`sessions.${group.label}`)}</div>
+              <div className="sessions-group-label">
+                {t(`sessions.${group.label}`)}
+              </div>
               {group.sessions.map((s) => (
                 <SessionCard
                   key={s.id}

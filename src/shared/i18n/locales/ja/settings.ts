@@ -40,6 +40,13 @@ export default {
   customProviderHint:
     "任意の OpenAI 互換 API（LM Studio・Ollama・vLLM 等）を使用",
   modelHint: "デフォルトのモデル名（空欄でプロバイダのデフォルトを使用）",
+  refreshModels: "モデル一覧を更新",
+  discoveringModels: "利用可能なモデルを読み込んでいます…",
+  discoveredCount: "{{count}} 個のモデルが利用可能です — 入力して絞り込めます",
+  discoveryNoKey:
+    "利用可能なモデル一覧を読み込むには、このプロバイダの API キーを .env に設定してください",
+  discoveryError:
+    "プロバイダのモデル一覧を取得できませんでした — モデル名を直接入力することもできます",
   customBaseUrlHint: "OpenAI 互換 API エンドポイント",
   poolHint:
     "同じプロバイダの API キーを複数追加して自動ローテーション・負荷分散。Hermes が順に使い回します。",

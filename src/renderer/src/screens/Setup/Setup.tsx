@@ -3,6 +3,7 @@ import { ArrowRight, ExternalLink } from "../../assets/icons";
 import { PROVIDERS, LOCAL_PRESETS } from "../../constants";
 import { useI18n } from "../../components/useI18n";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
+import BrandLogo from "../../components/common/BrandLogo";
 
 interface SetupProps {
   onComplete: () => void;
@@ -108,8 +109,8 @@ function Setup({
               setError("");
             }}
           >
+            <BrandLogo provider={p.id} size={24} matchTheme={true} />
             <div className="setup-provider-name">{t(p.name)}</div>
-            <div className="setup-provider-desc">{t(p.desc)}</div>
             {p.tag && <div className="setup-provider-tag">{t(p.tag)}</div>}
           </button>
         ))}
@@ -214,7 +215,7 @@ function Setup({
               {t("setup.defaultModelHint")}
             </div>
           </>
-        ) : (
+        ) : provider.needsKey ? (
           <>
             <label className="setup-label">
               {t("setup.apiKeyLabel", { provider: t(provider.name) })}
@@ -248,6 +249,31 @@ function Setup({
               {t("setup.noKeyHint")}
               <ExternalLink size={12} />
             </button>
+          </>
+        ) : (
+          <>
+            <div className="setup-field-hint">
+              {t("setup.noApiKeyRequired", { provider: t(provider.name) })}
+            </div>
+
+            <label className="setup-label" style={{ marginTop: 16 }}>
+              {t("setup.modelName")}{" "}
+              <span className="setup-label-optional">
+                {t("common.optional")}
+              </span>
+            </label>
+            <input
+              className="input"
+              type="text"
+              placeholder={t("setup.modelNamePlaceholder")}
+              value={modelName}
+              onChange={(e) => setModelName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleContinue()}
+              autoFocus
+            />
+            <div className="setup-field-hint">
+              {t("setup.defaultModelHint")}
+            </div>
           </>
         )}
 

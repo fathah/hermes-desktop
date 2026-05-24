@@ -17,7 +17,13 @@ interface SetupProgress {
   log: string;
 }
 
-function Office({ visible }: { visible?: boolean }): React.JSX.Element {
+function Office({
+  profile,
+  visible,
+}: {
+  profile?: string;
+  visible?: boolean;
+}): React.JSX.Element {
   const { t } = useI18n();
   const [state, setState] = useState<OfficeState>("checking");
   const [running, setRunning] = useState(false);
@@ -39,6 +45,10 @@ function Office({ visible }: { visible?: boolean }): React.JSX.Element {
   });
   const [webviewReady, setWebviewReady] = useState(false);
   const [webviewError, setWebviewError] = useState("");
+  // Set when the main process detects a Claw3D / hermes-office service
+  // running on the remote host (SSH tunnel mode). When present the webview
+  // points at this URL and the local install/start UX is bypassed.
+  const [remoteUrl, setRemoteUrl] = useState<string | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const webviewRef = useRef<HTMLWebViewElement>(null);
 
@@ -53,13 +63,14 @@ function Office({ visible }: { visible?: boolean }): React.JSX.Element {
   const checkStatus = useCallback(async (): Promise<void> => {
     setState("checking");
     const status = await window.hermesAPI.claw3dStatus();
+    setRemoteUrl(status.remoteUrl ?? null);
     setRunning(status.running);
     setPort(status.port);
     setPortInput(String(status.port));
     setPortInUse(status.portInUse);
     setWsUrlInput(status.wsUrl || "ws://localhost:18789");
     if (status.error) setError(status.error);
-    if (status.installed) {
+    if (status.installed || status.remoteUrl) {
       setState("ready");
     } else {
       setState("not-installed");
@@ -75,6 +86,7 @@ function Office({ visible }: { visible?: boolean }): React.JSX.Element {
     if (state !== "ready" || !visible) return;
     const interval = setInterval(async () => {
       const status = await window.hermesAPI.claw3dStatus();
+      setRemoteUrl(status.remoteUrl ?? null);
       setRunning(status.running);
       setPort(status.port);
       setPortInUse(status.portInUse);
@@ -107,15 +119,29 @@ function Office({ visible }: { visible?: boolean }): React.JSX.Element {
       executeJavaScript?: (code: string) => Promise<unknown>;
     };
     if (!wv) return;
-    const onLoad = (): void => {
-      setWebviewReady(true);
-      setWebviewError("");
+
+    const ONBOARDING_JS = `try { localStorage.setItem("claw3d:onboarding:completed", "true") } catch(e) {}`;
+
+    // Inject onboarding flag as early as possible (before Claw3D's scripts run).
+    // did-start-loading fires before any page resources load, so the injection
+    // is queued early enough that Claw3D's useOnboardingState hook sees it.
+    const injectOnboardingFlag = (): void => {
       if (wv.executeJavaScript) {
-        wv.executeJavaScript(
-          `try { localStorage.setItem("claw3d:onboarding:completed", "true") } catch(e) {}`,
-        ).catch(() => {});
+        wv.executeJavaScript(ONBOARDING_JS).catch(() => {});
       }
     };
+
+    const onStartLoad = (): void => {
+      injectOnboardingFlag();
+    };
+
+    const onDomReady = (): void => {
+      // Defense-in-depth: re-inject in case the first attempt didn't stick
+      injectOnboardingFlag();
+      setWebviewReady(true);
+      setWebviewError("");
+    };
+
     const onFail = (evt: unknown): void => {
       setWebviewReady(false);
       const e = evt as { errorDescription?: string; errorCode?: number };
@@ -125,10 +151,14 @@ function Office({ visible }: { visible?: boolean }): React.JSX.Element {
           "Failed to load Claw3D. The dev server may still be starting up.",
       );
     };
-    wv.addEventListener("did-finish-load", onLoad);
+
+    wv.addEventListener("did-start-loading", onStartLoad);
+    wv.addEventListener("dom-ready", onDomReady);
     wv.addEventListener("did-fail-load", onFail);
+
     return () => {
-      wv.removeEventListener("did-finish-load", onLoad);
+      wv.removeEventListener("did-start-loading", onStartLoad);
+      wv.removeEventListener("dom-ready", onDomReady);
       wv.removeEventListener("did-fail-load", onFail);
     };
   }, [running, port]);
@@ -168,7 +198,7 @@ function Office({ visible }: { visible?: boolean }): React.JSX.Element {
       setError("");
       setWebviewError("");
       setStarting(true);
-      const result = await window.hermesAPI.claw3dStartAll();
+      const result = await window.hermesAPI.claw3dStartAll(profile);
       if (!result.success) {
         setError(result.error || "Failed to start Claw3D");
         setStarting(false);
@@ -213,7 +243,10 @@ function Office({ visible }: { visible?: boolean }): React.JSX.Element {
       ? Math.round((progress.step / progress.totalSteps) * 100)
       : 0;
 
-  const claw3dUrl = `http://localhost:${port}`;
+  // Remote Claw3D (SSH tunnel mode) takes precedence: the remote
+  // hermes-office.service already runs, so we point the webview at it
+  // rather than asking the user to install Claw3D locally.
+  const claw3dUrl = remoteUrl || `http://localhost:${port}`;
 
   // --- Checking ---
   if (state === "checking") {
@@ -236,12 +269,8 @@ function Office({ visible }: { visible?: boolean }): React.JSX.Element {
         <div className="office-center">
           <div className="office-setup-card">
             <h2 className="office-setup-title">{t("office.setupTitle")}</h2>
-            <p className="office-setup-desc">
-              {t("office.setupDesc1")}
-            </p>
-            <p className="office-setup-desc">
-              {t("office.setupDesc2")}
-            </p>
+            <p className="office-setup-desc">{t("office.setupDesc1")}</p>
+            <p className="office-setup-desc">{t("office.setupDesc2")}</p>
             {error && <div className="office-error">{error}</div>}
             <div className="office-setup-actions">
               <button className="btn btn-primary" onClick={handleInstall}>
@@ -255,7 +284,8 @@ function Office({ visible }: { visible?: boolean }): React.JSX.Element {
                   )
                 }
               >
-                <ExternalLink size={14} />{t("office.viewOnGithub")}
+                <ExternalLink size={14} />
+                {t("office.viewOnGithub")}
               </button>
             </div>
           </div>

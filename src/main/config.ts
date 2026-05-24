@@ -1,7 +1,14 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
-import { HERMES_HOME } from "./installer";
-import { profilePaths, escapeRegex, safeWriteFile } from "./utils";
+import { HERMES_HOME, expectedEnvKeyForModel } from "./installer";
+import {
+  escapeRegex,
+  getActiveProfileNameSync,
+  profileHome,
+  profilePaths,
+  safeWriteFile,
+} from "./utils";
+import { getYamlPath } from "./yaml-path";
 
 // ── Connection Config (local / remote / ssh) ─────────────
 
@@ -21,13 +28,24 @@ export interface ConnectionConfig {
   ssh: SshConnectionConfig;
 }
 
+export interface PublicConnectionConfig {
+  mode: "local" | "remote" | "ssh";
+  remoteUrl: string;
+  hasApiKey: boolean;
+  // Length of the stored API key, exposed so the renderer can show a
+  // mask that matches the real value's width. The secret itself never
+  // leaves the main process. 0 when no key is set.
+  apiKeyLength: number;
+  ssh: SshConnectionConfig;
+}
+
 // Lazy getter — avoids circular dependency with installer.ts
 // (HERMES_HOME may not be assigned yet when this module first loads)
 function desktopConfigFile(): string {
   return join(HERMES_HOME, "desktop.json");
 }
 
-function readDesktopConfig(): Record<string, unknown> {
+export function readDesktopConfig(): Record<string, unknown> {
   try {
     const f = desktopConfigFile();
     if (!existsSync(f)) return {};
@@ -37,7 +55,7 @@ function readDesktopConfig(): Record<string, unknown> {
   }
 }
 
-function writeDesktopConfig(data: Record<string, unknown>): void {
+export function writeDesktopConfig(data: Record<string, unknown>): void {
   if (!existsSync(HERMES_HOME)) {
     mkdirSync(HERMES_HOME, { recursive: true });
   }
@@ -62,6 +80,17 @@ export function getConnectionConfig(): ConnectionConfig {
   };
 }
 
+export function getPublicConnectionConfig(): PublicConnectionConfig {
+  const config = getConnectionConfig();
+  return {
+    mode: config.mode,
+    remoteUrl: config.remoteUrl,
+    hasApiKey: config.apiKey.length > 0,
+    apiKeyLength: config.apiKey.length,
+    ssh: config.ssh,
+  };
+}
+
 export function setConnectionConfig(config: ConnectionConfig): void {
   const data = readDesktopConfig();
   data.connectionMode = config.mode;
@@ -71,6 +100,19 @@ export function setConnectionConfig(config: ConnectionConfig): void {
     data.sshConfig = config.ssh;
   }
   writeDesktopConfig(data);
+}
+
+export function resolveConnectionApiKeyUpdate(
+  existing: ConnectionConfig,
+  mode: "local" | "remote" | "ssh",
+  remoteUrl: string,
+  apiKey?: string,
+): string {
+  if (apiKey !== undefined) return apiKey;
+  if (existing.mode === mode && existing.remoteUrl === remoteUrl) {
+    return existing.apiKey;
+  }
+  return "";
 }
 
 // ── In-memory cache with TTL ─────────────────────────────
@@ -124,7 +166,7 @@ export function readEnv(profile?: string): Record<string, string> {
       value = value.slice(1, -1);
     }
 
-    if (value) result[key] = value;
+    result[key] = value;
   }
 
   setCache(cacheKey, result);
@@ -140,6 +182,7 @@ export function setEnvValue(
 
   const { envFile } = profilePaths(profile);
   invalidateCache(`env:${profile || "default"}`);
+  if (key === "API_SERVER_KEY") invalidateCache("apiServerKey:");
 
   if (!existsSync(envFile)) {
     safeWriteFile(envFile, `${key}=${value}\n`);
@@ -178,17 +221,204 @@ export function validateEnvEntry(key: string, value: string): void {
   }
 }
 
+function stripYamlQuotes(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed.length >= 2) {
+    const first = trimmed[0];
+    const last = trimmed[trimmed.length - 1];
+    if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+      return trimmed.slice(1, -1);
+    }
+  }
+  return trimmed;
+}
+
+/**
+ * Locate a dotted YAML path in `content` (e.g. "agent.service_tier" finds
+ * the `service_tier` field nested under top-level `agent:`). Returns the
+ * value plus the substring offsets a writer can splice over, or null
+ * when any segment of the path is missing.
+ *
+ * Why this exists: the renderer passes dotted paths like
+ * `agent.service_tier`, `memory.provider`, `network.force_ipv4` through
+ * `getConfig`/`setConfig`. The old implementation used the key string as
+ * a literal regex fragment, so it looked for a flat line spelled exactly
+ * `agent.service_tier:` — which never exists in real YAML and silently
+ * returned null. Flat keys also leaked across blocks (a `service_tier`
+ * under `telegram:` could shadow `agent.service_tier`). See issue #247.
+ *
+ * Each segment must appear at strictly-greater indent than its parent's
+ * line. Segments without dots are treated as 1-segment paths and pinned
+ * to the top level (column-0 keys only) — so a flat `provider` no longer
+ * matches `model.provider` or `auxiliary.vision.provider` by accident.
+ *
+ * Returns the first match in document order at each level; later
+ * duplicates at the same level are ignored, matching YAML semantics for
+ * mappings.
+ */
+interface YamlPathHit {
+  value: string;
+  /** Absolute offset where the writer should splice the new value. */
+  valueStart: number;
+  /** Absolute offset just past the substring the writer should replace.
+   *  Excludes any trailing comment so we don't clobber `# notes`. */
+  valueEnd: number;
+}
+
+function findYamlPath(content: string, dottedPath: string): YamlPathHit | null {
+  const segments = dottedPath.split(".").filter(Boolean);
+  if (segments.length === 0) return null;
+
+  let cursor = 0;
+  let parentIndent = -1;
+
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i];
+    const isLast = i === segments.length - 1;
+    const found = findSegmentInBlock(content, cursor, parentIndent, segment);
+    if (!found) return null;
+
+    if (isLast) {
+      return {
+        value: stripYamlQuotes(found.rawValue),
+        valueStart: found.valueStart,
+        valueEnd: found.valueEnd,
+      };
+    }
+
+    // Descend: subsequent search continues after the segment's header
+    // line, bounded by indent > parentIndent.
+    cursor = found.afterLine;
+    parentIndent = found.indent;
+  }
+
+  return null;
+}
+
+interface SegmentMatch {
+  /** Indent length of the matched line. */
+  indent: number;
+  /** Raw value substring (between the colon's gap and any trailing comment). */
+  rawValue: string;
+  valueStart: number;
+  valueEnd: number;
+  /** Absolute offset of the byte just past the matched line's newline. */
+  afterLine: number;
+}
+
+function findSegmentInBlock(
+  content: string,
+  startAt: number,
+  parentIndent: number,
+  segment: string,
+): SegmentMatch | null {
+  // Walk lines from startAt until we leave the parent's block (a line
+  // with indent <= parentIndent). Within the block, return the first
+  // line whose key matches `segment` at the *minimum* indent > parent's
+  // — which is the depth of direct children.
+  const escapedSegment = escapeRegex(segment);
+  let directChildIndent: number | null = null;
+  let cursor = startAt;
+
+  while (cursor < content.length) {
+    const lineEnd = content.indexOf("\n", cursor);
+    const lineEndExclusive = lineEnd === -1 ? content.length : lineEnd;
+    const line = content.slice(cursor, lineEndExclusive);
+    const trimmed = line.trim();
+
+    if (trimmed === "" || trimmed.startsWith("#")) {
+      cursor =
+        lineEndExclusive === content.length
+          ? content.length
+          : lineEndExclusive + 1;
+      continue;
+    }
+
+    const indent = line.length - line.trimStart().length;
+
+    // Block boundary: a non-blank line at or shallower than the parent
+    // closes the parent's block.
+    if (indent <= parentIndent) return null;
+
+    // First non-blank child sets the canonical "direct child" indent for
+    // this block. Deeper-nested lines (grandchildren) are walked past
+    // without being treated as siblings of `segment`.
+    if (directChildIndent === null) directChildIndent = indent;
+
+    if (indent === directChildIndent) {
+      // `[ \t]*` (zero-or-more) so this works at column 0 too — the
+      // first segment of a dotted path is a top-level key with no
+      // leading whitespace. The `indent === directChildIndent` gate
+      // above already enforces depth.
+      const m = line.match(
+        new RegExp(
+          `^([ \\t]*)(${escapedSegment}):([ \\t]*)([^\\n#]*?)([ \\t]*)(#.*)?$`,
+        ),
+      );
+      if (m) {
+        const indentStr = m[1];
+        const gapBeforeValue = m[3];
+        const rawValue = m[4];
+        const keyEnd = cursor + indentStr.length + segment.length + 1; // past `:`
+        const valueStart = keyEnd + gapBeforeValue.length;
+        const valueEnd = valueStart + rawValue.length;
+        return {
+          indent: indentStr.length,
+          rawValue,
+          valueStart,
+          valueEnd,
+          afterLine:
+            lineEndExclusive === content.length
+              ? content.length
+              : lineEndExclusive + 1,
+        };
+      }
+    }
+
+    cursor =
+      lineEndExclusive === content.length
+        ? content.length
+        : lineEndExclusive + 1;
+  }
+
+  return null;
+}
+
+/**
+ * Read a top-level key at column 0 (no indent). Used when a caller
+ * passes a single-segment "path" — we don't want it to silently match
+ * a nested occurrence with the same name.
+ */
+function findTopLevelKey(content: string, key: string): YamlPathHit | null {
+  const re = new RegExp(
+    `^(${escapeRegex(key)}):([ \\t]*)([^\\n#]*?)([ \\t]*)(#.*)?$`,
+    "m",
+  );
+  const m = content.match(re);
+  if (!m || m.index === undefined) return null;
+  const gap = m[2];
+  const rawValue = m[3];
+  const lineStart = m.index;
+  const valueStart = lineStart + key.length + 1 + gap.length; // past `:` and gap
+  const valueEnd = valueStart + rawValue.length;
+  return {
+    value: stripYamlQuotes(rawValue),
+    valueStart,
+    valueEnd,
+  };
+}
+
 export function getConfigValue(key: string, profile?: string): string | null {
   const { configFile } = profilePaths(profile);
   if (!existsSync(configFile)) return null;
 
   const content = readFileSync(configFile, "utf-8");
-  const regex = new RegExp(
-    `^\\s*${escapeRegex(key)}:\\s*["']?([^"'\\n#]+)["']?`,
-    "m",
-  );
-  const match = content.match(regex);
-  return match ? match[1].trim() : null;
+  // Use the indentation-aware reader so dotted keys like `memory.provider`,
+  // `network.force_ipv4`, `agent.service_tier` resolve correctly. The old
+  // regex matched only literal `dotted.key:` lines which don't exist in
+  // YAML, so nested lookups silently returned null and the UI rendered
+  // every memory provider as inactive, every nested toggle as default, etc.
+  return getYamlPath(content, key);
 }
 
 export function setConfigValue(
@@ -196,20 +426,152 @@ export function setConfigValue(
   value: string,
   profile?: string,
 ): void {
+  // Invalidate the apiServerKey cache when either of the two canonical
+  // gateway-secret locations is written: the legacy top-level
+  // `API_SERVER_KEY` *or* the hermes-agent canonical `api_server.token`
+  // path. Without the second check, editing `api_server.token` via the
+  // desktop would leave the cached value stale for up to the 5s TTL.
+  if (
+    key === "API_SERVER_KEY" ||
+    key === "api_server.token" ||
+    key.startsWith("api_server.")
+  ) {
+    invalidateCache("apiServerKey:");
+  }
   const { configFile } = profilePaths(profile);
   if (!existsSync(configFile)) return;
 
   let content = readFileSync(configFile, "utf-8");
-  const regex = new RegExp(
-    `^(\\s*#?\\s*${escapeRegex(key)}:\\s*)["']?[^"'\\n#]*["']?`,
-    "m",
-  );
+  const segments = key.split(".").filter(Boolean);
+  if (segments.length === 0) return;
 
-  if (regex.test(content)) {
-    content = content.replace(regex, `$1"${value}"`);
+  const hit =
+    segments.length === 1
+      ? findTopLevelKey(content, segments[0])
+      : findYamlPath(content, key);
+
+  // Existing key → in-place replace, preserving surrounding whitespace
+  // and any trailing comment.
+  if (hit) {
+    content =
+      content.slice(0, hit.valueStart) +
+      `"${value}"` +
+      content.slice(hit.valueEnd);
+    safeWriteFile(configFile, content);
+    return;
   }
 
-  safeWriteFile(configFile, content);
+  // Key missing. For multi-segment paths we don't know how deep the
+  // user's existing parent block goes (or which segments exist), so
+  // avoid guessing — drop the write rather than corrupting the file.
+  // Top-level single keys are safe to append.
+  if (segments.length === 1) {
+    const sep = content.endsWith("\n") || content === "" ? "" : "\n";
+    content = `${content}${sep}${key}: "${value}"\n`;
+    safeWriteFile(configFile, content);
+  }
+}
+
+/**
+ * Locate the direct children of a top-level YAML block. Each child is
+ * keyed by name and carries the substring offsets needed to read or
+ * rewrite its value in-place.
+ *
+ * Why this exists: the model-field readers/writers used to run loose
+ * regexes like `^\s*default:` against the whole file, which match any
+ * `default:` at any indent — so a `personalities.default` description
+ * would be picked up as the model name (issue #242), and toggling the
+ * model in the UI would overwrite that personality string instead of
+ * `model.default`. Scoping reads and writes to a named top-level block
+ * fixes both directions.
+ *
+ * Direct (sibling) children only: keys nested deeper than one indent
+ * under the block are ignored. The block ends at the first non-indented,
+ * non-empty line — the next top-level key. Anchored block-header search
+ * means a `model:` later in some other context (e.g. a YAML string
+ * literal, or nested under another block) won't be mistaken for the
+ * top-level `model:` we want.
+ */
+interface BlockChild {
+  key: string;
+  /** Parsed value, with surrounding single/double quotes stripped. */
+  value: string;
+  /** Indent string of this child's line (e.g. "  "). */
+  indent: string;
+  /** Absolute offset of the substring after `key: ` and any leading
+   *  whitespace — where a writer should splice the new value. */
+  valueStart: number;
+  /** Absolute offset just past the substring the writer should replace
+   *  (excludes any trailing comment so we don't clobber `# notes`). */
+  valueEnd: number;
+}
+
+function readTopLevelBlock(
+  content: string,
+  blockName: string,
+): {
+  children: Map<string, BlockChild>;
+  blockBodyStart: number | null;
+  childIndent: string;
+} {
+  const startRe = new RegExp(`^${escapeRegex(blockName)}:[ \\t]*\\r?\\n`, "m");
+  const start = content.match(startRe);
+  if (!start || start.index === undefined) {
+    return { children: new Map(), blockBodyStart: null, childIndent: "  " };
+  }
+
+  const blockBodyStart = start.index + start[0].length;
+  const children = new Map<string, BlockChild>();
+  let firstChildIndent: string | null = null;
+  let cursor = blockBodyStart;
+
+  while (cursor < content.length) {
+    const lineEnd = content.indexOf("\n", cursor);
+    const lineEndExclusive = lineEnd === -1 ? content.length : lineEnd;
+    const line = content.slice(cursor, lineEndExclusive);
+
+    // Stop at a non-indented, non-empty line (= next top-level key).
+    if (line.trim() !== "" && !/^\s/.test(line)) break;
+
+    const m = line.match(
+      /^([ \t]+)([A-Za-z_][A-Za-z0-9_-]*):([ \t]*)([^\n#]*?)([ \t]*)(#.*)?$/,
+    );
+    if (m) {
+      const indent = m[1];
+      const key = m[2];
+      const gapBeforeValue = m[3];
+      const rawValue = m[4];
+      const trailingWhitespace = m[5];
+      void trailingWhitespace; // not used for replacement boundaries
+
+      // First child encountered sets the canonical indent. Anything more
+      // indented is a nested child (skip); anything less is malformed.
+      if (firstChildIndent === null) firstChildIndent = indent;
+      if (indent === firstChildIndent && !children.has(key)) {
+        const keyEnd = cursor + indent.length + key.length + 1; // past `:`
+        const valueStart = keyEnd + gapBeforeValue.length;
+        const valueEnd = valueStart + rawValue.length;
+        children.set(key, {
+          key,
+          value: stripYamlQuotes(rawValue),
+          indent,
+          valueStart,
+          valueEnd,
+        });
+      }
+    }
+
+    cursor =
+      lineEndExclusive === content.length
+        ? content.length
+        : lineEndExclusive + 1;
+  }
+
+  return {
+    children,
+    blockBodyStart,
+    childIndent: firstChildIndent ?? "  ",
+  };
 }
 
 export function getModelConfig(profile?: string): {
@@ -230,19 +592,118 @@ export function getModelConfig(profile?: string): {
   if (!existsSync(configFile)) return defaults;
 
   const content = readFileSync(configFile, "utf-8");
-
-  const providerMatch = content.match(/^\s*provider:\s*["']?([^"'\n#]+)["']?/m);
-  const modelMatch = content.match(/^\s*default:\s*["']?([^"'\n#]+)["']?/m);
-  const baseUrlMatch = content.match(/^\s*base_url:\s*["']?([^"'\n#]+)["']?/m);
+  const { children } = readTopLevelBlock(content, "model");
 
   const result = {
-    provider: providerMatch ? providerMatch[1].trim() : defaults.provider,
-    model: modelMatch ? modelMatch[1].trim() : defaults.model,
-    baseUrl: baseUrlMatch ? baseUrlMatch[1].trim() : defaults.baseUrl,
+    provider: children.get("provider")?.value || defaults.provider,
+    model: children.get("default")?.value || defaults.model,
+    baseUrl: children.get("base_url")?.value || defaults.baseUrl,
   };
 
   setCache(cacheKey, result);
   return result;
+}
+
+/**
+ * Replace a direct child's value inside a top-level YAML block in-place,
+ * preserving the key's surrounding whitespace and any trailing comment.
+ * When the child doesn't exist, insert it as the first sibling at the
+ * block's existing indent. When the block itself doesn't exist, append
+ * one with the new key inside.
+ */
+function upsertBlockChild(
+  content: string,
+  blockName: string,
+  key: string,
+  value: string,
+): string {
+  const { children, blockBodyStart, childIndent } = readTopLevelBlock(
+    content,
+    blockName,
+  );
+
+  const existing = children.get(key);
+  if (existing) {
+    return (
+      content.slice(0, existing.valueStart) +
+      `"${value}"` +
+      content.slice(existing.valueEnd)
+    );
+  }
+
+  if (blockBodyStart !== null) {
+    const insertion = `${childIndent}${key}: "${value}"\n`;
+    return (
+      content.slice(0, blockBodyStart) +
+      insertion +
+      content.slice(blockBodyStart)
+    );
+  }
+
+  // No block at all → append one. Match the existing file's trailing
+  // newline conventions; if the file is empty (e.g. setModelConfig is
+  // bootstrapping a fresh config.yaml) skip the separator so we don't
+  // leave a stray leading blank line.
+  const sep = content === "" || content.endsWith("\n") ? "" : "\n";
+  return `${content}${sep}${blockName}:\n  ${key}: "${value}"\n`;
+}
+
+/**
+ * Pick a value to write under model.api_key when the user configures a
+ * provider="custom" entry pointing at a known commercial host (DeepSeek,
+ * Groq, Mistral, etc.).
+ *
+ * Workaround for an upstream hermes-agent bug
+ * (NousResearch/hermes-agent #?? — see fathah/hermes-desktop#260): the
+ * gateway's ``_resolve_openrouter_runtime`` fallback chain reaches
+ * ``OPENAI_API_KEY``/``OPENROUTER_API_KEY`` when a bare ``custom``
+ * provider's credential pool is empty, which leaks unrelated keys to
+ * non-OpenAI endpoints (manifesting as ``****ired`` / 401 from
+ * api.deepseek.com).  Writing the matching env-var value to
+ * ``model.api_key`` makes ``cfg_api_key`` win that chain before the
+ * leak ever runs.
+ *
+ * Returns null when the provider/base_url combination doesn't match a
+ * known commercial host or no env var is set — leaves the user's
+ * config untouched for local LLMs (Ollama, vLLM, etc.).
+ */
+function pickAutoApiKeyForCustomProvider(
+  provider: string,
+  baseUrl: string,
+  profile?: string,
+): string | null {
+  if (provider !== "custom" || !baseUrl) return null;
+  const envKey = expectedEnvKeyForModel(provider, baseUrl);
+  if (!envKey) return null;
+  const env = readEnv(profile);
+  const raw = env[envKey];
+  if (!raw) return null;
+  const trimmed = raw.trim().replace(/^["']|["']$/g, "");
+  return trimmed || null;
+}
+
+/**
+ * Locate the `model:` block in a YAML document and return the offsets that
+ * bracket its body (children lines, not counting the `model:` header line).
+ * Returns null when there's no `model:` block at all.
+ *
+ * The boundaries are needed to scope `api_key` add/update/remove operations
+ * to the model block — every `auxiliary.*` subsection has its own
+ * `api_key:` line, and a naive `/^api_key:/m` replace would clobber those
+ * instead.
+ */
+function findModelBlockBody(
+  content: string,
+): { start: number; end: number } | null {
+  const headerMatch = content.match(/^model:[^\S\r\n]*\r?\n/m);
+  if (!headerMatch) return null;
+  const start = headerMatch.index! + headerMatch[0].length;
+  // The body runs until the next line that starts at column 0 (next
+  // top-level key) or end of file.  Blank lines stay inside the block.
+  const after = content.slice(start);
+  const nextTopMatch = after.match(/^\S/m);
+  const end = nextTopMatch ? start + nextTopMatch.index! : content.length;
+  return { start, end };
 }
 
 export function setModelConfig(
@@ -253,29 +714,74 @@ export function setModelConfig(
 ): void {
   invalidateCache(`mc:${profile || "default"}`);
   const { configFile } = profilePaths(profile);
-  if (!existsSync(configFile)) return;
 
-  let content = readFileSync(configFile, "utf-8");
+  // Bootstrap an empty config.yaml when it's missing — previously this
+  // function early-returned, so users on a custom HERMES_HOME where the
+  // file hadn't been created (issue #228) had their model selection
+  // silently dropped: the desktop appeared to save it but config.yaml
+  // never got written, and the Python gateway saw an empty model and
+  // returned 404s. `safeWriteFile` (used below) will create parent dirs
+  // as needed; `upsertBlockChild` produces a valid minimal YAML doc
+  // from an empty starting string.
+  let content = existsSync(configFile) ? readFileSync(configFile, "utf-8") : "";
 
-  const providerRegex = /^(\s*provider:\s*)["']?[^"'\n#]*["']?/m;
-  if (providerRegex.test(content)) {
-    content = content.replace(providerRegex, `$1"${provider}"`);
+  content = upsertBlockChild(content, "model", "provider", provider);
+  content = upsertBlockChild(content, "model", "default", model);
+  if (baseUrl) {
+    content = upsertBlockChild(content, "model", "base_url", baseUrl);
   }
 
-  const modelRegex = /^(\s*default:\s*)["']?[^"'\n#]*["']?/m;
-  if (modelRegex.test(content)) {
-    content = content.replace(modelRegex, `$1"${model}"`);
-  }
-
-  const baseUrlRegex = /^(\s*base_url:\s*)["']?[^"'\n#]*["']?/m;
-  if (baseUrlRegex.test(content)) {
-    content = content.replace(baseUrlRegex, `$1"${baseUrl}"`);
-  } else if (baseUrl && provider !== "auto") {
-    // Append base_url line after the provider line in the model section
-    content = content.replace(
-      /^(\s*provider:\s*"[^"]*"\s*\n)/m,
-      `$1  base_url: "${baseUrl}"\n`
-    );
+  // Workaround for upstream gateway bug — see pickAutoApiKeyForCustomProvider.
+  // Scope all api_key add/update/remove operations to the `model:` block —
+  // `auxiliary.*` subsections each carry their own `api_key:` line and must
+  // not be touched.
+  const autoApiKey = pickAutoApiKeyForCustomProvider(
+    provider,
+    baseUrl,
+    profile,
+  );
+  const body = findModelBlockBody(content);
+  if (body) {
+    const block = content.slice(body.start, body.end);
+    const apiKeyInBlock = /^[ \t]+api_key:\s*.*\r?\n?/m;
+    let newBlock = block;
+    if (autoApiKey) {
+      if (apiKeyInBlock.test(block)) {
+        newBlock = block.replace(
+          /^([ \t]+api_key:\s*).*$/m,
+          `$1"${autoApiKey}"`,
+        );
+      } else {
+        // Insert after base_url within the block, otherwise after provider.
+        const eolMatch = block.match(/\r?\n/);
+        const eol = eolMatch ? eolMatch[0] : "\n";
+        const indentMatch = block.match(/^([ \t]+)\S/m);
+        const indent = indentMatch ? indentMatch[1] : "  ";
+        const apiKeyLine = `${indent}api_key: "${autoApiKey}"${eol}`;
+        const afterBaseUrl = block.replace(
+          /^([ \t]+base_url:\s*"[^"]*"\s*\r?\n)/m,
+          `$1${apiKeyLine}`,
+        );
+        newBlock =
+          afterBaseUrl !== block
+            ? afterBaseUrl
+            : block.replace(
+                /^([ \t]+provider:\s*"[^"]*"\s*\r?\n)/m,
+                `$1${apiKeyLine}`,
+              );
+        // Last-resort: if neither base_url nor provider lines were found
+        // (config got hand-edited), prepend api_key to the block.
+        if (newBlock === block) {
+          newBlock = `${apiKeyLine}${block}`;
+        }
+      }
+    } else if (apiKeyInBlock.test(block)) {
+      newBlock = block.replace(apiKeyInBlock, "");
+    }
+    if (newBlock !== block) {
+      content =
+        content.slice(0, body.start) + newBlock + content.slice(body.end);
+    }
   }
 
   // Disable smart_model_routing
@@ -304,109 +810,345 @@ export function getHermesHome(profile?: string): string {
   return profilePaths(profile).home;
 }
 
-// ── Platform enabled/disabled in config.yaml ────────────
+/**
+ * Resolve the API server's shared secret. Honoured by the local hermes
+ * gateway (`api_server.token` in `config.yaml` / `API_SERVER_KEY` in
+ * `.env`) when present; the desktop must include it as
+ * `Authorization: Bearer …` on every chat request, otherwise the gateway
+ * responds with "Invalid API key" / "Session continuation requires API
+ * key authentication".
+ *
+ * Search order — explicit overrides first, canonical locations after:
+ *
+ *   1. Profile `config.yaml` top-level `API_SERVER_KEY` (legacy override)
+ *   2. Default `config.yaml` top-level `API_SERVER_KEY` (legacy override)
+ *   3. Profile `.env` `API_SERVER_KEY` (matches what the gateway reads)
+ *   4. Default `.env` `API_SERVER_KEY`
+ *   5. Profile `config.yaml` `api_server.token` (canonical hermes-agent
+ *      gateway-secret location — issue #333)
+ *   6. Default `config.yaml` `api_server.token`
+ *
+ * The `api_server.token` candidates are the bug fix for #333: users who
+ * ran `hermes setup` (which writes `api_server.token` into `config.yaml`
+ * but does not touch `.env`) would otherwise see chat fail on the
+ * second message with *"Session continuation requires API key
+ * authentication. Configure API_SERVER_KEY to enable this feature."*
+ *
+ * `.env` is checked **before** `api_server.token` so that the
+ * documented manual workaround — add `API_SERVER_KEY=…` to `.env` to
+ * unblock the second message — still takes precedence when a user has
+ * set it explicitly.
+ *
+ * Returns "" when none of the six locations are configured.
+ *
+ * Hot path: called per chat message and per error-probe. Reuse the same
+ * 5s TTL cache as `readEnv()` so we do not re-parse `config.yaml` +
+ * `.env` every call. Invalidated by `setEnvValue` / `setConfigValue`
+ * when the key being written is `API_SERVER_KEY` or any
+ * `api_server.*` subkey.
+ */
+export function getApiServerKey(profile?: string): string {
+  const cacheKey = `apiServerKey:${profile || "default"}`;
+  const cached = getCached<string>(cacheKey);
+  if (cached !== undefined) return cached;
 
-const SUPPORTED_PLATFORMS = [
-  "telegram",
-  "discord",
-  "slack",
-  "whatsapp",
-  "signal",
-];
+  const value = resolveApiServerKey({
+    configTopLevelProfile: getConfigValue("API_SERVER_KEY", profile),
+    configTopLevelDefault:
+      profile && profile !== "default"
+        ? getConfigValue("API_SERVER_KEY")
+        : null,
+    envProfile: readEnv(profile).API_SERVER_KEY ?? null,
+    envDefault:
+      profile && profile !== "default"
+        ? (readEnv().API_SERVER_KEY ?? null)
+        : null,
+    apiServerTokenProfile: getConfigValue("api_server.token", profile),
+    apiServerTokenDefault:
+      profile && profile !== "default"
+        ? getConfigValue("api_server.token")
+        : null,
+  });
+  setCache(cacheKey, value);
+  return value;
+}
+
+/**
+ * Pure precedence-resolution for the API server's shared secret. Split
+ * out from `getApiServerKey` so the candidate-ordering policy can be
+ * unit-tested without filesystem fixtures (the I/O — `getConfigValue` /
+ * `readEnv` — happens in the caller).
+ *
+ * Returns the first non-empty trimmed candidate, or "" when all six
+ * sources are empty / null / whitespace.
+ */
+export function resolveApiServerKey(sources: {
+  configTopLevelProfile: string | null;
+  configTopLevelDefault: string | null;
+  envProfile: string | null;
+  envDefault: string | null;
+  apiServerTokenProfile: string | null;
+  apiServerTokenDefault: string | null;
+}): string {
+  const order: (string | null)[] = [
+    sources.configTopLevelProfile,
+    sources.configTopLevelDefault,
+    sources.envProfile,
+    sources.envDefault,
+    sources.apiServerTokenProfile,
+    sources.apiServerTokenDefault,
+  ];
+  for (const candidate of order) {
+    const trimmed = String(candidate ?? "").trim();
+    if (trimmed) return trimmed;
+  }
+  return "";
+}
+
+// ── Platform enabled/disabled ─────────────────────────────
+//
+// The Python hermes gateway (gateway/config.py) decides which messaging
+// platforms to start from env vars in .env; it doesn't look at a fictional
+// `platforms:` YAML section. config.yaml only carries an override-disable
+// switch: `<platform>.enabled: false` at the top level. Earlier the desktop
+// read and wrote a `platforms:\n  <name>:\n    enabled: …` block that the
+// gateway never inspected, so the Gateway UI's toggles were cosmetic.
+//
+// `envCheck` returns true when the platform's required env vars are present
+// (and, for whatsapp, set to a truthy literal). Add new platforms here as
+// their Python-side activation rules are confirmed.
+interface PlatformRule {
+  envCheck: (env: Record<string, string>) => boolean;
+  // YAML key for the override-disable lookup. Defaults to the platform key
+  // itself; provide an explicit value when the desktop's display key
+  // diverges from the Python CLI's config.yaml key (e.g. "home_assistant"
+  // in the desktop vs "homeassistant" in the Python gateway).
+  configKey?: string;
+}
+
+const TRUTHY_VALUES = new Set(["true", "1", "yes", "on"]);
+
+const PLATFORM_RULES: Record<string, PlatformRule> = {
+  telegram: { envCheck: (e) => !!e.TELEGRAM_BOT_TOKEN?.trim() },
+  discord: { envCheck: (e) => !!e.DISCORD_BOT_TOKEN?.trim() },
+  slack: { envCheck: (e) => !!e.SLACK_BOT_TOKEN?.trim() },
+  whatsapp: {
+    envCheck: (e) =>
+      TRUTHY_VALUES.has((e.WHATSAPP_ENABLED || "").trim().toLowerCase()),
+  },
+  signal: {
+    envCheck: (e) => !!e.SIGNAL_HTTP_URL?.trim() && !!e.SIGNAL_ACCOUNT?.trim(),
+  },
+  matrix: {
+    envCheck: (e) =>
+      !!e.MATRIX_ACCESS_TOKEN?.trim() || !!e.MATRIX_PASSWORD?.trim(),
+  },
+  mattermost: { envCheck: (e) => !!e.MATTERMOST_TOKEN?.trim() },
+  home_assistant: {
+    envCheck: (e) => !!e.HASS_TOKEN?.trim(),
+    configKey: "homeassistant",
+  },
+};
+
+const SUPPORTED_PLATFORMS = Object.keys(PLATFORM_RULES);
+
+/**
+ * Match a top-level YAML block's `enabled: <bool>` field, e.g.:
+ *
+ *     telegram:
+ *       reactions: false
+ *       enabled: false      ← captured
+ *       allowed_chats: ''
+ *
+ * Returns true/false if found, null if absent. The block must start at
+ * column 0; `enabled:` is captured if it sits anywhere inside the
+ * contiguous indented sub-block (any depth, in any position).
+ */
+function readPlatformOverride(
+  content: string,
+  platform: string,
+): boolean | null {
+  const blockStartRe = new RegExp(
+    `^${escapeRegex(platform)}:[ \\t]*\\r?\\n`,
+    "m",
+  );
+  const startMatch = content.match(blockStartRe);
+  if (!startMatch || startMatch.index === undefined) return null;
+
+  const after = content.slice(startMatch.index + startMatch[0].length);
+  const lines = after.split(/\r?\n/);
+  for (const line of lines) {
+    if (line.trim() === "") continue;
+    if (!/^\s/.test(line)) break; // hit next top-level key
+    const m = line.match(/^[ \t]+enabled:[ \t]*(true|false)\b/);
+    if (m) return m[1] === "true";
+  }
+  return null;
+}
 
 export function getPlatformEnabled(profile?: string): Record<string, boolean> {
+  const env = readEnv(profile);
   const { configFile } = profilePaths(profile);
-  if (!existsSync(configFile)) return {};
+  const content = existsSync(configFile)
+    ? readFileSync(configFile, "utf-8")
+    : "";
 
-  const content = readFileSync(configFile, "utf-8");
   const result: Record<string, boolean> = {};
-
   for (const platform of SUPPORTED_PLATFORMS) {
-    // Match "  platform:\n    enabled: true/false" under the platforms: block
-    const re = new RegExp(
-      `^[ \\t]+${platform}:\\s*\\n[ \\t]+enabled:\\s*(true|false)`,
-      "m",
-    );
-    const match = content.match(re);
-    result[platform] = match ? match[1] === "true" : false;
+    const rule = PLATFORM_RULES[platform];
+    const envEnabled = rule.envCheck(env);
+    const configKey = rule.configKey || platform;
+    const override = content ? readPlatformOverride(content, configKey) : null;
+    // Python's rule: env-driven activation, config.yaml `enabled: false`
+    // can force-disable. An explicit `enabled: true` doesn't bypass a
+    // missing token (the Python gateway still requires the credential),
+    // so reflect that here too.
+    result[platform] = envEnabled && override !== false;
   }
-
   return result;
 }
 
+/**
+ * Toggle a platform's force-disable override in config.yaml.
+ *
+ * The Python gateway activates a platform when its env vars are set;
+ * config can force-disable with `<platform>.enabled: false` at the top
+ * level. So toggling here writes/removes that single key:
+ *
+ *   - enabled=false → ensure `enabled: false` exists in the top-level
+ *     `<platform>:` block (modify in place, append a child, or create
+ *     the block).
+ *   - enabled=true  → remove any existing `enabled: false` line.
+ *
+ * Filling in the platform's token env vars is what actually starts it;
+ * this function only manages the disable override.
+ */
 export function setPlatformEnabled(
   platform: string,
   enabled: boolean,
   profile?: string,
 ): void {
-  if (!SUPPORTED_PLATFORMS.includes(platform)) return;
+  const rule = PLATFORM_RULES[platform];
+  if (!rule) return;
+  // Use the Python-side YAML key when writing the override, not the
+  // desktop's display key (matters for home_assistant → homeassistant).
+  const configKey = rule.configKey || platform;
 
   const { configFile } = profilePaths(profile);
-  if (!existsSync(configFile)) return;
+  if (!existsSync(configFile)) {
+    // Only need to write a file when we're recording a disable override;
+    // enabling a platform that has no config is the default.
+    if (enabled) return;
+    safeWriteFile(configFile, `${configKey}:\n  enabled: false\n`);
+    return;
+  }
 
   let content = readFileSync(configFile, "utf-8");
-
-  // Check if the platform entry already exists under platforms:
-  const existingRe = new RegExp(
-    `^([ \\t]+${platform}:\\s*\\n[ \\t]+enabled:\\s*)(?:true|false)`,
+  const enabledLineRe = new RegExp(
+    `^([ \\t]+enabled:[ \\t]*)(true|false)\\b([ \\t]*)$`,
+    "m",
+  );
+  const blockStartRe = new RegExp(
+    `^(${escapeRegex(configKey)}:[ \\t]*\\r?\\n)`,
+    "m",
+  );
+  const flowStyleRe = new RegExp(
+    `^${escapeRegex(configKey)}:[ \\t]*\\{\\s*\\}[ \\t]*$`,
     "m",
   );
 
-  if (existingRe.test(content)) {
-    // Update existing entry
-    content = content.replace(existingRe, `$1${enabled}`);
-  } else {
-    // Append new platform entry after the platforms: block
-    // Find the platforms: line and insert after the last existing platform entry
-    const platformsIdx = content.indexOf("\nplatforms:");
-    if (platformsIdx === -1) {
-      // No platforms section at all — append one
-      content += `\nplatforms:\n  ${platform}:\n    enabled: ${enabled}\n`;
-    } else {
-      // Insert the new platform at the end of the platforms block.
-      // Find the next top-level key (non-indented, non-comment, non-empty line)
-      // after the platforms: line.
-      const afterPlatforms = content.substring(platformsIdx + 1);
-      const lines = afterPlatforms.split("\n");
-      let insertOffset = platformsIdx + 1; // after the \n
-      // Skip the "platforms:" line itself
-      insertOffset += lines[0].length + 1;
+  const blockMatch = content.match(blockStartRe);
+  const hasBlock = !!blockMatch;
+  const isFlowEmpty = flowStyleRe.test(content);
 
-      // Skip all indented lines (children of platforms:)
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i];
-        if (line.trim() === "" || /^\s/.test(line)) {
-          insertOffset += line.length + 1;
-        } else {
-          break;
-        }
-      }
-
-      const entry = `  ${platform}:\n    enabled: ${enabled}\n`;
-      content =
-        content.substring(0, insertOffset) +
-        entry +
-        content.substring(insertOffset);
-    }
+  if (isFlowEmpty) {
+    // Convert `<platform>: {}` to a block we can edit.
+    content = content.replace(
+      flowStyleRe,
+      `${configKey}:\n  enabled: ${enabled}`,
+    );
+    safeWriteFile(configFile, content);
+    return;
   }
 
-  safeWriteFile(configFile, content);
+  if (hasBlock && blockMatch?.index !== undefined) {
+    const blockStart = blockMatch.index + blockMatch[0].length;
+    const rest = content.slice(blockStart);
+    const restLines = rest.split(/\r?\n/);
+
+    // Find the extent of the platform's sub-block (indented children).
+    let subBlockEndOffset = 0;
+    let existingEnabledLineStart: number | null = null;
+    let existingEnabledLineEnd: number | null = null;
+    for (const line of restLines) {
+      const lineLen = line.length + 1; // include trailing \n
+      if (line.trim() === "") {
+        subBlockEndOffset += lineLen;
+        continue;
+      }
+      if (!/^\s/.test(line)) break;
+      const localStart = blockStart + subBlockEndOffset;
+      const enabledMatch = line.match(enabledLineRe);
+      if (enabledMatch) {
+        existingEnabledLineStart = localStart;
+        existingEnabledLineEnd = localStart + line.length;
+      }
+      subBlockEndOffset += lineLen;
+    }
+
+    if (existingEnabledLineStart !== null && existingEnabledLineEnd !== null) {
+      if (enabled) {
+        // Remove the entire `  enabled: false` line, including its newline.
+        const removeEnd =
+          content[existingEnabledLineEnd] === "\n"
+            ? existingEnabledLineEnd + 1
+            : existingEnabledLineEnd;
+        content =
+          content.slice(0, existingEnabledLineStart) + content.slice(removeEnd);
+      } else {
+        content =
+          content.slice(0, existingEnabledLineStart) +
+          `  enabled: false` +
+          content.slice(existingEnabledLineEnd);
+      }
+    } else if (!enabled) {
+      // Append `enabled: false` as the first child of the block.
+      content =
+        content.slice(0, blockStart) +
+        `  enabled: false\n` +
+        content.slice(blockStart);
+    }
+    // (enabled=true with no existing override: nothing to do.)
+
+    safeWriteFile(configFile, content);
+    return;
+  }
+
+  // No block at all — only need to materialize one when recording a disable.
+  if (!enabled) {
+    const trailingNewline = content.endsWith("\n") ? "" : "\n";
+    content += `${trailingNewline}${configKey}:\n  enabled: false\n`;
+    safeWriteFile(configFile, content);
+  }
 }
 
-// ── Credential Pool (auth.json) ──────────────────────────
+// ── Credential Pool / OAuth store (auth.json) ─────────────────────────
 
-function authFilePath(): string {
-  return join(HERMES_HOME, "auth.json");
+function authFilePath(profile?: string): string {
+  return join(profileHome(profile || getActiveProfileNameSync()), "auth.json");
 }
 
 interface CredentialEntry {
-  key: string;
-  label: string;
+  key?: string;
+  api_key?: string;
+  access_token?: string;
+  refresh_token?: string;
+  label?: string;
 }
 
-function readAuthStore(): Record<string, unknown> {
+function readAuthStore(profile?: string): Record<string, unknown> {
   try {
-    const p = authFilePath();
+    const p = authFilePath(profile);
     if (!existsSync(p)) return {};
     return JSON.parse(readFileSync(p, "utf-8"));
   } catch {
@@ -414,12 +1156,17 @@ function readAuthStore(): Record<string, unknown> {
   }
 }
 
-function writeAuthStore(store: Record<string, unknown>): void {
-  safeWriteFile(authFilePath(), JSON.stringify(store, null, 2));
+function writeAuthStore(
+  store: Record<string, unknown>,
+  profile?: string,
+): void {
+  safeWriteFile(authFilePath(profile), JSON.stringify(store, null, 2));
 }
 
-export function getCredentialPool(): Record<string, CredentialEntry[]> {
-  const store = readAuthStore();
+export function getCredentialPool(
+  profile?: string,
+): Record<string, CredentialEntry[]> {
+  const store = readAuthStore(profile);
   const pool = store.credential_pool;
   if (!pool || typeof pool !== "object") return {};
   return pool as Record<string, CredentialEntry[]>;
@@ -428,12 +1175,77 @@ export function getCredentialPool(): Record<string, CredentialEntry[]> {
 export function setCredentialPool(
   provider: string,
   entries: CredentialEntry[],
+  profile?: string,
 ): void {
-  const store = readAuthStore();
+  const store = readAuthStore(profile);
   if (!store.credential_pool || typeof store.credential_pool !== "object") {
     store.credential_pool = {};
   }
   (store.credential_pool as Record<string, CredentialEntry[]>)[provider] =
     entries;
-  writeAuthStore(store);
+  writeAuthStore(store, profile);
+}
+
+/**
+ * True iff the given provider has usable OAuth or stored-credential evidence
+ * in auth.json. Recognized fields are `access_token`, `refresh_token`, and
+ * `api_key`, looked up under both `providers[<name>]` and any entry in
+ * `credential_pool[<name>]`. When a named profile is given without its own
+ * auth.json, fall back to the default-profile store.
+ *
+ * Stricter than just "provider key exists in JSON" — an empty
+ * `providers: { anthropic: {} }` or a bare `active_provider` no longer
+ * counts as configured. The previous looser check masked real onboarding
+ * errors where a credential record existed but contained no token.
+ */
+export function hasOAuthCredentials(
+  provider: string,
+  profile?: string,
+): boolean {
+  const cleanProvider = provider.trim();
+  if (!cleanProvider) return false;
+
+  const stores = [readAuthStore(profile)];
+  if (profile && profile !== "default") {
+    stores.push(readAuthStore());
+  }
+
+  for (const store of stores) {
+    const providers = store.providers;
+    if (providers && typeof providers === "object") {
+      const entry = (providers as Record<string, CredentialEntry>)[
+        cleanProvider
+      ];
+      if (
+        entry &&
+        (String(entry.access_token || "").trim() ||
+          String(entry.refresh_token || "").trim() ||
+          String(entry.api_key || "").trim())
+      ) {
+        return true;
+      }
+    }
+
+    const pool = store.credential_pool;
+    const entries =
+      pool && typeof pool === "object"
+        ? (pool as Record<string, CredentialEntry[]>)[cleanProvider]
+        : undefined;
+    if (
+      Array.isArray(entries) &&
+      entries.some(
+        (entry) =>
+          !!(
+            entry &&
+            (String(entry.api_key || "").trim() ||
+              String(entry.access_token || "").trim() ||
+              String(entry.refresh_token || "").trim())
+          ),
+      )
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 }

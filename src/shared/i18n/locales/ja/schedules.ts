@@ -38,7 +38,8 @@ export default {
   creating: "作成中...",
   create: "作成",
   deleteTaskTitle: "タスクを削除",
-  deleteConfirmText: "このスケジュールタスクを本当に削除しますか？この操作は取り消せません。",
+  deleteConfirmText:
+    "このスケジュールタスクを本当に削除しますか？この操作は取り消せません。",
   deleting: "削除中...",
   delete: "削除",
   loadFailed: "スケジュールタスクの読み込みに失敗しました",

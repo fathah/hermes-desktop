@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { I18nextProvider, initReactI18next } from "react-i18next";
 import {
   APP_LOCALES,
@@ -34,18 +34,36 @@ export function I18nProvider({
   children: React.ReactNode;
 }): React.JSX.Element {
   const [locale, setLocaleState] = useState<AppLocale>(initialLocale);
+  const [mainLocaleLoaded, setMainLocaleLoaded] = useState(
+    () => !window.hermesAPI?.getLocale,
+  );
+  const userSelectedLocale = useRef(false);
+
+  const setLocale = useCallback((nextLocale: AppLocale) => {
+    userSelectedLocale.current = true;
+    setLocaleState(nextLocale);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
+    const getMainLocale = window.hermesAPI?.getLocale;
 
-    void window.hermesAPI
-      ?.getLocale?.()
+    if (!getMainLocale) {
+      return;
+    }
+
+    void getMainLocale()
       .then((mainLocale) => {
-        if (cancelled || !mainLocale || mainLocale === locale) return;
+        if (cancelled || !mainLocale || userSelectedLocale.current) return;
         setLocaleState(mainLocale);
       })
       .catch(() => {
         /* ignore */
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setMainLocaleLoaded(true);
+        }
       });
 
     return () => {
@@ -54,6 +72,8 @@ export function I18nProvider({
   }, []);
 
   useEffect(() => {
+    if (!mainLocaleLoaded && !userSelectedLocale.current) return;
+
     if (sharedI18n.language !== locale) {
       setSharedLocale(locale);
     }
@@ -65,14 +85,14 @@ export function I18nProvider({
     } catch {
       /* ignore */
     }
-  }, [locale]);
+  }, [locale, mainLocaleLoaded]);
 
   const value = useMemo<I18nContextValue>(
     () => ({
       locale,
-      setLocale: setLocaleState,
+      setLocale,
     }),
-    [locale],
+    [locale, setLocale],
   );
 
   return (

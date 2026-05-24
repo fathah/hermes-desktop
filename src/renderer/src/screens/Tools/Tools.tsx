@@ -335,7 +335,10 @@ function Tools({ profile }: ToolsProps): React.JSX.Element {
         <>
           <div className="tools-header" style={{ marginTop: 32 }}>
             <h2 className="tools-title">{t("tools.mcpServers")}</h2>
-            <p className="tools-subtitle" dangerouslySetInnerHTML={{ __html: t("tools.mcpDescription") }} />
+            <p
+              className="tools-subtitle"
+              dangerouslySetInnerHTML={{ __html: t("tools.mcpDescription") }}
+            />
           </div>
           <div className="tools-grid">
             {mcpServers.map((s) => (

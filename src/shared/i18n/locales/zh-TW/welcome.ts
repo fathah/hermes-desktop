@@ -1,0 +1,23 @@
+export default {
+  title: "歡迎使用 Hermes",
+  subtitle: "你的自我進化 AI 助理，在本機執行，兼顧隱私、能力與持續學習。",
+  installIssueTitle: "安裝問題",
+  getStarted: "開始使用",
+  retryInstall: "重新安裝",
+  terminalInstallHint: "也可以先透過終端機安裝，然後再回來：",
+  recheck: "我已完成安裝，重新檢查",
+  switchToLocal: "切換到本機模式",
+  installSizeHint: "這將安裝所需元件（約 2 GB）",
+  copyInstallCommand: "複製安裝命令",
+  dividerOr: "或",
+  connectRemote: "連線到遠端 Hermes",
+  connectRemoteTitle: "連線到遠端 Hermes",
+  connectRemoteSubtitle: "輸入執行中的 Hermes API 伺服器的 URL。",
+  remoteServerUrl: "伺服器 URL",
+  remoteApiKey: "API 金鑰（選填）",
+  remoteApiKeyPlaceholder: "Bearer token (API_SERVER_KEY)",
+  testingConnection: "測試連線中...",
+  connect: "連線",
+  remoteHint:
+    "如果伺服器接受未驗證的請求（如透過 SSH 隧道到 localhost），請留空金鑰。",
+} as const;

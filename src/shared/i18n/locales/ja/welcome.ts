@@ -12,11 +12,13 @@ export default {
   dividerOr: "または",
   connectRemote: "リモート Hermes に接続",
   connectRemoteTitle: "リモート Hermes に接続",
-  connectRemoteSubtitle: "稼働中の Hermes API サーバの URL を入力してください。",
+  connectRemoteSubtitle:
+    "稼働中の Hermes API サーバの URL を入力してください。",
   remoteServerUrl: "サーバ URL",
   remoteApiKey: "API キー（任意）",
   remoteApiKeyPlaceholder: "Bearer トークン（API_SERVER_KEY）",
   testingConnection: "テスト中",
   connect: "接続",
-  remoteHint: "サーバが認証なしリクエストを受け付ける（例：SSH トンネル経由で localhost）場合はキーを空欄に。",
+  remoteHint:
+    "サーバが認証なしリクエストを受け付ける（例：SSH トンネル経由で localhost）場合はキーを空欄に。",
 } as const;

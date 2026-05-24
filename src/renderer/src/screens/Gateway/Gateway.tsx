@@ -12,8 +12,12 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
   >({});
   const [savedKey, setSavedKey] = useState<string | null>(null);
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set());
-  const gatewayStatusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const platformStatusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gatewayStatusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const platformStatusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   const loadConfig = useCallback(async (): Promise<void> => {
     const envData = await window.hermesAPI.getEnv(profile);
@@ -167,7 +171,9 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
                       <label className="settings-field-label">
                         {t(field.label)}
                         {savedKey === field.key && (
-                          <span className="settings-saved">{t("common.saved")}</span>
+                          <span className="settings-saved">
+                            {t("common.saved")}
+                          </span>
                         )}
                       </label>
                       <div className="settings-input-row">
@@ -191,7 +197,9 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
                             className="btn-ghost settings-toggle-btn"
                             onClick={() => toggleVisibility(field.key)}
                           >
-                            {visibleKeys.has(field.key) ? t("common.hide") : t("common.show")}
+                            {visibleKeys.has(field.key)
+                              ? t("common.hide")
+                              : t("common.show")}
                           </button>
                         )}
                       </div>
@@ -234,7 +242,9 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
                     className="btn-ghost settings-toggle-btn"
                     onClick={() => toggleVisibility(field.key)}
                   >
-                    {visibleKeys.has(field.key) ? t("common.hide") : t("common.show")}
+                    {visibleKeys.has(field.key)
+                      ? t("common.hide")
+                      : t("common.show")}
                   </button>
                 )}
               </div>

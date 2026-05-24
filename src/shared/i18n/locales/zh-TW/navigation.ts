@@ -1,0 +1,16 @@
+export default {
+  chat: "聊天",
+  sessions: "工作階段",
+  agents: "檔案",
+  office: "工作區",
+  models: "模型",
+  providers: "供應商",
+  skills: "技能",
+  soul: "人格",
+  memory: "記憶",
+  tools: "工具",
+  schedules: "排程工作",
+  kanban: "看板",
+  gateway: "網關",
+  settings: "設定",
+} as const;

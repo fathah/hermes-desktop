@@ -10,8 +10,10 @@ import {
   getEnhancedPath,
 } from "./installer";
 import {
+  getActiveProfileNameSync,
   isValidNamedProfileName,
   isValidProfileName,
+  pidIsAliveAs,
   PROFILE_NAME_ERROR,
 } from "./utils";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
@@ -80,24 +82,23 @@ async function countSkills(profilePath: string): Promise<number> {
 async function isGatewayRunning(profilePath: string): Promise<boolean> {
   const pidFile = join(profilePath, "gateway.pid");
   try {
-    const raw = await fs.readFile(pidFile, "utf-8");
-    const pid = parseInt(raw.trim(), 10);
+    const raw = (await fs.readFile(pidFile, "utf-8")).trim();
+    // The Python hermes CLI writes JSON: {"pid": <n>, "kind": ..., ...}.
+    // Older builds wrote a bare integer, so fall back to parseInt.
+    const parsed = raw.startsWith("{")
+      ? (JSON.parse(raw) as { pid?: unknown }).pid
+      : parseInt(raw, 10);
+    const pid =
+      typeof parsed === "number" && Number.isFinite(parsed) ? parsed : NaN;
     if (isNaN(pid)) return false;
-    process.kill(pid, 0);
-    return true;
+    return pidIsAliveAs(pid, ["python", "pythonw"]);
   } catch {
     return false;
   }
 }
 
 async function getActiveProfileName(): Promise<string> {
-  const activeFile = join(HERMES_HOME, "active_profile");
-  try {
-    const name = await fs.readFile(activeFile, "utf-8");
-    return name.trim() || "default";
-  } catch {
-    return "default";
-  }
+  return getActiveProfileNameSync();
 }
 
 async function fileExists(path: string): Promise<boolean> {

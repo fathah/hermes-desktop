@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { join } from "path";
+import { mkdirSync, writeFileSync } from "fs";
 
 const { TEST_HOME } = vi.hoisted(() => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -23,6 +24,7 @@ import {
   isValidProfileName,
   normalizeProfileName,
   profileHome,
+  activeStateDbPath,
   PROFILE_NAME_ERROR,
 } from "../src/main/utils";
 
@@ -62,5 +64,16 @@ describe("profile name validation", () => {
       join(TEST_HOME, "profiles", "work_1-prod"),
     );
     expect(() => profileHome("../outside")).toThrow(PROFILE_NAME_ERROR);
+  });
+
+  it("resolves the active profile's session DB path (issue #311)", () => {
+    mkdirSync(TEST_HOME, { recursive: true });
+    // No active_profile file → default profile → root state.db.
+    expect(activeStateDbPath()).toBe(join(TEST_HOME, "state.db"));
+    // Named active profile → profiles/<name>/state.db, not the root db.
+    writeFileSync(join(TEST_HOME, "active_profile"), "work_1-prod");
+    expect(activeStateDbPath()).toBe(
+      join(TEST_HOME, "profiles", "work_1-prod", "state.db"),
+    );
   });
 });

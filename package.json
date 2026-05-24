@@ -1,6 +1,6 @@
 {
   "name": "hermes-desktop",
-  "version": "0.4.3",
+  "version": "0.4.5",
   "description": "Hermes Agent Desktop — self-improving AI assistant",
   "main": "./out/main/index.js",
   "author": "fathah",
@@ -32,7 +32,7 @@
     "electron-updater": "^6.3.9",
     "i18next": "^25.6.0",
     "lucide-react": "^1.7.0",
-    "marked": "^18.0.3",
+    "posthog-js": "^1.376.0",
     "react-i18next": "^15.7.3",
     "react-markdown": "^10.1.0",
     "react-syntax-highlighter": "^16.1.1",

@@ -4,6 +4,10 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import { I18nProvider } from "./components/I18nProvider";
+import { initAnalytics } from "./utils/analytics";
+
+// Initialize analytics (privacy-first, only if user consented and key is configured)
+initAnalytics();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

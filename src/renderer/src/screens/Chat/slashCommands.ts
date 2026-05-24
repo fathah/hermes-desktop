@@ -77,7 +77,8 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   },
   {
     name: "/goal",
-    description: "Lock the agent onto a persistent cross-turn goal (Ralph loop)",
+    description:
+      "Lock the agent onto a persistent cross-turn goal (Ralph loop)",
     category: "agent",
   },
   {

@@ -26,6 +26,7 @@ import soulEn from "./locales/en/soul";
 import memoryEn from "./locales/en/memory";
 import installEn from "./locales/en/install";
 import constantsEn from "./locales/en/constants";
+import kanbanEn from "./locales/en/kanban";
 import commonEs from "./locales/es/common";
 import navigationEs from "./locales/es/navigation";
 import welcomeEs from "./locales/es/welcome";
@@ -86,6 +87,26 @@ import soulZh from "./locales/zh-CN/soul";
 import memoryZh from "./locales/zh-CN/memory";
 import installZh from "./locales/zh-CN/install";
 import constantsZh from "./locales/zh-CN/constants";
+import commonZhTw from "./locales/zh-TW/common";
+import navigationZhTw from "./locales/zh-TW/navigation";
+import welcomeZhTw from "./locales/zh-TW/welcome";
+import setupZhTw from "./locales/zh-TW/setup";
+import chatZhTw from "./locales/zh-TW/chat";
+import settingsZhTw from "./locales/zh-TW/settings";
+import toolsZhTw from "./locales/zh-TW/tools";
+import sessionsZhTw from "./locales/zh-TW/sessions";
+import modelsZhTw from "./locales/zh-TW/models";
+import providersZhTw from "./locales/zh-TW/providers";
+import officeZhTw from "./locales/zh-TW/office";
+import errorsZhTw from "./locales/zh-TW/errors";
+import schedulesZhTw from "./locales/zh-TW/schedules";
+import skillsZhTw from "./locales/zh-TW/skills";
+import gatewayZhTw from "./locales/zh-TW/gateway";
+import agentsZhTw from "./locales/zh-TW/agents";
+import soulZhTw from "./locales/zh-TW/soul";
+import memoryZhTw from "./locales/zh-TW/memory";
+import installZhTw from "./locales/zh-TW/install";
+import constantsZhTw from "./locales/zh-TW/constants";
 import commonJa from "./locales/ja/common";
 import navigationJa from "./locales/ja/navigation";
 import welcomeJa from "./locales/ja/welcome";
@@ -126,6 +147,27 @@ import soulPt from "./locales/pt-BR/soul";
 import memoryPt from "./locales/pt-BR/memory";
 import installPt from "./locales/pt-BR/install";
 import constantsPt from "./locales/pt-BR/constants";
+import commonPtPt from "./locales/pt-PT/common";
+import navigationPtPt from "./locales/pt-PT/navigation";
+import welcomePtPt from "./locales/pt-PT/welcome";
+import setupPtPt from "./locales/pt-PT/setup";
+import chatPtPt from "./locales/pt-PT/chat";
+import settingsPtPt from "./locales/pt-PT/settings";
+import toolsPtPt from "./locales/pt-PT/tools";
+import sessionsPtPt from "./locales/pt-PT/sessions";
+import modelsPtPt from "./locales/pt-PT/models";
+import providersPtPt from "./locales/pt-PT/providers";
+import officePtPt from "./locales/pt-PT/office";
+import errorsPtPt from "./locales/pt-PT/errors";
+import schedulesPtPt from "./locales/pt-PT/schedules";
+import skillsPtPt from "./locales/pt-PT/skills";
+import gatewayPtPt from "./locales/pt-PT/gateway";
+import agentsPtPt from "./locales/pt-PT/agents";
+import soulPtPt from "./locales/pt-PT/soul";
+import memoryPtPt from "./locales/pt-PT/memory";
+import installPtPt from "./locales/pt-PT/install";
+import constantsPtPt from "./locales/pt-PT/constants";
+import kanbanPtPt from "./locales/pt-PT/kanban";
 
 export const resources = {
   en: {
@@ -150,6 +192,7 @@ export const resources = {
       memory: memoryEn,
       install: installEn,
       constants: constantsEn,
+      kanban: kanbanEn,
     },
   },
   es: {
@@ -224,6 +267,30 @@ export const resources = {
       constants: constantsZh,
     },
   },
+  "zh-TW": {
+    translation: {
+      common: commonZhTw,
+      navigation: navigationZhTw,
+      welcome: welcomeZhTw,
+      setup: setupZhTw,
+      chat: chatZhTw,
+      settings: settingsZhTw,
+      tools: toolsZhTw,
+      sessions: sessionsZhTw,
+      models: modelsZhTw,
+      providers: providersZhTw,
+      office: officeZhTw,
+      errors: errorsZhTw,
+      schedules: schedulesZhTw,
+      skills: skillsZhTw,
+      gateway: gatewayZhTw,
+      agents: agentsZhTw,
+      soul: soulZhTw,
+      memory: memoryZhTw,
+      install: installZhTw,
+      constants: constantsZhTw,
+    },
+  },
   "pt-BR": {
     translation: {
       common: commonPt,
@@ -246,6 +313,31 @@ export const resources = {
       memory: memoryPt,
       install: installPt,
       constants: constantsPt,
+    },
+  },
+  "pt-PT": {
+    translation: {
+      common: commonPtPt,
+      navigation: navigationPtPt,
+      welcome: welcomePtPt,
+      setup: setupPtPt,
+      chat: chatPtPt,
+      settings: settingsPtPt,
+      tools: toolsPtPt,
+      sessions: sessionsPtPt,
+      models: modelsPtPt,
+      providers: providersPtPt,
+      office: officePtPt,
+      errors: errorsPtPt,
+      schedules: schedulesPtPt,
+      skills: skillsPtPt,
+      gateway: gatewayPtPt,
+      agents: agentsPtPt,
+      soul: soulPtPt,
+      memory: memoryPtPt,
+      install: installPtPt,
+      constants: constantsPtPt,
+      kanban: kanbanPtPt,
     },
   },
   ja: {

@@ -26,7 +26,12 @@ export function useChatIPC({
     const cleanupChunk = window.hermesAPI.onChatChunk((chunk) => {
       setMessages((prev) => {
         const last = prev[prev.length - 1];
-        if (last && last.role === "agent") {
+        if (
+          last &&
+          last.role === "agent" &&
+          "content" in last &&
+          typeof last.content === "string"
+        ) {
           return [
             ...prev.slice(0, -1),
             { ...last, content: last.content + chunk },

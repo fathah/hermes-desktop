@@ -1,6 +1,6 @@
 # Generated from this template by scripts/generate-winget-manifests.mjs.
 PackageIdentifier: NousResearch.HermesDesktop
-PackageVersion: {{VERSION}}
+PackageVersion: { { VERSION } }
 PackageLocale: en-US
 Publisher: Nous Research
 PublisherUrl: https://github.com/fathah/hermes-desktop
@@ -20,6 +20,6 @@ Tags:
   - desktop
   - electron
   - llm
-ReleaseNotesUrl: {{RELEASE_NOTES_URL}}
+ReleaseNotesUrl: { { RELEASE_NOTES_URL } }
 ManifestType: defaultLocale
 ManifestVersion: 1.6.0

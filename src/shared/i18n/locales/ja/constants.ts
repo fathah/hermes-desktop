@@ -19,6 +19,7 @@ export default {
   localName: "ローカル",
   localDesc: "OpenAI 互換",
   localTag: "",
+  customOpenAICompatibleName: "OpenAI 互換 / ローカル",
   // Local presets
   lmstudio: "LM Studio",
   ollama: "Ollama",
@@ -75,6 +76,8 @@ export default {
   mistralHint: "Mistral と Codestral モデル",
   perplexityApiKey: "Perplexity API キー",
   perplexityHint: "Web 検索付き Perplexity Sonar モデル",
+  nvidiaApiKey: "NVIDIA API キー",
+  nvidiaHint: "NVIDIA NIM（build.nvidia.com）でホストされるモデル",
   customApiKey: "カスタム API キー",
   customHint: "任意の OpenAI 互換エンドポイント用フォールバックキー",
   googleApiKey: "Google AI Studio キー",

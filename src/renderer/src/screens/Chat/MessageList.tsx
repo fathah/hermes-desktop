@@ -1,5 +1,6 @@
 import { memo, useMemo } from "react";
 import { HermesAvatar, MessageRow } from "./MessageRow";
+import { ReasoningRow, ToolCallRow, ToolResultRow } from "./HistoryRow";
 import type { ChatMessage } from "./types";
 
 interface MessageListProps {
@@ -34,6 +35,18 @@ function TypingIndicator({
   );
 }
 
+/**
+ * Bubble messages are filtered to "has content". History items (reasoning,
+ * tool_call, tool_result) are *always* shown — they're collapsed by default
+ * and the user opens them. Filtering them by content would defeat the point.
+ */
+function isBubble(m: ChatMessage): m is import("./types").ChatBubbleMessage {
+  // Bubble messages have no `kind` field (or kind === "user"/"assistant").
+  // History items have kind === "reasoning" | "tool_call" | "tool_result".
+  const k = (m as { kind?: string }).kind;
+  return !k || k === "user" || k === "assistant";
+}
+
 export const MessageList = memo(function MessageList({
   messages,
   isLoading,
@@ -42,27 +55,61 @@ export const MessageList = memo(function MessageList({
   onDeny,
   onFork,
 }: MessageListProps): React.JSX.Element {
+  // Bubbles with empty content are still hidden (live-stream placeholders).
+  // History rows pass through unconditionally.
   const visibleMessages = useMemo(
-    () => messages.filter((m) => (m.content || "").trim()),
+    () =>
+      messages.filter((m) => {
+        if (!isBubble(m)) return true;
+        return ((m.content as string) || "").trim().length > 0;
+      }),
     [messages],
   );
 
-  const lastMessageIsAgent =
-    messages.length > 0 && messages[messages.length - 1].role === "agent";
+  const lastBubble = [...messages].reverse().find(isBubble);
+  const lastMessageIsAgent = !!lastBubble && lastBubble.role === "agent";
 
   return (
     <>
-      {visibleMessages.map((msg, i) => (
-        <MessageRow
-          key={msg.id}
-          msg={msg}
-          isLast={i === visibleMessages.length - 1}
-          isLoading={isLoading}
-          onApprove={onApprove}
-          onDeny={onDeny}
-          onFork={onFork ? (editedText) => onFork(i, editedText) : undefined}
-        />
-      ))}
+      {visibleMessages.map((msg, i) => {
+        const k = (msg as { kind?: string }).kind;
+        if (k === "reasoning") {
+          return (
+            <ReasoningRow
+              key={msg.id}
+              msg={msg as Extract<ChatMessage, { kind: "reasoning" }>}
+            />
+          );
+        }
+        if (k === "tool_call") {
+          return (
+            <ToolCallRow
+              key={msg.id}
+              msg={msg as Extract<ChatMessage, { kind: "tool_call" }>}
+            />
+          );
+        }
+        if (k === "tool_result") {
+          return (
+            <ToolResultRow
+              key={msg.id}
+              msg={msg as Extract<ChatMessage, { kind: "tool_result" }>}
+            />
+          );
+        }
+        const bubble = msg as Extract<ChatMessage, { role: "user" | "agent" }>;
+        return (
+          <MessageRow
+            key={msg.id}
+            msg={bubble}
+            isLast={i === visibleMessages.length - 1}
+            isLoading={isLoading}
+            onApprove={onApprove}
+            onDeny={onDeny}
+            onFork={onFork ? (editedText) => onFork(i, editedText) : undefined}
+          />
+        );
+      })}
 
       {isLoading && !lastMessageIsAgent && (
         <TypingIndicator toolProgress={toolProgress} />

@@ -32,13 +32,15 @@ export default {
   cronPlaceholder: "p. ej. 0 9 * * 1-5",
   cronHint: "Formato cron estándar: minuto hora día mes día de la semana",
   prompt: "Prompt",
-  promptPlaceholder: "Introduce la descripción de la tarea que ejecutará el agente...",
+  promptPlaceholder:
+    "Introduce la descripción de la tarea que ejecutará el agente...",
   deliverTo: "Entregar a",
   deliverHint: "Dónde enviar los resultados al completar la tarea",
   creating: "Creando...",
   create: "Crear",
   deleteTaskTitle: "Eliminar tarea",
-  deleteConfirmText: "¿Seguro que quieres eliminar esta tarea programada? Esta acción no se puede deshacer.",
+  deleteConfirmText:
+    "¿Seguro que quieres eliminar esta tarea programada? Esta acción no se puede deshacer.",
   deleting: "Eliminando...",
   delete: "Eliminar",
   loadFailed: "No se pudieron cargar las tareas programadas",

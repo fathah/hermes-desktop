@@ -1,5 +1,5 @@
 import { memo, useState, useRef, useEffect } from "react";
-import { Trash2 as Trash, Plus, Zap, Pencil, Download } from "lucide-react";
+import { Trash2 as Trash, Plus, Zap, Pencil, Download, FolderOpen, X } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 import type { UsageState } from "./types";
 
@@ -9,6 +9,13 @@ interface ChatHeaderProps {
   usage: UsageState | null;
   fastMode: boolean;
   hasMessages: boolean;
+  /** Working folder bound to this conversation (issue #27), or null. */
+  contextFolder: string | null;
+  /** Whether to show the context-folder control (hidden in remote/SSH mode,
+   *  where the picker would browse the wrong machine's filesystem). */
+  showContextFolder: boolean;
+  onPickFolder: () => void;
+  onClearFolder: () => void;
   onToggleFast: () => void;
   onNewChat?: () => void;
   onClear: () => void;
@@ -32,12 +39,22 @@ function UsageBadge({ usage }: { usage: UsageState }): React.JSX.Element {
   );
 }
 
+/** Last path segment, for the compact chip label (handles \ and /). */
+function folderName(p: string): string {
+  const parts = p.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] || p;
+}
+
 export const ChatHeader = memo(function ChatHeader({
   sessionId,
   sessionTitle,
   usage,
   fastMode,
   hasMessages,
+  contextFolder,
+  showContextFolder,
+  onPickFolder,
+  onClearFolder,
   onToggleFast,
   onNewChat,
   onClear,
@@ -113,6 +130,36 @@ export const ChatHeader = memo(function ChatHeader({
         {usage && !renaming && <UsageBadge usage={usage} />}
       </div>
       <div className="chat-header-actions">
+        {showContextFolder &&
+          (contextFolder ? (
+            <div className="chat-ctxfolder">
+              <button
+                className="btn-ghost chat-ctxfolder-btn chat-ctxfolder-set"
+                onClick={onPickFolder}
+                title={t("chat.contextFolderActive", { path: contextFolder })}
+              >
+                <FolderOpen size={14} />
+                <span className="chat-ctxfolder-name">
+                  {folderName(contextFolder)}
+                </span>
+              </button>
+              <button
+                className="btn-ghost chat-ctxfolder-clear"
+                onClick={onClearFolder}
+                title={t("chat.removeContextFolder")}
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ) : (
+            <button
+              className="btn-ghost chat-ctxfolder-btn"
+              onClick={onPickFolder}
+              title={t("chat.setContextFolder")}
+            >
+              <FolderOpen size={14} />
+            </button>
+          ))}
         <div className="chat-fast-wrapper">
           <button
             className={`btn-ghost chat-fast-btn ${fastMode ? "chat-fast-active" : ""}`}
@@ -150,7 +197,9 @@ export const ChatHeader = memo(function ChatHeader({
         {hasMessages && (
           <button
             className="btn-ghost chat-clear-btn"
-            onClick={onClear}
+            onClick={() => {
+              if (window.confirm(t("chat.clearChatConfirm"))) onClear();
+            }}
             title={t("chat.clearChat")}
           >
             <Trash size={16} />

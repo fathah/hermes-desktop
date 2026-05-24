@@ -1,0 +1,16 @@
+export default {
+  title: "工作階段",
+  searchPlaceholder: "搜尋工作階段...",
+  noResults: "找不到結果",
+  noResultsHint: "試試其他搜尋詞",
+  empty: "還沒有工作階段",
+  newConversation: "新對話",
+  newChat: "新增聊天",
+  today: "今天",
+  yesterday: "昨天",
+  thisWeek: "本週",
+  earlier: "更早",
+  emptyHint: "開始聊天以建立第一個工作階段",
+  messages: "則訊息",
+  messageSingular: "則訊息",
+} as const;

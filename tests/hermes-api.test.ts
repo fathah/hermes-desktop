@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // ── Shared state for capturing HTTP requests (hoisted before mocks) ──
 
-const { capturedRequests, makeMockRequest, stopHealthPolling } = vi.hoisted(() => {
+const { capturedRequests, makeMockRequest } = vi.hoisted(() => {
   const capturedRequests: Array<{
     url: string;
     options: Record<string, unknown>;
@@ -12,18 +12,27 @@ const { capturedRequests, makeMockRequest, stopHealthPolling } = vi.hoisted(() =
   function makeMockRequest(
     url: string,
     options: Record<string, unknown>,
-  ) {
+  ): {
+    write: (body: string) => void;
+    end: () => void;
+    on: (event: string, cb: () => void) => void;
+    destroy: () => void;
+  } {
     return {
       write: (body: string) => {
         capturedRequests.push({ url, options, body });
       },
       end: () => {},
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       on: (_event: string, _cb: () => void) => {},
       destroy: () => {},
     };
   }
 
-  return { capturedRequests, makeMockRequest, stopHealthPolling: () => capturedRequests.splice(0) };
+  return {
+    capturedRequests,
+    makeMockRequest,
+  };
 });
 
 // ── Mock Node.js http/https modules ──
@@ -101,7 +110,10 @@ vi.mock("../src/main/process-options", () => ({
 
 // ── Import module under test ──
 
-import { sendMessage, stopHealthPolling as realStopHealthPolling } from "../src/main/hermes";
+import {
+  sendMessage,
+  stopHealthPolling as realStopHealthPolling,
+} from "../src/main/hermes";
 
 describe("sendMessageViaApi forwards resumeSessionId", () => {
   beforeEach(() => {
@@ -176,5 +188,52 @@ describe("sendMessageViaApi forwards resumeSessionId", () => {
     const parsed = JSON.parse(chatRequest!.body);
 
     expect(parsed).not.toHaveProperty("session_id");
+  });
+
+  it("sends the X-Hermes-Session-Id request header when resuming", async () => {
+    const testSessionId = "session-abc-123";
+
+    await sendMessage(
+      "hello",
+      {
+        onChunk: () => {},
+        onDone: () => {},
+        onError: () => {},
+      },
+      "default",
+      testSessionId,
+    );
+
+    const chatRequest = capturedRequests.find((r) =>
+      r.url.includes("/v1/chat/completions"),
+    );
+    expect(chatRequest).toBeDefined();
+    const headers = chatRequest!.options.headers as Record<string, string>;
+
+    // The gateway resumes an existing session from this request header;
+    // the session_id body field is ignored. Without it every request
+    // forks a new server-side session (issue #226).
+    expect(headers["X-Hermes-Session-Id"]).toBe(testSessionId);
+  });
+
+  it("omits the X-Hermes-Session-Id header for a fresh session", async () => {
+    await sendMessage(
+      "hello",
+      {
+        onChunk: () => {},
+        onDone: () => {},
+        onError: () => {},
+      },
+      "default",
+      undefined,
+    );
+
+    const chatRequest = capturedRequests.find((r) =>
+      r.url.includes("/v1/chat/completions"),
+    );
+    expect(chatRequest).toBeDefined();
+    const headers = chatRequest!.options.headers as Record<string, string>;
+
+    expect(headers).not.toHaveProperty("X-Hermes-Session-Id");
   });
 });

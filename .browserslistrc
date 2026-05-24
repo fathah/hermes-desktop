@@ -1,0 +1,7 @@
+# Target the Chromium version that the bundled Electron ships. Tooling that
+# reads browserslist (PostCSS / Microsoft Edge Tools / linters) will stop
+# warning about features that are only "missing" on engines we never ship to.
+#
+# Electron 39.x bundles Chromium 130+. Bumping this when we upgrade Electron
+# keeps the lint signal honest without silencing legitimate compat issues.
+last 2 Chrome versions

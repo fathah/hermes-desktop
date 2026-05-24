@@ -82,6 +82,9 @@ jobs:
         run: npm ci
 
       - name: Build app
+        env:
+          VITE_POSTHOG_KEY: ${{ secrets.VITE_POSTHOG_KEY }}
+          VITE_POSTHOG_HOST: ${{ secrets.VITE_POSTHOG_HOST }}
         run: npm run build
 
       - name: Stage App Store Connect API key
@@ -137,6 +140,9 @@ jobs:
         run: npm ci
 
       - name: Build app
+        env:
+          VITE_POSTHOG_KEY: ${{ secrets.VITE_POSTHOG_KEY }}
+          VITE_POSTHOG_HOST: ${{ secrets.VITE_POSTHOG_HOST }}
         run: npm run build
 
       - name: Install rpmbuild
@@ -174,10 +180,13 @@ jobs:
         run: npm ci
 
       - name: Build app
+        env:
+          VITE_POSTHOG_KEY: ${{ secrets.VITE_POSTHOG_KEY }}
+          VITE_POSTHOG_HOST: ${{ secrets.VITE_POSTHOG_HOST }}
         run: npm run build
 
       - name: Package Windows artifacts
-        run: npx electron-builder --win nsis --x64 --publish never
+        run: npx electron-builder --win nsis portable --x64 --publish never
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -222,7 +231,8 @@ jobs:
 
   publish:
     name: Publish Release
-    needs: [prepare, release_mac, release_linux, release_windows, generate_winget]
+    needs:
+      [prepare, release_mac, release_linux, release_windows, generate_winget]
     if: needs.prepare.outputs.is_dry_run == 'false' && needs.prepare.outputs.tag_exists == 'false'
     runs-on: ubuntu-latest
     steps:

@@ -41,7 +41,6 @@ const DEFAULT_MODELS: DefaultModel[] = [
     model: "gpt-4.1",
     baseUrl: "",
   },
-
 ];
 
 export default DEFAULT_MODELS;

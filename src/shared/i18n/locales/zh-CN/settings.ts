@@ -38,6 +38,11 @@ export default {
   providerHint: "选择推理提供商,或根据 API Key 自动识别",
   customProviderHint: "使用任何兼容 OpenAI 的接口(LM Studio、Ollama、vLLM 等)",
   modelHint: "默认模型名(留空则使用提供商默认值)",
+  refreshModels: "刷新模型列表",
+  discoveringModels: "正在加载可用模型…",
+  discoveredCount: "{{count}} 个可用模型 — 输入以筛选",
+  discoveryNoKey: "请在 .env 中设置此提供商的 API Key 以加载可用模型列表",
+  discoveryError: "无法获取提供商的模型列表 — 你仍可手动输入模型名",
   customBaseUrlHint: "兼容 OpenAI 的 API 地址",
   poolHint:
     "为同一提供商添加多个 API Key,以便自动轮换和负载均衡。Hermes 会在它们之间轮流使用。",

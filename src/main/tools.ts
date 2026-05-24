@@ -278,6 +278,11 @@ export function setToolsetEnabled(
         result.push(line);
       }
 
+      // Trailing platform_toolsets (no next block) never triggers inline insertion
+      if (inPlatformToolsets && !cliInserted) {
+        result.push(newSection);
+      }
+
       safeWriteFile(configFile, result.join("\n"));
     } else {
       // Append platform_toolsets section at end

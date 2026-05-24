@@ -16,11 +16,13 @@ export default {
   starting: "启动中...",
   openInBrowser: "在浏览器中打开",
   viewLogs: "查看日志",
-  portInUseWarning: "端口 {{port}} 已被占用。请在设置中修改端口或停止其他进程。",
+  portInUseWarning:
+    "端口 {{port}} 已被占用。请在设置中修改端口或停止其他进程。",
   close: "关闭",
   cannotLoadClaw3d: "无法加载 Claw3D",
   startingClaw3dService: "正在启动 Claw3D 服务...",
-  clickToStart: "点击\"启动\"来运行 Claw3D",
-  setupDesc1: "Claw3D 是你的 Hermes 代理的 3D 可视化环境。它让你可以看到代理在交互式办公空间中工作。",
+  clickToStart: '点击"启动"来运行 Claw3D',
+  setupDesc1:
+    "Claw3D 是你的 Hermes 代理的 3D 可视化环境。它让你可以看到代理在交互式办公空间中工作。",
   setupDesc2: "点击下方自动下载并设置 Claw3D。这将克隆仓库并安装所有依赖。",
 } as const;

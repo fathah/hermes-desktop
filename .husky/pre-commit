@@ -1,0 +1,12 @@
+BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null)
+if [[ "$BRANCH" != "release" && "$BRANCH" != release/* ]]; then
+  exit 0
+fi
+
+echo "→ [pre-commit] Release branch — running lint..."
+bun run lint || { echo "✗ Lint failed. Commit aborted."; exit 1; }
+
+echo "→ [pre-commit] Running tests..."
+bun run test || { echo "✗ Tests failed. Commit aborted."; exit 1; }
+
+echo "✓ [pre-commit] Lint and tests passed."

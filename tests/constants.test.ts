@@ -23,6 +23,7 @@ describe("PROVIDERS", () => {
     expect(values).toContain("openrouter");
     expect(values).toContain("anthropic");
     expect(values).toContain("openai");
+    expect(values).toContain("openai-codex");
     expect(values).toContain("google");
     expect(values).toContain("xai");
     expect(values).toContain("nous");
@@ -169,7 +170,9 @@ describe("GATEWAY_SECTIONS", () => {
 describe("SETTINGS_SECTIONS", () => {
   it("includes LLM Providers section", () => {
     expect(
-      SETTINGS_SECTIONS.find((s) => s.title === "constants.sectionLlmProviders"),
+      SETTINGS_SECTIONS.find(
+        (s) => s.title === "constants.sectionLlmProviders",
+      ),
     ).toBeTruthy();
   });
 

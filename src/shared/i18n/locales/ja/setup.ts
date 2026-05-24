@@ -28,8 +28,10 @@ export default {
   remoteGroupLabel: "リモート OpenAI 互換 API",
   serverUrl: "Base URL",
   modelName: "モデル名",
-  localServerHint: "続行する前にローカルサーバが起動していることを確認してください",
-  customServerHint: "プリセットを選ぶか、OpenAI 互換 Base URL を貼り付けてください",
+  localServerHint:
+    "続行する前にローカルサーバが起動していることを確認してください",
+  customServerHint:
+    "プリセットを選ぶか、OpenAI 互換 Base URL を貼り付けてください",
   customApiKeyLabel: "API キー",
   customApiKeyHint: "リモート API には必須。localhost の場合は空欄で OK。",
   defaultModelHint: "空欄でサーバのデフォルトモデルを使用",

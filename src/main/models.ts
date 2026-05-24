@@ -48,12 +48,20 @@ function loadCustomProviders(profile?: string): CustomProviderEntry[] {
   let inCustom = false;
   let current: CustomProviderEntry | null = null;
   for (const line of lines) {
-    if (/^\s*custom_providers\s*:/.test(line)) { inCustom = true; continue; }
+    if (/^\s*custom_providers\s*:/.test(line)) {
+      inCustom = true;
+      continue;
+    }
     if (inCustom) {
       if (/^\s*-\s*name\s*:/.test(line)) {
         if (current && current.model && current.baseUrl) result.push(current);
         const m = line.match(/name\s*:\s*["']?([^"'\n#]+)["']?/);
-        current = { name: (m ? m[1].trim() : "Custom"), provider: "custom", model: "", baseUrl: "" };
+        current = {
+          name: m ? m[1].trim() : "Custom",
+          provider: "custom",
+          model: "",
+          baseUrl: "",
+        };
       } else if (current) {
         const bm = line.match(/base_url\s*:\s*["']?([^"'\n#]+)["']?/);
         if (bm) current.baseUrl = bm[1].trim();
@@ -64,9 +72,14 @@ function loadCustomProviders(profile?: string): CustomProviderEntry[] {
         const apim = line.match(/api_mode\s*:\s*["']?([^"'\n#]+)["']?/);
         if (apim) current.apiMode = apim[1].trim();
       }
-      if (/^[a-z]/.test(line) && !/^\s/.test(line) && !/^\s*-\s*name/.test(line)) {
+      if (
+        /^[a-z]/.test(line) &&
+        !/^\s/.test(line) &&
+        !/^\s*-\s*name/.test(line)
+      ) {
         if (current && current.model && current.baseUrl) result.push(current);
-        inCustom = false; current = null;
+        inCustom = false;
+        current = null;
       }
     }
   }
@@ -98,17 +111,30 @@ function seedDefaults(profile?: string): SavedModel[] {
       });
       if (cp.apiKey) {
         try {
-          let envContent = existsSync(envFile) ? readFileSync(envFile, "utf-8") : "";
-          const envKey = "CUSTOM_PROVIDER_" + cp.name.replace(/[^A-Za-z0-9]/g, "_").toUpperCase() + "_KEY";
-          const keyRegex = new RegExp("^" + envKey.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "=.*$", "m");
+          let envContent = existsSync(envFile)
+            ? readFileSync(envFile, "utf-8")
+            : "";
+          const envKey =
+            "CUSTOM_PROVIDER_" +
+            cp.name.replace(/[^A-Za-z0-9]/g, "_").toUpperCase() +
+            "_KEY";
+          const keyRegex = new RegExp(
+            "^" + envKey.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "=.*$",
+            "m",
+          );
           if (!keyRegex.test(envContent)) {
-            envContent = envContent.trimEnd() + "\n" + envKey + "=" + cp.apiKey + "\n";
+            envContent =
+              envContent.trimEnd() + "\n" + envKey + "=" + cp.apiKey + "\n";
             safeWriteFile(envFile, envContent);
           }
-        } catch { /* best-effort */ }
+        } catch {
+          /* best-effort */
+        }
       }
     }
-  } catch (e) { console.error("Failed to load custom providers:", e); }
+  } catch (e) {
+    console.error("Failed to load custom providers:", e);
+  }
   writeModels(models);
   return models;
 }

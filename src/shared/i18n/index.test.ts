@@ -14,6 +14,10 @@ describe("shared i18n", () => {
     expect(t("welcome.title", "zh-CN")).toBe("欢迎使用 Hermes");
   });
 
+  it("returns zh-TW text when available", () => {
+    expect(t("welcome.title", "zh-TW")).toBe("歡迎使用 Hermes");
+  });
+
   it("returns es text when available", () => {
     expect(t("welcome.title", "es")).toBe("Bienvenido a Hermes");
   });

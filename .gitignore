@@ -33,3 +33,7 @@ release/
 **/src-tauri/target/
 **/src-tauri/gen/
 **/src-tauri/WixTools/
+
+# Local launcher scripts (user-specific, do not commit)
+/*.bat
+/*.ps1

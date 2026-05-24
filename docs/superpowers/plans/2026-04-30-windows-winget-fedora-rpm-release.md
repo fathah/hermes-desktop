@@ -23,6 +23,7 @@
 Run: `git status && git branch --show-current && git log --oneline -3`
 
 Expected output:
+
 - Current branch: `feat/winget-rpm-release`
 - Working tree clean
 - Top commit: `docs: add design spec for Windows (winget) and Fedora (RPM) release`
@@ -36,6 +37,7 @@ If on a different branch or tree is dirty, stop and resolve before proceeding.
 ### Task 1: Add RPM target and Linux packaging metadata to electron-builder.yml
 
 **Files:**
+
 - Modify: `electron-builder.yml`
 
 - [ ] **Step 1: Replace the `linux:` block and add `rpm:` block**
@@ -88,6 +90,7 @@ If neither `js-yaml`, `yaml`, nor Python yaml is available, just open the file a
 ### Task 2: Make NSIS settings explicit in electron-builder.yml
 
 **Files:**
+
 - Modify: `electron-builder.yml`
 
 - [ ] **Step 1: Replace the `nsis:` block**
@@ -119,15 +122,19 @@ The two new fields make the existing electron-builder defaults explicit so the b
 ### Task 3: Add `build:rpm` script to package.json
 
 **Files:**
+
 - Modify: `package.json`
 
 - [ ] **Step 1: Insert the script next to the existing `build:linux`**
 
 In `package.json` `"scripts"` block, after the line:
+
 ```json
 "build:linux": "electron-vite build && electron-builder --linux",
 ```
+
 add:
+
 ```json
 "build:rpm": "npm run build && electron-builder --linux rpm",
 ```
@@ -168,6 +175,7 @@ Expected: completes without errors, ~2-5 minutes. Final lines should mention wri
 Run: `ls -la dist/*.rpm && rpm -qpi dist/*.rpm | head -20`
 
 Expected:
+
 - A file `dist/hermes-desktop-0.2.3.rpm` (or current version) of non-trivial size (~120-200 MB)
 - `rpm -qpi` shows `Name: hermes-desktop`, `Version: 0.2.3`, `Vendor: Nous Research`, `License`, `Summary` matching our `synopsis`.
 
@@ -184,6 +192,7 @@ Reason: keeps the working tree clean so the next commit only contains our config
 - [ ] **Step 1: Stage and commit**
 
 Run:
+
 ```bash
 git add electron-builder.yml package.json
 git status
@@ -199,6 +208,7 @@ Expected: 1 commit, 2 files changed. `git status` should show clean working tree
 ### Task 6: Create the three winget manifest templates
 
 **Files:**
+
 - Create: `build/winget/Installer.template.yaml`
 - Create: `build/winget/Locale.en-US.template.yaml`
 - Create: `build/winget/Version.template.yaml`
@@ -215,16 +225,16 @@ Contents:
 # Generated from this template by scripts/generate-winget-manifests.mjs.
 # Placeholders ({{...}}) are replaced at build time. Do not edit the generated copy in dist/.
 PackageIdentifier: NousResearch.HermesDesktop
-PackageVersion: {{VERSION}}
+PackageVersion: { { VERSION } }
 InstallerLocale: en-US
 InstallerType: nullsoft
 Scope: user
 MinimumOSVersion: 10.0.17763.0
-ReleaseDate: {{RELEASE_DATE}}
+ReleaseDate: { { RELEASE_DATE } }
 Installers:
   - Architecture: x64
-    InstallerUrl: {{INSTALLER_URL}}
-    InstallerSha256: {{INSTALLER_SHA256}}
+    InstallerUrl: { { INSTALLER_URL } }
+    InstallerSha256: { { INSTALLER_SHA256 } }
     UpgradeBehavior: install
 ManifestType: installer
 ManifestVersion: 1.6.0
@@ -237,7 +247,7 @@ Contents:
 ```yaml
 # Generated from this template by scripts/generate-winget-manifests.mjs.
 PackageIdentifier: NousResearch.HermesDesktop
-PackageVersion: {{VERSION}}
+PackageVersion: { { VERSION } }
 PackageLocale: en-US
 Publisher: Nous Research
 PublisherUrl: https://github.com/fathah/hermes-desktop
@@ -257,7 +267,7 @@ Tags:
   - desktop
   - electron
   - llm
-ReleaseNotesUrl: {{RELEASE_NOTES_URL}}
+ReleaseNotesUrl: { { RELEASE_NOTES_URL } }
 ManifestType: defaultLocale
 ManifestVersion: 1.6.0
 ```
@@ -269,7 +279,7 @@ Contents:
 ```yaml
 # Generated from this template by scripts/generate-winget-manifests.mjs.
 PackageIdentifier: NousResearch.HermesDesktop
-PackageVersion: {{VERSION}}
+PackageVersion: { { VERSION } }
 DefaultLocale: en-US
 ManifestType: version
 ManifestVersion: 1.6.0
@@ -284,6 +294,7 @@ Expected: three `.template.yaml` files listed.
 ### Task 7: Write the failing test for the manifest generator
 
 **Files:**
+
 - Create: `tests/winget-generator.test.ts`
 
 - [ ] **Step 1: Create `tests/winget-generator.test.ts`**
@@ -326,7 +337,10 @@ function setupTemplates(rootDir: string) {
     join(buildDir, "Locale.en-US.template.yaml"),
     "Version: {{VERSION}}\nNotes: {{RELEASE_NOTES_URL}}\n",
   );
-  writeFileSync(join(buildDir, "Version.template.yaml"), "Version: {{VERSION}}\n");
+  writeFileSync(
+    join(buildDir, "Version.template.yaml"),
+    "Version: {{VERSION}}\n",
+  );
 }
 
 describe("generateWingetManifests", () => {
@@ -355,9 +369,15 @@ describe("generateWingetManifests", () => {
       "HermesDesktop",
       "9.9.9",
     );
-    expect(existsSync(join(outDir, "NousResearch.HermesDesktop.installer.yaml"))).toBe(true);
-    expect(existsSync(join(outDir, "NousResearch.HermesDesktop.locale.en-US.yaml"))).toBe(true);
-    expect(existsSync(join(outDir, "NousResearch.HermesDesktop.yaml"))).toBe(true);
+    expect(
+      existsSync(join(outDir, "NousResearch.HermesDesktop.installer.yaml")),
+    ).toBe(true);
+    expect(
+      existsSync(join(outDir, "NousResearch.HermesDesktop.locale.en-US.yaml")),
+    ).toBe(true);
+    expect(existsSync(join(outDir, "NousResearch.HermesDesktop.yaml"))).toBe(
+      true,
+    );
   });
 
   it("replaces all placeholders in the installer manifest", () => {
@@ -458,6 +478,7 @@ If existing tests fail, stop — that's an unrelated breakage we caused. Investi
 ### Task 9: Implement the manifest generator
 
 **Files:**
+
 - Create: `scripts/generate-winget-manifests.mjs`
 
 - [ ] **Step 1: Create the directory**
@@ -483,7 +504,12 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export function generateWingetManifests({ rootDir, version, name, publishOwner }) {
+export function generateWingetManifests({
+  rootDir,
+  version,
+  name,
+  publishOwner,
+}) {
   const exePath = join(rootDir, "dist", `${name}-${version}-setup.exe`);
   if (!existsSync(exePath)) {
     throw new Error(
@@ -497,10 +523,8 @@ export function generateWingetManifests({ rootDir, version, name, publishOwner }
     .digest("hex")
     .toUpperCase();
   const releaseDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  const installerUrl =
-    `https://github.com/${publishOwner}/hermes-desktop/releases/download/v${version}/${name}-${version}-setup.exe`;
-  const releaseNotesUrl =
-    `https://github.com/${publishOwner}/hermes-desktop/releases/tag/v${version}`;
+  const installerUrl = `https://github.com/${publishOwner}/hermes-desktop/releases/download/v${version}/${name}-${version}-setup.exe`;
+  const releaseNotesUrl = `https://github.com/${publishOwner}/hermes-desktop/releases/tag/v${version}`;
 
   const replacements = {
     VERSION: version,
@@ -531,7 +555,10 @@ export function generateWingetManifests({ rootDir, version, name, publishOwner }
 
   const files = [
     ["Installer.template.yaml", "NousResearch.HermesDesktop.installer.yaml"],
-    ["Locale.en-US.template.yaml", "NousResearch.HermesDesktop.locale.en-US.yaml"],
+    [
+      "Locale.en-US.template.yaml",
+      "NousResearch.HermesDesktop.locale.en-US.yaml",
+    ],
     ["Version.template.yaml", "NousResearch.HermesDesktop.yaml"],
   ];
 
@@ -576,6 +603,7 @@ If failing: read the assertion error and fix the script. Do not modify the test 
 - [ ] **Step 1: Stage and commit**
 
 Run:
+
 ```bash
 git add build/winget/ scripts/generate-winget-manifests.mjs tests/winget-generator.test.ts
 git status
@@ -593,6 +621,7 @@ The following four tasks edit `.github/workflows/release.yml` in sequence. Each 
 ### Task 12: Add `dry_run` input and `is_dry_run` output
 
 **Files:**
+
 - Modify: `.github/workflows/release.yml`
 
 - [ ] **Step 1: Replace the `on:` block**
@@ -627,40 +656,41 @@ on:
 In the `prepare` job, replace:
 
 ```yaml
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-      tag: ${{ steps.version.outputs.tag }}
-      tag_exists: ${{ steps.check.outputs.exists }}
+outputs:
+  version: ${{ steps.version.outputs.version }}
+  tag: ${{ steps.version.outputs.tag }}
+  tag_exists: ${{ steps.check.outputs.exists }}
 ```
 
 with:
 
 ```yaml
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-      tag: ${{ steps.version.outputs.tag }}
-      tag_exists: ${{ steps.check.outputs.exists }}
-      is_dry_run: ${{ steps.mode.outputs.is_dry_run }}
+outputs:
+  version: ${{ steps.version.outputs.version }}
+  tag: ${{ steps.version.outputs.tag }}
+  tag_exists: ${{ steps.check.outputs.exists }}
+  is_dry_run: ${{ steps.mode.outputs.is_dry_run }}
 ```
 
 Then, after the existing "Check if tag already exists" step inside `prepare.steps`, append:
 
 ```yaml
-      - name: Compute dry-run flag
-        id: mode
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" = "true" ]; then
-            echo "is_dry_run=true" >> "$GITHUB_OUTPUT"
-            echo "Dry run: builds will run, publish will be skipped."
-          else
-            echo "is_dry_run=false" >> "$GITHUB_OUTPUT"
-            echo "Real release: publish will run if tag does not exist."
-          fi
+- name: Compute dry-run flag
+  id: mode
+  run: |
+    if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" = "true" ]; then
+      echo "is_dry_run=true" >> "$GITHUB_OUTPUT"
+      echo "Dry run: builds will run, publish will be skipped."
+    else
+      echo "is_dry_run=false" >> "$GITHUB_OUTPUT"
+      echo "Real release: publish will run if tag does not exist."
+    fi
 ```
 
 ### Task 13: Extend `release_linux` with rpm
 
 **Files:**
+
 - Modify: `.github/workflows/release.yml`
 
 - [ ] **Step 1: Add `rpm` apt install before packaging, and rpm to the electron-builder targets**
@@ -668,42 +698,43 @@ Then, after the existing "Check if tag already exists" step inside `prepare.step
 In the `release_linux` job, locate the steps after `Install dependencies` and `Build app`. Replace:
 
 ```yaml
-      - name: Package Linux artifacts
-        run: npx electron-builder --linux AppImage deb --publish never
+- name: Package Linux artifacts
+  run: npx electron-builder --linux AppImage deb --publish never
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-artifacts
-          path: |
-            dist/*.AppImage
-            dist/*.deb
-            dist/latest-linux.yml
+- name: Upload artifacts
+  uses: actions/upload-artifact@v4
+  with:
+    name: linux-artifacts
+    path: |
+      dist/*.AppImage
+      dist/*.deb
+      dist/latest-linux.yml
 ```
 
 with:
 
 ```yaml
-      - name: Install rpmbuild
-        run: sudo apt-get update && sudo apt-get install -y rpm
+- name: Install rpmbuild
+  run: sudo apt-get update && sudo apt-get install -y rpm
 
-      - name: Package Linux artifacts
-        run: npx electron-builder --linux AppImage deb rpm --publish never
+- name: Package Linux artifacts
+  run: npx electron-builder --linux AppImage deb rpm --publish never
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-artifacts
-          path: |
-            dist/*.AppImage
-            dist/*.deb
-            dist/*.rpm
-            dist/latest-linux.yml
+- name: Upload artifacts
+  uses: actions/upload-artifact@v4
+  with:
+    name: linux-artifacts
+    path: |
+      dist/*.AppImage
+      dist/*.deb
+      dist/*.rpm
+      dist/latest-linux.yml
 ```
 
 ### Task 14: Add `release_windows` job
 
 **Files:**
+
 - Modify: `.github/workflows/release.yml`
 
 - [ ] **Step 1: Insert a new job after `release_linux`, before `publish`**
@@ -711,43 +742,44 @@ with:
 Add the following job block:
 
 ```yaml
-  release_windows:
-    name: Build Windows
-    needs: prepare
-    if: needs.prepare.outputs.tag_exists == 'false'
-    runs-on: windows-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+release_windows:
+  name: Build Windows
+  needs: prepare
+  if: needs.prepare.outputs.tag_exists == 'false'
+  runs-on: windows-latest
+  steps:
+    - name: Check out repository
+      uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: npm
 
-      - name: Install dependencies
-        run: npm ci
+    - name: Install dependencies
+      run: npm ci
 
-      - name: Build app
-        run: npm run build
+    - name: Build app
+      run: npm run build
 
-      - name: Package Windows artifacts
-        run: npx electron-builder --win nsis --x64 --publish never
+    - name: Package Windows artifacts
+      run: npx electron-builder --win nsis --x64 --publish never
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-artifacts
-          path: |
-            dist/*.exe
-            dist/*.exe.blockmap
-            dist/latest.yml
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-artifacts
+        path: |
+          dist/*.exe
+          dist/*.exe.blockmap
+          dist/latest.yml
 ```
 
 ### Task 15: Add `generate_winget` job
 
 **Files:**
+
 - Modify: `.github/workflows/release.yml`
 
 - [ ] **Step 1: Insert the new job after `release_windows`**
@@ -755,42 +787,43 @@ Add the following job block:
 Add the following job block:
 
 ```yaml
-  generate_winget:
-    name: Generate winget manifests
-    needs: [prepare, release_windows]
-    if: needs.prepare.outputs.tag_exists == 'false'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+generate_winget:
+  name: Generate winget manifests
+  needs: [prepare, release_windows]
+  if: needs.prepare.outputs.tag_exists == 'false'
+  runs-on: ubuntu-latest
+  steps:
+    - name: Check out repository
+      uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22
 
-      - name: Download Windows installer artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-artifacts
-          path: dist/
+    - name: Download Windows installer artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: windows-artifacts
+        path: dist/
 
-      - name: Generate winget manifests
-        env:
-          VERSION: ${{ needs.prepare.outputs.version }}
-          PUBLISH_OWNER: fathah
-        run: node scripts/generate-winget-manifests.mjs
+    - name: Generate winget manifests
+      env:
+        VERSION: ${{ needs.prepare.outputs.version }}
+        PUBLISH_OWNER: fathah
+      run: node scripts/generate-winget-manifests.mjs
 
-      - name: Upload winget manifests artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: winget-manifests-${{ needs.prepare.outputs.version }}
-          path: dist/winget/
+    - name: Upload winget manifests artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: winget-manifests-${{ needs.prepare.outputs.version }}
+        path: dist/winget/
 ```
 
 ### Task 16: Update the `publish` job (gate + explicit file list)
 
 **Files:**
+
 - Modify: `.github/workflows/release.yml`
 
 - [ ] **Step 1: Replace the `publish` job header and the gh-release files glob**
@@ -798,79 +831,79 @@ Add the following job block:
 Replace the existing `publish` job:
 
 ```yaml
-  publish:
-    name: Publish Release
-    needs: [prepare, release_mac, release_linux]
-    if: needs.prepare.outputs.tag_exists == 'false'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+publish:
+  name: Publish Release
+  needs: [prepare, release_mac, release_linux]
+  if: needs.prepare.outputs.tag_exists == 'false'
+  runs-on: ubuntu-latest
+  steps:
+    - name: Check out repository
+      uses: actions/checkout@v4
 
-      - name: Create tag
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag ${{ needs.prepare.outputs.tag }}
-          git push origin ${{ needs.prepare.outputs.tag }}
+    - name: Create tag
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git tag ${{ needs.prepare.outputs.tag }}
+        git push origin ${{ needs.prepare.outputs.tag }}
 
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          merge-multiple: true
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+        merge-multiple: true
 
-      - name: Publish GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.prepare.outputs.tag }}
-          name: Hermes Desktop ${{ needs.prepare.outputs.tag }}
-          generate_release_notes: true
-          files: artifacts/*
+    - name: Publish GitHub release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ needs.prepare.outputs.tag }}
+        name: Hermes Desktop ${{ needs.prepare.outputs.tag }}
+        generate_release_notes: true
+        files: artifacts/*
 ```
 
 with:
 
 ```yaml
-  publish:
-    name: Publish Release
-    needs: [prepare, release_mac, release_linux, release_windows, generate_winget]
-    if: needs.prepare.outputs.is_dry_run == 'false' && needs.prepare.outputs.tag_exists == 'false'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+publish:
+  name: Publish Release
+  needs: [prepare, release_mac, release_linux, release_windows, generate_winget]
+  if: needs.prepare.outputs.is_dry_run == 'false' && needs.prepare.outputs.tag_exists == 'false'
+  runs-on: ubuntu-latest
+  steps:
+    - name: Check out repository
+      uses: actions/checkout@v4
 
-      - name: Create tag
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag ${{ needs.prepare.outputs.tag }}
-          git push origin ${{ needs.prepare.outputs.tag }}
+    - name: Create tag
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git tag ${{ needs.prepare.outputs.tag }}
+        git push origin ${{ needs.prepare.outputs.tag }}
 
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          merge-multiple: true
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+        merge-multiple: true
 
-      - name: Publish GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.prepare.outputs.tag }}
-          name: Hermes Desktop ${{ needs.prepare.outputs.tag }}
-          generate_release_notes: true
-          files: |
-            artifacts/*.dmg
-            artifacts/*.zip
-            artifacts/*.AppImage
-            artifacts/*.deb
-            artifacts/*.rpm
-            artifacts/*.exe
-            artifacts/*.blockmap
-            artifacts/latest.yml
-            artifacts/latest-linux.yml
-            artifacts/latest-mac.yml
+    - name: Publish GitHub release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ needs.prepare.outputs.tag }}
+        name: Hermes Desktop ${{ needs.prepare.outputs.tag }}
+        generate_release_notes: true
+        files: |
+          artifacts/*.dmg
+          artifacts/*.zip
+          artifacts/*.AppImage
+          artifacts/*.deb
+          artifacts/*.rpm
+          artifacts/*.exe
+          artifacts/*.blockmap
+          artifacts/latest.yml
+          artifacts/latest-linux.yml
+          artifacts/latest-mac.yml
 ```
 
 ### Task 17: Validate workflow syntax and commit
@@ -892,6 +925,7 @@ Expected: either no output (lint clean) or "actionlint not installed, skipping".
 - [ ] **Step 3: Commit**
 
 Run:
+
 ```bash
 git add .github/workflows/release.yml
 git status
@@ -907,13 +941,14 @@ Expected: 1 commit, 1 file changed. Working tree clean.
 ### Task 18: Update README install section
 
 **Files:**
+
 - Modify: `README.md`
 
 - [ ] **Step 1: Replace the platform table and add notes**
 
 Locate the current Install section (lines ~22-37):
 
-```markdown
+````markdown
 ## Install
 
 Download the latest build from the [Releases](https://github.com/fathah/hermes-desktop/releases/) page.
@@ -930,22 +965,22 @@ Download the latest build from the [Releases](https://github.com/fathah/hermes-d
 > ```
 >
 > Or right-click the app → **Open** → click **Open** in the confirmation dialog.
-```
+````
 
 Replace the table and add a Linux/Windows notes block. The new section:
 
-```markdown
+````markdown
 ## Install
 
 Download the latest build from the [Releases](https://github.com/fathah/hermes-desktop/releases/) page.
 
-| Platform        | File                              |
-| --------------- | --------------------------------- |
-| macOS           | `.dmg`                            |
-| Linux (any)     | `.AppImage`                       |
-| Linux (Debian)  | `.deb`                            |
-| Linux (Fedora)  | `.rpm`                            |
-| Windows         | `.exe` (NSIS installer)           |
+| Platform       | File                    |
+| -------------- | ----------------------- |
+| macOS          | `.dmg`                  |
+| Linux (any)    | `.AppImage`             |
+| Linux (Debian) | `.deb`                  |
+| Linux (Fedora) | `.rpm`                  |
+| Windows        | `.exe` (NSIS installer) |
 
 ### Windows (winget)
 
@@ -954,6 +989,7 @@ Once the manifest has been accepted into [`microsoft/winget-pkgs`](https://githu
 ```powershell
 winget install NousResearch.HermesDesktop
 ```
+````
 
 Until then, download the `.exe` from the Releases page.
 
@@ -976,7 +1012,8 @@ sudo dnf install ./hermes-desktop-<version>.rpm
 > ```
 >
 > Or right-click the app → **Open** → click **Open** in the confirmation dialog.
-```
+
+````
 
 - [ ] **Step 2: Verify the markdown renders sensibly**
 
@@ -991,7 +1028,7 @@ Run:
 git add README.md
 git status
 git commit -m "docs: document Windows (winget) and Fedora (RPM) install paths"
-```
+````
 
 Expected: 1 commit, 1 file changed.
 
@@ -1056,6 +1093,7 @@ Expected: `gh` confirms the workflow was queued. (Alternative: trigger from the 
 Run: `gh run watch` (or `gh run list --workflow=release.yml --branch=feat/winget-rpm-release --limit 1` then `gh run view <id> --log-failed` if it fails)
 
 Expected progression:
+
 - `prepare` ✓ (~30s)
 - `release_mac` x64 + arm64 ✓ (~10-15min in parallel)
 - `release_linux` ✓ (~5-8min)
@@ -1068,6 +1106,7 @@ Total wall-clock: ~15-20min (mac arm64 is usually the longest pole).
 - [ ] **Step 3: If any job fails**
 
 Read the failure with `gh run view <id> --log-failed`. Most likely failure modes:
+
 - Windows job: `npm ci` fails on a native dep (better-sqlite3 needing windows-build-tools). Solution: add `npm config set msvs_version 2022` step or rely on electron-builder's own `install-app-deps`.
 - Linux rpm job: `rpmbuild` missing a dep. Solution: ensure `rpm` and possibly `rpm-build` are both apt-installed.
 - generate_winget: script error. Most likely a path mismatch — confirm artifact downloaded to `dist/`.
@@ -1089,6 +1128,7 @@ Expected: three `.yaml` files listed.
 Run: `cat /tmp/winget-check/manifests/n/NousResearch/HermesDesktop/0.2.3/*.yaml`
 
 Expected:
+
 - No `{{...}}` placeholders left.
 - `InstallerSha256` is a 64-character uppercase hex string.
 - `InstallerUrl` points to the `fathah/hermes-desktop` releases path with the correct version.
@@ -1118,6 +1158,7 @@ Wait for explicit confirmation.
 - [ ] **Step 2: Create the PR via gh**
 
 Run:
+
 ```bash
 gh pr create \
   --repo fathah/hermes-desktop \
@@ -1172,6 +1213,7 @@ Done.
 ## Self-review checklist (executed before saving)
 
 **Spec coverage:**
+
 - ✅ Windows NSIS build → Tasks 14, 17
 - ✅ Winget manifest generation → Tasks 6, 7, 9, 11, 15
 - ✅ Fedora RPM in CI → Task 13
@@ -1186,9 +1228,10 @@ Done.
 - ✅ CI verification on fork → Tasks 21–23
 - ✅ Open PR upstream → Task 24
 
-**Placeholder scan:** No "TBD" or "fill in details" left. The generated PR body in Task 24 has a "Test plan" with unchecked boxes — that is intentional, those are TODOs for the *maintainer*, not for the implementer.
+**Placeholder scan:** No "TBD" or "fill in details" left. The generated PR body in Task 24 has a "Test plan" with unchecked boxes — that is intentional, those are TODOs for the _maintainer_, not for the implementer.
 
 **Type/name consistency:**
+
 - `generateWingetManifests({ rootDir, version, name, publishOwner })` — same signature in test (Task 7), implementation (Task 9), and CLI entrypoint.
 - `winget-manifests-${{ needs.prepare.outputs.version }}` — same artifact name in `generate_winget` job (Task 15) and in the CI inspection step (Task 23).
 - `is_dry_run` output — defined in Task 12, consumed in Task 16.

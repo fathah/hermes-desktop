@@ -1,0 +1,26 @@
+export default {
+  title: "模型",
+  searchPlaceholder: "搜尋模型...",
+  empty: "還沒有模型",
+  noMatch: "沒有符合的模型",
+  deleteConfirm: "刪除？",
+  displayName: "顯示名稱",
+  modelId: "模型 ID",
+  namePlaceholder: "例如：Claude Sonnet 4",
+  modelIdPlaceholder: "例如：anthropic/claude-sonnet-4-20250514",
+  baseUrlPlaceholder: "http://localhost:1234/v1",
+  subtitle: "管理你的模型庫。這些模型會出現在聊天頁面的模型選擇器中。",
+  addModel: "新增模型",
+  emptyHint:
+    "在這裡新增模型後，就能在聊天頁面的模型選擇器中使用。你在設定頁設定的模型也會自動加入這裡。",
+  editModel: "編輯模型",
+  update: "更新",
+  deleteModelTitle: "刪除模型",
+  yes: "是",
+  no: "否",
+  nameRequired: "名稱和模型 ID 為必填欄位",
+  customProviderHint: "僅在自訂或本機供應商時需要填寫",
+  apiKeyLabel: "API Key",
+  apiKeyHint:
+    "儲存為環境變數。會依 URL 符合對應的環境變數名稱，否則使用 CUSTOM_API_KEY。",
+} as const;

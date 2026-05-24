@@ -197,12 +197,61 @@ function Layout({
 
   const handleResumeSession = useCallback(
     async (sessionId: string, title?: string) => {
-      const dbMessages = await window.hermesAPI.getSessionMessages(sessionId);
-      const chatMessages: ChatMessage[] = dbMessages.map((m) => ({
-        id: `db-${m.id}`,
-        role: m.role === "user" ? "user" : "agent",
-        content: m.content,
-      }));
+      const items = await window.hermesAPI.getSessionMessages(sessionId);
+      const chatMessages: ChatMessage[] = items
+        .map((it): ChatMessage | null => {
+          switch (it.kind) {
+            case "user":
+              return {
+                id: `db-${it.id}`,
+                role: "user",
+                content: it.content,
+                ...(it.attachments && it.attachments.length > 0
+                  ? { attachments: it.attachments }
+                  : {}),
+              };
+            case "assistant":
+              return {
+                id: `db-${it.id}`,
+                role: "agent",
+                content: it.content,
+                ...(it.attachments && it.attachments.length > 0
+                  ? { attachments: it.attachments }
+                  : {}),
+              };
+            case "reasoning":
+              return {
+                id: `db-r-${it.id}`,
+                kind: "reasoning",
+                role: "agent",
+                text: it.text,
+              };
+            case "tool_call":
+              return {
+                id: `db-tc-${it.id}-${it.callId || "x"}`,
+                kind: "tool_call",
+                role: "agent",
+                callId: it.callId,
+                name: it.name,
+                args: it.args,
+              };
+            case "tool_result":
+              return {
+                id: `db-tr-${it.id}`,
+                kind: "tool_result",
+                role: "agent",
+                callId: it.callId,
+                name: it.name,
+                content: it.content,
+                ...(it.attachments && it.attachments.length > 0
+                  ? { attachments: it.attachments }
+                  : {}),
+              };
+            default:
+              return null;
+          }
+        })
+        .filter((m): m is ChatMessage => m !== null);
       setMessages(chatMessages);
       setCurrentSessionId(sessionId);
       setCurrentSessionTitle(title ?? null);
@@ -333,13 +382,13 @@ function Layout({
 
         {visitedViews.has("office") && (
           <div style={paneStyle("office")}>
-            <Office visible={view === "office"} />
+            <Office profile={activeProfile} visible={view === "office"} />
           </div>
         )}
 
         {visitedViews.has("models") && (
           <div style={paneStyle("models")}>
-            <Models />
+            <Models visible={view === "models"} />
           </div>
         )}
 
@@ -407,10 +456,7 @@ function Layout({
             {remoteMode ? (
               <RemoteNotice feature="Kanban" />
             ) : (
-              <Kanban
-                profile={activeProfile}
-                visible={view === "kanban"}
-              />
+              <Kanban profile={activeProfile} visible={view === "kanban"} />
             )}
           </div>
         )}

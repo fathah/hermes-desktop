@@ -3,6 +3,7 @@ import { vi } from "vitest";
 import {
   DEFAULT_ACTIVE_LOCALE,
   setLocale as setSharedLocale,
+  type AppLocale,
 } from "../../../shared/i18n";
 import { I18nProvider } from "./I18nProvider";
 import { useI18n } from "./useI18n";
@@ -23,15 +24,24 @@ function LocaleSwitcherProbe(): React.JSX.Element {
   );
 }
 
+function installHermesAPI(
+  api: Pick<Window["hermesAPI"], "getLocale" | "setLocale">,
+): void {
+  Object.defineProperty(window, "hermesAPI", {
+    configurable: true,
+    value: api,
+  });
+}
+
 describe("I18nProvider", () => {
   const getLocale = vi.fn().mockResolvedValue(DEFAULT_ACTIVE_LOCALE);
   const setLocale = vi.fn().mockResolvedValue(DEFAULT_ACTIVE_LOCALE);
 
   beforeEach(() => {
-    (window as any).hermesAPI = {
+    installHermesAPI({
       getLocale,
       setLocale,
-    };
+    });
     getLocale.mockClear();
     setLocale.mockClear();
     getLocale.mockResolvedValue(DEFAULT_ACTIVE_LOCALE);
@@ -67,7 +77,35 @@ describe("I18nProvider", () => {
     );
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Switch to Spanish" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Switch to Spanish" }),
+      );
+    });
+
+    expect(setLocale).toHaveBeenLastCalledWith("es");
+    expect(await screen.findByText("Bienvenido a Hermes")).toBeInTheDocument();
+  });
+
+  it("does not overwrite the main-process locale with the startup fallback", async () => {
+    let resolveMainLocale: (locale: AppLocale) => void = () => {};
+    getLocale.mockReturnValue(
+      new Promise<AppLocale>((resolve) => {
+        resolveMainLocale = resolve;
+      }),
+    );
+
+    render(
+      <I18nProvider>
+        <Probe />
+      </I18nProvider>,
+    );
+
+    await act(async () => {});
+
+    expect(setLocale).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveMainLocale("es");
     });
 
     expect(setLocale).toHaveBeenLastCalledWith("es");

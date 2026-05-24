@@ -11,23 +11,54 @@ import {
   hermesCliArgs,
   getEnhancedPath,
 } from "./installer";
-import { getModelConfig, readEnv, getConnectionConfig } from "./config";
-import { getSshTunnelUrl, isSshTunnelActive, isSshTunnelHealthy, startSshTunnel } from "./ssh-tunnel";
-import { stripAnsi } from "./utils";
+import {
+  getApiServerKey,
+  getConnectionConfig,
+  getModelConfig,
+  readEnv,
+} from "./config";
+import {
+  getSshTunnelUrl,
+  isSshTunnelActive,
+  isSshTunnelHealthy,
+  startSshTunnel,
+} from "./ssh-tunnel";
+import { pidIsAliveAs, stripAnsi } from "./utils";
 import { readModels } from "./models";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
+import { type Attachment, escapeXmlAttr } from "../shared/attachments";
 
 const LOCAL_API_URL = "http://127.0.0.1:8642";
+
+/**
+ * Normalise a remote-mode URL the user typed into the connection
+ * settings.  Strips trailing slashes and, importantly, a trailing
+ * `/v1` segment — callers append `/v1/<path>` themselves, so leaving
+ * the user's `/v1` would produce `http://host/v1/v1/chat/completions`
+ * → 404.  Reported as #266 (multiple users entered the URL "with
+ * /v1" because the gateway's curl examples show that form).
+ *
+ * Also tolerates trailing whitespace and the rare `/v1/` (slash-suffixed)
+ * form.  Returns the cleaned string.
+ */
+export function normaliseRemoteUrl(raw: string): string {
+  let url = (raw || "").trim();
+  // Strip trailing slashes
+  url = url.replace(/\/+$/, "");
+  // Strip trailing `/v1` (callers append /v1/<path> themselves)
+  url = url.replace(/\/v1$/i, "");
+  return url;
+}
 
 export function getApiUrl(): string {
   const conn = getConnectionConfig();
   if (conn.mode === "ssh") {
     const sshUrl = getSshTunnelUrl();
     if (!sshUrl) throw new Error("SSH tunnel is not active");
-    return sshUrl;
+    return normaliseRemoteUrl(sshUrl);
   }
   if (conn.mode === "remote" && conn.remoteUrl) {
-    return conn.remoteUrl.replace(/\/+$/, "");
+    return normaliseRemoteUrl(conn.remoteUrl);
   }
   return LOCAL_API_URL;
 }
@@ -52,7 +83,8 @@ export function setSshRemoteApiKey(key: string): void {
 export function getRemoteAuthHeader(): Record<string, string> {
   const conn = getConnectionConfig();
   if (conn.mode === "ssh") {
-    if (_sshRemoteApiKey) return { Authorization: `Bearer ${_sshRemoteApiKey}` };
+    if (_sshRemoteApiKey)
+      return { Authorization: `Bearer ${_sshRemoteApiKey}` };
     return {};
   }
   if (conn.mode === "remote" && conn.apiKey) {
@@ -61,9 +93,23 @@ export function getRemoteAuthHeader(): Record<string, string> {
   return {};
 }
 
+function resolveRemoteApiKey(url: string, apiKey?: string): string {
+  if (apiKey !== undefined) return apiKey;
+
+  const conn = getConnectionConfig();
+  if (conn.mode !== "remote" || !conn.apiKey || !conn.remoteUrl) return "";
+  if (normaliseRemoteUrl(conn.remoteUrl) !== normaliseRemoteUrl(url)) {
+    return "";
+  }
+  return conn.apiKey;
+}
+
 export async function ensureSshTunnelIfNeeded(): Promise<void> {
   const conn = getConnectionConfig();
-  if (conn.mode === "ssh" && (!isSshTunnelActive() || !await isSshTunnelHealthy())) {
+  if (
+    conn.mode === "ssh" &&
+    (!isSshTunnelActive() || !(await isSshTunnelHealthy()))
+  ) {
     await startSshTunnel(conn.ssh);
   }
 }
@@ -165,28 +211,106 @@ export interface ChatCallbacks {
   }) => void;
 }
 
+type ChatContent =
+  | string
+  | Array<
+      | { type: "text"; text: string }
+      | { type: "image_url"; image_url: { url: string } }
+    >;
+
+/**
+ * Build the OpenAI-compatible `content` payload for a user turn.
+ *
+ * - No attachments → plain string (preserves prompt-cache friendliness for
+ *   the all-text path).
+ * - Text-file attachments → inlined into the text part as `<file …>…</file>`
+ *   wrappers (the gateway rejects `file`/`input_file` content parts, see
+ *   gateway/platforms/api_server.py:263).
+ * - Image attachments → emitted as `image_url` parts in the OpenAI vision
+ *   format, which the gateway accepts and converts for Anthropic providers.
+ * - Path-ref attachments → appended as `[Attached file: <abs-path>]` lines
+ *   so the agent's existing file-reading skills can pick them up.  Works
+ *   for PDFs/docx/binaries the gateway won't pass through inline.
+ */
+export function buildUserContent(
+  text: string,
+  attachments?: Attachment[],
+): ChatContent {
+  if (!attachments || attachments.length === 0) return text;
+
+  const textFiles = attachments.filter((a) => a.kind === "text-file");
+  const pathRefs = attachments.filter(
+    (a) => a.kind === "path-ref" && typeof a.path === "string" && a.path,
+  );
+  const images = attachments.filter(
+    (a) => a.kind === "image" && typeof a.dataUrl === "string" && a.dataUrl,
+  );
+
+  const parts: string[] = [];
+  if (text.trim()) parts.push(text);
+  for (const f of textFiles) {
+    if (typeof f.text !== "string") continue;
+    const name = escapeXmlAttr(f.name);
+    const mime = escapeXmlAttr(f.mime || "text/plain");
+    parts.push(`<file name="${name}" mime="${mime}">\n${f.text}\n</file>`);
+  }
+  if (pathRefs.length > 0) {
+    const lines = pathRefs.map((f) => `[Attached file: ${f.path}]`);
+    parts.push(lines.join("\n"));
+  }
+  const composedText = parts.join("\n\n");
+
+  if (images.length === 0) return composedText;
+
+  const imageParts = images.map((img) => ({
+    type: "image_url" as const,
+    image_url: { url: img.dataUrl! },
+  }));
+
+  // Omit the text part entirely when there's nothing to say — some
+  // providers (Anthropic via Bedrock, certain vision endpoints) reject an
+  // empty-string text part as `invalid_content_part`.
+  if (!composedText) return imageParts;
+
+  return [{ type: "text" as const, text: composedText }, ...imageParts];
+}
+
+/**
+ * Build the system message that scopes a conversation to a working folder
+ * (issue #27). Returns null when no folder is set (undefined / empty /
+ * whitespace) so callers can skip injection. Exported for unit testing.
+ */
+export function contextFolderSystemMessage(
+  contextFolder?: string,
+): { role: "system"; content: string } | null {
+  const folder = contextFolder?.trim();
+  if (!folder) return null;
+  return {
+    role: "system",
+    content:
+      `The working folder for this conversation is ${folder}. ` +
+      `When the user asks you to read, create, modify, or run project ` +
+      `files, use the file, terminal, and code-execution tools with ` +
+      `absolute paths under this folder.`,
+  };
+}
+
 function sendMessageViaApi(
   message: string,
   cb: ChatCallbacks,
   profile?: string,
   _resumeSessionId?: string,
   history?: Array<{ role: string; content: string }>,
-  attachments?: AttachmentPayload[],
+  attachments?: Attachment[],
+  contextFolder?: string,
 ): ChatHandle {
   const mc = getModelConfig(profile);
   const controller = new AbortController();
 
-  // Build full conversation from history + current message (OpenAI format)
-  // When attachments are present we use multimodal content arrays (vision API).
-  type OaiContent =
-    | string
-    | Array<
-        | { type: "text"; text: string }
-        | { type: "image_url"; image_url: { url: string; detail?: string } }
-        | { type: "file"; file: { filename: string; file_data: string } }
-      >;
-
-  const messages: Array<{ role: string; content: OaiContent }> = [];
+  // Build full conversation from history + current message (standard OpenAI format).
+  // History items are kept text-only — attachments from prior turns live in
+  // the gateway's session state when resuming via session_id.
+  const messages: Array<{ role: string; content: ChatContent }> = [];
   if (history && history.length > 0) {
     for (const msg of history) {
       messages.push({
@@ -195,49 +319,16 @@ function sendMessageViaApi(
       });
     }
   }
-
-  // Build the user content — multimodal if there are attachments
-  let userContent: OaiContent;
-  if (attachments && attachments.length > 0) {
-    const parts: Array<
-      | { type: "text"; text: string }
-      | { type: "image_url"; image_url: { url: string; detail?: string } }
-      | { type: "file"; file: { filename: string; file_data: string } }
-    > = [];
-
-    if (message) {
-      parts.push({ type: "text", text: message });
-    }
-
-    for (const att of attachments) {
-      if (att.isImage) {
-        // Standard OpenAI vision format
-        parts.push({
-          type: "image_url",
-          image_url: {
-            url: `data:${att.mimeType};base64,${att.data}`,
-            detail: "auto",
-          },
-        });
-      } else {
-        // Non-image files: some providers accept a "file" content part;
-        // others need it inlined as text. We try the file part first and
-        // fall back gracefully in the error handler.
-        parts.push({
-          type: "file",
-          file: {
-            filename: att.name,
-            file_data: `data:${att.mimeType};base64,${att.data}`,
-          },
-        });
-      }
-    }
-    userContent = parts;
-  } else {
-    userContent = message;
-  }
-
+  const userContent = buildUserContent(message, attachments);
   messages.push({ role: "user", content: userContent });
+
+  // Context folder (issue #27): when the conversation is bound to a working
+  // folder, prepend a system message so the agent scopes file/terminal work
+  // there. Injected only at the request-build step — the renderer's visible
+  // transcript stays clean, and getSessionMessages filters non-user/assistant
+  // roles, so reloaded sessions stay clean too.
+  const ctxSystem = contextFolderSystemMessage(contextFolder);
+  if (ctxSystem) messages.unshift(ctxSystem);
 
   const body = JSON.stringify({
     model: mc.model || "hermes-agent",
@@ -250,6 +341,24 @@ function sendMessageViaApi(
     "Content-Type": "application/json",
     ...getRemoteAuthHeader(),
   };
+  // Session continuity: the gateway resumes an existing session via the
+  // `X-Hermes-Session-Id` *request header* — the `session_id` body field
+  // above is not honoured. Without this header every request forks a new
+  // server-side session, fragmenting stored history and messageCount
+  // (issue #226). The gateway echoes the id back in the response header.
+  if (_resumeSessionId) {
+    headers["X-Hermes-Session-Id"] = _resumeSessionId;
+  }
+  // Local API server key (API_SERVER_KEY in the profile's .env /
+  // config.yaml) only applies in local mode — in remote/SSH mode the
+  // remote endpoint's own auth header (set above) is authoritative and
+  // must not be overwritten.
+  if (!isRemoteMode()) {
+    const apiServerKey = getApiServerKey(profile);
+    if (apiServerKey) {
+      headers.Authorization = `Bearer ${apiServerKey}`;
+    }
+  }
 
   let sessionId = _resumeSessionId || "";
   let hasContent = false;
@@ -272,20 +381,14 @@ function sendMessageViaApi(
     // When streaming returns empty, make a non-streaming request to surface the real error
     const probeBody = JSON.stringify({
       model: mc.model || "hermes-agent",
-      messages: [{ role: "user", content: message }],
+      messages: [{ role: "user", content: userContent }],
       stream: false,
     });
     const probeUrl = `${getApiUrl()}/v1/chat/completions`;
     const probeMod = probeUrl.startsWith("https") ? https : http;
     const probeReq = probeMod.request(
       probeUrl,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...getRemoteAuthHeader(),
-        },
-      },
+      { method: "POST", headers },
       (res) => {
         let raw = "";
         res.on("data", (d) => {
@@ -473,7 +576,9 @@ function sendMessageViaApi(
   });
   req.on("timeout", () => {
     req.destroy();
-    finish("API request timed out. Check the SSH tunnel and remote Hermes gateway.");
+    finish(
+      "API request timed out. Check the SSH tunnel and remote Hermes gateway.",
+    );
   });
 
   req.write(body);
@@ -497,7 +602,25 @@ function sendMessageViaCli(
   cb: ChatCallbacks,
   profile?: string,
   resumeSessionId?: string,
+  attachments?: Attachment[],
 ): ChatHandle {
+  // CLI fallback can't pipe multimodal content; inline text-file attachments
+  // and ignore images.  The gateway is the supported attachment path; this
+  // is only hit when the API server isn't reachable.
+  if (attachments && attachments.length > 0) {
+    const textFiles = attachments.filter(
+      (a) => a.kind === "text-file" && typeof a.text === "string",
+    );
+    if (textFiles.length > 0) {
+      const wrapped = textFiles
+        .map(
+          (f) =>
+            `<file name="${escapeXmlAttr(f.name)}" mime="${escapeXmlAttr(f.mime || "text/plain")}">\n${f.text}\n</file>`,
+        )
+        .join("\n\n");
+      message = message.trim() ? `${message}\n\n${wrapped}` : wrapped;
+    }
+  }
   const mc = getModelConfig(profile);
   const profileEnv = readEnv(profile);
 
@@ -557,9 +680,13 @@ function sendMessageViaCli(
     // Check if this model has an explicit apiMode from custom_providers
     let modelApiMode: string | null = null;
     try {
-      const modelEntry = readModels().find(m => m.baseUrl === mc.baseUrl && m.model === mc.model);
+      const modelEntry = readModels().find(
+        (m) => m.baseUrl === mc.baseUrl && m.model === mc.model,
+      );
       if (modelEntry) modelApiMode = modelEntry.apiMode || null;
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     const isAnthropicProtocol = modelApiMode === "anthropic_messages";
     if (isAnthropicProtocol) {
       env.HERMES_INFERENCE_PROVIDER = "anthropic";
@@ -581,12 +708,17 @@ function sendMessageViaCli(
       // Try custom provider auto-generated key from models.json
       try {
         const models = readModels();
-        const matching = models.find(m => m.baseUrl === mc.baseUrl);
+        const matching = models.find((m) => m.baseUrl === mc.baseUrl);
         if (matching) {
-          const envKey2 = "CUSTOM_PROVIDER_" + matching.name.replace(/[^A-Za-z0-9]/g, "_").toUpperCase() + "_KEY";
+          const envKey2 =
+            "CUSTOM_PROVIDER_" +
+            matching.name.replace(/[^A-Za-z0-9]/g, "_").toUpperCase() +
+            "_KEY";
           resolvedKey = profileEnv[envKey2] || env[envKey2] || "";
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
       if (!resolvedKey) {
         resolvedKey =
           profileEnv.CUSTOM_API_KEY ||
@@ -704,28 +836,28 @@ function sendMessageViaCli(
 
 let apiServerAvailable: boolean | null = null; // cached after first check
 
-export interface AttachmentPayload {
-  id: string;
-  name: string;
-  mimeType: string;
-  /** Raw base64 (no data-URI prefix) */
-  data: string;
-  isImage: boolean;
-}
-
 export async function sendMessage(
   message: string,
   cb: ChatCallbacks,
   profile?: string,
   resumeSessionId?: string,
   history?: Array<{ role: string; content: string }>,
-  attachments?: AttachmentPayload[],
+  attachments?: Attachment[],
+  contextFolder?: string,
 ): Promise<ChatHandle> {
   ensureInitialized();
 
   // Remote mode: always use API, no CLI fallback
   if (isRemoteMode()) {
-    return sendMessageViaApi(message, cb, profile, resumeSessionId, history, attachments);
+    return sendMessageViaApi(
+      message,
+      cb,
+      profile,
+      resumeSessionId,
+      history,
+      attachments,
+      contextFolder,
+    );
   }
 
   // Check API server availability (cache the result, re-check periodically)
@@ -734,18 +866,19 @@ export async function sendMessage(
   }
 
   if (apiServerAvailable) {
-    return sendMessageViaApi(message, cb, profile, resumeSessionId, history, attachments);
+    return sendMessageViaApi(
+      message,
+      cb,
+      profile,
+      resumeSessionId,
+      history,
+      attachments,
+      contextFolder,
+    );
   }
 
-  // Fallback to CLI (attachments not supported in CLI mode — send text only)
-  if (attachments && attachments.length > 0) {
-    const fileList = attachments.map((a) => a.name).join(", ");
-    const textWithNote = message
-      ? `${message}\n\n[Note: ${attachments.length} file(s) attached but CLI mode cannot send binary data: ${fileList}]`
-      : `[Note: ${attachments.length} file(s) attached but CLI mode cannot send binary data: ${fileList}]`;
-    return sendMessageViaCli(textWithNote, cb, profile, resumeSessionId);
-  }
-  return sendMessageViaCli(message, cb, profile, resumeSessionId);
+  // Fallback to CLI
+  return sendMessageViaCli(message, cb, profile, resumeSessionId, attachments);
 }
 
 // Lazy init — called on first sendMessage or gateway start
@@ -788,6 +921,18 @@ let gatewayProcess: ChildProcess | null = null;
 let gatewayStartedByApp = false;
 
 export function startGateway(profile?: string): boolean {
+  // Defensive: the local gateway is never the right thing to spawn in
+  // remote/SSH mode — the user is pointing at an off-machine server.
+  // Callers should already gate, but several IPC handlers historically
+  // forgot to (issue #266), and reaching `spawn(HERMES_PYTHON, …)` when
+  // there's no local hermes-agent install produces an uncaught ENOENT
+  // that pops a generic error dialog.  Refuse cleanly here.
+  if (isRemoteMode()) {
+    console.warn(
+      "[gateway] startGateway() called in remote/SSH mode — refusing local spawn",
+    );
+    return false;
+  }
   ensureInitialized();
   if (isGatewayRunning()) return false;
 
@@ -881,16 +1026,16 @@ export function stopGateway(force = false): void {
   apiServerAvailable = false;
 }
 
+// Python image prefixes covering both native Windows (pythonw.exe / python.exe)
+// and POSIX (python, python3, pythonw). Used to verify the PID we read from
+// gateway.pid actually belongs to a python process before reporting alive.
+const GATEWAY_IMAGE_PREFIXES = ["python", "pythonw"];
+
 export function isGatewayRunning(): boolean {
   if (gatewayProcess && !gatewayProcess.killed) return true;
   const pid = readPidFile();
   if (!pid) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
+  return pidIsAliveAs(pid, GATEWAY_IMAGE_PREFIXES);
 }
 
 export function isApiReady(): boolean {
@@ -902,10 +1047,11 @@ export function testRemoteConnection(
   apiKey?: string,
 ): Promise<boolean> {
   return new Promise((resolve) => {
-    const target = `${url.replace(/\/+$/, "")}/health`;
+    const target = `${normaliseRemoteUrl(url)}/health`;
     const mod = target.startsWith("https") ? https : http;
     const headers: Record<string, string> = {};
-    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+    const resolvedApiKey = resolveRemoteApiKey(url, apiKey);
+    if (resolvedApiKey) headers.Authorization = `Bearer ${resolvedApiKey}`;
     const req = mod.request(
       target,
       { method: "GET", timeout: 5000, headers },
@@ -924,6 +1070,10 @@ export function testRemoteConnection(
 }
 
 export function restartGateway(profile?: string): void {
+  // Same defensive gate as startGateway — the local gateway has no role
+  // in remote/SSH mode.  Cheap to check; catches IPC paths that don't
+  // wrap their restart calls in an isRemoteMode() check.
+  if (isRemoteMode()) return;
   if (!gatewayStartedByApp && !isGatewayRunning()) return;
   stopGateway(true);
   setTimeout(() => {
