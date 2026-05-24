@@ -181,7 +181,6 @@ export function listSessions(limit = 30, offset = 0): SessionSummary[] {
   if (!db) return [];
 
   try {
-    // Simple query without correlated subquery — titles come from session cache
     const rows = db
       .prepare(
         `SELECT
@@ -235,7 +234,6 @@ export function searchSessions(query: string, limit = 20): SearchResult[] {
 
     if (!tableCheck) return [];
 
-    // Sanitize query for FTS5: wrap each word with quotes for safety, add * for prefix
     const sanitized = query
       .trim()
       .split(/\s+/)
@@ -493,6 +491,10 @@ export function getSessionMessages(sessionId: string): HistoryItem[] {
   }
 }
 
+/**
+ * Delete a session (and its messages) from the active DB, then
+ * remove it from the local JSON cache.
+ */
 export function deleteSession(sessionId: string): void {
   const db = getDb(false);
   if (!db) return;

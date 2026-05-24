@@ -14,6 +14,7 @@ export interface ChatBubbleMessage {
   kind?: "user" | "assistant"; // optional for backward compat; absent ⇒ user/assistant by role
   role: "user" | "agent";
   content: string;
+  /** Attachments shown alongside this user message */
   attachments?: Attachment[];
 }
 

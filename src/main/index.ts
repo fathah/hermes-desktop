@@ -1007,10 +1007,6 @@ function setupIPC(): void {
     return getSessionMessages(sessionId);
   });
 
-  ipcMain.handle("delete-session", (_event, sessionId: string) => {
-    return deleteSession(sessionId);
-  });
-
   // Profiles
   ipcMain.handle("list-profiles", async () => {
     const conn = getConnectionConfig();

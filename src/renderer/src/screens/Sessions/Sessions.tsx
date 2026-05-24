@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback, memo } from "react";
+import { Trash2, Check, X as XIcon, Pencil } from "lucide-react";
 import { Plus, Search, X, ChatBubble } from "../../assets/icons";
 import { useI18n } from "../../components/useI18n";
 
@@ -22,7 +23,7 @@ interface SearchResult {
 }
 
 interface SessionsProps {
-  onResumeSession: (sessionId: string) => void;
+  onResumeSession: (sessionId: string, title?: string) => void;
   onNewChat: () => void;
   currentSessionId: string | null;
   visible: boolean;
@@ -104,47 +105,163 @@ function formatModel(model: string): string {
   return name.split(":")[0];
 }
 
-// Memoized session card
+// Memoized session card with hover-reveal delete + inline confirmation + inline rename
 const SessionCard = memo(function SessionCard({
   session,
   isActive,
   showFullDate,
   onClick,
+  onDelete,
+  onRename,
 }: {
   session: CachedSession;
   isActive: boolean;
   showFullDate: boolean;
   onClick: () => void;
+  onDelete: (sessionId: string) => void;
+  onRename: (sessionId: string, newTitle: string) => void;
 }) {
+  const [confirming, setConfirming] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  // Focus input when rename mode activates
+  useEffect(() => {
+    if (renaming && renameInputRef.current) {
+      renameInputRef.current.focus();
+      renameInputRef.current.select();
+    }
+  }, [renaming]);
+
+  function handleTrashClick(e: React.MouseEvent): void {
+    e.stopPropagation();
+    setConfirming(true);
+  }
+
+  function handleConfirm(e: React.MouseEvent): void {
+    e.stopPropagation();
+    onDelete(session.id);
+  }
+
+  function handleCancel(e: React.MouseEvent): void {
+    e.stopPropagation();
+    setConfirming(false);
+  }
+
+  function handlePencilClick(e: React.MouseEvent): void {
+    e.stopPropagation();
+    setRenameValue(session.title || "");
+    setRenaming(true);
+  }
+
+  function commitRename(): void {
+    const trimmed = renameValue.trim();
+    if (trimmed && trimmed !== session.title) {
+      onRename(session.id, trimmed);
+    }
+    setRenaming(false);
+  }
+
+  function handleRenameKeyDown(e: React.KeyboardEvent<HTMLInputElement>): void {
+    if (e.key === "Enter") { e.preventDefault(); commitRename(); }
+    if (e.key === "Escape") { e.preventDefault(); setRenaming(false); }
+  }
+
+  const blocked = confirming || renaming;
+
   return (
-    <button
-      className={`sessions-card ${isActive ? "sessions-card--active" : ""}`}
-      onClick={onClick}
+    <div
+      className={`sessions-card ${isActive ? "sessions-card--active" : ""} ${renaming ? "sessions-card--renaming" : ""}`}
+      onClick={blocked ? undefined : onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (!blocked && (e.key === "Enter" || e.key === " ")) onClick();
+      }}
     >
       <div className="sessions-card-main">
-        <span className="sessions-card-title">
-          {session.title || "New conversation"}
-        </span>
-        <span className="sessions-card-time">
-          {showFullDate
-            ? formatFullDate(session.startedAt)
-            : formatTime(session.startedAt)}
-        </span>
-      </div>
-      <div className="sessions-card-tags">
-        <span className="sessions-tag sessions-tag--source">
-          {session.source}
-        </span>
-        <span className="sessions-tag">
-          {session.messageCount} msg{session.messageCount !== 1 ? "s" : ""}
-        </span>
-        {session.model && (
-          <span className="sessions-tag sessions-tag--model">
-            {formatModel(session.model)}
+        {renaming ? (
+          <input
+            ref={renameInputRef}
+            className="sessions-card-rename-input"
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onKeyDown={handleRenameKeyDown}
+            onBlur={commitRename}
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : (
+          <span className="sessions-card-title">
+            {session.title || "New conversation"}
+            <span className="sessions-card-id">#{session.id.slice(-6)}</span>
+          </span>
+        )}
+        {!renaming && (
+          <span className="sessions-card-time">
+            {showFullDate
+              ? formatFullDate(session.startedAt)
+              : formatTime(session.startedAt)}
           </span>
         )}
       </div>
-    </button>
+      {!renaming && (
+        <div className="sessions-card-tags">
+          <span className="sessions-tag sessions-tag--source">
+            {session.source}
+          </span>
+          <span className="sessions-tag">
+            {session.messageCount} msg{session.messageCount !== 1 ? "s" : ""}
+          </span>
+          {session.model && (
+            <span className="sessions-tag sessions-tag--model">
+              {formatModel(session.model)}
+            </span>
+          )}
+        </div>
+      )}
+      {/* Action controls — pencil + trash on hover, confirm when deleting */}
+      {!renaming && (
+        <div className="sessions-card-actions">
+          {confirming ? (
+            <div className="sessions-card-confirm">
+              <span className="sessions-card-confirm-label">Delete?</span>
+              <button
+                className="sessions-card-confirm-btn sessions-card-confirm-yes"
+                onClick={handleConfirm}
+                title="Confirm delete"
+              >
+                <Check size={13} />
+              </button>
+              <button
+                className="sessions-card-confirm-btn sessions-card-confirm-no"
+                onClick={handleCancel}
+                title="Cancel"
+              >
+                <XIcon size={13} />
+              </button>
+            </div>
+          ) : (
+            <div className="sessions-card-icon-group">
+              <button
+                className="sessions-card-action-btn"
+                onClick={handlePencilClick}
+                title="Rename session"
+              >
+                <Pencil size={13} />
+              </button>
+              <button
+                className="sessions-card-delete-btn"
+                onClick={handleTrashClick}
+                title="Delete session"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 });
 
@@ -185,6 +302,30 @@ function Sessions({
     await refreshSessions();
     setLoading(false);
   }, [refreshSessions]);
+
+  const handleDeleteSession = useCallback(async (sessionId: string): Promise<void> => {
+    // Optimistically remove from local list first
+    setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+    try {
+      await window.hermesAPI.deleteSession(sessionId);
+    } catch {
+      // If deletion fails, reload to restore accurate list
+      loadSessions();
+    }
+  }, [loadSessions]);
+
+  const handleRenameSession = useCallback(async (sessionId: string, newTitle: string): Promise<void> => {
+    // Optimistically update title in local list
+    setSessions((prev) =>
+      prev.map((s) => s.id === sessionId ? { ...s, title: newTitle } : s),
+    );
+    try {
+      await window.hermesAPI.updateSessionTitle(sessionId, newTitle);
+    } catch {
+      // If save fails, reload to restore accurate list
+      loadSessions();
+    }
+  }, [loadSessions]);
 
   useEffect(() => {
     loadSessions();
@@ -298,12 +439,12 @@ function Sessions({
               <button
                 key={r.sessionId}
                 className={`sessions-card ${currentSessionId === r.sessionId ? "sessions-card--active" : ""}`}
-                onClick={() => onResumeSession(r.sessionId)}
+                onClick={() => onResumeSession(r.sessionId, r.title ?? undefined)}
               >
                 <div className="sessions-card-main">
                   <span className="sessions-card-title">
-                    {r.title ||
-                      `${t("sessions.title")} ${r.sessionId.slice(-6)}`}
+                    {r.title || t("sessions.title")}
+                    <span className="sessions-card-id">#{r.sessionId.slice(-6)}</span>
                   </span>
                   <span className="sessions-card-time">
                     {formatFullDate(r.startedAt)}
@@ -355,7 +496,9 @@ function Sessions({
                   showFullDate={
                     group.label === "thisWeek" || group.label === "earlier"
                   }
-                  onClick={() => onResumeSession(s.id)}
+                  onClick={() => onResumeSession(s.id, s.title)}
+                  onDelete={handleDeleteSession}
+                  onRename={handleRenameSession}
                 />
               ))}
             </div>

@@ -9,6 +9,7 @@ interface MessageListProps {
   toolProgress: string | null;
   onApprove: () => void;
   onDeny: () => void;
+  onFork?: (msgIndex: number, editedText: string) => void;
 }
 
 function TypingIndicator({
@@ -52,6 +53,7 @@ export const MessageList = memo(function MessageList({
   toolProgress,
   onApprove,
   onDeny,
+  onFork,
 }: MessageListProps): React.JSX.Element {
   // Bubbles with empty content are still hidden (live-stream placeholders).
   // History rows pass through unconditionally.
@@ -104,6 +106,7 @@ export const MessageList = memo(function MessageList({
             isLoading={isLoading}
             onApprove={onApprove}
             onDeny={onDeny}
+            onFork={onFork ? (editedText) => onFork(i, editedText) : undefined}
           />
         );
       })}

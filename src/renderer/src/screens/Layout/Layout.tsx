@@ -84,6 +84,7 @@ function Layout({
   const [view, setView] = useState<View>("chat");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [currentSessionTitle, setCurrentSessionTitle] = useState<string | null>(null);
   const [activeProfile, setActiveProfile] = useState("default");
   // Tabs lazy-mount on first visit, then stay mounted (display:none toggle).
   // Keeps IPC refetch / DOM rebuild off the tab-switch hot path.
@@ -169,6 +170,7 @@ function Layout({
     window.hermesAPI.abortChat();
     setMessages([]);
     setCurrentSessionId(null);
+    setCurrentSessionTitle(null);
     goTo("chat");
   }, [goTo]);
 
@@ -190,10 +192,11 @@ function Layout({
     setActiveProfile(name);
     setMessages([]);
     setCurrentSessionId(null);
+    setCurrentSessionTitle(null);
   }, []);
 
   const handleResumeSession = useCallback(
-    async (sessionId: string) => {
+    async (sessionId: string, title?: string) => {
       const items = await window.hermesAPI.getSessionMessages(sessionId);
       const chatMessages: ChatMessage[] = items
         .map((it): ChatMessage | null => {
@@ -251,9 +254,24 @@ function Layout({
         .filter((m): m is ChatMessage => m !== null);
       setMessages(chatMessages);
       setCurrentSessionId(sessionId);
+      setCurrentSessionTitle(title ?? null);
       goTo("chat");
     },
     [goTo],
+  );
+
+  const handleRenameSession = useCallback(
+    async (sessionId: string, newTitle: string) => {
+      if (currentSessionId === sessionId) {
+        setCurrentSessionTitle(newTitle);
+      }
+      try {
+        await window.hermesAPI.updateSessionTitle(sessionId, newTitle);
+      } catch {
+        // non-fatal
+      }
+    },
+    [currentSessionId],
   );
 
   return (
@@ -323,8 +341,10 @@ function Layout({
             messages={messages}
             setMessages={setMessages}
             sessionId={currentSessionId}
+            sessionTitle={currentSessionTitle}
             profile={activeProfile}
             onNewChat={handleNewChat}
+            onRenameSession={handleRenameSession}
           />
         </div>
 

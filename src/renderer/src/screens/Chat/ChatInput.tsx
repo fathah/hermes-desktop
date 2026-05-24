@@ -38,6 +38,7 @@ interface ChatInputProps {
   onAbort: () => void;
 }
 
+
 export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
   function ChatInput(
     {
@@ -53,10 +54,10 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
   ): React.JSX.Element {
     const { t } = useI18n();
     const [input, setInput] = useState("");
+    const [attachments, setAttachments] = useState<Attachment[]>([]);
     const [slashMenuOpen, setSlashMenuOpen] = useState(false);
     const [slashFilter, setSlashFilter] = useState("");
     const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
-    const [attachments, setAttachments] = useState<Attachment[]>([]);
     const [attachmentError, setAttachmentError] = useState<string | null>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const slashMenuRef = useRef<HTMLDivElement>(null);
@@ -227,14 +228,12 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
 
     function handleSlashSelect(cmd: SlashCommand): void {
       setSlashMenuOpen(false);
-      // Local / info commands dispatch immediately — let parent route through onSubmit
       if (cmd.local || cmd.category === "info") {
         setInput("");
         if (inputRef.current) inputRef.current.style.height = "auto";
         onSubmit(cmd.name, []);
         return;
       }
-      // Backend commands that take arguments: insert prefix and wait for the user
       setInput(cmd.name + " ");
       inputRef.current?.focus();
     }
@@ -264,7 +263,6 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>): void {
       if (isImeComposing(e)) return;
 
-      // Slash menu keyboard navigation
       if (slashMenuOpen && filteredSlashCommands.length > 0) {
         if (e.key === "ArrowDown") {
           e.preventDefault();
@@ -292,7 +290,6 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         }
       }
 
-      // History navigation: ArrowUp/Down when not in a multiline draft (or already navigating)
       if (!slashMenuOpen && (history.isNavigating() || !input.includes("\n"))) {
         if (e.key === "ArrowUp" && history.size() > 0) {
           if (history.recallPrev()) {

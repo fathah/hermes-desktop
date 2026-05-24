@@ -93,22 +93,29 @@ function getDb(): Database.Database | null {
   return new Database(dbPath, { readonly: true });
 }
 
-// Sync from hermes DB to local cache — only fetches new/updated sessions
-export function syncSessionCache(): CachedSession[] {
-  const cache = readCache();
-  const db = getDb();
-  if (!db) return cache.sessions;
-
+/**
+ * Sync one DB file into sessionMap (upsert).
+ * New sessions are inserted; existing sessions have their messageCount updated.
+ * Title preservation: if the cached title is already meaningful (not the
+ * default placeholder), keep it — this prevents renamed sessions from
+ * reverting to generated titles on the next sync.
+ */
+function syncOneDb(
+  dbPath: string,
+  lastSync: number,
+  sessionMap: Map<string, CachedSession>,
+): void {
+  let db: Database.Database | null = null;
   try {
-    // Fetch sessions newer than last sync, or all if first sync
+    db = new Database(dbPath, { readonly: true });
     const rows = db
       .prepare(
         `SELECT s.id, s.started_at, s.source, s.message_count, s.model, s.title
          FROM sessions s
-         WHERE s.started_at > ?
-         ORDER BY s.started_at DESC`,
+         WHERE s.updated_at > ?
+         ORDER BY s.updated_at DESC`,
       )
-      .all(cache.lastSync > 0 ? cache.lastSync - 300 : 0) as Array<{
+      .all(lastSync > 0 ? lastSync - 300 : 0) as Array<{
       id: string;
       started_at: number;
       source: string;
@@ -117,44 +124,43 @@ export function syncSessionCache(): CachedSession[] {
       title: string | null;
     }>;
 
-    // Index existing sessions by id once so the per-row update below is
-    // O(1) instead of O(N). Without this, syncing N existing sessions
-    // against N new rows is O(N²) and visibly slows app startup once a
-    // user has accumulated thousands of sessions (issue #16).
-    const existingById = new Map<string, CachedSession>();
-    for (const s of cache.sessions) existingById.set(s.id, s);
-    const newSessions: CachedSession[] = [];
+    const defaultTitle = t("sessions.newConversation", getAppLocale());
 
     const refreshedIds = new Set<string>();
     for (const row of rows) {
       refreshedIds.add(row.id);
-      const existing = existingById.get(row.id);
+      const existing = sessionMap.get(row.id);
       if (existing) {
         // Update existing entry (message count may have changed)
         existing.messageCount = row.message_count;
         continue;
       }
 
-      // Generate title from first user message
+      // Determine best title: prefer a cached, non-default title (user may
+      // have renamed the session) over re-generating from DB.
       let title = row.title || "";
-      if (!title) {
-        try {
-          const msg = db
-            .prepare(
-              `SELECT content FROM messages
-               WHERE session_id = ? AND role = 'user' AND content IS NOT NULL
-               ORDER BY timestamp, id LIMIT 1`,
-            )
-            .get(row.id) as { content: string } | undefined;
-          title = msg
-            ? generateTitle(msg.content)
-            : t("sessions.newConversation", getAppLocale());
-        } catch {
-          title = t("sessions.newConversation", getAppLocale());
+      if (!title || title === defaultTitle) {
+        if (existing?.title && existing.title !== defaultTitle) {
+          title = existing.title;
+        } else {
+          try {
+            const msg = db
+              .prepare(
+                `SELECT content FROM messages
+                 WHERE session_id = ? AND role IN ('user', 'human') AND content IS NOT NULL
+                 ORDER BY timestamp, id LIMIT 1`,
+              )
+              .get(row.id) as { content: string } | undefined;
+            title = msg
+              ? generateTitle(msg.content)
+              : existing?.title || defaultTitle;
+          } catch {
+            title = existing?.title || defaultTitle;
+          }
         }
       }
 
-      newSessions.push({
+      sessionMap.set(row.id, {
         id: row.id,
         title,
         startedAt: row.started_at,
@@ -163,45 +169,29 @@ export function syncSessionCache(): CachedSession[] {
         model: row.model || "",
       });
     }
+  } catch {
+    // DB may have a different schema — skip silently
+  } finally {
+    db?.close();
+  }
+}
 
-    // Phase 2: refresh message_count for cached sessions that weren't
-    // returned by the lastSync-windowed query above. Without this, an
-    // old session that's still accumulating messages keeps the stale
-    // count it had at first sync — the renderer reads from the cache,
-    // so the UI reports e.g. 15 messages when the conversation actually
-    // has 200+. Issue #226. Cheap (single column, no joins, batched IN
-    // clause), and skipped entirely on a first sync since cache.sessions
-    // is empty.
-    const staleIds = cache.sessions
-      .map((s) => s.id)
-      .filter((id) => !refreshedIds.has(id));
-    if (staleIds.length > 0) {
-      // SQLite caps prepared-statement parameters; chunk well under
-      // SQLITE_MAX_VARIABLE_NUMBER (default 999 on older builds) for
-      // portability across the better-sqlite3 versions hermes ships.
-      const CHUNK = 500;
-      const countsById = new Map<string, number>();
-      for (let i = 0; i < staleIds.length; i += CHUNK) {
-        const chunk = staleIds.slice(i, i + CHUNK);
-        const placeholders = chunk.map(() => "?").join(", ");
-        const refreshed = db
-          .prepare(
-            `SELECT id, message_count FROM sessions WHERE id IN (${placeholders})`,
-          )
-          .all(...chunk) as Array<{ id: string; message_count: number }>;
-        for (const r of refreshed) countsById.set(r.id, r.message_count);
-      }
-      for (const s of cache.sessions) {
-        const fresh = countsById.get(s.id);
-        if (fresh !== undefined && fresh !== s.messageCount) {
-          s.messageCount = fresh;
-        }
-      }
-    }
+// Sync from the active profile's hermes DB to local cache
+export function syncSessionCache(): CachedSession[] {
+  const cache = readCache();
+  const dbPath = activeStateDbPath();
+  if (!existsSync(dbPath)) return cache.sessions;
 
-    // Merge: new sessions first (most recent), then existing
-    const allSessions = [...newSessions, ...cache.sessions];
-    // Sort by startedAt descending
+  try {
+    // Seed the map with what we already have cached. syncOneDb upserts into
+    // this map, so existing sessions get their messageCount refreshed and new
+    // sessions are inserted — all in a single pass with no separate merge step.
+    const sessionMap = new Map<string, CachedSession>();
+    for (const s of cache.sessions) sessionMap.set(s.id, s);
+
+    syncOneDb(dbPath, cache.lastSync, sessionMap);
+
+    const allSessions = Array.from(sessionMap.values());
     allSessions.sort((a, b) => b.startedAt - a.startedAt);
 
     const updated: CacheData = {
@@ -212,8 +202,6 @@ export function syncSessionCache(): CachedSession[] {
     return updated.sessions;
   } catch {
     return cache.sessions;
-  } finally {
-    db.close();
   }
 }
 
