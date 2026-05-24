@@ -78,13 +78,37 @@ export interface ToolsTelemetry {
   }>;
 }
 
-/** GET /v1/telemetry/memory — provider status, never contents. */
+/** GET /v1/telemetry/memory — provider status, never contents.
+ *
+ * The PR-4 / Mira-Migration plan v10 extended this shape with
+ * three optional fields the edit-UI needs but read-only consumers
+ * can safely ignore:
+ *
+ * - `entries[]` — the actual MEMORY.md entries (content + index).
+ *   `/api/memory` already returns these in `memory.entries[]`;
+ *   the original adapter discarded them (kept only the count).
+ *   Required so the edit UI can render an editable list with
+ *   per-row [Edit] / [Delete] buttons.
+ *
+ * - `userCharCount` — current size of USER.md on disk. Used by
+ *   the EditUserProfileDialog header (so the user knows there
+ *   IS something redacted before they type a replacement).
+ *
+ * - `userLastModified` — file-stat mtime of USER.md (epoch
+ *   seconds). Used by the client-side drift check before any
+ *   PUT to `/api/memory/user`. Sourced from
+ *   `user.last_modified` / `user.lastModified` in the
+ *   Codex /api/memory response.
+ */
 export interface MemoryTelemetry {
   provider: string;
   configured: boolean;
   itemCount?: number;
   sizeBytes?: number;
   lastUpdatedAt?: string;
+  entries?: Array<{ index: number; content: string }>;
+  userCharCount?: number;
+  userLastModified?: number | null;
 }
 
 /** GET /v1/telemetry/schedules — cron / interval / one-shot job summary. */
@@ -173,12 +197,30 @@ export interface ProvidersTelemetry {
   active?: string | null;
 }
 
-/** GET /v1/telemetry/persona — Soul / Persona markdown body (capped). */
+/** GET /v1/telemetry/persona — Soul / Persona markdown body (capped).
+ *
+ * PR-4 / Mira-Migration plan v10 extended this shape with two
+ * optional fields:
+ *
+ * - `profileName` — the profile this SOUL.md belongs to. The
+ *   edit-UI needs it so PUT /api/profiles/{name}/soul targets
+ *   the right profile.
+ *
+ * - `soulLastModified` — file-stat mtime of SOUL.md (epoch
+ *   seconds). Used by the client-side drift check before any
+ *   PUT to `/api/profiles/{name}/soul`. Sourced from
+ *   `last_modified` / `lastModified` in the Codex
+ *   `_read_text_file` response. Without this mapping the
+ *   drift-check operates on `undefined` and trivially passes
+ *   (no protection).
+ */
 export interface PersonaTelemetry {
   configured: boolean;
   content: string;
   sizeBytes?: number;
   truncated?: boolean;
+  profileName?: string;
+  soulLastModified?: number | null;
 }
 
 /** GET /v1/telemetry/recent-events — structured activity feed. */
