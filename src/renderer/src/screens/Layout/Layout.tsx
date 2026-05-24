@@ -94,7 +94,26 @@ function Layout({
   const [view, setView] = useState<View>("chat");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const [activeProfile, setActiveProfile] = useState("default");
+  // Plan v11 follow-up: persist the App-selected profile across
+  // restarts. Without this, the picker resets to "default" on every
+  // app boot, which is annoying for any cross-profile workflow
+  // (especially the PR-4 Memory / Persona / Tools write tabs that
+  // gate on `activeProfile === "mira-uitest"`).
+  const [activeProfile, setActiveProfileState] = useState<string>(() => {
+    try {
+      return localStorage.getItem("hermes-active-profile") || "default";
+    } catch {
+      return "default";
+    }
+  });
+  const setActiveProfile = (name: string): void => {
+    setActiveProfileState(name);
+    try {
+      localStorage.setItem("hermes-active-profile", name);
+    } catch {
+      /* ignore quota / disabled storage */
+    }
+  };
   // Tabs lazy-mount on first visit, then stay mounted (display:none toggle).
   // Keeps IPC refetch / DOM rebuild off the tab-switch hot path.
   const [visitedViews, setVisitedViews] = useState<Set<View>>(
