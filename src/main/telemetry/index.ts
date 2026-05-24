@@ -11,8 +11,8 @@
  */
 
 import type { IpcMain } from "electron";
-import { fetchGatewayStatus } from "./gateway-status";
 import {
+  fetchGatewayStatus,
   fetchKanban,
   fetchMemory,
   fetchPersona,
@@ -44,6 +44,15 @@ import {
   type CreateBoardInput,
   type CreateTaskInput,
 } from "./kanban-mutations";
+import {
+  addMemoryEntry,
+  deleteMemoryEntry,
+  resetSoul,
+  setToolset,
+  updateMemoryEntry,
+  writeSoul,
+  writeUserProfile,
+} from "./subsystem-mutations";
 
 export function registerTelemetryHandlers(ipcMain: IpcMain): void {
   ipcMain.handle("telemetry-gateway-status", () => fetchGatewayStatus());
@@ -116,5 +125,40 @@ export function registerTelemetryHandlers(ipcMain: IpcMain): void {
   ipcMain.handle(
     "kanban-complete-task",
     (_event, taskId: string, board?: string) => completeTask(taskId, board),
+  );
+
+  // ---- Phase 4 (PR-E3): memory / soul / toolset write surface --
+  // All gated by the same Bearer-token auth as the read side.
+  // Backend handlers live in Codex' /api/memory/* + /api/profiles/*
+  // + /api/tools/* family.
+  ipcMain.handle(
+    "memory-add-entry",
+    (_event, content: string) => addMemoryEntry(content),
+  );
+  ipcMain.handle(
+    "memory-update-entry",
+    (_event, index: number, content: string) =>
+      updateMemoryEntry(index, content),
+  );
+  ipcMain.handle(
+    "memory-delete-entry",
+    (_event, index: number) => deleteMemoryEntry(index),
+  );
+  ipcMain.handle(
+    "memory-write-user-profile",
+    (_event, content: string) => writeUserProfile(content),
+  );
+  ipcMain.handle(
+    "soul-write",
+    (_event, profileName: string, content: string) =>
+      writeSoul(profileName, content),
+  );
+  ipcMain.handle(
+    "soul-reset",
+    (_event, profileName: string) => resetSoul(profileName),
+  );
+  ipcMain.handle(
+    "toolset-set",
+    (_event, key: string, enabled: boolean) => setToolset(key, enabled),
   );
 }

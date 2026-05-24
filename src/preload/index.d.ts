@@ -792,6 +792,27 @@ interface HermesAPI {
       board?: string,
     ) => Promise<MutationResult>;
   };
+
+  /** Phase-4 / PR-E3 — memory edit, soul edit, toolset toggle. */
+  memoryEdit: {
+    addEntry: (content: string) => Promise<MutationResult>;
+    updateEntry: (
+      index: number,
+      content: string,
+    ) => Promise<MutationResult>;
+    deleteEntry: (index: number) => Promise<MutationResult>;
+    writeUserProfile: (content: string) => Promise<MutationResult>;
+  };
+  soulEdit: {
+    write: (
+      profileName: string,
+      content: string,
+    ) => Promise<MutationResult>;
+    reset: (profileName: string) => Promise<MutationResult>;
+  };
+  toolsetEdit: {
+    set: (key: string, enabled: boolean) => Promise<MutationResult>;
+  };
 }
 
 declare global {

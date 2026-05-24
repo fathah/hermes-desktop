@@ -985,6 +985,37 @@ const hermesAPI = {
     run: (jobId: string): Promise<MutationResult> =>
       ipcRenderer.invoke("cron-run", jobId),
   },
+
+  // Memory / soul / toolset write surface (Phase-4 / PR-E3).
+  // Backed by Codex' /api/memory/* + /api/profiles/{name}/soul +
+  // /api/tools/toolsets/{key} endpoints. Same MutationResult
+  // discriminated-union contract — consumers branch on `ok`.
+  memoryEdit: {
+    addEntry: (content: string): Promise<MutationResult> =>
+      ipcRenderer.invoke("memory-add-entry", content),
+    updateEntry: (
+      index: number,
+      content: string,
+    ): Promise<MutationResult> =>
+      ipcRenderer.invoke("memory-update-entry", index, content),
+    deleteEntry: (index: number): Promise<MutationResult> =>
+      ipcRenderer.invoke("memory-delete-entry", index),
+    writeUserProfile: (content: string): Promise<MutationResult> =>
+      ipcRenderer.invoke("memory-write-user-profile", content),
+  },
+  soulEdit: {
+    write: (
+      profileName: string,
+      content: string,
+    ): Promise<MutationResult> =>
+      ipcRenderer.invoke("soul-write", profileName, content),
+    reset: (profileName: string): Promise<MutationResult> =>
+      ipcRenderer.invoke("soul-reset", profileName),
+  },
+  toolsetEdit: {
+    set: (key: string, enabled: boolean): Promise<MutationResult> =>
+      ipcRenderer.invoke("toolset-set", key, enabled),
+  },
 };
 
 if (process.contextIsolated) {
