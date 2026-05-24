@@ -142,13 +142,14 @@ import {
   listBoards as kanbanListBoards,
   currentBoard as kanbanCurrentBoard,
   switchBoard as kanbanSwitchBoard,
-  createBoard as kanbanCreateBoard,
-  removeBoard as kanbanRemoveBoard,
+  // createBoard, removeBoard, createTask, completeTask: removed —
+  // PR-E2 migrated those to src/main/telemetry/index.ts (which now
+  // hits Codex' /api/kanban/* via the telemetry-mutations layer).
+  // Keep the kanban.ts source functions intact for now in case we
+  // need a local-mode fallback later.
   listTasks as kanbanListTasks,
   getTask as kanbanGetTask,
-  createTask as kanbanCreateTask,
   assignTask as kanbanAssignTask,
-  completeTask as kanbanCompleteTask,
   blockTask as kanbanBlockTask,
   unblockTask as kanbanUnblockTask,
   archiveTask as kanbanArchiveTask,
@@ -157,7 +158,6 @@ import {
   commentTask as kanbanCommentTask,
   dispatchOnce as kanbanDispatchOnce,
   listClaw3dHqTasks as kanbanListClaw3dHqTasks,
-  CreateTaskInput,
 } from "./kanban";
 import { getAppLocale, setAppLocale } from "./locale";
 import {
@@ -1283,21 +1283,27 @@ function setupIPC(): void {
     (_event, slug: string, profile?: string) =>
       kanbanSwitchBoard(slug, profile),
   );
-  ipcMain.handle(
-    "kanban-create-board",
-    (
-      _event,
-      slug: string,
-      name?: string,
-      switchAfter?: boolean,
-      profile?: string,
-    ) => kanbanCreateBoard(slug, name, switchAfter, profile),
-  );
-  ipcMain.handle(
-    "kanban-remove-board",
-    (_event, slug: string, hardDelete?: boolean, profile?: string) =>
-      kanbanRemoveBoard(slug, hardDelete, profile),
-  );
+  // NOTE: kanban-create-board / kanban-remove-board sind nach
+  // PR-E2 in src/main/telemetry/index.ts gewandert (Phase-4
+  // mutations). Die alten Legacy-Handler hier würden eine
+  // zweite Registrierung versuchen → "second handler" Error
+  // beim Startup. Deshalb auskommentiert; können bei Rollback
+  // zur Legacy-Variante reaktiviert werden.
+  // ipcMain.handle(
+  //   "kanban-create-board",
+  //   (
+  //     _event,
+  //     slug: string,
+  //     name?: string,
+  //     switchAfter?: boolean,
+  //     profile?: string,
+  //   ) => kanbanCreateBoard(slug, name, switchAfter, profile),
+  // );
+  // ipcMain.handle(
+  //   "kanban-remove-board",
+  //   (_event, slug: string, hardDelete?: boolean, profile?: string) =>
+  //     kanbanRemoveBoard(slug, hardDelete, profile),
+  // );
   ipcMain.handle(
     "kanban-list-tasks",
     (
@@ -1316,11 +1322,13 @@ function setupIPC(): void {
     (_event, taskId: string, profile?: string) =>
       kanbanGetTask(taskId, profile),
   );
-  ipcMain.handle(
-    "kanban-create-task",
-    (_event, input: CreateTaskInput, profile?: string) =>
-      kanbanCreateTask(input, profile),
-  );
+  // NOTE: kanban-create-task wurde nach PR-E2 in
+  // src/main/telemetry/index.ts verschoben. Siehe Block oben.
+  // ipcMain.handle(
+  //   "kanban-create-task",
+  //   (_event, input: CreateTaskInput, profile?: string) =>
+  //     kanbanCreateTask(input, profile),
+  // );
   ipcMain.handle("select-folder", async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     const result = win
@@ -1334,11 +1342,13 @@ function setupIPC(): void {
     (_event, taskId: string, assignee: string | null, profile?: string) =>
       kanbanAssignTask(taskId, assignee, profile),
   );
-  ipcMain.handle(
-    "kanban-complete-task",
-    (_event, taskId: string, result?: string, profile?: string) =>
-      kanbanCompleteTask(taskId, result, profile),
-  );
+  // NOTE: kanban-complete-task wurde nach PR-E2 in
+  // src/main/telemetry/index.ts verschoben. Siehe Block oben.
+  // ipcMain.handle(
+  //   "kanban-complete-task",
+  //   (_event, taskId: string, result?: string, profile?: string) =>
+  //     kanbanCompleteTask(taskId, result, profile),
+  // );
   ipcMain.handle(
     "kanban-block-task",
     (_event, taskId: string, reason?: string, profile?: string) =>
