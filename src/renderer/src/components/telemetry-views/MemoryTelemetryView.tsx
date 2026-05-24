@@ -480,11 +480,17 @@ function EditEntryDialog({
     onSubmittingChange(true);
     onError(null);
 
-    // Race protection: re-fetch /api/memory, check that entry
-    // at our index still has the same content the user saw
-    // when they clicked Edit. If it shifted (parallel add /
-    // delete), refuse and tell them to reload.
-    const env = await window.hermesAPI.telemetry.memory();
+    // Race protection: re-fetch /api/memory for the SAME
+    // profile, check that entry at our index still has the
+    // same content the user saw when they clicked Edit. If
+    // it shifted (parallel add / delete), refuse and tell
+    // them to reload.
+    //
+    // IMPORTANT: passing `profile` here is required — without
+    // it the IPC defaults to the backend-active profile,
+    // which is a different file → the content-match would
+    // false-positive on every edit attempt.
+    const env = await window.hermesAPI.telemetry.memory(profile);
     if (!env.available) {
       onSubmittingChange(false);
       onError("Could not re-verify entry before edit. Reload and retry.");
@@ -585,8 +591,10 @@ function EditUserProfileDialog({
 
   const submit = async (): Promise<void> => {
     onError(null);
-    // Drift check: re-fetch /api/memory, compare userLastModified.
-    const env = await window.hermesAPI.telemetry.memory();
+    // Drift check: re-fetch /api/memory for the SAME profile,
+    // compare userLastModified. Passing `profile` is required —
+    // see the same race-protection note in EditEntryDialog.
+    const env = await window.hermesAPI.telemetry.memory(profile);
     if (!env.available) {
       onError("Could not re-verify USER.md before save. Reload and retry.");
       return;
