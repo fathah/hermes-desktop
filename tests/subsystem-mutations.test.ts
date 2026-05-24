@@ -201,36 +201,55 @@ describe("subsystem-mutations: soul allowlist", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Toolset — NO profile parameter (Option A)
+// Toolset — Option B: profile is LAST OPTIONAL + strict allowlist
 // ---------------------------------------------------------------------------
 
-describe("subsystem-mutations: setToolset (Option A, no profile)", () => {
-  it("PUT /api/tools/toolsets/<key>?platform=api_server with body", async () => {
+describe("subsystem-mutations: setToolset (Option B, profile-scoped)", () => {
+  // Reject cases — same allowlist as memory/soul.
+  for (const [label, value] of REJECT_CASES) {
+    it(`rejects ${label}`, async () => {
+      const result = await setToolset("web", true, value as string);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toMatch(/only the 'mira-uitest'/);
+      }
+      expect(mockedRequest).not.toHaveBeenCalled();
+    });
+  }
+
+  it("accepts canonical mira-uitest + sends profile in URL", async () => {
     mockedRequest.mockResolvedValueOnce({ ok: true, data: {} });
-    const result = await setToolset("web", true);
+    const result = await setToolset("web", true, "mira-uitest");
     expect(result.ok).toBe(true);
     expect(mockedRequest).toHaveBeenCalledOnce();
     expect(mockedRequest.mock.calls[0][0]).toBe("PUT");
     expect(mockedRequest.mock.calls[0][1]).toBe(
-      "/api/tools/toolsets/web?platform=api_server",
+      "/api/tools/toolsets/web?platform=api_server&profile=mira-uitest",
     );
     expect(mockedRequest.mock.calls[0][2]).toEqual({ enabled: true });
   });
 
-  it("never appends ?profile= to the URL", async () => {
+  it("accepts MIRA-UITEST case-insensitive (regression-guard)", async () => {
     mockedRequest.mockResolvedValueOnce({ ok: true, data: {} });
-    await setToolset("browser", false);
-    const url = mockedRequest.mock.calls[0][1] as string;
-    expect(url).not.toContain("profile=");
-    expect(url).toContain("platform=api_server");
+    const result = await setToolset("web", true, "MIRA-UITEST");
+    expect(result.ok).toBe(true);
+    expect(mockedRequest).toHaveBeenCalledOnce();
   });
 
-  it("rejects empty key with 400", async () => {
-    const result = await setToolset("", true);
+  it("rejects empty key with 400 (after allowlist passes)", async () => {
+    const result = await setToolset("", true, "mira-uitest");
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.status).toBe(400);
     }
     expect(mockedRequest).not.toHaveBeenCalled();
+  });
+
+  it("URL always includes platform=api_server", async () => {
+    mockedRequest.mockResolvedValueOnce({ ok: true, data: {} });
+    await setToolset("browser", false, "mira-uitest");
+    const url = mockedRequest.mock.calls[0][1] as string;
+    expect(url).toContain("platform=api_server");
+    expect(url).toContain("profile=mira-uitest");
   });
 });
