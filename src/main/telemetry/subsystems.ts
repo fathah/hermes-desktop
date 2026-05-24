@@ -219,18 +219,17 @@ interface CodexToolset {
 }
 
 export async function fetchTools(
-  _unused?: string,
+  profile?: string,
 ): Promise<TelemetryEnvelope<ToolsTelemetry>> {
-  // Option A (plan v10): backend doesn't honor ?profile= for
-  // toolsets. The `_unused` param is kept only for prop-API
-  // symmetry with the ToolsTelemetryView component signature
-  // (Layout still passes `profile={activeProfile}`). The
-  // platform default IS api_server server-side, but we send
-  // it explicitly so reads + writes agree on the wire and a
-  // future backend default change doesn't silently shift the
-  // scope.
+  // Option B (plan v11): backend now honors ?profile= for
+  // toolsets (feat/tools-profile-scoped). We plumb the
+  // App-selected profile through honestly — analog to
+  // fetchMemory + fetchPersona. When profile is omitted,
+  // the URL falls back to platform-only and the backend
+  // resolves the default profile (back-compat).
+  const profileQs = profile ? `&profile=${encodeURIComponent(profile)}` : "";
   const raw = await telemetryGet<{ toolsets: CodexToolset[] }>(
-    "/api/tools/toolsets?platform=api_server",
+    `/api/tools/toolsets?platform=api_server${profileQs}`,
   );
   return adapt(raw, (data) => ({
     toolsets: (data.toolsets || []).map((t) => ({

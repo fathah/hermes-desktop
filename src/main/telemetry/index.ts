@@ -173,6 +173,7 @@ export function registerTelemetryHandlers(ipcMain: IpcMain): void {
   );
   ipcMain.handle(
     "toolset-set",
-    (_event, key: string, enabled: boolean) => setToolset(key, enabled),
+    (_event, key: string, enabled: boolean, profile?: string) =>
+      setToolset(key, enabled, profile),
   );
 }

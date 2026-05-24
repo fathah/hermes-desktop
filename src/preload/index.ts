@@ -1035,8 +1035,14 @@ const hermesAPI = {
       ipcRenderer.invoke("soul-reset", profileName),
   },
   toolsetEdit: {
-    set: (key: string, enabled: boolean): Promise<MutationResult> =>
-      ipcRenderer.invoke("toolset-set", key, enabled),
+    // Plan v11 / Option B — profile is LAST OPTIONAL param.
+    // Adapter strictly allowlists "mira-uitest" tonight.
+    set: (
+      key: string,
+      enabled: boolean,
+      profile?: string,
+    ): Promise<MutationResult> =>
+      ipcRenderer.invoke("toolset-set", key, enabled, profile),
   },
 };
 

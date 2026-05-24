@@ -178,23 +178,31 @@ export async function resetSoul(
 // ---------------------------------------------------------------------------
 // Toolset toggle — /api/tools/toolsets/{key}
 //
-// Option A scope: NO profile parameter. The backend
-// (/api/tools/toolsets) doesn't read ?profile= — it operates
-// on its own active profile via load_config(). We send only
-// ?platform=api_server so the wire is unambiguous (instead of
-// relying on the backend default).
+// Option B (plan v11): the backend now honors ?profile= via
+// the new feat/tools-profile-scoped patch. We plumb the
+// App-selected profile through and apply the same strict
+// allowlist guard (_validateProfile) as memory + soul
+// mutations — tonight only `mira-uitest` is accepted at the
+// adapter layer. ?platform=api_server is still sent
+// explicitly so the wire shape is unambiguous.
 // ---------------------------------------------------------------------------
 
 export async function setToolset(
   key: string,
   enabled: boolean,
+  profile?: string,
 ): Promise<MutationResult<unknown>> {
+  const reject = _validateProfile(profile);
+  if (reject) return reject;
   if (!key) {
     return { ok: false, status: 400, error: "Toolset key is required" };
   }
+  const profileQs = profile
+    ? `&profile=${encodeURIComponent(profile.trim())}`
+    : "";
   return telemetryRequest(
     "PUT",
-    `/api/tools/toolsets/${encodeURIComponent(key)}?platform=api_server`,
+    `/api/tools/toolsets/${encodeURIComponent(key)}?platform=api_server${profileQs}`,
     { enabled: Boolean(enabled) },
   );
 }

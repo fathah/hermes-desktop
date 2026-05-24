@@ -832,7 +832,12 @@ interface HermesAPI {
     reset: (profileName: string) => Promise<MutationResult>;
   };
   toolsetEdit: {
-    set: (key: string, enabled: boolean) => Promise<MutationResult>;
+    /** Plan v11 / Option B — profile LAST OPTIONAL. */
+    set: (
+      key: string,
+      enabled: boolean,
+      profile?: string,
+    ) => Promise<MutationResult>;
   };
 }
 
