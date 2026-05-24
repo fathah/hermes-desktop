@@ -131,22 +131,30 @@ export function registerTelemetryHandlers(ipcMain: IpcMain): void {
   // All gated by the same Bearer-token auth as the read side.
   // Backend handlers live in Codex' /api/memory/* + /api/profiles/*
   // + /api/tools/* family.
+  //
+  // Plan v10 / PR-4 — `profile` is the LAST OPTIONAL arg on every
+  // memory IPC. The adapter strictly allowlists "mira-uitest"
+  // at runtime; the optional flag is only there to keep
+  // existing callers' arity intact during the migration.
   ipcMain.handle(
     "memory-add-entry",
-    (_event, content: string) => addMemoryEntry(content),
+    (_event, content: string, profile?: string) =>
+      addMemoryEntry(content, profile),
   );
   ipcMain.handle(
     "memory-update-entry",
-    (_event, index: number, content: string) =>
-      updateMemoryEntry(index, content),
+    (_event, index: number, content: string, profile?: string) =>
+      updateMemoryEntry(index, content, profile),
   );
   ipcMain.handle(
     "memory-delete-entry",
-    (_event, index: number) => deleteMemoryEntry(index),
+    (_event, index: number, profile?: string) =>
+      deleteMemoryEntry(index, profile),
   );
   ipcMain.handle(
     "memory-write-user-profile",
-    (_event, content: string) => writeUserProfile(content),
+    (_event, content: string, profile?: string) =>
+      writeUserProfile(content, profile),
   );
   ipcMain.handle(
     "soul-write",

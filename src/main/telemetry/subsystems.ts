@@ -219,10 +219,18 @@ interface CodexToolset {
 }
 
 export async function fetchTools(
-  _profile?: string,
+  _unused?: string,
 ): Promise<TelemetryEnvelope<ToolsTelemetry>> {
+  // Option A (plan v10): backend doesn't honor ?profile= for
+  // toolsets. The `_unused` param is kept only for prop-API
+  // symmetry with the ToolsTelemetryView component signature
+  // (Layout still passes `profile={activeProfile}`). The
+  // platform default IS api_server server-side, but we send
+  // it explicitly so reads + writes agree on the wire and a
+  // future backend default change doesn't silently shift the
+  // scope.
   const raw = await telemetryGet<{ toolsets: CodexToolset[] }>(
-    "/api/tools/toolsets",
+    "/api/tools/toolsets?platform=api_server",
   );
   return adapt(raw, (data) => ({
     toolsets: (data.toolsets || []).map((t) => ({
@@ -266,10 +274,11 @@ interface CodexMemory {
   };
 }
 
-export async function fetchMemory(): Promise<
-  TelemetryEnvelope<MemoryTelemetry>
-> {
-  const raw = await telemetryGet<CodexMemory>("/api/memory");
+export async function fetchMemory(
+  profile?: string,
+): Promise<TelemetryEnvelope<MemoryTelemetry>> {
+  const qs = profile ? `?profile=${encodeURIComponent(profile)}` : "";
+  const raw = await telemetryGet<CodexMemory>(`/api/memory${qs}`);
   return adapt(raw, (data) => {
     const mem = data.memory ?? {};
     const usr = data.user ?? {};
@@ -279,15 +288,26 @@ export async function fetchMemory(): Promise<
       mem.last_modified ?? mem.lastModified ?? usr.last_modified ?? usr.lastModified ?? null;
     const totalBytes = (mem.char_count ?? mem.charCount ?? 0) +
       (usr.char_count ?? usr.charCount ?? 0);
+    // Plan v10 / β edit-UI fields: surface entries + USER metadata.
+    // The backend's /api/memory.entries[*] carry {content, index?}
+    // — map to the shape MemoryTelemetry.entries expects (index
+    // is required there, so default to array position when absent).
+    const entries = (mem.entries || []).map((e, i) => ({
+      index: typeof e.index === "number" ? e.index : i,
+      content: e.content,
+    }));
     return {
       // The Codex /api/memory surface doesn't name a "provider"
       // — it serves the file-based MEMORY.md + USER.md backing
       // store directly. Synthesize a stable label.
       provider: "hermes-server",
       configured: memExists || usrExists,
-      itemCount: (mem.entries || []).length,
+      itemCount: entries.length,
       sizeBytes: totalBytes,
       lastUpdatedAt: epochToIso(lastEpoch),
+      entries,
+      userCharCount: usr.char_count ?? usr.charCount ?? 0,
+      userLastModified: usr.last_modified ?? usr.lastModified ?? null,
     };
   });
 }
@@ -593,29 +613,56 @@ export async function fetchProviders(): Promise<
 }
 
 // ---------------------------------------------------------------------------
-// Persona / Soul — /api/profiles/{active}/soul
+// Persona / Soul — /api/profiles/{name}/soul
 // ---------------------------------------------------------------------------
 
-export async function fetchPersona(): Promise<
-  TelemetryEnvelope<PersonaTelemetry>
-> {
-  // Need the active profile name first. The Codex /api/profiles
-  // call carries it at the top level.
-  const profilesEnv = await telemetryGet<{ active?: string }>(
-    "/api/profiles",
-  );
-  if (!profilesEnv.available) return profilesEnv;
-  const activeName = profilesEnv.data.active || "default";
+/**
+ * Fetch a profile's SOUL.md.
+ *
+ * Plan v10 change: the caller passes the profile name
+ * EXPLICITLY (was: inferred from `/api/profiles.active`). The
+ * App's Layout owns the active-profile concept; passing it
+ * through avoids the drift where App-active and Backend-active
+ * disagree.
+ *
+ * If `profileName` is omitted, we still fall back to a
+ * `/api/profiles.active` lookup so existing callers (the
+ * pre-PR-4 PersonaTelemetryView) keep working. New call sites
+ * pass profileName explicitly.
+ *
+ * Adapter mapping note: `soulLastModified` is mapped from
+ * `_read_text_file`'s `last_modified` / `lastModified` field
+ * (api_server.py:1042-1043 returns both casings). Without this
+ * mapping, the EditSoulDialog drift-check operates on
+ * `undefined` and trivially passes — no protection.
+ */
+export async function fetchPersona(
+  profileName?: string,
+): Promise<TelemetryEnvelope<PersonaTelemetry>> {
+  let activeName = (profileName || "").trim();
+  if (!activeName) {
+    // Back-compat path: no explicit name → ask the backend
+    // for its active profile (matches the pre-PR-4 behaviour).
+    const profilesEnv = await telemetryGet<{ active?: string }>(
+      "/api/profiles",
+    );
+    if (!profilesEnv.available) return profilesEnv;
+    activeName = profilesEnv.data.active || "default";
+  }
 
   const raw = await telemetryGet<{
     content?: string;
     soul_path?: string;
+    last_modified?: number | null;
+    lastModified?: number | null;
   }>(`/api/profiles/${encodeURIComponent(activeName)}/soul`);
   return adapt(raw, (data) => ({
     configured: Boolean(data.content && data.content.length > 0),
     content: data.content ?? "",
     sizeBytes: data.content ? new TextEncoder().encode(data.content).length : 0,
     truncated: false,
+    profileName: activeName,
+    soulLastModified: data.last_modified ?? data.lastModified ?? null,
   }));
 }
 

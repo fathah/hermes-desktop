@@ -793,15 +793,32 @@ interface HermesAPI {
     ) => Promise<MutationResult>;
   };
 
-  /** Phase-4 / PR-E3 — memory edit, soul edit, toolset toggle. */
+  /** Phase-4 / PR-E3 — memory edit, soul edit, toolset toggle.
+   *
+   * Plan v10 / PR-4 — `profile` is LAST OPTIONAL on every
+   * memoryEdit method (TypeScript optional preserves shape
+   * compat; adapter strictly allowlists "mira-uitest" at
+   * runtime). UI call sites must pass the app-selected
+   * profile explicitly.
+   */
   memoryEdit: {
-    addEntry: (content: string) => Promise<MutationResult>;
+    addEntry: (
+      content: string,
+      profile?: string,
+    ) => Promise<MutationResult>;
     updateEntry: (
       index: number,
       content: string,
+      profile?: string,
     ) => Promise<MutationResult>;
-    deleteEntry: (index: number) => Promise<MutationResult>;
-    writeUserProfile: (content: string) => Promise<MutationResult>;
+    deleteEntry: (
+      index: number,
+      profile?: string,
+    ) => Promise<MutationResult>;
+    writeUserProfile: (
+      content: string,
+      profile?: string,
+    ) => Promise<MutationResult>;
   };
   soulEdit: {
     write: (

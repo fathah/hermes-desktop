@@ -990,18 +990,36 @@ const hermesAPI = {
   // Backed by Codex' /api/memory/* + /api/profiles/{name}/soul +
   // /api/tools/toolsets/{key} endpoints. Same MutationResult
   // discriminated-union contract — consumers branch on `ok`.
+  //
+  // Plan v10 / PR-4 — `profile` is the LAST OPTIONAL param on
+  // every memoryEdit method. The TypeScript `optional` is only
+  // there to keep the existing preload shape compatible; at
+  // runtime the adapter REJECTS anything other than the
+  // canonical TONIGHT_ONLY_PROFILE ("mira-uitest") with a
+  // structured MutationResult. UI call sites MUST pass the
+  // app-selected profile explicitly.
   memoryEdit: {
-    addEntry: (content: string): Promise<MutationResult> =>
-      ipcRenderer.invoke("memory-add-entry", content),
+    addEntry: (
+      content: string,
+      profile?: string,
+    ): Promise<MutationResult> =>
+      ipcRenderer.invoke("memory-add-entry", content, profile),
     updateEntry: (
       index: number,
       content: string,
+      profile?: string,
     ): Promise<MutationResult> =>
-      ipcRenderer.invoke("memory-update-entry", index, content),
-    deleteEntry: (index: number): Promise<MutationResult> =>
-      ipcRenderer.invoke("memory-delete-entry", index),
-    writeUserProfile: (content: string): Promise<MutationResult> =>
-      ipcRenderer.invoke("memory-write-user-profile", content),
+      ipcRenderer.invoke("memory-update-entry", index, content, profile),
+    deleteEntry: (
+      index: number,
+      profile?: string,
+    ): Promise<MutationResult> =>
+      ipcRenderer.invoke("memory-delete-entry", index, profile),
+    writeUserProfile: (
+      content: string,
+      profile?: string,
+    ): Promise<MutationResult> =>
+      ipcRenderer.invoke("memory-write-user-profile", content, profile),
   },
   soulEdit: {
     write: (
