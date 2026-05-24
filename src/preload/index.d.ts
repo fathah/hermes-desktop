@@ -754,7 +754,9 @@ interface HermesAPI {
   telemetry: {
     gatewayStatus: () => Promise<TelemetryEnvelope<GatewayStatusTelemetry>>;
     tools: (profile?: string) => Promise<TelemetryEnvelope<ToolsTelemetry>>;
-    memory: () => Promise<TelemetryEnvelope<MemoryTelemetry>>;
+    memory: (
+      profile?: string,
+    ) => Promise<TelemetryEnvelope<MemoryTelemetry>>;
     schedules: () => Promise<TelemetryEnvelope<SchedulesTelemetry>>;
     kanban: () => Promise<TelemetryEnvelope<KanbanTelemetry>>;
     sessions: (
@@ -763,7 +765,9 @@ interface HermesAPI {
     skills: () => Promise<TelemetryEnvelope<SkillsTelemetry>>;
     profiles: () => Promise<TelemetryEnvelope<ProfilesTelemetry>>;
     providers: () => Promise<TelemetryEnvelope<ProvidersTelemetry>>;
-    persona: () => Promise<TelemetryEnvelope<PersonaTelemetry>>;
+    persona: (
+      profileName?: string,
+    ) => Promise<TelemetryEnvelope<PersonaTelemetry>>;
     recentEvents: (
       limit?: number,
       since?: string,

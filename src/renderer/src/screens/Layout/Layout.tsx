@@ -411,7 +411,7 @@ function Layout({
           {visitedViews.has("soul") && (
             <div style={paneStyle("soul")}>
               {remoteMode ? (
-                <PersonaTelemetryView />
+                <PersonaTelemetryView profile={activeProfile} />
               ) : (
                 <Soul profile={activeProfile} />
               )}
@@ -421,7 +421,7 @@ function Layout({
           {visitedViews.has("memory") && (
             <div style={paneStyle("memory")}>
               {remoteMode ? (
-                <MemoryTelemetryView />
+                <MemoryTelemetryView profile={activeProfile} />
               ) : (
                 <Memory profile={activeProfile} />
               )}

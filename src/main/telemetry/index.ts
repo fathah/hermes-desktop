@@ -60,7 +60,10 @@ export function registerTelemetryHandlers(ipcMain: IpcMain): void {
     "telemetry-tools",
     (_event, profile?: string) => fetchTools(profile),
   );
-  ipcMain.handle("telemetry-memory", () => fetchMemory());
+  ipcMain.handle(
+    "telemetry-memory",
+    (_event, profile?: string) => fetchMemory(profile),
+  );
   ipcMain.handle("telemetry-schedules", () => fetchSchedules());
   ipcMain.handle("telemetry-kanban", () => fetchKanban());
   ipcMain.handle(
@@ -70,7 +73,10 @@ export function registerTelemetryHandlers(ipcMain: IpcMain): void {
   ipcMain.handle("telemetry-skills", () => fetchSkills());
   ipcMain.handle("telemetry-profiles", () => fetchProfiles());
   ipcMain.handle("telemetry-providers", () => fetchProviders());
-  ipcMain.handle("telemetry-persona", () => fetchPersona());
+  ipcMain.handle(
+    "telemetry-persona",
+    (_event, profileName?: string) => fetchPersona(profileName),
+  );
   ipcMain.handle(
     "telemetry-recent-events",
     (_event, limit?: number, since?: string) =>

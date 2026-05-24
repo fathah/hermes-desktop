@@ -54,11 +54,19 @@ function PersonaView({
   );
 }
 
-function PersonaTelemetryView(): React.JSX.Element {
+interface Props {
+  profile?: string;
+}
+
+function PersonaTelemetryView({ profile }: Props): React.JSX.Element {
+  // Plan v10 / PR-4 — accept profile prop from Layout.
+  // Full edit-UI lands in the γ commit; for now we just
+  // forward `profile` into fetchPersona so the read targets
+  // the app-selected profile rather than backend-active.
   const state = useTelemetryQuery<PersonaTelemetry>(
     "persona",
-    () => window.hermesAPI.telemetry.persona(),
-    [],
+    () => window.hermesAPI.telemetry.persona(profile),
+    [profile],
   );
   return (
     <TelemetryCard state={state} feature="Persona">

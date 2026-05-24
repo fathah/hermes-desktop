@@ -909,8 +909,10 @@ const hermesAPI = {
       ipcRenderer.invoke("telemetry-gateway-status"),
     tools: (profile?: string): Promise<TelemetryEnvelope<ToolsTelemetry>> =>
       ipcRenderer.invoke("telemetry-tools", profile),
-    memory: (): Promise<TelemetryEnvelope<MemoryTelemetry>> =>
-      ipcRenderer.invoke("telemetry-memory"),
+    memory: (
+      profile?: string,
+    ): Promise<TelemetryEnvelope<MemoryTelemetry>> =>
+      ipcRenderer.invoke("telemetry-memory", profile),
     schedules: (): Promise<TelemetryEnvelope<SchedulesTelemetry>> =>
       ipcRenderer.invoke("telemetry-schedules"),
     kanban: (): Promise<TelemetryEnvelope<KanbanTelemetry>> =>
@@ -925,8 +927,10 @@ const hermesAPI = {
       ipcRenderer.invoke("telemetry-profiles"),
     providers: (): Promise<TelemetryEnvelope<ProvidersTelemetry>> =>
       ipcRenderer.invoke("telemetry-providers"),
-    persona: (): Promise<TelemetryEnvelope<PersonaTelemetry>> =>
-      ipcRenderer.invoke("telemetry-persona"),
+    persona: (
+      profileName?: string,
+    ): Promise<TelemetryEnvelope<PersonaTelemetry>> =>
+      ipcRenderer.invoke("telemetry-persona", profileName),
     recentEvents: (
       limit?: number,
       since?: string,
