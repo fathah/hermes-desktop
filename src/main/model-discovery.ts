@@ -26,7 +26,11 @@ import {
 // PROVIDER_BASE_URLS lives in its own module so `config.ts` can use the
 // same lookup without pulling in this whole file (and triggering a
 // circular import via `model-discovery → config → ...`).
-import { PROVIDER_BASE_URLS } from "./provider-registry";
+import {
+  PROVIDER_BASE_URLS,
+  isLocalOpenAICompatibleProvider,
+  isLoopbackBaseUrl,
+} from "./provider-registry";
 
 /** Providers whose `/models` we never call — either they don't expose it,
  *  use a different protocol, or rely on OAuth credentials we can't
@@ -327,9 +331,16 @@ export async function discoverProviderModels(
   const cached = fromCache(lowerProvider, baseUrl);
   if (cached) return { models: cached, status: "ok", cached: true };
 
-  const apiKey =
+  let apiKey =
     (apiKeyOverride || "").trim() ||
     envApiKeyFor(lowerProvider, baseUrl, profile);
+  if (
+    !apiKey &&
+    isLocalOpenAICompatibleProvider(lowerProvider) &&
+    isLoopbackBaseUrl(baseUrl)
+  ) {
+    apiKey = "no-key-required";
+  }
   if (!apiKey) return { models: [], status: "no-key", cached: false };
 
   const url = buildUrl(baseUrl);

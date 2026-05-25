@@ -1,3 +1,5 @@
+import { isIP } from "net";
+
 /**
  * Canonical inference base URLs for built-in providers — mirrors
  * hermes-agent's `PROVIDER_REGISTRY` defaults.
@@ -35,4 +37,38 @@ export const PROVIDER_BASE_URLS: Record<string, string> = {
 export function canonicalProviderBaseUrl(provider: string): string | null {
   const direct = PROVIDER_BASE_URLS[provider.toLowerCase()];
   return direct ?? null;
+}
+/** Local OpenAI-compatible provider ids. These providers typically expose
+ *  `/v1/*` endpoints on a user-supplied base URL and often do not require
+ *  a bearer token when served locally. */
+export const LOCAL_OPENAI_COMPATIBLE_PROVIDERS = new Set<string>([
+  "custom",
+  "lmstudio",
+  "ollama",
+  "vllm",
+  "llamacpp",
+]);
+
+export function isLocalOpenAICompatibleProvider(provider: string): boolean {
+  return LOCAL_OPENAI_COMPATIBLE_PROVIDERS.has(provider.toLowerCase());
+}
+
+/** Return true when a base URL points at the local machine.
+ *
+ * This deliberately checks host identity rather than specific ports so it
+ * works for Ollama, LM Studio, llama.cpp, vLLM, and custom local proxies
+ * regardless of the port a user configured. */
+export function isLoopbackBaseUrl(baseUrl: string): boolean {
+  try {
+    const hostname = new URL(baseUrl).hostname.toLowerCase();
+    if (hostname === "localhost") return true;
+
+    const normalizedHost = hostname.replace(/^\[(.*)\]$/, "$1");
+    const ipVersion = isIP(normalizedHost);
+    if (ipVersion === 4) return normalizedHost.startsWith("127.");
+    if (ipVersion === 6) return normalizedHost === "::1";
+  } catch {
+    // Invalid/missing URLs are handled by callers as unknown-host.
+  }
+  return false;
 }

@@ -81,18 +81,16 @@ describe("model-discovery", () => {
     expect(result.models).toEqual(["alpha", "beta", "gamma"]);
   });
 
-  it("returns status=no-key when no apiKey is provided or in .env", async () => {
-    server = http.createServer(() => {
-      throw new Error("must not be called when there's no key");
-    });
-    await listen();
-    // .env intentionally empty of DEEPSEEK_API_KEY
+  it("returns status=no-key for non-loopback custom URLs when no apiKey is provided or in .env", async () => {
+    // .env intentionally empty of matching API keys. Non-loopback custom
+    // endpoints still require an explicit key; loopback local LLMs are
+    // covered by the keyless discovery test below.
     writeFileSync(join(testHome, ".env"), "");
 
     const { discoverProviderModels } = await loadDiscovery();
     const result = await discoverProviderModels(
       "custom",
-      baseUrl,
+      "https://example.invalid/v1",
       undefined,
       undefined,
     );
@@ -282,5 +280,35 @@ describe("model-discovery", () => {
     // URL which isn't our loopback server.  Sanity check the .env load
     // path separately:
     expect(receivedAuth).toBe(""); // confirms the canonical URL was used, not our test server
+  });
+
+  it("discovers loopback custom models without an API key", async () => {
+    let receivedAuth = "";
+    server = http.createServer((req, res) => {
+      receivedAuth = String(req.headers["authorization"] || "");
+      if (req.url === "/v1/models" && req.method === "GET") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({ data: [{ id: "local-a" }, { id: "local-b" }] }),
+        );
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    await listen();
+    writeFileSync(join(testHome, ".env"), "");
+
+    const { discoverProviderModels } = await loadDiscovery();
+    const result = await discoverProviderModels(
+      "custom",
+      baseUrl,
+      undefined,
+      undefined,
+    );
+
+    expect(result.status).toBe("ok");
+    expect(result.models).toEqual(["local-a", "local-b"]);
+    expect(receivedAuth).toBe("Bearer no-key-required");
   });
 });

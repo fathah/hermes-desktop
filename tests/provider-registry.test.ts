@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   PROVIDER_BASE_URLS,
   canonicalProviderBaseUrl,
+  isLocalOpenAICompatibleProvider,
+  isLoopbackBaseUrl,
 } from "../src/main/provider-registry";
 
 describe("provider-registry", () => {
@@ -76,6 +78,25 @@ describe("provider-registry", () => {
       for (const provider of requiredBuiltins) {
         expect(PROVIDER_BASE_URLS[provider]).toBeTruthy();
       }
+    });
+  });
+
+  describe("local OpenAI-compatible providers", () => {
+    it("identifies local provider ids case-insensitively", () => {
+      expect(isLocalOpenAICompatibleProvider("custom")).toBe(true);
+      expect(isLocalOpenAICompatibleProvider("Ollama")).toBe(true);
+      expect(isLocalOpenAICompatibleProvider("lmstudio")).toBe(true);
+      expect(isLocalOpenAICompatibleProvider("openai")).toBe(false);
+      expect(isLocalOpenAICompatibleProvider("deepseek")).toBe(false);
+    });
+
+    it("detects loopback base URLs without depending on a fixed port", () => {
+      expect(isLoopbackBaseUrl("http://localhost:1234/v1")).toBe(true);
+      expect(isLoopbackBaseUrl("http://127.42.0.9:11434/v1")).toBe(true);
+      expect(isLoopbackBaseUrl("http://[::1]:8080/v1")).toBe(true);
+      expect(isLoopbackBaseUrl("http://192.168.1.10:8000/v1")).toBe(false);
+      expect(isLoopbackBaseUrl("https://api.openai.com/v1")).toBe(false);
+      expect(isLoopbackBaseUrl("not a url")).toBe(false);
     });
   });
 });
