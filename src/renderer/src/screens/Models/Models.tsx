@@ -443,9 +443,20 @@ function Models({ visible }: ModelsProps = {}): React.JSX.Element {
                 </div>
                 {discovery.models.length > 0 && (
                   <datalist id={modelDiscoveryListId}>
-                    {discovery.models.map((m) => (
-                      <option key={m} value={m} />
-                    ))}
+                    {discovery.models.map((m) => {
+                      // Surface free vs paid in the autocomplete —
+                      // Nous Portal flags this in its catalog (#367).
+                      // The browser's datalist renders the `label`
+                      // attribute as a grey suffix next to the value.
+                      const isFree = discovery.freeModels?.includes(m);
+                      return (
+                        <option
+                          key={m}
+                          value={m}
+                          label={isFree ? t("models.freeBadge") : undefined}
+                        />
+                      );
+                    })}
                   </datalist>
                 )}
                 {discovery.status !== "idle" &&

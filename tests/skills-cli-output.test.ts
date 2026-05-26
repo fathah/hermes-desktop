@@ -66,6 +66,25 @@ describe("classifySkillCliOutput", () => {
     });
   });
 
+  it("does not crash when error has undefined stdout/stderr (#145)", () => {
+    // When execFileSync throws a system-level error (e.g. binary not found),
+    // both stdout and stderr can be undefined. The catch block in
+    // installSkill/uninstallSkill must not call .trim() on undefined.
+    const buildMsg = (
+      stderr: string | undefined,
+      message: string | undefined,
+      stdout: string | undefined,
+    ): string => {
+      const msg = (stderr || message || "").trim();
+      return msg || stdout?.toString()?.trim() || "Install failed.";
+    };
+
+    expect(buildMsg(undefined, undefined, undefined)).toBe("Install failed.");
+    expect(buildMsg(undefined, "spawn ENOENT", undefined)).toBe("spawn ENOENT");
+    expect(buildMsg("pip error", undefined, undefined)).toBe("pip error");
+    expect(buildMsg(undefined, undefined, "some output")).toBe("some output");
+  });
+
   it("falls back to the raw output if every line gets filtered as noise", () => {
     // Pathological input: only the Resolving line is present and it
     // contains a failure marker — extractSkillCliMessage's filter would

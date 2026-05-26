@@ -457,6 +457,40 @@ describe("syncSessionCache", () => {
     expect(byId.get("new-c")?.messageCount).toBe(7);
   });
 
+  it("updates title and model on existing sessions when DB values change", () => {
+    const future = Math.floor(Date.now() / 1000) + 600;
+    seedDb([
+      {
+        id: "s1",
+        started_at: future,
+        message_count: 2,
+        model: "gpt-4o",
+        title: "Old title",
+        firstUserMessage: "hi",
+      },
+    ]);
+    const first = syncSessionCache();
+    expect(first[0].title).toBe("Old title");
+    expect(first[0].model).toBe("gpt-4o");
+
+    seedDb([
+      {
+        id: "s1",
+        started_at: future,
+        message_count: 5,
+        model: "claude-sonnet-4-20250514",
+        title: "Updated title",
+        firstUserMessage: "hi",
+      },
+    ]);
+    const second = syncSessionCache();
+
+    expect(second).toHaveLength(1);
+    expect(second[0].title).toBe("Updated title");
+    expect(second[0].model).toBe("claude-sonnet-4-20250514");
+    expect(second[0].messageCount).toBe(5);
+  });
+
   it("handles a large existing cache without quadratic blowup (issue #16)", () => {
     // 1500 existing sessions in cache, then sync sees same 1500 but with
     // bumped message counts. The pre-fix O(N²) implementation took >2s here

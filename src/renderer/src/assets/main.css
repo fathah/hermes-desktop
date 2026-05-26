@@ -1691,6 +1691,15 @@ body {
   }
 }
 
+.chat-queue-indicator {
+  text-align: center;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+}
+
 /* Input area */
 .chat-input-area {
   position: relative;
@@ -2726,6 +2735,42 @@ body {
 .settings-hermes-result.error {
   color: var(--error);
   background: var(--error-bg);
+}
+
+.settings-api-key-banner {
+  background: var(--warning-bg, #fff8e1);
+  border: 1px solid var(--warning-border, #f9a825);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-api-key-banner--info {
+  background: var(--bg-tertiary);
+  border-color: var(--border-bright);
+}
+
+.settings-api-key-banner-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.settings-api-key-banner-title code {
+  font-family: monospace;
+  font-size: 12px;
+  background: rgba(0, 0, 0, 0.07);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.settings-api-key-banner-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
 }
 
 .settings-migration-banner {
@@ -5776,7 +5821,9 @@ body {
   color: var(--error);
 }
 
-.kanban-card-action[data-tooltip]::after {
+.kanban-card-action[data-tooltip]::after,
+.kanban-header .btn[data-tooltip]::after,
+.kanban-board-chip-add[data-tooltip]::after {
   content: attr(data-tooltip);
   position: absolute;
   bottom: calc(100% + 6px);
@@ -5796,8 +5843,27 @@ body {
   z-index: 10;
 }
 
-.kanban-card-action[data-tooltip]:hover::after {
+.kanban-card-action[data-tooltip]:hover::after,
+.kanban-header .btn[data-tooltip]:hover:not(:disabled)::after,
+.kanban-board-chip-add[data-tooltip]:hover::after {
   opacity: 1;
+}
+
+/* Header buttons + add-board chip need an anchor for the absolutely-
+   positioned tooltip pseudo-element. The card actions already have
+   position:relative from their main rule. */
+.kanban-header .btn[data-tooltip],
+.kanban-board-chip-add[data-tooltip] {
+  position: relative;
+}
+
+/* The rightmost header button (New task) sits hard against the pane
+   edge, so its centered tooltip clips the viewport. Anchor to the
+   button's right edge instead. */
+.kanban-header .schedules-header-actions .btn[data-tooltip]:last-child::after {
+  left: auto;
+  right: 0;
+  transform: none;
 }
 
 /* Detail modal */

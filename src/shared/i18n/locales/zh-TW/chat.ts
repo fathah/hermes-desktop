@@ -63,4 +63,5 @@ export default {
     persona: "檢視目前人格",
     version: "檢視 Hermes 版本",
   },
+  queued: "{{count}} 則訊息已排隊 — 代理完成後將自動傳送",
 } as const;

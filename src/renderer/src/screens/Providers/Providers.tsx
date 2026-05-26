@@ -6,6 +6,23 @@ import { useDiscoveredModels } from "../../hooks/useDiscoveredModels";
 import OAuthLoginModal from "../../components/OAuthLoginModal";
 import { KeyRound } from "../../assets/icons";
 
+// Local mirror of the ambient `CredentialPoolEntry` from
+// src/preload/index.d.ts — the renderer's tsconfig sometimes doesn't
+// pick up the d.ts depending on where the file lives.
+interface CredentialPoolEntry {
+  id?: string;
+  label?: string;
+  auth_type?: "api_key" | "oauth_device_code" | string;
+  priority?: number;
+  source?: string;
+  access_token?: string;
+  refresh_token?: string;
+  api_key?: string;
+  base_url?: string;
+  request_count?: number;
+  key?: string;
+}
+
 function Providers({
   profile,
   visible,
@@ -28,9 +45,11 @@ function Providers({
   const modelLoaded = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Credential pool
+  // Credential pool — entries follow the upstream engine schema
+  // (issue #367). Old `{key, label}` entries are read tolerantly via
+  // the optional `key` field on CredentialPoolEntry.
   const [credPool, setCredPool] = useState<
-    Record<string, Array<{ key: string; label: string }>>
+    Record<string, Array<CredentialPoolEntry>>
   >({});
   const [poolProvider, setPoolProvider] = useState("");
   const [poolNewKey, setPoolNewKey] = useState("");
@@ -198,16 +217,18 @@ function Providers({
 
   async function handleAddPoolKey(): Promise<void> {
     if (!poolProvider || !poolNewKey.trim()) return;
-    const existing = credPool[poolProvider] || [];
-    const entries = [
-      ...existing,
-      {
-        key: poolNewKey.trim(),
-        label: poolNewLabel.trim() || `Key ${existing.length + 1}`,
-      },
-    ];
-    await window.hermesAPI.setCredentialPool(poolProvider, entries);
-    setCredPool((prev) => ({ ...prev, [poolProvider]: entries }));
+    // Use the main-process helper which constructs the canonical
+    // engine schema — `{id, label, auth_type, priority, source,
+    // access_token, base_url, request_count}` — so the entry is
+    // actually readable by the gateway's credential resolver. The
+    // previous code wrote `{key, label}` which the engine couldn't
+    // parse (issue #367).
+    const updated = await window.hermesAPI.addCredentialPoolEntry(
+      poolProvider,
+      poolNewKey.trim(),
+      poolNewLabel.trim(),
+    );
+    setCredPool((prev) => ({ ...prev, [poolProvider]: updated }));
     setPoolNewKey("");
     setPoolNewLabel("");
   }
@@ -329,9 +350,16 @@ function Providers({
           </div>
           {discovery.models.length > 0 && (
             <datalist id={discoveryListId}>
-              {discovery.models.map((m) => (
-                <option key={m} value={m} />
-              ))}
+              {discovery.models.map((m) => {
+                const isFree = discovery.freeModels?.includes(m);
+                return (
+                  <option
+                    key={m}
+                    value={m}
+                    label={isFree ? t("models.freeBadge") : undefined}
+                  />
+                );
+              })}
             </datalist>
           )}
           <div className="settings-field-hint">
@@ -431,25 +459,37 @@ function Providers({
                         )
                       : provider}
                   </div>
-                  {entries.map((entry, idx) => (
-                    <div key={idx} className="settings-pool-entry">
-                      <span className="settings-pool-label">
-                        {entry.label || `${t("settings.keyLabel")} ${idx + 1}`}
-                      </span>
-                      <span className="settings-pool-key">
-                        {entry.key
-                          ? `${entry.key.slice(0, 8)}...${entry.key.slice(-4)}`
-                          : t("settings.empty")}
-                      </span>
-                      <button
-                        className="btn-ghost"
-                        style={{ color: "var(--error)", fontSize: 11 }}
-                        onClick={() => handleRemovePoolKey(provider, idx)}
-                      >
-                        {t("settings.remove")}
-                      </button>
-                    </div>
-                  ))}
+                  {entries.map((entry, idx) => {
+                    // Display the secret from whichever field this
+                    // entry has — new entries use `access_token` per
+                    // the engine schema (#367); old entries may still
+                    // be in `key` (backward compat).
+                    const secret =
+                      entry.access_token ||
+                      entry.api_key ||
+                      entry.key ||
+                      "";
+                    return (
+                      <div key={entry.id || idx} className="settings-pool-entry">
+                        <span className="settings-pool-label">
+                          {entry.label ||
+                            `${t("settings.keyLabel")} ${idx + 1}`}
+                        </span>
+                        <span className="settings-pool-key">
+                          {secret
+                            ? `${secret.slice(0, 8)}...${secret.slice(-4)}`
+                            : t("settings.empty")}
+                        </span>
+                        <button
+                          className="btn-ghost"
+                          style={{ color: "var(--error)", fontSize: 11 }}
+                          onClick={() => handleRemovePoolKey(provider, idx)}
+                        >
+                          {t("settings.remove")}
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               ),
           )}

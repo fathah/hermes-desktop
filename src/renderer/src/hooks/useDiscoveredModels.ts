@@ -29,6 +29,10 @@ export interface UseDiscoveredModelsResult {
   models: string[];
   status: DiscoveryStatus;
   cached: boolean;
+  /** Subset of `models` that the provider's catalog flags as free.
+   *  Renderer surfaces this as an "(free)" suffix in autocomplete.
+   *  Empty/undefined for providers without pricing info. Issue #367. */
+  freeModels: string[];
 }
 
 /**
@@ -50,6 +54,7 @@ export function useDiscoveredModels(
   const [models, setModels] = useState<string[]>([]);
   const [status, setStatus] = useState<DiscoveryStatus>("idle");
   const [cached, setCached] = useState(false);
+  const [freeModels, setFreeModels] = useState<string[]>([]);
   const cancelRef = useRef(0);
 
   useEffect(() => {
@@ -57,6 +62,7 @@ export function useDiscoveredModels(
       setStatus("idle");
       setModels([]);
       setCached(false);
+      setFreeModels([]);
       return;
     }
     const seq = ++cancelRef.current;
@@ -73,11 +79,13 @@ export function useDiscoveredModels(
         setModels(result.models);
         setCached(result.cached);
         setStatus(result.status);
+        setFreeModels(result.freeModels ?? []);
       } catch {
         if (seq !== cancelRef.current) return;
         setStatus("error");
         setModels([]);
         setCached(false);
+        setFreeModels([]);
       }
     }, 400);
     return (): void => {
@@ -85,5 +93,5 @@ export function useDiscoveredModels(
     };
   }, [enabled, provider, baseUrl, apiKey, profile, refreshToken]);
 
-  return { models, status, cached };
+  return { models, status, cached, freeModels };
 }

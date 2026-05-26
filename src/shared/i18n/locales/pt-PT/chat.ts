@@ -77,4 +77,6 @@ export default {
     persona: "Mostrar a persona atual",
     version: "Mostrar a versão do Hermes",
   },
+  queued:
+    "{{count}} mensagem(ns) em fila — serão enviadas quando o agente terminar",
 } as const;

@@ -567,6 +567,7 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
             className="btn btn-secondary"
             onClick={() => loadAll()}
             disabled={actionBusy !== null}
+            data-tooltip={t("kanban.refreshTooltip")}
           >
             <Refresh size={14} />
             {t("kanban.refresh")}
@@ -585,6 +586,7 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
               <button
                 className="btn btn-primary"
                 onClick={() => setShowCreate(true)}
+                data-tooltip={t("kanban.newTaskTooltip")}
               >
                 <Plus size={14} />
                 {t("kanban.newTask")}
@@ -635,6 +637,7 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
             <button
               className="kanban-board-chip kanban-board-chip-add"
               onClick={() => setShowNewBoard(true)}
+              data-tooltip={t("kanban.newBoardTooltip")}
             >
               <Plus size={12} />
               {t("kanban.newBoard")}

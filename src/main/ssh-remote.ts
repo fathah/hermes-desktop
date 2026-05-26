@@ -10,7 +10,11 @@ import { join } from "path";
 import type { SshConfig } from "./ssh-tunnel";
 import type { KanbanTask } from "./kanban";
 import { buildSshControlOptions } from "./ssh-options";
-import type { InstalledSkill, SkillSearchResult } from "./skills";
+import {
+  classifySkillCliOutput,
+  type InstalledSkill,
+  type SkillSearchResult,
+} from "./skills";
 import type { MemoryInfo } from "./memory";
 import type { SessionSummary, SearchResult } from "./sessions";
 import type { CachedSession } from "./session-cache";
@@ -237,13 +241,13 @@ export async function sshInstallSkill(
   identifier: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    await sshExec(
+    const stdout = await sshExec(
       config,
       `hermes skills install ${shellQuote(identifier)} --yes 2>&1`,
       undefined,
       120000,
     );
-    return { success: true };
+    return classifySkillCliOutput(stdout ?? "");
   } catch (err) {
     return { success: false, error: (err as Error).message };
   }
@@ -254,8 +258,11 @@ export async function sshUninstallSkill(
   name: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    await sshExec(config, `hermes skills uninstall ${shellQuote(name)} 2>&1`);
-    return { success: true };
+    const stdout = await sshExec(
+      config,
+      `hermes skills uninstall ${shellQuote(name)} 2>&1`,
+    );
+    return classifySkillCliOutput(stdout ?? "");
   } catch (err) {
     return { success: false, error: (err as Error).message };
   }

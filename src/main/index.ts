@@ -55,6 +55,7 @@ import {
   restartGateway,
   ensureSshTunnelIfNeeded,
   setSshRemoteApiKey,
+  getRemoteAuthHeader,
 } from "./hermes";
 import {
   startSshTunnel,
@@ -90,12 +91,14 @@ import {
   setModelConfig,
   getCredentialPool,
   setCredentialPool,
+  addCredentialPoolEntry,
   getConnectionConfig,
   getPublicConnectionConfig,
   resolveConnectionApiKeyUpdate,
   setConnectionConfig,
   getPlatformEnabled,
   setPlatformEnabled,
+  getApiServerKey,
 } from "./config";
 import {
   listSessions,
@@ -620,6 +623,35 @@ function setupIPC(): void {
     },
   );
 
+  // API_SERVER_KEY management — lets the renderer detect a missing key and
+  // generate one with a button click (local mode) or show instructions (remote/SSH).
+  ipcMain.handle("get-api-server-key-status", (_event, profile?: string) => {
+    const key = getApiServerKey(profile);
+    return { hasKey: key.length > 0 };
+  });
+
+  ipcMain.handle(
+    "generate-api-server-key",
+    async (_event, profile?: string) => {
+      const { randomUUID } = await import("crypto");
+      const key = `desk-${randomUUID()}`;
+      // Write to both the active profile .env and the default .env so the
+      // gateway (which reads the profile .env) and the desktop (which reads
+      // the default .env as fallback) both see the same key.
+      setEnvValue("API_SERVER_KEY", key, profile);
+      if (profile && profile !== "default") {
+        setEnvValue("API_SERVER_KEY", key);
+      }
+      // Restart gateway so it picks up the new key immediately.
+      if (isGatewayRunning()) {
+        stopGateway();
+        await new Promise<void>((r) => setTimeout(r, 800));
+        startGateway(profile);
+      }
+      return { key };
+    },
+  );
+
   // Connection mode (local / remote / ssh)
   ipcMain.handle("is-remote-mode", () => isRemoteMode());
   ipcMain.handle("is-remote-only-mode", () => isRemoteOnlyMode());
@@ -740,6 +772,10 @@ function setupIPC(): void {
         if (!gatewayRunning || !tunnelHealthy) {
           await sshStartGateway(conn.ssh);
           await startSshTunnel(conn.ssh);
+        }
+        // Always ensure the API key is cached — the key may not have been
+        // read yet if the app-launch auto-start failed silently (#212).
+        if (!getRemoteAuthHeader().Authorization) {
           const key = await sshReadRemoteApiKey(conn.ssh);
           setSshRemoteApiKey(key);
         }
@@ -1203,11 +1239,28 @@ function setupIPC(): void {
     (
       _event,
       provider: string,
-      entries: Array<{ key: string; label: string }>,
+      entries: Array<Record<string, unknown>>,
       profile?: string,
     ) => {
       setCredentialPool(provider, entries, profile);
       return true;
+    },
+  );
+
+  // Append a user-typed key as a properly-shaped credential pool
+  // entry. Constructs the full upstream schema (id, label, auth_type,
+  // priority, source, access_token, base_url, request_count) so the
+  // engine's resolver can read it — issue #367 Bug 3.
+  ipcMain.handle(
+    "add-credential-pool-entry",
+    (
+      _event,
+      provider: string,
+      apiKey: string,
+      label: string,
+      profile?: string,
+    ) => {
+      return addCredentialPoolEntry(provider, apiKey, label, profile);
     },
   );
 
@@ -1675,6 +1728,17 @@ function setupUpdater(): void {
   setTimeout(() => {
     autoUpdater.checkForUpdates().catch(() => {});
   }, 5000);
+}
+
+// Opt-in Chrome DevTools Protocol port for E2E testing. Set
+// ENABLE_CDP=1 (with optional CDP_PORT, default 9222) before
+// launching `npm run dev` to expose the renderer for Playwright
+// attach. Off by default — no effect on normal dev or prod builds.
+if (process.env.ENABLE_CDP === "1") {
+  app.commandLine.appendSwitch(
+    "remote-debugging-port",
+    process.env.CDP_PORT || "9222",
+  );
 }
 
 app.whenReady().then(() => {

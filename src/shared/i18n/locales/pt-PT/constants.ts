@@ -55,6 +55,8 @@ export default {
   kimiHint: "Modelos IA de programação Moonshot",
   minimaxApiKey: "Chave de API da MiniMax",
   minimaxHint: "Modelos MiniMax (global)",
+  nousApiKey: "Chave de API do Nous Portal",
+  nousHint: "Chave de API do Nous Portal — use o cartão OAuth abaixo se tiver uma subscrição do Nous",
   minimaxCnApiKey: "Chave de API da MiniMax China",
   minimaxCnHint: "Modelos MiniMax (endpoint China)",
   opencodeZenApiKey: "Chave de API da OpenCode Zen",

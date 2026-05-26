@@ -119,11 +119,21 @@ export function dbItemsToChatMessages(
  * `null` opts a message out of matching — there's no equivalent on
  * the other side and the reconciliation should treat it as unique.
  */
+/**
+ * Collapse all runs of whitespace (spaces, tabs, newlines) into a single
+ * space and trim.  This prevents the reconciliation key from diverging
+ * when the stream-accumulated string and the DB-finalised string differ
+ * only in interior whitespace (e.g. "\n\n" vs " ").
+ */
+function normalizeWhitespace(s: string): string {
+  return s.replace(/\s+/g, " ").trim();
+}
+
 function reconciliationKey(m: ChatMessage): string | null {
   if ("kind" in m) {
     switch (m.kind) {
       case "reasoning":
-        return `reasoning:${(m.text || "").trim().slice(0, 200)}`;
+        return `reasoning:${normalizeWhitespace(m.text || "").slice(0, 200)}`;
       case "tool_call":
         return `tool_call:${m.callId || m.id}`;
       case "tool_result":
@@ -133,7 +143,28 @@ function reconciliationKey(m: ChatMessage): string | null {
     }
   }
   const bubble = m as ChatBubbleMessage;
-  return `${bubble.role}:${(bubble.content || "").trim().slice(0, 200)}`;
+  return `${bubble.role}:${normalizeWhitespace(bubble.content || "").slice(0, 200)}`;
+}
+
+/**
+ * Merge DB-only metadata (e.g. attachments) into a streamed message
+ * while preserving the streamed message's React identity (id).
+ * This prevents React from remounting the DOM node, which would
+ * disrupt scroll position and cause visual reordering.
+ */
+function mergeDbMetadataIntoStreamed(
+  streamed: ChatMessage,
+  db: ChatMessage,
+): ChatMessage {
+  // Only bubble messages carry mergeable metadata.
+  if ("kind" in streamed) return streamed;
+  const s = streamed as ChatBubbleMessage;
+  const d = db as ChatBubbleMessage;
+  // Attachments from the DB that the stream didn't deliver.
+  if (d.attachments && d.attachments.length > 0 && (!s.attachments || s.attachments.length === 0)) {
+    return { ...s, attachments: d.attachments };
+  }
+  return s;
 }
 
 /**
@@ -181,16 +212,51 @@ export function reconcileStreamedWithDb(
     const key = reconciliationKey(dbMsg);
     const bucket = key ? streamedByKey.get(key) : undefined;
     const streamedMatch = bucket?.shift();
-    result.push(streamedMatch ?? dbMsg);
+    if (streamedMatch) {
+      // Preserve the streamed message's React identity (id) so React
+      // doesn't remount the DOM node.  Carry over any DB-only metadata
+      // (e.g. attachments that the stream didn't deliver) into the
+      // streamed copy.
+      result.push(mergeDbMetadataIntoStreamed(streamedMatch, dbMsg));
+    } else {
+      result.push(dbMsg);
+    }
   }
 
   // Pathological case: the in-memory transcript carried something the
   // DB doesn't have yet (e.g. a renderer-side error bubble inserted by
   // `onChatError`). Preserve those tail-of-stream additions so the
   // reconciliation never silently drops UI-only state.
+  //
+  // But first, deduplicate by normalised content: if a streamed bubble
+  // has the same role + normalised text as a DB bubble already in the
+  // result, skip it — it's a near-duplicate that slipped past the
+  // key-based match (e.g. trailing-whitespace drift, one-frame delta
+  // that didn't round-trip through the DB identically).
+  const seenBubbleKeys = new Set<string>();
+  for (const m of result) {
+    if (!("kind" in m)) {
+      const bubble = m as ChatBubbleMessage;
+      seenBubbleKeys.add(
+        `${bubble.role}:${normalizeWhitespace(bubble.content || "")}`,
+      );
+    }
+  }
+
   const consumedIds = new Set(result.map((m) => m.id));
   for (const m of streamed) {
-    if (!consumedIds.has(m.id)) result.push(m);
+    if (consumedIds.has(m.id)) continue;
+    // For bubble messages, check if an equivalent already exists in the
+    // result set.  Non-bubble messages (tool_call, tool_result, reasoning)
+    // always pass through — they're either matched by callId above or are
+    // genuinely new.
+    if (!("kind" in m)) {
+      const bubble = m as ChatBubbleMessage;
+      const contentKey = `${bubble.role}:${normalizeWhitespace(bubble.content || "")}`;
+      if (seenBubbleKeys.has(contentKey)) continue;
+      seenBubbleKeys.add(contentKey);
+    }
+    result.push(m);
   }
 
   return result;

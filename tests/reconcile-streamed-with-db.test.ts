@@ -247,12 +247,11 @@ describe("reconcileStreamedWithDb", () => {
     expect(merged).toEqual(db);
   });
 
-  it("handles a duplicate streamed message that exceeds DB row count", () => {
+  it("deduplicates streamed messages that exceed DB row count", () => {
     // Edge case: the renderer somehow held two streamed bubbles with
-    // identical content, but the DB only has one. The merge should
-    // consume DB's single row, substitute one streamed equivalent,
-    // and append the unmatched second streamed row at the end as a
-    // UI-only message (covered by the "preserve renderer-only" path).
+    // identical content, but the DB only has one.  This is the exact
+    // duplication bug — the merge should deduplicate by content so
+    // only one message appears in the output.
     const streamed: ChatMessage[] = [
       STREAMED_AGENT("hello", "a-1"),
       STREAMED_AGENT("hello", "a-2"),
@@ -261,10 +260,8 @@ describe("reconcileStreamedWithDb", () => {
 
     const merged = reconcileStreamedWithDb(streamed, db);
 
-    expect(merged).toHaveLength(2);
-    // First slot took the streamed equivalent for the DB row.
+    expect(merged).toHaveLength(1);
+    // DB row takes precedence; the duplicate streamed row is dropped.
     expect(merged[0].id).toBe("a-1");
-    // Unmatched streamed row preserved at the tail.
-    expect(merged[1].id).toBe("a-2");
   });
 });

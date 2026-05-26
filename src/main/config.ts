@@ -1157,12 +1157,36 @@ function authFilePath(profile?: string): string {
   return join(profileHome(profile || getActiveProfileNameSync()), "auth.json");
 }
 
+/**
+ * Shape of a credential-pool entry as the upstream gateway expects it.
+ *
+ * The engine's resolver (`hermes_cli/auth.py` and the credential-pool
+ * entry parser) reads `access_token` (not `key`), needs an
+ * `auth_type` to distinguish OAuth from API-key entries inside the
+ * same pool, and uses `id` / `priority` / `source` for rotation and
+ * telemetry. Issue #367 — pool entries written by the desktop with
+ * just `{key, label}` were rejected at runtime ("Hermes is not
+ * logged into Nous Portal") because none of the canonical fields
+ * were present.
+ *
+ * `key` is retained for read-only compatibility — old auth.json files
+ * that already contain `{key, label}` entries are still parsed
+ * (otherwise a user's existing manual entries would vanish on first
+ * read). New writes always use the full canonical shape.
+ */
 interface CredentialEntry {
-  key?: string;
-  api_key?: string;
+  id?: string;
+  label?: string;
+  auth_type?: "api_key" | "oauth_device_code" | string;
+  priority?: number;
+  source?: string;
   access_token?: string;
   refresh_token?: string;
-  label?: string;
+  api_key?: string;
+  base_url?: string;
+  request_count?: number;
+  /** Legacy field — historical pool entries written with `{key, label}`. */
+  key?: string;
 }
 
 function readAuthStore(profile?: string): Record<string, unknown> {
@@ -1203,6 +1227,72 @@ export function setCredentialPool(
   (store.credential_pool as Record<string, CredentialEntry[]>)[provider] =
     entries;
   writeAuthStore(store, profile);
+}
+
+/**
+ * Build a credential-pool entry in the canonical engine shape from a
+ * user-typed (key, label). Used by the Providers screen so the
+ * renderer doesn't need to know the upstream schema — issue #367.
+ *
+ * The base URL for known providers comes from `canonicalProviderBaseUrl`;
+ * unknown providers (`custom`, user-defined) get an empty `base_url`
+ * and the engine falls back to its own registry.
+ */
+export function buildCredentialPoolEntry(
+  provider: string,
+  apiKey: string,
+  label: string,
+  existingEntries: CredentialEntry[] = [],
+): CredentialEntry {
+  const baseUrl = canonicalProviderBaseUrl(provider) || "";
+  // Next priority — pool entries are sorted ascending, so a new entry
+  // appended at the end gets the highest priority value.
+  const nextPriority =
+    existingEntries.reduce(
+      (max, e) => (typeof e.priority === "number" ? Math.max(max, e.priority + 1) : max),
+      0,
+    );
+  return {
+    id: cryptoRandomId(),
+    label: label.trim() || `Key ${existingEntries.length + 1}`,
+    auth_type: "api_key",
+    priority: nextPriority,
+    source: "manual",
+    access_token: apiKey.trim(),
+    base_url: baseUrl,
+    request_count: 0,
+  };
+}
+
+function cryptoRandomId(): string {
+  // 8-hex-char id — matches the existing pool entries' id length and
+  // doesn't import the heavier `crypto.randomUUID` machinery if a
+  // collision is astronomically unlikely at the per-pool level.
+  let out = "";
+  for (let i = 0; i < 8; i++) {
+    out += Math.floor(Math.random() * 16).toString(16);
+  }
+  return out;
+}
+
+/**
+ * Append a manually-typed credential pool entry, constructing the
+ * full canonical shape. Used by the renderer's "Add" button so the
+ * shape stays consistent with what the engine's resolver expects.
+ *
+ * Returns the updated entries list for that provider.
+ */
+export function addCredentialPoolEntry(
+  provider: string,
+  apiKey: string,
+  label: string,
+  profile?: string,
+): CredentialEntry[] {
+  const existing = getCredentialPool(profile)[provider] || [];
+  const entry = buildCredentialPoolEntry(provider, apiKey, label, existing);
+  const next = [...existing, entry];
+  setCredentialPool(provider, next, profile);
+  return next;
 }
 
 /**

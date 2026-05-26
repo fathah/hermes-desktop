@@ -411,6 +411,10 @@ function sendMessageViaApi(
   // must not be overwritten.
   if (!isRemoteMode()) {
     const apiServerKey = getApiServerKey(profile);
+    console.log(
+      "[hermes] apiServerKey=",
+      apiServerKey ? apiServerKey.slice(0, 12) + "…" : "(none)",
+    );
     if (apiServerKey) {
       headers.Authorization = `Bearer ${apiServerKey}`;
     }
@@ -455,6 +459,12 @@ function sendMessageViaApi(
   function finish(error?: string): void {
     if (finished) return;
     finished = true;
+    console.log(
+      "[hermes] finish called:",
+      error ? `error=${error}` : "done",
+      "sessionId=",
+      sessionId,
+    );
     if (error) {
       cb.onError(error);
     } else {
@@ -661,7 +671,10 @@ function sendMessageViaApi(
         finish(hasContent ? undefined : lastError);
       });
 
-      res.on("error", (err) => finish(`Stream error: ${err.message}`));
+      res.on("error", (err) => {
+        if (err.message === "aborted" || err.name === "AbortError") return;
+        finish(`Stream error: ${err.message}`);
+      });
     },
   );
 

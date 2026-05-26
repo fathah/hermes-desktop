@@ -104,6 +104,8 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
   const [connTesting, setConnTesting] = useState(false);
   const [connStatus, setConnStatus] = useState<string | null>(null);
   const connLoaded = useRef(false);
+  const [apiServerKeyMissing, setApiServerKeyMissing] = useState(false);
+  const [generatingKey, setGeneratingKey] = useState(false);
 
   // SSH connection state
   const [sshHost, setSshHost] = useState("");
@@ -140,10 +142,11 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
 
   const loadConfig = useCallback(async (): Promise<void> => {
     // Load fast config first (cached in main process)
-    const [home, aVersion, conn] = await Promise.all([
+    const [home, aVersion, conn, keyStatus] = await Promise.all([
       window.hermesAPI.getHermesHome(profile),
       window.hermesAPI.getAppVersion(),
       window.hermesAPI.getConnectionConfig(),
+      window.hermesAPI.getApiServerKeyStatus(profile),
     ]);
     setHermesHome(home);
     setAppVersion(aVersion);
@@ -158,6 +161,7 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
     setSshUser(conn.ssh?.username || "");
     setSshKeyPath(conn.ssh?.keyPath || "");
     setSshRemotePort(conn.ssh?.remotePort ? String(conn.ssh.remotePort) : "");
+    setApiServerKeyMissing(!keyStatus.hasKey);
     connLoaded.current = true;
 
     // Load network settings from config.yaml
@@ -616,6 +620,44 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
                 : t("settings.modeRemoteHint")}
           </div>
         </div>
+
+        {!apiServerKeyMissing ? null : connMode === "local" ? (
+          <div className="settings-api-key-banner">
+            <div className="settings-api-key-banner-title">
+              Session history disabled — <code>API_SERVER_KEY</code> not set
+            </div>
+            <div className="settings-api-key-banner-desc">
+              Without an API server key the gateway cannot authenticate session
+              continuation requests. Messages will still send, but conversation
+              history won&apos;t be preserved across restarts.
+            </div>
+            <button
+              className="btn btn-primary"
+              disabled={generatingKey}
+              onClick={async () => {
+                setGeneratingKey(true);
+                await window.hermesAPI.generateApiServerKey(profile);
+                setApiServerKeyMissing(false);
+                setGeneratingKey(false);
+                setConnStatus("API key generated — gateway restarting…");
+                setTimeout(() => setConnStatus(null), 4000);
+              }}
+            >
+              {generatingKey ? "Generating…" : "Generate & save a key for me"}
+            </button>
+          </div>
+        ) : (
+          <div className="settings-api-key-banner settings-api-key-banner--info">
+            <div className="settings-api-key-banner-title">
+              Set <code>API_SERVER_KEY</code> on the remote server
+            </div>
+            <div className="settings-api-key-banner-desc">
+              {connMode === "ssh"
+                ? "SSH mode: add API_SERVER_KEY=<your-key> to ~/.hermes/profiles/<profile>/.env on the remote host, then restart the gateway there."
+                : "Remote mode: add API_SERVER_KEY=<your-key> to the .env on your remote Hermes server, then restart the gateway."}
+            </div>
+          </div>
+        )}
 
         {connMode === "remote" && (
           <>

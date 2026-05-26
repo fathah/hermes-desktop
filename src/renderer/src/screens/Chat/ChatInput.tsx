@@ -210,7 +210,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     function handleSend(): void {
       const text = input.trim();
       const hasPayload = text.length > 0 || attachments.length > 0;
-      if (!hasPayload || isLoading) return;
+      if (!hasPayload) return;
       setSlashMenuOpen(false);
       const sendAttachments = attachments;
       clearAfterSend(text);
@@ -219,7 +219,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
 
     function handleQuickAsk(): void {
       const text = input.trim();
-      if (!text || isLoading) return;
+      if (!text) return;
       const sendAttachments = attachments;
       clearAfterSend(text);
       onQuickAsk(text, sendAttachments);
@@ -338,8 +338,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       setAttachmentError(null);
     }
 
-    const canSend =
-      (input.trim().length > 0 || attachments.length > 0) && !isLoading;
+    const canSend = input.trim().length > 0 || attachments.length > 0;
 
     return (
       <>

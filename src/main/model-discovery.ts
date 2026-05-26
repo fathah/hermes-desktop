@@ -15,7 +15,10 @@ import http from "http";
 import https from "https";
 import { URL } from "url";
 import { execFile } from "child_process";
+import { existsSync, readFileSync } from "fs";
+import { join } from "path";
 import { readEnv } from "./config";
+import { profileHome } from "./utils";
 import {
   expectedEnvKeyForModel,
   HERMES_PYTHON,
@@ -39,7 +42,6 @@ import {
 const NON_DISCOVERABLE_PROVIDERS = new Set<string>([
   "auto",
   "custom",
-  "nous",
   "google",
   "xai",
   "qwen",
@@ -49,13 +51,16 @@ const NON_DISCOVERABLE_PROVIDERS = new Set<string>([
 
 /** OAuth/subscription providers — no static-key `/v1/models` endpoint.
  *  Their model lists come from hermes-agent's `provider_model_ids`
- *  (live + account-aware for Codex), reached via a short Python call. */
+ *  (live + account-aware for Codex), reached via a short Python call.
+ *  `nous` is included here since the desktop now exposes its OAuth
+ *  sign-in surface (issue #367). */
 const OAUTH_DISCOVERY_PROVIDERS = new Set<string>([
   "openai-codex",
   "xai-oauth",
   "qwen-oauth",
   "google-gemini-cli",
   "minimax-oauth",
+  "nous",
 ]);
 
 /** Curated fallback model lists, mirrored from hermes-agent's
@@ -138,6 +143,102 @@ async function discoverOAuthModels(provider: string): Promise<string[]> {
   return OAUTH_PROVIDER_CURATED[provider] ?? [];
 }
 
+/**
+ * Fetch the Nous Portal `/v1/models` catalogue with the OAuth token
+ * stored in `auth.json`, and return the IDs of models whose prompt +
+ * completion pricing are both zero — i.e. the free tier. Issue #367
+ * found that a free-subscription user picking the default Nous model
+ * (Hermes-4-405B) gets a billing error. Surfacing free models in the
+ * autocomplete makes the right choice discoverable.
+ *
+ * Returns [] on any failure (no token, no inference_base_url, HTTP
+ * error, parse error). Best-effort enrichment — never blocks the
+ * main discovery call.
+ */
+async function fetchNousFreeModelIds(
+  profile: string | undefined,
+): Promise<string[]> {
+  try {
+    const authPath = join(profileHome(profile), "auth.json");
+    if (!existsSync(authPath)) return [];
+    const auth = JSON.parse(readFileSync(authPath, "utf-8")) as {
+      providers?: { nous?: { access_token?: string; inference_base_url?: string } };
+    };
+    const token = (auth.providers?.nous?.access_token || "").trim();
+    const base = (auth.providers?.nous?.inference_base_url || "").trim();
+    if (!token || !base) return [];
+
+    const url = `${base.replace(/\/+$/, "")}/models`;
+    return await new Promise<string[]>((resolve) => {
+      const u = new URL(url);
+      const mod = u.protocol === "https:" ? https : http;
+      const req = mod.request(
+        {
+          method: "GET",
+          protocol: u.protocol,
+          hostname: u.hostname,
+          port: u.port || undefined,
+          path: `${u.pathname}${u.search}`,
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          timeout: 10_000,
+        },
+        (res) => {
+          if (!res.statusCode || res.statusCode >= 400) {
+            res.resume();
+            resolve([]);
+            return;
+          }
+          let body = "";
+          res.setEncoding("utf-8");
+          res.on("data", (chunk) => {
+            body += chunk;
+          });
+          res.on("end", () => {
+            try {
+              const j = JSON.parse(body) as {
+                data?: Array<{
+                  id?: string;
+                  pricing?: { prompt?: string; completion?: string };
+                }>;
+              };
+              const free = (j.data || [])
+                .filter((m) => {
+                  // Free iff both prompt and completion cost zero. The
+                  // Portal returns them as strings like "0.0000000000".
+                  const pr = String(m.pricing?.prompt ?? "").trim();
+                  const co = String(m.pricing?.completion ?? "").trim();
+                  return (
+                    pr !== "" &&
+                    co !== "" &&
+                    parseFloat(pr) === 0 &&
+                    parseFloat(co) === 0
+                  );
+                })
+                .map((m) => String(m.id || "").trim())
+                .filter(Boolean);
+              resolve(uniqueSorted(free));
+            } catch {
+              resolve([]);
+            }
+          });
+          res.on("error", () => resolve([]));
+        },
+      );
+      req.on("error", () => resolve([]));
+      req.on("timeout", () => {
+        req.destroy();
+        resolve([]);
+      });
+      req.end();
+    });
+  } catch {
+    return [];
+  }
+}
+
 // In-memory result cache to avoid hammering the provider on every keystroke.
 interface CacheEntry {
   models: string[];
@@ -145,6 +246,9 @@ interface CacheEntry {
 }
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const _cache = new Map<string, CacheEntry>();
+// Parallel cache of free-model ids, keyed by provider. Cleared together
+// with the main cache via `_clearCache` for test isolation.
+const _freeCache = new Map<string, string[]>();
 
 function cacheKey(provider: string, baseUrl: string): string {
   return `${provider.toLowerCase()}|${baseUrl.replace(/\/+$/, "").toLowerCase()}`;
@@ -294,6 +398,11 @@ export interface DiscoverModelsResult {
   status: "ok" | "no-key" | "unsupported" | "unknown-host";
   /** ``true`` when the result came from the in-memory cache. */
   cached: boolean;
+  /** Subset of `models` flagged as free (no cost per token). Populated
+   *  for providers whose catalog exposes pricing — Nous Portal today,
+   *  others as we add them. Empty when no pricing info is available
+   *  (everything is treated as paid by default in the UI). */
+  freeModels?: string[];
 }
 
 /** Discover available models for a provider.  Returns an object so the
@@ -310,10 +419,34 @@ export async function discoverProviderModels(
   // endpoint — route them through hermes-agent's provider_model_ids.
   if (OAUTH_DISCOVERY_PROVIDERS.has(lowerProvider)) {
     const hit = fromCache(lowerProvider, "");
-    if (hit) return { models: hit, status: "ok", cached: true };
+    if (hit) {
+      // Re-attach free flags from cache. Pricing is fetched fresh on
+      // the next non-cache hit; meanwhile the renderer keeps the
+      // previous free list.
+      return {
+        models: hit,
+        status: "ok",
+        cached: true,
+        freeModels: _freeCache.get(lowerProvider) || [],
+      };
+    }
     const models = await discoverOAuthModels(lowerProvider);
     setCache(lowerProvider, "", models);
-    return { models, status: "ok", cached: false };
+    // Nous Portal exposes pricing in its catalog — enrich with the
+    // subset of models that are free, so the renderer can badge them.
+    // Other OAuth providers have no equivalent yet.
+    let freeModels: string[] = [];
+    if (lowerProvider === "nous") {
+      const allFree = await fetchNousFreeModelIds(profile);
+      // Keep only the free IDs that are actually in the curated list
+      // we're surfacing — avoids confusing the user with names that
+      // wouldn't autocomplete anyway. If hermes-agent's list misses
+      // some free ones, fall back to the full live list.
+      const inCurated = allFree.filter((id) => models.includes(id));
+      freeModels = inCurated.length > 0 ? inCurated : allFree;
+      _freeCache.set(lowerProvider, freeModels);
+    }
+    return { models, status: "ok", cached: false, freeModels };
   }
 
   if (!lowerProvider || NON_DISCOVERABLE_PROVIDERS.has(lowerProvider)) {
@@ -354,4 +487,5 @@ export async function discoverProviderModels(
  *  should always go through ``discoverProviderModels``. */
 export function _clearCache(): void {
   _cache.clear();
+  _freeCache.clear();
 }

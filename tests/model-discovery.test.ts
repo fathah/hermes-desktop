@@ -100,9 +100,10 @@ describe("model-discovery", () => {
 
   it("returns status=unsupported for known no-discovery providers", async () => {
     const { discoverProviderModels } = await loadDiscovery();
-    // openai-codex / qwen-oauth are no longer here — OAuth providers are
-    // discovered via hermes-agent's provider_model_ids instead.
-    for (const provider of ["nous", "google", "xai"]) {
+    // openai-codex / qwen-oauth / nous are no longer here — OAuth
+    // providers (including `nous` as of #367) are discovered via
+    // hermes-agent's provider_model_ids instead.
+    for (const provider of ["google", "xai"]) {
       const result = await discoverProviderModels(
         provider,
         undefined,
@@ -288,9 +289,7 @@ describe("model-discovery", () => {
       receivedAuth = String(req.headers["authorization"] || "");
       if (req.url === "/v1/models" && req.method === "GET") {
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(
-          JSON.stringify({ data: [{ id: "local-a" }, { id: "local-b" }] }),
-        );
+        res.end(JSON.stringify({ data: [{ id: "local-a" }, { id: "local-b" }] }));
         return;
       }
       res.writeHead(404);
@@ -310,5 +309,89 @@ describe("model-discovery", () => {
     expect(result.status).toBe("ok");
     expect(result.models).toEqual(["local-a", "local-b"]);
     expect(receivedAuth).toBe("Bearer no-key-required");
+  });
+
+  // Issue #367 — Nous Portal model discovery routes through the
+  // OAuth path (provider_model_ids via Python) AND enriches the
+  // result with a `freeModels` subset parsed from the live catalog
+  // at `inference_base_url`. The Python call can be unreachable in
+  // tests, but the live /v1/models fetch using the auth.json token
+  // is testable end-to-end against the loopback server.
+  it("nous discovery flags free models from the live /v1/models pricing data (#367)", async () => {
+    let receivedAuth = "";
+    server = http.createServer((req, res) => {
+      receivedAuth = String(req.headers["authorization"] || "");
+      if (req.url === "/v1/models" && req.method === "GET") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            data: [
+              {
+                id: "deepseek/deepseek-v4-flash:free",
+                pricing: { prompt: "0", completion: "0" },
+              },
+              { id: "openrouter/owl-alpha", pricing: { prompt: "0.0", completion: "0.0" } },
+              {
+                id: "anthropic/claude-opus-4.7",
+                pricing: { prompt: "0.000003", completion: "0.000015" },
+              },
+              { id: "missing-pricing" },
+            ],
+          }),
+        );
+      } else {
+        res.writeHead(404);
+        res.end();
+      }
+    });
+    await listen();
+
+    // Plant auth.json with the loopback server's URL as the inference
+    // base. Token can be anything — the test server checks it came.
+    writeFileSync(
+      join(testHome, "auth.json"),
+      JSON.stringify({
+        providers: {
+          nous: {
+            access_token: "tok-nous-test",
+            inference_base_url: baseUrl,
+          },
+        },
+      }),
+    );
+
+    const { discoverProviderModels } = await loadDiscovery();
+    const result = await discoverProviderModels(
+      "nous",
+      undefined,
+      undefined,
+      undefined,
+    );
+
+    // Bearer header reached the live /v1/models endpoint
+    expect(receivedAuth).toBe("Bearer tok-nous-test");
+    // Free flag carries through, two free models found
+    expect(result.freeModels).toBeDefined();
+    expect(result.freeModels?.sort()).toEqual([
+      "deepseek/deepseek-v4-flash:free",
+      "openrouter/owl-alpha",
+    ]);
+    // Status stays "ok" regardless of the Python provider_model_ids
+    // call (which may fail under tests — that path returns the
+    // curated fallback or an empty list, but `status:ok` either way).
+    expect(result.status).toBe("ok");
+  });
+
+  it("nous discovery returns empty freeModels when auth.json is missing", async () => {
+    server = http.createServer((_req, res) => {
+      res.writeHead(404);
+      res.end();
+    });
+    await listen();
+    // No auth.json planted in testHome — fetchNousFreeModelIds returns []
+    const { discoverProviderModels } = await loadDiscovery();
+    const result = await discoverProviderModels("nous", undefined, undefined, undefined);
+    expect(result.freeModels).toEqual([]);
+    expect(result.status).toBe("ok");
   });
 });

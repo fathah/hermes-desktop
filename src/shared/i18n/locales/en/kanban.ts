@@ -5,11 +5,14 @@ export default {
 
   // Header actions
   refresh: "Refresh",
+  refreshTooltip: "Reload boards and tasks from the agent",
   dispatch: "Dispatch",
   dispatchTooltip:
     "Run one dispatcher pass — promote ready tasks and spawn workers",
   newTask: "New task",
+  newTaskTooltip: "Create a new task on the current board",
   newBoard: "New board",
+  newBoardTooltip: "Create a new kanban board",
 
   // Remote-mode unsupported notice
   remoteUnsupportedTitle:

@@ -28,6 +28,27 @@ interface InstallProgress {
   log: string;
 }
 
+/**
+ * Shape of a credential-pool entry as the upstream engine expects
+ * (issue #367). Old entries written by the renderer with just
+ * `{key, label}` are still readable via the optional `key` field.
+ * New entries written from the UI use the canonical shape.
+ */
+interface CredentialPoolEntry {
+  id?: string;
+  label?: string;
+  auth_type?: "api_key" | "oauth_device_code" | string;
+  priority?: number;
+  source?: string;
+  access_token?: string;
+  refresh_token?: string;
+  api_key?: string;
+  base_url?: string;
+  request_count?: number;
+  /** Legacy field for backward compat with old auth.json shapes. */
+  key?: string;
+}
+
 interface KanbanTask {
   id: string;
   title: string;
@@ -218,6 +239,8 @@ interface HermesAPI {
     contextFolder?: string,
   ) => Promise<{ response: string; sessionId?: string }>;
   abortChat: () => Promise<void>;
+  getApiServerKeyStatus: (profile?: string) => Promise<{ hasKey: boolean }>;
+  generateApiServerKey: (profile?: string) => Promise<{ key: string }>;
   copyToClipboard: (text: string) => Promise<void>;
   onContextMenuCopyChat: (
     callback: (format: "text" | "markdown") => void,
@@ -249,6 +272,8 @@ interface HermesAPI {
     models: string[];
     status: "ok" | "no-key" | "unsupported" | "unknown-host";
     cached: boolean;
+    /** Subset of `models` flagged as free (Nous Portal today). #367. */
+    freeModels?: string[];
   }>;
   onChatChunk: (callback: (chunk: string) => void) => () => void;
   onChatReasoningChunk: (callback: (chunk: string) => void) => () => void;
@@ -470,15 +495,22 @@ interface HermesAPI {
     }>
   >;
 
-  // Credential Pool (profile-aware)
+  // Credential Pool (profile-aware) — entries follow the upstream
+  // engine schema (issue #367). See `CredentialPoolEntry` below.
   getCredentialPool: (
     profile?: string,
-  ) => Promise<Record<string, Array<{ key: string; label: string }>>>;
+  ) => Promise<Record<string, Array<CredentialPoolEntry>>>;
   setCredentialPool: (
     provider: string,
-    entries: Array<{ key: string; label: string }>,
+    entries: Array<CredentialPoolEntry>,
     profile?: string,
   ) => Promise<boolean>;
+  addCredentialPoolEntry: (
+    provider: string,
+    apiKey: string,
+    label: string,
+    profile?: string,
+  ) => Promise<Array<CredentialPoolEntry>>;
 
   // Models
   listModels: () => Promise<

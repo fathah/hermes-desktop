@@ -130,12 +130,12 @@ export function syncSessionCache(): CachedSession[] {
       refreshedIds.add(row.id);
       const existing = existingById.get(row.id);
       if (existing) {
-        // Update existing entry (message count may have changed)
         existing.messageCount = row.message_count;
+        if (row.model) existing.model = row.model;
+        if (row.title) existing.title = row.title;
         continue;
       }
 
-      // Generate title from first user message
       let title = row.title || "";
       if (!title) {
         try {
@@ -199,9 +199,12 @@ export function syncSessionCache(): CachedSession[] {
       }
     }
 
-    // Merge: new sessions first (most recent), then existing
-    const allSessions = [...newSessions, ...cache.sessions];
-    // Sort by startedAt descending
+    // Merge via Map to prevent duplicates: existing sessions (already
+    // mutated in-place above) plus newly discovered sessions.
+    const merged = new Map<string, CachedSession>();
+    for (const s of cache.sessions) merged.set(s.id, s);
+    for (const s of newSessions) merged.set(s.id, s);
+    const allSessions = Array.from(merged.values());
     allSessions.sort((a, b) => b.startedAt - a.startedAt);
 
     const updated: CacheData = {

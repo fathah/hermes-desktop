@@ -324,7 +324,7 @@ export function installSkill(
     const msg = (e.stderr?.toString() || e.message || "").trim();
     return {
       success: false,
-      error: msg || e.stdout?.toString().trim() || "Install failed.",
+      error: msg || e.stdout?.toString()?.trim() || "Install failed.",
     };
   }
 }
@@ -356,7 +356,7 @@ export function uninstallSkill(name: string, profile?: string): SkillCliResult {
     const msg = (e.stderr?.toString() || e.message || "").trim();
     return {
       success: false,
-      error: msg || e.stdout?.toString().trim() || "Uninstall failed.",
+      error: msg || e.stdout?.toString()?.trim() || "Uninstall failed.",
     };
   }
 }

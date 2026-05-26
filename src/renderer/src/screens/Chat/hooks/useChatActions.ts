@@ -30,7 +30,11 @@ interface UseChatActionsArgs {
 }
 
 interface UseChatActionsResult {
-  handleSend: (text: string, attachments?: Attachment[]) => Promise<void>;
+  handleSend: (
+    text: string,
+    attachments?: Attachment[],
+    skipLoadingCheck?: boolean,
+  ) => Promise<void>;
   handleQuickAsk: (text: string, attachments?: Attachment[]) => Promise<void>;
   handleAbort: () => void;
   handleApprove: () => void;
@@ -99,9 +103,14 @@ export function useChatActions({
   );
 
   const handleSend = useCallback(
-    async (text: string, attachments?: Attachment[]): Promise<void> => {
+    async (
+      text: string,
+      attachments?: Attachment[],
+      skipLoadingCheck = false,
+    ): Promise<void> => {
       const hasPayload = text.length > 0 || (attachments?.length ?? 0) > 0;
-      if (!hasPayload || isLoadingRef.current) return;
+      if (!hasPayload) return;
+      if (!skipLoadingCheck && isLoadingRef.current) return;
 
       if (text && localCommands.isLocal(text)) {
         const cmd = text.split(/\s+/)[0].toLowerCase();

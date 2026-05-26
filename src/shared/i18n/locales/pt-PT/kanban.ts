@@ -5,11 +5,14 @@ export default {
 
   // Header actions
   refresh: "Actualizar",
+  refreshTooltip: "Recarregar quadros e tarefas a partir do agente",
   dispatch: "Despachar",
   dispatchTooltip:
     "Executar uma passagem do despachante — promover tarefas prontas e iniciar trabalhadores",
   newTask: "Nova tarefa",
+  newTaskTooltip: "Criar uma nova tarefa no quadro actual",
   newBoard: "Novo quadro",
+  newBoardTooltip: "Criar um novo quadro kanban",
 
   // Remote-mode unsupported notice
   remoteUnsupportedTitle:
