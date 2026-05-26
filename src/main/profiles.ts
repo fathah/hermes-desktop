@@ -17,6 +17,8 @@ import {
   PROFILE_NAME_ERROR,
 } from "./utils";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
+import { getConnectionConfig } from "./config";
+import { getApiUrl, getRemoteAuthHeader } from "./hermes";
 
 const PROFILES_DIR = join(HERMES_HOME, "profiles");
 
@@ -264,11 +266,61 @@ export function deleteProfile(name: string): {
   }
 }
 
+/**
+ * Fire-and-forget POST against the remote backend's profile
+ * activation endpoint. Used by setActiveProfile() when the app
+ * is in remote mode — otherwise the local CLI invocation has no
+ * effect on the remote gateway's active profile.
+ *
+ * Errors are swallowed silently so a transient backend hiccup
+ * doesn't surface as a UI error on the profile switcher. The
+ * caller keeps the App-side activeProfile state regardless of
+ * whether the backend roundtrip succeeded; the worst case is a
+ * brief mismatch that resolves on the next request.
+ */
+async function _activateRemoteProfile(
+  apiUrl: string,
+  authHeader: Record<string, string>,
+  name: string,
+): Promise<void> {
+  try {
+    await fetch(
+      `${apiUrl}/api/profiles/${encodeURIComponent(name)}/activate`,
+      {
+        method: "POST",
+        headers: {
+          ...authHeader,
+          "Content-Type": "application/json",
+        },
+      },
+    );
+  } catch {
+    // ignore — best-effort
+  }
+}
+
 export function setActiveProfile(name: string): void {
   if (!isValidProfileName(name)) {
     throw new Error(PROFILE_NAME_ERROR);
   }
 
+  const conn = getConnectionConfig();
+
+  if (conn.mode === "remote") {
+    // Remote mode: the local hermes CLI fallback below would
+    // mutate this machine's hermes install instead of the
+    // remote gateway. Fire the HTTP activation endpoint
+    // (introduced by NousResearch/hermes-agent #23742) and
+    // return. Don't await — the caller is the IPC channel that
+    // returns synchronously.
+    void _activateRemoteProfile(getApiUrl(), getRemoteAuthHeader(), name);
+    return;
+  }
+
+  // Local mode: drive the local hermes CLI exactly as before.
+  // SSH-tunnel mode is already filtered out at the IPC handler
+  // level (see set-active-profile in main/index.ts), so this
+  // branch only fires for local mode in practice.
   try {
     execFileSync(HERMES_PYTHON, hermesCliArgs(["profile", "use", name]), {
       cwd: join(HERMES_HOME, "hermes-agent"),
