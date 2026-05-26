@@ -22,8 +22,6 @@ import VerifyWarningBanner from "../../components/VerifyWarningBanner";
 import { CapabilitiesProvider } from "../../components/CapabilitiesProvider";
 import MemoryTelemetryView from "../../components/telemetry-views/MemoryTelemetryView";
 import ToolsTelemetryView from "../../components/telemetry-views/ToolsTelemetryView";
-import SchedulesTelemetryView from "../../components/telemetry-views/SchedulesTelemetryView";
-import KanbanTelemetryView from "../../components/telemetry-views/KanbanTelemetryView";
 import GatewayTelemetryView from "../../components/telemetry-views/GatewayTelemetryView";
 import hermeslogo from "../../assets/hermes.png";
 import {
@@ -388,21 +386,13 @@ function Layout({
 
           {visitedViews.has("schedules") && (
             <div style={paneStyle("schedules")}>
-              {remoteMode ? (
-                <SchedulesTelemetryView />
-              ) : (
-                <Schedules profile={activeProfile} />
-              )}
+              <Schedules profile={activeProfile} />
             </div>
           )}
 
           {visitedViews.has("kanban") && (
             <div style={paneStyle("kanban")}>
-              {remoteMode ? (
-                <KanbanTelemetryView />
-              ) : (
-                <Kanban profile={activeProfile} visible={view === "kanban"} />
-              )}
+              <Kanban profile={activeProfile} visible={view === "kanban"} />
             </div>
           )}
 

@@ -1,43 +1,300 @@
 /**
- * IPC handlers for the four per-subsystem telemetry endpoints
- * (tools / memory / schedules / kanban). Each one is a thin
- * pass-through to the backend's `/v1/telemetry/<name>` endpoint.
+ * IPC handlers for the per-subsystem telemetry surfaces.
  *
- * Kept in a single file because the bodies are tiny and share
- * the same shape — splitting them four ways would just add
- * import noise.
+ * Each `fetch*` function calls Codex' `/api/*` endpoint (the
+ * Remote Management API introduced in
+ * NousResearch/hermes-agent #23742, with the
+ * /api/gateway/status enrichment from #31125) and adapts the
+ * raw response into the renderer's `*Telemetry` shape via a
+ * small `adapt()` helper.
+ *
+ * The adapter pattern keeps the React views unchanged while
+ * the wire format follows whatever Codex' contract evolves to.
+ * When upstream changes, adjust the adapters here — not in the
+ * views.
+ *
+ * Phase A scope is deliberately conservative: only Gateway,
+ * Tools, and Memory are wired here. Schedules and Kanban have
+ * no claim-conformant upstream contract for this PR
+ * (see PR body) and are not implemented.
  */
 
 import { telemetryGet } from "./client";
 import type {
-  KanbanTelemetry,
+  GatewayStatusTelemetry,
   MemoryTelemetry,
-  SchedulesTelemetry,
   TelemetryEnvelope,
   ToolsTelemetry,
 } from "../../shared/telemetry-types";
 
-export async function fetchTools(
-  profile?: string,
-): Promise<TelemetryEnvelope<ToolsTelemetry>> {
-  const qs = profile ? `?profile=${encodeURIComponent(profile)}` : "";
-  return telemetryGet<ToolsTelemetry>(`/v1/telemetry/tools${qs}`);
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Map a raw upstream response into a TelemetryEnvelope by piping
+ * the `available: true` branch through a shape adapter.
+ * `available: false` cases pass through unchanged so UI states
+ * (Loading / Empty / Error / Data) stay correct.
+ *
+ * An adapter that throws is converted to `upstream-error` rather
+ * than crashing the IPC. The renderer then shows the standard
+ * "couldn't reach the backend" empty-state instead of a blank
+ * tab.
+ */
+function adapt<TRaw, T>(
+  raw: TelemetryEnvelope<TRaw>,
+  fn: (data: TRaw) => T,
+): TelemetryEnvelope<T> {
+  if (!raw.available) return raw;
+  try {
+    return { available: true, data: fn(raw.data) };
+  } catch (err) {
+    return {
+      available: false,
+      reason: "upstream-error",
+      detail: `adapter failure: ${(err as Error).message}`,
+    };
+  }
+}
+
+/**
+ * Convert an epoch-seconds number (or string) to ISO-8601 with Z.
+ * Returns undefined for missing / unparseable input — never
+ * throws. Used by adapters that need to surface `last_modified`
+ * style fields as strings to the renderer.
+ */
+function epochToIso(value: unknown): string | undefined {
+  if (value == null) return undefined;
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return undefined;
+  try {
+    return new Date(n * 1000).toISOString();
+  } catch {
+    return undefined;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Gateway status — /api/gateway/status (+ /v1/capabilities merge)
+// ---------------------------------------------------------------------------
+
+/** Raw shape Codex' `/api/gateway/status` actually returns (verified
+ *  against the live deployment running #23742 + #31125). Fields are
+ *  all optional because older backends may pre-date the enrichment. */
+interface CodexGatewayStatus {
+  ok?: boolean;
+  running?: boolean;
+  pid?: number;
+  gateway_state?: string;
+  platforms?: Record<
+    string,
+    {
+      state: string;
+      error_code?: string | null;
+      error_message?: string | null;
+      updated_at?: string;
+    }
+  >;
+  active_agents?: number;
+  exit_reason?: string | null;
+  updated_at?: string;
+  version?: string | null;
+  python_version?: string;
+  openai_sdk_version?: string | null;
+  released?: string | null;
+  subsystem_capabilities?: string[];
+}
+
+/** Raw `/v1/capabilities` shape (subset we consume). */
+interface CodexCapabilities {
+  features?: Record<string, boolean | string>;
+  endpoints?: Record<string, { method: string; path: string }>;
+}
+
+/**
+ * Derive the renderer's capability list from #31125's
+ * `subsystem_capabilities` array plus `/v1/capabilities.features.remote_*`
+ * flags. Both are checked because:
+ *
+ * - `subsystem_capabilities` is the canonical hook (per #31125),
+ *   but older deployments may not populate it yet.
+ * - `/v1/capabilities.features.remote_*` predates the
+ *   subsystem_capabilities hook and stays a valid signal.
+ *
+ * Union-merge: a subsystem advertised by either source counts as
+ * present.
+ */
+function capabilitiesFromFeatures(
+  features: Record<string, boolean | string> = {},
+): string[] {
+  const map: Record<string, string> = {
+    remote_toolsets: "tools",
+    remote_memory: "memory",
+    remote_persona: "persona",
+    remote_sessions: "sessions",
+    remote_profiles: "profiles",
+    remote_skills: "skills",
+  };
+  const out: string[] = [];
+  for (const [feature, capability] of Object.entries(map)) {
+    if (features[feature]) out.push(capability);
+  }
+  return out;
+}
+
+export async function fetchGatewayStatus(): Promise<
+  TelemetryEnvelope<GatewayStatusTelemetry>
+> {
+  const statusEnv = await telemetryGet<CodexGatewayStatus>(
+    "/api/gateway/status",
+  );
+  if (!statusEnv.available) return statusEnv;
+
+  // Best-effort capability merge — never fails the whole status
+  // call if /v1/capabilities is missing on an older backend.
+  const capsEnv = await telemetryGet<CodexCapabilities>("/v1/capabilities");
+
+  const status = statusEnv.data;
+  const featureCaps =
+    capsEnv.available && capsEnv.data?.features
+      ? capabilitiesFromFeatures(capsEnv.data.features)
+      : [];
+  const mergedCaps = Array.from(
+    new Set([...(status.subsystem_capabilities || []), ...featureCaps]),
+  );
+
+  // Synthesise upstreamProviders from the platform-state map so
+  // the existing GatewayTelemetryView's "providers configured /
+  // reachable" rendering keeps working.
+  const upstreamProviders = Object.entries(status.platforms || {}).map(
+    ([name, p]) => ({
+      name,
+      configured: true,
+      reachable: (p?.state || "").toLowerCase() === "connected",
+    }),
+  );
+
+  return {
+    available: true,
+    data: {
+      service: "hermes-agent",
+      version: String(status.version ?? "unknown"),
+      released: status.released ?? null,
+      pythonVersion: status.python_version,
+      openaiSdkVersion: status.openai_sdk_version ?? null,
+      // Codex' /api/gateway/status doesn't expose uptime — leave
+      // 0 so the renderer's "—" placeholder triggers.
+      uptimeSeconds: 0,
+      capabilities: mergedCaps,
+      upstreamProviders,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Tools — /api/tools/toolsets
+// ---------------------------------------------------------------------------
+
+/** Raw shape Codex' `/api/tools/toolsets` returns (verified live). */
+interface CodexToolset {
+  key: string;
+  name?: string;
+  label?: string;
+  description?: string;
+  enabled?: boolean;
+  available?: boolean;
+  configured?: boolean;
+  /** Unused by Codex' shape but kept for future MCP integration. */
+  source?: "builtin" | "mcp";
+  mcpServer?: { name: string; status: "connected" | "disconnected" };
+}
+
+export async function fetchTools(): Promise<
+  TelemetryEnvelope<ToolsTelemetry>
+> {
+  const raw = await telemetryGet<{ toolsets: CodexToolset[] }>(
+    "/api/tools/toolsets",
+  );
+  return adapt(raw, (data) => ({
+    toolsets: (data.toolsets || []).map((t) => ({
+      key: t.key,
+      label: t.label ?? t.name ?? t.key,
+      description: t.description ?? "",
+      enabled: Boolean(t.enabled),
+      // Codex' toolsets are all builtin in this surface — MCP
+      // servers are configured separately. Default to builtin
+      // and leave the mcpServer field undefined.
+      source: t.source ?? "builtin",
+      ...(t.mcpServer ? { mcpServer: t.mcpServer } : {}),
+    })),
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Memory — /api/memory
+// ---------------------------------------------------------------------------
+
+/** Raw shape Codex' `/api/memory` returns (verified live; `user.content`
+ *  comes back as "<redacted>" when the PR #31568 sanitiser is loaded). */
+interface CodexMemory {
+  memory?: {
+    content?: string;
+    exists?: boolean;
+    lastModified?: number | null;
+    last_modified?: number | null;
+    entries?: Array<{ content: string; index?: number }>;
+    charCount?: number;
+    char_count?: number;
+    charLimit?: number;
+    char_limit?: number;
+  };
+  user?: {
+    content?: string;
+    exists?: boolean;
+    lastModified?: number | null;
+    last_modified?: number | null;
+    charCount?: number;
+    char_count?: number;
+    charLimit?: number;
+    char_limit?: number;
+  };
+  stats?: {
+    totalSessions?: number;
+    totalMessages?: number;
+    total_sessions?: number;
+    total_messages?: number;
+  };
 }
 
 export async function fetchMemory(): Promise<
   TelemetryEnvelope<MemoryTelemetry>
 > {
-  return telemetryGet<MemoryTelemetry>("/v1/telemetry/memory");
-}
-
-export async function fetchSchedules(): Promise<
-  TelemetryEnvelope<SchedulesTelemetry>
-> {
-  return telemetryGet<SchedulesTelemetry>("/v1/telemetry/schedules");
-}
-
-export async function fetchKanban(): Promise<
-  TelemetryEnvelope<KanbanTelemetry>
-> {
-  return telemetryGet<KanbanTelemetry>("/v1/telemetry/kanban");
+  const raw = await telemetryGet<CodexMemory>("/api/memory");
+  return adapt(raw, (data) => {
+    const mem = data.memory ?? {};
+    const usr = data.user ?? {};
+    const memExists = Boolean(mem.exists);
+    const usrExists = Boolean(usr.exists);
+    const lastEpoch =
+      mem.last_modified ??
+      mem.lastModified ??
+      usr.last_modified ??
+      usr.lastModified ??
+      null;
+    const totalBytes =
+      (mem.char_count ?? mem.charCount ?? 0) +
+      (usr.char_count ?? usr.charCount ?? 0);
+    return {
+      // Codex' /api/memory serves the file-based MEMORY.md +
+      // USER.md backing store directly — there's no provider
+      // name in the response. Synthesise a stable label so the
+      // renderer's "provider: …" field has something to show.
+      provider: "hermes-server",
+      configured: memExists || usrExists,
+      itemCount: (mem.entries || []).length,
+      sizeBytes: totalBytes,
+      lastUpdatedAt: epochToIso(lastEpoch),
+    };
+  });
 }

@@ -3,9 +3,7 @@ import type { AppLocale } from "../shared/i18n/types";
 import type { Attachment } from "../shared/attachments";
 import type {
   GatewayStatusTelemetry,
-  KanbanTelemetry,
   MemoryTelemetry,
-  SchedulesTelemetry,
   TelemetryEnvelope,
   ToolsTelemetry,
 } from "../shared/telemetry-types";
@@ -920,14 +918,10 @@ const hermesAPI = {
   telemetry: {
     gatewayStatus: (): Promise<TelemetryEnvelope<GatewayStatusTelemetry>> =>
       ipcRenderer.invoke("telemetry-gateway-status"),
-    tools: (profile?: string): Promise<TelemetryEnvelope<ToolsTelemetry>> =>
-      ipcRenderer.invoke("telemetry-tools", profile),
+    tools: (): Promise<TelemetryEnvelope<ToolsTelemetry>> =>
+      ipcRenderer.invoke("telemetry-tools"),
     memory: (): Promise<TelemetryEnvelope<MemoryTelemetry>> =>
       ipcRenderer.invoke("telemetry-memory"),
-    schedules: (): Promise<TelemetryEnvelope<SchedulesTelemetry>> =>
-      ipcRenderer.invoke("telemetry-schedules"),
-    kanban: (): Promise<TelemetryEnvelope<KanbanTelemetry>> =>
-      ipcRenderer.invoke("telemetry-kanban"),
   },
 };
 

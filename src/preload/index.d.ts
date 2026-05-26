@@ -2,9 +2,7 @@ import type { AppLocale } from "../shared/i18n/types";
 import type { Attachment } from "../shared/attachments";
 import type {
   GatewayStatusTelemetry,
-  KanbanTelemetry,
   MemoryTelemetry,
-  SchedulesTelemetry,
   TelemetryEnvelope,
   ToolsTelemetry,
 } from "../shared/telemetry-types";
@@ -747,13 +745,13 @@ interface HermesAPI {
     lines?: number,
   ) => Promise<{ content: string; path: string }>;
 
-  // Telemetry (read-only)
+  // Telemetry (read-only) — Phase A wires Gateway/Tools/Memory.
+  // Schedules + Kanban are out of scope for this PR (no
+  // claim-conformant upstream contract — see PR body).
   telemetry: {
     gatewayStatus: () => Promise<TelemetryEnvelope<GatewayStatusTelemetry>>;
-    tools: (profile?: string) => Promise<TelemetryEnvelope<ToolsTelemetry>>;
+    tools: () => Promise<TelemetryEnvelope<ToolsTelemetry>>;
     memory: () => Promise<TelemetryEnvelope<MemoryTelemetry>>;
-    schedules: () => Promise<TelemetryEnvelope<SchedulesTelemetry>>;
-    kanban: () => Promise<TelemetryEnvelope<KanbanTelemetry>>;
   };
 }
 

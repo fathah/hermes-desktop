@@ -50,8 +50,14 @@ export type TelemetryEnvelope<T> =
 export interface GatewayStatusTelemetry {
   service: "hermes-agent";
   version: string;
+  /** Most recent dated release tag on the backend (e.g. "2026.5.16"). */
+  released?: string | null;
+  /** Backend Python interpreter version (e.g. "3.11.15"). */
+  pythonVersion?: string;
+  /** Installed `openai` SDK version on the backend. */
+  openaiSdkVersion?: string | null;
   uptimeSeconds: number;
-  /** Known keys: "tools" | "memory" | "schedules" | "kanban". Backend may add more later. */
+  /** Subsystem keys the runtime exposes. Backend may add more later. */
   capabilities: string[];
   upstreamProviders: Array<{
     name: string;
