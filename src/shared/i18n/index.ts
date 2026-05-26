@@ -126,6 +126,26 @@ import soulPt from "./locales/pt-BR/soul";
 import memoryPt from "./locales/pt-BR/memory";
 import installPt from "./locales/pt-BR/install";
 import constantsPt from "./locales/pt-BR/constants";
+import commonZhTw from "./locales/zh-TW/common";
+import navigationZhTw from "./locales/zh-TW/navigation";
+import welcomeZhTw from "./locales/zh-TW/welcome";
+import setupZhTw from "./locales/zh-TW/setup";
+import chatZhTw from "./locales/zh-TW/chat";
+import settingsZhTw from "./locales/zh-TW/settings";
+import toolsZhTw from "./locales/zh-TW/tools";
+import sessionsZhTw from "./locales/zh-TW/sessions";
+import modelsZhTw from "./locales/zh-TW/models";
+import providersZhTw from "./locales/zh-TW/providers";
+import officeZhTw from "./locales/zh-TW/office";
+import errorsZhTw from "./locales/zh-TW/errors";
+import schedulesZhTw from "./locales/zh-TW/schedules";
+import skillsZhTw from "./locales/zh-TW/skills";
+import gatewayZhTw from "./locales/zh-TW/gateway";
+import agentsZhTw from "./locales/zh-TW/agents";
+import soulZhTw from "./locales/zh-TW/soul";
+import memoryZhTw from "./locales/zh-TW/memory";
+import installZhTw from "./locales/zh-TW/install";
+import constantsZhTw from "./locales/zh-TW/constants";
 
 export const resources = {
   en: {
@@ -270,6 +290,30 @@ export const resources = {
       memory: memoryJa,
       install: installJa,
       constants: constantsJa,
+    },
+  },
+  "zh-TW": {
+    translation: {
+      common: commonZhTw,
+      navigation: navigationZhTw,
+      welcome: welcomeZhTw,
+      setup: setupZhTw,
+      chat: chatZhTw,
+      settings: settingsZhTw,
+      tools: toolsZhTw,
+      sessions: sessionsZhTw,
+      models: modelsZhTw,
+      providers: providersZhTw,
+      office: officeZhTw,
+      errors: errorsZhTw,
+      schedules: schedulesZhTw,
+      skills: skillsZhTw,
+      gateway: gatewayZhTw,
+      agents: agentsZhTw,
+      soul: soulZhTw,
+      memory: memoryZhTw,
+      install: installZhTw,
+      constants: constantsZhTw,
     },
   },
 } satisfies Resource;

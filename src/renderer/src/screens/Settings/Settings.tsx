@@ -13,7 +13,8 @@ const LANGUAGE_NATIVE_NAMES: Record<AppLocale, string> = {
   id: "Bahasa Indonesia",
   ja: "日本語",
   "pt-BR": "Português",
-  "zh-CN": "中文",
+  "zh-CN": "简体中文",
+  "zh-TW": "繁體中文",
 };
 
 // Read cached values from localStorage for instant display

@@ -1,0 +1,32 @@
+export default {
+  title: "工具",
+  subtitle: "啟用或停用代理在對話期間可使用的工具集",
+  web: { label: "網頁搜尋", description: "搜尋網頁並擷取 URL 內容" },
+  browser: { label: "瀏覽器", description: "瀏覽、點選、輸入並與網頁互動" },
+  terminal: { label: "終端機", description: "執行 shell 指令和腳本" },
+  file: { label: "檔案操作", description: "讀取、寫入、搜尋和管理檔案" },
+  code_execution: {
+    label: "程式碼執行",
+    description: "直接執行 Python 和 shell 程式碼",
+  },
+  vision: { label: "視覺", description: "分析圖片和視覺內容" },
+  image_gen: { label: "圖片產生", description: "使用 DALL-E 等模型產生圖片" },
+  tts: { label: "文字轉語音", description: "將文字轉換為語音音訊" },
+  skills: { label: "技能", description: "建立、管理並執行可重複使用的技能" },
+  memory: { label: "記憶", description: "儲存並回顧持久知識" },
+  session_search: {
+    label: "工作階段搜尋",
+    description: "搜尋歷史工作階段內容",
+  },
+  clarify: { label: "釐清提問", description: "在需要時向使用者發起釐清" },
+  delegation: { label: "任務委派", description: "為並行任務派生子代理" },
+  cronjob: { label: "排程任務", description: "建立和管理排程任務" },
+  moa: { label: "多代理協作", description: "協調多個 AI 模型協同工作" },
+  todo: { label: "任務規劃", description: "為複雜任務建立和管理待辦清單" },
+  mcpServers: "MCP 伺服器",
+  mcpDescription:
+    "在 config.yaml 中設定的模型上下文協議伺服器。在終端機中使用 <code>hermes mcp add/remove</code> 管理。",
+  http: "HTTP",
+  stdio: "標準 IO",
+  disabled: "已停用",
+} as const;
