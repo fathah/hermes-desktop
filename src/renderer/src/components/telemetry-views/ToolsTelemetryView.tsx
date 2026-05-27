@@ -1,20 +1,14 @@
 /**
  * Tools tab in remote mode — read-only list of toolsets driven
  * by GET /api/tools/toolsets. Backend-active profile scope only
- * for Phase A; cross-profile read scoping needs upstream PR
- * NousResearch/hermes-agent #31607 (depends-on of a later phase).
+ * for Phase A; cross-profile read scoping arrives in a later
+ * phase that depends on NousResearch/hermes-agent #31607, at
+ * which point a `profile` prop will be re-introduced.
  */
 
 import { useTelemetryQuery } from "../../hooks/useTelemetryQuery";
 import TelemetryCard from "../TelemetryCard";
 import type { ToolsTelemetry } from "../../../../shared/telemetry-types";
-
-interface Props {
-  /** Currently unused — upstream `?profile=` scoping arrives in a
-   *  later Phase that depends on #31607. The prop is kept for
-   *  prop-API symmetry with the other TelemetryView components. */
-  profile?: string;
-}
 
 function ToolsView({ data }: { data: ToolsTelemetry }): React.JSX.Element {
   if (data.toolsets.length === 0) {
@@ -60,7 +54,7 @@ function ToolsView({ data }: { data: ToolsTelemetry }): React.JSX.Element {
   );
 }
 
-function ToolsTelemetryView(_props: Props): React.JSX.Element {
+function ToolsTelemetryView(): React.JSX.Element {
   const state = useTelemetryQuery<ToolsTelemetry>(
     "tools",
     () => window.hermesAPI.telemetry.tools(),

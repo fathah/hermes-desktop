@@ -377,7 +377,7 @@ function Layout({
           {visitedViews.has("tools") && (
             <div style={paneStyle("tools")}>
               {remoteMode ? (
-                <ToolsTelemetryView profile={activeProfile} />
+                <ToolsTelemetryView />
               ) : (
                 <Tools profile={activeProfile} />
               )}
