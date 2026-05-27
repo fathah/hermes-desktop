@@ -173,3 +173,137 @@ describe("telemetryGet", () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// validateShape — runs on BOTH paths
+// ---------------------------------------------------------------------------
+
+describe("telemetryGet — validateShape", () => {
+  // Require `{kind: string}` for these tests; minimal validator so
+  // we can exercise the validation pathway without locking the
+  // tests to a specific real DTO.
+  const requireKind = (data: unknown): true | string => {
+    if (!data || typeof data !== "object") return "expected object";
+    if (typeof (data as Record<string, unknown>)["kind"] !== "string") {
+      return "missing 'kind'";
+    }
+    return true;
+  };
+
+  beforeEach(() => {
+    // Silence the [telemetry] console.warn during validator
+    // negative tests — clutter, not signal.
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("envelope path: validator passes when env.data matches shape", async () => {
+    routes["/v1/telemetry/ok"] = (res) => {
+      res.statusCode = 200;
+      res.setHeader("content-type", "application/json");
+      res.end(
+        JSON.stringify({
+          available: true,
+          data: { kind: "expected", extra: "tolerated" },
+        }),
+      );
+    };
+    const env = await telemetryGet("/v1/telemetry/ok", {
+      validateShape: requireKind,
+    });
+    expect(env.available).toBe(true);
+  });
+
+  it("envelope path: validator rejects env.data when shape is wrong", async () => {
+    routes["/v1/telemetry/bad-env"] = (res) => {
+      res.statusCode = 200;
+      res.setHeader("content-type", "application/json");
+      // Envelope valid, but env.data missing `kind`.
+      res.end(
+        JSON.stringify({
+          available: true,
+          data: { unrelated: 42 },
+        }),
+      );
+    };
+    const env = await telemetryGet("/v1/telemetry/bad-env", {
+      validateShape: requireKind,
+    });
+    expect(env.available).toBe(false);
+    if (!env.available) {
+      expect(env.reason).toBe("upstream-error");
+      // Detail is intentionally empty (debug-log only).
+      expect(env.detail).toBeUndefined();
+    }
+  });
+
+  it("envelope path: available:false envelopes skip validation (no data)", async () => {
+    routes["/v1/telemetry/unavail"] = (res) => {
+      res.statusCode = 200;
+      res.setHeader("content-type", "application/json");
+      res.end(
+        JSON.stringify({
+          available: false,
+          reason: "not-configured",
+          detail: "no subsystem",
+        }),
+      );
+    };
+    const env = await telemetryGet("/v1/telemetry/unavail", {
+      validateShape: requireKind,
+    });
+    expect(env.available).toBe(false);
+    if (!env.available) {
+      expect(env.reason).toBe("not-configured");
+      expect(env.detail).toBe("no subsystem");
+    }
+  });
+
+  it("raw fallback: validator passes when raw payload matches shape", async () => {
+    routes["/v1/telemetry/raw-ok"] = (res) => {
+      res.statusCode = 200;
+      res.setHeader("content-type", "application/json");
+      // No envelope wrapper — raw JSON.
+      res.end(JSON.stringify({ kind: "expected", extra: "tolerated" }));
+    };
+    const env = await telemetryGet("/v1/telemetry/raw-ok", {
+      validateShape: requireKind,
+    });
+    expect(env.available).toBe(true);
+    if (env.available) {
+      expect(env.data).toMatchObject({ kind: "expected" });
+    }
+  });
+
+  it("raw fallback: validator rejects raw payload when shape is wrong", async () => {
+    routes["/v1/telemetry/raw-bad"] = (res) => {
+      res.statusCode = 200;
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ unrelated: 42 }));
+    };
+    const env = await telemetryGet("/v1/telemetry/raw-bad", {
+      validateShape: requireKind,
+    });
+    expect(env.available).toBe(false);
+    if (!env.available) {
+      expect(env.reason).toBe("upstream-error");
+      expect(env.detail).toBeUndefined();
+    }
+  });
+
+  it("no validateShape: both paths back-compat (envelope forwarded, raw wrapped)", async () => {
+    routes["/v1/telemetry/no-validator"] = (res) => {
+      res.statusCode = 200;
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ unrelated: 42 }));
+    };
+    const env = await telemetryGet("/v1/telemetry/no-validator");
+    expect(env.available).toBe(true);
+    if (env.available) {
+      expect(env.data).toMatchObject({ unrelated: 42 });
+    }
+  });
+});

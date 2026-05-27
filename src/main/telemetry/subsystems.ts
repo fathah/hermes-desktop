@@ -19,13 +19,67 @@
  * (see PR body) and are not implemented.
  */
 
-import { telemetryGet } from "./client";
+import { telemetryGet, type ShapeValidator } from "./client";
 import type {
   GatewayStatusTelemetry,
   MemoryTelemetry,
   TelemetryEnvelope,
   ToolsTelemetry,
 } from "../../shared/telemetry-types";
+
+// ---------------------------------------------------------------------------
+// Shape validators — required-key checks on both wrapper paths
+// ---------------------------------------------------------------------------
+//
+// Each adapter passes one of these to `telemetryGet`. The
+// validator runs on `env.data` when the backend speaks the
+// envelope contract AND on the parsed body when the backend
+// emits raw JSON. Either way, a wrong-shape payload can't
+// silently flow into the renderer. Unknown fields are tolerated
+// — only required keys are checked.
+
+function isObj(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+const validateGatewayStatus: ShapeValidator = (data) => {
+  if (!isObj(data)) return "expected object";
+  // /api/gateway/status always carries `ok` + `running` per #23742.
+  if (typeof data["ok"] !== "boolean") return "missing required key 'ok'";
+  if (typeof data["running"] !== "boolean") {
+    return "missing required key 'running'";
+  }
+  return true;
+};
+
+const validateToolsetsResponse: ShapeValidator = (data) => {
+  if (!isObj(data)) return "expected object";
+  const toolsets = data["toolsets"];
+  if (!Array.isArray(toolsets)) {
+    return "missing required key 'toolsets' (array)";
+  }
+  // Per-item shape — each toolset MUST carry a non-empty string
+  // `key`. Without this guard `[{}]` would reach the renderer
+  // as `<li key={undefined}>` and the React reconciler would
+  // collapse duplicates silently.
+  for (let i = 0; i < toolsets.length; i++) {
+    const t = toolsets[i];
+    if (!isObj(t)) return `toolsets[${i}] is not an object`;
+    if (typeof t["key"] !== "string" || t["key"].length === 0) {
+      return `toolsets[${i}].key missing or not a non-empty string`;
+    }
+  }
+  return true;
+};
+
+const validateMemoryResponse: ShapeValidator = (data) => {
+  if (!isObj(data)) return "expected object";
+  // /api/memory always carries `memory` and `user` sub-objects
+  // per #23742, even when empty.
+  if (!isObj(data["memory"])) return "missing required key 'memory' (object)";
+  if (!isObj(data["user"])) return "missing required key 'user' (object)";
+  return true;
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -148,6 +202,7 @@ export async function fetchGatewayStatus(): Promise<
 > {
   const statusEnv = await telemetryGet<CodexGatewayStatus>(
     "/api/gateway/status",
+    { validateShape: validateGatewayStatus },
   );
   if (!statusEnv.available) return statusEnv;
 
@@ -210,11 +265,10 @@ interface CodexToolset {
   mcpServer?: { name: string; status: "connected" | "disconnected" };
 }
 
-export async function fetchTools(): Promise<
-  TelemetryEnvelope<ToolsTelemetry>
-> {
+export async function fetchTools(): Promise<TelemetryEnvelope<ToolsTelemetry>> {
   const raw = await telemetryGet<{ toolsets: CodexToolset[] }>(
     "/api/tools/toolsets",
+    { validateShape: validateToolsetsResponse },
   );
   return adapt(raw, (data) => ({
     toolsets: (data.toolsets || []).map((t) => ({
@@ -270,7 +324,9 @@ interface CodexMemory {
 export async function fetchMemory(): Promise<
   TelemetryEnvelope<MemoryTelemetry>
 > {
-  const raw = await telemetryGet<CodexMemory>("/api/memory");
+  const raw = await telemetryGet<CodexMemory>("/api/memory", {
+    validateShape: validateMemoryResponse,
+  });
   return adapt(raw, (data) => {
     const mem = data.memory ?? {};
     const usr = data.user ?? {};

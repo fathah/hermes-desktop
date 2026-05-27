@@ -53,9 +53,26 @@ function envelopeError<T>(
  * is missing. The 404/5xx mappings below are pure drift-protection
  * for old backends that don't speak the envelope yet.
  */
+/**
+ * Optional shape validator passed by adapter callers. Returns
+ * `true` if the payload carries the required fields the caller
+ * cares about, or a short error string if it doesn't. Runs on
+ * BOTH wrapper paths:
+ *
+ *  - Envelope path (`{available:true, data: …}`) — validator is
+ *    called on `env.data` before forwarding. `available:false`
+ *    envelopes carry no data and bypass it.
+ *  - Raw-JSON fallback path — validator is called on the parsed
+ *    body before it's wrapped as `{available:true, data}`.
+ *
+ * Validators check REQUIRED keys only — unknown fields are
+ * tolerated by design (forward-compat with backend additions).
+ */
+export type ShapeValidator = (data: unknown) => true | string;
+
 export async function telemetryGet<T>(
   path: string,
-  opts: { timeoutMs?: number } = {},
+  opts: { timeoutMs?: number; validateShape?: ShapeValidator } = {},
 ): Promise<TelemetryEnvelope<T>> {
   let url: string;
   try {
@@ -116,14 +133,58 @@ export async function telemetryGet<T>(
           }
 
           try {
-            const json = JSON.parse(body) as TelemetryEnvelope<T>;
-            // Defensive: be tolerant if backend forgot the envelope.
-            if (json && typeof json === "object" && "available" in json) {
-              resolve(json);
+            const json = JSON.parse(body) as unknown;
+            // Path 1: backend speaks the envelope contract directly.
+            //   When the envelope is `available:true` and the caller
+            //   supplied a `validateShape`, we validate `env.data`
+            //   before forwarding so a wrong-shape payload can't slip
+            //   through into the renderer where a view could crash
+            //   on undefined access.
+            //
+            //   `available:false` envelopes carry no `data` to
+            //   validate and pass through unchanged.
+            if (
+              json &&
+              typeof json === "object" &&
+              "available" in (json as Record<string, unknown>)
+            ) {
+              const env = json as TelemetryEnvelope<T>;
+              if (env.available && opts.validateShape) {
+                const verdict = opts.validateShape(env.data);
+                if (verdict !== true) {
+                  // Debug-log for `npm run dev` main-process console;
+                  // user-facing `detail` is left empty so the UI
+                  // shows the standard upstream-error empty-state
+                  // instead of debug text.
+                  console.warn(
+                    `[telemetry] ${path}: envelope.data shape mismatch (${verdict})`,
+                  );
+                  resolve(envelopeError("upstream-error"));
+                  return;
+                }
+              }
+              resolve(env);
               return;
             }
-            // Treat as raw data — wrap it ourselves.
-            resolve({ available: true, data: json as unknown as T });
+            // Path 2: raw-JSON fallback for backends that don't speak
+            //   the envelope. We wrap as `available:true` ONLY if the
+            //   caller-supplied `validateShape` agrees the payload
+            //   carries the expected required fields. Without
+            //   `validateShape` we wrap permissively (back-compat).
+            //
+            //   Unknown fields are tolerated by design — validators
+            //   check required keys only.
+            if (opts.validateShape) {
+              const verdict = opts.validateShape(json);
+              if (verdict !== true) {
+                console.warn(
+                  `[telemetry] ${path}: raw payload shape mismatch (${verdict})`,
+                );
+                resolve(envelopeError("upstream-error"));
+                return;
+              }
+            }
+            resolve({ available: true, data: json as T });
           } catch (err) {
             resolve(
               envelopeError(
