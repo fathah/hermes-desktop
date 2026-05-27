@@ -37,9 +37,10 @@ export const CapabilitiesContext = createContext<CapabilitiesState>({
 interface ProviderProps {
   children: ReactNode;
   /**
-   * Dependency that triggers a re-probe when changed (e.g. the
-   * `view` from Layout, so we re-check after the user switches
-   * connection modes via Settings).
+   * Dependency that triggers a re-probe when changed. Typically a
+   * signature string of the current connection config (mode +
+   * URL + hasApiKey + ssh fields) so a backend swap in Settings
+   * re-probes even when staying in the same connection mode.
    */
   probeKey?: unknown;
 }

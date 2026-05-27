@@ -100,6 +100,15 @@ function Layout({
   );
   // Remote-only mode — SSH tunnel has full access; only pure HTTP remote mode restricts screens
   const [remoteMode, setRemoteMode] = useState(false);
+  // Signature of the current connection config. Changes whenever
+  // mode / remoteUrl / hasApiKey / ssh fields change so the
+  // CapabilitiesProvider re-probes when the user picks a different
+  // backend in Settings — not just on the mode boolean flip.
+  // Limitation: `hasApiKey` is a boolean (renderer never sees the
+  // raw key), so a value-only key swap on the same URL is NOT
+  // captured here. A follow-up could surface a config-changed
+  // event from Settings to close that gap.
+  const [connectionSignature, setConnectionSignature] = useState("");
 
   const paneStyle = (target: View): React.CSSProperties => ({
     display: view === target ? "flex" : "none",
@@ -113,9 +122,22 @@ function Layout({
     setView(v);
   }, []);
 
-  // Re-check remote mode on tab switch (picks up Settings changes)
+  // Re-check connection state on tab switch (picks up Settings
+  // changes — including switching between two different remote
+  // backends without leaving remote mode).
   useEffect(() => {
-    window.hermesAPI.isRemoteOnlyMode().then(setRemoteMode);
+    Promise.all([
+      window.hermesAPI.isRemoteOnlyMode(),
+      window.hermesAPI.getConnectionConfig(),
+    ])
+      .then(([remote, conn]) => {
+        setRemoteMode(remote);
+        setConnectionSignature(JSON.stringify(conn));
+      })
+      .catch(() => {
+        // Transient IPC failure — keep previous values so the user
+        // sees no false unavailability flicker.
+      });
   }, [view]);
 
   // Auto-update state
@@ -213,7 +235,7 @@ function Layout({
   );
 
   return (
-    <CapabilitiesProvider probeKey={remoteMode}>
+    <CapabilitiesProvider probeKey={connectionSignature}>
       <div className="layout">
         <aside className="sidebar">
           <div className="sidebar-brand">
