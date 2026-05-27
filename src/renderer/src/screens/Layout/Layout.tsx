@@ -408,13 +408,21 @@ function Layout({
 
           {visitedViews.has("schedules") && (
             <div style={paneStyle("schedules")}>
-              <Schedules profile={activeProfile} />
+              {remoteMode ? (
+                <RemoteNotice feature="Schedules" />
+              ) : (
+                <Schedules profile={activeProfile} />
+              )}
             </div>
           )}
 
           {visitedViews.has("kanban") && (
             <div style={paneStyle("kanban")}>
-              <Kanban profile={activeProfile} visible={view === "kanban"} />
+              {remoteMode ? (
+                <RemoteNotice feature="Kanban" />
+              ) : (
+                <Kanban profile={activeProfile} visible={view === "kanban"} />
+              )}
             </div>
           )}
 
