@@ -1,0 +1,16 @@
+export default {
+  chat: "채팅",
+  sessions: "세션",
+  agents: "프로필",
+  office: "오피스",
+  models: "모델",
+  providers: "제공자",
+  skills: "스킬",
+  soul: "페르소나",
+  memory: "메모리",
+  tools: "도구",
+  schedules: "스케줄",
+  kanban: "칸반",
+  gateway: "게이트웨이",
+  settings: "설정",
+} as const;

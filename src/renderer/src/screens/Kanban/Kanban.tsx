@@ -624,7 +624,7 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
               }`}
               onClick={() => handleBoardSwitch(HQ_BOARD_SLUG)}
               disabled={actionBusy === "board-switch"}
-              title="Claw3D headquarters board (read-only mirror)"
+              title={t("kanban.hqBoardTooltip")}
             >
               {isHqActive && <span className="kanban-board-dot" />}
               <span>HQ (Claw3D)</span>
@@ -651,7 +651,7 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
           {error}
           <button
             className="btn-ghost"
-            title="Dismiss error"
+            title={t("kanban.dismissError")}
             onClick={() => setError("")}
           >
             <X size={14} />
@@ -660,10 +660,7 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
       )}
 
       {isHqActive && (
-        <div className="kanban-hq-banner">
-          Read-only mirror of Claw3D&apos;s headquarters board. Edits made here
-          would not sync — use the Office screen to manage HQ tasks.
-        </div>
+        <div className="kanban-hq-banner">{t("kanban.hqReadOnlyBanner")}</div>
       )}
 
       <div className="kanban-columns">
@@ -708,7 +705,7 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
               </div>
               <div className="kanban-column-body">
                 {colTasks.length === 0 && (
-                  <div className="kanban-column-empty">—</div>
+                  <div className="kanban-column-empty">{t("kanban.columnEmpty")}</div>
                 )}
                 {colTasks.map((task) => {
                   const prio = priorityLabel(task.priority);
@@ -755,7 +752,7 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
                       <div className="kanban-card-actions">
                         {isHqActive && (
                           <span className="kanban-pill kanban-pill-readonly">
-                            read-only
+                            {t("kanban.cardReadOnly")}
                           </span>
                         )}
                         {!isHqActive && task.status === "triage" && (
@@ -901,7 +898,7 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
                 </label>
                 <select
                   className="input"
-                  aria-label="Assignee profile"
+                  aria-label={t("kanban.assigneeAriaLabel")}
                   value={newAssignee}
                   onChange={(e) => setNewAssignee(e.target.value)}
                 >
@@ -919,7 +916,7 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
                 </label>
                 <select
                   className="input"
-                  aria-label="Priority"
+                  aria-label={t("kanban.priorityAriaLabel")}
                   value={newPriority}
                   onChange={(e) => setNewPriority(e.target.value)}
                 >
@@ -935,7 +932,7 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
                 </label>
                 <select
                   className="input"
-                  aria-label="Workspace"
+                  aria-label={t("kanban.workspaceAriaLabel")}
                   value={newWorkspace}
                   onChange={(e) => setNewWorkspace(e.target.value)}
                 >
@@ -1077,7 +1074,7 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
               </span>
               <button
                 className="btn-ghost"
-                title="Close task details"
+                title={t("kanban.closeDetailsTitle")}
                 onClick={() => setDetailTaskId(null)}
               >
                 <X size={14} />

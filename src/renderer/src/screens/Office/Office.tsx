@@ -147,8 +147,7 @@ function Office({
       const e = evt as { errorDescription?: string; errorCode?: number };
       if (e?.errorCode === -3) return; // Aborted — ignore (happens on reload)
       setWebviewError(
-        e?.errorDescription ||
-          "Failed to load Claw3D. The dev server may still be starting up.",
+        e?.errorDescription || t("office.webviewLoadError"),
       );
     };
 
@@ -177,12 +176,12 @@ function Office({
       if (result.success) {
         setState("ready");
       } else {
-        setError(result.error || "Setup failed");
+        setError(result.error || t("office.setupFailed"));
         setState("error");
       }
     } catch (err) {
       cleanup();
-      setError((err as Error).message || "Setup failed");
+      setError((err as Error).message || t("office.setupFailed"));
       setState("error");
     }
   }
@@ -200,7 +199,7 @@ function Office({
       setStarting(true);
       const result = await window.hermesAPI.claw3dStartAll(profile);
       if (!result.success) {
-        setError(result.error || "Failed to start Claw3D");
+        setError(result.error || t("office.startFailed"));
         setStarting(false);
       } else {
         // Give processes a moment to actually start, polling will confirm

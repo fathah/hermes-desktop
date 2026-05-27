@@ -11,6 +11,21 @@ export default {
   installSizeHint: "Isto irá instalar os componentes necessários (~2 GB)",
   copyInstallCommand: "Copiar comando de instalação",
   dividerOr: "ou",
+  connectSsh: "Ligar via SSH",
+  sshSubtitle:
+    "Túnel para um Hermes remoto via SSH — sem portas expostas nem chaves de API.",
+  sshHost: "Host SSH",
+  sshHostPlaceholder: "192.168.1.100 ou myserver.local",
+  sshPort: "Porta SSH",
+  sshUsername: "Utilizador",
+  sshPrivateKey: "Caminho da chave privada",
+  sshPrivateKeyHint: "(opcional — predefinição ~/.ssh/id_rsa)",
+  sshRemotePort: "Porta do Hermes remoto",
+  sshRemotePortHint: "(predefinição 8642)",
+  sshTesting: "A testar ligação SSH…",
+  sshSystemHintBefore:
+    "Utiliza o SSH do sistema. Certifique-se de que já consegue executar",
+  sshSystemHintAfter: "sem pedido de palavra-passe.",
   connectRemote: "Ligar a Hermes Remoto",
   connectRemoteTitle: "Ligar a Hermes Remoto",
   connectRemoteSubtitle:

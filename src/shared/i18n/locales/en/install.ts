@@ -30,4 +30,5 @@ export default {
   useExistingDone:
     "Existing installation set — quit and reopen Hermes to apply it.",
   useExistingQuitBtn: "Quit Hermes",
+  joinCommunity: "Join Community",
 } as const;

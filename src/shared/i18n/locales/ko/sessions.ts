@@ -1,0 +1,17 @@
+export default {
+  title: "세션",
+  searchPlaceholder: "대화 검색...",
+  noResults: "결과가 없습니다",
+  noResultsHint: "다른 검색어를 시도해 보세요",
+  empty: "세션이 아직 없습니다",
+  newConversation: "새 대화",
+  newChat: "새 채팅",
+  today: "오늘",
+  yesterday: "어제",
+  thisWeek: "이번 주",
+  earlier: "이전",
+  emptyHint: "첫 세션을 만들려면 대화를 시작하세요",
+  messages: "개",
+  messageSingular: "개",
+  defaultTitle: "새 대화",
+} as const;

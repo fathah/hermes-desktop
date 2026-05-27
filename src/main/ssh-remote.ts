@@ -470,12 +470,7 @@ export async function sshWriteUserProfile(
 
 // ── Soul ─────────────────────────────────────────────────────────────────────
 
-const DEFAULT_SOUL = `You are Hermes, a helpful AI assistant. You are friendly, knowledgeable, and always eager to help.
-
-You communicate clearly and concisely. When asked to perform tasks, you think step-by-step and explain your reasoning. You are honest about your limitations and ask for clarification when needed.
-
-You strive to be helpful while being safe and responsible. You respect the user's privacy and handle sensitive information carefully.
-`;
+import { getDefaultSoul } from "./soul";
 
 function remoteSoulPath(profile?: string): string {
   if (profile && profile !== "default")
@@ -507,8 +502,9 @@ export async function sshResetSoul(
   config: SshConfig,
   profile?: string,
 ): Promise<string> {
-  await sshWriteSoul(config, DEFAULT_SOUL, profile);
-  return DEFAULT_SOUL;
+  const soul = getDefaultSoul();
+  await sshWriteSoul(config, soul, profile);
+  return soul;
 }
 
 // ── Tools ────────────────────────────────────────────────────────────────────

@@ -57,7 +57,7 @@ describe("I18nProvider", () => {
     }
   });
 
-  it("renders English translations by default", async () => {
+  it("renders default-locale translations by default", async () => {
     await act(async () => {
       render(
         <I18nProvider>
@@ -66,7 +66,9 @@ describe("I18nProvider", () => {
       );
     });
 
-    expect(await screen.findByText("Welcome to Hermes")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Hermes에 오신 것을 환영합니다"),
+    ).toBeInTheDocument();
   });
 
   it("renders Spanish translations after switching locale", async () => {
