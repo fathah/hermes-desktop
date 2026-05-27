@@ -64,7 +64,11 @@ interface SafeHouseToolBridgeStatus {
 interface SafeHouseToolEntry {
   name: string;
   description: string;
-  classification: "read_only" | "proposal_only" | "blocked";
+  classification:
+    | "read_only"
+    | "local_safe_write"
+    | "proposal_only"
+    | "blocked";
   risk_level: string;
   approval_required: boolean;
   action: string;
@@ -79,7 +83,11 @@ interface SafeHouseToolManifest {
 interface SafeHousePromptRoute {
   tool: string;
   action: string;
-  classification: "read_only" | "proposal_only" | "blocked";
+  classification:
+    | "read_only"
+    | "local_safe_write"
+    | "proposal_only"
+    | "blocked";
   reason: string;
 }
 
@@ -87,11 +95,16 @@ interface SafeHouseToolCallEnvelope {
   ok: boolean;
   tool?: string;
   action?: string;
-  classification?: "read_only" | "proposal_only" | "blocked";
+  classification?:
+    | "read_only"
+    | "local_safe_write"
+    | "proposal_only"
+    | "blocked";
   source?: string;
   status?: string;
   result?: Record<string, unknown>;
   mutation_performed?: boolean;
+  local_record_written?: boolean;
   strict_json?: boolean;
   error?: string;
 }

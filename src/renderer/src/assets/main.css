@@ -1763,6 +1763,228 @@ body {
   white-space: nowrap;
 }
 
+/* SafeHouse bridge-backed operator pages */
+.safehouse-bridge-page {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.safehouse-bridge-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.safehouse-bridge-kicker {
+  color: var(--success);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.safehouse-bridge-hero h1 {
+  font-size: 28px;
+  line-height: 1.15;
+  margin: 0 0 8px;
+}
+
+.safehouse-bridge-hero p,
+.safehouse-bridge-note,
+.safehouse-bridge-card-desc,
+.safehouse-bridge-tool-card p,
+.safehouse-bridge-boundaries p {
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.safehouse-bridge-status-card,
+.safehouse-bridge-draft,
+.safehouse-bridge-result-summary,
+.safehouse-bridge-boundaries {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.safehouse-bridge-status-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.safehouse-bridge-status-card.connected {
+  border-color: rgba(34, 197, 94, 0.28);
+  background: var(--success-bg);
+}
+
+.safehouse-bridge-status-card.offline {
+  border-color: rgba(245, 158, 11, 0.28);
+  background: var(--warning-bg);
+}
+
+.safehouse-bridge-status-card p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.safehouse-bridge-status-grid,
+.safehouse-bridge-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.safehouse-bridge-status-grid span {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: var(--text-secondary);
+  background: var(--bg-primary);
+  font-size: 12px;
+}
+
+.safehouse-bridge-error,
+.safehouse-bridge-empty,
+.safehouse-bridge-loading {
+  border-radius: var(--radius-md);
+  padding: 12px;
+  margin-bottom: 16px;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+}
+
+.safehouse-bridge-error {
+  color: var(--error);
+  background: var(--error-bg);
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
+.safehouse-bridge-draft {
+  display: grid;
+  gap: 10px;
+}
+
+.safehouse-bridge-draft h2,
+.safehouse-bridge-tool-group h2 {
+  font-size: 16px;
+  margin: 0;
+}
+
+.safehouse-bridge-textarea {
+  min-height: 84px;
+  resize: vertical;
+}
+
+.safehouse-bridge-card-grid,
+.safehouse-bridge-tool-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.safehouse-bridge-card,
+.safehouse-bridge-tool-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  padding: 14px;
+}
+
+.safehouse-bridge-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.safehouse-bridge-card-header h3 {
+  font-size: 14px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.safehouse-bridge-badge {
+  border-radius: 999px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  background: var(--bg-primary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.safehouse-bridge-badge.ok {
+  color: var(--success);
+  border-color: rgba(34, 197, 94, 0.3);
+  background: var(--success-bg);
+}
+
+.safehouse-bridge-badge.proposal {
+  color: var(--warning);
+  border-color: rgba(245, 158, 11, 0.3);
+  background: var(--warning-bg);
+}
+
+.safehouse-bridge-badge.blocked {
+  color: var(--error);
+  border-color: rgba(239, 68, 68, 0.3);
+  background: var(--error-bg);
+}
+
+.safehouse-bridge-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.safehouse-bridge-meta div {
+  min-width: 0;
+}
+
+.safehouse-bridge-meta dt {
+  color: var(--text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.safehouse-bridge-meta dd {
+  margin: 2px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.safehouse-bridge-tool-groups {
+  display: grid;
+  gap: 18px;
+}
+
+.safehouse-bridge-tool-card {
+  display: grid;
+  gap: 8px;
+}
+
+.safehouse-bridge-tool-card span {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
 .chat-input-wrapper {
   display: flex;
   align-items: flex-end;

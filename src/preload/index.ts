@@ -288,7 +288,11 @@ const hermesAPI = {
     tools: Array<{
       name: string;
       description: string;
-      classification: "read_only" | "proposal_only" | "blocked";
+      classification:
+        | "read_only"
+        | "local_safe_write"
+        | "proposal_only"
+        | "blocked";
       risk_level: string;
       approval_required: boolean;
       action: string;
@@ -303,11 +307,16 @@ const hermesAPI = {
     ok: boolean;
     tool?: string;
     action?: string;
-    classification?: "read_only" | "proposal_only" | "blocked";
+    classification?:
+      | "read_only"
+      | "local_safe_write"
+      | "proposal_only"
+      | "blocked";
     source?: string;
     status?: string;
     result?: Record<string, unknown>;
     mutation_performed?: boolean;
+    local_record_written?: boolean;
     strict_json?: boolean;
     error?: string;
   }> => ipcRenderer.invoke("safehouse-bridge-call", tool, input, bridgeUrl),
@@ -317,7 +326,11 @@ const hermesAPI = {
   ): Promise<{
     tool: string;
     action: string;
-    classification: "read_only" | "proposal_only" | "blocked";
+    classification:
+      | "read_only"
+      | "local_safe_write"
+      | "proposal_only"
+      | "blocked";
     reason: string;
   } | null> => ipcRenderer.invoke("safehouse-route-prompt", prompt),
 
@@ -329,7 +342,11 @@ const hermesAPI = {
     route: {
       tool: string;
       action: string;
-      classification: "read_only" | "proposal_only" | "blocked";
+      classification:
+        | "read_only"
+        | "local_safe_write"
+        | "proposal_only"
+        | "blocked";
       reason: string;
     } | null;
     response?: Record<string, unknown>;
