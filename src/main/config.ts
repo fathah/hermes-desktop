@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { randomBytes } from "crypto";
 import { join } from "path";
 import { HERMES_HOME, expectedEnvKeyForModel } from "./installer";
 import {
@@ -1265,14 +1266,12 @@ export function buildCredentialPoolEntry(
 }
 
 function cryptoRandomId(): string {
-  // 8-hex-char id — matches the existing pool entries' id length and
-  // doesn't import the heavier `crypto.randomUUID` machinery if a
-  // collision is astronomically unlikely at the per-pool level.
-  let out = "";
-  for (let i = 0; i < 8; i++) {
-    out += Math.floor(Math.random() * 16).toString(16);
-  }
-  return out;
+  // 8-hex-char id — matches the existing pool entries' id length.
+  // Uses `randomBytes(4)` so the name finally matches the impl: four
+  // cryptographically-strong bytes → 8 hex chars. Post-#382 review
+  // feedback flagged the previous `Math.random()` loop as both
+  // misleadingly named and collision-prone at scale.
+  return randomBytes(4).toString("hex");
 }
 
 /**

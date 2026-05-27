@@ -249,7 +249,12 @@ function createWindow(): void {
     width: 1100,
     height: 850,
     minWidth: 900,
-    minHeight: 820,
+    // Lowered from 820 to fit on 768p / 720p displays — Linux WMs
+    // enforce minHeight strictly, clipping content (chat input, bottom
+    // nav items) below the screen edge on 1366×768 laptops. Issue #393.
+    // Companion CSS change makes .sidebar-nav scrollable when content
+    // exceeds available vertical space.
+    minHeight: 600,
     show: false,
     autoHideMenuBar: true,
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : undefined,

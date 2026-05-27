@@ -948,6 +948,13 @@ body {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  /* When vertical space is tight (small screens, narrow windows), let
+   * the nav scroll instead of clipping the bottom items (Gateway,
+   * Settings). `min-height: 0` is required so the flex child can
+   * shrink below its content size — without it, `overflow-y: auto`
+   * never activates because the flex item refuses to shrink. #393. */
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .sidebar-nav-item {
