@@ -28,6 +28,14 @@ interface SessionsProps {
   visible: boolean;
 }
 
+type SessionsContentView =
+  | "loading"
+  | "search-loading"
+  | "search-empty"
+  | "search-results"
+  | "sessions-empty"
+  | "sessions-list";
+
 function formatTime(ts: number): string {
   const d = new Date(ts * 1000);
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -84,6 +92,26 @@ function groupSessions(
     .map((label) => ({ label, sessions: groups.get(label)! }));
 }
 
+function getSessionsContentView(input: {
+  loading: boolean;
+  isShowingSearch: boolean;
+  /** True while the current query has no settled results yet. */
+  searchPending: boolean;
+  searchResultCount: number;
+  sessionCount: number;
+}): SessionsContentView {
+  if (input.loading) return "loading";
+
+  if (input.isShowingSearch) {
+    if (input.searchPending) return "search-loading";
+    if (input.searchResultCount === 0) return "search-empty";
+    return "search-results";
+  }
+
+  if (input.sessionCount === 0) return "sessions-empty";
+  return "sessions-list";
+}
+
 function highlightSnippet(snippet: string): React.JSX.Element {
   const parts = snippet.split(/(<<.*?>>)/g);
   return (
@@ -104,7 +132,32 @@ function formatModel(model: string): string {
   return name.split(":")[0];
 }
 
-// Memoized session card
+function SessionsLoadingSpinner(): React.JSX.Element {
+  return (
+    <div className="sessions-loading">
+      <div className="loading-spinner" />
+    </div>
+  );
+}
+
+function SessionsEmptyState({
+  icon,
+  title,
+  hint,
+}: {
+  icon: React.JSX.Element;
+  title: string;
+  hint: string;
+}): React.JSX.Element {
+  return (
+    <div className="sessions-empty">
+      {icon}
+      <p className="sessions-empty-text">{title}</p>
+      <p className="sessions-empty-hint">{hint}</p>
+    </div>
+  );
+}
+
 const SessionCard = memo(function SessionCard({
   session,
   isActive,
@@ -148,6 +201,114 @@ const SessionCard = memo(function SessionCard({
   );
 });
 
+const SearchResultCard = memo(function SearchResultCard({
+  result,
+  isActive,
+  onClick,
+  titleFallback,
+  messageLabel,
+}: {
+  result: SearchResult;
+  isActive: boolean;
+  onClick: () => void;
+  titleFallback: string;
+  messageLabel: (count: number) => string;
+}) {
+  return (
+    <button
+      className={`sessions-card ${isActive ? "sessions-card--active" : ""}`}
+      onClick={onClick}
+    >
+      <div className="sessions-card-main">
+        <span className="sessions-card-title">
+          {result.title || titleFallback}
+        </span>
+        <span className="sessions-card-time">
+          {formatFullDate(result.startedAt)}
+        </span>
+      </div>
+      {result.snippet && (
+        <div className="sessions-result-snippet">
+          {highlightSnippet(result.snippet)}
+        </div>
+      )}
+      <div className="sessions-card-tags">
+        <span className="sessions-tag sessions-tag--source">
+          {result.source}
+        </span>
+        <span className="sessions-tag">{messageLabel(result.messageCount)}</span>
+        {result.model && (
+          <span className="sessions-tag sessions-tag--model">
+            {formatModel(result.model)}
+          </span>
+        )}
+      </div>
+    </button>
+  );
+});
+
+function SearchResultsList({
+  results,
+  currentSessionId,
+  onResumeSession,
+  titleFallback,
+  messageLabel,
+}: {
+  results: SearchResult[];
+  currentSessionId: string | null;
+  onResumeSession: (sessionId: string) => void;
+  titleFallback: (sessionId: string) => string;
+  messageLabel: (count: number) => string;
+}): React.JSX.Element {
+  return (
+    <div className="sessions-list">
+      {results.map((result) => (
+        <SearchResultCard
+          key={result.sessionId}
+          result={result}
+          isActive={currentSessionId === result.sessionId}
+          titleFallback={titleFallback(result.sessionId)}
+          messageLabel={messageLabel}
+          onClick={() => onResumeSession(result.sessionId)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function GroupedSessionsList({
+  grouped,
+  currentSessionId,
+  onResumeSession,
+  groupLabel,
+}: {
+  grouped: Array<{ label: DateGroup; sessions: CachedSession[] }>;
+  currentSessionId: string | null;
+  onResumeSession: (sessionId: string) => void;
+  groupLabel: (label: DateGroup) => string;
+}): React.JSX.Element {
+  return (
+    <div className="sessions-list">
+      {grouped.map((group) => (
+        <div key={group.label} className="sessions-group">
+          <div className="sessions-group-label">{groupLabel(group.label)}</div>
+          {group.sessions.map((session) => (
+            <SessionCard
+              key={session.id}
+              session={session}
+              isActive={currentSessionId === session.id}
+              showFullDate={
+                group.label === "thisWeek" || group.label === "earlier"
+              }
+              onClick={() => onResumeSession(session.id)}
+            />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // How often the Sessions tab re-syncs from state.db while it is open, so
 // sessions created in the background (cron jobs, gateway platforms, another
 // device) surface without the user navigating away and back. (refs #322)
@@ -164,9 +325,24 @@ function Sessions({
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
+  /** Trimmed query that `searchResults` belongs to; null while pending. */
+  const [settledQuery, setSettledQuery] = useState<string | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentQueryRef = useRef("");
   const searchRef = useRef<HTMLInputElement>(null);
+
+  const handleSearchQueryChange = useCallback((value: string) => {
+    currentQueryRef.current = value;
+    setSearchQuery(value);
+    if (!value.trim()) {
+      setSettledQuery(null);
+      setSearchResults([]);
+      return;
+    }
+    // Invalidate immediately — don't wait for useEffect debounce.
+    setSettledQuery(null);
+    setSearchResults([]);
+  }, []);
 
   // Quiet re-sync from state.db — refreshes the list WITHOUT flipping the
   // loading state, so it can run on a timer or on focus with no spinner flash.
@@ -230,28 +406,98 @@ function Sessions({
 
   useEffect(() => {
     if (searchTimer.current) clearTimeout(searchTimer.current);
-    if (!searchQuery.trim()) {
+    const query = searchQuery.trim();
+    currentQueryRef.current = searchQuery;
+    if (!query) {
+      setSettledQuery(null);
       setSearchResults([]);
-      setIsSearching(false);
       return;
     }
-    setIsSearching(true);
     searchTimer.current = setTimeout(async () => {
-      const results = await window.hermesAPI.searchSessions(searchQuery);
+      const results = await window.hermesAPI.searchSessions(query);
+      if (currentQueryRef.current.trim() !== query) return;
       setSearchResults(results);
-      setIsSearching(false);
+      setSettledQuery(query);
     }, 300);
     return () => {
       if (searchTimer.current) clearTimeout(searchTimer.current);
     };
   }, [searchQuery]);
 
-  const isShowingSearch = searchQuery.trim().length > 0;
+  const trimmedSearchQuery = searchQuery.trim();
+  const isShowingSearch = trimmedSearchQuery.length > 0;
+  const searchPending = isShowingSearch && settledQuery !== trimmedSearchQuery;
   const grouped = groupSessions(sessions);
+  const contentView = getSessionsContentView({
+    loading,
+    isShowingSearch,
+    searchPending,
+    searchResultCount: searchResults.length,
+    sessionCount: sessions.length,
+  });
+
+  const searchResultTitleFallback = useCallback(
+    (sessionId: string) => `${t("sessions.title")} ${sessionId.slice(-6)}`,
+    [t],
+  );
+
+  const searchResultMessageLabel = useCallback(
+    (count: number) =>
+      count !== 1
+        ? `${count} ${t("sessions.messages")}`
+        : `${count} ${t("sessions.messageSingular")}`,
+    [t],
+  );
+
+  const renderContent = (): React.JSX.Element => {
+    switch (contentView) {
+      case "loading":
+      case "search-loading":
+        return <SessionsLoadingSpinner />;
+
+      case "search-empty":
+        return (
+          <SessionsEmptyState
+            icon={<Search size={32} className="sessions-empty-icon" />}
+            title={t("sessions.noResults")}
+            hint={t("sessions.noResultsHint")}
+          />
+        );
+
+      case "search-results":
+        return (
+          <SearchResultsList
+            results={searchResults}
+            currentSessionId={currentSessionId}
+            onResumeSession={onResumeSession}
+            titleFallback={searchResultTitleFallback}
+            messageLabel={searchResultMessageLabel}
+          />
+        );
+
+      case "sessions-empty":
+        return (
+          <SessionsEmptyState
+            icon={<ChatBubble size={32} className="sessions-empty-icon" />}
+            title={t("sessions.empty")}
+            hint={t("sessions.emptyHint")}
+          />
+        );
+
+      case "sessions-list":
+        return (
+          <GroupedSessionsList
+            grouped={grouped}
+            currentSessionId={currentSessionId}
+            onResumeSession={onResumeSession}
+            groupLabel={(label) => t(`sessions.${label}`)}
+          />
+        );
+    }
+  };
 
   return (
     <div className="sessions-container">
-      {/* Header with integrated search */}
       <div className="sessions-header">
         <div className="sessions-header-top">
           <h2 className="sessions-title">{t("sessions.title")}</h2>
@@ -268,13 +514,13 @@ function Sessions({
             type="text"
             placeholder={t("sessions.searchPlaceholder")}
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => handleSearchQueryChange(e.target.value)}
           />
           {searchQuery && (
             <button
               className="btn-ghost sessions-searchbar-clear"
               onClick={() => {
-                setSearchQuery("");
+                handleSearchQueryChange("");
                 searchRef.current?.focus();
               }}
             >
@@ -284,92 +530,7 @@ function Sessions({
         </div>
       </div>
 
-      {/* Content */}
-      {loading ? (
-        <div className="sessions-loading">
-          <div className="loading-spinner" />
-        </div>
-      ) : isShowingSearch ? (
-        isSearching ? (
-          <div className="sessions-loading">
-            <div className="loading-spinner" />
-          </div>
-        ) : searchResults.length === 0 ? (
-          <div className="sessions-empty">
-            <Search size={32} className="sessions-empty-icon" />
-            <p className="sessions-empty-text">{t("sessions.noResults")}</p>
-            <p className="sessions-empty-hint">{t("sessions.noResultsHint")}</p>
-          </div>
-        ) : (
-          <div className="sessions-list">
-            {searchResults.map((r) => (
-              <button
-                key={r.sessionId}
-                className={`sessions-card ${currentSessionId === r.sessionId ? "sessions-card--active" : ""}`}
-                onClick={() => onResumeSession(r.sessionId)}
-              >
-                <div className="sessions-card-main">
-                  <span className="sessions-card-title">
-                    {r.title ||
-                      `${t("sessions.title")} ${r.sessionId.slice(-6)}`}
-                  </span>
-                  <span className="sessions-card-time">
-                    {formatFullDate(r.startedAt)}
-                  </span>
-                </div>
-                {r.snippet && (
-                  <div className="sessions-result-snippet">
-                    {highlightSnippet(r.snippet)}
-                  </div>
-                )}
-                <div className="sessions-card-tags">
-                  <span className="sessions-tag sessions-tag--source">
-                    {r.source}
-                  </span>
-                  <span className="sessions-tag">
-                    {r.messageCount}{" "}
-                    {r.messageCount !== 1
-                      ? t("sessions.messages")
-                      : t("sessions.messageSingular")}
-                  </span>
-                  {r.model && (
-                    <span className="sessions-tag sessions-tag--model">
-                      {formatModel(r.model)}
-                    </span>
-                  )}
-                </div>
-              </button>
-            ))}
-          </div>
-        )
-      ) : sessions.length === 0 ? (
-        <div className="sessions-empty">
-          <ChatBubble size={32} className="sessions-empty-icon" />
-          <p className="sessions-empty-text">{t("sessions.empty")}</p>
-          <p className="sessions-empty-hint">{t("sessions.emptyHint")}</p>
-        </div>
-      ) : (
-        <div className="sessions-list">
-          {grouped.map((group) => (
-            <div key={group.label} className="sessions-group">
-              <div className="sessions-group-label">
-                {t(`sessions.${group.label}`)}
-              </div>
-              {group.sessions.map((s) => (
-                <SessionCard
-                  key={s.id}
-                  session={s}
-                  isActive={currentSessionId === s.id}
-                  showFullDate={
-                    group.label === "thisWeek" || group.label === "earlier"
-                  }
-                  onClick={() => onResumeSession(s.id)}
-                />
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
+      {renderContent()}
     </div>
   );
 }
