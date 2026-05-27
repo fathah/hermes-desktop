@@ -8,11 +8,7 @@
  */
 
 import type { IpcMain } from "electron";
-import {
-  fetchGatewayStatus,
-  fetchMemory,
-  fetchTools,
-} from "./subsystems";
+import { fetchGatewayStatus, fetchMemory, fetchTools } from "./subsystems";
 
 export function registerTelemetryHandlers(ipcMain: IpcMain): void {
   ipcMain.handle("telemetry-gateway-status", () => fetchGatewayStatus());

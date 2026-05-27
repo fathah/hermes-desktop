@@ -50,7 +50,8 @@ function MemoryView({ data }: { data: MemoryTelemetry }): React.JSX.Element {
         )}
       </dl>
       <p className="telemetry-summary-hint">
-        Memory contents stay on the Hermes server. The desktop app shows status only.
+        Memory contents stay on the Hermes server. The desktop app shows status
+        only.
       </p>
     </div>
   );
