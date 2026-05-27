@@ -238,9 +238,11 @@ export async function fetchGatewayStatus(): Promise<
       released: status.released ?? null,
       pythonVersion: status.python_version,
       openaiSdkVersion: status.openai_sdk_version ?? null,
-      // Codex' /api/gateway/status doesn't expose uptime — leave
-      // 0 so the renderer's "—" placeholder triggers.
-      uptimeSeconds: 0,
+      // `uptimeSeconds` is intentionally omitted — Codex'
+      // /api/gateway/status doesn't expose uptime, so the
+      // renderer shows "—" via its undefined-branch. Future
+      // backend exposing an `uptime_seconds` field can be picked
+      // up here with one line.
       capabilities: mergedCaps,
       upstreamProviders,
     },

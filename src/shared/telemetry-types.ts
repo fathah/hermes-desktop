@@ -56,7 +56,11 @@ export interface GatewayStatusTelemetry {
   pythonVersion?: string;
   /** Installed `openai` SDK version on the backend. */
   openaiSdkVersion?: string | null;
-  uptimeSeconds: number;
+  /** Backend uptime in seconds. Optional — Codex'
+   *  `/api/gateway/status` does not expose this today. Renderer
+   *  shows "—" when undefined; a real number (incl. 0) renders
+   *  via `formatUptime`. */
+  uptimeSeconds?: number;
   /** Subsystem keys the runtime exposes. Backend may add more later. */
   capabilities: string[];
   upstreamProviders: Array<{

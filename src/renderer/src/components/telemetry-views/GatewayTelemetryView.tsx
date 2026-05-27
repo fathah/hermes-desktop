@@ -85,7 +85,11 @@ function GatewayTelemetryView(): React.JSX.Element {
   );
 }
 
-function formatUptime(seconds: number): string {
+function formatUptime(seconds: number | undefined): string {
+  // `undefined` = backend doesn't expose uptime (current Codex
+  // `/api/gateway/status`). Show "—" rather than a fake "0s" that
+  // looks like the backend just restarted.
+  if (seconds === undefined) return "—";
   if (seconds < 60) return `${seconds}s`;
   const m = Math.floor(seconds / 60);
   if (m < 60) return `${m}m ${seconds % 60}s`;
