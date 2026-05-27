@@ -198,28 +198,31 @@ function Welcome({
       <div className="screen welcome-screen">
         <HermesLogo size={36} />
         <h1 className="welcome-title" style={{ fontSize: 22 }}>
-          Connect via SSH
+          {t("welcome.connectSsh")}
         </h1>
         <p className="welcome-subtitle" style={{ marginBottom: 24 }}>
-          Tunnel to a remote Hermes over SSH — no exposed ports or API keys
-          needed.
+          {t("welcome.sshSubtitle")}
         </p>
 
         <div className="welcome-remote-card">
           <div style={{ display: "flex", gap: 8 }}>
             <div style={{ flex: 3 }}>
-              <label className="welcome-remote-label">SSH Host</label>
+              <label className="welcome-remote-label">
+                {t("welcome.sshHost")}
+              </label>
               <input
                 type="text"
                 className="welcome-remote-input"
-                placeholder="192.168.1.100 or myserver.local"
+                placeholder={t("welcome.sshHostPlaceholder")}
                 value={sshHost}
                 onChange={(e) => setSshHost(e.target.value)}
                 autoFocus
               />
             </div>
             <div style={{ flex: 1 }}>
-              <label className="welcome-remote-label">SSH Port</label>
+              <label className="welcome-remote-label">
+                {t("welcome.sshPort")}
+              </label>
               <input
                 type="number"
                 className="welcome-remote-input"
@@ -231,7 +234,7 @@ function Welcome({
           </div>
 
           <label className="welcome-remote-label" style={{ marginTop: 12 }}>
-            Username
+            {t("welcome.sshUsername")}
           </label>
           <input
             type="text"
@@ -242,9 +245,9 @@ function Welcome({
           />
 
           <label className="welcome-remote-label" style={{ marginTop: 12 }}>
-            Private Key Path{" "}
+            {t("welcome.sshPrivateKey")}{" "}
             <span style={{ fontWeight: 400, opacity: 0.6 }}>
-              (optional — defaults to ~/.ssh/id_rsa)
+              {t("welcome.sshPrivateKeyHint")}
             </span>
           </label>
           <input
@@ -256,9 +259,9 @@ function Welcome({
           />
 
           <label className="welcome-remote-label" style={{ marginTop: 12 }}>
-            Remote Hermes Port{" "}
+            {t("welcome.sshRemotePort")}{" "}
             <span style={{ fontWeight: 400, opacity: 0.6 }}>
-              (default 8642)
+              {t("welcome.sshRemotePortHint")}
             </span>
           </label>
           <input
@@ -278,12 +281,12 @@ function Welcome({
             >
               {sshTesting ? (
                 <>
-                  Testing SSH connection…
+                  {t("welcome.sshTesting")}
                   <Spinner size={14} className="animate-spin" />
                 </>
               ) : (
                 <>
-                  Connect via SSH
+                  {t("welcome.connectSsh")}
                   <ArrowRight size={16} />
                 </>
               )}
@@ -300,11 +303,11 @@ function Welcome({
           )}
 
           <p className="welcome-remote-hint">
-            Uses your system SSH. Make sure you can already run{" "}
+            {t("welcome.sshSystemHintBefore")}{" "}
             <code style={{ fontFamily: "monospace", fontSize: 12 }}>
               ssh {sshUser || "user"}@{sshHost || "host"}
             </code>{" "}
-            without a password prompt.
+            {t("welcome.sshSystemHintAfter")}
           </p>
         </div>
 
@@ -376,7 +379,7 @@ function Welcome({
               onClick={() => setPanel("ssh")}
             >
               <KeyRound size={16} />
-              Connect via SSH
+              {t("welcome.connectSsh")}
             </button>{" "}
             <button
               className="btn btn-secondary welcome-recheck-btn "
@@ -406,7 +409,7 @@ function Welcome({
             onClick={() => setPanel("ssh")}
           >
             <KeyRound size={16} />
-            Connect via SSH
+            {t("welcome.connectSsh")}
           </button>
 
           <button

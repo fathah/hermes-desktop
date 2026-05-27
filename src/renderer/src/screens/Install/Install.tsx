@@ -270,7 +270,7 @@ function Install({
               title={TELEGRAM_COMMUNITY_URL}
             >
               <Send size={13} />
-              Join Community
+              {t("install.joinCommunity")}
             </button>
           </div>
         </div>

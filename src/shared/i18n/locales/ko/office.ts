@@ -1,0 +1,30 @@
+export default {
+  title: "오피스",
+  checkingStatus: "Claw3D 상태 확인 중...",
+  setupTitle: "Claw3D 설정",
+  installTitle: "Claw3D 설치 중",
+  processLogs: "프로세스 로그",
+  noLogs: "로그가 없습니다. 서비스를 시작하면 출력이 표시됩니다.",
+  loadingClaw3d: "Claw3D 로드 중...",
+  installClaw3d: "Claw3D 설치",
+  setupFailed: "설정 실패",
+  startFailed: "Claw3D 시작 실패",
+  portInUse: "포트 {{port}}가 사용 중입니다. 설정에서 변경한 뒤 시작하세요.",
+  websocketUrl: "WebSocket URL",
+  viewOnGithub: "GitHub에서 보기",
+  waitingToStart: "시작 대기 중...",
+  starting: "시작하는 중...",
+  openInBrowser: "브라우저에서 열기",
+  viewLogs: "로그 보기",
+  portInUseWarning:
+    "포트 {{port}}가 사용 중입니다. 설정에서 포트를 변경하거나 다른 프로세스를 중지하세요.",
+  close: "닫기",
+  cannotLoadClaw3d: "Claw3D를 로드할 수 없습니다",
+  startingClaw3dService: "Claw3D 서비스를 시작하는 중...",
+  clickToStart: '"시작"을 클릭해 Claw3D를 실행하세요',
+  setupDesc1:
+    "Claw3D는 Hermes 에이전트를 위한 3D 시각화 환경입니다. 대화형 오피스 공간에서 에이전트의 작업을 볼 수 있습니다.",
+  setupDesc2:
+    "아래를 클릭해 Claw3D를 자동으로 다운로드·설정하세요. 저장소를 클론하고 모든 의존성을 설치합니다.",
+  webviewLoadError: "Claw3D를 로드하지 못했습니다. 개발 서버가 아직 시작 중일 수 있습니다.",
+} as const;

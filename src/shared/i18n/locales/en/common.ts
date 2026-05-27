@@ -46,4 +46,6 @@ export default {
   errorMessage: "An unexpected error occurred.",
   tryAgain: "Try Again",
   copied: "Copied!",
+  python: "Python",
+  openaiSdk: "OpenAI SDK",
 } as const;

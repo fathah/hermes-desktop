@@ -1,0 +1,30 @@
+export default {
+  title: "모델",
+  freeBadge: "(무료)",
+  searchPlaceholder: "모델 검색...",
+  empty: "모델이 아직 없습니다",
+  noMatch: "검색 결과에 일치하는 모델이 없습니다",
+  deleteConfirm: "삭제할까요?",
+  displayName: "표시 이름",
+  modelId: "모델 ID",
+  namePlaceholder: "예: Claude Sonnet 4",
+  modelIdPlaceholder: "예: anthropic/claude-sonnet-4-20250514",
+  baseUrlPlaceholder: "http://localhost:1234/v1",
+  subtitle:
+    "모델 라이브러리를 관리하세요. 여기 등록한 모델이 채팅 페이지의 모델 선택기에 표시됩니다.",
+  addModel: "모델 추가",
+  emptyHint:
+    "모델을 추가하면 채팅 페이지의 모델 선택기에서 사용할 수 있습니다. 설정에서 구성한 모델도 자동으로 여기에 추가됩니다.",
+  editModel: "모델 편집",
+  update: "업데이트",
+  deleteModelTitle: "모델 삭제",
+  yes: "예",
+  no: "아니오",
+  nameRequired: "이름과 모델 ID는 필수입니다",
+  customProviderHint: "사용자 지정 또는 로컬 제공자에만 필요합니다",
+  apiKeyLabel: "API 키",
+  apiKeyHint:
+    "환경 변수로 저장됩니다. URL에 맞는 env 키를 선택하거나, 그렇지 않으면 CUSTOM_API_KEY를 사용합니다.",
+  autoDetectedBadge: "Base URL에서 자동 감지됨",
+  apiKeyPlaceholder: "sk-...",
+} as const;

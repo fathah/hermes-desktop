@@ -1,0 +1,57 @@
+export default {
+  title: "메모리",
+  subtitle: "Hermes가 세션 너머로 당신과 환경에 대해 기억하는 정보입니다.",
+  sessions: "세션",
+  messages: "메시지",
+  memories: "메모리",
+  providersTitle: "제공자",
+  agentMemory: "에이전트 메모리",
+  userProfile: "사용자 프로필",
+  entries: "{{count}}개 항목",
+  addMemory: "메모리 추가",
+  addFailed: "항목 추가 실패",
+  updateFailed: "항목 업데이트 실패",
+  saveFailed: "저장 실패",
+  entriesPlaceholder:
+    "예: 사용자는 JavaScript보다 TypeScript를 선호. 항상 strict 모드 사용.",
+  userProfilePlaceholder:
+    "예: 이름: Alex. 시니어 개발자. 간결한 답변 선호. zsh가 있는 macOS 사용. 시간대: PST.",
+  noProvidersFound: "이 설치에서 메모리 제공자를 찾을 수 없습니다.",
+  openProviderWebsite: "제공자 웹사이트 열기",
+  noMemoriesYet:
+    "아직 메모리가 없습니다. 대화하면 Hermes가 중요한 사실을 저장합니다.",
+  noMemoryEntries: "메모리 항목이 아직 없습니다.",
+  noToolsetsFound: "도구 묶음이 없습니다.",
+  addManuallyHint: "위 버튼으로 메모리를 직접 추가할 수도 있습니다.",
+  userProfileHint:
+    "이름, 역할, 선호도, 소통 방식 등 자신에 대해 Hermes에게 알려주세요.",
+  providersHint:
+    "플러그형 메모리 제공자는 Hermes에게 고급 장기 메모리를 제공합니다. 내장 메모리(위)는 선택된 제공자와 함께 항상 활성 상태입니다.",
+  providersHintActive: "활성: <strong>{{provider}}</strong>",
+  providersHintInactive: "활성 외부 제공자 없음 — 내장 메모리만 사용 중.",
+  enterEnvKey: "{{key}} 입력",
+  chars: "{{count}}자",
+  cancel: "취소",
+  save: "저장",
+  edit: "편집",
+  deleteConfirm: "삭제할까요?",
+  yes: "예",
+  no: "아니오",
+  saveProfile: "프로필 저장",
+  active: "활성",
+  deactivate: "비활성화",
+  activating: "활성화 중...",
+  activate: "활성화",
+  providers: {
+    honcho: "변증법적 Q&A와 의미 검색을 갖춘 AI 네이티브 세션 간 사용자 모델링",
+    hindsight: "지식 그래프와 다중 전략 검색을 사용하는 장기 메모리",
+    mem0: "의미 검색과 자동 중복 제거가 포함된 서버측 LLM 사실 추출",
+    retaindb:
+      "하이브리드 검색과 7가지 메모리 유형을 제공하는 클라우드 메모리 API",
+    supermemory: "프로필 회상과 엔티티 추출이 포함된 의미 기반 장기 메모리",
+    holographic:
+      "FTS5 검색과 신뢰도 점수를 갖춘 로컬 SQLite 사실 저장소 (API 키 불필요)",
+    openviking: "계층 검색과 지식 탐색이 포함된 세션 관리형 메모리",
+    byterover: "brv CLI를 통한 계층 검색의 영속 지식 트리",
+  },
+} as const;

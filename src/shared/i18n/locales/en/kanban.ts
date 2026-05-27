@@ -98,4 +98,14 @@ export default {
   errArchive: "Failed to archive task",
   errReclaim: "Failed to reclaim",
   errDispatch: "Dispatch failed",
+  hqBoardTooltip: "Claw3D headquarters board (read-only mirror)",
+  hqReadOnlyBanner:
+    "Read-only mirror of Claw3D's headquarters board. Edits made here would not sync — use the Office screen to manage HQ tasks.",
+  columnEmpty: "—",
+  cardReadOnly: "read-only",
+  assigneeAriaLabel: "Assignee profile",
+  priorityAriaLabel: "Priority",
+  workspaceAriaLabel: "Workspace",
+  closeDetailsTitle: "Close task details",
+  dismissError: "Dismiss error",
 } as const;

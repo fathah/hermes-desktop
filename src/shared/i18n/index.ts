@@ -107,6 +107,27 @@ import soulZhTw from "./locales/zh-TW/soul";
 import memoryZhTw from "./locales/zh-TW/memory";
 import installZhTw from "./locales/zh-TW/install";
 import constantsZhTw from "./locales/zh-TW/constants";
+import commonKo from "./locales/ko/common";
+import navigationKo from "./locales/ko/navigation";
+import welcomeKo from "./locales/ko/welcome";
+import setupKo from "./locales/ko/setup";
+import chatKo from "./locales/ko/chat";
+import settingsKo from "./locales/ko/settings";
+import toolsKo from "./locales/ko/tools";
+import sessionsKo from "./locales/ko/sessions";
+import modelsKo from "./locales/ko/models";
+import providersKo from "./locales/ko/providers";
+import officeKo from "./locales/ko/office";
+import errorsKo from "./locales/ko/errors";
+import schedulesKo from "./locales/ko/schedules";
+import skillsKo from "./locales/ko/skills";
+import gatewayKo from "./locales/ko/gateway";
+import agentsKo from "./locales/ko/agents";
+import soulKo from "./locales/ko/soul";
+import memoryKo from "./locales/ko/memory";
+import installKo from "./locales/ko/install";
+import constantsKo from "./locales/ko/constants";
+import kanbanKo from "./locales/ko/kanban";
 import commonJa from "./locales/ja/common";
 import navigationJa from "./locales/ja/navigation";
 import welcomeJa from "./locales/ja/welcome";
@@ -338,6 +359,31 @@ export const resources = {
       install: installPtPt,
       constants: constantsPtPt,
       kanban: kanbanPtPt,
+    },
+  },
+  ko: {
+    translation: {
+      common: commonKo,
+      navigation: navigationKo,
+      welcome: welcomeKo,
+      setup: setupKo,
+      chat: chatKo,
+      settings: settingsKo,
+      tools: toolsKo,
+      sessions: sessionsKo,
+      models: modelsKo,
+      providers: providersKo,
+      office: officeKo,
+      errors: errorsKo,
+      schedules: schedulesKo,
+      skills: skillsKo,
+      gateway: gatewayKo,
+      agents: agentsKo,
+      soul: soulKo,
+      memory: memoryKo,
+      install: installKo,
+      constants: constantsKo,
+      kanban: kanbanKo,
     },
   },
   ja: {

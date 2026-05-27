@@ -75,7 +75,8 @@ export const ReasoningRow = memo(function ReasoningRow({
           <span className="chat-history-label">
             <span className="chat-history-title">{t("chat.thinking")}</span>
             <span className="chat-history-meta">
-              {lineCount} {lineCount === 1 ? "line" : "lines"}
+              {lineCount}{" "}
+              {lineCount === 1 ? t("chat.lineSingular") : t("chat.linePlural")}
             </span>
           </span>
         }
@@ -119,7 +120,7 @@ export const ToolCallRow = memo(function ToolCallRow({
         }
       >
         <pre className="chat-history-pre chat-history-pre--code">
-          {msg.args || "(no arguments)"}
+          {msg.args || t("chat.noArguments")}
         </pre>
       </CollapsibleSection>
     </div>
@@ -151,10 +152,13 @@ export const ToolResultRow = memo(function ToolResultRow({
             <span className="chat-history-title">{t("chat.toolResult")}</span>
             <span className="chat-history-tool-name">{msg.name}</span>
             <span className="chat-history-meta">
-              {lines} {lines === 1 ? "line" : "lines"}
+              {lines}{" "}
+              {lines === 1 ? t("chat.lineSingular") : t("chat.linePlural")}
               {hasAttachments
-                ? ` · ${msg.attachments!.length} attachment${
-                    msg.attachments!.length === 1 ? "" : "s"
+                ? ` · ${msg.attachments!.length} ${
+                    msg.attachments!.length === 1
+                      ? t("chat.attachmentSingular")
+                      : t("chat.attachmentPlural")
                   }`
                 : ""}
             </span>
@@ -169,7 +173,7 @@ export const ToolResultRow = memo(function ToolResultRow({
           </div>
         )}
         <pre className="chat-history-pre chat-history-pre--scroll">
-          {msg.content || "(empty)"}
+          {msg.content || t("chat.emptyResult")}
         </pre>
       </CollapsibleSection>
     </div>

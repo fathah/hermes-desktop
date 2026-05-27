@@ -116,4 +116,36 @@ export default {
     "You&apos;re connected to a remote Hermes server. Model selection, provider API keys, and credentials are managed on the server&apos;s <code>~/.hermes/.env</code> and <code>config.yaml</code>. Edit them on the host (e.g. <code>docker exec -it hermes vi /opt/data/.env</code>) and restart the container.",
   connectionMode: "Mode",
   switchedToLocal: "Switched to local mode",
+  communitySection: "Community",
+  communityHint:
+    "Join our Telegram group to ask questions, report issues, and chat with other Hermes users.",
+  joinTelegram: "Join Telegram Community",
+  modeSsh: "SSH Tunnel",
+  modeSshHint:
+    "Tunnel to a remote Hermes over SSH — no exposed ports or API keys needed.",
+  apiKeyMissingTitle: "Session history disabled — API_SERVER_KEY not set",
+  apiKeyMissingDesc:
+    "Without an API server key the gateway cannot authenticate session continuation requests. Messages will still send, but conversation history won't be preserved across restarts.",
+  apiKeyGenerated: "API key generated — gateway restarting…",
+  generatingKey: "Generating…",
+  generateKeyButton: "Generate & save a key for me",
+  setApiKeyTitle: "Set API_SERVER_KEY on the remote server",
+  setApiKeySshDesc:
+    "SSH mode: add API_SERVER_KEY=<your-key> to ~/.hermes/profiles/<profile>/.env on the remote host, then restart the gateway there.",
+  setApiKeyRemoteDesc:
+    "Remote mode: add API_SERVER_KEY=<your-key> to the .env on your remote Hermes server, then restart the gateway.",
+  sshHost: "SSH Host",
+  sshHostPlaceholder: "192.168.1.100 or myserver.local",
+  sshPort: "SSH Port",
+  sshUsername: "Username",
+  sshPrivateKey: "Private Key Path",
+  sshPrivateKeyHint: "(optional, defaults to ~/.ssh/id_rsa)",
+  sshRemotePort: "Remote Hermes Port",
+  sshRemotePortHint: "(default 8642)",
+  sshConnectionHintBefore: "Make sure you can run",
+  sshConnectionHintAfter:
+    "without a password prompt. The first connection trusts the host key and stores it in",
+  sshConnectionHintEnd: "; SSH will fail closed if that key changes later.",
+  testingSsh: "Testing SSH…",
+  testSshConnection: "Test SSH Connection",
 } as const;

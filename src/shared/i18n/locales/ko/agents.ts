@@ -1,0 +1,23 @@
+export default {
+  title: "프로필",
+  subtitle:
+    "각 프로필은 자체 구성·메모리·스킬을 가진 독립적인 Hermes 워크스페이스입니다",
+  newAgent: "새 에이전트",
+  namePlaceholder: "에이전트 이름 (예: coder)",
+  cloneConfig: "기본값에서 구성과 API 키 복제",
+  createFailed: "프로필 생성 실패",
+  creating: "생성 중...",
+  create: "생성",
+  active: "활성",
+  noModel: "모델이 설정되지 않음",
+  skillsCount: "{{count}}개 스킬",
+  gatewayRunning: "게이트웨이 실행 중",
+  gatewayOff: "게이트웨이 꺼짐",
+  chat: "채팅",
+  deleteConfirm: "삭제할까요?",
+  yes: "예",
+  no: "아니오",
+  deleteTitle: "에이전트 삭제",
+  auto: "자동",
+  local: "로컬",
+} as const;

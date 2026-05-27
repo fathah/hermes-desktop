@@ -179,7 +179,7 @@ function Setup({
               <input
                 className="input"
                 type={showKey ? "text" : "password"}
-                placeholder="sk-..."
+                placeholder={t("setup.apiKeyPlaceholder")}
                 value={apiKey}
                 onChange={(e) => {
                   setApiKey(e.target.value);

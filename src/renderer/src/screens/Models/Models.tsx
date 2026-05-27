@@ -387,7 +387,7 @@ function Models({ visible }: ModelsProps = {}): React.JSX.Element {
                   {t("common.provider")}
                   {providerAutoFilled && !providerTouched && (
                     <span className="models-modal-auto-badge">
-                      &nbsp;· auto-detected from base URL
+                      &nbsp;· {t("models.autoDetectedBadge")}
                     </span>
                   )}
                 </label>
@@ -504,7 +504,7 @@ function Models({ visible }: ModelsProps = {}): React.JSX.Element {
                       type={showApiKey ? "text" : "password"}
                       value={formApiKey}
                       onChange={(e) => setFormApiKey(e.target.value)}
-                      placeholder="sk-..."
+                      placeholder={t("models.apiKeyPlaceholder")}
                     />
                     <button
                       className="setup-toggle-visibility"

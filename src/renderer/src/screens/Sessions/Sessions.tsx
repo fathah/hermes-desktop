@@ -123,7 +123,7 @@ const SessionCard = memo(function SessionCard({
     >
       <div className="sessions-card-main">
         <span className="sessions-card-title">
-          {session.title || "New conversation"}
+          {session.title || t("sessions.defaultTitle")}
         </span>
         <span className="sessions-card-time">
           {showFullDate
