@@ -7,12 +7,11 @@
  * context to decide whether to attempt a follow-up telemetry
  * fetch or render the "not available" empty-state immediately.
  *
- * Step 0 (PR-A1): the backend doesn't yet implement
- * `/v1/telemetry/gateway-status`, so this provider will land
- * in a `not-implemented` state by default, and every consumer
- * tab will see `useCapability(...) === 'absent'`. This is by
- * design — it lets us ship the state-system without a backend
- * dependency and flip every screen to real data in PR-A2.
+ * The probe targets `/api/gateway/status` (with a `/v1/capabilities`
+ * merge, adapted in `src/main/telemetry/subsystems.ts`). Against a
+ * backend that predates that endpoint, the probe lands in a
+ * `not-implemented` state and every consumer tab sees
+ * `useCapability(...) === 'absent'` — the graceful-degradation path.
  */
 
 import { createContext, useEffect, useState, type ReactNode } from "react";

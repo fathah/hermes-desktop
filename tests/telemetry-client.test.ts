@@ -1,8 +1,10 @@
 /**
  * Unit tests for `src/main/telemetry/client.ts` — the
- * Node-side HTTP fetcher that talks to the backend's
- * `/v1/telemetry/*` endpoints and translates errors into
- * TelemetryEnvelope shapes.
+ * Node-side HTTP fetcher. The client is path-agnostic (the
+ * caller passes the path), so these tests exercise its
+ * transport + envelope + validation behaviour using arbitrary
+ * route names, NOT the real `/api/*` endpoints — those are
+ * covered end-to-end in tests/telemetry-contract.test.ts.
  *
  * We spin up a tiny http.Server inside each test and point the
  * client at it by stubbing the connection-mode resolvers it

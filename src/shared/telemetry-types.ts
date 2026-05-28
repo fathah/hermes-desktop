@@ -1,9 +1,10 @@
 /**
  * Shared types for the read-only telemetry surface.
  *
- * The same Envelope shape is produced by the Hermes Agent backend
- * (`/v1/telemetry/*`) and consumed by both the Electron main
- * process (HTTP client) and the renderer (React hooks).
+ * The same Envelope shape wraps the Hermes Agent backend's
+ * `/api/*` responses (adapted in `src/main/telemetry/subsystems.ts`)
+ * and is consumed by both the Electron main process (HTTP client)
+ * and the renderer (React hooks).
  *
  * Keep this file free of runtime imports — it is pulled into both
  * `tsconfig.node.json` and `tsconfig.web.json` builds.
@@ -38,7 +39,7 @@ export type TelemetryEnvelope<T> =
     };
 
 /**
- * GET /v1/telemetry/gateway-status
+ * Adapted from GET /api/gateway/status (+ /v1/capabilities merge).
  *
  * Capability-probe response. The `capabilities` array is the
  * source of truth for which other telemetry endpoints the app
@@ -70,7 +71,7 @@ export interface GatewayStatusTelemetry {
   }>;
 }
 
-/** GET /v1/telemetry/tools — read-only toolset status. */
+/** Adapted from GET /api/tools/toolsets — read-only toolset status. */
 export interface ToolsTelemetry {
   toolsets: Array<{
     key: string;
@@ -82,7 +83,7 @@ export interface ToolsTelemetry {
   }>;
 }
 
-/** GET /v1/telemetry/memory — provider status, never contents. */
+/** Adapted from GET /api/memory — provider status, never contents. */
 export interface MemoryTelemetry {
   provider: string;
   configured: boolean;
@@ -91,7 +92,9 @@ export interface MemoryTelemetry {
   lastUpdatedAt?: string;
 }
 
-/** GET /v1/telemetry/schedules — cron / interval / one-shot job summary. */
+/** Schedules summary — NOT wired in Phase A (no claim-conformant
+ *  upstream contract; `/api/jobs` lacks a `kind` field). Type kept
+ *  for a future phase that exposes a read-summary endpoint. */
 export interface SchedulesTelemetry {
   jobs: Array<{
     id: string;
@@ -106,7 +109,9 @@ export interface SchedulesTelemetry {
   }>;
 }
 
-/** GET /v1/telemetry/kanban — boards + per-column card counts. */
+/** Kanban summary — NOT wired in Phase A (`/api/kanban/*` lives in
+ *  the follow-up #31641, outside this PR's dependency chain). Type
+ *  kept for the Phase E1-E2 split. */
 export interface KanbanTelemetry {
   boards: Array<{
     id: string;

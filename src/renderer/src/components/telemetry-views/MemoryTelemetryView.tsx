@@ -1,6 +1,6 @@
 /**
  * Memory tab in remote mode — read-only summary card driven
- * by GET /v1/telemetry/memory.
+ * by GET /api/memory (adapted in subsystems.ts).
  *
  * Renders the provider name + configured flag + (optionally)
  * itemCount / sizeBytes / lastUpdatedAt. Never the memory
