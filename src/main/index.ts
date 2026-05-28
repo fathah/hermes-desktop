@@ -118,6 +118,12 @@ import {
   deleteProfile,
   setActiveProfile,
 } from "./profiles";
+import { initVault, shutdownVault } from "./vault/service";
+import { registerVaultHandlers } from "./ipc/vault-handlers";
+import { registerProfileHandlers } from "./ipc/profile-handlers";
+import { registerTerminalHandlers } from "./terminal";
+import { registerFilesHandlers } from "./files";
+import { registerDashboardHandlers, registerMcpHandlers } from "./dashboard";
 import {
   readMemory,
   addMemoryEntry,
@@ -1543,6 +1549,13 @@ function setupIPC(): void {
       return sshReadLogs(conn.ssh, logFile, lines);
     return readLogs(logFile, lines);
   });
+
+  registerVaultHandlers();
+  registerProfileHandlers();
+  registerFilesHandlers();
+  registerDashboardHandlers();
+  registerMcpHandlers();
+  registerTerminalHandlers();
 }
 
 function buildMenu(): void {
@@ -1761,6 +1774,11 @@ app.whenReady().then(() => {
   });
 
   buildMenu();
+  try {
+    initVault();
+  } catch (err) {
+    console.error("[VAULT] Init failed:", err);
+  }
   setupIPC();
   createWindow();
   setupUpdater();
@@ -1800,6 +1818,7 @@ app.on("before-quit", () => {
     currentChatAbort();
     currentChatAbort = null;
   }
+  shutdownVault();
   stopGateway();
   stopSshTunnel();
   stopClaw3d();

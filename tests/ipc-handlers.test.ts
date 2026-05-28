@@ -4,6 +4,13 @@ import { join } from "path";
 
 const ROOT = join(__dirname, "..");
 const indexSrc = readFileSync(join(ROOT, "src/main/index.ts"), "utf-8");
+const handlerModules = [
+  "src/main/ipc/vault-handlers.ts",
+  "src/main/ipc/profile-handlers.ts",
+  "src/main/terminal.ts",
+  "src/main/files.ts",
+  "src/main/dashboard.ts",
+].map((f) => readFileSync(join(ROOT, f), "utf-8")).join("\n");
 const preloadSrc = readFileSync(join(ROOT, "src/preload/index.ts"), "utf-8");
 
 /**
@@ -32,7 +39,10 @@ function extractPreloadInvokeChannels(src: string): string[] {
   return [...new Set(channels)];
 }
 
-const mainChannels = extractIpcHandleChannels(indexSrc);
+const mainChannels = [
+  ...extractIpcHandleChannels(indexSrc),
+  ...extractIpcHandleChannels(handlerModules),
+];
 const preloadChannels = extractPreloadInvokeChannels(preloadSrc);
 
 describe("IPC Handler ↔ Preload Consistency", () => {

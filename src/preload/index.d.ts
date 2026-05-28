@@ -770,6 +770,112 @@ interface HermesAPI {
     logFile?: string,
     lines?: number,
   ) => Promise<{ content: string; path: string }>;
+
+  vault: {
+    addCredential: (
+      profile: string,
+      provider: string,
+      label: string,
+      value: string,
+    ) => Promise<{ id: string; provider: string; label: string }>;
+    getCredentials: (
+      profile: string,
+    ) => Promise<
+      Array<{ id: string; provider: string; label: string; maskedValue: string }>
+    >;
+    updateCredential: (
+      id: string,
+      updates: { label?: string; value?: string },
+    ) => Promise<{ success: boolean }>;
+    deleteCredential: (id: string) => Promise<{ success: boolean }>;
+    getAuditLog: (
+      profile: string,
+    ) => Promise<
+      Array<{
+        id: string;
+        action: string;
+        provider: string;
+        label: string;
+        changedAt: string;
+      }>
+    >;
+    rotateMasterKey: () => Promise<{ success: boolean; entriesRotated: number }>;
+    isPopulated: () => Promise<boolean>;
+    encryptionAvailable: () => Promise<boolean>;
+    initWithPassword: (password: string) => Promise<{ success: boolean }>;
+  };
+
+  profileWizard: {
+    listTemplates: () => Promise<
+      Array<{
+        id: string;
+        name: string;
+        icon: string;
+        description: string;
+        toolsets: string[];
+        requiredSecrets: string[];
+      }>
+    >;
+    initialState: (templateId: string) => Promise<unknown>;
+    validateStep: (
+      step: number,
+      state: unknown,
+    ) => Promise<{ valid: boolean; errors: string[] }>;
+    createFromWizard: (
+      state: unknown,
+    ) => Promise<{ success: boolean; profilePath?: string; error?: string }>;
+    activate: (
+      profile: string,
+    ) => Promise<{
+      success: boolean;
+      profile?: string;
+      status?: string;
+      error?: string;
+    }>;
+    deactivate: (profile: string, wipe?: boolean) => Promise<{ success: boolean }>;
+    delete: (
+      profile: string,
+      archive: boolean,
+    ) => Promise<{ success: boolean; error?: string }>;
+    clone: (
+      source: string,
+      newName: string,
+    ) => Promise<{ success: boolean; profilePath?: string; error?: string }>;
+    detectMigration: () => Promise<
+      Array<{ name: string; keyCount: number; envPath: string }>
+    >;
+    migrateSecrets: (
+      profiles: string[],
+    ) => Promise<
+      Array<{ name: string; imported: boolean; vaultEntries: number; error?: string }>
+    >;
+  };
+
+  terminalCreate: (cwd?: string) => Promise<{ id: string }>;
+  terminalWrite: (id: string, data: string) => Promise<void>;
+  terminalResize: (id: string, cols: number, rows: number) => Promise<void>;
+  terminalKill: (id: string) => Promise<void>;
+  onTerminalData: (
+    handler: (payload: { id: string; data: string }) => void,
+  ) => () => void;
+
+  filesListDir: (
+    dir: string,
+  ) => Promise<Array<{ name: string; isDir: boolean; path: string }>>;
+  filesRead: (path: string) => Promise<string>;
+  filesWrite: (path: string, content: string) => Promise<boolean>;
+
+  getDashboardStats: (profile?: string) => Promise<{
+    sessionCount: number;
+    modelProvider: string;
+    modelName: string;
+    gatewayRunning: boolean;
+    cronJobCount: number;
+  }>;
+
+  listMcpCatalog: () => Promise<
+    Array<{ name: string; description: string; installed: boolean }>
+  >;
 }
 
 declare global {

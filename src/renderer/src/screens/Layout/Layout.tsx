@@ -17,6 +17,15 @@ import Models from "../Models/Models";
 import Providers from "../Providers/Providers";
 import Schedules from "../Schedules/Schedules";
 import Kanban from "../Kanban/Kanban";
+import Vault from "../Vault/Vault";
+import Terminal from "../Terminal/Terminal";
+import Files from "../Files/Files";
+import Dashboard from "../Dashboard/Dashboard";
+import MCP from "../MCP/MCP";
+import Swarm from "../Swarm/Swarm";
+import Ecosystem from "../Ecosystem/Ecosystem";
+import ProfileWizard from "../Agents/Wizard";
+import MigrationWizard from "../Migration/MigrationWizard";
 import RemoteNotice from "../../components/RemoteNotice";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
 import hermeslogo from "../../assets/hermes.png";
@@ -36,6 +45,12 @@ import {
   Timer,
   Kanban as KanbanIcon,
   Download,
+  Shield,
+  Terminal as TerminalIcon,
+  FolderOpen,
+  LayoutDashboard,
+  Network,
+  Globe,
 } from "../../assets/icons";
 import type { LucideIcon } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
@@ -44,6 +59,8 @@ type View =
   | "chat"
   | "sessions"
   | "agents"
+  | "dashboard"
+  | "vault"
   | "office"
   | "models"
   | "providers"
@@ -53,22 +70,34 @@ type View =
   | "tools"
   | "schedules"
   | "kanban"
+  | "terminal"
+  | "files"
+  | "mcp"
+  | "swarm"
+  | "ecosystem"
   | "gateway"
   | "settings";
 
 const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string }[] = [
   { view: "chat", icon: ChatBubble, labelKey: "navigation.chat" },
+  { view: "dashboard", icon: LayoutDashboard, labelKey: "navigation.dashboard" },
   { view: "sessions", icon: Clock, labelKey: "navigation.sessions" },
   { view: "agents", icon: Users, labelKey: "navigation.agents" },
+  { view: "vault", icon: Shield, labelKey: "navigation.vault" },
   { view: "office", icon: Building, labelKey: "navigation.office" },
   { view: "kanban", icon: KanbanIcon, labelKey: "navigation.kanban" },
+  { view: "terminal", icon: TerminalIcon, labelKey: "navigation.terminal" },
+  { view: "files", icon: FolderOpen, labelKey: "navigation.files" },
   { view: "models", icon: Layers, labelKey: "navigation.models" },
   { view: "providers", icon: KeyRound, labelKey: "navigation.providers" },
   { view: "skills", icon: Puzzle, labelKey: "navigation.skills" },
   { view: "soul", icon: Sparkles, labelKey: "navigation.soul" },
   { view: "memory", icon: Brain, labelKey: "navigation.memory" },
   { view: "tools", icon: Wrench, labelKey: "navigation.tools" },
+  { view: "mcp", icon: Network, labelKey: "navigation.mcp" },
   { view: "schedules", icon: Timer, labelKey: "navigation.schedules" },
+  { view: "swarm", icon: Globe, labelKey: "navigation.swarm" },
+  { view: "ecosystem", icon: Globe, labelKey: "navigation.ecosystem" },
   { view: "gateway", icon: Signal, labelKey: "navigation.gateway" },
   { view: "settings", icon: SettingsIcon, labelKey: "navigation.settings" },
 ];
@@ -96,6 +125,13 @@ function Layout({
   );
   // Remote-only mode — SSH tunnel has full access; only pure HTTP remote mode restricts screens
   const [remoteMode, setRemoteMode] = useState(false);
+  const [gatewayRunning, setGatewayRunning] = useState<boolean | null>(null);
+  const [activatingProfile, setActivatingProfile] = useState(false);
+  const [showProfileSwitcher, setShowProfileSwitcher] = useState(false);
+  const [profileList, setProfileList] = useState<Array<{ name: string; isActive: boolean }>>([]);
+  const [showMigration, setShowMigration] = useState(false);
+  const [migrationChecked, setMigrationChecked] = useState(false);
+  const [showWizard, setShowWizard] = useState(false);
 
   const paneStyle = (target: View): React.CSSProperties => ({
     display: view === target ? "flex" : "none",
@@ -112,7 +148,44 @@ function Layout({
   // Re-check remote mode on tab switch (picks up Settings changes)
   useEffect(() => {
     window.hermesAPI.isRemoteOnlyMode().then(setRemoteMode);
+    window.hermesAPI.gatewayStatus().then((running) => setGatewayRunning(running));
   }, [view]);
+
+  // Migration wizard on first main load
+  useEffect(() => {
+    if (migrationChecked || remoteMode) return;
+    window.hermesAPI.profileWizard.detectMigration().then((list) => {
+      setMigrationChecked(true);
+      if (list.length > 0) setShowMigration(true);
+    });
+  }, [migrationChecked, remoteMode]);
+
+  // Gateway status poll
+  useEffect(() => {
+    const id = setInterval(() => {
+      window.hermesAPI.gatewayStatus().then((running) => setGatewayRunning(running));
+    }, 10000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Keyboard shortcuts: Ctrl+P profile switcher, Ctrl+T terminal
+  useEffect(() => {
+    function onKey(e: KeyboardEvent): void {
+      if ((e.ctrlKey || e.metaKey) && e.key === "p") {
+        e.preventDefault();
+        window.hermesAPI.listProfiles().then((list) => {
+          setProfileList(list.map((p) => ({ name: p.name, isActive: p.isActive })));
+          setShowProfileSwitcher(true);
+        });
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "t") {
+        e.preventDefault();
+        goTo("terminal");
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [goTo]);
 
   // Auto-update state
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
@@ -190,11 +263,25 @@ function Layout({
     };
   }, [handleNewChat, goTo]);
 
-  const handleSelectProfile = useCallback((name: string) => {
-    setActiveProfile(name);
-    setMessages([]);
-    setCurrentSessionId(null);
+  const handleSelectProfile = useCallback(async (name: string) => {
+    setActivatingProfile(true);
+    try {
+      await window.hermesAPI.setActiveProfile(name);
+      await window.hermesAPI.profileWizard.activate(name);
+      const running = await window.hermesAPI.gatewayStatus();
+      setGatewayRunning(running);
+      setActiveProfile(name);
+      setMessages([]);
+      setCurrentSessionId(null);
+    } catch (err) {
+      console.error("Profile activation failed:", err);
+    } finally {
+      setActivatingProfile(false);
+      setShowProfileSwitcher(false);
+    }
   }, []);
+
+  const dismissMigration = useCallback(() => setShowMigration(false), []);
 
   const handleResumeSession = useCallback(
     async (sessionId: string) => {
@@ -258,7 +345,18 @@ function Layout({
             </button>
           )}
           <div className="sidebar-footer-text">
-            {activeProfile === "default" ? t("common.appName") : activeProfile}
+            {activatingProfile ? (
+              <span className="status-connecting">Connecting…</span>
+            ) : (
+              <>
+                {activeProfile === "default" ? t("common.appName") : activeProfile}
+                {gatewayRunning !== null && (
+                  <span className={`sidebar-status ${gatewayRunning ? "online" : "offline"}`}>
+                    {gatewayRunning ? " ● connected" : " ○ disconnected"}
+                  </span>
+                )}
+              </>
+            )}
           </div>
         </div>
       </aside>
@@ -303,6 +401,7 @@ function Layout({
               <Agents
                 activeProfile={activeProfile}
                 onSelectProfile={handleSelectProfile}
+                onOpenWizard={() => setShowWizard(true)}
                 onChatWith={(name: string) => {
                   handleSelectProfile(name);
                   goTo("chat");
@@ -403,12 +502,81 @@ function Layout({
           </div>
         )}
 
+        {visitedViews.has("dashboard") && (
+          <div style={paneStyle("dashboard")}>
+            <Dashboard profile={activeProfile} />
+          </div>
+        )}
+
+        {visitedViews.has("vault") && (
+          <div style={paneStyle("vault")}>
+            {remoteMode ? <RemoteNotice feature="Vault" /> : <Vault profile={activeProfile} />}
+          </div>
+        )}
+
+        {visitedViews.has("terminal") && (
+          <div style={paneStyle("terminal")}>
+            {remoteMode ? <RemoteNotice feature="Terminal" /> : <Terminal />}
+          </div>
+        )}
+
+        {visitedViews.has("files") && (
+          <div style={paneStyle("files")}>
+            {remoteMode ? <RemoteNotice feature="Files" /> : <Files />}
+          </div>
+        )}
+
+        {visitedViews.has("mcp") && (
+          <div style={paneStyle("mcp")}>
+            <MCP profile={activeProfile} />
+          </div>
+        )}
+
+        {visitedViews.has("swarm") && (
+          <div style={paneStyle("swarm")}>
+            <Swarm />
+          </div>
+        )}
+
+        {visitedViews.has("ecosystem") && (
+          <div style={paneStyle("ecosystem")}>
+            <Ecosystem profile={activeProfile} />
+          </div>
+        )}
+
         {visitedViews.has("settings") && (
           <div style={paneStyle("settings")}>
             <Settings profile={activeProfile} />
           </div>
         )}
       </main>
+
+      {showMigration && (
+        <MigrationWizard onComplete={dismissMigration} onSkip={dismissMigration} />
+      )}
+
+      {showWizard && (
+        <div className="wizard-overlay">
+          <ProfileWizard onComplete={() => { setShowWizard(false); goTo("agents"); }} onCancel={() => setShowWizard(false)} />
+        </div>
+      )}
+
+      {showProfileSwitcher && (
+        <div className="profile-switcher-overlay" onClick={() => setShowProfileSwitcher(false)}>
+          <div className="profile-switcher card" onClick={(e) => e.stopPropagation()}>
+            <h3>Switch Profile</h3>
+            <ul>
+              {profileList.map((p) => (
+                <li key={p.name}>
+                  <button className={p.name === activeProfile ? "active" : ""} onClick={() => handleSelectProfile(p.name)}>
+                    {p.name} {p.isActive && "✓"}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

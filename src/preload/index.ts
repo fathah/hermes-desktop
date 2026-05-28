@@ -952,6 +952,122 @@ const hermesAPI = {
     lines?: number,
   ): Promise<{ content: string; path: string }> =>
     ipcRenderer.invoke("read-logs", logFile, lines),
+
+  // Encrypted vault
+  vault: {
+    addCredential: (
+      profile: string,
+      provider: string,
+      label: string,
+      value: string,
+    ): Promise<{ id: string; provider: string; label: string }> =>
+      ipcRenderer.invoke("vault-add-credential", profile, provider, label, value),
+    getCredentials: (
+      profile: string,
+    ): Promise<
+      Array<{ id: string; provider: string; label: string; maskedValue: string }>
+    > => ipcRenderer.invoke("vault-get-credentials", profile),
+    updateCredential: (
+      id: string,
+      updates: { label?: string; value?: string },
+    ): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke("vault-update-credential", id, updates),
+    deleteCredential: (id: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke("vault-delete-credential", id),
+    getAuditLog: (
+      profile: string,
+    ): Promise<
+      Array<{
+        id: string;
+        action: string;
+        provider: string;
+        label: string;
+        changedAt: string;
+      }>
+    > => ipcRenderer.invoke("vault-get-audit-log", profile),
+    rotateMasterKey: (): Promise<{ success: boolean; entriesRotated: number }> =>
+      ipcRenderer.invoke("vault-rotate-master-key"),
+    isPopulated: (): Promise<boolean> =>
+      ipcRenderer.invoke("vault-is-populated"),
+    encryptionAvailable: (): Promise<boolean> =>
+      ipcRenderer.invoke("vault-encryption-available"),
+    initWithPassword: (password: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke("vault-init-with-password", password),
+    exportBlob: (): Promise<string> =>
+      ipcRenderer.invoke("vault-export"),
+  },
+
+  // Profile wizard
+  profileWizard: {
+    listTemplates: (): Promise<
+      Array<{
+        id: string;
+        name: string;
+        icon: string;
+        description: string;
+        toolsets: string[];
+        requiredSecrets: string[];
+      }>
+    > => ipcRenderer.invoke("profile-list-templates"),
+    initialState: (templateId: string) =>
+      ipcRenderer.invoke("profile-initial-wizard-state", templateId),
+    validateStep: (step: number, state: unknown) =>
+      ipcRenderer.invoke("profile-validate-wizard-step", step, state),
+    createFromWizard: (state: unknown) =>
+      ipcRenderer.invoke("profile-create-from-wizard", state),
+    activate: (profile: string) =>
+      ipcRenderer.invoke("profile-activate", profile),
+    deactivate: (profile: string, wipe?: boolean) =>
+      ipcRenderer.invoke("profile-deactivate", profile, wipe),
+    delete: (profile: string, archive: boolean) =>
+      ipcRenderer.invoke("profile-delete", profile, archive),
+    clone: (source: string, newName: string) =>
+      ipcRenderer.invoke("profile-clone", source, newName),
+    detectMigration: (): Promise<
+      Array<{ name: string; keyCount: number; envPath: string }>
+    > => ipcRenderer.invoke("profile-detect-migration"),
+    migrateSecrets: (profiles: string[]) =>
+      ipcRenderer.invoke("profile-migrate-secrets", profiles),
+  },
+
+  // Terminal
+  terminalCreate: (cwd?: string): Promise<{ id: string }> =>
+    ipcRenderer.invoke("terminal-create", cwd),
+  terminalWrite: (id: string, data: string): Promise<void> =>
+    ipcRenderer.invoke("terminal-write", id, data),
+  terminalResize: (id: string, cols: number, rows: number): Promise<void> =>
+    ipcRenderer.invoke("terminal-resize", id, cols, rows),
+  terminalKill: (id: string): Promise<void> =>
+    ipcRenderer.invoke("terminal-kill", id),
+  onTerminalData: (
+    handler: (payload: { id: string; data: string }) => void,
+  ): (() => void) => {
+    const fn = (_: unknown, payload: { id: string; data: string }) =>
+      handler(payload);
+    ipcRenderer.on("terminal-data", fn);
+    return () => ipcRenderer.removeListener("terminal-data", fn);
+  },
+
+  // File browser
+  filesListDir: (dir: string): Promise<Array<{ name: string; isDir: boolean; path: string }>> =>
+    ipcRenderer.invoke("files-list-dir", dir),
+  filesRead: (path: string): Promise<string> =>
+    ipcRenderer.invoke("files-read", path),
+  filesWrite: (path: string, content: string): Promise<boolean> =>
+    ipcRenderer.invoke("files-write", path, content),
+
+  // Dashboard
+  getDashboardStats: (profile?: string): Promise<{
+    sessionCount: number;
+    modelProvider: string;
+    modelName: string;
+    gatewayRunning: boolean;
+    cronJobCount: number;
+  }> => ipcRenderer.invoke("dashboard-stats", profile),
+
+  // MCP
+  listMcpCatalog: (): Promise<Array<{ name: string; description: string; installed: boolean }>> =>
+    ipcRenderer.invoke("mcp-catalog"),
 };
 
 if (process.contextIsolated) {

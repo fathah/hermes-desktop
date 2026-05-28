@@ -1162,6 +1162,31 @@ export function isApiReady(): boolean {
   return apiServerAvailable === true;
 }
 
+export async function waitForGatewayReady(
+  timeoutMs = 30_000,
+  options: { afterRestart?: boolean } = {},
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+
+  if (options.afterRestart) {
+    apiServerAvailable = false;
+    const downtimeDeadline = Math.min(deadline, Date.now() + 10_000);
+    while (Date.now() < downtimeDeadline) {
+      if (!(await isApiServerReady())) break;
+      await new Promise((r) => setTimeout(r, 200));
+    }
+  }
+
+  while (Date.now() < deadline) {
+    if (await isApiServerReady()) {
+      apiServerAvailable = true;
+      return true;
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return false;
+}
+
 export function testRemoteConnection(
   url: string,
   apiKey?: string,

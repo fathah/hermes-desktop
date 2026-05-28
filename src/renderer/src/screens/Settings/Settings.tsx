@@ -61,7 +61,7 @@ function getCachedOpenClaw(): { found: boolean; path: string | null } | null {
 function Settings({ profile }: { profile?: string }): React.JSX.Element {
   const { t, locale, setLocale } = useI18n();
   const [hermesHome, setHermesHome] = useState("");
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, colorTheme, setColorTheme } = useTheme();
 
   // Hermes engine info — initialize from localStorage cache for instant display
   const [hermesVersion, setHermesVersion] = useState<string | null>(
@@ -892,6 +892,48 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
           </div>
           <div className="settings-field-hint">
             {t("settings.appearanceHint")}
+          </div>
+        </div>
+        <div className="settings-field">
+          <label className="settings-field-label">
+            Color theme
+          </label>
+          <div className="settings-theme-options">
+            {[
+              { value: "hermes", label: "Hermes" },
+              { value: "nous", label: "Nous" },
+              { value: "bronze", label: "Bronze" },
+              { value: "slate", label: "Slate" },
+              { value: "mono", label: "Mono" },
+            ].map((opt) => (
+              <button
+                key={opt.value}
+                className={`settings-theme-option ${colorTheme === opt.value ? "active" : ""}`}
+                onClick={() => setColorTheme(opt.value as "hermes" | "nous" | "bronze" | "slate" | "mono")}
+              >
+                <span
+                  className="color-swatch"
+                  style={{
+                    display: "inline-block",
+                    width: 12,
+                    height: 12,
+                    borderRadius: "50%",
+                    marginRight: 6,
+                    verticalAlign: "middle",
+                    background:
+                      opt.value === "hermes" ? "#003f7a" :
+                      opt.value === "nous" ? "#6366f1" :
+                      opt.value === "bronze" ? "#b45309" :
+                      opt.value === "slate" ? "#64748b" :
+                      "#a3a3a3",
+                  }}
+                />
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <div className="settings-field-hint">
+            Changes accent color for buttons, links, and highlights.
           </div>
         </div>
         <div className="settings-field">
