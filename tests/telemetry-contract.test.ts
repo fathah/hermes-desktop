@@ -365,8 +365,14 @@ describe("Contract: /api/memory (#23742 + sanitiser #31568)", () => {
       // counts is 0 (memory) + 9 (user) = 9.
       expect(env.data.itemCount).toBe(0);
       expect(env.data.sizeBytes).toBe(9);
-      // last_modified epoch → ISO string with Z suffix.
-      expect(env.data.lastUpdatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T.*Z$/);
+      // MEMORY.md (1779630248) is older than USER.md (1779630434)
+      // in the fixture. The adapter must surface the NEWER of the
+      // two (user) — not the first-present timestamp, which would
+      // be the older memory one. Regression guard for the
+      // max-epoch selection.
+      expect(env.data.lastUpdatedAt).toBe(
+        new Date(1779630434 * 1000).toISOString(),
+      );
     }
   });
 

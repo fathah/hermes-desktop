@@ -334,12 +334,18 @@ export async function fetchMemory(): Promise<
     const usr = data.user ?? {};
     const memExists = Boolean(mem.exists);
     const usrExists = Boolean(usr.exists);
+    // Use the NEWEST of the memory/user file timestamps. If both
+    // MEMORY.md and USER.md exist, the Memory tab should reflect
+    // the most recent change — not whichever timestamp happens to
+    // be present first. Coerce via Number() (a backend could ship
+    // the epoch as a string), keep only finite values; when
+    // neither is valid, lastEpoch stays null and lastUpdatedAt
+    // resolves to undefined (no new semantics).
+    const memEpoch = Number(mem.last_modified ?? mem.lastModified ?? NaN);
+    const usrEpoch = Number(usr.last_modified ?? usr.lastModified ?? NaN);
+    const finiteEpochs = [memEpoch, usrEpoch].filter((n) => Number.isFinite(n));
     const lastEpoch =
-      mem.last_modified ??
-      mem.lastModified ??
-      usr.last_modified ??
-      usr.lastModified ??
-      null;
+      finiteEpochs.length > 0 ? Math.max(...finiteEpochs) : null;
     const totalBytes =
       (mem.char_count ?? mem.charCount ?? 0) +
       (usr.char_count ?? usr.charCount ?? 0);
