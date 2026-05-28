@@ -243,6 +243,27 @@ export function reconcileStreamedWithDb(
     }
   }
 
+  // Collect normalised DB-bubble texts grouped by role so we can detect the
+  // "concatenated streamed bubble vs split DB rows" case below. The desktop's
+  // chat-chunk stream has no boundary marker (main/index.ts forwards every
+  // delta verbatim), so when one agent turn produces multiple text bubbles
+  // split by a tool call, all the deltas land in a single streamed bubble.
+  // The reconciliation pass above keys on the first 200 chars, so it matches
+  // that streamed bubble against the FIRST db row only — and the remaining
+  // db rows fall through here, while the streamed bubble (still carrying the
+  // full concatenated text) also wants to fall through below. That's the
+  // visible "same text twice" bug.
+  const dbBubbleTextsByRole = new Map<string, string[]>();
+  for (const m of db) {
+    if ("kind" in m) continue;
+    const bubble = m as ChatBubbleMessage;
+    const norm = normalizeWhitespace(bubble.content || "");
+    if (!norm) continue;
+    const bucket = dbBubbleTextsByRole.get(bubble.role);
+    if (bucket) bucket.push(norm);
+    else dbBubbleTextsByRole.set(bubble.role, [norm]);
+  }
+
   const consumedIds = new Set(result.map((m) => m.id));
   for (const m of streamed) {
     if (consumedIds.has(m.id)) continue;
@@ -252,8 +273,25 @@ export function reconcileStreamedWithDb(
     // genuinely new.
     if (!("kind" in m)) {
       const bubble = m as ChatBubbleMessage;
-      const contentKey = `${bubble.role}:${normalizeWhitespace(bubble.content || "")}`;
+      const normContent = normalizeWhitespace(bubble.content || "");
+      const contentKey = `${bubble.role}:${normContent}`;
       if (seenBubbleKeys.has(contentKey)) continue;
+
+      // Multi-bubble-turn dedup: drop the streamed bubble when its content
+      // is the concatenation of two or more DB bubbles of the same role
+      // that already landed in `result`. The DB-canonical split is what
+      // the user should see; the concatenated streamed copy is a streaming
+      // artifact.
+      const dbBubbleTexts = dbBubbleTextsByRole.get(bubble.role);
+      if (dbBubbleTexts && dbBubbleTexts.length >= 2 && normContent) {
+        let matchedSegments = 0;
+        for (const segment of dbBubbleTexts) {
+          if (segment && normContent.includes(segment)) matchedSegments++;
+          if (matchedSegments >= 2) break;
+        }
+        if (matchedSegments >= 2) continue;
+      }
+
       seenBubbleKeys.add(contentKey);
     }
     result.push(m);
