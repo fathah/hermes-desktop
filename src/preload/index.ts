@@ -952,6 +952,17 @@ const hermesAPI = {
     lines?: number,
   ): Promise<{ content: string; path: string }> =>
     ipcRenderer.invoke("read-logs", logFile, lines),
+
+  getDashboardStats: (profile?: string): Promise<{
+    sessionCount: number;
+    modelProvider: string;
+    modelName: string;
+    gatewayRunning: boolean;
+    cronJobCount: number;
+  }> => ipcRenderer.invoke("dashboard-stats", profile),
+
+  listMcpCatalog: (): Promise<Array<{ name: string; description: string; installed: boolean }>> =>
+    ipcRenderer.invoke("mcp-catalog"),
 };
 
 if (process.contextIsolated) {

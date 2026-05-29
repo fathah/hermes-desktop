@@ -1,21 +1,28 @@
 import { createContext, useContext, useEffect, useState } from "react";
 
 type Theme = "light" | "dark" | "system";
+type ColorTheme = "hermes" | "nous" | "bronze" | "slate" | "mono";
 type ResolvedTheme = "light" | "dark";
 
 interface ThemeContextValue {
   theme: Theme;
+  colorTheme: ColorTheme;
   resolved: ResolvedTheme;
   setTheme: (theme: Theme) => void;
+  setColorTheme: (colorTheme: ColorTheme) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
   theme: "system",
+  colorTheme: "hermes",
   resolved: "dark",
   setTheme: () => {},
+  setColorTheme: () => {},
 });
 
 import { THEME_STORAGE_KEY as STORAGE_KEY } from "../constants";
+
+const COLOR_THEME_KEY = "hermes-color-theme";
 
 function getSystemTheme(): ResolvedTheme {
   return window.matchMedia("(prefers-color-scheme: dark)").matches
@@ -38,11 +45,23 @@ export function ThemeProvider({
       return stored;
     return "system";
   });
+  const [colorTheme, setColorThemeState] = useState<ColorTheme>(() => {
+    const stored = localStorage.getItem(COLOR_THEME_KEY);
+    if (stored === "nous" || stored === "bronze" || stored === "slate" || stored === "mono" || stored === "hermes") {
+      return stored;
+    }
+    return "hermes";
+  });
   const [resolved, setResolved] = useState<ResolvedTheme>(() => resolve(theme));
 
   function setTheme(next: Theme): void {
     setThemeState(next);
     localStorage.setItem(STORAGE_KEY, next);
+  }
+
+  function setColorTheme(next: ColorTheme): void {
+    setColorThemeState(next);
+    localStorage.setItem(COLOR_THEME_KEY, next);
   }
 
   // Listen for system preference changes
@@ -67,8 +86,12 @@ export function ThemeProvider({
     document.documentElement.setAttribute("data-theme", resolved);
   }, [resolved]);
 
+  useEffect(() => {
+    document.documentElement.setAttribute("data-color-theme", colorTheme);
+  }, [colorTheme]);
+
   return (
-    <ThemeContext.Provider value={{ theme, resolved, setTheme }}>
+    <ThemeContext.Provider value={{ theme, colorTheme, resolved, setTheme, setColorTheme }}>
       {children}
     </ThemeContext.Provider>
   );

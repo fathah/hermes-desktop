@@ -17,6 +17,10 @@ import Models from "../Models/Models";
 import Providers from "../Providers/Providers";
 import Schedules from "../Schedules/Schedules";
 import Kanban from "../Kanban/Kanban";
+import Dashboard from "../Dashboard/Dashboard";
+import MCP from "../MCP/MCP";
+import Swarm from "../Swarm/Swarm";
+import Ecosystem from "../Ecosystem/Ecosystem";
 import RemoteNotice from "../../components/RemoteNotice";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
 import hermeslogo from "../../assets/hermes.png";
@@ -36,6 +40,9 @@ import {
   Timer,
   Kanban as KanbanIcon,
   Download,
+  LayoutDashboard,
+  Network,
+  Globe,
 } from "../../assets/icons";
 import type { LucideIcon } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
@@ -44,6 +51,7 @@ type View =
   | "chat"
   | "sessions"
   | "agents"
+  | "dashboard"
   | "office"
   | "models"
   | "providers"
@@ -53,11 +61,15 @@ type View =
   | "tools"
   | "schedules"
   | "kanban"
+  | "mcp"
+  | "swarm"
+  | "ecosystem"
   | "gateway"
   | "settings";
 
 const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string }[] = [
   { view: "chat", icon: ChatBubble, labelKey: "navigation.chat" },
+  { view: "dashboard", icon: LayoutDashboard, labelKey: "navigation.dashboard" },
   { view: "sessions", icon: Clock, labelKey: "navigation.sessions" },
   { view: "agents", icon: Users, labelKey: "navigation.agents" },
   { view: "office", icon: Building, labelKey: "navigation.office" },
@@ -68,7 +80,10 @@ const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string }[] = [
   { view: "soul", icon: Sparkles, labelKey: "navigation.soul" },
   { view: "memory", icon: Brain, labelKey: "navigation.memory" },
   { view: "tools", icon: Wrench, labelKey: "navigation.tools" },
+  { view: "mcp", icon: Network, labelKey: "navigation.mcp" },
   { view: "schedules", icon: Timer, labelKey: "navigation.schedules" },
+  { view: "swarm", icon: Globe, labelKey: "navigation.swarm" },
+  { view: "ecosystem", icon: Globe, labelKey: "navigation.ecosystem" },
   { view: "gateway", icon: Signal, labelKey: "navigation.gateway" },
   { view: "settings", icon: SettingsIcon, labelKey: "navigation.settings" },
 ];
@@ -312,6 +327,12 @@ function Layout({
           </div>
         )}
 
+        {visitedViews.has("dashboard") && (
+          <div style={paneStyle("dashboard")}>
+            <Dashboard profile={activeProfile} />
+          </div>
+        )}
+
         {visitedViews.has("office") && (
           <div style={paneStyle("office")}>
             <Office profile={activeProfile} visible={view === "office"} />
@@ -390,6 +411,24 @@ function Layout({
             ) : (
               <Kanban profile={activeProfile} visible={view === "kanban"} />
             )}
+          </div>
+        )}
+
+        {visitedViews.has("mcp") && (
+          <div style={paneStyle("mcp")}>
+            <MCP profile={activeProfile} />
+          </div>
+        )}
+
+        {visitedViews.has("swarm") && (
+          <div style={paneStyle("swarm")}>
+            <Swarm />
+          </div>
+        )}
+
+        {visitedViews.has("ecosystem") && (
+          <div style={paneStyle("ecosystem")}>
+            <Ecosystem profile={activeProfile} />
           </div>
         )}
 

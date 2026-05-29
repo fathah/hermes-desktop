@@ -118,6 +118,7 @@ import {
   deleteProfile,
   setActiveProfile,
 } from "./profiles";
+import { registerDashboardHandlers, registerMcpHandlers } from "./dashboard";
 import {
   readMemory,
   addMemoryEntry,
@@ -1543,6 +1544,9 @@ function setupIPC(): void {
       return sshReadLogs(conn.ssh, logFile, lines);
     return readLogs(logFile, lines);
   });
+
+  registerDashboardHandlers();
+  registerMcpHandlers();
 }
 
 function buildMenu(): void {

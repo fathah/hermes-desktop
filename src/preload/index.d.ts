@@ -770,6 +770,18 @@ interface HermesAPI {
     logFile?: string,
     lines?: number,
   ) => Promise<{ content: string; path: string }>;
+
+  getDashboardStats: (profile?: string) => Promise<{
+    sessionCount: number;
+    modelProvider: string;
+    modelName: string;
+    gatewayRunning: boolean;
+    cronJobCount: number;
+  }>;
+
+  listMcpCatalog: () => Promise<
+    Array<{ name: string; description: string; installed: boolean }>
+  >;
 }
 
 declare global {

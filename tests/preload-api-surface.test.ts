@@ -92,6 +92,13 @@ describe("New APIs from v0.8/v0.9 features", () => {
     expect(preloadMethods).toContain("discoverMemoryProviders");
     expect(typeMethods).toContain("discoverMemoryProviders");
   });
+
+  it("has dashboard and MCP catalog APIs", () => {
+    expect(preloadMethods).toContain("getDashboardStats");
+    expect(typeMethods).toContain("getDashboardStats");
+    expect(preloadMethods).toContain("listMcpCatalog");
+    expect(typeMethods).toContain("listMcpCatalog");
+  });
 });
 
 // ─── Legacy APIs still present ──────────────────────────

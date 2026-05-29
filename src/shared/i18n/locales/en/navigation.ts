@@ -2,6 +2,7 @@ export default {
   chat: "Chat",
   sessions: "Sessions",
   agents: "Profiles",
+  dashboard: "Dashboard",
   office: "Office",
   models: "Models",
   providers: "Providers",
@@ -11,6 +12,9 @@ export default {
   tools: "Tools",
   schedules: "Schedules",
   kanban: "Kanban",
+  mcp: "MCP Hub",
+  swarm: "Swarm",
+  ecosystem: "Ecosystem",
   gateway: "Gateway",
   settings: "Settings",
 } as const;
