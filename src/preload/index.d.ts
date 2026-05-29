@@ -770,6 +770,41 @@ interface HermesAPI {
     logFile?: string,
     lines?: number,
   ) => Promise<{ content: string; path: string }>;
+
+  vault: {
+    addCredential: (
+      profile: string,
+      provider: string,
+      label: string,
+      value: string,
+    ) => Promise<{ id: string; provider: string; label: string }>;
+    getCredentials: (
+      profile: string,
+    ) => Promise<
+      Array<{ id: string; provider: string; label: string; maskedValue: string }>
+    >;
+    updateCredential: (
+      id: string,
+      updates: { label?: string; value?: string },
+    ) => Promise<{ success: boolean }>;
+    deleteCredential: (id: string) => Promise<{ success: boolean }>;
+    getAuditLog: (
+      profile: string,
+    ) => Promise<
+      Array<{
+        id: string;
+        action: string;
+        provider: string;
+        label: string;
+        changedAt: string;
+      }>
+    >;
+    rotateMasterKey: () => Promise<{ success: boolean; entriesRotated: number }>;
+    isPopulated: () => Promise<boolean>;
+    encryptionAvailable: () => Promise<boolean>;
+    initWithPassword: (password: string) => Promise<{ success: boolean }>;
+    exportBlob: () => Promise<string>;
+  };
 }
 
 declare global {

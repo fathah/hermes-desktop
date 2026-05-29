@@ -17,6 +17,7 @@ import Models from "../Models/Models";
 import Providers from "../Providers/Providers";
 import Schedules from "../Schedules/Schedules";
 import Kanban from "../Kanban/Kanban";
+import Vault from "../Vault/Vault";
 import RemoteNotice from "../../components/RemoteNotice";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
 import hermeslogo from "../../assets/hermes.png";
@@ -36,6 +37,7 @@ import {
   Timer,
   Kanban as KanbanIcon,
   Download,
+  Shield,
 } from "../../assets/icons";
 import type { LucideIcon } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
@@ -44,6 +46,7 @@ type View =
   | "chat"
   | "sessions"
   | "agents"
+  | "vault"
   | "office"
   | "models"
   | "providers"
@@ -60,6 +63,7 @@ const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string }[] = [
   { view: "chat", icon: ChatBubble, labelKey: "navigation.chat" },
   { view: "sessions", icon: Clock, labelKey: "navigation.sessions" },
   { view: "agents", icon: Users, labelKey: "navigation.agents" },
+  { view: "vault", icon: Shield, labelKey: "navigation.vault" },
   { view: "office", icon: Building, labelKey: "navigation.office" },
   { view: "kanban", icon: KanbanIcon, labelKey: "navigation.kanban" },
   { view: "models", icon: Layers, labelKey: "navigation.models" },
@@ -309,6 +313,12 @@ function Layout({
                 }}
               />
             )}
+          </div>
+        )}
+
+        {visitedViews.has("vault") && (
+          <div style={paneStyle("vault")}>
+            {remoteMode ? <RemoteNotice feature="Vault" /> : <Vault profile={activeProfile} />}
           </div>
         )}
 

@@ -952,6 +952,50 @@ const hermesAPI = {
     lines?: number,
   ): Promise<{ content: string; path: string }> =>
     ipcRenderer.invoke("read-logs", logFile, lines),
+
+  // Encrypted vault
+  vault: {
+    addCredential: (
+      profile: string,
+      provider: string,
+      label: string,
+      value: string,
+    ): Promise<{ id: string; provider: string; label: string }> =>
+      ipcRenderer.invoke("vault-add-credential", profile, provider, label, value),
+    getCredentials: (
+      profile: string,
+    ): Promise<
+      Array<{ id: string; provider: string; label: string; maskedValue: string }>
+    > => ipcRenderer.invoke("vault-get-credentials", profile),
+    updateCredential: (
+      id: string,
+      updates: { label?: string; value?: string },
+    ): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke("vault-update-credential", id, updates),
+    deleteCredential: (id: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke("vault-delete-credential", id),
+    getAuditLog: (
+      profile: string,
+    ): Promise<
+      Array<{
+        id: string;
+        action: string;
+        provider: string;
+        label: string;
+        changedAt: string;
+      }>
+    > => ipcRenderer.invoke("vault-get-audit-log", profile),
+    rotateMasterKey: (): Promise<{ success: boolean; entriesRotated: number }> =>
+      ipcRenderer.invoke("vault-rotate-master-key"),
+    isPopulated: (): Promise<boolean> =>
+      ipcRenderer.invoke("vault-is-populated"),
+    encryptionAvailable: (): Promise<boolean> =>
+      ipcRenderer.invoke("vault-encryption-available"),
+    initWithPassword: (password: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke("vault-init-with-password", password),
+    exportBlob: (): Promise<string> =>
+      ipcRenderer.invoke("vault-export"),
+  },
 };
 
 if (process.contextIsolated) {

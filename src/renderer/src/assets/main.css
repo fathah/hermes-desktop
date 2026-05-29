@@ -5959,3 +5959,66 @@ body {
   font-size: 11px;
   color: var(--text-muted);
 }
+
+/* ── Vault ───────────────────────────────────────────────────────────── */
+
+.card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.screen-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.screen-title {
+  font-size: 18px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.screen-loading {
+  padding: 40px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.btn-primary, .btn-secondary {
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  border: none;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn-secondary {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.vault-screen {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.vault-list { padding: 16px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; flex: 1; }
+.vault-card { display: flex; justify-content: space-between; align-items: center; }
+.vault-card-provider { font-weight: 600; text-transform: capitalize; }
+.vault-card-masked { font-family: monospace; color: var(--text-muted); }
+.vault-add-form { margin: 16px; display: flex; flex-direction: column; gap: 10px; }
+.vault-add-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
