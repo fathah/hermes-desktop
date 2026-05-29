@@ -372,8 +372,8 @@ function Layout({
                 activeProfile={activeProfile}
                 onSelectProfile={handleSelectProfile}
                 onOpenWizard={() => setShowWizard(true)}
-                onChatWith={(name: string) => {
-                  handleSelectProfile(name);
+                onChatWith={async (name: string) => {
+                  await handleSelectProfile(name);
                   goTo("chat");
                 }}
               />
@@ -502,7 +502,7 @@ function Layout({
             <ul>
               {profileList.map((p) => (
                 <li key={p.name}>
-                  <button className={p.name === activeProfile ? "active" : ""} onClick={() => handleSelectProfile(p.name)}>
+                  <button className={p.name === activeProfile ? "active" : ""} onClick={async () => { await handleSelectProfile(p.name); }}>
                     {p.name} {p.isActive && "✓"}
                   </button>
                 </li>

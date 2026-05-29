@@ -18,8 +18,8 @@ interface ProfileInfo {
 
 interface AgentsProps {
   activeProfile: string;
-  onSelectProfile: (name: string) => void;
-  onChatWith: (name: string) => void;
+  onSelectProfile: (name: string) => void | Promise<void>;
+  onChatWith: (name: string) => void | Promise<void>;
   onOpenWizard?: () => void;
 }
 
@@ -81,7 +81,7 @@ function Agents({
   async function handleDelete(name: string): Promise<void> {
     const result = await window.hermesAPI.deleteProfile(name);
     if (result.success) {
-      if (activeProfile === name) onSelectProfile("default");
+      if (activeProfile === name) await onSelectProfile("default");
       loadProfiles();
     }
     setConfirmDelete(null);
@@ -89,7 +89,7 @@ function Agents({
 
   async function handleSelect(name: string): Promise<void> {
     await window.hermesAPI.setActiveProfile(name);
-    onSelectProfile(name);
+    await onSelectProfile(name);
     loadProfiles();
   }
 
