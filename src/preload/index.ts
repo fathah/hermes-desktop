@@ -952,6 +952,24 @@ const hermesAPI = {
     lines?: number,
   ): Promise<{ content: string; path: string }> =>
     ipcRenderer.invoke("read-logs", logFile, lines),
+
+  // Terminal
+  terminalCreate: (cwd?: string): Promise<{ id: string }> =>
+    ipcRenderer.invoke("terminal-create", cwd),
+  terminalWrite: (id: string, data: string): Promise<void> =>
+    ipcRenderer.invoke("terminal-write", id, data),
+  terminalResize: (id: string, cols: number, rows: number): Promise<void> =>
+    ipcRenderer.invoke("terminal-resize", id, cols, rows),
+  terminalKill: (id: string): Promise<void> =>
+    ipcRenderer.invoke("terminal-kill", id),
+  onTerminalData: (
+    handler: (payload: { id: string; data: string }) => void,
+  ): (() => void) => {
+    const fn = (_: unknown, payload: { id: string; data: string }) =>
+      handler(payload);
+    ipcRenderer.on("terminal-data", fn);
+    return () => ipcRenderer.removeListener("terminal-data", fn);
+  },
 };
 
 if (process.contextIsolated) {

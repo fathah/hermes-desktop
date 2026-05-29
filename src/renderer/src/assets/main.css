@@ -5959,3 +5959,34 @@ body {
   font-size: 11px;
   color: var(--text-muted);
 }
+
+/* ── Embedded terminal ───────────────────────────────────────────────── */
+
+.screen-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.screen-title {
+  font-size: 18px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.terminal-screen {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.terminal-container {
+  flex: 1;
+  padding: 8px;
+  background: #0d0d0d;
+}

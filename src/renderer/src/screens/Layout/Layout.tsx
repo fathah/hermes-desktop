@@ -17,6 +17,7 @@ import Models from "../Models/Models";
 import Providers from "../Providers/Providers";
 import Schedules from "../Schedules/Schedules";
 import Kanban from "../Kanban/Kanban";
+import Terminal from "../Terminal/Terminal";
 import RemoteNotice from "../../components/RemoteNotice";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
 import hermeslogo from "../../assets/hermes.png";
@@ -36,6 +37,7 @@ import {
   Timer,
   Kanban as KanbanIcon,
   Download,
+  Terminal as TerminalIcon,
 } from "../../assets/icons";
 import type { LucideIcon } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
@@ -53,6 +55,7 @@ type View =
   | "tools"
   | "schedules"
   | "kanban"
+  | "terminal"
   | "gateway"
   | "settings";
 
@@ -62,6 +65,7 @@ const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string }[] = [
   { view: "agents", icon: Users, labelKey: "navigation.agents" },
   { view: "office", icon: Building, labelKey: "navigation.office" },
   { view: "kanban", icon: KanbanIcon, labelKey: "navigation.kanban" },
+  { view: "terminal", icon: TerminalIcon, labelKey: "navigation.terminal" },
   { view: "models", icon: Layers, labelKey: "navigation.models" },
   { view: "providers", icon: KeyRound, labelKey: "navigation.providers" },
   { view: "skills", icon: Puzzle, labelKey: "navigation.skills" },
@@ -113,6 +117,18 @@ function Layout({
   useEffect(() => {
     window.hermesAPI.isRemoteOnlyMode().then(setRemoteMode);
   }, [view]);
+
+  // Keyboard shortcut: Ctrl/Cmd+T opens terminal
+  useEffect(() => {
+    function onKey(e: KeyboardEvent): void {
+      if ((e.ctrlKey || e.metaKey) && e.key === "t") {
+        e.preventDefault();
+        goTo("terminal");
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [goTo]);
 
   // Auto-update state
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
@@ -390,6 +406,12 @@ function Layout({
             ) : (
               <Kanban profile={activeProfile} visible={view === "kanban"} />
             )}
+          </div>
+        )}
+
+        {visitedViews.has("terminal") && (
+          <div style={paneStyle("terminal")}>
+            {remoteMode ? <RemoteNotice feature="Terminal" /> : <Terminal />}
           </div>
         )}
 
