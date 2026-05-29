@@ -6022,3 +6022,52 @@ body {
 .vault-card-masked { font-family: monospace; color: var(--text-muted); }
 .vault-add-form { margin: 16px; display: flex; flex-direction: column; gap: 10px; }
 .vault-add-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+
+/* ── Profile wizard ──────────────────────────────────────────────────── */
+
+.wizard-overlay, .migration-overlay, .profile-switcher-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.wizard-screen {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-primary);
+  max-width: 900px;
+  width: 95%;
+  max-height: 90vh;
+  border-radius: 12px;
+}
+
+.wizard-header { padding: 20px; border-bottom: 1px solid var(--border); }
+.wizard-steps { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; font-size: 11px; color: var(--text-muted); }
+.wizard-step.active { color: var(--accent); font-weight: 600; }
+.wizard-step.done { color: var(--success); }
+.wizard-body { padding: 20px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 12px; }
+.wizard-body label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.wizard-body input, .wizard-body textarea { padding: 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-primary); color: var(--text-primary); }
+.template-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+.template-card { text-align: left; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-secondary); cursor: pointer; }
+.template-card.selected { border-color: var(--accent); }
+.template-icon { font-size: 24px; display: block; margin-bottom: 6px; }
+.wizard-footer { padding: 16px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
+.form-errors { color: var(--error); font-size: 13px; }
+.migration-modal { max-width: 480px; width: 90%; padding: 24px; }
+.profile-switcher { min-width: 280px; padding: 16px; }
+.profile-switcher ul { list-style: none; padding: 0; }
+.profile-switcher button { width: 100%; text-align: left; padding: 8px; border: none; background: transparent; color: var(--text-primary); cursor: pointer; border-radius: 4px; }
+.profile-switcher button.active { background: var(--bg-tertiary); }
+
+.sidebar-status.online { color: var(--success); }
+.sidebar-status.offline { color: var(--text-muted); }
+.status-connecting { color: var(--warning); }
+
+.agents-header-actions { display: flex; gap: 8px; align-items: center; }

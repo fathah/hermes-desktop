@@ -18,6 +18,8 @@ import Providers from "../Providers/Providers";
 import Schedules from "../Schedules/Schedules";
 import Kanban from "../Kanban/Kanban";
 import Vault from "../Vault/Vault";
+import ProfileWizard from "../Agents/Wizard";
+import MigrationWizard from "../Migration/MigrationWizard";
 import RemoteNotice from "../../components/RemoteNotice";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
 import hermeslogo from "../../assets/hermes.png";
@@ -100,6 +102,13 @@ function Layout({
   );
   // Remote-only mode — SSH tunnel has full access; only pure HTTP remote mode restricts screens
   const [remoteMode, setRemoteMode] = useState(false);
+  const [gatewayRunning, setGatewayRunning] = useState<boolean | null>(null);
+  const [activatingProfile, setActivatingProfile] = useState(false);
+  const [showProfileSwitcher, setShowProfileSwitcher] = useState(false);
+  const [profileList, setProfileList] = useState<Array<{ name: string; isActive: boolean }>>([]);
+  const [showMigration, setShowMigration] = useState(false);
+  const [migrationChecked, setMigrationChecked] = useState(false);
+  const [showWizard, setShowWizard] = useState(false);
 
   const paneStyle = (target: View): React.CSSProperties => ({
     display: view === target ? "flex" : "none",
@@ -116,7 +125,37 @@ function Layout({
   // Re-check remote mode on tab switch (picks up Settings changes)
   useEffect(() => {
     window.hermesAPI.isRemoteOnlyMode().then(setRemoteMode);
+    window.hermesAPI.gatewayStatus().then((running) => setGatewayRunning(running));
   }, [view]);
+
+  useEffect(() => {
+    if (migrationChecked || remoteMode) return;
+    window.hermesAPI.profileWizard.detectMigration().then((list) => {
+      setMigrationChecked(true);
+      if (list.length > 0) setShowMigration(true);
+    });
+  }, [migrationChecked, remoteMode]);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      window.hermesAPI.gatewayStatus().then((running) => setGatewayRunning(running));
+    }, 10000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent): void {
+      if ((e.ctrlKey || e.metaKey) && e.key === "p") {
+        e.preventDefault();
+        window.hermesAPI.listProfiles().then((list) => {
+          setProfileList(list.map((p) => ({ name: p.name, isActive: p.isActive })));
+          setShowProfileSwitcher(true);
+        });
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // Auto-update state
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
@@ -194,11 +233,25 @@ function Layout({
     };
   }, [handleNewChat, goTo]);
 
-  const handleSelectProfile = useCallback((name: string) => {
-    setActiveProfile(name);
-    setMessages([]);
-    setCurrentSessionId(null);
+  const handleSelectProfile = useCallback(async (name: string) => {
+    setActivatingProfile(true);
+    try {
+      await window.hermesAPI.setActiveProfile(name);
+      await window.hermesAPI.profileWizard.activate(name);
+      const running = await window.hermesAPI.gatewayStatus();
+      setGatewayRunning(running);
+      setActiveProfile(name);
+      setMessages([]);
+      setCurrentSessionId(null);
+    } catch (err) {
+      console.error("Profile activation failed:", err);
+    } finally {
+      setActivatingProfile(false);
+      setShowProfileSwitcher(false);
+    }
   }, []);
+
+  const dismissMigration = useCallback(() => setShowMigration(false), []);
 
   const handleResumeSession = useCallback(
     async (sessionId: string) => {
@@ -262,7 +315,18 @@ function Layout({
             </button>
           )}
           <div className="sidebar-footer-text">
-            {activeProfile === "default" ? t("common.appName") : activeProfile}
+            {activatingProfile ? (
+              <span className="status-connecting">Connecting…</span>
+            ) : (
+              <>
+                {activeProfile === "default" ? t("common.appName") : activeProfile}
+                {gatewayRunning !== null && (
+                  <span className={`sidebar-status ${gatewayRunning ? "online" : "offline"}`}>
+                    {gatewayRunning ? " ● connected" : " ○ disconnected"}
+                  </span>
+                )}
+              </>
+            )}
           </div>
         </div>
       </aside>
@@ -307,6 +371,7 @@ function Layout({
               <Agents
                 activeProfile={activeProfile}
                 onSelectProfile={handleSelectProfile}
+                onOpenWizard={() => setShowWizard(true)}
                 onChatWith={(name: string) => {
                   handleSelectProfile(name);
                   goTo("chat");
@@ -419,6 +484,33 @@ function Layout({
           </div>
         )}
       </main>
+
+      {showMigration && (
+        <MigrationWizard onComplete={dismissMigration} onSkip={dismissMigration} />
+      )}
+
+      {showWizard && (
+        <div className="wizard-overlay">
+          <ProfileWizard onComplete={() => { setShowWizard(false); goTo("agents"); }} onCancel={() => setShowWizard(false)} />
+        </div>
+      )}
+
+      {showProfileSwitcher && (
+        <div className="profile-switcher-overlay" onClick={() => setShowProfileSwitcher(false)}>
+          <div className="profile-switcher card" onClick={(e) => e.stopPropagation()}>
+            <h3>Switch Profile</h3>
+            <ul>
+              {profileList.map((p) => (
+                <li key={p.name}>
+                  <button className={p.name === activeProfile ? "active" : ""} onClick={() => handleSelectProfile(p.name)}>
+                    {p.name} {p.isActive && "✓"}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

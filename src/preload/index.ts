@@ -996,6 +996,39 @@ const hermesAPI = {
     exportBlob: (): Promise<string> =>
       ipcRenderer.invoke("vault-export"),
   },
+
+  // Profile wizard
+  profileWizard: {
+    listTemplates: (): Promise<
+      Array<{
+        id: string;
+        name: string;
+        icon: string;
+        description: string;
+        toolsets: string[];
+        requiredSecrets: string[];
+      }>
+    > => ipcRenderer.invoke("profile-list-templates"),
+    initialState: (templateId: string) =>
+      ipcRenderer.invoke("profile-initial-wizard-state", templateId),
+    validateStep: (step: number, state: unknown) =>
+      ipcRenderer.invoke("profile-validate-wizard-step", step, state),
+    createFromWizard: (state: unknown) =>
+      ipcRenderer.invoke("profile-create-from-wizard", state),
+    activate: (profile: string) =>
+      ipcRenderer.invoke("profile-activate", profile),
+    deactivate: (profile: string, wipe?: boolean) =>
+      ipcRenderer.invoke("profile-deactivate", profile, wipe),
+    delete: (profile: string, archive: boolean) =>
+      ipcRenderer.invoke("profile-delete", profile, archive),
+    clone: (source: string, newName: string) =>
+      ipcRenderer.invoke("profile-clone", source, newName),
+    detectMigration: (): Promise<
+      Array<{ name: string; keyCount: number; envPath: string }>
+    > => ipcRenderer.invoke("profile-detect-migration"),
+    migrateSecrets: (profiles: string[]) =>
+      ipcRenderer.invoke("profile-migrate-secrets", profiles),
+  },
 };
 
 if (process.contextIsolated) {

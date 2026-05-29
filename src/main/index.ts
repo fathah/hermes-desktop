@@ -120,6 +120,7 @@ import {
 } from "./profiles";
 import { initVault, shutdownVault } from "./vault/service";
 import { registerVaultHandlers } from "./ipc/vault-handlers";
+import { registerProfileHandlers } from "./ipc/profile-handlers";
 import {
   readMemory,
   addMemoryEntry,
@@ -1547,6 +1548,7 @@ function setupIPC(): void {
   });
 
   registerVaultHandlers();
+  registerProfileHandlers();
 }
 
 function buildMenu(): void {

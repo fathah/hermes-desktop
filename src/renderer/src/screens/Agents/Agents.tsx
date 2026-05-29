@@ -20,6 +20,7 @@ interface AgentsProps {
   activeProfile: string;
   onSelectProfile: (name: string) => void;
   onChatWith: (name: string) => void;
+  onOpenWizard?: () => void;
 }
 
 function AgentAvatar({ name }: { name: string }): React.JSX.Element {
@@ -39,6 +40,7 @@ function Agents({
   activeProfile,
   onSelectProfile,
   onChatWith,
+  onOpenWizard,
 }: AgentsProps): React.JSX.Element {
   const { t } = useI18n();
   const [profiles, setProfiles] = useState<ProfileInfo[]>([]);
@@ -114,13 +116,20 @@ function Agents({
           <h2 className="agents-title">{t("agents.title")}</h2>
           <p className="agents-subtitle">{t("agents.subtitle")}</p>
         </div>
-        <button
-          className="btn btn-primary btn-sm"
-          onClick={() => setShowCreate(true)}
-        >
-          <Plus size={14} />
-          {t("agents.newAgent")}
-        </button>
+        <div className="agents-header-actions">
+          {onOpenWizard && (
+            <button className="btn btn-secondary btn-sm" onClick={onOpenWizard}>
+              Create with Wizard
+            </button>
+          )}
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => setShowCreate(true)}
+          >
+            <Plus size={14} />
+            {t("agents.newAgent")}
+          </button>
+        </div>
       </div>
 
       {showCreate && (

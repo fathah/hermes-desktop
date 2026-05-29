@@ -805,6 +805,52 @@ interface HermesAPI {
     initWithPassword: (password: string) => Promise<{ success: boolean }>;
     exportBlob: () => Promise<string>;
   };
+
+  profileWizard: {
+    listTemplates: () => Promise<
+      Array<{
+        id: string;
+        name: string;
+        icon: string;
+        description: string;
+        toolsets: string[];
+        requiredSecrets: string[];
+      }>
+    >;
+    initialState: (templateId: string) => Promise<unknown>;
+    validateStep: (
+      step: number,
+      state: unknown,
+    ) => Promise<{ valid: boolean; errors: string[] }>;
+    createFromWizard: (
+      state: unknown,
+    ) => Promise<{ success: boolean; profilePath?: string; error?: string }>;
+    activate: (
+      profile: string,
+    ) => Promise<{
+      success: boolean;
+      profile?: string;
+      status?: string;
+      error?: string;
+    }>;
+    deactivate: (profile: string, wipe?: boolean) => Promise<{ success: boolean }>;
+    delete: (
+      profile: string,
+      archive: boolean,
+    ) => Promise<{ success: boolean; error?: string }>;
+    clone: (
+      source: string,
+      newName: string,
+    ) => Promise<{ success: boolean; profilePath?: string; error?: string }>;
+    detectMigration: () => Promise<
+      Array<{ name: string; keyCount: number; envPath: string }>
+    >;
+    migrateSecrets: (
+      profiles: string[],
+    ) => Promise<
+      Array<{ name: string; imported: boolean; vaultEntries: number; error?: string }>
+    >;
+  };
 }
 
 declare global {
