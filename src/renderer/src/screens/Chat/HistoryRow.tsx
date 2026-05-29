@@ -86,42 +86,19 @@ export const ReasoningRow = memo(function ReasoningRow({
   );
 });
 
-/* ── Tool call ────────────────────────────────────────────────────────── */
+import { ToolCallCard } from "./ToolCallCard";
 
-function summariseArgs(args: string): string {
-  // Single-line snippet for the collapsed header — show the first ~80
-  // chars, collapse whitespace so multi-line JSON doesn't break layout.
-  const flat = args.replace(/\s+/g, " ").trim();
-  if (flat.length <= 80) return flat;
-  return flat.slice(0, 77) + "…";
-}
+/* ── Tool call ────────────────────────────────────────────────────────── */
 
 export const ToolCallRow = memo(function ToolCallRow({
   msg,
 }: {
   msg: ToolCallMessage;
 }): React.JSX.Element {
-  const { t } = useI18n();
-  const summary = summariseArgs(msg.args);
   return (
     <div className="chat-message chat-message-agent chat-message-history">
       <HermesAvatar />
-      <CollapsibleSection
-        variant="tool-call"
-        header={
-          <span className="chat-history-label">
-            <span className="chat-history-title">{t("chat.toolCall")}</span>
-            <span className="chat-history-tool-name">{msg.name}</span>
-            {summary && (
-              <span className="chat-history-tool-summary">{summary}</span>
-            )}
-          </span>
-        }
-      >
-        <pre className="chat-history-pre chat-history-pre--code">
-          {msg.args || "(no arguments)"}
-        </pre>
-      </CollapsibleSection>
+      <ToolCallCard name={msg.name} argumentsJson={msg.args || "{}"} />
     </div>
   );
 });

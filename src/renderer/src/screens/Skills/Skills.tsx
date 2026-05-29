@@ -24,6 +24,16 @@ interface SkillsProps {
 
 type Tab = "installed" | "browse";
 
+function skillOrigin(path: string): { label: string; className: string } {
+  if (/marketplace|clawhub|registry/i.test(path)) {
+    return { label: "marketplace", className: "skill-origin-badge skill-origin-marketplace" };
+  }
+  if (/profiles\//.test(path) || /\/skills\//.test(path)) {
+    return { label: "project", className: "skill-origin-badge skill-origin-project" };
+  }
+  return { label: "built-in", className: "skill-origin-badge" };
+}
+
 function Skills({ profile }: SkillsProps): React.JSX.Element {
   const { t } = useI18n();
   const [tab, setTab] = useState<Tab>("installed");
@@ -293,7 +303,17 @@ function Skills({ profile }: SkillsProps): React.JSX.Element {
                 onClick={() => handleViewDetail(skill)}
               >
                 <div className="skills-card-category">{skill.category}</div>
-                <div className="skills-card-name">{skill.name}</div>
+                <div className="skills-card-name">
+                  {skill.name}
+                  {skill.path && (
+                    <span className={skillOrigin(skill.path).className}>
+                      {skillOrigin(skill.path).label}
+                    </span>
+                  )}
+                </div>
+                {skill.path && (
+                  <div className="skills-card-path">{skill.path}</div>
+                )}
                 {skill.description && (
                   <div className="skills-card-description">
                     {skill.description}
