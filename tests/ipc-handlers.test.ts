@@ -65,6 +65,11 @@ describe("New IPC handlers from v0.8/v0.9 features", () => {
     "run-hermes-dump",
     "list-mcp-servers",
     "discover-memory-providers",
+    "safehouse-bridge-status",
+    "safehouse-bridge-tools",
+    "safehouse-bridge-call",
+    "safehouse-route-prompt",
+    "safehouse-ask",
   ];
 
   for (const ch of newChannels) {

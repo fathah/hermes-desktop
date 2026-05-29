@@ -18,6 +18,7 @@ import Providers from "../Providers/Providers";
 import Schedules from "../Schedules/Schedules";
 import Kanban from "../Kanban/Kanban";
 import RemoteNotice from "../../components/RemoteNotice";
+import SafeHouseBridgeOperatorPage from "../../components/SafeHouseBridgeOperatorPage";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
 import hermeslogo from "../../assets/hermes.png";
 import {
@@ -340,7 +341,7 @@ function Layout({
         {visitedViews.has("skills") && (
           <div style={paneStyle("skills")}>
             {remoteMode ? (
-              <RemoteNotice feature="Skills" />
+              <SafeHouseBridgeOperatorPage mode="skills" />
             ) : (
               <Skills profile={activeProfile} />
             )}
@@ -360,7 +361,7 @@ function Layout({
         {visitedViews.has("memory") && (
           <div style={paneStyle("memory")}>
             {remoteMode ? (
-              <RemoteNotice feature="Memory" />
+              <SafeHouseBridgeOperatorPage mode="memory" />
             ) : (
               <Memory profile={activeProfile} />
             )}
@@ -370,7 +371,7 @@ function Layout({
         {visitedViews.has("tools") && (
           <div style={paneStyle("tools")}>
             {remoteMode ? (
-              <RemoteNotice feature="Tools" />
+              <SafeHouseBridgeOperatorPage mode="tools" />
             ) : (
               <Tools profile={activeProfile} />
             )}
@@ -379,14 +380,18 @@ function Layout({
 
         {visitedViews.has("schedules") && (
           <div style={paneStyle("schedules")}>
-            <Schedules profile={activeProfile} />
+            {remoteMode ? (
+              <SafeHouseBridgeOperatorPage mode="watchdog" />
+            ) : (
+              <Schedules profile={activeProfile} />
+            )}
           </div>
         )}
 
         {visitedViews.has("kanban") && (
           <div style={paneStyle("kanban")}>
             {remoteMode ? (
-              <RemoteNotice feature="Kanban" />
+              <SafeHouseBridgeOperatorPage mode="kanban" />
             ) : (
               <Kanban profile={activeProfile} visible={view === "kanban"} />
             )}
@@ -396,7 +401,7 @@ function Layout({
         {visitedViews.has("gateway") && (
           <div style={paneStyle("gateway")}>
             {remoteMode ? (
-              <RemoteNotice feature="Gateway" />
+              <SafeHouseBridgeOperatorPage mode="gateway" />
             ) : (
               <Gateway profile={activeProfile} />
             )}

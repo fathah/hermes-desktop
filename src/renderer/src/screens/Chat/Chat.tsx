@@ -49,6 +49,13 @@ function Chat({
   // Working folder bound to this conversation (issue #27). Per-conversation,
   // held in memory; reset on session switch / new chat below.
   const [contextFolder, setContextFolder] = useState<string | null>(null);
+  const [safeHouseBridge, setSafeHouseBridge] = useState<{
+    ok: boolean;
+    bridgeUrl: string;
+    toolsCount: number;
+    mode: string;
+    error?: string;
+  } | null>(null);
   const dragCounter = useRef(0);
   const chatInputRef = useRef<ChatInputHandle>(null);
   const queueRef = useRef<QueuedMessage[]>([]);
@@ -59,6 +66,35 @@ function Chat({
     (async (): Promise<void> => {
       const flag = await window.hermesAPI.isRemoteMode();
       if (!cancelled) setRemoteMode(flag);
+    })();
+    return (): void => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async (): Promise<void> => {
+      const status = await window.hermesAPI.getSafeHouseToolBridgeStatus();
+      let toolsCount = status.tools_count ?? 0;
+      if (status.ok) {
+        try {
+          const manifest = await window.hermesAPI.listSafeHouseTools();
+          toolsCount = manifest.tools.length;
+        } catch {
+          // Health is enough to show the bridge is reachable; keep the
+          // health-reported count when the manifest request races startup.
+        }
+      }
+      if (!cancelled) {
+        setSafeHouseBridge({
+          ok: status.ok,
+          bridgeUrl: status.bridge_url,
+          toolsCount,
+          mode: status.mode || "unknown",
+          error: status.error,
+        });
+      }
     })();
     return (): void => {
       cancelled = true;
@@ -333,6 +369,23 @@ function Chat({
         </div>
       )}
       <div className="chat-input-area">
+        <div
+          className={`safehouse-tool-bridge-status ${
+            safeHouseBridge?.ok ? "connected" : "offline"
+          }`}
+          data-testid="safehouse-tool-bridge-status"
+          title={safeHouseBridge?.bridgeUrl}
+        >
+          <span className="safehouse-tool-bridge-dot" aria-hidden />
+          <span className="safehouse-tool-bridge-label">
+            SafeHouse tools {safeHouseBridge?.ok ? "connected" : "offline"}
+          </span>
+          <span className="safehouse-tool-bridge-detail">
+            {safeHouseBridge?.ok
+              ? `${safeHouseBridge.toolsCount} tools • ${safeHouseBridge.mode} • profile ${profile || "default"}`
+              : safeHouseBridge?.error || "Start http://127.0.0.1:57109"}
+          </span>
+        </div>
         <ChatInput
           ref={chatInputRef}
           isLoading={isLoading}

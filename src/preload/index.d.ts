@@ -49,6 +49,74 @@ interface CredentialPoolEntry {
   key?: string;
 }
 
+interface SafeHouseToolBridgeStatus {
+  ok: boolean;
+  bridge_url: string;
+  local_only: boolean;
+  service?: string;
+  version?: string;
+  mode?: string;
+  tools_count?: number;
+  mutations_blocked?: boolean;
+  error?: string;
+}
+
+interface SafeHouseToolEntry {
+  name: string;
+  description: string;
+  classification:
+    | "read_only"
+    | "local_safe_write"
+    | "proposal_only"
+    | "blocked";
+  risk_level: string;
+  approval_required: boolean;
+  action: string;
+}
+
+interface SafeHouseToolManifest {
+  name: string;
+  version: string;
+  tools: SafeHouseToolEntry[];
+}
+
+interface SafeHousePromptRoute {
+  tool: string;
+  action: string;
+  classification:
+    | "read_only"
+    | "local_safe_write"
+    | "proposal_only"
+    | "blocked";
+  reason: string;
+}
+
+interface SafeHouseToolCallEnvelope {
+  ok: boolean;
+  tool?: string;
+  action?: string;
+  classification?:
+    | "read_only"
+    | "local_safe_write"
+    | "proposal_only"
+    | "blocked";
+  source?: string;
+  status?: string;
+  result?: Record<string, unknown>;
+  mutation_performed?: boolean;
+  local_record_written?: boolean;
+  strict_json?: boolean;
+  error?: string;
+}
+
+interface SafeHouseAskResult {
+  matched: boolean;
+  route: SafeHousePromptRoute | null;
+  response?: Record<string, unknown>;
+  markdown?: string;
+  error?: string;
+}
+
 interface KanbanTask {
   id: string;
   title: string;
@@ -256,6 +324,22 @@ interface HermesAPI {
     name: string,
     labels: { open: string; saveAs: string },
   ) => void;
+  getSafeHouseToolBridgeStatus: (
+    bridgeUrl?: string,
+  ) => Promise<SafeHouseToolBridgeStatus>;
+  listSafeHouseTools: (bridgeUrl?: string) => Promise<SafeHouseToolManifest>;
+  callSafeHouseTool: (
+    tool: string,
+    input?: Record<string, unknown>,
+    bridgeUrl?: string,
+  ) => Promise<SafeHouseToolCallEnvelope>;
+  routeSafeHousePrompt: (
+    prompt: string,
+  ) => Promise<SafeHousePromptRoute | null>;
+  askSafeHouseToolBridge: (
+    prompt: string,
+    bridgeUrl?: string,
+  ) => Promise<SafeHouseAskResult>;
   getPathForFile: (file: File) => string;
   stageAttachment: (
     sessionId: string,

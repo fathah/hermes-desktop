@@ -119,12 +119,56 @@ export function useChatActions({
         return;
       }
 
+      const safeHouseRoute = text
+        ? await window.hermesAPI.routeSafeHousePrompt(text)
+        : null;
+      if (safeHouseRoute) {
+        setIsLoading(true);
+        pushUser(text, "user");
+        onSessionStarted?.();
+        try {
+          const result = await window.hermesAPI.askSafeHouseToolBridge(text);
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `agent-safehouse-${Date.now()}`,
+              role: "agent",
+              content:
+                result.markdown ||
+                result.error ||
+                "SafeHouse tool bridge returned no displayable result.",
+            },
+          ]);
+        } catch (error) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `agent-safehouse-error-${Date.now()}`,
+              role: "agent",
+              content: `SafeHouse Tool Bridge error: ${
+                error instanceof Error ? error.message : "unknown error"
+              }`,
+            },
+          ]);
+        } finally {
+          setIsLoading(false);
+        }
+        return;
+      }
+
       setIsLoading(true);
       pushUser(text, "user", attachments);
       onSessionStarted?.();
       await sendToAgent(text, attachments);
     },
-    [localCommands, pushUser, onSessionStarted, sendToAgent, setIsLoading],
+    [
+      localCommands,
+      pushUser,
+      onSessionStarted,
+      sendToAgent,
+      setIsLoading,
+      setMessages,
+    ],
   );
 
   const handleQuickAsk = useCallback(

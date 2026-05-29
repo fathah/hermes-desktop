@@ -92,6 +92,7 @@ sudo dnf install ./hermes-desktop-<version>.rpm
 - **Session management** — full-text search (SQLite FTS5), date-grouped history, resume and search across conversations
 - **Profile switching** — create, delete, and switch between separate Hermes environments with isolated config
 - **14 toolsets** — web, browser, terminal, file, code execution, vision, image gen, TTS, skills, memory, session search, clarify, delegation, MoA, and task planning
+- **SafeHouse Tool Bridge** — optional loopback-only SafeHouse Signal tool bridge support for approved local platform expert prompts
 - **Memory system** — view/edit memory entries, user profile memory, capacity tracking, and discoverable memory providers (Honcho, Hindsight, Mem0, RetainDB, Supermemory, ByteRover)
 - **Persona editor** — edit and reset your agent's SOUL.md personality
 - **Saved models** — CRUD management for model configurations across providers
