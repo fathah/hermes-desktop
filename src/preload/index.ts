@@ -952,6 +952,13 @@ const hermesAPI = {
     lines?: number,
   ): Promise<{ content: string; path: string }> =>
     ipcRenderer.invoke("read-logs", logFile, lines),
+
+  filesListDir: (dir: string): Promise<Array<{ name: string; isDir: boolean; path: string }>> =>
+    ipcRenderer.invoke("files-list-dir", dir),
+  filesRead: (path: string): Promise<string> =>
+    ipcRenderer.invoke("files-read", path),
+  filesWrite: (path: string, content: string): Promise<boolean> =>
+    ipcRenderer.invoke("files-write", path, content),
 };
 
 if (process.contextIsolated) {

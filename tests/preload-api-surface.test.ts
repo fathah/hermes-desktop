@@ -92,6 +92,13 @@ describe("New APIs from v0.8/v0.9 features", () => {
     expect(preloadMethods).toContain("discoverMemoryProviders");
     expect(typeMethods).toContain("discoverMemoryProviders");
   });
+
+  it("has files browser APIs", () => {
+    for (const m of ["filesListDir", "filesRead", "filesWrite"]) {
+      expect(preloadMethods).toContain(m);
+      expect(typeMethods).toContain(m);
+    }
+  });
 });
 
 // ─── Legacy APIs still present ──────────────────────────

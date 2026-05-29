@@ -17,6 +17,7 @@ import Models from "../Models/Models";
 import Providers from "../Providers/Providers";
 import Schedules from "../Schedules/Schedules";
 import Kanban from "../Kanban/Kanban";
+import Files from "../Files/Files";
 import RemoteNotice from "../../components/RemoteNotice";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
 import hermeslogo from "../../assets/hermes.png";
@@ -36,6 +37,7 @@ import {
   Timer,
   Kanban as KanbanIcon,
   Download,
+  FolderOpen,
 } from "../../assets/icons";
 import type { LucideIcon } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
@@ -53,6 +55,7 @@ type View =
   | "tools"
   | "schedules"
   | "kanban"
+  | "files"
   | "gateway"
   | "settings";
 
@@ -62,6 +65,7 @@ const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string }[] = [
   { view: "agents", icon: Users, labelKey: "navigation.agents" },
   { view: "office", icon: Building, labelKey: "navigation.office" },
   { view: "kanban", icon: KanbanIcon, labelKey: "navigation.kanban" },
+  { view: "files", icon: FolderOpen, labelKey: "navigation.files" },
   { view: "models", icon: Layers, labelKey: "navigation.models" },
   { view: "providers", icon: KeyRound, labelKey: "navigation.providers" },
   { view: "skills", icon: Puzzle, labelKey: "navigation.skills" },
@@ -390,6 +394,12 @@ function Layout({
             ) : (
               <Kanban profile={activeProfile} visible={view === "kanban"} />
             )}
+          </div>
+        )}
+
+        {visitedViews.has("files") && (
+          <div style={paneStyle("files")}>
+            {remoteMode ? <RemoteNotice feature="Files" /> : <Files />}
           </div>
         )}
 

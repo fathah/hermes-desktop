@@ -118,6 +118,7 @@ import {
   deleteProfile,
   setActiveProfile,
 } from "./profiles";
+import { registerFilesHandlers } from "./files";
 import {
   readMemory,
   addMemoryEntry,
@@ -1543,6 +1544,8 @@ function setupIPC(): void {
       return sshReadLogs(conn.ssh, logFile, lines);
     return readLogs(logFile, lines);
   });
+
+  registerFilesHandlers();
 }
 
 function buildMenu(): void {

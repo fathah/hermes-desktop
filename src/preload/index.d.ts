@@ -770,6 +770,12 @@ interface HermesAPI {
     logFile?: string,
     lines?: number,
   ) => Promise<{ content: string; path: string }>;
+
+  filesListDir: (
+    dir: string,
+  ) => Promise<Array<{ name: string; isDir: boolean; path: string }>>;
+  filesRead: (path: string) => Promise<string>;
+  filesWrite: (path: string, content: string) => Promise<boolean>;
 }
 
 declare global {
