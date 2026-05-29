@@ -11,6 +11,7 @@ export default {
   tools: "Tools",
   schedules: "Schedules",
   kanban: "Kanban",
+  terminal: "Terminal",
   gateway: "Gateway",
   settings: "Settings",
 } as const;

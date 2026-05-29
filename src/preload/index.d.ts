@@ -770,6 +770,14 @@ interface HermesAPI {
     logFile?: string,
     lines?: number,
   ) => Promise<{ content: string; path: string }>;
+
+  terminalCreate: (cwd?: string) => Promise<{ id: string }>;
+  terminalWrite: (id: string, data: string) => Promise<void>;
+  terminalResize: (id: string, cols: number, rows: number) => Promise<void>;
+  terminalKill: (id: string) => Promise<void>;
+  onTerminalData: (
+    handler: (payload: { id: string; data: string }) => void,
+  ) => () => void;
 }
 
 declare global {

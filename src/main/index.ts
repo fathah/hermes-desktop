@@ -118,6 +118,7 @@ import {
   deleteProfile,
   setActiveProfile,
 } from "./profiles";
+import { registerTerminalHandlers, killAllTerminals } from "./terminal";
 import {
   readMemory,
   addMemoryEntry,
@@ -1543,6 +1544,8 @@ function setupIPC(): void {
       return sshReadLogs(conn.ssh, logFile, lines);
     return readLogs(logFile, lines);
   });
+
+  registerTerminalHandlers();
 }
 
 function buildMenu(): void {
@@ -1800,6 +1803,7 @@ app.on("before-quit", () => {
     currentChatAbort();
     currentChatAbort = null;
   }
+  killAllTerminals();
   stopGateway();
   stopSshTunnel();
   stopClaw3d();

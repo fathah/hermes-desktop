@@ -4,6 +4,7 @@ import { join } from "path";
 
 const ROOT = join(__dirname, "..");
 const indexSrc = readFileSync(join(ROOT, "src/main/index.ts"), "utf-8");
+const terminalSrc = readFileSync(join(ROOT, "src/main/terminal.ts"), "utf-8");
 const preloadSrc = readFileSync(join(ROOT, "src/preload/index.ts"), "utf-8");
 
 /**
@@ -32,7 +33,10 @@ function extractPreloadInvokeChannels(src: string): string[] {
   return [...new Set(channels)];
 }
 
-const mainChannels = extractIpcHandleChannels(indexSrc);
+const mainChannels = [
+  ...extractIpcHandleChannels(indexSrc),
+  ...extractIpcHandleChannels(terminalSrc),
+];
 const preloadChannels = extractPreloadInvokeChannels(preloadSrc);
 
 describe("IPC Handler ↔ Preload Consistency", () => {
@@ -65,6 +69,10 @@ describe("New IPC handlers from v0.8/v0.9 features", () => {
     "run-hermes-dump",
     "list-mcp-servers",
     "discover-memory-providers",
+    "terminal-create",
+    "terminal-write",
+    "terminal-resize",
+    "terminal-kill",
   ];
 
   for (const ch of newChannels) {
