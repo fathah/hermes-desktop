@@ -10,19 +10,21 @@
 
 | Your Computer | Download This File | Install Method |
 |--------------|-------------------|----------------|
-| **Mac (Apple Silicon - M1/M2/M3)** | `hermes-desktop-X.X.X-arm64-mac.dmg` | Open DMG, drag to Applications |
-| **Mac (Intel)** | `hermes-desktop-X.X.X-x64-mac.dmg` | Open DMG, drag to Applications |
+| **Mac (Apple Silicon - M1/M2/M3)** | `hermes-desktop-X.X.X-arm64.dmg` | Open DMG, drag to Applications |
+| **Mac (Intel)** | `hermes-desktop-X.X.X-x64.dmg` | Open DMG, drag to Applications |
 | **Windows** | `hermes-desktop-X.X.X-setup.exe` | Double-click, click "Run anyway" if Windows warns |
-| **Linux (Ubuntu/Debian)** | `hermes-desktop-X.X.X.deb` | Double-click to install |
+| **Linux (Ubuntu/Debian)** | `hermes-desktop_X.X.X_amd64.deb` | Double-click to install |
 | **Linux (Fedora/RHEL)** | `hermes-desktop-X.X.X.rpm` | `sudo dnf install ./hermes-desktop-X.X.X.rpm` |
 | **Linux (Any - Portable)** | `hermes-desktop-X.X.X.AppImage` | Double-click to run (no install) |
 
 **Where to download:** https://github.com/fathah/hermes-desktop/releases
 
-### Step 2: Install & Open
+### Step 2: Verify, Install & Open
+
+For unofficial tester builds, verify `SHA256SUMS.txt` against a hash shared through a trusted channel before bypassing operating-system warnings.
 
 - **Mac**: Open the `.dmg`, drag Hermes Agent to Applications, open from Applications folder
-- **Windows**: Run the installer, click "More info" → "Run anyway" if SmartScreen warns
+- **Windows**: Run the installer. If SmartScreen warns, verify the hash first, then click "More info" → "Run anyway" only if you trust the build source
 - **Linux**: Use your package manager or run the AppImage
 
 ### Step 3: First-Time Setup
@@ -49,6 +51,8 @@ npm run build:mac      # or :win, :linux
 # 3. Find the installer in the dist/ folder
 ```
 
+The tester packaging scripts require bash-compatible tools. On Windows, use Git Bash or WSL.
+
 ---
 
 ## What to Test
@@ -58,7 +62,7 @@ Once the app is running, try these:
 1. **Chat** - Send a message, check if AI responds
 2. **Tools** - Ask it to search the web or run a command
 3. **Sessions** - Close and reopen app, check if history saves
-4. **Profiles** - Create a new profile in Settings → Agents
+4. **Profiles** - Create a new profile from the top-level Profiles section
 5. **Settings** - Change theme, check all tabs load
 
 ---
@@ -67,10 +71,10 @@ Once the app is running, try these:
 
 | Problem | Solution |
 |---------|----------|
-| "App is damaged" (Mac) | Run: `xattr -cr /Applications/Hermes\ Agent.app` |
-| "Windows protected your PC" | Click "More info" → "Run anyway" |
+| "App is damaged" (Mac) | Verify the hash first, then run: `xattr -cr /Applications/Hermes\ Agent.app` only if you trust the build source |
+| "Windows protected your PC" | Verify the hash first, then click "More info" → "Run anyway" only if you trust the build source |
 | Installer hangs on Linux | Grant passwordless sudo temporarily (see README) |
-| App won't start | Delete `~/.hermes` folder and try again |
+| App won't start | Rename `~/.hermes` to a dated backup first, then try again |
 
 ---
 

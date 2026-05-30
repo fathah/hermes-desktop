@@ -2,9 +2,10 @@
 #
 # One-liner build for current platform - simplest possible
 # Usage: ./scripts/quick-test-build.sh
+# Requires bash-compatible tooling: bash, npm, npx, uname, and ls.
 #
 
-set -e
+set -euo pipefail
 
 echo "🚀 Hermes Desktop - Quick Test Build"
 echo "===================================="

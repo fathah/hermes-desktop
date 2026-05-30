@@ -2,14 +2,50 @@
 #
 # Build Hermes Desktop for a non-technical tester
 # Usage: ./scripts/build-for-tester.sh [mac|win|linux]
+# Requires bash-compatible tooling: bash, npm, npx, cp, mktemp, and uname.
 #
 
-set -e
+set -euo pipefail
 
 PLATFORM=${1:-"current"}
 VERSION=$(node -p "require('./package.json').version")
 DIST_DIR="dist"
 BUILD_DIR="builds-for-testing"
+ARTIFACT_DIR="$BUILD_DIR/artifacts"
+STAGE_DIR=""
+
+cleanup() {
+  if [ -n "$STAGE_DIR" ] && [ -d "$STAGE_DIR" ]; then
+    rm -rf "$STAGE_DIR"
+  fi
+}
+trap cleanup EXIT
+
+prepare_stage() {
+  mkdir -p "$BUILD_DIR"
+  STAGE_DIR=$(mktemp -d "$BUILD_DIR/stage.XXXXXX")
+}
+
+publish_artifacts() {
+  local patterns=("$@")
+  local artifacts=()
+
+  shopt -s nullglob
+  for pattern in "${patterns[@]}"; do
+    artifacts+=( $pattern )
+  done
+  shopt -u nullglob
+
+  if [ "${#artifacts[@]}" -eq 0 ]; then
+    echo "❌ No fresh installer artifacts found in $DIST_DIR"
+    exit 1
+  fi
+
+  cp "${artifacts[@]}" "$STAGE_DIR/"
+  rm -rf "$ARTIFACT_DIR"
+  mkdir -p "$ARTIFACT_DIR"
+  cp "$STAGE_DIR"/* "$ARTIFACT_DIR/"
+}
 
 echo "🏗️  Building Hermes Desktop v$VERSION for platform: $PLATFORM"
 echo ""
@@ -27,29 +63,26 @@ echo "🚀 Building application..."
 npm run build
 
 # Create output directory
-mkdir -p "$BUILD_DIR"
+prepare_stage
 
 # Build based on platform
 case "$PLATFORM" in
   mac|macos|darwin)
     echo "🍎 Building macOS artifacts..."
     npx electron-builder --mac dmg zip --publish never
-    cp "$DIST_DIR"/*.dmg "$BUILD_DIR/" 2>/dev/null || true
-    cp "$DIST_DIR"/*-mac.zip "$BUILD_DIR/" 2>/dev/null || true
+    publish_artifacts "$DIST_DIR"/*.dmg "$DIST_DIR"/*-mac.zip
     ;;
   
   win|windows|win32)
     echo "🪟 Building Windows artifacts..."
     npx electron-builder --win nsis portable --x64 --publish never
-    cp "$DIST_DIR"/*-setup.exe "$BUILD_DIR/" 2>/dev/null || true
-    cp "$DIST_DIR"/*-portable.exe "$BUILD_DIR/" 2>/dev/null || true
+    publish_artifacts "$DIST_DIR"/*-setup.exe "$DIST_DIR"/*-portable.exe
     ;;
   
   linux)
     echo "🐧 Building Linux artifacts..."
     npx electron-builder --linux AppImage deb --publish never
-    cp "$DIST_DIR"/*.AppImage "$BUILD_DIR/" 2>/dev/null || true
-    cp "$DIST_DIR"/*.deb "$BUILD_DIR/" 2>/dev/null || true
+    publish_artifacts "$DIST_DIR"/*.AppImage "$DIST_DIR"/*.deb
     ;;
   
   current|auto)
@@ -58,17 +91,17 @@ case "$PLATFORM" in
       Darwin)
         echo "🍎 Detected macOS, building..."
         npx electron-builder --mac dmg --publish never
-        cp "$DIST_DIR"/*.dmg "$BUILD_DIR/" 2>/dev/null || true
+        publish_artifacts "$DIST_DIR"/*.dmg
         ;;
       Linux)
         echo "🐧 Detected Linux, building AppImage..."
         npx electron-builder --linux AppImage --publish never
-        cp "$DIST_DIR"/*.AppImage "$BUILD_DIR/" 2>/dev/null || true
+        publish_artifacts "$DIST_DIR"/*.AppImage
         ;;
       MINGW*|CYGWIN*|MSYS*)
         echo "🪟 Detected Windows, building..."
         npx electron-builder --win nsis --x64 --publish never
-        cp "$DIST_DIR"/*-setup.exe "$BUILD_DIR/" 2>/dev/null || true
+        publish_artifacts "$DIST_DIR"/*-setup.exe
         ;;
       *)
         echo "❌ Unknown OS: $OS"
@@ -87,11 +120,11 @@ esac
 echo ""
 echo "✅ Build complete!"
 echo ""
-echo "📁 Output files in $BUILD_DIR/:"
-ls -lh "$BUILD_DIR/" 2>/dev/null || echo "   (no files found)"
+echo "📁 Output files in $ARTIFACT_DIR/:"
+ls -lh "$ARTIFACT_DIR/"
 echo ""
 echo "📝 Next steps:"
-echo "   1. Copy the file(s) from $BUILD_DIR/ to the tester's computer"
-echo "   2. Include TESTING-GUIDE.md with the files"
+echo "   1. Copy the file(s) from $ARTIFACT_DIR/ to the tester's computer"
+echo "   2. Include TESTING-GUIDE.md and SHA256 checksums with the files"
 echo "   3. Have them follow the guide!"
 echo ""
