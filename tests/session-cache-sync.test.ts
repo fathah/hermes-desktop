@@ -196,7 +196,11 @@ vi.mock("better-sqlite3", () => {
 });
 
 import Database from "better-sqlite3";
-import { syncSessionCache } from "../src/main/session-cache";
+import {
+  listCachedSessions,
+  syncSessionCache,
+  updateSessionMetadata,
+} from "../src/main/session-cache";
 
 const CACHE_FILE = join(TEST_HOME, "desktop", "sessions.json");
 const DB_PATH = join(TEST_HOME, "state.db");
@@ -489,6 +493,66 @@ describe("syncSessionCache", () => {
     expect(second[0].title).toBe("Updated title");
     expect(second[0].model).toBe("claude-sonnet-4-20250514");
     expect(second[0].messageCount).toBe(5);
+  });
+
+  it("preserves manual conversation metadata across syncs", () => {
+    const future = Math.floor(Date.now() / 1000) + 600;
+    seedDb([
+      {
+        id: "s1",
+        started_at: future,
+        message_count: 2,
+        model: "gpt-4o",
+        title: "Generated title",
+        firstUserMessage: "hi",
+      },
+    ]);
+    syncSessionCache();
+
+    updateSessionMetadata("s1", {
+      title: "Project Alpha",
+      tags: ["work", "research"],
+      pinned: true,
+    });
+
+    seedDb([
+      {
+        id: "s1",
+        started_at: future,
+        message_count: 5,
+        model: "claude-sonnet-4-20250514",
+        title: "New generated title",
+        firstUserMessage: "hi",
+      },
+    ]);
+    const second = syncSessionCache();
+
+    expect(second[0].title).toBe("Project Alpha");
+    expect(second[0].tags).toEqual(["work", "research"]);
+    expect(second[0].pinned).toBe(true);
+    expect(second[0].model).toBe("claude-sonnet-4-20250514");
+    expect(second[0].messageCount).toBe(5);
+  });
+
+  it("archives sessions without deleting them from the cache", () => {
+    const future = Math.floor(Date.now() / 1000) + 600;
+    seedDb([
+      {
+        id: "s1",
+        started_at: future,
+        message_count: 2,
+        firstUserMessage: "keep this for later",
+      },
+    ]);
+    syncSessionCache();
+
+    updateSessionMetadata("s1", { pinned: true, archived: true });
+    const cached = listCachedSessions();
+
+    expect(cached).toHaveLength(1);
+    expect(cached[0].id).toBe("s1");
+    expect(cached[0].archived).toBe(true);
+    expect(cached[0].pinned).toBe(false);
   });
 
   it("handles a large existing cache without quadratic blowup (issue #16)", () => {

@@ -110,6 +110,7 @@ import {
   syncSessionCache,
   listCachedSessions,
   updateSessionTitle,
+  updateSessionMetadata,
 } from "./session-cache";
 import { listModels, addModel, removeModel, updateModel } from "./models";
 import {
@@ -1222,6 +1223,19 @@ function setupIPC(): void {
     "update-session-title",
     (_event, sessionId: string, title: string) =>
       updateSessionTitle(sessionId, title),
+  );
+  ipcMain.handle(
+    "update-session-metadata",
+    (
+      _event,
+      sessionId: string,
+      update: {
+        title?: string;
+        tags?: string[];
+        pinned?: boolean;
+        archived?: boolean;
+      },
+    ) => updateSessionMetadata(sessionId, update),
   );
 
   // Session search

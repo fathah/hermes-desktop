@@ -1,5 +1,22 @@
-import { useEffect, useState, useRef, useCallback, memo } from "react";
-import { Plus, Search, X, ChatBubble, Trash } from "../../assets/icons";
+import {
+  useEffect,
+  useState,
+  useRef,
+  useCallback,
+  memo,
+  type MouseEvent,
+} from "react";
+import {
+  Archive,
+  Pencil,
+  Pin,
+  Plus,
+  Search,
+  Tags,
+  X,
+  ChatBubble,
+  Trash,
+} from "../../assets/icons";
 import { useI18n } from "../../components/useI18n";
 
 interface CachedSession {
@@ -9,6 +26,9 @@ interface CachedSession {
   source: string;
   messageCount: number;
   model: string;
+  tags?: string[];
+  pinned?: boolean;
+  archived?: boolean;
 }
 
 interface SearchResult {
@@ -42,7 +62,8 @@ function formatFullDate(ts: number): string {
   );
 }
 
-type DateGroup = "today" | "yesterday" | "thisWeek" | "earlier";
+type DateGroup = "pinned" | "today" | "yesterday" | "thisWeek" | "earlier";
+type SessionView = "active" | "pinned" | "archived";
 
 function getDateGroup(ts: number): DateGroup {
   const d = new Date(ts * 1000);
@@ -74,14 +95,48 @@ function groupSessions(
 ): Array<{ label: DateGroup; sessions: CachedSession[] }> {
   const groups = new Map<DateGroup, CachedSession[]>();
   for (const s of sessions) {
-    const group = getDateGroup(s.startedAt);
+    const group = s.pinned && !s.archived ? "pinned" : getDateGroup(s.startedAt);
     if (!groups.has(group)) groups.set(group, []);
     groups.get(group)!.push(s);
   }
-  const order: DateGroup[] = ["today", "yesterday", "thisWeek", "earlier"];
+  const order: DateGroup[] = [
+    "pinned",
+    "today",
+    "yesterday",
+    "thisWeek",
+    "earlier",
+  ];
   return order
     .filter((label) => groups.has(label))
     .map((label) => ({ label, sessions: groups.get(label)! }));
+}
+
+function matchesSessionView(session: CachedSession, view: SessionView): boolean {
+  if (view === "archived") return Boolean(session.archived);
+  if (view === "pinned") return Boolean(session.pinned) && !session.archived;
+  return !session.archived;
+}
+
+function matchesQuery(session: CachedSession, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return [
+    session.title,
+    session.source,
+    session.model,
+    ...(session.tags || []),
+  ].some((value) => value.toLowerCase().includes(q));
+}
+
+function parseTagsInput(input: string): string[] {
+  return Array.from(
+    new Set(
+      input
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean),
+    ),
+  ).slice(0, 12);
 }
 
 function highlightSnippet(snippet: string): React.JSX.Element {
@@ -110,17 +165,42 @@ const SessionCard = memo(function SessionCard({
   isActive,
   showFullDate,
   onClick,
+  onRename,
+  onEditTags,
+  onTogglePinned,
+  onToggleArchived,
   onDelete,
+  labels,
   deleteTitle,
 }: {
   session: CachedSession;
   isActive: boolean;
   showFullDate: boolean;
   onClick: () => void;
+  onRename?: (session: CachedSession) => void;
+  onEditTags?: (session: CachedSession) => void;
+  onTogglePinned?: (session: CachedSession) => void;
+  onToggleArchived?: (session: CachedSession) => void;
   // When provided, renders a trash icon button on the card. Closes #408.
   onDelete?: (id: string) => void;
+  labels?: {
+    rename: string;
+    tags: string;
+    pin: string;
+    unpin: string;
+    archive: string;
+    unarchive: string;
+  };
   deleteTitle?: string;
 }) {
+  const stopAndRun = (
+    event: MouseEvent<HTMLButtonElement>,
+    action: () => void,
+  ): void => {
+    event.stopPropagation();
+    action();
+  };
+
   // `div` instead of `button` because nesting a button-inside-button is
   // invalid HTML and many a11y / interaction layers (focus trap, keyboard
   // navigation) break on it. Click + Enter/Space behavior matches the
@@ -142,6 +222,11 @@ const SessionCard = memo(function SessionCard({
         <span className="sessions-card-title">
           {session.title || "New conversation"}
         </span>
+        {session.pinned && (
+          <span className="sessions-pin-badge" title={labels?.unpin || "Pinned"}>
+            <Pin size={12} />
+          </span>
+        )}
         <span className="sessions-card-time">
           {showFullDate
             ? formatFullDate(session.startedAt)
@@ -158,6 +243,63 @@ const SessionCard = memo(function SessionCard({
         {session.model && (
           <span className="sessions-tag sessions-tag--model">
             {formatModel(session.model)}
+          </span>
+        )}
+        {(session.tags || []).map((tag) => (
+          <span key={tag} className="sessions-tag sessions-tag--custom">
+            #{tag}
+          </span>
+        ))}
+        {labels && (
+          <span className="sessions-card-actions">
+            {onRename && (
+              <button
+                type="button"
+                className="sessions-card-action"
+                onClick={(e) => stopAndRun(e, () => onRename(session))}
+                onKeyDown={(e) => e.stopPropagation()}
+                title={labels.rename}
+                aria-label={labels.rename}
+              >
+                <Pencil size={14} />
+              </button>
+            )}
+            {onEditTags && (
+              <button
+                type="button"
+                className="sessions-card-action"
+                onClick={(e) => stopAndRun(e, () => onEditTags(session))}
+                onKeyDown={(e) => e.stopPropagation()}
+                title={labels.tags}
+                aria-label={labels.tags}
+              >
+                <Tags size={14} />
+              </button>
+            )}
+            {onTogglePinned && (
+              <button
+                type="button"
+                className={`sessions-card-action ${session.pinned ? "sessions-card-action--active" : ""}`}
+                onClick={(e) => stopAndRun(e, () => onTogglePinned(session))}
+                onKeyDown={(e) => e.stopPropagation()}
+                title={session.pinned ? labels.unpin : labels.pin}
+                aria-label={session.pinned ? labels.unpin : labels.pin}
+              >
+                <Pin size={14} />
+              </button>
+            )}
+            {onToggleArchived && (
+              <button
+                type="button"
+                className={`sessions-card-action ${session.archived ? "sessions-card-action--active" : ""}`}
+                onClick={(e) => stopAndRun(e, () => onToggleArchived(session))}
+                onKeyDown={(e) => e.stopPropagation()}
+                title={session.archived ? labels.unarchive : labels.archive}
+                aria-label={session.archived ? labels.unarchive : labels.archive}
+              >
+                <Archive size={14} />
+              </button>
+            )}
           </span>
         )}
         {onDelete && (
@@ -189,6 +331,7 @@ const SessionCard = memo(function SessionCard({
 // sessions created in the background (cron jobs, gateway platforms, another
 // device) surface without the user navigating away and back. (refs #322)
 export const SESSIONS_REFRESH_MS = 30_000;
+const SESSION_LIST_LIMIT = 200;
 
 function Sessions({
   onResumeSession,
@@ -202,6 +345,7 @@ function Sessions({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [sessionView, setSessionView] = useState<SessionView>("active");
   const [pendingDeleteSessionId, setPendingDeleteSessionId] = useState<
     string | null
   >(null);
@@ -211,23 +355,36 @@ function Sessions({
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
+  const applyLocalSessionUpdate = useCallback(
+    (sessionId: string, update: Partial<CachedSession>): void => {
+      setSessions((prev) =>
+        prev.map((session) =>
+          session.id === sessionId ? { ...session, ...update } : session,
+        ),
+      );
+    },
+    [],
+  );
+
   // Quiet re-sync from state.db — refreshes the list WITHOUT flipping the
   // loading state, so it can run on a timer or on focus with no spinner flash.
   const refreshSessions = useCallback(async (): Promise<void> => {
     const synced = await window.hermesAPI.syncSessionCache();
-    setSessions(synced.slice(0, 50));
+    setSessions(synced);
   }, []);
 
   const loadSessions = useCallback(async (): Promise<void> => {
     setLoading(true);
     try {
-      const cached = await window.hermesAPI.listCachedSessions(50);
+      const cached = await window.hermesAPI.listCachedSessions(
+        SESSION_LIST_LIMIT,
+      );
       if (cached.length > 0) {
         setSessions(cached);
       }
 
       const synced = await window.hermesAPI.syncSessionCache();
-      setSessions(synced.slice(0, 50));
+      setSessions(synced);
     } catch (error) {
       console.error("Failed to load sessions", error);
     } finally {
@@ -273,6 +430,62 @@ function Sessions({
       }
     },
     [refreshSessions],
+  );
+
+  const handleRename = useCallback(
+    async (session: CachedSession): Promise<void> => {
+      const nextTitle = window.prompt(
+        t("sessions.renamePrompt"),
+        session.title || "",
+      );
+      if (nextTitle === null) return;
+      const trimmed = nextTitle.trim();
+      if (!trimmed || trimmed === session.title) return;
+      applyLocalSessionUpdate(session.id, { title: trimmed });
+      await window.hermesAPI.updateSessionMetadata(session.id, {
+        title: trimmed,
+      });
+      await refreshSessions();
+    },
+    [applyLocalSessionUpdate, refreshSessions, t],
+  );
+
+  const handleEditTags = useCallback(
+    async (session: CachedSession): Promise<void> => {
+      const nextTags = window.prompt(
+        t("sessions.tagsPrompt"),
+        (session.tags || []).join(", "),
+      );
+      if (nextTags === null) return;
+      const tags = parseTagsInput(nextTags);
+      applyLocalSessionUpdate(session.id, { tags });
+      await window.hermesAPI.updateSessionMetadata(session.id, { tags });
+      await refreshSessions();
+    },
+    [applyLocalSessionUpdate, refreshSessions, t],
+  );
+
+  const handleTogglePinned = useCallback(
+    async (session: CachedSession): Promise<void> => {
+      const pinned = !session.pinned;
+      applyLocalSessionUpdate(session.id, { pinned });
+      await window.hermesAPI.updateSessionMetadata(session.id, { pinned });
+      await refreshSessions();
+    },
+    [applyLocalSessionUpdate, refreshSessions],
+  );
+
+  const handleToggleArchived = useCallback(
+    async (session: CachedSession): Promise<void> => {
+      const archived = !session.archived;
+      applyLocalSessionUpdate(session.id, {
+        archived,
+        ...(archived ? { pinned: false } : {}),
+      });
+      await window.hermesAPI.updateSessionMetadata(session.id, { archived });
+      await refreshSessions();
+    },
+    [applyLocalSessionUpdate, refreshSessions],
   );
 
   useEffect(() => {
@@ -335,7 +548,36 @@ function Sessions({
   }, [searchQuery]);
 
   const isShowingSearch = searchQuery.trim().length > 0;
-  const grouped = groupSessions(sessions);
+  const sessionById = new Map(sessions.map((session) => [session.id, session]));
+  const allVisibleSessions = sessions.filter((session) =>
+    matchesSessionView(session, sessionView),
+  );
+  const visibleSessions = allVisibleSessions.slice(0, SESSION_LIST_LIMIT);
+  const grouped = groupSessions(visibleSessions);
+  const localSearchSessions = isShowingSearch
+    ? allVisibleSessions
+        .filter((session) => matchesQuery(session, searchQuery))
+        .slice(0, SESSION_LIST_LIMIT)
+    : [];
+  const localSearchIds = new Set(
+    localSearchSessions.map((session) => session.id),
+  );
+  const visibleSearchResults = searchResults.filter((result) => {
+    const cached = sessionById.get(result.sessionId);
+    if (cached && !matchesSessionView(cached, sessionView)) return false;
+    if (!cached && sessionView !== "active") return false;
+    return !localSearchIds.has(result.sessionId);
+  });
+  const hasSearchResults =
+    localSearchSessions.length > 0 || visibleSearchResults.length > 0;
+  const managementLabels = {
+    rename: t("sessions.rename"),
+    tags: t("sessions.editTags"),
+    pin: t("sessions.pin"),
+    unpin: t("sessions.unpin"),
+    archive: t("sessions.archive"),
+    unarchive: t("sessions.unarchive"),
+  };
 
   return (
     <div className="sessions-container">
@@ -370,6 +612,20 @@ function Sessions({
             </button>
           )}
         </div>
+        <div className="sessions-view-tabs" role="tablist">
+          {(["active", "pinned", "archived"] as const).map((view) => (
+            <button
+              key={view}
+              type="button"
+              role="tab"
+              aria-selected={sessionView === view}
+              className={`sessions-view-tab ${sessionView === view ? "sessions-view-tab--active" : ""}`}
+              onClick={() => setSessionView(view)}
+            >
+              {t(`sessions.view.${view}`)}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Content */}
@@ -382,7 +638,7 @@ function Sessions({
           <div className="sessions-loading">
             <div className="loading-spinner" />
           </div>
-        ) : searchResults.length === 0 ? (
+        ) : !hasSearchResults ? (
           <div className="sessions-empty">
             <Search size={32} className="sessions-empty-icon" />
             <p className="sessions-empty-text">{t("sessions.noResults")}</p>
@@ -390,7 +646,27 @@ function Sessions({
           </div>
         ) : (
           <div className="sessions-list">
-            {searchResults.map((r) => (
+            {localSearchSessions.map((s) => (
+              <SessionCard
+                key={s.id}
+                session={s}
+                isActive={currentSessionId === s.id}
+                showFullDate={true}
+                onClick={() => onResumeSession(s.id)}
+                onRename={(session) => void handleRename(session)}
+                onEditTags={(session) => void handleEditTags(session)}
+                onTogglePinned={(session) => void handleTogglePinned(session)}
+                onToggleArchived={(session) =>
+                  void handleToggleArchived(session)
+                }
+                onDelete={handleDelete}
+                labels={managementLabels}
+                deleteTitle={t("sessions.delete")}
+              />
+            ))}
+            {visibleSearchResults.map((r) => {
+              const cached = sessionById.get(r.sessionId);
+              return (
               <div
                 key={r.sessionId}
                 role="button"
@@ -406,7 +682,8 @@ function Sessions({
               >
                 <div className="sessions-card-main">
                   <span className="sessions-card-title">
-                    {r.title ||
+                    {cached?.title ||
+                      r.title ||
                       `${t("sessions.title")} ${r.sessionId.slice(-6)}`}
                   </span>
                   <span className="sessions-card-time">
@@ -433,6 +710,11 @@ function Sessions({
                       {formatModel(r.model)}
                     </span>
                   )}
+                  {cached?.tags?.map((tag) => (
+                    <span key={tag} className="sessions-tag sessions-tag--custom">
+                      #{tag}
+                    </span>
+                  ))}
                   <button
                     type="button"
                     className="sessions-card-delete"
@@ -448,14 +730,23 @@ function Sessions({
                   </button>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )
-      ) : sessions.length === 0 ? (
+      ) : allVisibleSessions.length === 0 ? (
         <div className="sessions-empty">
           <ChatBubble size={32} className="sessions-empty-icon" />
-          <p className="sessions-empty-text">{t("sessions.empty")}</p>
-          <p className="sessions-empty-hint">{t("sessions.emptyHint")}</p>
+          <p className="sessions-empty-text">
+            {sessionView === "archived"
+              ? t("sessions.emptyArchived")
+              : t("sessions.empty")}
+          </p>
+          <p className="sessions-empty-hint">
+            {sessionView === "archived"
+              ? t("sessions.emptyArchivedHint")
+              : t("sessions.emptyHint")}
+          </p>
         </div>
       ) : (
         <div className="sessions-list">
@@ -473,7 +764,14 @@ function Sessions({
                     group.label === "thisWeek" || group.label === "earlier"
                   }
                   onClick={() => onResumeSession(s.id)}
+                  onRename={(session) => void handleRename(session)}
+                  onEditTags={(session) => void handleEditTags(session)}
+                  onTogglePinned={(session) => void handleTogglePinned(session)}
+                  onToggleArchived={(session) =>
+                    void handleToggleArchived(session)
+                  }
                   onDelete={handleDelete}
+                  labels={managementLabels}
                   deleteTitle={t("sessions.delete")}
                 />
               ))}

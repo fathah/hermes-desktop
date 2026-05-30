@@ -49,6 +49,26 @@ interface CredentialPoolEntry {
   key?: string;
 }
 
+interface CachedSession {
+  id: string;
+  title: string;
+  startedAt: number;
+  source: string;
+  messageCount: number;
+  model: string;
+  tags: string[];
+  pinned: boolean;
+  archived: boolean;
+  customTitle?: boolean;
+}
+
+interface SessionMetadataUpdate {
+  title?: string;
+  tags?: string[];
+  pinned?: boolean;
+  archived?: boolean;
+}
+
 interface KanbanTask {
   id: string;
   title: string;
@@ -456,27 +476,13 @@ interface HermesAPI {
   listCachedSessions: (
     limit?: number,
     offset?: number,
-  ) => Promise<
-    Array<{
-      id: string;
-      title: string;
-      startedAt: number;
-      source: string;
-      messageCount: number;
-      model: string;
-    }>
-  >;
-  syncSessionCache: () => Promise<
-    Array<{
-      id: string;
-      title: string;
-      startedAt: number;
-      source: string;
-      messageCount: number;
-      model: string;
-    }>
-  >;
+  ) => Promise<CachedSession[]>;
+  syncSessionCache: () => Promise<CachedSession[]>;
   updateSessionTitle: (sessionId: string, title: string) => Promise<void>;
+  updateSessionMetadata: (
+    sessionId: string,
+    update: SessionMetadataUpdate,
+  ) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
 
   // Session search

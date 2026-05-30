@@ -23,12 +23,14 @@ function installHermesAPI(initialSessions: unknown[] = []): {
   listCachedSessions: ReturnType<typeof vi.fn>;
   syncSessionCache: ReturnType<typeof vi.fn>;
   searchSessions: ReturnType<typeof vi.fn>;
+  updateSessionMetadata: ReturnType<typeof vi.fn>;
   deleteSession: ReturnType<typeof vi.fn>;
 } {
   const api = {
     listCachedSessions: vi.fn().mockResolvedValue(initialSessions),
     syncSessionCache: vi.fn().mockResolvedValue(initialSessions),
     searchSessions: vi.fn().mockResolvedValue([]),
+    updateSessionMetadata: vi.fn().mockResolvedValue(undefined),
     deleteSession: vi.fn().mockResolvedValue(undefined),
   };
   Object.defineProperty(window, "hermesAPI", {
@@ -214,5 +216,45 @@ describe("Sessions tab — delete affordance (#408)", () => {
 
     expect(onResume).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("updates conversation metadata from card controls", async () => {
+    const sessions = [
+      {
+        id: "sess-abc-123",
+        title: "First chat",
+        startedAt: Math.floor(Date.now() / 1000),
+        source: "api_server",
+        messageCount: 3,
+        model: "gpt-4",
+        tags: [],
+        pinned: false,
+        archived: false,
+      },
+    ];
+    const api = installHermesAPI(sessions);
+    const promptSpy = vi.spyOn(window, "prompt");
+    promptSpy.mockReturnValueOnce("Renamed chat");
+
+    render(<Sessions {...baseProps} visible={true} />);
+    await act(async () => {});
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "sessions.rename" }));
+    });
+    await act(async () => {});
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "sessions.pin" }));
+    });
+    await act(async () => {});
+
+    expect(api.updateSessionMetadata).toHaveBeenCalledWith("sess-abc-123", {
+      title: "Renamed chat",
+    });
+    expect(api.updateSessionMetadata).toHaveBeenCalledWith("sess-abc-123", {
+      pinned: true,
+    });
+
+    promptSpy.mockRestore();
   });
 });
