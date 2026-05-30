@@ -152,6 +152,11 @@ vi.mock("../src/main/ssh-tunnel", () => ({
 vi.mock("../src/main/utils", () => ({
   stripAnsi: (s: string) => s,
   pidIsAliveAs: () => false,
+  getActiveProfileNameSync: () => "default",
+  profileHome: (profile?: unknown) =>
+    profile && profile !== "default"
+      ? `${TEST_HOME}/profiles/${profile}`
+      : TEST_HOME,
 }));
 
 vi.mock("../src/main/models", () => ({
