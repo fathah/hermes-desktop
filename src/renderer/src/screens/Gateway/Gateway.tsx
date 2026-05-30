@@ -160,18 +160,6 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
                 />
                 <span className="tools-toggle-track" />
               </label>
-              {platformEnabled[platform.key] && (
-                <button
-                  className="btn btn-secondary btn-sm"
-                  type="button"
-                  onClick={async () => {
-                    const started = await window.hermesAPI.startGateway();
-                    if (started) await loadConfig();
-                  }}
-                >
-                  Test connection
-                </button>
-              )}
             </div>
             {platformEnabled[platform.key] && (
               <div className="settings-platform-fields">
