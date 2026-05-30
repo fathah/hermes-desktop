@@ -953,11 +953,21 @@ const hermesAPI = {
   ): Promise<{ content: string; path: string }> =>
     ipcRenderer.invoke("read-logs", logFile, lines),
 
-  filesListDir: (dir: string): Promise<Array<{ name: string; isDir: boolean; path: string }>> =>
+  // File browser
+  filesGetWorkspaceRoot: (): Promise<{ success: boolean; data?: { root: string | null }; error?: string }> =>
+    ipcRenderer.invoke("files-get-workspace-root"),
+  filesSetWorkspaceRoot: (dir: string): Promise<{ success: boolean; data?: { root: string }; error?: string }> =>
+    ipcRenderer.invoke("files-set-workspace-root", dir),
+  filesListDir: (dir: string): Promise<{
+    success: boolean;
+    data?: { root: string | null; cwd: string | null; entries: Array<{ name: string; isDir: boolean; path: string; error?: string }> };
+    error?: string;
+    unsupportedMode?: boolean;
+  }> =>
     ipcRenderer.invoke("files-list-dir", dir),
-  filesRead: (path: string): Promise<string> =>
+  filesRead: (path: string): Promise<{ success: boolean; data?: { text: string }; error?: string }> =>
     ipcRenderer.invoke("files-read", path),
-  filesWrite: (path: string, content: string): Promise<boolean> =>
+  filesWrite: (path: string, content: string): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke("files-write", path, content),
 };
 

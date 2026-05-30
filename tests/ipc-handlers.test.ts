@@ -69,6 +69,8 @@ describe("New IPC handlers from v0.8/v0.9 features", () => {
     "run-hermes-dump",
     "list-mcp-servers",
     "discover-memory-providers",
+    "files-get-workspace-root",
+    "files-set-workspace-root",
     "files-list-dir",
     "files-read",
     "files-write",

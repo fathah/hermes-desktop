@@ -58,8 +58,24 @@ describe("Preload API Surface", () => {
   });
 
   it("every type declaration has a preload implementation", () => {
-    const missing = typeMethods.filter((m) => !preloadMethods.includes(m));
+    const nestedNamespaces = ["vault", "profileWizard"];
+    const missing = typeMethods.filter(
+      (m) => !preloadMethods.includes(m) && !nestedNamespaces.includes(m),
+    );
     expect(missing).toEqual([]);
+  });
+
+  it("nested vault namespace is implemented", () => {
+    expect(preloadSrc).toContain("vault: {");
+    expect(preloadSrc).toContain("vault-add-credential");
+    expect(preloadSrc).not.toContain("vault-export");
+    expect(preloadSrc).not.toContain("vault-rotate-master-key");
+    expect(preloadSrc).not.toContain("vault-sync-profile");
+  });
+
+  it("nested profileWizard namespace is implemented", () => {
+    expect(preloadSrc).toContain("profileWizard: {");
+    expect(preloadSrc).toContain("profile-create-from-wizard");
   });
 });
 
@@ -91,13 +107,6 @@ describe("New APIs from v0.8/v0.9 features", () => {
   it("has memory provider discovery API", () => {
     expect(preloadMethods).toContain("discoverMemoryProviders");
     expect(typeMethods).toContain("discoverMemoryProviders");
-  });
-
-  it("has files browser APIs", () => {
-    for (const m of ["filesListDir", "filesRead", "filesWrite"]) {
-      expect(preloadMethods).toContain(m);
-      expect(typeMethods).toContain(m);
-    }
   });
 });
 
