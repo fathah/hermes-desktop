@@ -771,10 +771,15 @@ interface HermesAPI {
     lines?: number,
   ) => Promise<{ content: string; path: string }>;
 
-  terminalCreate: (cwd?: string) => Promise<{ id: string }>;
-  terminalWrite: (id: string, data: string) => Promise<void>;
-  terminalResize: (id: string, cols: number, rows: number) => Promise<void>;
-  terminalKill: (id: string) => Promise<void>;
+  terminalCreate: (cwd?: string) => Promise<{
+    success: boolean;
+    id?: string;
+    error?: string;
+    unsupportedMode?: boolean;
+  }>;
+  terminalWrite: (id: string, data: string) => Promise<{ success: boolean; error?: string }>;
+  terminalResize: (id: string, cols: number, rows: number) => Promise<{ success: boolean; error?: string }>;
+  terminalKill: (id: string) => Promise<{ success: boolean; error?: string }>;
   onTerminalData: (
     handler: (payload: { id: string; data: string }) => void,
   ) => () => void;

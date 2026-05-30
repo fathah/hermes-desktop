@@ -28,18 +28,18 @@
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "@types/react-syntax-highlighter": "^15.5.13",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "better-sqlite3": "^12.8.0",
     "electron-updater": "^6.3.9",
     "i18next": "^25.6.0",
     "lucide-react": "^1.7.0",
-    "node-pty": "^1.1.0",
+    "node-pty": "^1.0.0",
     "posthog-js": "^1.376.0",
     "react-i18next": "^15.7.3",
     "react-markdown": "^10.1.0",
     "react-syntax-highlighter": "^16.1.1",
-    "remark-gfm": "^4.0.1",
-    "xterm": "^5.3.0",
-    "xterm-addon-fit": "^0.8.0"
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config-prettier": "^3.0.0",
