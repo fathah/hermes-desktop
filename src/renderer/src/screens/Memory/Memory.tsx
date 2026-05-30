@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Plus, Trash, Refresh } from "../../assets/icons";
 import { useI18n } from "../../components/useI18n";
+import { AgentMarkdown } from "../../components/AgentMarkdown";
 import { Check, ExternalLink } from "lucide-react";
 
 interface MemoryEntry {
@@ -337,14 +338,17 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
             data.memory.entries.map((entry) => (
               <div key={entry.index} className="memory-entry-card">
                 {editingIndex === entry.index ? (
-                  <div className="memory-entry-form">
+                  <div className="memory-entry-form memory-preview-split">
                     <textarea
                       className="memory-entry-textarea"
                       value={editContent}
                       onChange={(e) => setEditContent(e.target.value)}
-                      rows={3}
+                      rows={6}
                       autoFocus
                     />
+                    <div className="memory-preview-pane">
+                      <AgentMarkdown>{editContent || "*Preview*"}</AgentMarkdown>
+                    </div>
                     <div className="memory-entry-form-actions">
                       <span className="memory-entry-chars">
                         {t("memory.chars", { count: editContent.length })}

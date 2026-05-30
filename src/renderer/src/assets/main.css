@@ -6542,3 +6542,25 @@ body {
   font-size: 11px;
   color: var(--text-muted);
 }
+
+/* ── Chat workspace panel & tool call cards ────────────────────────────── */
+
+.chat-layout { display: flex; flex: 1; overflow: hidden; }
+.chat-layout .chat-container { flex: 1; min-width: 0; }
+.workspace-panel { width: 280px; border-left: 1px solid var(--border); padding: 12px; overflow-y: auto; background: var(--bg-secondary); }
+.workspace-panel-title { font-size: 13px; font-weight: 600; margin-bottom: 12px; }
+.workspace-panel-section { margin-bottom: 12px; }
+.workspace-panel-label { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+.workspace-panel-path { font-size: 11px; word-break: break-all; }
+.workspace-panel-output { font-size: 11px; white-space: pre-wrap; max-height: 200px; overflow-y: auto; }
+
+.tool-call-card { margin-left: 8px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.tool-call-card-header { padding: 8px 12px; cursor: pointer; font-size: 13px; }
+.tool-call-card-body { border-top: 1px solid var(--border); }
+
+.skills-card-path { font-size: 10px; color: var(--text-muted); margin-top: 4px; word-break: break-all; }
+.skill-origin-badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-left: 6px; background: var(--bg-tertiary); color: var(--text-muted); }
+.skill-origin-marketplace { background: rgba(99,102,241,0.2); color: #818cf8; }
+.skill-origin-project { background: rgba(34,197,94,0.15); color: var(--success); }
+.memory-preview-split { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.memory-preview-pane { border: 1px solid var(--border); border-radius: 8px; padding: 12px; min-height: 200px; overflow-y: auto; }

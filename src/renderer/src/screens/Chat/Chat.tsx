@@ -15,6 +15,7 @@ import { useI18n } from "../../components/useI18n";
 import { buildChatTranscript } from "./transcriptUtils";
 import type { Attachment } from "../../../../shared/attachments";
 import type { ChatMessage, UsageState } from "./types";
+import WorkspacePanel from "./WorkspacePanel";
 
 interface QueuedMessage {
   text: string;
@@ -295,12 +296,13 @@ function Chat({
 
   return (
     <div
-      className="chat-container"
+      className="chat-layout"
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
+    <div className="chat-container">
       <ChatHeader
         sessionId={sessionId}
         usage={usage}
@@ -371,6 +373,8 @@ function Chat({
           </div>
         </div>
       )}
+    </div>
+    <WorkspacePanel contextFolder={contextFolder ?? undefined} toolOutput={toolProgress ?? undefined} />
     </div>
   );
 }
