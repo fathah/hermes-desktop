@@ -18,8 +18,9 @@ interface ProfileInfo {
 
 interface AgentsProps {
   activeProfile: string;
-  onSelectProfile: (name: string) => void;
-  onChatWith: (name: string) => void;
+  onSelectProfile: (name: string) => void | Promise<void>;
+  onChatWith: (name: string) => void | Promise<void>;
+  onOpenWizard?: () => void;
 }
 
 function AgentAvatar({ name }: { name: string }): React.JSX.Element {
@@ -39,6 +40,7 @@ function Agents({
   activeProfile,
   onSelectProfile,
   onChatWith,
+  onOpenWizard,
 }: AgentsProps): React.JSX.Element {
   const { t } = useI18n();
   const [profiles, setProfiles] = useState<ProfileInfo[]>([]);
@@ -77,17 +79,23 @@ function Agents({
   }
 
   async function handleDelete(name: string): Promise<void> {
-    const result = await window.hermesAPI.deleteProfile(name);
+    const result = await window.hermesAPI.profileWizard.delete(name, false);
     if (result.success) {
-      if (activeProfile === name) onSelectProfile("default");
+      if (activeProfile === name) await onSelectProfile("default");
       loadProfiles();
+    } else {
+      setError(result.error || t("agents.deleteFailed"));
     }
     setConfirmDelete(null);
   }
 
   async function handleSelect(name: string): Promise<void> {
-    await window.hermesAPI.setActiveProfile(name);
-    onSelectProfile(name);
+    const ok = await window.hermesAPI.setActiveProfile(name);
+    if (!ok) {
+      setError(t("agents.activateFailed"));
+      return;
+    }
+    await onSelectProfile(name);
     loadProfiles();
   }
 
@@ -114,13 +122,20 @@ function Agents({
           <h2 className="agents-title">{t("agents.title")}</h2>
           <p className="agents-subtitle">{t("agents.subtitle")}</p>
         </div>
-        <button
-          className="btn btn-primary btn-sm"
-          onClick={() => setShowCreate(true)}
-        >
-          <Plus size={14} />
-          {t("agents.newAgent")}
-        </button>
+        <div className="agents-header-actions">
+          {onOpenWizard && (
+            <button className="btn btn-secondary btn-sm" onClick={onOpenWizard}>
+              Create with Wizard
+            </button>
+          )}
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => setShowCreate(true)}
+          >
+            <Plus size={14} />
+            {t("agents.newAgent")}
+          </button>
+        </div>
       </div>
 
       {showCreate && (

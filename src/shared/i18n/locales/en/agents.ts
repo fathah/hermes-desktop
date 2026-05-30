@@ -6,6 +6,8 @@ export default {
   namePlaceholder: "Agent name (e.g. coder)",
   cloneConfig: "Clone config & API keys from default",
   createFailed: "Failed to create profile",
+  activateFailed: "Failed to activate profile (vault sync or gateway start)",
+  deleteFailed: "Failed to delete profile",
   creating: "Creating...",
   create: "Create",
   active: "Active",

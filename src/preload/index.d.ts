@@ -779,6 +779,145 @@ interface HermesAPI {
     logFile?: string,
     lines?: number,
   ) => Promise<{ content: string; path: string }>;
+
+  vault: {
+    addCredential: (
+      profile: string,
+      provider: string,
+      label: string,
+      value: string,
+    ) => Promise<{ id: string; provider: string; label: string }>;
+    getCredentials: (
+      profile: string,
+    ) => Promise<
+      | Array<{ id: string; provider: string; label: string; maskedValue: string }>
+      | { success: false; error: string; unsupportedMode?: boolean }
+    >;
+    updateCredential: (
+      profile: string,
+      id: string,
+      updates: { label?: string; value?: string },
+    ) => Promise<{ success: boolean }>;
+    deleteCredential: (
+      profile: string,
+      id: string,
+    ) => Promise<{ success: boolean; error?: string }>;
+    getAuditLog: (
+      profile: string,
+    ) => Promise<
+      Array<{
+        id: string;
+        action: string;
+        provider: string;
+        label: string;
+        changedAt: string;
+      }>
+    >;
+    isPopulated: () => Promise<boolean>;
+    encryptionAvailable: () => Promise<boolean>;
+    initWithPassword: (password: string) => Promise<{ success: boolean; error?: string }>;
+  };
+
+  profileWizard: {
+    listTemplates: () => Promise<
+      Array<{
+        id: string;
+        name: string;
+        icon: string;
+        description: string;
+        toolsets: string[];
+        requiredSecrets: string[];
+      }>
+    >;
+    initialState: (templateId: string) => Promise<unknown>;
+    validateStep: (
+      step: number,
+      state: unknown,
+    ) => Promise<{ valid: boolean; errors: string[] }>;
+    createFromWizard: (
+      state: unknown,
+    ) => Promise<{ success: boolean; profilePath?: string; error?: string }>;
+    activate: (
+      profile: string,
+    ) => Promise<
+      | { success: true }
+      | { success: false; error?: string; unsupportedMode?: true }
+    >;
+    detectMigration: () => Promise<
+      | { success: true; profiles: Array<{ profile: string; envKeys: string[] }> }
+      | { success: false; unsupportedMode: true; error: string }
+    >;
+    migrateEnv: (
+      profile: string,
+    ) => Promise<
+      | { success: true; migratedCount: number; remainingKeys: string[] }
+      | { success: false; error?: string; unsupportedMode?: true }
+    >;
+    delete: (
+      profile: string,
+      archive: boolean,
+    ) => Promise<{ success: boolean; error?: string }>;
+  };
+
+  terminalCreate: (cwd?: string) => Promise<{
+    success: boolean;
+    id?: string;
+    error?: string;
+    unsupportedMode?: boolean;
+  }>;
+  terminalWrite: (
+    id: string,
+    data: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+  terminalResize: (
+    id: string,
+    cols: number,
+    rows: number,
+  ) => Promise<{ success: boolean; error?: string }>;
+  terminalKill: (id: string) => Promise<{ success: boolean; error?: string }>;
+  onTerminalData: (
+    handler: (payload: { id: string; data: string }) => void,
+  ) => () => void;
+
+  filesGetWorkspaceRoot: () => Promise<{
+    success: boolean;
+    data?: { root: string | null };
+    error?: string;
+  }>;
+  filesSetWorkspaceRoot: (
+    dir: string,
+  ) => Promise<{ success: boolean; data?: { root: string }; error?: string }>;
+  filesListDir: (
+    dir: string,
+  ) => Promise<{
+    success: boolean;
+    data?: {
+      root: string | null;
+      cwd: string | null;
+      entries: Array<{ name: string; isDir: boolean; path: string; error?: string }>;
+    };
+    error?: string;
+    unsupportedMode?: boolean;
+  }>;
+  filesRead: (
+    path: string,
+  ) => Promise<{ success: boolean; data?: { text: string }; error?: string }>;
+  filesWrite: (
+    path: string,
+    content: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+
+  getDashboardStats: (profile?: string) => Promise<{
+    sessionCount: number;
+    modelProvider: string;
+    modelName: string;
+    gatewayRunning: boolean;
+    cronJobCount: number;
+  }>;
+
+  listMcpCatalog: () => Promise<
+    Array<{ name: string; description: string; installed: boolean }>
+  >;
 }
 
 declare global {

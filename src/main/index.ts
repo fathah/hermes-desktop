@@ -117,8 +117,10 @@ import {
   listProfiles,
   createProfile,
   deleteProfile,
-  setActiveProfile,
 } from "./profiles";
+import { initVault, shutdownVault } from "./vault/service";
+import { registerVaultHandlers } from "./ipc/vault-handlers";
+import { registerProfileHandlers } from "./ipc/profile-handlers";
 import {
   readMemory,
   addMemoryEntry,
@@ -1077,9 +1079,25 @@ function setupIPC(): void {
       return sshDeleteProfile(conn.ssh, name);
     return deleteProfile(name);
   });
-  ipcMain.handle("set-active-profile", (_event, name: string) => {
-    if (getConnectionConfig().mode !== "ssh") setActiveProfile(name);
-    return true;
+  ipcMain.handle("set-active-profile", async (_event, name: string) => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh") {
+      return true;
+    }
+    if (conn.mode === "remote") {
+      return true;
+    }
+    if (isRemoteOnlyMode()) {
+      return false;
+    }
+    try {
+      const { activateProfileWithRollback } = await import("./profiles/wizard");
+      await activateProfileWithRollback(name);
+      return true;
+    } catch (err) {
+      console.error("[profile] set-active-profile failed:", err);
+      return false;
+    }
   });
 
   // Memory
@@ -1626,6 +1644,9 @@ function setupIPC(): void {
       return sshReadLogs(conn.ssh, logFile, lines);
     return readLogs(logFile, lines);
   });
+
+  registerVaultHandlers();
+  registerProfileHandlers();
 }
 
 function buildMenu(): void {
@@ -1846,6 +1867,11 @@ app.whenReady().then(() => {
   });
 
   buildMenu();
+  try {
+    initVault();
+  } catch (err) {
+    console.error("[VAULT] Init failed:", err);
+  }
   setupIPC();
   createWindow();
   setupUpdater();
@@ -1885,6 +1911,7 @@ app.on("before-quit", () => {
     currentChatAbort();
     currentChatAbort = null;
   }
+  shutdownVault();
   stopGateway();
   stopSshTunnel();
   stopClaw3d();
