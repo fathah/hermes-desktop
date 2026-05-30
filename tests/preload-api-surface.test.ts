@@ -58,8 +58,16 @@ describe("Preload API Surface", () => {
   });
 
   it("every type declaration has a preload implementation", () => {
-    const missing = typeMethods.filter((m) => !preloadMethods.includes(m));
+    const nestedNamespaces = ["vault"];
+    const missing = typeMethods.filter(
+      (m) => !preloadMethods.includes(m) && !nestedNamespaces.includes(m),
+    );
     expect(missing).toEqual([]);
+  });
+
+  it("nested vault namespace is implemented", () => {
+    expect(preloadSrc).toContain("vault: {");
+    expect(preloadSrc).toContain("vault-add-credential");
   });
 });
 
