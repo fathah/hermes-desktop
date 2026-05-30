@@ -231,6 +231,31 @@ process.on("unhandledRejection", (reason) => {
 let mainWindow: BrowserWindow | null = null;
 let currentChatAbort: (() => void) | null = null;
 
+async function ensureLocalApiServerKey(profile?: string): Promise<string> {
+  if (isRemoteMode()) return "";
+
+  const existing = getApiServerKey(profile);
+  if (existing) return existing;
+
+  const { randomUUID } = await import("crypto");
+  const key = `desk-${randomUUID()}`;
+
+  // Keep the active profile and default profile aligned so the desktop
+  // and local gateway resolve the same API_SERVER_KEY consistently.
+  setEnvValue("API_SERVER_KEY", key, profile);
+  if (profile && profile !== "default") {
+    setEnvValue("API_SERVER_KEY", key);
+  }
+
+  if (isGatewayRunning()) {
+    stopGateway();
+    await new Promise<void>((r) => setTimeout(r, 800));
+    startGateway(profile);
+  }
+
+  return key;
+}
+
 function openExternalUrl(rawUrl: unknown): void {
   if (!isAllowedExternalUrl(rawUrl)) {
     console.warn("[SECURITY] Blocked unsafe external URL");
@@ -638,21 +663,7 @@ function setupIPC(): void {
   ipcMain.handle(
     "generate-api-server-key",
     async (_event, profile?: string) => {
-      const { randomUUID } = await import("crypto");
-      const key = `desk-${randomUUID()}`;
-      // Write to both the active profile .env and the default .env so the
-      // gateway (which reads the profile .env) and the desktop (which reads
-      // the default .env as fallback) both see the same key.
-      setEnvValue("API_SERVER_KEY", key, profile);
-      if (profile && profile !== "default") {
-        setEnvValue("API_SERVER_KEY", key);
-      }
-      // Restart gateway so it picks up the new key immediately.
-      if (isGatewayRunning()) {
-        stopGateway();
-        await new Promise<void>((r) => setTimeout(r, 800));
-        startGateway(profile);
-      }
+      const key = await ensureLocalApiServerKey(profile);
       return { key };
     },
   );
@@ -765,6 +776,7 @@ function setupIPC(): void {
       attachments?: Attachment[],
       contextFolder?: string,
     ) => {
+      await ensureLocalApiServerKey(profile);
       if (!isRemoteMode() && !isGatewayRunning()) {
         startGateway(profile);
       }

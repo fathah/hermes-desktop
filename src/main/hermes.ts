@@ -94,6 +94,14 @@ export function getRemoteAuthHeader(): Record<string, string> {
   return {};
 }
 
+function resolveResumedSessionId(
+  resumeSessionId: string | undefined,
+  hasAuth: boolean,
+): string {
+  if (!resumeSessionId) return "";
+  return hasAuth ? resumeSessionId : "";
+}
+
 function resolveRemoteApiKey(url: string, apiKey?: string): string {
   if (apiKey !== undefined) return apiKey;
 
@@ -445,8 +453,9 @@ function sendMessageViaApi(
   // local install degrades to the pre-fix (fingerprint) behaviour
   // rather than 403-looping.
   const hasAuth = "Authorization" in headers;
+  const resumedSessionId = resolveResumedSessionId(_resumeSessionId, hasAuth);
   let sessionId =
-    _resumeSessionId || (hasAuth ? `desk-${Date.now()}-${randomUUID()}` : "");
+    resumedSessionId || (hasAuth ? `desk-${Date.now()}-${randomUUID()}` : "");
   if (sessionId) {
     headers["X-Hermes-Session-Id"] = sessionId;
   }
@@ -1200,3 +1209,5 @@ export function restartGateway(profile?: string): void {
     startGateway(profile);
   }, 500);
 }
+
+export { resolveResumedSessionId };
