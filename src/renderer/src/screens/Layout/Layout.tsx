@@ -88,6 +88,13 @@ const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string }[] = [
   { view: "settings", icon: SettingsIcon, labelKey: "navigation.settings" },
 ];
 
+const SHOW_SWARM =
+  import.meta.env.DEV || import.meta.env.VITE_EXPERIMENTAL_SWARM === "1";
+
+const VISIBLE_NAV_ITEMS = NAV_ITEMS.filter(
+  (item) => item.view !== "swarm" || SHOW_SWARM,
+);
+
 interface LayoutProps {
   verifyWarning?: boolean;
   onReinstall?: () => void;
@@ -231,7 +238,7 @@ function Layout({
         </div>
 
         <nav className="sidebar-nav">
-          {NAV_ITEMS.map(({ view: v, icon: Icon, labelKey }) => (
+          {VISIBLE_NAV_ITEMS.map(({ view: v, icon: Icon, labelKey }) => (
             <button
               key={v}
               className={`sidebar-nav-item ${view === v ? "active" : ""}`}

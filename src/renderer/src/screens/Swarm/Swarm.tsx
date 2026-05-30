@@ -157,7 +157,7 @@ function Swarm(): React.JSX.Element {
           and collects checkpoints from each worker.
         </p>
         <p style={{ marginTop: 8, color: "var(--text-secondary)", lineHeight: 1.6 }}>
-          <strong>To get started:</strong> Start the gateway, then click "Start Conductor".
+          <strong>To get started:</strong> Start the gateway, then click &quot;Start Conductor&quot;.
           Workers automatically spawn based on your swarm configuration.
           Use the Kanban board to dispatch tasks to specific workers.
         </p>

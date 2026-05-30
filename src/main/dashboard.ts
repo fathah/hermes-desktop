@@ -1,12 +1,11 @@
 import { ipcMain } from "electron";
-import { listCachedSessions } from "./session-cache";
+import { countCachedSessions } from "./session-cache";
 import { getModelConfig } from "./config";
 import { isGatewayRunning } from "./hermes";
 import { listCronJobs } from "./cronjobs";
 
 export function registerDashboardHandlers(): void {
   ipcMain.handle("dashboard-stats", async (_event, profile?: string) => {
-    const sessions = listCachedSessions(1000, 0);
     const model = getModelConfig(profile);
     let cronJobCount = 0;
     try {
@@ -17,7 +16,7 @@ export function registerDashboardHandlers(): void {
     }
 
     return {
-      sessionCount: sessions.length,
+      sessionCount: countCachedSessions(),
       modelProvider: model.provider,
       modelName: model.model,
       gatewayRunning: isGatewayRunning(),

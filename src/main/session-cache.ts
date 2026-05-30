@@ -226,6 +226,10 @@ export function listCachedSessions(limit = 50, offset = 0): CachedSession[] {
   return cache.sessions.slice(offset, offset + limit);
 }
 
+export function countCachedSessions(): number {
+  return readCache().sessions.length;
+}
+
 // Update title for a specific session
 export function updateSessionTitle(sessionId: string, title: string): void {
   const cache = readCache();

@@ -5962,14 +5962,20 @@ body {
 
 /* ── Dashboard & workspace screens ───────────────────────────────────── */
 
-.card {
+.dashboard-screen .card,
+.mcp-screen .card,
+.ecosystem-screen .card,
+.swarm-screen .card {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 16px;
 }
 
-.screen-header {
+.dashboard-screen .screen-header,
+.mcp-screen .screen-header,
+.ecosystem-screen .screen-header,
+.swarm-screen .screen-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -5977,7 +5983,10 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
-.screen-title {
+.dashboard-screen .screen-title,
+.mcp-screen .screen-title,
+.ecosystem-screen .screen-title,
+.swarm-screen .screen-title {
   font-size: 18px;
   font-weight: 600;
   display: flex;
@@ -5985,7 +5994,10 @@ body {
   gap: 8px;
 }
 
-.screen-subtitle {
+.dashboard-screen .screen-subtitle,
+.mcp-screen .screen-subtitle,
+.ecosystem-screen .screen-subtitle,
+.swarm-screen .screen-subtitle {
   font-size: 13px;
   color: var(--text-muted);
   margin-top: 4px;
@@ -5997,24 +6009,6 @@ body {
   color: var(--text-muted);
 }
 
-.btn-primary, .btn-secondary {
-  padding: 8px 14px;
-  border-radius: 6px;
-  font-size: 13px;
-  cursor: pointer;
-  border: none;
-}
-
-.btn-primary {
-  background: var(--accent);
-  color: #fff;
-}
-
-.btn-secondary {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-}
-
 .dashboard-screen, .mcp-screen, .swarm-screen, .ecosystem-screen {
   display: flex;
   flex-direction: column;
@@ -6024,9 +6018,18 @@ body {
 
 .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; padding: 16px; }
 .dashboard-stat { font-size: 32px; font-weight: 700; }
-.status-badge { font-size: 12px; padding: 4px 10px; border-radius: 999px; }
-.status-badge.connected { background: rgba(34,197,94,0.15); color: var(--success); }
-.status-badge.disconnected { background: rgba(239,68,68,0.15); color: var(--error); }
+.dashboard-screen .status-badge,
+.mcp-screen .status-badge,
+.ecosystem-screen .status-badge,
+.swarm-screen .status-badge { font-size: 12px; padding: 4px 10px; border-radius: 999px; }
+.dashboard-screen .status-badge.connected,
+.mcp-screen .status-badge.connected,
+.ecosystem-screen .status-badge.connected,
+.swarm-screen .status-badge.connected { background: rgba(34,197,94,0.15); color: var(--success); }
+.dashboard-screen .status-badge.disconnected,
+.mcp-screen .status-badge.disconnected,
+.ecosystem-screen .status-badge.disconnected,
+.swarm-screen .status-badge.disconnected { background: rgba(239,68,68,0.15); color: var(--error); }
 
 .mcp-list { list-style: none; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
 .mcp-item p { margin-top: 4px; color: var(--text-muted); font-size: 13px; }
@@ -6039,10 +6042,22 @@ body {
 [data-color-theme="slate"] { --accent: #64748b; }
 [data-color-theme="mono"] { --accent: #a3a3a3; }
 
-.empty-state { color: var(--text-muted); padding: 24px; text-align: center; }
-.form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
-.badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: var(--bg-tertiary); }
-.badge.installed { background: rgba(34,197,94,0.2); color: var(--success); }
+.dashboard-screen .empty-state,
+.mcp-screen .empty-state,
+.ecosystem-screen .empty-state,
+.swarm-screen .empty-state { color: var(--text-muted); padding: 24px; text-align: center; }
+.dashboard-screen .form-actions,
+.mcp-screen .form-actions,
+.ecosystem-screen .form-actions,
+.swarm-screen .form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+.dashboard-screen .badge,
+.mcp-screen .badge,
+.ecosystem-screen .badge,
+.swarm-screen .badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: var(--bg-tertiary); }
+.dashboard-screen .badge.installed,
+.mcp-screen .badge.installed,
+.ecosystem-screen .badge.installed,
+.swarm-screen .badge.installed { background: rgba(34,197,94,0.2); color: var(--success); }
 
 .swarm-worker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; padding: 0 16px 16px; }
 .swarm-worker { padding: 12px; cursor: pointer; transition: border-color 0.15s; }
