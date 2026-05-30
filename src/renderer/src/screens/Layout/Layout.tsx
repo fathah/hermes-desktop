@@ -19,7 +19,6 @@ import Schedules from "../Schedules/Schedules";
 import Kanban from "../Kanban/Kanban";
 import Vault from "../Vault/Vault";
 import ProfileWizard from "../Agents/Wizard";
-import MigrationWizard from "../Migration/MigrationWizard";
 import RemoteNotice from "../../components/RemoteNotice";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
 import hermeslogo from "../../assets/hermes.png";
@@ -106,8 +105,6 @@ function Layout({
   const [activatingProfile, setActivatingProfile] = useState(false);
   const [showProfileSwitcher, setShowProfileSwitcher] = useState(false);
   const [profileList, setProfileList] = useState<Array<{ name: string; isActive: boolean }>>([]);
-  const [showMigration, setShowMigration] = useState(false);
-  const [migrationChecked, setMigrationChecked] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
 
   const paneStyle = (target: View): React.CSSProperties => ({
@@ -127,14 +124,6 @@ function Layout({
     window.hermesAPI.isRemoteOnlyMode().then(setRemoteMode);
     window.hermesAPI.gatewayStatus().then((running) => setGatewayRunning(running));
   }, [view]);
-
-  useEffect(() => {
-    if (migrationChecked || remoteMode) return;
-    window.hermesAPI.profileWizard.detectMigration().then((list) => {
-      setMigrationChecked(true);
-      if (list.length > 0) setShowMigration(true);
-    });
-  }, [migrationChecked, remoteMode]);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -236,8 +225,11 @@ function Layout({
   const handleSelectProfile = useCallback(async (name: string) => {
     setActivatingProfile(true);
     try {
-      await window.hermesAPI.setActiveProfile(name);
-      await window.hermesAPI.profileWizard.activate(name);
+      const ok = await window.hermesAPI.setActiveProfile(name);
+      if (!ok) {
+        console.error("Profile activation failed");
+        return;
+      }
       const running = await window.hermesAPI.gatewayStatus();
       setGatewayRunning(running);
       setActiveProfile(name);
@@ -251,7 +243,6 @@ function Layout({
     }
   }, []);
 
-  const dismissMigration = useCallback(() => setShowMigration(false), []);
 
   const handleResumeSession = useCallback(
     async (sessionId: string) => {
@@ -485,9 +476,6 @@ function Layout({
         )}
       </main>
 
-      {showMigration && (
-        <MigrationWizard onComplete={dismissMigration} onSkip={dismissMigration} />
-      )}
 
       {showWizard && (
         <div className="wizard-overlay">

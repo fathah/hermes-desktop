@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, rmSync, readFileSync, existsSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { randomBytes } from "crypto";
+import { createHmac, scryptSync } from "crypto";
 
 let testHome: string;
 
@@ -12,13 +12,15 @@ vi.mock("electron", () => ({
   },
 }));
 
-async function loadVaultModules() {
+async function loadVaultModules(): Promise<{
+  keychain: typeof import("../src/main/vault/keychain");
+  service: typeof import("../src/main/vault/service");
+}> {
   vi.resetModules();
   vi.stubEnv("HERMES_HOME", testHome);
   const keychain = await import("../src/main/vault/keychain");
   const service = await import("../src/main/vault/service");
-  const store = await import("../src/main/vault/store");
-  return { keychain, service, store };
+  return { keychain, service };
 }
 
 describe("vault encryption", () => {
@@ -32,7 +34,7 @@ describe("vault encryption", () => {
   });
 
   it("encrypts credentials at rest (not plaintext in vault.db)", async () => {
-    const { keychain, service, store } = await loadVaultModules();
+    const { keychain, service } = await loadVaultModules();
     keychain.initVaultWithPassword("test-password-123");
     service.addCredential("default", "openai", "work key", "sk-test-secret-value-here");
 
@@ -123,6 +125,30 @@ describe("vault encryption", () => {
     const creds = service.getCredentials("default");
     expect(creds).toHaveLength(1);
     expect(creds[0].provider).toBe("openai");
+  });
+
+  it("stores password verifier derived from scrypt key, not public salt", async () => {
+    const { keychain } = await loadVaultModules();
+    const password = "test-password-123";
+    keychain.initVaultWithPassword(password);
+
+    const envelopePath = join(testHome, "desktop", "master.key.enc");
+    const envelope = JSON.parse(readFileSync(envelopePath, "utf-8")) as {
+      salt: string;
+      verifierValue: string;
+    };
+    const salt = Buffer.from(envelope.salt, "base64");
+    const key = scryptSync(password, salt, 32);
+    const stored = Buffer.from(envelope.verifierValue, "base64");
+    const saltKeyed = createHmac("sha256", salt)
+      .update("hermes-vault-password-verifier-v1")
+      .digest();
+    const keyKeyed = createHmac("sha256", key)
+      .update("hermes-vault-password-verifier-v1")
+      .digest();
+
+    expect(saltKeyed.equals(stored)).toBe(false);
+    expect(keyKeyed.equals(stored)).toBe(true);
   });
 
   it("rejects wrong password after simulated restart", async () => {

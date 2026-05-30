@@ -68,6 +68,9 @@ describe("Preload API Surface", () => {
   it("nested vault namespace is implemented", () => {
     expect(preloadSrc).toContain("vault: {");
     expect(preloadSrc).toContain("vault-add-credential");
+    expect(preloadSrc).not.toContain("vault-export");
+    expect(preloadSrc).not.toContain("vault-rotate-master-key");
+    expect(preloadSrc).not.toContain("vault-sync-profile");
   });
 
   it("nested profileWizard namespace is implemented", () => {

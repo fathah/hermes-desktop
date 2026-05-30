@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "crypto";
-import { existsSync, readFileSync, renameSync, unlinkSync } from "fs";
+import { existsSync, readFileSync, renameSync, unlinkSync, readdirSync } from "fs";
 import { join } from "path";
 import {
   initMasterKey,
@@ -13,6 +13,7 @@ import {
   insertSecret,
   getSecretById,
   listSecretsForProfile,
+  findSecretByProfileAndEnvKey,
   listAllSecrets,
   updateSecret,
   deleteSecret,
@@ -22,7 +23,14 @@ import {
   VAULT_DB_PATH,
   type SecretRow,
 } from "./store";
-import { profilePaths, safeWriteFile } from "../utils";
+import {
+  mergeEnv,
+  parseEnvFile,
+  stripManagedKeys,
+  isImportableEnvKey,
+} from "./env";
+import { profilePaths, safeWriteFile, isValidNamedProfileName } from "../utils";
+import { HERMES_HOME } from "../installer";
 import { buildCredentialPoolEntry, getCredentialPool, setCredentialPool } from "../config";
 import { expectedEnvKeyForModel } from "../installer";
 
@@ -127,6 +135,7 @@ export function addCredential(
   provider: string,
   label: string,
   value: string,
+  envKey?: string,
 ): { id: string; provider: string; label: string } {
   initVault();
   const masterKey = initMasterKey();
@@ -139,29 +148,21 @@ export function addCredential(
     iv,
     authTag,
     getKeyId(),
+    value.length > 4 ? value.slice(-4) : "",
+    envKey,
   );
   return { id: row.id, provider: row.provider, label: row.label };
 }
 
 export function getCredentials(profile: string): VaultCredentialMeta[] {
   initVault();
-  const masterKey = initMasterKey();
   const rows = listSecretsForProfile(profile);
-  return rows.map((row) => {
-    const full = getSecretById(row.id)!;
-    let masked = "••••";
-    try {
-      masked = maskSecret(decrypt(full, masterKey));
-    } catch {
-      masked = "••••????";
-    }
-    return {
-      id: row.id,
-      provider: row.provider,
-      label: row.label,
-      maskedValue: masked,
-    };
-  });
+  return rows.map((row) => ({
+    id: row.id,
+    provider: row.provider,
+    label: row.label,
+    maskedValue: row.masked_suffix ? `••••${row.masked_suffix}` : "••••",
+  }));
 }
 
 export function updateCredential(
@@ -180,6 +181,7 @@ export function updateCredential(
       ciphertext,
       iv,
       authTag,
+      maskedSuffix: updates.value.length > 4 ? updates.value.slice(-4) : "",
     });
   } else if (updates.label !== undefined) {
     updateSecret(id, { label: updates.label });
@@ -189,6 +191,11 @@ export function updateCredential(
 export function removeCredential(id: string): void {
   initVault();
   deleteSecret(id);
+}
+
+export function credentialBelongsToProfile(id: string, profile: string): boolean {
+  initVault();
+  return getSecretById(id)?.profile === profile;
 }
 
 export function getCredentialAuditLog(
@@ -210,18 +217,20 @@ export function getCredentialAuditLog(
   }));
 }
 
-function buildEnvContent(
-  entries: Array<{ envKey: string; value: string }>,
-): string {
-  const lines = [
-    "# Managed by Hermes Workspace — do not edit manually",
-    "# Secrets are encrypted in vault.db and synced on profile activation",
-    "",
-  ];
-  for (const { envKey, value } of entries) {
-    lines.push(`${envKey}=${value}`);
+function upsertCredentialByEnvKey(
+  profile: string,
+  provider: string,
+  label: string,
+  value: string,
+  envKey: string,
+): void {
+  initVault();
+  const existing = findSecretByProfileAndEnvKey(profile, envKey);
+  if (existing) {
+    updateCredential(existing.id, { label, value });
+    return;
   }
-  return lines.join("\n") + (lines.length ? "\n" : "");
+  addCredential(profile, provider, label, value, envKey);
 }
 
 function atomicWrite(path: string, content: string): void {
@@ -231,7 +240,7 @@ function atomicWrite(path: string, content: string): void {
 }
 
 /**
- * Decrypt vault entries for profile and write plaintext .env + auth.json
+ * Decrypt vault entries for profile and merge managed keys into plaintext .env
  * for Hermes Agent to consume.
  */
 export function activateProfile(profile: string): void {
@@ -239,19 +248,20 @@ export function activateProfile(profile: string): void {
   const masterKey = initMasterKey();
   const rows = listSecretsForProfile(profile);
   const { envFile } = profilePaths(profile);
-  const envEntries: Array<{ envKey: string; value: string }> = [];
+  const managed = new Map<string, string>();
   const poolUpdates: Record<string, string> = {};
 
   for (const meta of rows) {
     const row = getSecretById(meta.id)!;
     const plaintext = decrypt(row, masterKey);
-    const envKey = resolveEnvKey(row.provider);
-    envEntries.push({ envKey, value: plaintext });
+    const envKey = row.env_key ?? resolveEnvKey(row.provider);
+    managed.set(envKey, plaintext);
     poolUpdates[row.provider] = plaintext;
   }
 
-  if (envEntries.length > 0) {
-    atomicWrite(envFile, buildEnvContent(envEntries));
+  if (managed.size > 0) {
+    const existing = existsSync(envFile) ? readFileSync(envFile, "utf-8") : "";
+    atomicWrite(envFile, mergeEnv(existing, managed));
   }
 
   for (const [provider, apiKey] of Object.entries(poolUpdates)) {
@@ -263,10 +273,8 @@ export function activateProfile(profile: string): void {
 
 export function deactivateProfile(profile: string, wipe = false): void {
   if (!wipe) return;
-  const { envFile, home } = profilePaths(profile);
-  const authFile = join(home, "auth.json");
+  const { envFile } = profilePaths(profile);
   if (existsSync(envFile)) unlinkSync(envFile);
-  if (existsSync(authFile)) unlinkSync(authFile);
 }
 
 export function removeProfileSecrets(profile: string): number {
@@ -288,7 +296,7 @@ export function copyProfileSecrets(
   for (const meta of rows) {
     const row = getSecretById(meta.id)!;
     const plaintext = decrypt(row, masterKey);
-    addCredential(targetProfile, row.provider, row.label, plaintext);
+    addCredential(targetProfile, row.provider, row.label, plaintext, row.env_key || undefined);
     count++;
   }
   return count;
@@ -326,20 +334,8 @@ export function vaultIsPopulated(): boolean {
   }
 }
 
-export function parseEnvFile(content: string): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const line of content.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eq = trimmed.indexOf("=");
-    if (eq <= 0) continue;
-    const key = trimmed.slice(0, eq).trim();
-    const value = trimmed.slice(eq + 1).trim();
-    if (/^[A-Z][A-Z0-9_]*$/.test(key) && value) {
-      result[key] = value.replace(/^["']|["']$/g, "");
-    }
-  }
-  return result;
+export function parseEnvFileAsRecord(content: string): Record<string, string> {
+  return Object.fromEntries(parseEnvFile(content));
 }
 
 export function envKeyToProvider(envKey: string): string {
@@ -356,18 +352,69 @@ export function envKeyToProvider(envKey: string): string {
   return lower.replace(/_/g, "-");
 }
 
+export function detectProfileMigration(profile: string): string[] {
+  initVault();
+  const { envFile } = profilePaths(profile);
+  if (!existsSync(envFile)) return [];
+  const parsed = parseEnvFile(readFileSync(envFile, "utf-8"));
+  const vaulted = new Set(
+    listSecretsForProfile(profile)
+      .map((row) => row.env_key)
+      .filter((key): key is string => Boolean(key)),
+  );
+  return [...parsed.keys()].filter(
+    (key) => isImportableEnvKey(key) && parsed.get(key) && !vaulted.has(key),
+  );
+}
+
+export function detectAllProfileMigrations(): Array<{
+  profile: string;
+  envKeys: string[];
+}> {
+  const results: Array<{ profile: string; envKeys: string[] }> = [];
+  const defaultKeys = detectProfileMigration("default");
+  if (defaultKeys.length > 0) {
+    results.push({ profile: "default", envKeys: defaultKeys });
+  }
+
+  const profilesDir = join(HERMES_HOME, "profiles");
+  if (!existsSync(profilesDir)) return results;
+
+  for (const name of readdirSync(profilesDir)) {
+    if (!isValidNamedProfileName(name)) continue;
+    const envKeys = detectProfileMigration(name);
+    if (envKeys.length > 0) {
+      results.push({ profile: name, envKeys });
+    }
+  }
+  return results;
+}
+
 export function migratePlaintextEnv(
   profile: string,
-  envContent: string,
+  envContent?: string,
 ): number {
   initVault();
-  const parsed = parseEnvFile(envContent);
+  const { envFile } = profilePaths(profile);
+  const content =
+    envContent ?? (existsSync(envFile) ? readFileSync(envFile, "utf-8") : "");
+  const parsed = parseEnvFile(content);
   let count = 0;
-  for (const [envKey, value] of Object.entries(parsed)) {
+  const migratedKeys: string[] = [];
+
+  for (const [envKey, value] of parsed) {
+    if (!isImportableEnvKey(envKey) || !value) continue;
     const provider = envKeyToProvider(envKey);
-    addCredential(profile, provider, envKey, value);
+    upsertCredentialByEnvKey(profile, provider, envKey, value, envKey);
+    migratedKeys.push(envKey);
     count++;
   }
+
+  if (!envContent && migratedKeys.length > 0 && existsSync(envFile)) {
+    const stripped = stripManagedKeys(readFileSync(envFile, "utf-8"), migratedKeys);
+    atomicWrite(envFile, stripped);
+  }
+
   return count;
 }
 

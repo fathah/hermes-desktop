@@ -79,16 +79,22 @@ function Agents({
   }
 
   async function handleDelete(name: string): Promise<void> {
-    const result = await window.hermesAPI.deleteProfile(name);
+    const result = await window.hermesAPI.profileWizard.delete(name, false);
     if (result.success) {
       if (activeProfile === name) await onSelectProfile("default");
       loadProfiles();
+    } else {
+      setError(result.error || t("agents.deleteFailed"));
     }
     setConfirmDelete(null);
   }
 
   async function handleSelect(name: string): Promise<void> {
-    await window.hermesAPI.setActiveProfile(name);
+    const ok = await window.hermesAPI.setActiveProfile(name);
+    if (!ok) {
+      setError(t("agents.activateFailed"));
+      return;
+    }
     await onSelectProfile(name);
     loadProfiles();
   }

@@ -116,7 +116,6 @@ import {
   listProfiles,
   createProfile,
   deleteProfile,
-  setActiveProfile,
 } from "./profiles";
 import { initVault, shutdownVault } from "./vault/service";
 import { registerVaultHandlers } from "./ipc/vault-handlers";
@@ -1079,9 +1078,25 @@ function setupIPC(): void {
       return sshDeleteProfile(conn.ssh, name);
     return deleteProfile(name);
   });
-  ipcMain.handle("set-active-profile", (_event, name: string) => {
-    if (getConnectionConfig().mode !== "ssh") setActiveProfile(name);
-    return true;
+  ipcMain.handle("set-active-profile", async (_event, name: string) => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh") {
+      return true;
+    }
+    if (conn.mode === "remote") {
+      return true;
+    }
+    if (isRemoteOnlyMode()) {
+      return false;
+    }
+    try {
+      const { activateProfileWithRollback } = await import("./profiles/wizard");
+      await activateProfileWithRollback(name);
+      return true;
+    } catch (err) {
+      console.error("[profile] set-active-profile failed:", err);
+      return false;
+    }
   });
 
   // Memory

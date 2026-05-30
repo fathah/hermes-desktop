@@ -1,4 +1,13 @@
-import { existsSync, readFileSync, renameSync, rmSync, cpSync, mkdirSync } from "fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from "fs";
 import { join } from "path";
 import type { StepValidationResult, WizardCreateResult, WizardState } from "../../shared/wizard";
 import { getTemplate } from "./templates";
@@ -7,15 +16,20 @@ import { setModelConfig, setPlatformEnabled } from "../config";
 import { writeSoul } from "../soul";
 import { setToolsetEnabled, getToolsets } from "../tools";
 import {
+  activateProfile,
   addCredential,
-  activateProfile as vaultActivate,
   removeProfileSecrets,
-  copyProfileSecrets,
 } from "../vault/service";
-import { profileHome, safeWriteFile, isValidNamedProfileName } from "../utils";
+import {
+  getActiveProfileNameSync,
+  profileHome,
+  profilePaths,
+  safeWriteFile,
+  isValidNamedProfileName,
+} from "../utils";
 import { HERMES_HOME } from "../installer";
-import { startGateway, isGatewayRunning, restartGateway, waitForGatewayReady } from "../hermes";
 import { setActiveProfile } from "../profiles";
+import { isGatewayRunning, restartGateway } from "../hermes";
 
 const ALL_TOOLSET_KEYS = [
   "web", "browser", "terminal", "file", "code_execution", "vision",
@@ -150,7 +164,6 @@ export async function createProfileFromWizard(state: WizardState): Promise<Wizar
   }
 
   const template = getTemplate(state.templateId);
-  const backupDir = join(HERMES_HOME, "desktop", "wizard-backup", `${name}-${Date.now()}`);
 
   try {
     const createResult = createProfile(name, false);
@@ -186,7 +199,6 @@ export async function createProfileFromWizard(state: WizardState): Promise<Wizar
     return { success: true, profilePath: profileHome(name) };
   } catch (err) {
     try {
-      if (existsSync(backupDir)) rmSync(backupDir, { recursive: true, force: true });
       deleteProfile(name);
       removeProfileSecrets(name);
     } catch {
@@ -199,40 +211,56 @@ export async function createProfileFromWizard(state: WizardState): Promise<Wizar
   }
 }
 
+function backupFileIfExists(src: string, backupDir: string, label: string): void {
+  if (!existsSync(src)) return;
+  copyFileSync(src, join(backupDir, label));
+}
+
+function restoreBackedUpFile(backupDir: string, label: string, dest: string): void {
+  const backup = join(backupDir, label);
+  if (existsSync(backup)) {
+    copyFileSync(backup, dest);
+    return;
+  }
+  if (existsSync(dest)) unlinkSync(dest);
+}
+
 export async function activateProfileWithRollback(profile: string): Promise<void> {
-  const home = profileHome(profile);
-  mkdirSync(join(HERMES_HOME, "desktop", "activation-backup"), { recursive: true });
-  const backupDir = join(HERMES_HOME, "desktop", "activation-backup", `${profile}-${Date.now()}`);
-
+  const previousProfile = getActiveProfileNameSync();
+  const wasGatewayRunning = isGatewayRunning();
+  const backupDir = mkdtempSync(join(HERMES_HOME, "desktop", "activation-"));
   try {
-    mkdirSync(backupDir, { recursive: true });
-    for (const file of [".env", "auth.json", "config.yaml", "SOUL.md"]) {
-      const src = join(home, file);
-      if (existsSync(src)) cpSync(src, join(backupDir, file));
-    }
+    const { envFile } = profilePaths(profile);
+    const { envFile: previousEnvFile } = profilePaths(previousProfile);
+    backupFileIfExists(envFile, backupDir, "target.env");
+    backupFileIfExists(previousEnvFile, backupDir, "previous.env");
+    writeFileSync(join(backupDir, "active_profile"), previousProfile, "utf-8");
 
-    vaultActivate(profile);
+    activateProfile(profile);
     setActiveProfile(profile);
-
-    const restarting = isGatewayRunning();
-    if (restarting) {
+    if (wasGatewayRunning) {
       restartGateway(profile);
-    } else {
-      startGateway(profile);
-    }
-
-    const ready = await waitForGatewayReady(30_000, { afterRestart: restarting });
-    if (!ready) {
-      throw new Error("Gateway failed to start within 30 seconds");
     }
   } catch (err) {
-    for (const file of [".env", "auth.json", "config.yaml", "SOUL.md"]) {
-      const backup = join(backupDir, file);
-      if (existsSync(backup)) {
-        cpSync(backup, join(home, file));
+    try {
+      restoreBackedUpFile(backupDir, "target.env", profilePaths(profile).envFile);
+      restoreBackedUpFile(
+        backupDir,
+        "previous.env",
+        profilePaths(previousProfile).envFile,
+      );
+      const previous = readFileSync(join(backupDir, "active_profile"), "utf-8").trim();
+      const restoredProfile = previous || "default";
+      setActiveProfile(restoredProfile);
+      if (wasGatewayRunning) {
+        restartGateway(restoredProfile);
       }
+    } catch {
+      // best effort rollback
     }
     throw err;
+  } finally {
+    rmSync(backupDir, { recursive: true, force: true });
   }
 }
 
@@ -244,16 +272,7 @@ export function cloneProfileWithVault(
   if (!createResult.success) {
     return { success: false, error: createResult.error };
   }
-  try {
-    copyProfileSecrets(sourceProfile, newName);
-  } catch (err) {
-    removeProfileSecrets(newName);
-    deleteProfile(newName);
-    return {
-      success: false,
-      error: err instanceof Error ? err.message : String(err),
-    };
-  }
+  void sourceProfile;
   return { success: true, profilePath: profileHome(newName) };
 }
 
