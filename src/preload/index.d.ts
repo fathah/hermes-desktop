@@ -781,13 +781,18 @@ interface HermesAPI {
     getCredentials: (
       profile: string,
     ) => Promise<
-      Array<{ id: string; provider: string; label: string; maskedValue: string }>
+      | Array<{ id: string; provider: string; label: string; maskedValue: string }>
+      | { success: false; error: string; unsupportedMode?: boolean }
     >;
     updateCredential: (
+      profile: string,
       id: string,
       updates: { label?: string; value?: string },
-    ) => Promise<{ success: boolean }>;
-    deleteCredential: (id: string) => Promise<{ success: boolean }>;
+    ) => Promise<{ success: boolean; error?: string }>;
+    deleteCredential: (
+      profile: string,
+      id: string,
+    ) => Promise<{ success: boolean; error?: string }>;
     getAuditLog: (
       profile: string,
     ) => Promise<
@@ -799,11 +804,9 @@ interface HermesAPI {
         changedAt: string;
       }>
     >;
-    rotateMasterKey: () => Promise<{ success: boolean; entriesRotated: number }>;
     isPopulated: () => Promise<boolean>;
     encryptionAvailable: () => Promise<boolean>;
-    initWithPassword: (password: string) => Promise<{ success: boolean }>;
-    exportBlob: () => Promise<string>;
+    initWithPassword: (password: string) => Promise<{ success: boolean; error?: string }>;
   };
 }
 

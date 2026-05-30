@@ -1,5 +1,18 @@
-import { randomBytes, scryptSync, createHash } from "crypto";
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import {
+  createHash,
+  createHmac,
+  randomBytes,
+  scryptSync,
+  timingSafeEqual,
+} from "crypto";
+import {
+  chmodSync,
+  existsSync,
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  unlinkSync,
+} from "fs";
 import { join, dirname } from "path";
 import { safeStorage } from "electron";
 import { HERMES_HOME } from "../installer";
@@ -8,15 +21,39 @@ const MASTER_KEY_FILE = join(HERMES_HOME, "desktop", "master.key.enc");
 const SALT_PATH = join(HERMES_HOME, "desktop", "master.key.salt");
 const KEY_ID = "key-v1";
 const MASTER_KEY_BYTES = 32;
+const ENVELOPE_VERSION = 1;
+const PASSWORD_VERIFIER_DOMAIN = "hermes-vault-password-verifier-v1";
 
 export type KeychainMode = "safeStorage" | "password";
+
+interface SafeStorageEnvelope {
+  version: 1;
+  mode: "safeStorage";
+  ciphertext: string;
+}
+
+interface PasswordEnvelope {
+  version: 1;
+  mode: "password";
+  kdf: "scrypt";
+  salt: string;
+  verifier: "hmac-sha256";
+  verifierValue: string;
+}
+
+type KeyEnvelope = SafeStorageEnvelope | PasswordEnvelope;
 
 let cachedMasterKey: Buffer | null = null;
 let keychainMode: KeychainMode | null = null;
 
 function ensureDesktopDir(): void {
   const dir = dirname(MASTER_KEY_FILE);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
+  try {
+    chmodSync(dir, 0o700);
+  } catch {
+    // best effort on Windows
+  }
 }
 
 export function isEncryptionAvailable(): boolean {
@@ -29,7 +66,8 @@ export function getKeychainMode(): KeychainMode {
 }
 
 export function isPasswordVaultConfigured(): boolean {
-  return existsSync(SALT_PATH) && existsSync(MASTER_KEY_FILE);
+  const envelope = loadKeyEnvelope();
+  return envelope?.mode === "password" || (existsSync(SALT_PATH) && existsSync(MASTER_KEY_FILE));
 }
 
 export function isVaultUnlocked(): boolean {
@@ -56,9 +94,66 @@ function loadEncryptedMasterKeyFile(): Buffer | null {
   return readFileSync(MASTER_KEY_FILE);
 }
 
-function saveEncryptedMasterKeyFile(data: Buffer): void {
+function loadKeyEnvelope(): KeyEnvelope | null {
+  const data = loadEncryptedMasterKeyFile();
+  if (!data) return null;
+  try {
+    const parsed = JSON.parse(data.toString("utf-8")) as Partial<KeyEnvelope>;
+    if (parsed.version !== ENVELOPE_VERSION) return null;
+    if (parsed.mode === "safeStorage" && typeof parsed.ciphertext === "string") {
+      return parsed as SafeStorageEnvelope;
+    }
+    if (
+      parsed.mode === "password" &&
+      parsed.kdf === "scrypt" &&
+      typeof parsed.salt === "string" &&
+      parsed.verifier === "hmac-sha256" &&
+      typeof parsed.verifierValue === "string"
+    ) {
+      return parsed as PasswordEnvelope;
+    }
+  } catch {
+    // Legacy key file.
+  }
+  return null;
+}
+
+function saveKeyEnvelope(envelope: KeyEnvelope): void {
   ensureDesktopDir();
-  writeFileSync(MASTER_KEY_FILE, data, { mode: 0o600 });
+  writeFileSync(MASTER_KEY_FILE, JSON.stringify(envelope), { mode: 0o600 });
+  try {
+    chmodSync(MASTER_KEY_FILE, 0o600);
+  } catch {
+    // best effort on Windows
+  }
+}
+
+function saveSafeStorageEnvelope(key: Buffer): void {
+  saveKeyEnvelope({
+    version: ENVELOPE_VERSION,
+    mode: "safeStorage",
+    ciphertext: encryptWithSafeStorage(key).toString("base64"),
+  });
+}
+
+function passwordVerifier(key: Buffer): Buffer {
+  return createHmac("sha256", key).update(PASSWORD_VERIFIER_DOMAIN).digest();
+}
+
+function savePasswordEnvelope(key: Buffer, salt: Buffer): void {
+  saveKeyEnvelope({
+    version: ENVELOPE_VERSION,
+    mode: "password",
+    kdf: "scrypt",
+    salt: salt.toString("base64"),
+    verifier: "hmac-sha256",
+    verifierValue: passwordVerifier(key).toString("base64"),
+  });
+  try {
+    if (existsSync(SALT_PATH)) unlinkSync(SALT_PATH);
+  } catch {
+    // best effort cleanup of the legacy sidecar salt
+  }
 }
 
 function generateMasterKey(): Buffer {
@@ -86,15 +181,29 @@ export function initMasterKey(): Buffer {
   if (cachedMasterKey) return cachedMasterKey;
 
   if (isEncryptionAvailable()) {
+    const envelope = loadKeyEnvelope();
+    if (envelope?.mode === "password") {
+      throw new Error("Vault is locked. Unlock with initVaultWithPassword.");
+    }
+    if (envelope?.mode === "safeStorage") {
+      cachedMasterKey = decryptWithSafeStorage(Buffer.from(envelope.ciphertext, "base64"));
+      keychainMode = "safeStorage";
+      return cachedMasterKey;
+    }
+
     const existing = loadEncryptedMasterKeyFile();
+    if (existing && existsSync(SALT_PATH)) {
+      throw new Error("Vault is locked. Unlock with initVaultWithPassword.");
+    }
     if (existing) {
       cachedMasterKey = decryptWithSafeStorage(existing);
+      saveSafeStorageEnvelope(cachedMasterKey);
       keychainMode = "safeStorage";
       return cachedMasterKey;
     }
 
     const key = generateMasterKey();
-    saveEncryptedMasterKeyFile(encryptWithSafeStorage(key));
+    saveSafeStorageEnvelope(key);
     cachedMasterKey = key;
     keychainMode = "safeStorage";
     return cachedMasterKey;
@@ -116,14 +225,14 @@ export function initVaultWithPassword(password: string): Buffer {
   ensureDesktopDir();
 
   let salt: Buffer;
-  const existing = loadEncryptedMasterKeyFile();
+  const envelope = loadKeyEnvelope();
 
-  if (existsSync(SALT_PATH) && existing) {
-    salt = readFileSync(SALT_PATH);
+  if (envelope?.mode === "password") {
+    salt = Buffer.from(envelope.salt, "base64");
     const key = deriveMasterKeyFromPassword(password, salt);
-    const check = createHash("sha256").update(key).digest();
-    const storedCheck = existing.subarray(0, 32);
-    if (!check.equals(storedCheck)) {
+    const check = passwordVerifier(key);
+    const storedCheck = Buffer.from(envelope.verifierValue, "base64");
+    if (storedCheck.length !== check.length || !timingSafeEqual(check, storedCheck)) {
       throw new Error("Invalid master password");
     }
     cachedMasterKey = key;
@@ -131,11 +240,33 @@ export function initVaultWithPassword(password: string): Buffer {
     return cachedMasterKey;
   }
 
+  const existing = loadEncryptedMasterKeyFile();
+  if (existsSync(SALT_PATH) && existing) {
+    salt = readFileSync(SALT_PATH);
+    const key = deriveMasterKeyFromPassword(password, salt);
+    const check = passwordVerifier(key);
+    const legacyCheck = createHmac("sha256", key)
+      .update("legacy-hermes-vault-password-verifier")
+      .digest();
+    const storedCheck = existing.subarray(0, 32);
+    const legacySha = createHash("sha256").update(key).digest();
+    if (
+      storedCheck.length !== check.length ||
+      (!timingSafeEqual(check, storedCheck) &&
+        !timingSafeEqual(legacyCheck, storedCheck) &&
+        !timingSafeEqual(legacySha, storedCheck))
+    ) {
+      throw new Error("Invalid master password");
+    }
+    savePasswordEnvelope(key, salt);
+    cachedMasterKey = key;
+    keychainMode = "password";
+    return cachedMasterKey;
+  }
+
   salt = randomBytes(16);
-  writeFileSync(SALT_PATH, salt, { mode: 0o600 });
   const key = deriveMasterKeyFromPassword(password, salt);
-  const check = createHash("sha256").update(key).digest();
-  saveEncryptedMasterKeyFile(check);
+  savePasswordEnvelope(key, salt);
   cachedMasterKey = key;
   keychainMode = "password";
   return cachedMasterKey;
@@ -144,7 +275,7 @@ export function initVaultWithPassword(password: string): Buffer {
 export function rotateMasterKey(newKey?: Buffer): Buffer {
   const key = newKey || generateMasterKey();
   if (isEncryptionAvailable()) {
-    saveEncryptedMasterKeyFile(encryptWithSafeStorage(key));
+    saveSafeStorageEnvelope(key);
     keychainMode = "safeStorage";
   } else {
     throw new Error("Master key rotation requires OS keychain or re-init with password");

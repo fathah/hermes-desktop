@@ -12,20 +12,47 @@ function Vault({ profile }: { profile: string }): React.JSX.Element {
   const [secrets, setSecrets] = useState<SecretItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
+  const [locked, setLocked] = useState(false);
+  const [password, setPassword] = useState("");
   const [provider, setProvider] = useState("openai");
   const [label, setLabel] = useState("");
   const [value, setValue] = useState("");
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
-    const list = await window.hermesAPI.vault.getCredentials(profile);
-    setSecrets(list);
-    setLoading(false);
+    setLoading(true);
+    setError("");
+    try {
+      const list = await window.hermesAPI.vault.getCredentials(profile);
+      if (Array.isArray(list)) {
+        setSecrets(list);
+        setLocked(false);
+      } else {
+        setError(list.error);
+        setLocked(true);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setLocked(true);
+    } finally {
+      setLoading(false);
+    }
   }, [profile]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  async function unlock(): Promise<void> {
+    setError("");
+    const result = await window.hermesAPI.vault.initWithPassword(password);
+    if (!result.success) {
+      setError(result.error || "Unable to unlock vault");
+      return;
+    }
+    setPassword("");
+    await load();
+  }
 
   async function handleAdd(): Promise<void> {
     if (!value.trim()) {
@@ -42,16 +69,53 @@ function Vault({ profile }: { profile: string }): React.JSX.Element {
     setShowAdd(false);
     setValue("");
     setLabel("");
-    load();
+    await load();
   }
 
   async function handleDelete(id: string): Promise<void> {
-    await window.hermesAPI.vault.deleteCredential(id);
-    load();
+    const result = await window.hermesAPI.vault.deleteCredential(profile, id);
+    if (!result.success) {
+      setError(result.error || "Unable to delete credential");
+      return;
+    }
+    await load();
   }
 
   if (loading) {
     return <div className="screen-loading">Loading vault…</div>;
+  }
+
+  if (locked) {
+    return (
+      <div className="vault-screen">
+        <header className="screen-header">
+          <div>
+            <h1 className="screen-title">
+              <KeyRound size={20} /> Encrypted Vault
+            </h1>
+            <p className="screen-subtitle">
+              Unlock or initialize the local vault for <strong>{profile}</strong>
+            </p>
+          </div>
+        </header>
+        <div className="vault-add-form card">
+          <label>
+            Vault password
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </label>
+          {error && <p className="form-error">{error}</p>}
+          <div className="form-actions">
+            <button className="btn-primary" onClick={unlock} disabled={password.length < 8}>
+              Unlock vault
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

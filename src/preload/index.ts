@@ -965,15 +965,17 @@ const hermesAPI = {
     getCredentials: (
       profile: string,
     ): Promise<
-      Array<{ id: string; provider: string; label: string; maskedValue: string }>
+      | Array<{ id: string; provider: string; label: string; maskedValue: string }>
+      | { success: false; error: string; unsupportedMode?: boolean }
     > => ipcRenderer.invoke("vault-get-credentials", profile),
     updateCredential: (
+      profile: string,
       id: string,
       updates: { label?: string; value?: string },
     ): Promise<{ success: boolean }> =>
-      ipcRenderer.invoke("vault-update-credential", id, updates),
-    deleteCredential: (id: string): Promise<{ success: boolean }> =>
-      ipcRenderer.invoke("vault-delete-credential", id),
+      ipcRenderer.invoke("vault-update-credential", profile, id, updates),
+    deleteCredential: (profile: string, id: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke("vault-delete-credential", profile, id),
     getAuditLog: (
       profile: string,
     ): Promise<
@@ -985,16 +987,12 @@ const hermesAPI = {
         changedAt: string;
       }>
     > => ipcRenderer.invoke("vault-get-audit-log", profile),
-    rotateMasterKey: (): Promise<{ success: boolean; entriesRotated: number }> =>
-      ipcRenderer.invoke("vault-rotate-master-key"),
     isPopulated: (): Promise<boolean> =>
       ipcRenderer.invoke("vault-is-populated"),
     encryptionAvailable: (): Promise<boolean> =>
       ipcRenderer.invoke("vault-encryption-available"),
-    initWithPassword: (password: string): Promise<{ success: boolean }> =>
+    initWithPassword: (password: string): Promise<{ success: boolean; error?: string }> =>
       ipcRenderer.invoke("vault-init-with-password", password),
-    exportBlob: (): Promise<string> =>
-      ipcRenderer.invoke("vault-export"),
   },
 };
 
