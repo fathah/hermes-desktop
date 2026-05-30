@@ -1,5 +1,11 @@
 import type { AppLocale } from "../shared/i18n/types";
 import type { Attachment } from "../shared/attachments";
+import type {
+  GatewayStatusTelemetry,
+  MemoryTelemetry,
+  TelemetryEnvelope,
+  ToolsTelemetry,
+} from "../shared/telemetry-types";
 
 interface ElectronAPI {
   process: {
@@ -770,6 +776,15 @@ interface HermesAPI {
     logFile?: string,
     lines?: number,
   ) => Promise<{ content: string; path: string }>;
+
+  // Telemetry (read-only) — Phase A wires Gateway/Tools/Memory.
+  // Schedules + Kanban are out of scope for this PR (no
+  // claim-conformant upstream contract — see PR body).
+  telemetry: {
+    gatewayStatus: () => Promise<TelemetryEnvelope<GatewayStatusTelemetry>>;
+    tools: () => Promise<TelemetryEnvelope<ToolsTelemetry>>;
+    memory: () => Promise<TelemetryEnvelope<MemoryTelemetry>>;
+  };
 }
 
 declare global {

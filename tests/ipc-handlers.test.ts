@@ -3,7 +3,14 @@ import { readFileSync } from "fs";
 import { join } from "path";
 
 const ROOT = join(__dirname, "..");
-const indexSrc = readFileSync(join(ROOT, "src/main/index.ts"), "utf-8");
+// Some handler bundles register their channels in a sub-module that
+// `src/main/index.ts` imports as a single `registerXyzHandlers(ipcMain)`
+// call (e.g. the telemetry surface). Concatenate them here so the
+// consistency checks below see the full set of registered channels.
+const indexSrc = [
+  readFileSync(join(ROOT, "src/main/index.ts"), "utf-8"),
+  readFileSync(join(ROOT, "src/main/telemetry/index.ts"), "utf-8"),
+].join("\n");
 const preloadSrc = readFileSync(join(ROOT, "src/preload/index.ts"), "utf-8");
 
 /**

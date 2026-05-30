@@ -1,6 +1,12 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { AppLocale } from "../shared/i18n/types";
 import type { Attachment } from "../shared/attachments";
+import type {
+  GatewayStatusTelemetry,
+  MemoryTelemetry,
+  TelemetryEnvelope,
+  ToolsTelemetry,
+} from "../shared/telemetry-types";
 
 /**
  * Mirror of the renderer-side `CredentialPoolEntry` ambient type
@@ -952,6 +958,19 @@ const hermesAPI = {
     lines?: number,
   ): Promise<{ content: string; path: string }> =>
     ipcRenderer.invoke("read-logs", logFile, lines),
+
+  // Telemetry (read-only) — capability probe + per-subsystem
+  // endpoints. The renderer should call gatewayStatus() first
+  // (cached by CapabilitiesProvider) and gate the per-subsystem
+  // calls on `capabilities` containing the matching key.
+  telemetry: {
+    gatewayStatus: (): Promise<TelemetryEnvelope<GatewayStatusTelemetry>> =>
+      ipcRenderer.invoke("telemetry-gateway-status"),
+    tools: (): Promise<TelemetryEnvelope<ToolsTelemetry>> =>
+      ipcRenderer.invoke("telemetry-tools"),
+    memory: (): Promise<TelemetryEnvelope<MemoryTelemetry>> =>
+      ipcRenderer.invoke("telemetry-memory"),
+  },
 };
 
 if (process.contextIsolated) {

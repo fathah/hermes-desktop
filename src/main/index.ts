@@ -219,6 +219,7 @@ import {
   sshRunDump,
   sshDiscoverMemoryProviders,
 } from "./ssh-remote";
+import { registerTelemetryHandlers } from "./telemetry";
 
 process.on("uncaughtException", (err) => {
   console.error("[MAIN UNCAUGHT]", err);
@@ -389,6 +390,10 @@ function createWindow(): void {
 }
 
 function setupIPC(): void {
+  // Telemetry (read-only) — registered first so the renderer can
+  // probe capabilities at startup independent of install state.
+  registerTelemetryHandlers(ipcMain);
+
   // Installation
   ipcMain.handle("check-install", () => {
     return checkInstallStatus();
