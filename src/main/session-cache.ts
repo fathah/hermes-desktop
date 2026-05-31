@@ -31,6 +31,17 @@ export interface CachedSession {
   source: string;
   messageCount: number;
   model: string;
+  tags: string[];
+  pinned: boolean;
+  archived: boolean;
+  customTitle?: boolean;
+}
+
+export interface SessionMetadataUpdate {
+  title?: string;
+  tags?: string[];
+  pinned?: boolean;
+  archived?: boolean;
 }
 
 interface CacheData {
@@ -69,11 +80,31 @@ function generateTitle(message: string): string {
   return title || text.slice(0, 45) + "...";
 }
 
+function normalizeSession(session: CachedSession): CachedSession {
+  return {
+    ...session,
+    tags: Array.isArray(session.tags)
+      ? session.tags.filter((tag) => typeof tag === "string")
+      : [],
+    pinned: Boolean(session.pinned),
+    archived: Boolean(session.archived),
+    customTitle: Boolean(session.customTitle),
+  };
+}
+
 function readCache(): CacheData {
   const file = cacheFilePath();
   try {
     if (!existsSync(file)) return { sessions: [], lastSync: 0 };
-    return JSON.parse(readFileSync(file, "utf-8"));
+    const parsed = JSON.parse(readFileSync(file, "utf-8")) as CacheData;
+    return {
+      sessions: Array.isArray(parsed.sessions)
+        ? parsed.sessions
+            .filter((session) => session && typeof session === "object")
+            .map((session) => normalizeSession(session as CachedSession))
+        : [],
+      lastSync: Number(parsed.lastSync) || 0,
+    };
   } catch {
     return { sessions: [], lastSync: 0 };
   }
@@ -81,10 +112,17 @@ function readCache(): CacheData {
 
 function writeCache(data: CacheData): void {
   try {
-    safeWriteFile(cacheFilePath(), JSON.stringify(data));
+    safeWriteFile(cacheFilePath(), JSON.stringify(data, null, 2));
   } catch {
     // non-fatal
   }
+}
+
+function sortSessions(sessions: CachedSession[]): CachedSession[] {
+  return sessions.sort((a, b) => {
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+    return b.startedAt - a.startedAt;
+  });
 }
 
 function getDb(): Database.Database | null {
@@ -132,7 +170,7 @@ export function syncSessionCache(): CachedSession[] {
       if (existing) {
         existing.messageCount = row.message_count;
         if (row.model) existing.model = row.model;
-        if (row.title) existing.title = row.title;
+        if (row.title && !existing.customTitle) existing.title = row.title;
         continue;
       }
 
@@ -161,6 +199,9 @@ export function syncSessionCache(): CachedSession[] {
         source: row.source,
         messageCount: row.message_count,
         model: row.model || "",
+        tags: [],
+        pinned: false,
+        archived: false,
       });
     }
 
@@ -204,8 +245,7 @@ export function syncSessionCache(): CachedSession[] {
     const merged = new Map<string, CachedSession>();
     for (const s of cache.sessions) merged.set(s.id, s);
     for (const s of newSessions) merged.set(s.id, s);
-    const allSessions = Array.from(merged.values());
-    allSessions.sort((a, b) => b.startedAt - a.startedAt);
+    const allSessions = sortSessions(Array.from(merged.values()));
 
     const updated: CacheData = {
       sessions: allSessions,
@@ -223,15 +263,45 @@ export function syncSessionCache(): CachedSession[] {
 // Fast read from cache only (no DB access)
 export function listCachedSessions(limit = 50, offset = 0): CachedSession[] {
   const cache = readCache();
-  return cache.sessions.slice(offset, offset + limit);
+  return sortSessions(cache.sessions).slice(offset, offset + limit);
 }
 
 // Update title for a specific session
 export function updateSessionTitle(sessionId: string, title: string): void {
+  updateSessionMetadata(sessionId, { title });
+}
+
+export function updateSessionMetadata(
+  sessionId: string,
+  update: SessionMetadataUpdate,
+): void {
   const cache = readCache();
   const idx = cache.sessions.findIndex((s) => s.id === sessionId);
   if (idx >= 0) {
-    cache.sessions[idx].title = title;
+    const session = cache.sessions[idx];
+    if (typeof update.title === "string") {
+      const nextTitle = update.title.trim();
+      if (nextTitle) {
+        session.title = nextTitle;
+        session.customTitle = true;
+      }
+    }
+    if (Array.isArray(update.tags)) {
+      session.tags = Array.from(
+        new Set(
+          update.tags
+            .map((tag) => tag.trim())
+            .filter((tag) => tag.length > 0)
+            .slice(0, 12),
+        ),
+      );
+    }
+    if (typeof update.pinned === "boolean") session.pinned = update.pinned;
+    if (typeof update.archived === "boolean") {
+      session.archived = update.archived;
+      if (update.archived) session.pinned = false;
+    }
+    cache.sessions = sortSessions(cache.sessions);
     writeCache(cache);
   }
 }

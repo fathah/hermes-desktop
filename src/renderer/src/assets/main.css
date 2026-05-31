@@ -3837,6 +3837,33 @@ body {
   color: var(--text-muted);
 }
 
+.sessions-view-tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.sessions-view-tab {
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    border-color var(--transition),
+    color var(--transition);
+}
+
+.sessions-view-tab:hover,
+.sessions-view-tab--active {
+  background: var(--accent-subtle);
+  border-color: var(--border-focus);
+  color: var(--text-primary);
+}
+
 /* Loading & empty states */
 .sessions-loading {
   flex: 1;
@@ -3946,6 +3973,13 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.sessions-pin-badge {
+  display: inline-flex;
+  align-items: center;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
 /* Tags row */
 .sessions-card-tags {
   display: flex;
@@ -3974,6 +4008,46 @@ body {
     opacity var(--transition),
     background var(--transition),
     color var(--transition);
+}
+
+.sessions-card-actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0.45;
+  transition: opacity var(--transition);
+}
+
+.sessions-card:hover .sessions-card-actions,
+.sessions-card:focus-within .sessions-card-actions {
+  opacity: 1;
+}
+
+.sessions-card-actions + .sessions-card-delete {
+  margin-left: 0;
+}
+
+.sessions-card-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.sessions-card-action:hover,
+.sessions-card-action:focus-visible,
+.sessions-card-action--active {
+  background: var(--bg-tertiary);
+  color: var(--accent);
 }
 
 .sessions-card:hover .sessions-card-delete {
@@ -4065,6 +4139,12 @@ body {
   font-family: var(--font-mono, monospace);
   font-size: 10.5px;
   letter-spacing: -0.01em;
+}
+
+.sessions-tag--custom {
+  color: var(--accent);
+  border-color: var(--border-focus);
+  background: var(--accent-subtle);
 }
 
 /* Search results snippet */

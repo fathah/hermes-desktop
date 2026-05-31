@@ -1877,6 +1877,9 @@ export async function sshListCachedSessions(
     source: s.source,
     messageCount: s.messageCount,
     model: s.model,
+    tags: [],
+    pinned: false,
+    archived: false,
   }));
 }
 

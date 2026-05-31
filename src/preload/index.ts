@@ -21,6 +21,26 @@ interface CredentialPoolEntry {
   key?: string;
 }
 
+interface CachedSession {
+  id: string;
+  title: string;
+  startedAt: number;
+  source: string;
+  messageCount: number;
+  model: string;
+  tags: string[];
+  pinned: boolean;
+  archived: boolean;
+  customTitle?: boolean;
+}
+
+interface SessionMetadataUpdate {
+  title?: string;
+  tags?: string[];
+  pinned?: boolean;
+  archived?: boolean;
+}
+
 const electronAPI = {
   process: {
     platform: process.platform,
@@ -551,30 +571,19 @@ const hermesAPI = {
   listCachedSessions: (
     limit?: number,
     offset?: number,
-  ): Promise<
-    Array<{
-      id: string;
-      title: string;
-      startedAt: number;
-      source: string;
-      messageCount: number;
-      model: string;
-    }>
-  > => ipcRenderer.invoke("list-cached-sessions", limit, offset),
+  ): Promise<CachedSession[]> =>
+    ipcRenderer.invoke("list-cached-sessions", limit, offset),
 
-  syncSessionCache: (): Promise<
-    Array<{
-      id: string;
-      title: string;
-      startedAt: number;
-      source: string;
-      messageCount: number;
-      model: string;
-    }>
-  > => ipcRenderer.invoke("sync-session-cache"),
+  syncSessionCache: (): Promise<CachedSession[]> =>
+    ipcRenderer.invoke("sync-session-cache"),
 
   updateSessionTitle: (sessionId: string, title: string): Promise<void> =>
     ipcRenderer.invoke("update-session-title", sessionId, title),
+  updateSessionMetadata: (
+    sessionId: string,
+    update: SessionMetadataUpdate,
+  ): Promise<void> =>
+    ipcRenderer.invoke("update-session-metadata", sessionId, update),
   deleteSession: (sessionId: string): Promise<void> =>
     ipcRenderer.invoke("delete-session", sessionId),
 
