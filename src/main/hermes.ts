@@ -6,7 +6,8 @@ import {
   appendFileSync,
   unlinkSync,
   mkdirSync,
-  createWriteStream,
+  openSync,
+  closeSync,
 } from "fs";
 import { join } from "path";
 import { homedir } from "os";
@@ -1163,17 +1164,32 @@ export function startGateway(profile?: string): boolean {
     // ignore
   }
   const logPath = join(logDir, "gateway-stderr.log");
-  const stderrStream = createWriteStream(logPath, { flags: "a" });
+  // Pass an already-open fd to child_process.spawn. On Windows/Electron,
+  // createWriteStream(...).fd can still be null at spawn time, which makes
+  // Node reject stdio with "The argument 'stdio' is invalid" and leaves the
+  // Gateway Start button unable to launch the process.
+  let stderrFd: number | null = openSync(logPath, "a");
 
   gatewayProcess = spawn(HERMES_PYTHON, hermesCliArgs(["gateway"]), {
     cwd: HERMES_REPO,
     env: gatewayEnv,
-    stdio: ["ignore", "ignore", stderrStream],
+    stdio: ["ignore", "ignore", stderrFd],
     detached: true,
     ...HIDDEN_SUBPROCESS_OPTIONS,
   });
 
+  const closeGatewayStderrFd = (): void => {
+    if (stderrFd === null) return;
+    try {
+      closeSync(stderrFd);
+    } catch {
+      // best-effort cleanup
+    }
+    stderrFd = null;
+  };
+
   gatewayProcess.on("error", (err) => {
+    closeGatewayStderrFd();
     console.error("[gateway] Failed to spawn gateway process:", err.message);
     gatewayProcess = null;
     gatewayStartedByApp = false;
@@ -1181,6 +1197,7 @@ export function startGateway(profile?: string): boolean {
   });
 
   gatewayProcess.on("close", (code, signal) => {
+    closeGatewayStderrFd();
     if (code !== null && code !== 0) {
       console.error(
         `[gateway] Process exited with code ${code}${signal ? ` (signal: ${signal})` : ""}. ` +

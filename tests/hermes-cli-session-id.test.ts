@@ -1,7 +1,7 @@
 import { EventEmitter } from "events";
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 
-const { spawned, TEST_HOME, TEST_REPO, healthStatuses, apiRequests } = vi.hoisted(() => {
+const { spawned, spawnCalls, TEST_HOME, TEST_REPO, healthStatuses, apiRequests } = vi.hoisted(() => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const path = require("path");
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -16,6 +16,7 @@ const { spawned, TEST_HOME, TEST_REPO, healthStatuses, apiRequests } = vi.hoiste
         unref: ReturnType<typeof vi.fn>;
       }
     >,
+    spawnCalls: [] as Array<{ command: string; args?: string[]; options?: unknown }>,
     TEST_HOME: path.join(os.tmpdir(), `hermes-cli-session-test-${Date.now()}`),
     TEST_REPO: os.tmpdir(),
     healthStatuses: [] as number[],
@@ -101,21 +102,14 @@ vi.mock("https", () => ({
   },
 }));
 
-vi.mock("child_process", () => ({
-  default: {
-    spawn: vi.fn(() => {
-      const proc = Object.assign(new EventEmitter(), {
-        stdout: new EventEmitter(),
-        stderr: new EventEmitter(),
-        killed: false,
-        kill: vi.fn(),
-        unref: vi.fn(),
-      });
-      spawned.push(proc);
-      return proc;
-    }),
-  },
-  spawn: vi.fn(() => {
+vi.mock("child_process", () => {
+  const makeProc = (): EventEmitter & {
+    stdout: EventEmitter;
+    stderr: EventEmitter;
+    killed: boolean;
+    kill: ReturnType<typeof vi.fn>;
+    unref: ReturnType<typeof vi.fn>;
+  } => {
     const proc = Object.assign(new EventEmitter(), {
       stdout: new EventEmitter(),
       stderr: new EventEmitter(),
@@ -125,8 +119,18 @@ vi.mock("child_process", () => ({
     });
     spawned.push(proc);
     return proc;
-  }),
-}));
+  };
+  const mockSpawn = vi.fn((command: string, args?: string[], options?: unknown) => {
+    spawnCalls.push({ command, args, options });
+    return makeProc();
+  });
+  return {
+    default: {
+      spawn: mockSpawn,
+    },
+    spawn: mockSpawn,
+  };
+});
 
 vi.mock("../src/main/installer", () => ({
   HERMES_HOME: TEST_HOME,
@@ -181,6 +185,7 @@ describe("CLI fallback session id propagation", () => {
     stopGateway(true);
     stopHealthPolling();
     spawned.length = 0;
+    spawnCalls.length = 0;
   });
 
   it("captures the quiet CLI session id from stderr so the next desktop turn can resume it", async () => {
@@ -268,6 +273,17 @@ describe("CLI fallback session id propagation", () => {
       messages: [{ role: "user", content: "hi" }],
       stream: true,
     });
+  });
+
+  it("passes an opened stderr file descriptor to gateway spawn", () => {
+    expect(startGateway()).toBe(true);
+
+    expect(spawnCalls).toHaveLength(1);
+    const options = spawnCalls[0].options as {
+      stdio?: unknown[];
+    };
+    expect(Array.isArray(options.stdio)).toBe(true);
+    expect(typeof options.stdio?.[2]).toBe("number");
   });
 
   it("re-checks health when a previously-ready local gateway is restarted cold", async () => {
