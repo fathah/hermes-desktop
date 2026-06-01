@@ -30,12 +30,14 @@ function installHermesAPI(initialSessions: unknown[] = []): {
   syncSessionCache: ReturnType<typeof vi.fn>;
   searchSessions: ReturnType<typeof vi.fn>;
   deleteSession: ReturnType<typeof vi.fn>;
+  updateSessionTitle: ReturnType<typeof vi.fn>;
 } {
   const api = {
     listCachedSessions: vi.fn().mockResolvedValue(initialSessions),
     syncSessionCache: vi.fn().mockResolvedValue(initialSessions),
     searchSessions: vi.fn().mockResolvedValue([]),
     deleteSession: vi.fn().mockResolvedValue(undefined),
+    updateSessionTitle: vi.fn().mockResolvedValue(undefined),
   };
   Object.defineProperty(window, "hermesAPI", {
     configurable: true,
@@ -44,7 +46,10 @@ function installHermesAPI(initialSessions: unknown[] = []): {
   return api;
 }
 
-function sessionSearchResult(title: string, snippet: string): {
+function sessionSearchResult(
+  title: string,
+  snippet: string,
+): {
   sessionId: string;
   title: string;
   startedAt: number;
@@ -339,5 +344,221 @@ describe("Sessions tab — delete affordance (#408)", () => {
 
     expect(onResume).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+});
+
+describe("Sessions tab — rename affordance", () => {
+  const sessions = [
+    {
+      id: "sess-abc-123",
+      title: "First chat",
+      startedAt: Math.floor(Date.now() / 1000),
+      source: "api_server",
+      messageCount: 3,
+      model: "gpt-4",
+    },
+  ];
+
+  beforeEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("shows a pre-filled input when the pencil is clicked", async () => {
+    installHermesAPI(sessions);
+    render(<Sessions {...baseProps} visible={true} />);
+    await act(async () => {});
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "sessions.rename" }));
+    });
+
+    const input = screen.getByPlaceholderText("sessions.renamePlaceholder");
+    expect(input).toHaveProperty("value", "First chat");
+  });
+
+  it("calls updateSessionTitle when edited and confirmed with Enter", async () => {
+    const api = installHermesAPI(sessions);
+    render(<Sessions {...baseProps} visible={true} />);
+    await act(async () => {});
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "sessions.rename" }));
+    });
+
+    const input = screen.getByPlaceholderText("sessions.renamePlaceholder");
+    fireEvent.change(input, { target: { value: "Renamed chat" } });
+    await act(async () => {
+      fireEvent.keyDown(input, { key: "Enter" });
+    });
+    await act(async () => {});
+
+    expect(api.updateSessionTitle).toHaveBeenCalledWith(
+      "sess-abc-123",
+      "Renamed chat",
+    );
+  });
+
+  it("calls updateSessionTitle when the save (check) button is clicked", async () => {
+    const api = installHermesAPI(sessions);
+    render(<Sessions {...baseProps} visible={true} />);
+    await act(async () => {});
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "sessions.rename" }));
+    });
+
+    const input = screen.getByPlaceholderText("sessions.renamePlaceholder");
+    fireEvent.change(input, { target: { value: "Saved via button" } });
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "sessions.renameSave" }),
+      );
+    });
+    await act(async () => {});
+
+    expect(api.updateSessionTitle).toHaveBeenCalledWith(
+      "sess-abc-123",
+      "Saved via button",
+    );
+  });
+
+  it("does NOT call updateSessionTitle when cancelled with Escape", async () => {
+    const api = installHermesAPI(sessions);
+    render(<Sessions {...baseProps} visible={true} />);
+    await act(async () => {});
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "sessions.rename" }));
+    });
+
+    const input = screen.getByPlaceholderText("sessions.renamePlaceholder");
+    fireEvent.change(input, { target: { value: "Discarded" } });
+    await act(async () => {
+      fireEvent.keyDown(input, { key: "Escape" });
+    });
+
+    expect(api.updateSessionTitle).not.toHaveBeenCalled();
+    expect(
+      screen.queryByPlaceholderText("sessions.renamePlaceholder"),
+    ).toBeNull();
+    expect(screen.getByText("First chat")).toBeTruthy();
+  });
+
+  it("does NOT call updateSessionTitle when cancelled with the X button", async () => {
+    const api = installHermesAPI(sessions);
+    render(<Sessions {...baseProps} visible={true} />);
+    await act(async () => {});
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "sessions.rename" }));
+    });
+
+    fireEvent.change(
+      screen.getByPlaceholderText("sessions.renamePlaceholder"),
+      { target: { value: "Discarded" } },
+    );
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "sessions.renameCancel" }),
+      );
+    });
+
+    expect(api.updateSessionTitle).not.toHaveBeenCalled();
+  });
+
+  it("does NOT call updateSessionTitle for an empty title", async () => {
+    const api = installHermesAPI(sessions);
+    render(<Sessions {...baseProps} visible={true} />);
+    await act(async () => {});
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "sessions.rename" }));
+    });
+
+    const input = screen.getByPlaceholderText("sessions.renamePlaceholder");
+    fireEvent.change(input, { target: { value: "   " } });
+    await act(async () => {
+      fireEvent.keyDown(input, { key: "Enter" });
+    });
+    await act(async () => {});
+
+    expect(api.updateSessionTitle).not.toHaveBeenCalled();
+  });
+
+  it("does NOT call updateSessionTitle when the title is unchanged", async () => {
+    const api = installHermesAPI(sessions);
+    render(<Sessions {...baseProps} visible={true} />);
+    await act(async () => {});
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "sessions.rename" }));
+    });
+
+    const input = screen.getByPlaceholderText("sessions.renamePlaceholder");
+    await act(async () => {
+      fireEvent.keyDown(input, { key: "Enter" });
+    });
+    await act(async () => {});
+
+    expect(api.updateSessionTitle).not.toHaveBeenCalled();
+  });
+
+  it("does not resume the session when starting a rename", async () => {
+    installHermesAPI(sessions);
+    const onResume = vi.fn();
+    render(
+      <Sessions {...baseProps} onResumeSession={onResume} visible={true} />,
+    );
+    await act(async () => {});
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "sessions.rename" }));
+    });
+
+    expect(onResume).not.toHaveBeenCalled();
+    expect(
+      screen.getByPlaceholderText("sessions.renamePlaceholder"),
+    ).toBeTruthy();
+  });
+
+  it("renames a search result", async () => {
+    const api = installHermesAPI([]);
+    api.searchSessions.mockResolvedValue([
+      {
+        sessionId: "result-1",
+        title: "Result title",
+        startedAt: Math.floor(Date.now() / 1000),
+        source: "desktop",
+        messageCount: 2,
+        model: "gpt-4",
+        snippet: "a <<match>> here",
+      },
+    ]);
+
+    render(<Sessions {...baseProps} visible={true} />);
+    await act(async () => {});
+
+    const search = screen.getByPlaceholderText("sessions.searchPlaceholder");
+    fireEvent.change(search, { target: { value: "match" } });
+
+    // Wait for the debounced search results to render, then start the rename.
+    const renameBtn = await screen.findByRole("button", {
+      name: "sessions.rename",
+    });
+    await act(async () => {
+      fireEvent.click(renameBtn);
+    });
+
+    const input = screen.getByPlaceholderText("sessions.renamePlaceholder");
+    fireEvent.change(input, { target: { value: "Renamed result" } });
+    await act(async () => {
+      fireEvent.keyDown(input, { key: "Enter" });
+    });
+    await act(async () => {});
+
+    expect(api.updateSessionTitle).toHaveBeenCalledWith(
+      "result-1",
+      "Renamed result",
+    );
   });
 });

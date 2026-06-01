@@ -21,4 +21,8 @@ export default {
   deleteCancel: "キャンセル",
   deleteConfirmAction: "削除",
   deleteDeleting: "削除中...",
+  rename: "会話の名前を変更",
+  renameSave: "保存",
+  renameCancel: "キャンセル",
+  renamePlaceholder: "会話名",
 } as const;

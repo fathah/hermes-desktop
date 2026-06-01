@@ -4,7 +4,7 @@ import { activeStateDbPath } from "./utils";
 import type { Attachment } from "../shared/attachments";
 import { isImageMime } from "../shared/attachments";
 import { clearStagedAttachments } from "./attachment-staging";
-import { removeSessionFromCache } from "./session-cache";
+import { removeSessionFromCache, updateSessionTitle } from "./session-cache";
 
 // Sentinel prefix used by hermes-agent's hermes_state.py to mark
 // JSON-encoded multimodal content in the messages.content column.
@@ -527,4 +527,26 @@ export function deleteSession(sessionId: string): void {
 
   clearStagedAttachments(sessionId);
   removeSessionFromCache(sessionId);
+}
+
+// Rename a session by writing the new title to the database `title` column.
+// The DB is the source of truth: syncSessionCache refreshes cached titles from
+// it, and the SSH path reads titles straight from the remote DB — so a
+// cache-only update would not survive. We mirror deleteSession's structure
+// (DB write + cache sync) and keep the renderer's fast-path cache in step.
+export function renameSession(sessionId: string, title: string): void {
+  const db = getDb(false);
+
+  if (db) {
+    try {
+      db.prepare("UPDATE sessions SET title = ? WHERE id = ?").run(
+        title,
+        sessionId,
+      );
+    } finally {
+      db.close();
+    }
+  }
+
+  updateSessionTitle(sessionId, title);
 }

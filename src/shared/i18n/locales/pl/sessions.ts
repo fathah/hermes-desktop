@@ -21,4 +21,8 @@ export default {
   deleteCancel: "Anuluj",
   deleteConfirmAction: "Usuń",
   deleteDeleting: "Usuwanie...",
+  rename: "Zmień nazwę rozmowy",
+  renameSave: "Zapisz",
+  renameCancel: "Anuluj",
+  renamePlaceholder: "Nazwa rozmowy",
 } as const;

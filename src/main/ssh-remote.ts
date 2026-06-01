@@ -1288,6 +1288,44 @@ conn.close()
   }
 }
 
+// Rename a remote session by updating the `title` column of the remote
+// state.db. Mirrors sshSearchSessions: a Python script reads the JSON payload
+// from stdin and runs a parameterized UPDATE. Non-fatal on failure, matching
+// the other SSH session helpers.
+export async function sshRenameSession(
+  config: SshConfig,
+  sessionId: string,
+  title: string,
+  profile?: string,
+): Promise<void> {
+  const script = `
+import sqlite3, json, os, sys
+payload = json.load(sys.stdin)
+profile = payload.get("profile")
+session_id = payload.get("sessionId") or ""
+title = payload.get("title") or ""
+db = os.path.expanduser(f"~/.hermes/profiles/{profile}/state.db" if profile and profile != "default" else "~/.hermes/state.db")
+if not os.path.exists(db):
+    sys.exit(0)
+conn = sqlite3.connect(db)
+try:
+    conn.execute("UPDATE sessions SET title = ? WHERE id = ?", (title, session_id))
+    conn.commit()
+except Exception:
+    pass
+conn.close()
+`;
+  try {
+    await sshPython(
+      config,
+      script,
+      pythonJsonInput({ profile, sessionId, title }),
+    );
+  } catch {
+    // non-fatal
+  }
+}
+
 // ── Profiles ─────────────────────────────────────────────────────────────────
 
 export interface SshProfileInfo {

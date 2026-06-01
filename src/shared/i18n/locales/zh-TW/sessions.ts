@@ -20,4 +20,8 @@ export default {
   deleteCancel: "取消",
   deleteConfirmAction: "刪除",
   deleteDeleting: "正在刪除...",
+  rename: "重新命名對話",
+  renameSave: "儲存",
+  renameCancel: "取消",
+  renamePlaceholder: "對話名稱",
 } as const;

@@ -12,6 +12,7 @@ export {
   Layers,
   Monitor,
   Moon,
+  Pencil,
   Plus,
   Puzzle,
   Search,

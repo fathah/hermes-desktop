@@ -4228,6 +4228,104 @@ body {
   opacity: 1;
 }
 
+/* Rename (pencil) button — mirrors the delete button's subtle, hover-reveal
+ * treatment but uses the accent colour on hover instead of danger. Its auto
+ * left-margin pushes the pencil + trash pair to the right of the tags row as
+ * a group. */
+.sessions-card-action {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  opacity: 0.45;
+  transition:
+    opacity var(--transition),
+    background var(--transition),
+    color var(--transition);
+}
+
+.sessions-card:hover .sessions-card-action {
+  opacity: 1;
+}
+
+.sessions-card-action:hover,
+.sessions-card-action:focus-visible {
+  background: var(--bg-tertiary);
+  color: var(--accent);
+  opacity: 1;
+}
+
+/* When the pencil sits next to the trash, only the pencil carries the auto
+ * margin that pushes the pair to the right edge. Drop the trash's own auto
+ * margin so the two icons stay adjacent instead of drifting apart. */
+.sessions-card-action + .sessions-card-delete {
+  margin-left: 0;
+}
+
+/* Inline rename editor — replaces the title text while a session is being
+ * renamed. The input grows to fill the row; the save/cancel buttons sit
+ * alongside it. */
+.sessions-card-rename {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.sessions-card-rename-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-focus);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  line-height: 1.4;
+}
+
+.sessions-card-rename-input:focus {
+  outline: none;
+  border-color: var(--border-focus);
+}
+
+.sessions-card-rename-save,
+.sessions-card-rename-cancel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.sessions-card-rename-save:hover,
+.sessions-card-rename-save:focus-visible {
+  background: var(--bg-tertiary);
+  color: var(--success, #98c379);
+}
+
+.sessions-card-rename-cancel:hover,
+.sessions-card-rename-cancel:focus-visible {
+  background: var(--bg-tertiary);
+  color: var(--danger, #e06c75);
+}
+
 .sessions-confirm-overlay {
   position: fixed;
   inset: 0;

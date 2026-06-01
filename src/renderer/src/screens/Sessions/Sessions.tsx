@@ -1,5 +1,13 @@
 import { useEffect, useState, useRef, useCallback, memo } from "react";
-import { Plus, Search, X, ChatBubble, Trash } from "../../assets/icons";
+import {
+  Plus,
+  Search,
+  X,
+  ChatBubble,
+  Trash,
+  Pencil,
+  Check,
+} from "../../assets/icons";
 import { useI18n } from "../../components/useI18n";
 
 interface CachedSession {
@@ -104,6 +112,80 @@ function formatModel(model: string): string {
   return name.split(":")[0];
 }
 
+// Inline editor for a session title. Rendered in place of the title text
+// while a session is being renamed. Shared by both the grouped list card and
+// the search-result card so the rename interaction stays identical in both.
+function SessionTitleEditor({
+  value,
+  onChange,
+  onConfirm,
+  onCancel,
+  placeholder,
+  saveLabel,
+  cancelLabel,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onConfirm: () => void;
+  onCancel: () => void;
+  placeholder?: string;
+  saveLabel?: string;
+  cancelLabel?: string;
+}): React.JSX.Element {
+  return (
+    <div className="sessions-card-rename">
+      <input
+        type="text"
+        className="sessions-card-rename-input"
+        value={value}
+        placeholder={placeholder}
+        autoFocus
+        onFocus={(e) => e.currentTarget.select()}
+        onChange={(e) => onChange(e.target.value)}
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          // Keep keystrokes from bubbling to the card-as-button, which would
+          // otherwise resume the session on Enter/Space.
+          e.stopPropagation();
+          if (e.key === "Enter") {
+            e.preventDefault();
+            onConfirm();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            onCancel();
+          }
+        }}
+      />
+      <button
+        type="button"
+        className="sessions-card-rename-save"
+        onClick={(e) => {
+          e.stopPropagation();
+          onConfirm();
+        }}
+        onKeyDown={(e) => e.stopPropagation()}
+        title={saveLabel}
+        aria-label={saveLabel}
+      >
+        <Check size={14} />
+      </button>
+      <button
+        type="button"
+        className="sessions-card-rename-cancel"
+        onClick={(e) => {
+          e.stopPropagation();
+          onCancel();
+        }}
+        onKeyDown={(e) => e.stopPropagation()}
+        title={cancelLabel}
+        aria-label={cancelLabel}
+      >
+        <X size={14} />
+      </button>
+    </div>
+  );
+}
+
 // Memoized session card
 const SessionCard = memo(function SessionCard({
   session,
@@ -112,6 +194,16 @@ const SessionCard = memo(function SessionCard({
   onClick,
   onDelete,
   deleteTitle,
+  isEditing,
+  renameValue,
+  onStartRename,
+  onChangeRename,
+  onConfirmRename,
+  onCancelRename,
+  renameTitle,
+  renameSave,
+  renameCancel,
+  renamePlaceholder,
 }: {
   session: CachedSession;
   isActive: boolean;
@@ -120,7 +212,23 @@ const SessionCard = memo(function SessionCard({
   // When provided, renders a trash icon button on the card. Closes #408.
   onDelete?: (id: string) => void;
   deleteTitle?: string;
+  // When provided, renders a pencil icon button that starts inline rename.
+  isEditing?: boolean;
+  renameValue?: string;
+  onStartRename?: (id: string, currentTitle: string) => void;
+  onChangeRename?: (value: string) => void;
+  onConfirmRename?: (id: string) => void;
+  onCancelRename?: () => void;
+  renameTitle?: string;
+  renameSave?: string;
+  renameCancel?: string;
+  renamePlaceholder?: string;
 }) {
+  const canRename =
+    !!onStartRename &&
+    !!onChangeRename &&
+    !!onConfirmRename &&
+    !!onCancelRename;
   // `div` instead of `button` because nesting a button-inside-button is
   // invalid HTML and many a11y / interaction layers (focus trap, keyboard
   // navigation) break on it. Click + Enter/Space behavior matches the
@@ -130,8 +238,12 @@ const SessionCard = memo(function SessionCard({
       role="button"
       tabIndex={0}
       className={`sessions-card ${isActive ? "sessions-card--active" : ""}`}
-      onClick={onClick}
+      onClick={() => {
+        // While renaming, the card must not navigate into the session.
+        if (!isEditing) onClick();
+      }}
       onKeyDown={(e) => {
+        if (isEditing) return;
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           onClick();
@@ -139,9 +251,21 @@ const SessionCard = memo(function SessionCard({
       }}
     >
       <div className="sessions-card-main">
-        <span className="sessions-card-title">
-          {session.title || "New conversation"}
-        </span>
+        {isEditing && canRename ? (
+          <SessionTitleEditor
+            value={renameValue ?? ""}
+            onChange={onChangeRename!}
+            onConfirm={() => onConfirmRename!(session.id)}
+            onCancel={onCancelRename!}
+            placeholder={renamePlaceholder}
+            saveLabel={renameSave}
+            cancelLabel={renameCancel}
+          />
+        ) : (
+          <span className="sessions-card-title">
+            {session.title || "New conversation"}
+          </span>
+        )}
         <span className="sessions-card-time">
           {showFullDate
             ? formatFullDate(session.startedAt)
@@ -160,7 +284,25 @@ const SessionCard = memo(function SessionCard({
             {formatModel(session.model)}
           </span>
         )}
-        {onDelete && (
+        {!isEditing && canRename && (
+          <button
+            type="button"
+            className="sessions-card-action"
+            onClick={(e) => {
+              // Stop propagation so the parent card's onClick (which resumes
+              // the session) doesn't also fire — starting a rename must not
+              // open the conversation.
+              e.stopPropagation();
+              onStartRename!(session.id, session.title || "");
+            }}
+            onKeyDown={(e) => e.stopPropagation()}
+            title={renameTitle}
+            aria-label={renameTitle}
+          >
+            <Pencil size={14} />
+          </button>
+        )}
+        {!isEditing && onDelete && (
           <button
             type="button"
             className="sessions-card-delete"
@@ -208,6 +350,13 @@ function Sessions({
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(
     null,
   );
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  // Refs mirror the rename state so the rename callbacks can stay referentially
+  // stable (deps: only refreshSessions). Without this, every keystroke would
+  // recreate the callbacks and re-render every memoized SessionCard.
+  const renameValueRef = useRef("");
+  const renameOriginalRef = useRef("");
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchRequestId = useRef(0);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -260,9 +409,7 @@ function Sessions({
       // backend deletion failed.
       setDeletingSessionId(sessionId);
       setSessions((prev) => prev.filter((s) => s.id !== sessionId));
-      setSearchResults((prev) =>
-        prev.filter((r) => r.sessionId !== sessionId),
-      );
+      setSearchResults((prev) => prev.filter((r) => r.sessionId !== sessionId));
       try {
         await window.hermesAPI.deleteSession(sessionId);
       } catch (err) {
@@ -271,6 +418,57 @@ function Sessions({
         await refreshSessions();
         setDeletingSessionId(null);
         setPendingDeleteSessionId(null);
+      }
+    },
+    [refreshSessions],
+  );
+
+  const startRename = useCallback(
+    (sessionId: string, currentTitle: string): void => {
+      renameValueRef.current = currentTitle;
+      renameOriginalRef.current = currentTitle;
+      setRenameValue(currentTitle);
+      setEditingSessionId(sessionId);
+    },
+    [],
+  );
+
+  const changeRename = useCallback((value: string): void => {
+    renameValueRef.current = value;
+    setRenameValue(value);
+  }, []);
+
+  const cancelRename = useCallback((): void => {
+    renameValueRef.current = "";
+    setRenameValue("");
+    setEditingSessionId(null);
+  }, []);
+
+  const confirmRename = useCallback(
+    async (sessionId: string): Promise<void> => {
+      const title = renameValueRef.current.trim();
+      const original = renameOriginalRef.current.trim();
+      // Close the editor regardless; an empty or unchanged title is a no-op
+      // so we never persist a blank name or fire a redundant IPC call.
+      setEditingSessionId(null);
+      setRenameValue("");
+      renameValueRef.current = "";
+      if (!title || title === original) return;
+      // Optimistic update so the new title shows instantly in both the list
+      // and any active search results, mirroring confirmDelete. The follow-up
+      // refresh re-syncs from the DB so we recover if the write failed.
+      setSessions((prev) =>
+        prev.map((s) => (s.id === sessionId ? { ...s, title } : s)),
+      );
+      setSearchResults((prev) =>
+        prev.map((r) => (r.sessionId === sessionId ? { ...r, title } : r)),
+      );
+      try {
+        await window.hermesAPI.updateSessionTitle(sessionId, title);
+      } catch (err) {
+        console.error("Failed to rename session", sessionId, err);
+      } finally {
+        await refreshSessions();
       }
     },
     [refreshSessions],
@@ -401,65 +599,102 @@ function Sessions({
           </div>
         ) : (
           <div className="sessions-list">
-            {searchResults.map((r, index) => (
-              <div
-                key={`${r.sessionId}-${index}`}
-                role="button"
-                tabIndex={0}
-                className={`sessions-card ${currentSessionId === r.sessionId ? "sessions-card--active" : ""}`}
-                onClick={() => onResumeSession(r.sessionId)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onResumeSession(r.sessionId);
-                  }
-                }}
-              >
-                <div className="sessions-card-main">
-                  <span className="sessions-card-title">
-                    {r.title ||
-                      `${t("sessions.title")} ${r.sessionId.slice(-6)}`}
-                  </span>
-                  <span className="sessions-card-time">
-                    {formatFullDate(r.startedAt)}
-                  </span>
-                </div>
-                {r.snippet && (
-                  <div className="sessions-result-snippet">
-                    {highlightSnippet(r.snippet)}
-                  </div>
-                )}
-                <div className="sessions-card-tags">
-                  <span className="sessions-tag sessions-tag--source">
-                    {r.source}
-                  </span>
-                  <span className="sessions-tag">
-                    {r.messageCount}{" "}
-                    {r.messageCount !== 1
-                      ? t("sessions.messages")
-                      : t("sessions.messageSingular")}
-                  </span>
-                  {r.model && (
-                    <span className="sessions-tag sessions-tag--model">
-                      {formatModel(r.model)}
+            {searchResults.map((r, index) => {
+              const isEditingResult = editingSessionId === r.sessionId;
+              return (
+                <div
+                  key={`${r.sessionId}-${index}`}
+                  role="button"
+                  tabIndex={0}
+                  className={`sessions-card ${currentSessionId === r.sessionId ? "sessions-card--active" : ""}`}
+                  onClick={() => {
+                    // While renaming, the card must not navigate into the
+                    // session.
+                    if (!isEditingResult) onResumeSession(r.sessionId);
+                  }}
+                  onKeyDown={(e) => {
+                    if (isEditingResult) return;
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onResumeSession(r.sessionId);
+                    }
+                  }}
+                >
+                  <div className="sessions-card-main">
+                    {isEditingResult ? (
+                      <SessionTitleEditor
+                        value={renameValue}
+                        onChange={changeRename}
+                        onConfirm={() => confirmRename(r.sessionId)}
+                        onCancel={cancelRename}
+                        placeholder={t("sessions.renamePlaceholder")}
+                        saveLabel={t("sessions.renameSave")}
+                        cancelLabel={t("sessions.renameCancel")}
+                      />
+                    ) : (
+                      <span className="sessions-card-title">
+                        {r.title ||
+                          `${t("sessions.title")} ${r.sessionId.slice(-6)}`}
+                      </span>
+                    )}
+                    <span className="sessions-card-time">
+                      {formatFullDate(r.startedAt)}
                     </span>
+                  </div>
+                  {r.snippet && (
+                    <div className="sessions-result-snippet">
+                      {highlightSnippet(r.snippet)}
+                    </div>
                   )}
-                  <button
-                    type="button"
-                    className="sessions-card-delete"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDelete(r.sessionId);
-                    }}
-                    onKeyDown={(e) => e.stopPropagation()}
-                    title={t("sessions.delete")}
-                    aria-label={t("sessions.delete")}
-                  >
-                    <Trash size={14} />
-                  </button>
+                  <div className="sessions-card-tags">
+                    <span className="sessions-tag sessions-tag--source">
+                      {r.source}
+                    </span>
+                    <span className="sessions-tag">
+                      {r.messageCount}{" "}
+                      {r.messageCount !== 1
+                        ? t("sessions.messages")
+                        : t("sessions.messageSingular")}
+                    </span>
+                    {r.model && (
+                      <span className="sessions-tag sessions-tag--model">
+                        {formatModel(r.model)}
+                      </span>
+                    )}
+                    {!isEditingResult && (
+                      <button
+                        type="button"
+                        className="sessions-card-action"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          startRename(r.sessionId, r.title || "");
+                        }}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        title={t("sessions.rename")}
+                        aria-label={t("sessions.rename")}
+                      >
+                        <Pencil size={14} />
+                      </button>
+                    )}
+                    {!isEditingResult && (
+                      <button
+                        type="button"
+                        className="sessions-card-delete"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(r.sessionId);
+                        }}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        title={t("sessions.delete")}
+                        aria-label={t("sessions.delete")}
+                      >
+                        <Trash size={14} />
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )
       ) : sessions.length === 0 ? (
@@ -486,6 +721,16 @@ function Sessions({
                   onClick={() => onResumeSession(s.id)}
                   onDelete={handleDelete}
                   deleteTitle={t("sessions.delete")}
+                  isEditing={editingSessionId === s.id}
+                  renameValue={editingSessionId === s.id ? renameValue : ""}
+                  onStartRename={startRename}
+                  onChangeRename={changeRename}
+                  onConfirmRename={confirmRename}
+                  onCancelRename={cancelRename}
+                  renameTitle={t("sessions.rename")}
+                  renameSave={t("sessions.renameSave")}
+                  renameCancel={t("sessions.renameCancel")}
+                  renamePlaceholder={t("sessions.renamePlaceholder")}
                 />
               ))}
             </div>

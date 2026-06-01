@@ -21,4 +21,8 @@ export default {
   deleteCancel: "Batal",
   deleteConfirmAction: "Hapus",
   deleteDeleting: "Menghapus...",
+  rename: "Ganti nama percakapan",
+  renameSave: "Simpan",
+  renameCancel: "Batal",
+  renamePlaceholder: "Nama percakapan",
 } as const;

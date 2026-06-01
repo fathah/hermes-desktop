@@ -106,12 +106,9 @@ import {
   getSessionMessages,
   searchSessions,
   deleteSession,
+  renameSession,
 } from "./sessions";
-import {
-  syncSessionCache,
-  listCachedSessions,
-  updateSessionTitle,
-} from "./session-cache";
+import { syncSessionCache, listCachedSessions } from "./session-cache";
 import { listModels, addModel, removeModel, updateModel } from "./models";
 import { validateChatReadiness } from "./validation";
 import {
@@ -206,6 +203,7 @@ import {
   sshListSessions,
   sshGetSessionMessages,
   sshSearchSessions,
+  sshRenameSession,
   sshListProfiles,
   sshCreateProfile,
   sshDeleteProfile,
@@ -1263,8 +1261,12 @@ function setupIPC(): void {
   });
   ipcMain.handle(
     "update-session-title",
-    (_event, sessionId: string, title: string) =>
-      updateSessionTitle(sessionId, title),
+    (_event, sessionId: string, title: string) => {
+      const conn = getConnectionConfig();
+      if (conn.mode === "ssh" && conn.ssh)
+        return sshRenameSession(conn.ssh, sessionId, title);
+      return renameSession(sessionId, title);
+    },
   );
 
   // Session search
