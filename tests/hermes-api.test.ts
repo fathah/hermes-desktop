@@ -113,6 +113,7 @@ vi.mock("../src/main/process-options", () => ({
 import {
   sendMessage,
   stopHealthPolling as realStopHealthPolling,
+  resolveResumedSessionId,
 } from "../src/main/hermes";
 
 describe("sendMessageViaApi forwards resumeSessionId", () => {
@@ -273,5 +274,17 @@ describe("sendMessageViaApi forwards resumeSessionId", () => {
     expect(ids[0]).toBeTruthy();
     expect(ids[1]).toBeTruthy();
     expect(ids[0]).not.toBe(ids[1]);
+  });
+});
+
+describe("resolveResumedSessionId", () => {
+  it("drops resumeSessionId when there is no auth header", () => {
+    expect(resolveResumedSessionId("session-abc-123", false)).toBe("");
+  });
+
+  it("keeps resumeSessionId when auth is present", () => {
+    expect(resolveResumedSessionId("session-abc-123", true)).toBe(
+      "session-abc-123",
+    );
   });
 });
