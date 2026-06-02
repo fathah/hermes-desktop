@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "tiptap-markdown";
+import BlockCommandMenu from "./BlockCommandMenu";
 import DatabaseBlock from "./DatabaseBlock";
 
 interface WorkspaceEditorProps {
@@ -90,36 +91,7 @@ export default function WorkspaceEditor({
         </button>
       </div>
       {slashOpen && (
-        <div className="workspace-slash-menu" role="menu">
-          <button type="button" onClick={() => insertSnippet("# New page\n")}>
-            Page
-          </button>
-          <button type="button" onClick={() => insertSnippet("- [ ] Task\n")}>
-            Todo
-          </button>
-          <button type="button" onClick={() => insertSnippet("### Toggle\n\n")}>
-            Toggle
-          </button>
-          <button type="button" onClick={() => insertSnippet("> Callout\n\n")}>
-            Callout
-          </button>
-          <button type="button" onClick={() => insertSnippet("```\n\n```\n")}>
-            Code
-          </button>
-          <button type="button" onClick={() => insertSnippet("[[Page]]")}>
-            Page link
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-              insertSnippet(
-                "\n```yaml\nhermesType: database\nversion: 1\ntitle: Tasks\nproperties:\n  name: { type: title }\nviews:\n  - id: view-1\n    name: Table\n    type: table\nitems: []\nrowPages: {}\n```\n",
-              )
-            }
-          >
-            Database
-          </button>
-        </div>
+        <BlockCommandMenu onSelect={insertSnippet} />
       )}
       <EditorContent editor={editor} />
     </div>
