@@ -697,13 +697,8 @@ interface HermesAPI {
     state: Partial<WorkspacePageGraph["sidebar"]>,
     profile?: string,
   ) => Promise<WorkspacePageGraph>;
-  getWorkspaceBacklinks: (
-    path: string,
-    profile?: string,
-  ) => Promise<string[]>;
-  listWorkspaceTemplates: (
-    profile?: string,
-  ) => Promise<WorkspaceTemplate[]>;
+  getWorkspaceBacklinks: (path: string, profile?: string) => Promise<string[]>;
+  listWorkspaceTemplates: (profile?: string) => Promise<WorkspaceTemplate[]>;
   saveWorkspaceTemplate: (
     input: {
       kind: "page" | "database-row" | "button";

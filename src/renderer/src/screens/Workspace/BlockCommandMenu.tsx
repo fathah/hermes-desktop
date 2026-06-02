@@ -24,7 +24,8 @@ const COMMANDS: BlockCommand[] = [
   },
   {
     label: "Synced block",
-    snippet: "<!-- hermes-synced-block:start -->\nSynced content\n<!-- hermes-synced-block:end -->\n",
+    snippet:
+      "<!-- hermes-synced-block:start -->\nSynced content\n<!-- hermes-synced-block:end -->\n",
   },
 ];
 

@@ -90,9 +90,7 @@ export default function WorkspaceEditor({
           Divider
         </button>
       </div>
-      {slashOpen && (
-        <BlockCommandMenu onSelect={insertSnippet} />
-      )}
+      {slashOpen && <BlockCommandMenu onSelect={insertSnippet} />}
       <EditorContent editor={editor} />
     </div>
   );

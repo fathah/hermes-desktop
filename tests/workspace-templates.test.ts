@@ -45,7 +45,9 @@ describe("workspace templates and buttons", () => {
     );
 
     expect(
-      (await listWorkspaceTemplates({ root })).map((template) => template.title),
+      (await listWorkspaceTemplates({ root })).map(
+        (template) => template.title,
+      ),
     ).toContain("Launch checklist");
   });
 

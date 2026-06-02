@@ -2,10 +2,7 @@ import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import {
-  createWorkspacePage,
-  writeWorkspaceFile,
-} from "../src/main/workspace";
+import { createWorkspacePage, writeWorkspaceFile } from "../src/main/workspace";
 import {
   getWorkspaceBacklinks,
   getWorkspacePageGraph,
@@ -64,12 +61,9 @@ describe("workspace page graph", () => {
     const gamma = await createWorkspacePage({ title: "Gamma" }, { root });
     await writeWorkspaceFile(alpha.path, "# Alpha\n\n[[Gamma]]", { root });
 
-    const moved = await moveWorkspacePageInGraph(
-      beta.path,
-      null,
-      gamma.path,
-      { root },
-    );
+    const moved = await moveWorkspacePageInGraph(beta.path, null, gamma.path, {
+      root,
+    });
     const graph = await getWorkspacePageGraph({ root });
 
     expect(moved.parentPath).toBeNull();

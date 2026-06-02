@@ -1020,7 +1020,12 @@ export async function searchWorkspace(
   return results
     .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title))
     .slice(0, limit)
-    .map(({ score: _score, ...result }) => result);
+    .map((result) => ({
+      kind: result.kind,
+      path: result.path,
+      title: result.title,
+      snippet: result.snippet,
+    }));
 }
 
 export async function exportWorkspaceMarkdownBundle(

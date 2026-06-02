@@ -23,14 +23,17 @@ afterEach(() => {
 describe("workspace search ranking", () => {
   it("returns recent pages before typing", async () => {
     const first = await createWorkspacePage({ title: "First Page" }, { root });
-    const second = await createWorkspacePage({ title: "Second Page" }, { root });
+    const second = await createWorkspacePage(
+      { title: "Second Page" },
+      { root },
+    );
 
     await recordWorkspaceVisit(first.path, { root });
     await recordWorkspaceVisit(second.path, { root });
 
-    expect((await searchWorkspace("", 2, { root })).map((hit) => hit.path)).toEqual(
-      [second.path, first.path],
-    );
+    expect(
+      (await searchWorkspace("", 2, { root })).map((hit) => hit.path),
+    ).toEqual([second.path, first.path]);
   });
 
   it("ranks favorite and title matches ahead of body-only matches", async () => {
@@ -49,11 +52,20 @@ describe("workspace search ranking", () => {
 
   it("supports exact phrase search", async () => {
     const match = await createWorkspacePage({ title: "Research" }, { root });
-    const miss = await createWorkspacePage({ title: "Loose Research" }, { root });
-    await writeWorkspaceFile(match.path, "# Research\n\nexact phrase", { root });
-    await writeWorkspaceFile(miss.path, "# Loose Research\n\nexact other phrase", {
+    const miss = await createWorkspacePage(
+      { title: "Loose Research" },
+      { root },
+    );
+    await writeWorkspaceFile(match.path, "# Research\n\nexact phrase", {
       root,
     });
+    await writeWorkspaceFile(
+      miss.path,
+      "# Loose Research\n\nexact other phrase",
+      {
+        root,
+      },
+    );
 
     expect(
       (await searchWorkspace('"exact phrase"', 5, { root })).map(

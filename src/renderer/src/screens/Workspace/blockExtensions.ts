@@ -58,7 +58,9 @@ export function duplicateBlockById(content: string, id: string): string {
 }
 
 export function deleteBlockById(content: string, id: string): string {
-  return stringifyBlocks(parseBlocks(content).filter((block) => block.id !== id));
+  return stringifyBlocks(
+    parseBlocks(content).filter((block) => block.id !== id),
+  );
 }
 
 function stripBlockSyntax(body: string): string {
@@ -89,7 +91,9 @@ export function turnBlockInto(
   const blocks = parseBlocks(content);
   return stringifyBlocks(
     blocks.map((block) =>
-      block.id === id ? { ...block, body: bodyForType(block.body, type) } : block,
+      block.id === id
+        ? { ...block, body: bodyForType(block.body, type) }
+        : block,
     ),
   );
 }

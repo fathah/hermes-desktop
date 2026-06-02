@@ -39,7 +39,9 @@ function storePath(root: string): string {
   return join(root, SYNCED_BLOCKS_FILE);
 }
 
-async function ensureWorkspace(options: WorkspaceOptions = {}): Promise<string> {
+async function ensureWorkspace(
+  options: WorkspaceOptions = {},
+): Promise<string> {
   const root = workspaceBase(options);
   await mkdir(root, { recursive: true });
   return root;

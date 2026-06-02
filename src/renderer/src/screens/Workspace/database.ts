@@ -113,7 +113,9 @@ function parseFilter(value: unknown): WorkspaceDatabaseFilter | null {
   };
 }
 
-function parseFilters(value: unknown): WorkspaceDatabaseFilterGroup | undefined {
+function parseFilters(
+  value: unknown,
+): WorkspaceDatabaseFilterGroup | undefined {
   if (!isRecord(value) || !Array.isArray(value.filters)) return undefined;
   return {
     operator: value.operator === "or" ? "or" : "and",
@@ -143,7 +145,8 @@ function parseView(value: unknown, index: number): WorkspaceDatabaseView {
     sorts: Array.isArray(value.sorts)
       ? value.sorts.map(parseSort).filter((sort) => sort !== null)
       : undefined,
-    openMode: isRecord(value) && value.openMode ? openMode(value.openMode) : undefined,
+    openMode:
+      isRecord(value) && value.openMode ? openMode(value.openMode) : undefined,
   };
 }
 
@@ -158,11 +161,13 @@ function ensureRowIds(
 
 function databaseId(value: unknown, title: string): string {
   if (typeof value === "string" && value.trim()) return value;
-  return `db-${title
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "") || "untitled"}`;
+  return `db-${
+    title
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "untitled"
+  }`;
 }
 
 export function parseWorkspaceDatabase(

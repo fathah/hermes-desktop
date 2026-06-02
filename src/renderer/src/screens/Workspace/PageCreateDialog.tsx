@@ -42,10 +42,18 @@ export default function PageCreateDialog({
           />
         </label>
         <div className="workspace-dialog-actions">
-          <button type="button" className="btn btn-secondary" onClick={onCancel}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={onCancel}
+          >
             Cancel
           </button>
-          <button type="submit" className="btn btn-primary" disabled={!title.trim()}>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={!title.trim()}
+          >
             {actionLabel}
           </button>
         </div>

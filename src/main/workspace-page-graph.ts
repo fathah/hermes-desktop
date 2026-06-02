@@ -117,7 +117,9 @@ function parentForPath(path: string): string | null {
   return parent === "." ? null : parent;
 }
 
-async function ensureWorkspace(options: WorkspaceOptions = {}): Promise<string> {
+async function ensureWorkspace(
+  options: WorkspaceOptions = {},
+): Promise<string> {
   const root = workspaceBase(options);
   await mkdir(root, { recursive: true });
   const indexPath = join(root, "index.md");
@@ -131,7 +133,10 @@ async function ensureWorkspace(options: WorkspaceOptions = {}): Promise<string> 
   return root;
 }
 
-async function collectFiles(root: string, absolutePath: string): Promise<string[]> {
+async function collectFiles(
+  root: string,
+  absolutePath: string,
+): Promise<string[]> {
   const info = await stat(absolutePath);
   const name = basename(absolutePath);
   if (INTERNAL_NAMES.has(name)) return [];
@@ -145,12 +150,14 @@ async function collectFiles(root: string, absolutePath: string): Promise<string[
   return nested.flat();
 }
 
-async function readRawGraph(root: string): Promise<Partial<WorkspacePageGraph>> {
+async function readRawGraph(
+  root: string,
+): Promise<Partial<WorkspacePageGraph>> {
   if (!existsSync(metadataPath(root))) return {};
   try {
-    return JSON.parse(await readFile(metadataPath(root), "utf-8")) as Partial<
-      WorkspacePageGraph
-    >;
+    return JSON.parse(
+      await readFile(metadataPath(root), "utf-8"),
+    ) as Partial<WorkspacePageGraph>;
   } catch {
     return {};
   }
@@ -226,7 +233,10 @@ async function buildBacklinks(
   for (const page of Object.values(pages)) {
     titleToPath.set(page.displayName.toLowerCase(), page.path);
     titleToPath.set(page.path.toLowerCase(), page.path);
-    titleToPath.set(basename(page.path, extname(page.path)).toLowerCase(), page.path);
+    titleToPath.set(
+      basename(page.path, extname(page.path)).toLowerCase(),
+      page.path,
+    );
   }
 
   const backlinks: Record<string, string[]> = {};

@@ -27,16 +27,18 @@ describe("workspace history and export", () => {
 
     const history = await listWorkspaceHistory(page.path, { root });
 
-    expect(history[0].summary).toEqual([
-      { kind: "changed", text: "Original" },
-    ]);
+    expect(history[0].summary).toEqual([{ kind: "changed", text: "Original" }]);
   });
 
   it("exports visible markdown and yaml workspace files", async () => {
     const page = await createWorkspacePage({ title: "Export Me" }, { root });
-    await writeWorkspaceFile("tasks.yaml", "hermesType: database\ntitle: Tasks", {
-      root,
-    });
+    await writeWorkspaceFile(
+      "tasks.yaml",
+      "hermesType: database\ntitle: Tasks",
+      {
+        root,
+      },
+    );
 
     expect(await exportWorkspaceMarkdownBundle({ root })).toEqual(
       expect.arrayContaining([

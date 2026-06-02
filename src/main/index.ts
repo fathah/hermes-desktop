@@ -1517,11 +1517,14 @@ function setupIPC(): void {
     return getWorkspaceMetadata({ profile });
   });
 
-  ipcMain.handle("get-workspace-page-graph", async (_event, profile?: string) => {
-    requireLocalWorkspace();
-    await ensureWorkspaceWatcher(profile);
-    return getWorkspacePageGraph({ profile });
-  });
+  ipcMain.handle(
+    "get-workspace-page-graph",
+    async (_event, profile?: string) => {
+      requireLocalWorkspace();
+      await ensureWorkspaceWatcher(profile);
+      return getWorkspacePageGraph({ profile });
+    },
+  );
 
   ipcMain.handle(
     "update-workspace-sidebar-state",
@@ -1549,10 +1552,13 @@ function setupIPC(): void {
     },
   );
 
-  ipcMain.handle("list-workspace-templates", async (_event, profile?: string) => {
-    requireLocalWorkspace();
-    return listWorkspaceTemplates({ profile });
-  });
+  ipcMain.handle(
+    "list-workspace-templates",
+    async (_event, profile?: string) => {
+      requireLocalWorkspace();
+      return listWorkspaceTemplates({ profile });
+    },
+  );
 
   ipcMain.handle(
     "save-workspace-template",

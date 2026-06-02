@@ -29,12 +29,21 @@ const TEMPLATES_FILE = ".workspace-templates.json";
 const BUILT_INS: WorkspaceTemplate[] = [
   ["Blank", ""],
   ["PRD", "# PRD\n\n## Problem\n\n## Goals\n\n## Scope\n"],
-  ["Meeting notes", "# Meeting notes\n\n## Attendees\n\n## Notes\n\n## Actions\n"],
+  [
+    "Meeting notes",
+    "# Meeting notes\n\n## Attendees\n\n## Notes\n\n## Actions\n",
+  ],
   ["Bug report", "# Bug report\n\n## Expected\n\n## Actual\n\n## Repro\n"],
   ["Research note", "# Research note\n\n## Question\n\n## Findings\n"],
   ["Sprint plan", "# Sprint plan\n\n## Goals\n\n## Tasks\n\n## Risks\n"],
-  ["Agent runbook", "# Agent runbook\n\n## Context\n\n## Steps\n\n## Validation\n"],
-  ["Decision log", "# Decision log\n\n## Decision\n\n## Options\n\n## Outcome\n"],
+  [
+    "Agent runbook",
+    "# Agent runbook\n\n## Context\n\n## Steps\n\n## Validation\n",
+  ],
+  [
+    "Decision log",
+    "# Decision log\n\n## Decision\n\n## Options\n\n## Outcome\n",
+  ],
 ].map(([title, content], index) => ({
   id: `builtin-${index + 1}`,
   kind: "page" as const,
@@ -53,7 +62,9 @@ function templatesPath(root: string): string {
   return join(root, TEMPLATES_FILE);
 }
 
-async function ensureWorkspace(options: WorkspaceOptions = {}): Promise<string> {
+async function ensureWorkspace(
+  options: WorkspaceOptions = {},
+): Promise<string> {
   const root = workspaceBase(options);
   await mkdir(root, { recursive: true });
   return root;
