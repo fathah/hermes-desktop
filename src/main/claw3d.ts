@@ -1,4 +1,4 @@
-import { spawn, ChildProcess, spawnSync } from "child_process";
+import { spawn, ChildProcess, spawnSync, execFileSync } from "child_process";
 import {
   existsSync,
   readFileSync,
@@ -10,7 +10,7 @@ import { join, win32 } from "path";
 import { homedir } from "os";
 import { createConnection } from "net";
 import { getEnhancedPath, HERMES_HOME } from "./installer";
-import { stripAnsi, safeWriteFile } from "./utils";
+import { stripAnsi, safeWriteFile, getActiveProfileNameSync } from "./utils";
 import { getApiServerKey, getConnectionConfig, getModelConfig } from "./config";
 import http from "http";
 
@@ -245,9 +245,10 @@ export function getClaw3dWsUrl(): string {
  * rather than a generic `hermes` agent the user never selected (issue
  * #256). Falls back to `hermes` only when no model is configured.
  */
-function resolveOfficeModel(): string {
+function resolveOfficeModel(profile?: string): string {
   try {
-    const model = getModelConfig().model?.trim();
+    const activeProfile = profile || getActiveProfileNameSync();
+    const model = getModelConfig(activeProfile).model?.trim();
     if (model) return model;
   } catch {
     /* no model configured — fall through to the default */
@@ -285,10 +286,11 @@ export function buildOfficeEnv(opts: {
  * Write Claw3D settings to ~/.openclaw/claw3d/settings.json
  * and .env in the claw3d directory so onboarding is skipped.
  */
-function writeClaw3dSettings(wsUrl?: string): void {
+function writeClaw3dSettings(wsUrl?: string, profile?: string): void {
+  const activeProfile = profile || getActiveProfileNameSync();
   const url = wsUrl || getSavedWsUrl();
   // Gateway bearer token — empty string when the gateway has no API_SERVER_KEY.
-  const apiKey = getApiServerKey();
+  const apiKey = getApiServerKey(activeProfile);
 
   // Write ~/.openclaw/claw3d/settings.json
   try {
@@ -324,7 +326,7 @@ function writeClaw3dSettings(wsUrl?: string): void {
           port: getSavedPort(),
           url,
           apiKey,
-          model: resolveOfficeModel(),
+          model: resolveOfficeModel(activeProfile),
         }),
       );
     }
@@ -702,7 +704,28 @@ export async function setupClaw3d(
 }
 
 function killProcessTree(proc: ChildProcess): void {
-  if (proc.pid) {
+  if (!proc.pid) return;
+
+  if (process.platform === "win32") {
+    try {
+      // /F: Force terminate the process
+      // /T: Terminate the specified process and any child processes started by it
+      execFileSync("taskkill", ["/F", "/T", "/PID", String(proc.pid)], {
+        stdio: "ignore",
+      });
+    } catch (err) {
+      console.error(
+        `[killProcessTree] taskkill failed for PID ${proc.pid}:`,
+        err,
+      );
+      try {
+        proc.kill("SIGKILL");
+      } catch {
+        /* already dead */
+      }
+    }
+  } else {
+    // POSIX: Kill the process group (since the process was spawned as detached)
     try {
       process.kill(-proc.pid, "SIGTERM");
     } catch {
@@ -713,11 +736,16 @@ function killProcessTree(proc: ChildProcess): void {
       }
     }
     // Fallback: SIGKILL after 3 seconds
+    const pid = proc.pid;
     setTimeout(() => {
       try {
-        if (proc.pid) process.kill(-proc.pid, "SIGKILL");
+        process.kill(-pid, "SIGKILL");
       } catch {
-        /* already dead */
+        try {
+          process.kill(pid, "SIGKILL");
+        } catch {
+          /* already dead */
+        }
       }
     }, 3000);
   }
@@ -887,7 +915,10 @@ export function stopAdapter(): void {
   cleanupPid(ADAPTER_PID_FILE);
 }
 
-export function startAll(): { success: boolean; error?: string } {
+export function startAll(profile?: string): {
+  success: boolean;
+  error?: string;
+} {
   if (!existsSync(join(HERMES_OFFICE_DIR, "node_modules"))) {
     return {
       success: false,
@@ -900,7 +931,7 @@ export function startAll(): { success: boolean; error?: string } {
   // Refresh the `.env` before the processes read it, so Office always
   // starts against the current port/URL and the desktop's configured
   // model rather than a value frozen at first setup (issue #256).
-  writeClaw3dSettings();
+  writeClaw3dSettings(undefined, profile);
 
   // Start dev server
   const devOk = startDevServer();

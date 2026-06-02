@@ -1,6 +1,7 @@
 import { ChildProcess, spawn } from "child_process";
 import { homedir } from "os";
 import { join } from "path";
+import { existsSync } from "fs";
 import net from "net";
 import http from "http";
 import { buildSshControlOptions } from "./ssh-options";
@@ -80,27 +81,6 @@ function findFreePort(preferred: number): Promise<number> {
   });
 }
 
-function waitForPort(port: number, timeoutMs: number): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const deadline = Date.now() + timeoutMs;
-    function attempt(): void {
-      const socket = net.connect(port, "127.0.0.1", () => {
-        socket.destroy();
-        resolve();
-      });
-      socket.on("error", () => {
-        socket.destroy();
-        if (Date.now() > deadline) {
-          reject(new Error(`SSH tunnel not ready after ${timeoutMs}ms`));
-        } else {
-          setTimeout(attempt, 400);
-        }
-      });
-    }
-    attempt();
-  });
-}
-
 function buildSshArgs(config: SshConfig, localPort: number): string[] {
   const keyPath = config.keyPath || join(homedir(), ".ssh", "id_rsa");
   return [
@@ -129,9 +109,16 @@ function buildSshArgs(config: SshConfig, localPort: number): string[] {
 export async function startSshTunnel(config: SshConfig): Promise<void> {
   stopSshTunnel();
 
+  const keyPath = config.keyPath?.trim() || join(homedir(), ".ssh", "id_rsa");
+  if (!existsSync(keyPath)) {
+    throw new Error(`SSH private key file not found at: ${keyPath}`);
+  }
+
   const localPort = await findFreePort(config.localPort || 18642);
   activeConfig = { ...config, localPort };
   tunnelRunning = false;
+
+  let spawnError: Error | null = null;
 
   tunnelProcess = spawn("ssh", buildSshArgs(config, localPort), {
     stdio: "ignore",
@@ -152,18 +139,50 @@ export async function startSshTunnel(config: SshConfig): Promise<void> {
     });
   });
 
-  tunnelProcess.on("error", () => {
+  tunnelProcess.on("error", (err) => {
     tunnelProcess = null;
-    checkTunnelHealth(localPort, 2000).then((healthy) => {
-      if (!healthy) {
-        tunnelRunning = false;
-        activeConfig = null;
-      }
-    });
+    if (err && "code" in err && err.code === "ENOENT") {
+      spawnError = new Error(
+        "System SSH binary not found on your system PATH. Please ensure an SSH client is installed.",
+      );
+    } else {
+      spawnError = err;
+    }
+    tunnelRunning = false;
+    activeConfig = null;
   });
 
   try {
-    await waitForPort(localPort, 12000);
+    // Poll for both port readiness and checking if spawnError was set
+    const deadline = Date.now() + 12000;
+    while (Date.now() <= deadline) {
+      if (spawnError) throw spawnError;
+
+      const portOpen = await new Promise<boolean>((resolve) => {
+        const socket = net.connect(localPort, "127.0.0.1", () => {
+          socket.destroy();
+          resolve(true);
+        });
+        socket.on("error", () => {
+          socket.destroy();
+          resolve(false);
+        });
+      });
+
+      if (portOpen) break;
+
+      // If the process exited and we don't have tunnel running, stop polling
+      if (!tunnelProcess && !spawnError) {
+        throw new Error(
+          "SSH tunnel process exited unexpectedly during startup.",
+        );
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
+
+    if (spawnError) throw spawnError;
+
     tunnelRunning = true;
     await waitForHealth(localPort, 20000);
   } catch (err) {
