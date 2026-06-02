@@ -313,7 +313,9 @@ const PROVIDER_ENV_KEYS: Record<string, string> = {
   qwen: "QWEN_API_KEY",
   minimax: "MINIMAX_API_KEY",
   glm: "GLM_API_KEY",
+  zai: "GLM_API_KEY",
   kimi: "KIMI_API_KEY",
+  "kimi-coding": "KIMI_API_KEY",
   nvidia: "NVIDIA_API_KEY",
   // Nous Portal supports BOTH OAuth (`nous` variant) AND API key
   // (`nous-api` variant). Register the env var name under both ids so
@@ -335,6 +337,8 @@ const URL_TO_ENV_KEY: Array<[RegExp, string]> = [
   [/huggingface\.co/i, "HF_TOKEN"],
   [/api\.groq\.com/i, "GROQ_API_KEY"],
   [/api\.deepseek\.com/i, "DEEPSEEK_API_KEY"],
+  [/api\.moonshot\.ai/i, "KIMI_API_KEY"],
+  [/api\.z\.ai/i, "GLM_API_KEY"],
   [/api\.together\.xyz/i, "TOGETHER_API_KEY"],
   [/api\.fireworks\.ai/i, "FIREWORKS_API_KEY"],
   [/api\.cerebras\.ai/i, "CEREBRAS_API_KEY"],

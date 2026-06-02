@@ -69,6 +69,47 @@ export function detectDeviceCode(
   return null;
 }
 
+export function detectAuthUrl(text: string): string | null {
+  const match = text.match(
+    /(?:Open this URL in your browser|Open this URL to authorize|If it does not open automatically, visit)[^\n:]*:[^\S\n]*\n[^\S\n]*(https:\/\/\S+)/i,
+  );
+  if (match) {
+    return match[1];
+  }
+  return null;
+}
+
+export interface OAuthPromptState {
+  buffer: string;
+  handled: boolean;
+}
+
+export type OAuthPromptAction =
+  | { kind: "device-code"; url: string; code: string }
+  | { kind: "auth-url"; url: string };
+
+export function accumulateOAuthPromptAction(
+  state: OAuthPromptState,
+  chunk: string,
+): OAuthPromptAction | null {
+  if (state.handled) return null;
+
+  state.buffer += chunk;
+  const device = detectDeviceCode(state.buffer);
+  if (device) {
+    state.handled = true;
+    return { kind: "device-code", url: device.url, code: device.code };
+  }
+
+  const authUrl = detectAuthUrl(state.buffer);
+  if (authUrl) {
+    state.handled = true;
+    return { kind: "auth-url", url: authUrl };
+  }
+
+  return null;
+}
+
 // Only one interactive login can run at a time — the renderer surfaces a
 // single modal. Tracked so the renderer can cancel a flow the user
 // abandoned (otherwise the CLI's loopback OAuth server lingers).

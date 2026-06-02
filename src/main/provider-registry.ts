@@ -23,8 +23,13 @@ export const PROVIDER_BASE_URLS: Record<string, string> = {
   cerebras: "https://api.cerebras.ai/v1",
   perplexity: "https://api.perplexity.ai",
   huggingface: "https://router.huggingface.co/v1",
+  "kimi-coding": "https://api.moonshot.ai/v1",
   zai: "https://api.z.ai/api/paas/v4",
+  glm: "https://api.z.ai/api/paas/v4",
   anthropic: "https://api.anthropic.com/v1",
+  xai: "https://api.x.ai/v1",
+  "xai-oauth": "https://api.x.ai/v1",
+  "qwen-oauth": "https://portal.qwen.ai/v1",
 };
 
 /**

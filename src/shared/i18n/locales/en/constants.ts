@@ -61,7 +61,8 @@ export default {
   minimaxApiKey: "MiniMax API Key",
   minimaxHint: "MiniMax models (global)",
   nousApiKey: "Nous Portal API Key",
-  nousHint: "Nous Portal API key — use the OAuth card below if you have a Nous subscription instead",
+  nousHint:
+    "Nous Portal API key — use the OAuth card below if you have a Nous subscription instead",
   minimaxCnApiKey: "MiniMax China API Key",
   minimaxCnHint: "MiniMax models (China endpoint)",
   opencodeZenApiKey: "OpenCode Zen API Key",

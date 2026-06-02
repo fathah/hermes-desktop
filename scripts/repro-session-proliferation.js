@@ -67,8 +67,7 @@ async function waitForChatIdle(page, prevAgentBubbleCount) {
   );
   // 3. Wait for the agent answer bubble (final, non-reasoning) count to grow.
   await page.waitForFunction(
-    (prev) =>
-      document.querySelectorAll(".chat-bubble-agent").length > prev,
+    (prev) => document.querySelectorAll(".chat-bubble-agent").length > prev,
     prevAgentBubbleCount,
     { timeout: 5_000, polling: 100 },
   );
@@ -115,7 +114,9 @@ async function countAgentBubbles(page) {
     await waitForChatIdle(page, prevAgentCount);
     const t = ((Date.now() - t0) / 1000).toFixed(1);
     prevAgentCount = await countAgentBubbles(page);
-    console.log(`           response received in ${t}s (agent bubbles=${prevAgentCount})`);
+    console.log(
+      `           response received in ${t}s (agent bubbles=${prevAgentCount})`,
+    );
   }
   console.log();
 
@@ -150,7 +151,9 @@ async function countAgentBubbles(page) {
       `[VERDICT] 🔴 PROLIFERATION REPRODUCED. Got ${newRows.length} new session rows for ${N_TURNS} turns.`,
     );
   } else {
-    console.log(`[VERDICT] ⚠️  0 new rows — chat may not have hit state.db (in-flight?).`);
+    console.log(
+      `[VERDICT] ⚠️  0 new rows — chat may not have hit state.db (in-flight?).`,
+    );
   }
 
   await browser.close();

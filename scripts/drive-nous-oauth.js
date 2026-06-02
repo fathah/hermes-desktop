@@ -20,7 +20,7 @@ const AUTH = path.join(os.homedir(), "AppData", "Local", "hermes", "auth.json");
   const { browser, page } = await attach();
 
   // Navigate to Providers
-  await page.click('text=/^Providers$/').catch(() => {});
+  await page.click("text=/^Providers$/").catch(() => {});
   await new Promise((r) => setTimeout(r, 500));
 
   // Scroll the page to bring the OAuth section into view (the card list
@@ -30,7 +30,8 @@ const AUTH = path.join(os.homedir(), "AppData", "Local", "hermes", "auth.json");
     const nousOauth = cards.find((c) =>
       /Nous Portal \(OAuth\)/i.test(c.textContent || ""),
     );
-    if (nousOauth) nousOauth.scrollIntoView({ behavior: "instant", block: "center" });
+    if (nousOauth)
+      nousOauth.scrollIntoView({ behavior: "instant", block: "center" });
   });
 
   // Click the Sign-in button on the Nous OAuth card
@@ -85,7 +86,9 @@ const AUTH = path.join(os.homedir(), "AppData", "Local", "hermes", "auth.json");
       status = snap.status;
       console.log();
       console.log("─".repeat(70));
-      console.log(`[status] ${status}${snap.errText ? ": " + snap.errText : ""}`);
+      console.log(
+        `[status] ${status}${snap.errText ? ": " + snap.errText : ""}`,
+      );
     }
   }
 
@@ -105,13 +108,20 @@ const AUTH = path.join(os.homedir(), "AppData", "Local", "hermes", "auth.json");
   console.log();
   console.log("─".repeat(70));
   console.log("auth.json state:");
-  console.log("  providers.nous:", nousProvider ? Object.keys(nousProvider).join(", ") : "absent");
-  console.log("  credential_pool.nous:", nousPool ? `${nousPool.length} entries` : "absent");
+  console.log(
+    "  providers.nous:",
+    nousProvider ? Object.keys(nousProvider).join(", ") : "absent",
+  );
+  console.log(
+    "  credential_pool.nous:",
+    nousPool ? `${nousPool.length} entries` : "absent",
+  );
   if (nousProvider) {
     // Show non-secret fields
     const safe = {};
     for (const [k, v] of Object.entries(nousProvider)) {
-      if (typeof v === "string" && v.length > 20) safe[k] = `<string, ${v.length} chars>`;
+      if (typeof v === "string" && v.length > 20)
+        safe[k] = `<string, ${v.length} chars>`;
       else safe[k] = v;
     }
     console.log("  providers.nous (sanitized):", JSON.stringify(safe));
@@ -119,7 +129,8 @@ const AUTH = path.join(os.homedir(), "AppData", "Local", "hermes", "auth.json");
   if (nousPool && nousPool[0]) {
     const safe = {};
     for (const [k, v] of Object.entries(nousPool[0])) {
-      if (typeof v === "string" && v.length > 20) safe[k] = `<string, ${v.length} chars>`;
+      if (typeof v === "string" && v.length > 20)
+        safe[k] = `<string, ${v.length} chars>`;
       else safe[k] = v;
     }
     console.log("  credential_pool.nous[0] (sanitized):", JSON.stringify(safe));

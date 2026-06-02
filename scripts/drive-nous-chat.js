@@ -49,7 +49,7 @@ const PROMPT =
 
     // Make sure we're on the Chat tab (drive-nous-oauth left us on
     // Providers).
-    await page.click('text=/^Chat$/').catch(() => {});
+    await page.click("text=/^Chat$/").catch(() => {});
     await new Promise((r) => setTimeout(r, 500));
 
     // Kill any in-flight chat + clear chat — new conversation

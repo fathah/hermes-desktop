@@ -125,17 +125,23 @@ async function sendTurn(page, text, prev) {
   console.log("[turn 1] sending normally...");
   const t1 = await sendTurn(page, "Turn 1: reply PONG1", prevAgent);
   prevAgent = await countAgentBubbles(page);
-  console.log(`  ${t1}s  state.db new rows: ${
-    snapshotSessions().rows.filter(r => !beforeIds.has(r.id)).map(r => `${r.id.slice(0,30)}…(${r.message_count})`).join(", ")
-  }`);
+  console.log(
+    `  ${t1}s  state.db new rows: ${snapshotSessions()
+      .rows.filter((r) => !beforeIds.has(r.id))
+      .map((r) => `${r.id.slice(0, 30)}…(${r.message_count})`)
+      .join(", ")}`,
+  );
 
   // Turn 2
   console.log("[turn 2] sending normally...");
   const t2 = await sendTurn(page, "Turn 2: reply PONG2", prevAgent);
   prevAgent = await countAgentBubbles(page);
-  console.log(`  ${t2}s  state.db new rows: ${
-    snapshotSessions().rows.filter(r => !beforeIds.has(r.id)).map(r => `${r.id.slice(0,30)}…(${r.message_count})`).join(", ")
-  }`);
+  console.log(
+    `  ${t2}s  state.db new rows: ${snapshotSessions()
+      .rows.filter((r) => !beforeIds.has(r.id))
+      .map((r) => `${r.id.slice(0, 30)}…(${r.message_count})`)
+      .join(", ")}`,
+  );
 
   // KILL gateway. The desktop doesn't autonomously restart it — only the
   // next chat-send IPC checks `isGatewayRunning()` and respawns. So we
@@ -149,7 +155,9 @@ async function sendTurn(page, text, prev) {
 
   // Turn 3 — desktop's send-message IPC should respawn the gateway. The
   // question is what session id gets used.
-  console.log("[turn 3] sending after gateway kill — desktop should respawn gateway...");
+  console.log(
+    "[turn 3] sending after gateway kill — desktop should respawn gateway...",
+  );
   const t3 = await sendTurn(page, "Turn 3: reply PONG3", prevAgent);
   console.log(`  ${t3}s  new gateway pid=${readGatewayPid()}`);
 
@@ -171,7 +179,9 @@ async function sendTurn(page, text, prev) {
       `[VERDICT] 🔴 FORKED across gateway restart. ${finalNew.length} rows created for 3 turns.`,
     );
   } else {
-    console.log(`[VERDICT] ⚠️  Unexpected — 0 new rows. State.db check failed?`);
+    console.log(
+      `[VERDICT] ⚠️  Unexpected — 0 new rows. State.db check failed?`,
+    );
   }
 
   await browser.close();

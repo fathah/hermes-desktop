@@ -101,16 +101,44 @@ describe("validateChatReadiness", () => {
 
   it("fails open for OAuth providers (codex, qwen-oauth, etc.)", async () => {
     writeConfig(
-      [
-        "model:",
-        "  provider: openai-codex",
-        "  default: gpt-5-codex",
-        "",
-      ].join("\n"),
+      ["model:", "  provider: openai-codex", "  default: gpt-5-codex", ""].join(
+        "\n",
+      ),
     );
     // No env file at all
     const { validateChatReadiness } = await freshValidation(TEST_DIR);
     expect(validateChatReadiness()).toEqual({ ok: true });
+  });
+
+  it("fails open for Qwen OAuth because it authenticates through auth.json", async () => {
+    writeConfig(
+      [
+        "model:",
+        "  provider: qwen-oauth",
+        "  default: qwen3-coder-plus",
+        "",
+      ].join("\n"),
+    );
+    const { validateChatReadiness } = await freshValidation(TEST_DIR);
+    expect(validateChatReadiness()).toEqual({ ok: true });
+  });
+
+  it("blocks Kimi coding plan when its API key is missing", async () => {
+    writeConfig(
+      [
+        "model:",
+        "  provider: kimi-coding",
+        "  default: kimi-for-coding",
+        "  base_url: https://api.moonshot.ai/v1",
+        "",
+      ].join("\n"),
+    );
+    writeEnv("");
+    const { validateChatReadiness } = await freshValidation(TEST_DIR);
+    const r = validateChatReadiness();
+    expect(r.ok).toBe(false);
+    expect(r.code).toBe("MISSING_API_KEY");
+    expect(r.expectedEnvKey).toBe("KIMI_API_KEY");
   });
 
   // (`nous` previously fell open here on the assumption that the
@@ -287,7 +315,9 @@ describe("validateChatReadiness", () => {
         {
           version: 1,
           credential_pool: {
-            nous: [{ key: "sk-nous-but-saved-under-wrong-field", label: "Key 1" }],
+            nous: [
+              { key: "sk-nous-but-saved-under-wrong-field", label: "Key 1" },
+            ],
           },
         },
         null,

@@ -55,7 +55,9 @@ function readEnvKeys() {
     if (auth.credential_pool) delete auth.credential_pool.deepseek;
     fs.writeFileSync(AUTH, JSON.stringify(auth, null, 2));
   }
-  console.log("[setup] removed DEEPSEEK_API_KEY from .env + cleared deepseek from auth.json");
+  console.log(
+    "[setup] removed DEEPSEEK_API_KEY from .env + cleared deepseek from auth.json",
+  );
 
   // The readEnv() in main process has a 5s TTL cache. Bust by setting and
   // unsetting some random key, OR just wait — but easier to flip it via
@@ -67,14 +69,20 @@ function readEnvKeys() {
   const blockedState = await page.evaluate(async () => {
     return await window.hermesAPI.validateChatReadiness();
   });
-  console.log("[B] missing-key validateChatReadiness:", JSON.stringify(blockedState));
+  console.log(
+    "[B] missing-key validateChatReadiness:",
+    JSON.stringify(blockedState),
+  );
 
   // --- C. Config-health audit: should report MODEL_KEY_MISSING + maybe more ---
   const health = await page.evaluate(async () => {
     return await window.hermesAPI.getConfigHealth();
   });
   console.log("[C] config-health summary:", JSON.stringify(health.summary));
-  console.log("[C] issue codes:", health.issues.map((i) => `${i.severity}:${i.code}`).join(", "));
+  console.log(
+    "[C] issue codes:",
+    health.issues.map((i) => `${i.severity}:${i.code}`).join(", "),
+  );
 
   // --- Restore .env + auth.json ---
   fs.copyFileSync(ENV_BACKUP, ENV_FILE);
@@ -92,15 +100,22 @@ function readEnvKeys() {
   // --- Verdicts ---
   console.log();
   const aOk = okState.ok === true;
-  const bBlocked = blockedState.ok === false &&
+  const bBlocked =
+    blockedState.ok === false &&
     blockedState.code === "MISSING_API_KEY" &&
     blockedState.expectedEnvKey === "DEEPSEEK_API_KEY";
   const cFlagged = (health.issues || []).some(
-    (i) => i.code === "MODEL_KEY_MISSING" && i.context?.expectedKey === "DEEPSEEK_API_KEY",
+    (i) =>
+      i.code === "MODEL_KEY_MISSING" &&
+      i.context?.expectedKey === "DEEPSEEK_API_KEY",
   );
   console.log(`[VERDICT A] ${aOk ? "✅" : "🔴"} happy path → ok:true`);
-  console.log(`[VERDICT B] ${bBlocked ? "✅" : "🔴"} missing-key → blocked with MISSING_API_KEY + DEEPSEEK_API_KEY`);
-  console.log(`[VERDICT C] ${cFlagged ? "✅" : "🔴"} config-health reports MODEL_KEY_MISSING for DEEPSEEK_API_KEY`);
+  console.log(
+    `[VERDICT B] ${bBlocked ? "✅" : "🔴"} missing-key → blocked with MISSING_API_KEY + DEEPSEEK_API_KEY`,
+  );
+  console.log(
+    `[VERDICT C] ${cFlagged ? "✅" : "🔴"} config-health reports MODEL_KEY_MISSING for DEEPSEEK_API_KEY`,
+  );
 
   await browser.close();
 })().catch((e) => {

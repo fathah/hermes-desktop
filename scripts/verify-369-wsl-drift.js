@@ -86,10 +86,7 @@ const WIN_ENV_BAK = WIN_ENV + ".wsl-drift-test-bk";
     // ── C. Confirm Windows-side .env now has the value ──────────
     const winEnvAfter = fs.readFileSync(WIN_ENV, "utf-8");
     const fieldName = target.context?.field;
-    const valueInEnv = new RegExp(
-      `^${fieldName}=(.+)$`,
-      "m",
-    ).exec(winEnvAfter);
+    const valueInEnv = new RegExp(`^${fieldName}=(.+)$`, "m").exec(winEnvAfter);
     console.log(
       `[C] Windows-side .env now has ${fieldName}: ${valueInEnv ? "✓ value present" : "✗ still missing"}`,
     );
@@ -115,10 +112,16 @@ const WIN_ENV_BAK = WIN_ENV + ".wsl-drift-test-bk";
     const bOk = fixResult.ok === true;
     const cOk = !!valueInEnv;
     const dOk = !sameDriftStillPresent;
-    console.log(`[VERDICT A] ${aOk ? "✅" : "🔴"} drift issues surfaced (${drifts.length})`);
+    console.log(
+      `[VERDICT A] ${aOk ? "✅" : "🔴"} drift issues surfaced (${drifts.length})`,
+    );
     console.log(`[VERDICT B] ${bOk ? "✅" : "🔴"} auto-fix returned ok:true`);
-    console.log(`[VERDICT C] ${cOk ? "✅" : "🔴"} field landed in Windows-side .env`);
-    console.log(`[VERDICT D] ${dOk ? "✅" : "🔴"} drift cleared from next audit`);
+    console.log(
+      `[VERDICT C] ${cOk ? "✅" : "🔴"} field landed in Windows-side .env`,
+    );
+    console.log(
+      `[VERDICT D] ${dOk ? "✅" : "🔴"} drift cleared from next audit`,
+    );
   } finally {
     // Restore .env so the live test doesn't pollute the user's setup
     if (fs.existsSync(WIN_ENV_BAK)) {

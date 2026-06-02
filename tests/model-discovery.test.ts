@@ -305,7 +305,10 @@ describe("model-discovery", () => {
                 id: "deepseek/deepseek-v4-flash:free",
                 pricing: { prompt: "0", completion: "0" },
               },
-              { id: "openrouter/owl-alpha", pricing: { prompt: "0.0", completion: "0.0" } },
+              {
+                id: "openrouter/owl-alpha",
+                pricing: { prompt: "0.0", completion: "0.0" },
+              },
               {
                 id: "anthropic/claude-opus-4.7",
                 pricing: { prompt: "0.000003", completion: "0.000015" },
@@ -365,7 +368,12 @@ describe("model-discovery", () => {
     await listen();
     // No auth.json planted in testHome — fetchNousFreeModelIds returns []
     const { discoverProviderModels } = await loadDiscovery();
-    const result = await discoverProviderModels("nous", undefined, undefined, undefined);
+    const result = await discoverProviderModels(
+      "nous",
+      undefined,
+      undefined,
+      undefined,
+    );
     expect(result.freeModels).toEqual([]);
     expect(result.status).toBe("ok");
   });

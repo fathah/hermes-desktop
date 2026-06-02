@@ -39,6 +39,26 @@ describe("provider-registry", () => {
       );
     });
 
+    it("returns the canonical URL for xai and xai-oauth providers", () => {
+      expect(canonicalProviderBaseUrl("xai")).toBe("https://api.x.ai/v1");
+      expect(canonicalProviderBaseUrl("xai-oauth")).toBe("https://api.x.ai/v1");
+    });
+
+    it("returns canonical URLs for Qwen OAuth, Kimi, and GLM providers", () => {
+      expect(canonicalProviderBaseUrl("qwen-oauth")).toBe(
+        "https://portal.qwen.ai/v1",
+      );
+      expect(canonicalProviderBaseUrl("kimi-coding")).toBe(
+        "https://api.moonshot.ai/v1",
+      );
+      expect(canonicalProviderBaseUrl("zai")).toBe(
+        "https://api.z.ai/api/paas/v4",
+      );
+      expect(canonicalProviderBaseUrl("glm")).toBe(
+        "https://api.z.ai/api/paas/v4",
+      );
+    });
+
     it("is case-insensitive on the provider id", () => {
       expect(canonicalProviderBaseUrl("DeepSeek")).toBe(
         "https://api.deepseek.com/v1",
@@ -68,6 +88,8 @@ describe("provider-registry", () => {
       const requiredBuiltins = [
         "groq",
         "deepseek",
+        "kimi-coding",
+        "zai",
         "together",
         "fireworks",
         "cerebras",

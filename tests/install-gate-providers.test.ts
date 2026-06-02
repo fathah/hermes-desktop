@@ -30,7 +30,9 @@ describe("expectedEnvKeyForModel — provider-name lookup", () => {
     ["qwen", "QWEN_API_KEY"],
     ["minimax", "MINIMAX_API_KEY"],
     ["glm", "GLM_API_KEY"],
+    ["zai", "GLM_API_KEY"],
     ["kimi", "KIMI_API_KEY"],
+    ["kimi-coding", "KIMI_API_KEY"],
   ])("maps provider %s → %s", (provider, expected) => {
     expect(expectedEnvKeyForModel(provider, "")).toBe(expected);
   });
@@ -56,6 +58,12 @@ describe("expectedEnvKeyForModel — URL fallback for custom/auto providers", ()
     expect(
       expectedEnvKeyForModel("custom", "https://openrouter.ai/api/v1"),
     ).toBe("OPENROUTER_API_KEY");
+    expect(
+      expectedEnvKeyForModel("custom", "https://api.moonshot.ai/v1"),
+    ).toBe("KIMI_API_KEY");
+    expect(
+      expectedEnvKeyForModel("custom", "https://api.z.ai/api/paas/v4"),
+    ).toBe("GLM_API_KEY");
   });
 
   it("recognizes a known endpoint when provider is 'auto'", () => {

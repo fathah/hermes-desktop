@@ -29,6 +29,8 @@ export const URL_KEY_MAP: ReadonlyArray<UrlKeyMapping> = [
   { pattern: /huggingface\.co/i, envKey: "HF_TOKEN" },
   { pattern: /api\.groq\.com/i, envKey: "GROQ_API_KEY" },
   { pattern: /api\.deepseek\.com/i, envKey: "DEEPSEEK_API_KEY" },
+  { pattern: /api\.moonshot\.ai/i, envKey: "KIMI_API_KEY" },
+  { pattern: /api\.z\.ai/i, envKey: "GLM_API_KEY" },
   { pattern: /api\.together\.xyz/i, envKey: "TOGETHER_API_KEY" },
   { pattern: /api\.fireworks\.ai/i, envKey: "FIREWORKS_API_KEY" },
   { pattern: /api\.cerebras\.ai/i, envKey: "CEREBRAS_API_KEY" },
@@ -98,6 +100,8 @@ export const OPENAI_COMPAT_PROVIDERS: ReadonlySet<string> = new Set([
   // Built-in remote OpenAI-compatible providers
   "groq",
   "deepseek",
+  "kimi-coding",
+  "zai",
   "together",
   "fireworks",
   "cerebras",

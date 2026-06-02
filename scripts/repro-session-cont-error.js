@@ -24,7 +24,9 @@ const { attach } = require("./e2e-attach");
   await new Promise((r) => setTimeout(r, 300));
 
   // Send a chat — desktop will respawn the gateway with the new config
-  console.log("[test] sending a single chat turn after config change + gateway kill...");
+  console.log(
+    "[test] sending a single chat turn after config change + gateway kill...",
+  );
   const prev = await page.evaluate(
     () => document.querySelectorAll(".chat-bubble-agent").length,
   );
@@ -54,12 +56,21 @@ const { attach } = require("./e2e-attach");
   console.log(`  last text:     ${result.lastText}`);
   console.log();
 
-  if (result.lastText && result.lastText.includes("Session continuation requires API key authentication")) {
+  if (
+    result.lastText &&
+    result.lastText.includes(
+      "Session continuation requires API key authentication",
+    )
+  ) {
     console.log("[VERDICT] 🔴 REPRODUCED — exact error users are reporting!");
   } else if (result.lastText && result.lastText.startsWith("Error:")) {
-    console.log(`[VERDICT] ⚠️  Different error: ${result.lastText.slice(0, 200)}`);
+    console.log(
+      `[VERDICT] ⚠️  Different error: ${result.lastText.slice(0, 200)}`,
+    );
   } else {
-    console.log(`[VERDICT] ✅ Chat succeeded — bug NOT reproduced with this config.`);
+    console.log(
+      `[VERDICT] ✅ Chat succeeded — bug NOT reproduced with this config.`,
+    );
   }
 
   await browser.close();

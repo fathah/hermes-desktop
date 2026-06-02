@@ -16,8 +16,20 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 
-const STATE_DB = path.join(os.homedir(), "AppData", "Local", "hermes", "state.db");
-const GATEWAY_PID_FILE = path.join(os.homedir(), "AppData", "Local", "hermes", "gateway.pid");
+const STATE_DB = path.join(
+  os.homedir(),
+  "AppData",
+  "Local",
+  "hermes",
+  "state.db",
+);
+const GATEWAY_PID_FILE = path.join(
+  os.homedir(),
+  "AppData",
+  "Local",
+  "hermes",
+  "gateway.pid",
+);
 
 function snapshotSessions() {
   const py = `
@@ -45,7 +57,9 @@ function readGatewayPid() {
 
 function probeHealth() {
   try {
-    execSync("curl -s --max-time 1 http://127.0.0.1:8642/health", { stdio: "ignore" });
+    execSync("curl -s --max-time 1 http://127.0.0.1:8642/health", {
+      stdio: "ignore",
+    });
     return true;
   } catch {
     return false;
@@ -68,7 +82,8 @@ async function waitForChatIdle(page, prevAgentBubbleCount, label = "") {
   await page.waitForFunction(
     (prev) => {
       const stop = document.querySelector("button.chat-stop-btn");
-      const agentBubbles = document.querySelectorAll(".chat-bubble-agent").length;
+      const agentBubbles =
+        document.querySelectorAll(".chat-bubble-agent").length;
       // Either streaming started OR a new agent bubble appeared (error or otherwise)
       return stop !== null || agentBubbles > prev;
     },
@@ -76,7 +91,11 @@ async function waitForChatIdle(page, prevAgentBubbleCount, label = "") {
     { timeout: 15_000, polling: 100 },
   );
   // If streaming started, wait for it to end
-  if (await page.evaluate(() => document.querySelector("button.chat-stop-btn") !== null)) {
+  if (
+    await page.evaluate(
+      () => document.querySelector("button.chat-stop-btn") !== null,
+    )
+  ) {
     await page.waitForFunction(
       () => document.querySelector("button.chat-stop-btn") === null,
       { timeout: 180_000, polling: 250 },
@@ -87,13 +106,17 @@ async function waitForChatIdle(page, prevAgentBubbleCount, label = "") {
 }
 
 async function countAgentBubbles(page) {
-  return await page.evaluate(() => document.querySelectorAll(".chat-bubble-agent").length);
+  return await page.evaluate(
+    () => document.querySelectorAll(".chat-bubble-agent").length,
+  );
 }
 
 async function lastAgentText(page) {
   return await page.evaluate(() => {
     const all = document.querySelectorAll(".chat-bubble-agent");
-    return all.length === 0 ? null : all[all.length - 1].textContent.trim().slice(0, 100);
+    return all.length === 0
+      ? null
+      : all[all.length - 1].textContent.trim().slice(0, 100);
   });
 }
 
@@ -114,7 +137,9 @@ async function sendTurn(page, text, label) {
 
   // Preflight: gateway must be up
   if (!probeHealth()) {
-    console.log("[preflight] gateway is DOWN — aborting. Restart dev electron first.");
+    console.log(
+      "[preflight] gateway is DOWN — aborting. Restart dev electron first.",
+    );
     await browser.close();
     process.exit(2);
   }
@@ -137,14 +162,18 @@ async function sendTurn(page, text, label) {
   const r1 = await sendTurn(page, "Reply with the single token PONG1", "t1");
   console.log(`  ${r1.elapsed}s | text: ${r1.lastText} | error=${r1.isError}`);
   let newRows = snapshotSessions().rows.filter((r) => !beforeIds.has(r.id));
-  console.log(`  new state.db rows: ${newRows.map((r) => `${r.id.slice(0,30)}…(${r.message_count})`).join(", ")}`);
+  console.log(
+    `  new state.db rows: ${newRows.map((r) => `${r.id.slice(0, 30)}…(${r.message_count})`).join(", ")}`,
+  );
 
   // Turn 2
   console.log("[turn 2] sending...");
   const r2 = await sendTurn(page, "Reply with the single token PONG2", "t2");
   console.log(`  ${r2.elapsed}s | text: ${r2.lastText} | error=${r2.isError}`);
   newRows = snapshotSessions().rows.filter((r) => !beforeIds.has(r.id));
-  console.log(`  new state.db rows: ${newRows.map((r) => `${r.id.slice(0,30)}…(${r.message_count})`).join(", ")}`);
+  console.log(
+    `  new state.db rows: ${newRows.map((r) => `${r.id.slice(0, 30)}…(${r.message_count})`).join(", ")}`,
+  );
 
   // DISRUPTION
   console.log();
@@ -160,7 +189,9 @@ async function sendTurn(page, text, label) {
   const r3 = await sendTurn(page, "Reply with the single token PONG3", "t3");
   console.log(`  ${r3.elapsed}s | text: ${r3.lastText} | error=${r3.isError}`);
   const newPid = readGatewayPid();
-  console.log(`  new gateway pid=${newPid} (was ${oldPid}, changed=${newPid !== oldPid})`);
+  console.log(
+    `  new gateway pid=${newPid} (was ${oldPid}, changed=${newPid !== oldPid})`,
+  );
 
   // Verdict
   const final = snapshotSessions();
@@ -173,7 +204,9 @@ async function sendTurn(page, text, label) {
   console.log();
 
   if (r3.isError) {
-    console.log(`[VERDICT] ⚠️  Turn 3 errored — desktop didn't recover. Error: ${r3.lastText}`);
+    console.log(
+      `[VERDICT] ⚠️  Turn 3 errored — desktop didn't recover. Error: ${r3.lastText}`,
+    );
   } else if (finalNew.length === 1) {
     console.log(
       `[VERDICT] ✅ Conversation survived gateway kill. 1 row, ${finalNew[0].message_count} msgs (expected 6).`,

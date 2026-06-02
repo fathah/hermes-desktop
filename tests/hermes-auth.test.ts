@@ -63,6 +63,8 @@ import {
   cancelHermesAuthLogin,
   isOAuthLoginProvider,
   detectDeviceCode,
+  detectAuthUrl,
+  accumulateOAuthPromptAction,
   OAUTH_LOGIN_PROVIDERS,
 } from "../src/main/hermes-auth";
 
@@ -136,6 +138,61 @@ describe("detectDeviceCode", () => {
       "     BVY0-XEPCD",
     ].join("\n");
     expect(detectDeviceCode(blankCodeGap)).toBeNull();
+  });
+});
+
+describe("detectAuthUrl", () => {
+  it("extracts url from xAI prompt", () => {
+    const text =
+      "Open this URL to authorize Hermes with xAI:\nhttps://auth.x.ai/oauth/authorize?client_id=123";
+    expect(detectAuthUrl(text)).toBe(
+      "https://auth.x.ai/oauth/authorize?client_id=123",
+    );
+  });
+
+  it("extracts url from Spotify prompt", () => {
+    const text =
+      "Open this URL to authorize:\nhttps://accounts.spotify.com/authorize?client_id=abc";
+    expect(detectAuthUrl(text)).toBe(
+      "https://accounts.spotify.com/authorize?client_id=abc",
+    );
+  });
+
+  it("extracts url from Gemini prompt", () => {
+    const text =
+      "If it does not open automatically, visit:\n  https://accounts.google.com/o/oauth2/v2/auth?client_id=xyz";
+    expect(detectAuthUrl(text)).toBe(
+      "https://accounts.google.com/o/oauth2/v2/auth?client_id=xyz",
+    );
+  });
+
+  it("returns null if prompt is not present", () => {
+    expect(detectAuthUrl("https://auth.x.ai/oauth/authorize")).toBeNull();
+  });
+});
+
+describe("accumulateOAuthPromptAction", () => {
+  it("returns an auth-url action for an xAI prompt split across chunks", () => {
+    const state = { buffer: "", handled: false };
+
+    expect(
+      accumulateOAuthPromptAction(
+        state,
+        "Open this URL to authorize Hermes with xAI:\n",
+      ),
+    ).toBeNull();
+    expect(
+      accumulateOAuthPromptAction(
+        state,
+        "https://auth.x.ai/oauth/authorize?client_id=123\n",
+      ),
+    ).toEqual({
+      kind: "auth-url",
+      url: "https://auth.x.ai/oauth/authorize?client_id=123",
+    });
+    expect(
+      accumulateOAuthPromptAction(state, "Waiting for callback...\n"),
+    ).toBeNull();
   });
 });
 

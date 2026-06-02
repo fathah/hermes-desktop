@@ -64,8 +64,7 @@ async function waitForChatIdle(page, prevAgentBubbleCount) {
     { timeout: 300_000, polling: 250 },
   );
   await page.waitForFunction(
-    (prev) =>
-      document.querySelectorAll(".chat-bubble-agent").length > prev,
+    (prev) => document.querySelectorAll(".chat-bubble-agent").length > prev,
     prevAgentBubbleCount,
     { timeout: 10_000, polling: 100 },
   );
@@ -97,7 +96,9 @@ async function countAgentBubbles(page) {
 
   for (let i = 1; i <= N_TURNS; i++) {
     const msg = `[Turn ${i}/${N_TURNS}] Reply with the single token PONG${i}. Context appended (ignore): ${filler}`;
-    process.stdout.write(`[turn ${String(i).padStart(2)}/${N_TURNS}] sending (${(msg.length / 1024).toFixed(1)} KB)... `);
+    process.stdout.write(
+      `[turn ${String(i).padStart(2)}/${N_TURNS}] sending (${(msg.length / 1024).toFixed(1)} KB)... `,
+    );
 
     const t0 = Date.now();
     await page.fill("textarea.chat-input", msg);
@@ -121,13 +122,17 @@ async function countAgentBubbles(page) {
         : newRows
             .map((r) => `${r.id.slice(0, 30)}…(msgs=${r.message_count})`)
             .join(" | ");
-    console.log(`${elapsed}s | new rows from chat: ${newRows.length} → ${rowSummary}`);
+    console.log(
+      `${elapsed}s | new rows from chat: ${newRows.length} → ${rowSummary}`,
+    );
   }
 
   console.log();
   const finalAfter = snapshotSessions();
   const finalNew = finalAfter.rows.filter((r) => !beforeIds.has(r.id));
-  console.log(`[final] state.db sessions: ${finalAfter.total} (+${finalAfter.total - before.total})`);
+  console.log(
+    `[final] state.db sessions: ${finalAfter.total} (+${finalAfter.total - before.total})`,
+  );
   console.log(`[final] new rows from this conversation:`);
   for (const r of finalNew) {
     console.log(`          ${r.id}  msgs=${r.message_count}  ${r.model}`);

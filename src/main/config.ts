@@ -564,6 +564,10 @@ interface BlockChild {
   value: string;
   /** Indent string of this child's line (e.g. "  "). */
   indent: string;
+  /** Absolute offset of the child line start. */
+  lineStart: number;
+  /** Absolute offset just past the child line, including its newline. */
+  lineEnd: number;
   /** Absolute offset of the substring after `key: ` and any leading
    *  whitespace — where a writer should splice the new value. */
   valueStart: number;
@@ -617,10 +621,16 @@ function readTopLevelBlock(
         const keyEnd = cursor + indent.length + key.length + 1; // past `:`
         const valueStart = keyEnd + gapBeforeValue.length;
         const valueEnd = valueStart + rawValue.length;
+        const lineEndWithNewline =
+          lineEndExclusive === content.length
+            ? content.length
+            : lineEndExclusive + 1;
         children.set(key, {
           key,
           value: stripYamlQuotes(rawValue),
           indent,
+          lineStart: cursor,
+          lineEnd: lineEndWithNewline,
           valueStart,
           valueEnd,
         });
@@ -754,6 +764,17 @@ export function upsertBlockChild(
   return `${content}${sep}${blockName}:\n  ${key}: "${value}"\n`;
 }
 
+function removeBlockChild(
+  content: string,
+  blockName: string,
+  key: string,
+): string {
+  const { children } = readTopLevelBlock(content, blockName);
+  const existing = children.get(key);
+  if (!existing) return content;
+  return content.slice(0, existing.lineStart) + content.slice(existing.lineEnd);
+}
+
 /**
  * Pick a value to write under model.api_key when the user configures a
  * provider="custom" entry pointing at a known commercial host (DeepSeek,
@@ -853,6 +874,8 @@ export function setModelConfig(
   const effectiveBaseUrl = baseUrl || canonicalProviderBaseUrl(provider) || "";
   if (effectiveBaseUrl) {
     content = upsertBlockChild(content, "model", "base_url", effectiveBaseUrl);
+  } else {
+    content = removeBlockChild(content, "model", "base_url");
   }
 
   // Workaround for upstream gateway bug — see pickAutoApiKeyForCustomProvider.

@@ -133,7 +133,10 @@ function restore() {
     const modelKeyIssueAfter = (healthAfter.issues || []).find(
       (i) => i.code === "MODEL_KEY_MISSING",
     );
-    console.log("[C] validateChatReadiness after adding pool entry:", JSON.stringify(readinessAfter));
+    console.log(
+      "[C] validateChatReadiness after adding pool entry:",
+      JSON.stringify(readinessAfter),
+    );
     console.log(
       "[D] MODEL_KEY_MISSING issue after adding pool entry:",
       JSON.stringify(modelKeyIssueAfter || null),
@@ -142,24 +145,36 @@ function restore() {
     await browser.close();
 
     console.log();
-    const aBlocks = readiness.ok === false &&
+    const aBlocks =
+      readiness.ok === false &&
       readiness.code === "MISSING_API_KEY" &&
       readiness.expectedEnvKey === "NOUS_API_KEY";
-    const bFlags = modelKeyIssue &&
+    const bFlags =
+      modelKeyIssue &&
       modelKeyIssue.context?.expectedKey === "NOUS_API_KEY" &&
       modelKeyIssue.context?.provider === "nous";
     const cAllows = readinessAfter.ok === true;
     const dClears = !modelKeyIssueAfter;
-    console.log(`[VERDICT A] ${aBlocks ? "✅" : "🔴"} validateChatReadiness blocks with MISSING_API_KEY / NOUS_API_KEY`);
-    console.log(`[VERDICT B] ${bFlags ? "✅" : "🔴"} config-health flags MODEL_KEY_MISSING for nous`);
-    console.log(`[VERDICT C] ${cAllows ? "✅" : "🔴"} validateChatReadiness clears after a properly-shaped pool entry`);
-    console.log(`[VERDICT D] ${dClears ? "✅" : "🔴"} config-health MODEL_KEY_MISSING clears after pool entry`);
+    console.log(
+      `[VERDICT A] ${aBlocks ? "✅" : "🔴"} validateChatReadiness blocks with MISSING_API_KEY / NOUS_API_KEY`,
+    );
+    console.log(
+      `[VERDICT B] ${bFlags ? "✅" : "🔴"} config-health flags MODEL_KEY_MISSING for nous`,
+    );
+    console.log(
+      `[VERDICT C] ${cAllows ? "✅" : "🔴"} validateChatReadiness clears after a properly-shaped pool entry`,
+    );
+    console.log(
+      `[VERDICT D] ${dClears ? "✅" : "🔴"} config-health MODEL_KEY_MISSING clears after pool entry`,
+    );
   } finally {
     restore();
     console.log("[teardown] config.yaml + .env + auth.json restored");
   }
 })().catch((e) => {
-  try { restore(); } catch {}
+  try {
+    restore();
+  } catch {}
   console.error("FAILED:", e.stack || e.message || e);
   process.exit(1);
 });

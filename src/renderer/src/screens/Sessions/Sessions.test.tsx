@@ -44,7 +44,10 @@ function installHermesAPI(initialSessions: unknown[] = []): {
   return api;
 }
 
-function sessionSearchResult(title: string, snippet: string): {
+function sessionSearchResult(
+  title: string,
+  snippet: string,
+): {
   sessionId: string;
   title: string;
   startedAt: number;

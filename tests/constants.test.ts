@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   PROVIDERS,
+  OAUTH_PROVIDERS,
   GATEWAY_PLATFORMS,
   GATEWAY_SECTIONS,
   SETTINGS_SECTIONS,
@@ -28,7 +29,10 @@ describe("PROVIDERS", () => {
     expect(values).toContain("xai");
     expect(values).toContain("nous");
     expect(values).toContain("qwen");
+    expect(values).toContain("qwen-oauth");
+    expect(values).toContain("kimi-coding");
     expect(values).toContain("minimax");
+    expect(values).toContain("zai");
     expect(values).toContain("custom");
   });
 
@@ -65,6 +69,19 @@ describe("PROVIDERS", () => {
   it("no duplicate setup IDs", () => {
     const ids = PROVIDERS.setup.map((s) => s.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("has setup cards for API-key providers that are not OAuth sign-ins", () => {
+    const ids = PROVIDERS.setup.map((s) => s.id);
+    expect(ids).toContain("deepseek");
+    expect(ids).toContain("kimi-coding");
+    expect(ids).toContain("zai");
+
+    const oauthIds = OAUTH_PROVIDERS.map((p) => p.id);
+    expect(oauthIds).toContain("qwen-oauth");
+    expect(oauthIds).not.toContain("deepseek");
+    expect(oauthIds).not.toContain("kimi-coding");
+    expect(oauthIds).not.toContain("zai");
   });
 });
 

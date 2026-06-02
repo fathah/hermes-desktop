@@ -465,12 +465,12 @@ function Providers({
                     // the engine schema (#367); old entries may still
                     // be in `key` (backward compat).
                     const secret =
-                      entry.access_token ||
-                      entry.api_key ||
-                      entry.key ||
-                      "";
+                      entry.access_token || entry.api_key || entry.key || "";
                     return (
-                      <div key={entry.id || idx} className="settings-pool-entry">
+                      <div
+                        key={entry.id || idx}
+                        className="settings-pool-entry"
+                      >
                         <span className="settings-pool-label">
                           {entry.label ||
                             `${t("settings.keyLabel")} ${idx + 1}`}
