@@ -89,8 +89,17 @@ export interface AgentWorkspaceProposal {
   path: string;
   baseContent: string;
   proposedContent: string;
+  hunks: AgentWorkspaceProposalHunk[];
   createdAt: number;
   status: "pending";
+}
+
+export interface AgentWorkspaceProposalHunk {
+  id: string;
+  blockId?: string;
+  before: string;
+  after: string;
+  status: "pending" | "accepted" | "rejected";
 }
 
 const DEFAULT_INDEX = `# Hermes Workspace
@@ -787,6 +796,43 @@ async function writeProposals(
   await writeFile(proposalsPath(root), JSON.stringify(proposals, null, 2));
 }
 
+function contentBody(content: string): string[] {
+  return content
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#"));
+}
+
+function proposalHunks(
+  baseContent: string,
+  proposedContent: string,
+): AgentWorkspaceProposalHunk[] {
+  const baseLines = contentBody(baseContent);
+  const proposedLines = contentBody(proposedContent);
+  const hunks: AgentWorkspaceProposalHunk[] = [];
+  const max = Math.max(baseLines.length, proposedLines.length);
+  for (let index = 0; index < max; index += 1) {
+    const before = baseLines[index] ?? "";
+    const after = proposedLines[index] ?? "";
+    if (before === after) continue;
+    hunks.push({
+      id: `hunk-${index + 1}`,
+      before,
+      after,
+      status: "pending",
+    });
+  }
+  if (hunks.length === 0 && baseContent !== proposedContent) {
+    hunks.push({
+      id: "hunk-1",
+      before: baseContent,
+      after: proposedContent,
+      status: "pending",
+    });
+  }
+  return hunks;
+}
+
 export async function listAgentWorkspaceProposals(
   options: WorkspaceOptions = {},
 ): Promise<AgentWorkspaceProposal[]> {
@@ -806,6 +852,7 @@ export async function createAgentWorkspaceProposal(
     path: assertWorkspacePath(path),
     baseContent,
     proposedContent,
+    hunks: proposalHunks(baseContent, proposedContent),
     createdAt: timestamp(),
     status: "pending",
   };
@@ -885,6 +932,37 @@ function snippetFor(content: string, query: string): string {
   return compact.slice(start, end).trim();
 }
 
+function searchNeedle(query: string): { needle: string; exact: boolean } {
+  const trimmed = query.trim();
+  const quoted = trimmed.match(/^"(.+)"$/);
+  return {
+    needle: (quoted?.[1] ?? trimmed).toLowerCase(),
+    exact: Boolean(quoted),
+  };
+}
+
+function scoreWorkspaceSearchResult(
+  title: string,
+  content: string,
+  query: string,
+  favorite: boolean,
+): number {
+  const { needle, exact } = searchNeedle(query);
+  const lowerTitle = title.toLowerCase();
+  const lowerContent = content.toLowerCase();
+  if (!needle) return 0;
+  if (exact && !lowerTitle.includes(needle) && !lowerContent.includes(needle)) {
+    return -1;
+  }
+  let score = 0;
+  if (lowerTitle === needle) score += 100;
+  if (lowerTitle.startsWith(needle)) score += 80;
+  if (lowerTitle.includes(needle)) score += 60;
+  if (lowerContent.includes(needle)) score += 20;
+  if (favorite) score += 25;
+  return score;
+}
+
 export async function searchWorkspace(
   query: string,
   limit = 20,
@@ -892,7 +970,7 @@ export async function searchWorkspace(
 ): Promise<WorkspaceSearchResult[]> {
   const root = await ensureWorkspace(options);
   const metadata = await ensureMetadata(root, options);
-  const needle = query.trim().toLowerCase();
+  const { needle } = searchNeedle(query);
   if (!needle) {
     return metadata.recentVisits.slice(0, limit).map((visit) => ({
       kind: "workspace",
@@ -902,20 +980,35 @@ export async function searchWorkspace(
     }));
   }
   const files = await collectFiles(root, root, metadata);
-  const results: WorkspaceSearchResult[] = [];
+  const results: Array<WorkspaceSearchResult & { score: number }> = [];
   for (const file of files) {
     const content = await readFile(file, "utf-8");
-    if (!content.toLowerCase().includes(needle)) continue;
     const path = toWorkspaceRelative(root, file);
+    const page = metadata.pages[path];
+    const fileTitle = titleForFile(path, content);
+    const scoreTitle = extname(path).match(/^\.ya?ml$/i)
+      ? fileTitle
+      : (page?.displayName ?? fileTitle);
+    const score = scoreWorkspaceSearchResult(
+      scoreTitle,
+      content,
+      query,
+      page?.favorite ?? false,
+    );
+    if (score < 0) continue;
+    if (score === 0 && !content.toLowerCase().includes(needle)) continue;
     results.push({
       kind: "workspace",
       path,
-      title: titleForFile(path, content),
+      title: fileTitle,
       snippet: snippetFor(content, query),
+      score,
     });
-    if (results.length >= limit) break;
   }
-  return results;
+  return results
+    .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title))
+    .slice(0, limit)
+    .map(({ score: _score, ...result }) => result);
 }
 
 export async function watchWorkspace(

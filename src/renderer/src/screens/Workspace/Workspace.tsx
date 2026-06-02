@@ -55,6 +55,13 @@ interface AgentWorkspaceProposal {
   path: string;
   baseContent: string;
   proposedContent: string;
+  hunks?: Array<{
+    id: string;
+    blockId?: string;
+    before: string;
+    after: string;
+    status: "pending" | "accepted" | "rejected";
+  }>;
   createdAt: number;
   status: "pending";
 }

@@ -147,8 +147,17 @@ interface AgentWorkspaceProposal {
   path: string;
   baseContent: string;
   proposedContent: string;
+  hunks: AgentWorkspaceProposalHunk[];
   createdAt: number;
   status: "pending";
+}
+
+interface AgentWorkspaceProposalHunk {
+  id: string;
+  blockId?: string;
+  before: string;
+  after: string;
+  status: "pending" | "accepted" | "rejected";
 }
 
 interface KanbanTask {

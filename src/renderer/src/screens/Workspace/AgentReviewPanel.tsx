@@ -5,6 +5,12 @@ interface AgentWorkspaceProposal {
   path: string;
   baseContent: string;
   proposedContent: string;
+  hunks?: Array<{
+    id: string;
+    before: string;
+    after: string;
+    status: "pending" | "accepted" | "rejected";
+  }>;
   createdAt: number;
 }
 
@@ -36,10 +42,21 @@ export default function AgentReviewPanel({
           <div>
             <strong>{proposal.path}</strong>
             <small>
-              {lineCount(proposal.baseContent)} lines to{" "}
-              {lineCount(proposal.proposedContent)} lines
+              {proposal.hunks?.length
+                ? `${proposal.hunks.length} suggested edit${
+                    proposal.hunks.length === 1 ? "" : "s"
+                  }`
+                : `${lineCount(proposal.baseContent)} lines to ${lineCount(
+                    proposal.proposedContent,
+                  )} lines`}
             </small>
           </div>
+          {proposal.hunks?.slice(0, 2).map((hunk) => (
+            <div key={hunk.id} className="workspace-agent-proposal-hunk">
+              <del>{hunk.before || "Empty"}</del>
+              <ins>{hunk.after || "Empty"}</ins>
+            </div>
+          ))}
           <div className="workspace-agent-proposal-actions">
             <button
               type="button"

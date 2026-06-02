@@ -122,6 +122,14 @@ describe("workspace history and agent proposals", () => {
       "# Agent Page\n\nBase",
       { root },
     );
+    expect(rejected.hunks).toEqual([
+      {
+        id: expect.stringMatching(/^hunk-/),
+        before: "Base",
+        after: "Rejected",
+        status: "pending",
+      },
+    ]);
     expect(await listAgentWorkspaceProposals({ root })).toHaveLength(1);
     await expect(
       acceptAgentWorkspaceProposal(rejected.id, { root }),
