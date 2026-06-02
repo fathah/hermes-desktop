@@ -67,6 +67,20 @@ function defaultHermesHome(): string {
   return localApp ?? homeDot;
 }
 
+function shQuote(s: string): string {
+  return `'${s.replace(/'/g, "'\"'\"'")}'`;
+}
+
+function getBundledScriptPath(scriptName: string): string {
+  const appPath = app?.getAppPath ? app.getAppPath() : resolve(__dirname, "../..");
+  const isPackaged = app?.isPackaged ?? false;
+  if (isPackaged) {
+    return join(appPath, "..", "app.asar.unpacked", "resources", scriptName);
+  } else {
+    return join(appPath, "resources", scriptName);
+  }
+}
+
 // A Hermes home the user explicitly pointed the app at via the "use an
 // existing installation" flow (issue #272). Persisted in the desktop's own
 // userData dir — outside any Hermes home — so it can be read here, before
@@ -902,9 +916,10 @@ export async function runInstall(
       // then run the official install script. Electron apps launched from Finder
       // don't inherit the terminal environment.
       const shellProfile = getShellProfile(home);
+      const scriptPath = getBundledScriptPath("install.sh");
       const installCmd = [
         shellProfile ? `source "${shellProfile}" 2>/dev/null;` : "",
-        "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash -s -- --skip-setup",
+        `bash ${shQuote(scriptPath)} --skip-setup`,
       ].join(" ");
 
       const basePath = getEnhancedPath();
@@ -1002,20 +1017,13 @@ async function runInstallWindows(emit: (t: string) => void): Promise<void> {
 
   // The wrapper downloads install.ps1 to a sibling temp file and invokes it
   // with our parameters. This sidesteps the `iex`-can't-pass-args limitation.
+  const scriptPath = getBundledScriptPath("install.ps1");
   const wrapperScript = [
     "$ErrorActionPreference = 'Stop'",
-    // Force TLS 1.2 for older Windows PowerShell 5.1 hosts that still default
-    // to TLS 1.0 — github raw refuses TLS < 1.2.
-    "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}",
-    "$url = 'https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.ps1'",
+    `$localScript = ${psQuote(scriptPath)}`,
     `$installer = Join-Path $env:TEMP ("hermes-install-script-" + [guid]::NewGuid().ToString() + ".ps1")`,
-    // Windows PowerShell 5.1 parses BOM-less files as the legacy ANSI codepage,
-    // which mangles the non-ASCII glyphs in install.ps1 and produces parse
-    // errors (see issue #149). Re-save with a UTF-8 BOM so PS 5.1 reads it as
-    // UTF-8. Idempotent if upstream later adds its own BOM or switches to ASCII.
-    "$resp = Invoke-WebRequest -Uri $url -UseBasicParsing",
-    "$text = if ($resp.Content -is [byte[]]) { [System.Text.Encoding]::UTF8.GetString($resp.Content) } else { [string]$resp.Content }",
-    "if ($text.Length -gt 0 -and $text[0] -eq [char]0xFEFF) { $text = $text.Substring(1) }",
+    // Read the bundled script and save with UTF-8 BOM so PS 5.1 doesn't mangle glyphs
+    "$text = [System.IO.File]::ReadAllText($localScript)",
     "[System.IO.File]::WriteAllText($installer, $text, (New-Object System.Text.UTF8Encoding $true))",
     `& $installer -SkipSetup -HermesHome ${psQuote(hermesHome)} -InstallDir ${psQuote(installDir)}`,
     "$exit = $LASTEXITCODE",

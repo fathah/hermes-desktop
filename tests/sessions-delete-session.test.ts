@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdirSync, rmSync, existsSync, writeFileSync } from "fs";
 import { join } from "path";
+import { closeSharedDb } from "../src/main/db";
 
 const { TEST_HOME, DB_PATH } = vi.hoisted(() => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -289,6 +290,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  closeSharedDb();
   if (existsSync(TEST_HOME)) {
     rmSync(TEST_HOME, { recursive: true, force: true });
   }

@@ -3,10 +3,10 @@ import { join } from "path";
 import {
   profileHome,
   getActiveProfileNameSync,
-  activeStateDbPath,
   safeWriteFile,
 } from "./utils";
 import Database from "better-sqlite3";
+import { getSharedDb } from "./db";
 import { t } from "../shared/i18n";
 import { getAppLocale } from "./locale";
 
@@ -88,9 +88,7 @@ function writeCache(data: CacheData): void {
 }
 
 function getDb(): Database.Database | null {
-  const dbPath = activeStateDbPath();
-  if (!existsSync(dbPath)) return null;
-  return new Database(dbPath, { readonly: true });
+  return getSharedDb(true);
 }
 
 // Sync from hermes DB to local cache — only fetches new/updated sessions
@@ -217,8 +215,6 @@ export function syncSessionCache(): CachedSession[] {
     return updated.sessions;
   } catch {
     return cache.sessions;
-  } finally {
-    db.close();
   }
 }
 

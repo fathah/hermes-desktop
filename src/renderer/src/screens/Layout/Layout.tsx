@@ -359,7 +359,7 @@ function Layout({
             {remoteMode ? (
               <RemoteNotice feature="Skills" />
             ) : (
-              <Skills profile={activeProfile} />
+              <Skills profile={activeProfile} visible={view === "skills"} />
             )}
           </div>
         )}
@@ -369,7 +369,7 @@ function Layout({
             {remoteMode ? (
               <RemoteNotice feature="Memory" />
             ) : (
-              <Memory profile={activeProfile} />
+              <Memory profile={activeProfile} visible={view === "memory"} />
             )}
           </div>
         )}

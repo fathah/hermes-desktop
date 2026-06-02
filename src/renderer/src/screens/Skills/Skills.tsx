@@ -20,11 +20,12 @@ interface BundledSkill {
 
 interface SkillsProps {
   profile?: string;
+  visible?: boolean;
 }
 
 type Tab = "installed" | "browse";
 
-function Skills({ profile }: SkillsProps): React.JSX.Element {
+function Skills({ profile, visible = true }: SkillsProps): React.JSX.Element {
   const { t } = useI18n();
   const [tab, setTab] = useState<Tab>("installed");
   const [installedSkills, setInstalledSkills] = useState<InstalledSkill[]>([]);
@@ -55,8 +56,9 @@ function Skills({ profile }: SkillsProps): React.JSX.Element {
   }, [loadInstalled, loadBundled]);
 
   useEffect(() => {
+    if (!visible) return;
     loadAll();
-  }, [loadAll]);
+  }, [loadAll, visible]);
 
   async function handleViewDetail(skill: InstalledSkill): Promise<void> {
     setDetailSkill(skill);

@@ -9,7 +9,13 @@ import { MemoryProfile } from "./MemoryProfile";
 import { MemoryProviders } from "./MemoryProviders";
 import type { MemoryData, MemoryProviderInfo, MemoryTab } from "./types";
 
-function Memory({ profile }: { profile?: string }): React.JSX.Element {
+function Memory({
+  profile,
+  visible = true,
+}: {
+  profile?: string;
+  visible?: boolean;
+}): React.JSX.Element {
   const { t } = useI18n();
   const [data, setData] = useState<MemoryData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -31,9 +37,10 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
   }, [profile]);
 
   useEffect(() => {
+    if (!visible) return;
     setLoading(true);
     loadData();
-  }, [loadData]);
+  }, [loadData, visible]);
 
   if (loading || !data) {
     return (

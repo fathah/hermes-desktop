@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { join } from "path";
 import { mkdirSync, rmSync, existsSync, writeFileSync } from "fs";
+import { closeSharedDb } from "../src/main/db";
 
 // vi.hoisted runs before module imports, so we can't reference imported
 // helpers here — use the bare Node modules via require.
@@ -259,6 +260,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  closeSharedDb();
   if (existsSync(TEST_HOME)) {
     rmSync(TEST_HOME, { recursive: true, force: true });
   }

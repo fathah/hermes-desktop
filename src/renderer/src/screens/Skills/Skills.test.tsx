@@ -142,4 +142,25 @@ describe("Skills.tsx — Install button (issue #310 diagnosis)", () => {
       expect(banner!.textContent).toContain("Did you mean");
     });
   });
+
+  it("does not call listInstalledSkills or listBundledSkills if visible=false", async () => {
+    const listInstalledSkills = vi.fn().mockResolvedValue([]);
+    const listBundledSkills = vi.fn().mockResolvedValue([]);
+
+    Object.defineProperty(window, "hermesAPI", {
+      configurable: true,
+      value: {
+        listInstalledSkills,
+        listBundledSkills,
+      },
+    });
+
+    render(<Skills visible={false} />);
+
+    // Give it a tiny bit of time to make sure effects had a chance to execute
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(listInstalledSkills).not.toHaveBeenCalled();
+    expect(listBundledSkills).not.toHaveBeenCalled();
+  });
 });

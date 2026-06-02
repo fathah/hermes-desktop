@@ -398,6 +398,20 @@ function createWindow(): void {
 }
 
 function setupIPC(): void {
+  function registerDualHandler<Args extends any[], RetLocal, RetSsh>(
+    channel: string,
+    localFn: (...args: Args) => Promise<RetLocal> | RetLocal,
+    sshFn: (ssh: any, ...args: Args) => Promise<RetSsh> | RetSsh,
+  ): void {
+    ipcMain.handle(channel, async (_event, ...args: any[]) => {
+      const conn = getConnectionConfig();
+      if (conn.mode === "ssh" && conn.ssh) {
+        return sshFn(conn.ssh, ...(args as Args));
+      }
+      return localFn(...(args as Args));
+    });
+  }
+
   // Installation
   ipcMain.handle("check-install", () => {
     return checkInstallStatus();
@@ -433,22 +447,16 @@ function setupIPC(): void {
   ipcMain.handle("quit-app", () => app.quit());
 
   // Hermes engine info
-  ipcMain.handle("get-hermes-version", async () => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh) return sshGetHermesVersion(conn.ssh);
-    return getHermesVersion();
-  });
-  ipcMain.handle("refresh-hermes-version", async () => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh) return sshGetHermesVersion(conn.ssh);
-    clearVersionCache();
-    return getHermesVersion();
-  });
-  ipcMain.handle("run-hermes-doctor", () => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh) return sshRunDoctor(conn.ssh);
-    return runHermesDoctor();
-  });
+  registerDualHandler("get-hermes-version", getHermesVersion, sshGetHermesVersion);
+  registerDualHandler(
+    "refresh-hermes-version",
+    () => {
+      clearVersionCache();
+      return getHermesVersion();
+    },
+    sshGetHermesVersion,
+  );
+  registerDualHandler("run-hermes-doctor", runHermesDoctor, sshRunDoctor);
   ipcMain.handle("run-hermes-update", async (event) => {
     try {
       const conn = getConnectionConfig();
@@ -597,39 +605,23 @@ function setupIPC(): void {
     },
   );
 
-  ipcMain.handle("get-config", (_event, key: string, profile?: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh)
-      return sshGetConfigValue(conn.ssh, key, profile);
-    return getConfigValue(key, profile);
-  });
+  registerDualHandler("get-config", getConfigValue, sshGetConfigValue);
 
-  ipcMain.handle(
+  registerDualHandler(
     "set-config",
-    async (_event, key: string, value: string, profile?: string) => {
-      const conn = getConnectionConfig();
-      if (conn.mode === "ssh" && conn.ssh) {
-        await sshSetConfigValue(conn.ssh, key, value, profile);
-        return true;
-      }
+    async (key: string, value: string, profile?: string) => {
       setConfigValue(key, value, profile);
+      return true;
+    },
+    async (ssh, key: string, value: string, profile?: string) => {
+      await sshSetConfigValue(ssh, key, value, profile);
       return true;
     },
   );
 
-  ipcMain.handle("get-hermes-home", (_event, profile?: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh)
-      return sshGetHermesHome(conn.ssh, profile);
-    return getHermesHome(profile);
-  });
+  registerDualHandler("get-hermes-home", getHermesHome, sshGetHermesHome);
 
-  ipcMain.handle("get-model-config", (_event, profile?: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh)
-      return sshGetModelConfig(conn.ssh, profile);
-    return getModelConfig(profile);
-  });
+  registerDualHandler("get-model-config", getModelConfig, sshGetModelConfig);
 
   ipcMain.handle(
     "set-model-config",
@@ -1093,42 +1085,18 @@ function setupIPC(): void {
   );
 
   // Sessions
-  ipcMain.handle("list-sessions", (_event, limit?: number, offset?: number) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh)
-      return sshListSessions(conn.ssh, limit, offset);
-    return listSessions(limit, offset);
-  });
+  registerDualHandler("list-sessions", listSessions, sshListSessions);
 
-  ipcMain.handle("get-session-messages", (_event, sessionId: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh)
-      return sshGetSessionMessages(conn.ssh, sessionId);
-    return getSessionMessages(sessionId);
-  });
+  registerDualHandler("get-session-messages", getSessionMessages, sshGetSessionMessages);
 
   ipcMain.handle("delete-session", (_event, sessionId: string) => {
     return deleteSession(sessionId);
   });
 
   // Profiles
-  ipcMain.handle("list-profiles", async () => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh) return sshListProfiles(conn.ssh);
-    return listProfiles();
-  });
-  ipcMain.handle("create-profile", (_event, name: string, clone: boolean) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh)
-      return sshCreateProfile(conn.ssh, name, clone);
-    return createProfile(name, clone);
-  });
-  ipcMain.handle("delete-profile", (_event, name: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh)
-      return sshDeleteProfile(conn.ssh, name);
-    return deleteProfile(name);
-  });
+  registerDualHandler("list-profiles", listProfiles, sshListProfiles);
+  registerDualHandler("create-profile", createProfile, sshCreateProfile);
+  registerDualHandler("delete-profile", deleteProfile, sshDeleteProfile);
   ipcMain.handle("set-active-profile", (_event, name: string) => {
     if (getConnectionConfig().mode !== "ssh") {
       setActiveProfile(name);
@@ -1146,12 +1114,7 @@ function setupIPC(): void {
   });
 
   // Memory
-  ipcMain.handle("read-memory", (_event, profile?: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh)
-      return sshReadMemory(conn.ssh, profile);
-    return readMemory(profile);
-  });
+  registerDualHandler("read-memory", readMemory, sshReadMemory);
   ipcMain.handle(
     "add-memory-entry",
     (_event, content: string, profile?: string) => {
