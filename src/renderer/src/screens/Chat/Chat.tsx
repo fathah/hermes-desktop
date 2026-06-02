@@ -31,6 +31,8 @@ interface ChatProps {
   profile?: string;
   onSessionStarted?: () => void;
   onNewChat?: () => void;
+  contextFolderOverride?: string | null;
+  compact?: boolean;
   /** Optional callback to navigate to Settings → Diagnose section
    *  when the user clicks "Show details" in the config-health banner. */
   onOpenDiagnose?: () => void;
@@ -43,6 +45,8 @@ function Chat({
   profile,
   onSessionStarted,
   onNewChat,
+  contextFolderOverride,
+  compact,
   onOpenDiagnose,
 }: ChatProps): React.JSX.Element {
   const { t } = useI18n();
@@ -222,6 +226,7 @@ function Chat({
     onClear: handleClear,
     addAgentMessage,
   });
+  const effectiveContextFolder = contextFolderOverride ?? contextFolder;
 
   const actions = useChatActions({
     profile,
@@ -233,7 +238,7 @@ function Chat({
     onSessionStarted,
     chatInputRef,
     localCommands,
-    contextFolder,
+    contextFolder: effectiveContextFolder,
   });
 
   // Stable ref to handleSend so the drain effect doesn't re-trigger on
@@ -333,7 +338,7 @@ function Chat({
 
   return (
     <div
-      className="chat-container"
+      className={`chat-container${compact ? " chat-container-compact" : ""}`}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -344,8 +349,8 @@ function Chat({
         usage={usage}
         fastMode={fastMode}
         hasMessages={messages.length > 0}
-        contextFolder={contextFolder}
-        showContextFolder={!remoteMode}
+        contextFolder={effectiveContextFolder}
+        showContextFolder={!remoteMode && !contextFolderOverride}
         worktreeVisible={worktreeVisible}
         onPickFolder={handlePickFolder}
         onClearFolder={handleClearFolder}
@@ -373,9 +378,11 @@ function Chat({
           <div ref={bottomRef} />
         </div>
 
-        {contextFolder && worktreeVisible && (
-          <WorktreePanel folderPath={contextFolder} />
-        )}
+        {effectiveContextFolder &&
+          worktreeVisible &&
+          !contextFolderOverride && (
+            <WorktreePanel folderPath={effectiveContextFolder} />
+          )}
       </div>
 
       {queuedCount > 0 && (

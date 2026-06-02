@@ -92,6 +92,36 @@ describe("New APIs from v0.8/v0.9 features", () => {
     expect(preloadMethods).toContain("discoverMemoryProviders");
     expect(typeMethods).toContain("discoverMemoryProviders");
   });
+
+  it("has workspace APIs", () => {
+    for (const method of [
+      "getWorkspaceTree",
+      "readWorkspaceFile",
+      "writeWorkspaceFile",
+      "deleteWorkspaceFile",
+      "searchWorkspaceAndSessions",
+      "onWorkspaceFileChanged",
+      "createWorkspacePage",
+      "renameWorkspacePage",
+      "moveWorkspacePage",
+      "duplicateWorkspacePage",
+      "trashWorkspacePage",
+      "restoreWorkspacePage",
+      "favoriteWorkspacePage",
+      "getWorkspaceMetadata",
+      "updateWorkspacePageOrder",
+      "recordWorkspaceVisit",
+      "listWorkspaceHistory",
+      "restoreWorkspaceVersion",
+      "listAgentWorkspaceProposals",
+      "createAgentWorkspaceProposal",
+      "acceptAgentWorkspaceProposal",
+      "rejectAgentWorkspaceProposal",
+    ]) {
+      expect(preloadMethods).toContain(method);
+      expect(typeMethods).toContain(method);
+    }
+  });
 });
 
 // ─── Legacy APIs still present ──────────────────────────

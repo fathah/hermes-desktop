@@ -622,6 +622,92 @@ const hermesAPI = {
     }>
   > => ipcRenderer.invoke("search-sessions", query, limit),
 
+  getWorkspaceTree: (profile?: string) =>
+    ipcRenderer.invoke("get-workspace-tree", profile),
+  readWorkspaceFile: (path: string, profile?: string) =>
+    ipcRenderer.invoke("read-workspace-file", path, profile),
+  writeWorkspaceFile: (path: string, content: string, profile?: string) =>
+    ipcRenderer.invoke("write-workspace-file", path, content, profile),
+  deleteWorkspaceFile: (path: string, profile?: string) =>
+    ipcRenderer.invoke("delete-workspace-file", path, profile),
+  searchWorkspaceAndSessions: (
+    query: string,
+    limit?: number,
+    profile?: string,
+  ) =>
+    ipcRenderer.invoke("search-workspace-and-sessions", query, limit, profile),
+  createWorkspacePage: (
+    input: { title: string; parentPath?: string | null; content?: string },
+    profile?: string,
+  ) => ipcRenderer.invoke("create-workspace-page", input, profile),
+  renameWorkspacePage: (path: string, title: string, profile?: string) =>
+    ipcRenderer.invoke("rename-workspace-page", path, title, profile),
+  moveWorkspacePage: (
+    path: string,
+    parentPath: string | null,
+    profile?: string,
+  ) => ipcRenderer.invoke("move-workspace-page", path, parentPath, profile),
+  duplicateWorkspacePage: (path: string, profile?: string) =>
+    ipcRenderer.invoke("duplicate-workspace-page", path, profile),
+  trashWorkspacePage: (path: string, profile?: string) =>
+    ipcRenderer.invoke("trash-workspace-page", path, profile),
+  restoreWorkspacePage: (path: string, profile?: string) =>
+    ipcRenderer.invoke("restore-workspace-page", path, profile),
+  favoriteWorkspacePage: (path: string, favorite: boolean, profile?: string) =>
+    ipcRenderer.invoke("favorite-workspace-page", path, favorite, profile),
+  getWorkspaceMetadata: (profile?: string) =>
+    ipcRenderer.invoke("get-workspace-metadata", profile),
+  updateWorkspacePageOrder: (
+    parentPath: string | null,
+    orderedPaths: string[],
+    profile?: string,
+  ) =>
+    ipcRenderer.invoke(
+      "update-workspace-page-order",
+      parentPath,
+      orderedPaths,
+      profile,
+    ),
+  recordWorkspaceVisit: (path: string, profile?: string) =>
+    ipcRenderer.invoke("record-workspace-visit", path, profile),
+  listWorkspaceHistory: (path: string, profile?: string) =>
+    ipcRenderer.invoke("list-workspace-history", path, profile),
+  restoreWorkspaceVersion: (
+    path: string,
+    historyId: string,
+    profile?: string,
+  ) =>
+    ipcRenderer.invoke("restore-workspace-version", path, historyId, profile),
+  listAgentWorkspaceProposals: (profile?: string) =>
+    ipcRenderer.invoke("list-agent-workspace-proposals", profile),
+  createAgentWorkspaceProposal: (
+    path: string,
+    proposedContent: string,
+    baseContent: string,
+    profile?: string,
+  ) =>
+    ipcRenderer.invoke(
+      "create-agent-workspace-proposal",
+      path,
+      proposedContent,
+      baseContent,
+      profile,
+    ),
+  acceptAgentWorkspaceProposal: (id: string, profile?: string) =>
+    ipcRenderer.invoke("accept-agent-workspace-proposal", id, profile),
+  rejectAgentWorkspaceProposal: (id: string, profile?: string) =>
+    ipcRenderer.invoke("reject-agent-workspace-proposal", id, profile),
+  onWorkspaceFileChanged: (
+    callback: (event: { path: string; content: string }) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      payload: unknown,
+    ): void => callback(payload as { path: string; content: string });
+    ipcRenderer.on("workspace-file-changed", handler);
+    return () => ipcRenderer.removeListener("workspace-file-changed", handler);
+  },
+
   // Credential Pool (profile-aware: reads/writes the named profile's
   // auth.json; defaults to the currently active profile when omitted)
   //

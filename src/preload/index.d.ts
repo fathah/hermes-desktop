@@ -79,6 +79,63 @@ interface CredentialPoolEntry {
   key?: string;
 }
 
+interface WorkspaceFileNode {
+  name: string;
+  path: string;
+  kind: "file" | "directory";
+  children?: WorkspaceFileNode[];
+}
+
+type WorkspaceSearchResult =
+  | { kind: "workspace"; path: string; title: string; snippet: string }
+  | {
+      kind: "session";
+      sessionId: string;
+      title: string | null;
+      snippet: string;
+    }
+  | { kind: "admin"; view: string; title: string }
+  | { kind: "command"; command: string; title: string };
+
+interface WorkspacePageMeta {
+  id: string;
+  path: string;
+  displayName: string;
+  parentPath: string | null;
+  childOrder: string[];
+  favorite: boolean;
+  trashed: boolean;
+  createdAt: number;
+  updatedAt: number;
+  lastVisitedAt?: number;
+}
+
+interface WorkspaceMetadata {
+  version: 1;
+  pages: Record<string, WorkspacePageMeta>;
+  rootOrder: string[];
+  favorites: string[];
+  recentVisits: Array<{ path: string; visitedAt: number }>;
+}
+
+interface WorkspaceHistoryEntry {
+  id: string;
+  pageId: string;
+  path: string;
+  createdAt: number;
+  reason: "user-save" | "page-operation" | "agent-proposal" | "restore";
+  content: string;
+}
+
+interface AgentWorkspaceProposal {
+  id: string;
+  path: string;
+  baseContent: string;
+  proposedContent: string;
+  createdAt: number;
+  status: "pending";
+}
+
 interface KanbanTask {
   id: string;
   title: string;
@@ -546,6 +603,80 @@ interface HermesAPI {
       snippet: string;
     }>
   >;
+  getWorkspaceTree: (profile?: string) => Promise<WorkspaceFileNode[]>;
+  readWorkspaceFile: (path: string, profile?: string) => Promise<string>;
+  writeWorkspaceFile: (
+    path: string,
+    content: string,
+    profile?: string,
+  ) => Promise<boolean>;
+  deleteWorkspaceFile: (path: string, profile?: string) => Promise<boolean>;
+  searchWorkspaceAndSessions: (
+    query: string,
+    limit?: number,
+    profile?: string,
+  ) => Promise<WorkspaceSearchResult[]>;
+  createWorkspacePage: (
+    input: { title: string; parentPath?: string | null; content?: string },
+    profile?: string,
+  ) => Promise<WorkspacePageMeta>;
+  renameWorkspacePage: (
+    path: string,
+    title: string,
+    profile?: string,
+  ) => Promise<WorkspacePageMeta>;
+  moveWorkspacePage: (
+    path: string,
+    parentPath: string | null,
+    profile?: string,
+  ) => Promise<WorkspacePageMeta>;
+  duplicateWorkspacePage: (
+    path: string,
+    profile?: string,
+  ) => Promise<WorkspacePageMeta>;
+  trashWorkspacePage: (path: string, profile?: string) => Promise<boolean>;
+  restoreWorkspacePage: (path: string, profile?: string) => Promise<boolean>;
+  favoriteWorkspacePage: (
+    path: string,
+    favorite: boolean,
+    profile?: string,
+  ) => Promise<WorkspacePageMeta>;
+  getWorkspaceMetadata: (profile?: string) => Promise<WorkspaceMetadata>;
+  updateWorkspacePageOrder: (
+    parentPath: string | null,
+    orderedPaths: string[],
+    profile?: string,
+  ) => Promise<WorkspaceMetadata>;
+  recordWorkspaceVisit: (path: string, profile?: string) => Promise<boolean>;
+  listWorkspaceHistory: (
+    path: string,
+    profile?: string,
+  ) => Promise<WorkspaceHistoryEntry[]>;
+  restoreWorkspaceVersion: (
+    path: string,
+    historyId: string,
+    profile?: string,
+  ) => Promise<string>;
+  listAgentWorkspaceProposals: (
+    profile?: string,
+  ) => Promise<AgentWorkspaceProposal[]>;
+  createAgentWorkspaceProposal: (
+    path: string,
+    proposedContent: string,
+    baseContent: string,
+    profile?: string,
+  ) => Promise<AgentWorkspaceProposal>;
+  acceptAgentWorkspaceProposal: (
+    id: string,
+    profile?: string,
+  ) => Promise<boolean>;
+  rejectAgentWorkspaceProposal: (
+    id: string,
+    profile?: string,
+  ) => Promise<boolean>;
+  onWorkspaceFileChanged: (
+    callback: (event: { path: string; content: string }) => void,
+  ) => () => void;
 
   // Credential Pool (profile-aware) — entries follow the upstream
   // engine schema (issue #367). See `CredentialPoolEntry` below.

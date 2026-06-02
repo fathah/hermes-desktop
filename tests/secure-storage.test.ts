@@ -17,6 +17,10 @@ const safeStorageMock = {
   },
 };
 
+type SecureStorageTestGlobal = typeof globalThis & {
+  mockSafeStorage?: typeof safeStorageMock;
+};
+
 vi.mock("electron", () => ({
   safeStorage: safeStorageMock,
 }));
@@ -24,12 +28,12 @@ vi.mock("electron", () => ({
 describe("config secure secret storage", () => {
   beforeEach(() => {
     isEncryptionAvailableMock = true;
-    (global as any).mockSafeStorage = safeStorageMock;
+    (globalThis as SecureStorageTestGlobal).mockSafeStorage = safeStorageMock;
     vi.resetModules();
   });
 
   afterEach(() => {
-    delete (global as any).mockSafeStorage;
+    delete (globalThis as SecureStorageTestGlobal).mockSafeStorage;
   });
 
   it("encrypts secrets if safeStorage is available", async () => {
@@ -39,7 +43,11 @@ describe("config secure secret storage", () => {
 
     // Should be base64-encoded encrypted format
     expect(encrypted).not.toBe(plaintext);
-    expect(Buffer.from(encrypted, "base64").toString("utf-8").startsWith("encrypted:")).toBe(true);
+    expect(
+      Buffer.from(encrypted, "base64")
+        .toString("utf-8")
+        .startsWith("encrypted:"),
+    ).toBe(true);
 
     const decrypted = decryptSecret(encrypted);
     expect(decrypted).toBe(plaintext);

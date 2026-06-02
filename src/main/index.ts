@@ -101,6 +101,7 @@ import {
   getPlatformEnabled,
   setPlatformEnabled,
   getApiServerKey,
+  type SshConnectionConfig,
 } from "./config";
 import {
   listSessions,
@@ -108,6 +109,30 @@ import {
   searchSessions,
   deleteSession,
 } from "./sessions";
+import {
+  acceptAgentWorkspaceProposal,
+  createAgentWorkspaceProposal,
+  createWorkspacePage,
+  getWorkspaceTree,
+  getWorkspaceMetadata,
+  duplicateWorkspacePage,
+  favoriteWorkspacePage,
+  listAgentWorkspaceProposals,
+  listWorkspaceHistory,
+  moveWorkspacePage,
+  recordWorkspaceVisit,
+  readWorkspaceFile,
+  rejectAgentWorkspaceProposal,
+  renameWorkspacePage,
+  restoreWorkspacePage,
+  restoreWorkspaceVersion,
+  trashWorkspacePage,
+  updateWorkspacePageOrder,
+  deleteWorkspaceFile,
+  searchWorkspace,
+  watchWorkspace,
+  writeWorkspaceFile,
+} from "./workspace";
 import {
   syncSessionCache,
   listCachedSessions,
@@ -239,6 +264,46 @@ process.on("unhandledRejection", (reason) => {
 
 let mainWindow: BrowserWindow | null = null;
 const activeChatAborts = new Map<string, () => void>();
+let workspaceWatcher: Awaited<ReturnType<typeof watchWorkspace>> | null = null;
+let workspaceWatcherProfile = "";
+
+const ADMIN_SEARCH_ITEMS = [
+  { kind: "admin" as const, view: "models", title: "Models" },
+  { kind: "admin" as const, view: "providers", title: "Providers" },
+  { kind: "admin" as const, view: "schedules", title: "Schedules" },
+  { kind: "admin" as const, view: "memory", title: "Memory" },
+  { kind: "admin" as const, view: "tools", title: "Tools" },
+  { kind: "admin" as const, view: "kanban", title: "Kanban" },
+  { kind: "admin" as const, view: "gateway", title: "Gateway" },
+  { kind: "admin" as const, view: "settings", title: "Settings" },
+];
+
+const COMMAND_SEARCH_ITEMS = [
+  "/new",
+  "/clear",
+  "/btw",
+  "/approve",
+  "/deny",
+  "/status",
+  "/reset",
+  "/compact",
+  "/undo",
+  "/retry",
+  "/fast",
+  "/usage",
+  "/web",
+  "/image",
+  "/browse",
+  "/code",
+  "/file",
+  "/shell",
+  "/help",
+  "/tools",
+  "/skills",
+  "/kanban",
+  "/memory",
+  "/model",
+].map((command) => ({ kind: "command" as const, command, title: command }));
 
 function openExternalUrl(rawUrl: unknown): void {
   if (!isAllowedExternalUrl(rawUrl)) {
@@ -398,12 +463,37 @@ function createWindow(): void {
 }
 
 function setupIPC(): void {
-  function registerDualHandler<Args extends any[], RetLocal, RetSsh>(
+  function requireLocalWorkspace(): void {
+    const conn = getConnectionConfig();
+    if (conn.mode !== "local") {
+      throw new Error(
+        "Workspace files are only available in local mode in this version.",
+      );
+    }
+  }
+
+  async function ensureWorkspaceWatcher(profile?: string): Promise<void> {
+    const profileKey = profile || "";
+    if (workspaceWatcher && workspaceWatcherProfile === profileKey) return;
+    if (workspaceWatcher) {
+      await workspaceWatcher.close();
+      workspaceWatcher = null;
+    }
+    workspaceWatcherProfile = profileKey;
+    workspaceWatcher = await watchWorkspace({ profile }, (payload) => {
+      mainWindow?.webContents.send("workspace-file-changed", payload);
+    });
+  }
+
+  function registerDualHandler<Args extends unknown[], RetLocal, RetSsh>(
     channel: string,
     localFn: (...args: Args) => Promise<RetLocal> | RetLocal,
-    sshFn: (ssh: any, ...args: Args) => Promise<RetSsh> | RetSsh,
+    sshFn: (
+      ssh: SshConnectionConfig,
+      ...args: Args
+    ) => Promise<RetSsh> | RetSsh,
   ): void {
-    ipcMain.handle(channel, async (_event, ...args: any[]) => {
+    ipcMain.handle(channel, async (_event, ...args: unknown[]) => {
       const conn = getConnectionConfig();
       if (conn.mode === "ssh" && conn.ssh) {
         return sshFn(conn.ssh, ...(args as Args));
@@ -447,7 +537,11 @@ function setupIPC(): void {
   ipcMain.handle("quit-app", () => app.quit());
 
   // Hermes engine info
-  registerDualHandler("get-hermes-version", getHermesVersion, sshGetHermesVersion);
+  registerDualHandler(
+    "get-hermes-version",
+    getHermesVersion,
+    sshGetHermesVersion,
+  );
   registerDualHandler(
     "refresh-hermes-version",
     () => {
@@ -1087,7 +1181,11 @@ function setupIPC(): void {
   // Sessions
   registerDualHandler("list-sessions", listSessions, sshListSessions);
 
-  registerDualHandler("get-session-messages", getSessionMessages, sshGetSessionMessages);
+  registerDualHandler(
+    "get-session-messages",
+    getSessionMessages,
+    sshGetSessionMessages,
+  );
 
   ipcMain.handle("delete-session", (_event, sessionId: string) => {
     return deleteSession(sessionId);
@@ -1258,6 +1356,230 @@ function setupIPC(): void {
       return sshSearchSessions(conn.ssh, query, limit);
     return searchSessions(query, limit);
   });
+
+  ipcMain.handle("get-workspace-tree", async (_event, profile?: string) => {
+    requireLocalWorkspace();
+    await ensureWorkspaceWatcher(profile);
+    return getWorkspaceTree({ profile });
+  });
+
+  ipcMain.handle(
+    "read-workspace-file",
+    async (_event, path: string, profile?: string) => {
+      requireLocalWorkspace();
+      await ensureWorkspaceWatcher(profile);
+      return readWorkspaceFile(path, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "write-workspace-file",
+    async (_event, path: string, content: string, profile?: string) => {
+      requireLocalWorkspace();
+      await ensureWorkspaceWatcher(profile);
+      return writeWorkspaceFile(path, content, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "delete-workspace-file",
+    async (_event, path: string, profile?: string) => {
+      requireLocalWorkspace();
+      await ensureWorkspaceWatcher(profile);
+      return deleteWorkspaceFile(path, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "search-workspace-and-sessions",
+    async (_event, query: string, limit?: number, profile?: string) => {
+      requireLocalWorkspace();
+      const maxResults = limit ?? 20;
+      const workspaceResults = await searchWorkspace(query, maxResults, {
+        profile,
+      });
+      const sessionResults = searchSessions(query, maxResults).map(
+        (result) => ({
+          kind: "session" as const,
+          sessionId: result.sessionId,
+          title: result.title,
+          snippet: result.snippet,
+        }),
+      );
+      const needle = query.trim().toLowerCase();
+      const adminResults = ADMIN_SEARCH_ITEMS.filter((item) =>
+        item.title.toLowerCase().includes(needle),
+      );
+      const commandResults = COMMAND_SEARCH_ITEMS.filter((item) =>
+        item.command.toLowerCase().includes(needle),
+      );
+      return [
+        ...workspaceResults,
+        ...sessionResults,
+        ...adminResults,
+        ...commandResults,
+      ].slice(0, maxResults);
+    },
+  );
+
+  ipcMain.handle(
+    "create-workspace-page",
+    async (
+      _event,
+      input: { title: string; parentPath?: string | null; content?: string },
+      profile?: string,
+    ) => {
+      requireLocalWorkspace();
+      await ensureWorkspaceWatcher(profile);
+      return createWorkspacePage(input, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "rename-workspace-page",
+    async (_event, path: string, title: string, profile?: string) => {
+      requireLocalWorkspace();
+      await ensureWorkspaceWatcher(profile);
+      return renameWorkspacePage(path, title, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "move-workspace-page",
+    async (
+      _event,
+      path: string,
+      parentPath: string | null,
+      profile?: string,
+    ) => {
+      requireLocalWorkspace();
+      await ensureWorkspaceWatcher(profile);
+      return moveWorkspacePage(path, parentPath, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "duplicate-workspace-page",
+    async (_event, path: string, profile?: string) => {
+      requireLocalWorkspace();
+      await ensureWorkspaceWatcher(profile);
+      return duplicateWorkspacePage(path, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "trash-workspace-page",
+    async (_event, path: string, profile?: string) => {
+      requireLocalWorkspace();
+      await ensureWorkspaceWatcher(profile);
+      return trashWorkspacePage(path, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "restore-workspace-page",
+    async (_event, path: string, profile?: string) => {
+      requireLocalWorkspace();
+      await ensureWorkspaceWatcher(profile);
+      return restoreWorkspacePage(path, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "favorite-workspace-page",
+    async (_event, path: string, favorite: boolean, profile?: string) => {
+      requireLocalWorkspace();
+      await ensureWorkspaceWatcher(profile);
+      return favoriteWorkspacePage(path, favorite, { profile });
+    },
+  );
+
+  ipcMain.handle("get-workspace-metadata", async (_event, profile?: string) => {
+    requireLocalWorkspace();
+    await ensureWorkspaceWatcher(profile);
+    return getWorkspaceMetadata({ profile });
+  });
+
+  ipcMain.handle(
+    "update-workspace-page-order",
+    async (
+      _event,
+      parentPath: string | null,
+      orderedPaths: string[],
+      profile?: string,
+    ) => {
+      requireLocalWorkspace();
+      await ensureWorkspaceWatcher(profile);
+      return updateWorkspacePageOrder(parentPath, orderedPaths, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "record-workspace-visit",
+    async (_event, path: string, profile?: string) => {
+      requireLocalWorkspace();
+      await ensureWorkspaceWatcher(profile);
+      return recordWorkspaceVisit(path, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "list-workspace-history",
+    async (_event, path: string, profile?: string) => {
+      requireLocalWorkspace();
+      return listWorkspaceHistory(path, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "restore-workspace-version",
+    async (_event, path: string, historyId: string, profile?: string) => {
+      requireLocalWorkspace();
+      await ensureWorkspaceWatcher(profile);
+      return restoreWorkspaceVersion(path, historyId, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "list-agent-workspace-proposals",
+    async (_event, profile?: string) => {
+      requireLocalWorkspace();
+      return listAgentWorkspaceProposals({ profile });
+    },
+  );
+
+  ipcMain.handle(
+    "create-agent-workspace-proposal",
+    async (
+      _event,
+      path: string,
+      proposedContent: string,
+      baseContent: string,
+      profile?: string,
+    ) => {
+      requireLocalWorkspace();
+      return createAgentWorkspaceProposal(path, proposedContent, baseContent, {
+        profile,
+      });
+    },
+  );
+
+  ipcMain.handle(
+    "accept-agent-workspace-proposal",
+    async (_event, id: string, profile?: string) => {
+      requireLocalWorkspace();
+      await ensureWorkspaceWatcher(profile);
+      return acceptAgentWorkspaceProposal(id, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "reject-agent-workspace-proposal",
+    async (_event, id: string, profile?: string) => {
+      requireLocalWorkspace();
+      return rejectAgentWorkspaceProposal(id, { profile });
+    },
+  );
 
   // Credential Pool — profile-aware. When `profile` is omitted, the
   // credential pool helpers default to the currently active profile's

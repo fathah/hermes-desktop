@@ -24,6 +24,14 @@ try {
   // Not running inside an Electron environment (e.g. unit tests)
 }
 
+type MockSafeStorageGlobal = typeof globalThis & {
+  mockSafeStorage?: typeof safeStorage;
+};
+
+function getSafeStorage(): typeof safeStorage {
+  return (globalThis as MockSafeStorageGlobal).mockSafeStorage ?? safeStorage;
+}
+
 // ── Connection Config (local / remote / ssh) ─────────────
 
 export interface SshConnectionConfig {
@@ -61,14 +69,12 @@ function desktopConfigFile(): string {
 
 export function encryptSecret(secret: string): string {
   if (!secret) return "";
-  const storage = typeof global !== "undefined" && (global as any).mockSafeStorage
-    ? (global as any).mockSafeStorage
-    : safeStorage;
+  const storage = getSafeStorage();
   if (storage && storage.isEncryptionAvailable()) {
     try {
       return storage.encryptString(secret).toString("base64");
-    } catch (e) {
-      console.error("[Security] Failed to encrypt secret:", e);
+    } catch (err) {
+      console.error("[Security] Failed to encrypt secret:", err);
     }
   }
   return secret;
@@ -76,14 +82,12 @@ export function encryptSecret(secret: string): string {
 
 export function decryptSecret(payload: string): string {
   if (!payload) return "";
-  const storage = typeof global !== "undefined" && (global as any).mockSafeStorage
-    ? (global as any).mockSafeStorage
-    : safeStorage;
+  const storage = getSafeStorage();
   if (storage && storage.isEncryptionAvailable()) {
     try {
       const buffer = Buffer.from(payload, "base64");
       return storage.decryptString(buffer);
-    } catch (e) {
+    } catch {
       // Fallback for legacy plaintext values
       return payload;
     }
@@ -96,7 +100,11 @@ export function readDesktopConfig(): Record<string, unknown> {
     const f = desktopConfigFile();
     if (!existsSync(f)) return {};
     const data = JSON.parse(readFileSync(f, "utf-8"));
-    if (data && typeof data === "object" && typeof data.remoteApiKey === "string") {
+    if (
+      data &&
+      typeof data === "object" &&
+      typeof data.remoteApiKey === "string"
+    ) {
       data.remoteApiKey = decryptSecret(data.remoteApiKey);
     }
     return data;
@@ -110,7 +118,11 @@ export function writeDesktopConfig(data: Record<string, unknown>): void {
     mkdirSync(HERMES_HOME, { recursive: true });
   }
   const clone = JSON.parse(JSON.stringify(data));
-  if (clone && typeof clone === "object" && typeof clone.remoteApiKey === "string") {
+  if (
+    clone &&
+    typeof clone === "object" &&
+    typeof clone.remoteApiKey === "string"
+  ) {
     clone.remoteApiKey = encryptSecret(clone.remoteApiKey);
   }
   writeFileSync(desktopConfigFile(), JSON.stringify(clone, null, 2), "utf-8");

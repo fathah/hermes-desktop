@@ -16,11 +16,13 @@ import Models from "../Models/Models";
 import Providers from "../Providers/Providers";
 import Schedules from "../Schedules/Schedules";
 import Kanban from "../Kanban/Kanban";
+import Workspace from "../Workspace/Workspace";
 import RemoteNotice from "../../components/RemoteNotice";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
 import hermeslogo from "../../assets/hermes.png";
 import {
   ChatBubble,
+  ChevronDown,
   Clock,
   Users,
   Settings as SettingsIcon,
@@ -35,10 +37,12 @@ import {
   Kanban as KanbanIcon,
   Download,
 } from "../../assets/icons";
+import { FileText } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 
 type View =
+  | "workspace"
   | "chat"
   | "sessions"
   | "agents"
@@ -54,7 +58,6 @@ type View =
   | "settings";
 
 const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string }[] = [
-  { view: "chat", icon: ChatBubble, labelKey: "navigation.chat" },
   { view: "sessions", icon: Clock, labelKey: "navigation.sessions" },
   { view: "agents", icon: Users, labelKey: "navigation.agents" },
   { view: "office", icon: Building, labelKey: "navigation.office" },
@@ -69,6 +72,11 @@ const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string }[] = [
   { view: "settings", icon: SettingsIcon, labelKey: "navigation.settings" },
 ];
 
+const WORKSPACE_NAV_ITEMS: { view: View; icon: LucideIcon; label: string }[] = [
+  { view: "workspace", icon: FileText, label: "Workspace" },
+  { view: "chat", icon: ChatBubble, label: "Chat" },
+];
+
 interface LayoutProps {
   verifyWarning?: boolean;
   onReinstall?: () => void;
@@ -81,17 +89,18 @@ function Layout({
   onDismissVerifyWarning,
 }: LayoutProps = {}): React.JSX.Element {
   const { t } = useI18n();
-  const [view, setView] = useState<View>("chat");
+  const [view, setView] = useState<View>("workspace");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [activeProfile, setActiveProfile] = useState("default");
   // Tabs lazy-mount on first visit, then stay mounted (display:none toggle).
   // Keeps IPC refetch / DOM rebuild off the tab-switch hot path.
   const [visitedViews, setVisitedViews] = useState<Set<View>>(
-    () => new Set<View>(["chat"]),
+    () => new Set<View>(["workspace"]),
   );
   // Remote-only mode — SSH tunnel has full access; only pure HTTP remote mode restricts screens
   const [remoteMode, setRemoteMode] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(true);
 
   const paneStyle = (target: View): React.CSSProperties => ({
     display: view === target ? "flex" : "none",
@@ -232,16 +241,40 @@ function Layout({
         </div>
 
         <nav className="sidebar-nav">
-          {NAV_ITEMS.map(({ view: v, icon: Icon, labelKey }) => (
-            <button
-              key={v}
-              className={`sidebar-nav-item ${view === v ? "active" : ""}`}
-              onClick={() => goTo(v)}
-            >
-              <Icon size={16} />
-              {t(labelKey)}
-            </button>
-          ))}
+          <div className="sidebar-nav-section">
+            {WORKSPACE_NAV_ITEMS.map(({ view: v, icon: Icon, label }) => (
+              <button
+                key={v}
+                className={`sidebar-nav-item ${view === v ? "active" : ""}`}
+                onClick={() => goTo(v)}
+              >
+                <Icon size={16} />
+                {label}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="sidebar-section-toggle"
+            onClick={() => setAdminOpen((open) => !open)}
+          >
+            <ChevronDown
+              size={14}
+              className={adminOpen ? "sidebar-section-open" : ""}
+            />
+            Agent Control Center
+          </button>
+          {adminOpen &&
+            NAV_ITEMS.map(({ view: v, icon: Icon, labelKey }) => (
+              <button
+                key={v}
+                className={`sidebar-nav-item ${view === v ? "active" : ""}`}
+                onClick={() => goTo(v)}
+              >
+                <Icon size={16} />
+                {t(labelKey)}
+              </button>
+            ))}
         </nav>
 
         <div className="sidebar-footer">
@@ -286,6 +319,14 @@ function Layout({
             onDismiss={onDismissVerifyWarning}
           />
         )}
+        <div style={paneStyle("workspace")}>
+          <Workspace
+            profile={activeProfile}
+            onOpenAdmin={(target) => goTo(target as View)}
+            onOpenSession={handleResumeSession}
+          />
+        </div>
+
         <div style={paneStyle("chat")}>
           <Chat
             messages={messages}
