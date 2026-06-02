@@ -6,7 +6,8 @@ import {
   appendFileSync,
   unlinkSync,
   mkdirSync,
-  createWriteStream,
+  openSync,
+  closeSync,
 } from "fs";
 import { join } from "path";
 import { homedir } from "os";
@@ -35,14 +36,32 @@ import {
   pidIsAliveAs,
   stripAnsi,
   profileHome,
+  profilePaths,
+  normalizeProfileName,
   getActiveProfileNameSync,
 } from "./utils";
+import { getProfilePort } from "./gateway-ports";
 import { readModels } from "./models";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 import { type Attachment, escapeXmlAttr } from "../shared/attachments";
-import { URL_KEY_MAP } from "../shared/url-key-map";
+import { URL_KEY_MAP, OPENAI_COMPAT_PROVIDERS } from "../shared/url-key-map";
 
-const LOCAL_API_URL = "http://127.0.0.1:8642";
+/**
+ * Resolve which profile a gateway call targets. An explicit profile always
+ * wins; otherwise we fall back to the file-backed active profile so that
+ * callers without a profile argument (health polling, status, app-exit)
+ * operate on whatever the desktop is currently showing — not a hardcoded
+ * "default". Returns `undefined` for the default profile (matching the
+ * profileHome/readEnv/getProfilePort convention).
+ */
+function resolveProfile(profile?: string): string | undefined {
+  return normalizeProfileName(profile ?? getActiveProfileNameSync());
+}
+
+/** Map a resolved profile to the key used in the per-profile process maps. */
+function profileKey(profile?: string): string {
+  return resolveProfile(profile) ?? "default";
+}
 
 /**
  * Normalise a remote-mode URL the user typed into the connection
@@ -64,7 +83,7 @@ export function normaliseRemoteUrl(raw: string): string {
   return url;
 }
 
-export function getApiUrl(): string {
+export function getApiUrl(profile?: string): string {
   const conn = getConnectionConfig();
   if (conn.mode === "ssh") {
     const sshUrl = getSshTunnelUrl();
@@ -74,7 +93,11 @@ export function getApiUrl(): string {
   if (conn.mode === "remote" && conn.remoteUrl) {
     return normaliseRemoteUrl(conn.remoteUrl);
   }
-  return LOCAL_API_URL;
+  // Local mode: each profile's gateway binds its own port so they can run
+  // concurrently. Address the active (or explicitly requested) profile's
+  // gateway rather than a fixed 8642 — that constant would always resolve to
+  // whichever gateway grabbed the port first, regardless of active profile.
+  return `http://127.0.0.1:${getProfilePort(resolveProfile(profile))}`;
 }
 
 export function isRemoteMode(): boolean {
@@ -128,45 +151,75 @@ export async function ensureSshTunnelIfNeeded(): Promise<void> {
   }
 }
 
+/** Pick a Whisper model name appropriate for the provider's base URL. */
+function whisperModelForBaseUrl(baseUrl: string): string {
+  if (/api\.groq\.com/i.test(baseUrl)) return "whisper-large-v3-turbo";
+  // OpenAI and most OpenAI-compatible gateways accept whisper-1.
+  return "whisper-1";
+}
+
 /**
- * Providers whose chat path the desktop wires up explicitly with
- * `OPENAI_BASE_URL` + a resolved `OPENAI_API_KEY` — rather than relying
- * on the agent's native provider routing.
+ * Transcribe a recorded audio clip to text via the active profile's provider.
  *
- * The original set was just *local* LLM endpoints (lmstudio / ollama /
- * vllm / llamacpp) plus the generic `custom` entry. That meant the
- * built-in remote OpenAI-compatible providers (Groq, DeepSeek,
- * Together, Fireworks, Cerebras, Mistral) — which are defined in
- * `src/renderer/src/constants.ts:LOCAL_PRESETS` with their own
- * `baseUrl` + `envKey` — slipped past this branch and tripped an
- * upstream hermes-agent fallback that misroutes the request to
- * OpenAI's API while still sending the user's provider key, producing
- * a 401 like *"Incorrect API key provided: sk-… You can find your
- * API key at https://platform.openai.com/account/api-keys."*
+ * The local gateway has no audio endpoint, so this goes straight to the
+ * profile's OpenAI-compatible provider (`{baseUrl}/audio/transcriptions`) — the
+ * same base URL + key the model uses (e.g. Groq Whisper). Used as the desktop's
+ * voice-input fallback when the browser SpeechRecognition API is unavailable.
  *
- * Including them here lets the same `URL_KEY_MAP` lookup that already
- * handles `provider="custom"` with a known commercial host also fire
- * when the user picks the built-in entry — same routing, same key,
- * no upstream-fallback leak.
+ * Throws with a user-readable message when no transcription-capable endpoint /
+ * key is configured, so the caller can surface it.
  */
-const OPENAI_COMPAT_PROVIDERS = new Set([
-  // Generic
-  "custom",
-  // Local LLMs
-  "lmstudio",
-  "ollama",
-  "vllm",
-  "llamacpp",
-  // Built-in remote OpenAI-compatible providers (must stay in sync
-  // with the `id` field of remote-group entries in renderer
-  // `LOCAL_PRESETS`).
-  "groq",
-  "deepseek",
-  "together",
-  "fireworks",
-  "cerebras",
-  "mistral",
-]);
+export async function transcribeAudio(
+  audio: Uint8Array,
+  mimeType: string,
+  profile?: string,
+): Promise<string> {
+  const resolved = resolveProfile(profile);
+  const mc = getModelConfig(resolved);
+  const baseUrl = (mc.baseUrl || "").replace(/\/+$/, "");
+  if (!baseUrl) {
+    throw new Error(
+      "Voice input needs an OpenAI-compatible base URL (e.g. Groq) on the active model. Set one in Models, or type your message.",
+    );
+  }
+
+  // Resolve the provider key the same way the chat path does: URL-specific key
+  // first, then the generic CUSTOM_API_KEY / OPENAI_API_KEY fallbacks.
+  const env = readEnv(resolved);
+  let apiKey = "";
+  for (const { pattern, envKey } of URL_KEY_MAP) {
+    if (pattern.test(baseUrl)) {
+      apiKey = (env[envKey] || "").trim();
+      break;
+    }
+  }
+  if (!apiKey) apiKey = (env.CUSTOM_API_KEY || env.OPENAI_API_KEY || "").trim();
+
+  const form = new FormData();
+  form.append(
+    "file",
+    new Blob([audio as BlobPart], { type: mimeType || "audio/webm" }),
+    "speech.webm",
+  );
+  form.append("model", whisperModelForBaseUrl(baseUrl));
+
+  const headers: Record<string, string> = {};
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+
+  const res = await fetch(`${baseUrl}/audio/transcriptions`, {
+    method: "POST",
+    headers,
+    body: form,
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(
+      `Transcription failed (${res.status}). ${body.slice(0, 200)}`.trim(),
+    );
+  }
+  const data = (await res.json().catch(() => null)) as { text?: string } | null;
+  return (data?.text || "").trim();
+}
 
 interface ChatHandle {
   abort: () => void;
@@ -176,9 +229,9 @@ interface ChatHandle {
 //  API Server health check
 // ────────────────────────────────────────────────────
 
-function isApiServerReady(): Promise<boolean> {
+function isApiServerReady(profile?: string): Promise<boolean> {
   return new Promise((resolve) => {
-    const url = `${getApiUrl()}/health`;
+    const url = `${getApiUrl(profile)}/health`;
     const mod = url.startsWith("https") ? https : http;
     const req = mod.request(
       url,
@@ -201,10 +254,13 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function waitForApiServerReady(timeoutMs = 8000): Promise<boolean> {
+async function waitForApiServerReady(
+  timeoutMs = 8000,
+  profile?: string,
+): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (await isApiServerReady()) return true;
+    if (await isApiServerReady(profile)) return true;
     await delay(250);
   }
   return false;
@@ -214,23 +270,28 @@ async function waitForApiServerReady(timeoutMs = 8000): Promise<boolean> {
 //  Ensure API server is enabled in config
 // ────────────────────────────────────────────────────
 
-function ensureApiServerConfig(): void {
+function ensureApiServerConfig(profile?: string): void {
   try {
-    const configPath = join(HERMES_HOME, "config.yaml");
-    if (!existsSync(configPath)) return;
-    const content = readFileSync(configPath, "utf-8");
-    // If api_server is already configured, skip
+    const { configFile } = profilePaths(resolveProfile(profile));
+    if (!existsSync(configFile)) return;
+    const content = readFileSync(configFile, "utf-8");
+    // If api_server is already configured, skip — the port is then governed
+    // by the existing block (reconciled for collisions by getProfilePort) and
+    // by the API_SERVER_PORT env we pass at spawn.
     if (/api_server/i.test(content)) return;
+    // Bind this profile's gateway to its own allocated port so profiles can
+    // run concurrently without fighting over 8642.
+    const port = getProfilePort(profile);
     const addition = `
 # Desktop app API server (auto-configured)
 platforms:
   api_server:
     enabled: true
     extra:
-      port: 8642
+      port: ${port}
       host: "127.0.0.1"
 `;
-    appendFileSync(configPath, addition, "utf-8");
+    appendFileSync(configFile, addition, "utf-8");
   } catch {
     /* non-fatal */
   }
@@ -283,6 +344,8 @@ export interface ChatCallbacks {
     cost?: number;
     rateLimitRemaining?: number;
     rateLimitReset?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
   }) => void;
 }
 
@@ -513,7 +576,7 @@ function sendMessageViaApi(
       ...headers,
       "Content-Length": String(probeBodyBuf.length),
     };
-    const probeUrl = `${getApiUrl()}/v1/chat/completions`;
+    const probeUrl = `${getApiUrl(profile)}/v1/chat/completions`;
     const probeMod = probeUrl.startsWith("https") ? https : http;
     const probeReq = probeMod.request(
       probeUrl,
@@ -597,6 +660,13 @@ function sendMessageViaApi(
           cost: parsed.usage.cost,
           rateLimitRemaining: parsed.usage.rate_limit_remaining,
           rateLimitReset: parsed.usage.rate_limit_reset,
+          // Prompt-cache stats for the context gauge. The gateway emits
+          // cache_read_tokens / cache_write_tokens; OpenAI-style providers
+          // expose cached_tokens under prompt_tokens_details.
+          cacheReadTokens:
+            parsed.usage.cache_read_tokens ??
+            parsed.usage.prompt_tokens_details?.cached_tokens,
+          cacheWriteTokens: parsed.usage.cache_write_tokens,
         });
       }
 
@@ -627,7 +697,7 @@ function sendMessageViaApi(
     return false;
   }
 
-  const chatUrl = `${getApiUrl()}/v1/chat/completions`;
+  const chatUrl = `${getApiUrl(profile)}/v1/chat/completions`;
   const requester = chatUrl.startsWith("https") ? https.request : http.request;
   const req = requester(
     chatUrl,
@@ -1022,15 +1092,15 @@ export async function sendMessage(
   // Check API server availability. In local mode, a running gateway process
   // can still be in its startup window (or the cached ready state can be stale
   // after an external stop/start), so verify health before taking the API path.
-  const localGatewayRunning = !isRemoteMode() && isGatewayRunning();
+  const localGatewayRunning = !isRemoteMode() && isGatewayRunning(profile);
   if (
     apiServerAvailable === null ||
     apiServerAvailable === false ||
     localGatewayRunning
   ) {
-    apiServerAvailable = await isApiServerReady();
+    apiServerAvailable = await isApiServerReady(profile);
     if (!apiServerAvailable && localGatewayRunning) {
-      apiServerAvailable = await waitForApiServerReady();
+      apiServerAvailable = await waitForApiServerReady(8000, profile);
     }
   }
 
@@ -1057,9 +1127,9 @@ let _healthCheckInterval: ReturnType<typeof setInterval> | null = null;
 function ensureInitialized(): void {
   if (_initialized) return;
   _initialized = true;
-  if (!isRemoteMode()) {
-    ensureApiServerConfig();
-  }
+  // Note: api_server config is written per-profile by startGateway() now
+  // (each profile needs its own port), so ensureInitialized only owns the
+  // shared health poller.
   startHealthPolling();
 }
 
@@ -1086,8 +1156,25 @@ export function stopHealthPolling(): void {
 //  Gateway management
 // ────────────────────────────────────────────────────
 
-let gatewayProcess: ChildProcess | null = null;
-let gatewayStartedByApp = false;
+// Profiles each own a gateway, keyed by profileKey() ("default" for the
+// default profile, the profile name otherwise). Tracking them in maps —
+// rather than a single global — lets several profiles' gateways run at once
+// (e.g. each keeping its own Telegram bot online), which is the documented
+// hermes model: one gateway per profile, bound to that profile's own port.
+const gatewayProcesses = new Map<string, ChildProcess>();
+const appStartedProfiles = new Set<string>();
+
+/**
+ * Clear the cached API-server-ready flag, but only when `profile` is the one
+ * the desktop currently addresses (the active profile). A *background*
+ * profile's gateway dying must not flip the active profile's chat into the
+ * CLI-fallback path on its next message.
+ */
+function invalidateApiCacheFor(profile?: string): void {
+  if (profileKey(profile) === profileKey(undefined)) {
+    apiServerAvailable = false;
+  }
+}
 
 export function startGateway(profile?: string): boolean {
   // Defensive: the local gateway is never the right thing to spawn in
@@ -1103,7 +1190,7 @@ export function startGateway(profile?: string): boolean {
     return false;
   }
   ensureInitialized();
-  if (isGatewayRunning()) return false;
+  if (isGatewayRunning(profile)) return false;
 
   // Pre-flight: verify the Python interpreter exists before attempting to
   // spawn. Without this check, spawn() fails with ENOENT and the error is
@@ -1123,6 +1210,14 @@ export function startGateway(profile?: string): boolean {
     return false;
   }
 
+  const resolved = resolveProfile(profile); // undefined => default
+  const key = profileKey(profile);
+
+  // Make sure this profile's config.yaml enables the api_server and binds the
+  // profile's own port before we spawn.
+  ensureApiServerConfig(profile);
+  const port = getProfilePort(profile);
+
   // Build gateway env with profile API keys
   const gatewayEnv: Record<string, string> = {
     ...(process.env as Record<string, string>),
@@ -1130,13 +1225,17 @@ export function startGateway(profile?: string): boolean {
     HOME: homedir(),
     HERMES_HOME: HERMES_HOME,
     API_SERVER_ENABLED: "true", // Ensure API server starts with gateway
+    // Bind to this profile's port. config.yaml's api_server.port wins when
+    // present (getProfilePort keeps it collision-free); this env value covers
+    // the case where the block exists but omits an explicit port.
+    API_SERVER_PORT: String(port),
   };
 
   // Inject ALL profile API keys so the gateway can authenticate with any provider.
   const profileEnv = readEnv(profile);
-  for (const [key, value] of Object.entries(profileEnv)) {
+  for (const [k, value] of Object.entries(profileEnv)) {
     if (value) {
-      gatewayEnv[key] = value;
+      gatewayEnv[k] = value;
     }
   }
 
@@ -1174,51 +1273,86 @@ export function startGateway(profile?: string): boolean {
   }
 
   // Route stderr to a log file so startup errors are visible for debugging.
-  // stdout is still ignored (the gateway daemonizes and writes its own logs).
-  const logDir = HERMES_HOME;
+  // Per-profile log dir so a named profile's failures (e.g. a duplicate bot
+  // token, which the gateway refuses to start with) don't get mixed into the
+  // default profile's log. stdout is ignored (the gateway daemonizes and
+  // writes its own logs).
+  const logDir = profileHome(resolved);
   try {
     mkdirSync(logDir, { recursive: true });
   } catch {
     // ignore
   }
   const logPath = join(logDir, "gateway-stderr.log");
-  const stderrStream = createWriteStream(logPath, { flags: "a" });
+  // Open the log synchronously and hand spawn a real fd. A createWriteStream
+  // opens its fd asynchronously, so passing the stream to stdio races: when
+  // the fd hasn't resolved yet (fd: null) Electron's Node rejects it with
+  // ERR_INVALID_ARG_VALUE. An integer fd sidesteps the race entirely.
+  let stderrFd: number;
+  try {
+    stderrFd = openSync(logPath, "a");
+  } catch {
+    // If the log file can't be opened (e.g. permissions), fall back to
+    // discarding stderr rather than failing the whole gateway start.
+    stderrFd = -1;
+  }
 
-  gatewayProcess = spawn(HERMES_PYTHON, hermesCliArgs(["gateway"]), {
+  // Target the specific profile via `--profile <name>` (placed before the
+  // subcommand, as the CLI requires). The flag makes the CLI repoint
+  // HERMES_HOME at the profile's dir internally; the shared repo/venv stay
+  // put. The default profile takes no flag.
+  const cliArgs = resolved ? ["--profile", resolved, "gateway"] : ["gateway"];
+  const proc = spawn(HERMES_PYTHON, hermesCliArgs(cliArgs), {
     cwd: HERMES_REPO,
     env: gatewayEnv,
-    stdio: ["ignore", "ignore", stderrStream],
+    stdio: ["ignore", "ignore", stderrFd >= 0 ? stderrFd : "ignore"],
     detached: true,
     ...HIDDEN_SUBPROCESS_OPTIONS,
   });
+  // The child has inherited (dup'd) the fd; close our copy so we don't leak a
+  // descriptor on every gateway (re)start.
+  if (stderrFd >= 0) {
+    try {
+      closeSync(stderrFd);
+    } catch {
+      // best-effort
+    }
+  }
 
-  gatewayProcess.on("error", (err) => {
-    console.error("[gateway] Failed to spawn gateway process:", err.message);
-    gatewayProcess = null;
-    gatewayStartedByApp = false;
-    apiServerAvailable = false;
+  proc.on("error", (err) => {
+    console.error(
+      `[gateway:${key}] Failed to spawn gateway process:`,
+      err.message,
+    );
+    if (gatewayProcesses.get(key) === proc) gatewayProcesses.delete(key);
+    appStartedProfiles.delete(key);
+    invalidateApiCacheFor(profile);
   });
 
-  gatewayProcess.on("close", (code, signal) => {
+  proc.on("close", (code, signal) => {
     if (code !== null && code !== 0) {
       console.error(
-        `[gateway] Process exited with code ${code}${signal ? ` (signal: ${signal})` : ""}. ` +
+        `[gateway:${key}] Process exited with code ${code}${signal ? ` (signal: ${signal})` : ""}. ` +
           `Check ${logPath} for details.`,
       );
     }
-    gatewayProcess = null;
-    gatewayStartedByApp = false;
-    apiServerAvailable = false;
+    if (gatewayProcesses.get(key) === proc) gatewayProcesses.delete(key);
+    appStartedProfiles.delete(key);
+    invalidateApiCacheFor(profile);
     // Restart health polling to detect if gateway comes back
     startHealthPolling();
   });
 
-  gatewayProcess.unref();
-  gatewayStartedByApp = true;
+  proc.unref();
+  gatewayProcesses.set(key, proc);
+  appStartedProfiles.add(key);
 
-  // Wait a bit then check if API server came up
+  // Wait a bit then check if API server came up (only meaningful for the
+  // active profile, whose URL getApiUrl() resolves to).
   setTimeout(async () => {
-    apiServerAvailable = await isApiServerReady();
+    if (profileKey(profile) === profileKey(undefined)) {
+      apiServerAvailable = await isApiServerReady(profile);
+    }
   }, 3000);
 
   return true;
@@ -1239,37 +1373,35 @@ function parsePidFromFile(pidFile: string): number | null {
 }
 
 /**
- * Returns candidate gateway.pid paths to check. The hermes CLI writes the
- * PID file into the active profile's home directory when a named profile is
- * in use (e.g. ~/.hermes/profiles/fatha/gateway.pid), falling back to
- * ~/.hermes/gateway.pid for the default profile. We check both so that
- * isGatewayRunning() works regardless of which profile is active.
+ * The gateway.pid path for a profile. The hermes CLI writes it into the
+ * profile's home directory (~/.hermes/gateway.pid for default,
+ * ~/.hermes/profiles/<name>/gateway.pid for a named profile), so each
+ * profile's gateway has its own PID file — that's what lets them coexist.
  */
-function gatewayPidPaths(): string[] {
-  const paths: string[] = [join(HERMES_HOME, "gateway.pid")];
-  const activeProfile = getActiveProfileNameSync();
-  if (activeProfile && activeProfile !== "default") {
-    paths.push(join(profileHome(activeProfile), "gateway.pid"));
-  }
-  return paths;
+function gatewayPidPath(profile?: string): string {
+  return join(profileHome(resolveProfile(profile)), "gateway.pid");
 }
 
-function readPidFile(): number | null {
-  for (const pidFile of gatewayPidPaths()) {
-    const pid = parsePidFromFile(pidFile);
-    if (pid !== null) return pid;
-  }
-  return null;
+function readPidFile(profile?: string): number | null {
+  return parsePidFromFile(gatewayPidPath(profile));
 }
 
-export function stopGateway(force = false): void {
-  if (!force && !gatewayStartedByApp) return;
+/**
+ * Stop a single profile's gateway. Defaults to the active profile. By design
+ * this only touches the named profile — switching profiles, app exit, etc.
+ * must never take down a *different* profile's gateway (and its bots).
+ */
+export function stopGateway(profile?: string, force = false): void {
+  const key = profileKey(profile);
+  if (!force && !appStartedProfiles.has(key)) return;
 
-  if (gatewayProcess && !gatewayProcess.killed) {
-    gatewayProcess.kill("SIGTERM");
-    gatewayProcess = null;
+  const proc = gatewayProcesses.get(key);
+  if (proc && !proc.killed) {
+    proc.kill("SIGTERM");
   }
-  const pid = readPidFile();
+  gatewayProcesses.delete(key);
+
+  const pid = readPidFile(profile);
   if (pid) {
     try {
       process.kill(pid, "SIGTERM");
@@ -1280,17 +1412,16 @@ export function stopGateway(force = false): void {
   // Always clear the PID file once we've signalled it. Leaving a stale PID
   // around means the next isGatewayRunning() / stopGateway() call can hit
   // an unrelated process that the OS has since assigned the same PID.
-  for (const pidFile of gatewayPidPaths()) {
-    if (existsSync(pidFile)) {
-      try {
-        unlinkSync(pidFile);
-      } catch {
-        // best-effort; will be overwritten on next gateway start
-      }
+  const pidFile = gatewayPidPath(profile);
+  if (existsSync(pidFile)) {
+    try {
+      unlinkSync(pidFile);
+    } catch {
+      // best-effort; will be overwritten on next gateway start
     }
   }
-  gatewayStartedByApp = false;
-  apiServerAvailable = false;
+  appStartedProfiles.delete(key);
+  invalidateApiCacheFor(profile);
 }
 
 // Python image prefixes covering both native Windows (pythonw.exe / python.exe)
@@ -1298,9 +1429,10 @@ export function stopGateway(force = false): void {
 // gateway.pid actually belongs to a python process before reporting alive.
 const GATEWAY_IMAGE_PREFIXES = ["python", "pythonw"];
 
-export function isGatewayRunning(): boolean {
-  if (gatewayProcess && !gatewayProcess.killed) return true;
-  const pid = readPidFile();
+export function isGatewayRunning(profile?: string): boolean {
+  const proc = gatewayProcesses.get(profileKey(profile));
+  if (proc && !proc.killed) return true;
+  const pid = readPidFile(profile);
   if (!pid) return false;
   return pidIsAliveAs(pid, GATEWAY_IMAGE_PREFIXES);
 }
@@ -1341,9 +1473,19 @@ export function restartGateway(profile?: string): void {
   // in remote/SSH mode.  Cheap to check; catches IPC paths that don't
   // wrap their restart calls in an isRemoteMode() check.
   if (isRemoteMode()) return;
-  if (!gatewayStartedByApp && !isGatewayRunning()) return;
-  stopGateway(true);
+  const key = profileKey(profile);
+  if (!appStartedProfiles.has(key) && !isGatewayRunning(profile)) return;
+  stopGateway(profile, true);
   setTimeout(() => {
     startGateway(profile);
   }, 500);
+}
+
+/**
+ * Hook for the profile-switch handler: drop the cached ready flag so the next
+ * health check probes the newly active profile's port instead of trusting a
+ * value sampled against the previous profile's gateway.
+ */
+export function notifyProfileSwitched(): void {
+  apiServerAvailable = null;
 }

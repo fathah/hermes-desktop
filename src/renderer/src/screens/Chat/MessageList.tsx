@@ -71,11 +71,21 @@ export const MessageList = memo(function MessageList({
     <>
       {visibleMessages.map((msg, i) => {
         const k = (msg as { kind?: string }).kind;
+        // One avatar per turn: show it only on the first row of a contiguous
+        // run of same-role rows. An agent turn's thinking/tool rows + answer
+        // bubble share one avatar; the continuation rows render a spacer.
+        const prev = visibleMessages[i - 1];
+        const showAvatar = !prev || prev.role !== msg.role;
         if (k === "reasoning") {
           return (
             <ReasoningRow
               key={msg.id}
               msg={msg as Extract<ChatMessage, { kind: "reasoning" }>}
+              // Still "Thinking…" only while this is the last row and the turn
+              // is streaming; once the answer arrives (or history loads) it
+              // becomes a completed "Thought".
+              active={isLoading && i === visibleMessages.length - 1}
+              showAvatar={showAvatar}
             />
           );
         }
@@ -84,6 +94,7 @@ export const MessageList = memo(function MessageList({
             <ToolCallRow
               key={msg.id}
               msg={msg as Extract<ChatMessage, { kind: "tool_call" }>}
+              showAvatar={showAvatar}
             />
           );
         }
@@ -92,6 +103,7 @@ export const MessageList = memo(function MessageList({
             <ToolResultRow
               key={msg.id}
               msg={msg as Extract<ChatMessage, { kind: "tool_result" }>}
+              showAvatar={showAvatar}
             />
           );
         }
@@ -104,6 +116,7 @@ export const MessageList = memo(function MessageList({
             isLoading={isLoading}
             onApprove={onApprove}
             onDeny={onDeny}
+            showAvatar={showAvatar}
           />
         );
       })}

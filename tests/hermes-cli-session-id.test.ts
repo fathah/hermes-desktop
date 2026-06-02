@@ -158,6 +158,14 @@ vi.mock("../src/main/utils", () => ({
   stripAnsi: (s: string) => s,
   pidIsAliveAs: () => false,
   getActiveProfileNameSync: () => "default",
+  normalizeProfileName: (p?: string) =>
+    p === undefined || p === "" || p === "default" ? undefined : p,
+  profileHome: () => TEST_HOME,
+  profilePaths: () => ({
+    home: TEST_HOME,
+    envFile: `${TEST_HOME}/.env`,
+    configFile: `${TEST_HOME}/config.yaml`,
+  }),
 }));
 
 vi.mock("../src/main/models", () => ({
@@ -182,7 +190,7 @@ describe("CLI fallback session id propagation", () => {
   });
 
   afterEach(() => {
-    stopGateway(true);
+    stopGateway(undefined, true);
     stopHealthPolling();
     spawned.length = 0;
   });
@@ -217,7 +225,10 @@ describe("CLI fallback session id propagation", () => {
       }).then(() => {
         const proc = spawned[0];
         proc.stdout.emit("data", Buffer.from("Hi there"));
-        proc.stderr.emit("data", Buffer.from(`\nsession_id: ${cliSessionId}\n`));
+        proc.stderr.emit(
+          "data",
+          Buffer.from(`\nsession_id: ${cliSessionId}\n`),
+        );
         proc.emit("close", 0);
       });
     });

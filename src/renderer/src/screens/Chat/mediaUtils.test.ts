@@ -3,6 +3,7 @@ import {
   parseMediaTokens,
   hasMediaTokens,
   describeImageSrc,
+  cleanLeakedToolTags,
   type MediaSegment,
 } from "./mediaUtils";
 
@@ -260,5 +261,76 @@ describe("parseMediaTokens (issue #299)", () => {
     // Used as React keys, the values are unique.
     const keys = segs.map((s) => `${s.type}-${s.start}`);
     expect(new Set(keys).size).toBe(keys.length);
+  });
+});
+
+describe("cleanLeakedToolTags", () => {
+  it("extracts the answer from a leaked skill_view tag", () => {
+    const raw =
+      '<skill_view name="hermes-agent-skill-authoring">{"answer": "To develop an AI agent, start by defining its purpose."}</skill_view>';
+    expect(cleanLeakedToolTags(raw)).toBe(
+      "To develop an AI agent, start by defining its purpose.",
+    );
+  });
+
+  it("handles a leaked tag embedded in surrounding prose", () => {
+    const raw =
+      'Here you go:\n<some_tool>{"content": "the body"}</some_tool>\nThanks!';
+    expect(cleanLeakedToolTags(raw)).toBe("Here you go:\nthe body\nThanks!");
+  });
+
+  it("recovers multiple leaked tags", () => {
+    const raw =
+      '<a_tool>{"answer": "first"}</a_tool> and <b_tool>{"text": "second"}</b_tool>';
+    expect(cleanLeakedToolTags(raw)).toBe("first and second");
+  });
+
+  it("leaves normal prose untouched", () => {
+    const text = "Just a normal reply with no tags.";
+    expect(cleanLeakedToolTags(text)).toBe(text);
+  });
+
+  it("leaves a single-word tag (no underscore, e.g. real HTML) untouched", () => {
+    // `terminal` has no underscore, so it's treated as markup, not a tool leak.
+    expect(
+      cleanLeakedToolTags('<terminal>{"command": "ls -la"}</terminal>'),
+    ).toBe('<terminal>{"command": "ls -la"}</terminal>');
+    expect(cleanLeakedToolTags("<b>bold</b> and <code>x = 1</code>")).toBe(
+      "<b>bold</b> and <code>x = 1</code>",
+    );
+  });
+
+  it("strips a prose-bodied leaked wrapper (skills_list) and keeps the body", () => {
+    const raw =
+      '<skills_list category="">We have:\n1. claude-code: delegate coding\n</skills_list>';
+    expect(cleanLeakedToolTags(raw)).toBe(
+      "We have:\n1. claude-code: delegate coding",
+    );
+  });
+
+  it("converts inline <b>/<i> inside a leaked wrapper body to markdown", () => {
+    const raw =
+      '<skills_list category="">1. <b>Autonomous AI Agents</b>\n2. <i>Creative</i></skills_list>';
+    expect(cleanLeakedToolTags(raw)).toBe(
+      "1. **Autonomous AI Agents**\n2. *Creative*",
+    );
+  });
+
+  it("does not convert inline HTML outside a leaked wrapper", () => {
+    // No snake_case wrapper → the <b> is left exactly as the model wrote it.
+    expect(cleanLeakedToolTags("plain <b>bold</b> text")).toBe(
+      "plain <b>bold</b> text",
+    );
+  });
+
+  it("does not transform an example inside a fenced code block", () => {
+    const raw =
+      '```\n<skill_view name="x">{"answer": "example"}</skill_view>\n```';
+    expect(cleanLeakedToolTags(raw)).toBe(raw);
+  });
+
+  it("is a no-op (same reference path) when there is no closing tag", () => {
+    const text = "no closing tag here";
+    expect(cleanLeakedToolTags(text)).toBe(text);
   });
 });

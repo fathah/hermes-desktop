@@ -30,6 +30,7 @@ function installHermesAPI(initialSessions: unknown[] = []): {
   syncSessionCache: ReturnType<typeof vi.fn>;
   searchSessions: ReturnType<typeof vi.fn>;
   deleteSession: ReturnType<typeof vi.fn>;
+  deleteSessions: ReturnType<typeof vi.fn>;
   updateSessionTitle: ReturnType<typeof vi.fn>;
 } {
   const api = {
@@ -37,6 +38,7 @@ function installHermesAPI(initialSessions: unknown[] = []): {
     syncSessionCache: vi.fn().mockResolvedValue(initialSessions),
     searchSessions: vi.fn().mockResolvedValue([]),
     deleteSession: vi.fn().mockResolvedValue(undefined),
+    deleteSessions: vi.fn().mockResolvedValue({ requested: 0, deleted: 0 }),
     updateSessionTitle: vi.fn().mockResolvedValue(undefined),
   };
   Object.defineProperty(window, "hermesAPI", {
@@ -47,11 +49,12 @@ function installHermesAPI(initialSessions: unknown[] = []): {
 }
 
 function sessionSearchResult(
-  title: string,
+  title: string | null,
   snippet: string,
+  sessionId?: string,
 ): {
   sessionId: string;
-  title: string;
+  title: string | null;
   startedAt: number;
   source: string;
   messageCount: number;
@@ -59,7 +62,13 @@ function sessionSearchResult(
   snippet: string;
 } {
   return {
-    sessionId: title.toLowerCase().replace(/\s+/g, "-"),
+    sessionId:
+      sessionId ??
+      (title ?? snippet)
+        .replace(/<</g, "")
+        .replace(/>>/g, "")
+        .toLowerCase()
+        .replace(/\s+/g, "-"),
     title,
     startedAt: Math.floor(Date.now() / 1000),
     source: "desktop",
@@ -205,6 +214,29 @@ describe("Sessions tab live refresh (#322)", () => {
     expect(screen.queryByText("Broad h match")).toBeNull();
   });
 
+  it("uses matched text as the visible title for untitled search results", async () => {
+    vi.useRealTimers();
+    const api = installHermesAPI();
+    api.searchSessions.mockResolvedValue([
+      sessionSearchResult(
+        null,
+        "<<Live PR499>> smoke test. Reply exactly: OK",
+        "session-722999",
+      ),
+    ]);
+
+    render(<Sessions {...baseProps} visible={true} />);
+    await act(async () => {});
+
+    const search = screen.getByPlaceholderText("sessions.searchPlaceholder");
+    fireEvent.change(search, { target: { value: "Live PR499" } });
+
+    await waitFor(() => {
+      expect(screen.getByText(/smoke test\. Reply exactly: OK/)).toBeTruthy();
+    });
+    expect(screen.queryByText("sessions.title 722999")).toBeNull();
+  });
+
   it("does not repopulate search results after clearing the input", async () => {
     const api = installHermesAPI();
     let resolveSearch:
@@ -344,6 +376,176 @@ describe("Sessions tab — delete affordance (#408)", () => {
 
     expect(onResume).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+});
+
+describe("Sessions tab — bulk delete selection (#490)", () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("deletes the selected sessions after confirmation", async () => {
+    const sessions = [
+      {
+        id: "sess-one",
+        title: "First chat",
+        startedAt: Math.floor(Date.now() / 1000),
+        source: "api_server",
+        messageCount: 3,
+        model: "gpt-4",
+      },
+      {
+        id: "sess-two",
+        title: "Second chat",
+        startedAt: Math.floor(Date.now() / 1000),
+        source: "api_server",
+        messageCount: 1,
+        model: "gpt-4",
+      },
+      {
+        id: "sess-three",
+        title: "Third chat",
+        startedAt: Math.floor(Date.now() / 1000),
+        source: "api_server",
+        messageCount: 2,
+        model: "gpt-4",
+      },
+    ];
+    const api = installHermesAPI(sessions);
+
+    render(<Sessions {...baseProps} visible={true} />);
+    await act(async () => {});
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "sessions.selectMode" }),
+      );
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("First chat"));
+      fireEvent.click(screen.getByText("Second chat"));
+    });
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "sessions.deleteSelected" }),
+      );
+    });
+
+    expect(screen.getByRole("dialog")).toHaveTextContent(
+      "sessions.deleteSelectedConfirm",
+    );
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "sessions.deleteConfirmAction",
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(api.deleteSessions).toHaveBeenCalledWith(["sess-one", "sess-two"]);
+    });
+    expect(api.deleteSession).not.toHaveBeenCalled();
+  });
+
+  it("selects only visible search results", async () => {
+    const api = installHermesAPI([
+      {
+        id: "main-session",
+        title: "Main chat",
+        startedAt: Math.floor(Date.now() / 1000),
+        source: "api_server",
+        messageCount: 1,
+        model: "gpt-4",
+      },
+    ]);
+    api.searchSessions.mockResolvedValue([
+      sessionSearchResult("Search one", "<<bulk>> one"),
+      sessionSearchResult("Search two", "<<bulk>> two"),
+    ]);
+
+    render(<Sessions {...baseProps} visible={true} />);
+    await act(async () => {});
+
+    const search = screen.getByPlaceholderText("sessions.searchPlaceholder");
+    fireEvent.change(search, { target: { value: "bulk" } });
+    await waitFor(() => {
+      expect(screen.getByText("Search one")).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "sessions.selectMode" }),
+      );
+    });
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "sessions.selectVisible" }),
+      );
+    });
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "sessions.deleteSelected" }),
+      );
+    });
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "sessions.deleteConfirmAction",
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(api.deleteSessions).toHaveBeenCalledWith([
+        "search-one",
+        "search-two",
+      ]);
+    });
+    expect(api.deleteSessions).not.toHaveBeenCalledWith(["main-session"]);
+  });
+
+  it("does not delete selected sessions when the bulk confirm is cancelled", async () => {
+    const sessions = [
+      {
+        id: "sess-one",
+        title: "First chat",
+        startedAt: Math.floor(Date.now() / 1000),
+        source: "api_server",
+        messageCount: 3,
+        model: "gpt-4",
+      },
+    ];
+    const api = installHermesAPI(sessions);
+
+    render(<Sessions {...baseProps} visible={true} />);
+    await act(async () => {});
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "sessions.selectMode" }),
+      );
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("First chat"));
+    });
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "sessions.deleteSelected" }),
+      );
+    });
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "sessions.deleteCancel" }),
+      );
+    });
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(api.deleteSessions).not.toHaveBeenCalled();
   });
 });
 

@@ -7,6 +7,7 @@ import {
   Notification,
   dialog,
   clipboard,
+  session,
 } from "electron";
 import { join, extname } from "path";
 import { readdir, readFile } from "fs/promises";
@@ -48,12 +49,14 @@ import {
   isRemoteMode,
   isRemoteOnlyMode,
   sendMessage,
+  transcribeAudio,
   startGateway,
   stopGateway,
   isGatewayRunning,
   testRemoteConnection,
   stopHealthPolling,
   restartGateway,
+  notifyProfileSwitched,
   ensureSshTunnelIfNeeded,
   setSshRemoteApiKey,
   getRemoteAuthHeader,
@@ -107,6 +110,7 @@ import {
   searchSessions,
   deleteSession,
   renameSession,
+  deleteSessions,
 } from "./sessions";
 import { syncSessionCache, listCachedSessions } from "./session-cache";
 import { listModels, addModel, removeModel, updateModel } from "./models";
@@ -587,7 +591,7 @@ function setupIPC(): void {
         key.endsWith("_API_KEY") ||
         key.endsWith("_TOKEN") ||
         key === "HF_TOKEN";
-      if (isGatewayRunning() && looksLikeCredential) {
+      if (isGatewayRunning(profile) && looksLikeCredential) {
         restartGateway(profile);
       }
       return true;
@@ -657,7 +661,7 @@ function setupIPC(): void {
 
       // Restart gateway when provider, model, or endpoint changes so it picks up new config
       if (
-        isGatewayRunning() &&
+        isGatewayRunning(profile) &&
         (prev.provider !== provider ||
           prev.model !== model ||
           prev.baseUrl !== baseUrl)
@@ -689,8 +693,8 @@ function setupIPC(): void {
         setEnvValue("API_SERVER_KEY", key);
       }
       // Restart gateway so it picks up the new key immediately.
-      if (isGatewayRunning()) {
-        stopGateway();
+      if (isGatewayRunning(profile)) {
+        stopGateway(profile, true);
         await new Promise<void>((r) => setTimeout(r, 800));
         startGateway(profile);
       }
@@ -796,6 +800,16 @@ function setupIPC(): void {
 
   // Chat — lazy-start gateway on first message
   ipcMain.handle(
+    "transcribe-audio",
+    async (
+      _event,
+      audio: Uint8Array,
+      mimeType: string,
+      profile?: string,
+    ): Promise<string> => transcribeAudio(audio, mimeType, profile),
+  );
+
+  ipcMain.handle(
     "send-message",
     async (
       event,
@@ -806,7 +820,7 @@ function setupIPC(): void {
       attachments?: Attachment[],
       contextFolder?: string,
     ) => {
-      if (!isRemoteMode() && !isGatewayRunning()) {
+      if (!isRemoteMode() && !isGatewayRunning(profile)) {
         startGateway(profile);
       }
 
@@ -1047,7 +1061,9 @@ function setupIPC(): void {
       // No local gateway to stop in pure remote mode.
       return true;
     }
-    stopGateway(true);
+    // No profile argument → stops the active profile's gateway, leaving any
+    // other profiles' gateways running.
+    stopGateway(undefined, true);
     return true;
   });
   ipcMain.handle("gateway-status", () => {
@@ -1073,7 +1089,7 @@ function setupIPC(): void {
       }
       setPlatformEnabled(platform, enabled, profile);
       // Restart gateway so it picks up the new platform config
-      if (isGatewayRunning()) {
+      if (isGatewayRunning(profile)) {
         restartGateway(profile);
       }
       return true;
@@ -1099,6 +1115,10 @@ function setupIPC(): void {
     return deleteSession(sessionId);
   });
 
+  ipcMain.handle("delete-sessions", (_event, sessionIds: string[]) => {
+    return deleteSessions(Array.isArray(sessionIds) ? sessionIds : []);
+  });
+
   // Profiles
   ipcMain.handle("list-profiles", async () => {
     const conn = getConnectionConfig();
@@ -1118,7 +1138,18 @@ function setupIPC(): void {
     return deleteProfile(name);
   });
   ipcMain.handle("set-active-profile", (_event, name: string) => {
-    if (getConnectionConfig().mode !== "ssh") setActiveProfile(name);
+    if (getConnectionConfig().mode !== "ssh") {
+      setActiveProfile(name);
+      // The desktop now follows this profile: chat/health resolve their URL
+      // from the active profile's own port. Drop the cached health flag so the
+      // next check probes the new gateway rather than the previous profile's.
+      notifyProfileSwitched();
+      // Bring the activated profile's own gateway up if it isn't already —
+      // without stopping any other profile's gateway (their bots stay online).
+      if (!isRemoteMode() && !isGatewayRunning(name)) {
+        startGateway(name);
+      }
+    }
     return true;
   });
 
@@ -1879,6 +1910,18 @@ app.whenReady().then(() => {
   app.name = "Hermes";
   electronApp.setAppUserModelId("com.nousresearch.hermes");
 
+  // Allow microphone access for the app's own renderer (voice input). Without
+  // a handler Electron denies getUserMedia by default. Scoped to the `media`
+  // permission only; everything else stays denied.
+  session.defaultSession.setPermissionRequestHandler(
+    (_wc, permission, callback) => {
+      callback(permission === "media");
+    },
+  );
+  session.defaultSession.setPermissionCheckHandler(
+    (_wc, permission) => permission === "media",
+  );
+
   app.on("browser-window-created", (_, window) => {
     optimizer.watchWindowShortcuts(window);
   });
@@ -1916,7 +1959,10 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
-    stopGateway();
+    // Intentionally do NOT stop the gateway on exit: profile gateways are
+    // detached and meant to keep running headless (e.g. Telegram/Discord bots
+    // stay online after the desktop closes). The user stops a gateway
+    // explicitly via the Gateway controls.
     stopSshTunnel();
     stopClaw3d();
     app.quit();
@@ -1929,7 +1975,8 @@ app.on("before-quit", () => {
     currentChatAbort();
     currentChatAbort = null;
   }
-  stopGateway();
+  // Leave profile gateways running on quit (see window-all-closed) so bots
+  // and other platforms stay online headless.
   stopSshTunnel();
   stopClaw3d();
 });

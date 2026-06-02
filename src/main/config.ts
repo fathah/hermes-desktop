@@ -11,6 +11,10 @@ import {
 } from "./utils";
 import { getYamlPath } from "./yaml-path";
 import { canonicalProviderBaseUrl } from "./provider-registry";
+import {
+  expectedEnvKeyForUrl,
+  OPENAI_COMPAT_PROVIDERS,
+} from "../shared/url-key-map";
 
 // ── Connection Config (local / remote / ssh) ─────────────
 
@@ -607,6 +611,46 @@ export function getModelConfig(profile?: string): {
 }
 
 /**
+ * Mirror of the runtime key-resolution fallback for OpenAI-compatible /
+ * custom endpoints (see `sendMessageViaCli` in hermes.ts): the gateway tries
+ * the URL-specific key, then `CUSTOM_API_KEY`, then `OPENAI_API_KEY`. Returns
+ * true when any link in that chain is populated for `profile`.
+ *
+ * Why it exists: the pre-send readiness check and the config-health audit
+ * derive a single expected key from the base URL (e.g. a Groq URL →
+ * `GROQ_API_KEY`). But a user on the "OpenAI Compatible" provider pointed at
+ * Groq legitimately authenticates with `OPENAI_API_KEY` — the runtime falls
+ * back to it — so demanding `GROQ_API_KEY` is a false positive (the chat
+ * actually works). This lets those checks accept the same keys the gateway
+ * does. Returns false for providers the runtime does NOT route through the
+ * custom path, so their specific-key checks still apply.
+ *
+ * (The runtime also consults a per-model `CUSTOM_PROVIDER_<name>_KEY` ahead of
+ * the generic keys; that lookup needs models.json and is intentionally omitted
+ * here to keep config.ts free of a models.ts import — the generic chain covers
+ * the reported cases.)
+ */
+export function customEndpointKeyResolvable(
+  provider: string,
+  baseUrl: string,
+  profile?: string,
+): boolean {
+  const p = (provider || "").trim().toLowerCase();
+  if (!baseUrl || !OPENAI_COMPAT_PROVIDERS.has(p)) return false;
+
+  const env = readEnv(profile);
+  const candidates = new Set<string>([
+    expectedEnvKeyForUrl(baseUrl), // URL-specific key, or CUSTOM_API_KEY
+    "CUSTOM_API_KEY",
+    "OPENAI_API_KEY",
+  ]);
+  for (const k of candidates) {
+    if ((env[k] ?? "").trim()) return true;
+  }
+  return false;
+}
+
+/**
  * Replace a direct child's value inside a top-level YAML block in-place,
  * preserving the key's surrounding whitespace and any trailing comment.
  * When the child doesn't exist, insert it as the first sibling at the
@@ -925,9 +969,10 @@ export function getApiServerKey(profile?: string): string {
         issueCode: "API_SERVER_KEY_NON_CANONICAL",
         action: "migrate",
         from: source,
-        to: profile && profile !== "default"
-          ? `~/.hermes/profiles/${profile}/.env`
-          : "~/.hermes/.env",
+        to:
+          profile && profile !== "default"
+            ? `~/.hermes/profiles/${profile}/.env`
+            : "~/.hermes/.env",
         profile: profile || "default",
         valueMasked: maskKey(value),
       });
@@ -1012,9 +1057,8 @@ export function resolveApiServerKey(sources: ApiKeySources): string {
  * and crucially the gateway's own `os.getenv("API_SERVER_KEY")` —
  * find the value in the canonical spot.
  */
-export const CANONICAL_API_KEY_SOURCES: ReadonlySet<ApiKeySource> = new Set<
-  ApiKeySource
->(["envProfile", "envDefault"]);
+export const CANONICAL_API_KEY_SOURCES: ReadonlySet<ApiKeySource> =
+  new Set<ApiKeySource>(["envProfile", "envDefault"]);
 
 /**
  * Mask a credential for safe logging: keep the first 4 and last 4
@@ -1059,9 +1103,8 @@ export function appendConfigFixLog(entry: ConfigFixLogEntry): void {
       const lines = existing.split("\n").filter((l) => l.trim() !== "");
       if (lines.length >= CONFIG_FIX_LOG_MAX_LINES) {
         existing =
-          lines
-            .slice(lines.length - CONFIG_FIX_LOG_MAX_LINES + 1)
-            .join("\n") + "\n";
+          lines.slice(lines.length - CONFIG_FIX_LOG_MAX_LINES + 1).join("\n") +
+          "\n";
       } else if (existing && !existing.endsWith("\n")) {
         existing += "\n";
       }
@@ -1396,11 +1439,11 @@ export function buildCredentialPoolEntry(
   const baseUrl = canonicalProviderBaseUrl(provider) || "";
   // Next priority — pool entries are sorted ascending, so a new entry
   // appended at the end gets the highest priority value.
-  const nextPriority =
-    existingEntries.reduce(
-      (max, e) => (typeof e.priority === "number" ? Math.max(max, e.priority + 1) : max),
-      0,
-    );
+  const nextPriority = existingEntries.reduce(
+    (max, e) =>
+      typeof e.priority === "number" ? Math.max(max, e.priority + 1) : max,
+    0,
+  );
   return {
     id: cryptoRandomId(),
     label: label.trim() || `Key ${existingEntries.length + 1}`,

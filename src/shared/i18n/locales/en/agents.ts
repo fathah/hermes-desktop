@@ -21,4 +21,7 @@ export default {
   deleteTitle: "Delete agent",
   auto: "Auto",
   local: "Local",
+  manageProfiles: "Manage profiles",
+  switchProfile: "Switch profile",
+  defaultTag: "default",
 } as const;

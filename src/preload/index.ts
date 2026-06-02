@@ -269,6 +269,13 @@ const hermesAPI = {
 
   abortChat: (): Promise<void> => ipcRenderer.invoke("abort-chat"),
 
+  transcribeAudio: (
+    audio: Uint8Array,
+    mimeType: string,
+    profile?: string,
+  ): Promise<string> =>
+    ipcRenderer.invoke("transcribe-audio", audio, mimeType, profile),
+
   getApiServerKeyStatus: (profile?: string): Promise<{ hasKey: boolean }> =>
     ipcRenderer.invoke("get-api-server-key-status", profile),
 
@@ -400,6 +407,8 @@ const hermesAPI = {
       cost?: number;
       rateLimitRemaining?: number;
       rateLimitReset?: number;
+      cacheReadTokens?: number;
+      cacheWriteTokens?: number;
     }) => void,
   ): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, usage: unknown): void =>
@@ -411,6 +420,8 @@ const hermesAPI = {
           cost?: number;
           rateLimitRemaining?: number;
           rateLimitReset?: number;
+          cacheReadTokens?: number;
+          cacheWriteTokens?: number;
         },
       );
     ipcRenderer.on("chat-usage", handler);
@@ -605,6 +616,10 @@ const hermesAPI = {
     ipcRenderer.invoke("update-session-title", sessionId, title),
   deleteSession: (sessionId: string): Promise<void> =>
     ipcRenderer.invoke("delete-session", sessionId),
+  deleteSessions: (
+    sessionIds: string[],
+  ): Promise<{ requested: number; deleted: number }> =>
+    ipcRenderer.invoke("delete-sessions", sessionIds),
 
   // Session search
   searchSessions: (

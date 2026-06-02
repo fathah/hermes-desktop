@@ -429,6 +429,50 @@ describe("syncSessionCache", () => {
     expect(second[0].title).toContain("first");
   });
 
+  it("prunes cached sessions that no longer exist in state.db", () => {
+    const oldStart = Math.floor(Date.now() / 1000) - 86400 * 14;
+    seedDb([
+      {
+        id: "still-present",
+        started_at: oldStart,
+        message_count: 3,
+        firstUserMessage: "keep me",
+      },
+    ]);
+
+    mkdirSync(join(TEST_HOME, "desktop"), { recursive: true });
+    writeFileSync(
+      CACHE_FILE,
+      JSON.stringify({
+        sessions: [
+          {
+            id: "already-deleted",
+            title: "Already deleted",
+            startedAt: oldStart,
+            source: "api_server",
+            messageCount: 1,
+            model: "gpt-5.5",
+          },
+          {
+            id: "still-present",
+            title: "Keep me",
+            startedAt: oldStart,
+            source: "api_server",
+            messageCount: 1,
+            model: "gpt-5.5",
+          },
+        ],
+        lastSync: Math.floor(Date.now() / 1000),
+      }),
+      "utf-8",
+    );
+
+    const result = syncSessionCache();
+
+    expect(result.map((s) => s.id)).toEqual(["still-present"]);
+    expect(result[0].messageCount).toBe(3);
+  });
+
   it("refreshes some old, leaves others untouched, all in one sync", () => {
     // Mix: one session inside the lastSync window (handled by Phase 1)
     // and two outside it (handled by Phase 2). All three counts grow

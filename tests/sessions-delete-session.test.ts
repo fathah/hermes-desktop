@@ -105,7 +105,7 @@ vi.mock("better-sqlite3", () => {
         this.sql.includes("INSERT OR REPLACE INTO sessions") ||
         this.sql.includes("INSERT INTO sessions")
       ) {
-        const [id, source, startedAt, , messageCount, model, title] = args;
+        const [id, source, startedAt, messageCount, model, title] = args;
         this.store.sessions.set(String(id), {
           id: String(id),
           source: String(source),
@@ -149,7 +149,39 @@ vi.mock("better-sqlite3", () => {
       throw new Error(`Unhandled fake run SQL: ${this.sql}`);
     }
 
-    all(...args: unknown[]): SessionRow[] | MessageRow[] {
+    all(...args: unknown[]): unknown[] {
+      if (
+        this.sql.includes("FROM sessions s") &&
+        this.sql.includes("LOWER(COALESCE")
+      ) {
+        const titlePattern = String(args[0])
+          .replace(/^%/, "")
+          .replace(/%$/, "")
+          .replace(/\\/g, "")
+          .toLowerCase();
+        const idPattern = String(args[1])
+          .replace(/^%/, "")
+          .replace(/%$/, "")
+          .replace(/\\/g, "")
+          .toLowerCase();
+        const limit = Number(args[2]);
+        return Array.from(this.store.sessions.values())
+          .filter((session) =>
+            (session.title || "").toLowerCase().includes(titlePattern) ||
+            session.id.toLowerCase().includes(idPattern),
+          )
+          .sort((a, b) => b.started_at - a.started_at)
+          .slice(0, limit)
+          .map((session) => ({
+            session_id: session.id,
+            title: session.title,
+            started_at: session.started_at,
+            source: session.source,
+            message_count: session.message_count,
+            model: session.model,
+          }));
+      }
+
       if (this.sql.includes("FROM sessions s")) {
         const [limit, offset] = args.map(Number);
         return Array.from(this.store.sessions.values())
@@ -174,6 +206,10 @@ vi.mock("better-sqlite3", () => {
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     get(..._args: unknown[]): unknown {
+      if (this.sql.includes("sqlite_master") && this.sql.includes("messages_fts")) {
+        return undefined;
+      }
+
       throw new Error(`Unhandled fake get SQL: ${this.sql}`);
     }
   }
@@ -214,8 +250,10 @@ vi.mock("better-sqlite3", () => {
 import Database from "better-sqlite3";
 import {
   deleteSession,
+  deleteSessions,
   listSessions,
   getSessionMessages,
+  searchSessions,
 } from "../src/main/sessions";
 
 function seedDb(
@@ -390,5 +428,141 @@ describe("deleteSession", () => {
   it("returns early when the database file does not exist", () => {
     // No DB seeded — HERMES_HOME/state.db doesn't exist
     expect(() => deleteSession("any-session")).not.toThrow();
+  });
+});
+
+describe("searchSessions", () => {
+  it("finds title-only matches when the message body does not contain the query", () => {
+    const now = Math.floor(Date.now() / 1000);
+    seedDb([
+      {
+        id: "title-only-match",
+        title: "Manual bulk delete search target 1780363992423",
+        started_at: now,
+        message_count: 1,
+        messages: [
+          {
+            role: "user",
+            content: "temporary manual bulk delete test row",
+            timestamp: now,
+          },
+        ],
+      },
+    ]);
+
+    const results = searchSessions("1780363992423");
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({
+      sessionId: "title-only-match",
+      title: "Manual bulk delete search target 1780363992423",
+    });
+    expect(results[0].snippet).toContain("<<1780363992423>>");
+  });
+
+  it("finds sessions by id suffix when the UI displays a fallback title", () => {
+    const now = Math.floor(Date.now() / 1000);
+    seedDb([
+      {
+        id: "desk-old-session-295d8a",
+        title: null,
+        started_at: now,
+        message_count: 1,
+        messages: [
+          {
+            role: "user",
+            content: "body does not include the id suffix",
+            timestamp: now,
+          },
+        ],
+      },
+    ]);
+
+    const results = searchSessions("295d");
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({
+      sessionId: "desk-old-session-295d8a",
+      title: null,
+    });
+    expect(results[0].snippet).toContain("Sessions <<295d>>8a");
+  });
+});
+
+describe("deleteSessions", () => {
+  it("deletes multiple sessions and all of their messages", () => {
+    const now = Math.floor(Date.now() / 1000);
+    seedDb([
+      {
+        id: "bulk-delete-a",
+        started_at: now,
+        message_count: 1,
+        messages: [{ role: "user", content: "delete a", timestamp: now }],
+      },
+      {
+        id: "bulk-delete-b",
+        started_at: now + 1,
+        message_count: 1,
+        messages: [
+          { role: "assistant", content: "delete b", timestamp: now + 1 },
+        ],
+      },
+      {
+        id: "bulk-keep",
+        started_at: now + 2,
+        message_count: 1,
+        messages: [{ role: "user", content: "keep", timestamp: now + 2 }],
+      },
+    ]);
+
+    const result = deleteSessions(["bulk-delete-a", "bulk-delete-b"]);
+
+    expect(result).toEqual({ requested: 2, deleted: 2 });
+    expect(listSessions().map((s) => s.id)).toEqual(["bulk-keep"]);
+    expect(getSessionMessages("bulk-delete-a")).toHaveLength(0);
+    expect(getSessionMessages("bulk-delete-b")).toHaveLength(0);
+    expect(getSessionMessages("bulk-keep")).toHaveLength(1);
+  });
+
+  it("dedupes and ignores blank session ids", () => {
+    const now = Math.floor(Date.now() / 1000);
+    seedDb([
+      {
+        id: "dedupe-me",
+        started_at: now,
+        message_count: 1,
+        messages: [{ role: "user", content: "delete", timestamp: now }],
+      },
+    ]);
+
+    const result = deleteSessions([
+      "",
+      " ",
+      "dedupe-me",
+      "dedupe-me",
+      " missing ",
+    ]);
+
+    expect(result).toEqual({ requested: 2, deleted: 1 });
+    expect(listSessions()).toHaveLength(0);
+  });
+
+  it("clears staged attachment files for every deleted id", () => {
+    const now = Math.floor(Date.now() / 1000);
+    seedDb([
+      { id: "bulk-staged-a", started_at: now },
+      { id: "bulk-staged-b", started_at: now + 1 },
+    ]);
+    const stagingA = join(TEST_HOME, "desktop-staging", "bulk-staged-a");
+    const stagingB = join(TEST_HOME, "desktop-staging", "bulk-staged-b");
+    mkdirSync(stagingA, { recursive: true });
+    mkdirSync(stagingB, { recursive: true });
+    writeFileSync(join(stagingA, "a.txt"), "a");
+    writeFileSync(join(stagingB, "b.txt"), "b");
+
+    deleteSessions(["bulk-staged-a", "bulk-staged-b"]);
+
+    expect(existsSync(stagingA)).toBe(false);
+    expect(existsSync(stagingB)).toBe(false);
   });
 });

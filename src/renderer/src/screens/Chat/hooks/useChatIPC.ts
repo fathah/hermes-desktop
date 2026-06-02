@@ -143,6 +143,10 @@ export function useChatIPC({
         completionTokens: (prev?.completionTokens || 0) + u.completionTokens,
         totalTokens: (prev?.totalTokens || 0) + u.totalTokens,
         cost: u.cost != null ? (prev?.cost || 0) + u.cost : prev?.cost,
+        // Latest-turn values (overwrite, not sum) for the context gauge.
+        contextTokens: u.promptTokens || prev?.contextTokens,
+        cacheReadTokens: u.cacheReadTokens ?? prev?.cacheReadTokens,
+        cacheWriteTokens: u.cacheWriteTokens ?? prev?.cacheWriteTokens,
       }));
     });
 

@@ -25,4 +25,15 @@ export default {
   renameSave: "Save",
   renameCancel: "Cancel",
   renamePlaceholder: "Conversation name",
+  selectMode: "Select",
+  cancelSelect: "Cancel",
+  selectedCount: "{{count}} selected",
+  selectVisible: "Select visible",
+  clearVisible: "Clear visible",
+  deleteSelected: "Delete selected",
+  selectSession: "Select session",
+  deleteSelectedConfirmTitle: "Delete selected sessions",
+  deleteSelectedConfirm:
+    "Delete {{count}} selected sessions? This cannot be undone — messages and session records will be permanently removed.",
+  deleteSelectedClose: "Close bulk delete confirmation",
 } as const;

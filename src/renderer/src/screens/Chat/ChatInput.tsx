@@ -7,17 +7,19 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
-import { Send, Square as Stop, Slash, Paperclip } from "lucide-react";
+import { Send, Square as Stop, Slash, Paperclip, Mic } from "lucide-react";
 import { isImeComposing } from "./keyboard";
 import { useI18n } from "../../components/useI18n";
 import { SLASH_COMMANDS, type SlashCommand } from "./slashCommands";
 import { useInputHistory } from "./hooks/useInputHistory";
+import { useVoiceInput } from "./hooks/useVoiceInput";
 import {
   processFiles,
   filesFromClipboard,
   type AttachmentError,
 } from "./attachmentUtils";
 import { AttachmentChip } from "../../components/AttachmentChip";
+import { ContextGauge, type ContextUsage } from "./ContextGauge";
 import type { Attachment } from "../../../../shared/attachments";
 
 export interface ChatInputHandle {
@@ -41,9 +43,16 @@ interface ChatInputProps {
   hasSession: boolean;
   sessionId?: string | null;
   remoteMode?: boolean;
+  /** Active profile — used to resolve the provider for voice transcription. */
+  profile?: string;
+  /** Context-window occupancy for the gauge; null until the first response. */
+  contextUsage?: ContextUsage | null;
   /** Pre-send validation state. When `ok` is false, Send is disabled
    * and an inline banner explains why + how to fix it. */
   readiness?: ChatInputReadiness;
+  /** Controls rendered inline in the bottom toolbar row (model + folder
+   * pickers) so they share the composer's single bordered container. */
+  toolbarExtras?: React.ReactNode;
   onSubmit: (text: string, attachments: Attachment[]) => void;
   onQuickAsk: (text: string, attachments: Attachment[]) => void;
   onAbort: () => void;
@@ -56,7 +65,10 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       hasSession,
       sessionId,
       remoteMode,
+      profile,
+      contextUsage,
       readiness,
+      toolbarExtras,
       onSubmit,
       onQuickAsk,
       onAbort,
@@ -73,6 +85,20 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const slashMenuRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Voice input. We snapshot whatever was already typed when recording starts
+    // (`voiceBaseRef`), then rebuild the field as `base + livetranscript` on
+    // every result so the SpeechRecognition path streams in live. The recorder
+    // fallback delivers one final result on stop.
+    const voiceBaseRef = useRef("");
+    const handleVoiceResult = useCallback((text: string, isFinal: boolean) => {
+      const base = voiceBaseRef.current;
+      setInput(
+        base.trim() ? (text ? `${base.trimEnd()} ${text}` : base) : text,
+      );
+      if (isFinal) inputRef.current?.focus();
+    }, []);
+    const voice = useVoiceInput(handleVoiceResult, profile);
 
     const autoResize = useCallback((): void => {
       const el = inputRef.current;
@@ -439,6 +465,11 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             )}
           </div>
         )}
+        {voice.error && (
+          <div className="chat-attachment-error chat-voice-error" role="alert">
+            {voice.error}
+          </div>
+        )}
         <div className="chat-input-wrapper">
           <input
             ref={fileInputRef}
@@ -447,16 +478,6 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             style={{ display: "none" }}
             onChange={handleFileInputChange}
           />
-          <button
-            className="chat-attach-btn"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isLoading}
-            title={t("chat.attach")}
-            aria-label={t("chat.attach")}
-            type="button"
-          >
-            <Paperclip size={16} />
-          </button>
           <textarea
             ref={inputRef}
             className="chat-input"
@@ -468,35 +489,86 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             rows={1}
             autoFocus
           />
-          {isLoading ? (
+          <div className="chat-input-toolbar">
             <button
-              className="chat-send-btn chat-stop-btn"
-              onClick={onAbort}
-              title={t("common.stop")}
+              className="chat-attach-btn"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isLoading}
+              title={t("chat.attach")}
+              aria-label={t("chat.attach")}
+              type="button"
             >
-              <Stop size={14} />
+              <Paperclip size={16} />
             </button>
-          ) : (
-            <>
-              {input.trim() && hasSession && (
-                <button
-                  className="chat-btw-btn"
-                  onClick={handleQuickAsk}
-                  title={t("chat.quickAskTitle")}
-                >
-                  💭
-                </button>
-              )}
+            {voice.supported && (
               <button
-                className="chat-send-btn"
-                onClick={handleSend}
-                disabled={!canSend}
-                title={t("chat.send")}
+                className={`chat-mic-btn${
+                  voice.recording ? " chat-mic-btn--recording" : ""
+                }`}
+                onClick={() => {
+                  // Snapshot the current text so live results append to it.
+                  if (!voice.recording && !voice.transcribing) {
+                    voiceBaseRef.current = input;
+                  }
+                  voice.toggle();
+                }}
+                disabled={voice.transcribing}
+                title={
+                  voice.transcribing
+                    ? t("chat.voiceTranscribing")
+                    : voice.recording
+                      ? t("chat.voiceStop")
+                      : t("chat.voiceInput")
+                }
+                aria-label={
+                  voice.recording ? t("chat.voiceStop") : t("chat.voiceInput")
+                }
+                aria-pressed={voice.recording}
+                type="button"
               >
-                <Send size={16} />
+                <Mic size={16} />
               </button>
-            </>
-          )}
+            )}
+            {toolbarExtras && (
+              <>
+                <span className="chat-input-toolbar-divider" aria-hidden />
+                {toolbarExtras}
+              </>
+            )}
+            <div className="chat-input-toolbar-spacer" />
+            {contextUsage && contextUsage.used > 0 && (
+              <ContextGauge {...contextUsage} />
+            )}
+            {isLoading ? (
+              <button
+                className="chat-send-btn chat-stop-btn"
+                onClick={onAbort}
+                title={t("common.stop")}
+              >
+                <Stop size={14} />
+              </button>
+            ) : (
+              <>
+                {input.trim() && hasSession && (
+                  <button
+                    className="chat-btw-btn"
+                    onClick={handleQuickAsk}
+                    title={t("chat.quickAskTitle")}
+                  >
+                    💭
+                  </button>
+                )}
+                <button
+                  className="chat-send-btn"
+                  onClick={handleSend}
+                  disabled={!canSend}
+                  title={t("chat.send")}
+                >
+                  <Send size={16} />
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </>
     );

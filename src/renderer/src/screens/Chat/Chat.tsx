@@ -4,6 +4,7 @@ import { ChatHeader } from "./ChatHeader";
 import { ChatEmptyState } from "./ChatEmptyState";
 import { MessageList } from "./MessageList";
 import { ModelPicker } from "./ModelPicker";
+import { ContextFolderChip } from "./ContextFolderChip";
 import { WorktreePanel } from "./WorktreePanel";
 import { useChatScroll } from "./hooks/useChatScroll";
 import { useChatIPC } from "./hooks/useChatIPC";
@@ -16,6 +17,8 @@ import { buildChatTranscript } from "./transcriptUtils";
 import { ConfigHealthBanner } from "../../components/ConfigHealthBanner";
 import type { Attachment } from "../../../../shared/attachments";
 import type { ChatMessage, UsageState } from "./types";
+import type { ContextUsage } from "./ContextGauge";
+import { contextWindowForModel } from "./contextWindows";
 
 interface QueuedMessage {
   text: string;
@@ -331,6 +334,16 @@ function Chat({
     [eventHasFiles],
   );
 
+  // Context-gauge data: the latest turn's prompt tokens vs the model's window.
+  const contextUsage: ContextUsage | null = usage?.contextTokens
+    ? {
+        used: usage.contextTokens,
+        window: contextWindowForModel(modelConfig.currentModel),
+        cacheReadTokens: usage.cacheReadTokens,
+        cacheWriteTokens: usage.cacheWriteTokens,
+      }
+    : null;
+
   return (
     <div
       className="chat-container"
@@ -344,13 +357,7 @@ function Chat({
         usage={usage}
         fastMode={fastMode}
         hasMessages={messages.length > 0}
-        contextFolder={contextFolder}
-        showContextFolder={!remoteMode}
-        worktreeVisible={worktreeVisible}
-        onPickFolder={handlePickFolder}
-        onClearFolder={handleClearFolder}
         onToggleFast={toggleFastMode}
-        onToggleWorktree={() => setWorktreeVisible((v) => !v)}
         onNewChat={onNewChat}
         onClear={handleClear}
       />
@@ -390,19 +397,33 @@ function Chat({
           hasSession={!!hermesSessionId}
           sessionId={hermesSessionId}
           remoteMode={remoteMode}
+          profile={profile}
+          contextUsage={contextUsage}
           readiness={readiness}
           onSubmit={handleSubmitOrQueue}
           onQuickAsk={actions.handleQuickAsk}
           onAbort={actions.handleAbort}
-        />
-        <ModelPicker
-          currentModel={modelConfig.currentModel}
-          currentProvider={modelConfig.currentProvider}
-          currentBaseUrl={modelConfig.currentBaseUrl}
-          modelGroups={modelConfig.modelGroups}
-          displayModel={modelConfig.displayModel}
-          onOpen={modelConfig.reload}
-          onSelectModel={modelConfig.selectModel}
+          toolbarExtras={
+            <>
+              <ModelPicker
+                currentModel={modelConfig.currentModel}
+                currentProvider={modelConfig.currentProvider}
+                currentBaseUrl={modelConfig.currentBaseUrl}
+                modelGroups={modelConfig.modelGroups}
+                displayModel={modelConfig.displayModel}
+                onOpen={modelConfig.reload}
+                onSelectModel={modelConfig.selectModel}
+              />
+              <ContextFolderChip
+                contextFolder={contextFolder}
+                show={!remoteMode}
+                worktreeVisible={worktreeVisible}
+                onPickFolder={handlePickFolder}
+                onClearFolder={handleClearFolder}
+                onToggleWorktree={() => setWorktreeVisible((v) => !v)}
+              />
+            </>
+          }
         />
       </div>
       {dragActive && (

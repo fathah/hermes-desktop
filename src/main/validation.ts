@@ -16,7 +16,12 @@
  * surface the error like before.
  */
 
-import { getModelConfig, hasOAuthCredentials, readEnv } from "./config";
+import {
+  getModelConfig,
+  hasOAuthCredentials,
+  readEnv,
+  customEndpointKeyResolvable,
+} from "./config";
 import { expectedEnvKeyForModel } from "./installer";
 import { isLocalBaseUrl } from "../shared/url-key-map";
 
@@ -119,6 +124,15 @@ export function validateChatReadiness(profile?: string): ChatReadiness {
     const env = readEnv(profile);
     const value = (env[expectedKey] ?? "").trim();
     if (value) return OK;
+
+    // OpenAI-compatible / custom endpoints (e.g. provider "custom" pointed at
+    // Groq) authenticate via a fallback key chain at runtime — the URL key may
+    // be absent while OPENAI_API_KEY / CUSTOM_API_KEY carries the credential.
+    // Accept the same chain the gateway uses so we don't false-block a Send
+    // that will actually succeed.
+    if (customEndpointKeyResolvable(provider, baseUrl, profile)) {
+      return OK;
+    }
 
     // Secondary positive signal: the engine also accepts credentials
     // stored in auth.json (top-level `providers[<name>]` or any entry

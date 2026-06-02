@@ -184,6 +184,48 @@ export function dedupeSearchRowsBySession<T extends { session_id: string }>(
   return uniqueRows;
 }
 
+function escapeLikePattern(query: string): string {
+  return query.replace(/[\\%_]/g, (match) => `\\${match}`);
+}
+
+function highlightTextMatch(text: string, query: string): string {
+  if (!text) return "";
+
+  const terms = [query.trim(), ...query.trim().split(/\s+/)]
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+
+  for (const term of terms) {
+    const index = text.toLocaleLowerCase().indexOf(term.toLocaleLowerCase());
+    if (index >= 0) {
+      return `${text.slice(0, index)}<<${text.slice(
+        index,
+        index + term.length,
+      )}>>${text.slice(index + term.length)}`;
+    }
+  }
+
+  return text;
+}
+
+function fallbackSessionTitle(sessionId: string): string {
+  return `Sessions ${sessionId.slice(-6)}`;
+}
+
+function highlightSessionMatch(
+  title: string | null,
+  sessionId: string,
+  query: string,
+): string {
+  const text = title || "";
+  const highlightedTitle = highlightTextMatch(text, query);
+  if (highlightedTitle && highlightedTitle.includes("<<")) {
+    return highlightedTitle;
+  }
+
+  return highlightTextMatch(fallbackSessionTitle(sessionId), query);
+}
+
 function getDb(readonly = true): Database.Database | null {
   // Open the active profile's session DB — named profiles keep their
   // sessions under ~/.hermes/profiles/<name>/state.db (issue #311).
@@ -242,6 +284,42 @@ export function searchSessions(query: string, limit = 20): SearchResult[] {
   if (!db) return [];
 
   try {
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery) return [];
+
+    const titleRows = db
+      .prepare(
+        `SELECT
+          s.id as session_id,
+          s.title,
+          s.started_at,
+          s.source,
+          s.message_count,
+          s.model
+        FROM sessions s
+        WHERE LOWER(COALESCE(s.title, '')) LIKE ? ESCAPE '\\'
+          OR LOWER(s.id) LIKE ? ESCAPE '\\'
+        ORDER BY s.started_at DESC
+        LIMIT ?`,
+      )
+      .all(
+        `%${escapeLikePattern(trimmedQuery.toLocaleLowerCase())}%`,
+        `%${escapeLikePattern(trimmedQuery.toLocaleLowerCase())}%`,
+        limit,
+      ) as Array<{
+      session_id: string;
+      title: string | null;
+      started_at: number;
+      source: string;
+      message_count: number;
+      model: string;
+    }>;
+
+    const titleMatches = titleRows.map((r) => ({
+      ...r,
+      snippet: highlightSessionMatch(r.title, r.session_id, trimmedQuery),
+    }));
+
     // Check if FTS table exists
     const tableCheck = db
       .prepare(
@@ -249,46 +327,47 @@ export function searchSessions(query: string, limit = 20): SearchResult[] {
       )
       .get() as { name: string } | undefined;
 
-    if (!tableCheck) return [];
-
     // Sanitize query for FTS5: wrap each word with quotes for safety, add * for prefix
-    const sanitized = query
+    const sanitized = trimmedQuery
       .trim()
       .split(/\s+/)
       .filter((w) => w.length > 0)
       .map((w) => `"${w.replace(/"/g, "")}"*`)
       .join(" ");
 
-    if (!sanitized) return [];
+    const ftsRows = tableCheck
+      ? (db
+          .prepare(
+            `SELECT DISTINCT
+              m.session_id,
+              s.title,
+              s.started_at,
+              s.source,
+              s.message_count,
+              s.model,
+              snippet(messages_fts, 0, '<<', '>>', '...', 40) as snippet
+            FROM messages_fts
+            JOIN messages m ON m.id = messages_fts.rowid
+            JOIN sessions s ON s.id = m.session_id
+            WHERE messages_fts MATCH ?
+            ORDER BY rank
+            LIMIT ?`,
+          )
+          .all(sanitized, Math.max(limit * 5, limit)) as Array<{
+          session_id: string;
+          title: string | null;
+          started_at: number;
+          source: string;
+          message_count: number;
+          model: string;
+          snippet: string;
+        }>)
+      : [];
 
-    const rows = db
-      .prepare(
-        `SELECT DISTINCT
-          m.session_id,
-          s.title,
-          s.started_at,
-          s.source,
-          s.message_count,
-          s.model,
-          snippet(messages_fts, 0, '<<', '>>', '...', 40) as snippet
-        FROM messages_fts
-        JOIN messages m ON m.id = messages_fts.rowid
-        JOIN sessions s ON s.id = m.session_id
-        WHERE messages_fts MATCH ?
-        ORDER BY rank
-        LIMIT ?`,
-      )
-      .all(sanitized, Math.max(limit * 5, limit)) as Array<{
-      session_id: string;
-      title: string | null;
-      started_at: number;
-      source: string;
-      message_count: number;
-      model: string;
-      snippet: string;
-    }>;
-
-    const uniqueRows = dedupeSearchRowsBySession(rows, limit);
+    const uniqueRows = dedupeSearchRowsBySession(
+      [...titleMatches, ...ftsRows],
+      limit,
+    );
     return uniqueRows.map((r) => ({
       sessionId: r.session_id,
       title: r.title,
@@ -510,23 +589,62 @@ export function getSessionMessages(sessionId: string): HistoryItem[] {
   }
 }
 
-export function deleteSession(sessionId: string): void {
+export interface DeleteSessionsResult {
+  requested: number;
+  deleted: number;
+}
+
+function normalizeSessionIds(sessionIds: string[]): string[] {
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  for (const id of sessionIds) {
+    if (typeof id !== "string") continue;
+    const trimmed = id.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    normalized.push(trimmed);
+  }
+  return normalized;
+}
+
+export function deleteSessions(sessionIds: string[]): DeleteSessionsResult {
+  const ids = normalizeSessionIds(sessionIds);
+  let deleted = 0;
+
   const db = getDb(false);
 
   if (db) {
     try {
-      const tx = db.transaction((id: string) => {
-        db.prepare("DELETE FROM messages WHERE session_id = ?").run(id);
-        db.prepare("DELETE FROM sessions WHERE id = ?").run(id);
+      const tx = db.transaction((idsToDelete: string[]) => {
+        const deleteMessages = db.prepare(
+          "DELETE FROM messages WHERE session_id = ?",
+        );
+        const deleteSessionRow = db.prepare(
+          "DELETE FROM sessions WHERE id = ?",
+        );
+
+        for (const id of idsToDelete) {
+          deleteMessages.run(id);
+          const result = deleteSessionRow.run(id);
+          if (result.changes > 0) deleted += result.changes;
+        }
       });
-      tx(sessionId);
+      tx(ids);
     } finally {
       db.close();
     }
   }
 
-  clearStagedAttachments(sessionId);
-  removeSessionFromCache(sessionId);
+  for (const id of ids) {
+    clearStagedAttachments(id);
+    removeSessionFromCache(id);
+  }
+
+  return { requested: ids.length, deleted };
+}
+
+export function deleteSession(sessionId: string): void {
+  deleteSessions([sessionId]);
 }
 
 // Rename a session by writing the new title to the database `title` column.

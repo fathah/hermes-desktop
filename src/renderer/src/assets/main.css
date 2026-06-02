@@ -998,10 +998,187 @@ body {
   gap: 8px;
 }
 
-.sidebar-footer-text {
-  font-size: 12px;
+/* ── Profile switcher (sidebar footer) ──────────────────── */
+.profile-switcher {
+  position: relative;
+}
+
+.profile-switcher-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  text-align: left;
+  transition: all var(--transition);
+}
+
+.profile-switcher-trigger:hover,
+.profile-switcher-trigger.open {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.profile-switcher-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-switcher-chevron {
+  flex-shrink: 0;
   color: var(--text-muted);
-  padding: 0 8px;
+  transition: transform var(--transition);
+}
+
+.profile-switcher-trigger.open .profile-switcher-chevron {
+  transform: rotate(180deg);
+}
+
+/* Profile icon — green when that profile's gateway is running. */
+.profile-icon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.profile-icon.running {
+  color: var(--success, #22c55e);
+}
+
+/* Popover menu, anchored above the trigger. */
+.profile-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  min-width: 260px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  padding: 6px;
+  z-index: 200;
+  animation: profileMenuIn 0.12s ease;
+}
+
+@keyframes profileMenuIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.profile-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.profile-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-sans);
+  transition: background var(--transition);
+}
+
+.profile-menu-item:hover {
+  background: var(--bg-tertiary);
+}
+
+.profile-menu-item.active {
+  background: var(--accent-subtle);
+}
+
+.profile-menu-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.profile-menu-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-menu-tag {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.profile-menu-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-menu-check {
+  flex-shrink: 0;
+  color: var(--accent-text, var(--accent));
+}
+
+.profile-menu-manage {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 6px;
+  padding: 9px 10px;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  text-align: left;
+  transition: all var(--transition);
+}
+
+.profile-menu-manage:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.profile-menu-manage svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
 }
 
 .sidebar-update-btn {
@@ -1834,6 +2011,13 @@ body {
   align-self: flex-start;
 }
 
+/* Continuation rows of a turn (thinking/tool rows + answer that share one
+   avatar). Pull them closer to the row above so the turn reads as one block
+   rather than several spaced-out bubbles. */
+.chat-message--grouped {
+  margin-top: -8px;
+}
+
 .chat-avatar {
   width: 28px;
   height: 28px;
@@ -2209,12 +2393,13 @@ body {
 
 .chat-input-wrapper {
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-bright);
   border-radius: var(--radius-lg);
-  padding: 6px 6px 6px 16px;
+  padding: 10px 10px 8px;
   transition: border-color var(--transition);
 }
 
@@ -2223,19 +2408,39 @@ body {
 }
 
 .chat-input {
-  flex: 1;
+  width: 100%;
   background: none;
   border: none;
   color: var(--text-primary);
   font-size: 14px;
   font-family: var(--font-sans);
-  padding: 4px 0;
+  padding: 4px 6px;
   outline: none;
   resize: none;
   min-height: 20px;
   max-height: 120px;
   overflow-y: auto;
   line-height: 1.4;
+  box-sizing: border-box;
+}
+
+/* Bottom toolbar row: attach/mic + model/folder pickers, send pushed right. */
+.chat-input-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.chat-input-toolbar-spacer {
+  flex: 1;
+}
+
+/* Thin separator between the icon buttons and the picker chips. */
+.chat-input-toolbar-divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 4px 4px;
+  background: var(--border-bright);
 }
 
 .chat-input::placeholder {
@@ -2320,6 +2525,122 @@ body {
 .chat-attach-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* Voice-input button — shares the attach button's shape. */
+.chat-mic-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.chat-mic-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.chat-mic-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Recording: red, gently pulsing so it's clearly "live". */
+.chat-mic-btn--recording {
+  color: var(--danger, #ef4444);
+  animation: chatMicPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes chatMicPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.chat-voice-error {
+  margin-top: 6px;
+}
+
+/* Context-window gauge — circular % ring with a hover/focus tooltip. */
+.chat-ctx-gauge {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+  outline: none;
+}
+
+.chat-ctx-gauge-track {
+  stroke: var(--border, rgba(255, 255, 255, 0.12));
+}
+
+.chat-ctx-gauge-fill {
+  stroke: var(--accent, #4ade80);
+  transition: stroke-dasharray var(--transition);
+}
+
+.chat-ctx-gauge-num {
+  position: absolute;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-ctx-tooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  min-width: 220px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-elevated, #1c1c22);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(4px);
+  transition:
+    opacity var(--transition),
+    transform var(--transition),
+    visibility var(--transition);
+  pointer-events: none;
+}
+
+.chat-ctx-gauge:hover .chat-ctx-tooltip,
+.chat-ctx-gauge:focus-visible .chat-ctx-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.chat-ctx-tooltip-title {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
 }
 
 .chat-attachment-strip {
@@ -3009,7 +3330,59 @@ body {
   position: relative;
   display: flex;
   align-items: center;
-  margin-top: 6px;
+}
+
+/* Shared chip style for the input-footer controls (model + folder). */
+.chat-meta-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  transition: all var(--transition);
+}
+
+.chat-meta-chip:hover,
+.chat-meta-chip--active {
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+}
+
+.chat-ctxfolder-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.chat-ctxfolder-name {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-meta-chip-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 3px;
+  border-radius: 4px;
+  transition: all var(--transition);
+}
+
+.chat-meta-chip-icon:hover,
+.chat-meta-chip-icon--active {
+  color: var(--text-secondary);
+  background: var(--bg-hover);
 }
 
 .chat-model-trigger {
@@ -3021,7 +3394,7 @@ body {
   color: var(--text-muted);
   font-size: 11px;
   cursor: pointer;
-  padding: 2px 6px;
+  padding: 4px 8px;
   border-radius: 4px;
   transition: all var(--transition);
 }
@@ -4034,6 +4407,34 @@ body {
   color: var(--text-primary);
 }
 
+.sessions-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sessions-select-mode {
+  min-width: 78px;
+}
+
+.sessions-selection-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+}
+
+.sessions-selection-count {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 /* Search bar — integrated into header */
 .sessions-searchbar {
   display: flex;
@@ -4161,11 +4562,34 @@ body {
   border-color: var(--border-focus);
 }
 
+.sessions-card--selected {
+  border-color: var(--border-focus);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
 .sessions-card-main {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
+}
+
+.sessions-card-select {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.sessions-card-select input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
 }
 
 .sessions-card-title {
@@ -4418,6 +4842,13 @@ body {
 }
 
 .sessions-result-snippet mark {
+  background: rgba(245, 158, 11, 0.3);
+  color: var(--text-primary);
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+.sessions-card-title mark {
   background: rgba(245, 158, 11, 0.3);
   color: var(--text-primary);
   padding: 0 2px;

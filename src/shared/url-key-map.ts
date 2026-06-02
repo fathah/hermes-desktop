@@ -74,3 +74,32 @@ export function isLocalBaseUrl(url: string | null | undefined): boolean {
     url,
   );
 }
+
+/**
+ * Provider ids the runtime routes through its OpenAI-compatible "custom
+ * endpoint" path (see sendMessageViaCli in hermes.ts). For these, the gateway
+ * resolves the upstream key from a fallback chain — URL-specific key →
+ * CUSTOM_PROVIDER_<name>_KEY → CUSTOM_API_KEY → OPENAI_API_KEY — rather than
+ * insisting on the URL-derived key. Single source of truth so the gateway
+ * spawn, the pre-send readiness check, and the config-health audit all agree
+ * on which providers get that treatment.
+ *
+ * The remote entries must stay in sync with the `id` of remote-group entries
+ * in the renderer's `LOCAL_PRESETS`.
+ */
+export const OPENAI_COMPAT_PROVIDERS: ReadonlySet<string> = new Set([
+  // Generic
+  "custom",
+  // Local LLMs
+  "lmstudio",
+  "ollama",
+  "vllm",
+  "llamacpp",
+  // Built-in remote OpenAI-compatible providers
+  "groq",
+  "deepseek",
+  "together",
+  "fireworks",
+  "cerebras",
+  "mistral",
+]);

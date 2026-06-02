@@ -1,7 +1,7 @@
 import { memo, useState } from "react";
 import { useI18n } from "../../components/useI18n";
 import { AttachmentChip } from "../../components/AttachmentChip";
-import { HermesAvatar } from "./MessageRow";
+import { HermesAvatar, AvatarSpacer } from "./MessageRow";
 import type {
   Attachment,
   ReasoningMessage,
@@ -61,19 +61,33 @@ const CollapsibleSection = memo(function CollapsibleSection({
 
 export const ReasoningRow = memo(function ReasoningRow({
   msg,
+  active = false,
+  showAvatar = true,
 }: {
   msg: ReasoningMessage;
+  /** True only while this turn's reasoning is still streaming. Controls the
+   *  present-vs-past label ("Thinking…" vs "Thought"). */
+  active?: boolean;
+  /** False on continuation rows of a turn — render a spacer instead of an
+   *  avatar so one turn shows a single avatar. */
+  showAvatar?: boolean;
 }): React.JSX.Element {
   const { t } = useI18n();
   const lineCount = msg.text.split("\n").length;
   return (
-    <div className="chat-message chat-message-agent chat-message-history">
-      <HermesAvatar />
+    <div
+      className={`chat-message chat-message-agent chat-message-history${
+        showAvatar ? "" : " chat-message--grouped"
+      }`}
+    >
+      {showAvatar ? <HermesAvatar /> : <AvatarSpacer />}
       <CollapsibleSection
         variant="reasoning"
         header={
           <span className="chat-history-label">
-            <span className="chat-history-title">{t("chat.thinking")}</span>
+            <span className="chat-history-title">
+              {active ? t("chat.thinking") : t("chat.thought")}
+            </span>
             <span className="chat-history-meta">
               {lineCount} {lineCount === 1 ? "line" : "lines"}
             </span>
@@ -98,14 +112,20 @@ function summariseArgs(args: string): string {
 
 export const ToolCallRow = memo(function ToolCallRow({
   msg,
+  showAvatar = true,
 }: {
   msg: ToolCallMessage;
+  showAvatar?: boolean;
 }): React.JSX.Element {
   const { t } = useI18n();
   const summary = summariseArgs(msg.args);
   return (
-    <div className="chat-message chat-message-agent chat-message-history">
-      <HermesAvatar />
+    <div
+      className={`chat-message chat-message-agent chat-message-history${
+        showAvatar ? "" : " chat-message--grouped"
+      }`}
+    >
+      {showAvatar ? <HermesAvatar /> : <AvatarSpacer />}
       <CollapsibleSection
         variant="tool-call"
         header={
@@ -135,15 +155,21 @@ function countLines(text: string): number {
 
 export const ToolResultRow = memo(function ToolResultRow({
   msg,
+  showAvatar = true,
 }: {
   msg: ToolResultMessage;
+  showAvatar?: boolean;
 }): React.JSX.Element {
   const { t } = useI18n();
   const lines = countLines(msg.content);
   const hasAttachments = !!msg.attachments && msg.attachments.length > 0;
   return (
-    <div className="chat-message chat-message-agent chat-message-history">
-      <HermesAvatar />
+    <div
+      className={`chat-message chat-message-agent chat-message-history${
+        showAvatar ? "" : " chat-message--grouped"
+      }`}
+    >
+      {showAvatar ? <HermesAvatar /> : <AvatarSpacer />}
       <CollapsibleSection
         variant="tool-result"
         header={

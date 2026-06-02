@@ -193,6 +193,9 @@ export function syncSessionCache(): CachedSession[] {
           .all(...chunk) as Array<{ id: string; message_count: number }>;
         for (const r of refreshed) countsById.set(r.id, r.message_count);
       }
+      cache.sessions = cache.sessions.filter(
+        (s) => refreshedIds.has(s.id) || countsById.has(s.id),
+      );
       for (const s of cache.sessions) {
         const fresh = countsById.get(s.id);
         if (fresh !== undefined && fresh !== s.messageCount) {

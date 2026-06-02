@@ -208,6 +208,95 @@ export function hasMediaTokens(content: string): boolean {
   return MEDIA_RE.test(content);
 }
 
+// A tool/skill invocation that the model "leaked" into its *text* instead of
+// issuing a real function call — e.g.
+//   <skill_view name="x">{"answer": "the real reply"}</skill_view>
+//   <skills_list category="">…markdown prose with <b>headings</b>…</skills_list>
+// Weaker models on strict-tool providers (e.g. llama-3.3-70b on Groq) do this;
+// the gateway forwards it verbatim, so without cleanup the chat shows the raw
+// tag. We only treat tags whose name is snake_case (contains `_`) as leaks —
+// no HTML element name contains an underscore, so real markup (`<b>`, `<code>`,
+// `<div>`) is never matched.
+const LEAKED_TOOL_TAG_RE = /<([a-z][a-z0-9_]*)\b[^>]*>([\s\S]*?)<\/\1>/gi;
+
+// Keys whose string value is the human-readable payload to surface.
+const READABLE_JSON_KEYS = [
+  "answer",
+  "response",
+  "content",
+  "text",
+  "message",
+  "result",
+] as const;
+
+function readableFromLeakedJson(jsonStr: string): string | null {
+  let obj: unknown;
+  try {
+    obj = JSON.parse(jsonStr);
+  } catch {
+    return null;
+  }
+  if (!obj || typeof obj !== "object") return null;
+  const rec = obj as Record<string, unknown>;
+  for (const key of READABLE_JSON_KEYS) {
+    const v = rec[key];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return null;
+}
+
+/**
+ * Map the safe inline-HTML subset the model sometimes emits inside leaked tool
+ * output to markdown, so AgentMarkdown (react-markdown without rehype-raw, which
+ * renders raw HTML literally) shows it as intended. Scoped to leaked-tag bodies
+ * only — normal prose/markup elsewhere is left alone.
+ */
+function inlineHtmlToMarkdown(text: string): string {
+  return text
+    .replace(/<\/?(?:b|strong)(?:\s[^>]*)?>/gi, "**")
+    .replace(/<\/?(?:i|em)(?:\s[^>]*)?>/gi, "*");
+}
+
+/**
+ * Recover the readable text from leaked tool/skill tags (see
+ * {@link LEAKED_TOOL_TAG_RE}). For a leaked tag:
+ *   - if its body is JSON with an answer/content/text/etc. string, surface that;
+ *   - otherwise strip the wrapper and keep the inner body (converting its inline
+ *     HTML to markdown).
+ * Non-leaked tags (single-word HTML elements, real prose) are left untouched,
+ * as are matches inside fenced/inline code.
+ *
+ * Returns the original string unchanged when there's nothing to clean — cheap
+ * for the common case (no `</…>` in the content).
+ */
+export function cleanLeakedToolTags(content: string): string {
+  if (!content || !content.includes("</")) return content;
+
+  const code = codeRanges(content);
+  let result = "";
+  let last = 0;
+  let changed = false;
+  let m: RegExpExecArray | null;
+  LEAKED_TOOL_TAG_RE.lastIndex = 0;
+  while ((m = LEAKED_TOOL_TAG_RE.exec(content)) !== null) {
+    const tag = m[1];
+    const body = m[2];
+    // snake_case name ⇒ a leaked tool/skill call, not real HTML markup.
+    if (!tag.includes("_")) continue;
+    if (inCode(m.index, code)) continue;
+    const readable = readableFromLeakedJson(body);
+    const replacement =
+      readable !== null ? readable : inlineHtmlToMarkdown(body).trim();
+    if (!replacement) continue; // empty body → leave the tag as-is
+    result += content.slice(last, m.index) + replacement;
+    last = m.index + m[0].length;
+    changed = true;
+  }
+  if (!changed) return content;
+  result += content.slice(last);
+  return result;
+}
+
 /**
  * Classify a plain `src` from a markdown `![alt](src)` image syntax. The
  * markdown image syntax doesn't actually guarantee an image — the agent

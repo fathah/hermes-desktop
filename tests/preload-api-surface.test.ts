@@ -133,6 +133,7 @@ describe("Legacy APIs preserved (backward compat)", () => {
     // Sessions
     "listSessions",
     "getSessionMessages",
+    "deleteSessions",
     // Profiles
     "listProfiles",
     "createProfile",

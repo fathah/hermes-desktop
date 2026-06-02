@@ -18,6 +18,7 @@ import { profilePaths } from "./utils";
 import {
   type ApiKeySource,
   appendConfigFixLog,
+  customEndpointKeyResolvable,
   getConfigValue,
   getModelConfig,
   hasOAuthCredentials,
@@ -77,9 +78,7 @@ const EMPTY_REPORT = (profile: string): ConfigHealthReport => ({
  * Run all enabled checks against the given profile (default profile
  * when omitted). Returns a populated report; never throws.
  */
-export function runConfigHealthCheck(
-  profile?: string,
-): ConfigHealthReport {
+export function runConfigHealthCheck(profile?: string): ConfigHealthReport {
   const profileName = profile || "default";
   const report = EMPTY_REPORT(profileName);
 
@@ -248,7 +247,15 @@ function checkActiveModelKeyPresence(profile?: string): ConfigHealthIssue[] {
   if (!expectedKey) return [];
 
   const env = readEnv(profile);
-  if (((env[expectedKey] ?? "")).trim()) return [];
+  if ((env[expectedKey] ?? "").trim()) return [];
+
+  // OpenAI-compatible / custom endpoints resolve their key from a fallback
+  // chain (URL key → CUSTOM_PROVIDER_<name>_KEY → CUSTOM_API_KEY →
+  // OPENAI_API_KEY). If any link is present the gateway can authenticate, so
+  // don't warn about the URL-derived key being absent.
+  if (customEndpointKeyResolvable(mc.provider, mc.baseUrl, profile)) {
+    return [];
+  }
 
   // Secondary positive signal: auth.json may carry the credentials
   // (OAuth tokens, or properly-shaped credential-pool entries).
@@ -282,9 +289,7 @@ function checkActiveModelKeyPresence(profile?: string): ConfigHealthIssue[] {
  * a value under Y. Auto-fix copies the value to X (Option A — leave
  * the old entry alone).
  */
-function checkRuntimeEnvKeyMismatch(
-  profile?: string,
-): ConfigHealthIssue[] {
+function checkRuntimeEnvKeyMismatch(profile?: string): ConfigHealthIssue[] {
   const mc = getModelConfig(profile);
   if (!mc.baseUrl) return [];
 
@@ -294,6 +299,14 @@ function checkRuntimeEnvKeyMismatch(
   const env = readEnv(profile);
   const expectedValue = (env[expectedKey] ?? "").trim();
   if (expectedValue) return []; // Expected key already has a value
+
+  // For OpenAI-compatible / custom endpoints, OPENAI_API_KEY and
+  // CUSTOM_API_KEY are valid fallbacks the runtime actually reads — not a
+  // "saved under the wrong name" mismatch. Don't suggest copying the value to
+  // the URL-derived key when the existing one already resolves.
+  if (customEndpointKeyResolvable(mc.provider, mc.baseUrl, profile)) {
+    return [];
+  }
 
   // Look for any non-empty *_API_KEY / *_TOKEN that *isn't* the expected
   // one — that's the candidate for the mismatch warning. Don't fire
@@ -407,7 +420,10 @@ function fixRuntimeEnvKeyMismatch(
   const env = readEnv(profile);
   const value = (env[context.from] ?? "").trim();
   if (!value) {
-    return { ok: false, message: `${context.from} is empty — nothing to copy.` };
+    return {
+      ok: false,
+      message: `${context.from} is empty — nothing to copy.`,
+    };
   }
   if ((env[context.to] ?? "").trim()) {
     return {
@@ -497,16 +513,44 @@ const DRIFT_FIELDS: ReadonlyArray<{
 }> = [
   // .env credentials — the most common drift cause
   { source: "env", field: "API_SERVER_KEY", label: "API_SERVER_KEY (.env)" },
-  { source: "env", field: "OPENROUTER_API_KEY", label: "OPENROUTER_API_KEY (.env)" },
-  { source: "env", field: "ANTHROPIC_API_KEY", label: "ANTHROPIC_API_KEY (.env)" },
+  {
+    source: "env",
+    field: "OPENROUTER_API_KEY",
+    label: "OPENROUTER_API_KEY (.env)",
+  },
+  {
+    source: "env",
+    field: "ANTHROPIC_API_KEY",
+    label: "ANTHROPIC_API_KEY (.env)",
+  },
   { source: "env", field: "OPENAI_API_KEY", label: "OPENAI_API_KEY (.env)" },
-  { source: "env", field: "DEEPSEEK_API_KEY", label: "DEEPSEEK_API_KEY (.env)" },
+  {
+    source: "env",
+    field: "DEEPSEEK_API_KEY",
+    label: "DEEPSEEK_API_KEY (.env)",
+  },
   { source: "env", field: "GROQ_API_KEY", label: "GROQ_API_KEY (.env)" },
   { source: "env", field: "MISTRAL_API_KEY", label: "MISTRAL_API_KEY (.env)" },
-  { source: "env", field: "TOGETHER_API_KEY", label: "TOGETHER_API_KEY (.env)" },
-  { source: "env", field: "FIREWORKS_API_KEY", label: "FIREWORKS_API_KEY (.env)" },
-  { source: "env", field: "CEREBRAS_API_KEY", label: "CEREBRAS_API_KEY (.env)" },
-  { source: "env", field: "PERPLEXITY_API_KEY", label: "PERPLEXITY_API_KEY (.env)" },
+  {
+    source: "env",
+    field: "TOGETHER_API_KEY",
+    label: "TOGETHER_API_KEY (.env)",
+  },
+  {
+    source: "env",
+    field: "FIREWORKS_API_KEY",
+    label: "FIREWORKS_API_KEY (.env)",
+  },
+  {
+    source: "env",
+    field: "CEREBRAS_API_KEY",
+    label: "CEREBRAS_API_KEY (.env)",
+  },
+  {
+    source: "env",
+    field: "PERPLEXITY_API_KEY",
+    label: "PERPLEXITY_API_KEY (.env)",
+  },
   { source: "env", field: "GOOGLE_API_KEY", label: "GOOGLE_API_KEY (.env)" },
   { source: "env", field: "XAI_API_KEY", label: "XAI_API_KEY (.env)" },
   { source: "env", field: "NOUS_API_KEY", label: "NOUS_API_KEY (.env)" },
@@ -514,11 +558,31 @@ const DRIFT_FIELDS: ReadonlyArray<{
   { source: "env", field: "CUSTOM_API_KEY", label: "CUSTOM_API_KEY (.env)" },
   // config.yaml fields — the model-specific ones, including the
   // `api_key` field that issue #384 was hitting.
-  { source: "config", field: "model.provider", label: "model.provider (config.yaml)" },
-  { source: "config", field: "model.default", label: "model.default (config.yaml)" },
-  { source: "config", field: "model.base_url", label: "model.base_url (config.yaml)" },
-  { source: "config", field: "model.api_key", label: "model.api_key (config.yaml)" },
-  { source: "config", field: "api_server.token", label: "api_server.token (config.yaml)" },
+  {
+    source: "config",
+    field: "model.provider",
+    label: "model.provider (config.yaml)",
+  },
+  {
+    source: "config",
+    field: "model.default",
+    label: "model.default (config.yaml)",
+  },
+  {
+    source: "config",
+    field: "model.base_url",
+    label: "model.base_url (config.yaml)",
+  },
+  {
+    source: "config",
+    field: "model.api_key",
+    label: "model.api_key (config.yaml)",
+  },
+  {
+    source: "config",
+    field: "api_server.token",
+    label: "api_server.token (config.yaml)",
+  },
 ];
 
 /** True when the field's value should be treated as a secret in
@@ -585,10 +649,7 @@ function readDottedYaml(text: string, dotted: string): string {
     const blockRe = new RegExp(`^${parts[0]}:\\s*\\n((?:[ \\t]+.*\\n?)*)`, "m");
     const blockM = text.match(blockRe);
     if (!blockM) return "";
-    const child = new RegExp(
-      `^[ \\t]+${parts[1]}\\s*:\\s*(.+?)\\s*$`,
-      "m",
-    );
+    const child = new RegExp(`^[ \\t]+${parts[1]}\\s*:\\s*(.+?)\\s*$`, "m");
     const m = blockM[1].match(child);
     return m ? m[1].replace(/^["']|["']$/g, "").trim() : "";
   }
@@ -604,9 +665,7 @@ function readCurrentFields(profile: string | undefined): SiblingEnv {
   return readSiblingFields(profilePaths(profile).home);
 }
 
-function checkSiblingHermesHomeDrift(
-  profile?: string,
-): ConfigHealthIssue[] {
+function checkSiblingHermesHomeDrift(profile?: string): ConfigHealthIssue[] {
   const siblings = findSiblingHermesHomes();
   if (siblings.length === 0) return [];
 
@@ -640,11 +699,7 @@ function checkSiblingHermesHomeDrift(
             `WSL value (${where}): ${wslMasked}\n` +
             `Windows value: (not set)\n\n` +
             `Hermes Desktop reads only ${current.envFile.replace(/\\\.env$/, "")} — your CLI on WSL works, the desktop doesn't, because the value never made it across. Auto-fix copies the WSL value into the Windows-side file.`,
-          locations: [
-            current.configFile,
-            current.envFile,
-            sibling.hermesHome,
-          ],
+          locations: [current.configFile, current.envFile, sibling.hermesHome],
           autoFixable: true,
           fixDescription: `Copy ${label} from WSL (${sibling.distro}) → Windows side.`,
           fixLocation: ".env",
@@ -756,12 +811,7 @@ function fixSiblingHermesHomeDrift(
         const content = existsSync(configFile)
           ? readFileSync(configFile, "utf-8")
           : "";
-        const next = upsertBlockChild(
-          content,
-          segments[0],
-          segments[1],
-          value,
-        );
+        const next = upsertBlockChild(content, segments[0], segments[1], value);
         safeWriteFile(configFile, next);
       } else {
         return {
@@ -775,7 +825,10 @@ function fixSiblingHermesHomeDrift(
       issueCode: "SIBLING_HERMES_HOME_DRIFT",
       action: "autofix",
       from: `wsl:${wslHome}/${fieldDef.source === "env" ? ".env" : "config.yaml"}`,
-      to: fieldDef.source === "env" ? "%LocalAppData%/hermes/.env" : "%LocalAppData%/hermes/config.yaml",
+      to:
+        fieldDef.source === "env"
+          ? "%LocalAppData%/hermes/.env"
+          : "%LocalAppData%/hermes/config.yaml",
       profile: profile || "default",
       valueMasked: isSecretField(fieldDef.label) ? maskKey(value) : value,
       detail: field,
@@ -830,9 +883,9 @@ function checkLegacyToolsetName(profile?: string): ConfigHealthIssue[] {
     message:
       'config.yaml references the legacy toolset name "hermes" — the current engine expects "hermes-cli".',
     detail:
-      'The bundled hermes-agent CLI renamed the default toolset alias ' +
+      "The bundled hermes-agent CLI renamed the default toolset alias " +
       'from "hermes" to "hermes-cli". The agent still runs, but every ' +
-      'invocation prints `Warning: Unknown toolsets: hermes` until the ' +
+      "invocation prints `Warning: Unknown toolsets: hermes` until the " +
       "entry is updated. Auto-fix rewrites the line in place.",
     locations: [configFile],
     autoFixable: true,
@@ -884,9 +937,10 @@ function findLegacyToolsetEntry(content: string): boolean {
  * trailing comment. Re-runs `findLegacyToolsetEntry` on the result so
  * the function is a no-op if there's nothing to fix.
  */
-function fixLegacyToolsetName(
-  profile?: string,
-): { ok: boolean; message?: string } {
+function fixLegacyToolsetName(profile?: string): {
+  ok: boolean;
+  message?: string;
+} {
   try {
     const { configFile } = profilePaths(profile);
     if (!existsSync(configFile)) {
@@ -916,9 +970,7 @@ function fixLegacyToolsetName(
         }
         // Rewrite the legacy entry only — leave hermes-cli et al alone.
         // Accept both zero-indent (`- hermes`) and indented (`  - hermes`).
-        const m = line.match(
-          /^(\s*-\s+)(["']?)hermes\2(\s*(?:#.*)?)$/,
-        );
+        const m = line.match(/^(\s*-\s+)(["']?)hermes\2(\s*(?:#.*)?)$/);
         if (m) {
           const prefix = m[1];
           const quote = m[2];
