@@ -895,6 +895,38 @@ export async function acceptAgentWorkspaceProposal(
   return true;
 }
 
+export async function acceptAgentWorkspaceProposalHunk(
+  id: string,
+  hunkId: string,
+  options: WorkspaceOptions = {},
+): Promise<boolean> {
+  const root = await ensureWorkspace(options);
+  const proposals = await readProposals(root);
+  const proposal = proposals.find((candidate) => candidate.id === id);
+  if (!proposal) throw new Error("Agent proposal not found");
+  const hunk = proposal.hunks.find((candidate) => candidate.id === hunkId);
+  if (!hunk) throw new Error("Agent proposal hunk not found");
+  await snapshotWorkspaceFile(proposal.path, "agent-proposal", options);
+  const target = resolveWorkspacePath(proposal.path, options);
+  const current = existsSync(target)
+    ? await readFile(target, "utf-8")
+    : proposal.baseContent;
+  const next = current.includes(hunk.before)
+    ? current.replace(hunk.before, hunk.after)
+    : proposal.proposedContent;
+  await writeFile(target, next, "utf-8");
+  proposal.hunks = proposal.hunks.filter(
+    (candidate) => candidate.id !== hunkId,
+  );
+  await writeProposals(
+    root,
+    proposals.filter(
+      (candidate) => candidate.id !== id || candidate.hunks.length > 0,
+    ),
+  );
+  return true;
+}
+
 export async function rejectAgentWorkspaceProposal(
   id: string,
   options: WorkspaceOptions = {},
@@ -914,6 +946,27 @@ export async function rejectAgentWorkspaceProposal(
   await writeProposals(
     root,
     proposals.filter((candidate) => candidate.id !== id),
+  );
+  return true;
+}
+
+export async function rejectAgentWorkspaceProposalHunk(
+  id: string,
+  hunkId: string,
+  options: WorkspaceOptions = {},
+): Promise<boolean> {
+  const root = await ensureWorkspace(options);
+  const proposals = await readProposals(root);
+  const proposal = proposals.find((candidate) => candidate.id === id);
+  if (!proposal) throw new Error("Agent proposal not found");
+  proposal.hunks = proposal.hunks.filter(
+    (candidate) => candidate.id !== hunkId,
+  );
+  await writeProposals(
+    root,
+    proposals.filter(
+      (candidate) => candidate.id !== id || candidate.hunks.length > 0,
+    ),
   );
   return true;
 }

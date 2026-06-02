@@ -717,6 +717,19 @@ const hermesAPI = {
       blockId,
       profile,
     ),
+  listWorkspaceComments: (path?: string, profile?: string) =>
+    ipcRenderer.invoke("list-workspace-comments", path, profile),
+  createWorkspaceComment: (
+    input: {
+      path: string;
+      blockId?: string;
+      body: string;
+      reminderAt?: number;
+    },
+    profile?: string,
+  ) => ipcRenderer.invoke("create-workspace-comment", input, profile),
+  resolveWorkspaceComment: (id: string, profile?: string) =>
+    ipcRenderer.invoke("resolve-workspace-comment", id, profile),
   updateWorkspacePageOrder: (
     parentPath: string | null,
     orderedPaths: string[],
@@ -759,6 +772,28 @@ const hermesAPI = {
     ipcRenderer.invoke("accept-agent-workspace-proposal", id, profile),
   rejectAgentWorkspaceProposal: (id: string, profile?: string) =>
     ipcRenderer.invoke("reject-agent-workspace-proposal", id, profile),
+  acceptAgentWorkspaceProposalHunk: (
+    id: string,
+    hunkId: string,
+    profile?: string,
+  ) =>
+    ipcRenderer.invoke(
+      "accept-agent-workspace-proposal-hunk",
+      id,
+      hunkId,
+      profile,
+    ),
+  rejectAgentWorkspaceProposalHunk: (
+    id: string,
+    hunkId: string,
+    profile?: string,
+  ) =>
+    ipcRenderer.invoke(
+      "reject-agent-workspace-proposal-hunk",
+      id,
+      hunkId,
+      profile,
+    ),
   onWorkspaceFileChanged: (
     callback: (event: { path: string; content: string }) => void,
   ): (() => void) => {

@@ -88,6 +88,9 @@ describe("New IPC handlers from v0.8/v0.9 features", () => {
     "create-workspace-synced-block",
     "update-workspace-synced-block-content",
     "remove-workspace-synced-block-reference",
+    "list-workspace-comments",
+    "create-workspace-comment",
+    "resolve-workspace-comment",
     "update-workspace-page-order",
     "record-workspace-visit",
     "list-workspace-history",
@@ -97,6 +100,8 @@ describe("New IPC handlers from v0.8/v0.9 features", () => {
     "create-agent-workspace-proposal",
     "accept-agent-workspace-proposal",
     "reject-agent-workspace-proposal",
+    "accept-agent-workspace-proposal-hunk",
+    "reject-agent-workspace-proposal-hunk",
   ];
 
   for (const ch of newChannels) {

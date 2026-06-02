@@ -119,6 +119,9 @@ describe("New APIs from v0.8/v0.9 features", () => {
       "createWorkspaceSyncedBlock",
       "updateWorkspaceSyncedBlockContent",
       "removeWorkspaceSyncedBlockReference",
+      "listWorkspaceComments",
+      "createWorkspaceComment",
+      "resolveWorkspaceComment",
       "updateWorkspacePageOrder",
       "recordWorkspaceVisit",
       "listWorkspaceHistory",
@@ -128,6 +131,8 @@ describe("New APIs from v0.8/v0.9 features", () => {
       "createAgentWorkspaceProposal",
       "acceptAgentWorkspaceProposal",
       "rejectAgentWorkspaceProposal",
+      "acceptAgentWorkspaceProposalHunk",
+      "rejectAgentWorkspaceProposalHunk",
     ]) {
       expect(preloadMethods).toContain(method);
       expect(typeMethods).toContain(method);

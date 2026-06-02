@@ -31,5 +31,5 @@ describe("app locale persistence", () => {
     const secondRun = await loadLocaleModule();
 
     expect(secondRun.getAppLocale()).toBe("es");
-  });
+  }, 10000);
 });

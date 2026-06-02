@@ -168,6 +168,17 @@ interface WorkspaceSyncedBlock {
   updatedAt: number;
 }
 
+interface WorkspaceComment {
+  id: string;
+  path: string;
+  blockId?: string;
+  body: string;
+  reminderAt?: number;
+  status: "open" | "resolved";
+  createdAt: number;
+  resolvedAt?: number;
+}
+
 interface AgentWorkspaceProposal {
   id: string;
   path: string;
@@ -735,6 +746,23 @@ interface HermesAPI {
     blockId: string,
     profile?: string,
   ) => Promise<WorkspaceSyncedBlock>;
+  listWorkspaceComments: (
+    path?: string,
+    profile?: string,
+  ) => Promise<WorkspaceComment[]>;
+  createWorkspaceComment: (
+    input: {
+      path: string;
+      blockId?: string;
+      body: string;
+      reminderAt?: number;
+    },
+    profile?: string,
+  ) => Promise<WorkspaceComment>;
+  resolveWorkspaceComment: (
+    id: string,
+    profile?: string,
+  ) => Promise<WorkspaceComment>;
   updateWorkspacePageOrder: (
     parentPath: string | null,
     orderedPaths: string[],
@@ -768,6 +796,16 @@ interface HermesAPI {
   ) => Promise<boolean>;
   rejectAgentWorkspaceProposal: (
     id: string,
+    profile?: string,
+  ) => Promise<boolean>;
+  acceptAgentWorkspaceProposalHunk: (
+    id: string,
+    hunkId: string,
+    profile?: string,
+  ) => Promise<boolean>;
+  rejectAgentWorkspaceProposalHunk: (
+    id: string,
+    hunkId: string,
     profile?: string,
   ) => Promise<boolean>;
   onWorkspaceFileChanged: (

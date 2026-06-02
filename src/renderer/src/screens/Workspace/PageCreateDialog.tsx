@@ -3,17 +3,25 @@ import { useEffect, useState } from "react";
 interface PageCreateDialogProps {
   mode: "create" | "rename";
   initialTitle?: string;
+  templates?: Array<{
+    id: string;
+    title: string;
+    content: string;
+    kind: "page" | "database-row" | "button";
+  }>;
   onCancel: () => void;
-  onSubmit: (title: string) => void;
+  onSubmit: (title: string, content?: string) => void;
 }
 
 export default function PageCreateDialog({
   mode,
   initialTitle = "",
+  templates = [],
   onCancel,
   onSubmit,
 }: PageCreateDialogProps): React.JSX.Element {
   const [title, setTitle] = useState(initialTitle);
+  const [templateId, setTemplateId] = useState("");
 
   useEffect(() => {
     setTitle(initialTitle);
@@ -30,7 +38,10 @@ export default function PageCreateDialog({
         onSubmit={(event) => {
           event.preventDefault();
           const next = title.trim();
-          if (next) onSubmit(next);
+          const template = templates.find(
+            (candidate) => candidate.id === templateId,
+          );
+          if (next) onSubmit(next, template?.content);
         }}
       >
         <label>
@@ -41,6 +52,24 @@ export default function PageCreateDialog({
             onChange={(event) => setTitle(event.target.value)}
           />
         </label>
+        {mode === "create" && templates.length > 0 && (
+          <label>
+            <span>Template</span>
+            <select
+              value={templateId}
+              onChange={(event) => setTemplateId(event.target.value)}
+            >
+              <option value="">Blank</option>
+              {templates
+                .filter((template) => template.kind === "page")
+                .map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.title}
+                  </option>
+                ))}
+            </select>
+          </label>
+        )}
         <div className="workspace-dialog-actions">
           <button
             type="button"

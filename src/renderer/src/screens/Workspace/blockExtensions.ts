@@ -7,6 +7,14 @@ export type WorkspaceBlockType =
   | "quote"
   | "code";
 
+export type WorkspaceBlockColor =
+  | "default"
+  | "gray"
+  | "yellow"
+  | "green"
+  | "blue"
+  | "red";
+
 interface MarkdownBlock {
   id: string;
   marker: string;
@@ -60,6 +68,39 @@ export function duplicateBlockById(content: string, id: string): string {
 export function deleteBlockById(content: string, id: string): string {
   return stringifyBlocks(
     parseBlocks(content).filter((block) => block.id !== id),
+  );
+}
+
+export function moveBlockById(
+  content: string,
+  id: string,
+  direction: "up" | "down",
+): string {
+  const blocks = parseBlocks(content);
+  const index = blocks.findIndex((block) => block.id === id);
+  if (index === -1) return ensureMarkdownBlockIds(content);
+  const nextIndex = direction === "up" ? index - 1 : index + 1;
+  if (nextIndex < 0 || nextIndex >= blocks.length)
+    return stringifyBlocks(blocks);
+  const [block] = blocks.splice(index, 1);
+  blocks.splice(nextIndex, 0, block);
+  return stringifyBlocks(blocks);
+}
+
+export function colorBlockById(
+  content: string,
+  id: string,
+  color: WorkspaceBlockColor,
+): string {
+  const blocks = parseBlocks(content);
+  return stringifyBlocks(
+    blocks.map((block) => {
+      if (block.id !== id) return block;
+      const body = block.body.replace(/^<!-- hermes-color:[a-z]+ -->\n?/, "");
+      return color === "default"
+        ? { ...block, body }
+        : { ...block, body: `<!-- hermes-color:${color} -->\n${body}` };
+    }),
   );
 }
 

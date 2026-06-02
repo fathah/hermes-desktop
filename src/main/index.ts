@@ -111,6 +111,7 @@ import {
 } from "./sessions";
 import {
   acceptAgentWorkspaceProposal,
+  acceptAgentWorkspaceProposalHunk,
   createAgentWorkspaceProposal,
   createWorkspacePage,
   getWorkspaceTree,
@@ -123,6 +124,7 @@ import {
   recordWorkspaceVisit,
   readWorkspaceFile,
   rejectAgentWorkspaceProposal,
+  rejectAgentWorkspaceProposalHunk,
   renameWorkspacePage,
   restoreWorkspacePage,
   restoreWorkspaceVersion,
@@ -150,6 +152,11 @@ import {
   removeWorkspaceSyncedBlockReference,
   updateWorkspaceSyncedBlockContent,
 } from "./workspace-synced-blocks";
+import {
+  createWorkspaceComment,
+  listWorkspaceComments,
+  resolveWorkspaceComment,
+} from "./workspace-comments";
 import {
   syncSessionCache,
   listCachedSessions,
@@ -1633,6 +1640,39 @@ function setupIPC(): void {
   );
 
   ipcMain.handle(
+    "list-workspace-comments",
+    async (_event, path?: string, profile?: string) => {
+      requireLocalWorkspace();
+      return listWorkspaceComments(path, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "create-workspace-comment",
+    async (
+      _event,
+      input: {
+        path: string;
+        blockId?: string;
+        body: string;
+        reminderAt?: number;
+      },
+      profile?: string,
+    ) => {
+      requireLocalWorkspace();
+      return createWorkspaceComment(input, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "resolve-workspace-comment",
+    async (_event, id: string, profile?: string) => {
+      requireLocalWorkspace();
+      return resolveWorkspaceComment(id, { profile });
+    },
+  );
+
+  ipcMain.handle(
     "update-workspace-page-order",
     async (
       _event,
@@ -1718,6 +1758,23 @@ function setupIPC(): void {
     async (_event, id: string, profile?: string) => {
       requireLocalWorkspace();
       return rejectAgentWorkspaceProposal(id, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "accept-agent-workspace-proposal-hunk",
+    async (_event, id: string, hunkId: string, profile?: string) => {
+      requireLocalWorkspace();
+      await ensureWorkspaceWatcher(profile);
+      return acceptAgentWorkspaceProposalHunk(id, hunkId, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "reject-agent-workspace-proposal-hunk",
+    async (_event, id: string, hunkId: string, profile?: string) => {
+      requireLocalWorkspace();
+      return rejectAgentWorkspaceProposalHunk(id, hunkId, { profile });
     },
   );
 

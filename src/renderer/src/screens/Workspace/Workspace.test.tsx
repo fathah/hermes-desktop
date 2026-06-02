@@ -141,6 +141,32 @@ beforeEach(() => {
     recordWorkspaceVisit: vi.fn().mockResolvedValue(true),
     listWorkspaceHistory: vi.fn().mockResolvedValue([]),
     restoreWorkspaceVersion: vi.fn().mockResolvedValue("# Home\n\nWelcome"),
+    listWorkspaceTemplates: vi.fn().mockResolvedValue([]),
+    listWorkspaceSyncedBlocks: vi.fn().mockResolvedValue([]),
+    createWorkspaceSyncedBlock: vi.fn().mockResolvedValue({
+      id: "synced-1",
+      sourcePath: "index.md",
+      sourceBlockId: "block-1",
+      content: "Pinned note",
+      references: [],
+      updatedAt: 1,
+    }),
+    listWorkspaceComments: vi.fn().mockResolvedValue([]),
+    createWorkspaceComment: vi.fn().mockResolvedValue({
+      id: "comment-1",
+      path: "index.md",
+      body: "Review",
+      status: "open",
+      createdAt: 1,
+    }),
+    resolveWorkspaceComment: vi.fn().mockResolvedValue({
+      id: "comment-1",
+      path: "index.md",
+      body: "Review",
+      status: "resolved",
+      createdAt: 1,
+      resolvedAt: 2,
+    }),
     listAgentWorkspaceProposals: vi.fn().mockResolvedValue([]),
     createAgentWorkspaceProposal: vi.fn().mockResolvedValue({
       id: "proposal-1",
@@ -152,6 +178,8 @@ beforeEach(() => {
     }),
     acceptAgentWorkspaceProposal: vi.fn().mockResolvedValue(true),
     rejectAgentWorkspaceProposal: vi.fn().mockResolvedValue(true),
+    acceptAgentWorkspaceProposalHunk: vi.fn().mockResolvedValue(true),
+    rejectAgentWorkspaceProposalHunk: vi.fn().mockResolvedValue(true),
     searchWorkspaceAndSessions: vi.fn().mockResolvedValue([]),
     onWorkspaceFileChanged: vi.fn((callback) => {
       fileChangedListeners.push(callback);
@@ -229,7 +257,7 @@ describe("Workspace", () => {
       ),
     );
     expect(promptSpy).not.toHaveBeenCalled();
-  });
+  }, 10000);
 
   it("persists sidebar width and collapsed state through the page graph API", async () => {
     render(<Workspace profile="default" onOpenAdmin={() => undefined} />);

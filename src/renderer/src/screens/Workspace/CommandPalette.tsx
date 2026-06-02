@@ -19,6 +19,9 @@ interface CommandPaletteProps {
   onSelectWorkspace: (path: string) => void;
   onSelectAdmin: (view: string) => void;
   onSelectSession: (sessionId: string) => void;
+  onRunCommand?: (command: string) => void;
+  onOpenWorkspaceInTab?: (path: string) => void;
+  onOpenWorkspaceInWindow?: (path: string) => void;
 }
 
 function resultLabel(result: WorkspaceSearchResult): string {
@@ -28,6 +31,8 @@ function resultLabel(result: WorkspaceSearchResult): string {
   return result.title;
 }
 
+type PaletteFilter = "all" | WorkspaceSearchResult["kind"];
+
 export default function CommandPalette({
   open,
   profile,
@@ -35,9 +40,13 @@ export default function CommandPalette({
   onSelectWorkspace,
   onSelectAdmin,
   onSelectSession,
+  onRunCommand,
+  onOpenWorkspaceInTab,
+  onOpenWorkspaceInWindow,
 }: CommandPaletteProps): React.JSX.Element | null {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<WorkspaceSearchResult[]>([]);
+  const [filter, setFilter] = useState<PaletteFilter>("all");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -45,6 +54,7 @@ export default function CommandPalette({
     if (!open) return;
     setQuery("");
     setResults([]);
+    setFilter("all");
     setSelectedIndex(0);
     setTimeout(() => inputRef.current?.focus(), 0);
   }, [open]);
@@ -73,10 +83,16 @@ export default function CommandPalette({
 
   if (!open) return null;
 
+  const visibleResults =
+    filter === "all"
+      ? results
+      : results.filter((result) => result.kind === filter);
+
   function select(result: WorkspaceSearchResult): void {
     if (result.kind === "workspace") onSelectWorkspace(result.path);
     if (result.kind === "admin") onSelectAdmin(result.view);
     if (result.kind === "session") onSelectSession(result.sessionId);
+    if (result.kind === "command") onRunCommand?.(result.command);
     onClose();
   }
 
@@ -106,15 +122,15 @@ export default function CommandPalette({
               if (event.key === "ArrowDown") {
                 event.preventDefault();
                 setSelectedIndex((index) =>
-                  Math.min(results.length - 1, index + 1),
+                  Math.max(0, Math.min(visibleResults.length - 1, index + 1)),
                 );
               }
               if (event.key === "ArrowUp") {
                 event.preventDefault();
                 setSelectedIndex((index) => Math.max(0, index - 1));
               }
-              if (event.key === "Enter" && results[selectedIndex]) {
-                select(results[selectedIndex]);
+              if (event.key === "Enter" && visibleResults[selectedIndex]) {
+                select(visibleResults[selectedIndex]);
               }
             }}
           />
@@ -126,8 +142,29 @@ export default function CommandPalette({
             <X size={16} />
           </button>
         </div>
+        <div className="command-palette-filters" aria-label="Search filters">
+          {[
+            ["all", "All"],
+            ["workspace", "Pages"],
+            ["session", "Sessions"],
+            ["admin", "Admin"],
+            ["command", "Commands"],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              className={filter === value ? "active" : ""}
+              onClick={() => {
+                setFilter(value as PaletteFilter);
+                setSelectedIndex(0);
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <div className="command-palette-results">
-          {results.map((result, index) => (
+          {visibleResults.map((result, index) => (
             <button
               key={`${result.kind}-${index}-${resultLabel(result)}`}
               type="button"
@@ -140,21 +177,47 @@ export default function CommandPalette({
                 <small>{result.snippet}</small>
               )}
               {result.kind === "workspace" && (
-                <span
-                  role="button"
-                  tabIndex={-1}
-                  className="command-palette-copy"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    copyLink(result);
-                  }}
-                >
-                  Copy link
+                <span className="command-palette-actions">
+                  <span
+                    role="button"
+                    tabIndex={-1}
+                    className="command-palette-copy"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      copyLink(result);
+                    }}
+                  >
+                    Copy link
+                  </span>
+                  <span
+                    role="button"
+                    tabIndex={-1}
+                    className="command-palette-copy"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onOpenWorkspaceInTab?.(result.path);
+                      onClose();
+                    }}
+                  >
+                    Open tab
+                  </span>
+                  <span
+                    role="button"
+                    tabIndex={-1}
+                    className="command-palette-copy"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onOpenWorkspaceInWindow?.(result.path);
+                      onClose();
+                    }}
+                  >
+                    Open window
+                  </span>
                 </span>
               )}
             </button>
           ))}
-          {results.length === 0 && (
+          {visibleResults.length === 0 && (
             <div className="command-palette-empty">No results</div>
           )}
         </div>

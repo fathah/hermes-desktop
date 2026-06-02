@@ -4,6 +4,7 @@ import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   acceptAgentWorkspaceProposal,
+  acceptAgentWorkspaceProposalHunk,
   createAgentWorkspaceProposal,
   createWorkspacePage,
   duplicateWorkspacePage,
@@ -16,6 +17,7 @@ import {
   recordWorkspaceVisit,
   renameWorkspacePage,
   rejectAgentWorkspaceProposal,
+  rejectAgentWorkspaceProposalHunk,
   restoreWorkspacePage,
   restoreWorkspaceVersion,
   trashWorkspacePage,
@@ -151,5 +153,40 @@ describe("workspace history and agent proposals", () => {
       "# Agent Page\n\nRejected",
     );
     expect(await listAgentWorkspaceProposals({ root })).toEqual([]);
+  });
+
+  it("accepts and rejects individual agent proposal hunks", async () => {
+    const page = await createWorkspacePage({ title: "Hunks" }, { root });
+    await writeWorkspaceFile(page.path, "# Hunks\n\nBase one\n\nBase two", {
+      root,
+    });
+    const proposal = await createAgentWorkspaceProposal(
+      page.path,
+      "# Hunks\n\nChanged one\n\nBase two",
+      "# Hunks\n\nBase one\n\nBase two",
+      { root },
+    );
+
+    await expect(
+      acceptAgentWorkspaceProposalHunk(proposal.id, proposal.hunks[0].id, {
+        root,
+      }),
+    ).resolves.toBe(true);
+    expect(readFileSync(join(root, "workspace", page.path), "utf-8")).toBe(
+      "# Hunks\n\nChanged one\n\nBase two",
+    );
+
+    const second = await createAgentWorkspaceProposal(
+      page.path,
+      "# Hunks\n\nRejected\n\nBase two",
+      "# Hunks\n\nChanged one\n\nBase two",
+      { root },
+    );
+    await expect(
+      rejectAgentWorkspaceProposalHunk(second.id, second.hunks[0].id, { root }),
+    ).resolves.toBe(true);
+    expect(readFileSync(join(root, "workspace", page.path), "utf-8")).toBe(
+      "# Hunks\n\nChanged one\n\nBase two",
+    );
   });
 });

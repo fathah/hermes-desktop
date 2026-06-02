@@ -5,6 +5,9 @@ import CommandPalette from "./CommandPalette";
 import PageCreateDialog from "./PageCreateDialog";
 import WorkspaceEditor from "./WorkspaceEditor";
 import WorkspaceHeader, { type WorkspaceMode } from "./WorkspaceHeader";
+import WorkspaceCommentsPanel from "./WorkspaceCommentsPanel";
+import WorkspaceOfflinePanel from "./WorkspaceOfflinePanel";
+import WorkspaceSyncedBlocksPanel from "./WorkspaceSyncedBlocksPanel";
 import WorkspaceTree from "./WorkspaceTree";
 
 interface WorkspaceFileNode {
@@ -74,6 +77,33 @@ interface WorkspaceHistoryEntry {
   content: string;
 }
 
+interface WorkspaceTemplate {
+  id: string;
+  kind: "page" | "database-row" | "button";
+  title: string;
+  content: string;
+}
+
+interface WorkspaceSyncedBlock {
+  id: string;
+  sourcePath: string;
+  sourceBlockId: string;
+  content: string;
+  references: Array<{ path: string; blockId: string }>;
+  updatedAt: number;
+}
+
+interface WorkspaceComment {
+  id: string;
+  path: string;
+  blockId?: string;
+  body: string;
+  reminderAt?: number;
+  status: "open" | "resolved";
+  createdAt: number;
+  resolvedAt?: number;
+}
+
 interface WorkspaceProps {
   profile: string;
   onOpenAdmin: (view: string) => void;
@@ -115,6 +145,9 @@ export default function Workspace({
   const [historyEntries, setHistoryEntries] = useState<WorkspaceHistoryEntry[]>(
     [],
   );
+  const [templates, setTemplates] = useState<WorkspaceTemplate[]>([]);
+  const [syncedBlocks, setSyncedBlocks] = useState<WorkspaceSyncedBlock[]>([]);
+  const [comments, setComments] = useState<WorkspaceComment[]>([]);
   const [externalHighlight, setExternalHighlight] = useState(false);
   const [mode, setMode] = useState<WorkspaceMode>("split");
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -143,17 +176,32 @@ export default function Workspace({
     contentRef.current = content;
   }, [content]);
 
+  const refreshCollaborationPanels = useCallback(
+    async (path: string) => {
+      const [nextComments, nextSyncedBlocks] = await Promise.all([
+        window.hermesAPI.listWorkspaceComments(path, profile),
+        window.hermesAPI.listWorkspaceSyncedBlocks(profile),
+      ]);
+      setComments(nextComments);
+      setSyncedBlocks(nextSyncedBlocks);
+    },
+    [profile],
+  );
+
   const refreshWorkspace = useCallback(async () => {
-    const [tree, nextMetadata, nextGraph, nextProposals] = await Promise.all([
-      window.hermesAPI.getWorkspaceTree(profile),
-      window.hermesAPI.getWorkspaceMetadata(profile),
-      window.hermesAPI.getWorkspacePageGraph(profile),
-      window.hermesAPI.listAgentWorkspaceProposals(profile),
-    ]);
+    const [tree, nextMetadata, nextGraph, nextProposals, nextTemplates] =
+      await Promise.all([
+        window.hermesAPI.getWorkspaceTree(profile),
+        window.hermesAPI.getWorkspaceMetadata(profile),
+        window.hermesAPI.getWorkspacePageGraph(profile),
+        window.hermesAPI.listAgentWorkspaceProposals(profile),
+        window.hermesAPI.listWorkspaceTemplates(profile),
+      ]);
     setNodes(tree);
     setMetadata(nextMetadata);
     setPageGraph(nextGraph);
     setProposals(nextProposals);
+    setTemplates(nextTemplates);
     return tree;
   }, [profile]);
 
@@ -169,6 +217,7 @@ export default function Workspace({
         setDirty(false);
         dirtyRef.current = false;
         setConflictContent(null);
+        await refreshCollaborationPanels(path);
         window.hermesAPI.recordWorkspaceVisit(path, profile).catch(() => {
           /* non-critical metadata update */
         });
@@ -178,7 +227,7 @@ export default function Workspace({
         setLoading(false);
       }
     },
-    [profile],
+    [profile, refreshCollaborationPanels],
   );
 
   const navigateToFile = useCallback(
@@ -301,6 +350,43 @@ export default function Workspace({
     setSessionId(null);
   }
 
+  async function handleCreateComment(body: string): Promise<void> {
+    try {
+      await window.hermesAPI.createWorkspaceComment(
+        { path: selectedPathRef.current, body },
+        profile,
+      );
+      await refreshCollaborationPanels(selectedPathRef.current);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleResolveComment(id: string): Promise<void> {
+    try {
+      await window.hermesAPI.resolveWorkspaceComment(id, profile);
+      await refreshCollaborationPanels(selectedPathRef.current);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleCreateSyncedBlock(nextContent: string): Promise<void> {
+    try {
+      await window.hermesAPI.createWorkspaceSyncedBlock(
+        {
+          sourcePath: selectedPathRef.current,
+          sourceBlockId: `block-${Date.now()}`,
+          content: nextContent,
+        },
+        profile,
+      );
+      await refreshCollaborationPanels(selectedPathRef.current);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   async function refreshAfterPageOperation(nextPath?: string): Promise<void> {
     const tree = await refreshWorkspace();
     await loadFile(nextPath ?? selectedPathRef.current ?? firstFile(tree));
@@ -338,10 +424,13 @@ export default function Workspace({
   async function submitCreatePage(
     title: string,
     parentPath?: string | null,
+    content?: string,
   ): Promise<void> {
     try {
       const page = await window.hermesAPI.createWorkspacePage(
-        { title, parentPath },
+        content === undefined
+          ? { title, parentPath }
+          : { title, parentPath, content },
         profile,
       );
       setPageDialog(null);
@@ -487,6 +576,39 @@ export default function Workspace({
       if (proposal?.path === selectedPathRef.current) {
         await loadFile(proposal.path);
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleAcceptProposalHunk(
+    id: string,
+    hunkId: string,
+  ): Promise<void> {
+    try {
+      await window.hermesAPI.acceptAgentWorkspaceProposalHunk(
+        id,
+        hunkId,
+        profile,
+      );
+      await refreshWorkspace();
+      await loadFile(selectedPathRef.current);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleRejectProposalHunk(
+    id: string,
+    hunkId: string,
+  ): Promise<void> {
+    try {
+      await window.hermesAPI.rejectAgentWorkspaceProposalHunk(
+        id,
+        hunkId,
+        profile,
+      );
+      await refreshWorkspace();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -688,6 +810,10 @@ export default function Workspace({
                 <WorkspaceEditor
                   path={selectedPath}
                   content={content}
+                  pages={Object.values(metadata?.pages ?? {}).map((page) => ({
+                    path: page.path,
+                    title: page.displayName,
+                  }))}
                   onChange={handleContentChange}
                 />
               )}
@@ -695,10 +821,47 @@ export default function Workspace({
           )}
           {mode !== "canvas" && (
             <div className="workspace-chat-pane">
+              <WorkspaceOfflinePanel
+                dirty={dirty}
+                conflictPending={conflictContent !== null}
+                proposalCount={proposals.length}
+                lastSavedLabel={dirty ? "pending" : "now"}
+              />
               <AgentReviewPanel
                 proposals={proposals}
                 onAccept={handleAcceptProposal}
                 onReject={handleRejectProposal}
+                onAcceptHunk={(id, hunkId) => {
+                  handleAcceptProposalHunk(id, hunkId).catch((err) =>
+                    setError(err instanceof Error ? err.message : String(err)),
+                  );
+                }}
+                onRejectHunk={(id, hunkId) => {
+                  handleRejectProposalHunk(id, hunkId).catch((err) =>
+                    setError(err instanceof Error ? err.message : String(err)),
+                  );
+                }}
+              />
+              <WorkspaceCommentsPanel
+                comments={comments}
+                onCreate={(body) => {
+                  handleCreateComment(body).catch((err) =>
+                    setError(err instanceof Error ? err.message : String(err)),
+                  );
+                }}
+                onResolve={(id) => {
+                  handleResolveComment(id).catch((err) =>
+                    setError(err instanceof Error ? err.message : String(err)),
+                  );
+                }}
+              />
+              <WorkspaceSyncedBlocksPanel
+                blocks={syncedBlocks}
+                onCreate={(nextContent) => {
+                  handleCreateSyncedBlock(nextContent).catch((err) =>
+                    setError(err instanceof Error ? err.message : String(err)),
+                  );
+                }}
               />
               <Chat
                 messages={messages}
@@ -721,17 +884,37 @@ export default function Workspace({
         onSelectWorkspace={navigateToFile}
         onSelectAdmin={onOpenAdmin}
         onSelectSession={(id) => onOpenSession?.(id)}
+        onOpenWorkspaceInTab={(path) => {
+          navigateToFile(path).catch((err) =>
+            setError(err instanceof Error ? err.message : String(err)),
+          );
+        }}
+        onOpenWorkspaceInWindow={(path) => {
+          window.open(
+            `hermes-workspace://${encodeURIComponent(path)}`,
+            "_blank",
+          );
+        }}
+        onRunCommand={(command) => {
+          if (command === "new-chat") handleNewChat();
+          if (command === "new-page") handleCreatePage(null);
+        }}
       />
       {pageDialog && (
         <PageCreateDialog
           mode={pageDialog.mode}
+          templates={templates}
           initialTitle={
             pageDialog.mode === "rename" ? pageDialog.title : undefined
           }
           onCancel={() => setPageDialog(null)}
-          onSubmit={(title) => {
+          onSubmit={(title, selectedContent) => {
             if (pageDialog.mode === "create") {
-              submitCreatePage(title, pageDialog.parentPath).catch((err) =>
+              submitCreatePage(
+                title,
+                pageDialog.parentPath,
+                selectedContent,
+              ).catch((err) =>
                 setError(err instanceof Error ? err.message : String(err)),
               );
             } else {

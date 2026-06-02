@@ -1,4 +1,6 @@
 import { useState } from "react";
+import DatabaseRowPeek from "./DatabaseRowPeek";
+import DatabaseSettingsPanel from "./DatabaseSettingsPanel";
 import {
   applyWorkspaceDatabaseView,
   parseWorkspaceDatabase,
@@ -30,6 +32,8 @@ export default function DatabaseBlock({
   onChange,
 }: DatabaseBlockProps): React.JSX.Element {
   const [viewId, setViewId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [openRowId, setOpenRowId] = useState<string | null>(null);
   const parsed = parseWorkspaceDatabase(content);
   if (!parsed.ok) {
     return <div className="workspace-db-error">{parsed.error}</div>;
@@ -40,7 +44,13 @@ export default function DatabaseBlock({
     db.views.find((view) => view.id === viewId) ?? db.view ?? db.views[0];
   const columns = visibleColumns(db, activeView);
   const groupBy = activeView.groupBy;
-  const visibleItems = applyWorkspaceDatabaseView(db, activeView);
+  const visibleItems = applyWorkspaceDatabaseView(db, activeView).filter(
+    (item) =>
+      JSON.stringify(item).toLowerCase().includes(search.trim().toLowerCase()),
+  );
+  const openRow = openRowId
+    ? db.items.find((item) => String(item.id) === openRowId)
+    : undefined;
 
   function editItem(index: number, key: string, value: string): void {
     const edited = updateWorkspaceDatabaseItem(db, index, key, value);
@@ -56,6 +66,29 @@ export default function DatabaseBlock({
       items: [...db.items, { ...row, id: `row-${db.items.length + 1}` }],
     };
     onChange(stringifyWorkspaceDatabase(edited));
+  }
+
+  function editRowPage(rowId: string, body: string): void {
+    onChange(
+      stringifyWorkspaceDatabase({
+        ...db,
+        rowPages: {
+          ...db.rowPages,
+          [rowId]: body,
+        },
+      }),
+    );
+  }
+
+  function editOpenMode(mode: "side" | "center" | "full"): void {
+    onChange(
+      stringifyWorkspaceDatabase({
+        ...db,
+        views: db.views.map((view) =>
+          view.id === activeView.id ? { ...view, openMode: mode } : view,
+        ),
+      }),
+    );
   }
 
   function renderFields(
@@ -112,6 +145,7 @@ export default function DatabaseBlock({
       <table className="workspace-db-table">
         <thead>
           <tr>
+            <th>open</th>
             {columns.map((column) => (
               <th key={column}>{column}</th>
             ))}
@@ -122,6 +156,15 @@ export default function DatabaseBlock({
             const index = db.items.indexOf(item);
             return (
               <tr key={String(item.id ?? index)}>
+                <td>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setOpenRowId(String(item.id ?? index))}
+                  >
+                    Open {itemTitle(item)}
+                  </button>
+                </td>
                 {columns.map((column) => (
                   <td key={column}>
                     <input
@@ -151,6 +194,13 @@ export default function DatabaseBlock({
               className="workspace-db-card"
             >
               <strong>{itemTitle(item)}</strong>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setOpenRowId(String(item.id ?? index))}
+              >
+                Open {itemTitle(item)}
+              </button>
               {renderFields(item, index)}
             </article>
           );
@@ -175,6 +225,13 @@ export default function DatabaseBlock({
     <div className="workspace-db">
       <div className="workspace-db-header">
         <h1>{db.title}</h1>
+        <label className="workspace-db-search">
+          <span>Database search</span>
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </label>
         <button
           type="button"
           className="btn btn-secondary btn-sm"
@@ -201,7 +258,19 @@ export default function DatabaseBlock({
           </button>
         ))}
       </div>
+      <DatabaseSettingsPanel
+        view={activeView}
+        onOpenModeChange={editOpenMode}
+      />
       {renderView()}
+      {openRow && (
+        <DatabaseRowPeek
+          title={itemTitle(openRow)}
+          body={db.rowPages[String(openRow.id)] ?? ""}
+          onChange={(body) => editRowPage(String(openRow.id), body)}
+          onClose={() => setOpenRowId(null)}
+        />
+      )}
     </div>
   );
 }
