@@ -238,7 +238,7 @@ process.on("unhandledRejection", (reason) => {
 });
 
 let mainWindow: BrowserWindow | null = null;
-let currentChatAbort: (() => void) | null = null;
+const activeChatAborts = new Map<string, () => void>();
 
 function openExternalUrl(rawUrl: unknown): void {
   if (!isAllowedExternalUrl(rawUrl)) {
@@ -830,8 +830,11 @@ function setupIPC(): void {
         }
       }
 
-      if (currentChatAbort) {
-        currentChatAbort();
+      const sessionKey = resumeSessionId || `sender-${event.sender.id}`;
+
+      const existing = activeChatAborts.get(sessionKey);
+      if (existing) {
+        existing();
       }
 
       let fullResponse = "";
@@ -865,10 +868,11 @@ function setupIPC(): void {
         {
           onChunk: (chunk) => {
             fullResponse += chunk;
-            if (!safeSend("chat-chunk", chunk) && currentChatAbort) {
+            if (!safeSend("chat-chunk", chunk)) {
               // Renderer is gone — stop generating and resolve with what we
               // have so the awaiting promise doesn't leak.
-              currentChatAbort();
+              const abort = activeChatAborts.get(sessionKey);
+              if (abort) abort();
             }
           },
           onReasoningChunk: (chunk) => {
@@ -876,12 +880,13 @@ function setupIPC(): void {
             // the renderer can render the thinking bubble live during the
             // stream rather than waiting for a focus-change refresh (#352).
             // Same renderer-gone abort guard as the content channel.
-            if (!safeSend("chat-reasoning-chunk", chunk) && currentChatAbort) {
-              currentChatAbort();
+            if (!safeSend("chat-reasoning-chunk", chunk)) {
+              const abort = activeChatAborts.get(sessionKey);
+              if (abort) abort();
             }
           },
           onDone: (sessionId) => {
-            currentChatAbort = null;
+            activeChatAborts.delete(sessionKey);
             safeSend("chat-done", sessionId || "");
             resolveChat({ response: fullResponse, sessionId });
             // Desktop notification when window is not focused and response took >10s
@@ -901,7 +906,7 @@ function setupIPC(): void {
             }
           },
           onError: (error) => {
-            currentChatAbort = null;
+            activeChatAborts.delete(sessionKey);
             safeSend("chat-error", error);
             rejectChat(new Error(error));
             // Notify on error too if window not focused
@@ -926,15 +931,17 @@ function setupIPC(): void {
         contextFolder,
       );
 
-      currentChatAbort = handle.abort;
+      activeChatAborts.set(sessionKey, handle.abort);
       return promise;
     },
   );
 
-  ipcMain.handle("abort-chat", () => {
-    if (currentChatAbort) {
-      currentChatAbort();
-      currentChatAbort = null;
+  ipcMain.handle("abort-chat", (event, sessionId?: string) => {
+    const sessionKey = sessionId || `sender-${event.sender.id}`;
+    const abort = activeChatAborts.get(sessionKey);
+    if (abort) {
+      abort();
+      activeChatAborts.delete(sessionKey);
     }
   });
 
@@ -1940,10 +1947,10 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   stopHealthPolling();
-  if (currentChatAbort) {
-    currentChatAbort();
-    currentChatAbort = null;
+  for (const abort of activeChatAborts.values()) {
+    abort();
   }
+  activeChatAborts.clear();
   // Leave profile gateways running on quit (see window-all-closed) so bots
   // and other platforms stay online headless.
   stopSshTunnel();

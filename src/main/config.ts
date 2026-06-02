@@ -16,6 +16,14 @@ import {
   OPENAI_COMPAT_PROVIDERS,
 } from "../shared/url-key-map";
 
+let safeStorage: typeof import("electron").safeStorage | undefined;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  safeStorage = require("electron").safeStorage;
+} catch {
+  // Not running inside an Electron environment (e.g. unit tests)
+}
+
 // ── Connection Config (local / remote / ssh) ─────────────
 
 export interface SshConnectionConfig {
@@ -51,11 +59,47 @@ function desktopConfigFile(): string {
   return join(HERMES_HOME, "desktop.json");
 }
 
+export function encryptSecret(secret: string): string {
+  if (!secret) return "";
+  const storage = typeof global !== "undefined" && (global as any).mockSafeStorage
+    ? (global as any).mockSafeStorage
+    : safeStorage;
+  if (storage && storage.isEncryptionAvailable()) {
+    try {
+      return storage.encryptString(secret).toString("base64");
+    } catch (e) {
+      console.error("[Security] Failed to encrypt secret:", e);
+    }
+  }
+  return secret;
+}
+
+export function decryptSecret(payload: string): string {
+  if (!payload) return "";
+  const storage = typeof global !== "undefined" && (global as any).mockSafeStorage
+    ? (global as any).mockSafeStorage
+    : safeStorage;
+  if (storage && storage.isEncryptionAvailable()) {
+    try {
+      const buffer = Buffer.from(payload, "base64");
+      return storage.decryptString(buffer);
+    } catch (e) {
+      // Fallback for legacy plaintext values
+      return payload;
+    }
+  }
+  return payload;
+}
+
 export function readDesktopConfig(): Record<string, unknown> {
   try {
     const f = desktopConfigFile();
     if (!existsSync(f)) return {};
-    return JSON.parse(readFileSync(f, "utf-8"));
+    const data = JSON.parse(readFileSync(f, "utf-8"));
+    if (data && typeof data === "object" && typeof data.remoteApiKey === "string") {
+      data.remoteApiKey = decryptSecret(data.remoteApiKey);
+    }
+    return data;
   } catch {
     return {};
   }
@@ -65,7 +109,11 @@ export function writeDesktopConfig(data: Record<string, unknown>): void {
   if (!existsSync(HERMES_HOME)) {
     mkdirSync(HERMES_HOME, { recursive: true });
   }
-  writeFileSync(desktopConfigFile(), JSON.stringify(data, null, 2), "utf-8");
+  const clone = JSON.parse(JSON.stringify(data));
+  if (clone && typeof clone === "object" && typeof clone.remoteApiKey === "string") {
+    clone.remoteApiKey = encryptSecret(clone.remoteApiKey);
+  }
+  writeFileSync(desktopConfigFile(), JSON.stringify(clone, null, 2), "utf-8");
 }
 
 export function getConnectionConfig(): ConnectionConfig {
@@ -1381,7 +1429,7 @@ interface CredentialEntry {
   key?: string;
 }
 
-function readAuthStore(profile?: string): Record<string, unknown> {
+export function readAuthStore(profile?: string): Record<string, unknown> {
   try {
     const p = authFilePath(profile);
     if (!existsSync(p)) return {};

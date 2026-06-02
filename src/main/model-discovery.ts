@@ -15,10 +15,7 @@ import http from "http";
 import https from "https";
 import { URL } from "url";
 import { execFile } from "child_process";
-import { existsSync, readFileSync } from "fs";
-import { join } from "path";
-import { readEnv } from "./config";
-import { profileHome } from "./utils";
+import { readEnv, readAuthStore } from "./config";
 import {
   expectedEnvKeyForModel,
   HERMES_PYTHON,
@@ -155,9 +152,7 @@ async function fetchNousFreeModelIds(
   profile: string | undefined,
 ): Promise<string[]> {
   try {
-    const authPath = join(profileHome(profile), "auth.json");
-    if (!existsSync(authPath)) return [];
-    const auth = JSON.parse(readFileSync(authPath, "utf-8")) as {
+    const auth = readAuthStore(profile) as {
       providers?: { nous?: { access_token?: string; inference_base_url?: string } };
     };
     const token = (auth.providers?.nous?.access_token || "").trim();

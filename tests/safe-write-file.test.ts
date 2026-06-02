@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { existsSync, mkdirSync, readFileSync, readdirSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { safeWriteFile } from "../src/main/utils";
@@ -28,5 +28,15 @@ describe("safeWriteFile", () => {
     expect(readdirSync(dir).filter((name) => name.endsWith(".tmp"))).toEqual(
       [],
     );
+  });
+
+  it("restricts file permissions to owner-only read/write (0600)", () => {
+    const filePath = join(TEST_DIR, "secure.txt");
+    safeWriteFile(filePath, "secret content");
+
+    if (process.platform !== "win32") {
+      const stat = statSync(filePath);
+      expect(stat.mode & 0o777).toBe(0o600);
+    }
   });
 });

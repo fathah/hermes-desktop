@@ -7,6 +7,7 @@ import {
   renameSync,
   unlinkSync,
   writeFileSync,
+  chmodSync,
 } from "fs";
 import { HERMES_HOME } from "./installer";
 
@@ -209,6 +210,11 @@ export function safeWriteFile(filePath: string, content: string): void {
   let tempWritten = false;
   try {
     writeFileSync(tempPath, content, "utf-8");
+    try {
+      chmodSync(tempPath, 0o600);
+    } catch {
+      // Ignore chmod failures on filesystems that do not support Unix-like permissions (e.g. FAT32)
+    }
     tempWritten = true;
     renameSync(tempPath, filePath);
   } catch (err) {

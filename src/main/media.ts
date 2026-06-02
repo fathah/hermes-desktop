@@ -8,10 +8,10 @@
 
 import {
   existsSync,
-  readFileSync,
   writeFileSync,
   copyFileSync,
   statSync,
+  promises as fsPromises,
 } from "fs";
 import { extname } from "path";
 import { BrowserWindow, dialog } from "electron";
@@ -33,15 +33,16 @@ const MIME_BY_EXT: Record<string, string> = {
  * Read a local image file and return it as a `data:` URL. Returns null when
  * the file is missing, not an image, too large, or unreadable.
  */
-export function readMediaAsDataUrl(filePath: string): string | null {
+export async function readMediaAsDataUrl(filePath: string): Promise<string | null> {
   try {
-    if (!filePath || !existsSync(filePath)) return null;
+    if (!filePath) return null;
+    const stat = await fsPromises.stat(filePath);
+    if (!stat.isFile() || stat.size > MAX_MEDIA_BYTES) return null;
     const ext = extname(filePath).toLowerCase();
     const mime = MIME_BY_EXT[ext];
     if (!mime) return null;
-    if (statSync(filePath).size > MAX_MEDIA_BYTES) return null;
-    const base64 = readFileSync(filePath).toString("base64");
-    return `data:${mime};base64,${base64}`;
+    const buffer = await fsPromises.readFile(filePath);
+    return `data:${mime};base64,${buffer.toString("base64")}`;
   } catch {
     return null;
   }
