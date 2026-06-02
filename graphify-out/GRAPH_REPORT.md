@@ -1,7 +1,7 @@
 # Graph Report - /Users/amar/Desktop/MyCode/fathah_hermes  (2026-06-02)
 
 ## Corpus Check
-- 452 files · ~701,959 words
+- 452 files · ~701,965 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -2604,10 +2604,10 @@ Nodes (0):
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `t()` connect `Community 10` to `Community 0`, `Community 1`, `Community 5`, `Community 6`, `Community 11`, `Community 12`, `Community 14`?**
-  _High betweenness centrality (0.101) - this node is a cross-community bridge._
-- **Why does `profileHome()` connect `Community 11` to `Community 0`, `Community 1`, `Community 3`, `Community 6`, `Community 13`?**
-  _High betweenness centrality (0.045) - this node is a cross-community bridge._
+  _High betweenness centrality (0.103) - this node is a cross-community bridge._
 - **Why does `syncSessionCache()` connect `Community 6` to `Community 8`, `Community 10`, `Community 4`?**
+  _High betweenness centrality (0.046) - this node is a cross-community bridge._
+- **Why does `loadFile()` connect `Community 5` to `Community 10`, `Community 21`?**
   _High betweenness centrality (0.043) - this node is a cross-community bridge._
 - **Are the 30 inferred relationships involving `t()` (e.g. with `tk()` and `handleMigrate()`) actually correct?**
   _`t()` has 30 INFERRED edges - model-reasoned connections that need verification._
