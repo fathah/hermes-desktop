@@ -2,8 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import AgentReviewPanel from "./AgentReviewPanel";
 import Chat, { type ChatMessage } from "../Chat/Chat";
 import CommandPalette from "./CommandPalette";
+import PageCreateDialog from "./PageCreateDialog";
 import WorkspaceEditor from "./WorkspaceEditor";
 import WorkspaceHeader, { type WorkspaceMode } from "./WorkspaceHeader";
+import WorkspaceCommentsPanel from "./WorkspaceCommentsPanel";
+import WorkspaceOfflinePanel from "./WorkspaceOfflinePanel";
+import WorkspaceSyncedBlocksPanel from "./WorkspaceSyncedBlocksPanel";
 import WorkspaceTree from "./WorkspaceTree";
 
 interface WorkspaceFileNode {
@@ -34,11 +38,33 @@ interface WorkspaceMetadata {
   recentVisits: Array<{ path: string; visitedAt: number }>;
 }
 
+interface WorkspacePageGraph {
+  version: 2;
+  pages: Record<string, WorkspacePageMeta>;
+  rootOrder: string[];
+  childOrder: Record<string, string[]>;
+  favorites: string[];
+  recentVisits: Array<{ path: string; visitedAt: number }>;
+  backlinks: Record<string, string[]>;
+  sidebar: {
+    collapsedSections: string[];
+    width: number;
+    collapsed: boolean;
+  };
+}
+
 interface AgentWorkspaceProposal {
   id: string;
   path: string;
   baseContent: string;
   proposedContent: string;
+  hunks?: Array<{
+    id: string;
+    blockId?: string;
+    before: string;
+    after: string;
+    status: "pending" | "accepted" | "rejected";
+  }>;
   createdAt: number;
   status: "pending";
 }
@@ -49,6 +75,33 @@ interface WorkspaceHistoryEntry {
   createdAt: number;
   reason: string;
   content: string;
+}
+
+interface WorkspaceTemplate {
+  id: string;
+  kind: "page" | "database-row" | "button";
+  title: string;
+  content: string;
+}
+
+interface WorkspaceSyncedBlock {
+  id: string;
+  sourcePath: string;
+  sourceBlockId: string;
+  content: string;
+  references: Array<{ path: string; blockId: string }>;
+  updatedAt: number;
+}
+
+interface WorkspaceComment {
+  id: string;
+  path: string;
+  blockId?: string;
+  body: string;
+  reminderAt?: number;
+  status: "open" | "resolved";
+  createdAt: number;
+  resolvedAt?: number;
 }
 
 interface WorkspaceProps {
@@ -77,6 +130,7 @@ export default function Workspace({
 }: WorkspaceProps): React.JSX.Element {
   const [nodes, setNodes] = useState<WorkspaceFileNode[]>([]);
   const [metadata, setMetadata] = useState<WorkspaceMetadata | null>(null);
+  const [pageGraph, setPageGraph] = useState<WorkspacePageGraph | null>(null);
   const [proposals, setProposals] = useState<AgentWorkspaceProposal[]>([]);
   const [selectedPath, setSelectedPath] = useState("index.md");
   const [openTabs, setOpenTabs] = useState<string[]>(["index.md"]);
@@ -91,12 +145,20 @@ export default function Workspace({
   const [historyEntries, setHistoryEntries] = useState<WorkspaceHistoryEntry[]>(
     [],
   );
+  const [templates, setTemplates] = useState<WorkspaceTemplate[]>([]);
+  const [syncedBlocks, setSyncedBlocks] = useState<WorkspaceSyncedBlock[]>([]);
+  const [comments, setComments] = useState<WorkspaceComment[]>([]);
   const [externalHighlight, setExternalHighlight] = useState(false);
   const [mode, setMode] = useState<WorkspaceMode>("split");
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [workspaceRoot, setWorkspaceRoot] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [pageDialog, setPageDialog] = useState<
+    | { mode: "create"; parentPath: string | null }
+    | { mode: "rename"; path: string; title: string }
+    | null
+  >(null);
   const selectedPathRef = useRef(selectedPath);
   const dirtyRef = useRef(dirty);
   const contentRef = useRef(content);
@@ -114,15 +176,32 @@ export default function Workspace({
     contentRef.current = content;
   }, [content]);
 
+  const refreshCollaborationPanels = useCallback(
+    async (path: string) => {
+      const [nextComments, nextSyncedBlocks] = await Promise.all([
+        window.hermesAPI.listWorkspaceComments(path, profile),
+        window.hermesAPI.listWorkspaceSyncedBlocks(profile),
+      ]);
+      setComments(nextComments);
+      setSyncedBlocks(nextSyncedBlocks);
+    },
+    [profile],
+  );
+
   const refreshWorkspace = useCallback(async () => {
-    const [tree, nextMetadata, nextProposals] = await Promise.all([
-      window.hermesAPI.getWorkspaceTree(profile),
-      window.hermesAPI.getWorkspaceMetadata(profile),
-      window.hermesAPI.listAgentWorkspaceProposals(profile),
-    ]);
+    const [tree, nextMetadata, nextGraph, nextProposals, nextTemplates] =
+      await Promise.all([
+        window.hermesAPI.getWorkspaceTree(profile),
+        window.hermesAPI.getWorkspaceMetadata(profile),
+        window.hermesAPI.getWorkspacePageGraph(profile),
+        window.hermesAPI.listAgentWorkspaceProposals(profile),
+        window.hermesAPI.listWorkspaceTemplates(profile),
+      ]);
     setNodes(tree);
     setMetadata(nextMetadata);
+    setPageGraph(nextGraph);
     setProposals(nextProposals);
+    setTemplates(nextTemplates);
     return tree;
   }, [profile]);
 
@@ -138,6 +217,7 @@ export default function Workspace({
         setDirty(false);
         dirtyRef.current = false;
         setConflictContent(null);
+        await refreshCollaborationPanels(path);
         window.hermesAPI.recordWorkspaceVisit(path, profile).catch(() => {
           /* non-critical metadata update */
         });
@@ -147,7 +227,7 @@ export default function Workspace({
         setLoading(false);
       }
     },
-    [profile],
+    [profile, refreshCollaborationPanels],
   );
 
   const navigateToFile = useCallback(
@@ -270,6 +350,43 @@ export default function Workspace({
     setSessionId(null);
   }
 
+  async function handleCreateComment(body: string): Promise<void> {
+    try {
+      await window.hermesAPI.createWorkspaceComment(
+        { path: selectedPathRef.current, body },
+        profile,
+      );
+      await refreshCollaborationPanels(selectedPathRef.current);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleResolveComment(id: string): Promise<void> {
+    try {
+      await window.hermesAPI.resolveWorkspaceComment(id, profile);
+      await refreshCollaborationPanels(selectedPathRef.current);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleCreateSyncedBlock(nextContent: string): Promise<void> {
+    try {
+      await window.hermesAPI.createWorkspaceSyncedBlock(
+        {
+          sourcePath: selectedPathRef.current,
+          sourceBlockId: `block-${Date.now()}`,
+          content: nextContent,
+        },
+        profile,
+      );
+      await refreshCollaborationPanels(selectedPathRef.current);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   async function refreshAfterPageOperation(nextPath?: string): Promise<void> {
     const tree = await refreshWorkspace();
     await loadFile(nextPath ?? selectedPathRef.current ?? firstFile(tree));
@@ -304,34 +421,76 @@ export default function Workspace({
     }
   }
 
-  async function handleCreatePage(parentPath?: string | null): Promise<void> {
-    const title = window.prompt("New page name");
-    if (!title) return;
+  async function submitCreatePage(
+    title: string,
+    parentPath?: string | null,
+    content?: string,
+  ): Promise<void> {
     try {
       const page = await window.hermesAPI.createWorkspacePage(
-        { title, parentPath },
+        content === undefined
+          ? { title, parentPath }
+          : { title, parentPath, content },
         profile,
       );
+      setPageDialog(null);
       await refreshAfterPageOperation(page.path);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
   }
 
-  async function handleRenamePage(path: string): Promise<void> {
-    const current = metadata?.pages[path]?.displayName ?? path;
-    const title = window.prompt("Rename page", current);
-    if (!title || title === current) return;
+  async function submitRenamePage(path: string, title: string): Promise<void> {
     try {
       const page = await window.hermesAPI.renameWorkspacePage(
         path,
         title,
         profile,
       );
+      setPageDialog(null);
       await refreshAfterPageOperation(page.path);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
+  }
+
+  function handleCreatePage(parentPath?: string | null): void {
+    setPageDialog({ mode: "create", parentPath: parentPath ?? null });
+  }
+
+  function handleRenamePage(path: string): void {
+    setPageDialog({
+      mode: "rename",
+      path,
+      title: metadata?.pages[path]?.displayName ?? path,
+    });
+  }
+
+  function handleSidebarState(next: {
+    width?: number;
+    collapsed?: boolean;
+  }): void {
+    const sidebar = {
+      width: next.width ?? pageGraph?.sidebar.width ?? 280,
+      collapsed: next.collapsed ?? pageGraph?.sidebar.collapsed ?? false,
+    };
+    setPageGraph((current) =>
+      current
+        ? {
+            ...current,
+            sidebar: {
+              ...current.sidebar,
+              ...sidebar,
+            },
+          }
+        : current,
+    );
+    window.hermesAPI
+      .updateWorkspaceSidebarState(sidebar, profile)
+      .then(setPageGraph)
+      .catch((err) =>
+        setError(err instanceof Error ? err.message : String(err)),
+      );
   }
 
   async function handleDuplicatePage(path: string): Promise<void> {
@@ -422,6 +581,39 @@ export default function Workspace({
     }
   }
 
+  async function handleAcceptProposalHunk(
+    id: string,
+    hunkId: string,
+  ): Promise<void> {
+    try {
+      await window.hermesAPI.acceptAgentWorkspaceProposalHunk(
+        id,
+        hunkId,
+        profile,
+      );
+      await refreshWorkspace();
+      await loadFile(selectedPathRef.current);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleRejectProposalHunk(
+    id: string,
+    hunkId: string,
+  ): Promise<void> {
+    try {
+      await window.hermesAPI.rejectAgentWorkspaceProposalHunk(
+        id,
+        hunkId,
+        profile,
+      );
+      await refreshWorkspace();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   async function openHistory(): Promise<void> {
     try {
       const entries = await window.hermesAPI.listWorkspaceHistory(
@@ -504,8 +696,42 @@ export default function Workspace({
         ))}
       </div>
       <div className="workspace-body">
-        <aside className="workspace-pages">
-          <div className="workspace-section-label">Workspace</div>
+        <aside
+          className={`workspace-pages${
+            pageGraph?.sidebar.collapsed ? " workspace-pages-collapsed" : ""
+          }`}
+          style={{ width: pageGraph?.sidebar.width ?? 280 }}
+        >
+          <div className="workspace-sidebar-header">
+            <div className="workspace-section-label">Workspace</div>
+            <button
+              type="button"
+              aria-label={
+                pageGraph?.sidebar.collapsed
+                  ? "Expand sidebar"
+                  : "Collapse sidebar"
+              }
+              onClick={() =>
+                handleSidebarState({
+                  collapsed: !(pageGraph?.sidebar.collapsed ?? false),
+                })
+              }
+            >
+              {pageGraph?.sidebar.collapsed ? ">" : "<"}
+            </button>
+          </div>
+          <label className="workspace-sidebar-resize">
+            <span>Sidebar width</span>
+            <input
+              type="range"
+              min={220}
+              max={520}
+              value={pageGraph?.sidebar.width ?? 280}
+              onChange={(event) =>
+                handleSidebarState({ width: Number(event.target.value) })
+              }
+            />
+          </label>
           <WorkspaceTree
             nodes={nodes}
             metadata={metadata}
@@ -584,6 +810,10 @@ export default function Workspace({
                 <WorkspaceEditor
                   path={selectedPath}
                   content={content}
+                  pages={Object.values(metadata?.pages ?? {}).map((page) => ({
+                    path: page.path,
+                    title: page.displayName,
+                  }))}
                   onChange={handleContentChange}
                 />
               )}
@@ -591,10 +821,47 @@ export default function Workspace({
           )}
           {mode !== "canvas" && (
             <div className="workspace-chat-pane">
+              <WorkspaceOfflinePanel
+                dirty={dirty}
+                conflictPending={conflictContent !== null}
+                proposalCount={proposals.length}
+                lastSavedLabel={dirty ? "pending" : "now"}
+              />
               <AgentReviewPanel
                 proposals={proposals}
                 onAccept={handleAcceptProposal}
                 onReject={handleRejectProposal}
+                onAcceptHunk={(id, hunkId) => {
+                  handleAcceptProposalHunk(id, hunkId).catch((err) =>
+                    setError(err instanceof Error ? err.message : String(err)),
+                  );
+                }}
+                onRejectHunk={(id, hunkId) => {
+                  handleRejectProposalHunk(id, hunkId).catch((err) =>
+                    setError(err instanceof Error ? err.message : String(err)),
+                  );
+                }}
+              />
+              <WorkspaceCommentsPanel
+                comments={comments}
+                onCreate={(body) => {
+                  handleCreateComment(body).catch((err) =>
+                    setError(err instanceof Error ? err.message : String(err)),
+                  );
+                }}
+                onResolve={(id) => {
+                  handleResolveComment(id).catch((err) =>
+                    setError(err instanceof Error ? err.message : String(err)),
+                  );
+                }}
+              />
+              <WorkspaceSyncedBlocksPanel
+                blocks={syncedBlocks}
+                onCreate={(nextContent) => {
+                  handleCreateSyncedBlock(nextContent).catch((err) =>
+                    setError(err instanceof Error ? err.message : String(err)),
+                  );
+                }}
               />
               <Chat
                 messages={messages}
@@ -617,7 +884,47 @@ export default function Workspace({
         onSelectWorkspace={navigateToFile}
         onSelectAdmin={onOpenAdmin}
         onSelectSession={(id) => onOpenSession?.(id)}
+        onOpenWorkspaceInTab={(path) => {
+          navigateToFile(path).catch((err) =>
+            setError(err instanceof Error ? err.message : String(err)),
+          );
+        }}
+        onOpenWorkspaceInWindow={(path) => {
+          window.open(
+            `hermes-workspace://${encodeURIComponent(path)}`,
+            "_blank",
+          );
+        }}
+        onRunCommand={(command) => {
+          if (command === "new-chat") handleNewChat();
+          if (command === "new-page") handleCreatePage(null);
+        }}
       />
+      {pageDialog && (
+        <PageCreateDialog
+          mode={pageDialog.mode}
+          templates={templates}
+          initialTitle={
+            pageDialog.mode === "rename" ? pageDialog.title : undefined
+          }
+          onCancel={() => setPageDialog(null)}
+          onSubmit={(title, selectedContent) => {
+            if (pageDialog.mode === "create") {
+              submitCreatePage(
+                title,
+                pageDialog.parentPath,
+                selectedContent,
+              ).catch((err) =>
+                setError(err instanceof Error ? err.message : String(err)),
+              );
+            } else {
+              submitRenamePage(pageDialog.path, title).catch((err) =>
+                setError(err instanceof Error ? err.message : String(err)),
+              );
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

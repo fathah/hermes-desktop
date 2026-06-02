@@ -1,5 +1,8 @@
 import { useState } from "react";
+import DatabaseRowPeek from "./DatabaseRowPeek";
+import DatabaseSettingsPanel from "./DatabaseSettingsPanel";
 import {
+  applyWorkspaceDatabaseView,
   parseWorkspaceDatabase,
   stringifyWorkspaceDatabase,
   updateWorkspaceDatabaseItem,
@@ -29,6 +32,8 @@ export default function DatabaseBlock({
   onChange,
 }: DatabaseBlockProps): React.JSX.Element {
   const [viewId, setViewId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [openRowId, setOpenRowId] = useState<string | null>(null);
   const parsed = parseWorkspaceDatabase(content);
   if (!parsed.ok) {
     return <div className="workspace-db-error">{parsed.error}</div>;
@@ -39,6 +44,13 @@ export default function DatabaseBlock({
     db.views.find((view) => view.id === viewId) ?? db.view ?? db.views[0];
   const columns = visibleColumns(db, activeView);
   const groupBy = activeView.groupBy;
+  const visibleItems = applyWorkspaceDatabaseView(db, activeView).filter(
+    (item) =>
+      JSON.stringify(item).toLowerCase().includes(search.trim().toLowerCase()),
+  );
+  const openRow = openRowId
+    ? db.items.find((item) => String(item.id) === openRowId)
+    : undefined;
 
   function editItem(index: number, key: string, value: string): void {
     const edited = updateWorkspaceDatabaseItem(db, index, key, value);
@@ -54,6 +66,29 @@ export default function DatabaseBlock({
       items: [...db.items, { ...row, id: `row-${db.items.length + 1}` }],
     };
     onChange(stringifyWorkspaceDatabase(edited));
+  }
+
+  function editRowPage(rowId: string, body: string): void {
+    onChange(
+      stringifyWorkspaceDatabase({
+        ...db,
+        rowPages: {
+          ...db.rowPages,
+          [rowId]: body,
+        },
+      }),
+    );
+  }
+
+  function editOpenMode(mode: "side" | "center" | "full"): void {
+    onChange(
+      stringifyWorkspaceDatabase({
+        ...db,
+        views: db.views.map((view) =>
+          view.id === activeView.id ? { ...view, openMode: mode } : view,
+        ),
+      }),
+    );
   }
 
   function renderFields(
@@ -88,16 +123,17 @@ export default function DatabaseBlock({
         {groups.map((group) => (
           <section key={group} className="workspace-db-column">
             <div className="workspace-db-column-title">{group || "None"}</div>
-            {db.items.map((item, index) =>
-              !groupBy || String(item[groupBy] ?? "") === group ? (
+            {visibleItems.map((item) => {
+              const index = db.items.indexOf(item);
+              return !groupBy || String(item[groupBy] ?? "") === group ? (
                 <div
                   key={String(item.id ?? index)}
                   className="workspace-db-card"
                 >
                   {renderFields(item, index)}
                 </div>
-              ) : null,
-            )}
+              ) : null;
+            })}
           </section>
         ))}
       </div>
@@ -109,26 +145,39 @@ export default function DatabaseBlock({
       <table className="workspace-db-table">
         <thead>
           <tr>
+            <th>open</th>
             {columns.map((column) => (
               <th key={column}>{column}</th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {db.items.map((item, index) => (
-            <tr key={String(item.id ?? index)}>
-              {columns.map((column) => (
-                <td key={column}>
-                  <input
-                    value={String(item[column] ?? "")}
-                    onChange={(event) =>
-                      editItem(index, column, event.target.value)
-                    }
-                  />
+          {visibleItems.map((item) => {
+            const index = db.items.indexOf(item);
+            return (
+              <tr key={String(item.id ?? index)}>
+                <td>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setOpenRowId(String(item.id ?? index))}
+                  >
+                    Open {itemTitle(item)}
+                  </button>
                 </td>
-              ))}
-            </tr>
-          ))}
+                {columns.map((column) => (
+                  <td key={column}>
+                    <input
+                      value={String(item[column] ?? "")}
+                      onChange={(event) =>
+                        editItem(index, column, event.target.value)
+                      }
+                    />
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     );
@@ -137,12 +186,25 @@ export default function DatabaseBlock({
   function renderCards(className: string): React.JSX.Element {
     return (
       <div className={className}>
-        {db.items.map((item, index) => (
-          <article key={String(item.id ?? index)} className="workspace-db-card">
-            <strong>{itemTitle(item)}</strong>
-            {renderFields(item, index)}
-          </article>
-        ))}
+        {visibleItems.map((item) => {
+          const index = db.items.indexOf(item);
+          return (
+            <article
+              key={String(item.id ?? index)}
+              className="workspace-db-card"
+            >
+              <strong>{itemTitle(item)}</strong>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setOpenRowId(String(item.id ?? index))}
+              >
+                Open {itemTitle(item)}
+              </button>
+              {renderFields(item, index)}
+            </article>
+          );
+        })}
       </div>
     );
   }
@@ -163,6 +225,13 @@ export default function DatabaseBlock({
     <div className="workspace-db">
       <div className="workspace-db-header">
         <h1>{db.title}</h1>
+        <label className="workspace-db-search">
+          <span>Database search</span>
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </label>
         <button
           type="button"
           className="btn btn-secondary btn-sm"
@@ -189,7 +258,19 @@ export default function DatabaseBlock({
           </button>
         ))}
       </div>
+      <DatabaseSettingsPanel
+        view={activeView}
+        onOpenModeChange={editOpenMode}
+      />
       {renderView()}
+      {openRow && (
+        <DatabaseRowPeek
+          title={itemTitle(openRow)}
+          body={db.rowPages[String(openRow.id)] ?? ""}
+          onChange={(body) => editRowPage(String(openRow.id), body)}
+          onClose={() => setOpenRowId(null)}
+        />
+      )}
     </div>
   );
 }

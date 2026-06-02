@@ -118,6 +118,21 @@ interface WorkspaceMetadata {
   recentVisits: Array<{ path: string; visitedAt: number }>;
 }
 
+interface WorkspacePageGraph {
+  version: 2;
+  pages: Record<string, WorkspacePageMeta>;
+  rootOrder: string[];
+  childOrder: Record<string, string[]>;
+  favorites: string[];
+  recentVisits: Array<{ path: string; visitedAt: number }>;
+  backlinks: Record<string, string[]>;
+  sidebar: {
+    collapsedSections: string[];
+    width: number;
+    collapsed: boolean;
+  };
+}
+
 interface WorkspaceHistoryEntry {
   id: string;
   pageId: string;
@@ -125,6 +140,43 @@ interface WorkspaceHistoryEntry {
   createdAt: number;
   reason: "user-save" | "page-operation" | "agent-proposal" | "restore";
   content: string;
+  summary: Array<{ kind: "added" | "removed" | "changed"; text: string }>;
+}
+
+interface WorkspaceTemplate {
+  id: string;
+  kind: "page" | "database-row" | "button";
+  title: string;
+  content: string;
+  properties?: Record<string, unknown>;
+  createdAt: number;
+  updatedAt: number;
+  builtin?: boolean;
+}
+
+interface WorkspaceSyncedBlockReference {
+  path: string;
+  blockId: string;
+}
+
+interface WorkspaceSyncedBlock {
+  id: string;
+  sourcePath: string;
+  sourceBlockId: string;
+  content: string;
+  references: WorkspaceSyncedBlockReference[];
+  updatedAt: number;
+}
+
+interface WorkspaceComment {
+  id: string;
+  path: string;
+  blockId?: string;
+  body: string;
+  reminderAt?: number;
+  status: "open" | "resolved";
+  createdAt: number;
+  resolvedAt?: number;
 }
 
 interface AgentWorkspaceProposal {
@@ -132,8 +184,17 @@ interface AgentWorkspaceProposal {
   path: string;
   baseContent: string;
   proposedContent: string;
+  hunks: AgentWorkspaceProposalHunk[];
   createdAt: number;
   status: "pending";
+}
+
+interface AgentWorkspaceProposalHunk {
+  id: string;
+  blockId?: string;
+  before: string;
+  after: string;
+  status: "pending" | "accepted" | "rejected";
 }
 
 interface KanbanTask {
@@ -642,6 +703,66 @@ interface HermesAPI {
     profile?: string,
   ) => Promise<WorkspacePageMeta>;
   getWorkspaceMetadata: (profile?: string) => Promise<WorkspaceMetadata>;
+  getWorkspacePageGraph: (profile?: string) => Promise<WorkspacePageGraph>;
+  updateWorkspaceSidebarState: (
+    state: Partial<WorkspacePageGraph["sidebar"]>,
+    profile?: string,
+  ) => Promise<WorkspacePageGraph>;
+  getWorkspaceBacklinks: (path: string, profile?: string) => Promise<string[]>;
+  listWorkspaceTemplates: (profile?: string) => Promise<WorkspaceTemplate[]>;
+  saveWorkspaceTemplate: (
+    input: {
+      kind: "page" | "database-row" | "button";
+      title: string;
+      content: string;
+      properties?: Record<string, unknown>;
+    },
+    profile?: string,
+  ) => Promise<WorkspaceTemplate>;
+  renderWorkspaceButtonBlock: (input: {
+    label: string;
+    prompt: string;
+  }) => Promise<string>;
+  listWorkspaceSyncedBlocks: (
+    profile?: string,
+  ) => Promise<WorkspaceSyncedBlock[]>;
+  createWorkspaceSyncedBlock: (
+    input: {
+      sourcePath: string;
+      sourceBlockId: string;
+      content: string;
+      references?: WorkspaceSyncedBlockReference[];
+    },
+    profile?: string,
+  ) => Promise<WorkspaceSyncedBlock>;
+  updateWorkspaceSyncedBlockContent: (
+    id: string,
+    content: string,
+    profile?: string,
+  ) => Promise<WorkspaceSyncedBlock>;
+  removeWorkspaceSyncedBlockReference: (
+    id: string,
+    path: string,
+    blockId: string,
+    profile?: string,
+  ) => Promise<WorkspaceSyncedBlock>;
+  listWorkspaceComments: (
+    path?: string,
+    profile?: string,
+  ) => Promise<WorkspaceComment[]>;
+  createWorkspaceComment: (
+    input: {
+      path: string;
+      blockId?: string;
+      body: string;
+      reminderAt?: number;
+    },
+    profile?: string,
+  ) => Promise<WorkspaceComment>;
+  resolveWorkspaceComment: (
+    id: string,
+    profile?: string,
+  ) => Promise<WorkspaceComment>;
   updateWorkspacePageOrder: (
     parentPath: string | null,
     orderedPaths: string[],
@@ -657,6 +778,9 @@ interface HermesAPI {
     historyId: string,
     profile?: string,
   ) => Promise<string>;
+  exportWorkspaceMarkdownBundle: (
+    profile?: string,
+  ) => Promise<Array<{ path: string; content: string }>>;
   listAgentWorkspaceProposals: (
     profile?: string,
   ) => Promise<AgentWorkspaceProposal[]>;
@@ -672,6 +796,16 @@ interface HermesAPI {
   ) => Promise<boolean>;
   rejectAgentWorkspaceProposal: (
     id: string,
+    profile?: string,
+  ) => Promise<boolean>;
+  acceptAgentWorkspaceProposalHunk: (
+    id: string,
+    hunkId: string,
+    profile?: string,
+  ) => Promise<boolean>;
+  rejectAgentWorkspaceProposalHunk: (
+    id: string,
+    hunkId: string,
     profile?: string,
   ) => Promise<boolean>;
   onWorkspaceFileChanged: (

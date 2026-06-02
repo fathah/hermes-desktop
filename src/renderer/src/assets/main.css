@@ -1272,6 +1272,50 @@ body {
   overflow: auto;
 }
 
+.workspace-pages-collapsed {
+  width: 56px !important;
+}
+
+.workspace-pages-collapsed .workspace-tree,
+.workspace-pages-collapsed .workspace-sidebar-resize,
+.workspace-pages-collapsed .workspace-section-label {
+  display: none;
+}
+
+.workspace-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.workspace-sidebar-header button {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.workspace-sidebar-header button:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.workspace-sidebar-resize {
+  display: grid;
+  gap: 4px;
+  padding: 0 8px 10px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.workspace-sidebar-resize input {
+  width: 100%;
+}
+
 .workspace-section-label {
   padding: 0 8px 10px;
   color: var(--text-muted);
@@ -1408,6 +1452,52 @@ body {
   color: var(--text-primary);
 }
 
+.workspace-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 28%);
+}
+
+.workspace-dialog {
+  width: min(360px, calc(100vw - 32px));
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  box-shadow: var(--shadow-lg);
+}
+
+.workspace-dialog label {
+  display: grid;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.workspace-dialog input,
+.workspace-dialog select {
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  padding: 0 10px;
+  font: inherit;
+}
+
+.workspace-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .workspace-main {
   flex: 1;
   min-width: 0;
@@ -1463,8 +1553,19 @@ body {
   margin-bottom: 14px;
 }
 
+.workspace-block-handle-bar {
+  max-width: 820px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
 .workspace-editor-toolbar button,
-.workspace-slash-menu button {
+.workspace-slash-menu button,
+.workspace-block-handle-bar button,
+.workspace-block-handle-bar select {
   min-height: 28px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -1477,9 +1578,34 @@ body {
 }
 
 .workspace-editor-toolbar button:hover,
-.workspace-slash-menu button:hover {
+.workspace-slash-menu button:hover,
+.workspace-block-handle-bar button:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+
+.workspace-block-handle-bar button {
+  width: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.workspace-block-handle-bar label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.workspace-block-handle-bar label span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
 }
 
 .workspace-slash-menu {
@@ -1489,6 +1615,34 @@ body {
   border-radius: var(--radius-sm);
   background: var(--bg-primary);
   box-shadow: var(--shadow-md);
+}
+
+.workspace-mention-menu {
+  position: absolute;
+  z-index: 20;
+  display: grid;
+  min-width: 220px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  box-shadow: var(--shadow-md);
+}
+
+.workspace-mention-menu button {
+  min-height: 30px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  text-align: left;
+  padding: 0 8px;
+  cursor: pointer;
+}
+
+.workspace-mention-menu button:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .workspace-editor-prosemirror {
@@ -1636,6 +1790,33 @@ body {
   margin-bottom: 14px;
 }
 
+.workspace-db-search,
+.workspace-db-settings label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.workspace-db-search input,
+.workspace-db-settings select {
+  height: 30px;
+  min-width: 160px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  padding: 0 8px;
+  font: inherit;
+}
+
+.workspace-db-settings {
+  display: flex;
+  justify-content: flex-end;
+  margin: 8px 0 12px;
+}
+
 .workspace-db-views {
   gap: 4px;
   margin-bottom: 16px;
@@ -1680,6 +1861,47 @@ body {
   color: var(--text-primary);
   padding: 7px 8px;
   font-family: var(--font-sans);
+}
+
+.workspace-db-row-peek {
+  position: absolute;
+  top: 96px;
+  right: 16px;
+  bottom: 16px;
+  width: min(380px, calc(100% - 32px));
+  z-index: 15;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  box-shadow: var(--shadow-lg);
+}
+
+.workspace-db-row-peek-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.workspace-db-row-peek label {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 6px;
+  min-height: 0;
+}
+
+.workspace-db-row-peek textarea {
+  min-height: 220px;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  padding: 8px;
+  font: inherit;
 }
 
 .workspace-db-board {
@@ -1769,12 +1991,85 @@ body {
 }
 
 .workspace-agent-proposal {
-  justify-content: space-between;
+  align-items: stretch;
+  flex-direction: column;
   gap: 10px;
   padding: 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg-primary);
+}
+
+.workspace-agent-proposal-hunk {
+  display: grid;
+  gap: 4px;
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  font-size: 12px;
+}
+
+.workspace-agent-proposal-hunk del,
+.workspace-agent-proposal-hunk ins {
+  text-decoration: none;
+}
+
+.workspace-agent-proposal-hunk del {
+  color: var(--error);
+}
+
+.workspace-agent-proposal-hunk ins {
+  color: var(--success);
+}
+
+.workspace-agent-hunk-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.workspace-status-panel,
+.workspace-comments-panel,
+.workspace-synced-panel {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.workspace-status-panel {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.workspace-comments-panel label,
+.workspace-synced-panel label {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.workspace-comments-panel input,
+.workspace-synced-panel input {
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  padding: 0 8px;
+  font: inherit;
+}
+
+.workspace-comments-panel article,
+.workspace-synced-panel article {
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
 }
 
 .workspace-agent-proposal strong,
@@ -1840,6 +2135,28 @@ body {
   cursor: pointer;
 }
 
+.command-palette-filters {
+  display: flex;
+  gap: 6px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.command-palette-filters button {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  padding: 4px 8px;
+  font: 12px/1.2 var(--font-sans);
+  cursor: pointer;
+}
+
+.command-palette-filters button.active {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
 .command-palette-results {
   max-height: 540px;
   overflow: auto;
@@ -1886,6 +2203,13 @@ body {
 
 .command-palette-copy:hover {
   color: var(--text-primary);
+}
+
+.command-palette-actions {
+  grid-column: 3;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
 }
 
 /* ========================================================================

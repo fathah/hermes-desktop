@@ -657,6 +657,79 @@ const hermesAPI = {
     ipcRenderer.invoke("favorite-workspace-page", path, favorite, profile),
   getWorkspaceMetadata: (profile?: string) =>
     ipcRenderer.invoke("get-workspace-metadata", profile),
+  getWorkspacePageGraph: (profile?: string) =>
+    ipcRenderer.invoke("get-workspace-page-graph", profile),
+  updateWorkspaceSidebarState: (
+    state: {
+      collapsedSections?: string[];
+      width?: number;
+      collapsed?: boolean;
+    },
+    profile?: string,
+  ) => ipcRenderer.invoke("update-workspace-sidebar-state", state, profile),
+  getWorkspaceBacklinks: (path: string, profile?: string) =>
+    ipcRenderer.invoke("get-workspace-backlinks", path, profile),
+  listWorkspaceTemplates: (profile?: string) =>
+    ipcRenderer.invoke("list-workspace-templates", profile),
+  saveWorkspaceTemplate: (
+    input: {
+      kind: "page" | "database-row" | "button";
+      title: string;
+      content: string;
+      properties?: Record<string, unknown>;
+    },
+    profile?: string,
+  ) => ipcRenderer.invoke("save-workspace-template", input, profile),
+  renderWorkspaceButtonBlock: (input: { label: string; prompt: string }) =>
+    ipcRenderer.invoke("render-workspace-button-block", input),
+  listWorkspaceSyncedBlocks: (profile?: string) =>
+    ipcRenderer.invoke("list-workspace-synced-blocks", profile),
+  createWorkspaceSyncedBlock: (
+    input: {
+      sourcePath: string;
+      sourceBlockId: string;
+      content: string;
+      references?: Array<{ path: string; blockId: string }>;
+    },
+    profile?: string,
+  ) => ipcRenderer.invoke("create-workspace-synced-block", input, profile),
+  updateWorkspaceSyncedBlockContent: (
+    id: string,
+    content: string,
+    profile?: string,
+  ) =>
+    ipcRenderer.invoke(
+      "update-workspace-synced-block-content",
+      id,
+      content,
+      profile,
+    ),
+  removeWorkspaceSyncedBlockReference: (
+    id: string,
+    path: string,
+    blockId: string,
+    profile?: string,
+  ) =>
+    ipcRenderer.invoke(
+      "remove-workspace-synced-block-reference",
+      id,
+      path,
+      blockId,
+      profile,
+    ),
+  listWorkspaceComments: (path?: string, profile?: string) =>
+    ipcRenderer.invoke("list-workspace-comments", path, profile),
+  createWorkspaceComment: (
+    input: {
+      path: string;
+      blockId?: string;
+      body: string;
+      reminderAt?: number;
+    },
+    profile?: string,
+  ) => ipcRenderer.invoke("create-workspace-comment", input, profile),
+  resolveWorkspaceComment: (id: string, profile?: string) =>
+    ipcRenderer.invoke("resolve-workspace-comment", id, profile),
   updateWorkspacePageOrder: (
     parentPath: string | null,
     orderedPaths: string[],
@@ -678,6 +751,8 @@ const hermesAPI = {
     profile?: string,
   ) =>
     ipcRenderer.invoke("restore-workspace-version", path, historyId, profile),
+  exportWorkspaceMarkdownBundle: (profile?: string) =>
+    ipcRenderer.invoke("export-workspace-markdown-bundle", profile),
   listAgentWorkspaceProposals: (profile?: string) =>
     ipcRenderer.invoke("list-agent-workspace-proposals", profile),
   createAgentWorkspaceProposal: (
@@ -697,6 +772,28 @@ const hermesAPI = {
     ipcRenderer.invoke("accept-agent-workspace-proposal", id, profile),
   rejectAgentWorkspaceProposal: (id: string, profile?: string) =>
     ipcRenderer.invoke("reject-agent-workspace-proposal", id, profile),
+  acceptAgentWorkspaceProposalHunk: (
+    id: string,
+    hunkId: string,
+    profile?: string,
+  ) =>
+    ipcRenderer.invoke(
+      "accept-agent-workspace-proposal-hunk",
+      id,
+      hunkId,
+      profile,
+    ),
+  rejectAgentWorkspaceProposalHunk: (
+    id: string,
+    hunkId: string,
+    profile?: string,
+  ) =>
+    ipcRenderer.invoke(
+      "reject-agent-workspace-proposal-hunk",
+      id,
+      hunkId,
+      profile,
+    ),
   onWorkspaceFileChanged: (
     callback: (event: { path: string; content: string }) => void,
   ): (() => void) => {

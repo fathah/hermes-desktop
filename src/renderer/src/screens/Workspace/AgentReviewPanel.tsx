@@ -5,6 +5,12 @@ interface AgentWorkspaceProposal {
   path: string;
   baseContent: string;
   proposedContent: string;
+  hunks?: Array<{
+    id: string;
+    before: string;
+    after: string;
+    status: "pending" | "accepted" | "rejected";
+  }>;
   createdAt: number;
 }
 
@@ -12,6 +18,8 @@ interface AgentReviewPanelProps {
   proposals: AgentWorkspaceProposal[];
   onAccept: (id: string) => void;
   onReject: (id: string) => void;
+  onAcceptHunk?: (id: string, hunkId: string) => void;
+  onRejectHunk?: (id: string, hunkId: string) => void;
 }
 
 function lineCount(content: string): number {
@@ -22,6 +30,8 @@ export default function AgentReviewPanel({
   proposals,
   onAccept,
   onReject,
+  onAcceptHunk,
+  onRejectHunk,
 }: AgentReviewPanelProps): React.JSX.Element | null {
   if (proposals.length === 0) return null;
 
@@ -36,10 +46,39 @@ export default function AgentReviewPanel({
           <div>
             <strong>{proposal.path}</strong>
             <small>
-              {lineCount(proposal.baseContent)} lines to{" "}
-              {lineCount(proposal.proposedContent)} lines
+              {proposal.hunks?.length
+                ? `${proposal.hunks.length} suggested edit${
+                    proposal.hunks.length === 1 ? "" : "s"
+                  }`
+                : `${lineCount(proposal.baseContent)} lines to ${lineCount(
+                    proposal.proposedContent,
+                  )} lines`}
             </small>
           </div>
+          {proposal.hunks?.slice(0, 2).map((hunk) => (
+            <div key={hunk.id} className="workspace-agent-proposal-hunk">
+              <del>{hunk.before || "Empty"}</del>
+              <ins>{hunk.after || "Empty"}</ins>
+              <div className="workspace-agent-hunk-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  aria-label={`Reject hunk ${hunk.id}`}
+                  onClick={() => onRejectHunk?.(proposal.id, hunk.id)}
+                >
+                  Reject hunk
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  aria-label={`Accept hunk ${hunk.id}`}
+                  onClick={() => onAcceptHunk?.(proposal.id, hunk.id)}
+                >
+                  Accept hunk
+                </button>
+              </div>
+            </div>
+          ))}
           <div className="workspace-agent-proposal-actions">
             <button
               type="button"

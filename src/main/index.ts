@@ -111,6 +111,7 @@ import {
 } from "./sessions";
 import {
   acceptAgentWorkspaceProposal,
+  acceptAgentWorkspaceProposalHunk,
   createAgentWorkspaceProposal,
   createWorkspacePage,
   getWorkspaceTree,
@@ -123,16 +124,39 @@ import {
   recordWorkspaceVisit,
   readWorkspaceFile,
   rejectAgentWorkspaceProposal,
+  rejectAgentWorkspaceProposalHunk,
   renameWorkspacePage,
   restoreWorkspacePage,
   restoreWorkspaceVersion,
   trashWorkspacePage,
   updateWorkspacePageOrder,
   deleteWorkspaceFile,
+  exportWorkspaceMarkdownBundle,
   searchWorkspace,
   watchWorkspace,
   writeWorkspaceFile,
 } from "./workspace";
+import {
+  getWorkspaceBacklinks,
+  getWorkspacePageGraph,
+  updateWorkspaceSidebarState,
+} from "./workspace-page-graph";
+import {
+  listWorkspaceTemplates,
+  renderWorkspaceButtonBlock,
+  saveWorkspaceTemplate,
+} from "./workspace-templates";
+import {
+  createWorkspaceSyncedBlock,
+  listWorkspaceSyncedBlocks,
+  removeWorkspaceSyncedBlockReference,
+  updateWorkspaceSyncedBlockContent,
+} from "./workspace-synced-blocks";
+import {
+  createWorkspaceComment,
+  listWorkspaceComments,
+  resolveWorkspaceComment,
+} from "./workspace-comments";
 import {
   syncSessionCache,
   listCachedSessions,
@@ -1502,6 +1526,154 @@ function setupIPC(): void {
   });
 
   ipcMain.handle(
+    "get-workspace-page-graph",
+    async (_event, profile?: string) => {
+      requireLocalWorkspace();
+      await ensureWorkspaceWatcher(profile);
+      return getWorkspacePageGraph({ profile });
+    },
+  );
+
+  ipcMain.handle(
+    "update-workspace-sidebar-state",
+    async (
+      _event,
+      state: {
+        collapsedSections?: string[];
+        width?: number;
+        collapsed?: boolean;
+      },
+      profile?: string,
+    ) => {
+      requireLocalWorkspace();
+      await ensureWorkspaceWatcher(profile);
+      return updateWorkspaceSidebarState(state, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "get-workspace-backlinks",
+    async (_event, path: string, profile?: string) => {
+      requireLocalWorkspace();
+      await ensureWorkspaceWatcher(profile);
+      return getWorkspaceBacklinks(path, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "list-workspace-templates",
+    async (_event, profile?: string) => {
+      requireLocalWorkspace();
+      return listWorkspaceTemplates({ profile });
+    },
+  );
+
+  ipcMain.handle(
+    "save-workspace-template",
+    async (
+      _event,
+      input: {
+        kind: "page" | "database-row" | "button";
+        title: string;
+        content: string;
+        properties?: Record<string, unknown>;
+      },
+      profile?: string,
+    ) => {
+      requireLocalWorkspace();
+      return saveWorkspaceTemplate(input, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "render-workspace-button-block",
+    (_event, input: { label: string; prompt: string }) =>
+      renderWorkspaceButtonBlock(input),
+  );
+
+  ipcMain.handle(
+    "list-workspace-synced-blocks",
+    async (_event, profile?: string) => {
+      requireLocalWorkspace();
+      return listWorkspaceSyncedBlocks({ profile });
+    },
+  );
+
+  ipcMain.handle(
+    "create-workspace-synced-block",
+    async (
+      _event,
+      input: {
+        sourcePath: string;
+        sourceBlockId: string;
+        content: string;
+        references?: Array<{ path: string; blockId: string }>;
+      },
+      profile?: string,
+    ) => {
+      requireLocalWorkspace();
+      return createWorkspaceSyncedBlock(input, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "update-workspace-synced-block-content",
+    async (_event, id: string, content: string, profile?: string) => {
+      requireLocalWorkspace();
+      return updateWorkspaceSyncedBlockContent(id, content, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "remove-workspace-synced-block-reference",
+    async (
+      _event,
+      id: string,
+      path: string,
+      blockId: string,
+      profile?: string,
+    ) => {
+      requireLocalWorkspace();
+      return removeWorkspaceSyncedBlockReference(id, path, blockId, {
+        profile,
+      });
+    },
+  );
+
+  ipcMain.handle(
+    "list-workspace-comments",
+    async (_event, path?: string, profile?: string) => {
+      requireLocalWorkspace();
+      return listWorkspaceComments(path, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "create-workspace-comment",
+    async (
+      _event,
+      input: {
+        path: string;
+        blockId?: string;
+        body: string;
+        reminderAt?: number;
+      },
+      profile?: string,
+    ) => {
+      requireLocalWorkspace();
+      return createWorkspaceComment(input, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "resolve-workspace-comment",
+    async (_event, id: string, profile?: string) => {
+      requireLocalWorkspace();
+      return resolveWorkspaceComment(id, { profile });
+    },
+  );
+
+  ipcMain.handle(
     "update-workspace-page-order",
     async (
       _event,
@@ -1538,6 +1710,14 @@ function setupIPC(): void {
       requireLocalWorkspace();
       await ensureWorkspaceWatcher(profile);
       return restoreWorkspaceVersion(path, historyId, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "export-workspace-markdown-bundle",
+    async (_event, profile?: string) => {
+      requireLocalWorkspace();
+      return exportWorkspaceMarkdownBundle({ profile });
     },
   );
 
@@ -1579,6 +1759,23 @@ function setupIPC(): void {
     async (_event, id: string, profile?: string) => {
       requireLocalWorkspace();
       return rejectAgentWorkspaceProposal(id, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "accept-agent-workspace-proposal-hunk",
+    async (_event, id: string, hunkId: string, profile?: string) => {
+      requireLocalWorkspace();
+      await ensureWorkspaceWatcher(profile);
+      return acceptAgentWorkspaceProposalHunk(id, hunkId, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "reject-agent-workspace-proposal-hunk",
+    async (_event, id: string, hunkId: string, profile?: string) => {
+      requireLocalWorkspace();
+      return rejectAgentWorkspaceProposalHunk(id, hunkId, { profile });
     },
   );
 

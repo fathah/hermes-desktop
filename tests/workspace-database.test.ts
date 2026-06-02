@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyWorkspaceDatabaseView,
   parseWorkspaceDatabase,
   stringifyWorkspaceDatabase,
   updateWorkspaceDatabaseItem,
@@ -66,13 +67,75 @@ describe("workspace database yaml", () => {
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
 
-    expect(parsed.database.version).toBe(1);
+    expect(parsed.database.version).toBe(2);
     expect(parsed.database.views.map((view) => view.type)).toEqual(["board"]);
     expect(parsed.database.items[0].id).toMatch(/^row-/);
 
     const output = stringifyWorkspaceDatabase(parsed.database);
-    expect(output).toContain("version: 1");
+    expect(output).toContain("version: 2");
     expect(output).toContain("views:");
     expect(output).toContain("id: row-");
+  });
+
+  it("applies view filters and sorts without mutating row pages", () => {
+    const parsed = parseWorkspaceDatabase(`hermesType: database
+version: 2
+title: Tasks
+properties:
+  name: { type: title }
+  status: { type: status, options: [Todo, Done] }
+  priority: { type: number }
+views:
+  - id: done
+    name: Done
+    type: table
+    openMode: side
+    filters:
+      operator: and
+      filters:
+        - property: status
+          operator: equals
+          value: Done
+    sorts:
+      - property: priority
+        direction: desc
+items:
+  - id: row-low
+    name: Low
+    status: Done
+    priority: 1
+  - id: row-todo
+    name: Todo
+    status: Todo
+    priority: 9
+  - id: row-high
+    name: High
+    status: Done
+    priority: 5
+rowPages:
+  row-high: "High body"
+`);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+
+    const view = parsed.database.views[0];
+    expect(view.openMode).toBe("side");
+    expect(applyWorkspaceDatabaseView(parsed.database, view)).toEqual([
+      {
+        id: "row-high",
+        name: "High",
+        status: "Done",
+        priority: 5,
+      },
+      {
+        id: "row-low",
+        name: "Low",
+        status: "Done",
+        priority: 1,
+      },
+    ]);
+    expect(stringifyWorkspaceDatabase(parsed.database)).toContain(
+      "row-high: High body",
+    );
   });
 });
