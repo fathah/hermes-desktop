@@ -61,7 +61,6 @@ const OAUTH_PROVIDERS = new Set([
   "qwen-oauth",
   "google-gemini-cli",
   "minimax-oauth",
-  "kimi-coding",
 ]);
 
 // Provider ids that don't need an API key at all. `auto` lets

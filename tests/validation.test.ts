@@ -110,6 +110,37 @@ describe("validateChatReadiness", () => {
     expect(validateChatReadiness()).toEqual({ ok: true });
   });
 
+  it("fails open for Qwen OAuth because it authenticates through auth.json", async () => {
+    writeConfig(
+      [
+        "model:",
+        "  provider: qwen-oauth",
+        "  default: qwen3-coder-plus",
+        "",
+      ].join("\n"),
+    );
+    const { validateChatReadiness } = await freshValidation(TEST_DIR);
+    expect(validateChatReadiness()).toEqual({ ok: true });
+  });
+
+  it("blocks Kimi coding plan when its API key is missing", async () => {
+    writeConfig(
+      [
+        "model:",
+        "  provider: kimi-coding",
+        "  default: kimi-for-coding",
+        "  base_url: https://api.moonshot.ai/v1",
+        "",
+      ].join("\n"),
+    );
+    writeEnv("");
+    const { validateChatReadiness } = await freshValidation(TEST_DIR);
+    const r = validateChatReadiness();
+    expect(r.ok).toBe(false);
+    expect(r.code).toBe("MISSING_API_KEY");
+    expect(r.expectedEnvKey).toBe("KIMI_API_KEY");
+  });
+
   // (`nous` previously fell open here on the assumption that the
   // gateway always had its own credential cache. Issue #367 showed
   // that's not true — Nous Portal supports BOTH OAuth and API key,

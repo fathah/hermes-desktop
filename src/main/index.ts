@@ -42,7 +42,7 @@ import { updaterLogger } from "./updater-log";
 import {
   runHermesAuthLogin,
   cancelHermesAuthLogin,
-  detectDeviceCode,
+  accumulateOAuthPromptAction,
 } from "./hermes-auth";
 import {
   isRemoteMode,
@@ -492,11 +492,9 @@ function setupIPC(): void {
   // OAuth provider sign-in — spawns `hermes auth add <provider> --type
   // oauth`, streaming the CLI's output to the renderer's sign-in modal.
   ipcMain.handle("oauth-login", (event, provider: string, profile?: string) => {
-    // Codex uses a device-code flow: it prints a URL + code instead
-    // of opening a browser. Watch the stream for that prompt, then
-    // open the page and pre-copy the code so the user just pastes.
-    let buffer = "";
-    let deviceHandled = false;
+    // Some providers print the authorization URL instead of opening it.
+    // Watch the accumulated stream once, then open the first safe prompt.
+    const promptState = { buffer: "", handled: false };
     return runHermesAuthLogin(
       provider,
       (chunk) => {
@@ -504,16 +502,19 @@ function setupIPC(): void {
         // tears down the subprocess; any send on a destroyed sender throws.
         if (event.sender.isDestroyed()) return;
         event.sender.send("oauth-login-progress", chunk);
-        if (deviceHandled) return;
-        buffer += chunk;
-        const device = detectDeviceCode(buffer);
-        if (device) {
-          deviceHandled = true;
-          openExternalUrl(device.url);
-          clipboard.writeText(device.code);
+        const action = accumulateOAuthPromptAction(promptState, chunk);
+        if (action?.kind === "device-code") {
+          openExternalUrl(action.url);
+          clipboard.writeText(action.code);
           event.sender.send(
             "oauth-login-progress",
-            `\n→ Code ${device.code} copied to clipboard — opening browser...\n`,
+            `\n→ Code ${action.code} copied to clipboard — opening browser...\n`,
+          );
+        } else if (action?.kind === "auth-url") {
+          openExternalUrl(action.url);
+          event.sender.send(
+            "oauth-login-progress",
+            "\n→ Opening browser for sign-in...\n",
           );
         }
       },

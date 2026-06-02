@@ -42,7 +42,6 @@ const NON_DISCOVERABLE_PROVIDERS = new Set<string>([
   "xai",
   "qwen",
   "minimax",
-  "kimi-coding",
 ]);
 
 /** OAuth/subscription providers — no static-key `/v1/models` endpoint.
@@ -87,7 +86,7 @@ const OAUTH_PROVIDER_CURATED: Record<string, string[]> = {
     "gemini-3-flash-preview",
   ],
   "minimax-oauth": ["MiniMax-M2.7", "MiniMax-M2.7-highspeed"],
-  "qwen-oauth": [],
+  "qwen-oauth": ["qwen3-coder-plus", "qwen3-coder-flash"],
 };
 
 // One-liner that prints hermes-agent's model list for a provider as a

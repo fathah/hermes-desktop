@@ -41,6 +41,34 @@ const DEFAULT_MODELS: DefaultModel[] = [
     model: "gpt-4.1",
     baseUrl: "",
   },
+
+  // ── Subscription / coding-plan providers ─────────────────────────────
+  {
+    name: "Qwen3 Coder Plus",
+    provider: "qwen-oauth",
+    model: "qwen3-coder-plus",
+    baseUrl: "",
+  },
+  {
+    name: "Kimi for Coding",
+    provider: "kimi-coding",
+    model: "kimi-for-coding",
+    baseUrl: "",
+  },
+
+  // ── Direct API providers ─────────────────────────────────────────────
+  {
+    name: "DeepSeek Chat",
+    provider: "deepseek",
+    model: "deepseek-chat",
+    baseUrl: "",
+  },
+  {
+    name: "GLM-5",
+    provider: "zai",
+    model: "glm-5",
+    baseUrl: "",
+  },
 ];
 
 export default DEFAULT_MODELS;

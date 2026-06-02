@@ -5,6 +5,10 @@ export const PROVIDERS_WITHOUT_API_KEYS = new Set([
   "vllm",
   "llamacpp",
   "openai-codex",
+  "xai-oauth",
+  "qwen-oauth",
+  "google-gemini-cli",
+  "minimax-oauth",
 ]);
 
 export function providerDoesNotNeedApiKey(provider: string): boolean {

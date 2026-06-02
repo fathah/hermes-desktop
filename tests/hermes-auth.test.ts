@@ -64,6 +64,7 @@ import {
   isOAuthLoginProvider,
   detectDeviceCode,
   detectAuthUrl,
+  accumulateOAuthPromptAction,
   OAUTH_LOGIN_PROVIDERS,
 } from "../src/main/hermes-auth";
 
@@ -167,6 +168,31 @@ describe("detectAuthUrl", () => {
 
   it("returns null if prompt is not present", () => {
     expect(detectAuthUrl("https://auth.x.ai/oauth/authorize")).toBeNull();
+  });
+});
+
+describe("accumulateOAuthPromptAction", () => {
+  it("returns an auth-url action for an xAI prompt split across chunks", () => {
+    const state = { buffer: "", handled: false };
+
+    expect(
+      accumulateOAuthPromptAction(
+        state,
+        "Open this URL to authorize Hermes with xAI:\n",
+      ),
+    ).toBeNull();
+    expect(
+      accumulateOAuthPromptAction(
+        state,
+        "https://auth.x.ai/oauth/authorize?client_id=123\n",
+      ),
+    ).toEqual({
+      kind: "auth-url",
+      url: "https://auth.x.ai/oauth/authorize?client_id=123",
+    });
+    expect(
+      accumulateOAuthPromptAction(state, "Waiting for callback...\n"),
+    ).toBeNull();
   });
 });
 

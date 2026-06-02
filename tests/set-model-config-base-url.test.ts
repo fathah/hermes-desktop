@@ -131,6 +131,33 @@ describe("setModelConfig — base_url substitution", () => {
     expect(content).not.toMatch(/^\s+base_url:/m);
   });
 
+  it("clears a stale base_url when switching to a provider with no canonical URL", async () => {
+    const configFile = join(TEST_DIR, "config.yaml");
+    writeFileSync(
+      configFile,
+      [
+        "model:",
+        '  provider: "xai-oauth"',
+        '  default: "grok-4.3"',
+        '  base_url: "https://api.x.ai/v1"',
+        "",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const { setModelConfig, getModelConfig } =
+      await importConfigWithHome(TEST_DIR);
+    setModelConfig("openai-codex", "gpt-5.5", "");
+
+    const mc = getModelConfig();
+    expect(mc.provider).toBe("openai-codex");
+    expect(mc.model).toBe("gpt-5.5");
+    expect(mc.baseUrl).toBe("");
+
+    const content = readFileSync(configFile, "utf-8");
+    expect(content).not.toMatch(/^\s+base_url:/m);
+  });
+
   it("covers every built-in remote provider — the full coverage check", async () => {
     // If this test starts failing because a built-in remote provider
     // got added to constants.ts:LOCAL_PRESETS without a corresponding
