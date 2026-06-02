@@ -7,6 +7,7 @@
 import { spawn } from "child_process";
 import { homedir } from "os";
 import { join } from "path";
+import { existsSync } from "fs";
 import type { SshConfig } from "./ssh-tunnel";
 import type { KanbanTask } from "./kanban";
 import { buildSshControlOptions } from "./ssh-options";
@@ -53,6 +54,11 @@ export function sshExec(
   timeoutMs = 30000,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
+    const keyPath = config.keyPath?.trim() || join(homedir(), ".ssh", "id_rsa");
+    if (!existsSync(keyPath)) {
+      return reject(new Error(`SSH private key file not found at: ${keyPath}`));
+    }
+
     const child = spawn("ssh", [...buildExecArgs(config), command], {
       stdio: ["pipe", "pipe", "pipe"],
       ...HIDDEN_SUBPROCESS_OPTIONS,
@@ -73,7 +79,15 @@ export function sshExec(
     });
     child.on("error", (err) => {
       clearTimeout(timeout);
-      reject(err);
+      if (err && "code" in err && err.code === "ENOENT") {
+        reject(
+          new Error(
+            "System SSH binary not found on your system PATH. Please ensure an SSH client is installed.",
+          ),
+        );
+      } else {
+        reject(err);
+      }
     });
     child.on("close", (code) => {
       clearTimeout(timeout);

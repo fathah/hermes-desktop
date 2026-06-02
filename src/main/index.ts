@@ -61,6 +61,7 @@ import {
   runHermesAuthLogin,
   cancelHermesAuthLogin,
   detectDeviceCode,
+  detectAuthUrl,
 } from "./hermes-auth";
 import {
   isRemoteMode,
@@ -130,6 +131,7 @@ import {
   deleteSession,
   deleteSessions,
 } from "./sessions";
+import { closeDbConnection } from "./db";
 import {
   syncSessionCache,
   listCachedSessions,
@@ -541,8 +543,9 @@ function setupIPC(): void {
     // Codex uses a device-code flow: it prints a URL + code instead
     // of opening a browser. Watch the stream for that prompt, then
     // open the page and pre-copy the code so the user just pastes.
+    // Loopback OAuth flows print an authorize URL; watch for it and open it.
     let buffer = "";
-    let deviceHandled = false;
+    let urlHandled = false;
     return runHermesAuthLogin(
       provider,
       (chunk) => {
@@ -550,16 +553,26 @@ function setupIPC(): void {
         // tears down the subprocess; any send on a destroyed sender throws.
         if (event.sender.isDestroyed()) return;
         event.sender.send("oauth-login-progress", chunk);
-        if (deviceHandled) return;
+        if (urlHandled) return;
         buffer += chunk;
         const device = detectDeviceCode(buffer);
         if (device) {
-          deviceHandled = true;
+          urlHandled = true;
           openExternalUrl(device.url);
           clipboard.writeText(device.code);
           event.sender.send(
             "oauth-login-progress",
             `\n→ Code ${device.code} copied to clipboard — opening browser...\n`,
+          );
+          return;
+        }
+        const authUrl = detectAuthUrl(buffer);
+        if (authUrl) {
+          urlHandled = true;
+          openExternalUrl(authUrl);
+          event.sender.send(
+            "oauth-login-progress",
+            `\n→ Opening browser for authorization...\n`,
           );
         }
       },
@@ -2200,6 +2213,7 @@ app.on("window-all-closed", () => {
     // explicitly via the Gateway controls.
     stopSshTunnel();
     stopClaw3d();
+    closeDbConnection();
     app.quit();
   }
 });
@@ -2215,4 +2229,5 @@ app.on("before-quit", () => {
   // and other platforms stay online headless.
   stopSshTunnel();
   stopClaw3d();
+  closeDbConnection();
 });

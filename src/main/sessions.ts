@@ -1,10 +1,9 @@
 import Database from "better-sqlite3";
-import { existsSync } from "fs";
-import { activeStateDbPath } from "./utils";
 import type { Attachment } from "../shared/attachments";
 import { isImageMime } from "../shared/attachments";
 import { clearStagedAttachments } from "./attachment-staging";
 import { removeSessionFromCache } from "./session-cache";
+import { getDbConnection } from "./db";
 import {
   deletePromptImageAttachmentsForSession,
   loadPromptImageAttachments,
@@ -232,56 +231,48 @@ function highlightSessionMatch(
 }
 
 function getDb(readonly = true): Database.Database | null {
-  // Open the active profile's session DB — named profiles keep their
-  // sessions under ~/.hermes/profiles/<name>/state.db (issue #311).
-  const dbPath = activeStateDbPath();
-  if (!existsSync(dbPath)) return null;
-  return new Database(dbPath, readonly ? { readonly: true } : {});
+  return getDbConnection(readonly);
 }
 
 export function listSessions(limit = 30, offset = 0): SessionSummary[] {
   const db = getDb();
   if (!db) return [];
 
-  try {
-    // Simple query without correlated subquery — titles come from session cache
-    const rows = db
-      .prepare(
-        `SELECT
-          s.id,
-          s.source,
-          s.started_at,
-          s.ended_at,
-          s.message_count,
-          s.model,
-          s.title
-        FROM sessions s
-        ORDER BY s.started_at DESC
-        LIMIT ? OFFSET ?`,
-      )
-      .all(limit, offset) as Array<{
-      id: string;
-      source: string;
-      started_at: number;
-      ended_at: number | null;
-      message_count: number;
-      model: string;
-      title: string | null;
-    }>;
+  // Simple query without correlated subquery — titles come from session cache
+  const rows = db
+    .prepare(
+      `SELECT
+        s.id,
+        s.source,
+        s.started_at,
+        s.ended_at,
+        s.message_count,
+        s.model,
+        s.title
+      FROM sessions s
+      ORDER BY s.started_at DESC
+      LIMIT ? OFFSET ?`,
+    )
+    .all(limit, offset) as Array<{
+    id: string;
+    source: string;
+    started_at: number;
+    ended_at: number | null;
+    message_count: number;
+    model: string;
+    title: string | null;
+  }>;
 
-    return rows.map((r) => ({
-      id: r.id,
-      source: r.source,
-      startedAt: r.started_at,
-      endedAt: r.ended_at,
-      messageCount: r.message_count,
-      model: r.model || "",
-      title: r.title,
-      preview: "",
-    }));
-  } finally {
-    db.close();
-  }
+  return rows.map((r) => ({
+    id: r.id,
+    source: r.source,
+    startedAt: r.started_at,
+    endedAt: r.ended_at,
+    messageCount: r.message_count,
+    model: r.model || "",
+    title: r.title,
+    preview: "",
+  }));
 }
 
 export function searchSessions(query: string, limit = 20): SearchResult[] {
@@ -384,8 +375,6 @@ export function searchSessions(query: string, limit = 20): SearchResult[] {
     }));
   } catch {
     return [];
-  } finally {
-    db.close();
   }
 }
 
@@ -597,26 +586,22 @@ export function getSessionMessages(sessionId: string): HistoryItem[] {
   const db = getDb();
   if (!db) return [];
 
-  try {
-    const rows = db
-      .prepare(
-        `SELECT id, role, content, timestamp,
-                tool_call_id, tool_calls, tool_name,
-                reasoning, reasoning_content, reasoning_details
-         FROM messages
-         WHERE session_id = ? AND role IN ('user', 'assistant', 'tool')
-         ORDER BY timestamp, id`,
-      )
-      .all(sessionId) as RawMessageRow[];
+  const rows = db
+    .prepare(
+      `SELECT id, role, content, timestamp,
+              tool_call_id, tool_calls, tool_name,
+              reasoning, reasoning_content, reasoning_details
+       FROM messages
+       WHERE session_id = ? AND role IN ('user', 'assistant', 'tool')
+       ORDER BY timestamp, id`,
+    )
+    .all(sessionId) as RawMessageRow[];
 
-    const items = expandRowsToHistory(rows);
-    return mergeStoredPromptImageAttachments(
-      items,
-      loadPromptImageAttachments(db, sessionId),
-    );
-  } finally {
-    db.close();
-  }
+  const items = expandRowsToHistory(rows);
+  return mergeStoredPromptImageAttachments(
+    items,
+    loadPromptImageAttachments(db, sessionId),
+  );
 }
 
 export interface DeleteSessionsResult {
@@ -656,14 +641,10 @@ export function deleteSession(sessionId: string): void {
   const db = getDb(false);
 
   if (db) {
-    try {
-      const tx = db.transaction((sessionIdToDelete: string) => {
-        deleteSessionRows(db, sessionIdToDelete);
-      });
-      tx(id);
-    } finally {
-      db.close();
-    }
+    const tx = db.transaction((sessionIdToDelete: string) => {
+      deleteSessionRows(db, sessionIdToDelete);
+    });
+    tx(id);
   }
 
   cleanupDeletedSession(id);
@@ -676,16 +657,12 @@ export function deleteSessions(sessionIds: string[]): DeleteSessionsResult {
   const db = getDb(false);
 
   if (db) {
-    try {
-      const tx = db.transaction((idsToDelete: string[]) => {
-        for (const id of idsToDelete) {
-          deleted += deleteSessionRows(db, id);
-        }
-      });
-      tx(ids);
-    } finally {
-      db.close();
-    }
+    const tx = db.transaction((idsToDelete: string[]) => {
+      for (const id of idsToDelete) {
+        deleted += deleteSessionRows(db, id);
+      }
+    });
+    tx(ids);
   }
 
   for (const id of ids) {

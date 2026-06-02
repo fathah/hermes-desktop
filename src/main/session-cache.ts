@@ -1,14 +1,10 @@
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
-import {
-  profileHome,
-  getActiveProfileNameSync,
-  activeStateDbPath,
-  safeWriteFile,
-} from "./utils";
+import { profileHome, getActiveProfileNameSync, safeWriteFile } from "./utils";
 import Database from "better-sqlite3";
 import { t } from "../shared/i18n";
 import { getAppLocale } from "./locale";
+import { getDbConnection } from "./db";
 
 /**
  * The session cache lives alongside its own profile's data so profiles
@@ -88,9 +84,7 @@ function writeCache(data: CacheData): void {
 }
 
 function getDb(): Database.Database | null {
-  const dbPath = activeStateDbPath();
-  if (!existsSync(dbPath)) return null;
-  return new Database(dbPath, { readonly: true });
+  return getDbConnection(true);
 }
 
 // Sync from hermes DB to local cache — only fetches new/updated sessions
@@ -220,8 +214,6 @@ export function syncSessionCache(): CachedSession[] {
     return updated.sessions;
   } catch {
     return cache.sessions;
-  } finally {
-    db.close();
   }
 }
 
