@@ -18,6 +18,11 @@ export default {
     label: "File Operations",
     description: "Read, write, search, and manage files",
   },
+  obsidian: {
+    label: "Obsidian",
+    description:
+      "Read, write, search, open, and call functions in Obsidian vaults",
+  },
   code_execution: {
     label: "Code Execution",
     description: "Execute Python and shell code directly",

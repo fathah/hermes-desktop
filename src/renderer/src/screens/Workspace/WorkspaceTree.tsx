@@ -42,6 +42,7 @@ interface WorkspaceTreeProps {
   onTrash: (path: string) => void;
   onRestore: (path: string) => void;
   onMove: (path: string, parentPath: string | null) => void;
+  readOnly?: boolean;
 }
 
 function pageLabel(
@@ -69,6 +70,7 @@ function WorkspaceTreeNode({
   onFavorite,
   onTrash,
   onMove,
+  readOnly,
 }: {
   node: WorkspaceFileNode;
   metadata: WorkspaceMetadata | null;
@@ -80,6 +82,7 @@ function WorkspaceTreeNode({
   onFavorite: (path: string, favorite: boolean) => void;
   onTrash: (path: string) => void;
   onMove: (path: string, parentPath: string | null) => void;
+  readOnly?: boolean;
 }): React.JSX.Element {
   if (node.kind === "directory") {
     return (
@@ -94,13 +97,15 @@ function WorkspaceTreeNode({
         <div className="workspace-tree-folder">
           <Folder size={14} />
           <span>{node.name}</span>
-          <button
-            type="button"
-            aria-label={`New page in ${node.name}`}
-            onClick={() => onCreate(node.path)}
-          >
-            <Plus size={13} />
-          </button>
+          {!readOnly && (
+            <button
+              type="button"
+              aria-label={`New page in ${node.name}`}
+              onClick={() => onCreate(node.path)}
+            >
+              <Plus size={13} />
+            </button>
+          )}
         </div>
         <div className="workspace-tree-children">
           {(node.children ?? []).map((child) => (
@@ -116,6 +121,7 @@ function WorkspaceTreeNode({
               onFavorite={onFavorite}
               onTrash={onTrash}
               onMove={onMove}
+              readOnly={readOnly}
             />
           ))}
         </div>
@@ -144,36 +150,38 @@ function WorkspaceTreeNode({
         <FileText size={14} />
         <span>{pageLabel(node.path, metadata, node.name)}</span>
       </button>
-      <div className="workspace-tree-actions">
-        <button
-          type="button"
-          aria-label={favorite ? "Remove favorite" : "Add favorite"}
-          onClick={() => onFavorite(node.path, !favorite)}
-        >
-          <Star size={13} fill={favorite ? "currentColor" : "none"} />
-        </button>
-        <button
-          type="button"
-          aria-label="Duplicate page"
-          onClick={() => onDuplicate(node.path)}
-        >
-          <Copy size={13} />
-        </button>
-        <button
-          type="button"
-          aria-label="Rename page"
-          onClick={() => onRename(node.path)}
-        >
-          <MoreHorizontal size={13} />
-        </button>
-        <button
-          type="button"
-          aria-label="Move to trash"
-          onClick={() => onTrash(node.path)}
-        >
-          <Trash2 size={13} />
-        </button>
-      </div>
+      {!readOnly && (
+        <div className="workspace-tree-actions">
+          <button
+            type="button"
+            aria-label={favorite ? "Remove favorite" : "Add favorite"}
+            onClick={() => onFavorite(node.path, !favorite)}
+          >
+            <Star size={13} fill={favorite ? "currentColor" : "none"} />
+          </button>
+          <button
+            type="button"
+            aria-label="Duplicate page"
+            onClick={() => onDuplicate(node.path)}
+          >
+            <Copy size={13} />
+          </button>
+          <button
+            type="button"
+            aria-label="Rename page"
+            onClick={() => onRename(node.path)}
+          >
+            <MoreHorizontal size={13} />
+          </button>
+          <button
+            type="button"
+            aria-label="Move to trash"
+            onClick={() => onTrash(node.path)}
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -190,6 +198,7 @@ export default function WorkspaceTree({
   onTrash,
   onRestore,
   onMove,
+  readOnly = false,
 }: WorkspaceTreeProps): React.JSX.Element {
   const favoritePages =
     metadata?.favorites
@@ -200,28 +209,32 @@ export default function WorkspaceTree({
 
   return (
     <div className="workspace-tree" aria-label="Workspace pages">
-      <section className="workspace-tree-section">
-        <div className="workspace-section-heading">
-          <span>Favorites</span>
-        </div>
-        {favoritePages.length === 0 ? (
-          <div className="workspace-tree-empty">No favorites</div>
-        ) : (
-          favoritePages.map((page) => (
-            <button
-              key={page.id}
-              type="button"
-              className={`workspace-tree-file${
-                selectedPath === page.path ? " workspace-tree-file-active" : ""
-              }`}
-              onClick={() => onSelect(page.path)}
-            >
-              <Star size={14} fill="currentColor" />
-              <span>{page.displayName}</span>
-            </button>
-          ))
-        )}
-      </section>
+      {!readOnly && (
+        <section className="workspace-tree-section">
+          <div className="workspace-section-heading">
+            <span>Favorites</span>
+          </div>
+          {favoritePages.length === 0 ? (
+            <div className="workspace-tree-empty">No favorites</div>
+          ) : (
+            favoritePages.map((page) => (
+              <button
+                key={page.id}
+                type="button"
+                className={`workspace-tree-file${
+                  selectedPath === page.path
+                    ? " workspace-tree-file-active"
+                    : ""
+                }`}
+                onClick={() => onSelect(page.path)}
+              >
+                <Star size={14} fill="currentColor" />
+                <span>{page.displayName}</span>
+              </button>
+            ))
+          )}
+        </section>
+      )}
 
       <section
         className="workspace-tree-section workspace-tree-root-drop"
@@ -233,14 +246,16 @@ export default function WorkspaceTree({
         }}
       >
         <div className="workspace-section-heading">
-          <span>Workspace</span>
-          <button
-            type="button"
-            aria-label="New page"
-            onClick={() => onCreate(null)}
-          >
-            <Plus size={14} />
-          </button>
+          <span>{readOnly ? "Vault notes" : "Workspace"}</span>
+          {!readOnly && (
+            <button
+              type="button"
+              aria-label="New page"
+              onClick={() => onCreate(null)}
+            >
+              <Plus size={14} />
+            </button>
+          )}
         </div>
         {nodes.map((node) => (
           <WorkspaceTreeNode
@@ -255,11 +270,12 @@ export default function WorkspaceTree({
             onFavorite={onFavorite}
             onTrash={onTrash}
             onMove={onMove}
+            readOnly={readOnly}
           />
         ))}
       </section>
 
-      {trashPages.length > 0 && (
+      {!readOnly && trashPages.length > 0 && (
         <section className="workspace-tree-section">
           <div className="workspace-section-heading">
             <span>Trash</span>

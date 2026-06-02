@@ -1212,6 +1212,34 @@ body {
   color: var(--text-primary);
 }
 
+.workspace-backend-switch {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+
+.workspace-backend-switch button {
+  min-height: 26px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.workspace-backend-switch button.active,
+.workspace-backend-switch button:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
 .workspace-body {
   flex: 1;
   min-height: 0;
@@ -1277,6 +1305,43 @@ body {
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 600;
+}
+
+.workspace-obsidian-config {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+}
+
+.workspace-obsidian-config label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.workspace-obsidian-config input {
+  min-width: 0;
+  min-height: 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  padding: 4px 7px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.workspace-obsidian-config button,
+.workspace-obsidian-actions button {
+  width: fit-content;
 }
 
 .workspace-tree,
@@ -1548,6 +1613,12 @@ body {
   color: var(--text-primary);
   padding: 5px 8px;
   cursor: pointer;
+}
+
+.workspace-obsidian-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 10px 14px 0;
 }
 
 .workspace-history {

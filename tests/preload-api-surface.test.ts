@@ -117,6 +117,16 @@ describe("New APIs from v0.8/v0.9 features", () => {
       "createAgentWorkspaceProposal",
       "acceptAgentWorkspaceProposal",
       "rejectAgentWorkspaceProposal",
+      "getObsidianConfig",
+      "setObsidianConfig",
+      "getObsidianTree",
+      "readObsidianFile",
+      "writeObsidianFile",
+      "appendObsidianFile",
+      "searchObsidian",
+      "openObsidianNote",
+      "callObsidianFunction",
+      "onObsidianFileChanged",
     ]) {
       expect(preloadMethods).toContain(method);
       expect(typeMethods).toContain(method);

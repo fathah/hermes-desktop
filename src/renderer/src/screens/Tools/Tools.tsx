@@ -66,6 +66,19 @@ const TOOL_ICONS: Record<string, React.JSX.Element> = {
       <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" />
     </svg>
   ),
+  obsidian: (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 2 4 7v10l8 5 8-5V7Z" />
+      <path d="M8 9.5 12 7l4 2.5M8 14.5 12 17l4-2.5M12 7v10" />
+    </svg>
+  ),
   code_execution: (
     <svg
       viewBox="0 0 24 24"

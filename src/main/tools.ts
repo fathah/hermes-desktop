@@ -37,6 +37,11 @@ const TOOLSET_DEFS: {
     descriptionKey: "tools.file.description",
   },
   {
+    key: "obsidian",
+    labelKey: "tools.obsidian.label",
+    descriptionKey: "tools.obsidian.description",
+  },
+  {
     key: "code_execution",
     labelKey: "tools.code_execution.label",
     descriptionKey: "tools.code_execution.description",
