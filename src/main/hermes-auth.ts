@@ -69,6 +69,16 @@ export function detectDeviceCode(
   return null;
 }
 
+export function detectAuthUrl(text: string): string | null {
+  const match = text.match(
+    /(?:Open this URL in your browser|Open this URL to authorize|If it does not open automatically, visit)[^\n:]*:[^\S\n]*\n[^\S\n]*(https:\/\/\S+)/i,
+  );
+  if (match) {
+    return match[1];
+  }
+  return null;
+}
+
 // Only one interactive login can run at a time — the renderer surfaces a
 // single modal. Tracked so the renderer can cancel a flow the user
 // abandoned (otherwise the CLI's loopback OAuth server lingers).

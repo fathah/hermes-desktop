@@ -53,7 +53,11 @@ const { attach } = require("./e2e-attach");
       if (/send|submit/i.test(text + " " + aria + " " + title)) {
         result.sendCandidates.push(describe(el));
       }
-      if (/new chat|new session|new conversation/i.test(text + " " + aria + " " + title)) {
+      if (
+        /new chat|new session|new conversation/i.test(
+          text + " " + aria + " " + title,
+        )
+      ) {
         result.newChatCandidates.push(describe(el));
       }
     });
@@ -73,11 +77,15 @@ const { attach } = require("./e2e-attach");
     });
 
     // Look for the chat tab's active state
-    const activeNav = document.querySelector(".navigation-item.active, [data-active='true']");
+    const activeNav = document.querySelector(
+      ".navigation-item.active, [data-active='true']",
+    );
     result.activeTab = activeNav ? describe(activeNav) : null;
 
     // Model picker
-    const mp = document.querySelector(".model-picker, [data-testid='model-picker']");
+    const mp = document.querySelector(
+      ".model-picker, [data-testid='model-picker']",
+    );
     result.modelPicker = mp ? describe(mp) : null;
 
     // Count chat messages currently rendered

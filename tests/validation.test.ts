@@ -101,12 +101,9 @@ describe("validateChatReadiness", () => {
 
   it("fails open for OAuth providers (codex, qwen-oauth, etc.)", async () => {
     writeConfig(
-      [
-        "model:",
-        "  provider: openai-codex",
-        "  default: gpt-5-codex",
-        "",
-      ].join("\n"),
+      ["model:", "  provider: openai-codex", "  default: gpt-5-codex", ""].join(
+        "\n",
+      ),
     );
     // No env file at all
     const { validateChatReadiness } = await freshValidation(TEST_DIR);
@@ -287,7 +284,9 @@ describe("validateChatReadiness", () => {
         {
           version: 1,
           credential_pool: {
-            nous: [{ key: "sk-nous-but-saved-under-wrong-field", label: "Key 1" }],
+            nous: [
+              { key: "sk-nous-but-saved-under-wrong-field", label: "Key 1" },
+            ],
           },
         },
         null,

@@ -81,12 +81,12 @@ const { attach } = require("./e2e-attach");
 
 Naming conventions:
 
-| Prefix | Purpose | Lives long? |
-|---|---|---|
+| Prefix                  | Purpose                                                                                                                                      | Lives long?                                                                                                |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `repro-<short-name>.js` | Reproduce a specific bug. Pair with an issue number or commit. Print `[VERDICT] 🔴 REPRODUCED` (pre-fix) or `[VERDICT] ✅ FIXED` (post-fix). | Until the fix is shipped + a regression test exists; then it can be deleted or kept as a manual reference. |
-| `drive-<flow>.js` | Walk through a user flow end-to-end (e.g. OAuth sign-in, model switch + chat). | Keep alongside the feature so future contributors can re-run. |
-| `probe-<aspect>.js` | Read-only inspection. No state mutation. Useful for understanding a bug before writing a repro. | Useful long-term as documentation. |
-| `verify-<feature>.js` | Live verifier paired with a PR. Asserts `[VERDICT A/B/C/D]` lines for each contract the PR claims. | Lives with the PR; can be repurposed as a manual smoke test. |
+| `drive-<flow>.js`       | Walk through a user flow end-to-end (e.g. OAuth sign-in, model switch + chat).                                                               | Keep alongside the feature so future contributors can re-run.                                              |
+| `probe-<aspect>.js`     | Read-only inspection. No state mutation. Useful for understanding a bug before writing a repro.                                              | Useful long-term as documentation.                                                                         |
+| `verify-<feature>.js`   | Live verifier paired with a PR. Asserts `[VERDICT A/B/C/D]` lines for each contract the PR claims.                                           | Lives with the PR; can be repurposed as a manual smoke test.                                               |
 
 ## Things to remember
 

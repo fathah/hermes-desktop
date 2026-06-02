@@ -39,6 +39,11 @@ describe("provider-registry", () => {
       );
     });
 
+    it("returns the canonical URL for xai and xai-oauth providers", () => {
+      expect(canonicalProviderBaseUrl("xai")).toBe("https://api.x.ai/v1");
+      expect(canonicalProviderBaseUrl("xai-oauth")).toBe("https://api.x.ai/v1");
+    });
+
     it("is case-insensitive on the provider id", () => {
       expect(canonicalProviderBaseUrl("DeepSeek")).toBe(
         "https://api.deepseek.com/v1",

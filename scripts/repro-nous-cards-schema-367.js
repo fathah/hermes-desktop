@@ -25,7 +25,7 @@ const AUTH_BAK = AUTH + ".nous-cards-bk";
     const { browser, page } = await attach();
 
     // Navigate to Providers tab
-    await page.click('text=/^Providers$/').catch(() => {});
+    await page.click("text=/^Providers$/").catch(() => {});
     await new Promise((r) => setTimeout(r, 600));
 
     // --- A. Nous API Key card present in LLM Providers section ---
@@ -37,9 +37,10 @@ const AUTH_BAK = AUTH + ".nous-cards-bk";
       );
       // Match by surrounding text "Nous Portal API Key"
       const cards = Array.from(document.querySelectorAll(".provider-key-card"));
-      return cards.some((c) =>
-        /Nous Portal API Key/i.test(c.textContent || ""),
-      ) && inputs.length > 0;
+      return (
+        cards.some((c) => /Nous Portal API Key/i.test(c.textContent || "")) &&
+        inputs.length > 0
+      );
     });
     console.log(`[A] Nous Portal API Key card: present=${apiKeyCardPresent}`);
 
@@ -99,10 +100,18 @@ const AUTH_BAK = AUTH + ".nous-cards-bk";
       onDisk.auth_type === "api_key" &&
       onDisk.key === undefined;
     console.log();
-    console.log(`[VERDICT A] ${aPass ? "✅" : "🔴"} Nous Portal API Key card renders in LLM Providers section`);
-    console.log(`[VERDICT B] ${bPass ? "✅" : "🔴"} Nous Portal OAuth Sign-in card renders in OAuth section`);
-    console.log(`[VERDICT C] ${cPass ? "✅" : "🔴"} addCredentialPoolEntry returns canonical engine schema (no legacy {key, label})`);
-    console.log(`[VERDICT D] ${cDisk ? "✅" : "🔴"} canonical schema persisted to auth.json`);
+    console.log(
+      `[VERDICT A] ${aPass ? "✅" : "🔴"} Nous Portal API Key card renders in LLM Providers section`,
+    );
+    console.log(
+      `[VERDICT B] ${bPass ? "✅" : "🔴"} Nous Portal OAuth Sign-in card renders in OAuth section`,
+    );
+    console.log(
+      `[VERDICT C] ${cPass ? "✅" : "🔴"} addCredentialPoolEntry returns canonical engine schema (no legacy {key, label})`,
+    );
+    console.log(
+      `[VERDICT D] ${cDisk ? "✅" : "🔴"} canonical schema persisted to auth.json`,
+    );
   } finally {
     if (fs.existsSync(AUTH_BAK)) {
       fs.copyFileSync(AUTH_BAK, AUTH);

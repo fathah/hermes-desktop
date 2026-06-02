@@ -25,6 +25,8 @@ export const PROVIDER_BASE_URLS: Record<string, string> = {
   huggingface: "https://router.huggingface.co/v1",
   zai: "https://api.z.ai/api/paas/v4",
   anthropic: "https://api.anthropic.com/v1",
+  xai: "https://api.x.ai/v1",
+  "xai-oauth": "https://api.x.ai/v1",
 };
 
 /**

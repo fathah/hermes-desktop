@@ -30,16 +30,27 @@ const { attach } = require("./e2e-attach");
   const okStatus = result.status === "ok";
   const hasModels = (result.models || []).length > 50; // expect many
   const hasFree = (result.freeModels || []).length > 0;
-  const knownFreeIds = ["deepseek/deepseek-v4-flash:free", "openrouter/owl-alpha"];
+  const knownFreeIds = [
+    "deepseek/deepseek-v4-flash:free",
+    "openrouter/owl-alpha",
+  ];
   const matchesKnown = knownFreeIds.every((id) =>
     (result.freeModels || []).includes(id),
   );
 
   console.log();
-  console.log(`[VERDICT A] ${okStatus ? "✅" : "🔴"} discovery status === "ok"`);
-  console.log(`[VERDICT B] ${hasModels ? "✅" : "🔴"} returned >50 models (got ${(result.models || []).length})`);
-  console.log(`[VERDICT C] ${hasFree ? "✅" : "🔴"} freeModels populated (${(result.freeModels || []).length} entries)`);
-  console.log(`[VERDICT D] ${matchesKnown ? "✅" : "🔴"} freeModels contains known Nous free tier (deepseek/deepseek-v4-flash:free + openrouter/owl-alpha)`);
+  console.log(
+    `[VERDICT A] ${okStatus ? "✅" : "🔴"} discovery status === "ok"`,
+  );
+  console.log(
+    `[VERDICT B] ${hasModels ? "✅" : "🔴"} returned >50 models (got ${(result.models || []).length})`,
+  );
+  console.log(
+    `[VERDICT C] ${hasFree ? "✅" : "🔴"} freeModels populated (${(result.freeModels || []).length} entries)`,
+  );
+  console.log(
+    `[VERDICT D] ${matchesKnown ? "✅" : "🔴"} freeModels contains known Nous free tier (deepseek/deepseek-v4-flash:free + openrouter/owl-alpha)`,
+  );
 
   if (!okStatus || !hasModels || !hasFree || !matchesKnown) process.exit(2);
 })().catch((e) => {

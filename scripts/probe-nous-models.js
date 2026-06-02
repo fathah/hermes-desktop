@@ -7,11 +7,7 @@ const { attach } = require("./e2e-attach");
   const { browser, page } = await attach();
   const models = await page.evaluate(async () => {
     try {
-      return await window.hermesAPI.discoverProviderModels(
-        "nous",
-        "",
-        "",
-      );
+      return await window.hermesAPI.discoverProviderModels("nous", "", "");
     } catch (e) {
       return { error: String(e) };
     }
@@ -20,7 +16,8 @@ const { attach } = require("./e2e-attach");
     console.log("discoverModels error:", models.error);
   } else if (Array.isArray(models)) {
     console.log("Available models:", models.length);
-    for (const m of models) console.log(" -", typeof m === "string" ? m : JSON.stringify(m));
+    for (const m of models)
+      console.log(" -", typeof m === "string" ? m : JSON.stringify(m));
   } else {
     console.log("unexpected result:", JSON.stringify(models)?.slice(0, 500));
   }

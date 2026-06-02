@@ -158,7 +158,9 @@ async function fetchNousFreeModelIds(
     const authPath = join(profileHome(profile), "auth.json");
     if (!existsSync(authPath)) return [];
     const auth = JSON.parse(readFileSync(authPath, "utf-8")) as {
-      providers?: { nous?: { access_token?: string; inference_base_url?: string } };
+      providers?: {
+        nous?: { access_token?: string; inference_base_url?: string };
+      };
     };
     const token = (auth.providers?.nous?.access_token || "").trim();
     const base = (auth.providers?.nous?.inference_base_url || "").trim();

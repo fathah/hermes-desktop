@@ -18,13 +18,7 @@ const { execFileSync } = require("child_process");
 const path = require("path");
 const os = require("os");
 
-const ENV_FILE = path.join(
-  os.homedir(),
-  "AppData",
-  "Local",
-  "hermes",
-  ".env",
-);
+const ENV_FILE = path.join(os.homedir(), "AppData", "Local", "hermes", ".env");
 
 const TEST_BASE_URL = "https://www.arccodex.com/api/codex/v1";
 const TEST_KEY = "sk-test-arc-codex-AAAA-BBBB-CCCC";
@@ -52,7 +46,11 @@ async function clickByTitle(page, title) {
 
 async function dumpModalState(page) {
   return await page.evaluate(() => {
-    const inputs = Array.from(document.querySelectorAll(".models-modal input, .models-modal select, .models-modal textarea"));
+    const inputs = Array.from(
+      document.querySelectorAll(
+        ".models-modal input, .models-modal select, .models-modal textarea",
+      ),
+    );
     return inputs.map((el) => ({
       tag: el.tagName.toLowerCase(),
       type: el.getAttribute("type"),
@@ -69,10 +67,15 @@ async function dumpModalState(page) {
 
   // Snapshot .env before
   const beforeEnv = envEntries(ENV_FILE);
-  console.log("[setup] .env keys before:", Object.keys(beforeEnv).filter(k => k.endsWith("_API_KEY") || k === "CUSTOM_API_KEY"));
+  console.log(
+    "[setup] .env keys before:",
+    Object.keys(beforeEnv).filter(
+      (k) => k.endsWith("_API_KEY") || k === "CUSTOM_API_KEY",
+    ),
+  );
 
   // Navigate to Models tab
-  await page.click('text=/^Models$/');
+  await page.click("text=/^Models$/");
   await new Promise((r) => setTimeout(r, 400));
   console.log("[step 1] On Models tab");
 
@@ -88,52 +91,78 @@ async function dumpModalState(page) {
 
   // Fill form: select OpenAI Compatible / Local provider, fill name, model, base URL, api key
   // First, the provider dropdown — must be "custom"
-  await page.selectOption('select#model-form-provider', 'custom');
+  await page.selectOption("select#model-form-provider", "custom");
   // Wait for any reactive updates
   await new Promise((r) => setTimeout(r, 200));
 
   // Find the various inputs by their visible structure
   const inputs = await dumpModalState(page);
   console.log("[step 2] Modal inputs:");
-  for (const i of inputs) console.log(`           ${i.tag}[${i.type || ''}] id=${i.id||''} placeholder=${i.placeholder||''} value=${i.value||''}`);
+  for (const i of inputs)
+    console.log(
+      `           ${i.tag}[${i.type || ""}] id=${i.id || ""} placeholder=${i.placeholder || ""} value=${i.value || ""}`,
+    );
 
   // Fill the form — there are 4 text inputs we need:
   // displayName, modelId, baseUrl, apiKey
   // We'll fill by labels
-  await page.evaluate(({ name, model, url, key }) => {
-    const all = Array.from(document.querySelectorAll(".models-modal input[type='text'], .models-modal input[type='password']"));
-    // models.displayName is the first text input typically
-    // models.modelId is second; baseUrl third; apiKey fourth/last
-    const setVal = (el, value) => {
-      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-      setter.call(el, value);
-      el.dispatchEvent(new Event("input", { bubbles: true }));
-    };
-    if (all[0]) setVal(all[0], name);
-    if (all[1]) setVal(all[1], model);
-    if (all[2]) setVal(all[2], url);
-    if (all[3]) setVal(all[3], key);
-  }, { name: TEST_MODEL_NAME, model: TEST_MODEL_ID, url: TEST_BASE_URL, key: TEST_KEY });
+  await page.evaluate(
+    ({ name, model, url, key }) => {
+      const all = Array.from(
+        document.querySelectorAll(
+          ".models-modal input[type='text'], .models-modal input[type='password']",
+        ),
+      );
+      // models.displayName is the first text input typically
+      // models.modelId is second; baseUrl third; apiKey fourth/last
+      const setVal = (el, value) => {
+        const setter = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype,
+          "value",
+        ).set;
+        setter.call(el, value);
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+      };
+      if (all[0]) setVal(all[0], name);
+      if (all[1]) setVal(all[1], model);
+      if (all[2]) setVal(all[2], url);
+      if (all[3]) setVal(all[3], key);
+    },
+    {
+      name: TEST_MODEL_NAME,
+      model: TEST_MODEL_ID,
+      url: TEST_BASE_URL,
+      key: TEST_KEY,
+    },
+  );
   await new Promise((r) => setTimeout(r, 200));
 
   console.log("[step 3] Form filled, clicking Add Model");
   // Click the "Add Model" / Update button in the modal
   await page.evaluate(() => {
     const btns = Array.from(document.querySelectorAll(".models-modal button"));
-    const submitBtn = btns.find((b) => /add model|update/i.test(b.textContent || ""));
+    const submitBtn = btns.find((b) =>
+      /add model|update/i.test(b.textContent || ""),
+    );
     if (submitBtn) submitBtn.click();
   });
-  await page.waitForSelector(".models-modal", { state: "hidden", timeout: 5000 }).catch(() => {});
+  await page
+    .waitForSelector(".models-modal", { state: "hidden", timeout: 5000 })
+    .catch(() => {});
   await new Promise((r) => setTimeout(r, 500));
   console.log("[step 3] Saved.");
 
   // Check .env
   const afterEnv = envEntries(ENV_FILE);
   const newKeys = Object.keys(afterEnv).filter((k) => !(k in beforeEnv));
-  const changedKeys = Object.keys(afterEnv).filter((k) => k in beforeEnv && afterEnv[k] !== beforeEnv[k]);
+  const changedKeys = Object.keys(afterEnv).filter(
+    (k) => k in beforeEnv && afterEnv[k] !== beforeEnv[k],
+  );
   console.log("[step 4] .env changes:");
   for (const k of newKeys) {
-    console.log(`           NEW: ${k}=${afterEnv[k].slice(0, 12)}…  (matches test key prefix? ${afterEnv[k] === TEST_KEY})`);
+    console.log(
+      `           NEW: ${k}=${afterEnv[k].slice(0, 12)}…  (matches test key prefix? ${afterEnv[k] === TEST_KEY})`,
+    );
   }
   for (const k of changedKeys) {
     console.log(`           CHANGED: ${k}`);
@@ -160,19 +189,31 @@ async function dumpModalState(page) {
   console.log("[step 6] Edit-dialog inputs after reopen:");
   for (const i of reopenInputs) {
     const v = (i.value || "").slice(0, 25);
-    console.log(`           ${i.tag}[${i.type || ''}] placeholder=${(i.placeholder||'').slice(0,30)} value=${v}`);
+    console.log(
+      `           ${i.tag}[${i.type || ""}] placeholder=${(i.placeholder || "").slice(0, 30)} value=${v}`,
+    );
   }
 
   // The 4th text/password input is the apiKey field per Models.tsx
-  const apiKeyInput = reopenInputs.find((i) => (i.placeholder || "").toLowerCase().includes("sk-") || (i.placeholder || "").toLowerCase().includes("key"));
+  const apiKeyInput = reopenInputs.find(
+    (i) =>
+      (i.placeholder || "").toLowerCase().includes("sk-") ||
+      (i.placeholder || "").toLowerCase().includes("key"),
+  );
   console.log();
   if (apiKeyInput) {
     if (apiKeyInput.value && apiKeyInput.value.includes("sk-test")) {
-      console.log(`[VERDICT] ✅ API key persisted in the form: ${apiKeyInput.value.slice(0, 20)}…`);
+      console.log(
+        `[VERDICT] ✅ API key persisted in the form: ${apiKeyInput.value.slice(0, 20)}…`,
+      );
     } else if (!apiKeyInput.value) {
-      console.log(`[VERDICT] 🔴 REPRODUCED — API key field is empty after reopen, even though .env has the value.`);
+      console.log(
+        `[VERDICT] 🔴 REPRODUCED — API key field is empty after reopen, even though .env has the value.`,
+      );
     } else {
-      console.log(`[VERDICT] ⚠️  Field has unexpected value: ${apiKeyInput.value}`);
+      console.log(
+        `[VERDICT] ⚠️  Field has unexpected value: ${apiKeyInput.value}`,
+      );
     }
   } else {
     console.log(`[VERDICT] ⚠️  Couldn't identify the API key field`);
@@ -180,7 +221,9 @@ async function dumpModalState(page) {
 
   // Cleanup: close the modal
   await page.evaluate(() => {
-    const cancelBtn = Array.from(document.querySelectorAll(".models-modal button")).find((b) => /cancel|close/i.test(b.textContent || ""));
+    const cancelBtn = Array.from(
+      document.querySelectorAll(".models-modal button"),
+    ).find((b) => /cancel|close/i.test(b.textContent || ""));
     if (cancelBtn) cancelBtn.click();
   });
 

@@ -12,18 +12,24 @@ const { attach } = require("./e2e-attach");
       sendBtnDisabled: sendBtn?.disabled,
       sendBtnAriaDisabled: sendBtn?.getAttribute("aria-disabled"),
       countByClass: {
-        chatMessageAgent: document.querySelectorAll(".chat-message-agent").length,
+        chatMessageAgent: document.querySelectorAll(".chat-message-agent")
+          .length,
         chatMessageUser: document.querySelectorAll(".chat-message-user").length,
         chatBubbleAgent: document.querySelectorAll(".chat-bubble-agent").length,
         chatBubbleUser: document.querySelectorAll(".chat-bubble-user").length,
         anyChatMessage: document.querySelectorAll(".chat-message").length,
       },
-      allMessages: Array.from(document.querySelectorAll(".chat-message")).map((el) => ({
-        cls: el.className,
-        text: el.textContent.trim().slice(0, 80),
-      })),
+      allMessages: Array.from(document.querySelectorAll(".chat-message")).map(
+        (el) => ({
+          cls: el.className,
+          text: el.textContent.trim().slice(0, 80),
+        }),
+      ),
     };
   });
   console.log(JSON.stringify(state, null, 2));
   await browser.close();
-})().catch((e) => { console.error(e); process.exit(1); });
+})().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

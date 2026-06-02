@@ -260,9 +260,7 @@ function Sessions({
       // backend deletion failed.
       setDeletingSessionId(sessionId);
       setSessions((prev) => prev.filter((s) => s.id !== sessionId));
-      setSearchResults((prev) =>
-        prev.filter((r) => r.sessionId !== sessionId),
-      );
+      setSearchResults((prev) => prev.filter((r) => r.sessionId !== sessionId));
       try {
         await window.hermesAPI.deleteSession(sessionId);
       } catch (err) {

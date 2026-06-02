@@ -7,7 +7,10 @@ interface MemoryTabsProps {
   onTabChange: (tab: MemoryTab) => void;
 }
 
-export function MemoryTabs({ activeTab, onTabChange }: MemoryTabsProps): React.JSX.Element {
+export function MemoryTabs({
+  activeTab,
+  onTabChange,
+}: MemoryTabsProps): React.JSX.Element {
   const { t } = useI18n();
 
   const tabs: { id: MemoryTab; icon: typeof Database; label: string }[] = [
