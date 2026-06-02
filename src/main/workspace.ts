@@ -82,6 +82,7 @@ export interface WorkspaceHistoryEntry {
   createdAt: number;
   reason: "user-save" | "page-operation" | "agent-proposal" | "restore";
   content: string;
+  summary: Array<{ kind: "added" | "removed" | "changed"; text: string }>;
 }
 
 export interface AgentWorkspaceProposal {
@@ -386,10 +387,21 @@ async function snapshotWorkspaceFile(
     createdAt: timestamp(),
     reason,
     content: await readFile(target, "utf-8"),
+    summary: historySummary(await readFile(target, "utf-8")),
   };
   const dir = historyRoot(root, page.id);
   await mkdir(dir, { recursive: true });
   await writeFile(join(dir, `${id}.json`), JSON.stringify(entry, null, 2));
+}
+
+function historySummary(
+  content: string,
+): Array<{ kind: "added" | "removed" | "changed"; text: string }> {
+  const lines = content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#"));
+  return lines.slice(0, 5).map((line) => ({ kind: "changed", text: line }));
 }
 
 async function readNode(
@@ -1009,6 +1021,21 @@ export async function searchWorkspace(
     .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title))
     .slice(0, limit)
     .map(({ score: _score, ...result }) => result);
+}
+
+export async function exportWorkspaceMarkdownBundle(
+  options: WorkspaceOptions = {},
+): Promise<Array<{ path: string; content: string }>> {
+  const root = await ensureWorkspace(options);
+  const metadata = await ensureMetadata(root, options);
+  const files = await collectFiles(root, root, metadata);
+  const bundle = await Promise.all(
+    files.map(async (file) => ({
+      path: toWorkspaceRelative(root, file),
+      content: await readFile(file, "utf-8"),
+    })),
+  );
+  return bundle.sort((a, b) => a.path.localeCompare(b.path));
 }
 
 export async function watchWorkspace(

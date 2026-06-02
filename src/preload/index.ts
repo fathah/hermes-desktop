@@ -738,6 +738,8 @@ const hermesAPI = {
     profile?: string,
   ) =>
     ipcRenderer.invoke("restore-workspace-version", path, historyId, profile),
+  exportWorkspaceMarkdownBundle: (profile?: string) =>
+    ipcRenderer.invoke("export-workspace-markdown-bundle", profile),
   listAgentWorkspaceProposals: (profile?: string) =>
     ipcRenderer.invoke("list-agent-workspace-proposals", profile),
   createAgentWorkspaceProposal: (

@@ -129,6 +129,7 @@ import {
   trashWorkspacePage,
   updateWorkspacePageOrder,
   deleteWorkspaceFile,
+  exportWorkspaceMarkdownBundle,
   searchWorkspace,
   watchWorkspace,
   writeWorkspaceFile,
@@ -1662,6 +1663,14 @@ function setupIPC(): void {
       requireLocalWorkspace();
       await ensureWorkspaceWatcher(profile);
       return restoreWorkspaceVersion(path, historyId, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "export-workspace-markdown-bundle",
+    async (_event, profile?: string) => {
+      requireLocalWorkspace();
+      return exportWorkspaceMarkdownBundle({ profile });
     },
   );
 

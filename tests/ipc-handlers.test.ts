@@ -92,6 +92,7 @@ describe("New IPC handlers from v0.8/v0.9 features", () => {
     "record-workspace-visit",
     "list-workspace-history",
     "restore-workspace-version",
+    "export-workspace-markdown-bundle",
     "list-agent-workspace-proposals",
     "create-agent-workspace-proposal",
     "accept-agent-workspace-proposal",

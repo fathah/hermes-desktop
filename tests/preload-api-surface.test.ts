@@ -123,6 +123,7 @@ describe("New APIs from v0.8/v0.9 features", () => {
       "recordWorkspaceVisit",
       "listWorkspaceHistory",
       "restoreWorkspaceVersion",
+      "exportWorkspaceMarkdownBundle",
       "listAgentWorkspaceProposals",
       "createAgentWorkspaceProposal",
       "acceptAgentWorkspaceProposal",

@@ -140,6 +140,7 @@ interface WorkspaceHistoryEntry {
   createdAt: number;
   reason: "user-save" | "page-operation" | "agent-proposal" | "restore";
   content: string;
+  summary: Array<{ kind: "added" | "removed" | "changed"; text: string }>;
 }
 
 interface WorkspaceTemplate {
@@ -754,6 +755,9 @@ interface HermesAPI {
     historyId: string,
     profile?: string,
   ) => Promise<string>;
+  exportWorkspaceMarkdownBundle: (
+    profile?: string,
+  ) => Promise<Array<{ path: string; content: string }>>;
   listAgentWorkspaceProposals: (
     profile?: string,
   ) => Promise<AgentWorkspaceProposal[]>;
