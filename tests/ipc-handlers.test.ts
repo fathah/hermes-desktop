@@ -102,6 +102,15 @@ describe("New IPC handlers from v0.8/v0.9 features", () => {
     "reject-agent-workspace-proposal",
     "accept-agent-workspace-proposal-hunk",
     "reject-agent-workspace-proposal-hunk",
+    "get-obsidian-config",
+    "set-obsidian-config",
+    "get-obsidian-tree",
+    "read-obsidian-file",
+    "write-obsidian-file",
+    "append-obsidian-file",
+    "search-obsidian",
+    "open-obsidian-note",
+    "call-obsidian-function",
   ];
 
   for (const ch of newChannels) {

@@ -9,9 +9,13 @@ vi.mock("../Chat/Chat", () => ({
 const fileChangedListeners: Array<
   (event: { path: string; content: string }) => void
 > = [];
+const obsidianChangedListeners: Array<
+  (event: { path: string; content: string }) => void
+> = [];
 
 beforeEach(() => {
   fileChangedListeners.length = 0;
+  obsidianChangedListeners.length = 0;
   const hermesAPI = {
     getHermesHome: vi.fn().mockResolvedValue("/tmp/hermes"),
     getWorkspaceTree: vi
@@ -185,6 +189,38 @@ beforeEach(() => {
       fileChangedListeners.push(callback);
       return () => undefined;
     }),
+    getObsidianConfig: vi.fn().mockResolvedValue({
+      enabled: true,
+      vaultPath: "/tmp/notes",
+      vaultName: "Notes",
+      vaultId: "",
+      bridgeUrl: "http://127.0.0.1:27124",
+      hasBridgeToken: true,
+    }),
+    setObsidianConfig: vi.fn().mockResolvedValue({
+      enabled: true,
+      vaultPath: "/tmp/notes",
+      vaultName: "Notes",
+      vaultId: "",
+      bridgeUrl: "http://127.0.0.1:27124",
+      hasBridgeToken: true,
+    }),
+    getObsidianTree: vi
+      .fn()
+      .mockResolvedValue([
+        { name: "daily.md", path: "daily.md", kind: "file" },
+      ]),
+    readObsidianFile: vi.fn().mockResolvedValue("# Daily\n\nFrom vault"),
+    writeObsidianFile: vi.fn().mockResolvedValue(true),
+    appendObsidianFile: vi.fn().mockResolvedValue(true),
+    searchObsidian: vi.fn().mockResolvedValue([]),
+    openObsidianNote: vi.fn().mockResolvedValue(true),
+    callObsidianFunction: vi.fn().mockResolvedValue({ ok: true }),
+    onObsidianFileChanged: vi.fn((callback) => {
+      obsidianChangedListeners.push(callback);
+      return () => undefined;
+    }),
+    selectFolder: vi.fn().mockResolvedValue("/tmp/notes"),
   } as Partial<typeof window.hermesAPI>;
   Object.defineProperty(window, "hermesAPI", {
     value: hermesAPI,
@@ -272,6 +308,28 @@ describe("Workspace", () => {
         { width: 320, collapsed: true },
         "default",
       ),
+    );
+  });
+
+  it("switches to an Obsidian vault backend and opens the selected note in Obsidian", async () => {
+    render(<Workspace profile="default" onOpenAdmin={() => undefined} />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Obsidian Vault" }),
+    );
+
+    await waitFor(() =>
+      expect(window.hermesAPI.readObsidianFile).toHaveBeenCalledWith(
+        "daily.md",
+        "default",
+      ),
+    );
+    expect(screen.getByText("Daily")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open in Obsidian" }));
+    expect(window.hermesAPI.openObsidianNote).toHaveBeenCalledWith(
+      "daily.md",
+      "default",
     );
   });
 });

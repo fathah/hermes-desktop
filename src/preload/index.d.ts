@@ -86,8 +86,42 @@ interface WorkspaceFileNode {
   children?: WorkspaceFileNode[];
 }
 
+interface ObsidianFileNode {
+  name: string;
+  path: string;
+  kind: "file" | "directory";
+  children?: ObsidianFileNode[];
+}
+
+interface ObsidianConfig {
+  enabled: boolean;
+  vaultPath: string;
+  vaultName: string;
+  vaultId: string;
+  bridgeUrl: string;
+  hasBridgeToken: boolean;
+}
+
+interface ObsidianConfigInput {
+  vaultPath: string;
+  vaultName?: string;
+  vaultId?: string;
+  bridgeUrl?: string;
+  bridgeToken?: string;
+}
+
+type ObsidianFunctionName =
+  | "status"
+  | "active-note"
+  | "open-note"
+  | "insert-at-cursor"
+  | "replace-selection"
+  | "run-command"
+  | "write-note";
+
 type WorkspaceSearchResult =
   | { kind: "workspace"; path: string; title: string; snippet: string }
+  | { kind: "obsidian"; path: string; title: string; snippet: string }
   | {
       kind: "session";
       sessionId: string;
@@ -809,6 +843,39 @@ interface HermesAPI {
     profile?: string,
   ) => Promise<boolean>;
   onWorkspaceFileChanged: (
+    callback: (event: { path: string; content: string }) => void,
+  ) => () => void;
+  getObsidianConfig: (profile?: string) => Promise<ObsidianConfig>;
+  setObsidianConfig: (
+    input: ObsidianConfigInput,
+    profile?: string,
+  ) => Promise<ObsidianConfig>;
+  getObsidianTree: (profile?: string) => Promise<ObsidianFileNode[]>;
+  readObsidianFile: (path: string, profile?: string) => Promise<string>;
+  writeObsidianFile: (
+    path: string,
+    content: string,
+    profile?: string,
+  ) => Promise<boolean>;
+  appendObsidianFile: (
+    path: string,
+    content: string,
+    profile?: string,
+  ) => Promise<boolean>;
+  searchObsidian: (
+    query: string,
+    limit?: number,
+    profile?: string,
+  ) => Promise<
+    Array<{ kind: "obsidian"; path: string; title: string; snippet: string }>
+  >;
+  openObsidianNote: (path: string, profile?: string) => Promise<boolean>;
+  callObsidianFunction: (
+    name: ObsidianFunctionName,
+    payload?: Record<string, unknown>,
+    profile?: string,
+  ) => Promise<unknown>;
+  onObsidianFileChanged: (
     callback: (event: { path: string; content: string }) => void,
   ) => () => void;
 

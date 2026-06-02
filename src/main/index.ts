@@ -158,6 +158,21 @@ import {
   resolveWorkspaceComment,
 } from "./workspace-comments";
 import {
+  appendObsidianFile,
+  buildObsidianOpenUri,
+  callObsidianFunction,
+  getObsidianConfig,
+  getObsidianTree,
+  isAllowedObsidianExternalUrl,
+  readObsidianFile,
+  searchObsidian,
+  setObsidianConfig,
+  watchObsidian,
+  writeObsidianFile,
+  type ObsidianConfigInput,
+  type ObsidianFunctionName,
+} from "./obsidian";
+import {
   syncSessionCache,
   listCachedSessions,
   updateSessionTitle,
@@ -290,6 +305,8 @@ let mainWindow: BrowserWindow | null = null;
 const activeChatAborts = new Map<string, () => void>();
 let workspaceWatcher: Awaited<ReturnType<typeof watchWorkspace>> | null = null;
 let workspaceWatcherProfile = "";
+let obsidianWatcher: Awaited<ReturnType<typeof watchObsidian>> | null = null;
+let obsidianWatcherProfile = "";
 
 const ADMIN_SEARCH_ITEMS = [
   { kind: "admin" as const, view: "models", title: "Models" },
@@ -330,7 +347,7 @@ const COMMAND_SEARCH_ITEMS = [
 ].map((command) => ({ kind: "command" as const, command, title: command }));
 
 function openExternalUrl(rawUrl: unknown): void {
-  if (!isAllowedExternalUrl(rawUrl)) {
+  if (!isAllowedExternalUrl(rawUrl) && !isAllowedObsidianExternalUrl(rawUrl)) {
     console.warn("[SECURITY] Blocked unsafe external URL");
     return;
   }
@@ -506,6 +523,19 @@ function setupIPC(): void {
     workspaceWatcherProfile = profileKey;
     workspaceWatcher = await watchWorkspace({ profile }, (payload) => {
       mainWindow?.webContents.send("workspace-file-changed", payload);
+    });
+  }
+
+  async function ensureObsidianWatcher(profile?: string): Promise<void> {
+    const profileKey = profile || "";
+    if (obsidianWatcher && obsidianWatcherProfile === profileKey) return;
+    if (obsidianWatcher) {
+      await obsidianWatcher.close();
+      obsidianWatcher = null;
+    }
+    obsidianWatcherProfile = profileKey;
+    obsidianWatcher = await watchObsidian(profile, (payload) => {
+      mainWindow?.webContents.send("obsidian-file-changed", payload);
     });
   }
 
@@ -1423,6 +1453,11 @@ function setupIPC(): void {
       const workspaceResults = await searchWorkspace(query, maxResults, {
         profile,
       });
+      const obsidianResults = await searchObsidian(
+        query,
+        maxResults,
+        profile,
+      ).catch(() => []);
       const sessionResults = searchSessions(query, maxResults).map(
         (result) => ({
           kind: "session" as const,
@@ -1440,6 +1475,7 @@ function setupIPC(): void {
       );
       return [
         ...workspaceResults,
+        ...obsidianResults,
         ...sessionResults,
         ...adminResults,
         ...commandResults,
@@ -1776,6 +1812,98 @@ function setupIPC(): void {
     async (_event, id: string, hunkId: string, profile?: string) => {
       requireLocalWorkspace();
       return rejectAgentWorkspaceProposalHunk(id, hunkId, { profile });
+    },
+  );
+
+  ipcMain.handle("get-obsidian-config", async (_event, profile?: string) => {
+    requireLocalWorkspace();
+    return getObsidianConfig(profile);
+  });
+
+  ipcMain.handle(
+    "set-obsidian-config",
+    async (_event, input: ObsidianConfigInput, profile?: string) => {
+      requireLocalWorkspace();
+      const config = await setObsidianConfig(input, profile);
+      if (obsidianWatcherProfile === (profile || "")) {
+        if (obsidianWatcher) {
+          await obsidianWatcher.close();
+          obsidianWatcher = null;
+        }
+        if (config.enabled) await ensureObsidianWatcher(profile);
+      }
+      return config;
+    },
+  );
+
+  ipcMain.handle("get-obsidian-tree", async (_event, profile?: string) => {
+    requireLocalWorkspace();
+    await ensureObsidianWatcher(profile);
+    return getObsidianTree(profile);
+  });
+
+  ipcMain.handle(
+    "read-obsidian-file",
+    async (_event, path: string, profile?: string) => {
+      requireLocalWorkspace();
+      await ensureObsidianWatcher(profile);
+      return readObsidianFile(path, profile);
+    },
+  );
+
+  ipcMain.handle(
+    "write-obsidian-file",
+    async (_event, path: string, content: string, profile?: string) => {
+      requireLocalWorkspace();
+      await ensureObsidianWatcher(profile);
+      return writeObsidianFile(path, content, profile);
+    },
+  );
+
+  ipcMain.handle(
+    "append-obsidian-file",
+    async (_event, path: string, content: string, profile?: string) => {
+      requireLocalWorkspace();
+      await ensureObsidianWatcher(profile);
+      return appendObsidianFile(path, content, profile);
+    },
+  );
+
+  ipcMain.handle(
+    "search-obsidian",
+    async (_event, query: string, limit?: number, profile?: string) => {
+      requireLocalWorkspace();
+      return searchObsidian(query, limit ?? 20, profile);
+    },
+  );
+
+  ipcMain.handle(
+    "open-obsidian-note",
+    async (_event, path: string, profile?: string) => {
+      requireLocalWorkspace();
+      const config = await getObsidianConfig(profile);
+      if (!config.enabled) throw new Error("Obsidian vault is not configured");
+      openExternalUrl(
+        buildObsidianOpenUri({
+          vaultName: config.vaultName || config.vaultId,
+          vaultPath: config.vaultPath,
+          path,
+        }),
+      );
+      return true;
+    },
+  );
+
+  ipcMain.handle(
+    "call-obsidian-function",
+    async (
+      _event,
+      name: ObsidianFunctionName,
+      payload?: Record<string, unknown>,
+      profile?: string,
+    ) => {
+      requireLocalWorkspace();
+      return callObsidianFunction(name, payload ?? {}, profile);
     },
   );
 

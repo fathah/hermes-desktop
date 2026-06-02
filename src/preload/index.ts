@@ -804,6 +804,52 @@ const hermesAPI = {
     ipcRenderer.on("workspace-file-changed", handler);
     return () => ipcRenderer.removeListener("workspace-file-changed", handler);
   },
+  getObsidianConfig: (profile?: string) =>
+    ipcRenderer.invoke("get-obsidian-config", profile),
+  setObsidianConfig: (
+    input: {
+      vaultPath: string;
+      vaultName?: string;
+      vaultId?: string;
+      bridgeUrl?: string;
+      bridgeToken?: string;
+    },
+    profile?: string,
+  ) => ipcRenderer.invoke("set-obsidian-config", input, profile),
+  getObsidianTree: (profile?: string) =>
+    ipcRenderer.invoke("get-obsidian-tree", profile),
+  readObsidianFile: (path: string, profile?: string) =>
+    ipcRenderer.invoke("read-obsidian-file", path, profile),
+  writeObsidianFile: (path: string, content: string, profile?: string) =>
+    ipcRenderer.invoke("write-obsidian-file", path, content, profile),
+  appendObsidianFile: (path: string, content: string, profile?: string) =>
+    ipcRenderer.invoke("append-obsidian-file", path, content, profile),
+  searchObsidian: (query: string, limit?: number, profile?: string) =>
+    ipcRenderer.invoke("search-obsidian", query, limit, profile),
+  openObsidianNote: (path: string, profile?: string) =>
+    ipcRenderer.invoke("open-obsidian-note", path, profile),
+  callObsidianFunction: (
+    name:
+      | "status"
+      | "active-note"
+      | "open-note"
+      | "insert-at-cursor"
+      | "replace-selection"
+      | "run-command"
+      | "write-note",
+    payload?: Record<string, unknown>,
+    profile?: string,
+  ) => ipcRenderer.invoke("call-obsidian-function", name, payload, profile),
+  onObsidianFileChanged: (
+    callback: (event: { path: string; content: string }) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      payload: unknown,
+    ): void => callback(payload as { path: string; content: string });
+    ipcRenderer.on("obsidian-file-changed", handler);
+    return () => ipcRenderer.removeListener("obsidian-file-changed", handler);
+  },
 
   // Credential Pool (profile-aware: reads/writes the named profile's
   // auth.json; defaults to the currently active profile when omitted)

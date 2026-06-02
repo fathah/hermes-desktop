@@ -104,6 +104,25 @@ interface WorkspaceComment {
   resolvedAt?: number;
 }
 
+type WorkspaceBackend = "workspace" | "obsidian";
+
+interface ObsidianConfig {
+  enabled: boolean;
+  vaultPath: string;
+  vaultName: string;
+  vaultId: string;
+  bridgeUrl: string;
+  hasBridgeToken: boolean;
+}
+
+interface ObsidianConfigInput {
+  vaultPath: string;
+  vaultName?: string;
+  vaultId?: string;
+  bridgeUrl?: string;
+  bridgeToken?: string;
+}
+
 interface WorkspaceProps {
   profile: string;
   onOpenAdmin: (view: string) => void;
@@ -159,6 +178,17 @@ export default function Workspace({
     | { mode: "rename"; path: string; title: string }
     | null
   >(null);
+  const [backend, setBackend] = useState<WorkspaceBackend>("workspace");
+  const [obsidianConfig, setObsidianConfig] = useState<ObsidianConfig | null>(
+    null,
+  );
+  const [obsidianDraft, setObsidianDraft] = useState<ObsidianConfigInput>({
+    vaultPath: "",
+    vaultName: "",
+    vaultId: "",
+    bridgeUrl: "",
+    bridgeToken: "",
+  });
   const selectedPathRef = useRef(selectedPath);
   const dirtyRef = useRef(dirty);
   const contentRef = useRef(content);
@@ -205,29 +235,59 @@ export default function Workspace({
     return tree;
   }, [profile]);
 
+  const refreshObsidian = useCallback(async () => {
+    const config = await window.hermesAPI.getObsidianConfig(profile);
+    setObsidianConfig(config);
+    setObsidianDraft({
+      vaultPath: config.vaultPath,
+      vaultName: config.vaultName,
+      vaultId: config.vaultId,
+      bridgeUrl: config.bridgeUrl,
+      bridgeToken: "",
+    });
+    setMetadata(null);
+    setPageGraph(null);
+    setProposals([]);
+    setTemplates([]);
+    setComments([]);
+    setSyncedBlocks([]);
+    if (!config.enabled) {
+      setNodes([]);
+      return [];
+    }
+    const tree = await window.hermesAPI.getObsidianTree(profile);
+    setNodes(tree);
+    return tree;
+  }, [profile]);
+
   const loadFile = useCallback(
     async (path: string) => {
       setLoading(true);
       setError(null);
       try {
-        const next = await window.hermesAPI.readWorkspaceFile(path, profile);
+        const next =
+          backend === "obsidian"
+            ? await window.hermesAPI.readObsidianFile(path, profile)
+            : await window.hermesAPI.readWorkspaceFile(path, profile);
         setSelectedPath(path);
         setOpenTabs((tabs) => (tabs.includes(path) ? tabs : [...tabs, path]));
         setContent(next);
         setDirty(false);
         dirtyRef.current = false;
         setConflictContent(null);
-        await refreshCollaborationPanels(path);
-        window.hermesAPI.recordWorkspaceVisit(path, profile).catch(() => {
-          /* non-critical metadata update */
-        });
+        if (backend === "workspace") {
+          await refreshCollaborationPanels(path);
+          window.hermesAPI.recordWorkspaceVisit(path, profile).catch(() => {
+            /* non-critical metadata update */
+          });
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       } finally {
         setLoading(false);
       }
     },
-    [profile, refreshCollaborationPanels],
+    [backend, profile, refreshCollaborationPanels],
   );
 
   const navigateToFile = useCallback(
@@ -245,13 +305,32 @@ export default function Workspace({
     let cancelled = false;
     (async () => {
       try {
-        const [tree, home] = await Promise.all([
-          refreshWorkspace(),
-          window.hermesAPI.getHermesHome(profile),
-        ]);
+        const [tree, home] =
+          backend === "obsidian"
+            ? await Promise.all([
+                refreshObsidian(),
+                Promise.resolve(obsidianConfig?.vaultPath ?? ""),
+              ])
+            : await Promise.all([
+                refreshWorkspace(),
+                window.hermesAPI.getHermesHome(profile),
+              ]);
         if (cancelled) return;
-        setWorkspaceRoot(workspaceRootFromHermesHome(home));
-        await loadFile(firstFile(tree));
+        setWorkspaceRoot(
+          backend === "obsidian"
+            ? home || null
+            : workspaceRootFromHermesHome(home),
+        );
+        const path = firstFile(tree);
+        setSelectedPath(path);
+        selectedPathRef.current = path;
+        setOpenTabs([path]);
+        if (tree.length === 0 && backend === "obsidian") {
+          setContent("");
+          setLoading(false);
+          return;
+        }
+        await loadFile(path);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : String(err));
@@ -262,10 +341,18 @@ export default function Workspace({
     return () => {
       cancelled = true;
     };
-  }, [loadFile, refreshWorkspace, profile]);
+  }, [
+    backend,
+    loadFile,
+    obsidianConfig?.vaultPath,
+    refreshObsidian,
+    refreshWorkspace,
+    profile,
+  ]);
 
   useEffect(() => {
     return window.hermesAPI.onWorkspaceFileChanged((event) => {
+      if (backend !== "workspace") return;
       if (event.path !== selectedPathRef.current) return;
       if (event.content === contentRef.current) return;
       if (
@@ -299,21 +386,39 @@ export default function Workspace({
           setError(err instanceof Error ? err.message : String(err)),
         );
     });
-  }, [profile]);
+  }, [backend, profile]);
+
+  useEffect(() => {
+    return window.hermesAPI.onObsidianFileChanged((event) => {
+      if (backend !== "obsidian") return;
+      if (event.path !== selectedPathRef.current) return;
+      if (event.content === contentRef.current) return;
+      if (dirtyRef.current) {
+        setConflictContent(event.content);
+        return;
+      }
+      setContent(event.content);
+      contentRef.current = event.content;
+      setExternalHighlight(true);
+      window.setTimeout(() => setExternalHighlight(false), 1800);
+    });
+  }, [backend]);
 
   useEffect(() => {
     if (!dirty) return;
     const timer = window.setTimeout(() => {
       dirtyRef.current = false;
       setDirty(false);
-      window.hermesAPI
-        .writeWorkspaceFile(selectedPath, content, profile)
-        .catch((err) =>
-          setError(err instanceof Error ? err.message : String(err)),
-        );
+      const write =
+        backend === "obsidian"
+          ? window.hermesAPI.writeObsidianFile
+          : window.hermesAPI.writeWorkspaceFile;
+      write(selectedPath, content, profile).catch((err) =>
+        setError(err instanceof Error ? err.message : String(err)),
+      );
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [content, dirty, profile, selectedPath]);
+  }, [backend, content, dirty, profile, selectedPath]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent): void {
@@ -350,7 +455,47 @@ export default function Workspace({
     setSessionId(null);
   }
 
+  async function handleBackendChange(
+    nextBackend: WorkspaceBackend,
+  ): Promise<void> {
+    setBackend(nextBackend);
+    setBackStack([]);
+    setForwardStack([]);
+    setHistoryOpen(false);
+    setConflictContent(null);
+    setDirty(false);
+    dirtyRef.current = false;
+  }
+
+  async function handleChooseObsidianVault(): Promise<void> {
+    const path = await window.hermesAPI.selectFolder();
+    if (!path) return;
+    setObsidianDraft((draft) => ({ ...draft, vaultPath: path }));
+  }
+
+  async function handleSaveObsidianConfig(): Promise<void> {
+    try {
+      const config = await window.hermesAPI.setObsidianConfig(
+        obsidianDraft,
+        profile,
+      );
+      setObsidianConfig(config);
+      await refreshObsidian();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleOpenInObsidian(): Promise<void> {
+    try {
+      await window.hermesAPI.openObsidianNote(selectedPathRef.current, profile);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   async function handleCreateComment(body: string): Promise<void> {
+    if (backend === "obsidian") return;
     try {
       await window.hermesAPI.createWorkspaceComment(
         { path: selectedPathRef.current, body },
@@ -363,6 +508,7 @@ export default function Workspace({
   }
 
   async function handleResolveComment(id: string): Promise<void> {
+    if (backend === "obsidian") return;
     try {
       await window.hermesAPI.resolveWorkspaceComment(id, profile);
       await refreshCollaborationPanels(selectedPathRef.current);
@@ -372,6 +518,7 @@ export default function Workspace({
   }
 
   async function handleCreateSyncedBlock(nextContent: string): Promise<void> {
+    if (backend === "obsidian") return;
     try {
       await window.hermesAPI.createWorkspaceSyncedBlock(
         {
@@ -388,6 +535,11 @@ export default function Workspace({
   }
 
   async function refreshAfterPageOperation(nextPath?: string): Promise<void> {
+    if (backend === "obsidian") {
+      const tree = await refreshObsidian();
+      await loadFile(nextPath ?? selectedPathRef.current ?? firstFile(tree));
+      return;
+    }
     const tree = await refreshWorkspace();
     await loadFile(nextPath ?? selectedPathRef.current ?? firstFile(tree));
   }
@@ -426,6 +578,7 @@ export default function Workspace({
     parentPath?: string | null,
     content?: string,
   ): Promise<void> {
+    if (backend === "obsidian") return;
     try {
       const page = await window.hermesAPI.createWorkspacePage(
         content === undefined
@@ -441,6 +594,7 @@ export default function Workspace({
   }
 
   async function submitRenamePage(path: string, title: string): Promise<void> {
+    if (backend === "obsidian") return;
     try {
       const page = await window.hermesAPI.renameWorkspacePage(
         path,
@@ -455,10 +609,12 @@ export default function Workspace({
   }
 
   function handleCreatePage(parentPath?: string | null): void {
+    if (backend === "obsidian") return;
     setPageDialog({ mode: "create", parentPath: parentPath ?? null });
   }
 
   function handleRenamePage(path: string): void {
+    if (backend === "obsidian") return;
     setPageDialog({
       mode: "rename",
       path,
@@ -470,6 +626,7 @@ export default function Workspace({
     width?: number;
     collapsed?: boolean;
   }): void {
+    if (backend === "obsidian") return;
     const sidebar = {
       width: next.width ?? pageGraph?.sidebar.width ?? 280,
       collapsed: next.collapsed ?? pageGraph?.sidebar.collapsed ?? false,
@@ -494,6 +651,7 @@ export default function Workspace({
   }
 
   async function handleDuplicatePage(path: string): Promise<void> {
+    if (backend === "obsidian") return;
     try {
       const page = await window.hermesAPI.duplicateWorkspacePage(path, profile);
       await refreshAfterPageOperation(page.path);
@@ -503,6 +661,7 @@ export default function Workspace({
   }
 
   async function handleTrashPage(path: string): Promise<void> {
+    if (backend === "obsidian") return;
     try {
       await window.hermesAPI.trashWorkspacePage(path, profile);
       const tree = await refreshWorkspace();
@@ -513,6 +672,7 @@ export default function Workspace({
   }
 
   async function handleRestorePage(path: string): Promise<void> {
+    if (backend === "obsidian") return;
     try {
       await window.hermesAPI.restoreWorkspacePage(path, profile);
       await refreshAfterPageOperation(path);
@@ -525,6 +685,7 @@ export default function Workspace({
     path: string,
     favorite: boolean,
   ): Promise<void> {
+    if (backend === "obsidian") return;
     try {
       await window.hermesAPI.favoriteWorkspacePage(path, favorite, profile);
       await refreshWorkspace();
@@ -537,6 +698,7 @@ export default function Workspace({
     path: string,
     parentPath: string | null,
   ): Promise<void> {
+    if (backend === "obsidian") return;
     try {
       const page = await window.hermesAPI.moveWorkspacePage(
         path,
@@ -550,6 +712,7 @@ export default function Workspace({
   }
 
   async function handleAcceptProposal(id: string): Promise<void> {
+    if (backend === "obsidian") return;
     const proposal = proposals.find((candidate) => candidate.id === id);
     if (!proposal) return;
     try {
@@ -569,6 +732,7 @@ export default function Workspace({
   }
 
   async function handleRejectProposal(id: string): Promise<void> {
+    if (backend === "obsidian") return;
     const proposal = proposals.find((candidate) => candidate.id === id);
     try {
       await window.hermesAPI.rejectAgentWorkspaceProposal(id, profile);
@@ -585,6 +749,7 @@ export default function Workspace({
     id: string,
     hunkId: string,
   ): Promise<void> {
+    if (backend === "obsidian") return;
     try {
       await window.hermesAPI.acceptAgentWorkspaceProposalHunk(
         id,
@@ -602,6 +767,7 @@ export default function Workspace({
     id: string,
     hunkId: string,
   ): Promise<void> {
+    if (backend === "obsidian") return;
     try {
       await window.hermesAPI.rejectAgentWorkspaceProposalHunk(
         id,
@@ -615,6 +781,7 @@ export default function Workspace({
   }
 
   async function openHistory(): Promise<void> {
+    if (backend === "obsidian") return;
     try {
       const entries = await window.hermesAPI.listWorkspaceHistory(
         selectedPathRef.current,
@@ -628,6 +795,7 @@ export default function Workspace({
   }
 
   async function restoreHistory(entry: WorkspaceHistoryEntry): Promise<void> {
+    if (backend === "obsidian") return;
     try {
       await window.hermesAPI.restoreWorkspaceVersion(
         selectedPathRef.current,
@@ -665,11 +833,40 @@ export default function Workspace({
         canBack={backStack.length > 0}
         canForward={forwardStack.length > 0}
         onOpenHistory={() => {
+          if (backend === "obsidian") return;
           openHistory().catch((err) =>
             setError(err instanceof Error ? err.message : String(err)),
           );
         }}
       />
+      <div
+        className="workspace-backend-switch"
+        role="group"
+        aria-label="Workspace backend"
+      >
+        <button
+          type="button"
+          className={backend === "workspace" ? "active" : ""}
+          onClick={() =>
+            handleBackendChange("workspace").catch((err) =>
+              setError(err instanceof Error ? err.message : String(err)),
+            )
+          }
+        >
+          Hermes Workspace
+        </button>
+        <button
+          type="button"
+          className={backend === "obsidian" ? "active" : ""}
+          onClick={() =>
+            handleBackendChange("obsidian").catch((err) =>
+              setError(err instanceof Error ? err.message : String(err)),
+            )
+          }
+        >
+          Obsidian Vault
+        </button>
+      </div>
       <div className="workspace-tabs" role="tablist" aria-label="Open pages">
         {openTabs.map((path) => (
           <button
@@ -680,7 +877,11 @@ export default function Workspace({
             className={path === selectedPath ? "active" : ""}
             onClick={() => navigateToFile(path)}
           >
-            <span>{metadata?.pages[path]?.displayName ?? path}</span>
+            <span>
+              {backend === "workspace"
+                ? (metadata?.pages[path]?.displayName ?? path)
+                : path}
+            </span>
             <span
               role="button"
               tabIndex={-1}
@@ -698,40 +899,141 @@ export default function Workspace({
       <div className="workspace-body">
         <aside
           className={`workspace-pages${
-            pageGraph?.sidebar.collapsed ? " workspace-pages-collapsed" : ""
+            backend === "workspace" && pageGraph?.sidebar.collapsed
+              ? " workspace-pages-collapsed"
+              : ""
           }`}
-          style={{ width: pageGraph?.sidebar.width ?? 280 }}
+          style={{
+            width:
+              backend === "workspace" ? (pageGraph?.sidebar.width ?? 280) : 280,
+          }}
         >
           <div className="workspace-sidebar-header">
-            <div className="workspace-section-label">Workspace</div>
-            <button
-              type="button"
-              aria-label={
-                pageGraph?.sidebar.collapsed
-                  ? "Expand sidebar"
-                  : "Collapse sidebar"
-              }
-              onClick={() =>
-                handleSidebarState({
-                  collapsed: !(pageGraph?.sidebar.collapsed ?? false),
-                })
-              }
-            >
-              {pageGraph?.sidebar.collapsed ? ">" : "<"}
-            </button>
+            <div className="workspace-section-label">
+              {backend === "obsidian" ? "Obsidian" : "Workspace"}
+            </div>
+            {backend === "workspace" && (
+              <button
+                type="button"
+                aria-label={
+                  pageGraph?.sidebar.collapsed
+                    ? "Expand sidebar"
+                    : "Collapse sidebar"
+                }
+                onClick={() =>
+                  handleSidebarState({
+                    collapsed: !(pageGraph?.sidebar.collapsed ?? false),
+                  })
+                }
+              >
+                {pageGraph?.sidebar.collapsed ? ">" : "<"}
+              </button>
+            )}
           </div>
-          <label className="workspace-sidebar-resize">
-            <span>Sidebar width</span>
-            <input
-              type="range"
-              min={220}
-              max={520}
-              value={pageGraph?.sidebar.width ?? 280}
-              onChange={(event) =>
-                handleSidebarState({ width: Number(event.target.value) })
-              }
-            />
-          </label>
+          {backend === "workspace" && (
+            <label className="workspace-sidebar-resize">
+              <span>Sidebar width</span>
+              <input
+                type="range"
+                min={220}
+                max={520}
+                value={pageGraph?.sidebar.width ?? 280}
+                onChange={(event) =>
+                  handleSidebarState({ width: Number(event.target.value) })
+                }
+              />
+            </label>
+          )}
+          {backend === "obsidian" && (
+            <div className="workspace-obsidian-config">
+              <label>
+                <span>Vault folder</span>
+                <input
+                  value={obsidianDraft.vaultPath}
+                  onChange={(event) =>
+                    setObsidianDraft((draft) => ({
+                      ...draft,
+                      vaultPath: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() =>
+                  handleChooseObsidianVault().catch((err) =>
+                    setError(err instanceof Error ? err.message : String(err)),
+                  )
+                }
+              >
+                Choose folder
+              </button>
+              <label>
+                <span>Vault name</span>
+                <input
+                  value={obsidianDraft.vaultName ?? ""}
+                  onChange={(event) =>
+                    setObsidianDraft((draft) => ({
+                      ...draft,
+                      vaultName: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label>
+                <span>Vault id</span>
+                <input
+                  value={obsidianDraft.vaultId ?? ""}
+                  onChange={(event) =>
+                    setObsidianDraft((draft) => ({
+                      ...draft,
+                      vaultId: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label>
+                <span>Bridge URL</span>
+                <input
+                  value={obsidianDraft.bridgeUrl ?? ""}
+                  onChange={(event) =>
+                    setObsidianDraft((draft) => ({
+                      ...draft,
+                      bridgeUrl: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label>
+                <span>Bridge token</span>
+                <input
+                  type="password"
+                  placeholder={
+                    obsidianConfig?.hasBridgeToken
+                      ? "Token configured"
+                      : "Required for plugin calls"
+                  }
+                  value={obsidianDraft.bridgeToken ?? ""}
+                  onChange={(event) =>
+                    setObsidianDraft((draft) => ({
+                      ...draft,
+                      bridgeToken: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() =>
+                  handleSaveObsidianConfig().catch((err) =>
+                    setError(err instanceof Error ? err.message : String(err)),
+                  )
+                }
+              >
+                Save vault
+              </button>
+            </div>
+          )}
           <WorkspaceTree
             nodes={nodes}
             metadata={metadata}
@@ -744,6 +1046,7 @@ export default function Workspace({
             onTrash={handleTrashPage}
             onRestore={handleRestorePage}
             onMove={handleMovePage}
+            readOnly={backend === "obsidian"}
           />
         </aside>
         <section className={`workspace-main workspace-mode-${mode}`}>
@@ -751,7 +1054,11 @@ export default function Workspace({
             <div className="workspace-canvas">
               {conflictContent && (
                 <div className="workspace-conflict">
-                  <span>Workspace file changed externally.</span>
+                  <span>
+                    {backend === "obsidian"
+                      ? "Obsidian note changed externally."
+                      : "Workspace file changed externally."}
+                  </span>
                   <button type="button" onClick={handleReloadConflict}>
                     Reload file
                   </button>
@@ -804,16 +1111,40 @@ export default function Workspace({
                 </div>
               )}
               {error && <div className="workspace-error">{error}</div>}
+              {backend === "obsidian" && obsidianConfig?.enabled && (
+                <div className="workspace-obsidian-actions">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleOpenInObsidian().catch((err) =>
+                        setError(
+                          err instanceof Error ? err.message : String(err),
+                        ),
+                      )
+                    }
+                  >
+                    Open in Obsidian
+                  </button>
+                </div>
+              )}
               {loading ? (
-                <div className="workspace-loading">Loading workspace...</div>
+                <div className="workspace-loading">
+                  {backend === "obsidian"
+                    ? "Loading Obsidian vault..."
+                    : "Loading workspace..."}
+                </div>
               ) : (
                 <WorkspaceEditor
                   path={selectedPath}
                   content={content}
-                  pages={Object.values(metadata?.pages ?? {}).map((page) => ({
-                    path: page.path,
-                    title: page.displayName,
-                  }))}
+                  pages={
+                    backend === "workspace"
+                      ? Object.values(metadata?.pages ?? {}).map((page) => ({
+                          path: page.path,
+                          title: page.displayName,
+                        }))
+                      : []
+                  }
                   onChange={handleContentChange}
                 />
               )}
@@ -821,48 +1152,62 @@ export default function Workspace({
           )}
           {mode !== "canvas" && (
             <div className="workspace-chat-pane">
-              <WorkspaceOfflinePanel
-                dirty={dirty}
-                conflictPending={conflictContent !== null}
-                proposalCount={proposals.length}
-                lastSavedLabel={dirty ? "pending" : "now"}
-              />
-              <AgentReviewPanel
-                proposals={proposals}
-                onAccept={handleAcceptProposal}
-                onReject={handleRejectProposal}
-                onAcceptHunk={(id, hunkId) => {
-                  handleAcceptProposalHunk(id, hunkId).catch((err) =>
-                    setError(err instanceof Error ? err.message : String(err)),
-                  );
-                }}
-                onRejectHunk={(id, hunkId) => {
-                  handleRejectProposalHunk(id, hunkId).catch((err) =>
-                    setError(err instanceof Error ? err.message : String(err)),
-                  );
-                }}
-              />
-              <WorkspaceCommentsPanel
-                comments={comments}
-                onCreate={(body) => {
-                  handleCreateComment(body).catch((err) =>
-                    setError(err instanceof Error ? err.message : String(err)),
-                  );
-                }}
-                onResolve={(id) => {
-                  handleResolveComment(id).catch((err) =>
-                    setError(err instanceof Error ? err.message : String(err)),
-                  );
-                }}
-              />
-              <WorkspaceSyncedBlocksPanel
-                blocks={syncedBlocks}
-                onCreate={(nextContent) => {
-                  handleCreateSyncedBlock(nextContent).catch((err) =>
-                    setError(err instanceof Error ? err.message : String(err)),
-                  );
-                }}
-              />
+              {backend === "workspace" && (
+                <>
+                  <WorkspaceOfflinePanel
+                    dirty={dirty}
+                    conflictPending={conflictContent !== null}
+                    proposalCount={proposals.length}
+                    lastSavedLabel={dirty ? "pending" : "now"}
+                  />
+                  <AgentReviewPanel
+                    proposals={proposals}
+                    onAccept={handleAcceptProposal}
+                    onReject={handleRejectProposal}
+                    onAcceptHunk={(id, hunkId) => {
+                      handleAcceptProposalHunk(id, hunkId).catch((err) =>
+                        setError(
+                          err instanceof Error ? err.message : String(err),
+                        ),
+                      );
+                    }}
+                    onRejectHunk={(id, hunkId) => {
+                      handleRejectProposalHunk(id, hunkId).catch((err) =>
+                        setError(
+                          err instanceof Error ? err.message : String(err),
+                        ),
+                      );
+                    }}
+                  />
+                  <WorkspaceCommentsPanel
+                    comments={comments}
+                    onCreate={(body) => {
+                      handleCreateComment(body).catch((err) =>
+                        setError(
+                          err instanceof Error ? err.message : String(err),
+                        ),
+                      );
+                    }}
+                    onResolve={(id) => {
+                      handleResolveComment(id).catch((err) =>
+                        setError(
+                          err instanceof Error ? err.message : String(err),
+                        ),
+                      );
+                    }}
+                  />
+                  <WorkspaceSyncedBlocksPanel
+                    blocks={syncedBlocks}
+                    onCreate={(nextContent) => {
+                      handleCreateSyncedBlock(nextContent).catch((err) =>
+                        setError(
+                          err instanceof Error ? err.message : String(err),
+                        ),
+                      );
+                    }}
+                  />
+                </>
+              )}
               <Chat
                 messages={messages}
                 setMessages={setMessages}

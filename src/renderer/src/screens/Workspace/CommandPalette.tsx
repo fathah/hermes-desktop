@@ -3,6 +3,7 @@ import { Search, X } from "../../assets/icons";
 
 type WorkspaceSearchResult =
   | { kind: "workspace"; path: string; title: string; snippet: string }
+  | { kind: "obsidian"; path: string; title: string; snippet: string }
   | {
       kind: "session";
       sessionId: string;
@@ -25,7 +26,9 @@ interface CommandPaletteProps {
 }
 
 function resultLabel(result: WorkspaceSearchResult): string {
-  if (result.kind === "workspace") return result.title;
+  if (result.kind === "workspace" || result.kind === "obsidian") {
+    return result.title;
+  }
   if (result.kind === "session") return result.title || "New conversation";
   if (result.kind === "command") return result.command;
   return result.title;
@@ -89,7 +92,9 @@ export default function CommandPalette({
       : results.filter((result) => result.kind === filter);
 
   function select(result: WorkspaceSearchResult): void {
-    if (result.kind === "workspace") onSelectWorkspace(result.path);
+    if (result.kind === "workspace" || result.kind === "obsidian") {
+      onSelectWorkspace(result.path);
+    }
     if (result.kind === "admin") onSelectAdmin(result.view);
     if (result.kind === "session") onSelectSession(result.sessionId);
     if (result.kind === "command") onRunCommand?.(result.command);
@@ -97,9 +102,10 @@ export default function CommandPalette({
   }
 
   function copyLink(result: WorkspaceSearchResult): void {
-    if (result.kind !== "workspace") return;
+    if (result.kind !== "workspace" && result.kind !== "obsidian") return;
+    const scheme = result.kind === "obsidian" ? "obsidian" : "hermes-workspace";
     navigator.clipboard
-      ?.writeText(`hermes-workspace://${encodeURIComponent(result.path)}`)
+      ?.writeText(`${scheme}://${encodeURIComponent(result.path)}`)
       .catch(() => undefined);
   }
 
@@ -176,7 +182,7 @@ export default function CommandPalette({
               {"snippet" in result && result.snippet && (
                 <small>{result.snippet}</small>
               )}
-              {result.kind === "workspace" && (
+              {(result.kind === "workspace" || result.kind === "obsidian") && (
                 <span className="command-palette-actions">
                   <span
                     role="button"
@@ -189,30 +195,34 @@ export default function CommandPalette({
                   >
                     Copy link
                   </span>
-                  <span
-                    role="button"
-                    tabIndex={-1}
-                    className="command-palette-copy"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onOpenWorkspaceInTab?.(result.path);
-                      onClose();
-                    }}
-                  >
-                    Open tab
-                  </span>
-                  <span
-                    role="button"
-                    tabIndex={-1}
-                    className="command-palette-copy"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onOpenWorkspaceInWindow?.(result.path);
-                      onClose();
-                    }}
-                  >
-                    Open window
-                  </span>
+                  {result.kind === "workspace" && (
+                    <>
+                      <span
+                        role="button"
+                        tabIndex={-1}
+                        className="command-palette-copy"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onOpenWorkspaceInTab?.(result.path);
+                          onClose();
+                        }}
+                      >
+                        Open tab
+                      </span>
+                      <span
+                        role="button"
+                        tabIndex={-1}
+                        className="command-palette-copy"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onOpenWorkspaceInWindow?.(result.path);
+                          onClose();
+                        }}
+                      >
+                        Open window
+                      </span>
+                    </>
+                  )}
                 </span>
               )}
             </button>

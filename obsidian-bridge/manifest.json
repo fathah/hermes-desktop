@@ -1,0 +1,9 @@
+{
+  "id": "hermes-obsidian-bridge",
+  "name": "Hermes Obsidian Bridge",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Localhost bridge that lets Hermes Desktop call selected Obsidian functions.",
+  "author": "fathah",
+  "isDesktopOnly": true
+}
