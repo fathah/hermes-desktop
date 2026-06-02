@@ -153,6 +153,20 @@ interface WorkspaceTemplate {
   builtin?: boolean;
 }
 
+interface WorkspaceSyncedBlockReference {
+  path: string;
+  blockId: string;
+}
+
+interface WorkspaceSyncedBlock {
+  id: string;
+  sourcePath: string;
+  sourceBlockId: string;
+  content: string;
+  references: WorkspaceSyncedBlockReference[];
+  updatedAt: number;
+}
+
 interface AgentWorkspaceProposal {
   id: string;
   path: string;
@@ -702,6 +716,29 @@ interface HermesAPI {
     label: string;
     prompt: string;
   }) => Promise<string>;
+  listWorkspaceSyncedBlocks: (
+    profile?: string,
+  ) => Promise<WorkspaceSyncedBlock[]>;
+  createWorkspaceSyncedBlock: (
+    input: {
+      sourcePath: string;
+      sourceBlockId: string;
+      content: string;
+      references?: WorkspaceSyncedBlockReference[];
+    },
+    profile?: string,
+  ) => Promise<WorkspaceSyncedBlock>;
+  updateWorkspaceSyncedBlockContent: (
+    id: string,
+    content: string,
+    profile?: string,
+  ) => Promise<WorkspaceSyncedBlock>;
+  removeWorkspaceSyncedBlockReference: (
+    id: string,
+    path: string,
+    blockId: string,
+    profile?: string,
+  ) => Promise<WorkspaceSyncedBlock>;
   updateWorkspacePageOrder: (
     parentPath: string | null,
     orderedPaths: string[],

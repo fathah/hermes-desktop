@@ -144,6 +144,12 @@ import {
   saveWorkspaceTemplate,
 } from "./workspace-templates";
 import {
+  createWorkspaceSyncedBlock,
+  listWorkspaceSyncedBlocks,
+  removeWorkspaceSyncedBlockReference,
+  updateWorkspaceSyncedBlockContent,
+} from "./workspace-synced-blocks";
+import {
   syncSessionCache,
   listCachedSessions,
   updateSessionTitle,
@@ -1568,6 +1574,55 @@ function setupIPC(): void {
     "render-workspace-button-block",
     (_event, input: { label: string; prompt: string }) =>
       renderWorkspaceButtonBlock(input),
+  );
+
+  ipcMain.handle(
+    "list-workspace-synced-blocks",
+    async (_event, profile?: string) => {
+      requireLocalWorkspace();
+      return listWorkspaceSyncedBlocks({ profile });
+    },
+  );
+
+  ipcMain.handle(
+    "create-workspace-synced-block",
+    async (
+      _event,
+      input: {
+        sourcePath: string;
+        sourceBlockId: string;
+        content: string;
+        references?: Array<{ path: string; blockId: string }>;
+      },
+      profile?: string,
+    ) => {
+      requireLocalWorkspace();
+      return createWorkspaceSyncedBlock(input, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "update-workspace-synced-block-content",
+    async (_event, id: string, content: string, profile?: string) => {
+      requireLocalWorkspace();
+      return updateWorkspaceSyncedBlockContent(id, content, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "remove-workspace-synced-block-reference",
+    async (
+      _event,
+      id: string,
+      path: string,
+      blockId: string,
+      profile?: string,
+    ) => {
+      requireLocalWorkspace();
+      return removeWorkspaceSyncedBlockReference(id, path, blockId, {
+        profile,
+      });
+    },
   );
 
   ipcMain.handle(

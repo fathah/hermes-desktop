@@ -682,6 +682,41 @@ const hermesAPI = {
   ) => ipcRenderer.invoke("save-workspace-template", input, profile),
   renderWorkspaceButtonBlock: (input: { label: string; prompt: string }) =>
     ipcRenderer.invoke("render-workspace-button-block", input),
+  listWorkspaceSyncedBlocks: (profile?: string) =>
+    ipcRenderer.invoke("list-workspace-synced-blocks", profile),
+  createWorkspaceSyncedBlock: (
+    input: {
+      sourcePath: string;
+      sourceBlockId: string;
+      content: string;
+      references?: Array<{ path: string; blockId: string }>;
+    },
+    profile?: string,
+  ) => ipcRenderer.invoke("create-workspace-synced-block", input, profile),
+  updateWorkspaceSyncedBlockContent: (
+    id: string,
+    content: string,
+    profile?: string,
+  ) =>
+    ipcRenderer.invoke(
+      "update-workspace-synced-block-content",
+      id,
+      content,
+      profile,
+    ),
+  removeWorkspaceSyncedBlockReference: (
+    id: string,
+    path: string,
+    blockId: string,
+    profile?: string,
+  ) =>
+    ipcRenderer.invoke(
+      "remove-workspace-synced-block-reference",
+      id,
+      path,
+      blockId,
+      profile,
+    ),
   updateWorkspacePageOrder: (
     parentPath: string | null,
     orderedPaths: string[],
