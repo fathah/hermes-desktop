@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  applyWorkspaceDatabaseView,
   parseWorkspaceDatabase,
   stringifyWorkspaceDatabase,
   updateWorkspaceDatabaseItem,
@@ -39,6 +40,7 @@ export default function DatabaseBlock({
     db.views.find((view) => view.id === viewId) ?? db.view ?? db.views[0];
   const columns = visibleColumns(db, activeView);
   const groupBy = activeView.groupBy;
+  const visibleItems = applyWorkspaceDatabaseView(db, activeView);
 
   function editItem(index: number, key: string, value: string): void {
     const edited = updateWorkspaceDatabaseItem(db, index, key, value);
@@ -88,16 +90,17 @@ export default function DatabaseBlock({
         {groups.map((group) => (
           <section key={group} className="workspace-db-column">
             <div className="workspace-db-column-title">{group || "None"}</div>
-            {db.items.map((item, index) =>
-              !groupBy || String(item[groupBy] ?? "") === group ? (
+            {visibleItems.map((item) => {
+              const index = db.items.indexOf(item);
+              return !groupBy || String(item[groupBy] ?? "") === group ? (
                 <div
                   key={String(item.id ?? index)}
                   className="workspace-db-card"
                 >
                   {renderFields(item, index)}
                 </div>
-              ) : null,
-            )}
+              ) : null;
+            })}
           </section>
         ))}
       </div>
@@ -115,20 +118,23 @@ export default function DatabaseBlock({
           </tr>
         </thead>
         <tbody>
-          {db.items.map((item, index) => (
-            <tr key={String(item.id ?? index)}>
-              {columns.map((column) => (
-                <td key={column}>
-                  <input
-                    value={String(item[column] ?? "")}
-                    onChange={(event) =>
-                      editItem(index, column, event.target.value)
-                    }
-                  />
-                </td>
-              ))}
-            </tr>
-          ))}
+          {visibleItems.map((item) => {
+            const index = db.items.indexOf(item);
+            return (
+              <tr key={String(item.id ?? index)}>
+                {columns.map((column) => (
+                  <td key={column}>
+                    <input
+                      value={String(item[column] ?? "")}
+                      onChange={(event) =>
+                        editItem(index, column, event.target.value)
+                      }
+                    />
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     );
@@ -137,12 +143,18 @@ export default function DatabaseBlock({
   function renderCards(className: string): React.JSX.Element {
     return (
       <div className={className}>
-        {db.items.map((item, index) => (
-          <article key={String(item.id ?? index)} className="workspace-db-card">
-            <strong>{itemTitle(item)}</strong>
-            {renderFields(item, index)}
-          </article>
-        ))}
+        {visibleItems.map((item) => {
+          const index = db.items.indexOf(item);
+          return (
+            <article
+              key={String(item.id ?? index)}
+              className="workspace-db-card"
+            >
+              <strong>{itemTitle(item)}</strong>
+              {renderFields(item, index)}
+            </article>
+          );
+        })}
       </div>
     );
   }
