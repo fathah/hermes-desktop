@@ -1,5 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { buildOfficeEnv } from "../src/main/claw3d";
+import { createServer, type Server } from "net";
+import {
+  buildOfficeEnv,
+  findAvailableAdapterPort,
+  resolveLocalAdapterPortFromWsUrl,
+} from "../src/main/claw3d";
+
+function listen(server: Server, port: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(port, "127.0.0.1", () => {
+      server.off("error", reject);
+      resolve();
+    });
+  });
+}
+
+function close(server: Server): Promise<void> {
+  return new Promise((resolve, reject) => {
+    server.close((error) => {
+      if (error) reject(error);
+      else resolve();
+    });
+  });
+}
 
 // Hermes Desktop writes the hermes-office `.env`. It used to hardcode
 // `HERMES_MODEL=hermes`, so Office ignored the user's configured model
@@ -58,5 +82,45 @@ describe("buildOfficeEnv (issue #256)", () => {
     });
     expect(env).toContain("CLAW3D_GATEWAY_TOKEN=");
     expect(env).toContain("HERMES_API_KEY=");
+  });
+
+  it("writes the selected Hermes adapter port", () => {
+    const env = buildOfficeEnv({
+      port: 5179,
+      url: "ws://localhost:19444",
+      apiKey: "",
+      model: "hermes",
+      adapterPort: 19444,
+    });
+    expect(env).toContain("HERMES_ADAPTER_PORT=19444");
+  });
+
+  it("extracts local adapter ports from localhost WebSocket URLs only", () => {
+    expect(resolveLocalAdapterPortFromWsUrl("ws://localhost:19444")).toBe(
+      19444,
+    );
+    expect(resolveLocalAdapterPortFromWsUrl("ws://127.0.0.1:19445")).toBe(
+      19445,
+    );
+    expect(resolveLocalAdapterPortFromWsUrl("ws://[::1]:19446")).toBe(19446);
+    expect(resolveLocalAdapterPortFromWsUrl("ws://gateway.example:19444")).toBe(
+      null,
+    );
+  });
+
+  it("skips an occupied adapter port", async () => {
+    const server = createServer();
+    await listen(server, 0);
+    try {
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        throw new Error("Expected TCP server address");
+      }
+
+      const port = await findAvailableAdapterPort(address.port);
+      expect(port).toBeGreaterThan(address.port);
+    } finally {
+      await close(server);
+    }
   });
 });
