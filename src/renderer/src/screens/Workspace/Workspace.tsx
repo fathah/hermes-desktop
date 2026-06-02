@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import AgentReviewPanel from "./AgentReviewPanel";
 import Chat, { type ChatMessage } from "../Chat/Chat";
 import CommandPalette from "./CommandPalette";
+import PageCreateDialog from "./PageCreateDialog";
 import WorkspaceEditor from "./WorkspaceEditor";
 import WorkspaceHeader, { type WorkspaceMode } from "./WorkspaceHeader";
 import WorkspaceTree from "./WorkspaceTree";
@@ -32,6 +33,21 @@ interface WorkspaceMetadata {
   rootOrder: string[];
   favorites: string[];
   recentVisits: Array<{ path: string; visitedAt: number }>;
+}
+
+interface WorkspacePageGraph {
+  version: 2;
+  pages: Record<string, WorkspacePageMeta>;
+  rootOrder: string[];
+  childOrder: Record<string, string[]>;
+  favorites: string[];
+  recentVisits: Array<{ path: string; visitedAt: number }>;
+  backlinks: Record<string, string[]>;
+  sidebar: {
+    collapsedSections: string[];
+    width: number;
+    collapsed: boolean;
+  };
 }
 
 interface AgentWorkspaceProposal {
@@ -77,6 +93,7 @@ export default function Workspace({
 }: WorkspaceProps): React.JSX.Element {
   const [nodes, setNodes] = useState<WorkspaceFileNode[]>([]);
   const [metadata, setMetadata] = useState<WorkspaceMetadata | null>(null);
+  const [pageGraph, setPageGraph] = useState<WorkspacePageGraph | null>(null);
   const [proposals, setProposals] = useState<AgentWorkspaceProposal[]>([]);
   const [selectedPath, setSelectedPath] = useState("index.md");
   const [openTabs, setOpenTabs] = useState<string[]>(["index.md"]);
@@ -97,6 +114,11 @@ export default function Workspace({
   const [workspaceRoot, setWorkspaceRoot] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [pageDialog, setPageDialog] = useState<
+    | { mode: "create"; parentPath: string | null }
+    | { mode: "rename"; path: string; title: string }
+    | null
+  >(null);
   const selectedPathRef = useRef(selectedPath);
   const dirtyRef = useRef(dirty);
   const contentRef = useRef(content);
@@ -115,13 +137,15 @@ export default function Workspace({
   }, [content]);
 
   const refreshWorkspace = useCallback(async () => {
-    const [tree, nextMetadata, nextProposals] = await Promise.all([
+    const [tree, nextMetadata, nextGraph, nextProposals] = await Promise.all([
       window.hermesAPI.getWorkspaceTree(profile),
       window.hermesAPI.getWorkspaceMetadata(profile),
+      window.hermesAPI.getWorkspacePageGraph(profile),
       window.hermesAPI.listAgentWorkspaceProposals(profile),
     ]);
     setNodes(tree);
     setMetadata(nextMetadata);
+    setPageGraph(nextGraph);
     setProposals(nextProposals);
     return tree;
   }, [profile]);
@@ -304,34 +328,73 @@ export default function Workspace({
     }
   }
 
-  async function handleCreatePage(parentPath?: string | null): Promise<void> {
-    const title = window.prompt("New page name");
-    if (!title) return;
+  async function submitCreatePage(
+    title: string,
+    parentPath?: string | null,
+  ): Promise<void> {
     try {
       const page = await window.hermesAPI.createWorkspacePage(
         { title, parentPath },
         profile,
       );
+      setPageDialog(null);
       await refreshAfterPageOperation(page.path);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
   }
 
-  async function handleRenamePage(path: string): Promise<void> {
-    const current = metadata?.pages[path]?.displayName ?? path;
-    const title = window.prompt("Rename page", current);
-    if (!title || title === current) return;
+  async function submitRenamePage(path: string, title: string): Promise<void> {
     try {
       const page = await window.hermesAPI.renameWorkspacePage(
         path,
         title,
         profile,
       );
+      setPageDialog(null);
       await refreshAfterPageOperation(page.path);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
+  }
+
+  function handleCreatePage(parentPath?: string | null): void {
+    setPageDialog({ mode: "create", parentPath: parentPath ?? null });
+  }
+
+  function handleRenamePage(path: string): void {
+    setPageDialog({
+      mode: "rename",
+      path,
+      title: metadata?.pages[path]?.displayName ?? path,
+    });
+  }
+
+  function handleSidebarState(next: {
+    width?: number;
+    collapsed?: boolean;
+  }): void {
+    const sidebar = {
+      width: next.width ?? pageGraph?.sidebar.width ?? 280,
+      collapsed: next.collapsed ?? pageGraph?.sidebar.collapsed ?? false,
+    };
+    setPageGraph((current) =>
+      current
+        ? {
+            ...current,
+            sidebar: {
+              ...current.sidebar,
+              ...sidebar,
+            },
+          }
+        : current,
+    );
+    window.hermesAPI
+      .updateWorkspaceSidebarState(sidebar, profile)
+      .then(setPageGraph)
+      .catch((err) =>
+        setError(err instanceof Error ? err.message : String(err)),
+      );
   }
 
   async function handleDuplicatePage(path: string): Promise<void> {
@@ -504,8 +567,42 @@ export default function Workspace({
         ))}
       </div>
       <div className="workspace-body">
-        <aside className="workspace-pages">
-          <div className="workspace-section-label">Workspace</div>
+        <aside
+          className={`workspace-pages${
+            pageGraph?.sidebar.collapsed ? " workspace-pages-collapsed" : ""
+          }`}
+          style={{ width: pageGraph?.sidebar.width ?? 280 }}
+        >
+          <div className="workspace-sidebar-header">
+            <div className="workspace-section-label">Workspace</div>
+            <button
+              type="button"
+              aria-label={
+                pageGraph?.sidebar.collapsed
+                  ? "Expand sidebar"
+                  : "Collapse sidebar"
+              }
+              onClick={() =>
+                handleSidebarState({
+                  collapsed: !(pageGraph?.sidebar.collapsed ?? false),
+                })
+              }
+            >
+              {pageGraph?.sidebar.collapsed ? ">" : "<"}
+            </button>
+          </div>
+          <label className="workspace-sidebar-resize">
+            <span>Sidebar width</span>
+            <input
+              type="range"
+              min={220}
+              max={520}
+              value={pageGraph?.sidebar.width ?? 280}
+              onChange={(event) =>
+                handleSidebarState({ width: Number(event.target.value) })
+              }
+            />
+          </label>
           <WorkspaceTree
             nodes={nodes}
             metadata={metadata}
@@ -618,6 +715,26 @@ export default function Workspace({
         onSelectAdmin={onOpenAdmin}
         onSelectSession={(id) => onOpenSession?.(id)}
       />
+      {pageDialog && (
+        <PageCreateDialog
+          mode={pageDialog.mode}
+          initialTitle={
+            pageDialog.mode === "rename" ? pageDialog.title : undefined
+          }
+          onCancel={() => setPageDialog(null)}
+          onSubmit={(title) => {
+            if (pageDialog.mode === "create") {
+              submitCreatePage(title, pageDialog.parentPath).catch((err) =>
+                setError(err instanceof Error ? err.message : String(err)),
+              );
+            } else {
+              submitRenamePage(pageDialog.path, title).catch((err) =>
+                setError(err instanceof Error ? err.message : String(err)),
+              );
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

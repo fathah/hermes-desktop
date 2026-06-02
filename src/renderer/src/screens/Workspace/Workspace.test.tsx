@@ -40,6 +40,104 @@ beforeEach(() => {
       favorites: [],
       recentVisits: [],
     }),
+    getWorkspacePageGraph: vi.fn().mockResolvedValue({
+      version: 2,
+      pages: {
+        "index.md": {
+          id: "page-index",
+          path: "index.md",
+          displayName: "index.md",
+          parentPath: null,
+          childOrder: [],
+          favorite: false,
+          trashed: false,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      },
+      rootOrder: ["index.md"],
+      childOrder: { __root__: ["index.md"] },
+      favorites: [],
+      recentVisits: [],
+      backlinks: {},
+      sidebar: {
+        collapsedSections: [],
+        width: 280,
+        collapsed: false,
+      },
+    }),
+    updateWorkspaceSidebarState: vi.fn().mockResolvedValue({
+      version: 2,
+      pages: {},
+      rootOrder: [],
+      childOrder: { __root__: [] },
+      favorites: [],
+      recentVisits: [],
+      backlinks: {},
+      sidebar: {
+        collapsedSections: [],
+        width: 320,
+        collapsed: false,
+      },
+    }),
+    getWorkspaceBacklinks: vi.fn().mockResolvedValue([]),
+    createWorkspacePage: vi.fn().mockResolvedValue({
+      id: "page-research",
+      path: "research-note.md",
+      displayName: "Research Note",
+      parentPath: null,
+      childOrder: [],
+      favorite: false,
+      trashed: false,
+      createdAt: 1,
+      updatedAt: 1,
+    }),
+    renameWorkspacePage: vi.fn().mockResolvedValue({
+      id: "page-index",
+      path: "home-base.md",
+      displayName: "Home Base",
+      parentPath: null,
+      childOrder: [],
+      favorite: false,
+      trashed: false,
+      createdAt: 1,
+      updatedAt: 2,
+    }),
+    duplicateWorkspacePage: vi.fn().mockResolvedValue({
+      id: "page-copy",
+      path: "index-copy.md",
+      displayName: "index.md Copy",
+      parentPath: null,
+      childOrder: [],
+      favorite: false,
+      trashed: false,
+      createdAt: 1,
+      updatedAt: 1,
+    }),
+    trashWorkspacePage: vi.fn().mockResolvedValue(true),
+    restoreWorkspacePage: vi.fn().mockResolvedValue(true),
+    favoriteWorkspacePage: vi.fn().mockResolvedValue({
+      id: "page-index",
+      path: "index.md",
+      displayName: "index.md",
+      parentPath: null,
+      childOrder: [],
+      favorite: true,
+      trashed: false,
+      createdAt: 1,
+      updatedAt: 2,
+    }),
+    moveWorkspacePage: vi.fn().mockResolvedValue({
+      id: "page-index",
+      path: "index.md",
+      displayName: "index.md",
+      parentPath: null,
+      childOrder: [],
+      favorite: false,
+      trashed: false,
+      createdAt: 1,
+      updatedAt: 2,
+    }),
     recordWorkspaceVisit: vi.fn().mockResolvedValue(true),
     listWorkspaceHistory: vi.fn().mockResolvedValue([]),
     restoreWorkspaceVersion: vi.fn().mockResolvedValue("# Home\n\nWelcome"),
@@ -98,5 +196,54 @@ describe("Workspace", () => {
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Reload file" }));
     expect(screen.getByText("Agent edit")).toBeInTheDocument();
+  });
+
+  it("creates and renames pages through dialogs instead of browser prompts", async () => {
+    const promptSpy = vi.spyOn(window, "prompt");
+    render(<Workspace profile="default" onOpenAdmin={() => undefined} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "New page" }));
+    fireEvent.change(screen.getByLabelText("Page name"), {
+      target: { value: "Research Note" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create page" }));
+
+    await waitFor(() =>
+      expect(window.hermesAPI.createWorkspacePage).toHaveBeenCalledWith(
+        { title: "Research Note", parentPath: null },
+        "default",
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Rename page" }));
+    fireEvent.change(screen.getByLabelText("Page name"), {
+      target: { value: "Home Base" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save page name" }));
+
+    await waitFor(() =>
+      expect(window.hermesAPI.renameWorkspacePage).toHaveBeenCalledWith(
+        "index.md",
+        "Home Base",
+        "default",
+      ),
+    );
+    expect(promptSpy).not.toHaveBeenCalled();
+  });
+
+  it("persists sidebar width and collapsed state through the page graph API", async () => {
+    render(<Workspace profile="default" onOpenAdmin={() => undefined} />);
+
+    fireEvent.change(await screen.findByLabelText("Sidebar width"), {
+      target: { value: "320" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Collapse sidebar" }));
+
+    await waitFor(() =>
+      expect(window.hermesAPI.updateWorkspaceSidebarState).toHaveBeenCalledWith(
+        { width: 320, collapsed: true },
+        "default",
+      ),
+    );
   });
 });
