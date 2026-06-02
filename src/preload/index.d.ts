@@ -118,6 +118,21 @@ interface WorkspaceMetadata {
   recentVisits: Array<{ path: string; visitedAt: number }>;
 }
 
+interface WorkspacePageGraph {
+  version: 2;
+  pages: Record<string, WorkspacePageMeta>;
+  rootOrder: string[];
+  childOrder: Record<string, string[]>;
+  favorites: string[];
+  recentVisits: Array<{ path: string; visitedAt: number }>;
+  backlinks: Record<string, string[]>;
+  sidebar: {
+    collapsedSections: string[];
+    width: number;
+    collapsed: boolean;
+  };
+}
+
 interface WorkspaceHistoryEntry {
   id: string;
   pageId: string;
@@ -642,6 +657,15 @@ interface HermesAPI {
     profile?: string,
   ) => Promise<WorkspacePageMeta>;
   getWorkspaceMetadata: (profile?: string) => Promise<WorkspaceMetadata>;
+  getWorkspacePageGraph: (profile?: string) => Promise<WorkspacePageGraph>;
+  updateWorkspaceSidebarState: (
+    state: Partial<WorkspacePageGraph["sidebar"]>,
+    profile?: string,
+  ) => Promise<WorkspacePageGraph>;
+  getWorkspaceBacklinks: (
+    path: string,
+    profile?: string,
+  ) => Promise<string[]>;
   updateWorkspacePageOrder: (
     parentPath: string | null,
     orderedPaths: string[],

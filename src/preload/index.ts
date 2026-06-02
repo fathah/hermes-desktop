@@ -657,6 +657,18 @@ const hermesAPI = {
     ipcRenderer.invoke("favorite-workspace-page", path, favorite, profile),
   getWorkspaceMetadata: (profile?: string) =>
     ipcRenderer.invoke("get-workspace-metadata", profile),
+  getWorkspacePageGraph: (profile?: string) =>
+    ipcRenderer.invoke("get-workspace-page-graph", profile),
+  updateWorkspaceSidebarState: (
+    state: {
+      collapsedSections?: string[];
+      width?: number;
+      collapsed?: boolean;
+    },
+    profile?: string,
+  ) => ipcRenderer.invoke("update-workspace-sidebar-state", state, profile),
+  getWorkspaceBacklinks: (path: string, profile?: string) =>
+    ipcRenderer.invoke("get-workspace-backlinks", path, profile),
   updateWorkspacePageOrder: (
     parentPath: string | null,
     orderedPaths: string[],

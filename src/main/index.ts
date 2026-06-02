@@ -134,6 +134,11 @@ import {
   writeWorkspaceFile,
 } from "./workspace";
 import {
+  getWorkspaceBacklinks,
+  getWorkspacePageGraph,
+  updateWorkspaceSidebarState,
+} from "./workspace-page-graph";
+import {
   syncSessionCache,
   listCachedSessions,
   updateSessionTitle,
@@ -1499,6 +1504,38 @@ function setupIPC(): void {
     await ensureWorkspaceWatcher(profile);
     return getWorkspaceMetadata({ profile });
   });
+
+  ipcMain.handle("get-workspace-page-graph", async (_event, profile?: string) => {
+    requireLocalWorkspace();
+    await ensureWorkspaceWatcher(profile);
+    return getWorkspacePageGraph({ profile });
+  });
+
+  ipcMain.handle(
+    "update-workspace-sidebar-state",
+    async (
+      _event,
+      state: {
+        collapsedSections?: string[];
+        width?: number;
+        collapsed?: boolean;
+      },
+      profile?: string,
+    ) => {
+      requireLocalWorkspace();
+      await ensureWorkspaceWatcher(profile);
+      return updateWorkspaceSidebarState(state, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "get-workspace-backlinks",
+    async (_event, path: string, profile?: string) => {
+      requireLocalWorkspace();
+      await ensureWorkspaceWatcher(profile);
+      return getWorkspaceBacklinks(path, { profile });
+    },
+  );
 
   ipcMain.handle(
     "update-workspace-page-order",
