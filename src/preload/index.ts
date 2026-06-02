@@ -669,6 +669,19 @@ const hermesAPI = {
   ) => ipcRenderer.invoke("update-workspace-sidebar-state", state, profile),
   getWorkspaceBacklinks: (path: string, profile?: string) =>
     ipcRenderer.invoke("get-workspace-backlinks", path, profile),
+  listWorkspaceTemplates: (profile?: string) =>
+    ipcRenderer.invoke("list-workspace-templates", profile),
+  saveWorkspaceTemplate: (
+    input: {
+      kind: "page" | "database-row" | "button";
+      title: string;
+      content: string;
+      properties?: Record<string, unknown>;
+    },
+    profile?: string,
+  ) => ipcRenderer.invoke("save-workspace-template", input, profile),
+  renderWorkspaceButtonBlock: (input: { label: string; prompt: string }) =>
+    ipcRenderer.invoke("render-workspace-button-block", input),
   updateWorkspacePageOrder: (
     parentPath: string | null,
     orderedPaths: string[],

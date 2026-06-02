@@ -142,6 +142,17 @@ interface WorkspaceHistoryEntry {
   content: string;
 }
 
+interface WorkspaceTemplate {
+  id: string;
+  kind: "page" | "database-row" | "button";
+  title: string;
+  content: string;
+  properties?: Record<string, unknown>;
+  createdAt: number;
+  updatedAt: number;
+  builtin?: boolean;
+}
+
 interface AgentWorkspaceProposal {
   id: string;
   path: string;
@@ -675,6 +686,22 @@ interface HermesAPI {
     path: string,
     profile?: string,
   ) => Promise<string[]>;
+  listWorkspaceTemplates: (
+    profile?: string,
+  ) => Promise<WorkspaceTemplate[]>;
+  saveWorkspaceTemplate: (
+    input: {
+      kind: "page" | "database-row" | "button";
+      title: string;
+      content: string;
+      properties?: Record<string, unknown>;
+    },
+    profile?: string,
+  ) => Promise<WorkspaceTemplate>;
+  renderWorkspaceButtonBlock: (input: {
+    label: string;
+    prompt: string;
+  }) => Promise<string>;
   updateWorkspacePageOrder: (
     parentPath: string | null,
     orderedPaths: string[],

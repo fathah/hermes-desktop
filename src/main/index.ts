@@ -139,6 +139,11 @@ import {
   updateWorkspaceSidebarState,
 } from "./workspace-page-graph";
 import {
+  listWorkspaceTemplates,
+  renderWorkspaceButtonBlock,
+  saveWorkspaceTemplate,
+} from "./workspace-templates";
+import {
   syncSessionCache,
   listCachedSessions,
   updateSessionTitle,
@@ -1535,6 +1540,34 @@ function setupIPC(): void {
       await ensureWorkspaceWatcher(profile);
       return getWorkspaceBacklinks(path, { profile });
     },
+  );
+
+  ipcMain.handle("list-workspace-templates", async (_event, profile?: string) => {
+    requireLocalWorkspace();
+    return listWorkspaceTemplates({ profile });
+  });
+
+  ipcMain.handle(
+    "save-workspace-template",
+    async (
+      _event,
+      input: {
+        kind: "page" | "database-row" | "button";
+        title: string;
+        content: string;
+        properties?: Record<string, unknown>;
+      },
+      profile?: string,
+    ) => {
+      requireLocalWorkspace();
+      return saveWorkspaceTemplate(input, { profile });
+    },
+  );
+
+  ipcMain.handle(
+    "render-workspace-button-block",
+    (_event, input: { label: string; prompt: string }) =>
+      renderWorkspaceButtonBlock(input),
   );
 
   ipcMain.handle(
