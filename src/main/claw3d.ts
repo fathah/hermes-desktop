@@ -21,7 +21,9 @@ const ADAPTER_PID_FILE = join(HERMES_HOME, "claw3d-adapter.pid");
 const PORT_FILE = join(HERMES_HOME, "claw3d-port");
 const WS_URL_FILE = join(HERMES_HOME, "claw3d-ws-url");
 const DEFAULT_PORT = 3000;
-const DEFAULT_WS_URL = "ws://localhost:18789";
+const DEFAULT_ADAPTER_PORT = 18789;
+const DEFAULT_WS_URL = `ws://localhost:${DEFAULT_ADAPTER_PORT}`;
+const MAX_ADAPTER_PORT_SCAN = 20;
 const CLAW3D_SETTINGS_DIR = join(homedir(), ".openclaw", "claw3d");
 
 let devServerProcess: ChildProcess | null = null;
@@ -239,6 +241,42 @@ export function getClaw3dWsUrl(): string {
   return getSavedWsUrl();
 }
 
+export function resolveLocalAdapterPortFromWsUrl(url: string): number | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "ws:" && parsed.protocol !== "wss:") return null;
+
+    const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    if (
+      hostname !== "localhost" &&
+      hostname !== "127.0.0.1" &&
+      hostname !== "::1"
+    ) {
+      return null;
+    }
+
+    const port = parsed.port
+      ? Number.parseInt(parsed.port, 10)
+      : parsed.protocol === "wss:"
+        ? 443
+        : 80;
+    if (!Number.isFinite(port) || port <= 0 || port > 65535) return null;
+    return port;
+  } catch {
+    return null;
+  }
+}
+
+function getSavedAdapterPort(): number {
+  return (
+    resolveLocalAdapterPortFromWsUrl(getSavedWsUrl()) ?? DEFAULT_ADAPTER_PORT
+  );
+}
+
+function adapterUrlForPort(port: number): string {
+  return `ws://localhost:${port}`;
+}
+
 /**
  * The model Hermes Office should default to. Office runs against the same
  * gateway as the desktop chat, so it should use the same configured model
@@ -265,6 +303,7 @@ export function buildOfficeEnv(opts: {
   url: string;
   apiKey: string;
   model: string;
+  adapterPort?: number;
 }): string {
   return [
     "# Auto-configured by Hermes Desktop",
@@ -274,7 +313,7 @@ export function buildOfficeEnv(opts: {
     `CLAW3D_GATEWAY_URL=${opts.url}`,
     `CLAW3D_GATEWAY_TOKEN=${opts.apiKey}`,
     `HERMES_API_KEY=${opts.apiKey}`,
-    `HERMES_ADAPTER_PORT=18789`,
+    `HERMES_ADAPTER_PORT=${opts.adapterPort ?? DEFAULT_ADAPTER_PORT}`,
     `HERMES_MODEL=${opts.model || "hermes"}`,
     `HERMES_AGENT_NAME=Hermes`,
     "",
@@ -285,7 +324,10 @@ export function buildOfficeEnv(opts: {
  * Write Claw3D settings to ~/.openclaw/claw3d/settings.json
  * and .env in the claw3d directory so onboarding is skipped.
  */
-function writeClaw3dSettings(wsUrl?: string): void {
+function writeClaw3dSettings(
+  wsUrl?: string,
+  adapterPort = getSavedAdapterPort(),
+): void {
   const url = wsUrl || getSavedWsUrl();
   // Gateway bearer token — empty string when the gateway has no API_SERVER_KEY.
   const apiKey = getApiServerKey();
@@ -325,6 +367,7 @@ function writeClaw3dSettings(wsUrl?: string): void {
           url,
           apiKey,
           model: resolveOfficeModel(),
+          adapterPort,
         }),
       );
     }
@@ -350,6 +393,34 @@ function checkPort(port: number): Promise<boolean> {
       resolve(false);
     });
   });
+}
+
+export async function findAvailableAdapterPort(
+  preferredPort: number,
+): Promise<number> {
+  const maxPort = Math.min(65535, preferredPort + MAX_ADAPTER_PORT_SCAN);
+  for (let port = preferredPort; port <= maxPort; port += 1) {
+    if (!(await checkPort(port))) return port;
+  }
+  return preferredPort;
+}
+
+async function prepareLocalAdapterPort(): Promise<{
+  port: number;
+  changed: boolean;
+}> {
+  const currentUrl = getSavedWsUrl();
+  const currentLocalPort = resolveLocalAdapterPortFromWsUrl(currentUrl);
+  const preferredPort = currentLocalPort ?? DEFAULT_ADAPTER_PORT;
+
+  if (isAdapterRunning()) return { port: preferredPort, changed: false };
+
+  const port = await findAvailableAdapterPort(preferredPort);
+  const changed = Boolean(currentLocalPort && port !== currentLocalPort);
+  if (changed) {
+    safeWriteFile(WS_URL_FILE, adapterUrlForPort(port));
+  }
+  return { port, changed };
 }
 
 export interface Claw3dStatus {
@@ -723,7 +794,7 @@ function killProcessTree(proc: ChildProcess): void {
   }
 }
 
-export function startDevServer(): boolean {
+export function startDevServer(adapterPort = getSavedAdapterPort()): boolean {
   if (isDevServerRunning()) return true;
   if (!existsSync(join(HERMES_OFFICE_DIR, "node_modules"))) return false;
 
@@ -736,6 +807,9 @@ export function startDevServer(): boolean {
     HOME: homedir(),
     TERM: "dumb",
     HERMES_API_KEY: getApiServerKey(),
+    HERMES_ADAPTER_PORT: String(adapterPort),
+    NEXT_PUBLIC_GATEWAY_URL: getSavedWsUrl(),
+    CLAW3D_GATEWAY_URL: getSavedWsUrl(),
     PORT: String(port),
   };
   const node = resolveCommand("node", env.PATH);
@@ -804,10 +878,12 @@ export function stopDevServer(): void {
   cleanupPid(DEV_PID_FILE);
 }
 
-export function startAdapter(): boolean {
+export async function startAdapter(adapterPort?: number): Promise<boolean> {
   if (isAdapterRunning()) return true;
   if (!existsSync(join(HERMES_OFFICE_DIR, "node_modules"))) return false;
 
+  const port = adapterPort ?? (await prepareLocalAdapterPort()).port;
+  writeClaw3dSettings(getSavedWsUrl(), port);
   adapterError = "";
   adapterLogs = "";
   // The hermes-gateway-adapter authenticates to the Hermes gateway with
@@ -819,6 +895,7 @@ export function startAdapter(): boolean {
     HOME: homedir(),
     TERM: "dumb",
     HERMES_API_KEY: getApiServerKey(),
+    HERMES_ADAPTER_PORT: String(port),
   };
   const node = resolveCommand("node", env.PATH);
   const adapterScript = createClaw3dScriptInvocation(
@@ -887,7 +964,10 @@ export function stopAdapter(): void {
   cleanupPid(ADAPTER_PID_FILE);
 }
 
-export function startAll(): { success: boolean; error?: string } {
+export async function startAll(): Promise<{
+  success: boolean;
+  error?: string;
+}> {
   if (!existsSync(join(HERMES_OFFICE_DIR, "node_modules"))) {
     return {
       success: false,
@@ -896,14 +976,18 @@ export function startAll(): { success: boolean; error?: string } {
   }
 
   const port = getSavedPort();
+  const adapterPort = await prepareLocalAdapterPort();
+  if (adapterPort.changed && isDevServerRunning()) {
+    stopDevServer();
+  }
 
   // Refresh the `.env` before the processes read it, so Office always
   // starts against the current port/URL and the desktop's configured
   // model rather than a value frozen at first setup (issue #256).
-  writeClaw3dSettings();
+  writeClaw3dSettings(getSavedWsUrl(), adapterPort.port);
 
   // Start dev server
-  const devOk = startDevServer();
+  const devOk = startDevServer(adapterPort.port);
   if (!devOk) {
     return {
       success: false,
@@ -912,7 +996,7 @@ export function startAll(): { success: boolean; error?: string } {
   }
 
   // Start adapter
-  const adapterOk = startAdapter();
+  const adapterOk = await startAdapter(adapterPort.port);
   if (!adapterOk) {
     return { success: false, error: "Failed to start Hermes adapter" };
   }

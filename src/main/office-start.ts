@@ -1,6 +1,7 @@
 import type { ConnectionConfig, SshConnectionConfig } from "./config";
 
 type StartResult = { success: boolean; error?: string };
+type MaybePromise<T> = T | Promise<T>;
 
 export interface OfficeStartDependencies {
   getConnectionConfig: () => ConnectionConfig;
@@ -11,7 +12,7 @@ export interface OfficeStartDependencies {
   startSshTunnel: (config: SshConnectionConfig) => Promise<void>;
   sshReadRemoteApiKey: (config: SshConnectionConfig) => Promise<string>;
   setSshRemoteApiKey: (key: string) => void;
-  startClaw3dAll: () => StartResult;
+  startClaw3dAll: () => MaybePromise<StartResult>;
 }
 
 function errorMessage(error: unknown): string {
@@ -35,7 +36,7 @@ export async function startOfficeStack(
       deps.startGateway(profile);
     }
 
-    return deps.startClaw3dAll();
+    return await deps.startClaw3dAll();
   } catch (error) {
     return { success: false, error: errorMessage(error) };
   }
