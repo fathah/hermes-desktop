@@ -8035,46 +8035,12 @@ body {
 }
 
 /* ========================================================================
-   SPLASH SCREEN
+   BOOT SCREEN — neutral blank shown briefly during the startup install check
    ======================================================================== */
-.splash-screen {
+.boot-screen {
   position: fixed;
   inset: 0;
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #000;
-}
-
-.splash-bg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.splash-logo {
-  position: relative;
-  z-index: 1;
-  width: 600px;
-  max-width: 60%;
-  opacity: 0;
-  animation: splashFadeIn 1.1s ease-out forwards;
-}
-
-@keyframes splashFadeIn {
-  0% {
-    opacity: 0;
-    transform: scale(0.9) translateY(10px);
-    filter: blur(8px);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-    filter: blur(0);
-  }
+  background: var(--bg-primary);
 }
 
 /* ========================================================================
