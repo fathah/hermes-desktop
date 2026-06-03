@@ -27,6 +27,9 @@
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
+    "@fontsource/inter": "^5.2.8",
+    "@fontsource/jetbrains-mono": "^5.2.8",
+    "@fontsource/source-serif-4": "^5.2.9",
     "@tiptap/react": "^3.24.0",
     "@tiptap/starter-kit": "^3.24.0",
     "@types/highlight.js": "^9.12.4",
@@ -34,9 +37,11 @@
     "@wesbos/code-icons": "^1.2.4",
     "better-sqlite3": "^12.8.0",
     "chokidar": "^5.0.0",
+    "dompurify": "^3.4.7",
     "electron-updater": "^6.3.9",
     "highlight.js": "^11.11.1",
     "i18next": "^25.6.0",
+    "ipaddr.js": "^2.4.0",
     "lucide-react": "^1.7.0",
     "posthog-js": "^1.376.0",
     "react-file-icon": "^1.6.0",
@@ -45,8 +50,10 @@
     "react-syntax-highlighter": "^16.1.1",
     "remark-gfm": "^4.0.1",
     "tiptap-markdown": "^0.9.0",
+    "undici": "^7.27.0",
     "vscode-material-icons": "^0.1.1",
-    "yaml": "^2.9.0"
+    "yaml": "^2.9.0",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config-prettier": "^3.0.0",

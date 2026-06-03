@@ -1,0 +1,41 @@
+/* ============================================================
+   SPS Agent — v3 features: diffs, sub-pages, dnd, properties
+   Appended layer. Builds on home.css + notion.css.
+   ============================================================ */
+
+/* ---- AI diff (tracked change) ---- */
+.sps-scope .diff-block { flex: 1; border: 1px solid color-mix(in oklab, var(--accent) 38%, transparent); border-radius: 10px; overflow: hidden; margin: 4px 0; background: var(--proposed-bg); animation: propIn 200ms var(--ease-out, ease); }
+.sps-scope .diff-head { display: flex; align-items: center; gap: 7px; font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--accent-text); padding: 7px 10px; }
+.sps-scope .diff-head .proposed-actions { margin-left: auto; text-transform: none; letter-spacing: 0; }
+.sps-scope .diff-old { padding: 6px 12px; color: var(--danger-fg); background: rgba(161,32,44,0.06); text-decoration: line-through; text-decoration-color: rgba(161,32,44,0.5); font-size: 0.95em; line-height: 1.5; }
+.sps-scope .diff-new { padding: 6px 12px 9px; color: var(--ok-fg); background: rgba(31,107,58,0.07); font-size: 0.95em; line-height: 1.5; }
+.sps-scope[data-theme="dark"] .diff-old { color: #e89a9a; } .sps-scope[data-theme="dark"] .diff-new { color: #8fcea6; }
+
+/* ---- AI action card (db) ---- */
+.sps-scope .ai-action { display: flex; gap: 6px; margin-top: 8px; }
+
+/* ---- sub-page block ---- */
+.sps-scope .b-page { flex: 1; display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 6px; cursor: pointer; color: var(--tx-1); }
+.sps-scope .b-page:hover { background: var(--block-hover); }
+.sps-scope .b-page-ic { font-size: 17px; line-height: 1; }
+.sps-scope .b-page-title { font-weight: 500; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--hair-strong); }
+
+/* ---- editable table cell ---- */
+.sps-scope .cell-edit { display: block; min-width: 60px; min-height: 18px; outline: none; border-radius: 3px; padding: 1px 3px; color: var(--tx-1); }
+.sps-scope .cell-edit:focus { box-shadow: 0 0 0 2px var(--accent-soft); }
+.sps-scope .cell-edit:empty::before { content: "—"; color: var(--tx-4); }
+
+/* ---- block drag-to-nest guide ---- */
+.sps-scope .drop-guide { position: absolute; left: 0; right: 0; top: -2px; height: 2px; background: var(--accent); border-radius: 2px; z-index: 5; pointer-events: none; }
+.sps-scope .drop-guide::before { content: ""; position: absolute; left: 0; top: -2px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+
+/* ---- sidebar drag/drop indicators ---- */
+.sps-scope .tree-row { position: relative; }
+.sps-scope .tree-row.dnd-before::before, .sps-scope .tree-row.dnd-after::after { content: ""; position: absolute; left: 6px; right: 6px; height: 2px; background: var(--accent); border-radius: 2px; }
+.sps-scope .tree-row.dnd-before::before { top: -1px; }
+.sps-scope .tree-row.dnd-after::after { bottom: -1px; }
+.sps-scope .tree-row.dnd-inside { background: var(--accent-soft); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 40%, transparent); }
+.sps-scope .tree-row[draggable="true"] { cursor: pointer; }
+
+/* breadcrumb segments are clickable */
+.sps-scope .crumb .seg { transition: background 90ms; }

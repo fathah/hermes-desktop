@@ -211,6 +211,24 @@ function Sessions({
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchRequestId = useRef(0);
   const searchRef = useRef<HTMLInputElement>(null);
+  // Search summarization (idea A5)
+  const [summary, setSummary] = useState<
+    import("../../../../shared/searchSummary").SearchSummary | null
+  >(null);
+  const [summarizing, setSummarizing] = useState(false);
+
+  const handleSummarize = useCallback(async () => {
+    const q = searchQuery.trim();
+    if (!q) return;
+    setSummarizing(true);
+    try {
+      setSummary(await window.hermesAPI.summarizeSearch(q));
+    } catch {
+      setSummary({ summary: "", sources: [], error: "Failed to summarize" });
+    } finally {
+      setSummarizing(false);
+    }
+  }, [searchQuery]);
 
   // Quiet re-sync from state.db — refreshes the list WITHOUT flipping the
   // loading state, so it can run on a timer or on focus with no spinner flash.
@@ -326,6 +344,7 @@ function Sessions({
     }
     const requestId = searchRequestId.current + 1;
     searchRequestId.current = requestId;
+    setSummary(null); // stale summary — the query changed
     setIsSearching(true);
     searchTimer.current = setTimeout(async () => {
       try {
@@ -399,6 +418,41 @@ function Sessions({
           </div>
         ) : (
           <div className="sessions-list">
+            <div className="sessions-summarize-bar">
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={handleSummarize}
+                disabled={summarizing}
+              >
+                {summarizing ? "Summarizing…" : "Summarize results"}
+              </button>
+            </div>
+            {summary && (summary.summary || summary.error) && (
+              <div className="sessions-summary">
+                {summary.error ? (
+                  <span className="sessions-summary-error">
+                    {summary.error}
+                  </span>
+                ) : (
+                  <p className="sessions-summary-text">{summary.summary}</p>
+                )}
+                {summary.sources.length > 0 && (
+                  <div className="sessions-summary-sources">
+                    {summary.sources.map((s, i) => (
+                      <button
+                        key={`${s.sessionId}-${i}`}
+                        className="sessions-summary-source"
+                        onClick={() => onResumeSession(s.sessionId)}
+                        title={s.title || s.sessionId}
+                      >
+                        [{i + 1}]{" "}
+                        {s.title || `Session ${s.sessionId.slice(-6)}`}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             {searchResults.map((r, index) => (
               <div
                 key={`${r.sessionId}-${index}`}

@@ -16,7 +16,9 @@ import Models from "../Models/Models";
 import Providers from "../Providers/Providers";
 import Schedules from "../Schedules/Schedules";
 import Kanban from "../Kanban/Kanban";
+import Insights from "../Insights/Insights";
 import Workspace from "../Workspace/Workspace";
+import SpsAgent from "../SpsAgent/SpsAgent";
 import RemoteNotice from "../../components/RemoteNotice";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
 import hermeslogo from "../../assets/hermes.png";
@@ -37,9 +39,10 @@ import {
   Kanban as KanbanIcon,
   Download,
 } from "../../assets/icons";
-import { FileText } from "lucide-react";
+import { FileText, Sparkles, BarChart3 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
+import { loadAndApplyActiveSkin } from "../../utils/skin";
 
 type View =
   | "workspace"
@@ -54,14 +57,29 @@ type View =
   | "tools"
   | "schedules"
   | "kanban"
+  | "insights"
   | "gateway"
+  | "spsAgent"
   | "settings";
 
-const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string }[] = [
+// `label` (literal) overrides `labelKey` (i18n) when set — used for views added
+// after the locale files were authored, to avoid touching every translation.
+const NAV_ITEMS: {
+  view: View;
+  icon: LucideIcon;
+  labelKey: string;
+  label?: string;
+}[] = [
   { view: "sessions", icon: Clock, labelKey: "navigation.sessions" },
   { view: "agents", icon: Users, labelKey: "navigation.agents" },
   { view: "office", icon: Building, labelKey: "navigation.office" },
   { view: "kanban", icon: KanbanIcon, labelKey: "navigation.kanban" },
+  {
+    view: "insights",
+    icon: BarChart3,
+    labelKey: "navigation.insights",
+    label: "Insights",
+  },
   { view: "models", icon: Layers, labelKey: "navigation.models" },
   { view: "providers", icon: KeyRound, labelKey: "navigation.providers" },
   { view: "skills", icon: Puzzle, labelKey: "navigation.skills" },
@@ -74,6 +92,7 @@ const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string }[] = [
 
 const WORKSPACE_NAV_ITEMS: { view: View; icon: LucideIcon; label: string }[] = [
   { view: "workspace", icon: FileText, label: "Workspace" },
+  { view: "spsAgent", icon: Sparkles, label: "SPS Agent" },
   { view: "chat", icon: ChatBubble, label: "Chat" },
 ];
 
@@ -118,6 +137,11 @@ function Layout({
   useEffect(() => {
     window.hermesAPI.isRemoteOnlyMode().then(setRemoteMode);
   }, [view]);
+
+  // Apply the active skin (idea A6) for the current profile at the app root.
+  useEffect(() => {
+    void loadAndApplyActiveSkin(activeProfile);
+  }, [activeProfile]);
 
   // Restore the last-activated profile on launch. The main process persists it
   // in ~/.hermes/active_profile (via `hermes profile use`), so the desktop
@@ -265,14 +289,14 @@ function Layout({
             Agent Control Center
           </button>
           {adminOpen &&
-            NAV_ITEMS.map(({ view: v, icon: Icon, labelKey }) => (
+            NAV_ITEMS.map(({ view: v, icon: Icon, labelKey, label }) => (
               <button
                 key={v}
                 className={`sidebar-nav-item ${view === v ? "active" : ""}`}
                 onClick={() => goTo(v)}
               >
                 <Icon size={16} />
-                {t(labelKey)}
+                {label ?? t(labelKey)}
               </button>
             ))}
         </nav>
@@ -326,6 +350,15 @@ function Layout({
             onOpenSession={handleResumeSession}
           />
         </div>
+
+        {/* SPS Agent: mount only while active — its zustand store is a module
+            singleton so workspace state survives unmount, and this keeps its
+            global ⌘K/⌘J hotkeys from firing on other views. */}
+        {view === "spsAgent" && (
+          <div style={paneStyle("spsAgent")}>
+            <SpsAgent />
+          </div>
+        )}
 
         <div style={paneStyle("chat")}>
           <Chat
@@ -438,6 +471,12 @@ function Layout({
             ) : (
               <Kanban profile={activeProfile} visible={view === "kanban"} />
             )}
+          </div>
+        )}
+
+        {visitedViews.has("insights") && (
+          <div style={paneStyle("insights")}>
+            <Insights profile={activeProfile} visible={view === "insights"} />
           </div>
         )}
 

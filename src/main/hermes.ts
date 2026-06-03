@@ -41,6 +41,12 @@ import {
   getActiveProfileNameSync,
 } from "./utils";
 import { getProfilePort } from "./gateway-ports";
+import {
+  processCustomEvent as parseCustomEvent,
+  type ApprovalRequest,
+  type CheckpointEvent,
+  type DelegateProgress,
+} from "./sse-parser";
 import { readModels } from "./models";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 import { type Attachment, escapeXmlAttr } from "../shared/attachments";
@@ -98,6 +104,121 @@ export function getApiUrl(profile?: string): string {
   // gateway rather than a fixed 8642 — that constant would always resolve to
   // whichever gateway grabbed the port first, regardless of active profile.
   return `http://127.0.0.1:${getProfilePort(resolveProfile(profile))}`;
+}
+
+/**
+ * One-shot, non-streaming chat completion (idea A5: search summarization, and
+ * other auxiliary single-turn calls). Reuses the same gateway URL + auth header
+ * logic as the streaming path. Never throws — returns `{ content, error? }`.
+ */
+export function chatCompletionOnce(
+  messages: Array<{ role: string; content: string }>,
+  profile?: string,
+): Promise<{ content: string; error?: string }> {
+  return new Promise((resolve) => {
+    const mc = getModelConfig(profile);
+    const body = JSON.stringify({
+      model: mc.model || "hermes-agent",
+      messages,
+      stream: false,
+    });
+    const bodyBuf = Buffer.from(body, "utf-8");
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "Content-Length": String(bodyBuf.length),
+      ...getRemoteAuthHeader(),
+    };
+    if (!isRemoteMode()) {
+      const apiServerKey = getApiServerKey(profile);
+      if (apiServerKey) headers.Authorization = `Bearer ${apiServerKey}`;
+    }
+    const url = `${getApiUrl(profile)}/v1/chat/completions`;
+    const requester = url.startsWith("https") ? https.request : http.request;
+    const req = requester(
+      url,
+      { method: "POST", headers, timeout: 120000 },
+      (res) => {
+        let data = "";
+        res.on("data", (d) => (data += d.toString()));
+        res.on("end", () => {
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.error) {
+              resolve({
+                content: "",
+                error: parsed.error.message || "Gateway error",
+              });
+              return;
+            }
+            resolve({
+              content: parsed.choices?.[0]?.message?.content || "",
+            });
+          } catch {
+            resolve({
+              content: "",
+              error: `Bad response from gateway (${res.statusCode})`,
+            });
+          }
+        });
+      },
+    );
+    req.on("error", (e) => resolve({ content: "", error: e.message }));
+    req.on("timeout", () => {
+      req.destroy();
+      resolve({ content: "", error: "Request timed out" });
+    });
+    req.write(bodyBuf);
+    req.end();
+  });
+}
+
+/**
+ * Resolve a pending run approval (idea B1) via the gateway's
+ * `POST /v1/runs/{run_id}/approval` endpoint. Never throws.
+ */
+export function respondRunApproval(
+  runId: string,
+  choice: "once" | "session" | "always" | "deny",
+  profile?: string,
+): Promise<{ ok: boolean; error?: string }> {
+  return new Promise((resolve) => {
+    const body = JSON.stringify({ choice });
+    const bodyBuf = Buffer.from(body, "utf-8");
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "Content-Length": String(bodyBuf.length),
+      ...getRemoteAuthHeader(),
+    };
+    if (!isRemoteMode()) {
+      const apiServerKey = getApiServerKey(profile);
+      if (apiServerKey) headers.Authorization = `Bearer ${apiServerKey}`;
+    }
+    const url = `${getApiUrl(profile)}/v1/runs/${encodeURIComponent(runId)}/approval`;
+    const requester = url.startsWith("https") ? https.request : http.request;
+    const req = requester(
+      url,
+      { method: "POST", headers, timeout: 30000 },
+      (res) => {
+        res.on("data", () => {});
+        res.on("end", () =>
+          resolve({
+            ok: (res.statusCode ?? 500) < 400,
+            error:
+              (res.statusCode ?? 500) >= 400
+                ? `Gateway returned ${res.statusCode}`
+                : undefined,
+          }),
+        );
+      },
+    );
+    req.on("error", (e) => resolve({ ok: false, error: e.message }));
+    req.on("timeout", () => {
+      req.destroy();
+      resolve({ ok: false, error: "Request timed out" });
+    });
+    req.write(bodyBuf);
+    req.end();
+  });
 }
 
 export function isRemoteMode(): boolean {
@@ -274,7 +395,18 @@ export interface ChatCallbacks {
     cost?: number;
     rateLimitRemaining?: number;
     rateLimitReset?: number;
+    /** Enrichment for the desktop usage store (A2): set by the transport. */
+    model?: string;
+    sessionId?: string;
+    cacheRead?: number;
+    cacheWrite?: number;
   }) => void;
+  /** Gateway requested approval for a dangerous command (idea B1). */
+  onApprovalRequest?: (req: ApprovalRequest) => void;
+  /** Gateway recorded a filesystem checkpoint (idea B2). */
+  onCheckpoint?: (cp: CheckpointEvent) => void;
+  /** A delegated subagent reported progress (idea B3). */
+  onDelegateProgress?: (p: DelegateProgress) => void;
 }
 
 type ChatContent =
@@ -541,18 +673,14 @@ function sendMessageViaApi(
     probeReq.end();
   }
 
-  /** Handle a custom SSE event (non-data lines with `event:` prefix). */
+  /**
+   * Handle a custom SSE event (non-data lines with `event:` prefix). Delegates
+   * to the shared, unit-tested dispatch table in sse-parser so there is a
+   * single source of truth for event normalization (tool progress, approval
+   * requests, checkpoints, delegation progress).
+   */
   function processCustomEvent(eventType: string, data: string): void {
-    if (eventType === "hermes.tool.progress" && cb.onToolProgress) {
-      try {
-        const payload = JSON.parse(data);
-        const label = payload.label || payload.tool || "";
-        const emoji = payload.emoji || "";
-        cb.onToolProgress(emoji ? `${emoji} ${label}` : label);
-      } catch {
-        /* malformed — skip */
-      }
-    }
+    parseCustomEvent(eventType, data, cb);
   }
 
   function processSseData(data: string): boolean {
@@ -579,15 +707,26 @@ function sendMessageViaApi(
       const choice = parsed.choices?.[0];
       const delta = choice?.delta;
 
-      // Extract usage from final chunk (with optional cost + rate limit info)
+      // Extract usage from final chunk (with optional cost + rate limit info).
+      // Enriched with model + sessionId + cache-token counts (both known here
+      // in the transport) so the desktop usage store (A2) records accurate,
+      // attributable rows. Cache fields use the common provider aliases:
+      // Anthropic → cache_read_input_tokens / cache_creation_input_tokens;
+      // OpenAI → prompt_tokens_details.cached_tokens.
       if (parsed.usage && cb.onUsage) {
+        const u = parsed.usage;
         cb.onUsage({
-          promptTokens: parsed.usage.prompt_tokens || 0,
-          completionTokens: parsed.usage.completion_tokens || 0,
-          totalTokens: parsed.usage.total_tokens || 0,
-          cost: parsed.usage.cost,
-          rateLimitRemaining: parsed.usage.rate_limit_remaining,
-          rateLimitReset: parsed.usage.rate_limit_reset,
+          promptTokens: u.prompt_tokens || 0,
+          completionTokens: u.completion_tokens || 0,
+          totalTokens: u.total_tokens || 0,
+          cost: u.cost,
+          rateLimitRemaining: u.rate_limit_remaining,
+          rateLimitReset: u.rate_limit_reset,
+          model: mc.model,
+          sessionId: sessionId || _resumeSessionId || undefined,
+          cacheRead:
+            u.cache_read_input_tokens ?? u.prompt_tokens_details?.cached_tokens,
+          cacheWrite: u.cache_creation_input_tokens,
         });
       }
 

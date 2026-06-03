@@ -1,6 +1,7 @@
-import { memo, useMemo } from "react";
+import { memo, useMemo, Fragment } from "react";
 import { HermesAvatar, MessageRow } from "./MessageRow";
 import { ReasoningRow, ToolCallRow, ToolResultRow } from "./HistoryRow";
+import { isCompressionSummary } from "./contextGauge";
 import type { ChatMessage } from "./types";
 
 interface MessageListProps {
@@ -108,16 +109,27 @@ export const MessageList = memo(function MessageList({
           );
         }
         const bubble = msg as Extract<ChatMessage, { role: "user" | "agent" }>;
+        // Mark the point where the gateway compacted context (idea A3) so a
+        // mid-conversation summary doesn't read like the agent's own message.
+        const compressed =
+          bubble.role === "agent" &&
+          isCompressionSummary(
+            ((bubble as { content?: unknown }).content as string) || "",
+          );
         return (
-          <MessageRow
-            key={msg.id}
-            msg={bubble}
-            isLast={i === visibleMessages.length - 1}
-            isLoading={isLoading}
-            onApprove={onApprove}
-            onDeny={onDeny}
-            showAvatar={showAvatar}
-          />
+          <Fragment key={msg.id}>
+            {compressed && (
+              <div className="chat-compress-marker">Context compressed</div>
+            )}
+            <MessageRow
+              msg={bubble}
+              isLast={i === visibleMessages.length - 1}
+              isLoading={isLoading}
+              onApprove={onApprove}
+              onDeny={onDeny}
+              showAvatar={showAvatar}
+            />
+          </Fragment>
         );
       })}
 

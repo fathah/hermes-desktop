@@ -14,6 +14,11 @@ export default defineConfig(
       ".claude/**",
       ".agents/**",
       "build/**",
+      // Standalone SPS Agent app + its design reference: separate sub-projects
+      // with their own tooling. The integrated copy under
+      // src/renderer/src/screens/SpsAgent IS linted.
+      "sps-agent/**",
+      "sps-agent-prototype/**",
       // CDP E2E harness — plain Node CommonJS scripts driving the
       // dev electron via Chrome DevTools Protocol for live testing.
       // They intentionally use require() because they run as one-off
@@ -24,6 +29,8 @@ export default defineConfig(
       "scripts/probe-*.js",
       "scripts/drive-*.js",
       "scripts/verify-*.js",
+      // One-off build utility (plain JS): scopes the SPS Agent CSS under .sps-scope.
+      "scripts/scope-sps-css.mjs",
     ],
   },
   tseslint.configs.recommended,
@@ -48,6 +55,15 @@ export default defineConfig(
       "react-hooks/set-state-in-effect": "off",
       "react-hooks/refs": "off",
       "react-refresh/only-export-components": "off",
+    },
+  },
+  {
+    // The integrated SPS Agent workspace is a faithful port of a React-idiomatic
+    // app (inferred return types). Relax the explicit-return-type rule for it
+    // rather than annotating ~110 components/handlers.
+    files: ["src/renderer/src/screens/SpsAgent/**/*.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/explicit-function-return-type": "off",
     },
   },
   eslintConfigPrettier,

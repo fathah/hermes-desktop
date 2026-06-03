@@ -1,5 +1,9 @@
 import type { AppLocale } from "../shared/i18n/types";
 import type { Attachment } from "../shared/attachments";
+import type { UsageAggregate } from "../shared/usage";
+import type { MemoryTimeline } from "../shared/memoryTimeline";
+import type { SearchSummary } from "../shared/searchSummary";
+import type { LoadedSkin } from "../shared/skins";
 
 interface ElectronAPI {
   process: {
@@ -394,6 +398,14 @@ interface HermesAPI {
   // Connection mode (local / remote / ssh)
   isRemoteMode: () => Promise<boolean>;
   isRemoteOnlyMode: () => Promise<boolean>;
+  getUsageStats: (profile?: string) => Promise<UsageAggregate>;
+  summarizeSearch: (query: string, profile?: string) => Promise<SearchSummary>;
+  listSkins: (profile?: string) => Promise<LoadedSkin[]>;
+  respondApproval: (
+    runId: string,
+    choice: "once" | "session" | "always" | "deny",
+    profile?: string,
+  ) => Promise<{ ok: boolean; error?: string }>;
   getConnectionConfig: () => Promise<{
     mode: "local" | "remote" | "ssh";
     remoteUrl: string;
@@ -491,9 +503,44 @@ interface HermesAPI {
       cost?: number;
       rateLimitRemaining?: number;
       rateLimitReset?: number;
+      model?: string;
+      sessionId?: string;
+      cacheRead?: number;
+      cacheWrite?: number;
     }) => void,
   ) => () => void;
   onChatError: (callback: (error: string) => void) => () => void;
+  onChatApprovalRequest: (
+    callback: (req: {
+      id: string;
+      command?: string;
+      toolName?: string;
+      patternKey?: string;
+      description?: string;
+      sessionKey?: string;
+    }) => void,
+  ) => () => void;
+  onChatCheckpoint: (
+    callback: (cp: {
+      id: string;
+      label?: string;
+      turn?: number;
+      createdAt?: string;
+      sessionKey?: string;
+    }) => void,
+  ) => () => void;
+  onChatDelegateProgress: (
+    callback: (p: {
+      id: string;
+      parentId?: string;
+      goal?: string;
+      status: string;
+      depth?: number;
+      tool?: string;
+      label?: string;
+      sessionKey?: string;
+    }) => void,
+  ) => () => void;
 
   // Gateway
   startGateway: () => Promise<boolean>;
@@ -598,6 +645,7 @@ interface HermesAPI {
     user: { content: string; exists: boolean; lastModified: number | null };
     stats: { totalSessions: number; totalMessages: number };
   }>;
+  getMemoryTimeline: (profile?: string) => Promise<MemoryTimeline>;
 
   addMemoryEntry: (
     content: string,
@@ -1163,6 +1211,22 @@ interface HermesAPI {
     logFile?: string,
     lines?: number,
   ) => Promise<{ content: string; path: string }>;
+
+  // SPS Agent workspace
+  spsUnfurl: (url: string) => Promise<{
+    url: string;
+    title: string;
+    desc: string;
+    favicon?: string;
+    image?: string;
+  }>;
+  spsAssistant: (
+    prompt: string,
+    ctx: { blocks: { type: string; text: string }[]; pageTitle: string },
+    profile?: string,
+  ) => Promise<unknown>;
+  spsLoad: (profile?: string) => Promise<unknown | null>;
+  spsSave: (ws: unknown, profile?: string) => Promise<boolean>;
 }
 
 declare global {

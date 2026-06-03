@@ -15,6 +15,13 @@ import type { AppUpdater } from "electron-updater";
 import icon from "../../resources/icon.png?asset";
 import type { Attachment } from "../shared/attachments";
 import { stageAttachment, clearStagedAttachments } from "./attachment-staging";
+import {
+  spsUnfurl,
+  spsAssistant,
+  spsLoad,
+  spsSave,
+  type PageContext as SpsPageContext,
+} from "./sps-agent";
 import { discoverProviderModels } from "./model-discovery";
 import { readMediaAsDataUrl, saveMedia, mediaFileExists } from "./media";
 import {
@@ -58,6 +65,7 @@ import {
   ensureSshTunnelIfNeeded,
   setSshRemoteApiKey,
   getRemoteAuthHeader,
+  respondRunApproval,
 } from "./hermes";
 import {
   startSshTunnel,
@@ -177,6 +185,7 @@ import {
   listCachedSessions,
   updateSessionTitle,
 } from "./session-cache";
+import { recordUsage, getUsageStats } from "./usage-store";
 import { listModels, addModel, removeModel, updateModel } from "./models";
 import { validateChatReadiness } from "./validation";
 import {
@@ -198,6 +207,9 @@ import {
   removeMemoryEntry,
   writeUserProfile,
 } from "./memory";
+import { getMemoryTimeline } from "./memory-timeline";
+import { summarizeSearch } from "./session-summary";
+import { listSkins } from "./skins";
 import { readSoul, writeSoul, resetSoul } from "./soul";
 import { getToolsets, setToolsetEnabled } from "./tools";
 import {
@@ -846,6 +858,38 @@ function setupIPC(): void {
   ipcMain.handle("is-remote-mode", () => isRemoteMode());
   ipcMain.handle("is-remote-only-mode", () => isRemoteOnlyMode());
   ipcMain.handle("get-connection-config", () => getPublicConnectionConfig());
+
+  // Usage / cost analytics (idea A2). Aggregates the desktop-owned usage store
+  // for the active (or given) profile. Read-only — never touches the gateway.
+  ipcMain.handle("get-usage-stats", (_event, profile?: string) =>
+    getUsageStats({ profile }),
+  );
+
+  // Session-search summarization (idea A5): synthesize a cited summary of the
+  // FTS hits for a query via one non-streaming gateway completion.
+  ipcMain.handle(
+    "summarize-search",
+    (_event, query: string, profile?: string) =>
+      summarizeSearch(query, profile),
+  );
+
+  // Skin engine (idea A6): list validated skins (+ their CSS-var maps) for a
+  // profile so the renderer can apply one at the app root.
+  ipcMain.handle("list-skins", (_event, profile?: string) =>
+    listSkins(profile),
+  );
+
+  // Command-approval reply (idea B1): resolve a pending run approval via the
+  // gateway's /v1/runs/{id}/approval endpoint.
+  ipcMain.handle(
+    "respond-approval",
+    (
+      _event,
+      runId: string,
+      choice: "once" | "session" | "always" | "deny",
+      profile?: string,
+    ) => respondRunApproval(runId, choice, profile),
+  );
   ipcMain.handle("is-ssh-tunnel-active", () => isSshTunnelActive());
 
   ipcMain.handle(
@@ -1063,6 +1107,34 @@ function setupIPC(): void {
           },
           onUsage: (usage) => {
             safeSend("chat-usage", usage);
+            // Persist to the desktop-owned usage store (A2). Best-effort:
+            // recordUsage swallows its own errors so a write failure never
+            // affects the live chat. sessionId falls back to the resume id.
+            recordUsage(
+              {
+                sessionId: usage.sessionId ?? resumeSessionId,
+                model: usage.model,
+                promptTokens: usage.promptTokens,
+                completionTokens: usage.completionTokens,
+                totalTokens: usage.totalTokens,
+                cost: usage.cost,
+                cacheRead: usage.cacheRead,
+                cacheWrite: usage.cacheWrite,
+              },
+              { profile },
+            );
+          },
+          // Gateway-emitted custom events (ideas B1–B3). Forwarded to the
+          // renderer with `sessionKey` so it can route the approval reply /
+          // checkpoint panel / delegation tree to the right conversation.
+          onApprovalRequest: (req) => {
+            safeSend("chat-approval-request", { ...req, sessionKey });
+          },
+          onCheckpoint: (cp) => {
+            safeSend("chat-checkpoint", { ...cp, sessionKey });
+          },
+          onDelegateProgress: (p) => {
+            safeSend("chat-delegate-progress", { ...p, sessionKey });
           },
         },
         profile,
@@ -1268,6 +1340,11 @@ function setupIPC(): void {
 
   // Memory
   registerDualHandler("read-memory", readMemory, sshReadMemory);
+  // Memory timeline (idea A4): entries enriched with originating-session
+  // provenance via FTS. Read-only; provenance is best-effort.
+  ipcMain.handle("get-memory-timeline", (_event, profile?: string) =>
+    getMemoryTimeline(profile),
+  );
   ipcMain.handle(
     "add-memory-entry",
     (_event, content: string, profile?: string) => {
@@ -2300,6 +2377,18 @@ function setupIPC(): void {
       return sshReadLogs(conn.ssh, logFile, lines);
     return readLogs(logFile, lines);
   });
+
+  // SPS Agent workspace (unfurl / assistant / persistence)
+  ipcMain.handle("sps-unfurl", (_event, url: string) => spsUnfurl(url));
+  ipcMain.handle(
+    "sps-assistant",
+    (_event, prompt: string, ctx: SpsPageContext, profile?: string) =>
+      spsAssistant(prompt, ctx, profile),
+  );
+  ipcMain.handle("sps-load", (_event, profile?: string) => spsLoad(profile));
+  ipcMain.handle("sps-save", (_event, ws: unknown, profile?: string) =>
+    spsSave(ws, profile),
+  );
 }
 
 function buildMenu(): void {

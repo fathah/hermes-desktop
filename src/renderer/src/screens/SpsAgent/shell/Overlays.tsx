@@ -1,0 +1,77 @@
+// Overlays.tsx — global, store-driven overlays (selection toolbar, pickers, and —
+// in Phase 9 — command palette, templates, trash, tweaks). Keeps App a thin root.
+import { useStore } from "../store";
+import { SelectionToolbar } from "../editor/SelectionToolbar";
+import { EmojiPicker } from "../components/pickers/EmojiPicker";
+import { CoverPicker } from "../components/pickers/CoverPicker";
+import { CommandPalette } from "../components/CommandPalette";
+import { TaskDrawer } from "../modals/TaskDrawer";
+import { TemplatesModal } from "../modals/TemplatesModal";
+import { TrashModal } from "../modals/TrashModal";
+import { TweaksPanel } from "../tweaks/TweaksPanel";
+
+export function Overlays() {
+  const emojiPick = useStore((s) => s.emojiPick);
+  const coverPick = useStore((s) => s.coverPick);
+  const openTask = useStore((s) => s.openTask);
+  const paletteOpen = useStore((s) => s.paletteOpen);
+  const templatesOpen = useStore((s) => s.templatesOpen);
+  const trashOpen = useStore((s) => s.trashOpen);
+  const setEmojiPick = useStore((s) => s.setEmojiPick);
+  const setCoverPick = useStore((s) => s.setCoverPick);
+  const setOpenTask = useStore((s) => s.setOpenTask);
+  const setPMeta = useStore((s) => s.setPMeta);
+  const addSelectionComment = useStore((s) => s.addSelectionComment);
+  const askAbout = useStore((s) => s.askAbout);
+
+  return (
+    <>
+      <SelectionToolbar onComment={addSelectionComment} onAsk={askAbout} />
+
+      {paletteOpen && <CommandPalette />}
+      {templatesOpen && <TemplatesModal />}
+      {trashOpen && <TrashModal />}
+      <TweaksPanel />
+
+      {openTask && (
+        <TaskDrawer task={openTask} onClose={() => setOpenTask(null)} />
+      )}
+
+      {emojiPick && (
+        <EmojiPicker
+          x={emojiPick.x}
+          y={emojiPick.y}
+          onPick={(e) => {
+            setPMeta({ icon: e });
+            setEmojiPick(null);
+          }}
+          onRemove={() => {
+            setPMeta({ icon: "📄" });
+            setEmojiPick(null);
+          }}
+          onClose={() => setEmojiPick(null)}
+        />
+      )}
+
+      {coverPick && (
+        <CoverPicker
+          x={coverPick.x}
+          y={coverPick.y}
+          onPick={(c) => {
+            setPMeta({ cover: c });
+            setCoverPick(null);
+          }}
+          onImage={() => {
+            setPMeta({ cover: "image" });
+            setCoverPick(null);
+          }}
+          onRemove={() => {
+            setPMeta({ cover: null });
+            setCoverPick(null);
+          }}
+          onClose={() => setCoverPick(null)}
+        />
+      )}
+    </>
+  );
+}

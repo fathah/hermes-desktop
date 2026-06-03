@@ -30,4 +30,9 @@ export interface MemoryProviderInfo {
   envVars: string[];
 }
 
-export type MemoryTab = "entries" | "profile" | "providers" | "soul";
+export type MemoryTab =
+  | "entries"
+  | "timeline"
+  | "profile"
+  | "providers"
+  | "soul";

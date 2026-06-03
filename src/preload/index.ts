@@ -1,6 +1,10 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { AppLocale } from "../shared/i18n/types";
 import type { Attachment } from "../shared/attachments";
+import type { UsageAggregate } from "../shared/usage";
+import type { MemoryTimeline } from "../shared/memoryTimeline";
+import type { SearchSummary } from "../shared/searchSummary";
+import type { LoadedSkin } from "../shared/skins";
 
 /**
  * Mirror of the renderer-side `CredentialPoolEntry` ambient type
@@ -195,6 +199,26 @@ const hermesAPI = {
       localPort: number;
     };
   }> => ipcRenderer.invoke("get-connection-config"),
+
+  /** Usage / cost analytics for a profile (idea A2). */
+  getUsageStats: (profile?: string): Promise<UsageAggregate> =>
+    ipcRenderer.invoke("get-usage-stats", profile),
+
+  /** Summarize session-search results for a query, with citations (idea A5). */
+  summarizeSearch: (query: string, profile?: string): Promise<SearchSummary> =>
+    ipcRenderer.invoke("summarize-search", query, profile),
+
+  /** List validated skins (+ CSS-var maps) for a profile (idea A6). */
+  listSkins: (profile?: string): Promise<LoadedSkin[]> =>
+    ipcRenderer.invoke("list-skins", profile),
+
+  /** Resolve a pending command-approval request (idea B1). */
+  respondApproval: (
+    runId: string,
+    choice: "once" | "session" | "always" | "deny",
+    profile?: string,
+  ): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke("respond-approval", runId, choice, profile),
 
   setConnectionConfig: (
     mode: "local" | "remote" | "ssh",
@@ -400,19 +424,14 @@ const hermesAPI = {
       cost?: number;
       rateLimitRemaining?: number;
       rateLimitReset?: number;
+      model?: string;
+      sessionId?: string;
+      cacheRead?: number;
+      cacheWrite?: number;
     }) => void,
   ): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, usage: unknown): void =>
-      callback(
-        usage as {
-          promptTokens: number;
-          completionTokens: number;
-          totalTokens: number;
-          cost?: number;
-          rateLimitRemaining?: number;
-          rateLimitReset?: number;
-        },
-      );
+      callback(usage as Parameters<typeof callback>[0]);
     ipcRenderer.on("chat-usage", handler);
     return () => ipcRenderer.removeListener("chat-usage", handler);
   },
@@ -422,6 +441,59 @@ const hermesAPI = {
       callback(error);
     ipcRenderer.on("chat-error", handler);
     return () => ipcRenderer.removeListener("chat-error", handler);
+  },
+
+  /** Gateway requested approval for a dangerous command (idea B1). The
+   *  renderer renders an approval card and replies via `respondApproval`. */
+  onChatApprovalRequest: (
+    callback: (req: {
+      id: string;
+      command?: string;
+      toolName?: string;
+      patternKey?: string;
+      description?: string;
+      sessionKey?: string;
+    }) => void,
+  ): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, req: unknown): void =>
+      callback(req as Parameters<typeof callback>[0]);
+    ipcRenderer.on("chat-approval-request", handler);
+    return () => ipcRenderer.removeListener("chat-approval-request", handler);
+  },
+
+  /** Gateway recorded a filesystem checkpoint (idea B2). */
+  onChatCheckpoint: (
+    callback: (cp: {
+      id: string;
+      label?: string;
+      turn?: number;
+      createdAt?: string;
+      sessionKey?: string;
+    }) => void,
+  ): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, cp: unknown): void =>
+      callback(cp as Parameters<typeof callback>[0]);
+    ipcRenderer.on("chat-checkpoint", handler);
+    return () => ipcRenderer.removeListener("chat-checkpoint", handler);
+  },
+
+  /** A delegated subagent reported progress (idea B3). */
+  onChatDelegateProgress: (
+    callback: (p: {
+      id: string;
+      parentId?: string;
+      goal?: string;
+      status: string;
+      depth?: number;
+      tool?: string;
+      label?: string;
+      sessionKey?: string;
+    }) => void,
+  ): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, p: unknown): void =>
+      callback(p as Parameters<typeof callback>[0]);
+    ipcRenderer.on("chat-delegate-progress", handler);
+    return () => ipcRenderer.removeListener("chat-delegate-progress", handler);
   },
 
   // Gateway
@@ -506,6 +578,10 @@ const hermesAPI = {
     user: { content: string; exists: boolean; lastModified: number | null };
     stats: { totalSessions: number; totalMessages: number };
   }> => ipcRenderer.invoke("read-memory", profile),
+
+  /** Memory entries enriched with originating-session provenance (idea A4). */
+  getMemoryTimeline: (profile?: string): Promise<MemoryTimeline> =>
+    ipcRenderer.invoke("get-memory-timeline", profile),
 
   addMemoryEntry: (
     content: string,
@@ -1222,6 +1298,27 @@ const hermesAPI = {
     lines?: number,
   ): Promise<{ content: string; path: string }> =>
     ipcRenderer.invoke("read-logs", logFile, lines),
+
+  // SPS Agent workspace
+  spsUnfurl: (
+    url: string,
+  ): Promise<{
+    url: string;
+    title: string;
+    desc: string;
+    favicon?: string;
+    image?: string;
+  }> => ipcRenderer.invoke("sps-unfurl", url),
+  spsAssistant: (
+    prompt: string,
+    ctx: { blocks: { type: string; text: string }[]; pageTitle: string },
+    profile?: string,
+  ): Promise<unknown> =>
+    ipcRenderer.invoke("sps-assistant", prompt, ctx, profile),
+  spsLoad: (profile?: string): Promise<unknown | null> =>
+    ipcRenderer.invoke("sps-load", profile),
+  spsSave: (ws: unknown, profile?: string): Promise<boolean> =>
+    ipcRenderer.invoke("sps-save", ws, profile),
 };
 
 if (process.contextIsolated) {

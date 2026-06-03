@@ -1,7 +1,9 @@
-import { memo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { useI18n } from "../../components/useI18n";
 import { AttachmentChip } from "../../components/AttachmentChip";
 import { HermesAvatar, AvatarSpacer } from "./MessageRow";
+import { ToolDiff } from "./ToolDiff";
+import { parseFileEditToolCall } from "./toolEditParse";
 import type {
   Attachment,
   ReasoningMessage,
@@ -119,6 +121,12 @@ export const ToolCallRow = memo(function ToolCallRow({
 }): React.JSX.Element {
   const { t } = useI18n();
   const summary = summariseArgs(msg.args);
+  // A file-editing tool call (write_file / edit_file …) renders an inline diff
+  // instead of a wall of JSON args (idea A1). Falls back to raw args otherwise.
+  const fileEdit = useMemo(
+    () => parseFileEditToolCall(msg.name, msg.args),
+    [msg.name, msg.args],
+  );
   return (
     <div
       className={`chat-message chat-message-agent chat-message-history${
@@ -138,9 +146,17 @@ export const ToolCallRow = memo(function ToolCallRow({
           </span>
         }
       >
-        <pre className="chat-history-pre chat-history-pre--code">
-          {msg.args || "(no arguments)"}
-        </pre>
+        {fileEdit ? (
+          <ToolDiff
+            fileName={fileEdit.fileName}
+            oldText={fileEdit.oldText}
+            newText={fileEdit.newText}
+          />
+        ) : (
+          <pre className="chat-history-pre chat-history-pre--code">
+            {msg.args || "(no arguments)"}
+          </pre>
+        )}
       </CollapsibleSection>
     </div>
   );

@@ -6,9 +6,12 @@ import {
   FolderOpen,
   X,
   FolderTree,
+  Minimize2,
+  History,
 } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 import type { UsageState } from "./types";
+import { contextGaugeInfo } from "./contextGauge";
 
 interface ChatHeaderProps {
   sessionId: string | null;
@@ -28,6 +31,38 @@ interface ChatHeaderProps {
   onToggleWorktree: () => void;
   onNewChat?: () => void;
   onClear: () => void;
+  /** Current model id — drives the context-fill gauge (idea A3). */
+  model?: string;
+  /** Send a `/compress` turn to compact the conversation context (idea A3). */
+  onCompress?: () => void;
+  /** List filesystem checkpoints via `/rollback` (idea B2). */
+  onCheckpoints?: () => void;
+}
+
+/** Context-fill gauge: how much of the model's window the last prompt used. */
+function ContextGauge({
+  promptTokens,
+  model,
+}: {
+  promptTokens: number;
+  model?: string;
+}): React.JSX.Element | null {
+  if (!promptTokens || promptTokens <= 0) return null;
+  const info = contextGaugeInfo(promptTokens, model);
+  return (
+    <span
+      className={`chat-context-gauge chat-context-gauge--${info.level}`}
+      title={`Context: ${promptTokens.toLocaleString()} prompt tokens (${info.label})`}
+    >
+      <span className="chat-context-gauge-track">
+        <span
+          className="chat-context-gauge-fill"
+          style={{ width: `${info.percent}%` }}
+        />
+      </span>
+      <span className="chat-context-gauge-label">{info.label}</span>
+    </span>
+  );
 }
 
 function UsageBadge({ usage }: { usage: UsageState }): React.JSX.Element {
@@ -66,6 +101,9 @@ export const ChatHeader = memo(function ChatHeader({
   onToggleWorktree,
   onNewChat,
   onClear,
+  model,
+  onCompress,
+  onCheckpoints,
 }: ChatHeaderProps): React.JSX.Element {
   const { t } = useI18n();
 
@@ -78,6 +116,9 @@ export const ChatHeader = memo(function ChatHeader({
             : t("chat.title")}
         </div>
         {usage && <UsageBadge usage={usage} />}
+        {usage && (
+          <ContextGauge promptTokens={usage.promptTokens} model={model} />
+        )}
       </div>
       <div className="chat-header-actions">
         {showContextFolder &&
@@ -137,6 +178,24 @@ export const ChatHeader = memo(function ChatHeader({
             </span>
           </div>
         </div>
+        {onCheckpoints && hasMessages && (
+          <button
+            className="btn-ghost chat-clear-btn"
+            onClick={onCheckpoints}
+            title="Show filesystem checkpoints (/rollback)"
+          >
+            <History size={15} />
+          </button>
+        )}
+        {onCompress && hasMessages && (
+          <button
+            className="btn-ghost chat-clear-btn"
+            onClick={onCompress}
+            title="Compress context (summarize older turns)"
+          >
+            <Minimize2 size={15} />
+          </button>
+        )}
         {onNewChat && (
           <button
             className="btn-ghost chat-clear-btn"

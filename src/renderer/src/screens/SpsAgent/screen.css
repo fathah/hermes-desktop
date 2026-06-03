@@ -1,0 +1,10 @@
+/* screen.css — fit the scoped SPS Agent workspace into a Hermes layout pane.
+   The scoped design-system CSS gives .sps-scope height:100% + the warm background;
+   here we just make the inner .app grid fill the scope (it was authored at 100vh). */
+.sps-scope {
+  flex: 1;
+  min-height: 0;
+}
+.sps-scope .app {
+  height: 100%;
+}

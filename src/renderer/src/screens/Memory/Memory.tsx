@@ -5,6 +5,7 @@ import Soul from "../Soul/Soul";
 import { CapacityCards } from "./CapacityCards";
 import { MemoryTabs } from "./MemoryTabs";
 import { MemoryEntries } from "./MemoryEntries";
+import { MemoryTimeline } from "./MemoryTimeline";
 import { MemoryProfile } from "./MemoryProfile";
 import { MemoryProviders } from "./MemoryProviders";
 import type { MemoryData, MemoryProviderInfo, MemoryTab } from "./types";
@@ -78,6 +79,10 @@ function Memory({
           profile={profile}
           onRefresh={loadData}
         />
+      )}
+
+      {tab === "timeline" && (
+        <MemoryTimeline profile={profile} onRefresh={loadData} />
       )}
 
       {tab === "profile" && (

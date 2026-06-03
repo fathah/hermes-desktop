@@ -1,0 +1,265 @@
+/* ==========================================================================
+   SPS Financial Control Plane — Colors & Type
+   Internal operator tool for accounting ops, reconciliation, controls.
+   Design goals: information-dense, tabular, functional color coding,
+   high contrast, no decorative gradients, no emoji, no rounded novelties.
+   ========================================================================== */
+
+/* Fonts (Inter / JetBrains Mono / Source Serif 4) are self-hosted via @fontsource
+   and imported in SpsAgent.tsx — the desktop CSP blocks external @import. */
+
+.sps-scope {
+  /* ---------- Neutrals: warm off-white + cool slate ink ------------------ */
+  --paper: #faf8f2; /* app background — warm cream paper */
+  --surface: #ffffff; /* cards, tables */
+  --surface-sunk: #f1ede2; /* sunk wells, table header */
+  --surface-raised: #ffffff;
+  --hairline: #e2dccd; /* primary border */
+  --hairline-strong: #c9c1ae; /* input border, dividers in dense UI */
+  --rule: #ece6d6; /* faint rule inside tables */
+
+  --ink-1: #14161a; /* primary text */
+  --ink-2: #3d4148; /* secondary text */
+  --ink-3: #6b7079; /* tertiary / meta */
+  --ink-4: #9ba0a9; /* placeholder, disabled */
+  --ink-inverse: #ffffff;
+
+  /* ---------- Brand: Sukhi ---------------------------------------------- */
+  /* Heritage identity — 1965 star-shield mark, red + yellow on black.     */
+  /* Primary ink is near-black (ledger ink, badge background).             */
+  /* Sukhi-red is the hero accent (star + banner).                         */
+  /* Sukhi-gold is for highlights, selected states, approvals.             */
+  --ink-primary: #161511; /* near-black badge ink */
+  --ink-primary-hover: #2a2823;
+  --ink-primary-press: #0a0907;
+  --ink-primary-tint: #eceae3; /* selected row bg (warm) */
+
+  --sukhi-red: #d42a22; /* hero CTA, brand red */
+  --sukhi-red-hover: #b31f17;
+  --sukhi-red-press: #91160f;
+  --sukhi-red-tint: #fbe6e3;
+
+  --sukhi-gold: #f2b705; /* brand yellow — highlights, active nav */
+  --sukhi-gold-deep: #c79400; /* readable gold on white (links, accents) */
+  --sukhi-gold-tint: #fbf1c9;
+
+  /* Backwards-compat aliases — many existing cards reference --accent-ochre */
+  --accent-ochre: var(--sukhi-gold-deep);
+  --accent-ochre-hover: #9e7500;
+  --accent-ochre-tint: var(--sukhi-gold-tint);
+
+  /* ---------- Semantic: tied to domain states --------------------------- */
+  /* Voucher / gate / exception status colors. Muted, not neon.           */
+  --ok-fg: #1f6b3a; /* PASS, POSTED, RECONCILED, APPROVED */
+  --ok-bg: #e3f1e6;
+  --ok-border: #a8d4b2;
+
+  --warn-fg: #8a5a00; /* PENDING, IN_REVIEW, SUGGESTED */
+  --warn-bg: #fbefd0;
+  --warn-border: #e8c878;
+
+  --danger-fg: #a1202c; /* FAIL, FAILED, OPEN, HARD_LOCKED, CRITICAL */
+  --danger-bg: #fbe3e4;
+  --danger-border: #e8a8ae;
+
+  --info-fg: #1b4f8a; /* DRAFT, CLASSIFIED, IMPORTED */
+  --info-bg: #e3ecf7;
+  --info-border: #a8c3e3;
+
+  --neutral-fg: #3d4148; /* VOID, DISMISSED, SKIP, no-op */
+  --neutral-bg: #ece8de;
+  --neutral-border: #cfc7b5;
+
+  --purple-fg: #5a3a8a; /* ADJUSTMENT, MANUAL_EXCEPTION (rare) */
+  --purple-bg: #eee6f5;
+  --purple-border: #c9b8e0;
+
+  /* Direction pills for DEBIT / CREDIT */
+  --debit-fg: #a1202c;
+  --debit-bg: #fbe3e4;
+  --credit-fg: #1f6b3a;
+  --credit-bg: #e3f1e6;
+
+  /* ---------- Focus, selection, interaction ----------------------------- */
+  --focus-ring: #2e6fc6;
+  --focus-ring-soft: rgba(46, 111, 198, 0.28);
+  --row-hover: #f1eee7;
+  --row-selected: var(--ink-primary-tint);
+
+  /* ---------- Type ------------------------------------------------------ */
+  --font-sans:
+    "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: "Source Serif 4", "Iowan Old Style", Georgia, serif;
+  --font-mono:
+    "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Tabular numeric features — apply on any money/figure cell */
+  --feat-tnum: "tnum" 1, "lnum" 1;
+
+  /* Type scale — internal tool, dense, 13px base for data UIs */
+  --fs-12: 12px; /* meta, chips */
+  --fs-13: 13px; /* body, tables */
+  --fs-14: 14px; /* default UI text */
+  --fs-16: 16px; /* section labels */
+  --fs-18: 18px; /* panel titles */
+  --fs-22: 22px; /* page H1 */
+  --fs-28: 28px; /* dashboard headline */
+  --fs-40: 40px; /* KPI numerals */
+
+  --lh-tight: 1.2;
+  --lh-snug: 1.35;
+  --lh-body: 1.5;
+
+  /* ---------- Spacing (4pt base) ---------------------------------------- */
+  --s-0: 0;
+  --s-1: 2px;
+  --s-2: 4px;
+  --s-3: 8px;
+  --s-4: 12px;
+  --s-5: 16px;
+  --s-6: 20px;
+  --s-7: 24px;
+  --s-8: 32px;
+  --s-9: 40px;
+  --s-10: 48px;
+  --s-12: 64px;
+
+  /* ---------- Radii (conservative — this is a ledger) ------------------- */
+  --r-0: 0;
+  --r-1: 2px; /* chips, inputs */
+  --r-2: 4px; /* buttons, cards */
+  --r-3: 6px; /* panels */
+  --r-pill: 999px;
+
+  /* ---------- Elevation ------------------------------------------------- */
+  /* Shadows are restrained. Most surfaces sit on hairline borders.        */
+  --shadow-0: none;
+  --shadow-1: 0 1px 0 rgba(20, 22, 26, 0.04), 0 1px 2px rgba(20, 22, 26, 0.04);
+  --shadow-2:
+    0 2px 4px rgba(20, 22, 26, 0.06), 0 1px 2px rgba(20, 22, 26, 0.04);
+  --shadow-3:
+    0 8px 24px rgba(20, 22, 26, 0.1), 0 2px 4px rgba(20, 22, 26, 0.04);
+  --shadow-pop: 0 16px 48px rgba(14, 35, 64, 0.18);
+
+  /* Focus ring */
+  --ring: 0 0 0 2px var(--paper), 0 0 0 4px var(--focus-ring);
+
+  /* Inner inset for pressed / sunk */
+  --inset-sunk: inset 0 1px 0 rgba(20, 22, 26, 0.05);
+
+  /* ---------- Motion ---------------------------------------------------- */
+  /* Internal tool — fast, no bounces. Fades and small translates.         */
+  --ease-out: cubic-bezier(0.2, 0.6, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0.1, 0.2, 1);
+  --dur-1: 90ms; /* hover, small state */
+  --dur-2: 160ms; /* panel, menu */
+  --dur-3: 240ms; /* page transition */
+}
+
+/* ==========================================================================
+   Semantic type styles
+   Use these classes (or mirror them in components) rather than naked sizes.
+   ========================================================================== */
+
+.sps-scope .type-h1 {
+  font-family: var(--font-sans);
+  font-size: var(--fs-22);
+  font-weight: 600;
+  line-height: var(--lh-tight);
+  letter-spacing: -0.01em;
+  color: var(--ink-1);
+}
+.sps-scope .type-h2 {
+  font-family: var(--font-sans);
+  font-size: var(--fs-18);
+  font-weight: 600;
+  line-height: var(--lh-snug);
+  color: var(--ink-1);
+}
+.sps-scope .type-h3 {
+  font-family: var(--font-sans);
+  font-size: var(--fs-14);
+  font-weight: 600;
+  line-height: var(--lh-snug);
+  color: var(--ink-1);
+}
+.sps-scope .type-section-label {
+  font-family: var(--font-sans);
+  font-size: var(--fs-12);
+  font-weight: 600;
+  line-height: var(--lh-tight);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.sps-scope .type-body {
+  font-family: var(--font-sans);
+  font-size: var(--fs-13);
+  font-weight: 400;
+  line-height: var(--lh-body);
+  color: var(--ink-1);
+}
+.sps-scope .type-body-sm {
+  font-family: var(--font-sans);
+  font-size: var(--fs-12);
+  font-weight: 400;
+  line-height: var(--lh-body);
+  color: var(--ink-2);
+}
+.sps-scope .type-meta {
+  font-family: var(--font-sans);
+  font-size: var(--fs-12);
+  font-weight: 400;
+  line-height: var(--lh-snug);
+  color: var(--ink-3);
+}
+.sps-scope .type-kpi {
+  font-family: var(--font-sans);
+  font-size: var(--fs-40);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--ink-1);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: var(--feat-tnum);
+}
+.sps-scope .type-money,
+.sps-scope .type-num {
+  font-family: var(--font-mono);
+  font-size: var(--fs-13);
+  font-weight: 500;
+  line-height: var(--lh-snug);
+  color: var(--ink-1);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: var(--feat-tnum);
+}
+.sps-scope .type-code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  font-weight: 400;
+  line-height: var(--lh-snug);
+  color: var(--ink-2);
+}
+.sps-scope .type-serif-quote {
+  /* Reserved for rare use: auditor notes, CA sign-off blocks. */
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-weight: 500;
+  line-height: var(--lh-body);
+  color: var(--ink-1);
+}
+
+/* ==========================================================================
+   Global baseline — apply on <body> of every preview
+   ========================================================================== */
+.sps-scope {
+  font-family: var(--font-sans);
+  font-size: var(--fs-13);
+  line-height: var(--lh-body);
+  color: var(--ink-1);
+  background: var(--paper);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  margin: 0;
+  padding: 0;
+}

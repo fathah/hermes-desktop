@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { ChatHeader } from "./ChatHeader";
+import { useChatSignals } from "./useChatSignals";
+import { ApprovalQueue } from "./ApprovalQueue";
+import { DelegationTree } from "./DelegationTree";
+import { listCommand } from "../../../../shared/checkpoints";
 import { ChatEmptyState } from "./ChatEmptyState";
 import { MessageList } from "./MessageList";
 import { ModelPicker } from "./ModelPicker";
@@ -53,6 +57,8 @@ function Chat({
   const [isLoading, setIsLoading] = useState(false);
   const [hermesSessionId, setHermesSessionId] = useState<string | null>(null);
   const [toolProgress, setToolProgress] = useState<string | null>(null);
+  // Gateway approval (B1) + delegation (B3) signals, forward-compatible.
+  const { approvals, respond, delegationTree } = useChatSignals(profile);
   const [usage, setUsage] = useState<UsageState | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [remoteMode, setRemoteMode] = useState(false);
@@ -358,6 +364,13 @@ function Chat({
         onToggleWorktree={() => setWorktreeVisible((v) => !v)}
         onNewChat={onNewChat}
         onClear={handleClear}
+        model={modelConfig.currentModel}
+        onCompress={() => {
+          void actions.handleSend("/compress", []);
+        }}
+        onCheckpoints={() => {
+          void actions.handleSend(listCommand(), []);
+        }}
       />
 
       <ConfigHealthBanner profile={profile} onOpenDiagnose={onOpenDiagnose} />
@@ -375,6 +388,8 @@ function Chat({
               onDeny={actions.handleDeny}
             />
           )}
+          <DelegationTree tree={delegationTree} />
+          <ApprovalQueue state={approvals} onRespond={respond} />
           <div ref={bottomRef} />
         </div>
 

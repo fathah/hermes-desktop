@@ -1,0 +1,5 @@
+/* Tailwind layers. Preflight is disabled in tailwind.config.ts, so no reset ships.
+   Imported BEFORE the ported design-system CSS so hand-tuned styles always win. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
