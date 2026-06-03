@@ -12,7 +12,7 @@ export type Tweaks = {
 };
 
 export const TWEAK_DEFAULTS: Tweaks = {
-  dark: false,
+  dark: true, // dark is the default app mode
   accent: "#C79400", // sukhi gold-deep
   sidebar: "full",
   width: "comfortable",

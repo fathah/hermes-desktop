@@ -37,7 +37,7 @@ export function ThemeProvider({
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored === "light" || stored === "dark" || stored === "system")
       return stored;
-    return "system";
+    return "dark"; // dark is the default app mode (pre-SPS / onboarding paint)
   });
   const [resolved, setResolved] = useState<ResolvedTheme>(() => resolve(theme));
 
