@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { AppLocale } from "../shared/i18n/types";
 import type { Attachment } from "../shared/attachments";
+import type { WritingAssistSettings } from "../shared/writing-assist";
 
 /**
  * Mirror of the renderer-side `CredentialPoolEntry` ambient type
@@ -120,6 +121,12 @@ const hermesAPI = {
   getLocale: (): Promise<AppLocale> => ipcRenderer.invoke("get-locale"),
   setLocale: (locale: AppLocale): Promise<AppLocale> =>
     ipcRenderer.invoke("set-locale", locale),
+  getWritingAssistSettings: (): Promise<WritingAssistSettings> =>
+    ipcRenderer.invoke("get-writing-assist-settings"),
+  setWritingAssistSettings: (
+    settings: WritingAssistSettings,
+  ): Promise<WritingAssistSettings> =>
+    ipcRenderer.invoke("set-writing-assist-settings", settings),
 
   // Configuration (profile-aware)
   getEnv: (profile?: string): Promise<Record<string, string>> =>

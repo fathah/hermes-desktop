@@ -43,6 +43,7 @@ interface ChatInputProps {
   hasSession: boolean;
   sessionId?: string | null;
   remoteMode?: boolean;
+  spellCheck?: boolean;
   /** Active profile — used to resolve the provider for voice transcription. */
   profile?: string;
   /** Context-window occupancy for the gauge; null until the first response. */
@@ -65,6 +66,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       hasSession,
       sessionId,
       remoteMode,
+      spellCheck = true,
       profile,
       contextUsage,
       readiness,
@@ -483,6 +485,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             className="chat-input"
             placeholder={t("chat.typeMessage")}
             value={input}
+            spellCheck={spellCheck}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}

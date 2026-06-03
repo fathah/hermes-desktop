@@ -3,8 +3,47 @@ export default {
   sections: {
     hermesAgent: "Hermes Agent",
     appearance: "Appearance",
+    writingTools: "Writing Tools",
     privacy: "Privacy",
     credentialPool: "Credential Pool",
+  },
+  writingTools: {
+    enabled: "Enable writing tools",
+    enabledHint:
+      "Global desktop preferences for spellcheck, autocomplete, and translation in the chat composer.",
+    saving: "Saving...",
+    modelLabel: "Saved model",
+    modelHint:
+      "Select a saved model from the Models library for LLM-backed writing tools.",
+    modelUnset: "Select a saved model",
+    mode: {
+      off: "Off",
+      llm: "LLM",
+    },
+    spellcheck: {
+      label: "Spellcheck",
+      native: "Native spellcheck",
+      hint:
+        "Uses the operating system and Chromium spellcheck support instead of sending text to a model.",
+    },
+    autocomplete: {
+      label: "Autocomplete",
+      dictionary: "Dictionary / local",
+      hint:
+        "Suggestions while typing. Keep this off by default if you want to avoid background draft processing.",
+    },
+    translation: {
+      label: "Translation",
+      onDemand: "On demand",
+      preSend: "Pre-send",
+      hint:
+        "Translate selected text or the full draft. Pre-send mode remains opt-in because it changes outgoing text.",
+      targetLanguage: "Target language",
+      targetPlaceholder: "e.g. German, English, Spanish",
+      targetHint:
+        "Leave blank until you know the target language you want to use most often.",
+      preserveTone: "Preserve tone when translating",
+    },
   },
   theme: {
     label: "Theme",

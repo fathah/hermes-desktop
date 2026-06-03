@@ -17,6 +17,8 @@ import { buildChatTranscript } from "./transcriptUtils";
 import { ConfigHealthBanner } from "../../components/ConfigHealthBanner";
 import type { Attachment } from "../../../../shared/attachments";
 import type { ChatMessage, UsageState } from "./types";
+import type { WritingAssistSettings } from "../../../../shared/writing-assist";
+import { DEFAULT_WRITING_ASSIST_SETTINGS } from "../../../../shared/writing-assist";
 import type { ContextUsage } from "./ContextGauge";
 import { contextWindowForModel } from "./contextWindows";
 
@@ -64,12 +66,32 @@ function Chat({
   const chatInputRef = useRef<ChatInputHandle>(null);
   const queueRef = useRef<QueuedMessage[]>([]);
   const [queuedCount, setQueuedCount] = useState(0);
+  const [writingAssist, setWritingAssist] = useState<WritingAssistSettings>(
+    DEFAULT_WRITING_ASSIST_SETTINGS,
+  );
 
   useEffect(() => {
     let cancelled = false;
     (async (): Promise<void> => {
       const flag = await window.hermesAPI.isRemoteMode();
       if (!cancelled) setRemoteMode(flag);
+    })();
+    return (): void => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async (): Promise<void> => {
+      try {
+        const settings = await window.hermesAPI.getWritingAssistSettings();
+        if (!cancelled) setWritingAssist(settings);
+      } catch {
+        if (!cancelled) {
+          setWritingAssist(DEFAULT_WRITING_ASSIST_SETTINGS);
+        }
+      }
     })();
     return (): void => {
       cancelled = true;
@@ -397,6 +419,10 @@ function Chat({
           hasSession={!!hermesSessionId}
           sessionId={hermesSessionId}
           remoteMode={remoteMode}
+          spellCheck={
+            writingAssist.enabled &&
+            writingAssist.spellcheck.mode === "native"
+          }
           profile={profile}
           contextUsage={contextUsage}
           readiness={readiness}

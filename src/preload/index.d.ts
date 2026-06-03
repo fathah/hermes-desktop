@@ -1,5 +1,6 @@
 import type { AppLocale } from "../shared/i18n/types";
 import type { Attachment } from "../shared/attachments";
+import type { WritingAssistSettings } from "../shared/writing-assist";
 
 interface ElectronAPI {
   process: {
@@ -200,6 +201,10 @@ interface HermesAPI {
 
   getLocale: () => Promise<AppLocale>;
   setLocale: (locale: AppLocale) => Promise<AppLocale>;
+  getWritingAssistSettings: () => Promise<WritingAssistSettings>;
+  setWritingAssistSettings: (
+    settings: WritingAssistSettings,
+  ) => Promise<WritingAssistSettings>;
 
   // Configuration (profile-aware)
   getEnv: (profile?: string) => Promise<Record<string, string>>;
