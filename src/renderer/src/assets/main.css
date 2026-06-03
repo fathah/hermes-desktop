@@ -4862,38 +4862,46 @@ body {
 /* ========================================================================
    SETTINGS
    ======================================================================== */
+/* Settings reads as an SPS document: a centred content column on warm paper,
+   the SPS type scale, and restrained white surfaces (hairline + soft shadow,
+   no heavy card chrome). */
 .settings-container {
-  padding: 24px 32px;
+  padding: 40px 32px 64px;
   overflow-y: auto;
   height: 100%;
+  max-width: 880px;
+  margin: 0 auto;
 }
 
 .settings-header {
-  font-size: 20px;
-  font-weight: 700;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   margin-bottom: 24px;
   color: var(--text-primary);
 }
 
 .settings-section {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface);
+  border: 1px solid var(--hair);
   border-radius: var(--radius-md);
-  padding: 20px;
-  margin-bottom: 16px;
+  box-shadow: var(--shadow-1);
+  padding: 20px 22px;
+  margin-bottom: 14px;
 }
 
+/* SPS section label — mirrors .type-section-label (12px / 600 / 0.06em). */
 .settings-section-title {
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.8px;
+  letter-spacing: 0.06em;
   margin-bottom: 16px;
 }
 
 .settings-field {
-  margin-bottom: 18px;
+  margin-bottom: 16px;
 }
 
 .settings-field:last-child {
