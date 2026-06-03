@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useTheme } from "../../components/ThemeProvider";
-import { SkinPicker } from "./SkinPicker";
 import { THEME_OPTIONS } from "../../constants";
 import { useStore as useSpsStore } from "../SpsAgent/store";
 import { useI18n } from "../../components/useI18n";
@@ -912,7 +911,6 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
             {t("settings.appearanceHint")}
           </div>
         </div>
-        <SkinPicker profile={profile} />
         <div className="settings-field">
           <label className="settings-field-label">
             {t("settings.language.label")}
