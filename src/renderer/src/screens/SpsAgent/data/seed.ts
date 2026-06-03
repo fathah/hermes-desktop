@@ -259,7 +259,7 @@ function starterDoc(title: string): Block[] {
 export function buildInitialWorkspace(): Workspace {
   const tree = treeFromSeed(TREE);
   const meta = metaFromSeed(TREE, {});
-  meta.home = { icon: "🏠", title: "Team Home", cover: "var(--accent)" };
+  meta.home = { icon: "🏠", title: "Team Home", cover: null };
   const docs: Record<string, Block[]> = { home: HOME_BLOCKS };
   Object.keys(meta).forEach((id) => {
     if (id !== "home" && !docs[id]) docs[id] = starterDoc(meta[id].title);
