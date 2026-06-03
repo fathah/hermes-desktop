@@ -2429,8 +2429,8 @@ body {
 }
 
 .file-viewer-modal {
-  background: #1e1e1e;
-  border: 1px solid #333;
+  background: var(--surface);
+  border: 1px solid var(--hair);
   border-radius: 8px;
   width: 100%;
   max-width: 900px;
@@ -2438,7 +2438,7 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--shadow-pop);
 }
 
 .file-viewer-header {
@@ -2446,8 +2446,8 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  border-bottom: 1px solid #333;
-  background: #252526;
+  border-bottom: 1px solid var(--hair);
+  background: var(--sunk);
   flex-shrink: 0;
 }
 
@@ -2459,14 +2459,14 @@ body {
 }
 
 .file-viewer-icon {
-  color: #858585;
+  color: var(--tx-3);
   flex-shrink: 0;
 }
 
 .file-viewer-filename {
   font-size: 13px;
   font-weight: 500;
-  color: #cccccc;
+  color: var(--tx-1);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2475,7 +2475,7 @@ body {
 
 .file-viewer-size {
   font-size: 11px;
-  color: #858585;
+  color: var(--tx-3);
   margin-left: 8px;
   font-family: var(--font-mono);
 }
@@ -2489,7 +2489,7 @@ body {
 .file-viewer-open {
   opacity: 0.8;
   padding: 6px 10px;
-  color: #cccccc;
+  color: var(--tx-1);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -2498,7 +2498,7 @@ body {
 
 .file-viewer-open:hover {
   opacity: 1;
-  background: #3c3c3c;
+  background: var(--row-hover);
   border-radius: 4px;
 }
 
@@ -2510,12 +2510,12 @@ body {
 .file-viewer-close {
   opacity: 0.7;
   padding: 6px;
-  color: #cccccc;
+  color: var(--tx-1);
 }
 
 .file-viewer-close:hover {
   opacity: 1;
-  background: #3c3c3c;
+  background: var(--row-hover);
   border-radius: 4px;
 }
 
@@ -2527,7 +2527,7 @@ body {
   justify-content: center;
   height: 100%;
   gap: 12px;
-  color: #858585;
+  color: var(--tx-3);
 }
 
 .file-viewer-binary-icon {
@@ -2538,12 +2538,12 @@ body {
 .file-viewer-binary-text {
   font-size: 14px;
   font-weight: 500;
-  color: #cccccc;
+  color: var(--tx-1);
 }
 
 .file-viewer-binary-hint {
   font-size: 12px;
-  color: #858585;
+  color: var(--tx-3);
 }
 
 /* Image viewer styles */
@@ -2553,7 +2553,7 @@ body {
   justify-content: center;
   height: 100%;
   padding: 20px;
-  background: #1e1e1e;
+  background: var(--sunk);
   overflow: auto;
 }
 
@@ -2568,7 +2568,7 @@ body {
 .file-viewer-content {
   flex: 1;
   overflow: auto;
-  background: #1e1e1e;
+  background: var(--sunk);
 }
 
 .file-viewer-loading,
@@ -2578,19 +2578,19 @@ body {
   justify-content: center;
   height: 100%;
   font-size: 14px;
-  color: #858585;
+  color: var(--tx-3);
 }
 
 .file-viewer-error {
-  color: #f48771;
+  color: var(--danger-fg);
 }
 
 .file-viewer-truncated {
   padding: 10px 16px;
-  background: rgba(255, 204, 0, 0.1);
-  border-bottom: 1px solid #333;
+  background: var(--warn-bg);
+  border-bottom: 1px solid var(--hair);
   font-size: 12px;
-  color: #cccccc;
+  color: var(--tx-1);
   font-family: var(--font-mono);
 }
 
@@ -2598,7 +2598,7 @@ body {
 .file-viewer-code {
   margin: 0;
   padding: 0;
-  background: #1e1e1e;
+  background: var(--sunk);
   font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1.5;
@@ -2609,8 +2609,8 @@ body {
   display: block;
   padding: 16px;
   padding-left: 16px;
-  background: #1e1e1e;
-  color: #d4d4d4;
+  background: var(--sunk);
+  color: var(--tx-1);
   white-space: pre;
   overflow-x: auto;
   tab-size: 2;
@@ -2623,29 +2623,29 @@ body {
 }
 
 .file-viewer-content::-webkit-scrollbar-track {
-  background: #1e1e1e;
+  background: var(--sunk);
 }
 
 .file-viewer-content::-webkit-scrollbar-thumb {
-  background: #424242;
+  background: var(--hair-strong);
   border-radius: 5px;
 }
 
 .file-viewer-content::-webkit-scrollbar-thumb:hover {
-  background: #4f4f4f;
+  background: var(--tx-4);
 }
 
 /* Override highlight.js styles for VS Code dark theme look */
 .file-viewer-modal .hljs {
-  background: #1e1e1e;
-  color: #d4d4d4;
+  background: var(--sunk);
+  color: var(--tx-1);
 }
 
 /* Keyword - blue */
 .file-viewer-modal .hljs-keyword,
 .file-viewer-modal .hljs-selector-tag,
 .file-viewer-modal .hljs-subst {
-  color: #569cd6;
+  color: var(--info-fg);
   font-weight: normal;
 }
 
@@ -2654,13 +2654,13 @@ body {
 .file-viewer-modal .hljs-regexp,
 .file-viewer-modal .hljs-addition,
 .file-viewer-modal .hljs-attribute {
-  color: #ce9178;
+  color: var(--danger-fg);
 }
 
 /* Number - light green */
 .file-viewer-modal .hljs-number,
 .file-viewer-modal .hljs-literal {
-  color: #b5cea8;
+  color: var(--warn-fg);
 }
 
 /* Function/method - yellow */
@@ -2668,48 +2668,48 @@ body {
 .file-viewer-modal .hljs-title.class_,
 .file-viewer-modal .hljs-title.function_,
 .file-viewer-modal .hljs-built_in {
-  color: #dcdcaa;
+  color: var(--accent);
 }
 
 /* Variable - light blue */
 .file-viewer-modal .hljs-variable,
 .file-viewer-modal .hljs-template-variable,
 .file-viewer-modal .hljs-params {
-  color: #9cdcfe;
+  color: var(--info-fg);
 }
 
 /* Property - light blue */
 .file-viewer-modal .hljs-property,
 .file-viewer-modal .hljs-attr {
-  color: #9cdcfe;
+  color: var(--info-fg);
 }
 
 /* Comment - green */
 .file-viewer-modal .hljs-comment,
 .file-viewer-modal .hljs-quote {
-  color: #6a9955;
+  color: var(--tx-3);
   font-style: italic;
 }
 
 /* Operator - light */
 .file-viewer-modal .hljs-operator,
 .file-viewer-modal .hljs-punctuation {
-  color: #d4d4d4;
+  color: var(--tx-1);
 }
 
 /* Tag (HTML/XML) - blue */
 .file-viewer-modal .hljs-tag {
-  color: #569cd6;
+  color: var(--info-fg);
 }
 
 /* Tag name - red */
 .file-viewer-modal .hljs-name {
-  color: #569cd6;
+  color: var(--info-fg);
 }
 
 /* Tag attribute - light blue */
 .file-viewer-modal .hljs-attr {
-  color: #9cdcfe;
+  color: var(--info-fg);
 }
 
 /* CSS property - light blue */
@@ -2717,18 +2717,18 @@ body {
 .file-viewer-modal .hljs-selector-class,
 .file-viewer-modal .hljs-selector-attr,
 .file-viewer-modal .hljs-selector-pseudo {
-  color: #d7ba7d;
+  color: var(--accent);
 }
 
 /* Type/Class - greenish */
 .file-viewer-modal .hljs-type,
 .file-viewer-modal .hljs-class_ {
-  color: #4ec9b0;
+  color: var(--ok-fg);
 }
 
 /* Meta - gray */
 .file-viewer-modal .hljs-meta {
-  color: #808080;
+  color: var(--tx-3);
 }
 
 /* Emphasis - bold */
@@ -2744,7 +2744,7 @@ body {
 /* Built-in constant */
 .file-viewer-modal .hljs-built_in,
 .file-viewer-modal .hljs-builtin-name {
-  color: #dcdcaa;
+  color: var(--accent);
 }
 
 /* Clickable file rows in worktree */
