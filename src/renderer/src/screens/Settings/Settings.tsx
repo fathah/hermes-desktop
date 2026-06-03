@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useTheme } from "../../components/ThemeProvider";
 import { SkinPicker } from "./SkinPicker";
 import { THEME_OPTIONS } from "../../constants";
+import { useStore as useSpsStore } from "../SpsAgent/store";
 import { useI18n } from "../../components/useI18n";
 import { APP_LOCALES, type AppLocale } from "../../../../shared/i18n";
 import {
@@ -885,7 +886,19 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
               <button
                 key={opt.value}
                 className={`settings-theme-option ${theme === opt.value ? "active" : ""}`}
-                onClick={() => setTheme(opt.value)}
+                onClick={() => {
+                  setTheme(opt.value);
+                  // Keep the SPS workspace (the source of truth) in lockstep:
+                  // its Tweaks.dark drives both the workspace and, via
+                  // applyTweaks → document root, this admin overlay.
+                  const prefersDark = window.matchMedia(
+                    "(prefers-color-scheme: dark)",
+                  ).matches;
+                  const dark =
+                    opt.value === "dark" ||
+                    (opt.value === "system" && prefersDark);
+                  useSpsStore.getState().setTweak("dark", dark);
+                }}
               >
                 {opt.value === "system"
                   ? t("settings.theme.system")

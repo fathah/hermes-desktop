@@ -16,6 +16,7 @@ const ThemeContext = createContext<ThemeContextValue>({
 });
 
 import { THEME_STORAGE_KEY as STORAGE_KEY } from "../constants";
+import { isScopeActive } from "../screens/SpsAgent/lib/theme";
 
 function getSystemTheme(): ResolvedTheme {
   return window.matchMedia("(prefers-color-scheme: dark)").matches
@@ -62,8 +63,12 @@ export function ThemeProvider({
     setResolved(resolve(theme));
   }, [theme]);
 
-  // Apply data-theme attribute to <html>
+  // Apply data-theme attribute to <html>. While the SPS workspace is mounted it
+  // owns document-root theming (applyTweaks mirrors the Tweaks.dark state here),
+  // so we yield to it — this keeps a single writer of <html>'s data-theme and
+  // prevents the admin overlay from desyncing from the workspace.
   useEffect(() => {
+    if (isScopeActive()) return;
     document.documentElement.setAttribute("data-theme", resolved);
   }, [resolved]);
 

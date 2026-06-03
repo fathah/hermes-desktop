@@ -37,19 +37,44 @@ export function setThemeScope(el: HTMLElement | null): void {
   scopeEl = el;
 }
 
+/** True while the SPS workspace is mounted and owns document-root theming.
+ *  ThemeProvider yields to this so there is a single writer of <html>'s
+ *  data-theme/--accent (no dual-writer race between the two systems). */
+export function isScopeActive(): boolean {
+  return scopeEl !== null;
+}
+
+/** The targets a theme change writes to: the SPS scope, plus the document root
+ *  so the Hermes admin overlay (Settings/Providers/… rendered OUTSIDE
+ *  .sps-scope) tracks the SPS workspace. When no scope is set yet we only have
+ *  the root. */
+function themeTargets(): HTMLElement[] {
+  if (scopeEl && scopeEl !== document.documentElement) {
+    return [scopeEl, document.documentElement];
+  }
+  return [scopeEl ?? document.documentElement];
+}
+
 // Active skin variables (idea A6). A skin layers ON TOP of tweaks — re-applied
 // at the end of applyTweaks so a tweak change never clobbers the skin (e.g. the
 // skin's accent wins over the tweaks accent picker when a skin sets one).
 let skinVars: Record<string, string> = {};
 
-/** Set (or clear) the active skin's CSS variables on the SPS scope. */
+/** Set (or clear) the active skin's CSS variables on the SPS scope AND the
+ *  document root, so a skin picked in the SPS Tweaks panel themes the admin
+ *  overlay too (root reads the skin's SPS-named vars through the main.css
+ *  aliases, e.g. --bg-primary: var(--canvas)). */
 export function setSkinVars(vars: Record<string, string>): void {
-  const r = scopeEl ?? document.documentElement;
-  for (const k of Object.keys(skinVars)) {
-    if (!(k in vars)) r.style.removeProperty(k);
+  const targets = themeTargets();
+  for (const r of targets) {
+    for (const k of Object.keys(skinVars)) {
+      if (!(k in vars)) r.style.removeProperty(k);
+    }
   }
   skinVars = { ...vars };
-  for (const [k, v] of Object.entries(skinVars)) r.style.setProperty(k, v);
+  for (const r of targets) {
+    for (const [k, v] of Object.entries(skinVars)) r.style.setProperty(k, v);
+  }
 }
 
 export function applyTweaks(t: Tweaks): void {
@@ -65,4 +90,12 @@ export function applyTweaks(t: Tweaks): void {
   r.style.setProperty("--content-w", WIDTHS[t.width] || "740px");
   // Re-apply skin vars last so they layer over the tweak vars above.
   for (const [k, v] of Object.entries(skinVars)) r.style.setProperty(k, v);
+  // Mirror ONLY theme + accent to the document root (density/width/bodyfont are
+  // SPS-layout-specific). This is what keeps the admin overlay in lockstep with
+  // the workspace; ThemeProvider yields while the scope is active.
+  if (scopeEl && scopeEl !== document.documentElement) {
+    const root = document.documentElement;
+    root.setAttribute("data-theme", t.dark ? "dark" : "light");
+    root.style.setProperty("--accent", t.accent);
+  }
 }
