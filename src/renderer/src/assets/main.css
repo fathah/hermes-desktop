@@ -4197,6 +4197,53 @@ body {
   overflow-y: auto;
 }
 
+/* ---- SPS admin escape hatch (gear + overlay) ---- */
+.sps-admin-gear {
+  position: fixed;
+  top: 10px;
+  right: 12px;
+  z-index: 9000;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--border, rgba(127, 127, 127, 0.2));
+  background: var(--surface, rgba(255, 255, 255, 0.7));
+  backdrop-filter: blur(6px);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0.55;
+  transition: opacity 120ms ease;
+  -webkit-app-region: no-drag;
+}
+.sps-admin-gear:hover {
+  opacity: 1;
+}
+.sps-admin-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9500;
+  background: var(--app-bg, #fff);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.sps-admin-close {
+  position: fixed;
+  top: 10px;
+  right: 12px;
+  z-index: 9600;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--border, rgba(127, 127, 127, 0.2));
+  background: var(--surface, rgba(255, 255, 255, 0.85));
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  -webkit-app-region: no-drag;
+}
+
 /* ---- Inline tool diff (idea A1) ---- */
 .chat-tool-diff {
   border: 1px solid var(--border, rgba(127, 127, 127, 0.16));

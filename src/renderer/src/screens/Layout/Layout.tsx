@@ -100,22 +100,25 @@ interface LayoutProps {
   verifyWarning?: boolean;
   onReinstall?: () => void;
   onDismissVerifyWarning?: () => void;
+  /** Opening view — used when Layout is shown as the SPS admin overlay. */
+  initialView?: View;
 }
 
 function Layout({
   verifyWarning,
   onReinstall,
   onDismissVerifyWarning,
+  initialView,
 }: LayoutProps = {}): React.JSX.Element {
   const { t } = useI18n();
-  const [view, setView] = useState<View>("workspace");
+  const [view, setView] = useState<View>(initialView ?? "workspace");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [activeProfile, setActiveProfile] = useState("default");
   // Tabs lazy-mount on first visit, then stay mounted (display:none toggle).
   // Keeps IPC refetch / DOM rebuild off the tab-switch hot path.
   const [visitedViews, setVisitedViews] = useState<Set<View>>(
-    () => new Set<View>(["workspace"]),
+    () => new Set<View>(["workspace", ...(initialView ? [initialView] : [])]),
   );
   // Remote-only mode — SSH tunnel has full access; only pure HTTP remote mode restricts screens
   const [remoteMode, setRemoteMode] = useState(false);

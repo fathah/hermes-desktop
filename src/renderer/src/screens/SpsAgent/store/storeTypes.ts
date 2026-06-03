@@ -12,6 +12,12 @@ import type {
 } from "../types";
 
 export type RightTab = "assistant" | "outline" | "comments" | "info";
+
+// Top-level surface shown in the main area. "doc" is the page editor (default);
+// the others are full-area surfaces reached from the rail (ideas A2/A4 + the
+// Ask panel and Agent Console).
+export type Surface = "doc" | "insights" | "memory" | "ask" | "agent";
+
 export interface XY {
   x: number;
   y: number;
@@ -62,6 +68,7 @@ export interface CommentsSlice {
 export interface UiSlice {
   panelOpen: boolean;
   rightTab: RightTab;
+  surface: Surface;
   paletteOpen: boolean;
   templatesOpen: { parent: string | null } | null;
   trashOpen: boolean;
@@ -75,6 +82,7 @@ export interface UiSlice {
   setPanelOpen: (v: boolean) => void;
   setRightTab: (t: RightTab) => void;
   openPanelTab: (t: RightTab) => void;
+  setSurface: (s: Surface) => void;
   setPaletteOpen: (v: boolean) => void;
   setTemplatesOpen: (v: { parent: string | null } | null) => void;
   setTrashOpen: (v: boolean) => void;

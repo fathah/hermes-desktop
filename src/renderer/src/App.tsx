@@ -4,6 +4,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import Welcome from "./screens/Welcome/Welcome";
 import Install from "./screens/Install/Install";
 import Setup from "./screens/Setup/Setup";
+import SpsAgent from "./screens/SpsAgent/SpsAgent";
 import Layout from "./screens/Layout/Layout";
 import SplashScreen from "./screens/SplashScreen/SplashScreen";
 import { captureScreenView } from "./utils/analytics";
@@ -26,7 +27,26 @@ function App(): React.JSX.Element {
   // which previously trapped restricted-network users in a reinstall
   // loop on every launch (#130).
   const [verifyWarning, setVerifyWarning] = useState(false);
+  // SPS Agent is the app; the Hermes admin screens (Providers/Gateway/Settings/
+  // …) open on demand as an overlay via the gear button or ⌘,. This is the
+  // "settings escape hatch" so the assistant's provider/keys stay configurable.
+  const [adminOpen, setAdminOpen] = useState(false);
   const isMac = window.electron?.process?.platform === "darwin";
+
+  // ⌘, (mac) / Ctrl+, toggles the admin overlay, only once on the main screen.
+  useEffect(() => {
+    if (screen !== "main") return;
+    const onKey = (e: KeyboardEvent): void => {
+      if ((e.metaKey || e.ctrlKey) && e.key === ",") {
+        e.preventDefault();
+        setAdminOpen((open) => !open);
+      } else if (e.key === "Escape") {
+        setAdminOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [screen]);
 
   const runInstallCheck = useCallback(async () => {
     const startedAt = Date.now();
@@ -178,12 +198,41 @@ function App(): React.JSX.Element {
           />
         );
       case "main":
+        // SPS Agent IS the desktop application — it replaces the former Hermes
+        // Agent Desktop UI (Layout). Onboarding (install/setup) still runs first
+        // because the SPS assistant talks to the Hermes gateway it configures.
+        // The gear / ⌘, opens the Hermes admin screens (Providers, Gateway,
+        // Models, Settings, …) as an overlay so config stays reachable.
         return (
-          <Layout
-            verifyWarning={verifyWarning}
-            onReinstall={handleVerifyReinstall}
-            onDismissVerifyWarning={handleDismissVerifyWarning}
-          />
+          <>
+            <SpsAgent />
+            <button
+              className="sps-admin-gear"
+              onClick={() => setAdminOpen(true)}
+              title="Settings (⌘,)"
+              aria-label="Open settings"
+            >
+              ⚙
+            </button>
+            {adminOpen && (
+              <div className="sps-admin-overlay">
+                <button
+                  className="sps-admin-close"
+                  onClick={() => setAdminOpen(false)}
+                  title="Close (Esc)"
+                  aria-label="Close settings"
+                >
+                  ✕
+                </button>
+                <Layout
+                  initialView="settings"
+                  verifyWarning={verifyWarning}
+                  onReinstall={handleVerifyReinstall}
+                  onDismissVerifyWarning={handleDismissVerifyWarning}
+                />
+              </div>
+            )}
+          </>
         );
     }
   }

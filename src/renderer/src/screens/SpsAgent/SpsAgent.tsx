@@ -19,10 +19,13 @@ import "./styles/sps-tokens.css";
 import "./styles/home.css";
 import "./styles/notion.css";
 import "./styles/v3.css";
+import "./styles/ask.css";
 import "./screen.css";
 import { App } from "./App";
 import { useStore, hydrateWorkspace } from "./store";
-import { setThemeScope, applyTweaks } from "./lib/theme";
+import { setThemeScope, applyTweaks, setSkinVars } from "./lib/theme";
+import { skinToSpsVars } from "./lib/skin";
+import { getActiveSkinId } from "../../utils/skin";
 
 export function SpsAgent() {
   const scopeRef = useRef<HTMLDivElement>(null);
@@ -30,6 +33,18 @@ export function SpsAgent() {
     setThemeScope(scopeRef.current);
     applyTweaks(useStore.getState().t);
     void hydrateWorkspace();
+    // Apply the active skin onto the SPS scope (idea A6 — fixes the regression
+    // where skins targeted document root with Hermes var names). No-op in the
+    // standalone web app where window.hermesAPI is absent.
+    void (async () => {
+      try {
+        const skins = await window.hermesAPI.listSkins();
+        const active = skins.find((s) => s.id === getActiveSkinId());
+        setSkinVars(skinToSpsVars(active?.skin ?? null));
+      } catch {
+        /* no bridge / no skins — leave tweaks-only theming */
+      }
+    })();
     return () => setThemeScope(null);
   }, []);
   return (

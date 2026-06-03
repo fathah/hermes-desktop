@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { validateSkin, skinToCssVars } from "../src/shared/skins";
+import { skinToSpsVars } from "../src/renderer/src/screens/SpsAgent/lib/skin";
 
 describe("validateSkin", () => {
   it("accepts a well-formed skin", () => {
@@ -66,5 +67,55 @@ describe("skinToCssVars", () => {
 
   it("returns an empty map for a bare skin", () => {
     expect(skinToCssVars({ name: "x" })).toEqual({});
+  });
+});
+
+describe("skinToSpsVars (SPS scope mapping)", () => {
+  it("maps semantic tokens to SPS variable names", () => {
+    const vars = skinToSpsVars({
+      name: "Midnight",
+      colors: {
+        accent: "#5b8def",
+        background: "#0b0d12",
+        surface: "#15181f",
+        text: "#e8e8e8",
+        textSecondary: "#b0b0b0",
+        textMuted: "#808080",
+        border: "#2a2d35",
+      },
+      fonts: { body: "Inter", mono: "JetBrains Mono" },
+    });
+    expect(vars["--accent"]).toBe("#5b8def");
+    // background drives both the app well and the document canvas
+    expect(vars["--app-bg"]).toBe("#0b0d12");
+    expect(vars["--canvas"]).toBe("#0b0d12");
+    expect(vars["--surface"]).toBe("#15181f");
+    expect(vars["--tx-1"]).toBe("#e8e8e8");
+    expect(vars["--tx-2"]).toBe("#b0b0b0");
+    expect(vars["--tx-3"]).toBe("#808080");
+    expect(vars["--hairline"]).toBe("#2a2d35");
+    expect(vars["--font-sans"]).toBe("Inter");
+    expect(vars["--font-mono"]).toBe("JetBrains Mono");
+  });
+
+  it("only sets variables for tokens the skin specifies", () => {
+    const vars = skinToSpsVars({
+      name: "AccentOnly",
+      colors: { accent: "#abc" },
+    });
+    expect(vars).toEqual({ "--accent": "#abc" });
+  });
+
+  it("returns an empty map for null / bare skin", () => {
+    expect(skinToSpsVars(null)).toEqual({});
+    expect(skinToSpsVars({ name: "x" })).toEqual({});
+  });
+
+  it("ignores unknown color tokens", () => {
+    const vars = skinToSpsVars({
+      name: "x",
+      colors: { accent: "#abc", mystery: "#999" },
+    });
+    expect(Object.values(vars)).not.toContain("#999");
   });
 });

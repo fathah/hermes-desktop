@@ -11,7 +11,14 @@ export function Sidebar() {
   const tree = useStore((s) => s.tree);
   const meta = useStore((s) => s.meta);
   const activeId = useStore((s) => s.page);
+  const surface = useStore((s) => s.surface);
+  const setSurface = useStore((s) => s.setSurface);
   const selectPage = useStore((s) => s.selectPage);
+  // Selecting a page always returns to the document surface.
+  const selectDoc = (id: string): void => {
+    selectPage(id);
+    setSurface("doc");
+  };
   const newSubPage = useStore((s) => s.newSubPage);
   const renamePage = useStore((s) => s.renamePage);
   const deletePage = useStore((s) => s.deletePage);
@@ -48,8 +55,8 @@ export function Sidebar() {
           <span className="nav-kbd">⌘K</span>
         </div>
         <div
-          className={`nav-item ${activeId === "home" ? "active" : ""}`}
-          onClick={() => selectPage("home")}
+          className={`nav-item ${activeId === "home" && surface === "doc" ? "active" : ""}`}
+          onClick={() => selectDoc("home")}
         >
           <Icon name="home" size={17} />
           <span className="nav-label">Home</span>
@@ -58,6 +65,34 @@ export function Sidebar() {
           <Icon name="inbox" size={17} />
           <span className="nav-label">Inbox</span>
           <span className="nav-kbd">3</span>
+        </div>
+        <div
+          className={`nav-item ${surface === "ask" ? "active" : ""}`}
+          onClick={() => setSurface("ask")}
+        >
+          <Icon name="sparkle" size={17} />
+          <span className="nav-label">Ask</span>
+        </div>
+        <div
+          className={`nav-item ${surface === "insights" ? "active" : ""}`}
+          onClick={() => setSurface("insights")}
+        >
+          <Icon name="board" size={17} />
+          <span className="nav-label">Insights</span>
+        </div>
+        <div
+          className={`nav-item ${surface === "memory" ? "active" : ""}`}
+          onClick={() => setSurface("memory")}
+        >
+          <Icon name="clock" size={17} />
+          <span className="nav-label">Memory</span>
+        </div>
+        <div
+          className={`nav-item ${surface === "agent" ? "active" : ""}`}
+          onClick={() => setSurface("agent")}
+        >
+          <Icon name="code" size={17} />
+          <span className="nav-label">Agent Console</span>
         </div>
 
         <div className="sec">
@@ -73,7 +108,7 @@ export function Sidebar() {
             depth={0}
             meta={meta}
             activeId={activeId}
-            onSelect={selectPage}
+            onSelect={selectDoc}
             onNewSubPage={newSubPage}
             onRename={renamePage}
             onDelete={deletePage}

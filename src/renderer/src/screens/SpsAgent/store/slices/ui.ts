@@ -8,6 +8,7 @@ let toastTimer: ReturnType<typeof setTimeout> | null = null;
 export const createUiSlice: StateCreator<Store, [], [], UiSlice> = (set) => ({
   panelOpen: true,
   rightTab: "assistant",
+  surface: "doc",
   paletteOpen: false,
   templatesOpen: null,
   trashOpen: false,
@@ -21,6 +22,7 @@ export const createUiSlice: StateCreator<Store, [], [], UiSlice> = (set) => ({
   setPanelOpen: (v) => set({ panelOpen: v }),
   setRightTab: (t) => set({ rightTab: t }),
   openPanelTab: (t) => set({ panelOpen: true, rightTab: t }),
+  setSurface: (s) => set({ surface: s }),
   setPaletteOpen: (v) => set({ paletteOpen: v }),
   setTemplatesOpen: (v) => set({ templatesOpen: v }),
   setTrashOpen: (v) => set({ trashOpen: v }),

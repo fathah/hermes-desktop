@@ -1,9 +1,12 @@
 // TweaksPanel.tsx — real settings panel. Keeps the prototype's glass .twk-* visual
 // (tweaks-panel.jsx) but drops the omelette host postMessage protocol: values read
 // and write the Zustand tweaks slice (persisted) instead of the EDITMODE block.
-import { useRef, type ReactNode } from "react";
+import { useRef, useState, useEffect, type ReactNode } from "react";
 import { useStore } from "../store";
-import { ACCENTS, type Tweaks } from "../lib/theme";
+import { ACCENTS, type Tweaks, setSkinVars } from "../lib/theme";
+import { skinToSpsVars } from "../lib/skin";
+import { getActiveSkinId, setActiveSkinId } from "../../../utils/skin";
+import type { LoadedSkin } from "../../../../../shared/skins";
 
 // ── styles (ported verbatim from tweaks-panel.jsx __TWEAKS_STYLE) ──────────────
 const TWEAKS_STYLE = `
@@ -194,6 +197,64 @@ function Select<T extends string>({
   );
 }
 
+// Skin selector (idea A6): lists skins found under <profileHome>/skins/ and
+// applies the chosen one's variables onto the SPS scope. Hidden when none exist.
+function SkinSelect() {
+  const [skins, setSkins] = useState<LoadedSkin[]>([]);
+  const [active, setActive] = useState<string>("");
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await window.hermesAPI.listSkins();
+        if (cancelled) return;
+        setSkins(list);
+        setActive(getActiveSkinId() ?? "");
+      } catch {
+        /* no bridge / no skins */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  if (skins.length === 0) return null;
+  const onChange = (id: string): void => {
+    setActive(id);
+    if (!id) {
+      setActiveSkinId(undefined, null);
+      setSkinVars({});
+      return;
+    }
+    const skin = skins.find((s) => s.id === id);
+    setActiveSkinId(undefined, id);
+    setSkinVars(skinToSpsVars(skin?.skin ?? null));
+  };
+  return (
+    <>
+      <Section label="Skin" />
+      <div className="twk-row twk-row-h">
+        <span className="twk-lbl">
+          <span>Skin</span>
+        </span>
+        <select
+          className="twk-field"
+          style={{ width: 120 }}
+          value={active}
+          onChange={(e) => onChange(e.target.value)}
+        >
+          <option value="">Default</option>
+          {skins.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.skin.name}
+            </option>
+          ))}
+        </select>
+      </div>
+    </>
+  );
+}
+
 function Shell({
   children,
   onClose,
@@ -285,6 +346,7 @@ export function TweaksPanel() {
         options={["sans", "serif", "mono"]}
         onChange={(v) => setTweak("bodyfont", v)}
       />
+      <SkinSelect />
     </Shell>
   );
 }

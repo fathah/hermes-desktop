@@ -1,7 +1,7 @@
 // App.tsx — composition root. Phase 3 wires the sidebar + shell + doc header.
 // The block editor (Phase 4), right panel (Phase 7), pickers/palette/modals/tweaks
 // (Phases 5/9) slot into the marked placeholders.
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useStore } from "./store";
 import { useHotkeys } from "./hooks/useHotkeys";
 import { setScrollContainer } from "./lib/scroll";
@@ -12,13 +12,21 @@ import { Editor } from "./editor/Editor";
 import { RightPanel } from "./panel/RightPanel";
 import { Overlays } from "./shell/Overlays";
 import { Toast } from "./components/Toast";
+import Insights from "../Insights/Insights";
+import { MemoryTimeline } from "../Memory/MemoryTimeline";
+import Chat, { type ChatMessage } from "../Chat/Chat";
+import { AskPane } from "./panel/AskPane";
 
 export function App() {
   useHotkeys();
   const sidebar = useStore((s) => s.t.sidebar);
   const page = useStore((s) => s.page);
   const panelOpen = useStore((s) => s.panelOpen);
+  const surface = useStore((s) => s.surface);
   const docScrollRef = useRef<HTMLDivElement>(null);
+  // Agent Console (tool-using Hermes chat) state — kept local to SPS.
+  const [agentMessages, setAgentMessages] = useState<ChatMessage[]>([]);
+  const [agentSession, setAgentSession] = useState<string | null>(null);
 
   useEffect(() => {
     setScrollContainer(docScrollRef.current);
@@ -31,16 +39,44 @@ export function App() {
 
       <div style={{ display: "flex", minWidth: 0 }}>
         <main className="main">
-          <Topbar />
-          <div className="doc-scroll scroll" ref={docScrollRef}>
-            <DocHeader>
-              {/* distinct key so the editor remounts (clean refs) on page switch */}
-              <Editor key={`ed-${page}`} />
-            </DocHeader>
-          </div>
+          {surface === "doc" ? (
+            <>
+              <Topbar />
+              <div className="doc-scroll scroll" ref={docScrollRef}>
+                <DocHeader>
+                  {/* distinct key so the editor remounts (clean refs) on page switch */}
+                  <Editor key={`ed-${page}`} />
+                </DocHeader>
+              </div>
+            </>
+          ) : surface === "agent" ? (
+            // Agent Console: the tool-using Hermes chat (diffs/approval/gauge/
+            // delegation) — distinct from the doc-editing assistant.
+            <Chat
+              messages={agentMessages}
+              setMessages={setAgentMessages}
+              sessionId={agentSession}
+              profile="default"
+              onNewChat={() => {
+                setAgentMessages([]);
+                setAgentSession(null);
+              }}
+              onOpenDiagnose={() => {}}
+            />
+          ) : surface === "ask" ? (
+            <AskPane />
+          ) : (
+            <div className="doc-scroll scroll">
+              {surface === "insights" && <Insights profile="default" visible />}
+              {surface === "memory" && (
+                <MemoryTimeline profile="default" onRefresh={() => {}} />
+              )}
+            </div>
+          )}
         </main>
 
-        {panelOpen && <RightPanel />}
+        {/* The right panel (assistant/outline/comments/info) is doc-only. */}
+        {panelOpen && surface === "doc" && <RightPanel />}
       </div>
 
       <Overlays />

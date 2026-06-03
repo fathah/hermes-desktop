@@ -37,6 +37,21 @@ export function setThemeScope(el: HTMLElement | null): void {
   scopeEl = el;
 }
 
+// Active skin variables (idea A6). A skin layers ON TOP of tweaks — re-applied
+// at the end of applyTweaks so a tweak change never clobbers the skin (e.g. the
+// skin's accent wins over the tweaks accent picker when a skin sets one).
+let skinVars: Record<string, string> = {};
+
+/** Set (or clear) the active skin's CSS variables on the SPS scope. */
+export function setSkinVars(vars: Record<string, string>): void {
+  const r = scopeEl ?? document.documentElement;
+  for (const k of Object.keys(skinVars)) {
+    if (!(k in vars)) r.style.removeProperty(k);
+  }
+  skinVars = { ...vars };
+  for (const [k, v] of Object.entries(skinVars)) r.style.setProperty(k, v);
+}
+
 export function applyTweaks(t: Tweaks): void {
   const r = scopeEl ?? document.documentElement;
   r.setAttribute("data-theme", t.dark ? "dark" : "light");
@@ -48,4 +63,6 @@ export function applyTweaks(t: Tweaks): void {
   r.setAttribute("data-width", t.width === "full" ? "full" : "fixed");
   r.style.setProperty("--accent", t.accent);
   r.style.setProperty("--content-w", WIDTHS[t.width] || "740px");
+  // Re-apply skin vars last so they layer over the tweak vars above.
+  for (const [k, v] of Object.entries(skinVars)) r.style.setProperty(k, v);
 }
