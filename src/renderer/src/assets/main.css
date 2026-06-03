@@ -3,72 +3,82 @@
    Dark + Light mode, no gradients, flat design
    ======================================================================== */
 
-/* ----- Dark Theme (default) ----- */
+/* ==========================================================================
+   Hermes admin screens now speak the canonical SPS palette.
+   The legacy Hermes token names below are ALIASES onto the SPS warm-paper
+   tokens defined in design-tokens.css (--canvas, --tx-1, --hair, …). Changing
+   one variable here re-skins every admin screen; the screens' markup is
+   untouched. --accent / --accent-hover / --accent-text are intentionally NOT
+   redefined here — design-tokens.css :root owns them (Sukhi gold) for both
+   themes, so links/CTAs stay gold in light and dark.
+   ========================================================================== */
+
+/* ----- Dark Theme: aliases → SPS warm-dark ----- */
 [data-theme="dark"] {
-  --bg-primary: #212121;
-  --bg-secondary: #171717;
-  --bg-tertiary: #2f2f2f;
-  --bg-elevated: #303030;
-  --bg-hover: #3a3a3a;
-  --bg-active: #424242;
-  --accent: #003f7a;
-  --accent-hover: #0055a4;
-  --accent-subtle: rgba(0, 63, 122, 0.15);
-  --accent-text: #006acd;
-  --text-primary: #ececec;
-  --text-secondary: #b4b4b4;
-  --text-muted: #8e8e8e;
-  --border: rgba(255, 255, 255, 0.06);
-  --border-bright: rgba(255, 255, 255, 0.1);
-  --border-focus: #003f7a;
-  --success: #22c55e;
-  --success-bg: rgba(34, 197, 94, 0.1);
-  --error: #ef4444;
-  --error-bg: rgba(239, 68, 68, 0.1);
-  --warning: #f59e0b;
-  --warning-bg: rgba(245, 158, 11, 0.1);
-  --user-bubble: #003f7a;
-  --user-bubble-text: #ffffff;
-  --agent-bubble: #2f2f2f;
-  --agent-bubble-text: #ececec;
-  --code-bg: #1a1a1a;
-  --scrollbar-thumb: #424242;
-  --scrollbar-hover: #555555;
-  --selection: rgba(0, 63, 122, 0.4);
+  --bg-primary: var(--canvas);
+  --bg-secondary: var(--surface);
+  --bg-tertiary: var(--sunk);
+  --bg-elevated: var(--surface);
+  --bg-hover: var(--row-hover);
+  --bg-active: var(--row-sel);
+  --accent-subtle: var(--accent-soft);
+  --text-primary: var(--tx-1);
+  --text-secondary: var(--tx-2);
+  --text-muted: var(--tx-3);
+  --text-tertiary: var(--tx-4);
+  --border: var(--hair);
+  --border-bright: var(--hair-strong);
+  --border-subtle: var(--hair-soft);
+  --border-hover: var(--hair-strong);
+  --border-focus: var(--accent);
+  --success: var(--ok-fg);
+  --success-bg: var(--ok-bg);
+  --error: var(--danger-fg);
+  --error-bg: var(--danger-bg);
+  --warning: var(--warn-fg);
+  --warning-bg: var(--warn-bg);
+  --user-bubble: var(--accent);
+  --user-bubble-text: var(--accent-on);
+  --agent-bubble: var(--surface);
+  --agent-bubble-text: var(--tx-1);
+  --code-bg: var(--sunk);
+  --scrollbar-thumb: var(--hair-strong);
+  --scrollbar-hover: var(--tx-4);
+  --selection: var(--accent-soft);
 }
 
-/* ----- Light Theme ----- */
+/* ----- Light Theme: aliases → SPS warm-paper ----- */
 [data-theme="light"] {
-  --bg-primary: #ffffff;
-  --bg-secondary: #f8f8f8;
-  --bg-tertiary: #f0f0f0;
-  --bg-elevated: #e8e8e8;
-  --bg-hover: #ebebeb;
-  --bg-active: #e0e0e0;
-  --accent: #003f7a;
-  --accent-hover: #002d58;
-  --accent-subtle: rgba(0, 63, 122, 0.08);
-  --accent-text: #003f7a;
-  --text-primary: #111111;
-  --text-secondary: #555555;
-  --text-muted: #999999;
-  --border: #e5e5e5;
-  --border-bright: #d4d4d4;
-  --border-focus: #003f7a;
-  --success: #16a34a;
-  --success-bg: rgba(22, 163, 74, 0.08);
-  --error: #dc2626;
-  --error-bg: rgba(220, 38, 38, 0.06);
-  --warning: #d97706;
-  --warning-bg: rgba(217, 119, 6, 0.08);
-  --user-bubble: #003f7a;
-  --user-bubble-text: #ffffff;
-  --agent-bubble: #f0f0f0;
-  --agent-bubble-text: #111111;
-  --code-bg: #f5f5f5;
-  --scrollbar-thumb: #d4d4d4;
-  --scrollbar-hover: #bbbbbb;
-  --selection: rgba(0, 63, 122, 0.2);
+  --bg-primary: var(--canvas);
+  --bg-secondary: var(--surface);
+  --bg-tertiary: var(--sunk);
+  --bg-elevated: var(--surface);
+  --bg-hover: var(--row-hover);
+  --bg-active: var(--row-sel);
+  --accent-subtle: var(--accent-soft);
+  --text-primary: var(--tx-1);
+  --text-secondary: var(--tx-2);
+  --text-muted: var(--tx-3);
+  --text-tertiary: var(--tx-4);
+  --border: var(--hair);
+  --border-bright: var(--hair-strong);
+  --border-subtle: var(--hair-soft);
+  --border-hover: var(--hair-strong);
+  --border-focus: var(--accent);
+  --success: var(--ok-fg);
+  --success-bg: var(--ok-bg);
+  --error: var(--danger-fg);
+  --error-bg: var(--danger-bg);
+  --warning: var(--warn-fg);
+  --warning-bg: var(--warn-bg);
+  --user-bubble: var(--accent);
+  --user-bubble-text: var(--accent-on);
+  --agent-bubble: var(--surface);
+  --agent-bubble-text: var(--tx-1);
+  --code-bg: var(--sunk);
+  --scrollbar-thumb: var(--hair-strong);
+  --scrollbar-hover: var(--tx-4);
+  --selection: var(--accent-soft);
 }
 
 /* ----- Google Sans ----- */
@@ -115,18 +125,16 @@
   font-display: swap;
 }
 
-/* ----- Shared Tokens ----- */
+/* ----- Shared Tokens -----
+   Radii pulled toward the SPS "ledger" scale (conservative corners). Font
+   families are owned by design-tokens.css (:root) — Inter / JetBrains Mono /
+   Source Serif 4 — so they are intentionally not redefined here. */
 :root {
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 20px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
   --transition: 150ms ease;
-  --font-sans:
-    "Google Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    sans-serif;
-  --font-mono:
-    "SF Mono", "Fira Code", "JetBrains Mono", Menlo, Consolas, monospace;
 }
 
 /* ----- Body ----- */
@@ -195,7 +203,7 @@ body {
 
 .btn-primary {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-on); /* dark ink on gold — readable, on-brand */
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -218,7 +226,7 @@ body {
 }
 
 .btn-danger {
-  background: var(--error);
+  background: var(--danger-solid);
   color: #fff;
   border: none;
 }
@@ -933,7 +941,7 @@ body {
   justify-content: center;
   font-size: 14px;
   font-weight: 700;
-  color: #fff;
+  color: var(--accent-on);
 }
 
 .sidebar-brand-name {
@@ -1046,7 +1054,7 @@ body {
   background: var(--accent);
   border: none;
   border-radius: 6px;
-  color: #fff;
+  color: var(--accent-on);
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
@@ -1067,11 +1075,11 @@ body {
 }
 
 .sidebar-update-btn.error {
-  background: var(--error);
+  background: var(--danger-solid);
 }
 
 .sidebar-update-btn.error:hover {
-  background: var(--error);
+  background: var(--danger-solid);
 }
 
 /* Theme Switcher */
@@ -3236,7 +3244,7 @@ body {
 }
 
 .chat-approve {
-  background: var(--success);
+  background: var(--ok-solid);
   color: #fff;
 }
 
@@ -3457,7 +3465,7 @@ body {
   border-radius: var(--radius-sm);
   background: var(--accent);
   border: none;
-  color: #fff;
+  color: var(--accent-on);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -3476,7 +3484,7 @@ body {
 }
 
 .chat-stop-btn {
-  background: var(--error);
+  background: var(--danger-solid);
 }
 
 .chat-stop-btn:hover {
@@ -3855,7 +3863,7 @@ body {
 }
 
 .attachment-chip-remove:hover {
-  background: var(--error);
+  background: var(--danger-solid);
   color: #fff;
   border-color: var(--error);
 }
@@ -5324,7 +5332,7 @@ body {
 }
 
 .settings-gateway-status.running::before {
-  background: var(--success);
+  background: var(--ok-solid);
 }
 
 .settings-gateway-status.stopped::before {
@@ -5623,7 +5631,7 @@ body {
 
 .agents-card.active .agents-card-avatar {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-on);
 }
 
 .agents-card-info {
@@ -7336,7 +7344,7 @@ body {
 
 .tools-card-enabled .tools-card-icon {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-on);
 }
 
 .tools-card-icon svg {
@@ -7748,7 +7756,7 @@ body {
 }
 
 .office-status-dot.running {
-  background: var(--success);
+  background: var(--ok-solid);
   box-shadow: 0 0 6px var(--success);
 }
 

@@ -1,0 +1,130 @@
+/* ==========================================================================
+   SPS Design System — Canonical Tokens (document-wide single source of truth)
+   --------------------------------------------------------------------------
+   The SPS Agent "warm paper / Notion surface" palette is the design language
+   for the ENTIRE desktop app. It was previously fenced inside `.sps-scope`
+   (see screens/SpsAgent/styles/home.css) so the Hermes admin screens
+   (Settings, Providers, Gateway, …) — which render at document root, OUTSIDE
+   that scope — reverted to the old navy/Google-Sans Hermes look.
+
+   This file hoists the SPS palette to :root so every screen inherits it, and
+   main.css aliases the legacy Hermes token names (--bg-primary, --text-primary,
+   --accent, …) onto these values. Net effect: one palette, one type system,
+   everywhere — with zero markup changes to the 21 admin screens.
+
+   Source of truth: this file. home.css still declares the same values under
+   `.sps-scope` (higher specificity) so the SPS screen is untouched; keep the
+   two in sync until Phase 4 makes `.sps-scope` inherit from :root.
+   ========================================================================== */
+
+:root,
+:root[data-theme="light"] {
+  /* ---------- Surfaces: warm paper (light) ------------------------------ */
+  --app-bg: #f2efe7; /* warm sidebar / wells — most recessed */
+  --canvas: #fbfaf6; /* document surface — main reading bg */
+  --surface: #ffffff; /* raised cards, tables, sections */
+  --sunk: #f1ede3; /* sunk wells, inputs, table header */
+  --hair: #e4dfd2; /* primary hairline border */
+  --hair-soft: #ece8dc; /* faint divider */
+  --hair-strong: #d2cbb8; /* input border, strong divider */
+
+  /* ---------- Ink ------------------------------------------------------- */
+  --tx-1: #1b1d21; /* primary text */
+  --tx-2: #44484f; /* secondary text */
+  --tx-3: #797e87; /* tertiary / meta */
+  --tx-4: #a7abb2; /* faint / placeholder / disabled */
+
+  /* ---------- Interaction ----------------------------------------------- */
+  --row-hover: #f0ece2;
+  --row-sel: #ece8dd;
+  --block-hover: rgba(20, 22, 26, 0.035);
+
+  /* ---------- Brand accent: Sukhi gold ---------------------------------- */
+  --accent: #c79400; /* gold-deep — links, active nav, focus, CTAs */
+  --accent-hover: #9e7500;
+  --accent-press: #856200;
+  --accent-soft: color-mix(in oklab, var(--accent) 14%, transparent);
+  --accent-text: var(--accent); /* readable gold on light surfaces */
+  --accent-on: #1b1d21; /* text/icon ON an accent fill (dark ink on gold) */
+
+  /* ---------- Semantic states (muted, ledger-grade) --------------------- */
+  --ok-fg: #1f6b3a;
+  --ok-bg: #e3f1e6;
+  --ok-border: #a8d4b2;
+  --warn-fg: #8a5a00;
+  --warn-bg: #fbefd0;
+  --warn-border: #e8c878;
+  --danger-fg: #a1202c;
+  --danger-bg: #fbe3e4;
+  --danger-border: #e8a8ae;
+  --info-fg: #1b4f8a;
+  --info-bg: #e3ecf7;
+  --info-border: #a8c3e3;
+
+  /* Solid status fills — saturated in BOTH themes so they pair with white
+     text on buttons (.btn-danger, .chat-approve). The *-fg tokens above
+     lighten on dark for text legibility and must NOT be used as fills. */
+  --danger-solid: #a1202c;
+  --ok-solid: #1f6b3a;
+  --warn-solid: #8a5a00;
+
+  /* ---------- Elevation ------------------------------------------------- */
+  --shadow-1: 0 1px 0 rgba(20, 22, 26, 0.04), 0 1px 2px rgba(20, 22, 26, 0.04);
+  --shadow-2:
+    0 2px 4px rgba(20, 22, 26, 0.06), 0 1px 2px rgba(20, 22, 26, 0.04);
+  --shadow-pop:
+    0 12px 40px rgba(20, 22, 26, 0.16), 0 2px 8px rgba(20, 22, 26, 0.08);
+  --shadow-menu:
+    0 8px 28px rgba(20, 22, 26, 0.13), 0 1px 3px rgba(20, 22, 26, 0.07);
+  --scrim: rgba(28, 26, 22, 0.34);
+
+  /* ---------- Type families (self-hosted, loaded in main.tsx) ----------- */
+  --font-sans:
+    "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: "Source Serif 4", "Iowan Old Style", Georgia, serif;
+  --font-mono:
+    "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* ---------- Surfaces: warm dark --------------------------------------- */
+:root[data-theme="dark"] {
+  --app-bg: #16150f;
+  --canvas: #1c1b16;
+  --surface: #232118;
+  --sunk: #211f18;
+  --hair: #322f25;
+  --hair-soft: #2a2820;
+  --hair-strong: #45412f;
+
+  --tx-1: #ece7d8;
+  --tx-2: #b6b1a2;
+  --tx-3: #888373;
+  --tx-4: #5e5a4d;
+
+  --row-hover: #242219;
+  --row-sel: #2b281d;
+  --block-hover: rgba(255, 255, 255, 0.04);
+
+  /* Gold reads slightly brighter on warm dark; ink-on-accent stays dark. */
+  --accent-on: #16150f;
+
+  /* Semantic states tuned for dark surfaces */
+  --ok-fg: #6bc48a;
+  --ok-bg: rgba(31, 107, 58, 0.18);
+  --ok-border: rgba(107, 196, 138, 0.32);
+  --warn-fg: #e2b65a;
+  --warn-bg: rgba(138, 90, 0, 0.22);
+  --warn-border: rgba(232, 200, 120, 0.3);
+  --danger-fg: #e88a92;
+  --danger-bg: rgba(161, 32, 44, 0.22);
+  --danger-border: rgba(232, 168, 174, 0.3);
+  --info-fg: #7fb0e0;
+  --info-bg: rgba(27, 79, 138, 0.22);
+  --info-border: rgba(168, 195, 227, 0.3);
+
+  --shadow-1: 0 1px 0 rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-pop: 0 16px 48px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-menu: 0 10px 30px rgba(0, 0, 0, 0.5);
+  --scrim: rgba(0, 0, 0, 0.55);
+}

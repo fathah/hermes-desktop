@@ -1,3 +1,16 @@
+// Self-hosted brand fonts (Inter / JetBrains Mono / Source Serif 4) — loaded
+// globally so every screen, not just the SPS Agent workspace, renders in the
+// canonical type system. Same-origin, so the desktop CSP allows them.
+import "@fontsource/inter/400.css";
+import "@fontsource/inter/500.css";
+import "@fontsource/inter/600.css";
+import "@fontsource/inter/700.css";
+import "@fontsource/jetbrains-mono/400.css";
+import "@fontsource/jetbrains-mono/500.css";
+import "@fontsource/source-serif-4/500.css";
+// Canonical SPS design tokens (must precede main.css so its [data-theme]
+// aliases can reference these :root values).
+import "./assets/design-tokens.css";
 import "./assets/main.css";
 
 import { StrictMode } from "react";
