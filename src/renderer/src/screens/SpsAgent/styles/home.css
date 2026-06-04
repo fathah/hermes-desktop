@@ -1506,7 +1506,7 @@
   max-height: 140px;
 }
 .sps-scope .composer textarea::placeholder {
-  color: var(--tx-4);
+  color: var(--tx-3);
 }
 .sps-scope .composer-row {
   display: flex;
