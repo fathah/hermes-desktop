@@ -2,12 +2,15 @@ import { memo, useMemo, Fragment } from "react";
 import { HermesAvatar, MessageRow } from "./MessageRow";
 import { ReasoningRow, ToolCallRow, ToolResultRow } from "./HistoryRow";
 import { isCompressionSummary } from "./contextGauge";
+import { useTtsPlayback } from "./hooks/useTtsPlayback";
 import type { ChatMessage } from "./types";
 
 interface MessageListProps {
   messages: ChatMessage[];
   isLoading: boolean;
   toolProgress: string | null;
+  /** Active profile — routes TTS synthesis to the right key. */
+  profile?: string;
   onApprove: () => void;
   onDeny: () => void;
 }
@@ -51,9 +54,11 @@ export const MessageList = memo(function MessageList({
   messages,
   isLoading,
   toolProgress,
+  profile,
   onApprove,
   onDeny,
 }: MessageListProps): React.JSX.Element {
+  const tts = useTtsPlayback(profile);
   // Bubbles with empty content are still hidden (live-stream placeholders).
   // History rows pass through unconditionally.
   const visibleMessages = useMemo(
@@ -128,6 +133,18 @@ export const MessageList = memo(function MessageList({
               onApprove={onApprove}
               onDeny={onDeny}
               showAvatar={showAvatar}
+              ttsHasKey={tts.hasKey}
+              ttsSpeaking={tts.playingId === bubble.id}
+              ttsBusy={tts.busyId === bubble.id}
+              onSpeak={() =>
+                tts.playingId === bubble.id
+                  ? tts.stop()
+                  : tts.play(
+                      bubble.id,
+                      ((bubble as { content?: unknown }).content as string) ||
+                        "",
+                    )
+              }
             />
           </Fragment>
         );

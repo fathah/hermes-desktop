@@ -7,8 +7,9 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
-import { Send, Square as Stop, Slash, Paperclip } from "lucide-react";
+import { Send, Square as Stop, Slash, Paperclip, Mic } from "lucide-react";
 import { isImeComposing } from "./keyboard";
+import { useVoiceInput } from "./hooks/useVoiceInput";
 import { useI18n } from "../../components/useI18n";
 import { SLASH_COMMANDS, type SlashCommand } from "./slashCommands";
 import { useInputHistory } from "./hooks/useInputHistory";
@@ -40,6 +41,8 @@ interface ChatInputProps {
   isLoading: boolean;
   hasSession: boolean;
   sessionId?: string | null;
+  /** Active profile — routes voice transcription to the right key. */
+  profile?: string;
   remoteMode?: boolean;
   /** Pre-send validation state. When `ok` is false, Send is disabled
    * and an inline banner explains why + how to fix it. */
@@ -55,6 +58,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       isLoading,
       hasSession,
       sessionId,
+      profile,
       remoteMode,
       readiness,
       onSubmit,
@@ -96,6 +100,20 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       currentInput: input,
       applyText: applyHistoryText,
     });
+
+    // Voice input (WS4): append dictated text to the current draft so the user
+    // can dictate then keep typing, rather than overwriting what's there.
+    const injectVoiceText = useCallback(
+      (text: string): void => {
+        setInput((prev) => (prev ? `${prev} ${text}` : text));
+        requestAnimationFrame(() => {
+          autoResize();
+          inputRef.current?.focus();
+        });
+      },
+      [autoResize],
+    );
+    const voice = useVoiceInput(profile, injectVoiceText);
 
     const formatError = useCallback(
       (err: AttachmentError): string => {
@@ -423,6 +441,13 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             )}
           </div>
         )}
+        {voice.error && (
+          <div className="chat-attachment-strip">
+            <div className="chat-attachment-error" role="alert">
+              {voice.error}
+            </div>
+          </div>
+        )}
         {(attachments.length > 0 || attachmentError) && (
           <div className="chat-attachment-strip">
             {attachments.map((att) => (
@@ -457,6 +482,28 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           >
             <Paperclip size={16} />
           </button>
+          {voice.supported && (
+            <button
+              className={`chat-attach-btn chat-mic-btn ${
+                voice.recording ? "chat-mic-recording" : ""
+              }`}
+              onClick={voice.toggle}
+              disabled={isLoading || voice.busy || !voice.hasKey}
+              title={
+                !voice.hasKey
+                  ? t("chat.voiceNoKey")
+                  : voice.busy
+                    ? t("chat.voiceTranscribing")
+                    : voice.recording
+                      ? t("chat.voiceStop")
+                      : t("chat.voiceStart")
+              }
+              aria-label={t("chat.voiceStart")}
+              type="button"
+            >
+              {voice.recording ? <Stop size={16} /> : <Mic size={16} />}
+            </button>
+          )}
           <textarea
             ref={inputRef}
             className="chat-input"

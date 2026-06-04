@@ -100,4 +100,11 @@ export default {
   hideWorktree: "Ukryj eksplorator plików",
   showPreview: "Pokaż podgląd",
   hidePreview: "Ukryj podgląd",
+  voiceStart: "Kliknij, aby nagrywać",
+  voiceStop: "Zatrzymaj i transkrybuj",
+  voiceTranscribing: "Transkrypcja…",
+  voiceNoKey: "Ustaw VOICE_TOOLS_OPENAI_KEY w Ustawieniach, aby włączyć głos",
+  voicePlay: "Odtwórz tę odpowiedź",
+  voiceStopPlayback: "Zatrzymaj odtwarzanie",
+  voiceSynthesizing: "Generowanie dźwięku…",
 } as const;

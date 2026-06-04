@@ -2318,6 +2318,60 @@ body {
   overflow: hidden;
 }
 
+/* Voice (WS4): push-to-talk mic button + per-message speaker button */
+.chat-mic-btn.chat-mic-recording {
+  color: var(--danger, #e5484d);
+  animation: chat-mic-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes chat-mic-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.chat-msg-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+  padding-left: 2px;
+}
+
+.chat-speak-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0.6;
+  transition:
+    opacity var(--transition),
+    background-color var(--transition);
+}
+
+.chat-speak-btn:hover:not(:disabled) {
+  opacity: 1;
+  background: var(--bg-hover);
+}
+
+.chat-speak-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.chat-speak-btn.chat-speak-active {
+  opacity: 1;
+  color: var(--accent-text);
+}
+
 /* Preview panel (WS2) - visual tool output on the right (screenshot / HTML) */
 .preview-panel {
   width: 420px;

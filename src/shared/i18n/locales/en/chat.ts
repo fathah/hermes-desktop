@@ -108,4 +108,11 @@ export default {
   hideWorktree: "Hide file explorer",
   showPreview: "Show preview",
   hidePreview: "Hide preview",
+  voiceStart: "Hold to talk — click to start recording",
+  voiceStop: "Stop recording & transcribe",
+  voiceTranscribing: "Transcribing…",
+  voiceNoKey: "Set VOICE_TOOLS_OPENAI_KEY in Settings to enable voice",
+  voicePlay: "Play this reply",
+  voiceStopPlayback: "Stop playback",
+  voiceSynthesizing: "Generating audio…",
 } as const;

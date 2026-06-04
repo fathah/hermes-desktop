@@ -38,6 +38,7 @@ import {
 import { profileHome, getActiveProfileNameSync } from "./utils";
 import { discoverProviderModels } from "./model-discovery";
 import { readMediaAsDataUrl, saveMedia, mediaFileExists } from "./media";
+import { getVoiceStatus, transcribeAudio, speakText } from "./voice";
 import {
   checkInstallStatus,
   verifyInstall,
@@ -380,6 +381,21 @@ function createWindow(): void {
     openExternalUrl(url);
   });
 
+  // Microphone access for push-to-talk voice input (WS4). Grant audio-only
+  // `media`; deny camera and every other permission. getUserMedia still shows
+  // the OS-level mic prompt, so the user explicitly consents at capture time.
+  mainWindow.webContents.session.setPermissionRequestHandler(
+    (_wc, permission, callback, details) => {
+      if (permission === "media") {
+        const mediaTypes =
+          (details as { mediaTypes?: string[] }).mediaTypes ?? [];
+        callback(!mediaTypes.includes("video"));
+        return;
+      }
+      callback(false);
+    },
+  );
+
   mainWindow.webContents.on(
     "will-attach-webview",
     (event, webPreferences, params) => {
@@ -581,6 +597,22 @@ function setupIPC(): void {
       return { available: false, reason: (err as Error).message };
     }
   });
+
+  // Voice I/O (WS4) — speech-to-text and text-to-speech via OpenAI, keyed by
+  // the profile's VOICE_TOOLS_OPENAI_KEY (read in main; never sent to renderer).
+  ipcMain.handle("get-voice-status", (_event, profile?: string) =>
+    getVoiceStatus(profile),
+  );
+  ipcMain.handle(
+    "transcribe-audio",
+    (_event, audio: ArrayBuffer, mime: string, profile?: string) =>
+      transcribeAudio(audio, mime, profile),
+  );
+  ipcMain.handle(
+    "speak-text",
+    (_event, text: string, voice: string | undefined, profile?: string) =>
+      speakText(text, voice, profile),
+  );
 
   // OpenClaw migration
   ipcMain.handle("check-openclaw", () => checkOpenClawExists());

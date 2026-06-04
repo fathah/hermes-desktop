@@ -107,6 +107,22 @@ const hermesAPI = {
     reason?: string;
   }> => ipcRenderer.invoke("check-hermes-update"),
 
+  // Voice I/O (WS4)
+  getVoiceStatus: (profile?: string): Promise<{ hasKey: boolean }> =>
+    ipcRenderer.invoke("get-voice-status", profile),
+  transcribeAudio: (
+    audio: ArrayBuffer,
+    mime: string,
+    profile?: string,
+  ): Promise<{ text?: string; error?: string }> =>
+    ipcRenderer.invoke("transcribe-audio", audio, mime, profile),
+  speakText: (
+    text: string,
+    voice?: string,
+    profile?: string,
+  ): Promise<{ audioUrl?: string; error?: string }> =>
+    ipcRenderer.invoke("speak-text", text, voice, profile),
+
   // OpenClaw migration
   checkOpenClaw: (): Promise<{ found: boolean; path: string | null }> =>
     ipcRenderer.invoke("check-openclaw"),

@@ -423,6 +423,7 @@ function Chat({
               messages={messages}
               isLoading={isLoading}
               toolProgress={toolProgress}
+              profile={profile}
               onApprove={actions.handleApprove}
               onDeny={actions.handleDeny}
             />
@@ -458,6 +459,7 @@ function Chat({
           isLoading={isLoading}
           hasSession={!!hermesSessionId}
           sessionId={hermesSessionId}
+          profile={profile}
           remoteMode={remoteMode}
           readiness={readiness}
           onSubmit={handleSubmitOrQueue}

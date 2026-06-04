@@ -229,6 +229,17 @@ interface HermesAPI {
     upstreamHead?: string;
     reason?: string;
   }>;
+  getVoiceStatus: (profile?: string) => Promise<{ hasKey: boolean }>;
+  transcribeAudio: (
+    audio: ArrayBuffer,
+    mime: string,
+    profile?: string,
+  ) => Promise<{ text?: string; error?: string }>;
+  speakText: (
+    text: string,
+    voice?: string,
+    profile?: string,
+  ) => Promise<{ audioUrl?: string; error?: string }>;
 
   // OpenClaw migration
   checkOpenClaw: () => Promise<{ found: boolean; path: string | null }>;
