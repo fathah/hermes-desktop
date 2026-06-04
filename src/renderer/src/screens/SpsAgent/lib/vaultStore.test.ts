@@ -7,6 +7,7 @@ import {
   writeVaultWorkspace,
   rollbackToBlob,
   deleteVaultPages,
+  deleteVaultDbFolders,
 } from "./vaultStore";
 import { workspaceToVault } from "../editor/workspaceVault";
 import { blk } from "../lib/ids";
@@ -183,5 +184,25 @@ describe("deleteVaultPages — orphan cleanup (F3)", () => {
     const del = vi.fn().mockRejectedValue(new Error("locked"));
     stubApi({ spsDeletePage: del });
     await expect(deleteVaultPages(["a"])).resolves.toBeUndefined();
+  });
+});
+
+describe("deleteVaultDbFolders — query-DB row-folder cleanup (F3)", () => {
+  it("calls spsDeleteDbFolder once per source", async () => {
+    const del = vi.fn().mockResolvedValue(true);
+    stubApi({ spsDeleteDbFolder: del });
+    await deleteVaultDbFolders(["projects", "tasks"]);
+    expect(del.mock.calls.map((c) => c[0])).toEqual(["projects", "tasks"]);
+  });
+
+  it("is a no-op when the delete API is unavailable", async () => {
+    stubApi({});
+    await expect(deleteVaultDbFolders(["projects"])).resolves.toBeUndefined();
+  });
+
+  it("never rejects when a delete fails (best-effort)", async () => {
+    const del = vi.fn().mockRejectedValue(new Error("locked"));
+    stubApi({ spsDeleteDbFolder: del });
+    await expect(deleteVaultDbFolders(["projects"])).resolves.toBeUndefined();
   });
 });

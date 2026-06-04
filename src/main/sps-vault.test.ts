@@ -13,6 +13,7 @@ import {
   pageFilename,
   exportRowMarkdownTo,
   deleteRowIn,
+  deleteDbFolderIn,
   listRowIdsIn,
   readVaultPages,
   readVaultManifest,
@@ -114,6 +115,22 @@ describe("database rows (S4)", () => {
   it("lists nothing for a missing folder or bad segment", async () => {
     expect(await listRowIdsIn(dir, "missing")).toEqual([]);
     expect(await listRowIdsIn(dir, "../x")).toEqual([]);
+  });
+
+  it("deletes a whole row folder when its block is removed (F3)", async () => {
+    await exportRowMarkdownTo(dir, "db1", "r1", "a");
+    await exportRowMarkdownTo(dir, "db1", "r2", "b");
+    expect(existsSync(join(dir, "db1"))).toBe(true);
+    expect(await deleteDbFolderIn(dir, "db1")).toBe(true);
+    expect(existsSync(join(dir, "db1"))).toBe(false);
+  });
+
+  it("deleteDbFolderIn rejects a hostile or missing segment", async () => {
+    await exportRowMarkdownTo(dir, "keep", "r1", "a");
+    expect(await deleteDbFolderIn(dir, "../keep")).toBe(false);
+    expect(await deleteDbFolderIn(dir, "a/b")).toBe(false);
+    expect(await deleteDbFolderIn(dir, "missing")).toBe(false);
+    expect(existsSync(join(dir, "keep"))).toBe(true);
   });
 });
 

@@ -108,6 +108,22 @@ export async function deleteRowIn(
   }
 }
 
+/** Delete a whole database row folder (F3 — when its block is removed). The
+ *  folder is a single id-safe segment, so this can't escape the vault; a bad
+ *  segment or missing folder ⇒ false. Recursive: removes the folder + its rows. */
+export async function deleteDbFolderIn(
+  vaultDir: string,
+  dbFolder: string,
+): Promise<boolean> {
+  if (!isValidSegment(dbFolder)) return false;
+  try {
+    await fs.rm(join(vaultDir, dbFolder), { recursive: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** List the row ids in a database folder (filenames sans .md). */
 export async function listRowIdsIn(
   vaultDir: string,

@@ -4,7 +4,7 @@ import type { StateCreator } from "zustand";
 import { blk, uid } from "../../lib/ids";
 import { clearWorkspace } from "../../lib/persistence";
 import { getStorageMode } from "../../lib/storageMode";
-import { deleteVaultPages } from "../../lib/vaultStore";
+import { deleteVaultPages, deleteVaultDbFolders } from "../../lib/vaultStore";
 import {
   treeFind,
   treeInsert,
@@ -16,6 +16,15 @@ import { buildInitialWorkspace } from "../../data/seed";
 import { initialWorkspace as initial } from "../initial";
 import type { Block } from "../../types";
 import type { Store, WorkspaceSlice } from "../storeTypes";
+
+/** The `source` folders of folder-backed database blocks in a block list. */
+function dbSources(blocks: Block[]): Set<string> {
+  const out = new Set<string>();
+  for (const b of blocks) {
+    if (b.type === "database" && b.source) out.add(b.source);
+  }
+  return out;
+}
 
 export const createWorkspaceSlice: StateCreator<
   Store,
@@ -32,7 +41,24 @@ export const createWorkspaceSlice: StateCreator<
   setBlocks: (updater) =>
     set((s) => {
       const cur = s.docs[s.page] || [];
-      return { docs: { ...s.docs, [s.page]: updater(cur) } };
+      const next = updater(cur);
+      // F3: in vault mode, removing a folder-backed database block orphans its
+      // row folder on disk. Clean it up — but only if no other page (nor the new
+      // current page) still references that source (best-effort, never throws).
+      if (getStorageMode() === "vault") {
+        const after = dbSources(next);
+        const removed = [...dbSources(cur)].filter((src) => !after.has(src));
+        if (removed.length) {
+          const stillUsed = new Set<string>(after);
+          for (const [pid, blocks] of Object.entries(s.docs)) {
+            if (pid === s.page) continue;
+            for (const src of dbSources(blocks)) stillUsed.add(src);
+          }
+          const orphaned = removed.filter((src) => !stillUsed.has(src));
+          if (orphaned.length) void deleteVaultDbFolders(orphaned);
+        }
+      }
+      return { docs: { ...s.docs, [s.page]: next } };
     }),
 
   setPageDoc: (id, blocks) =>

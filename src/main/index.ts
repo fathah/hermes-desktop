@@ -28,6 +28,7 @@ import {
   exportRowMarkdownTo,
   deletePageIn,
   deleteRowIn,
+  deleteDbFolderIn,
   readVaultPages,
   readVaultManifest,
   writeVaultManifest,
@@ -2532,6 +2533,17 @@ function setupIPC(): void {
       const home = profileHome(profile || getActiveProfileNameSync());
       const dir = join(home, "sps-agent", "vault");
       return deletePageIn(dir, pageId);
+    },
+  );
+
+  // F3: remove a folder-backed database's row folder when its block is removed
+  // (vault mode). Best-effort.
+  ipcMain.handle(
+    "sps-delete-db-folder",
+    (_event, dbFolder: string, profile?: string) => {
+      const home = profileHome(profile || getActiveProfileNameSync());
+      const dir = join(home, "sps-agent", "vault");
+      return deleteDbFolderIn(dir, dbFolder);
     },
   );
 

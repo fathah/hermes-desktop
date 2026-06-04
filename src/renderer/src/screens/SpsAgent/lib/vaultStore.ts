@@ -70,6 +70,16 @@ export async function deleteVaultPages(pageIds: string[]): Promise<void> {
   await Promise.all(pageIds.map((id) => del(id).catch(() => false)));
 }
 
+/** Best-effort: remove the row folders of removed folder-backed databases (F3),
+ *  so a deleted query-DB block doesn't orphan its `<source>/` folder on disk.
+ *  Never throws. */
+export async function deleteVaultDbFolders(sources: string[]): Promise<void> {
+  const api = window.hermesAPI;
+  const del = api?.spsDeleteDbFolder;
+  if (!del) return;
+  await Promise.all(sources.map((src) => del(src).catch(() => false)));
+}
+
 export interface MigrationResult {
   ok: boolean;
   reason?: string;
