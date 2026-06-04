@@ -3,7 +3,8 @@
 //
 // Safety rails:
 //   • migrate runs a parity pre-check and REFUSES if content/structure would not
-//     round-trip, or if any comment is anchored to a block id (not yet supported).
+//     round-trip (parity.ok includes blockAnchorsOk — comment-anchored block ids
+//     are persisted in markdown by F2, so anchored comments no longer block).
 //   • migrate backs up the JSON blob (timestamped) before writing the vault.
 //   • migrate and rollback are inverses, so neither direction loses edits.
 //   • the blob is never deleted — rollback just makes it authoritative again.
@@ -12,6 +13,7 @@ import {
   vaultToWorkspace,
   workspaceManifest,
   workspaceParity,
+  commentAnchorIds,
   type VaultSnapshot,
 } from "../editor/workspaceVault";
 import { pageToMarkdown } from "../editor/pageMarkdown";
@@ -49,7 +51,11 @@ export async function saveVaultPage(
 ): Promise<void> {
   const api = window.hermesAPI;
   if (!api?.spsExportPage || !api.spsVaultWriteManifest) return;
-  const md = pageToMarkdown(ws.meta[pageId] ?? {}, ws.docs[pageId] ?? []);
+  const md = pageToMarkdown(
+    ws.meta[pageId] ?? {},
+    ws.docs[pageId] ?? [],
+    commentAnchorIds(ws.comments),
+  );
   await api.spsExportPage(pageId, md);
   await api.spsVaultWriteManifest(JSON.stringify(workspaceManifest(ws)));
 }
@@ -64,13 +70,9 @@ export interface MigrationResult {
 export async function migrateToVault(ws: Workspace): Promise<MigrationResult> {
   const report = workspaceParity(ws);
   if (!report.ok) {
+    // F2 persists ids for comment-anchored blocks, so anchored comments no
+    // longer block cutover; parity.ok already incorporates blockAnchorsOk.
     return { ok: false, reason: "Content would not round-trip losslessly" };
-  }
-  if (report.blockAnchoredComments > 0) {
-    return {
-      ok: false,
-      reason: `${report.blockAnchoredComments} comment(s) anchored to blocks — re-anchoring not yet supported`,
-    };
   }
   const api = window.hermesAPI;
   const backup = api?.spsBackupWorkspace

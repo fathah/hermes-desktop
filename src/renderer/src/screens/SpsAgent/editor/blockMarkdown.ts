@@ -26,16 +26,19 @@ import type { Block, BlockType } from "../types";
 
 const META_RE = /^<!--\s*sps:([A-Za-z0-9+/=]+)\s*-->$/;
 
-function encodeMeta(block: Block): string {
-  const json = JSON.stringify(stripId(block));
+// `keepId` is set for anchored blocks (F2): a block an open comment references
+// must keep a stable id across the round-trip. Default stays clean (id dropped).
+function encodeMeta(block: Block, keepId = false): string {
+  const json = JSON.stringify(keepId ? block : stripId(block));
   return `<!-- sps:${btoa(unescape(encodeURIComponent(json)))} -->`;
 }
 
 function decodeMeta(b64: string): Block | null {
   try {
     const json = decodeURIComponent(escape(atob(b64)));
-    const parsed = JSON.parse(json) as Block;
-    return { ...parsed, id: uid() };
+    const parsed = JSON.parse(json) as Partial<Block>;
+    // Reuse a persisted (anchored) id; otherwise the id is a fresh runtime handle.
+    return { ...parsed, id: parsed.id || uid() } as Block;
   } catch {
     return null;
   }
@@ -209,6 +212,25 @@ const HEADING_PREFIX: Record<string, string> = {
 };
 const LIST_TYPES = new Set<BlockType>(["li", "numli", "todo"]);
 
+// F2 — block-id persistence for comment anchors. A block an open comment is
+// anchored to must keep a stable id across the markdown round-trip. Inline,
+// single-line tier-1 blocks carry an Obsidian-style trailing ` ^<id>`; any other
+// anchored block (divider/code/image/page-link, or a tier-2 block) keeps its id
+// inside the `<!-- sps:… -->` meta instead. Non-anchored blocks are untouched —
+// output stays clean for the 99% case.
+const INLINE_ANCHOR_TYPES = new Set<BlockType>([
+  "p",
+  "h1",
+  "h2",
+  "h3",
+  "li",
+  "numli",
+  "todo",
+  "quote",
+]);
+// Matches a trailing ` ^<id>` marker on a content line (Obsidian block ref).
+const BLOCK_ID_RE = /\s+\^([A-Za-z0-9_-]+)\s*$/;
+
 // A page-link block serializes to a bare [[pageId]] so the note-index graph
 // resolves it (a note's basename == its pageId). Round-trips losslessly.
 const PAGE_ID_RE = /^[A-Za-z0-9_-]+$/;
@@ -250,9 +272,8 @@ function renderInline(block: Block): string {
   return escapeInline(block.text || "");
 }
 
-function blockToMarkdown(block: Block): string {
-  if (!isCleanBlock(block)) return encodeMeta(block);
-
+/** The clean tier-1 markdown line for a block (no id marker). */
+function cleanBlockLine(block: Block): string {
   const indent = "  ".repeat(block.indent || 0);
   switch (block.type) {
     case "divider":
@@ -280,9 +301,26 @@ function blockToMarkdown(block: Block): string {
   }
 }
 
-/** Serialize a block list to a markdown body (blank line between blocks). */
-export function blocksToMarkdown(blocks: Block[]): string {
-  return blocks.map(blockToMarkdown).join("\n\n");
+function blockToMarkdown(block: Block, anchored = false): string {
+  if (!isCleanBlock(block)) return encodeMeta(block, anchored);
+  // An anchored block whose type can't carry a trailing marker (divider, code,
+  // image, page-link) keeps its id via the tier-2 meta comment instead.
+  if (anchored && !INLINE_ANCHOR_TYPES.has(block.type)) {
+    return encodeMeta(block, true);
+  }
+  const line = cleanBlockLine(block);
+  return anchored ? `${line} ^${block.id}` : line;
+}
+
+/** Serialize a block list to a markdown body (blank line between blocks).
+ *  Block ids in `anchoredIds` are persisted (so comment anchors survive). */
+export function blocksToMarkdown(
+  blocks: Block[],
+  anchoredIds?: Set<string>,
+): string {
+  return blocks
+    .map((b) => blockToMarkdown(b, anchoredIds?.has(b.id) ?? false))
+    .join("\n\n");
 }
 
 // ── parsing ─────────────────────────────────────────────────────────────────
@@ -363,42 +401,58 @@ export function markdownToBlocks(md: string): Block[] {
       continue;
     }
 
-    const heading = /^(#{1,3})\s+(.*)$/.exec(raw);
+    // A trailing ` ^<id>` on a content line is a persisted, comment-anchored
+    // block id (F2). Strip it from the text and reuse it as the block's id.
+    const anchorMatch = BLOCK_ID_RE.exec(raw);
+    const body = anchorMatch ? raw.slice(0, anchorMatch.index) : raw;
+    const idExtra: Partial<Block> = anchorMatch ? { id: anchorMatch[1] } : {};
+
+    const heading = /^(#{1,3})\s+(.*)$/.exec(body);
     if (heading) {
       const type = (["h1", "h2", "h3"] as const)[heading[1].length - 1];
-      blocks.push(mk(type, heading[2]));
+      blocks.push(mk(type, heading[2], idExtra));
       i++;
       continue;
     }
 
-    const { indent, rest } = leadingIndent(raw);
+    const { indent, rest } = leadingIndent(body);
     const todo = /^- \[([ xX])\]\s+(.*)$/.exec(rest);
     if (todo) {
       const done = todo[1].toLowerCase() === "x";
-      blocks.push(mk("todo", todo[2], { ...(indent ? { indent } : {}), done }));
+      blocks.push(
+        mk("todo", todo[2], {
+          ...(indent ? { indent } : {}),
+          done,
+          ...idExtra,
+        }),
+      );
       i++;
       continue;
     }
     const bullet = /^[-*]\s+(.*)$/.exec(rest);
     if (bullet) {
-      blocks.push(mk("li", bullet[1], indent ? { indent } : {}));
+      blocks.push(
+        mk("li", bullet[1], { ...(indent ? { indent } : {}), ...idExtra }),
+      );
       i++;
       continue;
     }
     const numbered = /^\d+\.\s+(.*)$/.exec(rest);
     if (numbered) {
-      blocks.push(mk("numli", numbered[1], indent ? { indent } : {}));
+      blocks.push(
+        mk("numli", numbered[1], { ...(indent ? { indent } : {}), ...idExtra }),
+      );
       i++;
       continue;
     }
-    const quote = /^>\s?(.*)$/.exec(raw);
+    const quote = /^>\s?(.*)$/.exec(body);
     if (quote) {
-      blocks.push(mk("quote", quote[1]));
+      blocks.push(mk("quote", quote[1], idExtra));
       i++;
       continue;
     }
 
-    blocks.push(mk("p", raw));
+    blocks.push(mk("p", body, idExtra));
     i++;
   }
 

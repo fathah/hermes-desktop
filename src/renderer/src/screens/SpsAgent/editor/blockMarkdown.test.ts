@@ -182,3 +182,56 @@ describe("full-document round-trip", () => {
     expectRoundTrip(content);
   });
 });
+
+describe("F2 — block-id persistence for comment anchors", () => {
+  it("default output is unchanged (no ^id marker) without anchoredIds", () => {
+    const p = blk("p", "Hello");
+    const md = blocksToMarkdown([p]);
+    expect(md).toBe("Hello");
+    expect(md).not.toContain("^");
+  });
+
+  it("round-trip without anchoredIds is byte-identical to passing an empty set", () => {
+    const blocks = [blk("p", "a"), blk("li", "b"), blk("h1", "c")];
+    expect(blocksToMarkdown(blocks)).toBe(blocksToMarkdown(blocks, new Set()));
+  });
+
+  it("persists an anchored tier-1 block id via an Obsidian ^marker", () => {
+    const p = blk("p", "Anchored para");
+    const md = blocksToMarkdown([p], new Set([p.id]));
+    expect(md).toBe(`Anchored para ^${p.id}`);
+    const back = markdownToBlocks(md);
+    expect(back).toHaveLength(1);
+    expect(back[0].id).toBe(p.id);
+    expect(back[0].text).toBe("Anchored para");
+  });
+
+  it("persists anchored ids across heading + todo lines (content intact)", () => {
+    const h = blk("h2", "Title");
+    const t = blk("todo", "ship", { done: true });
+    const back = markdownToBlocks(
+      blocksToMarkdown([h, t], new Set([h.id, t.id])),
+    );
+    expect(back.map((b) => b.id)).toEqual([h.id, t.id]);
+    expect(back[1].done).toBe(true);
+    expect(back[1].text).toBe("ship");
+  });
+
+  it("only anchored blocks keep their id; others regenerate", () => {
+    const a = blk("p", "keep");
+    const b = blk("p", "fresh");
+    const back = markdownToBlocks(blocksToMarkdown([a, b], new Set([a.id])));
+    expect(back[0].id).toBe(a.id);
+    expect(back[1].id).not.toBe(b.id);
+  });
+
+  it("anchors a non-inline block (divider) via the tier-2 meta, id preserved", () => {
+    const d = blk("divider", "");
+    const md = blocksToMarkdown([d], new Set([d.id]));
+    expect(md).toContain("<!-- sps:");
+    expect(md).not.toContain(`^${d.id}`);
+    const back = markdownToBlocks(md);
+    expect(back[0].type).toBe("divider");
+    expect(back[0].id).toBe(d.id);
+  });
+});

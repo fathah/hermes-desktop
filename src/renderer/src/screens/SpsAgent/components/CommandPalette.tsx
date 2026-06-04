@@ -167,7 +167,9 @@ export function CommandPalette() {
             (p) => !p.contentOk || !p.metaOk,
           ).length;
           const caveat = report.blockAnchoredComments
-            ? `, ${report.blockAnchoredComments} comment(s) need re-anchoring`
+            ? report.blockAnchorsOk
+              ? `, ${report.blockAnchoredComments} anchored comment(s) preserved`
+              : `, anchored comment(s) would not survive`
             : "";
           flash(
             report.ok
