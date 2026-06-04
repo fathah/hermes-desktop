@@ -11,6 +11,7 @@
 // metadata, and structure survive — plus the one known caveat: block-anchored
 // comments reference runtime block ids that regenerate on parse.
 import { pageToMarkdown, pageFromMarkdown } from "./pageMarkdown";
+import { treeWalkIds } from "../lib/tree";
 import type {
   Block,
   Comment,
@@ -35,6 +36,16 @@ export interface VaultSnapshot {
 
 const DEFAULT_META: PageMeta = { icon: "📄", title: "", cover: null };
 
+/** The structural manifest for a workspace (everything not in page files). */
+export function workspaceManifest(ws: Workspace): WorkspaceManifest {
+  return {
+    tree: ws.tree,
+    trash: ws.trash,
+    comments: ws.comments,
+    page: ws.page,
+  };
+}
+
 /** Serialize a whole workspace to a vault (page files + manifest). */
 export function workspaceToVault(ws: Workspace): VaultSnapshot {
   const pages: Record<string, string> = {};
@@ -55,14 +66,22 @@ export function workspaceToVault(ws: Workspace): VaultSnapshot {
 /** Reconstruct a workspace from a vault. Inverse of workspaceToVault (within the
  *  documented tolerances: block ids regenerate, empty paragraphs drop). */
 export function vaultToWorkspace(snapshot: VaultSnapshot): Workspace {
+  const m = snapshot.manifest;
+  // Only reconstruct pages the manifest knows about, so a stale orphan file left
+  // by a delete in vault mode can't resurrect itself as a hidden page.
+  const known = new Set<string>([
+    ...m.tree.flatMap((n) => treeWalkIds(n)),
+    ...m.trash.flatMap((t) => t.ids),
+    m.page,
+  ]);
   const docs: Record<string, Block[]> = {};
   const meta: Record<string, PageMeta> = {};
   for (const id of Object.keys(snapshot.pages)) {
+    if (!known.has(id)) continue;
     const parsed = pageFromMarkdown(snapshot.pages[id]);
     docs[id] = parsed.blocks;
     meta[id] = { ...DEFAULT_META, ...parsed.meta };
   }
-  const m = snapshot.manifest;
   return {
     tree: m.tree,
     trash: m.trash,

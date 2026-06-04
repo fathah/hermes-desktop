@@ -4,6 +4,7 @@ import { mkdtemp, rm, readFile, readdir } from "fs/promises";
 import { existsSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { writeFile } from "fs/promises";
 import {
   exportPageMarkdownTo,
   readPageMarkdownFrom,
@@ -12,6 +13,10 @@ import {
   exportRowMarkdownTo,
   deleteRowIn,
   listRowIdsIn,
+  readVaultPages,
+  readVaultManifest,
+  writeVaultManifest,
+  backupFile,
 } from "./sps-vault";
 
 let dir: string;
@@ -89,3 +94,39 @@ describe("database rows (S4)", () => {
     expect(await listRowIdsIn(dir, "../x")).toEqual([]);
   });
 });
+
+describe("vault-as-authoritative I/O (S6)", () => {
+  it("reads root page files only (not db-row subfolders or the manifest)", async () => {
+    await exportPageMarkdownTo(dir, "home", "# Home");
+    await exportPageMarkdownTo(dir, "sub", "# Sub");
+    await exportRowMarkdownTo(dir, "db1", "r1", "row"); // subfolder
+    await writeVaultManifest(dir, "{}"); // _manifest.json
+    const pages = await readVaultPages(dir);
+    expect(Object.keys(pages).sort()).toEqual(["home", "sub"]);
+    expect(pages.home).toBe("# Home");
+  });
+
+  it("round-trips the structure manifest", async () => {
+    expect(await readVaultManifest(dir)).toBeNull();
+    expect(await writeVaultManifest(dir, '{"page":"home"}')).toBe(true);
+    expect(await readVaultManifest(dir)).toBe('{"page":"home"}');
+  });
+
+  it("backs up a file to a timestamped sibling", async () => {
+    const f = join(dir, "workspace.json");
+    await writeFile(f, "BLOB", "utf-8");
+    const backup = await backupFile(f, 12345);
+    expect(backup).toBe(`${f}.bak-12345`);
+    expect(await readPageMarkdownFromRaw(backup!)).toBe("BLOB");
+  });
+
+  it("returns null when backing up a missing file", async () => {
+    expect(await backupFile(join(dir, "nope.json"), 1)).toBeNull();
+  });
+});
+
+// small helper: read any file as utf-8 (backup isn't a page)
+async function readPageMarkdownFromRaw(path: string): Promise<string> {
+  const { readFile } = await import("fs/promises");
+  return readFile(path, "utf-8");
+}

@@ -1281,6 +1281,11 @@ interface HermesAPI {
     rowId: string,
     profile?: string,
   ) => Promise<boolean>;
+  spsVaultRead: (
+    profile?: string,
+  ) => Promise<{ pages: Record<string, string>; manifest: string | null }>;
+  spsVaultWriteManifest: (json: string, profile?: string) => Promise<boolean>;
+  spsBackupWorkspace: (profile?: string) => Promise<string | null>;
   spsIndexQuery: (
     query: {
       scope?: string;

@@ -9,7 +9,10 @@ import { useStore } from "../store";
 import { treeWalkIds } from "../lib/tree";
 import { computePathIds } from "../store/selectors";
 import { workspaceParity } from "../editor/workspaceVault";
-import type { PageMeta, TreeNode } from "../types";
+import { migrateToVault } from "../lib/vaultStore";
+import { getStorageMode, setStorageMode } from "../lib/storageMode";
+import { saveWorkspace } from "../lib/persistence";
+import type { PageMeta, TreeNode, Workspace } from "../types";
 
 interface ActionItem {
   kind: "action";
@@ -171,6 +174,46 @@ export function CommandPalette() {
               ? `Vault parity OK — ${report.pages.length} pages${caveat}`
               : `Parity: ${failed} page(s) differ${caveat}`,
           );
+        },
+      },
+      {
+        kind: "action",
+        id: "storage",
+        icon: "code",
+        label:
+          getStorageMode() === "blob"
+            ? "Switch to markdown storage (migrate)"
+            : "Switch to JSON storage (rollback)",
+        desc:
+          getStorageMode() === "blob"
+            ? "Make the markdown vault authoritative (backs up the JSON blob first)."
+            : "Make the JSON blob authoritative again.",
+        run: () => {
+          const s = useStore.getState();
+          const ws: Workspace = {
+            tree: s.tree,
+            meta: s.meta,
+            docs: s.docs,
+            comments: s.comments,
+            trash: s.trash,
+            page: s.page,
+          };
+          if (getStorageMode() === "blob") {
+            void migrateToVault(ws).then((res) => {
+              if (res.ok) {
+                setStorageMode("vault");
+                flash(
+                  `Migrated to markdown storage${res.backup ? " · blob backed up" : ""}`,
+                );
+              } else {
+                flash(`Migration refused: ${res.reason}`);
+              }
+            });
+          } else {
+            saveWorkspace(ws); // persist current state to the blob
+            setStorageMode("blob");
+            flash("Switched to JSON storage");
+          }
         },
       },
     ],

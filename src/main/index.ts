@@ -20,12 +20,16 @@ import {
   spsAssistant,
   spsLoad,
   spsSave,
+  spsBackupWorkspace,
   type PageContext as SpsPageContext,
 } from "./sps-agent";
 import {
   exportPageMarkdownTo,
   exportRowMarkdownTo,
   deleteRowIn,
+  readVaultPages,
+  readVaultManifest,
+  writeVaultManifest,
 } from "./sps-vault";
 import { profileHome, getActiveProfileNameSync } from "./utils";
 import { discoverProviderModels } from "./model-discovery";
@@ -2512,6 +2516,31 @@ function setupIPC(): void {
       const dir = join(home, "sps-agent", "vault");
       return deleteRowIn(dir, dbFolder, rowId);
     },
+  );
+
+  // S6: vault-as-authoritative-store I/O (page files + structure manifest) and
+  // a pre-migration backup of the JSON blob.
+  const spsVaultDir = (profile?: string): string =>
+    join(
+      profileHome(profile || getActiveProfileNameSync()),
+      "sps-agent",
+      "vault",
+    );
+  ipcMain.handle("sps-vault-read", async (_event, profile?: string) => {
+    const dir = spsVaultDir(profile);
+    const [pages, manifest] = await Promise.all([
+      readVaultPages(dir),
+      readVaultManifest(dir),
+    ]);
+    return { pages, manifest };
+  });
+  ipcMain.handle(
+    "sps-vault-write-manifest",
+    (_event, json: string, profile?: string) =>
+      writeVaultManifest(spsVaultDir(profile), json),
+  );
+  ipcMain.handle("sps-backup-workspace", (_event, profile?: string) =>
+    spsBackupWorkspace(profile),
   );
 }
 

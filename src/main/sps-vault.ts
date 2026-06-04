@@ -9,6 +9,7 @@
 // Pure fs/path only (no Electron) so it is unit-testable; index.ts supplies the
 // per-profile vault directory.
 import { promises as fs } from "fs";
+import type { Dirent } from "fs";
 import { join } from "path";
 
 // Page ids are internal handles ("home", "b<seed><n>"). Validate strictly so a
@@ -105,5 +106,72 @@ export async function listRowIdsIn(
       .map((n) => n.replace(/\.md$/, ""));
   } catch {
     return [];
+  }
+}
+
+// ── S6: the vault as the authoritative store (page files + a structure manifest) ─
+
+const MANIFEST_FILE = "_manifest.json";
+
+/** Read every root-level page file (sub-folders are database rows, not pages). */
+export async function readVaultPages(
+  vaultDir: string,
+): Promise<Record<string, string>> {
+  const pages: Record<string, string> = {};
+  let entries: Dirent[];
+  try {
+    entries = (await fs.readdir(vaultDir, { withFileTypes: true })) as Dirent[];
+  } catch {
+    return pages;
+  }
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
+    const pageId = entry.name.replace(/\.md$/, "");
+    if (!isValidPageId(pageId)) continue;
+    try {
+      pages[pageId] = await fs.readFile(join(vaultDir, entry.name), "utf-8");
+    } catch {
+      /* skip unreadable file */
+    }
+  }
+  return pages;
+}
+
+/** Read the structure manifest JSON (or null if absent/unreadable). */
+export async function readVaultManifest(
+  vaultDir: string,
+): Promise<string | null> {
+  try {
+    return await fs.readFile(join(vaultDir, MANIFEST_FILE), "utf-8");
+  } catch {
+    return null;
+  }
+}
+
+/** Write the structure manifest JSON. */
+export async function writeVaultManifest(
+  vaultDir: string,
+  json: string,
+): Promise<boolean> {
+  try {
+    await fs.mkdir(vaultDir, { recursive: true });
+    await fs.writeFile(join(vaultDir, MANIFEST_FILE), json, "utf-8");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Copy a file to a timestamped sibling backup. Returns the backup path or null. */
+export async function backupFile(
+  path: string,
+  stamp: number,
+): Promise<string | null> {
+  try {
+    const backup = `${path}.bak-${stamp}`;
+    await fs.copyFile(path, backup);
+    return backup;
+  } catch {
+    return null;
   }
 }

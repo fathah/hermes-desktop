@@ -413,4 +413,18 @@ export async function spsSave(ws: unknown, profile?: string): Promise<boolean> {
   }
 }
 
+/** Copy the JSON blob to a timestamped backup before a vault migration (S6). */
+export async function spsBackupWorkspace(
+  profile?: string,
+): Promise<string | null> {
+  try {
+    const p = workspacePath(profile);
+    const backup = `${p}.bak-${Date.now()}`;
+    await fs.copyFile(p, backup);
+    return backup;
+  } catch {
+    return null;
+  }
+}
+
 export type { PageContext };

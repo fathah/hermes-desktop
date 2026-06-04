@@ -13,6 +13,8 @@ import {
   mirrorPage,
   mirrorAllPages,
 } from "../lib/persistence";
+import { getStorageMode } from "../lib/storageMode";
+import { readVaultWorkspace, saveVaultPage } from "../lib/vaultStore";
 import type { Workspace } from "../types";
 import type { Store } from "./storeTypes";
 import { createWorkspaceSlice } from "./slices/workspace";
@@ -69,21 +71,23 @@ useStore.subscribe(
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       const s = useStore.getState();
-      saveWorkspace(snapshotWorkspace(s));
-      // Additive mirror: write the current page's markdown (S2b).
-      mirrorPage(s.page, s.meta[s.page] ?? {}, s.docs[s.page] ?? []);
+      const ws = snapshotWorkspace(s);
+      if (getStorageMode() === "vault") {
+        // Vault is authoritative (S6): write the current page + manifest. The
+        // blob is intentionally left untouched as the rollback safety net.
+        void saveVaultPage(ws, s.page);
+      } else {
+        saveWorkspace(ws); // blob authoritative
+        mirrorPage(s.page, s.meta[s.page] ?? {}, s.docs[s.page] ?? []); // mirror
+      }
     }, 350);
   },
   { equalityFn: (a, b) => a.every((v, i) => v === b[i]) },
 );
 
 let hydrated = false;
-/** Load the persisted workspace from main and apply it (once). */
-export async function hydrateWorkspace(): Promise<void> {
-  if (hydrated) return;
-  hydrated = true;
-  const ws = await loadWorkspace();
-  if (!ws || !ws.docs || !ws.tree) return;
+
+function applyWorkspace(ws: Workspace): void {
   useStore.setState({
     tree: ws.tree,
     meta: ws.meta,
@@ -92,6 +96,27 @@ export async function hydrateWorkspace(): Promise<void> {
     trash: ws.trash ?? [],
     page: ws.page in (ws.docs || {}) ? ws.page : "home",
   });
+}
+
+/** Load the authoritative workspace and apply it (once). */
+export async function hydrateWorkspace(): Promise<void> {
+  if (hydrated) return;
+  hydrated = true;
+
+  if (getStorageMode() === "vault") {
+    // Markdown vault is authoritative (S6): load from it; no mirror needed.
+    const vault = await readVaultWorkspace();
+    if (vault && vault.docs && vault.tree) {
+      applyWorkspace(vault);
+      return;
+    }
+    // Vault not populated yet — fall back to the blob (and mirror) so the user
+    // isn't stranded; migration happens explicitly via the storage switch.
+  }
+
+  const ws = await loadWorkspace();
+  if (!ws || !ws.docs || !ws.tree) return;
+  applyWorkspace(ws);
   // Materialize the markdown substrate for every page once on load (S2b).
   mirrorAllPages(snapshotWorkspace(useStore.getState()));
 }
