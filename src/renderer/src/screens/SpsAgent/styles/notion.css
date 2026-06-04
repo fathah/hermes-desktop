@@ -508,10 +508,18 @@
 }
 .sps-scope .b-excalidraw.editing {
   cursor: default;
+  width: 100%;
 }
 .sps-scope .b-excalidraw .exc-canvas {
+  position: relative;
   height: 460px;
   width: 100%;
+}
+/* Excalidraw measures its own root; force it to fill the block-width host so the
+   canvas + toolbar render full-width instead of collapsing to a thin column. */
+.sps-scope .b-excalidraw .exc-canvas > .excalidraw {
+  width: 100%;
+  height: 100%;
 }
 .sps-scope .b-excalidraw-preview {
   display: flex;

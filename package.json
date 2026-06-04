@@ -10,6 +10,7 @@
     "lint": "eslint --cache .",
     "test": "vitest run",
     "verify:note-index": "bash scripts/verify-note-index.sh",
+    "smoke:diagrams": "node scripts/diagram-smoke.mjs",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
