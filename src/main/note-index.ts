@@ -23,11 +23,21 @@ import { mkdir, readdir, readFile, stat } from "fs/promises";
 import { basename, extname, join, relative, sep } from "path";
 import chokidar, { type FSWatcher } from "chokidar";
 import YAML from "yaml";
-import { ensureWorkspace } from "./workspace";
-import { extractBacklinks } from "./workspace-page-graph";
 import { getActiveProfileNameSync, profileHome } from "./utils";
 
 const NOTE_EXTENSIONS = new Set([".md", ".markdown"]);
+
+/** Extract `[[wikilink]]` targets from raw note content. */
+function extractBacklinks(content: string): string[] {
+  const links = new Set<string>();
+  const re = /\[\[([^\]]+)\]\]/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(content)) !== null) {
+    const target = match[1]?.trim();
+    if (target) links.add(target);
+  }
+  return [...links];
+}
 const INDEX_DB_FILE = ".note-index.db";
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 
@@ -463,12 +473,6 @@ export async function getNoteIndexForRoot(root: string): Promise<NoteIndex> {
     instances.set(root, pending);
   }
   return pending;
-}
-
-/** The live index for a profile's generic markdown workspace. */
-export async function getNoteIndex(profile?: string): Promise<NoteIndex> {
-  const root = await ensureWorkspace({ profile });
-  return getNoteIndexForRoot(root);
 }
 
 /** The live index for a profile's SPS page vault (the S2b mirror target). */

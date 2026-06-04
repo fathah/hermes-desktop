@@ -17,7 +17,6 @@ import Providers from "../Providers/Providers";
 import Schedules from "../Schedules/Schedules";
 import Kanban from "../Kanban/Kanban";
 import Insights from "../Insights/Insights";
-import Workspace from "../Workspace/Workspace";
 import SpsAgent from "../SpsAgent/SpsAgent";
 import RemoteNotice from "../../components/RemoteNotice";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
@@ -45,7 +44,6 @@ import { useI18n } from "../../components/useI18n";
 import { loadAndApplyActiveSkin } from "../../utils/skin";
 
 type View =
-  | "workspace"
   | "chat"
   | "sessions"
   | "agents"
@@ -347,19 +345,6 @@ function Layout({
             onDismiss={onDismissVerifyWarning}
           />
         )}
-        {/* Legacy Workspace engine — retired from nav (SPS Agent is the single
-            wiki). Pane only mounts if something still routes to it; nothing
-            does. Removed entirely in the Workspace-deletion follow-up. */}
-        {visitedViews.has("workspace") && (
-          <div style={paneStyle("workspace")}>
-            <Workspace
-              profile={activeProfile}
-              onOpenAdmin={(target) => goTo(target as View)}
-              onOpenSession={handleResumeSession}
-            />
-          </div>
-        )}
-
         {/* SPS Agent: mount only while active — its zustand store is a module
             singleton so workspace state survives unmount, and this keeps its
             global ⌘K/⌘J hotkeys from firing on other views. */}
