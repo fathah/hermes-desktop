@@ -1,11 +1,59 @@
-// Sidebar.tsx — workspace rail: state-driven page tree with drag reorder/nest.
-// Ported from sidebar.jsx; reads tree/meta from the store.
-import { useState } from "react";
+// Sidebar.tsx — workspace rail. Notion-3.1 grammar: an always-visible top icon
+// row, then named/toggleable/collapsible sections (Meetings/Recents/Agents/
+// Shared/Private/Apps), a persistent "New chat" launcher, and the identity foot.
+// Identity is derived from the active Hermes profile (demo fallback offline).
+import { useEffect, useState } from "react";
 import { Icon } from "../components/Icon";
 import { useStore } from "../store";
 import type { DropWhere } from "../lib/tree";
 import type { TreeDnd } from "./dnd";
 import { TreeNode } from "./TreeNode";
+import { SidebarSection } from "./SidebarSection";
+import { SidebarRecents } from "./SidebarRecents";
+import { SidebarAgents } from "./SidebarAgents";
+import { SidebarApps, SidebarMeetings, SidebarShared } from "./SidebarStubs";
+
+interface Identity {
+  workspace: string;
+  user: string;
+  initial: string;
+}
+
+const DEMO_IDENTITY: Identity = {
+  workspace: "SPS Agent",
+  user: "Maya Rao",
+  initial: "S",
+};
+
+/** Derive the rail identity from the active Hermes profile (fallback: demo). */
+function useIdentity(): Identity {
+  const [identity, setIdentity] = useState<Identity>(DEMO_IDENTITY);
+  useEffect(() => {
+    let cancelled = false;
+    const api = window.hermesAPI;
+    if (!api?.listProfiles) return;
+    api
+      .listProfiles()
+      .then((rows) => {
+        const active = rows.find((r) => r.isActive) ?? rows[0];
+        if (!active || cancelled) return;
+        const name = active.name;
+        const pretty = name.charAt(0).toUpperCase() + name.slice(1);
+        setIdentity({
+          workspace: pretty,
+          user: pretty,
+          initial: pretty.charAt(0) || "H",
+        });
+      })
+      .catch(() => {
+        /* offline — keep demo identity */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return identity;
+}
 
 export function Sidebar() {
   const tree = useStore((s) => s.tree);
@@ -14,6 +62,7 @@ export function Sidebar() {
   const surface = useStore((s) => s.surface);
   const setSurface = useStore((s) => s.setSurface);
   const selectPage = useStore((s) => s.selectPage);
+  const startNewChat = useStore((s) => s.startNewChat);
   // Selecting a page always returns to the document surface.
   const selectDoc = (id: string): void => {
     selectPage(id);
@@ -33,21 +82,29 @@ export function Sidebar() {
     null,
   );
   const dnd: TreeDnd = { drag, setDrag, over, setOver, onMove: movePage };
+  const identity = useIdentity();
 
-  const openPalette = () => setPaletteOpen(true);
-  const newPage = () => setTemplatesOpen({ parent: null });
+  const openPalette = (): void => setPaletteOpen(true);
+  const newPage = (): void => setTemplatesOpen({ parent: null });
+  // Agents are Hermes profiles; profile creation lives in the admin panel (⌘,).
+  // Start a guided chat that walks the user through setting one up.
+  const newAgent = (): void =>
+    startNewChat(
+      "Help me set up a new agent (Hermes profile): pick a name, model, and the tools it should have.",
+    );
 
   return (
     <nav className="rail">
       <div className="rail-top">
         <span className="wmark">
-          <span>S</span>
+          <span>{identity.initial}</span>
         </span>
-        <span className="wname">SPS Agent</span>
+        <span className="wname">{identity.workspace}</span>
         <span className="rail-chev">
           <Icon name="chevD" size={15} />
         </span>
       </div>
+
       <div className="rail-scroll scroll">
         <div className="nav-item" onClick={openPalette}>
           <Icon name="search" size={17} />
@@ -60,6 +117,13 @@ export function Sidebar() {
         >
           <Icon name="home" size={17} />
           <span className="nav-label">Home</span>
+        </div>
+        <div
+          className={`nav-item ${surface === "chats" ? "active" : ""}`}
+          onClick={() => setSurface("chats")}
+        >
+          <Icon name="comment" size={17} />
+          <span className="nav-label">AI Chats</span>
         </div>
         <div className="nav-item" onClick={openPalette}>
           <Icon name="inbox" size={17} />
@@ -95,51 +159,90 @@ export function Sidebar() {
           <span className="nav-label">Agent Console</span>
         </div>
 
-        <div className="sec">
-          <span className="sec-label">Workspace</span>
-          <span className="sec-add" title="New page" onClick={newPage}>
-            <Icon name="plus" size={15} />
-          </span>
-        </div>
-        {tree.map((n) => (
-          <TreeNode
-            key={n.id}
-            node={n}
-            depth={0}
-            meta={meta}
-            activeId={activeId}
-            onSelect={selectDoc}
-            onNewSubPage={newSubPage}
-            onRename={renamePage}
-            onDelete={deletePage}
-            dnd={dnd}
-          />
-        ))}
-        {tree.length === 0 && (
-          <div
-            className="tree-row"
-            style={{ color: "var(--tx-4)", cursor: "default" }}
-          >
-            <span className="tree-toggle leaf"></span>No pages
-          </div>
-        )}
+        <SidebarSection id="meetings" label="Meetings">
+          <SidebarMeetings />
+        </SidebarSection>
 
-        <div className="sec">
+        <SidebarSection id="recents" label="Recents">
+          <SidebarRecents />
+        </SidebarSection>
+
+        <SidebarSection
+          id="agents"
+          label="Agents"
+          onAdd={newAgent}
+          addTitle="New agent"
+        >
+          <SidebarAgents />
+        </SidebarSection>
+
+        <SidebarSection id="shared" label="Shared">
+          <SidebarShared />
+        </SidebarSection>
+
+        <SidebarSection
+          id="private"
+          label="Private"
+          onAdd={newPage}
+          addTitle="New page"
+        >
+          {tree.map((n) => (
+            <TreeNode
+              key={n.id}
+              node={n}
+              depth={0}
+              meta={meta}
+              activeId={activeId}
+              onSelect={selectDoc}
+              onNewSubPage={newSubPage}
+              onRename={renamePage}
+              onDelete={deletePage}
+              dnd={dnd}
+            />
+          ))}
+          {tree.length === 0 && (
+            <div
+              className="tree-row"
+              style={{ color: "var(--tx-4)", cursor: "default" }}
+            >
+              <span className="tree-toggle leaf"></span>No pages
+            </div>
+          )}
+          <div className="nav-item" onClick={newPage}>
+            <Icon name="plus" size={17} />
+            <span className="nav-label">Add new</span>
+          </div>
+        </SidebarSection>
+
+        <SidebarSection id="apps" label="Notion apps">
+          <SidebarApps />
+        </SidebarSection>
+
+        <div className="sec sec-static">
           <span className="sec-label">More</span>
-        </div>
-        <div className="nav-item" onClick={newPage}>
-          <Icon name="plus" size={17} />
-          <span className="nav-label">New page</span>
         </div>
         <div className="nav-item" onClick={() => setTrashOpen(true)}>
           <Icon name="trash" size={17} />
           <span className="nav-label">Trash</span>
         </div>
       </div>
+
+      <div className="rail-newchat-bar">
+        <button className="rail-newchat" onClick={() => startNewChat()}>
+          <Icon name="sparkle" size={16} />
+          <span>New chat</span>
+          <span className="rail-newchat-kbd">⌘O</span>
+        </button>
+        <button className="rail-compose" title="New page" onClick={newPage}>
+          <Icon name="callout" size={16} />
+        </button>
+      </div>
+
       <div className="rail-foot">
-        <span className="avatar">MR</span>
+        <span className="avatar">{identity.initial}</span>
         <span className="rail-foot-name">
-          Maya Rao<small>Product · Acme</small>
+          {identity.user}
+          <small>Hermes Agent</small>
         </span>
         <span
           title="Tweaks"

@@ -18,6 +18,9 @@ export const createUiSlice: StateCreator<Store, [], [], UiSlice> = (set) => ({
   coverPick: null,
   toast: null,
   focusReq: null,
+  activeChatSession: null,
+  pendingChatPrompt: null,
+  chatNonce: 0,
 
   setPanelOpen: (v) => set({ panelOpen: v }),
   setRightTab: (t) => set({ rightTab: t }),
@@ -31,6 +34,17 @@ export const createUiSlice: StateCreator<Store, [], [], UiSlice> = (set) => ({
   setEmojiPick: (v) => set({ emojiPick: v }),
   setCoverPick: (v) => set({ coverPick: v }),
   setFocusReq: (id) => set({ focusReq: id }),
+  setActiveChatSession: (id) =>
+    set((s) => ({ activeChatSession: id, chatNonce: s.chatNonce + 1 })),
+  setPendingChatPrompt: (text) => set({ pendingChatPrompt: text }),
+
+  startNewChat: (prompt) =>
+    set((s) => ({
+      surface: "chats",
+      activeChatSession: null,
+      pendingChatPrompt: prompt ?? null,
+      chatNonce: s.chatNonce + 1,
+    })),
 
   flash: (text) => {
     set({ toast: { text } });

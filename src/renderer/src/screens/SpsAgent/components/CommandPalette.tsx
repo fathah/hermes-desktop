@@ -1,10 +1,13 @@
-// CommandPalette.tsx — ⌘K palette: actions + jump-to-page + in-page content search.
-// Ported from palette.jsx; reads the live workspace from the store.
+// CommandPalette.tsx — ⌘K quick switcher. Notion-3.1 grammar: filter chips, a
+// two-column layout with a right-side preview pane, and "Start new chat" / "New
+// page" results. Reuses the existing search over actions / pages / in-page
+// content; all chrome is the existing .palette / .pal-* design language.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./Icon";
 import type { IconName } from "./iconPaths";
 import { useStore } from "../store";
 import { treeWalkIds } from "../lib/tree";
+import { computePathIds } from "../store/selectors";
 import type { PageMeta, TreeNode } from "../types";
 
 interface ActionItem {
@@ -13,6 +16,7 @@ interface ActionItem {
   icon: IconName;
   label: string;
   hint?: string;
+  desc: string;
   run: () => void;
 }
 interface PageItem {
@@ -56,9 +60,11 @@ export function CommandPalette() {
   const setTemplatesOpen = useStore((s) => s.setTemplatesOpen);
   const setTrashOpen = useStore((s) => s.setTrashOpen);
   const resetWorkspace = useStore((s) => s.resetWorkspace);
+  const startNewChat = useStore((s) => s.startNewChat);
 
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
+  const [titleOnly, setTitleOnly] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const onClose = () => setPaletteOpen(false);
 
@@ -70,10 +76,28 @@ export function CommandPalette() {
     () => [
       {
         kind: "action",
+        id: "newchat",
+        icon: "sparkle",
+        label: "Start new chat",
+        hint: "⌘O",
+        desc: "Open a fresh AI chat with the Hermes agent.",
+        run: () => startNewChat(),
+      },
+      {
+        kind: "action",
+        id: "newpage",
+        icon: "plus",
+        label: "New page",
+        desc: "Create a new page from a template.",
+        run: () => setTemplatesOpen({ parent: null }),
+      },
+      {
+        kind: "action",
         id: "assistant",
         icon: "sparkle",
         label: "Open assistant",
         hint: "⌘J",
+        desc: "Open the page assistant panel.",
         run: () => openPanelTab("assistant"),
       },
       {
@@ -81,6 +105,7 @@ export function CommandPalette() {
         id: "outline",
         icon: "list",
         label: "Show outline",
+        desc: "Show the outline of the current page.",
         run: () => openPanelTab("outline"),
       },
       {
@@ -88,6 +113,7 @@ export function CommandPalette() {
         id: "theme",
         icon: "sun",
         label: t.dark ? "Switch to light" : "Switch to dark",
+        desc: "Toggle the colour theme.",
         run: () => setTweak("dark", !t.dark),
       },
       {
@@ -96,21 +122,16 @@ export function CommandPalette() {
         icon: "panelLeft",
         label: "Toggle sidebar",
         hint: "⌘\\",
+        desc: "Show or hide the sidebar.",
         run: () =>
           setTweak("sidebar", t.sidebar === "hidden" ? "full" : "hidden"),
-      },
-      {
-        kind: "action",
-        id: "newpage",
-        icon: "plus",
-        label: "New page from template",
-        run: () => setTemplatesOpen({ parent: null }),
       },
       {
         kind: "action",
         id: "trash",
         icon: "trash",
         label: "Open trash",
+        desc: "Restore or permanently delete pages.",
         run: () => setTrashOpen(true),
       },
       {
@@ -118,6 +139,7 @@ export function CommandPalette() {
         id: "reset",
         icon: "clock",
         label: "Reset workspace to sample",
+        desc: "Replace the workspace with the sample content.",
         run: () => resetWorkspace(),
       },
     ],
@@ -129,6 +151,7 @@ export function CommandPalette() {
       setTemplatesOpen,
       setTrashOpen,
       resetWorkspace,
+      startNewChat,
     ],
   );
 
@@ -164,7 +187,8 @@ export function CommandPalette() {
   const fPages = q
     ? pages.filter((i) => i.label.toLowerCase().includes(ql))
     : pages;
-  const content = q ? searchContent(q) : [];
+  // "Title only" scopes search to page/action titles, skipping in-page content.
+  const content = q && !titleOnly ? searchContent(q) : [];
 
   const grouped = [
     { label: "Actions", items: fActs as Item[] },
@@ -175,7 +199,7 @@ export function CommandPalette() {
 
   useEffect(() => {
     setSel(0);
-  }, [q]);
+  }, [q, titleOnly]);
 
   const pick = (item: Item | undefined) => {
     if (!item) return;
@@ -203,67 +227,96 @@ export function CommandPalette() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flat, sel]);
 
+  const selected = flat[sel];
+
   let idx = -1;
   return (
     <div className="scrim" onMouseDown={onClose}>
-      <div className="palette" onMouseDown={(e) => e.stopPropagation()}>
+      <div
+        className="palette palette-wide"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
         <div className="pal-input">
           <Icon name="search" size={18} style={{ color: "var(--tx-3)" }} />
           <input
             ref={inputRef}
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search pages, content, or run a command…"
+            placeholder="Search or open in new tab…"
           />
           <span className="kbd">esc</span>
         </div>
-        <div className="pal-list scroll">
-          {grouped.length === 0 && (
-            <div className="pal-group">No results for “{q}”</div>
-          )}
-          {grouped.map((g) => (
-            <div key={g.label}>
-              <div className="pal-group">{g.label}</div>
-              {g.items.map((item) => {
-                idx++;
-                const here = idx;
-                return (
-                  <div
-                    key={item.kind + item.id}
-                    className={`pal-item ${here === sel ? "sel" : ""}`}
-                    onMouseEnter={() => setSel(here)}
-                    onMouseDown={() => pick(item)}
-                  >
-                    <Icon
-                      name={item.kind === "action" ? item.icon : "doc"}
-                      size={17}
-                    />
-                    {item.kind !== "action" && (
-                      <span style={{ marginLeft: -4 }}>{item.emoji}</span>
-                    )}
-                    <span className="label">
-                      {item.label}
-                      {item.kind === "content" && (
-                        <small
-                          style={{
-                            display: "block",
-                            color: "var(--tx-3)",
-                            fontSize: 12,
-                          }}
-                        >
-                          {item.snippet}
-                        </small>
-                      )}
-                    </span>
-                    {item.kind === "action" && item.hint && (
-                      <span className="hint">{item.hint}</span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ))}
+
+        <div className="pal-filters">
+          <button
+            className={`pal-chip ${titleOnly ? "on" : ""}`}
+            onClick={() => setTitleOnly((v) => !v)}
+          >
+            <Icon name="text" size={13} /> Title only
+          </button>
+          <button className="pal-chip" disabled title="Coming soon">
+            <Icon name="sparkle" size={13} /> Created by
+          </button>
+          <button className="pal-chip" disabled title="Coming soon">
+            <Icon name="doc" size={13} /> In
+          </button>
+          <button className="pal-chip" disabled title="Coming soon">
+            <Icon name="plus" size={13} /> Filter
+          </button>
         </div>
+
+        <div className="pal-body">
+          <div className="pal-list scroll">
+            {grouped.length === 0 && (
+              <div className="pal-group">No results for “{q}”</div>
+            )}
+            {grouped.map((g) => (
+              <div key={g.label}>
+                <div className="pal-group">{g.label}</div>
+                {g.items.map((item) => {
+                  idx++;
+                  const here = idx;
+                  return (
+                    <div
+                      key={item.kind + item.id}
+                      className={`pal-item ${here === sel ? "sel" : ""}`}
+                      onMouseEnter={() => setSel(here)}
+                      onMouseDown={() => pick(item)}
+                    >
+                      <Icon
+                        name={item.kind === "action" ? item.icon : "doc"}
+                        size={17}
+                      />
+                      {item.kind !== "action" && (
+                        <span style={{ marginLeft: -4 }}>{item.emoji}</span>
+                      )}
+                      <span className="label">
+                        {item.label}
+                        {item.kind === "content" && (
+                          <small
+                            style={{
+                              display: "block",
+                              color: "var(--tx-3)",
+                              fontSize: 12,
+                            }}
+                          >
+                            {item.snippet}
+                          </small>
+                        )}
+                      </span>
+                      {item.kind === "action" && item.hint && (
+                        <span className="hint">{item.hint}</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+
+          <PalettePreview item={selected} tree={tree} meta={meta} docs={docs} />
+        </div>
+
         <div className="pal-foot">
           <span>
             <kbd>↑</kbd> <kbd>↓</kbd> navigate
@@ -275,6 +328,62 @@ export function CommandPalette() {
             <kbd>esc</kbd> close
           </span>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Right-side preview of the highlighted result (Notion's quick-switcher pane). */
+function PalettePreview({
+  item,
+  tree,
+  meta,
+  docs,
+}: {
+  item: Item | undefined;
+  tree: TreeNode[];
+  meta: Record<string, PageMeta>;
+  docs: Record<string, import("../types").Block[]>;
+}) {
+  if (!item) {
+    return (
+      <div className="pal-preview pal-preview-empty">
+        <Icon name="search" size={22} style={{ color: "var(--tx-4)" }} />
+        <div>Search your workspace</div>
+      </div>
+    );
+  }
+
+  if (item.kind === "action") {
+    return (
+      <div className="pal-preview">
+        <div className="pal-pv-ic">
+          <Icon name={item.icon} size={22} />
+        </div>
+        <div className="pal-pv-crumb">Command</div>
+        <div className="pal-pv-title">{item.label}</div>
+        <div className="pal-pv-desc">{item.desc}</div>
+      </div>
+    );
+  }
+
+  const pid = item.kind === "content" ? item.pageId : item.id;
+  const crumbIds = computePathIds(tree, pid);
+  const crumb = crumbIds.map((id) => meta[id]?.title || "Untitled").join(" / ");
+  const blocks = (docs[pid] || []).filter((b) => (b.text || "").trim());
+  const first = blocks[0]?.text || "Empty page.";
+
+  return (
+    <div className="pal-preview">
+      <div className="pal-pv-ic">{item.emoji}</div>
+      <div className="pal-pv-crumb">{crumb}</div>
+      <div className="pal-pv-title">{item.label}</div>
+      <div className="pal-pv-desc">{first}</div>
+      <div className="pal-pv-skel">
+        <span style={{ width: "92%" }} />
+        <span style={{ width: "76%" }} />
+        <span style={{ width: "84%" }} />
+        <span style={{ width: "60%" }} />
       </div>
     </div>
   );

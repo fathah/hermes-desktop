@@ -1675,3 +1675,241 @@
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
+
+/* ============================================================
+   Notion-3.1 affordances: sectioned sidebar, new-chat foot,
+   get-started launcher, two-column command palette.
+   Reuses existing tokens + the .rail / .nav-item / .sec / .pal-* skin.
+   ============================================================ */
+
+/* --- collapsible, toggleable sidebar sections --- */
+.sps-scope .sec {
+  cursor: pointer;
+  user-select: none;
+}
+.sps-scope .sec.sec-static {
+  cursor: default;
+}
+.sps-scope .sec-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.sps-scope .sec-chev {
+  display: inline-flex;
+  color: var(--tx-4);
+  transition: transform 120ms var(--ease-out, ease);
+  transform: rotate(0deg);
+}
+.sps-scope .sec-chev.open {
+  transform: rotate(90deg);
+}
+.sps-scope .nav-item.nav-empty {
+  color: var(--tx-4);
+  cursor: default;
+}
+.sps-scope .nav-item.nav-empty:hover {
+  background: none;
+}
+.sps-scope[data-rail="icons"] .sec-chev {
+  display: none;
+}
+
+/* --- persistent "New chat ⌘O" launcher above the foot --- */
+.sps-scope .rail-newchat-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border-top: 1px solid var(--hair);
+}
+.sps-scope .rail-newchat {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sps-scope .rail-newchat:hover {
+  filter: brightness(1.06);
+}
+.sps-scope .rail-newchat-kbd {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  opacity: 0.75;
+}
+.sps-scope .rail-compose {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--tx-2);
+  cursor: pointer;
+}
+.sps-scope .rail-compose:hover {
+  background: var(--row-hover);
+  color: var(--tx-1);
+}
+.sps-scope[data-rail="icons"] .rail-newchat span,
+.sps-scope[data-rail="icons"] .rail-newchat-kbd {
+  display: none;
+}
+
+/* --- "Get started with" launcher row (empty-page on-ramp) --- */
+.sps-scope .doc-title:empty::before {
+  content: "New page";
+  color: var(--tx-4);
+  pointer-events: none;
+}
+.sps-scope .gs-row {
+  margin: 10px 0 18px;
+}
+.sps-scope .gs-label {
+  font-size: 12.5px;
+  color: var(--tx-3);
+  margin-bottom: 9px;
+}
+.sps-scope .gs-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.sps-scope .gs-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--tx-1);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 100ms ease;
+}
+.sps-scope .gs-chip:hover {
+  background: var(--row-hover);
+}
+.sps-scope .gs-chip .ic {
+  color: var(--tx-3);
+}
+.sps-scope .gs-chip-more {
+  padding: 7px 10px;
+}
+
+/* --- command palette: filter chips + two-column preview --- */
+.sps-scope .palette.palette-wide {
+  width: min(880px, 94vw);
+  max-height: 70vh;
+}
+.sps-scope .pal-filters {
+  display: flex;
+  gap: 7px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--hair);
+  flex-wrap: wrap;
+}
+.sps-scope .pal-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border: 1px solid var(--hair);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--tx-2);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.sps-scope .pal-chip:hover:not(:disabled) {
+  background: var(--row-hover);
+}
+.sps-scope .pal-chip.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.sps-scope .pal-chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.sps-scope .pal-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+.sps-scope .pal-body .pal-list {
+  flex: 1;
+  min-width: 0;
+}
+.sps-scope .pal-preview {
+  width: 340px;
+  flex: none;
+  border-left: 1px solid var(--hair);
+  padding: 22px 20px;
+  overflow-y: auto;
+}
+.sps-scope .pal-preview-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--tx-4);
+  font-size: 13px;
+}
+.sps-scope .pal-pv-ic {
+  font-size: 24px;
+  margin-bottom: 12px;
+  color: var(--tx-2);
+}
+.sps-scope .pal-pv-crumb {
+  font-size: 12px;
+  color: var(--tx-3);
+  margin-bottom: 4px;
+}
+.sps-scope .pal-pv-title {
+  font-size: 19px;
+  font-weight: 650;
+  color: var(--tx-1);
+  margin-bottom: 8px;
+}
+.sps-scope .pal-pv-desc {
+  font-size: 13px;
+  color: var(--tx-2);
+  line-height: 1.5;
+  margin-bottom: 16px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.sps-scope .pal-pv-skel {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.sps-scope .pal-pv-skel span {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--sunk);
+}

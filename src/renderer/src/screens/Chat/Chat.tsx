@@ -37,6 +37,9 @@ interface ChatProps {
   onNewChat?: () => void;
   contextFolderOverride?: string | null;
   compact?: boolean;
+  /** Optional text to pre-fill into the composer once on mount (used by the
+   *  SPS "guided chat" entry points: New chat, meeting/calendar cards). */
+  initialInput?: string;
   /** Optional callback to navigate to Settings → Diagnose section
    *  when the user clicks "Show details" in the config-health banner. */
   onOpenDiagnose?: () => void;
@@ -51,6 +54,7 @@ function Chat({
   onNewChat,
   contextFolderOverride,
   compact,
+  initialInput,
   onOpenDiagnose,
 }: ChatProps): React.JSX.Element {
   const { t } = useI18n();
@@ -283,6 +287,16 @@ function Chat({
   const handleSuggestion = useCallback((text: string) => {
     chatInputRef.current?.setText(text);
   }, []);
+
+  // Pre-fill the composer once from an external "guided chat" entry point.
+  const didPrefill = useRef(false);
+  useEffect(() => {
+    if (didPrefill.current) return;
+    if (!initialInput) return;
+    didPrefill.current = true;
+    chatInputRef.current?.setText(initialInput);
+    chatInputRef.current?.focus();
+  }, [initialInput]);
 
   const handlePickFolder = useCallback(async () => {
     const path = await window.hermesAPI.selectFolder();

@@ -15,6 +15,7 @@ import { Toast } from "./components/Toast";
 import Insights from "../Insights/Insights";
 import { MemoryTimeline } from "../Memory/MemoryTimeline";
 import Chat, { type ChatMessage } from "../Chat/Chat";
+import { ChatSurface } from "./shell/ChatSurface";
 import { AskPane } from "./panel/AskPane";
 
 export function App() {
@@ -23,6 +24,7 @@ export function App() {
   const page = useStore((s) => s.page);
   const panelOpen = useStore((s) => s.panelOpen);
   const surface = useStore((s) => s.surface);
+  const chatNonce = useStore((s) => s.chatNonce);
   const docScrollRef = useRef<HTMLDivElement>(null);
   // Agent Console (tool-using Hermes chat) state — kept local to SPS.
   const [agentMessages, setAgentMessages] = useState<ChatMessage[]>([]);
@@ -63,6 +65,9 @@ export function App() {
               }}
               onOpenDiagnose={() => {}}
             />
+          ) : surface === "chats" ? (
+            // AI Chats: recent sessions + guided new chats (shares <Chat>).
+            <ChatSurface key={`chat-${chatNonce}`} />
           ) : surface === "ask" ? (
             <AskPane />
           ) : (

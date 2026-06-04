@@ -15,8 +15,28 @@ export type RightTab = "assistant" | "outline" | "comments" | "info";
 
 // Top-level surface shown in the main area. "doc" is the page editor (default);
 // the others are full-area surfaces reached from the rail (ideas A2/A4 + the
-// Ask panel and Agent Console).
-export type Surface = "doc" | "insights" | "memory" | "ask" | "agent";
+// Ask panel and Agent Console). "chats" is the AI Chats surface (sessions),
+// distinct from "agent" (the tool-using Agent Console) but sharing <Chat>.
+export type Surface = "doc" | "insights" | "memory" | "ask" | "agent" | "chats";
+
+// Named, toggleable sidebar sections (Notion 3.1 grammar). Order here is the
+// render order in the rail.
+export type SectionId =
+  | "meetings"
+  | "recents"
+  | "agents"
+  | "shared"
+  | "private"
+  | "apps";
+
+export const SECTION_ORDER: SectionId[] = [
+  "meetings",
+  "recents",
+  "agents",
+  "shared",
+  "private",
+  "apps",
+];
 
 export interface XY {
   x: number;
@@ -78,6 +98,14 @@ export interface UiSlice {
   coverPick: XY | null;
   toast: { text: string } | null;
   focusReq: string | null;
+  // AI Chats surface: the session currently shown (null = a fresh chat).
+  activeChatSession: string | null;
+  // A prompt to pre-fill into the chat on next mount (powers the "card → guided
+  // agent flow" entry points: meetings, calendar, apps). Consumed once.
+  pendingChatPrompt: string | null;
+  // Bumped on every new-chat / session-select so the chat surface remounts
+  // cleanly (re-captures the pending prompt, reloads the transcript).
+  chatNonce: number;
 
   setPanelOpen: (v: boolean) => void;
   setRightTab: (t: RightTab) => void;
@@ -92,6 +120,19 @@ export interface UiSlice {
   setCoverPick: (v: XY | null) => void;
   setFocusReq: (id: string | null) => void;
   flash: (text: string) => void;
+  setActiveChatSession: (id: string | null) => void;
+  setPendingChatPrompt: (text: string | null) => void;
+  /** Open the AI Chats surface on a fresh chat, optionally pre-filled. */
+  startNewChat: (prompt?: string) => void;
+}
+
+export interface SidebarSlice {
+  /** Whether a section is shown at all (the "customize sidebar" toggle). */
+  sectionsEnabled: Record<SectionId, boolean>;
+  /** Whether a shown section is expanded (the collapse caret). */
+  sectionsOpen: Record<SectionId, boolean>;
+  setSectionEnabled: (id: SectionId, v: boolean) => void;
+  toggleSection: (id: SectionId) => void;
 }
 
 export interface TweaksSlice {
@@ -116,5 +157,6 @@ export interface AssistantSlice {
 export type Store = WorkspaceSlice &
   CommentsSlice &
   UiSlice &
+  SidebarSlice &
   TweaksSlice &
   AssistantSlice;

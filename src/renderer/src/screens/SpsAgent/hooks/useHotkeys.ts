@@ -1,5 +1,5 @@
 // useHotkeys.ts — global keyboard shortcuts. Ported from app.jsx:232-241.
-//   ⌘K toggle palette · ⌘\ toggle sidebar · ⌘J toggle assistant · Esc close task
+//   ⌘K palette · ⌘O new chat · ⌘\ toggle sidebar · ⌘J assistant · Esc close task
 import { useEffect } from "react";
 import { useStore } from "../store";
 
@@ -11,6 +11,9 @@ export function useHotkeys(): void {
       if (mod && e.key.toLowerCase() === "k") {
         e.preventDefault();
         s.setPaletteOpen(!s.paletteOpen);
+      } else if (mod && e.key.toLowerCase() === "o") {
+        e.preventDefault();
+        s.startNewChat();
       } else if (mod && e.key === "\\") {
         e.preventDefault();
         s.setTweak("sidebar", s.t.sidebar === "hidden" ? "full" : "hidden");

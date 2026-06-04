@@ -3,6 +3,7 @@
 // and write the Zustand tweaks slice (persisted) instead of the EDITMODE block.
 import { useRef, useState, useEffect, type ReactNode } from "react";
 import { useStore } from "../store";
+import { SECTION_ORDER, type SectionId } from "../store/storeTypes";
 import { ACCENTS, type Tweaks, setSkinVars } from "../lib/theme";
 import { skinToSpsVars } from "../lib/skin";
 import { getActiveSkinId, setActiveSkinId } from "../../../utils/skin";
@@ -69,6 +70,34 @@ const TWEAKS_STYLE = `
 
 function Section({ label }: { label: string }) {
   return <div className="twk-sect">{label}</div>;
+}
+
+const SECTION_LABELS: Record<SectionId, string> = {
+  meetings: "Meetings",
+  recents: "Recents",
+  agents: "Agents",
+  shared: "Shared",
+  private: "Private",
+  apps: "Notion apps",
+};
+
+/** Toggle individual sidebar sections on/off (Notion 3.1 "customize sidebar"). */
+function SidebarSections() {
+  const enabled = useStore((s) => s.sectionsEnabled);
+  const setSectionEnabled = useStore((s) => s.setSectionEnabled);
+  return (
+    <>
+      <Section label="Sidebar sections" />
+      {SECTION_ORDER.map((id) => (
+        <Toggle
+          key={id}
+          label={SECTION_LABELS[id]}
+          value={enabled[id]}
+          onChange={(v) => setSectionEnabled(id, v)}
+        />
+      ))}
+    </>
+  );
 }
 
 function Toggle({
@@ -347,6 +376,7 @@ export function TweaksPanel() {
         onChange={(v) => setTweak("bodyfont", v)}
       />
       <SkinSelect />
+      <SidebarSections />
     </Shell>
   );
 }

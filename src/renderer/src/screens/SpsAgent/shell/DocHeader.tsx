@@ -3,14 +3,24 @@
 // Emoji/cover pickers render in Phase 5; here the buttons set picker coordinates.
 import type { ReactNode } from "react";
 import { Icon } from "../components/Icon";
+import { GetStarted } from "../components/GetStarted";
 import { useStore } from "../store";
-import { selectPmeta } from "../store/selectors";
+import { selectCurrentBlocks, selectPmeta } from "../store/selectors";
 
 export function DocHeader({ children }: { children?: ReactNode }) {
   const page = useStore((s) => s.page);
   const pmeta = useStore(selectPmeta);
+  const blocks = useStore(selectCurrentBlocks);
   const setPMeta = useStore((s) => s.setPMeta);
   const setCoverPick = useStore((s) => s.setCoverPick);
+
+  // Empty page = no title and no real content (0–1 empty blocks). Mirror
+  // Notion's empty-state launcher here, above the editor body.
+  const titleEmpty = !(pmeta.title || "").trim();
+  const contentEmpty =
+    blocks.length === 0 ||
+    (blocks.length === 1 && !(blocks[0].text || "").trim());
+  const showGetStarted = titleEmpty && contentEmpty;
 
   return (
     <>
@@ -65,6 +75,7 @@ export function DocHeader({ children }: { children?: ReactNode }) {
             </span>
             <span>Saved locally</span>
           </div>
+          {showGetStarted && <GetStarted />}
           {children}
         </div>
       </div>

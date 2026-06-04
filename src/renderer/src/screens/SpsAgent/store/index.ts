@@ -13,6 +13,7 @@ import type { Store } from "./storeTypes";
 import { createWorkspaceSlice } from "./slices/workspace";
 import { createCommentsSlice } from "./slices/comments";
 import { createUiSlice } from "./slices/ui";
+import { createSidebarSlice, saveSidebar } from "./slices/sidebar";
 import { createTweaksSlice, saveTweaks } from "./slices/tweaks";
 import { createAssistantSlice } from "./slices/assistant";
 
@@ -21,6 +22,7 @@ export const useStore = create<Store>()(
     ...createWorkspaceSlice(...a),
     ...createCommentsSlice(...a),
     ...createUiSlice(...a),
+    ...createSidebarSlice(...a),
     ...createTweaksSlice(...a),
     ...createAssistantSlice(...a),
   })),
@@ -33,6 +35,13 @@ useStore.subscribe(
     applyTweaks(t);
     saveTweaks(t);
   },
+);
+
+// ---- persist sidebar section visibility/collapse (localStorage) ----
+useStore.subscribe(
+  (s) => [s.sectionsEnabled, s.sectionsOpen] as const,
+  ([sectionsEnabled, sectionsOpen]) =>
+    saveSidebar({ sectionsEnabled, sectionsOpen }),
 );
 
 // ---- debounced workspace persistence (to the main process) ----
