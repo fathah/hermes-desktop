@@ -71,7 +71,7 @@
   --line-pad: 3px; /* block vertical padding */
   --block-gap: 1px;
   --row-h: 36px;
-  --doc-pad-y: 56px;
+  --doc-pad-y: 32px;
 
   --content-w: 740px; /* width tweak */
   --rail-w: 248px;
@@ -80,7 +80,7 @@
 .sps-scope[data-density="compact"] {
   --line-pad: 1px;
   --row-h: 30px;
-  --doc-pad-y: 40px;
+  --doc-pad-y: 22px;
 }
 
 .sps-scope * {
