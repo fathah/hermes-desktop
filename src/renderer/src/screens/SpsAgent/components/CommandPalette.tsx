@@ -8,6 +8,7 @@ import type { IconName } from "./iconPaths";
 import { useStore } from "../store";
 import { treeWalkIds } from "../lib/tree";
 import { computePathIds } from "../store/selectors";
+import { workspaceParity } from "../editor/workspaceVault";
 import type { PageMeta, TreeNode } from "../types";
 
 interface ActionItem {
@@ -61,6 +62,7 @@ export function CommandPalette() {
   const setTrashOpen = useStore((s) => s.setTrashOpen);
   const resetWorkspace = useStore((s) => s.resetWorkspace);
   const startNewChat = useStore((s) => s.startNewChat);
+  const flash = useStore((s) => s.flash);
 
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
@@ -142,6 +144,35 @@ export function CommandPalette() {
         desc: "Replace the workspace with the sample content.",
         run: () => resetWorkspace(),
       },
+      {
+        kind: "action",
+        id: "parity",
+        icon: "code",
+        label: "Check vault parity",
+        desc: "Verify the workspace round-trips through markdown losslessly (cutover readiness).",
+        run: () => {
+          const s = useStore.getState();
+          const report = workspaceParity({
+            tree: s.tree,
+            meta: s.meta,
+            docs: s.docs,
+            comments: s.comments,
+            trash: s.trash,
+            page: s.page,
+          });
+          const failed = report.pages.filter(
+            (p) => !p.contentOk || !p.metaOk,
+          ).length;
+          const caveat = report.blockAnchoredComments
+            ? `, ${report.blockAnchoredComments} comment(s) need re-anchoring`
+            : "";
+          flash(
+            report.ok
+              ? `Vault parity OK — ${report.pages.length} pages${caveat}`
+              : `Parity: ${failed} page(s) differ${caveat}`,
+          );
+        },
+      },
     ],
     [
       t.dark,
@@ -152,6 +183,7 @@ export function CommandPalette() {
       setTrashOpen,
       resetWorkspace,
       startNewChat,
+      flash,
     ],
   );
 
