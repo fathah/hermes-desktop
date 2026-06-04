@@ -434,33 +434,6 @@
   margin-top: -36px;
   position: relative;
 }
-.sps-scope .header-add {
-  display: flex;
-  gap: 4px;
-  margin: 8px 0 4px;
-  opacity: 0;
-  transition: opacity 120ms;
-}
-.sps-scope .doc-head-inner:hover .header-add,
-.sps-scope .doc:hover > .doc-head-inner .header-add {
-  opacity: 1;
-}
-.sps-scope .header-add button {
-  font-size: 13px;
-  color: var(--tx-3);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 6px;
-  display: inline-flex;
-  gap: 6px;
-  align-items: center;
-}
-.sps-scope .header-add button:hover {
-  background: var(--row-hover);
-  color: var(--tx-1);
-}
 
 /* ---------- Image block ---------- */
 .sps-scope .b-image {

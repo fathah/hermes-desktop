@@ -56,23 +56,6 @@ export function DocHeader({ children }: { children?: ReactNode }) {
           >
             {pmeta.icon}
           </div>
-          <div className="header-add">
-            {!pmeta.cover && (
-              <button onClick={() => setPMeta({ cover: "var(--accent)" })}>
-                <Icon name="callout" size={15} /> Add cover
-              </button>
-            )}
-            <button
-              onClick={(e) =>
-                setEmojiPick({
-                  x: e.currentTarget.getBoundingClientRect().left,
-                  y: e.currentTarget.getBoundingClientRect().bottom + 6,
-                })
-              }
-            >
-              <Icon name="sparkle" size={15} /> Change icon
-            </button>
-          </div>
           <div
             className="doc-title"
             contentEditable
