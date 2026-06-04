@@ -889,6 +889,34 @@ interface HermesAPI {
     logFile?: string,
     lines?: number,
   ) => Promise<{ content: string; path: string }>;
+
+  filesGetWorkspaceRoot: () => Promise<{
+    success: boolean;
+    data?: { root: string | null };
+    error?: string;
+  }>;
+  filesSetWorkspaceRoot: (
+    dir: string,
+  ) => Promise<{ success: boolean; data?: { root: string }; error?: string }>;
+  filesListDir: (
+    dir: string,
+  ) => Promise<{
+    success: boolean;
+    data?: {
+      root: string | null;
+      cwd: string | null;
+      entries: Array<{ name: string; isDir: boolean; path: string; error?: string }>;
+    };
+    error?: string;
+    unsupportedMode?: boolean;
+  }>;
+  filesRead: (
+    path: string,
+  ) => Promise<{ success: boolean; data?: { text: string }; error?: string }>;
+  filesWrite: (
+    path: string,
+    content: string,
+  ) => Promise<{ success: boolean; error?: string }>;
 }
 
 declare global {

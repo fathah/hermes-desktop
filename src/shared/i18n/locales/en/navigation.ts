@@ -12,6 +12,7 @@ export default {
   tools: "Tools",
   schedules: "Schedules",
   kanban: "Kanban",
+  files: "Files",
   gateway: "Gateway",
   settings: "Settings",
 } as const;
