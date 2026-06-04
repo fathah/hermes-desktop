@@ -20,7 +20,12 @@ export type BlockType =
   | "image"
   | "bookmark"
   | "page"
-  | "database";
+  | "database"
+  // Diagram blocks. mermaid keeps its source in `text` (serialises to a clean
+  // ```mermaid fence). excalidraw keeps a preview-SVG path in `src` and stores
+  // its scene in a sidecar asset file — never inline in the markdown.
+  | "mermaid"
+  | "excalidraw";
 
 export type DbView = "board" | "table" | "list" | "gallery" | "calendar";
 export type StatusKey = "todo" | "doing" | "review" | "done";

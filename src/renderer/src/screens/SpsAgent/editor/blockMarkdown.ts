@@ -233,9 +233,13 @@ function isCleanBlock(block: Block): boolean {
     "code",
     "divider",
     "image",
+    // mermaid -> ```mermaid fence (clean, Obsidian/GitHub render it natively).
+    "mermaid",
   ];
   if (!cleanTypes.includes(block.type)) return false;
-  if (block.html && block.type !== "code") {
+  // code/mermaid carry verbatim source in `text`; their `html` (if any) is not
+  // inline-markdown and must not gate cleanliness.
+  if (block.html && block.type !== "code" && block.type !== "mermaid") {
     return inlineHtmlToMd(block.html).clean;
   }
   return true;
@@ -259,6 +263,8 @@ function blockToMarkdown(block: Block): string {
       return "---";
     case "code":
       return "```\n" + (block.text || "") + "\n```";
+    case "mermaid":
+      return "```mermaid\n" + (block.text || "") + "\n```";
     case "image":
       return `![${block.caption || ""}](${block.src || ""})`;
     case "h1":
@@ -326,6 +332,9 @@ export function markdownToBlocks(md: string): Block[] {
     }
 
     if (raw.trimStart().startsWith("```")) {
+      // The info-string after the opening fence selects the block type:
+      // ```mermaid → a mermaid diagram, anything else → a plain code block.
+      const lang = raw.trim().slice(3).trim().toLowerCase();
       const body: string[] = [];
       i++;
       while (i < lines.length && !lines[i].trimStart().startsWith("```")) {
@@ -333,7 +342,8 @@ export function markdownToBlocks(md: string): Block[] {
         i++;
       }
       i++; // consume closing fence
-      blocks.push({ id: uid(), type: "code", text: body.join("\n") });
+      const type: BlockType = lang === "mermaid" ? "mermaid" : "code";
+      blocks.push({ id: uid(), type, text: body.join("\n") });
       continue;
     }
 

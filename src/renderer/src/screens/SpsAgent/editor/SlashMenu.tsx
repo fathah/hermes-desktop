@@ -68,6 +68,12 @@ export const SLASH_ITEMS: SlashItem[] = [
     label: "Task board",
     desc: "Embedded database",
   },
+  {
+    type: "mermaid",
+    icon: "pageGraph",
+    label: "Mermaid diagram",
+    desc: "Flowchart, sequence, ER from text",
+  },
 ];
 
 interface Props {

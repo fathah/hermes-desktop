@@ -236,6 +236,10 @@ export function Editor() {
       setType(id, { type: "image", html: "", text: "" });
       return;
     }
+    if (item.type === "mermaid") {
+      setType(id, { type: "mermaid", html: "", text: "" });
+      return;
+    }
     if (item.type === "bookmark") {
       setType(id, { type: "bookmark", html: "", text: "", bm: null });
       return;

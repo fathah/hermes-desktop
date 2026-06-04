@@ -152,6 +152,30 @@ describe("page links as wikilinks (S3 — feeds the vault graph)", () => {
     expectRoundTrip([blk("page", "", { pageId: "pg-123" })]));
 });
 
+describe("mermaid diagram block", () => {
+  it("round-trips a mermaid block as a clean ```mermaid fence", () => {
+    const source = "graph TD;\n  A[Start] --> B[End]";
+    const blocks: Block[] = [blk("mermaid", source)];
+    const md = blocksToMarkdown(blocks);
+    expect(md).toBe("```mermaid\n" + source + "\n```");
+    expectRoundTrip(blocks);
+  });
+
+  it("keeps a plain fence as a code block (no mermaid info-string)", () => {
+    const out = markdownToBlocks("```\necho hi\n```");
+    expect(out).toHaveLength(1);
+    expect(out[0].type).toBe("code");
+    expect(out[0].text).toBe("echo hi");
+  });
+
+  it("does not embed base64/metadata for a mermaid block", () => {
+    const md = blocksToMarkdown([
+      blk("mermaid", "sequenceDiagram\n  A->>B: hi"),
+    ]);
+    expect(md).not.toContain("<!-- sps:");
+  });
+});
+
 describe("full-document round-trip", () => {
   it("round-trips a representative mixed document", () => {
     const doc: Block[] = [
