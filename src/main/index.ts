@@ -49,6 +49,7 @@ import {
   clearVersionCache,
   runHermesDoctor,
   runHermesUpdate,
+  checkHermesUpdate,
   checkOpenClawExists,
   runClawMigrate,
   runHermesBackup,
@@ -556,9 +557,28 @@ function setupIPC(): void {
       await runHermesUpdate((progress: InstallProgress) => {
         event.sender.send("install-progress", progress);
       });
+      // The local gateway is a long-lived subprocess running the now-stale
+      // code; restart it so the freshly-pulled runtime takes effect. Only
+      // when one is actually running (restartGateway self-gates on remote
+      // mode) — don't spawn a gateway the user had stopped.
+      if (isGatewayRunning()) {
+        restartGateway();
+      }
       return { success: true };
     } catch (err) {
       return { success: false, error: (err as Error).message };
+    }
+  });
+
+  // Detect whether the locally-checked-out Hermes runtime is behind upstream
+  // (WS3). Skipped in remote/SSH mode — there the local repo isn't the one
+  // serving the gateway, so a local git compare would be misleading.
+  ipcMain.handle("check-hermes-update", async () => {
+    if (isRemoteMode()) return { available: false, reason: "remote-mode" };
+    try {
+      return await checkHermesUpdate();
+    } catch (err) {
+      return { available: false, reason: (err as Error).message };
     }
   });
 

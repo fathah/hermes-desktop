@@ -173,6 +173,16 @@ function Layout({
   const [downloadPercent, setDownloadPercent] = useState(0);
   const [updateError, setUpdateError] = useState<string | null>(null);
 
+  // Hermes *runtime* update (WS3) — distinct from the Electron-shell auto-update
+  // above. Detects when the locally-checked-out agent is behind upstream and
+  // offers an in-place `hermes update`.
+  const [hermesUpdateState, setHermesUpdateState] = useState<
+    "available" | "updating" | "done" | "error" | null
+  >(null);
+  const [hermesUpdateDetail, setHermesUpdateDetail] = useState<string | null>(
+    null,
+  );
+
   useEffect(() => {
     const cleanupAvailable = window.hermesAPI.onUpdateAvailable((info) => {
       setUpdateVersion(info.version);
@@ -201,6 +211,41 @@ function Layout({
       cleanupError();
     };
   }, []);
+
+  // Probe the runtime once on mount (best-effort, non-blocking).
+  useEffect(() => {
+    let cancelled = false;
+    window.hermesAPI
+      .checkHermesUpdate()
+      .then((status) => {
+        if (!cancelled && status.available) setHermesUpdateState("available");
+      })
+      .catch(() => {
+        /* offline / not a git checkout — stay silent */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handleHermesUpdate(): Promise<void> {
+    if (hermesUpdateState === "updating") return;
+    setHermesUpdateState("updating");
+    setHermesUpdateDetail(null);
+    const cleanup = window.hermesAPI.onInstallProgress((p) => {
+      setHermesUpdateDetail(p.detail || null);
+    });
+    try {
+      const result = await window.hermesAPI.runHermesUpdate();
+      setHermesUpdateState(result.success ? "done" : "error");
+      if (!result.success) setHermesUpdateDetail(result.error ?? null);
+    } catch (err) {
+      setHermesUpdateState("error");
+      setHermesUpdateDetail(err instanceof Error ? err.message : String(err));
+    } finally {
+      cleanup();
+    }
+  }
 
   async function handleUpdate(): Promise<void> {
     if (updateState === "available" || updateState === "error") {
@@ -329,6 +374,32 @@ function Layout({
               )}
               {updateState === "error" && (
                 <span>{t("common.updateFailed")}</span>
+              )}
+            </button>
+          )}
+          {hermesUpdateState && (
+            <button
+              className={`sidebar-update-btn ${
+                hermesUpdateState === "error" ? "error" : ""
+              }`}
+              onClick={handleHermesUpdate}
+              disabled={
+                hermesUpdateState === "updating" || hermesUpdateState === "done"
+              }
+              title={hermesUpdateDetail ?? undefined}
+            >
+              <Download size={13} />
+              {hermesUpdateState === "available" && (
+                <span>{t("common.agentUpdateAvailable")}</span>
+              )}
+              {hermesUpdateState === "updating" && (
+                <span>{t("common.agentUpdating")}</span>
+              )}
+              {hermesUpdateState === "done" && (
+                <span>{t("common.agentUpdated")}</span>
+              )}
+              {hermesUpdateState === "error" && (
+                <span>{t("common.agentUpdateFailed")}</span>
               )}
             </button>
           )}

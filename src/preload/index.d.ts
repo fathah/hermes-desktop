@@ -222,6 +222,13 @@ interface HermesAPI {
   refreshHermesVersion: () => Promise<string | null>;
   runHermesDoctor: () => Promise<string>;
   runHermesUpdate: () => Promise<{ success: boolean; error?: string }>;
+  checkHermesUpdate: () => Promise<{
+    available: boolean;
+    behindBy?: number;
+    localHead?: string;
+    upstreamHead?: string;
+    reason?: string;
+  }>;
 
   // OpenClaw migration
   checkOpenClaw: () => Promise<{ found: boolean; path: string | null }>;

@@ -99,6 +99,13 @@ const hermesAPI = {
     ipcRenderer.invoke("run-hermes-doctor"),
   runHermesUpdate: (): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke("run-hermes-update"),
+  checkHermesUpdate: (): Promise<{
+    available: boolean;
+    behindBy?: number;
+    localHead?: string;
+    upstreamHead?: string;
+    reason?: string;
+  }> => ipcRenderer.invoke("check-hermes-update"),
 
   // OpenClaw migration
   checkOpenClaw: (): Promise<{ found: boolean; path: string | null }> =>

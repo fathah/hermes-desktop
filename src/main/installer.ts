@@ -72,7 +72,9 @@ function shQuote(s: string): string {
 }
 
 function getBundledScriptPath(scriptName: string): string {
-  const appPath = app?.getAppPath ? app.getAppPath() : resolve(__dirname, "../..");
+  const appPath = app?.getAppPath
+    ? app.getAppPath()
+    : resolve(__dirname, "../..");
   const isPackaged = app?.isPackaged ?? false;
   if (isPackaged) {
     return join(appPath, "..", "app.asar.unpacked", "resources", scriptName);
@@ -782,6 +784,101 @@ export async function runHermesUpdate(
       reject(new Error(`Failed to run update: ${err.message}`));
     });
   });
+}
+
+// ────────────────────────────────────────────────────
+//  Runtime update detection (WS3)
+// ────────────────────────────────────────────────────
+
+export interface HermesUpdateStatus {
+  /** True when upstream is ahead of the local checkout. */
+  available: boolean;
+  /** Commits the local HEAD is behind upstream, when known. */
+  behindBy?: number;
+  localHead?: string;
+  upstreamHead?: string;
+  /** Why a check couldn't conclude (not-a-git-repo, no-upstream, error…). */
+  reason?: string;
+}
+
+/**
+ * Pure interpretation of a local-vs-upstream HEAD comparison. Extracted from
+ * the git I/O so the decision logic is unit-testable. `behindRaw` is the raw
+ * stdout of `git rev-list --count HEAD..@{u}` (or null if that call failed).
+ */
+export function interpretHeadComparison(
+  localHead: string | null,
+  upstreamHead: string | null,
+  behindRaw: string | null,
+): HermesUpdateStatus {
+  if (!localHead) return { available: false, reason: "no-head" };
+  if (!upstreamHead)
+    return { available: false, reason: "no-upstream", localHead };
+  if (localHead === upstreamHead) {
+    return { available: false, localHead, upstreamHead };
+  }
+  const parsed = behindRaw ? parseInt(behindRaw, 10) : NaN;
+  const behindBy = Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+  return { available: true, behindBy, localHead, upstreamHead };
+}
+
+/**
+ * Check whether the locally-checked-out Hermes Agent repo is behind its
+ * upstream tracking branch. Best-effort: a missing `.git`, no tracking
+ * branch, or an offline `git fetch` all resolve to `available: false` with a
+ * `reason` rather than throwing. Never auto-updates — the caller surfaces the
+ * result and lets the user trigger `hermes update`.
+ */
+export async function checkHermesUpdate(): Promise<HermesUpdateStatus> {
+  if (!existsSync(join(HERMES_REPO, ".git"))) {
+    return { available: false, reason: "not-a-git-repo" };
+  }
+
+  const gitEnv = {
+    ...process.env,
+    PATH: getEnhancedPath(),
+    HOME: homedir(),
+    HERMES_HOME,
+  };
+  const runGit = (
+    args: string[],
+    timeout: number,
+  ): Promise<{ ok: boolean; out: string }> =>
+    new Promise((resolve) => {
+      execFile(
+        "git",
+        args,
+        {
+          cwd: HERMES_REPO,
+          env: gitEnv,
+          timeout,
+          ...HIDDEN_SUBPROCESS_OPTIONS,
+        },
+        (error, stdout) => {
+          resolve({
+            ok: !error,
+            out: stripAnsi((stdout || "").toString()).trim(),
+          });
+        },
+      );
+    });
+
+  // Refresh remote-tracking refs (best-effort; offline is fine — we then
+  // compare against whatever was last fetched).
+  await runGit(["fetch", "--quiet"], 30000);
+
+  const local = await runGit(["rev-parse", "HEAD"], 5000);
+  const upstream = await runGit(["rev-parse", "@{u}"], 5000);
+  const behind =
+    local.ok && upstream.ok
+      ? await runGit(["rev-list", "--count", "HEAD..@{u}"], 5000)
+      : { ok: false, out: "" };
+
+  return interpretHeadComparison(
+    local.ok ? local.out : null,
+    upstream.ok ? upstream.out : null,
+    behind.ok ? behind.out : null,
+  );
 }
 
 function getShellProfile(home: string): string | null {
