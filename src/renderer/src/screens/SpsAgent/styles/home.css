@@ -167,6 +167,12 @@
   overflow: hidden;
   user-select: none;
 }
+/* macOS hiddenInset: the traffic-light buttons (trafficLightPosition y:16) sit
+   over the top-left. Drop the sidebar header below them so the SPS Agent mark
+   isn't obscured. */
+[data-platform="mac"] .sps-scope .rail-top {
+  margin-top: 24px;
+}
 .sps-scope .rail-top {
   display: flex;
   align-items: center;

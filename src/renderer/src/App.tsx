@@ -30,6 +30,15 @@ function App(): React.JSX.Element {
   const [adminOpen, setAdminOpen] = useState(false);
   const isMac = window.electron?.process?.platform === "darwin";
 
+  // Expose the platform so CSS can reserve room for the macOS traffic-light
+  // buttons (hiddenInset title bar) above the sidebar header.
+  useEffect(() => {
+    document.documentElement.setAttribute(
+      "data-platform",
+      isMac ? "mac" : "other",
+    );
+  }, [isMac]);
+
   // ⌘, (mac) / Ctrl+, toggles the admin overlay, only once on the main screen.
   useEffect(() => {
     if (screen !== "main") return;
