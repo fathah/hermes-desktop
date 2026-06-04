@@ -418,6 +418,37 @@ export class NoteIndex {
     return rows.map((r) => r.source).filter((p) => p !== relPath);
   }
 
+  /** All resolved [[wikilink]] edges as {source, target} relPaths (F4 graph
+   *  view). Only edges whose target resolves to an indexed note are returned;
+   *  self-links and duplicate edges are dropped. */
+  links(): Array<{ source: string; target: string }> {
+    const notes = this.db.prepare(`SELECT path FROM notes`).all() as Array<{
+      path: string;
+    }>;
+    // Map each note's candidate names → its relPath so a normalized link target
+    // resolves to a concrete note (first note to claim a name wins).
+    const nameToPath = new Map<string, string>();
+    for (const { path } of notes) {
+      for (const name of candidateNames(path)) {
+        if (!nameToPath.has(name)) nameToPath.set(name, path);
+      }
+    }
+    const rows = this.db
+      .prepare(`SELECT source, target_norm FROM links`)
+      .all() as Array<{ source: string; target_norm: string }>;
+    const edges: Array<{ source: string; target: string }> = [];
+    const seen = new Set<string>();
+    for (const { source, target_norm } of rows) {
+      const target = nameToPath.get(target_norm);
+      if (!target || target === source) continue;
+      const key = `${source} ${target}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      edges.push({ source, target });
+    }
+    return edges;
+  }
+
   status(): NoteIndexStatus {
     return {
       root: this.root,

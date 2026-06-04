@@ -100,7 +100,7 @@ describe("workspaceParity", () => {
     expect(workspaceParity(ws).pages[0].contentOk).toBe(true);
   });
 
-  it("flags block-anchored comments as the cutover caveat (content still ok)", () => {
+  it("counts block-anchored comments (informational), even dangling ones", () => {
     const comment: Comment = {
       id: "c1",
       quote: "Welcome",
@@ -113,5 +113,40 @@ describe("workspaceParity", () => {
     expect(report.blockAnchoredComments).toBe(1);
     expect(report.pages.every((p) => p.contentOk)).toBe(true);
     expect(report.treeOk).toBe(true);
+  });
+
+  it("preserves a comment anchored to a real block across the round-trip (F2)", () => {
+    const anchored = blk("p", "Welcome");
+    const comment: Comment = {
+      id: "c1",
+      quote: "Welcome",
+      blockId: anchored.id,
+      page: "home",
+      resolved: false,
+      messages: [],
+    };
+    const ws = makeWorkspace({
+      docs: { home: [blk("h1", "Home"), anchored], sub: [blk("p", "Sub")] },
+      comments: [comment],
+    });
+    const report = workspaceParity(ws);
+    expect(report.blockAnchoredComments).toBe(1);
+    expect(report.blockAnchorsOk).toBe(true);
+    expect(report.ok).toBe(true);
+    expect(workspaceToVault(ws).pages.home).toContain(`^${anchored.id}`);
+  });
+
+  it("ignores a dangling anchor (no matching source block) for cutover", () => {
+    const comment: Comment = {
+      id: "c1",
+      quote: "x",
+      blockId: "no-such-block",
+      page: "home",
+      resolved: false,
+      messages: [],
+    };
+    const report = workspaceParity(makeWorkspace({ comments: [comment] }));
+    expect(report.blockAnchorsOk).toBe(true);
+    expect(report.ok).toBe(true);
   });
 });

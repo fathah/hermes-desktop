@@ -8,8 +8,9 @@
 //     (the page tree, trash, comments, current page).
 //
 // workspaceParity() round-trips a live workspace and reports whether content,
-// metadata, and structure survive — plus the one known caveat: block-anchored
-// comments reference runtime block ids that regenerate on parse.
+// metadata, and structure survive. Block-anchored comments survive too: F2
+// persists the ids of anchored blocks in the markdown (Obsidian-style ` ^<id>`
+// for tier-1, or inside the tier-2 meta), and parity reports blockAnchorsOk.
 import { pageToMarkdown, pageFromMarkdown } from "./pageMarkdown";
 import { treeWalkIds } from "../lib/tree";
 import type {
@@ -36,6 +37,14 @@ export interface VaultSnapshot {
 
 const DEFAULT_META: PageMeta = { icon: "📄", title: "", cover: null };
 
+/** Block ids that an open comment anchors to — these must persist across the
+ *  markdown round-trip (F2) so the comment can re-anchor after cutover. */
+export function commentAnchorIds(comments: Comment[]): Set<string> {
+  return new Set(
+    comments.map((c) => c.blockId).filter((id): id is string => !!id),
+  );
+}
+
 /** The structural manifest for a workspace (everything not in page files). */
 export function workspaceManifest(ws: Workspace): WorkspaceManifest {
   return {
@@ -49,8 +58,13 @@ export function workspaceManifest(ws: Workspace): WorkspaceManifest {
 /** Serialize a whole workspace to a vault (page files + manifest). */
 export function workspaceToVault(ws: Workspace): VaultSnapshot {
   const pages: Record<string, string> = {};
+  const anchoredIds = commentAnchorIds(ws.comments);
   for (const id of Object.keys(ws.docs)) {
-    pages[id] = pageToMarkdown(ws.meta[id] ?? {}, ws.docs[id] ?? []);
+    pages[id] = pageToMarkdown(
+      ws.meta[id] ?? {},
+      ws.docs[id] ?? [],
+      anchoredIds,
+    );
   }
   return {
     pages,
@@ -107,8 +121,12 @@ export interface ParityReport {
   treeOk: boolean;
   /** Empty paragraphs are intentionally not representable in markdown. */
   droppedEmptyParagraphs: number;
-  /** Comments anchored to a block id — these need re-anchoring at cutover. */
+  /** Comments anchored to a block id (informational count). */
   blockAnchoredComments: number;
+  /** True when every anchor to a real source block survives the round-trip
+   *  (F2). Dangling anchors — a blockId with no matching block — are
+   *  pre-existing breakage and do not gate cutover. */
+  blockAnchorsOk: boolean;
 }
 
 /** Strip the runtime id and empty paragraphs so two block lists are comparable. */
@@ -161,6 +179,32 @@ export function workspaceParity(ws: Workspace): ParityReport {
 
   const blockAnchoredComments = ws.comments.filter((c) => !!c.blockId).length;
 
-  const ok = treeOk && pages.every((p) => p.contentOk && p.metaOk);
-  return { ok, pages, treeOk, droppedEmptyParagraphs, blockAnchoredComments };
+  // F2: every comment anchored to a *real* source block must keep its id through
+  // the round-trip. Dangling anchors (no matching source block) are ignored —
+  // they are already broken in blob mode and cutover doesn't make them worse.
+  const sourceIds = new Set<string>();
+  for (const id of Object.keys(ws.docs)) {
+    for (const b of ws.docs[id] ?? []) sourceIds.add(b.id);
+  }
+  const reconstructedIds = new Set<string>();
+  for (const id of Object.keys(back.docs)) {
+    for (const b of back.docs[id] ?? []) reconstructedIds.add(b.id);
+  }
+  const liveAnchors = ws.comments.filter(
+    (c) => !!c.blockId && sourceIds.has(c.blockId),
+  );
+  const blockAnchorsOk = liveAnchors.every((c) =>
+    reconstructedIds.has(c.blockId as string),
+  );
+
+  const ok =
+    treeOk && blockAnchorsOk && pages.every((p) => p.contentOk && p.metaOk);
+  return {
+    ok,
+    pages,
+    treeOk,
+    droppedEmptyParagraphs,
+    blockAnchoredComments,
+    blockAnchorsOk,
+  };
 }

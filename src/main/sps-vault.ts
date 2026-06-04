@@ -50,6 +50,21 @@ export async function exportPageMarkdownTo(
   }
 }
 
+/** Delete a page's markdown file from a vault directory (F3 orphan cleanup).
+ *  Id-validated and traversal-safe; best-effort (missing file ⇒ still false). */
+export async function deletePageIn(
+  dir: string,
+  pageId: string,
+): Promise<boolean> {
+  if (!isValidPageId(pageId)) return false;
+  try {
+    await fs.rm(join(dir, pageFilename(pageId)));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Read a page's mirrored markdown back, or null if absent / bad id. */
 export async function readPageMarkdownFrom(
   dir: string,
@@ -94,6 +109,22 @@ export async function deleteRowIn(
   if (isReservedFolder(dbFolder)) return false;
   try {
     await fs.rm(join(vaultDir, dbFolder, pageFilename(rowId)));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Delete a whole database row folder (F3 — when its block is removed). The
+ *  folder is a single id-safe segment, so this can't escape the vault; a bad
+ *  segment or missing folder ⇒ false. Recursive: removes the folder + its rows. */
+export async function deleteDbFolderIn(
+  vaultDir: string,
+  dbFolder: string,
+): Promise<boolean> {
+  if (!isValidSegment(dbFolder)) return false;
+  try {
+    await fs.rm(join(vaultDir, dbFolder), { recursive: true });
     return true;
   } catch {
     return false;

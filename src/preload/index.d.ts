@@ -977,6 +977,8 @@ interface HermesAPI {
     rowId: string,
     profile?: string,
   ) => Promise<boolean>;
+  spsDeletePage: (pageId: string, profile?: string) => Promise<boolean>;
+  spsDeleteDbFolder: (dbFolder: string, profile?: string) => Promise<boolean>;
   spsVaultRead: (
     profile?: string,
   ) => Promise<{ pages: Record<string, string>; manifest: string | null }>;
@@ -1020,6 +1022,9 @@ interface HermesAPI {
     profile?: string,
   ) => Promise<Array<{ path: string; title: string; snippet: string }>>;
   spsIndexBacklinks: (path: string, profile?: string) => Promise<string[]>;
+  spsIndexLinks: (
+    profile?: string,
+  ) => Promise<Array<{ source: string; target: string }>>;
   spsIndexStatus: (profile?: string) => Promise<{
     root: string;
     notes: number;

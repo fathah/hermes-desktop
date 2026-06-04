@@ -8,10 +8,12 @@ import { writeFile } from "fs/promises";
 import {
   exportPageMarkdownTo,
   readPageMarkdownFrom,
+  deletePageIn,
   isValidPageId,
   pageFilename,
   exportRowMarkdownTo,
   deleteRowIn,
+  deleteDbFolderIn,
   listRowIdsIn,
   readVaultPages,
   readVaultManifest,
@@ -111,6 +113,27 @@ describe("exportPageMarkdownTo / readPageMarkdownFrom", () => {
   });
 });
 
+describe("deletePageIn (F3 orphan cleanup)", () => {
+  it("deletes an existing page file and reports success", async () => {
+    await exportPageMarkdownTo(dir, "gone", "# Gone");
+    expect(existsSync(join(dir, "gone.md"))).toBe(true);
+    expect(await deletePageIn(dir, "gone")).toBe(true);
+    expect(existsSync(join(dir, "gone.md"))).toBe(false);
+  });
+
+  it("returns false for a missing file (best-effort, no throw)", async () => {
+    expect(await deletePageIn(dir, "never")).toBe(false);
+  });
+
+  it("refuses a hostile id and removes nothing outside the vault", async () => {
+    await exportPageMarkdownTo(dir, "keep", "# Keep");
+    expect(await deletePageIn(dir, "../keep")).toBe(false);
+    expect(await deletePageIn(dir, "a/b")).toBe(false);
+    expect(await deletePageIn(dir, "")).toBe(false);
+    expect(existsSync(join(dir, "keep.md"))).toBe(true);
+  });
+});
+
 describe("database rows (S4)", () => {
   it("writes, lists, and deletes row files in a database folder", async () => {
     expect(await exportRowMarkdownTo(dir, "db1", "r1", "a")).toBe(true);
@@ -134,6 +157,22 @@ describe("database rows (S4)", () => {
   it("lists nothing for a missing folder or bad segment", async () => {
     expect(await listRowIdsIn(dir, "missing")).toEqual([]);
     expect(await listRowIdsIn(dir, "../x")).toEqual([]);
+  });
+
+  it("deletes a whole row folder when its block is removed (F3)", async () => {
+    await exportRowMarkdownTo(dir, "db1", "r1", "a");
+    await exportRowMarkdownTo(dir, "db1", "r2", "b");
+    expect(existsSync(join(dir, "db1"))).toBe(true);
+    expect(await deleteDbFolderIn(dir, "db1")).toBe(true);
+    expect(existsSync(join(dir, "db1"))).toBe(false);
+  });
+
+  it("deleteDbFolderIn rejects a hostile or missing segment", async () => {
+    await exportRowMarkdownTo(dir, "keep", "r1", "a");
+    expect(await deleteDbFolderIn(dir, "../keep")).toBe(false);
+    expect(await deleteDbFolderIn(dir, "a/b")).toBe(false);
+    expect(await deleteDbFolderIn(dir, "missing")).toBe(false);
+    expect(existsSync(join(dir, "keep"))).toBe(true);
   });
 });
 

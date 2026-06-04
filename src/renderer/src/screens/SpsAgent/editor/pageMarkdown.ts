@@ -13,16 +13,18 @@ import type { Block, PageMeta } from "../types";
 
 const FRONTMATTER_RE = /^---\n([\s\S]*?)\n---\n?/;
 
-/** Serialize a page (its properties + blocks) to a markdown file string. */
+/** Serialize a page (its properties + blocks) to a markdown file string.
+ *  Block ids in `anchoredIds` are persisted so comment anchors survive (F2). */
 export function pageToMarkdown(
   meta: Partial<PageMeta>,
   blocks: Block[],
+  anchoredIds?: Set<string>,
 ): string {
   const fm: string[] = [];
   if (meta.title !== undefined) fm.push(`title: ${JSON.stringify(meta.title)}`);
   if (meta.icon !== undefined) fm.push(`icon: ${JSON.stringify(meta.icon)}`);
   if (meta.cover !== undefined) fm.push(`cover: ${JSON.stringify(meta.cover)}`);
-  const body = blocksToMarkdown(blocks);
+  const body = blocksToMarkdown(blocks, anchoredIds);
   if (fm.length === 0) return body;
   return `---\n${fm.join("\n")}\n---\n\n${body}`;
 }

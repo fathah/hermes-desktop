@@ -1,12 +1,22 @@
 // TweaksPanel.tsx — real settings panel. Keeps the prototype's glass .twk-* visual
 // (tweaks-panel.jsx) but drops the omelette host postMessage protocol: values read
 // and write the Zustand tweaks slice (persisted) instead of the EDITMODE block.
-import { useRef, useState, useEffect, type ReactNode } from "react";
+import {
+  useRef,
+  useState,
+  useEffect,
+  useCallback,
+  type ReactNode,
+} from "react";
 import { useStore } from "../store";
 import { SECTION_ORDER, type SectionId } from "../store/storeTypes";
 import { ACCENTS, type Tweaks, setSkinVars } from "../lib/theme";
 import { skinToSpsVars } from "../lib/skin";
 import { getActiveSkinId, setActiveSkinId } from "../../../utils/skin";
+import { getStorageMode, type StorageMode } from "../lib/storageMode";
+import { toggleStorageMode, getLastBackup } from "../lib/storageActions";
+import { workspaceParity, type ParityReport } from "../editor/workspaceVault";
+import type { Workspace } from "../types";
 import type { LoadedSkin } from "../../../../../shared/skins";
 
 // ── styles (ported verbatim from tweaks-panel.jsx __TWEAKS_STYLE) ──────────────
@@ -284,6 +294,100 @@ function SkinSelect() {
   );
 }
 
+// Storage settings (F5): a discoverable home for the markdown-vault cutover —
+// current mode, a parity readout, the migrate/rollback control (shared with the
+// command palette via lib/storageActions), and the last JSON-blob backup path.
+function StorageSettings() {
+  const tree = useStore((s) => s.tree);
+  const flash = useStore((s) => s.flash);
+  const [mode, setMode] = useState<StorageMode>(() => getStorageMode());
+  const [parity, setParity] = useState<ParityReport | null>(null);
+  const [backup, setBackup] = useState<string | null>(() => getLastBackup());
+  const [busy, setBusy] = useState(false);
+
+  const snapshot = (): Workspace => {
+    const s = useStore.getState();
+    return {
+      tree: s.tree,
+      meta: s.meta,
+      docs: s.docs,
+      comments: s.comments,
+      trash: s.trash,
+      page: s.page,
+    };
+  };
+
+  const refreshParity = useCallback(() => {
+    setParity(workspaceParity(snapshot()));
+  }, []);
+
+  // Recompute when the panel mounts and whenever the page tree changes.
+  useEffect(() => {
+    refreshParity();
+  }, [refreshParity, tree]);
+
+  const onToggle = async (): Promise<void> => {
+    setBusy(true);
+    const res = await toggleStorageMode(snapshot());
+    setMode(res.mode);
+    setBackup(getLastBackup());
+    flash(res.message);
+    refreshParity();
+    setBusy(false);
+  };
+
+  const parityText = !parity
+    ? "—"
+    : parity.ok
+      ? `Ready · ${parity.pages.length} page${parity.pages.length === 1 ? "" : "s"}`
+      : `${parity.pages.filter((p) => !p.contentOk || !p.metaOk).length} page(s) differ`;
+
+  return (
+    <>
+      <Section label="Storage" />
+      <div className="twk-row twk-row-h">
+        <span className="twk-lbl" style={{ flex: 1 }}>
+          <span>Mode</span>
+        </span>
+        <span>{mode === "vault" ? "Markdown vault" : "JSON blob"}</span>
+      </div>
+      <div className="twk-row twk-row-h">
+        <span className="twk-lbl" style={{ flex: 1 }}>
+          <span>Parity</span>
+        </span>
+        <span>{parityText}</span>
+      </div>
+      <button
+        className="twk-field"
+        style={{ cursor: busy ? "default" : "pointer" }}
+        disabled={busy}
+        onClick={() => void onToggle()}
+      >
+        {mode === "blob"
+          ? "Switch to markdown storage"
+          : "Switch to JSON storage"}
+      </button>
+      {backup && (
+        <div className="twk-row">
+          <span className="twk-lbl">
+            <span>Last backup</span>
+          </span>
+          <span
+            style={{
+              fontSize: 10.5,
+              opacity: 0.7,
+              wordBreak: "break-all",
+              fontFamily: "var(--font-mono)",
+            }}
+          >
+            {backup}
+          </span>
+        </div>
+      )}
+    </>
+  );
+}
+
 function Shell({
   children,
   onClose,
@@ -377,6 +481,7 @@ export function TweaksPanel() {
       />
       <SkinSelect />
       <SidebarSections />
+      <StorageSettings />
     </Shell>
   );
 }

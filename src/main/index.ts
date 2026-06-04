@@ -26,7 +26,9 @@ import {
 import {
   exportPageMarkdownTo,
   exportRowMarkdownTo,
+  deletePageIn,
   deleteRowIn,
+  deleteDbFolderIn,
   readVaultPages,
   readVaultManifest,
   writeVaultManifest,
@@ -1431,6 +1433,12 @@ function setupIPC(): void {
     },
   );
 
+  // F4: the full [[wikilink]] edge list, for the local graph view.
+  ipcMain.handle("sps-index-links", async (_event, profile?: string) => {
+    requireLocalWorkspace();
+    return (await getSpsNoteIndex(profile)).links();
+  });
+
   ipcMain.handle("sps-index-status", async (_event, profile?: string) => {
     requireLocalWorkspace();
     return (await getSpsNoteIndex(profile)).status();
@@ -1974,6 +1982,27 @@ function setupIPC(): void {
     },
   );
 
+  // F3: remove an orphaned page file from the vault (vault mode). Best-effort.
+  ipcMain.handle(
+    "sps-delete-page",
+    (_event, pageId: string, profile?: string) => {
+      const home = profileHome(profile || getActiveProfileNameSync());
+      const dir = join(home, "sps-agent", "vault");
+      return deletePageIn(dir, pageId);
+    },
+  );
+
+  // F3: remove a folder-backed database's row folder when its block is removed
+  // (vault mode). Best-effort.
+  ipcMain.handle(
+    "sps-delete-db-folder",
+    (_event, dbFolder: string, profile?: string) => {
+      const home = profileHome(profile || getActiveProfileNameSync());
+      const dir = join(home, "sps-agent", "vault");
+      return deleteDbFolderIn(dir, dbFolder);
+    },
+  );
+
   // S6: vault-as-authoritative-store I/O (page files + structure manifest) and
   // a pre-migration backup of the JSON blob.
   const spsVaultDir = (profile?: string): string =>
@@ -2244,7 +2273,24 @@ if (process.env.ENABLE_CDP === "1") {
   );
 }
 
+// Single instance: a second launch must not spin up a parallel app. Acquire the
+// lock; if another instance already holds it, focus its window and quit this one.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
+
 app.whenReady().then(() => {
+  // A second instance is already quitting (above) — do nothing here.
+  if (!gotSingleInstanceLock) return;
   app.name = "Hermes";
   electronApp.setAppUserModelId("com.nousresearch.hermes");
 

@@ -17,6 +17,7 @@ import { MemoryTimeline } from "../Memory/MemoryTimeline";
 import Chat, { type ChatMessage } from "../Chat/Chat";
 import { ChatSurface } from "./shell/ChatSurface";
 import { AskPane } from "./panel/AskPane";
+import { GraphView } from "./graph/GraphView";
 
 export function App() {
   useHotkeys();
@@ -76,6 +77,7 @@ export function App() {
               {surface === "memory" && (
                 <MemoryTimeline profile="default" onRefresh={() => {}} />
               )}
+              {surface === "graph" && <GraphView />}
             </div>
           )}
         </main>

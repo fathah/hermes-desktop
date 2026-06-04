@@ -71,6 +71,36 @@ export function useVaultBacklinks(pageId: string | null): string[] {
   return backlinks;
 }
 
+export interface VaultEdge {
+  source: string;
+  target: string;
+}
+
+/** All [[wikilink]] edges between pages (pageIds, .md stripped) for the graph
+ *  view (F4). Best-effort: empty when the gateway/index is unavailable. */
+export function useVaultGraph(): { edges: VaultEdge[]; refetch: () => void } {
+  const [edges, setEdges] = useState<VaultEdge[]>([]);
+  const refetch = useCallback(() => {
+    const api = window.hermesAPI;
+    if (!api?.spsIndexLinks) return;
+    api
+      .spsIndexLinks()
+      .then((rows) =>
+        setEdges(
+          rows.map((e) => ({
+            source: e.source.replace(MD_SUFFIX, ""),
+            target: e.target.replace(MD_SUFFIX, ""),
+          })),
+        ),
+      )
+      .catch(() => setEdges([]));
+  }, []);
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
+  return { edges, refetch };
+}
+
 export interface VaultHit {
   pageId: string;
   title: string;

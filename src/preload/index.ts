@@ -1156,6 +1156,10 @@ const hermesAPI = {
     profile?: string,
   ): Promise<boolean> =>
     ipcRenderer.invoke("sps-delete-row", dbFolder, rowId, profile),
+  spsDeletePage: (pageId: string, profile?: string): Promise<boolean> =>
+    ipcRenderer.invoke("sps-delete-page", pageId, profile),
+  spsDeleteDbFolder: (dbFolder: string, profile?: string): Promise<boolean> =>
+    ipcRenderer.invoke("sps-delete-db-folder", dbFolder, profile),
   spsVaultRead: (
     profile?: string,
   ): Promise<{ pages: Record<string, string>; manifest: string | null }> =>
@@ -1213,6 +1217,10 @@ const hermesAPI = {
     ipcRenderer.invoke("sps-index-search", text, limit, profile),
   spsIndexBacklinks: (path: string, profile?: string): Promise<string[]> =>
     ipcRenderer.invoke("sps-index-backlinks", path, profile),
+  spsIndexLinks: (
+    profile?: string,
+  ): Promise<Array<{ source: string; target: string }>> =>
+    ipcRenderer.invoke("sps-index-links", profile),
   spsIndexStatus: (
     profile?: string,
   ): Promise<{

@@ -17,7 +17,15 @@ export type RightTab = "assistant" | "outline" | "comments" | "info";
 // the others are full-area surfaces reached from the rail (ideas A2/A4 + the
 // Ask panel and Agent Console). "chats" is the AI Chats surface (sessions),
 // distinct from "agent" (the tool-using Agent Console) but sharing <Chat>.
-export type Surface = "doc" | "insights" | "memory" | "ask" | "agent" | "chats";
+// "graph" is the local wikilink graph view (F4).
+export type Surface =
+  | "doc"
+  | "insights"
+  | "memory"
+  | "ask"
+  | "agent"
+  | "chats"
+  | "graph";
 
 // Named, toggleable sidebar sections (Notion 3.1 grammar). Order here is the
 // render order in the rail.

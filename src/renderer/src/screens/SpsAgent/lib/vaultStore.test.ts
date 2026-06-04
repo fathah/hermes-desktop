@@ -6,6 +6,8 @@ import {
   readVaultWorkspace,
   writeVaultWorkspace,
   rollbackToBlob,
+  deleteVaultPages,
+  deleteVaultDbFolders,
 } from "./vaultStore";
 import { workspaceToVault } from "../editor/workspaceVault";
 import { blk } from "../lib/ids";
@@ -61,21 +63,51 @@ describe("migrateToVault — safety gate", () => {
     expect(writeManifest).toHaveBeenCalledTimes(1);
   });
 
-  it("REFUSES (no backup, no write) when a comment is block-anchored", async () => {
-    const exportPage = vi.fn();
-    const backup = vi.fn();
-    stubApi({ spsExportPage: exportPage, spsBackupWorkspace: backup });
+  it("migrates a block-anchored comment, persisting the anchored block id (F2)", async () => {
+    const anchored = blk("p", "Welcome");
     const comment: Comment = {
       id: "c1",
       quote: "Welcome",
-      blockId: "blk-1",
+      blockId: anchored.id,
       page: "home",
       resolved: false,
       messages: [],
     };
-    const res = await migrateToVault(makeWorkspace({ comments: [comment] }));
+    const exportPage = vi.fn().mockResolvedValue(true);
+    const writeManifest = vi.fn().mockResolvedValue(true);
+    const backup = vi.fn().mockResolvedValue("/x/workspace.json.bak-1");
+    stubApi({
+      spsExportPage: exportPage,
+      spsVaultWriteManifest: writeManifest,
+      spsBackupWorkspace: backup,
+    });
+    const ws = makeWorkspace({
+      docs: { home: [blk("h1", "Home"), anchored], sub: [blk("p", "Sub")] },
+      comments: [comment],
+    });
+    const res = await migrateToVault(ws);
+    expect(res.ok).toBe(true);
+    expect(backup).toHaveBeenCalledTimes(1);
+    expect(exportPage).toHaveBeenCalledTimes(2);
+    // The anchored page carries the block-id marker so the comment re-anchors.
+    const homeMd = exportPage.mock.calls.find((c) => c[0] === "home")?.[1] as
+      | string
+      | undefined;
+    expect(homeMd).toContain(`^${anchored.id}`);
+  });
+
+  it("still REFUSES when content would not round-trip", async () => {
+    // A live anchor whose block id cannot be reconstructed fails parity.
+    const exportPage = vi.fn();
+    const backup = vi.fn();
+    stubApi({ spsExportPage: exportPage, spsBackupWorkspace: backup });
+    const res = await migrateToVault({
+      ...makeWorkspace(),
+      // tree without "home" makes vaultToWorkspace drop the page → parity fails.
+      tree: [{ id: "ghost", children: [] }],
+      page: "ghost",
+    });
     expect(res.ok).toBe(false);
-    expect(res.reason).toMatch(/anchored to blocks/);
     expect(backup).not.toHaveBeenCalled();
     expect(exportPage).not.toHaveBeenCalled();
   });
@@ -132,5 +164,45 @@ describe("read / write / rollback round-trip", () => {
     await writeVaultWorkspace(makeWorkspace());
     expect(exportPage).toHaveBeenCalledTimes(2);
     expect(writeManifest).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("deleteVaultPages — orphan cleanup (F3)", () => {
+  it("calls spsDeletePage once per id", async () => {
+    const del = vi.fn().mockResolvedValue(true);
+    stubApi({ spsDeletePage: del });
+    await deleteVaultPages(["a", "b", "c"]);
+    expect(del.mock.calls.map((c) => c[0])).toEqual(["a", "b", "c"]);
+  });
+
+  it("is a no-op when the delete API is unavailable", async () => {
+    stubApi({});
+    await expect(deleteVaultPages(["a"])).resolves.toBeUndefined();
+  });
+
+  it("never rejects when a delete fails (best-effort)", async () => {
+    const del = vi.fn().mockRejectedValue(new Error("locked"));
+    stubApi({ spsDeletePage: del });
+    await expect(deleteVaultPages(["a"])).resolves.toBeUndefined();
+  });
+});
+
+describe("deleteVaultDbFolders — query-DB row-folder cleanup (F3)", () => {
+  it("calls spsDeleteDbFolder once per source", async () => {
+    const del = vi.fn().mockResolvedValue(true);
+    stubApi({ spsDeleteDbFolder: del });
+    await deleteVaultDbFolders(["projects", "tasks"]);
+    expect(del.mock.calls.map((c) => c[0])).toEqual(["projects", "tasks"]);
+  });
+
+  it("is a no-op when the delete API is unavailable", async () => {
+    stubApi({});
+    await expect(deleteVaultDbFolders(["projects"])).resolves.toBeUndefined();
+  });
+
+  it("never rejects when a delete fails (best-effort)", async () => {
+    const del = vi.fn().mockRejectedValue(new Error("locked"));
+    stubApi({ spsDeleteDbFolder: del });
+    await expect(deleteVaultDbFolders(["projects"])).resolves.toBeUndefined();
   });
 });
