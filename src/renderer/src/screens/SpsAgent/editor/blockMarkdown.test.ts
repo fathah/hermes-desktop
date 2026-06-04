@@ -130,6 +130,10 @@ describe("tier-2 lossless fallback (metadata comment)", () => {
         ],
       }),
     ]));
+  it("folder-backed query database preserves its source (S4)", () =>
+    expectRoundTrip([
+      blk("database", "", { view: "table", source: "db-abc" }),
+    ]));
 });
 
 describe("page links as wikilinks (S3 — feeds the vault graph)", () => {

@@ -1371,6 +1371,19 @@ const hermesAPI = {
     profile?: string,
   ): Promise<boolean> =>
     ipcRenderer.invoke("sps-export-page", pageId, markdown, profile),
+  spsExportRow: (
+    dbFolder: string,
+    rowId: string,
+    markdown: string,
+    profile?: string,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("sps-export-row", dbFolder, rowId, markdown, profile),
+  spsDeleteRow: (
+    dbFolder: string,
+    rowId: string,
+    profile?: string,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("sps-delete-row", dbFolder, rowId, profile),
   spsIndexQuery: (
     query: {
       scope?: string;

@@ -1,8 +1,12 @@
 // useNoteIndex.test.tsx — S3 renderer hooks over the SPS-vault index. The IPC
 // surface (window.hermesAPI) is stubbed so the hooks are tested in isolation.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
-import { useVaultBacklinks, useVaultSearch } from "./useNoteIndex";
+import { renderHook, waitFor, act } from "@testing-library/react";
+import {
+  useVaultBacklinks,
+  useVaultSearch,
+  useVaultQuery,
+} from "./useNoteIndex";
 
 function stubApi(overrides: Record<string, unknown>): void {
   (window as unknown as { hermesAPI: unknown }).hermesAPI = overrides;
@@ -58,5 +62,32 @@ describe("useVaultSearch", () => {
     stubApi({ spsIndexSearch: vi.fn() });
     const { result } = renderHook(() => useVaultSearch("   "));
     expect(result.current).toEqual([]);
+  });
+});
+
+describe("useVaultQuery", () => {
+  it("queries a folder scope and exposes a refetch", async () => {
+    const row = { path: "db1/r1.md", title: "R1", props: {}, mtime: 1 };
+    const spy = vi.fn().mockResolvedValue([row]);
+    stubApi({ spsIndexQuery: spy });
+    const { result } = renderHook(() => useVaultQuery("db1"));
+    await waitFor(() => expect(result.current.rows.length).toBe(1));
+    expect(spy).toHaveBeenCalledWith({
+      scope: "db1",
+      filters: undefined,
+      sort: undefined,
+    });
+
+    spy.mockResolvedValueOnce([row, { ...row, path: "db1/r2.md" }]);
+    await act(async () => {
+      result.current.refetch();
+    });
+    await waitFor(() => expect(result.current.rows.length).toBe(2));
+  });
+
+  it("yields no rows when scope is undefined", () => {
+    stubApi({ spsIndexQuery: vi.fn() });
+    const { result } = renderHook(() => useVaultQuery(undefined));
+    expect(result.current.rows).toEqual([]);
   });
 });

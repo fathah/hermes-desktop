@@ -8,6 +8,7 @@ import { ImageBlock } from "./ImageBlock";
 import { BookmarkBlock } from "./BookmarkBlock";
 import { PageLinkBlock } from "./PageLinkBlock";
 import { TasksDB } from "../tasks/TasksDB";
+import { QueryDatabase } from "../tasks/QueryDatabase";
 import type { Block, BlockType, DbView, PageMeta, Task } from "../types";
 
 export interface BlockInnerProps {
@@ -120,7 +121,11 @@ export function BlockInner(props: BlockInnerProps) {
         />
       );
     case "database":
-      return (
+      // A `source` opts the block into the folder-backed query database (S4);
+      // otherwise it stays the classic embedded-rows board (unchanged).
+      return block.source ? (
+        <QueryDatabase block={block} />
+      ) : (
         <TasksDB
           block={block}
           update={(patch) => props.setType(block.id, patch)}

@@ -74,6 +74,10 @@ export interface Block {
   filter?: StatusKey[];
   sort?: string;
   cols?: DbCol[];
+  // S4: a folder-backed "query database". When set, the block renders rows from
+  // markdown row-files under <vault>/<source>/ (via the note index) instead of
+  // the embedded `rows`. Absent ⇒ classic embedded database (unchanged).
+  source?: string;
   // bookmark
   bm?: BookmarkMeta | null;
   // image (data URL + caption)

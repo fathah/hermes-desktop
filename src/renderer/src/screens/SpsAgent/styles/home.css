@@ -1913,3 +1913,96 @@
   border-radius: 4px;
   background: var(--sunk);
 }
+
+/* --- S4: folder-backed query database (rows from the note index) --- */
+.sps-scope .qdb {
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  overflow: hidden;
+  margin: 6px 0;
+  background: var(--surface);
+}
+.sps-scope .qdb-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.sps-scope .qdb-table th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--tx-3);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--hair);
+}
+.sps-scope .qdb-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--hair-soft, var(--hair));
+  color: var(--tx-1);
+}
+.sps-scope .qdb-empty {
+  color: var(--tx-4);
+  text-align: center;
+  padding: 14px;
+}
+.sps-scope .qdb-del {
+  border: none;
+  background: none;
+  color: var(--tx-4);
+  cursor: pointer;
+  display: inline-flex;
+  border-radius: 4px;
+  padding: 2px;
+}
+.sps-scope .qdb-del:hover {
+  background: var(--row-hover);
+  color: var(--danger, var(--tx-1));
+}
+.sps-scope .qdb-form {
+  display: flex;
+  gap: 8px;
+  padding: 8px 10px;
+  align-items: center;
+}
+.sps-scope .qdb-input {
+  flex: 1;
+  border: 1px solid var(--hair);
+  border-radius: 7px;
+  padding: 6px 9px;
+  background: var(--app-bg, var(--surface));
+  color: var(--tx-1);
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+}
+.sps-scope .qdb-input:focus {
+  border-color: var(--accent);
+}
+.sps-scope .qdb-select {
+  border: 1px solid var(--hair);
+  border-radius: 7px;
+  padding: 6px 8px;
+  background: var(--app-bg, var(--surface));
+  color: var(--tx-1);
+  font-family: inherit;
+  font-size: 13px;
+}
+.sps-scope .qdb-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  border-radius: 7px;
+  padding: 6px 12px;
+  background: var(--accent);
+  color: #fff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sps-scope .qdb-add:hover {
+  filter: brightness(1.06);
+}

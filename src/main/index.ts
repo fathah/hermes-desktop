@@ -22,7 +22,11 @@ import {
   spsSave,
   type PageContext as SpsPageContext,
 } from "./sps-agent";
-import { exportPageMarkdownTo } from "./sps-vault";
+import {
+  exportPageMarkdownTo,
+  exportRowMarkdownTo,
+  deleteRowIn,
+} from "./sps-vault";
 import { profileHome, getActiveProfileNameSync } from "./utils";
 import { discoverProviderModels } from "./model-discovery";
 import { readMediaAsDataUrl, saveMedia, mediaFileExists } from "./media";
@@ -2483,6 +2487,30 @@ function setupIPC(): void {
       const home = profileHome(profile || getActiveProfileNameSync());
       const dir = join(home, "sps-agent", "vault");
       return exportPageMarkdownTo(dir, pageId, markdown);
+    },
+  );
+
+  // S4: folder-backed database rows live under the SPS vault as markdown files.
+  ipcMain.handle(
+    "sps-export-row",
+    (
+      _event,
+      dbFolder: string,
+      rowId: string,
+      markdown: string,
+      profile?: string,
+    ) => {
+      const home = profileHome(profile || getActiveProfileNameSync());
+      const dir = join(home, "sps-agent", "vault");
+      return exportRowMarkdownTo(dir, dbFolder, rowId, markdown);
+    },
+  );
+  ipcMain.handle(
+    "sps-delete-row",
+    (_event, dbFolder: string, rowId: string, profile?: string) => {
+      const home = profileHome(profile || getActiveProfileNameSync());
+      const dir = join(home, "sps-agent", "vault");
+      return deleteRowIn(dir, dbFolder, rowId);
     },
   );
 }

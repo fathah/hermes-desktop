@@ -1270,6 +1270,17 @@ interface HermesAPI {
     markdown: string,
     profile?: string,
   ) => Promise<boolean>;
+  spsExportRow: (
+    dbFolder: string,
+    rowId: string,
+    markdown: string,
+    profile?: string,
+  ) => Promise<boolean>;
+  spsDeleteRow: (
+    dbFolder: string,
+    rowId: string,
+    profile?: string,
+  ) => Promise<boolean>;
   spsIndexQuery: (
     query: {
       scope?: string;

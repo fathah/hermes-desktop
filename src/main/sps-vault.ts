@@ -19,6 +19,11 @@ export function isValidPageId(pageId: string): boolean {
   return PAGE_ID_RE.test(pageId);
 }
 
+/** A database folder and a row id are each a single id-safe path segment. */
+function isValidSegment(seg: string): boolean {
+  return PAGE_ID_RE.test(seg);
+}
+
 export function pageFilename(pageId: string): string {
   return `${pageId}.md`;
 }
@@ -49,5 +54,56 @@ export async function readPageMarkdownFrom(
     return await fs.readFile(join(dir, pageFilename(pageId)), "utf-8");
   } catch {
     return null;
+  }
+}
+
+// ── S4: rows of a folder-backed database — <vaultDir>/<dbFolder>/<rowId>.md ──────
+
+/** Write a database row's markdown. Both segments must be id-safe (no traversal). */
+export async function exportRowMarkdownTo(
+  vaultDir: string,
+  dbFolder: string,
+  rowId: string,
+  markdown: string,
+): Promise<boolean> {
+  if (!isValidSegment(dbFolder) || !isValidSegment(rowId)) return false;
+  try {
+    const dir = join(vaultDir, dbFolder);
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(join(dir, pageFilename(rowId)), markdown, "utf-8");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Delete a database row file. Returns false on a bad segment. */
+export async function deleteRowIn(
+  vaultDir: string,
+  dbFolder: string,
+  rowId: string,
+): Promise<boolean> {
+  if (!isValidSegment(dbFolder) || !isValidSegment(rowId)) return false;
+  try {
+    await fs.rm(join(vaultDir, dbFolder, pageFilename(rowId)));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** List the row ids in a database folder (filenames sans .md). */
+export async function listRowIdsIn(
+  vaultDir: string,
+  dbFolder: string,
+): Promise<string[]> {
+  if (!isValidSegment(dbFolder)) return [];
+  try {
+    const names = await fs.readdir(join(vaultDir, dbFolder));
+    return names
+      .filter((n) => n.endsWith(".md"))
+      .map((n) => n.replace(/\.md$/, ""));
+  } catch {
+    return [];
   }
 }

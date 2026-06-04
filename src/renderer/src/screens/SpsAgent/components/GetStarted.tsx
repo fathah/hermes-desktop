@@ -4,7 +4,7 @@
 import { Icon } from "./Icon";
 import type { IconName } from "./iconPaths";
 import { useStore } from "../store";
-import { blk } from "../lib/ids";
+import { blk, uid } from "../lib/ids";
 
 interface Chip {
   icon: IconName;
@@ -21,7 +21,9 @@ export function GetStarted() {
   const flash = useStore((s) => s.flash);
 
   const addDatabase = (): void => {
-    setBlocks((bs) => [...bs, blk("database", "", { view: "board" })]);
+    // A folder-backed query database (S4): rows live as markdown files on disk.
+    const source = uid("db");
+    setBlocks((bs) => [...bs, blk("database", "", { view: "table", source })]);
     flash("Database added");
   };
 

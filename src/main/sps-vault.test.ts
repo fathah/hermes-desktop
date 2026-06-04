@@ -9,6 +9,9 @@ import {
   readPageMarkdownFrom,
   isValidPageId,
   pageFilename,
+  exportRowMarkdownTo,
+  deleteRowIn,
+  listRowIdsIn,
 } from "./sps-vault";
 
 let dir: string;
@@ -58,5 +61,31 @@ describe("exportPageMarkdownTo / readPageMarkdownFrom", () => {
   it("returns null when reading a missing or invalid page", async () => {
     expect(await readPageMarkdownFrom(dir, "nope")).toBeNull();
     expect(await readPageMarkdownFrom(dir, "../x")).toBeNull();
+  });
+});
+
+describe("database rows (S4)", () => {
+  it("writes, lists, and deletes row files in a database folder", async () => {
+    expect(await exportRowMarkdownTo(dir, "db1", "r1", "a")).toBe(true);
+    expect(await exportRowMarkdownTo(dir, "db1", "r2", "b")).toBe(true);
+    expect(existsSync(join(dir, "db1", "r1.md"))).toBe(true);
+    expect((await listRowIdsIn(dir, "db1")).sort()).toEqual(["r1", "r2"]);
+
+    expect(await deleteRowIn(dir, "db1", "r1")).toBe(true);
+    expect((await listRowIdsIn(dir, "db1")).sort()).toEqual(["r2"]);
+  });
+
+  it("rejects hostile folder or row segments (no escape)", async () => {
+    expect(await exportRowMarkdownTo(dir, "../evil", "r", "x")).toBe(false);
+    expect(await exportRowMarkdownTo(dir, "db", "../r", "x")).toBe(false);
+    expect(await exportRowMarkdownTo(dir, "a/b", "r", "x")).toBe(false);
+    expect(await deleteRowIn(dir, "../evil", "r")).toBe(false);
+    const entries = await readdir(dir);
+    expect(entries).toEqual([]);
+  });
+
+  it("lists nothing for a missing folder or bad segment", async () => {
+    expect(await listRowIdsIn(dir, "missing")).toEqual([]);
+    expect(await listRowIdsIn(dir, "../x")).toEqual([]);
   });
 });
