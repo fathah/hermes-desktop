@@ -324,9 +324,14 @@ describe("Workspace", () => {
         "default",
       ),
     );
-    expect(screen.getByText("Daily")).toBeInTheDocument();
+    // `readObsidianFile` being called doesn't guarantee the note title has
+    // rendered yet — await it so the assertion can't race the state flush
+    // (the cause of the intermittent failure under parallel load).
+    expect(await screen.findByText("Daily")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Open in Obsidian" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Open in Obsidian" }),
+    );
     expect(window.hermesAPI.openObsidianNote).toHaveBeenCalledWith(
       "daily.md",
       "default",
