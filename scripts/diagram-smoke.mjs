@@ -27,6 +27,9 @@ import { join } from "path";
 const OUT = process.env.SMOKE_OUT || join(tmpdir(), "diagram-smoke");
 mkdirSync(OUT, { recursive: true });
 const HOME = mkdtempSync(join(tmpdir(), "hermes-dsmoke-"));
+// The app holds a single-instance lock keyed on userData; give this throwaway
+// launch its own userData dir so it never collides with a running instance.
+const USERDATA = mkdtempSync(join(tmpdir(), "hermes-dsmoke-ud-"));
 
 // install markers → App.tsx routes straight to the SPS main screen
 mkdirSync(join(HOME, "hermes-agent", "venv", "bin"), { recursive: true });
@@ -97,7 +100,7 @@ const check = (name, ok, detail = "") => {
 };
 
 const app = await electron.launch({
-  args: ["."],
+  args: [`--user-data-dir=${USERDATA}`, "."],
   env: { ...process.env, HERMES_HOME: HOME, ELECTRON_DISABLE_SECURITY_WARNINGS: "1" },
 });
 const win = await app.firstWindow();
