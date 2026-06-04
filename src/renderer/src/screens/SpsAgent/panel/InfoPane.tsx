@@ -1,15 +1,23 @@
 // InfoPane.tsx — page stats, metadata, contributors. Ported from panel.jsx InfoPane.
+// The "Linked references" section (S3) is fed by the SPS-vault note index — pages
+// whose mirrored markdown [[wikilinks]] to this one.
 import { Icon } from "../components/Icon";
 import { PEOPLE } from "../data/seed";
 import { Avatar } from "../tasks/chips";
+import { useStore } from "../store";
+import { useVaultBacklinks } from "../hooks/useNoteIndex";
 import type { Block, Comment } from "../types";
 
 interface Props {
   blocks: Block[];
   comments: Comment[];
+  pageId: string;
 }
 
-export function InfoPane({ blocks, comments }: Props) {
+export function InfoPane({ blocks, comments, pageId }: Props) {
+  const backlinks = useVaultBacklinks(pageId);
+  const meta = useStore((s) => s.meta);
+  const selectPage = useStore((s) => s.selectPage);
   const words = blocks.reduce(
     (n, b) =>
       n + (b.text ? b.text.trim().split(/\s+/).filter(Boolean).length : 0),
@@ -66,6 +74,29 @@ export function InfoPane({ blocks, comments }: Props) {
           </div>
           <div className="fv num">{comments.length}</div>
         </div>
+        <hr className="b-divider" style={{ margin: "16px 0" }} />
+        <div className="type-section-label" style={{ marginBottom: 10 }}>
+          Linked references
+        </div>
+        {backlinks.length === 0 ? (
+          <div className="fv" style={{ color: "var(--tx-4)", fontSize: 13 }}>
+            No pages link here yet
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {backlinks.map((id) => (
+              <div
+                key={id}
+                className="nav-item"
+                style={{ fontSize: 13.5 }}
+                onClick={() => selectPage(id)}
+              >
+                <span style={{ marginRight: 4 }}>{meta[id]?.icon || "📄"}</span>
+                {meta[id]?.title || "Untitled"}
+              </div>
+            ))}
+          </div>
+        )}
         <hr className="b-divider" style={{ margin: "16px 0" }} />
         <div className="type-section-label" style={{ marginBottom: 10 }}>
           Contributors

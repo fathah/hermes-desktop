@@ -4,7 +4,11 @@
 import { mkdtemp, rm, writeFile, mkdir } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
-import { NoteIndex } from "../src/main/note-index";
+import {
+  NoteIndex,
+  getNoteIndexForRoot,
+  closeAllNoteIndexes,
+} from "../src/main/note-index";
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error("FAIL: " + msg);
@@ -89,6 +93,47 @@ async function main(): Promise<void> {
 
   await index.close();
   await rm(root, { recursive: true, force: true });
+
+  // ── S3: getNoteIndexForRoot on a mirror-shaped vault (frontmatter + wikilinks).
+  console.log("\nS3 — getNoteIndexForRoot over a mirror-shaped vault:");
+  const vault = await mkdtemp(join(tmpdir(), "note-index-vault-"));
+  await writeFile(
+    join(vault, "home.md"),
+    `---\ntitle: "Home"\nicon: "🏠"\n---\n\n# Home\n\nSee [[tasks]].\n`,
+  );
+  await writeFile(
+    join(vault, "tasks.md"),
+    `---\ntitle: "Tasks"\nstatus: doing\n---\n\n# Tasks\n\nWork.\n`,
+  );
+
+  const v1 = await getNoteIndexForRoot(vault);
+  const v2 = await getNoteIndexForRoot(vault);
+  assert(v1 === v2, "same root returns the cached index instance");
+  eq(v1.status().notes, 2, "vault index sees 2 mirrored pages");
+  eq(
+    v1
+      .query({ filters: [{ prop: "status", op: "eq", value: "doing" }] })
+      .map((n) => n.path),
+    ["tasks.md"],
+    "queries a frontmatter property written by the mirror",
+  );
+  eq(
+    v1
+      .query({})
+      .map((n) => n.title)
+      .sort(),
+    ["Home", "Tasks"],
+    "titles come from frontmatter",
+  );
+  eq(
+    v1.backlinks("tasks.md"),
+    ["home.md"],
+    "[[wikilink]] backlink resolves (home -> tasks)",
+  );
+
+  await closeAllNoteIndexes();
+  await rm(vault, { recursive: true, force: true });
+
   console.log("\nALL NOTE-INDEX CHECKS PASSED");
 }
 

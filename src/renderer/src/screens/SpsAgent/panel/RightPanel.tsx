@@ -80,7 +80,9 @@ export function RightPanel() {
         {tab === "comments" && (
           <CommentsPane comments={comments} api={commentApi} />
         )}
-        {tab === "info" && <InfoPane blocks={blocks} comments={comments} />}
+        {tab === "info" && (
+          <InfoPane blocks={blocks} comments={comments} pageId={page} />
+        )}
       </div>
     </aside>
   );

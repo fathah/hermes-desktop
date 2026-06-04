@@ -19,13 +19,13 @@
 // on-demand expression indexes.
 import Database from "better-sqlite3";
 import type { Dirent } from "fs";
-import { readdir, readFile, stat } from "fs/promises";
+import { mkdir, readdir, readFile, stat } from "fs/promises";
 import { basename, extname, join, relative, sep } from "path";
 import chokidar, { type FSWatcher } from "chokidar";
 import YAML from "yaml";
 import { ensureWorkspace } from "./workspace";
 import { extractBacklinks } from "./workspace-page-graph";
-import { getActiveProfileNameSync } from "./utils";
+import { getActiveProfileNameSync, profileHome } from "./utils";
 
 const NOTE_EXTENSIONS = new Set([".md", ".markdown"]);
 const INDEX_DB_FILE = ".note-index.db";
@@ -446,24 +446,35 @@ export class NoteIndex {
   }
 }
 
-// ── per-profile lifecycle cache ────────────────────────────────────────────────
+// ── per-root lifecycle cache ───────────────────────────────────────────────────
 
 const instances = new Map<string, Promise<NoteIndex>>();
 
-/** Get (or lazily create) the live note index for a profile's workspace. */
-export async function getNoteIndex(profile?: string): Promise<NoteIndex> {
-  const key = profile || getActiveProfileNameSync();
-  let pending = instances.get(key);
+/** Get (or lazily create) the live note index for an arbitrary markdown root. */
+export async function getNoteIndexForRoot(root: string): Promise<NoteIndex> {
+  let pending = instances.get(root);
   if (!pending) {
     pending = (async (): Promise<NoteIndex> => {
-      const root = await ensureWorkspace({ profile });
+      await mkdir(root, { recursive: true }); // better-sqlite3 needs the dir
       const idx = await NoteIndex.open(root);
       idx.startWatcher();
       return idx;
     })();
-    instances.set(key, pending);
+    instances.set(root, pending);
   }
   return pending;
+}
+
+/** The live index for a profile's generic markdown workspace. */
+export async function getNoteIndex(profile?: string): Promise<NoteIndex> {
+  const root = await ensureWorkspace({ profile });
+  return getNoteIndexForRoot(root);
+}
+
+/** The live index for a profile's SPS page vault (the S2b mirror target). */
+export async function getSpsNoteIndex(profile?: string): Promise<NoteIndex> {
+  const home = profileHome(profile || getActiveProfileNameSync());
+  return getNoteIndexForRoot(join(home, "sps-agent", "vault"));
 }
 
 /** Close every open index (call on profile switch / app quit). */

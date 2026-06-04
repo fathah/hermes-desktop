@@ -1371,6 +1371,50 @@ const hermesAPI = {
     profile?: string,
   ): Promise<boolean> =>
     ipcRenderer.invoke("sps-export-page", pageId, markdown, profile),
+  spsIndexQuery: (
+    query: {
+      scope?: string;
+      filters?: Array<{
+        prop: string;
+        op: "eq" | "neq" | "contains" | "exists";
+        value?: unknown;
+      }>;
+      sort?: { prop: string; dir: "asc" | "desc" };
+      limit?: number;
+    },
+    profile?: string,
+  ): Promise<
+    Array<{
+      path: string;
+      title: string;
+      props: Record<string, unknown>;
+      mtime: number;
+    }>
+  > => ipcRenderer.invoke("sps-index-query", query, profile),
+  spsIndexSearch: (
+    text: string,
+    limit?: number,
+    profile?: string,
+  ): Promise<Array<{ path: string; title: string; snippet: string }>> =>
+    ipcRenderer.invoke("sps-index-search", text, limit, profile),
+  spsIndexBacklinks: (path: string, profile?: string): Promise<string[]> =>
+    ipcRenderer.invoke("sps-index-backlinks", path, profile),
+  spsIndexStatus: (
+    profile?: string,
+  ): Promise<{
+    root: string;
+    notes: number;
+    links: number;
+    indexedAt: number | null;
+  }> => ipcRenderer.invoke("sps-index-status", profile),
+  spsIndexRebuild: (
+    profile?: string,
+  ): Promise<{
+    root: string;
+    notes: number;
+    links: number;
+    indexedAt: number | null;
+  }> => ipcRenderer.invoke("sps-index-rebuild", profile),
 };
 
 if (process.contextIsolated) {

@@ -105,8 +105,8 @@ describe("tier-2 lossless fallback (metadata comment)", () => {
     expectRoundTrip([blk("p", "warn", { color: "red", bg: "yellow" })]));
   it("toggle with collapsed state", () =>
     expectRoundTrip([blk("toggle", "Details", { collapsed: true })]));
-  it("sub-page link", () =>
-    expectRoundTrip([blk("page", "", { pageId: "pg-123" })]));
+  it("coloured sub-page link falls back to a comment", () =>
+    expectRoundTrip([blk("page", "", { pageId: "pg-9", color: "red" })]));
   it("bookmark", () =>
     expectRoundTrip([
       blk("bookmark", "", {
@@ -130,6 +130,22 @@ describe("tier-2 lossless fallback (metadata comment)", () => {
         ],
       }),
     ]));
+});
+
+describe("page links as wikilinks (S3 — feeds the vault graph)", () => {
+  it("serializes a sub-page link to a bare [[pageId]]", () => {
+    expect(blocksToMarkdown([blk("page", "", { pageId: "pg-123" })])).toBe(
+      "[[pg-123]]",
+    );
+  });
+  it("parses [[pageId]] back into a page block", () => {
+    const blocks = markdownToBlocks("[[pg-123]]");
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe("page");
+    expect(blocks[0].pageId).toBe("pg-123");
+  });
+  it("round-trips a plain sub-page link losslessly", () =>
+    expectRoundTrip([blk("page", "", { pageId: "pg-123" })]));
 });
 
 describe("full-document round-trip", () => {

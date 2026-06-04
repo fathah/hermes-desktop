@@ -1270,6 +1270,44 @@ interface HermesAPI {
     markdown: string,
     profile?: string,
   ) => Promise<boolean>;
+  spsIndexQuery: (
+    query: {
+      scope?: string;
+      filters?: Array<{
+        prop: string;
+        op: "eq" | "neq" | "contains" | "exists";
+        value?: unknown;
+      }>;
+      sort?: { prop: string; dir: "asc" | "desc" };
+      limit?: number;
+    },
+    profile?: string,
+  ) => Promise<
+    Array<{
+      path: string;
+      title: string;
+      props: Record<string, unknown>;
+      mtime: number;
+    }>
+  >;
+  spsIndexSearch: (
+    text: string,
+    limit?: number,
+    profile?: string,
+  ) => Promise<Array<{ path: string; title: string; snippet: string }>>;
+  spsIndexBacklinks: (path: string, profile?: string) => Promise<string[]>;
+  spsIndexStatus: (profile?: string) => Promise<{
+    root: string;
+    notes: number;
+    links: number;
+    indexedAt: number | null;
+  }>;
+  spsIndexRebuild: (profile?: string) => Promise<{
+    root: string;
+    notes: number;
+    links: number;
+    indexedAt: number | null;
+  }>;
 }
 
 declare global {

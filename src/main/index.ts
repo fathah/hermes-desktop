@@ -148,6 +148,7 @@ import {
 } from "./workspace";
 import {
   getNoteIndex,
+  getSpsNoteIndex,
   closeAllNoteIndexes,
   type NoteQuery,
 } from "./note-index";
@@ -1568,6 +1569,42 @@ function setupIPC(): void {
     requireLocalWorkspace();
     const index = await getNoteIndex(profile);
     return index.status();
+  });
+
+  // ── SPS-vault index (S3): the same engine pointed at sps-agent/vault/, so the
+  //    mirrored SPS pages become queryable (search, property views, backlinks).
+  ipcMain.handle(
+    "sps-index-query",
+    async (_event, query: NoteQuery, profile?: string) => {
+      requireLocalWorkspace();
+      return (await getSpsNoteIndex(profile)).query(query ?? {});
+    },
+  );
+
+  ipcMain.handle(
+    "sps-index-search",
+    async (_event, text: string, limit?: number, profile?: string) => {
+      requireLocalWorkspace();
+      return (await getSpsNoteIndex(profile)).search(text, limit ?? 20);
+    },
+  );
+
+  ipcMain.handle(
+    "sps-index-backlinks",
+    async (_event, path: string, profile?: string) => {
+      requireLocalWorkspace();
+      return (await getSpsNoteIndex(profile)).backlinks(path);
+    },
+  );
+
+  ipcMain.handle("sps-index-status", async (_event, profile?: string) => {
+    requireLocalWorkspace();
+    return (await getSpsNoteIndex(profile)).status();
+  });
+
+  ipcMain.handle("sps-index-rebuild", async (_event, profile?: string) => {
+    requireLocalWorkspace();
+    return (await getSpsNoteIndex(profile)).rebuild();
   });
 
   ipcMain.handle(

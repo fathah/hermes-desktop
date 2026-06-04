@@ -209,10 +209,18 @@ const HEADING_PREFIX: Record<string, string> = {
 };
 const LIST_TYPES = new Set<BlockType>(["li", "numli", "todo"]);
 
+// A page-link block serializes to a bare [[pageId]] so the note-index graph
+// resolves it (a note's basename == its pageId). Round-trips losslessly.
+const PAGE_ID_RE = /^[A-Za-z0-9_-]+$/;
+const WIKILINK_RE = /^\[\[([A-Za-z0-9_-]+)\]\]$/;
+
 /** A block is tier-1 (clean markdown) only if markdown can express it fully. */
 function isCleanBlock(block: Block): boolean {
   if (block.color || block.bg) return false;
   if (block.indent && !LIST_TYPES.has(block.type)) return false;
+  // A sub-page link is clean only when it is a plain pageId reference.
+  if (block.type === "page")
+    return !!block.pageId && PAGE_ID_RE.test(block.pageId);
   const cleanTypes: BlockType[] = [
     "p",
     "h1",
@@ -265,6 +273,8 @@ function blockToMarkdown(block: Block): string {
       return indent + "1. " + renderInline(block);
     case "todo":
       return indent + (block.done ? "- [x] " : "- [ ] ") + renderInline(block);
+    case "page":
+      return `[[${block.pageId}]]`;
     default:
       return renderInline(block); // paragraph
   }
@@ -329,6 +339,13 @@ export function markdownToBlocks(md: string): Block[] {
 
     if (raw.trim() === "---") {
       blocks.push({ id: uid(), type: "divider", text: "" });
+      i++;
+      continue;
+    }
+
+    const wikilink = WIKILINK_RE.exec(raw.trim());
+    if (wikilink) {
+      blocks.push({ id: uid(), type: "page", text: "", pageId: wikilink[1] });
       i++;
       continue;
     }
