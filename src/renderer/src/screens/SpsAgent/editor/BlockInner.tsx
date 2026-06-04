@@ -124,7 +124,10 @@ export function BlockInner(props: BlockInnerProps) {
       // A `source` opts the block into the folder-backed query database (S4);
       // otherwise it stays the classic embedded-rows board (unchanged).
       return block.source ? (
-        <QueryDatabase block={block} />
+        <QueryDatabase
+          block={block}
+          update={(patch) => props.setType(block.id, patch)}
+        />
       ) : (
         <TasksDB
           block={block}

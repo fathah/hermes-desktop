@@ -17,6 +17,9 @@ interface Props {
   setCustom: (id: string, colId: string, val: string) => void;
   addRow: () => void;
   addCol: () => void;
+  // F1: optional per-row delete (folder-backed query databases delete a file).
+  // Absent ⇒ no delete affordance (the embedded TasksDB is unchanged).
+  onDelete?: (id: string) => void;
 }
 
 export function TableView({
@@ -27,6 +30,7 @@ export function TableView({
   setCustom,
   addRow,
   addCol,
+  onDelete,
 }: Props) {
   return (
     <div style={{ overflowX: "auto" }}>
@@ -92,7 +96,7 @@ export function TableView({
               >
                 <span className="person">
                   <Avatar who={t.who} />
-                  {PEOPLE[t.who].name}
+                  {PEOPLE[t.who]?.name ?? t.who}
                 </span>
               </td>
               <td className="num">{t.due}</td>
@@ -111,7 +115,17 @@ export function TableView({
                   </span>
                 </td>
               ))}
-              <td></td>
+              <td>
+                {onDelete && (
+                  <button
+                    className="qdb-del"
+                    aria-label="Delete row"
+                    onClick={() => onDelete(t.id)}
+                  >
+                    <Icon name="x" size={13} />
+                  </button>
+                )}
+              </td>
             </tr>
           ))}
           <tr className="db-addrow">
