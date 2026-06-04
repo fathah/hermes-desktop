@@ -86,9 +86,14 @@
 .sps-scope * {
   box-sizing: border-box;
 }
-.sps-scope,
 .sps-scope {
+  /* Fill .app-content (a flex column) via flex, not a % chain — robustly
+     tracks the real window height without the 100vh overshoot. */
+  flex: 1;
+  min-height: 0;
   height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 .sps-scope {
   margin: 0;
@@ -134,7 +139,14 @@
 .sps-scope .app {
   display: grid;
   grid-template-columns: var(--rail-w) 1fr;
-  height: 100vh;
+  /* Cap the row to the container height so the sidebar's internal scroll
+     (rail-scroll) handles overflow and the footer stays pinned/visible —
+     without this the implicit row grows to the tallest content and the
+     bottom (footer / composer) is clipped. */
+  grid-template-rows: minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+  height: 100%;
   transition: grid-template-columns var(--dur-2, 160ms) var(--ease-out, ease);
 }
 .sps-scope .app[data-rail="hidden"] {
@@ -151,6 +163,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
   overflow: hidden;
   user-select: none;
 }
@@ -158,8 +171,8 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 12px 10px 12px 14px;
-  height: 52px;
+  padding: 10px 10px 10px 14px;
+  height: 48px;
   cursor: pointer;
   border-radius: 6px;
 }
@@ -234,12 +247,12 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 5px 8px;
-  margin: 1px 0;
+  padding: 4px 8px;
+  margin: 0;
   border-radius: 6px;
   cursor: pointer;
   color: var(--tx-2);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 450;
   white-space: nowrap;
 }
@@ -274,7 +287,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 8px 4px;
+  padding: 10px 8px 3px;
 }
 .sps-scope .sec-label {
   font-size: 11.5px;
@@ -305,12 +318,12 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 8px 4px 6px;
-  margin: 1px 0;
+  padding: 3px 8px 3px 6px;
+  margin: 0;
   border-radius: 6px;
   cursor: pointer;
   color: var(--tx-2);
-  font-size: 14px;
+  font-size: 13px;
   white-space: nowrap;
 }
 .sps-scope .tree-row:hover {
@@ -423,7 +436,7 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  height: 100vh;
+  height: 100%;
   background: var(--canvas);
 }
 .sps-scope .topbar {
@@ -1313,7 +1326,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  height: 100vh;
+  height: 100%;
   min-height: 0;
 }
 .sps-scope .agent-head {

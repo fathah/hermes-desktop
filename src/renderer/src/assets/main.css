@@ -147,9 +147,18 @@ body {
     color 0.2s ease;
 }
 
+/* Anchor the app to the real window height. Fixed + inset:0 sizes #root to the
+   layout viewport (== window.innerHeight) exactly — unlike 100vh, which on
+   macOS/Electron can overshoot by a few px and clip the sidebar footer /
+   assistant composer at the bottom. The full-height flex chain hangs off this. */
+#root {
+  position: fixed;
+  inset: 0;
+}
+
 /* ----- App Shell ----- */
 .app {
-  height: 97vh;
+  height: 100%;
   display: flex;
   flex-direction: column;
   background: var(--bg-primary);
@@ -167,6 +176,7 @@ body {
 
 .app-content {
   flex: 1;
+  min-height: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
