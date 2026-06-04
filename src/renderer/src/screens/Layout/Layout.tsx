@@ -39,7 +39,7 @@ import {
   Kanban as KanbanIcon,
   Download,
 } from "../../assets/icons";
-import { FileText, Sparkles, BarChart3 } from "lucide-react";
+import { Sparkles, BarChart3 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 import { loadAndApplyActiveSkin } from "../../utils/skin";
@@ -90,8 +90,9 @@ const NAV_ITEMS: {
   { view: "settings", icon: SettingsIcon, labelKey: "navigation.settings" },
 ];
 
+// The legacy Workspace (TipTap) engine has been retired in favour of SPS Agent
+// as the single wiki surface; its nav entry is intentionally gone.
 const WORKSPACE_NAV_ITEMS: { view: View; icon: LucideIcon; label: string }[] = [
-  { view: "workspace", icon: FileText, label: "Workspace" },
   { view: "spsAgent", icon: Sparkles, label: "SPS Agent" },
   { view: "chat", icon: ChatBubble, label: "Chat" },
 ];
@@ -111,14 +112,14 @@ function Layout({
   initialView,
 }: LayoutProps = {}): React.JSX.Element {
   const { t } = useI18n();
-  const [view, setView] = useState<View>(initialView ?? "workspace");
+  const [view, setView] = useState<View>(initialView ?? "settings");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [activeProfile, setActiveProfile] = useState("default");
   // Tabs lazy-mount on first visit, then stay mounted (display:none toggle).
   // Keeps IPC refetch / DOM rebuild off the tab-switch hot path.
   const [visitedViews, setVisitedViews] = useState<Set<View>>(
-    () => new Set<View>(["workspace", ...(initialView ? [initialView] : [])]),
+    () => new Set<View>(["settings", ...(initialView ? [initialView] : [])]),
   );
   // Remote-only mode — SSH tunnel has full access; only pure HTTP remote mode restricts screens
   const [remoteMode, setRemoteMode] = useState(false);
@@ -346,13 +347,18 @@ function Layout({
             onDismiss={onDismissVerifyWarning}
           />
         )}
-        <div style={paneStyle("workspace")}>
-          <Workspace
-            profile={activeProfile}
-            onOpenAdmin={(target) => goTo(target as View)}
-            onOpenSession={handleResumeSession}
-          />
-        </div>
+        {/* Legacy Workspace engine — retired from nav (SPS Agent is the single
+            wiki). Pane only mounts if something still routes to it; nothing
+            does. Removed entirely in the Workspace-deletion follow-up. */}
+        {visitedViews.has("workspace") && (
+          <div style={paneStyle("workspace")}>
+            <Workspace
+              profile={activeProfile}
+              onOpenAdmin={(target) => goTo(target as View)}
+              onOpenSession={handleResumeSession}
+            />
+          </div>
+        )}
 
         {/* SPS Agent: mount only while active — its zustand store is a module
             singleton so workspace state survives unmount, and this keeps its
