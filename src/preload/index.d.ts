@@ -1286,6 +1286,18 @@ interface HermesAPI {
   ) => Promise<{ pages: Record<string, string>; manifest: string | null }>;
   spsVaultWriteManifest: (json: string, profile?: string) => Promise<boolean>;
   spsBackupWorkspace: (profile?: string) => Promise<string | null>;
+  spsWriteExcalidraw: (
+    pageId: string,
+    assetId: string,
+    sceneJson: string,
+    svg: string,
+    profile?: string,
+  ) => Promise<boolean>;
+  spsReadExcalidraw: (
+    pageId: string,
+    assetId: string,
+    profile?: string,
+  ) => Promise<{ scene: string | null; svg: string | null }>;
   spsIndexQuery: (
     query: {
       scope?: string;

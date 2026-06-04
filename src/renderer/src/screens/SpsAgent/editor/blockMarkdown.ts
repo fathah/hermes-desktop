@@ -221,6 +221,9 @@ function isCleanBlock(block: Block): boolean {
   // A sub-page link is clean only when it is a plain pageId reference.
   if (block.type === "page")
     return !!block.pageId && PAGE_ID_RE.test(block.pageId);
+  // An excalidraw block is clean once it has a preview-svg path; an undrawn one
+  // falls to the tier-2 stub so its block type survives the round-trip.
+  if (block.type === "excalidraw") return !!block.src;
   const cleanTypes: BlockType[] = [
     "p",
     "h1",
@@ -266,6 +269,9 @@ function blockToMarkdown(block: Block): string {
     case "mermaid":
       return "```mermaid\n" + (block.text || "") + "\n```";
     case "image":
+    case "excalidraw":
+      // Both render as a clean image; the `.excalidraw.svg` suffix on the path
+      // is what tells the parser to reconstruct an excalidraw block.
       return `![${block.caption || ""}](${block.src || ""})`;
     case "h1":
     case "h2":
@@ -362,13 +368,12 @@ export function markdownToBlocks(md: string): Block[] {
 
     const image = /^!\[([^\]]*)\]\(([^)]*)\)$/.exec(raw.trim());
     if (image) {
-      blocks.push({
-        id: uid(),
-        type: "image",
-        text: "",
-        caption: image[1],
-        src: image[2],
-      });
+      const src = image[2];
+      // A `.excalidraw.svg` preview path round-trips back to a drawing block.
+      const type: BlockType = src.endsWith(".excalidraw.svg")
+        ? "excalidraw"
+        : "image";
+      blocks.push({ id: uid(), type, text: "", caption: image[1], src });
       i++;
       continue;
     }

@@ -8,6 +8,7 @@ import { ImageBlock } from "./ImageBlock";
 import { BookmarkBlock } from "./BookmarkBlock";
 import { PageLinkBlock } from "./PageLinkBlock";
 import { MermaidBlock } from "./MermaidBlock";
+import { ExcalidrawBlock } from "./ExcalidrawBlock";
 import { TasksDB } from "../tasks/TasksDB";
 import { QueryDatabase } from "../tasks/QueryDatabase";
 import type { Block, BlockType, DbView, PageMeta, Task } from "../types";
@@ -113,6 +114,8 @@ export function BlockInner(props: BlockInnerProps) {
       return <ImageBlock block={block} setType={props.setType} />;
     case "mermaid":
       return <MermaidBlock block={block} setType={props.setType} />;
+    case "excalidraw":
+      return <ExcalidrawBlock block={block} setType={props.setType} />;
     case "bookmark":
       return <BookmarkBlock block={block} setType={props.setType} />;
     case "page":

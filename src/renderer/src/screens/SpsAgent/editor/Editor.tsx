@@ -240,6 +240,12 @@ export function Editor() {
       setType(id, { type: "mermaid", html: "", text: "" });
       return;
     }
+    if (item.type === "excalidraw") {
+      // No src yet — the block mints its assetId and writes the sidecar on the
+      // first edit, then records the preview-svg path back into `src`.
+      setType(id, { type: "excalidraw", html: "", text: "", src: null });
+      return;
+    }
     if (item.type === "bookmark") {
       setType(id, { type: "bookmark", html: "", text: "", bm: null });
       return;

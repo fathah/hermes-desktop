@@ -1392,6 +1392,27 @@ const hermesAPI = {
     ipcRenderer.invoke("sps-vault-write-manifest", json, profile),
   spsBackupWorkspace: (profile?: string): Promise<string | null> =>
     ipcRenderer.invoke("sps-backup-workspace", profile),
+  spsWriteExcalidraw: (
+    pageId: string,
+    assetId: string,
+    sceneJson: string,
+    svg: string,
+    profile?: string,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke(
+      "sps-write-excalidraw",
+      pageId,
+      assetId,
+      sceneJson,
+      svg,
+      profile,
+    ),
+  spsReadExcalidraw: (
+    pageId: string,
+    assetId: string,
+    profile?: string,
+  ): Promise<{ scene: string | null; svg: string | null }> =>
+    ipcRenderer.invoke("sps-read-excalidraw", pageId, assetId, profile),
   spsIndexQuery: (
     query: {
       scope?: string;

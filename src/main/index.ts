@@ -30,6 +30,8 @@ import {
   readVaultPages,
   readVaultManifest,
   writeVaultManifest,
+  writeAssetTo,
+  readAssetFrom,
 } from "./sps-vault";
 import { profileHome, getActiveProfileNameSync } from "./utils";
 import { discoverProviderModels } from "./model-discovery";
@@ -2541,6 +2543,47 @@ function setupIPC(): void {
   );
   ipcMain.handle("sps-backup-workspace", (_event, profile?: string) =>
     spsBackupWorkspace(profile),
+  );
+
+  // Excalidraw sidecar assets: the scene JSON (.excalidraw) + its rendered
+  // preview (.excalidraw.svg) live under the vault's assets/<pageId>/ folder,
+  // keeping the page markdown clean. assetId is a stable, path-embedded handle.
+  ipcMain.handle(
+    "sps-write-excalidraw",
+    async (
+      _event,
+      pageId: string,
+      assetId: string,
+      sceneJson: string,
+      svg: string,
+      profile?: string,
+    ) => {
+      const dir = spsVaultDir(profile);
+      const okScene = await writeAssetTo(
+        dir,
+        pageId,
+        `${assetId}.excalidraw`,
+        sceneJson,
+      );
+      const okSvg = await writeAssetTo(
+        dir,
+        pageId,
+        `${assetId}.excalidraw.svg`,
+        svg,
+      );
+      return okScene && okSvg;
+    },
+  );
+  ipcMain.handle(
+    "sps-read-excalidraw",
+    async (_event, pageId: string, assetId: string, profile?: string) => {
+      const dir = spsVaultDir(profile);
+      const [scene, svg] = await Promise.all([
+        readAssetFrom(dir, pageId, `${assetId}.excalidraw`),
+        readAssetFrom(dir, pageId, `${assetId}.excalidraw.svg`),
+      ]);
+      return { scene, svg };
+    },
   );
 }
 

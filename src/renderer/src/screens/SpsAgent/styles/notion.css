@@ -497,6 +497,50 @@
   margin-top: 8px;
 }
 
+/* ---------- Excalidraw drawing block ---------- */
+.sps-scope .b-excalidraw {
+  margin: 6px 0;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface);
+  cursor: pointer;
+}
+.sps-scope .b-excalidraw.editing {
+  cursor: default;
+}
+.sps-scope .b-excalidraw .exc-canvas {
+  height: 460px;
+  width: 100%;
+}
+.sps-scope .b-excalidraw-preview {
+  display: flex;
+  justify-content: center;
+  padding: 8px;
+}
+.sps-scope .b-excalidraw-preview svg {
+  max-width: 100%;
+  height: auto;
+}
+.sps-scope .b-excalidraw-empty,
+.sps-scope .b-excalidraw-load {
+  padding: 28px;
+  text-align: center;
+  color: var(--tx-3);
+  font-size: 13px;
+}
+.sps-scope .b-excalidraw-done {
+  display: block;
+  margin: 8px;
+  padding: 5px 12px;
+  border: 1px solid var(--hair);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--tx-1);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
 /* ---------- Bookmark block ---------- */
 .sps-scope .b-bookmark {
   display: flex;

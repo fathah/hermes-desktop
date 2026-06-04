@@ -74,6 +74,12 @@ export const SLASH_ITEMS: SlashItem[] = [
     label: "Mermaid diagram",
     desc: "Flowchart, sequence, ER from text",
   },
+  {
+    type: "excalidraw",
+    icon: "wand",
+    label: "Excalidraw drawing",
+    desc: "Freeform sketch or whiteboard",
+  },
 ];
 
 interface Props {

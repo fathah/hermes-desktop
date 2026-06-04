@@ -176,6 +176,37 @@ describe("mermaid diagram block", () => {
   });
 });
 
+describe("excalidraw drawing block", () => {
+  const src = "assets/home/exb1abc.excalidraw.svg";
+
+  it("round-trips a drawn block as a clean image ref (no base64)", () => {
+    const blocks: Block[] = [blk("excalidraw", "", { src, caption: "" })];
+    const md = blocksToMarkdown(blocks);
+    expect(md).toBe(`![](${src})`);
+    expect(md).not.toContain("<!-- sps:");
+    expectRoundTrip(blocks);
+  });
+
+  it("reconstructs an excalidraw block from the .excalidraw.svg suffix", () => {
+    const out = markdownToBlocks(`![](${src})`);
+    expect(out).toHaveLength(1);
+    expect(out[0].type).toBe("excalidraw");
+    expect(out[0].src).toBe(src);
+  });
+
+  it("keeps an ordinary image as an image block", () => {
+    const out = markdownToBlocks("![cat](assets/home/p.png)");
+    expect(out[0].type).toBe("image");
+  });
+
+  it("preserves the type of an undrawn block via the tier-2 stub", () => {
+    const md = blocksToMarkdown([blk("excalidraw", "", { src: null })]);
+    expect(md).toContain("<!-- sps:");
+    const out = markdownToBlocks(md);
+    expect(out[0].type).toBe("excalidraw");
+  });
+});
+
 describe("full-document round-trip", () => {
   it("round-trips a representative mixed document", () => {
     const doc: Block[] = [
