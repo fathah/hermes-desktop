@@ -9,9 +9,8 @@ import { useStore } from "../store";
 import { treeWalkIds } from "../lib/tree";
 import { computePathIds } from "../store/selectors";
 import { workspaceParity } from "../editor/workspaceVault";
-import { migrateToVault } from "../lib/vaultStore";
-import { getStorageMode, setStorageMode } from "../lib/storageMode";
-import { saveWorkspace } from "../lib/persistence";
+import { getStorageMode } from "../lib/storageMode";
+import { toggleStorageMode } from "../lib/storageActions";
 import type { PageMeta, TreeNode, Workspace } from "../types";
 
 interface ActionItem {
@@ -200,22 +199,7 @@ export function CommandPalette() {
             trash: s.trash,
             page: s.page,
           };
-          if (getStorageMode() === "blob") {
-            void migrateToVault(ws).then((res) => {
-              if (res.ok) {
-                setStorageMode("vault");
-                flash(
-                  `Migrated to markdown storage${res.backup ? " · blob backed up" : ""}`,
-                );
-              } else {
-                flash(`Migration refused: ${res.reason}`);
-              }
-            });
-          } else {
-            saveWorkspace(ws); // persist current state to the blob
-            setStorageMode("blob");
-            flash("Switched to JSON storage");
-          }
+          void toggleStorageMode(ws).then((res) => flash(res.message));
         },
       },
     ],
