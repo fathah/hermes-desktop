@@ -537,19 +537,6 @@
 }
 
 /* page header */
-.sps-scope .doc-emoji {
-  font-size: 64px;
-  line-height: 1;
-  margin-bottom: 8px;
-  cursor: pointer;
-  width: max-content;
-  border-radius: 8px;
-  padding: 2px 6px;
-  margin-left: -6px;
-}
-.sps-scope .doc-emoji:hover {
-  background: var(--block-hover);
-}
 .sps-scope .doc-title {
   font-size: 40px;
   font-weight: 700;

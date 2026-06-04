@@ -10,7 +10,6 @@ export function DocHeader({ children }: { children?: ReactNode }) {
   const page = useStore((s) => s.page);
   const pmeta = useStore(selectPmeta);
   const setPMeta = useStore((s) => s.setPMeta);
-  const setEmojiPick = useStore((s) => s.setEmojiPick);
   const setCoverPick = useStore((s) => s.setCoverPick);
 
   return (
@@ -45,17 +44,6 @@ export function DocHeader({ children }: { children?: ReactNode }) {
       )}
       <div className={`doc ${pmeta.cover ? "has-cover" : ""}`}>
         <div className="doc-head-inner">
-          <div
-            className="doc-emoji"
-            onClick={(e) =>
-              setEmojiPick({
-                x: e.currentTarget.getBoundingClientRect().left,
-                y: e.currentTarget.getBoundingClientRect().bottom + 6,
-              })
-            }
-          >
-            {pmeta.icon}
-          </div>
           <div
             className="doc-title"
             contentEditable
