@@ -152,6 +152,13 @@ export function Sidebar() {
           <span className="nav-label">Memory</span>
         </div>
         <div
+          className={`nav-item ${surface === "graph" ? "active" : ""}`}
+          onClick={() => setSurface("graph")}
+        >
+          <Icon name="pageGraph" size={17} />
+          <span className="nav-label">Graph</span>
+        </div>
+        <div
           className={`nav-item ${surface === "agent" ? "active" : ""}`}
           onClick={() => setSurface("agent")}
         >

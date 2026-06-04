@@ -80,6 +80,20 @@ async function main(): Promise<void> {
     "backlinks gamma <- beta",
   );
 
+  const edges = index
+    .links()
+    .map((e) => `${e.source} -> ${e.target}`)
+    .sort();
+  eq(
+    edges,
+    [
+      "alpha.md -> beta.md",
+      "beta.md -> alpha.md",
+      "beta.md -> projects/gamma.md",
+    ],
+    "links() resolves wikilink edges to indexed notes",
+  );
+
   const before = index
     .query({})
     .map((n) => `${n.path}:${n.title}`)
@@ -129,6 +143,11 @@ async function main(): Promise<void> {
     v1.backlinks("tasks.md"),
     ["home.md"],
     "[[wikilink]] backlink resolves (home -> tasks)",
+  );
+  eq(
+    v1.links().map((e) => `${e.source} -> ${e.target}`),
+    ["home.md -> tasks.md"],
+    "links() returns the resolved home -> tasks edge",
   );
 
   await closeAllNoteIndexes();

@@ -1606,6 +1606,12 @@ function setupIPC(): void {
     },
   );
 
+  // F4: the full [[wikilink]] edge list, for the local graph view.
+  ipcMain.handle("sps-index-links", async (_event, profile?: string) => {
+    requireLocalWorkspace();
+    return (await getSpsNoteIndex(profile)).links();
+  });
+
   ipcMain.handle("sps-index-status", async (_event, profile?: string) => {
     requireLocalWorkspace();
     return (await getSpsNoteIndex(profile)).status();

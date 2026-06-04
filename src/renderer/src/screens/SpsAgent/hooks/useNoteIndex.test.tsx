@@ -6,6 +6,7 @@ import {
   useVaultBacklinks,
   useVaultSearch,
   useVaultQuery,
+  useVaultGraph,
 } from "./useNoteIndex";
 
 function stubApi(overrides: Record<string, unknown>): void {
@@ -89,5 +90,33 @@ describe("useVaultQuery", () => {
     stubApi({ spsIndexQuery: vi.fn() });
     const { result } = renderHook(() => useVaultQuery(undefined));
     expect(result.current.rows).toEqual([]);
+  });
+});
+
+describe("useVaultGraph", () => {
+  it("maps edges to pageIds (stripping the .md suffix)", async () => {
+    const spy = vi.fn().mockResolvedValue([
+      { source: "home.md", target: "tasks.md" },
+      { source: "tasks.md", target: "projects/x.md" },
+    ]);
+    stubApi({ spsIndexLinks: spy });
+    const { result } = renderHook(() => useVaultGraph());
+    await waitFor(() => expect(result.current.edges.length).toBe(2));
+    expect(result.current.edges).toEqual([
+      { source: "home", target: "tasks" },
+      { source: "tasks", target: "projects/x" },
+    ]);
+  });
+
+  it("returns no edges when the api is missing", () => {
+    stubApi({});
+    const { result } = renderHook(() => useVaultGraph());
+    expect(result.current.edges).toEqual([]);
+  });
+
+  it("swallows index errors", async () => {
+    stubApi({ spsIndexLinks: vi.fn().mockRejectedValue(new Error("x")) });
+    const { result } = renderHook(() => useVaultGraph());
+    await waitFor(() => expect(result.current.edges).toEqual([]));
   });
 });

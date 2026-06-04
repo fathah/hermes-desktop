@@ -1422,6 +1422,10 @@ const hermesAPI = {
     ipcRenderer.invoke("sps-index-search", text, limit, profile),
   spsIndexBacklinks: (path: string, profile?: string): Promise<string[]> =>
     ipcRenderer.invoke("sps-index-backlinks", path, profile),
+  spsIndexLinks: (
+    profile?: string,
+  ): Promise<Array<{ source: string; target: string }>> =>
+    ipcRenderer.invoke("sps-index-links", profile),
   spsIndexStatus: (
     profile?: string,
   ): Promise<{
