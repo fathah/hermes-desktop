@@ -754,6 +754,44 @@ interface HermesAPI {
     profile?: string,
   ) => Promise<boolean>;
   deleteWorkspaceFile: (path: string, profile?: string) => Promise<boolean>;
+  indexQuery: (
+    query: {
+      scope?: string;
+      filters?: Array<{
+        prop: string;
+        op: "eq" | "neq" | "contains" | "exists";
+        value?: unknown;
+      }>;
+      sort?: { prop: string; dir: "asc" | "desc" };
+      limit?: number;
+    },
+    profile?: string,
+  ) => Promise<
+    Array<{
+      path: string;
+      title: string;
+      props: Record<string, unknown>;
+      mtime: number;
+    }>
+  >;
+  indexSearch: (
+    text: string,
+    limit?: number,
+    profile?: string,
+  ) => Promise<Array<{ path: string; title: string; snippet: string }>>;
+  indexBacklinks: (path: string, profile?: string) => Promise<string[]>;
+  indexRebuild: (profile?: string) => Promise<{
+    root: string;
+    notes: number;
+    links: number;
+    indexedAt: number | null;
+  }>;
+  indexStatus: (profile?: string) => Promise<{
+    root: string;
+    notes: number;
+    links: number;
+    indexedAt: number | null;
+  }>;
   searchWorkspaceAndSessions: (
     query: string,
     limit?: number,

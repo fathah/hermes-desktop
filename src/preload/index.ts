@@ -706,6 +706,52 @@ const hermesAPI = {
     ipcRenderer.invoke("write-workspace-file", path, content, profile),
   deleteWorkspaceFile: (path: string, profile?: string) =>
     ipcRenderer.invoke("delete-workspace-file", path, profile),
+
+  // Note index (S1): derived SQLite query/search/graph layer over the vault.
+  indexQuery: (
+    query: {
+      scope?: string;
+      filters?: Array<{
+        prop: string;
+        op: "eq" | "neq" | "contains" | "exists";
+        value?: unknown;
+      }>;
+      sort?: { prop: string; dir: "asc" | "desc" };
+      limit?: number;
+    },
+    profile?: string,
+  ): Promise<
+    Array<{
+      path: string;
+      title: string;
+      props: Record<string, unknown>;
+      mtime: number;
+    }>
+  > => ipcRenderer.invoke("index-query", query, profile),
+  indexSearch: (
+    text: string,
+    limit?: number,
+    profile?: string,
+  ): Promise<Array<{ path: string; title: string; snippet: string }>> =>
+    ipcRenderer.invoke("index-search", text, limit, profile),
+  indexBacklinks: (path: string, profile?: string): Promise<string[]> =>
+    ipcRenderer.invoke("index-backlinks", path, profile),
+  indexRebuild: (
+    profile?: string,
+  ): Promise<{
+    root: string;
+    notes: number;
+    links: number;
+    indexedAt: number | null;
+  }> => ipcRenderer.invoke("index-rebuild", profile),
+  indexStatus: (
+    profile?: string,
+  ): Promise<{
+    root: string;
+    notes: number;
+    links: number;
+    indexedAt: number | null;
+  }> => ipcRenderer.invoke("index-status", profile),
   searchWorkspaceAndSessions: (
     query: string,
     limit?: number,

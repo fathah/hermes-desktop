@@ -1,0 +1,98 @@
+// Standalone runtime proof for the S1 note indexer. Runs under Electron's node
+// (ELECTRON_RUN_AS_NODE=1) so the Electron-ABI better-sqlite3 binary loads.
+// Bundled via esbuild and executed by scripts/verify-note-index.sh.
+import { mkdtemp, rm, writeFile, mkdir } from "fs/promises";
+import { tmpdir } from "os";
+import { join } from "path";
+import { NoteIndex } from "../src/main/note-index";
+
+function assert(cond: boolean, msg: string): void {
+  if (!cond) throw new Error("FAIL: " + msg);
+  console.log("  ok -", msg);
+}
+
+function eq(a: unknown, b: unknown, msg: string): void {
+  assert(
+    JSON.stringify(a) === JSON.stringify(b),
+    `${msg} (got ${JSON.stringify(a)})`,
+  );
+}
+
+async function main(): Promise<void> {
+  const root = await mkdtemp(join(tmpdir(), "note-index-verify-"));
+  await writeFile(
+    join(root, "alpha.md"),
+    `---\nstatus: doing\npriority: high\n---\n# Alpha\nThe quick brown fox links to [[beta]].\n`,
+  );
+  await writeFile(
+    join(root, "beta.md"),
+    `---\nstatus: done\npriority: low\n---\n# Beta\nA lazy dog. See [[alpha]] and [[gamma]].\n`,
+  );
+  await mkdir(join(root, "projects"), { recursive: true });
+  await writeFile(
+    join(root, "projects", "gamma.md"),
+    `---\nstatus: doing\n---\n# Gamma\nNested note.\n`,
+  );
+  await writeFile(join(root, ".ignore.md"), `# Hidden`);
+
+  const index = await NoteIndex.open(root);
+
+  eq(index.status().notes, 3, "indexes 3 notes, skips hidden .ignore.md");
+
+  const titles = index
+    .query({})
+    .map((n) => n.title)
+    .sort();
+  eq(titles, ["Alpha", "Beta", "Gamma"], "derives titles from first heading");
+
+  const doing = index
+    .query({ filters: [{ prop: "status", op: "eq", value: "doing" }] })
+    .map((n) => n.path)
+    .sort();
+  eq(
+    doing,
+    ["alpha.md", "projects/gamma.md"],
+    "filters by frontmatter property",
+  );
+
+  const sorted = index
+    .query({
+      filters: [{ prop: "priority", op: "exists" }],
+      sort: { prop: "priority", dir: "asc" },
+    })
+    .map((n) => n.props.priority);
+  eq(sorted, ["high", "low"], "sorts by frontmatter property");
+
+  const scoped = index.query({ scope: "projects" }).map((n) => n.path);
+  eq(scoped, ["projects/gamma.md"], "scopes a query to a folder");
+
+  const hits = index.search("brown").map((h) => h.path);
+  assert(hits.includes("alpha.md"), "FTS search finds body text");
+
+  eq(index.backlinks("alpha.md"), ["beta.md"], "backlinks alpha <- beta");
+  eq(
+    index.backlinks("projects/gamma.md"),
+    ["beta.md"],
+    "backlinks gamma <- beta",
+  );
+
+  const before = index
+    .query({})
+    .map((n) => `${n.path}:${n.title}`)
+    .sort();
+  await index.rebuild();
+  const after = index
+    .query({})
+    .map((n) => `${n.path}:${n.title}`)
+    .sort();
+  eq(after, before, "rebuild from disk is identical (markdown is sole truth)");
+
+  await index.close();
+  await rm(root, { recursive: true, force: true });
+  console.log("\nALL NOTE-INDEX CHECKS PASSED");
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

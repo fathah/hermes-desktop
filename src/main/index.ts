@@ -145,6 +145,11 @@ import {
   writeWorkspaceFile,
 } from "./workspace";
 import {
+  getNoteIndex,
+  closeAllNoteIndexes,
+  type NoteQuery,
+} from "./note-index";
+import {
   getWorkspaceBacklinks,
   getWorkspacePageGraph,
   updateWorkspaceSidebarState,
@@ -1522,6 +1527,47 @@ function setupIPC(): void {
     },
   );
 
+  // ── Note index (Part 2 / S1): derived SQLite index over the markdown vault.
+  //    Read-only over the files; powers database views, search and backlinks.
+  ipcMain.handle(
+    "index-query",
+    async (_event, query: NoteQuery, profile?: string) => {
+      requireLocalWorkspace();
+      const index = await getNoteIndex(profile);
+      return index.query(query ?? {});
+    },
+  );
+
+  ipcMain.handle(
+    "index-search",
+    async (_event, text: string, limit?: number, profile?: string) => {
+      requireLocalWorkspace();
+      const index = await getNoteIndex(profile);
+      return index.search(text, limit ?? 20);
+    },
+  );
+
+  ipcMain.handle(
+    "index-backlinks",
+    async (_event, path: string, profile?: string) => {
+      requireLocalWorkspace();
+      const index = await getNoteIndex(profile);
+      return index.backlinks(path);
+    },
+  );
+
+  ipcMain.handle("index-rebuild", async (_event, profile?: string) => {
+    requireLocalWorkspace();
+    const index = await getNoteIndex(profile);
+    return index.rebuild();
+  });
+
+  ipcMain.handle("index-status", async (_event, profile?: string) => {
+    requireLocalWorkspace();
+    const index = await getNoteIndex(profile);
+    return index.status();
+  });
+
   ipcMain.handle(
     "search-workspace-and-sessions",
     async (_event, query: string, limit?: number, profile?: string) => {
@@ -2655,4 +2701,5 @@ app.on("before-quit", () => {
   // and other platforms stay online headless.
   stopSshTunnel();
   stopClaw3d();
+  void closeAllNoteIndexes();
 });
