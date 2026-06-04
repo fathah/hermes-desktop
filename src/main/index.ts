@@ -2776,7 +2776,24 @@ if (process.env.ENABLE_CDP === "1") {
   );
 }
 
+// Single instance: a second launch must not spin up a parallel app. Acquire the
+// lock; if another instance already holds it, focus its window and quit this one.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
+
 app.whenReady().then(() => {
+  // A second instance is already quitting (above) — do nothing here.
+  if (!gotSingleInstanceLock) return;
   app.name = "Hermes";
   electronApp.setAppUserModelId("com.nousresearch.hermes");
 
