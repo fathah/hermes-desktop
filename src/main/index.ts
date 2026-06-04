@@ -26,6 +26,7 @@ import {
 import {
   exportPageMarkdownTo,
   exportRowMarkdownTo,
+  deletePageIn,
   deleteRowIn,
   readVaultPages,
   readVaultManifest,
@@ -2515,6 +2516,16 @@ function setupIPC(): void {
       const home = profileHome(profile || getActiveProfileNameSync());
       const dir = join(home, "sps-agent", "vault");
       return deleteRowIn(dir, dbFolder, rowId);
+    },
+  );
+
+  // F3: remove an orphaned page file from the vault (vault mode). Best-effort.
+  ipcMain.handle(
+    "sps-delete-page",
+    (_event, pageId: string, profile?: string) => {
+      const home = profileHome(profile || getActiveProfileNameSync());
+      const dir = join(home, "sps-agent", "vault");
+      return deletePageIn(dir, pageId);
     },
   );
 

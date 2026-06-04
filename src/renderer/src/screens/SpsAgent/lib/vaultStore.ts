@@ -60,6 +60,16 @@ export async function saveVaultPage(
   await api.spsVaultWriteManifest(JSON.stringify(workspaceManifest(ws)));
 }
 
+/** Best-effort: remove orphaned page files from the vault (F3). Used when pages
+ *  leave the workspace entirely (e.g. reset) so stale `<pageId>.md` files don't
+ *  linger. Never throws — a failed delete just leaves a harmless extra file. */
+export async function deleteVaultPages(pageIds: string[]): Promise<void> {
+  const api = window.hermesAPI;
+  const del = api?.spsDeletePage;
+  if (!del) return;
+  await Promise.all(pageIds.map((id) => del(id).catch(() => false)));
+}
+
 export interface MigrationResult {
   ok: boolean;
   reason?: string;

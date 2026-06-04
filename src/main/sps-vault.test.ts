@@ -8,6 +8,7 @@ import { writeFile } from "fs/promises";
 import {
   exportPageMarkdownTo,
   readPageMarkdownFrom,
+  deletePageIn,
   isValidPageId,
   pageFilename,
   exportRowMarkdownTo,
@@ -66,6 +67,27 @@ describe("exportPageMarkdownTo / readPageMarkdownFrom", () => {
   it("returns null when reading a missing or invalid page", async () => {
     expect(await readPageMarkdownFrom(dir, "nope")).toBeNull();
     expect(await readPageMarkdownFrom(dir, "../x")).toBeNull();
+  });
+});
+
+describe("deletePageIn (F3 orphan cleanup)", () => {
+  it("deletes an existing page file and reports success", async () => {
+    await exportPageMarkdownTo(dir, "gone", "# Gone");
+    expect(existsSync(join(dir, "gone.md"))).toBe(true);
+    expect(await deletePageIn(dir, "gone")).toBe(true);
+    expect(existsSync(join(dir, "gone.md"))).toBe(false);
+  });
+
+  it("returns false for a missing file (best-effort, no throw)", async () => {
+    expect(await deletePageIn(dir, "never")).toBe(false);
+  });
+
+  it("refuses a hostile id and removes nothing outside the vault", async () => {
+    await exportPageMarkdownTo(dir, "keep", "# Keep");
+    expect(await deletePageIn(dir, "../keep")).toBe(false);
+    expect(await deletePageIn(dir, "a/b")).toBe(false);
+    expect(await deletePageIn(dir, "")).toBe(false);
+    expect(existsSync(join(dir, "keep.md"))).toBe(true);
   });
 });
 

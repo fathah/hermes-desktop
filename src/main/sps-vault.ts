@@ -45,6 +45,21 @@ export async function exportPageMarkdownTo(
   }
 }
 
+/** Delete a page's markdown file from a vault directory (F3 orphan cleanup).
+ *  Id-validated and traversal-safe; best-effort (missing file ⇒ still false). */
+export async function deletePageIn(
+  dir: string,
+  pageId: string,
+): Promise<boolean> {
+  if (!isValidPageId(pageId)) return false;
+  try {
+    await fs.rm(join(dir, pageFilename(pageId)));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Read a page's mirrored markdown back, or null if absent / bad id. */
 export async function readPageMarkdownFrom(
   dir: string,

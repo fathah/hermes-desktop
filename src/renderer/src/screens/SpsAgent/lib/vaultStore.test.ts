@@ -6,6 +6,7 @@ import {
   readVaultWorkspace,
   writeVaultWorkspace,
   rollbackToBlob,
+  deleteVaultPages,
 } from "./vaultStore";
 import { workspaceToVault } from "../editor/workspaceVault";
 import { blk } from "../lib/ids";
@@ -162,5 +163,25 @@ describe("read / write / rollback round-trip", () => {
     await writeVaultWorkspace(makeWorkspace());
     expect(exportPage).toHaveBeenCalledTimes(2);
     expect(writeManifest).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("deleteVaultPages — orphan cleanup (F3)", () => {
+  it("calls spsDeletePage once per id", async () => {
+    const del = vi.fn().mockResolvedValue(true);
+    stubApi({ spsDeletePage: del });
+    await deleteVaultPages(["a", "b", "c"]);
+    expect(del.mock.calls.map((c) => c[0])).toEqual(["a", "b", "c"]);
+  });
+
+  it("is a no-op when the delete API is unavailable", async () => {
+    stubApi({});
+    await expect(deleteVaultPages(["a"])).resolves.toBeUndefined();
+  });
+
+  it("never rejects when a delete fails (best-effort)", async () => {
+    const del = vi.fn().mockRejectedValue(new Error("locked"));
+    stubApi({ spsDeletePage: del });
+    await expect(deleteVaultPages(["a"])).resolves.toBeUndefined();
   });
 });

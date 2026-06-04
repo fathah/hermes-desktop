@@ -1281,6 +1281,7 @@ interface HermesAPI {
     rowId: string,
     profile?: string,
   ) => Promise<boolean>;
+  spsDeletePage: (pageId: string, profile?: string) => Promise<boolean>;
   spsVaultRead: (
     profile?: string,
   ) => Promise<{ pages: Record<string, string>; manifest: string | null }>;

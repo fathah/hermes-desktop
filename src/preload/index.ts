@@ -1384,6 +1384,8 @@ const hermesAPI = {
     profile?: string,
   ): Promise<boolean> =>
     ipcRenderer.invoke("sps-delete-row", dbFolder, rowId, profile),
+  spsDeletePage: (pageId: string, profile?: string): Promise<boolean> =>
+    ipcRenderer.invoke("sps-delete-page", pageId, profile),
   spsVaultRead: (
     profile?: string,
   ): Promise<{ pages: Record<string, string>; manifest: string | null }> =>
