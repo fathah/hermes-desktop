@@ -6,6 +6,7 @@ import {
   FolderOpen,
   X,
   FolderTree,
+  PanelRight,
   Minimize2,
   History,
 } from "lucide-react";
@@ -25,10 +26,15 @@ interface ChatHeaderProps {
   showContextFolder: boolean;
   /** Whether the worktree panel is visible (when contextFolder is set). */
   worktreeVisible: boolean;
+  /** Whether there is previewable visual output to show (WS2). */
+  previewAvailable: boolean;
+  /** Whether the preview pane is currently shown. */
+  previewVisible: boolean;
   onPickFolder: () => void;
   onClearFolder: () => void;
   onToggleFast: () => void;
   onToggleWorktree: () => void;
+  onTogglePreview: () => void;
   onNewChat?: () => void;
   onClear: () => void;
   /** Current model id — drives the context-fill gauge (idea A3). */
@@ -95,10 +101,13 @@ export const ChatHeader = memo(function ChatHeader({
   contextFolder,
   showContextFolder,
   worktreeVisible,
+  previewAvailable,
+  previewVisible,
   onPickFolder,
   onClearFolder,
   onToggleFast,
   onToggleWorktree,
+  onTogglePreview,
   onNewChat,
   onClear,
   model,
@@ -178,6 +187,17 @@ export const ChatHeader = memo(function ChatHeader({
             </span>
           </div>
         </div>
+        {previewAvailable && (
+          <button
+            className={`btn-ghost chat-worktree-toggle ${previewVisible ? "chat-worktree-active" : ""}`}
+            onClick={onTogglePreview}
+            title={
+              previewVisible ? t("chat.hidePreview") : t("chat.showPreview")
+            }
+          >
+            <PanelRight size={14} />
+          </button>
+        )}
         {onCheckpoints && hasMessages && (
           <button
             className="btn-ghost chat-clear-btn"

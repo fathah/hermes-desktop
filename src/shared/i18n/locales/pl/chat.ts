@@ -98,4 +98,6 @@ export default {
   },
   showWorktree: "Pokaż eksplorator plików",
   hideWorktree: "Ukryj eksplorator plików",
+  showPreview: "Pokaż podgląd",
+  hidePreview: "Ukryj podgląd",
 } as const;

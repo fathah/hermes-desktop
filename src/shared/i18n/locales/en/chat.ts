@@ -106,4 +106,6 @@ export default {
   },
   showWorktree: "Show file explorer",
   hideWorktree: "Hide file explorer",
+  showPreview: "Show preview",
+  hidePreview: "Hide preview",
 } as const;
