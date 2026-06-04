@@ -1265,6 +1265,11 @@ interface HermesAPI {
   ) => Promise<unknown>;
   spsLoad: (profile?: string) => Promise<unknown | null>;
   spsSave: (ws: unknown, profile?: string) => Promise<boolean>;
+  spsExportPage: (
+    pageId: string,
+    markdown: string,
+    profile?: string,
+  ) => Promise<boolean>;
 }
 
 declare global {

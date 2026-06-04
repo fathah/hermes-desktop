@@ -7,7 +7,12 @@
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import { applyTweaks } from "../lib/theme";
-import { loadWorkspace, saveWorkspace } from "../lib/persistence";
+import {
+  loadWorkspace,
+  saveWorkspace,
+  mirrorPage,
+  mirrorAllPages,
+} from "../lib/persistence";
 import type { Workspace } from "../types";
 import type { Store } from "./storeTypes";
 import { createWorkspaceSlice } from "./slices/workspace";
@@ -62,10 +67,12 @@ useStore.subscribe(
   (s) => [s.tree, s.meta, s.docs, s.comments, s.trash, s.page] as const,
   () => {
     if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(
-      () => saveWorkspace(snapshotWorkspace(useStore.getState())),
-      350,
-    );
+    saveTimer = setTimeout(() => {
+      const s = useStore.getState();
+      saveWorkspace(snapshotWorkspace(s));
+      // Additive mirror: write the current page's markdown (S2b).
+      mirrorPage(s.page, s.meta[s.page] ?? {}, s.docs[s.page] ?? []);
+    }, 350);
   },
   { equalityFn: (a, b) => a.every((v, i) => v === b[i]) },
 );
@@ -85,4 +92,6 @@ export async function hydrateWorkspace(): Promise<void> {
     trash: ws.trash ?? [],
     page: ws.page in (ws.docs || {}) ? ws.page : "home",
   });
+  // Materialize the markdown substrate for every page once on load (S2b).
+  mirrorAllPages(snapshotWorkspace(useStore.getState()));
 }

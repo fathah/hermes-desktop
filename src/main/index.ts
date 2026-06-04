@@ -22,6 +22,8 @@ import {
   spsSave,
   type PageContext as SpsPageContext,
 } from "./sps-agent";
+import { exportPageMarkdownTo } from "./sps-vault";
+import { profileHome, getActiveProfileNameSync } from "./utils";
 import { discoverProviderModels } from "./model-discovery";
 import { readMediaAsDataUrl, saveMedia, mediaFileExists } from "./media";
 import {
@@ -2434,6 +2436,17 @@ function setupIPC(): void {
   ipcMain.handle("sps-load", (_event, profile?: string) => spsLoad(profile));
   ipcMain.handle("sps-save", (_event, ws: unknown, profile?: string) =>
     spsSave(ws, profile),
+  );
+
+  // Additive markdown mirror (S2b): write a page's markdown into the SPS vault
+  // so the substrate + note-index materialize. The JSON blob stays authoritative.
+  ipcMain.handle(
+    "sps-export-page",
+    (_event, pageId: string, markdown: string, profile?: string) => {
+      const home = profileHome(profile || getActiveProfileNameSync());
+      const dir = join(home, "sps-agent", "vault");
+      return exportPageMarkdownTo(dir, pageId, markdown);
+    },
   );
 }
 

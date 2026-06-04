@@ -1365,6 +1365,12 @@ const hermesAPI = {
     ipcRenderer.invoke("sps-load", profile),
   spsSave: (ws: unknown, profile?: string): Promise<boolean> =>
     ipcRenderer.invoke("sps-save", ws, profile),
+  spsExportPage: (
+    pageId: string,
+    markdown: string,
+    profile?: string,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("sps-export-page", pageId, markdown, profile),
 };
 
 if (process.contextIsolated) {
