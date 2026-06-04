@@ -129,6 +129,88 @@ function normalizeWhitespace(s: string): string {
   return s.replace(/\s+/g, " ").trim();
 }
 
+function normalizeBubbleContentForMatch(s: string): string {
+  return normalizeWhitespace(s).replace(
+    /(?:\s+\[(?:screenshot|image)\])+$/i,
+    "",
+  );
+}
+
+function nonWhitespaceLength(s: string): number {
+  return s.replace(/\s+/g, "").length;
+}
+
+function buildDbAssistantSplitSequences(
+  items: ReadonlyArray<ChatMessage>,
+): string[][] {
+  const sequences: string[][] = [];
+  let current: string[] = [];
+
+  const flush = (): void => {
+    if (current.length >= 2) sequences.push(current);
+    current = [];
+  };
+
+  for (const m of items) {
+    if (!("kind" in m)) {
+      const bubble = m as ChatBubbleMessage;
+      if (bubble.role === "user") {
+        flush();
+        continue;
+      }
+      const text = normalizeBubbleContentForMatch(bubble.content || "");
+      if (text) current.push(text);
+    }
+  }
+
+  flush();
+  return sequences;
+}
+
+/**
+ * Detect the artifact behind issue #420/#431: the live stream can append
+ * several assistant DB rows into one renderer bubble because chunk events do
+ * not carry row-boundary markers. When the final DB refresh returns the
+ * canonical split rows, keeping the concatenated streamed bubble repeats large
+ * chunks of the answer.
+ */
+function isCoveredByDbBubbleSplit(
+  bubble: ChatBubbleMessage,
+  dbAssistantSplitSequences: ReadonlyArray<ReadonlyArray<string>>,
+): boolean {
+  if (bubble.role !== "agent") return false;
+
+  const text = normalizeBubbleContentForMatch(bubble.content || "");
+  if (!text) return false;
+
+  for (const sequence of dbAssistantSplitSequences) {
+    let searchFrom = 0;
+    let matchedSegments = 0;
+    let matchedNonWhitespaceLength = 0;
+
+    for (const dbText of sequence) {
+      if (!dbText) continue;
+      const index = text.indexOf(dbText, searchFrom);
+      if (index < 0) continue;
+
+      matchedSegments++;
+      matchedNonWhitespaceLength += nonWhitespaceLength(dbText);
+      searchFrom = index + dbText.length;
+    }
+
+    if (matchedSegments < 2) continue;
+
+    const textNonWhitespaceLength = nonWhitespaceLength(text);
+    if (textNonWhitespaceLength === 0) return false;
+
+    if (matchedNonWhitespaceLength / textNonWhitespaceLength >= 0.85) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function reconciliationKey(m: ChatMessage): string | null {
   if ("kind" in m) {
     switch (m.kind) {
@@ -143,7 +225,7 @@ function reconciliationKey(m: ChatMessage): string | null {
     }
   }
   const bubble = m as ChatBubbleMessage;
-  return `${bubble.role}:${normalizeWhitespace(bubble.content || "").slice(0, 200)}`;
+  return `${bubble.role}:${normalizeBubbleContentForMatch(bubble.content || "").slice(0, 200)}`;
 }
 
 /**
@@ -161,7 +243,11 @@ function mergeDbMetadataIntoStreamed(
   const s = streamed as ChatBubbleMessage;
   const d = db as ChatBubbleMessage;
   // Attachments from the DB that the stream didn't deliver.
-  if (d.attachments && d.attachments.length > 0 && (!s.attachments || s.attachments.length === 0)) {
+  if (
+    d.attachments &&
+    d.attachments.length > 0 &&
+    (!s.attachments || s.attachments.length === 0)
+  ) {
     return { ...s, attachments: d.attachments };
   }
   return s;
@@ -207,6 +293,7 @@ export function reconcileStreamedWithDb(
     else streamedByKey.set(key, [m]);
   }
 
+  const dbAssistantSplitSequences = buildDbAssistantSplitSequences(db);
   const result: ChatMessage[] = [];
   for (const dbMsg of db) {
     const key = reconciliationKey(dbMsg);
@@ -233,31 +320,73 @@ export function reconcileStreamedWithDb(
   // result, skip it — it's a near-duplicate that slipped past the
   // key-based match (e.g. trailing-whitespace drift, one-frame delta
   // that didn't round-trip through the DB identically).
-  const seenBubbleKeys = new Set<string>();
-  for (const m of result) {
-    if (!("kind" in m)) {
-      const bubble = m as ChatBubbleMessage;
-      seenBubbleKeys.add(
-        `${bubble.role}:${normalizeWhitespace(bubble.content || "")}`,
-      );
-    }
-  }
-
   const consumedIds = new Set(result.map((m) => m.id));
-  for (const m of streamed) {
-    if (consumedIds.has(m.id)) continue;
+  const consumedStreamIndexes: number[] = [];
+  for (let i = 0; i < streamed.length; i++) {
+    if (consumedIds.has(streamed[i].id)) consumedStreamIndexes.push(i);
+  }
+  const firstConsumedIndex =
+    consumedStreamIndexes.length > 0 ? Math.min(...consumedStreamIndexes) : -1;
+
+  const seedSeenBubbleKeys = (
+    seen: Set<string>,
+    items: ReadonlyArray<ChatMessage>,
+  ): void => {
+    for (const m of items) {
+      if (!("kind" in m)) {
+        const bubble = m as ChatBubbleMessage;
+        seen.add(
+          `${bubble.role}:${normalizeBubbleContentForMatch(bubble.content || "")}`,
+        );
+      }
+    }
+  };
+
+  const appendIfUnique = (
+    target: ChatMessage[],
+    m: ChatMessage,
+    seen: Set<string>,
+    dropDbSplitArtifacts = true,
+  ): boolean => {
+    if (consumedIds.has(m.id)) return false;
     // For bubble messages, check if an equivalent already exists in the
     // result set.  Non-bubble messages (tool_call, tool_result, reasoning)
     // always pass through — they're either matched by callId above or are
     // genuinely new.
     if (!("kind" in m)) {
       const bubble = m as ChatBubbleMessage;
-      const contentKey = `${bubble.role}:${normalizeWhitespace(bubble.content || "")}`;
-      if (seenBubbleKeys.has(contentKey)) continue;
-      seenBubbleKeys.add(contentKey);
+      const contentKey = `${bubble.role}:${normalizeBubbleContentForMatch(bubble.content || "")}`;
+      if (seen.has(contentKey)) return false;
+      if (
+        dropDbSplitArtifacts &&
+        isCoveredByDbBubbleSplit(bubble, dbAssistantSplitSequences)
+      ) {
+        return false;
+      }
+      seen.add(contentKey);
     }
-    result.push(m);
+    target.push(m);
+    return true;
+  };
+
+  const prefix: ChatMessage[] = [];
+  const seenPrefixBubbleKeys = new Set<string>();
+  for (let i = 0; i < streamed.length; i++) {
+    const m = streamed[i];
+    if (firstConsumedIndex >= 0 && i < firstConsumedIndex) {
+      appendIfUnique(prefix, m, seenPrefixBubbleKeys, false);
+    }
   }
 
-  return result;
+  const suffix: ChatMessage[] = [];
+  const seenSuffixBubbleKeys = new Set<string>();
+  seedSeenBubbleKeys(seenSuffixBubbleKeys, prefix);
+  seedSeenBubbleKeys(seenSuffixBubbleKeys, result);
+  for (let i = 0; i < streamed.length; i++) {
+    const m = streamed[i];
+    if (firstConsumedIndex >= 0 && i < firstConsumedIndex) continue;
+    appendIfUnique(suffix, m, seenSuffixBubbleKeys);
+  }
+
+  return [...prefix, ...result, ...suffix];
 }

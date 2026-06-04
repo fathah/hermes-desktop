@@ -86,6 +86,18 @@ describe("New APIs from v0.8/v0.9 features", () => {
   it("has MCP server list API", () => {
     expect(preloadMethods).toContain("listMcpServers");
     expect(typeMethods).toContain("listMcpServers");
+    expect(preloadMethods).toContain("addMcpServer");
+    expect(typeMethods).toContain("addMcpServer");
+    expect(preloadMethods).toContain("removeMcpServer");
+    expect(typeMethods).toContain("removeMcpServer");
+    expect(preloadMethods).toContain("setMcpServerEnabled");
+    expect(typeMethods).toContain("setMcpServerEnabled");
+    expect(preloadMethods).toContain("testMcpServer");
+    expect(typeMethods).toContain("testMcpServer");
+    expect(preloadMethods).toContain("listMcpCatalog");
+    expect(typeMethods).toContain("listMcpCatalog");
+    expect(preloadMethods).toContain("installMcpCatalogEntry");
+    expect(typeMethods).toContain("installMcpCatalogEntry");
   });
 
   it("has memory provider discovery API", () => {
@@ -146,6 +158,7 @@ describe("Legacy APIs preserved (backward compat)", () => {
     // Sessions
     "listSessions",
     "getSessionMessages",
+    "deleteSessions",
     // Profiles
     "listProfiles",
     "createProfile",

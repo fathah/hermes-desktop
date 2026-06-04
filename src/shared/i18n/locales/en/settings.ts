@@ -20,6 +20,7 @@ export default {
     spanish: "Español",
     chinese: "中文",
     portuguese: "Portuguese",
+    turkish: "Türkçe",
     hint: "Choose the interface language",
   },
   analytics: {

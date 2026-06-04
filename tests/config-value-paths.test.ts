@@ -228,12 +228,60 @@ describe("setConfigValue — dotted paths", () => {
     expect(after).toContain('service_tier: "normal"');
   });
 
-  it("is a no-op for missing nested paths (don't guess where to create the parent)", async () => {
+  it("creates a missing direct nested key under an existing parent block", async () => {
+    writeFileSync(
+      join(TEST_DIR, "config.yaml"),
+      [
+        "network:",
+        "  force_ipv4: false",
+        "security:",
+        "  redact_secrets: true",
+        "",
+      ].join("\n"),
+    );
+
+    const { setConfigValue, getConfigValue } =
+      await importConfigWithHome(TEST_DIR);
+    setConfigValue("network.proxy", "socks5://127.0.0.1:1080");
+
+    const after = readFileSync(join(TEST_DIR, "config.yaml"), "utf-8");
+    expect(after).toContain("network:\n  force_ipv4: false\n");
+    expect(after).toContain('  proxy: "socks5://127.0.0.1:1080"\nsecurity:');
+    expect(getConfigValue("network.proxy")).toBe("socks5://127.0.0.1:1080");
+  });
+
+  it("creates a missing direct nested key with a new parent block", async () => {
     const before = ["display:", "  compact: true", ""].join("\n");
     writeFileSync(join(TEST_DIR, "config.yaml"), before);
 
+    const { setConfigValue, getConfigValue } =
+      await importConfigWithHome(TEST_DIR);
+    setConfigValue("network.proxy", "http://proxy:8080");
+
+    const after = readFileSync(join(TEST_DIR, "config.yaml"), "utf-8");
+    expect(after).toContain("display:\n  compact: true\n");
+    expect(after).toContain('network:\n  proxy: "http://proxy:8080"\n');
+    expect(getConfigValue("network.proxy")).toBe("http://proxy:8080");
+  });
+
+  it("quotes created nested values safely", async () => {
+    writeFileSync(join(TEST_DIR, "config.yaml"), ["network:", ""].join("\n"));
+
     const { setConfigValue } = await importConfigWithHome(TEST_DIR);
-    setConfigValue("agent.service_tier", "fast");
+    setConfigValue("network.proxy", 'http://proxy:8080/path?name="quoted"');
+
+    const after = readFileSync(join(TEST_DIR, "config.yaml"), "utf-8");
+    expect(after).toContain(
+      '  proxy: "http://proxy:8080/path?name=\\"quoted\\""\n',
+    );
+  });
+
+  it("is a no-op for deeper missing nested paths", async () => {
+    const before = ["agent:", "  max_turns: 60", ""].join("\n");
+    writeFileSync(join(TEST_DIR, "config.yaml"), before);
+
+    const { setConfigValue } = await importConfigWithHome(TEST_DIR);
+    setConfigValue("agent.fallback.service_tier", "fast");
 
     const after = readFileSync(join(TEST_DIR, "config.yaml"), "utf-8");
     expect(after).toBe(before);

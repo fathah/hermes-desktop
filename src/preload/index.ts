@@ -1,6 +1,12 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { AppLocale } from "../shared/i18n/types";
 import type { Attachment } from "../shared/attachments";
+import type {
+  MessagingPlatformsResponse,
+  MessagingPlatformTestResponse,
+  MessagingPlatformUpdate,
+} from "../shared/messaging-platforms";
+import type { ChatToolEvent } from "../shared/chat-stream";
 
 /**
  * Mirror of the renderer-side `CredentialPoolEntry` ambient type
@@ -19,6 +25,14 @@ interface CredentialPoolEntry {
   base_url?: string;
   request_count?: number;
   key?: string;
+}
+
+interface GatewayStartResult {
+  success: boolean;
+  running: boolean;
+  alreadyRunning?: boolean;
+  error?: string;
+  logPath?: string;
 }
 
 const electronAPI = {
@@ -127,6 +141,34 @@ const hermesAPI = {
 
   setEnv: (key: string, value: string, profile?: string): Promise<boolean> =>
     ipcRenderer.invoke("set-env", key, value, profile),
+
+  validateChatReadiness: (
+    profile?: string,
+  ): Promise<{
+    ok: boolean;
+    code?:
+      | "NO_ACTIVE_MODEL"
+      | "NO_PROVIDER"
+      | "NO_BASE_URL"
+      | "MISSING_API_KEY"
+      | "GATEWAY_DOWN";
+    message?: string;
+    fixLocation?: "providers" | "models" | "gateway" | "setup";
+    expectedEnvKey?: string;
+  }> => ipcRenderer.invoke("validate-chat-readiness", profile),
+
+  getConfigHealth: (profile?: string): Promise<unknown> =>
+    ipcRenderer.invoke("get-config-health", profile),
+  rerunConfigHealth: (profile?: string): Promise<unknown> =>
+    ipcRenderer.invoke("rerun-config-health", profile),
+  autofixConfigIssue: (
+    code: string,
+    profile?: string,
+    context?: Record<string, string>,
+  ): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke("autofix-config-issue", code, profile, context),
+  getConfigFixLog: (maxEntries?: number): Promise<unknown[]> =>
+    ipcRenderer.invoke("get-config-fix-log", maxEntries),
 
   getConfig: (key: string, profile?: string): Promise<string | null> =>
     ipcRenderer.invoke("get-config", key, profile),
@@ -240,6 +282,13 @@ const hermesAPI = {
     ),
 
   abortChat: (): Promise<void> => ipcRenderer.invoke("abort-chat"),
+
+  transcribeAudio: (
+    audio: Uint8Array,
+    mimeType: string,
+    profile?: string,
+  ): Promise<string> =>
+    ipcRenderer.invoke("transcribe-audio", audio, mimeType, profile),
 
   getApiServerKeyStatus: (profile?: string): Promise<{ hasKey: boolean }> =>
     ipcRenderer.invoke("get-api-server-key-status", profile),
@@ -364,6 +413,17 @@ const hermesAPI = {
     return () => ipcRenderer.removeListener("chat-tool-progress", handler);
   },
 
+  onChatToolEvent: (
+    callback: (event: ChatToolEvent) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      toolEvent: ChatToolEvent,
+    ): void => callback(toolEvent);
+    ipcRenderer.on("chat-tool-event", handler);
+    return () => ipcRenderer.removeListener("chat-tool-event", handler);
+  },
+
   onChatUsage: (
     callback: (usage: {
       promptTokens: number;
@@ -372,6 +432,8 @@ const hermesAPI = {
       cost?: number;
       rateLimitRemaining?: number;
       rateLimitReset?: number;
+      cacheReadTokens?: number;
+      cacheWriteTokens?: number;
     }) => void,
   ): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, usage: unknown): void =>
@@ -383,6 +445,8 @@ const hermesAPI = {
           cost?: number;
           rateLimitRemaining?: number;
           rateLimitReset?: number;
+          cacheReadTokens?: number;
+          cacheWriteTokens?: number;
         },
       );
     ipcRenderer.on("chat-usage", handler);
@@ -397,7 +461,8 @@ const hermesAPI = {
   },
 
   // Gateway
-  startGateway: (): Promise<boolean> => ipcRenderer.invoke("start-gateway"),
+  startGateway: (): Promise<GatewayStartResult> =>
+    ipcRenderer.invoke("start-gateway"),
   stopGateway: (): Promise<boolean> => ipcRenderer.invoke("stop-gateway"),
   gatewayStatus: (): Promise<boolean> => ipcRenderer.invoke("gateway-status"),
 
@@ -410,6 +475,21 @@ const hermesAPI = {
     profile?: string,
   ): Promise<boolean> =>
     ipcRenderer.invoke("set-platform-enabled", platform, enabled, profile),
+  getMessagingPlatforms: (
+    profile?: string,
+  ): Promise<MessagingPlatformsResponse> =>
+    ipcRenderer.invoke("get-messaging-platforms", profile),
+  updateMessagingPlatform: (
+    platform: string,
+    update: MessagingPlatformUpdate,
+    profile?: string,
+  ): Promise<{ ok: boolean; platform: string }> =>
+    ipcRenderer.invoke("update-messaging-platform", platform, update, profile),
+  testMessagingPlatform: (
+    platform: string,
+    profile?: string,
+  ): Promise<MessagingPlatformTestResponse> =>
+    ipcRenderer.invoke("test-messaging-platform", platform, profile),
 
   // Sessions
   listSessions: (
@@ -577,6 +657,10 @@ const hermesAPI = {
     ipcRenderer.invoke("update-session-title", sessionId, title),
   deleteSession: (sessionId: string): Promise<void> =>
     ipcRenderer.invoke("delete-session", sessionId),
+  deleteSessions: (
+    sessionIds: string[],
+  ): Promise<{ requested: number; deleted: number }> =>
+    ipcRenderer.invoke("delete-sessions", sessionIds),
 
   // Session search
   searchSessions: (
@@ -883,6 +967,19 @@ const hermesAPI = {
   ) => ipcRenderer.invoke("kanban-create-task", input, profile),
   selectFolder: (): Promise<string | null> =>
     ipcRenderer.invoke("select-folder"),
+  readDirectory: (
+    dirPath: string,
+  ): Promise<{ name: string; isDirectory: boolean }[] | null> =>
+    ipcRenderer.invoke("read-directory", dirPath),
+  readFile: (
+    filePath: string,
+    maxBytes?: number,
+  ): Promise<{ content: string; truncated: boolean } | null> =>
+    ipcRenderer.invoke("read-file", filePath, maxBytes),
+  openFileInEditor: (filePath: string): Promise<boolean> =>
+    ipcRenderer.invoke("open-file-in-editor", filePath),
+  readImageFile: (filePath: string): Promise<string | null> =>
+    ipcRenderer.invoke("read-image-file", filePath),
   kanbanAssignTask: (
     taskId: string,
     assignee: string | null,
@@ -943,8 +1040,93 @@ const hermesAPI = {
   listMcpServers: (
     profile?: string,
   ): Promise<
-    Array<{ name: string; type: string; enabled: boolean; detail: string }>
+    Array<{
+      name: string;
+      type: "http" | "stdio" | "unknown";
+      transport: "http" | "stdio" | "unknown";
+      enabled: boolean;
+      detail: string;
+      url?: string;
+      command?: string;
+      args: string[];
+      env: Record<string, string>;
+      auth?: string;
+      tools?: unknown;
+    }>
   > => ipcRenderer.invoke("list-mcp-servers", profile),
+  addMcpServer: (
+    input: {
+      name: string;
+      type: "http" | "stdio";
+      url?: string;
+      command?: string;
+      args?: string[];
+      env?: Record<string, string>;
+      auth?: string;
+    },
+    profile?: string,
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("add-mcp-server", input, profile),
+  removeMcpServer: (
+    name: string,
+    profile?: string,
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("remove-mcp-server", name, profile),
+  setMcpServerEnabled: (
+    name: string,
+    enabled: boolean,
+    profile?: string,
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("set-mcp-server-enabled", name, enabled, profile),
+  testMcpServer: (
+    name: string,
+    profile?: string,
+  ): Promise<{
+    success: boolean;
+    error?: string;
+    tools?: Array<{ name: string; description: string }>;
+  }> => ipcRenderer.invoke("test-mcp-server", name, profile),
+  listMcpCatalog: (
+    profile?: string,
+  ): Promise<{
+    entries: Array<{
+      name: string;
+      description: string;
+      source: string;
+      transport: "http" | "stdio" | "unknown";
+      authType: string;
+      requiredEnv: Array<{ name: string; prompt: string; required: boolean }>;
+      needsInstall: boolean;
+      installed: boolean;
+      enabled: boolean;
+    }>;
+    diagnostics: unknown[];
+    error?: string;
+  }> => ipcRenderer.invoke("list-mcp-catalog", profile),
+  installMcpCatalogEntry: (
+    name: string,
+    env?: Record<string, string>,
+    profile?: string,
+  ): Promise<{
+    success: boolean;
+    error?: string;
+    background?: boolean;
+    action?: string;
+  }> => ipcRenderer.invoke("install-mcp-catalog-entry", name, env, profile),
+
+  // Discover marketplace (community registry)
+  fetchRegistry: (force?: boolean) =>
+    ipcRenderer.invoke("registry-fetch", force),
+  listInstalledRegistry: (profile?: string) =>
+    ipcRenderer.invoke("registry-list-installed", profile),
+  fetchRegistryDetail: (kind: string, item: unknown) =>
+    ipcRenderer.invoke("registry-detail", kind, item),
+  installRegistryItem: (
+    kind: string,
+    item: unknown,
+    profile?: string,
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("registry-install", kind, item, profile),
 
   // Log viewer
   readLogs: (

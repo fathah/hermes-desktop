@@ -1,10 +1,19 @@
-import { describe, expect, it } from "vitest";
+import { execFileSync } from "child_process";
+import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("../src/main/locale", () => ({
+  getAppLocale: () => "en",
+}));
+
 import {
+  buildRemoteHermesCmd,
   sshSetConfigValue,
   buildGatewayStartCommand,
   buildGatewayStopCommand,
   buildGatewayStatusCommand,
-  buildRemoteHermesCmd,
 } from "../src/main/ssh-remote";
 import type { SshConfig } from "../src/main/ssh-tunnel";
 
@@ -22,6 +31,39 @@ const sshConfig: SshConfig = {
   localPort: 18642,
 };
 
+function runWithHermesShim(command: string): Buffer {
+  const home = mkdtempSync(join(tmpdir(), "hermes-ssh-cmd-home-"));
+  const bin = join(home, "bin");
+  mkdirSync(bin, { recursive: true });
+  const hermes = join(bin, "hermes");
+  writeFileSync(
+    hermes,
+    [
+      "#!/usr/bin/env bash",
+      'if [ "$1" = "doctor" ]; then',
+      '  printf "doctor stderr preserved\\n" >&2',
+      "  exit 0",
+      "fi",
+      'printf "%s\\0" "$@"',
+      "",
+    ].join("\n"),
+  );
+  chmodSync(hermes, 0o755);
+  return execFileSync("bash", ["-lc", command], {
+    env: {
+      ...process.env,
+      HOME: home,
+      PATH: `${bin}:${process.env.PATH || ""}`,
+    },
+  });
+}
+
+function parseNulArgs(output: Buffer): string[] {
+  const parts = output.toString("utf8").split("\0");
+  if (parts.at(-1) === "") parts.pop();
+  return parts;
+}
+
 describe("ssh remote config writes", () => {
   it.each([
     ["quote", 'bad"value'],
@@ -36,6 +78,58 @@ describe("ssh remote config writes", () => {
       ).rejects.toThrow("Config value contains illegal characters");
     },
   );
+});
+
+describe("ssh Hermes command quoting", () => {
+  it("shell-quotes the whole bash script without dropping per-argument quoting", () => {
+    const command = buildRemoteHermesCmd([
+      "kanban",
+      "create",
+      "My task title",
+      "--triage",
+      "--json",
+    ]);
+
+    expect(command).not.toContain(
+      "bash -c '[ -x $HOME/hermes-agent/.venv/bin/hermes ] && exec $HOME/hermes-agent/.venv/bin/hermes 'kanban' 'create'",
+    );
+    expect(command).toContain(
+      `bash -c '[ -x $HOME/hermes-agent/.venv/bin/hermes ] && exec $HOME/hermes-agent/.venv/bin/hermes '"'"'kanban'"'"'`,
+    );
+  });
+
+  it.each([
+    [
+      "multi-word title",
+      ["kanban", "create", "My task title", "--triage", "--json"],
+    ],
+    [
+      "multiline markdown body",
+      [
+        "kanban",
+        "create",
+        "My task title",
+        "--body",
+        "first line\n- bullet one\n- bullet two",
+        "--triage",
+        "--json",
+      ],
+    ],
+    [
+      "single quote in user input",
+      ["kanban", "create", "User's task", "--json"],
+    ],
+  ])("preserves %s", (_name, expectedArgs) => {
+    const command = buildRemoteHermesCmd(expectedArgs);
+    expect(parseNulArgs(runWithHermesShim(command))).toEqual(expectedArgs);
+  });
+
+  it("preserves existing extraShell redirects", () => {
+    const output = runWithHermesShim(
+      buildRemoteHermesCmd(["doctor"], " 2>&1"),
+    ).toString("utf8");
+    expect(output).toBe("doctor stderr preserved\n");
+  });
 });
 
 describe("ssh gateway commands (issue #285)", () => {

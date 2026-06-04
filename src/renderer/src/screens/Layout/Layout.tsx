@@ -6,9 +6,10 @@ import {
 } from "../Chat/sessionHistory";
 import Sessions from "../Sessions/Sessions";
 import Agents from "../Agents/Agents";
+import Discover from "../Discover/Discover";
+import ProfileSwitcher from "./ProfileSwitcher";
 import Settings from "../Settings/Settings";
 import Skills from "../Skills/Skills";
-import Soul from "../Soul/Soul";
 import Memory from "../Memory/Memory";
 import Tools from "../Tools/Tools";
 import Gateway from "../Gateway/Gateway";
@@ -20,14 +21,12 @@ import Kanban from "../Kanban/Kanban";
 import Terminal from "../Terminal/Terminal";
 import RemoteNotice from "../../components/RemoteNotice";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
-import hermeslogo from "../../assets/hermes.png";
+import hermeslogo from "../../assets/hermes-one.svg";
 import {
   ChatBubble,
   Clock,
-  Users,
+  Compass,
   Settings as SettingsIcon,
-  Puzzle,
-  Sparkles,
   Brain,
   Wrench,
   Signal,
@@ -45,12 +44,12 @@ import { useI18n } from "../../components/useI18n";
 type View =
   | "chat"
   | "sessions"
+  | "discover"
   | "agents"
   | "office"
   | "models"
   | "providers"
   | "skills"
-  | "soul"
   | "memory"
   | "tools"
   | "schedules"
@@ -62,14 +61,16 @@ type View =
 const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string }[] = [
   { view: "chat", icon: ChatBubble, labelKey: "navigation.chat" },
   { view: "sessions", icon: Clock, labelKey: "navigation.sessions" },
-  { view: "agents", icon: Users, labelKey: "navigation.agents" },
+  { view: "discover", icon: Compass, labelKey: "navigation.discover" },
+  // "agents" (Profiles) is reached from the sidebar-footer ProfileSwitcher's
+  // "Manage profiles" action rather than a top-level nav item.
   { view: "office", icon: Building, labelKey: "navigation.office" },
   { view: "kanban", icon: KanbanIcon, labelKey: "navigation.kanban" },
   { view: "terminal", icon: TerminalIcon, labelKey: "navigation.terminal" },
   { view: "models", icon: Layers, labelKey: "navigation.models" },
   { view: "providers", icon: KeyRound, labelKey: "navigation.providers" },
-  { view: "skills", icon: Puzzle, labelKey: "navigation.skills" },
-  { view: "soul", icon: Sparkles, labelKey: "navigation.soul" },
+  // "skills" lives under the Discover tab (installed + community), so it's no
+  // longer a top-level nav item.
   { view: "memory", icon: Brain, labelKey: "navigation.memory" },
   { view: "tools", icon: Wrench, labelKey: "navigation.tools" },
   { view: "schedules", icon: Timer, labelKey: "navigation.schedules" },
@@ -100,6 +101,12 @@ function Layout({
   );
   // Remote-only mode — SSH tunnel has full access; only pure HTTP remote mode restricts screens
   const [remoteMode, setRemoteMode] = useState(false);
+  // Set by the Capabilities screen's "Browse" actions to focus a Discover tab
+  // (Skills → Community, or MCPs). The nonce re-fires Discover's effect.
+  const [discoverFocus, setDiscoverFocus] = useState<{
+    kind: "skills" | "mcps";
+    nonce: number;
+  } | null>(null);
 
   const paneStyle = (target: View): React.CSSProperties => ({
     display: view === target ? "flex" : "none",
@@ -112,6 +119,14 @@ function Layout({
     setVisitedViews((prev) => (prev.has(v) ? prev : new Set(prev).add(v)));
     setView(v);
   }, []);
+
+  const focusDiscover = useCallback(
+    (kind: "skills" | "mcps") => {
+      setDiscoverFocus((prev) => ({ kind, nonce: (prev?.nonce ?? 0) + 1 }));
+      goTo("discover");
+    },
+    [goTo],
+  );
 
   // Re-check remote mode on tab switch (picks up Settings changes)
   useEffect(() => {
@@ -129,6 +144,26 @@ function Layout({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [goTo]);
+
+  // Restore the last-activated profile on launch. The main process persists it
+  // in ~/.hermes/active_profile (via `hermes profile use`), so the desktop
+  // should reopen on that profile rather than always resetting to "default".
+  useEffect(() => {
+    let cancelled = false;
+    window.hermesAPI
+      .listProfiles()
+      .then((profiles) => {
+        if (cancelled) return;
+        const active = profiles.find((p) => p.isActive);
+        if (active && active.name !== "default") setActiveProfile(active.name);
+      })
+      .catch(() => {
+        /* fall back to the default profile */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Auto-update state
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
@@ -228,7 +263,15 @@ function Layout({
     <div className="layout">
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <img src={hermeslogo} height={30} alt="" />
+          <span
+            className="sidebar-logo"
+            role="img"
+            aria-label="Hermes"
+            style={{
+              maskImage: `url(${hermeslogo})`,
+              WebkitMaskImage: `url(${hermeslogo})`,
+            }}
+          />
         </div>
 
         <nav className="sidebar-nav">
@@ -273,9 +316,11 @@ function Layout({
               )}
             </button>
           )}
-          <div className="sidebar-footer-text">
-            {activeProfile === "default" ? t("common.appName") : activeProfile}
-          </div>
+          <ProfileSwitcher
+            activeProfile={activeProfile}
+            onSwitch={handleSelectProfile}
+            onManage={() => goTo("agents")}
+          />
         </div>
       </aside>
 
@@ -293,6 +338,7 @@ function Layout({
             sessionId={currentSessionId}
             profile={activeProfile}
             onNewChat={handleNewChat}
+            onOpenDiagnose={() => goTo("settings")}
           />
         </div>
 
@@ -306,6 +352,20 @@ function Layout({
                 onNewChat={handleNewChat}
                 currentSessionId={currentSessionId}
                 visible={view === "sessions"}
+              />
+            )}
+          </div>
+        )}
+
+        {visitedViews.has("discover") && (
+          <div style={paneStyle("discover")}>
+            {remoteMode ? (
+              <RemoteNotice feature="Discover" />
+            ) : (
+              <Discover
+                profile={activeProfile}
+                visible={view === "discover"}
+                focusKind={discoverFocus ?? undefined}
               />
             )}
           </div>
@@ -363,16 +423,6 @@ function Layout({
           </div>
         )}
 
-        {visitedViews.has("soul") && (
-          <div style={paneStyle("soul")}>
-            {remoteMode ? (
-              <RemoteNotice feature="Persona" />
-            ) : (
-              <Soul profile={activeProfile} />
-            )}
-          </div>
-        )}
-
         {visitedViews.has("memory") && (
           <div style={paneStyle("memory")}>
             {remoteMode ? (
@@ -385,11 +435,13 @@ function Layout({
 
         {visitedViews.has("tools") && (
           <div style={paneStyle("tools")}>
-            {remoteMode ? (
-              <RemoteNotice feature="Tools" />
-            ) : (
-              <Tools profile={activeProfile} />
-            )}
+            <Tools
+              profile={activeProfile}
+              showPlatformToolsets={!remoteMode}
+              remoteMode={remoteMode}
+              onBrowseSkills={() => focusDiscover("skills")}
+              onBrowseMcps={() => focusDiscover("mcps")}
+            />
           </div>
         )}
 

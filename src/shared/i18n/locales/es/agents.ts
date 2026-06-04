@@ -9,6 +9,7 @@ export default {
   createFailed: "No se pudo crear el perfil",
   creating: "Creando...",
   create: "Crear",
+  deleteFailed: "No se pudo eliminar el perfil",
   active: "Activo",
   noModel: "No hay un modelo configurado",
   skillsCount: "{{count}} habilidades",
@@ -21,4 +22,7 @@ export default {
   deleteTitle: "Eliminar agente",
   auto: "Automático",
   local: "Local",
+  manageProfiles: "Gestionar perfiles",
+  switchProfile: "Cambiar perfil",
+  defaultTag: "predeterminado",
 } as const;

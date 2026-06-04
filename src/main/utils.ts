@@ -1,6 +1,13 @@
 import { execFileSync } from "child_process";
-import { join, dirname } from "path";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { join, dirname, basename } from "path";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from "fs";
 import { HERMES_HOME } from "./installer";
 
 const PROFILE_NAME_RE = /^[a-z0-9_][a-z0-9_-]{0,63}$/;
@@ -103,24 +110,39 @@ export function pidIsAlive(pid: number): boolean {
  * own that number, EPERM would lie. Verifying the image name (e.g. starts
  * with "python") catches that.
  *
- * Synchronous tasklist call with a tight timeout — acceptable because it's
- * gated behind a positive liveness check that already short-circuits the
- * common "process is gone" path.
+ * Synchronous tasklist is noticeably expensive on some Windows machines, so
+ * cache successful and failed lookups briefly and fail fast. The liveness
+ * check still runs before this, so a flaky image lookup should not make a
+ * healthy gateway look dead.
  */
+const PROCESS_IMAGE_CACHE_TTL_MS = 30_000;
+const processImageNameCache = new Map<
+  number,
+  { image: string | null; checkedAt: number }
+>();
+
 export function getProcessImageNameWin(pid: number): string | null {
   if (process.platform !== "win32") return null;
   if (!pid || !Number.isFinite(pid)) return null;
+  const now = Date.now();
+  const cached = processImageNameCache.get(pid);
+  if (cached && now - cached.checkedAt < PROCESS_IMAGE_CACHE_TTL_MS) {
+    return cached.image;
+  }
   try {
     const output = execFileSync(
       "tasklist",
       ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"],
-      { encoding: "utf-8", timeout: 5000, windowsHide: true },
+      { encoding: "utf-8", timeout: 500, windowsHide: true },
     );
     // CSV row format: "image.exe","27652","Console","1","45,000 K"
     // Returns "INFO: No tasks are running…" if the PID doesn't exist.
     const m = output.match(/^"([^"]+)"/);
-    return m ? m[1] : null;
+    const image = m ? m[1] : null;
+    processImageNameCache.set(pid, { image, checkedAt: now });
+    return image;
   } catch {
+    processImageNameCache.set(pid, { image: null, checkedAt: now });
     return null;
   }
 }
@@ -191,5 +213,27 @@ export function escapeRegex(str: string): string {
 export function safeWriteFile(filePath: string, content: string): void {
   const dir = dirname(filePath);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  writeFileSync(filePath, content, "utf-8");
+
+  const tempPath = join(
+    dir,
+    `.${basename(filePath)}.${process.pid}.${Date.now()}.${Math.random()
+      .toString(16)
+      .slice(2)}.tmp`,
+  );
+
+  let tempWritten = false;
+  try {
+    writeFileSync(tempPath, content, "utf-8");
+    tempWritten = true;
+    renameSync(tempPath, filePath);
+  } catch (err) {
+    if (tempWritten) {
+      try {
+        unlinkSync(tempPath);
+      } catch {
+        // Best-effort cleanup. Preserve the original write/rename error.
+      }
+    }
+    throw err;
+  }
 }

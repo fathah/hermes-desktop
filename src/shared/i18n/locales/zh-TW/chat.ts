@@ -64,4 +64,10 @@ export default {
     version: "檢視 Hermes 版本",
   },
   queued: "{{count}} 則訊息已排隊 — 代理完成後將自動傳送",
+  worktree: {
+    loading: "載入中",
+    empty: "資料夾是空的",
+    emptyFolder: "空資料夾",
+    errorLoading: "無法載入資料夾內容",
+  },
 } as const;

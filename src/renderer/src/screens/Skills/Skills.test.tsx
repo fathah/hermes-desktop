@@ -108,11 +108,15 @@ describe("Skills.tsx — Install button (issue #310 diagnosis)", () => {
     });
 
     const view = render(<Skills />);
-    await waitFor(() => expect(listBundledSkills).toHaveBeenCalled());
+    await waitFor(() => {
+      expect(listBundledSkills).toHaveBeenCalled();
+      expect(listInstalledSkills).toHaveBeenCalled();
+    });
 
     const browseTab = view.container.querySelectorAll(
       ".skills-tab",
     )[1] as HTMLButtonElement;
+    expect(browseTab).toBeTruthy();
     await act(async () => {
       fireEvent.click(browseTab);
     });

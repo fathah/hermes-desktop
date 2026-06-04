@@ -30,7 +30,9 @@ export default {
   removeAttachment: "Hapus lampiran",
   dropToAttach: "Lepaskan file untuk dilampirkan",
   attachUnsupported: "{{name}}: tipe file tidak didukung",
-  attachImageTooLarge: "{{name}}: gambar terlalu besar (maks. 20 MB)",
+  attachImageTooLarge: "{{name}}: gambar terlalu besar (maks. 50 MB)",
+  attachImageUncompressible:
+    "{{name}}: gambar tidak dapat dikompresi agar muat (GIF animasi atau format tidak didukung). Coba tangkapan layar statis.",
   attachTextTooLarge: "{{name}}: file terlalu besar (maks. 256 KB)",
   attachTooMany: "Terlalu banyak lampiran (maks. 10 per pesan)",
   attachReadFailed: "{{name}}: tidak dapat dibaca",
@@ -76,5 +78,11 @@ export default {
     memory: "Tampilkan memori agent",
     persona: "Tampilkan persona saat ini",
     version: "Tampilkan versi Hermes",
+  },
+  worktree: {
+    loading: "Memuat",
+    empty: "Folder kosong",
+    emptyFolder: "Folder kosong",
+    errorLoading: "Gagal memuat konten folder",
   },
 } as const;

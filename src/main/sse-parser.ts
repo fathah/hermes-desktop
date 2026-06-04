@@ -2,6 +2,12 @@
  * Extracted SSE parsing logic — testable without Electron or HTTP.
  */
 
+import {
+  chatToolEventFromPayload,
+  chatToolProgressLabel,
+  type ChatToolEvent,
+} from "../shared/chat-stream";
+
 export interface ParsedUsage {
   promptTokens: number;
   completionTokens: number;
@@ -14,6 +20,7 @@ export interface ParsedUsage {
 export interface SseCallbacks {
   onChunk: (text: string) => void;
   onToolProgress?: (tool: string) => void;
+  onToolEvent?: (event: ChatToolEvent) => void;
   onUsage?: (usage: ParsedUsage) => void;
   onError?: (message: string) => void;
   onDone?: () => void;
@@ -29,15 +36,19 @@ const toolProgressRe = /^`([^\s`]+)\s+([^`]+)`$/;
 export function processCustomEvent(
   eventType: string,
   data: string,
-  cb: Pick<SseCallbacks, "onToolProgress">,
+  cb: Pick<SseCallbacks, "onToolProgress" | "onToolEvent">,
 ): boolean {
-  if (eventType === "hermes.tool.progress" && cb.onToolProgress) {
+  if (eventType === "hermes.tool.progress") {
     try {
-      const payload = JSON.parse(data);
-      const label = payload.label || payload.tool || "";
-      const emoji = payload.emoji || "";
-      cb.onToolProgress(emoji ? `${emoji} ${label}` : label);
-      return true;
+      const payload = JSON.parse(data) as Record<string, unknown>;
+      const toolEvent = chatToolEventFromPayload(payload);
+      if (cb.onToolEvent) {
+        cb.onToolEvent(toolEvent);
+      }
+      if (!cb.onToolEvent && cb.onToolProgress) {
+        cb.onToolProgress(chatToolProgressLabel(toolEvent));
+      }
+      return !!cb.onToolProgress || !!cb.onToolEvent;
     } catch {
       /* malformed — skip */
     }

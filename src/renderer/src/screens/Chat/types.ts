@@ -37,6 +37,7 @@ export interface ToolCallMessage {
   callId: string;
   name: string;
   args: string;
+  status?: "running" | "completed" | "failed";
 }
 
 export interface ToolResultMessage {
@@ -71,4 +72,10 @@ export interface UsageState {
   completionTokens: number;
   totalTokens: number;
   cost?: number;
+  /** Latest turn's prompt tokens = current context-window occupancy (NOT
+   *  summed across turns, unlike promptTokens). Drives the context gauge. */
+  contextTokens?: number;
+  /** Latest turn's prompt-cache read/write tokens, if the provider reports them. */
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
 }

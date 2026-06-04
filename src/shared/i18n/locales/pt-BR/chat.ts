@@ -30,7 +30,9 @@ export default {
   removeAttachment: "Remover anexo",
   dropToAttach: "Solte os arquivos para anexar",
   attachUnsupported: "{{name}}: tipo de arquivo não suportado",
-  attachImageTooLarge: "{{name}}: imagem muito grande (máx. 20 MB)",
+  attachImageTooLarge: "{{name}}: imagem muito grande (máx. 50 MB)",
+  attachImageUncompressible:
+    "{{name}}: não foi possível comprimir a imagem para caber (GIF animado ou formato não suportado). Tente uma captura de tela estática.",
   attachTextTooLarge: "{{name}}: arquivo muito grande (máx. 256 KB)",
   attachTooMany: "Anexos demais (máx. 10 por mensagem)",
   attachReadFailed: "{{name}}: não foi possível ler",
@@ -76,5 +78,11 @@ export default {
     memory: "Mostrar a memória do agente",
     persona: "Mostrar a persona atual",
     version: "Mostrar a versão do Hermes",
+  },
+  worktree: {
+    loading: "Carregando",
+    empty: "A pasta está vazia",
+    emptyFolder: "Pasta vazia",
+    errorLoading: "Falha ao carregar conteúdo da pasta",
   },
 } as const;

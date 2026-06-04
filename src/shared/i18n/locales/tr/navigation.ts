@@ -1,0 +1,16 @@
+export default {
+  chat: "Sohbet",
+  sessions: "Oturumlar",
+  agents: "Profiller",
+  office: "Ofis",
+  models: "Modeller",
+  providers: "Sağlayıcılar",
+  skills: "Yetenekler",
+  soul: "Persona",
+  memory: "Bellek",
+  tools: "Araçlar",
+  schedules: "Zamanlayıcı",
+  kanban: "Kanban",
+  gateway: "Gateway",
+  settings: "Ayarlar",
+} as const;

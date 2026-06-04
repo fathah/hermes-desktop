@@ -30,6 +30,22 @@ const STREAMED_USER = (content: string, id = "u-1"): ChatMessage => ({
   content,
 });
 
+const STREAMED_IMAGE_USER = (content: string, id = "u-img"): ChatMessage => ({
+  id,
+  role: "user",
+  content,
+  attachments: [
+    {
+      id: "img-1",
+      kind: "image",
+      name: "pasted-image.png",
+      mime: "image/png",
+      size: 3,
+      dataUrl: "data:image/png;base64,AAA=",
+    },
+  ],
+});
+
 const STREAMED_AGENT = (content: string, id = "a-1"): ChatMessage => ({
   id,
   role: "agent",
@@ -263,5 +279,219 @@ describe("reconcileStreamedWithDb", () => {
     expect(merged).toHaveLength(1);
     // DB row takes precedence; the duplicate streamed row is dropped.
     expect(merged[0].id).toBe("a-1");
+  });
+
+  it("drops a concatenated streamed assistant bubble when DB splits the turn", () => {
+    const partA = "First paragraph from before the tool call.";
+    const partB = "Second paragraph after the tool result.";
+    const streamed: ChatMessage[] = [
+      STREAMED_USER("do the thing", "u-1"),
+      STREAMED_AGENT(`${partA}\n\n${partB}`, "a-concat"),
+    ];
+    const db: ChatMessage[] = [
+      DB_USER("do the thing", 1),
+      DB_AGENT(partA, 2),
+      DB_TOOL_CALL("call-1", "terminal", '{"command":"echo ok"}', 3),
+      DB_TOOL_RESULT("call-1", "terminal", "ok", 4),
+      DB_AGENT(partB, 5),
+    ];
+
+    const merged = reconcileStreamedWithDb(streamed, db);
+
+    expect(merged.map((m) => m.id)).toEqual([
+      "u-1",
+      "db-2",
+      "db-tc-3-call-1",
+      "db-tr-4",
+      "db-5",
+    ]);
+    expect(
+      merged.filter(
+        (m) => !("kind" in m) && m.content.includes(partB),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("does not repeat long-chat tool-split turns during DB refresh", () => {
+    const turn2A = "I checked the current directory before running the command.";
+    const turn2B = "The directory contains package.json and src.";
+    const turn3A = "I will inspect the failing test next.";
+    const turn3B = "The failing assertion is caused by duplicate rendering.";
+    const streamed: ChatMessage[] = [
+      STREAMED_USER("hello", "u-1"),
+      STREAMED_AGENT("Hi there.", "a-1"),
+      STREAMED_USER("list files", "u-2"),
+      STREAMED_AGENT(`${turn2A}\n\n${turn2B}`, "a-2-concat"),
+      STREAMED_USER("why is it failing?", "u-3"),
+      STREAMED_AGENT(`${turn3A}\n\n${turn3B}`, "a-3-concat"),
+    ];
+    const db: ChatMessage[] = [
+      DB_USER("hello", 1),
+      DB_AGENT("Hi there.", 2),
+      DB_USER("list files", 3),
+      DB_AGENT(turn2A, 4),
+      DB_TOOL_CALL("call-ls", "terminal", '{"command":"ls"}', 5),
+      DB_TOOL_RESULT("call-ls", "terminal", "package.json\nsrc", 6),
+      DB_AGENT(turn2B, 7),
+      DB_USER("why is it failing?", 8),
+      DB_AGENT(turn3A, 9),
+      DB_TOOL_CALL("call-test", "terminal", '{"command":"npm test"}', 10),
+      DB_TOOL_RESULT("call-test", "terminal", "1 failed", 11),
+      DB_AGENT(turn3B, 12),
+    ];
+
+    const merged = reconcileStreamedWithDb(streamed, db);
+
+    expect(merged.map((m) => m.id)).toEqual([
+      "u-1",
+      "a-1",
+      "u-2",
+      "db-4",
+      "db-tc-5-call-ls",
+      "db-tr-6",
+      "db-7",
+      "u-3",
+      "db-9",
+      "db-tc-10-call-test",
+      "db-tr-11",
+      "db-12",
+    ]);
+    for (const text of [turn2B, turn3B]) {
+      expect(
+        merged.filter((m) => !("kind" in m) && m.content.includes(text)),
+      ).toHaveLength(1);
+    }
+  });
+
+  it("preserves unmatched streamed bubbles that are not covered by a DB split", () => {
+    const streamedOnly = STREAMED_AGENT(
+      "Renderer-only warning: the provider closed the stream early.",
+      "a-warning",
+    );
+    const streamed: ChatMessage[] = [
+      STREAMED_USER("hi", "u-1"),
+      streamedOnly,
+    ];
+    const db: ChatMessage[] = [
+      DB_USER("hi", 1),
+      DB_AGENT("A different DB response.", 2),
+      DB_AGENT("Another canonical row.", 3),
+    ];
+
+    const merged = reconcileStreamedWithDb(streamed, db);
+
+    expect(merged[merged.length - 1]).toBe(streamedOnly);
+  });
+
+  it("does not drop a streamed answer that quotes assistant rows from different turns", () => {
+    const quoteA = "Earlier answer A.";
+    const quoteB = "Earlier answer B.";
+    const quotedSummary = `${quoteA}\n\n${quoteB}`;
+    const streamed: ChatMessage[] = [
+      STREAMED_USER("summarize prior answers", "u-current"),
+      STREAMED_AGENT(quotedSummary, "a-current"),
+    ];
+    const db: ChatMessage[] = [
+      DB_USER("first question", 1),
+      DB_AGENT(quoteA, 2),
+      DB_USER("second question", 3),
+      DB_AGENT(quoteB, 4),
+      DB_USER("summarize prior answers", 5),
+    ];
+
+    const merged = reconcileStreamedWithDb(streamed, db);
+
+    expect(merged[merged.length - 1]).toMatchObject({
+      id: "a-current",
+      role: "agent",
+      content: quotedSummary,
+    });
+  });
+
+  it("keeps earlier streamed turns before a DB suffix from a split session", () => {
+    // Regression: a cold desktop send briefly fell back to the CLI path,
+    // which created a timestamp-style session id. The next send used the
+    // API path and generated a fresh desk-* id. At chat-done, the DB fetch
+    // returned only the desk-* suffix, and the old reconciliation appended
+    // the unmatched first turn after the latest answer.
+    const streamed: ChatMessage[] = [
+      STREAMED_USER("hi", "u-old"),
+      STREAMED_AGENT("Hi! What can I help you with today?", "a-old"),
+      STREAMED_USER("what time is it?", "u-new"),
+      STREAMED_AGENT("It's Wed, May 27, 2026, 2:34 PM.", "a-new"),
+    ];
+    const db: ChatMessage[] = [
+      DB_USER("what time is it?", 30),
+      DB_TOOL_CALL("call-time", "terminal", '{"command":"date"}', 31),
+      DB_TOOL_RESULT("call-time", "terminal", "Wed, May 27, 2026 2:34 PM", 32),
+      DB_AGENT("It's Wed, May 27, 2026, 2:34 PM.", 33),
+    ];
+
+    const merged = reconcileStreamedWithDb(streamed, db);
+
+    expect(merged.map((m) => m.id)).toEqual([
+      "u-old",
+      "a-old",
+      "u-new",
+      "db-tc-31-call-time",
+      "db-tr-32",
+      "a-new",
+    ]);
+  });
+
+  it("matches a streamed image user bubble to the DB screenshot placeholder", () => {
+    const streamed: ChatMessage[] = [
+      STREAMED_IMAGE_USER("describe this image", "u-img"),
+      STREAMED_AGENT("It is a simple cartoon image.", "a-img"),
+    ];
+    const db: ChatMessage[] = [
+      DB_USER("describe this image\n[screenshot]", 40),
+      DB_AGENT("It is a simple cartoon image.", 41),
+    ];
+
+    const merged = reconcileStreamedWithDb(streamed, db);
+
+    expect(merged).toHaveLength(2);
+    expect(merged[0].id).toBe("u-img");
+    expect(merged[0]).toMatchObject({
+      role: "user",
+      content: "describe this image",
+    });
+    expect(
+      ("attachments" in merged[0] && merged[0].attachments) || [],
+    ).toHaveLength(1);
+    expect(merged[1].id).toBe("a-img");
+  });
+
+  it("does not append an old streamed image turn after later DB-only rows", () => {
+    const streamed: ChatMessage[] = [
+      STREAMED_IMAGE_USER("describe this image", "u-img"),
+      STREAMED_AGENT("It is a simple cartoon image.", "a-img"),
+      STREAMED_USER("what time is it", "u-time"),
+      STREAMED_AGENT("It's Wed, May 27, 2026, 3:51 PM.", "a-time"),
+    ];
+    const db: ChatMessage[] = [
+      DB_USER("describe this image\n[screenshot]", 50),
+      DB_AGENT("It is a simple cartoon image.", 51),
+      DB_USER("what time is it", 52),
+      DB_TOOL_CALL("call-time", "terminal", '{"command":"date"}', 53),
+      DB_TOOL_RESULT("call-time", "terminal", "Wed, May 27, 2026 3:51 PM", 54),
+      DB_AGENT("It's Wed, May 27, 2026, 3:51 PM.", 55),
+    ];
+
+    const merged = reconcileStreamedWithDb(streamed, db);
+
+    expect(merged.map((m) => m.id)).toEqual([
+      "u-img",
+      "a-img",
+      "u-time",
+      "db-tc-53-call-time",
+      "db-tr-54",
+      "a-time",
+    ]);
+    expect(merged.filter((m) => m.id === "u-img")).toHaveLength(1);
+    expect(
+      ("attachments" in merged[0] && merged[0].attachments) || [],
+    ).toHaveLength(1);
   });
 });

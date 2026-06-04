@@ -1,5 +1,17 @@
 import type { AppLocale } from "../shared/i18n/types";
 import type { Attachment } from "../shared/attachments";
+import type {
+  RegistryKind,
+  RegistryItem,
+  RegistryCatalog,
+  RegistryDetail,
+} from "../shared/registry";
+import type {
+  MessagingPlatformsResponse,
+  MessagingPlatformTestResponse,
+  MessagingPlatformUpdate,
+} from "../shared/messaging-platforms";
+import type { ChatToolEvent } from "../shared/chat-stream";
 
 interface ElectronAPI {
   process: {
@@ -26,6 +38,44 @@ interface InstallProgress {
   title: string;
   detail: string;
   log: string;
+}
+
+interface ConfigHealthIssue {
+  code: string;
+  severity: "error" | "warning" | "info";
+  message: string;
+  detail?: string;
+  locations: string[];
+  autoFixable: boolean;
+  fixDescription?: string;
+  fixLocation?: "providers" | "models" | ".env" | "config.yaml" | "setup";
+  context?: Record<string, string>;
+}
+
+interface ConfigHealthReport {
+  ranAt: number;
+  profile: string;
+  issues: ConfigHealthIssue[];
+  summary: { errors: number; warnings: number; infos: number };
+}
+
+interface ConfigFixLogEntry {
+  ts: number;
+  issueCode: string;
+  action: "migrate" | "autofix" | "manual-fix";
+  from?: string;
+  to?: string;
+  profile?: string;
+  valueMasked?: string;
+  detail?: string;
+}
+
+interface GatewayStartResult {
+  success: boolean;
+  running: boolean;
+  alreadyRunning?: boolean;
+  error?: string;
+  logPath?: string;
 }
 
 /**
@@ -174,6 +224,28 @@ interface HermesAPI {
   // Configuration (profile-aware)
   getEnv: (profile?: string) => Promise<Record<string, string>>;
   setEnv: (key: string, value: string, profile?: string) => Promise<boolean>;
+  validateChatReadiness: (profile?: string) => Promise<{
+    ok: boolean;
+    code?:
+      | "NO_ACTIVE_MODEL"
+      | "NO_PROVIDER"
+      | "NO_BASE_URL"
+      | "MISSING_API_KEY"
+      | "GATEWAY_DOWN";
+    message?: string;
+    fixLocation?: "providers" | "models" | "gateway" | "setup";
+    expectedEnvKey?: string;
+  }>;
+
+  // Config-health audit (Diagnose section)
+  getConfigHealth: (profile?: string) => Promise<ConfigHealthReport>;
+  rerunConfigHealth: (profile?: string) => Promise<ConfigHealthReport>;
+  autofixConfigIssue: (
+    code: string,
+    profile?: string,
+    context?: Record<string, string>,
+  ) => Promise<{ ok: boolean; message?: string }>;
+  getConfigFixLog: (maxEntries?: number) => Promise<ConfigFixLogEntry[]>;
   getConfig: (key: string, profile?: string) => Promise<string | null>;
   setConfig: (key: string, value: string, profile?: string) => Promise<boolean>;
   getHermesHome: (profile?: string) => Promise<string>;
@@ -239,6 +311,11 @@ interface HermesAPI {
     contextFolder?: string,
   ) => Promise<{ response: string; sessionId?: string }>;
   abortChat: () => Promise<void>;
+  transcribeAudio: (
+    audio: Uint8Array,
+    mimeType: string,
+    profile?: string,
+  ) => Promise<string>;
   getApiServerKeyStatus: (profile?: string) => Promise<{ hasKey: boolean }>;
   generateApiServerKey: (profile?: string) => Promise<{ key: string }>;
   copyToClipboard: (text: string) => Promise<void>;
@@ -279,6 +356,7 @@ interface HermesAPI {
   onChatReasoningChunk: (callback: (chunk: string) => void) => () => void;
   onChatDone: (callback: (sessionId?: string) => void) => () => void;
   onChatToolProgress: (callback: (tool: string) => void) => () => void;
+  onChatToolEvent: (callback: (event: ChatToolEvent) => void) => () => void;
   onChatUsage: (
     callback: (usage: {
       promptTokens: number;
@@ -287,12 +365,14 @@ interface HermesAPI {
       cost?: number;
       rateLimitRemaining?: number;
       rateLimitReset?: number;
+      cacheReadTokens?: number;
+      cacheWriteTokens?: number;
     }) => void,
   ) => () => void;
   onChatError: (callback: (error: string) => void) => () => void;
 
   // Gateway
-  startGateway: () => Promise<boolean>;
+  startGateway: () => Promise<GatewayStartResult>;
   stopGateway: () => Promise<boolean>;
   gatewayStatus: () => Promise<boolean>;
 
@@ -303,6 +383,16 @@ interface HermesAPI {
     enabled: boolean,
     profile?: string,
   ) => Promise<boolean>;
+  getMessagingPlatforms: (profile?: string) => Promise<MessagingPlatformsResponse>;
+  updateMessagingPlatform: (
+    platform: string,
+    update: MessagingPlatformUpdate,
+    profile?: string,
+  ) => Promise<{ ok: boolean; platform: string }>;
+  testMessagingPlatform: (
+    platform: string,
+    profile?: string,
+  ) => Promise<MessagingPlatformTestResponse>;
 
   // Sessions
   listSessions: (
@@ -478,6 +568,9 @@ interface HermesAPI {
   >;
   updateSessionTitle: (sessionId: string, title: string) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
+  deleteSessions: (
+    sessionIds: string[],
+  ) => Promise<{ requested: number; deleted: number }>;
 
   // Session search
   searchSessions: (
@@ -685,6 +778,15 @@ interface HermesAPI {
     profile?: string,
   ) => Promise<{ success: boolean; data?: { id: string }; error?: string }>;
   selectFolder: () => Promise<string | null>;
+  readDirectory: (
+    dirPath: string,
+  ) => Promise<{ name: string; isDirectory: boolean }[] | null>;
+  readFile: (
+    filePath: string,
+    maxBytes?: number,
+  ) => Promise<{ content: string; truncated: boolean } | null>;
+  openFileInEditor: (filePath: string) => Promise<boolean>;
+  readImageFile: (filePath: string) => Promise<string | null>;
   kanbanAssignTask: (
     taskId: string,
     assignee: string | null,
@@ -762,8 +864,91 @@ interface HermesAPI {
   listMcpServers: (
     profile?: string,
   ) => Promise<
-    Array<{ name: string; type: string; enabled: boolean; detail: string }>
+    Array<{
+      name: string;
+      type: "http" | "stdio" | "unknown";
+      transport: "http" | "stdio" | "unknown";
+      enabled: boolean;
+      detail: string;
+      url?: string;
+      command?: string;
+      args: string[];
+      env: Record<string, string>;
+      auth?: string;
+      tools?: unknown;
+    }>
   >;
+  addMcpServer: (
+    input: {
+      name: string;
+      type: "http" | "stdio";
+      url?: string;
+      command?: string;
+      args?: string[];
+      env?: Record<string, string>;
+      auth?: string;
+    },
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+  removeMcpServer: (
+    name: string,
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+  setMcpServerEnabled: (
+    name: string,
+    enabled: boolean,
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+  testMcpServer: (
+    name: string,
+    profile?: string,
+  ) => Promise<{
+    success: boolean;
+    error?: string;
+    tools?: Array<{ name: string; description: string }>;
+  }>;
+  listMcpCatalog: (profile?: string) => Promise<{
+    entries: Array<{
+      name: string;
+      description: string;
+      source: string;
+      transport: "http" | "stdio" | "unknown";
+      authType: string;
+      requiredEnv: Array<{ name: string; prompt: string; required: boolean }>;
+      needsInstall: boolean;
+      installed: boolean;
+      enabled: boolean;
+    }>;
+    diagnostics: unknown[];
+    error?: string;
+  }>;
+  installMcpCatalogEntry: (
+    name: string,
+    env?: Record<string, string>,
+    profile?: string,
+  ) => Promise<{
+    success: boolean;
+    error?: string;
+    background?: boolean;
+    action?: string;
+  }>;
+
+  // Discover marketplace (community registry)
+  fetchRegistry: (
+    force?: boolean,
+  ) => Promise<RegistryCatalog & { error?: string }>;
+  listInstalledRegistry: (
+    profile?: string,
+  ) => Promise<{ skills: string[]; mcps: string[]; workflows: string[] }>;
+  fetchRegistryDetail: (
+    kind: RegistryKind,
+    item: RegistryItem,
+  ) => Promise<RegistryDetail>;
+  installRegistryItem: (
+    kind: RegistryKind,
+    item: RegistryItem,
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
 
   // Log viewer
   readLogs: (

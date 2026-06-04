@@ -15,16 +15,19 @@ import {
   getAnalyticsConsent,
   setAnalyticsConsent,
 } from "../../utils/analytics";
+import { ConfigHealth } from "./ConfigHealth";
 
-const TELEGRAM_COMMUNITY_URL = "https://t.me/hermes_agent_desktop";
+const DISCORD_COMMUNITY_URL = "https://discord.gg/vMwcnNPHc";
 
 const LANGUAGE_NATIVE_NAMES: Record<AppLocale, string> = {
   en: "English",
   es: "Español",
   id: "Bahasa Indonesia",
   ja: "日本語",
+  pl: "Polski",
   "pt-BR": "Português (BR)",
   "pt-PT": "Português (PT)",
+  tr: "Türkçe",
   "zh-CN": "简体中文",
   "zh-TW": "繁體中文（台灣）",
 };
@@ -129,6 +132,8 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
   // Network settings
   const [forceIpv4, setForceIpv4] = useState(false);
   const [httpProxy, setHttpProxy] = useState("");
+  const httpProxyRef = useRef("");
+  const savedHttpProxyRef = useRef("");
   const [networkSaved, setNetworkSaved] = useState(false);
 
   // Debug dump
@@ -169,7 +174,10 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
       setForceIpv4(v === "true" || v === "True");
     });
     window.hermesAPI.getConfig("network.proxy", profile).then((v) => {
-      setHttpProxy(v || "");
+      const loadedProxy = v || "";
+      setHttpProxy(loadedProxy);
+      httpProxyRef.current = loadedProxy;
+      savedHttpProxyRef.current = loadedProxy.trim();
     });
 
     // Defer slow calls — background refresh, cached values show instantly
@@ -200,6 +208,32 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
   useEffect(() => {
     void Promise.resolve().then(loadConfig);
   }, [loadConfig]);
+
+  const saveHttpProxy = useCallback(async (): Promise<void> => {
+    const trimmed = httpProxyRef.current.trim();
+    if (trimmed === savedHttpProxyRef.current) return;
+    await window.hermesAPI.setConfig("network.proxy", trimmed, profile);
+    savedHttpProxyRef.current = trimmed;
+    setNetworkSaved(true);
+    setTimeout(() => setNetworkSaved(false), 2000);
+  }, [profile]);
+
+  useEffect(() => {
+    httpProxyRef.current = httpProxy;
+  }, [httpProxy]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void saveHttpProxy();
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [httpProxy, saveHttpProxy]);
+
+  useEffect(() => {
+    return () => {
+      void saveHttpProxy();
+    };
+  }, [saveHttpProxy]);
 
   async function handleMigrate(): Promise<void> {
     setMigrating(true);
@@ -420,6 +454,8 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
     <div className="settings-container">
       <h1 className="settings-header">{t("settings.title")}</h1>
 
+      <ConfigHealth />
+
       <div className="settings-section">
         <div className="settings-section-title">
           {t("settings.sections.hermesAgent")}
@@ -557,19 +593,19 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
         <div className="settings-section-title">Community</div>
         <div className="settings-field">
           <div className="settings-field-hint" style={{ marginBottom: 10 }}>
-            Join our Telegram group to ask questions, report issues, and chat
+            Join our Discord channel to ask questions, report issues, and chat
             with other Hermes users.
           </div>
           <div className="settings-hermes-actions">
             <button
               className="btn btn-secondary"
               onClick={() =>
-                window.hermesAPI.openExternal(TELEGRAM_COMMUNITY_URL)
+                window.hermesAPI.openExternal(DISCORD_COMMUNITY_URL)
               }
-              title={TELEGRAM_COMMUNITY_URL}
+              title={DISCORD_COMMUNITY_URL}
             >
               <Send size={14} style={{ marginRight: 6 }} />
-              Join Telegram Community
+              Join Discord Channel
             </button>
           </div>
         </div>
@@ -990,15 +1026,19 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
             className="input"
             type="text"
             value={httpProxy}
-            onChange={(e) => setHttpProxy(e.target.value)}
-            onBlur={async () => {
-              await window.hermesAPI.setConfig(
-                "network.proxy",
-                httpProxy.trim(),
-                profile,
-              );
-              setNetworkSaved(true);
-              setTimeout(() => setNetworkSaved(false), 2000);
+            onChange={(e) => {
+              httpProxyRef.current = e.target.value;
+              setHttpProxy(e.target.value);
+            }}
+            onBlur={() => {
+              void saveHttpProxy();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void saveHttpProxy();
+                e.currentTarget.blur();
+              }
             }}
             placeholder={t("settings.proxyPlaceholder")}
           />

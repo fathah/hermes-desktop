@@ -44,7 +44,12 @@ async function attach(opts = {}) {
 
   let page;
   if (titleHint) {
-    page = pages.find(async (p) => (await p.title()).includes(titleHint));
+    for (const candidate of pages) {
+      if ((await candidate.title()).includes(titleHint)) {
+        page = candidate;
+        break;
+      }
+    }
   }
   if (!page) {
     // electron-vite dev serves the renderer at http://localhost:5173/ (no

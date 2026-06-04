@@ -1,6 +1,12 @@
 import { execFileSync } from "child_process";
-import { existsSync, readdirSync, readFileSync, statSync } from "fs";
-import { join } from "path";
+import {
+  existsSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+} from "fs";
+import { isAbsolute, join, relative, resolve } from "path";
 import { homedir } from "os";
 import {
   HERMES_HOME,
@@ -9,7 +15,7 @@ import {
   hermesCliArgs,
   getEnhancedPath,
 } from "./installer";
-import { profileHome } from "./utils";
+import { isValidNamedProfileName, profileHome } from "./utils";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 
 export interface InstalledSkill {
@@ -117,15 +123,56 @@ export function listInstalledSkills(profile?: string): InstalledSkill[] {
   );
 }
 
+function realOrResolved(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    return resolve(path);
+  }
+}
+
+function pathIsInside(parent: string, child: string): boolean {
+  const rel = relative(parent, child);
+  return rel === "" || (!!rel && !rel.startsWith("..") && !isAbsolute(rel));
+}
+
+function isProfileSkillFile(skillFile: string): boolean {
+  const profilesRoot = realOrResolved(join(HERMES_HOME, "profiles"));
+  if (!pathIsInside(profilesRoot, skillFile)) return false;
+
+  const parts = relative(profilesRoot, skillFile).split(/[\\/]+/);
+  return (
+    parts.length >= 4 &&
+    isValidNamedProfileName(parts[0]) &&
+    parts[1] === "skills"
+  );
+}
+
+function isAllowedSkillFile(skillFile: string): boolean {
+  const allowedRoots = [
+    join(HERMES_HOME, "skills"),
+    join(HERMES_REPO, "skills"),
+  ].map(realOrResolved);
+
+  return (
+    allowedRoots.some((root) => pathIsInside(root, skillFile)) ||
+    isProfileSkillFile(skillFile)
+  );
+}
+
 /**
  * Get the full content of a SKILL.md for the detail view.
  */
 export function getSkillContent(skillPath: string): string {
-  const skillFile = join(skillPath, "SKILL.md");
+  if (typeof skillPath !== "string" || skillPath.trim() === "") return "";
+
+  const skillFile = resolve(skillPath, "SKILL.md");
   if (!existsSync(skillFile)) return "";
 
   try {
-    return readFileSync(skillFile, "utf-8");
+    const realSkillFile = realpathSync(skillFile);
+    if (!isAllowedSkillFile(realSkillFile)) return "";
+    return readFileSync(realSkillFile, "utf-8");
   } catch {
     return "";
   }

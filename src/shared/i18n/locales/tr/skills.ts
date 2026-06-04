@@ -1,0 +1,25 @@
+export default {
+  title: "Yetenekler",
+  subtitle:
+    "Ajanı tekrar kullanılabilir yetenekler ve iş akışlarıyla genişletin",
+  refresh: "Yenile",
+  installedTab: "Yüklü",
+  browseTab: "Gözat",
+  filterInstalled: "Yüklü yetenekleri filtrele...",
+  search: "Yetenekleri ara...",
+  all: "Tümü",
+  noMatchingInstalled: "Eşleşen yetenek bulunamadı",
+  noInstalled: "Henüz yetenek yüklenmemiş",
+  noInstalledHint:
+    "Mevcut yeteneklere gözatın ve ajanı genişletmek için yükleyin",
+  noMatchingHint: "Farklı bir arama terimi deneyin",
+  noBrowseResults: "Yetenek bulunamadı",
+  noBrowseResultsHint: "Farklı bir arama terimi veya kategori filtresi deneyin",
+  installFailed: "Yetenek yüklenemedi",
+  uninstallFailed: "Yetenek kaldırılamadı",
+  removing: "Kaldırılıyor...",
+  uninstall: "Kaldır",
+  installedBadge: "Yüklü",
+  installing: "Yükleniyor...",
+  install: "Yükle",
+} as const;

@@ -56,8 +56,15 @@ linux:
     messaging, and a closed learning loop.
 appImage:
   artifactName: ${name}-${version}.${ext}
+deb:
+  # Run chmod 4755 on chrome-sandbox so Electron's setuid sandbox helper
+  # works on modern Linux distros that disable unprivileged user
+  # namespaces (Ubuntu 24.04+, etc.). Closes #395.
+  afterInstall: build/linux-after-install.sh
 rpm:
   artifactName: ${name}-${version}.${ext}
+  # Same SUID fix for .rpm consumers (Fedora 40+ also restricts userns).
+  afterInstall: build/linux-after-install.sh
 npmRebuild: false
 publish:
   provider: github

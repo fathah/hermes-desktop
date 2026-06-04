@@ -13,4 +13,23 @@ export default {
   emptyHint: "Empieza a chatear para crear tu primera sesión",
   messages: "msg",
   messageSingular: "msg",
+  delete: "Eliminar conversación",
+  deleteConfirmTitle: "Eliminar conversación",
+  deleteConfirm:
+    "¿Eliminar esta conversación? Esta acción no se puede deshacer — los mensajes y el registro de la sesión se eliminarán permanentemente.",
+  deleteClose: "Cerrar confirmación de eliminación",
+  deleteCancel: "Cancelar",
+  deleteConfirmAction: "Eliminar",
+  deleteDeleting: "Eliminando...",
+  selectMode: "Seleccionar",
+  cancelSelect: "Cancelar",
+  selectedCount: "{{count}} seleccionados",
+  selectVisible: "Seleccionar visibles",
+  clearVisible: "Limpiar visibles",
+  deleteSelected: "Eliminar seleccionados",
+  selectSession: "Seleccionar sesión",
+  deleteSelectedConfirmTitle: "Eliminar sesiones seleccionadas",
+  deleteSelectedConfirm:
+    "¿Eliminar {{count}} sesiones seleccionadas? Esta acción no se puede deshacer — los mensajes y registros de sesión se eliminarán permanentemente.",
+  deleteSelectedClose: "Cerrar confirmación de eliminación masiva",
 } as const;

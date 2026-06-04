@@ -4,6 +4,8 @@ import { ChatHeader } from "./ChatHeader";
 import { ChatEmptyState } from "./ChatEmptyState";
 import { MessageList } from "./MessageList";
 import { ModelPicker } from "./ModelPicker";
+import { ContextFolderChip } from "./ContextFolderChip";
+import { WorktreePanel } from "./WorktreePanel";
 import { useChatScroll } from "./hooks/useChatScroll";
 import { useChatIPC } from "./hooks/useChatIPC";
 import { useChatActions } from "./hooks/useChatActions";
@@ -12,8 +14,11 @@ import { useFastMode } from "./hooks/useFastMode";
 import { useLocalCommands } from "./hooks/useLocalCommands";
 import { useI18n } from "../../components/useI18n";
 import { buildChatTranscript } from "./transcriptUtils";
+import { ConfigHealthBanner } from "../../components/ConfigHealthBanner";
 import type { Attachment } from "../../../../shared/attachments";
 import type { ChatMessage, UsageState } from "./types";
+import type { ContextUsage } from "./ContextGauge";
+import { contextWindowForModel } from "./contextWindows";
 
 interface QueuedMessage {
   text: string;
@@ -29,6 +34,9 @@ interface ChatProps {
   profile?: string;
   onSessionStarted?: () => void;
   onNewChat?: () => void;
+  /** Optional callback to navigate to Settings → Diagnose section
+   *  when the user clicks "Show details" in the config-health banner. */
+  onOpenDiagnose?: () => void;
 }
 
 function Chat({
@@ -38,6 +46,7 @@ function Chat({
   profile,
   onSessionStarted,
   onNewChat,
+  onOpenDiagnose,
 }: ChatProps): React.JSX.Element {
   const { t } = useI18n();
   const [isLoading, setIsLoading] = useState(false);
@@ -49,6 +58,8 @@ function Chat({
   // Working folder bound to this conversation (issue #27). Per-conversation,
   // held in memory; reset on session switch / new chat below.
   const [contextFolder, setContextFolder] = useState<string | null>(null);
+  // Whether the worktree panel is visible (only applies when contextFolder is set)
+  const [worktreeVisible, setWorktreeVisible] = useState<boolean>(true);
   const dragCounter = useRef(0);
   const chatInputRef = useRef<ChatInputHandle>(null);
   const queueRef = useRef<QueuedMessage[]>([]);
@@ -72,6 +83,39 @@ function Chat({
     toggle: toggleFastMode,
     set: setFastTier,
   } = useFastMode(profile);
+
+  // Pre-send readiness — fail-open check that disables Send + shows
+  // an inline banner when the desktop can predict that the gateway
+  // will reject the request (e.g. provider configured but its API
+  // key is missing from .env). Re-runs on profile/model/baseUrl
+  // change so the banner reflects the current state.
+  const [readiness, setReadiness] = useState<{
+    ok: boolean;
+    code?: string;
+    message?: string;
+    fixLocation?: string;
+    expectedEnvKey?: string;
+  }>({ ok: true });
+  useEffect(() => {
+    let cancelled = false;
+    (async (): Promise<void> => {
+      try {
+        const r = await window.hermesAPI.validateChatReadiness(profile);
+        if (!cancelled) setReadiness(r);
+      } catch {
+        // Fail open on IPC error — never block Send on validation failure
+        if (!cancelled) setReadiness({ ok: true });
+      }
+    })();
+    return (): void => {
+      cancelled = true;
+    };
+  }, [
+    profile,
+    modelConfig.currentModel,
+    modelConfig.currentProvider,
+    modelConfig.currentBaseUrl,
+  ]);
 
   useChatIPC({
     setMessages,
@@ -290,6 +334,16 @@ function Chat({
     [eventHasFiles],
   );
 
+  // Context-gauge data: the latest turn's prompt tokens vs the model's window.
+  const contextUsage: ContextUsage | null = usage?.contextTokens
+    ? {
+        used: usage.contextTokens,
+        window: contextWindowForModel(modelConfig.currentModel),
+        cacheReadTokens: usage.cacheReadTokens,
+        cacheWriteTokens: usage.cacheWriteTokens,
+      }
+    : null;
+
   return (
     <div
       className="chat-container"
@@ -303,28 +357,32 @@ function Chat({
         usage={usage}
         fastMode={fastMode}
         hasMessages={messages.length > 0}
-        contextFolder={contextFolder}
-        showContextFolder={!remoteMode}
-        onPickFolder={handlePickFolder}
-        onClearFolder={handleClearFolder}
         onToggleFast={toggleFastMode}
         onNewChat={onNewChat}
         onClear={handleClear}
       />
 
-      <div className="chat-messages" ref={containerRef}>
-        {messages.length === 0 ? (
-          <ChatEmptyState onSelectSuggestion={handleSuggestion} />
-        ) : (
-          <MessageList
-            messages={messages}
-            isLoading={isLoading}
-            toolProgress={toolProgress}
-            onApprove={actions.handleApprove}
-            onDeny={actions.handleDeny}
-          />
+      <ConfigHealthBanner profile={profile} onOpenDiagnose={onOpenDiagnose} />
+
+      <div className="chat-body">
+        <div className="chat-messages" ref={containerRef}>
+          {messages.length === 0 ? (
+            <ChatEmptyState onSelectSuggestion={handleSuggestion} />
+          ) : (
+            <MessageList
+              messages={messages}
+              isLoading={isLoading}
+              toolProgress={toolProgress}
+              onApprove={actions.handleApprove}
+              onDeny={actions.handleDeny}
+            />
+          )}
+          <div ref={bottomRef} />
+        </div>
+
+        {contextFolder && worktreeVisible && (
+          <WorktreePanel folderPath={contextFolder} />
         )}
-        <div ref={bottomRef} />
       </div>
 
       {queuedCount > 0 && (
@@ -339,18 +397,33 @@ function Chat({
           hasSession={!!hermesSessionId}
           sessionId={hermesSessionId}
           remoteMode={remoteMode}
+          profile={profile}
+          contextUsage={contextUsage}
+          readiness={readiness}
           onSubmit={handleSubmitOrQueue}
           onQuickAsk={actions.handleQuickAsk}
           onAbort={actions.handleAbort}
-        />
-        <ModelPicker
-          currentModel={modelConfig.currentModel}
-          currentProvider={modelConfig.currentProvider}
-          currentBaseUrl={modelConfig.currentBaseUrl}
-          modelGroups={modelConfig.modelGroups}
-          displayModel={modelConfig.displayModel}
-          onOpen={modelConfig.reload}
-          onSelectModel={modelConfig.selectModel}
+          toolbarExtras={
+            <>
+              <ModelPicker
+                currentModel={modelConfig.currentModel}
+                currentProvider={modelConfig.currentProvider}
+                currentBaseUrl={modelConfig.currentBaseUrl}
+                modelGroups={modelConfig.modelGroups}
+                displayModel={modelConfig.displayModel}
+                onOpen={modelConfig.reload}
+                onSelectModel={modelConfig.selectModel}
+              />
+              <ContextFolderChip
+                contextFolder={contextFolder}
+                show={!remoteMode}
+                worktreeVisible={worktreeVisible}
+                onPickFolder={handlePickFolder}
+                onClearFolder={handleClearFolder}
+                onToggleWorktree={() => setWorktreeVisible((v) => !v)}
+              />
+            </>
+          }
         />
       </div>
       {dragActive && (

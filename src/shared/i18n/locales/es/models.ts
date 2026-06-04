@@ -1,5 +1,6 @@
 export default {
   title: "Modelos",
+  freeBadge: "(gratis)",
   searchPlaceholder: "Buscar modelos...",
   empty: "Todavía no hay modelos",
   noMatch: "Ningún modelo coincide con tu búsqueda",

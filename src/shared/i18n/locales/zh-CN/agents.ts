@@ -7,6 +7,7 @@ export default {
   createFailed: "创建档案失败",
   creating: "创建中...",
   create: "创建",
+  deleteFailed: "删除档案失败",
   active: "当前使用",
   noModel: "尚未设置模型",
   skillsCount: "{{count}} 个技能",

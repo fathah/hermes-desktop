@@ -4,7 +4,13 @@ import { join } from "path";
 import { execFile } from "child_process";
 import { HERMES_HOME, HERMES_PYTHON, hermesCliArgs } from "./installer";
 import { profileHome } from "./utils";
-import { isRemoteMode, getApiUrl, getRemoteAuthHeader } from "./hermes";
+import {
+  isRemoteMode,
+  getApiUrl,
+  getRemoteAuthHeader,
+  normaliseRemoteUrl,
+} from "./hermes";
+import { getConnectionConfig } from "./config";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 
 export interface CronJob {
@@ -69,7 +75,49 @@ async function remoteFetch(
     ...getRemoteAuthHeader(),
     ...((init.headers as Record<string, string>) || {}),
   };
-  return fetch(`${getApiUrl()}${path}`, { ...init, headers });
+  const apiUrl = await getCronApiUrl(headers);
+  return fetch(`${apiUrl}${path}`, { ...init, headers });
+}
+
+async function getCronApiUrl(headers: Record<string, string>): Promise<string> {
+  try {
+    return getApiUrl();
+  } catch (err) {
+    const conn = getConnectionConfig();
+    if (conn.mode !== "ssh" || !conn.ssh?.localPort) throw err;
+
+    // Schedules/Cron can be opened without first running the Chat path that
+    // starts/refreshes the in-process SSH tunnel state. As a narrow fallback for
+    // that screen, probe the configured/default local SSH port before using it.
+    // This port may be stale if startSshTunnel() had to choose a different free
+    // port, so a failed /health check preserves getApiUrl()'s original error
+    // instead of sending authenticated API requests to an unrelated service.
+    const fallbackUrl = normaliseRemoteUrl(
+      `http://127.0.0.1:${conn.ssh.localPort}`,
+    );
+    if (await isCronFallbackHealthy(fallbackUrl, headers)) return fallbackUrl;
+    throw err;
+  }
+}
+
+async function isCronFallbackHealthy(
+  apiUrl: string,
+  headers: Record<string, string>,
+): Promise<boolean> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 1500);
+  try {
+    const res = await fetch(`${apiUrl}/health`, {
+      method: "GET",
+      headers,
+      signal: controller.signal,
+    });
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function remoteJsonError(res: Response): Promise<string> {
@@ -201,14 +249,10 @@ export async function createCronJob(
     }
   }
 
-  // Use -- to prevent prompt from being parsed as a flag
   const args = ["create", schedule];
+  if (prompt) args.push(prompt);
   if (name) args.push("--name", name);
   if (deliver) args.push("--deliver", deliver);
-  if (prompt) {
-    args.push("--");
-    args.push(prompt);
-  }
 
   const result = await runCronCommand(args, profile);
   return { success: result.success, error: result.error };

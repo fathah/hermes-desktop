@@ -44,7 +44,12 @@ vi.mock("../src/main/locale", () => ({
   getAppLocale: () => "en",
 }));
 
-import { setToolsetEnabled, getToolsets } from "../src/main/tools";
+import {
+  getPlatformToolsets,
+  getToolsets,
+  setMessagingPlatformToolsetEnabled,
+  setToolsetEnabled,
+} from "../src/main/tools";
 
 const CONFIG_FILE = join(TEST_HOME, "config.yaml");
 
@@ -265,5 +270,53 @@ describe("setToolsetEnabled — disable all (C2d)", () => {
     const after = readConfig();
     expect(after).toContain("platform_toolsets:");
     expect(after).toContain("  cli:");
+  });
+});
+
+describe("setMessagingPlatformToolsetEnabled", () => {
+  it("writes a messaging platform subsection without changing cli", () => {
+    writeConfig(
+      [
+        "platform_toolsets:",
+        "  cli:",
+        "      - web",
+        "  telegram:",
+        "      - memory",
+        "",
+      ].join("\n"),
+    );
+
+    const result = setMessagingPlatformToolsetEnabled("telegram", "browser", true);
+    expect(result).toBe(true);
+
+    const after = readConfig();
+    expect(after).toContain("  cli:");
+    expect(after).toContain("      - web");
+    expect(after).toContain("  telegram:");
+    expect(after).toContain("      - browser");
+    expect(after).toContain("      - memory");
+  });
+
+  it("starts from safe messaging defaults when the platform has no explicit list", () => {
+    writeConfig(["platform_toolsets:", "  cli:", "      - web", ""].join("\n"));
+
+    const result = setMessagingPlatformToolsetEnabled("telegram", "browser", true);
+    expect(result).toBe(true);
+
+    const toolsets = getPlatformToolsets();
+    expect(toolsets.telegram).toContain("browser");
+    expect(toolsets.telegram).toContain("web");
+    expect(toolsets.telegram).toContain("memory");
+    expect(toolsets.telegram).not.toContain("terminal");
+  });
+
+  it("respects an explicit empty messaging platform toolset list", () => {
+    writeConfig(["platform_toolsets:", "  telegram: []", ""].join("\n"));
+
+    const toolsets = getPlatformToolsets();
+    expect(toolsets.telegram).toEqual([]);
+
+    setMessagingPlatformToolsetEnabled("telegram", "browser", true);
+    expect(getPlatformToolsets().telegram).toEqual(["browser"]);
   });
 });

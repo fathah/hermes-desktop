@@ -16,6 +16,7 @@ export default {
   add: "Agregar",
   create: "Crear",
   close: "Cerrar",
+  dismiss: "Descartar",
   confirm: "Confirmar",
   reset: "Restablecer",
   back: "Atrás",

@@ -21,6 +21,7 @@ export default {
   localTag: "任意 OpenAI 相容 API",
   // Local presets
   lmstudio: "LM Studio",
+  atomicchat: "Atomic Chat",
   ollama: "Ollama",
   vllm: "vLLM",
   llamacpp: "llama.cpp",

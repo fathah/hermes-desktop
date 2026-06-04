@@ -47,13 +47,69 @@ describe("parseSseBlock", () => {
 describe("processCustomEvent", () => {
   it("handles hermes.tool.progress with emoji and label", () => {
     const onToolProgress = vi.fn();
+    const onToolEvent = vi.fn();
     const handled = processCustomEvent(
       "hermes.tool.progress",
-      JSON.stringify({ tool: "search_web", emoji: "🔍", label: "Searching" }),
-      { onToolProgress },
+      JSON.stringify({
+        tool: "search_web",
+        toolCallId: "call-1",
+        emoji: "🔍",
+        label: "Searching",
+        status: "running",
+      }),
+      { onToolProgress, onToolEvent },
     );
     expect(handled).toBe(true);
-    expect(onToolProgress).toHaveBeenCalledWith("🔍 Searching");
+    expect(onToolProgress).not.toHaveBeenCalled();
+    expect(onToolEvent).toHaveBeenCalledWith({
+      callId: "call-1",
+      hasStableCallId: true,
+      name: "search_web",
+      status: "running",
+      label: "Searching",
+      emoji: "🔍",
+    });
+  });
+
+  it("handles completed hermes.tool.progress as a structured tool event", () => {
+    const onToolEvent = vi.fn();
+    const handled = processCustomEvent(
+      "hermes.tool.progress",
+      JSON.stringify({
+        tool: "terminal",
+        toolCallId: "call-terminal",
+        status: "completed",
+      }),
+      { onToolEvent },
+    );
+    expect(handled).toBe(true);
+    expect(onToolEvent).toHaveBeenCalledWith({
+      callId: "call-terminal",
+      hasStableCallId: true,
+      name: "terminal",
+      status: "completed",
+      label: "terminal",
+    });
+  });
+
+  it("marks fallback tool ids as synthetic when the gateway omits call ids", () => {
+    const onToolEvent = vi.fn();
+    processCustomEvent(
+      "hermes.tool.progress",
+      JSON.stringify({
+        tool: "terminal",
+        status: "running",
+        label: "terminal",
+      }),
+      { onToolEvent },
+    );
+    expect(onToolEvent).toHaveBeenCalledWith({
+      callId: "terminal:terminal",
+      hasStableCallId: false,
+      name: "terminal",
+      status: "running",
+      label: "terminal",
+    });
   });
 
   it("uses tool name as fallback when label is missing", () => {

@@ -4,6 +4,7 @@ import { PROVIDERS, LOCAL_PRESETS } from "../../constants";
 import { useI18n } from "../../components/useI18n";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
 import BrandLogo from "../../components/common/BrandLogo";
+import { expectedEnvKeyForUrl } from "../../../../shared/url-key-map";
 
 interface SetupProps {
   onComplete: () => void;
@@ -34,21 +35,14 @@ function Setup({
     setBaseUrl(presetBaseUrl);
   }
 
+  // Setup prefers a LOCAL_PRESETS exact-URL match (so e.g. an LM Studio
+  // preset's explicit `envKey` wins over URL pattern matching), then
+  // falls back to the shared URL_KEY_MAP for known commercial hosts and
+  // finally to `CUSTOM_API_KEY` for unknown URLs.
   function resolveCustomEnvKey(url: string): string {
     const preset = LOCAL_PRESETS.find((p) => p.baseUrl === url);
     if (preset?.envKey) return preset.envKey;
-    if (/openrouter\.ai/i.test(url)) return "OPENROUTER_API_KEY";
-    if (/anthropic\.com/i.test(url)) return "ANTHROPIC_API_KEY";
-    if (/openai\.com/i.test(url)) return "OPENAI_API_KEY";
-    if (/huggingface\.co/i.test(url)) return "HF_TOKEN";
-    if (/api\.groq\.com/i.test(url)) return "GROQ_API_KEY";
-    if (/api\.deepseek\.com/i.test(url)) return "DEEPSEEK_API_KEY";
-    if (/api\.together\.xyz/i.test(url)) return "TOGETHER_API_KEY";
-    if (/api\.fireworks\.ai/i.test(url)) return "FIREWORKS_API_KEY";
-    if (/api\.cerebras\.ai/i.test(url)) return "CEREBRAS_API_KEY";
-    if (/api\.mistral\.ai/i.test(url)) return "MISTRAL_API_KEY";
-    if (/api\.perplexity\.ai/i.test(url)) return "PERPLEXITY_API_KEY";
-    return "CUSTOM_API_KEY";
+    return expectedEnvKeyForUrl(url);
   }
 
   async function handleContinue(): Promise<void> {

@@ -16,6 +16,7 @@ export default {
   add: "Add",
   create: "Create",
   close: "Close",
+  dismiss: "Dismiss",
   confirm: "Confirm",
   reset: "Reset",
   back: "Back",

@@ -6,6 +6,7 @@
 
 - 英文：`CONTRIBUTING.md`
 - 简体中文：`CONTRIBUTING.zh-CN.md`
+- 日本語：`CONTRIBUTING.ja-JP.md`
 
 ## 快速开始
 

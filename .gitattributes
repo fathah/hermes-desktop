@@ -1,2 +1,7 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Shell scripts must always be LF — CRLF breaks the shebang line on
+# Linux ("bad interpreter: /bin/bash\r: No such file or directory"),
+# which silently fails the .deb / .rpm postinst hook (#395).
+*.sh text eol=lf

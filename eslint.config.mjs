@@ -14,6 +14,16 @@ export default defineConfig(
       ".claude/**",
       ".agents/**",
       "build/**",
+      // CDP E2E harness — plain Node CommonJS scripts driving the
+      // dev electron via Chrome DevTools Protocol for live testing.
+      // They intentionally use require() because they run as one-off
+      // `node scripts/*.js` invocations outside the TS build, and
+      // they're not part of the shipped app. See scripts/README.md.
+      "scripts/e2e-attach.js",
+      "scripts/repro-*.js",
+      "scripts/probe-*.js",
+      "scripts/drive-*.js",
+      "scripts/verify-*.js",
     ],
   },
   tseslint.configs.recommended,

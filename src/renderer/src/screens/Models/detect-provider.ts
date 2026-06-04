@@ -29,9 +29,9 @@ export function detectProviderFromUrl(rawUrl: string): string | null {
   if (host && isPrivateOrLoopback(host)) return "custom";
 
   // Well-known local-LLM ports on any host — Ollama 11434, LM Studio 1234,
-  // vLLM 8000, llama.cpp 8080. These run on LAN VMs too, so we don't
+  // Atomic Chat 1337, vLLM 8000, llama.cpp 8080. These run on LAN VMs too, so we don't
   // require a private-IP match for the port-only heuristic.
-  if (/:(11434|1234|8000|8080)(\/|$)/.test(url)) return "custom";
+  if (/:(11434|1234|1337|8000|8080)(\/|$)/.test(url)) return "custom";
 
   return null;
 }

@@ -1,7 +1,12 @@
 import { memo, useMemo } from "react";
 import { HermesAvatar, MessageRow } from "./MessageRow";
-import { ReasoningRow, ToolCallRow, ToolResultRow } from "./HistoryRow";
-import type { ChatMessage } from "./types";
+import { ReasoningRow, ToolActivityGroup } from "./HistoryRow";
+import type { ChatMessage, ToolCallMessage, ToolResultMessage } from "./types";
+
+function isToolRow(m: ChatMessage): m is ToolCallMessage | ToolResultMessage {
+  const k = (m as { kind?: string }).kind;
+  return k === "tool_call" || k === "tool_result";
+}
 
 interface MessageListProps {
   messages: ChatMessage[];
@@ -67,46 +72,75 @@ export const MessageList = memo(function MessageList({
   const lastBubble = [...messages].reverse().find(isBubble);
   const lastMessageIsAgent = !!lastBubble && lastBubble.role === "agent";
 
+  // Render plan: bubble/reasoning rows pass through one-to-one, but a
+  // contiguous run of tool_call/tool_result rows folds into a single
+  // ToolActivityGroup (collapsed by default) instead of one bubble per call.
+  const rows: React.JSX.Element[] = [];
+  for (let i = 0; i < visibleMessages.length; i++) {
+    const msg = visibleMessages[i];
+    // One avatar per turn: show it only on the first row of a contiguous run
+    // of same-role rows. The agent turn's thinking/tool rows + answer bubble
+    // share one avatar; the continuation rows render a spacer.
+    const prev = visibleMessages[i - 1];
+    const showAvatar = !prev || prev.role !== msg.role;
+
+    if (isToolRow(msg)) {
+      // Collect the whole run of consecutive tool rows.
+      const group: (ToolCallMessage | ToolResultMessage)[] = [];
+      const start = i;
+      while (i < visibleMessages.length && isToolRow(visibleMessages[i])) {
+        group.push(visibleMessages[i] as ToolCallMessage | ToolResultMessage);
+        i++;
+      }
+      i--; // step back: the for-loop's i++ advances past the run
+      rows.push(
+        <ToolActivityGroup
+          key={group[0].id}
+          items={group}
+          // Active (spinner) only while streaming and this run is trailing.
+          active={isLoading && i === visibleMessages.length - 1}
+          showAvatar={
+            !visibleMessages[start - 1] ||
+            visibleMessages[start - 1].role !== "agent"
+          }
+        />,
+      );
+      continue;
+    }
+
+    const k = (msg as { kind?: string }).kind;
+    if (k === "reasoning") {
+      rows.push(
+        <ReasoningRow
+          key={msg.id}
+          msg={msg as Extract<ChatMessage, { kind: "reasoning" }>}
+          // Still "Thinking…" only while this is the last row and the turn is
+          // streaming; once the answer arrives (or history loads) it becomes
+          // a completed "Thought".
+          active={isLoading && i === visibleMessages.length - 1}
+          showAvatar={showAvatar}
+        />,
+      );
+      continue;
+    }
+
+    const bubble = msg as Extract<ChatMessage, { role: "user" | "agent" }>;
+    rows.push(
+      <MessageRow
+        key={msg.id}
+        msg={bubble}
+        isLast={i === visibleMessages.length - 1}
+        isLoading={isLoading}
+        onApprove={onApprove}
+        onDeny={onDeny}
+        showAvatar={showAvatar}
+      />,
+    );
+  }
+
   return (
     <>
-      {visibleMessages.map((msg, i) => {
-        const k = (msg as { kind?: string }).kind;
-        if (k === "reasoning") {
-          return (
-            <ReasoningRow
-              key={msg.id}
-              msg={msg as Extract<ChatMessage, { kind: "reasoning" }>}
-            />
-          );
-        }
-        if (k === "tool_call") {
-          return (
-            <ToolCallRow
-              key={msg.id}
-              msg={msg as Extract<ChatMessage, { kind: "tool_call" }>}
-            />
-          );
-        }
-        if (k === "tool_result") {
-          return (
-            <ToolResultRow
-              key={msg.id}
-              msg={msg as Extract<ChatMessage, { kind: "tool_result" }>}
-            />
-          );
-        }
-        const bubble = msg as Extract<ChatMessage, { role: "user" | "agent" }>;
-        return (
-          <MessageRow
-            key={msg.id}
-            msg={bubble}
-            isLast={i === visibleMessages.length - 1}
-            isLoading={isLoading}
-            onApprove={onApprove}
-            onDeny={onDeny}
-          />
-        );
-      })}
+      {rows}
 
       {isLoading && !lastMessageIsAgent && (
         <TypingIndicator toolProgress={toolProgress} />

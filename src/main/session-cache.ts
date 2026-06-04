@@ -100,6 +100,8 @@ export function syncSessionCache(): CachedSession[] {
   if (!db) return cache.sessions;
 
   try {
+    const lastSync = cache.sessions.length === 0 ? 0 : cache.lastSync;
+
     // Fetch sessions newer than last sync, or all if first sync
     const rows = db
       .prepare(
@@ -108,7 +110,7 @@ export function syncSessionCache(): CachedSession[] {
          WHERE s.started_at > ?
          ORDER BY s.started_at DESC`,
       )
-      .all(cache.lastSync > 0 ? cache.lastSync - 300 : 0) as Array<{
+      .all(lastSync > 0 ? lastSync - 300 : 0) as Array<{
       id: string;
       started_at: number;
       source: string;
@@ -191,6 +193,9 @@ export function syncSessionCache(): CachedSession[] {
           .all(...chunk) as Array<{ id: string; message_count: number }>;
         for (const r of refreshed) countsById.set(r.id, r.message_count);
       }
+      cache.sessions = cache.sessions.filter(
+        (s) => refreshedIds.has(s.id) || countsById.has(s.id),
+      );
       for (const s of cache.sessions) {
         const fresh = countsById.get(s.id);
         if (fresh !== undefined && fresh !== s.messageCount) {

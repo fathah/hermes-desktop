@@ -8,6 +8,7 @@ export default {
   createFailed: "建立 Agent 檔案失敗",
   creating: "建立中...",
   create: "建立",
+  deleteFailed: "刪除 Agent 檔案失敗",
   active: "目前使用",
   noModel: "尚未設定模型",
   skillsCount: "{{count}} 個技能",

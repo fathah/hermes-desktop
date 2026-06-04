@@ -247,6 +247,12 @@ export const LOCAL_PRESETS: LocalPreset[] = [
     group: "local",
   },
   {
+    id: "atomicchat",
+    name: "constants.atomicchat",
+    baseUrl: "http://localhost:1337/v1",
+    group: "local",
+  },
+  {
     id: "ollama",
     name: "constants.ollama",
     baseUrl: "http://localhost:11434/v1",

@@ -13,4 +13,11 @@ export default {
   emptyHint: "開始聊天以建立第一個工作階段",
   messages: "則訊息",
   messageSingular: "則訊息",
+  delete: "刪除對話",
+  deleteConfirmTitle: "刪除對話",
+  deleteConfirm: "刪除此對話？此操作無法復原 — 訊息和工作階段記錄將永久移除。",
+  deleteClose: "關閉刪除確認",
+  deleteCancel: "取消",
+  deleteConfirmAction: "刪除",
+  deleteDeleting: "正在刪除...",
 } as const;

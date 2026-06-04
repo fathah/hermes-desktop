@@ -25,6 +25,7 @@ export default {
   customOpenAICompatibleName: "OpenAI 兼容 / 本地",
   // Local presets
   lmstudio: "LM Studio",
+  atomicchat: "Atomic Chat",
   ollama: "Ollama",
   vllm: "vLLM",
   llamacpp: "llama.cpp",

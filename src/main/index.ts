@@ -7,8 +7,10 @@ import {
   Notification,
   dialog,
   clipboard,
+  session,
 } from "electron";
-import { join } from "path";
+import { join, extname } from "path";
+import { readdir, readFile } from "fs/promises";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import type { AppUpdater } from "electron-updater";
 import icon from "../../resources/icon.png?asset";
@@ -32,11 +34,20 @@ import {
   runHermesBackup,
   runHermesImport,
   runHermesDump,
-  listMcpServers,
   discoverMemoryProviders,
   readLogs,
   InstallProgress,
 } from "./installer";
+import {
+  addMcpServer,
+  installMcpCatalogEntry,
+  listMcpCatalog,
+  listMcpServers,
+  removeMcpServer,
+  setMcpServerEnabled,
+  testMcpServer,
+  type McpServerInput,
+} from "./mcp-servers";
 import { updaterLogger } from "./updater-log";
 import {
   runHermesAuthLogin,
@@ -47,12 +58,15 @@ import {
   isRemoteMode,
   isRemoteOnlyMode,
   sendMessage,
+  transcribeAudio,
   startGateway,
+  startGatewayDetailed,
   stopGateway,
   isGatewayRunning,
   testRemoteConnection,
   stopHealthPolling,
   restartGateway,
+  notifyProfileSwitched,
   ensureSshTunnelIfNeeded,
   setSshRemoteApiKey,
   getRemoteAuthHeader,
@@ -105,6 +119,7 @@ import {
   getSessionMessages,
   searchSessions,
   deleteSession,
+  deleteSessions,
 } from "./sessions";
 import {
   syncSessionCache,
@@ -112,6 +127,13 @@ import {
   updateSessionTitle,
 } from "./session-cache";
 import { listModels, addModel, removeModel, updateModel } from "./models";
+import { validateChatReadiness } from "./validation";
+import {
+  runConfigHealthCheck,
+  autoFixIssue,
+  readConfigFixLog,
+  type IssueCode,
+} from "./config-health";
 import {
   listProfiles,
   createProfile,
@@ -127,7 +149,20 @@ import {
   writeUserProfile,
 } from "./memory";
 import { readSoul, writeSoul, resetSoul } from "./soul";
-import { getToolsets, setToolsetEnabled } from "./tools";
+import {
+  getPlatformToolsets,
+  getToolsets,
+  setMessagingPlatformToolsetEnabled,
+  setToolsetEnabled,
+} from "./tools";
+import {
+  fetchRegistry,
+  fetchRegistryDetail,
+  listInstalledRegistry,
+  installRegistryItem,
+  type RegistryKind,
+  type RegistryItem,
+} from "./registry";
 import {
   listInstalledSkills,
   listBundledSkills,
@@ -143,6 +178,15 @@ import {
   resumeCronJob,
   triggerCronJob,
 } from "./cronjobs";
+import {
+  applyMessagingPlatformUpdate,
+  buildDesktopMessagingPlatforms,
+  fetchRemoteMessagingPlatforms,
+  readLocalGatewayPlatformStates,
+  testDesktopMessagingPlatform,
+  testRemoteMessagingPlatform,
+  updateRemoteMessagingPlatform,
+} from "./messaging-platforms";
 import {
   listBoards as kanbanListBoards,
   currentBoard as kanbanCurrentBoard,
@@ -188,7 +232,9 @@ import {
   sshWriteSoul,
   sshResetSoul,
   sshGetToolsets,
+  sshGetPlatformToolsets,
   sshSetToolsetEnabled,
+  sshSetMessagingPlatformToolsetEnabled,
   sshReadEnv,
   sshSetEnvValue,
   sshGetConfigValue,
@@ -526,6 +572,41 @@ function setupIPC(): void {
     return readEnv(profile);
   });
 
+  // Pre-send chat readiness — answers "if Send is clicked right now,
+  // will it work?". Fail-open semantics: any uncertain state returns
+  // `ok: true`, so the renderer never false-blocks a Send.
+  ipcMain.handle("validate-chat-readiness", (_event, profile?: string) => {
+    return validateChatReadiness(profile);
+  });
+
+  // Config-health audit + per-issue auto-fix. The renderer renders a
+  // dismissible banner above the chat input and a full report in the
+  // Settings → Diagnose section. Auto-fixes are additive only — never
+  // delete; always log to ~/.hermes/logs/config-fixes.log.
+  ipcMain.handle("get-config-health", (_event, profile?: string) => {
+    return runConfigHealthCheck(profile);
+  });
+
+  ipcMain.handle("rerun-config-health", (_event, profile?: string) => {
+    return runConfigHealthCheck(profile);
+  });
+
+  ipcMain.handle(
+    "autofix-config-issue",
+    (
+      _event,
+      code: IssueCode,
+      profile?: string,
+      context?: Record<string, string>,
+    ) => {
+      return autoFixIssue(code, profile, context);
+    },
+  );
+
+  ipcMain.handle("get-config-fix-log", (_event, maxEntries?: number) => {
+    return readConfigFixLog(maxEntries);
+  });
+
   ipcMain.handle(
     "set-env",
     async (_event, key: string, value: string, profile?: string) => {
@@ -547,7 +628,7 @@ function setupIPC(): void {
         key.endsWith("_API_KEY") ||
         key.endsWith("_TOKEN") ||
         key === "HF_TOKEN";
-      if (isGatewayRunning() && looksLikeCredential) {
+      if (isGatewayRunning(profile) && looksLikeCredential) {
         restartGateway(profile);
       }
       return true;
@@ -617,7 +698,7 @@ function setupIPC(): void {
 
       // Restart gateway when provider, model, or endpoint changes so it picks up new config
       if (
-        isGatewayRunning() &&
+        isGatewayRunning(profile) &&
         (prev.provider !== provider ||
           prev.model !== model ||
           prev.baseUrl !== baseUrl)
@@ -649,8 +730,8 @@ function setupIPC(): void {
         setEnvValue("API_SERVER_KEY", key);
       }
       // Restart gateway so it picks up the new key immediately.
-      if (isGatewayRunning()) {
-        stopGateway();
+      if (isGatewayRunning(profile)) {
+        stopGateway(profile, true);
         await new Promise<void>((r) => setTimeout(r, 800));
         startGateway(profile);
       }
@@ -756,6 +837,16 @@ function setupIPC(): void {
 
   // Chat — lazy-start gateway on first message
   ipcMain.handle(
+    "transcribe-audio",
+    async (
+      _event,
+      audio: Uint8Array,
+      mimeType: string,
+      profile?: string,
+    ): Promise<string> => transcribeAudio(audio, mimeType, profile),
+  );
+
+  ipcMain.handle(
     "send-message",
     async (
       event,
@@ -766,7 +857,7 @@ function setupIPC(): void {
       attachments?: Attachment[],
       contextFolder?: string,
     ) => {
-      if (!isRemoteMode() && !isGatewayRunning()) {
+      if (!isRemoteMode() && !isGatewayRunning(profile)) {
         startGateway(profile);
       }
 
@@ -871,6 +962,9 @@ function setupIPC(): void {
           },
           onToolProgress: (tool) => {
             safeSend("chat-tool-progress", tool);
+          },
+          onToolEvent: (toolEvent) => {
+            safeSend("chat-tool-event", toolEvent);
           },
           onUsage: (usage) => {
             safeSend("chat-usage", usage);
@@ -987,15 +1081,20 @@ function setupIPC(): void {
     const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh) {
       await sshStartGateway(conn.ssh);
-      return true;
+      return { success: true, running: true };
     }
     if (conn.mode === "remote") {
       // The remote server runs its own gateway; nothing to start locally.
       // Without this guard we'd fall through to `startGateway()` and
       // spawn a non-existent local hermes-agent (issue #266).
-      return false;
+      return {
+        success: false,
+        running: false,
+        error:
+          "Remote mode points at an already-running Hermes server. Start or restart the gateway on that remote host.",
+      };
     }
-    return startGateway();
+    return startGatewayDetailed();
   });
   ipcMain.handle("stop-gateway", async () => {
     const conn = getConnectionConfig();
@@ -1007,7 +1106,9 @@ function setupIPC(): void {
       // No local gateway to stop in pure remote mode.
       return true;
     }
-    stopGateway(true);
+    // No profile argument → stops the active profile's gateway, leaving any
+    // other profiles' gateways running.
+    stopGateway(undefined, true);
     return true;
   });
   ipcMain.handle("gateway-status", () => {
@@ -1033,10 +1134,122 @@ function setupIPC(): void {
       }
       setPlatformEnabled(platform, enabled, profile);
       // Restart gateway so it picks up the new platform config
-      if (isGatewayRunning()) {
+      if (isGatewayRunning(profile)) {
         restartGateway(profile);
       }
       return true;
+    },
+  );
+
+  ipcMain.handle("get-messaging-platforms", async (_event, profile?: string) => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "remote") {
+      return fetchRemoteMessagingPlatforms();
+    }
+    if (conn.mode === "ssh" && conn.ssh) {
+      const [envData, enabled, running, platformToolsets] = await Promise.all([
+        sshReadEnv(conn.ssh, profile),
+        sshGetPlatformEnabled(conn.ssh, profile),
+        sshGatewayStatus(conn.ssh),
+        sshGetPlatformToolsets(conn.ssh, profile),
+      ]);
+      return buildDesktopMessagingPlatforms(
+        envData,
+        enabled,
+        running,
+        platformToolsets,
+      );
+    }
+    const running = isGatewayRunning(profile);
+    return buildDesktopMessagingPlatforms(
+      readEnv(profile),
+      getPlatformEnabled(profile),
+      running,
+      getPlatformToolsets(profile),
+      readLocalGatewayPlatformStates(profile, running),
+    );
+  });
+
+  ipcMain.handle(
+    "update-messaging-platform",
+    async (_event, platform: string, update, profile?: string) => {
+      const conn = getConnectionConfig();
+      if (conn.mode === "remote") {
+        return updateRemoteMessagingPlatform(platform, update);
+      }
+      if (conn.mode === "ssh" && conn.ssh) {
+        await applyMessagingPlatformUpdate(
+          platform,
+          update,
+          (key, value) => sshSetEnvValue(conn.ssh!, key, value, profile),
+          (key, enabled) =>
+            sshSetPlatformEnabled(conn.ssh!, key, enabled, profile),
+          (platformKey, toolsetKey, enabled) =>
+            sshSetMessagingPlatformToolsetEnabled(
+              conn.ssh!,
+              platformKey,
+              toolsetKey,
+              enabled,
+              profile,
+            ),
+        );
+        return { ok: true, platform };
+      }
+      await applyMessagingPlatformUpdate(
+        platform,
+        update,
+        (key, value) => setEnvValue(key, value, profile),
+        (key, enabled) => setPlatformEnabled(key, enabled, profile),
+        (platformKey, toolsetKey, enabled) =>
+          setMessagingPlatformToolsetEnabled(
+            platformKey,
+            toolsetKey,
+            enabled,
+            profile,
+          ),
+      );
+      if (isGatewayRunning(profile)) {
+        restartGateway(profile);
+      }
+      return { ok: true, platform };
+    },
+  );
+
+  ipcMain.handle(
+    "test-messaging-platform",
+    async (_event, platform: string, profile?: string) => {
+      const conn = getConnectionConfig();
+      if (conn.mode === "remote") {
+        return testRemoteMessagingPlatform(platform);
+      }
+      if (conn.mode === "ssh" && conn.ssh) {
+        const [envData, enabled, running, platformToolsets] = await Promise.all([
+          sshReadEnv(conn.ssh, profile),
+          sshGetPlatformEnabled(conn.ssh, profile),
+          sshGatewayStatus(conn.ssh),
+          sshGetPlatformToolsets(conn.ssh, profile),
+        ]);
+        return testDesktopMessagingPlatform(
+          platform,
+          buildDesktopMessagingPlatforms(
+            envData,
+            enabled,
+            running,
+            platformToolsets,
+          ),
+        );
+      }
+      const running = isGatewayRunning(profile);
+      return testDesktopMessagingPlatform(
+        platform,
+        buildDesktopMessagingPlatforms(
+          readEnv(profile),
+          getPlatformEnabled(profile),
+          running,
+          getPlatformToolsets(profile),
+          readLocalGatewayPlatformStates(profile, running),
+        ),
+      );
     },
   );
 
@@ -1059,6 +1272,10 @@ function setupIPC(): void {
     return deleteSession(sessionId);
   });
 
+  ipcMain.handle("delete-sessions", (_event, sessionIds: string[]) => {
+    return deleteSessions(Array.isArray(sessionIds) ? sessionIds : []);
+  });
+
   // Profiles
   ipcMain.handle("list-profiles", async () => {
     const conn = getConnectionConfig();
@@ -1078,7 +1295,18 @@ function setupIPC(): void {
     return deleteProfile(name);
   });
   ipcMain.handle("set-active-profile", (_event, name: string) => {
-    if (getConnectionConfig().mode !== "ssh") setActiveProfile(name);
+    if (getConnectionConfig().mode !== "ssh") {
+      setActiveProfile(name);
+      // The desktop now follows this profile: chat/health resolve their URL
+      // from the active profile's own port. Drop the cached health flag so the
+      // next check probes the new gateway rather than the previous profile's.
+      notifyProfileSwitched();
+      // Bring the activated profile's own gateway up if it isn't already —
+      // without stopping any other profile's gateway (their bots stay online).
+      if (!isRemoteMode() && !isGatewayRunning(name)) {
+        startGateway(name);
+      }
+    }
     return true;
   });
 
@@ -1453,6 +1681,88 @@ function setupIPC(): void {
     if (result.canceled || result.filePaths.length === 0) return null;
     return result.filePaths[0];
   });
+
+  // Read directory contents for worktree panel
+  ipcMain.handle(
+    "read-directory",
+    async (
+      _event,
+      dirPath: string,
+    ): Promise<{ name: string; isDirectory: boolean }[] | null> => {
+      try {
+        const entries = await readdir(dirPath, { withFileTypes: true });
+        return entries.map((entry) => ({
+          name: entry.name,
+          isDirectory: entry.isDirectory(),
+        }));
+      } catch {
+        return null;
+      }
+    },
+  );
+
+  // Read file contents for file viewer
+  ipcMain.handle(
+    "read-file",
+    async (
+      _event,
+      filePath: string,
+      maxBytes?: number,
+    ): Promise<{ content: string; truncated: boolean } | null> => {
+      try {
+        const limit = maxBytes ?? 102400; // Default 100KB
+        const buffer = await readFile(filePath);
+        const truncated = buffer.byteLength > limit;
+        const content = truncated
+          ? buffer.subarray(0, limit).toString("utf-8")
+          : buffer.toString("utf-8");
+        return { content, truncated };
+      } catch {
+        return null;
+      }
+    },
+  );
+
+  // Open file in default application
+  ipcMain.handle("open-file-in-editor", async (_event, filePath: string) => {
+    try {
+      await shell.openPath(filePath);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+
+  // Read image file as data URL for preview
+  ipcMain.handle(
+    "read-image-file",
+    async (_event, filePath: string): Promise<string | null> => {
+      try {
+        const buffer = await readFile(filePath);
+        const ext = extname(filePath).toLowerCase().slice(1);
+        const mimeType =
+          ext === "png"
+            ? "image/png"
+            : ext === "jpg" || ext === "jpeg"
+              ? "image/jpeg"
+              : ext === "gif"
+                ? "image/gif"
+                : ext === "webp"
+                  ? "image/webp"
+                  : ext === "svg"
+                    ? "image/svg+xml"
+                    : ext === "bmp"
+                      ? "image/bmp"
+                      : ext === "ico"
+                        ? "image/x-icon"
+                        : "application/octet-stream";
+        const base64 = buffer.toString("base64");
+        return `data:${mimeType};base64,${base64}`;
+      } catch {
+        return null;
+      }
+    },
+  );
   ipcMain.handle(
     "kanban-assign-task",
     (_event, taskId: string, assignee: string | null, profile?: string) =>
@@ -1527,6 +1837,48 @@ function setupIPC(): void {
   // MCP servers
   ipcMain.handle("list-mcp-servers", (_event, profile?: string) =>
     listMcpServers(profile),
+  );
+  ipcMain.handle(
+    "add-mcp-server",
+    (_event, input: McpServerInput, profile?: string) =>
+      addMcpServer(input, profile),
+  );
+  ipcMain.handle("remove-mcp-server", (_event, name: string, profile?: string) =>
+    removeMcpServer(name, profile),
+  );
+  ipcMain.handle(
+    "set-mcp-server-enabled",
+    (_event, name: string, enabled: boolean, profile?: string) =>
+      setMcpServerEnabled(name, enabled, profile),
+  );
+  ipcMain.handle("test-mcp-server", (_event, name: string, profile?: string) =>
+    testMcpServer(name, profile),
+  );
+  ipcMain.handle("list-mcp-catalog", (_event, profile?: string) =>
+    listMcpCatalog(profile),
+  );
+  ipcMain.handle(
+    "install-mcp-catalog-entry",
+    (_event, name: string, env?: Record<string, string>, profile?: string) =>
+      installMcpCatalogEntry(name, env, profile),
+  );
+
+  // Discover marketplace (community registry)
+  ipcMain.handle("registry-fetch", (_event, force?: boolean) =>
+    fetchRegistry(!!force),
+  );
+  ipcMain.handle("registry-list-installed", (_event, profile?: string) =>
+    listInstalledRegistry(profile),
+  );
+  ipcMain.handle(
+    "registry-detail",
+    (_event, kind: RegistryKind, item: RegistryItem) =>
+      fetchRegistryDetail(kind, item),
+  );
+  ipcMain.handle(
+    "registry-install",
+    (_event, kind: RegistryKind, item: RegistryItem, profile?: string) =>
+      installRegistryItem(kind, item, profile),
   );
 
   // Memory providers
@@ -1739,9 +2091,11 @@ function setupUpdater(): void {
 }
 
 // Opt-in Chrome DevTools Protocol port for E2E testing. Set
-// ENABLE_CDP=1 (with optional CDP_PORT, default 9222) before
-// launching `npm run dev` to expose the renderer for Playwright
-// attach. Off by default — no effect on normal dev or prod builds.
+// ENABLE_CDP=1 (with optional CDP_PORT, default 9222) before launching
+// `npm run dev` to expose the renderer for Playwright (or any CDP
+// client) to attach and drive the UI without going through
+// screenshots / OCR. Off by default — no effect on normal dev or
+// production builds. See `scripts/README.md` for the harness workflow.
 if (process.env.ENABLE_CDP === "1") {
   app.commandLine.appendSwitch(
     "remote-debugging-port",
@@ -1752,6 +2106,18 @@ if (process.env.ENABLE_CDP === "1") {
 app.whenReady().then(() => {
   app.name = "Hermes";
   electronApp.setAppUserModelId("com.nousresearch.hermes");
+
+  // Allow microphone access for the app's own renderer (voice input). Without
+  // a handler Electron denies getUserMedia by default. Scoped to the `media`
+  // permission only; everything else stays denied.
+  session.defaultSession.setPermissionRequestHandler(
+    (_wc, permission, callback) => {
+      callback(permission === "media");
+    },
+  );
+  session.defaultSession.setPermissionCheckHandler(
+    (_wc, permission) => permission === "media",
+  );
 
   app.on("browser-window-created", (_, window) => {
     optimizer.watchWindowShortcuts(window);
@@ -1790,7 +2156,10 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
-    stopGateway();
+    // Intentionally do NOT stop the gateway on exit: profile gateways are
+    // detached and meant to keep running headless (e.g. Telegram/Discord bots
+    // stay online after the desktop closes). The user stops a gateway
+    // explicitly via the Gateway controls.
     stopSshTunnel();
     stopClaw3d();
     app.quit();
@@ -1804,7 +2173,8 @@ app.on("before-quit", () => {
     currentChatAbort = null;
   }
   killAllTerminals();
-  stopGateway();
+  // Leave profile gateways running on quit (see window-all-closed) so bots
+  // and other platforms stay online headless.
   stopSshTunnel();
   stopClaw3d();
 });

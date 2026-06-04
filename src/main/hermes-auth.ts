@@ -120,6 +120,7 @@ export function runHermesAuthLogin(
           PATH: getEnhancedPath(),
           HOME: homedir(),
           HERMES_HOME,
+          PYTHONUNBUFFERED: "1",
           TERM: "dumb",
         },
         stdio: ["ignore", "pipe", "pipe"],

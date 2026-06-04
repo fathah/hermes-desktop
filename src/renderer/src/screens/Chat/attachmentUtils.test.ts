@@ -62,12 +62,16 @@ describe("processFiles", () => {
     expect(a.dataUrl?.startsWith("data:image/png;base64,")).toBe(true);
   });
 
-  it("rejects an image over the size limit", async () => {
+  it("rejects an image over the input cap (50 MB) without attempting compression", async () => {
+    // Post-#405: anything ≤ MAX_IMAGE_INPUT_BYTES (50 MB) goes through
+    // the compression path which downsamples to fit the gateway. Only
+    // pathologically large inputs (>50 MB) are rejected outright. Use
+    // 51 MB to exercise that boundary.
     const file = makeFile(
       "huge.png",
       "image/png",
       "x",
-      21 * 1024 * 1024, // 21 MB > 20 MB cap
+      51 * 1024 * 1024,
     );
     const out = await processFiles([file], 0);
     expect(out.attachments).toEqual([]);
@@ -76,6 +80,29 @@ describe("processFiles", () => {
       code: "image-too-large",
       filename: "huge.png",
     });
+  });
+
+  it("passes images under the compression target through untouched", async () => {
+    // 1 MB image — under MAX_IMAGE_TARGET_BYTES (5 MB) so compression
+    // short-circuits and the file isn't decoded.  Verifies the fast path
+    // doesn't accidentally transcode small images (no quality loss, no
+    // originalSize set).
+    const file = makeFile(
+      "small.png",
+      "image/png",
+      "data:image/png;base64,iVBORw0KGgo=",
+      1 * 1024 * 1024,
+    );
+    const out = await processFiles([file], 0);
+    expect(out.errors).toEqual([]);
+    expect(out.attachments).toHaveLength(1);
+    expect(out.attachments[0]).toMatchObject({
+      kind: "image",
+      name: "small.png",
+      size: 1 * 1024 * 1024,
+    });
+    // originalSize is only set when compression actually ran
+    expect(out.attachments[0].originalSize).toBeUndefined();
   });
 
   it("accepts a text file by MIME type", async () => {

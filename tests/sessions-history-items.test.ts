@@ -11,6 +11,7 @@
 import { describe, expect, it } from "vitest";
 import {
   expandRowsToHistory,
+  dedupeSearchRowsBySession,
   pickReasoning,
   parseToolCalls,
   type RawMessageRow,
@@ -78,6 +79,22 @@ describe("pickReasoning", () => {
         reasoning_details: "{not-json",
       }),
     ).toBe("");
+  });
+});
+
+describe("dedupeSearchRowsBySession", () => {
+  it("keeps the first ranked match for each session up to the requested limit", () => {
+    const rows = [
+      { session_id: "s1", snippet: "<<hello>> one" },
+      { session_id: "s1", snippet: "<<hello>> two" },
+      { session_id: "s2", snippet: "<<hello>> three" },
+      { session_id: "s3", snippet: "<<hello>> four" },
+    ];
+
+    expect(dedupeSearchRowsBySession(rows, 2)).toEqual([
+      { session_id: "s1", snippet: "<<hello>> one" },
+      { session_id: "s2", snippet: "<<hello>> three" },
+    ]);
   });
 });
 

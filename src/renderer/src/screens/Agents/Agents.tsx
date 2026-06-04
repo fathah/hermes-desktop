@@ -70,19 +70,26 @@ function Agents({
     if (result.success) {
       setShowCreate(false);
       setNewName("");
-      loadProfiles();
     } else {
       setError(result.error || t("agents.createFailed"));
     }
+    loadProfiles();
   }
 
   async function handleDelete(name: string): Promise<void> {
+    const previousProfiles = profiles;
+    setConfirmDelete(null);
+    setError("");
+    setProfiles((current) => current.filter((p) => p.name !== name));
+
     const result = await window.hermesAPI.deleteProfile(name);
     if (result.success) {
       if (activeProfile === name) onSelectProfile("default");
       loadProfiles();
+    } else {
+      setProfiles(previousProfiles);
+      setError(result.error || t("agents.deleteFailed"));
     }
-    setConfirmDelete(null);
   }
 
   async function handleSelect(name: string): Promise<void> {
@@ -167,6 +174,10 @@ function Agents({
             </button>
           </div>
         </div>
+      )}
+
+      {!showCreate && error && (
+        <div className="agents-create-error">{error}</div>
       )}
 
       <div className="agents-grid">

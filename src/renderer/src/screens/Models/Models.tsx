@@ -5,6 +5,7 @@ import { useI18n } from "../../components/useI18n";
 import BrandLogo from "../../components/common/BrandLogo";
 import { detectProviderFromUrl } from "./detect-provider";
 import { useDiscoveredModels } from "../../hooks/useDiscoveredModels";
+import { expectedEnvKeyForUrl } from "../../../../shared/url-key-map";
 
 interface SavedModel {
   id: string;
@@ -46,22 +47,6 @@ function Models({ visible }: ModelsProps = {}): React.JSX.Element {
   // touches the dropdown we stop overriding their choice.
   const [providerTouched, setProviderTouched] = useState(false);
   const [providerAutoFilled, setProviderAutoFilled] = useState(false);
-
-  function resolveCustomEnvKey(url: string): string {
-    if (!url) return "CUSTOM_API_KEY";
-    if (/openrouter\.ai/i.test(url)) return "OPENROUTER_API_KEY";
-    if (/anthropic\.com/i.test(url)) return "ANTHROPIC_API_KEY";
-    if (/openai\.com/i.test(url)) return "OPENAI_API_KEY";
-    if (/huggingface\.co/i.test(url)) return "HF_TOKEN";
-    if (/api\.groq\.com/i.test(url)) return "GROQ_API_KEY";
-    if (/api\.deepseek\.com/i.test(url)) return "DEEPSEEK_API_KEY";
-    if (/api\.together\.xyz/i.test(url)) return "TOGETHER_API_KEY";
-    if (/api\.fireworks\.ai/i.test(url)) return "FIREWORKS_API_KEY";
-    if (/api\.cerebras\.ai/i.test(url)) return "CEREBRAS_API_KEY";
-    if (/api\.mistral\.ai/i.test(url)) return "MISTRAL_API_KEY";
-    if (/api\.perplexity\.ai/i.test(url)) return "PERPLEXITY_API_KEY";
-    return "CUSTOM_API_KEY";
-  }
 
   const loadModels = useCallback(async () => {
     const list = await window.hermesAPI.listModels();
@@ -114,7 +99,24 @@ function Models({ visible }: ModelsProps = {}): React.JSX.Element {
     setFormProvider(m.provider);
     setFormModel(m.model);
     setFormBaseUrl(m.baseUrl);
+    // Read back the saved API key so the user sees what's actually
+    // configured — previously the field was always reset to empty,
+    // which made the dialog look like the key was missing even when
+    // chat was working fine. Resolve the env var name from the base
+    // URL via the shared URL_KEY_MAP (or CUSTOM_API_KEY fallback for
+    // unknown hosts).
     setFormApiKey("");
+    const envKey = expectedEnvKeyForUrl(m.baseUrl);
+    window.hermesAPI
+      .getEnv()
+      .then((env) => {
+        const saved = env[envKey];
+        if (saved) setFormApiKey(saved);
+      })
+      .catch(() => {
+        // Leave the field empty on read failure — the user can still
+        // overwrite with a new value as before.
+      });
     setShowApiKey(false);
     setFormError("");
     // Editing an existing entry — respect the saved provider, don't auto-overwrite it.
@@ -210,7 +212,7 @@ function Models({ visible }: ModelsProps = {}): React.JSX.Element {
     }
 
     if (formApiKey.trim() && formProvider === "custom") {
-      const envKey = resolveCustomEnvKey(formBaseUrl.trim());
+      const envKey = expectedEnvKeyForUrl(formBaseUrl.trim());
       await window.hermesAPI.setEnv(envKey, formApiKey.trim());
     }
 

@@ -8,6 +8,7 @@ export default {
   createFailed: "Failed to create profile",
   creating: "Creating...",
   create: "Create",
+  deleteFailed: "Failed to delete profile",
   active: "Active",
   noModel: "No model set",
   skillsCount: "{{count}} skills",
@@ -20,4 +21,7 @@ export default {
   deleteTitle: "Delete agent",
   auto: "Auto",
   local: "Local",
+  manageProfiles: "Manage profiles",
+  switchProfile: "Switch profile",
+  defaultTag: "default",
 } as const;

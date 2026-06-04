@@ -1,7 +1,8 @@
 import { memo, useState } from "react";
+import { ChevronRight, Spinner, Wrench } from "../../assets/icons";
 import { useI18n } from "../../components/useI18n";
 import { AttachmentChip } from "../../components/AttachmentChip";
-import { HermesAvatar } from "./MessageRow";
+import { HermesAvatar, AvatarSpacer } from "./MessageRow";
 import type {
   Attachment,
   ReasoningMessage,
@@ -61,19 +62,33 @@ const CollapsibleSection = memo(function CollapsibleSection({
 
 export const ReasoningRow = memo(function ReasoningRow({
   msg,
+  active = false,
+  showAvatar = true,
 }: {
   msg: ReasoningMessage;
+  /** True only while this turn's reasoning is still streaming. Controls the
+   *  present-vs-past label ("Thinking…" vs "Thought"). */
+  active?: boolean;
+  /** False on continuation rows of a turn — render a spacer instead of an
+   *  avatar so one turn shows a single avatar. */
+  showAvatar?: boolean;
 }): React.JSX.Element {
   const { t } = useI18n();
   const lineCount = msg.text.split("\n").length;
   return (
-    <div className="chat-message chat-message-agent chat-message-history">
-      <HermesAvatar />
+    <div
+      className={`chat-message chat-message-agent chat-message-history${
+        showAvatar ? "" : " chat-message--grouped"
+      }`}
+    >
+      {showAvatar ? <HermesAvatar /> : <AvatarSpacer />}
       <CollapsibleSection
         variant="reasoning"
         header={
           <span className="chat-history-label">
-            <span className="chat-history-title">{t("chat.thinking")}</span>
+            <span className="chat-history-title">
+              {active ? t("chat.thinking") : t("chat.thought")}
+            </span>
             <span className="chat-history-meta">
               {lineCount} {lineCount === 1 ? "line" : "lines"}
             </span>
@@ -86,7 +101,17 @@ export const ReasoningRow = memo(function ReasoningRow({
   );
 });
 
-/* ── Tool call ────────────────────────────────────────────────────────── */
+/* ── Tool activity (grouped) ──────────────────────────────────────────────
+ *
+ * A contiguous run of tool calls/results collapses into a single block —
+ * the way ChatGPT and Claude fold a burst of tool use into one line. The
+ * collapsed summary shows the most recent step (plus a total count); the
+ * whole run expands smoothly to reveal every step, and each step in turn
+ * expands to its full arguments/output. This keeps a 100-call turn from
+ * exploding into 100 stacked bubbles.
+ */
+
+type ToolItem = ToolCallMessage | ToolResultMessage;
 
 function summariseArgs(args: string): string {
   // Single-line snippet for the collapsed header — show the first ~80
@@ -96,82 +121,152 @@ function summariseArgs(args: string): string {
   return flat.slice(0, 77) + "…";
 }
 
-export const ToolCallRow = memo(function ToolCallRow({
-  msg,
-}: {
-  msg: ToolCallMessage;
-}): React.JSX.Element {
-  const { t } = useI18n();
-  const summary = summariseArgs(msg.args);
-  return (
-    <div className="chat-message chat-message-agent chat-message-history">
-      <HermesAvatar />
-      <CollapsibleSection
-        variant="tool-call"
-        header={
-          <span className="chat-history-label">
-            <span className="chat-history-title">{t("chat.toolCall")}</span>
-            <span className="chat-history-tool-name">{msg.name}</span>
-            {summary && (
-              <span className="chat-history-tool-summary">{summary}</span>
-            )}
-          </span>
-        }
-      >
-        <pre className="chat-history-pre chat-history-pre--code">
-          {msg.args || "(no arguments)"}
-        </pre>
-      </CollapsibleSection>
-    </div>
-  );
-});
-
-/* ── Tool result ──────────────────────────────────────────────────────── */
-
 function countLines(text: string): number {
   if (!text) return 0;
   return text.split("\n").length;
 }
 
-export const ToolResultRow = memo(function ToolResultRow({
+function isToolCall(msg: ToolItem): msg is ToolCallMessage {
+  return msg.kind === "tool_call";
+}
+
+function resultMeta(msg: ToolResultMessage): string {
+  const lines = countLines(msg.content);
+  const base = `${lines} ${lines === 1 ? "line" : "lines"}`;
+  const n = msg.attachments?.length ?? 0;
+  return n > 0 ? `${base} · ${n} attachment${n === 1 ? "" : "s"}` : base;
+}
+
+function itemDetail(msg: ToolItem): string {
+  return isToolCall(msg) ? summariseArgs(msg.args) : resultMeta(msg);
+}
+
+function itemTone(msg: ToolItem): "call" | "result" | "failed" {
+  if (!isToolCall(msg)) return "result";
+  return msg.status === "failed" ? "failed" : "call";
+}
+
+const ToolActivityItem = memo(function ToolActivityItem({
   msg,
 }: {
-  msg: ToolResultMessage;
+  msg: ToolItem;
 }): React.JSX.Element {
   const { t } = useI18n();
-  const lines = countLines(msg.content);
-  const hasAttachments = !!msg.attachments && msg.attachments.length > 0;
+  const [open, setOpen] = useState(false);
+  const call = isToolCall(msg);
+  const hasAttachments =
+    !call && !!msg.attachments && msg.attachments.length > 0;
+
   return (
-    <div className="chat-message chat-message-agent chat-message-history">
-      <HermesAvatar />
-      <CollapsibleSection
-        variant="tool-result"
-        header={
-          <span className="chat-history-label">
-            <span className="chat-history-title">{t("chat.toolResult")}</span>
-            <span className="chat-history-tool-name">{msg.name}</span>
-            <span className="chat-history-meta">
-              {lines} {lines === 1 ? "line" : "lines"}
-              {hasAttachments
-                ? ` · ${msg.attachments!.length} attachment${
-                    msg.attachments!.length === 1 ? "" : "s"
-                  }`
-                : ""}
-            </span>
-          </span>
-        }
+    <div className="chat-tool-item">
+      <button
+        type="button"
+        className="chat-tool-item-header"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
       >
-        {hasAttachments && (
-          <div className="chat-history-attachments">
-            {msg.attachments!.map((att: Attachment) => (
-              <AttachmentChip key={att.id} attachment={att} />
-            ))}
+        <ChevronRight
+          size={12}
+          className={`chat-tool-item-chevron${
+            open ? " chat-tool-item-chevron--open" : ""
+          }`}
+        />
+        <span
+          className={`chat-tool-item-dot chat-tool-item-dot--${itemTone(msg)}`}
+        />
+        <span className="chat-tool-item-kind">
+          {call ? t("chat.toolCall") : t("chat.toolResult")}
+        </span>
+        <span className="chat-tool-item-name">{msg.name}</span>
+        <span className="chat-tool-item-detail">{itemDetail(msg)}</span>
+      </button>
+      <div
+        className={`chat-tool-collapse${open ? " chat-tool-collapse--open" : ""}`}
+      >
+        <div className="chat-tool-collapse-inner">
+          <div className="chat-tool-item-body">
+            {hasAttachments && (
+              <div className="chat-history-attachments">
+                {msg.attachments!.map((att: Attachment) => (
+                  <AttachmentChip key={att.id} attachment={att} />
+                ))}
+              </div>
+            )}
+            <pre
+              className={`chat-history-pre ${
+                call ? "chat-history-pre--code" : "chat-history-pre--scroll"
+              }`}
+            >
+              {call ? msg.args || "(no arguments)" : msg.content || "(empty)"}
+            </pre>
           </div>
-        )}
-        <pre className="chat-history-pre chat-history-pre--scroll">
-          {msg.content || "(empty)"}
-        </pre>
-      </CollapsibleSection>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+export const ToolActivityGroup = memo(function ToolActivityGroup({
+  items,
+  active = false,
+  showAvatar = true,
+}: {
+  items: ToolItem[];
+  /** True while the turn is still streaming and this is the trailing run —
+   *  drives the spinner on the collapsed summary. */
+  active?: boolean;
+  showAvatar?: boolean;
+}): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  const last = items[items.length - 1];
+  const count = items.length;
+  const detail = itemDetail(last);
+
+  return (
+    <div
+      className={`chat-message chat-message-agent chat-message-history${
+        showAvatar ? "" : " chat-message--grouped"
+      }`}
+    >
+      {showAvatar ? <HermesAvatar /> : <AvatarSpacer />}
+      <div
+        className={`chat-tool-group${active ? " chat-tool-group--active" : ""}`}
+      >
+        <button
+          type="button"
+          className="chat-tool-group-summary"
+          aria-expanded={open}
+          onClick={() => setOpen((o) => !o)}
+        >
+          <ChevronRight
+            size={14}
+            className={`chat-tool-group-chevron${
+              open ? " chat-tool-group-chevron--open" : ""
+            }`}
+          />
+          {active ? (
+            <Spinner size={13} className="chat-tool-group-spinner" />
+          ) : (
+            <Wrench size={13} className="chat-tool-group-icon" />
+          )}
+          <span className="chat-tool-group-name">{last.name}</span>
+          {detail && <span className="chat-tool-group-detail">{detail}</span>}
+          <span className="chat-tool-group-count">
+            {count} {count === 1 ? "step" : "steps"}
+          </span>
+        </button>
+        <div
+          className={`chat-tool-collapse${open ? " chat-tool-collapse--open" : ""}`}
+        >
+          <div className="chat-tool-collapse-inner">
+            <div className="chat-tool-group-items">
+              {items.map((it) => (
+                <ToolActivityItem key={it.id} msg={it} />
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 });

@@ -4,7 +4,7 @@ import { AgentMarkdown } from "../../components/AgentMarkdown";
 import { AttachmentChip } from "../../components/AttachmentChip";
 import { MediaSegmentView } from "../../components/MediaImage";
 import { useI18n } from "../../components/useI18n";
-import { parseMediaTokens } from "./mediaUtils";
+import { parseMediaTokens, cleanLeakedToolTags } from "./mediaUtils";
 import type { Attachment, ChatBubbleMessage, ChatMessage } from "./types";
 
 export const APPROVAL_RE =
@@ -30,12 +30,25 @@ export const HermesAvatar = memo(function HermesAvatar({
   );
 });
 
+/**
+ * Empty box the size of an avatar. Rendered in place of the avatar on
+ * continuation rows of a turn (the thinking/tool rows and answer bubble that
+ * follow the first row) so one turn shows a single avatar while every row
+ * stays aligned to the same content column.
+ */
+export const AvatarSpacer = memo(function AvatarSpacer(): React.JSX.Element {
+  return <div className="chat-avatar" aria-hidden="true" />;
+});
+
 interface MessageRowProps {
   msg: ChatMessage;
   isLast: boolean;
   isLoading: boolean;
   onApprove: () => void;
   onDeny: () => void;
+  /** False on continuation rows of a turn — render a spacer instead of the
+   *  avatar so the turn reads as one grouped block. Defaults to true. */
+  showAvatar?: boolean;
 }
 
 export const MessageRow = memo(function MessageRow({
@@ -44,6 +57,7 @@ export const MessageRow = memo(function MessageRow({
   isLoading,
   onApprove,
   onDeny,
+  showAvatar = true,
 }: MessageRowProps): React.JSX.Element {
   const { t } = useI18n();
   const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(
@@ -63,7 +77,9 @@ export const MessageRow = memo(function MessageRow({
   const segments = useMemo(
     () =>
       msg.role === "agent" && bubbleContent
-        ? parseMediaTokens(bubbleContent)
+        ? // Recover any tool/skill call the model leaked as text (e.g. a raw
+          // `<skill_view>{"answer": …}</skill_view>` tag) before tokenizing.
+          parseMediaTokens(cleanLeakedToolTags(bubbleContent))
         : null,
     [msg.role, bubbleContent],
   );
@@ -72,7 +88,7 @@ export const MessageRow = memo(function MessageRow({
   if (!isChatBubbleMessage(msg)) {
     return (
       <div className={`chat-message chat-message-${msg.role}`}>
-        <HermesAvatar />
+        {showAvatar ? <HermesAvatar /> : <AvatarSpacer />}
         <div className={`chat-bubble chat-bubble-${msg.role}`}>
           {/* Reasoning/tool messages handled separately */}
         </div>
@@ -88,8 +104,14 @@ export const MessageRow = memo(function MessageRow({
   const hasAttachments = !!msg.attachments && msg.attachments.length > 0;
 
   return (
-    <div className={`chat-message chat-message-${msg.role}`}>
-      {msg.role === "user" ? (
+    <div
+      className={`chat-message chat-message-${msg.role}${
+        showAvatar ? "" : " chat-message--grouped"
+      }`}
+    >
+      {!showAvatar ? (
+        <AvatarSpacer />
+      ) : msg.role === "user" ? (
         <div className="chat-avatar chat-avatar-user">U</div>
       ) : (
         <HermesAvatar />

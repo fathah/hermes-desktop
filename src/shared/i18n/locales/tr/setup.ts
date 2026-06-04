@@ -1,0 +1,53 @@
+export default {
+  title: "Yapay Zeka Sağlayıcınızı Ayarlayın",
+  subtitle: "Başlamak için bir sağlayıcı seçin ve yapılandırın",
+  providerCards: {
+    openrouter: { name: "OpenRouter", desc: "200+ model", tag: "Önerilen" },
+    anthropic: { name: "Anthropic", desc: "Claude modelleri", tag: "" },
+    openai: { name: "OpenAI", desc: "GPT modelleri", tag: "" },
+    local: {
+      name: "Yerel / OpenAI Uyumlu",
+      desc: "LM Studio, Ollama, Groq, DeepSeek, Together…",
+      tag: "",
+    },
+  },
+  localPresets: {
+    lmstudio: "LM Studio",
+    atomicchat: "Atomic Chat",
+    ollama: "Ollama",
+    vllm: "vLLM",
+    llamacpp: "llama.cpp",
+    groq: "Groq",
+    deepseek: "DeepSeek",
+    together: "Together AI",
+    fireworks: "Fireworks",
+    cerebras: "Cerebras",
+    mistral: "Mistral",
+  },
+  serverPreset: "Sunucu Ön Ayarı",
+  localGroupLabel: "Yerel Sunucular",
+  remoteGroupLabel: "Uzaktaki OpenAI Uyumlu API'ler",
+  serverUrl: "Temel URL",
+  modelName: "Model Adı",
+  localServerHint:
+    "Devam etmeden önce yerel sunucunuzun çalıştığından emin olun",
+  customServerHint:
+    "Bir ön ayar seçin veya herhangi bir OpenAI uyumlu temel URL yapıştırın",
+  customApiKeyLabel: "API Anahtarı",
+  customApiKeyHint:
+    "Uzaktaki API'ler için gerekli. Localhost için boş bırakın.",
+  defaultModelHint: "Sunucunun varsayılan modelini kullanmak için boş bırakın",
+  missingApiKey: "Lütfen bir API anahtarı girin",
+  missingServerUrl: "Lütfen sunucu URL'sini girin",
+  saveFailed: "Yapılandırma kaydedilemedi",
+  noKeyHint: "Anahtarınız yok mu? Buradan edin",
+  continue: "Devam",
+  saving: "Kaydediliyor...",
+  apiKeyLabel: "{{provider}} API Anahtarı",
+  noApiKeyRequired:
+    "{{provider}} bir API anahtarı gerektirmez. Hermes yerel CLI/OAuth yapılandırmanızı kullanacaktır.",
+  localNoKeyNeeded: "API anahtarı gerekmez",
+  localLlm: "Yerel LLM",
+  modelBaseUrlPlaceholder: "http://localhost:1234/v1",
+  modelNamePlaceholder: "örn. llama-3.1-8b",
+} as const;

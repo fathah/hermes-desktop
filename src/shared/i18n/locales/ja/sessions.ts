@@ -13,4 +13,12 @@ export default {
   emptyHint: "チャットを始めて最初のセッションを作りましょう",
   messages: "件",
   messageSingular: "件",
+  delete: "会話を削除",
+  deleteConfirmTitle: "会話を削除",
+  deleteConfirm:
+    "この会話を削除しますか？この操作は取り消せません — メッセージとセッション記録は完全に削除されます。",
+  deleteClose: "削除確認を閉じる",
+  deleteCancel: "キャンセル",
+  deleteConfirmAction: "削除",
+  deleteDeleting: "削除中...",
 } as const;

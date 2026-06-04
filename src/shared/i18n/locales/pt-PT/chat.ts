@@ -30,12 +30,23 @@ export default {
   removeAttachment: "Remover anexo",
   dropToAttach: "Largue ficheiros para anexar",
   attachUnsupported: "{{name}}: tipo de ficheiro não suportado",
-  attachImageTooLarge: "{{name}}: imagem demasiado grande (máx. 20 MB)",
+  attachImageTooLarge: "{{name}}: imagem demasiado grande (máx. 50 MB)",
+  attachImageUncompressible:
+    "{{name}}: não foi possível comprimir a imagem para caber (GIF animado ou formato não suportado). Tenta uma captura de ecrã estática.",
   attachTextTooLarge: "{{name}}: ficheiro demasiado grande (máx. 256 KB)",
   attachTooMany: "Demasiados anexos (máx. 10 por mensagem)",
   attachReadFailed: "{{name}}: não foi possível ler",
   attachRemoteModeBinary:
     "{{name}}: anexos PDF/binários exigem o modo local — imagens e ficheiros de texto continuam a funcionar.",
+  validation: {
+    noModel: "Nenhum modelo seleccionado. Escolha um no selector de Chat em baixo.",
+    noProvider: "Sem fornecedor definido para o modelo activo.",
+    missingKey: "Falta {{key}} — exigida pelo fornecedor activo.",
+    fixInProviders: "Defina em Fornecedores →",
+    fixInModels: "Escolha um modelo em Modelos →",
+    fixInGateway: "Verifique o separador Gateway →",
+    fixInSetup: "Executar configuração →",
+  },
   fastMode: "Modo Rápido",
   fastModeOn: "Modo Rápido LIGADO",
   fastModeActive:
@@ -79,4 +90,10 @@ export default {
   },
   queued:
     "{{count}} mensagem(ns) em fila — serão enviadas quando o agente terminar",
+  worktree: {
+    loading: "A carregar",
+    empty: "A pasta está vazia",
+    emptyFolder: "Pasta vazia",
+    errorLoading: "Falha ao carregar conteúdo da pasta",
+  },
 } as const;

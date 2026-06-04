@@ -3,10 +3,11 @@ import {
   existsSync,
   readFileSync,
   readdirSync,
+  statSync,
   writeFileSync,
   unlinkSync,
 } from "fs";
-import { join, delimiter } from "path";
+import { join, delimiter, resolve } from "path";
 import { homedir, tmpdir } from "os";
 import { randomBytes } from "crypto";
 import { app, type BrowserWindow } from "electron";
@@ -300,6 +301,14 @@ const PROVIDER_ENV_KEYS: Record<string, string> = {
   glm: "GLM_API_KEY",
   kimi: "KIMI_API_KEY",
   nvidia: "NVIDIA_API_KEY",
+  // Nous Portal supports BOTH OAuth (`nous` variant) AND API key
+  // (`nous-api` variant). Register the env var name under both ids so
+  // the install-gate + pre-send validation + config-health audit can
+  // detect a missing key — whichever id the user's profile happens to
+  // be configured under. The OAuth case is handled separately by
+  // checking auth.json via hasOAuthCredentials() (config.ts).
+  nous: "NOUS_API_KEY",
+  "nous-api": "NOUS_API_KEY",
 };
 
 // When provider is "custom" or "auto", the desktop's setup flow falls
@@ -1158,12 +1167,17 @@ export async function runHermesImport(
   archivePath: string,
   profile?: string,
 ): Promise<{ success: boolean; error?: string }> {
+  const archive = validateImportArchivePath(archivePath);
+  if (!archive.success) {
+    return { success: false, error: archive.error };
+  }
+
   if (!existsSync(HERMES_PYTHON) || !existsSync(HERMES_SCRIPT)) {
     return { success: false, error: "Hermes is not installed." };
   }
   const args = hermesCliArgs();
   if (profile && profile !== "default") args.push("-p", profile);
-  args.push("import", archivePath);
+  args.push("import", archive.path);
 
   return new Promise((resolve) => {
     execFile(
@@ -1193,6 +1207,29 @@ export async function runHermesImport(
       },
     );
   });
+}
+
+export function validateImportArchivePath(
+  archivePath: unknown,
+): { success: true; path: string } | { success: false; error: string } {
+  if (typeof archivePath !== "string" || archivePath.trim() === "") {
+    return { success: false, error: "Import archive path is required." };
+  }
+
+  const path = resolve(archivePath);
+  if (!existsSync(path)) {
+    return { success: false, error: "Import archive does not exist." };
+  }
+
+  try {
+    if (!statSync(path).isFile()) {
+      return { success: false, error: "Import archive must be a file." };
+    }
+  } catch {
+    return { success: false, error: "Import archive is not readable." };
+  }
+
+  return { success: true, path };
 }
 
 // ────────────────────────────────────────────────────

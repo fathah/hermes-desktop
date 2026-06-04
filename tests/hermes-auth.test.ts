@@ -182,6 +182,10 @@ describe("runHermesAuthLogin", () => {
       "--type",
       "oauth",
     ]);
+    const options = spawnSpy.mock.calls[0][2] as {
+      env?: Record<string, string | undefined>;
+    };
+    expect(options.env?.PYTHONUNBUFFERED).toBe("1");
 
     const proc = lastProc();
     proc.stdout.emit("data", Buffer.from("Opening browser for sign-in...\n"));

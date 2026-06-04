@@ -20,6 +20,17 @@ import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 
 const PROFILES_DIR = join(HERMES_HOME, "profiles");
 
+function commandErrorMessage(err: unknown): string {
+  const e = err as {
+    stdout?: Buffer | string;
+    stderr?: Buffer | string;
+    message?: string;
+  };
+  const stdout = e.stdout?.toString().trim();
+  const stderr = e.stderr?.toString().trim();
+  return stdout || stderr || e.message || "Command failed";
+}
+
 export interface ProfileInfo {
   name: string;
   path: string;
@@ -218,14 +229,12 @@ export function createProfile(
         HERMES_HOME,
       },
       stdio: "pipe",
-      timeout: 15000,
+      timeout: 30000,
       ...HIDDEN_SUBPROCESS_OPTIONS,
     });
     return { success: true };
   } catch (err) {
-    const msg =
-      (err as { stderr?: Buffer }).stderr?.toString() || (err as Error).message;
-    return { success: false, error: msg.trim() };
+    return { success: false, error: commandErrorMessage(err) };
   }
 }
 
@@ -252,15 +261,13 @@ export function deleteProfile(name: string): {
           HERMES_HOME,
         },
         stdio: "pipe",
-        timeout: 15000,
+        timeout: 30000,
         ...HIDDEN_SUBPROCESS_OPTIONS,
       },
     );
     return { success: true };
   } catch (err) {
-    const msg =
-      (err as { stderr?: Buffer }).stderr?.toString() || (err as Error).message;
-    return { success: false, error: msg.trim() };
+    return { success: false, error: commandErrorMessage(err) };
   }
 }
 

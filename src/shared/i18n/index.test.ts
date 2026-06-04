@@ -26,6 +26,10 @@ describe("shared i18n", () => {
     expect(t("welcome.title", "id")).toBe("Selamat datang di Hermes");
   });
 
+  it("returns pl text when available", () => {
+    expect(t("welcome.title", "pl")).toBe("Witamy w Hermes");
+  });
+
   it("falls back to en when zh-CN key is missing", () => {
     expect(t("nonExistent.fallbackKey", "zh-CN")).toBe(
       "nonExistent.fallbackKey",
@@ -35,6 +39,12 @@ describe("shared i18n", () => {
   it("preserves interpolation placeholders in es", () => {
     expect(t("common.updateAvailable", "es", { version: "1.2.3" })).toBe(
       "Actualizar a v1.2.3",
+    );
+  });
+
+  it("preserves interpolation placeholders in pl", () => {
+    expect(t("common.updateAvailable", "pl", { version: "1.2.3" })).toBe(
+      "Aktualizacja v1.2.3",
     );
   });
 });

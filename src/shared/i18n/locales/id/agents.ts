@@ -8,6 +8,7 @@ export default {
   createFailed: "Gagal membuat profil",
   creating: "Membuat...",
   create: "Buat",
+  deleteFailed: "Gagal menghapus profil",
   active: "Aktif",
   noModel: "Model belum diatur",
   skillsCount: "{{count}} skill",

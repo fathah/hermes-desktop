@@ -8,6 +8,7 @@ export default {
   createFailed: "プロファイル作成に失敗しました",
   creating: "作成中...",
   create: "作成",
+  deleteFailed: "プロファイルの削除に失敗しました",
   active: "稼働中",
   noModel: "モデル未設定",
   skillsCount: "{{count}} スキル",

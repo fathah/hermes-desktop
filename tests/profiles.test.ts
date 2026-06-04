@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { join } from "path";
 import { mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
 
+const execFileSyncMock = vi.hoisted(() => vi.fn());
+
 // `vi.hoisted` runs before module imports, so we can't reference imported
 // `join` / `tmpdir` here — use the bare Node modules via require, which is
 // the documented escape hatch for hoisted setup.
@@ -25,6 +27,11 @@ vi.mock("../src/main/installer", () => ({
   getEnhancedPath: () => process.env.PATH || "",
 }));
 
+vi.mock("child_process", () => ({
+  default: { execFileSync: execFileSyncMock },
+  execFileSync: execFileSyncMock,
+}));
+
 // Import AFTER the mock so PROFILES_DIR is resolved against TEST_HOME.
 import {
   createProfile,
@@ -36,6 +43,7 @@ import {
 const PROFILES_DIR = join(TEST_HOME, "profiles");
 
 beforeEach(() => {
+  execFileSyncMock.mockReset();
   mkdirSync(TEST_HOME, { recursive: true });
   mkdirSync(PROFILES_DIR, { recursive: true });
 });
@@ -138,6 +146,70 @@ describe("listProfiles", () => {
     expect(deleteProfile("../outside").success).toBe(false);
     expect(() => setActiveProfile("../outside")).toThrow(
       "Profile names may contain lowercase letters",
+    );
+    expect(execFileSyncMock).not.toHaveBeenCalled();
+  });
+
+  it("surfaces Hermes Agent profile-create errors written to stdout", () => {
+    const err = new Error("Command failed");
+    Object.assign(err, {
+      stdout: Buffer.from(
+        "Error: Profile name 'test' is reserved — it collides with either the Hermes installation itself or a common system binary. Pick a different name.\n",
+      ),
+      stderr: Buffer.from(""),
+    });
+    execFileSyncMock.mockImplementation(() => {
+      throw err;
+    });
+
+    const result = createProfile("test", true);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("reserved");
+    expect(result.error).toContain("common system binary");
+  });
+
+  it("uses Hermes Agent stdout for duplicate profile-create errors", () => {
+    const err = new Error("Command failed");
+    Object.assign(err, {
+      stdout: Buffer.from(
+        "Error: Profile 'test2' already exists at C:\\Users\\pmos6\\AppData\\Local\\hermes\\profiles\\test2\n",
+      ),
+      stderr: Buffer.from(""),
+    });
+    execFileSyncMock.mockImplementation(() => {
+      throw err;
+    });
+
+    const result = createProfile("test2", false);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe(
+      "Error: Profile 'test2' already exists at C:\\Users\\pmos6\\AppData\\Local\\hermes\\profiles\\test2",
+    );
+  });
+
+  it("allows slower cloned profile creation before timing out", () => {
+    execFileSyncMock.mockReturnValue(Buffer.from(""));
+
+    expect(createProfile("slow-clone", true).success).toBe(true);
+
+    expect(execFileSyncMock).toHaveBeenCalledWith(
+      "/usr/bin/python3",
+      ["/dev/null", "profile", "create", "slow-clone", "--clone"],
+      expect.objectContaining({ timeout: 30000 }),
+    );
+  });
+
+  it("bounds profile deletion with the same timeout as profile creation", () => {
+    execFileSyncMock.mockReturnValue(Buffer.from(""));
+
+    expect(deleteProfile("slow-delete").success).toBe(true);
+
+    expect(execFileSyncMock).toHaveBeenCalledWith(
+      "/usr/bin/python3",
+      ["/dev/null", "profile", "delete", "slow-delete", "--yes"],
+      expect.objectContaining({ timeout: 30000 }),
     );
   });
 });

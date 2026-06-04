@@ -6,6 +6,7 @@ Thanks for your interest in contributing to Hermes Desktop! Whether it's a bug f
 
 - English: `CONTRIBUTING.md`
 - 简体中文: `CONTRIBUTING.zh-CN.md`
+- 日本語: `CONTRIBUTING.ja-JP.md`
 
 ## Getting Started
 

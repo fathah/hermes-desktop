@@ -11,6 +11,12 @@ export interface Attachment {
   size: number;
   // Images: data:image/<mime>;base64,<...>
   dataUrl?: string;
+  // Images: present iff the renderer transcoded/downsampled the source
+  // before pushing the attachment (e.g. a 12 MB photo compressed to fit
+  // the gateway's 10 MB request-body cap — see #405). UI uses this to
+  // surface the size delta in the attachment chip so the user knows
+  // quality changed.
+  originalSize?: number;
   // Text files: raw UTF-8 contents (already validated to be text)
   text?: string;
   // Path-ref attachments (PDFs, docx, etc.): absolute filesystem path.
@@ -19,7 +25,37 @@ export interface Attachment {
   path?: string;
 }
 
-export const MAX_IMAGE_BYTES = 20 * 1024 * 1024; // 20 MB
+/**
+ * Sanity cap on accepted image input. Set generously — the renderer
+ * compresses anything between this and `MAX_IMAGE_TARGET_BYTES` to fit.
+ * The only purpose of this cap is to bail before loading a pathologically
+ * large file into the renderer's canvas (which has its own pixel ceiling
+ * around 16M px and would OOM or stall before the decode completes).
+ *
+ * Was 20 MB pre-#405 with no compression; users with >20 MB photos got
+ * a hard reject. Now: anything up to 50 MB original is accepted, and
+ * compression brings the encoded body under the gateway's limit.
+ */
+export const MAX_IMAGE_INPUT_BYTES = 50 * 1024 * 1024; // 50 MB
+
+/**
+ * Target size for the binary payload of an image attachment after
+ * (optional) compression. Chosen so the base64-inflated payload (~4/3×)
+ * plus history and JSON overhead stays under the gateway's 10 MB
+ * request-body cap (`MAX_REQUEST_BYTES` in `gateway/platforms/api_server.py`).
+ *
+ *   5 MB binary × 4/3 ≈ 6.67 MB base64 → ~3.3 MB headroom for history.
+ *
+ * `attachmentUtils.compressImageToFit` only runs when `file.size`
+ * exceeds this target. Files already under the target pass through
+ * untouched (no quality loss, no recompression).
+ */
+export const MAX_IMAGE_TARGET_BYTES = 5 * 1024 * 1024; // 5 MB
+
+// Kept under the old name for backwards-compat with existing imports
+// (notably tests). Equivalent to the new INPUT cap — same semantics.
+export const MAX_IMAGE_BYTES = MAX_IMAGE_INPUT_BYTES;
+
 export const MAX_TEXT_BYTES = 256 * 1024; // 256 KB
 export const MAX_ATTACHMENTS_PER_MESSAGE = 10;
 

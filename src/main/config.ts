@@ -11,6 +11,10 @@ import {
 } from "./utils";
 import { getYamlPath } from "./yaml-path";
 import { canonicalProviderBaseUrl } from "./provider-registry";
+import {
+  expectedEnvKeyForUrl,
+  OPENAI_COMPAT_PROVIDERS,
+} from "../shared/url-key-map";
 
 // ── Connection Config (local / remote / ssh) ─────────────
 
@@ -235,6 +239,56 @@ function stripYamlQuotes(raw: string): string {
   return trimmed;
 }
 
+function quoteYamlScalar(value: string): string {
+  return JSON.stringify(value);
+}
+
+function appendDirectNestedYamlValue(
+  content: string,
+  segments: string[],
+  value: string,
+): string | null {
+  if (segments.length !== 2) return null;
+  const [parent, child] = segments;
+  if (!parent || !child) return null;
+
+  const newline = content.includes("\r\n") ? "\r\n" : "\n";
+  const quotedValue = quoteYamlScalar(value);
+  const parentRe = new RegExp(
+    `^${escapeRegex(parent)}:[ \\t]*(#.*)?(?:\\r?\\n|$)`,
+    "m",
+  );
+  const parentMatch = parentRe.exec(content);
+
+  if (!parentMatch || parentMatch.index === undefined) {
+    const sep = content === "" || content.endsWith("\n") ? "" : newline;
+    return `${content}${sep}${parent}:${newline}  ${child}: ${quotedValue}${newline}`;
+  }
+
+  const blockStart = parentMatch.index + parentMatch[0].length;
+  let blockEnd = blockStart;
+  let cursor = blockStart;
+
+  while (cursor < content.length) {
+    const lineEnd = content.indexOf("\n", cursor);
+    const lineEndExclusive = lineEnd === -1 ? content.length : lineEnd;
+    const line = content.slice(cursor, lineEndExclusive);
+
+    if (line.trim() !== "" && !/^[ \t]/.test(line)) {
+      break;
+    }
+
+    blockEnd =
+      lineEndExclusive === content.length
+        ? content.length
+        : lineEndExclusive + 1;
+    cursor = blockEnd;
+  }
+
+  const insertion = `  ${child}: ${quotedValue}${newline}`;
+  return `${content.slice(0, blockEnd)}${insertion}${content.slice(blockEnd)}`;
+}
+
 /**
  * Locate a dotted YAML path in `content` (e.g. "agent.service_tier" finds
  * the `service_tier` field nested under top-level `agent:`). Returns the
@@ -457,20 +511,26 @@ export function setConfigValue(
   if (hit) {
     content =
       content.slice(0, hit.valueStart) +
-      `"${value}"` +
+      quoteYamlScalar(value) +
       content.slice(hit.valueEnd);
     safeWriteFile(configFile, content);
     return;
   }
 
-  // Key missing. For multi-segment paths we don't know how deep the
-  // user's existing parent block goes (or which segments exist), so
-  // avoid guessing — drop the write rather than corrupting the file.
-  // Top-level single keys are safe to append.
+  // Key missing. Top-level single keys are safe to append. Direct
+  // two-segment scalar paths are also safe to create/append and are used
+  // by Settings fields such as `network.proxy`. Deeper paths remain a
+  // no-op to avoid guessing inside complex user-edited YAML.
   if (segments.length === 1) {
     const sep = content.endsWith("\n") || content === "" ? "" : "\n";
-    content = `${content}${sep}${key}: "${value}"\n`;
+    content = `${content}${sep}${key}: ${quoteYamlScalar(value)}\n`;
     safeWriteFile(configFile, content);
+    return;
+  }
+
+  const nextContent = appendDirectNestedYamlValue(content, segments, value);
+  if (nextContent !== null) {
+    safeWriteFile(configFile, nextContent);
   }
 }
 
@@ -607,13 +667,53 @@ export function getModelConfig(profile?: string): {
 }
 
 /**
+ * Mirror of the runtime key-resolution fallback for OpenAI-compatible /
+ * custom endpoints (see `sendMessageViaCli` in hermes.ts): the gateway tries
+ * the URL-specific key, then `CUSTOM_API_KEY`, then `OPENAI_API_KEY`. Returns
+ * true when any link in that chain is populated for `profile`.
+ *
+ * Why it exists: the pre-send readiness check and the config-health audit
+ * derive a single expected key from the base URL (e.g. a Groq URL →
+ * `GROQ_API_KEY`). But a user on the "OpenAI Compatible" provider pointed at
+ * Groq legitimately authenticates with `OPENAI_API_KEY` — the runtime falls
+ * back to it — so demanding `GROQ_API_KEY` is a false positive (the chat
+ * actually works). This lets those checks accept the same keys the gateway
+ * does. Returns false for providers the runtime does NOT route through the
+ * custom path, so their specific-key checks still apply.
+ *
+ * (The runtime also consults a per-model `CUSTOM_PROVIDER_<name>_KEY` ahead of
+ * the generic keys; that lookup needs models.json and is intentionally omitted
+ * here to keep config.ts free of a models.ts import — the generic chain covers
+ * the reported cases.)
+ */
+export function customEndpointKeyResolvable(
+  provider: string,
+  baseUrl: string,
+  profile?: string,
+): boolean {
+  const p = (provider || "").trim().toLowerCase();
+  if (!baseUrl || !OPENAI_COMPAT_PROVIDERS.has(p)) return false;
+
+  const env = readEnv(profile);
+  const candidates = new Set<string>([
+    expectedEnvKeyForUrl(baseUrl), // URL-specific key, or CUSTOM_API_KEY
+    "CUSTOM_API_KEY",
+    "OPENAI_API_KEY",
+  ]);
+  for (const k of candidates) {
+    if ((env[k] ?? "").trim()) return true;
+  }
+  return false;
+}
+
+/**
  * Replace a direct child's value inside a top-level YAML block in-place,
  * preserving the key's surrounding whitespace and any trailing comment.
  * When the child doesn't exist, insert it as the first sibling at the
  * block's existing indent. When the block itself doesn't exist, append
  * one with the new key inside.
  */
-function upsertBlockChild(
+export function upsertBlockChild(
   content: string,
   blockName: string,
   key: string,
@@ -872,13 +972,14 @@ export function getApiServerKey(profile?: string): string {
   const cached = getCached<string>(cacheKey);
   if (cached !== undefined) return cached;
 
-  const value = resolveApiServerKey({
+  const envForProfile = readEnv(profile);
+  const sources: ApiKeySources = {
     configTopLevelProfile: getConfigValue("API_SERVER_KEY", profile),
     configTopLevelDefault:
       profile && profile !== "default"
         ? getConfigValue("API_SERVER_KEY")
         : null,
-    envProfile: readEnv(profile).API_SERVER_KEY ?? null,
+    envProfile: envForProfile.API_SERVER_KEY ?? null,
     envDefault:
       profile && profile !== "default"
         ? (readEnv().API_SERVER_KEY ?? null)
@@ -888,9 +989,108 @@ export function getApiServerKey(profile?: string): string {
       profile && profile !== "default"
         ? getConfigValue("api_server.token")
         : null,
-  });
+  };
+  const { value, source } = resolveApiServerKeyWithSource(sources);
+
+  // Migration on read — if we resolved the key from a non-canonical
+  // location AND the canonical `.env` slot is empty for this profile,
+  // copy the value into `.env`. Keeps the original copy alone (additive
+  // only — never deletes), so a user who explicitly wrote to
+  // `api_server.token:` can still see their original entry there.
+  //
+  // The point of the migration is to make the gateway's own
+  // `os.getenv("API_SERVER_KEY")` lookup find the value: the gateway's
+  // env hydration at spawn time also injects it (Piece 0), but a
+  // user-edited `.env` is the canonical, file-of-record storage.
+  //
+  // Per-profile scope: cross-profile migration (e.g. copy default .env
+  // value into a profile that has neither) is out of scope — a user
+  // running multiple profiles may have intentionally per-profile keys.
+  const isNamedProfile = Boolean(profile && profile !== "default");
+  const sourceBelongsToProfile =
+    !isNamedProfile ||
+    source === "configTopLevelProfile" ||
+    source === "apiServerTokenProfile";
+  if (
+    value &&
+    source &&
+    sourceBelongsToProfile &&
+    !CANONICAL_API_KEY_SOURCES.has(source) &&
+    !(envForProfile.API_SERVER_KEY ?? "").trim()
+  ) {
+    try {
+      setEnvValue("API_SERVER_KEY", value, profile);
+      appendConfigFixLog({
+        ts: Date.now(),
+        issueCode: "API_SERVER_KEY_NON_CANONICAL",
+        action: "migrate",
+        from: source,
+        to:
+          profile && profile !== "default"
+            ? `~/.hermes/profiles/${profile}/.env`
+            : "~/.hermes/.env",
+        profile: profile || "default",
+        valueMasked: maskKey(value),
+      });
+    } catch {
+      // best-effort — don't block the read on a failed migration
+    }
+  }
+
   setCache(cacheKey, value);
   return value;
+}
+
+/**
+ * Identifies which of the six candidate locations a resolved
+ * `API_SERVER_KEY` was sourced from. Used by the migration-on-read
+ * heuristic in `getApiServerKey` and by the config-health audit to
+ * surface keys living outside the canonical `.env` location.
+ */
+export type ApiKeySource =
+  | "configTopLevelProfile"
+  | "configTopLevelDefault"
+  | "envProfile"
+  | "envDefault"
+  | "apiServerTokenProfile"
+  | "apiServerTokenDefault";
+
+export interface ApiKeySources {
+  configTopLevelProfile: string | null;
+  configTopLevelDefault: string | null;
+  envProfile: string | null;
+  envDefault: string | null;
+  apiServerTokenProfile: string | null;
+  apiServerTokenDefault: string | null;
+}
+
+export interface ApiKeyResolution {
+  value: string;
+  source: ApiKeySource | null;
+}
+
+/**
+ * Source-aware variant of `resolveApiServerKey`. Returns both the
+ * resolved value and a tag indicating which candidate won, so callers
+ * can decide whether the value lives in the canonical `.env` location
+ * or somewhere that warrants a migration / health-audit warning.
+ */
+export function resolveApiServerKeyWithSource(
+  sources: ApiKeySources,
+): ApiKeyResolution {
+  const order: Array<{ source: ApiKeySource; value: string | null }> = [
+    { source: "configTopLevelProfile", value: sources.configTopLevelProfile },
+    { source: "configTopLevelDefault", value: sources.configTopLevelDefault },
+    { source: "envProfile", value: sources.envProfile },
+    { source: "envDefault", value: sources.envDefault },
+    { source: "apiServerTokenProfile", value: sources.apiServerTokenProfile },
+    { source: "apiServerTokenDefault", value: sources.apiServerTokenDefault },
+  ];
+  for (const { source, value } of order) {
+    const trimmed = String(value ?? "").trim();
+    if (trimmed) return { value: trimmed, source };
+  }
+  return { value: "", source: null };
 }
 
 /**
@@ -902,27 +1102,74 @@ export function getApiServerKey(profile?: string): string {
  * Returns the first non-empty trimmed candidate, or "" when all six
  * sources are empty / null / whitespace.
  */
-export function resolveApiServerKey(sources: {
-  configTopLevelProfile: string | null;
-  configTopLevelDefault: string | null;
-  envProfile: string | null;
-  envDefault: string | null;
-  apiServerTokenProfile: string | null;
-  apiServerTokenDefault: string | null;
-}): string {
-  const order: (string | null)[] = [
-    sources.configTopLevelProfile,
-    sources.configTopLevelDefault,
-    sources.envProfile,
-    sources.envDefault,
-    sources.apiServerTokenProfile,
-    sources.apiServerTokenDefault,
-  ];
-  for (const candidate of order) {
-    const trimmed = String(candidate ?? "").trim();
-    if (trimmed) return trimmed;
+export function resolveApiServerKey(sources: ApiKeySources): string {
+  return resolveApiServerKeyWithSource(sources).value;
+}
+
+/**
+ * Sources that are considered the canonical location for
+ * `API_SERVER_KEY`. Reads from anywhere else are still honoured but
+ * trigger a migration write to `.env` (see Piece 1) so future reads —
+ * and crucially the gateway's own `os.getenv("API_SERVER_KEY")` —
+ * find the value in the canonical spot.
+ */
+export const CANONICAL_API_KEY_SOURCES: ReadonlySet<ApiKeySource> =
+  new Set<ApiKeySource>(["envProfile", "envDefault"]);
+
+/**
+ * Mask a credential for safe logging: keep the first 4 and last 4
+ * characters, replace the middle with a fixed-width ellipsis. Returns
+ * "" for empty input and "***" for very short values where masking
+ * would still expose most of the key.
+ */
+export function maskKey(value: string): string {
+  if (!value) return "";
+  if (value.length <= 8) return "***";
+  return `${value.slice(0, 4)}…${value.slice(-4)}`;
+}
+
+/**
+ * Append a JSONL entry to `~/.hermes/logs/config-fixes.log` recording
+ * an automated or user-initiated config migration. Auto-truncates the
+ * log to the most-recent 1000 entries on each write so it doesn't grow
+ * unbounded. Best-effort — any I/O error is silently swallowed so a
+ * broken log directory never blocks the migration itself.
+ */
+export interface ConfigFixLogEntry {
+  ts: number;
+  issueCode: string;
+  action: "migrate" | "autofix" | "manual-fix";
+  from?: string;
+  to?: string;
+  profile?: string;
+  valueMasked?: string;
+  detail?: string;
+}
+
+const CONFIG_FIX_LOG_MAX_LINES = 1000;
+
+export function appendConfigFixLog(entry: ConfigFixLogEntry): void {
+  try {
+    const logDir = join(HERMES_HOME, "logs");
+    if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
+    const logFile = join(logDir, "config-fixes.log");
+    let existing = "";
+    if (existsSync(logFile)) {
+      existing = readFileSync(logFile, "utf-8");
+      const lines = existing.split("\n").filter((l) => l.trim() !== "");
+      if (lines.length >= CONFIG_FIX_LOG_MAX_LINES) {
+        existing =
+          lines.slice(lines.length - CONFIG_FIX_LOG_MAX_LINES + 1).join("\n") +
+          "\n";
+      } else if (existing && !existing.endsWith("\n")) {
+        existing += "\n";
+      }
+    }
+    const line = JSON.stringify(entry) + "\n";
+    writeFileSync(logFile, existing + line, "utf-8");
+  } catch {
+    // intentionally silent — never let log I/O block a migration
   }
-  return "";
 }
 
 // ── Platform enabled/disabled ─────────────────────────────
@@ -951,22 +1198,95 @@ const TRUTHY_VALUES = new Set(["true", "1", "yes", "on"]);
 const PLATFORM_RULES: Record<string, PlatformRule> = {
   telegram: { envCheck: (e) => !!e.TELEGRAM_BOT_TOKEN?.trim() },
   discord: { envCheck: (e) => !!e.DISCORD_BOT_TOKEN?.trim() },
-  slack: { envCheck: (e) => !!e.SLACK_BOT_TOKEN?.trim() },
+  slack: {
+    envCheck: (e) =>
+      !!e.SLACK_BOT_TOKEN?.trim() && !!e.SLACK_APP_TOKEN?.trim(),
+  },
   whatsapp: {
     envCheck: (e) =>
-      TRUTHY_VALUES.has((e.WHATSAPP_ENABLED || "").trim().toLowerCase()),
+      TRUTHY_VALUES.has((e.WHATSAPP_ENABLED || "").trim().toLowerCase()) ||
+      (!!e.WHATSAPP_API_URL?.trim() && !!e.WHATSAPP_API_TOKEN?.trim()),
   },
   signal: {
-    envCheck: (e) => !!e.SIGNAL_HTTP_URL?.trim() && !!e.SIGNAL_ACCOUNT?.trim(),
+    envCheck: (e) =>
+      (!!e.SIGNAL_HTTP_URL?.trim() && !!e.SIGNAL_ACCOUNT?.trim()) ||
+      !!e.SIGNAL_PHONE_NUMBER?.trim(),
   },
   matrix: {
     envCheck: (e) =>
-      !!e.MATRIX_ACCESS_TOKEN?.trim() || !!e.MATRIX_PASSWORD?.trim(),
+      (!!e.MATRIX_HOMESERVER?.trim() &&
+        !!e.MATRIX_ACCESS_TOKEN?.trim() &&
+        !!e.MATRIX_USER_ID?.trim()) ||
+      !!e.MATRIX_PASSWORD?.trim(),
   },
-  mattermost: { envCheck: (e) => !!e.MATTERMOST_TOKEN?.trim() },
+  mattermost: {
+    envCheck: (e) => !!e.MATTERMOST_URL?.trim() && !!e.MATTERMOST_TOKEN?.trim(),
+  },
   home_assistant: {
-    envCheck: (e) => !!e.HASS_TOKEN?.trim(),
+    envCheck: (e) => !!e.HASS_URL?.trim() && !!e.HASS_TOKEN?.trim(),
     configKey: "homeassistant",
+  },
+  homeassistant: {
+    envCheck: (e) => !!e.HASS_URL?.trim() && !!e.HASS_TOKEN?.trim(),
+    configKey: "homeassistant",
+  },
+  email: {
+    envCheck: (e) =>
+      !!e.EMAIL_ADDRESS?.trim() &&
+      !!e.EMAIL_PASSWORD?.trim() &&
+      (!!e.EMAIL_IMAP_HOST?.trim() || !!e.EMAIL_IMAP_SERVER?.trim()) &&
+      (!!e.EMAIL_SMTP_HOST?.trim() || !!e.EMAIL_SMTP_SERVER?.trim()),
+  },
+  sms: {
+    envCheck: (e) =>
+      !!e.TWILIO_ACCOUNT_SID?.trim() && !!e.TWILIO_AUTH_TOKEN?.trim(),
+  },
+  bluebubbles: {
+    envCheck: (e) =>
+      (!!e.BLUEBUBBLES_SERVER_URL?.trim() || !!e.BLUEBUBBLES_URL?.trim()) &&
+      !!e.BLUEBUBBLES_PASSWORD?.trim(),
+  },
+  dingtalk: {
+    envCheck: (e) =>
+      (!!e.DINGTALK_CLIENT_ID?.trim() &&
+        !!e.DINGTALK_CLIENT_SECRET?.trim()) ||
+      (!!e.DINGTALK_APP_KEY?.trim() && !!e.DINGTALK_APP_SECRET?.trim()),
+  },
+  feishu: {
+    envCheck: (e) => !!e.FEISHU_APP_ID?.trim() && !!e.FEISHU_APP_SECRET?.trim(),
+  },
+  wecom: {
+    envCheck: (e) =>
+      !!e.WECOM_BOT_ID?.trim() ||
+      (!!e.WECOM_CORP_ID?.trim() &&
+        !!e.WECOM_AGENT_ID?.trim() &&
+        !!e.WECOM_SECRET?.trim()),
+  },
+  wecom_callback: {
+    envCheck: (e) =>
+      !!e.WECOM_CALLBACK_CORP_ID?.trim() &&
+      !!e.WECOM_CALLBACK_CORP_SECRET?.trim() &&
+      !!e.WECOM_CALLBACK_AGENT_ID?.trim(),
+  },
+  weixin: {
+    envCheck: (e) =>
+      (!!e.WEIXIN_ACCOUNT_ID?.trim() && !!e.WEIXIN_TOKEN?.trim()) ||
+      !!e.WEIXIN_BOT_TOKEN?.trim(),
+  },
+  qqbot: {
+    envCheck: (e) => !!e.QQ_APP_ID?.trim() && !!e.QQ_CLIENT_SECRET?.trim(),
+  },
+  yuanbao: { envCheck: () => false },
+  api_server: {
+    envCheck: (e) =>
+      TRUTHY_VALUES.has((e.API_SERVER_ENABLED || "").trim().toLowerCase()) ||
+      !!e.API_SERVER_KEY?.trim(),
+  },
+  webhook: {
+    envCheck: (e) =>
+      TRUTHY_VALUES.has((e.WEBHOOK_ENABLED || "").trim().toLowerCase()) ||
+      !!e.WEBHOOK_SECRET?.trim(),
+    configKey: "webhook",
   },
 };
 
@@ -1248,11 +1568,11 @@ export function buildCredentialPoolEntry(
   const baseUrl = canonicalProviderBaseUrl(provider) || "";
   // Next priority — pool entries are sorted ascending, so a new entry
   // appended at the end gets the highest priority value.
-  const nextPriority =
-    existingEntries.reduce(
-      (max, e) => (typeof e.priority === "number" ? Math.max(max, e.priority + 1) : max),
-      0,
-    );
+  const nextPriority = existingEntries.reduce(
+    (max, e) =>
+      typeof e.priority === "number" ? Math.max(max, e.priority + 1) : max,
+    0,
+  );
   return {
     id: cryptoRandomId(),
     label: label.trim() || `Key ${existingEntries.length + 1}`,
