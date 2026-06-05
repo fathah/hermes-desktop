@@ -1,0 +1,41 @@
+{
+  "_note": "Recall experiment corpus (8 docs > the top-5 cap). The two RM-* questions are engineered synonym misses: the gold doc shares NO salient term with the question, and distractor docs crowd the top-5, so the gold falls OUT of retrieval — a genuine recall miss the file tool alone cannot fix (no path is ever handed over). The CTRL-* questions retrieve their gold normally (guards against the vault-nav affordance breaking easy cases). The experiment runs each question through two arms: baseline grounding vs grounding + vault-root nav hint.",
+  "questions": [
+    {
+      "id": "RM-holiday",
+      "hypothesis": "recall-miss",
+      "question": "What is the yearly vacation allowance for permanent staff?",
+      "gold": ["guard-handbook.md"],
+      "answer_doc": "guard-handbook.md",
+      "answer_fragment": "28 working days per annum",
+      "expected": "28 working days per annum, inclusive of public holidays (the handbook calls it 'holiday entitlement', not 'vacation')."
+    },
+    {
+      "id": "RM-keys",
+      "hypothesis": "recall-miss",
+      "question": "How often is the safe's access code rotated?",
+      "gold": ["key-control-policy.md"],
+      "answer_doc": "key-control-policy.md",
+      "answer_fragment": "changed\neach quarter",
+      "expected": "The key cabinet combination is changed each quarter (and whenever a supervisor leaves). The policy says 'cabinet combination', not 'safe access code'."
+    },
+    {
+      "id": "CTRL-checkcall",
+      "hypothesis": "pass",
+      "question": "How often must a guard make a radio check-call to the control room during a night shift?",
+      "gold": ["field-operations-sop.md"],
+      "answer_doc": "field-operations-sop.md",
+      "answer_fragment": "every 30 minutes",
+      "expected": "Every 30 minutes on a night shift."
+    },
+    {
+      "id": "CTRL-uniform",
+      "hypothesis": "pass",
+      "question": "What is the standard day-shift uniform for an officer?",
+      "gold": ["guard-handbook.md"],
+      "answer_doc": "guard-handbook.md",
+      "answer_fragment": "white shirt with epaulettes",
+      "expected": "Black trousers, white shirt with epaulettes, clip-on tie, company softshell jacket."
+    }
+  ]
+}

@@ -39,6 +39,17 @@ Ordered roughly by value.
 > only if a measured recall gap survives. Caveats (model-dependence, scale reliability,
 > latency) are in the findings doc. The original analysis below is preserved as the
 > pre-evidence reasoning.
+>
+> **UPDATE 2026-06-05 (b) — recall measured (see the findings doc's recall addendum).** An
+> 8-doc experiment with engineered synonym misses (`scripts/kb-dogfood/recall-experiment.ts`)
+> confirms the recall gap is real (baseline **0%**) and that the **cheapest** fix — pointing the
+> agent at the vault directory so it can self-navigate — lifts it to **80% but is stochastic**
+> (the agentic gateway navigates inconsistently: 100% on an obvious reformulation, 60% on a
+> harder one, 0/2 on one whole run). So the **reliable** recall fix is **app-side query
+> expansion** (broaden the FTS query so the gold doc enters the candidate set → its path is
+> handed over → the agent reads it ~deterministically), which lives in this repo's
+> "app-selects-candidates" role and needs no upstream change. **Not yet built** — this is the
+> remaining recall work. Embeddings stay unjustified until query expansion leaves a residual gap.
 
 **Direction decided:** do **RLM** — let the co-author _navigate_ the vault (search → read → re-search → recurse → synthesize) — instead of a vector-RAG pipeline. Embeddings are **demoted to an optional tool**, added only if a measured recall gap demands it. Short version: RLM reuses what's already built, dodges the entire vector tax, and wins exactly where top-k stuffing fails (multi-hop, whole-doc, follow-the-thread).
 

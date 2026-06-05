@@ -179,3 +179,49 @@ document with deep, figure-dense content and no hallucination. The open work is 
 attack **recall** (needs a >5-doc corpus to even measure), harden ingestion (the garbage-text
 bug), and quantify latency. Real-run corpus/questions/results were kept out of the repo; only
 the reusable `ingest-pdfs.ts` step is committed.
+
+---
+
+## Addendum — recall experiment (2026-06-05): cheapest fix measured
+
+The recall direction from item 1 was finally **measured**, not assumed. Harness:
+`scripts/kb-dogfood/recall-experiment.ts` over an 8-doc corpus
+(`scripts/kb-dogfood/recall-corpus/`, > the top-5 retrieval cap) with two engineered
+**keyword-recall misses** — the gold doc shares no salient term with the question, so it
+falls outside the top-5 and is never handed to the agent (RM-holiday: "vacation/yearly"
+vs the handbook's "holiday/annum"; RM-keys: "safe/access code" vs the policy's
+"cabinet/combination") — plus two controls. Two arms, 5 trials each, live (grok-4.3):
+
+- **baseline** — current grounding (top-5 excerpts + paths).
+- **vault-nav** — the cheapest possible fix: append one paragraph naming the vault
+  **directory** so the agent can list/read other files to discover the missed doc with its
+  existing file tools. (Kept entirely in the harness — production grounding is unchanged.)
+
+| question      | baseline | vault-nav         |
+| ------------- | -------- | ----------------- |
+| RM-holiday    | 0/5      | 5/5 (100%)        |
+| RM-keys       | 0/5      | 3/5 (60%)         |
+| controls (×2) | 5/5      | 5/5 (no breakage) |
+
+**Findings:**
+
+1. **The recall gap is real and the file tool cannot close it.** Baseline 0% on both misses:
+   with the gold doc absent from the top-5, no path is handed over, and (unlike depth) the
+   agent has nothing to read. This is the residual failure the depth mechanism leaves behind.
+2. **The cheapest fix helps a lot — but is stochastic.** vault-nav lifts recall 0 → 80% mean.
+   But the **agentic gateway is non-deterministic**: across runs the agent navigated the vault
+   on an obvious reformulation (vacation→holiday, 100%) and only _sometimes_ on a harder one
+   (safe→cabinet, 60%) — and an earlier single-shot run closed **0/2**. (This itself is a
+   methodology lesson: n=1 per arm flipped between "ship it" and "useless" on consecutive
+   runs; agent behaviour must be measured as a **rate**.)
+3. **Controls are unaffected** — the hint never broke an easy retrieval.
+
+**Conclusion / next step.** vault-nav is a cheap, strictly-positive, but **unreliable**
+mitigation — it can't be the primary fix because you can't promise a co-author it will find a
+synonym-phrased fact. The **reliable** lever is **app-side query expansion**: broaden the FTS
+query (synonyms / term variants) so the gold doc enters the candidate set and its path is
+handed over — which the agent reads ~deterministically (controls 100%, and the proven depth
+mechanism). That sits squarely in this repo's "app selects candidates" role, needs no upstream
+change, and is testable with this same harness. **Embeddings remain unjustified** until FTS
+query expansion is shown to leave a residual synonym gap. The vault-nav hint may later be added
+as a cheap belt-and-braces, but only on top of the deterministic fix, not instead of it.
