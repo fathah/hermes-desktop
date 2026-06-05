@@ -29,7 +29,7 @@
     "@electron-toolkit/utils": "^4.0.0",
     "@types/highlight.js": "^9.12.4",
     "@types/react-syntax-highlighter": "^15.5.13",
-    "@wesbos/code-icons": "^1.2.4",
+    "@wesbos/code-icons": "^1.1.5",
     "better-sqlite3": "^12.8.0",
     "electron-updater": "^6.3.9",
     "highlight.js": "^11.11.1",
@@ -71,6 +71,7 @@
     "tailwindcss": "^4.2.2",
     "typescript": "^5.9.3",
     "vite": "^7.2.6",
-    "vitest": "^4.1.4"
+    "vitest": "^4.1.4",
+    "webpack-cli": "^7.0.3"
   }
 }
