@@ -138,6 +138,7 @@ import {
   closeAllNoteIndexes,
   type NoteQuery,
 } from "./note-index";
+import { extractPdfToMarkdown } from "./pdf-extract";
 import {
   appendObsidianFile,
   buildObsidianOpenUri,
@@ -963,6 +964,7 @@ function setupIPC(): void {
       history?: Array<{ role: string; content: string }>,
       attachments?: Attachment[],
       contextFolder?: string,
+      groundInWorkspace?: boolean,
     ) => {
       if (!isRemoteMode() && !isGatewayRunning(profile)) {
         startGateway(profile);
@@ -1112,6 +1114,7 @@ function setupIPC(): void {
         history,
         attachments,
         contextFolder,
+        groundInWorkspace,
       );
 
       activeChatAborts.set(sessionKey, handle.abort);
@@ -1499,6 +1502,30 @@ function setupIPC(): void {
   ipcMain.handle("sps-index-rebuild", async (_event, profile?: string) => {
     requireLocalWorkspace();
     return (await getSpsNoteIndex(profile)).rebuild();
+  });
+
+  // KB Phase 0: open a file dialog scoped to PDFs; returns the absolute path or
+  // null if cancelled. Local workspace only (the agent reads these files later).
+  ipcMain.handle("sps-pick-pdf", async (event) => {
+    requireLocalWorkspace();
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const opts: Electron.OpenDialogOptions = {
+      properties: ["openFile"],
+      filters: [{ name: "PDF", extensions: ["pdf"] }],
+    };
+    const result = win
+      ? await dialog.showOpenDialog(win, opts)
+      : await dialog.showOpenDialog(opts);
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+  });
+
+  // KB Phase 0: extract a text-layer PDF into markdown for ingestion. Stateless
+  // — the renderer turns the result into a real page via pageFromMarkdown +
+  // makePage so markdown-on-disk stays authoritative.
+  ipcMain.handle("sps-extract-pdf", async (_event, filePath: string) => {
+    requireLocalWorkspace();
+    return extractPdfToMarkdown(filePath);
   });
 
   ipcMain.handle("get-obsidian-config", async (_event, profile?: string) => {

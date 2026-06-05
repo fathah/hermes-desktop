@@ -352,6 +352,7 @@ interface HermesAPI {
     history?: Array<{ role: string; content: string }>,
     attachments?: Attachment[],
     contextFolder?: string,
+    groundInWorkspace?: boolean,
   ) => Promise<{ response: string; sessionId?: string }>;
   abortChat: () => Promise<void>;
   getApiServerKeyStatus: (profile?: string) => Promise<{ hasKey: boolean }>;
@@ -1054,6 +1055,13 @@ interface HermesAPI {
     notes: number;
     links: number;
     indexedAt: number | null;
+  }>;
+  spsPickPdf: () => Promise<string | null>;
+  spsExtractPdf: (filePath: string) => Promise<{
+    title: string;
+    markdown: string;
+    pageCount: number;
+    hasTextLayer: boolean;
   }>;
 }
 

@@ -14,6 +14,7 @@ import {
 } from "../../lib/tree";
 import { buildInitialWorkspace } from "../../data/seed";
 import { initialWorkspace as initial } from "../initial";
+import { pageFromMarkdown } from "../../editor/pageMarkdown";
 import type { Block } from "../../types";
 import type { Store, WorkspaceSlice } from "../storeTypes";
 
@@ -85,6 +86,11 @@ export const createWorkspaceSlice: StateCreator<
           icon: info.icon || "📄",
           title: info.title || "Untitled",
           cover: null,
+          // KB ingestion provenance — only stamped when supplied.
+          ...(info.source !== undefined ? { source: info.source } : {}),
+          ...(info.ingestedAt !== undefined
+            ? { ingestedAt: info.ingestedAt }
+            : {}),
         },
       },
       tree: treeInsert(
@@ -95,6 +101,43 @@ export const createWorkspaceSlice: StateCreator<
       ),
     }));
     return id;
+  },
+
+  importPdf: async (parentId) => {
+    const api = window.hermesAPI;
+    if (!api?.spsPickPdf || !api?.spsExtractPdf) {
+      get().flash("PDF import needs a local workspace");
+      return;
+    }
+    set({ templatesOpen: null });
+    const filePath = await api.spsPickPdf();
+    if (!filePath) return;
+    get().flash("Extracting PDF…");
+    let res: Awaited<ReturnType<typeof api.spsExtractPdf>>;
+    try {
+      res = await api.spsExtractPdf(filePath);
+    } catch {
+      get().flash("Could not read that PDF");
+      return;
+    }
+    if (!res.hasTextLayer) {
+      get().flash("No text layer — scanned PDFs need OCR (not imported)");
+      return;
+    }
+    const { blocks } = pageFromMarkdown(res.markdown);
+    const docBlocks = blocks.length ? blocks : [blk("p", "")];
+    const id = get().makePage(
+      {
+        icon: "📄",
+        title: res.title,
+        source: filePath,
+        ingestedAt: Date.now(),
+      },
+      docBlocks,
+      parentId,
+    );
+    set({ page: id });
+    get().flash(`Imported “${res.title}”`);
   },
 
   newSubPage: (parentId) => {

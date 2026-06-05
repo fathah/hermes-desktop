@@ -45,6 +45,7 @@
     "ipaddr.js": "^2.4.0",
     "lucide-react": "^1.7.0",
     "mermaid": "^11.15.0",
+    "pdfjs-dist": "^4.10.38",
     "posthog-js": "^1.376.0",
     "react-file-icon": "^1.6.0",
     "react-i18next": "^15.7.3",

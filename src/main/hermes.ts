@@ -9,6 +9,7 @@ import {
   openSync,
   closeSync,
 } from "fs";
+import { readFile } from "fs/promises";
 import { join } from "path";
 import { homedir } from "os";
 import http from "http";
@@ -48,6 +49,7 @@ import {
   type DelegateProgress,
 } from "./sse-parser";
 import { readModels } from "./models";
+import { getSpsNoteIndex } from "./note-index";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 import { type Attachment, escapeXmlAttr } from "../shared/attachments";
 import { URL_KEY_MAP, OPENAI_COMPAT_PROVIDERS } from "../shared/url-key-map";
@@ -493,6 +495,93 @@ export function contextFolderSystemMessage(
   };
 }
 
+// ── KB Phase 1: workspace grounding ──────────────────────────────────────────
+// When grounding is on, we run the SPS vault FTS5 index over the user's message,
+// read a bounded excerpt of each top hit, and inject a system message citing the
+// sources (with absolute paths so the agent can read the full file via its file
+// toolset). App selects candidates; Hermes does the reading. Local mode only.
+
+/** How many vault hits to ground on, and how much of each file to inline. */
+const GROUNDING_HITS = 5;
+const GROUNDING_EXCERPT_CHARS = 1500;
+
+export interface GroundingSource {
+  title: string;
+  /** Vault-relative path, e.g. "sources/handbook.md". */
+  relPath: string;
+  /** Absolute path on disk, for the agent's file tool. */
+  absPath: string;
+  excerpt: string;
+}
+
+/** Strip YAML frontmatter and clamp to a bounded, single-block excerpt. */
+function excerptForGrounding(markdown: string): string {
+  const withoutFm = markdown.replace(/^---\n[\s\S]*?\n---\n?/, "");
+  const trimmed = withoutFm.trim();
+  if (trimmed.length <= GROUNDING_EXCERPT_CHARS) return trimmed;
+  return `${trimmed.slice(0, GROUNDING_EXCERPT_CHARS)}…`;
+}
+
+/**
+ * Format grounding sources into a system message. Pure (no IO) so it is unit
+ * testable. Returns null when there are no sources, matching
+ * contextFolderSystemMessage's skip-injection contract.
+ */
+export function formatRetrievalSystemMessage(
+  sources: GroundingSource[],
+): { role: "system"; content: string } | null {
+  if (sources.length === 0) return null;
+  const blocks = sources.map(
+    (s) =>
+      `[${s.title} · ${s.relPath}] (full file: ${s.absPath})\n${s.excerpt}`,
+  );
+  return {
+    role: "system",
+    content:
+      `The following excerpts are from the user's workspace and are the ` +
+      `most relevant to their message. Ground your answer in them and cite ` +
+      `the source path in brackets. If an excerpt is insufficient, read the ` +
+      `full file at its absolute path with the file tool. If none are ` +
+      `relevant, say so and answer normally.\n\n${blocks.join("\n\n")}`,
+  };
+}
+
+/**
+ * Search the SPS vault for the message's terms and build a grounding system
+ * message from the top hits. Best-effort: any failure (no index, unreadable
+ * file) yields null so chat proceeds ungrounded rather than erroring. Exported
+ * for integration testing.
+ */
+export async function buildRetrievalSystemMessage(
+  message: string,
+  profile?: string,
+): Promise<{ role: "system"; content: string } | null> {
+  try {
+    const index = await getSpsNoteIndex(profile);
+    const hits = index.search(message, GROUNDING_HITS);
+    if (hits.length === 0) return null;
+    const root = index.status().root;
+    const sources: GroundingSource[] = [];
+    for (const hit of hits) {
+      const absPath = join(root, hit.path);
+      try {
+        const raw = await readFile(absPath, "utf-8");
+        sources.push({
+          title: hit.title || hit.path,
+          relPath: hit.path,
+          absPath,
+          excerpt: excerptForGrounding(raw),
+        });
+      } catch {
+        /* skip an unreadable hit */
+      }
+    }
+    return formatRetrievalSystemMessage(sources);
+  } catch {
+    return null;
+  }
+}
+
 function sendMessageViaApi(
   message: string,
   cb: ChatCallbacks,
@@ -501,6 +590,7 @@ function sendMessageViaApi(
   history?: Array<{ role: string; content: string }>,
   attachments?: Attachment[],
   contextFolder?: string,
+  groundingSystem?: { role: "system"; content: string } | null,
 ): ChatHandle {
   const mc = getModelConfig(profile);
   const controller = new AbortController();
@@ -527,6 +617,11 @@ function sendMessageViaApi(
   // roles, so reloaded sessions stay clean too.
   const ctxSystem = contextFolderSystemMessage(contextFolder);
   if (ctxSystem) messages.unshift(ctxSystem);
+
+  // KB Phase 1: workspace grounding. Injected only at request-build time (like
+  // the context-folder message), so the visible transcript stays clean and
+  // reloaded sessions — which filter non-user/assistant roles — stay clean too.
+  if (groundingSystem) messages.unshift(groundingSystem);
 
   const body = JSON.stringify({
     model: mc.model || "hermes-agent",
@@ -1133,8 +1228,17 @@ export async function sendMessage(
   history?: Array<{ role: string; content: string }>,
   attachments?: Attachment[],
   contextFolder?: string,
+  groundInWorkspace?: boolean,
 ): Promise<ChatHandle> {
   ensureInitialized();
+
+  // KB Phase 1: workspace grounding is local-only (the vault lives on this
+  // machine; a remote gateway can't read these paths). Computed here, before
+  // routing, so both API and remote paths receive a ready system message.
+  const groundingSystem =
+    groundInWorkspace && !isRemoteMode()
+      ? await buildRetrievalSystemMessage(message, profile)
+      : null;
 
   // Remote mode: always use API, no CLI fallback
   if (isRemoteMode()) {
@@ -1146,6 +1250,7 @@ export async function sendMessage(
       history,
       attachments,
       contextFolder,
+      groundingSystem,
     );
   }
 
@@ -1173,6 +1278,7 @@ export async function sendMessage(
       history,
       attachments,
       contextFolder,
+      groundingSystem,
     );
   }
 

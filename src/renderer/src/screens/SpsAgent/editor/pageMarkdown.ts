@@ -24,6 +24,12 @@ export function pageToMarkdown(
   if (meta.title !== undefined) fm.push(`title: ${JSON.stringify(meta.title)}`);
   if (meta.icon !== undefined) fm.push(`icon: ${JSON.stringify(meta.icon)}`);
   if (meta.cover !== undefined) fm.push(`cover: ${JSON.stringify(meta.cover)}`);
+  // KB ingestion keys (Phase 0) — appended after cover so pages without them
+  // serialize byte-for-byte identically to before (golden tests stay green).
+  if (meta.source !== undefined)
+    fm.push(`source: ${JSON.stringify(meta.source)}`);
+  if (meta.ingestedAt !== undefined)
+    fm.push(`ingestedAt: ${JSON.stringify(meta.ingestedAt)}`);
   const body = blocksToMarkdown(blocks, anchoredIds);
   if (fm.length === 0) return body;
   return `---\n${fm.join("\n")}\n---\n\n${body}`;
@@ -59,6 +65,9 @@ function parseScalarFrontmatter(text: string): Partial<PageMeta> {
     if (key === "title" && typeof value === "string") out.title = value;
     else if (key === "icon" && typeof value === "string") out.icon = value;
     else if (key === "cover") out.cover = value as PageMeta["cover"];
+    else if (key === "source" && typeof value === "string") out.source = value;
+    else if (key === "ingestedAt" && typeof value === "number")
+      out.ingestedAt = value;
   }
   return out;
 }

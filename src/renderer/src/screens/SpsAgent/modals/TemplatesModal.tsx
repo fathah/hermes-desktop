@@ -68,6 +68,7 @@ export function TemplatesModal() {
   const templatesOpen = useStore((s) => s.templatesOpen);
   const setTemplatesOpen = useStore((s) => s.setTemplatesOpen);
   const createFromTemplate = useStore((s) => s.createFromTemplate);
+  const importPdf = useStore((s) => s.importPdf);
   const onClose = () => setTemplatesOpen(null);
   const parent = templatesOpen?.parent ?? null;
 
@@ -100,6 +101,17 @@ export function TemplatesModal() {
                 <div className="tpl-desc">{tp.desc}</div>
               </div>
             ))}
+            <div
+              key="import-pdf"
+              className="tpl-card"
+              onClick={() => void importPdf(parent)}
+            >
+              <div className="tpl-emoji">📄</div>
+              <div className="tpl-name">Import PDF</div>
+              <div className="tpl-desc">
+                Add a document to your knowledgebase (text PDFs).
+              </div>
+            </div>
           </div>
         </div>
       </div>

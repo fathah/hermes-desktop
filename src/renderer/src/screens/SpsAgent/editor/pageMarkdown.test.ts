@@ -40,6 +40,27 @@ describe("pageMarkdown frontmatter", () => {
       expect(roundTrip(meta, [blk("p", "x")]).meta).toEqual(meta);
     }
   });
+
+  it("round-trips KB ingestion keys (source, ingestedAt)", () => {
+    const meta: Partial<PageMeta> = {
+      title: "Handbook",
+      icon: "📄",
+      cover: null,
+      source: "/Users/me/Documents/handbook.pdf",
+      ingestedAt: 1717600000000,
+    };
+    expect(roundTrip(meta, [blk("p", "x")]).meta).toEqual(meta);
+  });
+
+  it("serializes a page WITHOUT ingestion keys byte-identically (regression guard)", () => {
+    // Pages that never carry source/ingestedAt must produce exactly the old
+    // output, so existing on-disk vault files and golden expectations hold.
+    const meta = { title: "My Page", icon: "📄", cover: null };
+    const md = pageToMarkdown(meta, [blk("p", "hi")]);
+    expect(md).toBe(
+      '---\ntitle: "My Page"\nicon: "📄"\ncover: null\n---\n\nhi',
+    );
+  });
 });
 
 describe("pageMarkdown full round-trip", () => {

@@ -117,6 +117,11 @@ export interface PageMeta {
   icon: string;
   title: string;
   cover: Cover;
+  // KB ingestion (Phase 0): set on pages created from an imported document.
+  // `source` is the absolute path of the original file; `ingestedAt` is the
+  // import epoch-ms. Both optional ⇒ ordinary pages serialize unchanged.
+  source?: string;
+  ingestedAt?: number;
 }
 
 export interface CommentMessage {

@@ -303,6 +303,7 @@ const hermesAPI = {
     history?: Array<{ role: string; content: string }>,
     attachments?: Attachment[],
     contextFolder?: string,
+    groundInWorkspace?: boolean,
   ): Promise<{ response: string; sessionId?: string }> =>
     ipcRenderer.invoke(
       "send-message",
@@ -312,6 +313,7 @@ const hermesAPI = {
       history,
       attachments,
       contextFolder,
+      groundInWorkspace,
     ),
 
   abortChat: (): Promise<void> => ipcRenderer.invoke("abort-chat"),
@@ -1260,6 +1262,17 @@ const hermesAPI = {
     links: number;
     indexedAt: number | null;
   }> => ipcRenderer.invoke("sps-index-rebuild", profile),
+
+  // KB Phase 0: pick + extract a PDF for ingestion into the SPS vault.
+  spsPickPdf: (): Promise<string | null> => ipcRenderer.invoke("sps-pick-pdf"),
+  spsExtractPdf: (
+    filePath: string,
+  ): Promise<{
+    title: string;
+    markdown: string;
+    pageCount: number;
+    hasTextLayer: boolean;
+  }> => ipcRenderer.invoke("sps-extract-pdf", filePath),
 };
 
 if (process.contextIsolated) {

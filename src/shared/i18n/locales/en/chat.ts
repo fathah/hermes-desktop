@@ -30,6 +30,8 @@ export default {
   setContextFolder: "Set context folder",
   contextFolderActive: "Context folder: {{path}}",
   removeContextFolder: "Remove context folder",
+  groundingOn: "Workspace grounding ON — answers cite your pages",
+  groundingOff: "Workspace grounding OFF",
   attach: "Attach files",
   removeAttachment: "Remove attachment",
   dropToAttach: "Drop files to attach",

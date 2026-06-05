@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useState } from "react";
 import {
   Trash2 as Trash,
   Plus,
@@ -9,10 +9,12 @@ import {
   PanelRight,
   Minimize2,
   History,
+  BookOpen,
 } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 import type { UsageState } from "./types";
 import { contextGaugeInfo } from "./contextGauge";
+import { getGroundInWorkspace, setGroundInWorkspace } from "./lib/grounding";
 
 interface ChatHeaderProps {
   sessionId: string | null;
@@ -115,6 +117,14 @@ export const ChatHeader = memo(function ChatHeader({
   onCheckpoints,
 }: ChatHeaderProps): React.JSX.Element {
   const { t } = useI18n();
+  // KB Phase 1: self-managed grounding toggle. The send path reads this from
+  // localStorage at send time, so no prop threading is needed.
+  const [grounded, setGrounded] = useState(getGroundInWorkspace());
+  const toggleGrounding = (): void => {
+    const next = !grounded;
+    setGrounded(next);
+    setGroundInWorkspace(next);
+  };
 
   return (
     <div className="chat-header">
@@ -171,6 +181,13 @@ export const ChatHeader = memo(function ChatHeader({
               <FolderOpen size={14} />
             </button>
           ))}
+        <button
+          className={`btn-ghost chat-grounding-toggle ${grounded ? "chat-worktree-active" : ""}`}
+          onClick={toggleGrounding}
+          title={grounded ? t("chat.groundingOn") : t("chat.groundingOff")}
+        >
+          <BookOpen size={14} />
+        </button>
         <div className="chat-fast-wrapper">
           <button
             className={`btn-ghost chat-fast-btn ${fastMode ? "chat-fast-active" : ""}`}

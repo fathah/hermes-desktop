@@ -64,11 +64,18 @@ export interface WorkspaceSlice {
   setPageDoc: (id: string, blocks: Block[]) => void;
   selectPage: (id: string) => void;
   makePage: (
-    info: { icon?: string; title?: string },
+    info: {
+      icon?: string;
+      title?: string;
+      source?: string;
+      ingestedAt?: number;
+    },
     docBlocks: Block[],
     parentId: string | null,
   ) => string;
   newSubPage: (parentId: string) => void;
+  /** KB Phase 0: pick a PDF, extract it, and ingest it as a page under parent. */
+  importPdf: (parentId: string | null) => Promise<void>;
   createChildPage: () => string;
   createFromTemplate: (
     blocks: Block[],
