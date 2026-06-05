@@ -1069,6 +1069,13 @@ interface HermesAPI {
     assetId: string,
     profile?: string,
   ) => Promise<{ scene: string | null; svg: string | null }>;
+  spsAssetWrite: (
+    bytes: Uint8Array,
+    ext: string,
+    profile?: string,
+  ) => Promise<string>;
+  spsAssetExists: (name: string, profile?: string) => Promise<boolean>;
+  spsAssetGc: (referenced: string[], profile?: string) => Promise<number>;
   spsIndexQuery: (
     query: {
       scope?: string;

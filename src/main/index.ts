@@ -7,8 +7,11 @@ import {
   Notification,
   dialog,
   clipboard,
+  protocol,
+  net,
 } from "electron";
 import { join, extname } from "path";
+import { pathToFileURL } from "url";
 import { readdir, readFile } from "fs/promises";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import type { AppUpdater } from "electron-updater";
@@ -36,6 +39,12 @@ import {
   readAssetFrom,
 } from "./sps-vault";
 import { profileHome, getActiveProfileNameSync } from "./utils";
+import {
+  writeAsset,
+  assetExists,
+  resolveAssetPath,
+  gcAssets,
+} from "./sps-assets";
 import { discoverProviderModels } from "./model-discovery";
 import { readMediaAsDataUrl, saveMedia, mediaFileExists } from "./media";
 import { getVoiceStatus, transcribeAudio, speakText } from "./voice";
@@ -312,6 +321,31 @@ function openExternalUrl(rawUrl: unknown): void {
   });
 }
 
+// The SPS asset store streams journal/editor media (photos, voice, video,
+// files) from the vault over a custom scheme instead of inlining base64. It
+// must be registered as privileged BEFORE app `ready`, and listed in the
+// renderer CSP (img-src/media-src) — see src/renderer/index.html.
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "sps-asset",
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true, // range requests → video/audio seeking
+    },
+  },
+]);
+
+/** Absolute path to the active (or named) profile's SPS vault directory. */
+function spsVaultDirFor(profile?: string): string {
+  return join(
+    profileHome(profile || getActiveProfileNameSync()),
+    "sps-agent",
+    "vault",
+  );
+}
+
 function createWindow(): void {
   const rendererHtmlPath = join(__dirname, "../renderer/index.html");
 
@@ -375,6 +409,20 @@ function createWindow(): void {
     openExternalUrl(details.url);
     return { action: "deny" };
   });
+
+  // Mic access for in-app voice notes. Grant `media` ONLY to the app renderer
+  // (file:// or the dev server); attached webviews must never gain mic/camera.
+  // All other permissions keep their prior (handler-less) allow behavior.
+  mainWindow.webContents.session.setPermissionRequestHandler(
+    (wc, permission, callback) => {
+      const url = wc?.getURL?.() ?? "";
+      const devUrl = is.dev ? process.env["ELECTRON_RENDERER_URL"] : undefined;
+      const isAppRenderer =
+        url.startsWith("file://") || (!!devUrl && url.startsWith(devUrl));
+      if (permission === "media") return callback(isAppRenderer);
+      return callback(true);
+    },
+  );
 
   mainWindow.webContents.on("will-navigate", (event, url) => {
     if (
@@ -2153,12 +2201,7 @@ function setupIPC(): void {
 
   // S6: vault-as-authoritative-store I/O (page files + structure manifest) and
   // a pre-migration backup of the JSON blob.
-  const spsVaultDir = (profile?: string): string =>
-    join(
-      profileHome(profile || getActiveProfileNameSync()),
-      "sps-agent",
-      "vault",
-    );
+  const spsVaultDir = (profile?: string): string => spsVaultDirFor(profile);
   ipcMain.handle("sps-vault-read", async (_event, profile?: string) => {
     const dir = spsVaultDir(profile);
     const [pages, manifest] = await Promise.all([
@@ -2215,6 +2258,23 @@ function setupIPC(): void {
       ]);
       return { scene, svg };
     },
+  );
+  // Asset store: write media bytes to vault/_assets/<sha256>.<ext> and return
+  // the bare filename. Reads happen via the sps-asset:// protocol, not IPC.
+  ipcMain.handle(
+    "sps-asset-write",
+    (_event, bytes: Uint8Array, ext: string, profile?: string) =>
+      writeAsset(spsVaultDirFor(profile), Buffer.from(bytes), ext),
+  );
+  ipcMain.handle("sps-asset-exists", (_event, name: string, profile?: string) =>
+    assetExists(spsVaultDirFor(profile), name),
+  );
+  // GC: delete any asset not referenced by a live block. `referenced` is the
+  // set of asset filenames the renderer still points at.
+  ipcMain.handle(
+    "sps-asset-gc",
+    (_event, referenced: string[], profile?: string) =>
+      gcAssets(spsVaultDirFor(profile), referenced),
   );
 }
 
@@ -2449,6 +2509,24 @@ app.whenReady().then(() => {
   app.on("web-contents-created", (_event, contents) => {
     if (contents.getType() === "webview") {
       hardenAttachedWebContents(contents);
+    }
+  });
+
+  // Stream SPS vault assets to the renderer. URL shape: sps-asset://asset/<name>
+  // where <name> is a content-addressed `<sha256>.<ext>`. The strict name check
+  // in resolveAssetPath makes this traversal-proof; net.fetch on a file URL
+  // gives us range requests (video/audio seeking) for free.
+  protocol.handle("sps-asset", async (request) => {
+    try {
+      const name = decodeURIComponent(new URL(request.url).pathname).replace(
+        /^\/+/,
+        "",
+      );
+      const abs = resolveAssetPath(spsVaultDirFor(), name);
+      if (!abs) return new Response("Bad asset name", { status: 400 });
+      return net.fetch(pathToFileURL(abs).toString());
+    } catch {
+      return new Response("Not found", { status: 404 });
     }
   });
 

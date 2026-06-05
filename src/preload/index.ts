@@ -1282,6 +1282,16 @@ const hermesAPI = {
     profile?: string,
   ): Promise<{ scene: string | null; svg: string | null }> =>
     ipcRenderer.invoke("sps-read-excalidraw", pageId, assetId, profile),
+  spsAssetWrite: (
+    bytes: Uint8Array,
+    ext: string,
+    profile?: string,
+  ): Promise<string> =>
+    ipcRenderer.invoke("sps-asset-write", bytes, ext, profile),
+  spsAssetExists: (name: string, profile?: string): Promise<boolean> =>
+    ipcRenderer.invoke("sps-asset-exists", name, profile),
+  spsAssetGc: (referenced: string[], profile?: string): Promise<number> =>
+    ipcRenderer.invoke("sps-asset-gc", referenced, profile),
   spsIndexQuery: (
     query: {
       scope?: string;
