@@ -66,8 +66,8 @@ Bet (to verify, not assert): with SOP/contract corpora (shared vocab, cross-refs
 
 ### 2. OCR for scanned PDFs
 
-**Status:** `extractPdfToMarkdown()` (`src/main/pdf-extract.ts`) detects a missing text layer via `hasUsableTextLayer()` and the UI flags "needs OCR, not imported" (`importPdf` in `screens/SpsAgent/store/slices/workspace.ts`).
-**Left:** add an OCR path (tesseract.js, or a native/Python OCR) so scanned books actually ingest. Larger effort; isolate it (extraction quality, language packs).
+**Status:** `extractPdfToMarkdown()` (`src/main/pdf-extract.ts`) detects a missing text layer via `hasUsableTextLayer()` and the UI flags "needs OCR, not imported" (`importPdf` in `screens/SpsAgent/store/slices/workspace.ts`). **Its sibling — the _unreadable_ (present-but-garbage) text-layer case — is now handled by [item 10](#10-ingestion-intelligibility-check----hasusabletextlayer-false-positives-on-garbage-text) (✅ fixed 2026-06-05):** `extractPdfToMarkdown` returns `reason: "missing" | "unreadable"`, so this item is now scoped to **`reason: "missing"` only** (true scanned/image-only PDFs with no text layer), with the rejection plumbing and distinct messaging already in place to hang OCR off.
+**Left:** add an OCR path (tesseract.js, or a native/Python OCR) so scanned books actually ingest. Larger effort; isolate it (extraction quality, language packs). Wire it into the existing `reason: "missing"` branch in `importPdf` (swap the "needs OCR" flash for an OCR attempt).
 
 ### 3. Remote / SSH grounding
 
