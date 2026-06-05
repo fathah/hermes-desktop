@@ -10,7 +10,7 @@
 //
 // Usage:  npm run build && node scripts/sps-import-smoke.mjs
 import { _electron as electron } from "playwright";
-import { mkdtempSync, mkdirSync, writeFileSync } from "fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -85,7 +85,9 @@ const fail = (m) => {
 setTimeout(() => fail("WATCHDOG_TIMEOUT"), 120000).unref();
 
 const app = await electron.launch({
-  args: ["."],
+  // Own userData dir → own single-instance lock, so the smoke runs even when a
+  // developer's app is open (which holds the default lock; see main).
+  args: [".", `--user-data-dir=${join(HOME, "electron-userdata")}`],
   env: { ...process.env, HERMES_HOME: HOME, ELECTRON_DISABLE_SECURITY_WARNINGS: "1" },
 });
 
@@ -97,6 +99,11 @@ await app.evaluate(async ({ dialog }, fixture) => {
 const win = await app.firstWindow();
 await win.waitForLoadState("domcontentloaded");
 await win.waitForSelector(".app", { timeout: 30000 });
+// Give the window a generous size so the (now longer) template grid fits and
+// every card — including the last one, Import PDF — is within the viewport.
+await app.evaluate(({ BrowserWindow }) => {
+  BrowserWindow.getAllWindows()[0]?.setContentSize(1400, 1200);
+});
 await win.waitForTimeout(1500);
 await win.screenshot({ path: join(OUT, "01-before.png") });
 
@@ -106,6 +113,9 @@ await win.waitForSelector(".tpl-card", { timeout: 10000 });
 await win.screenshot({ path: join(OUT, "02-templates-modal.png") });
 const importCard = win.locator(".tpl-card", { hasText: "Import PDF" });
 if ((await importCard.count()) === 0) fail('no "Import PDF" card in the modal');
+// The card is the last in a now-longer template grid; scroll it into view so
+// the click is actionable regardless of how many templates precede it.
+await importCard.first().scrollIntoViewIfNeeded();
 await importCard.first().click();
 
 // The real flow runs (stubbed picker → real extract → makePage). Assert the
@@ -122,6 +132,19 @@ await win.screenshot({ path: join(OUT, "03-imported-page.png") });
 // The new page should carry the PDF's base name as its title.
 const titled = await win.getByText("France-handbook", { exact: false }).count();
 console.log("page-title-visible:", titled > 0);
+
+// Item 4: the ingested page must nest under a "Sources" folder. Assert from the
+// persisted workspace.json (robust, no DOM-structure coupling) after autosave.
+await win.waitForTimeout(2000);
+const ws = JSON.parse(readFileSync(join(sps, "workspace.json"), "utf-8"));
+const sourcesId = Object.keys(ws.meta).find(
+  (id) => ws.meta[id]?.title === "Sources",
+);
+if (!sourcesId) fail("no 'Sources' folder was created for the ingested PDF");
+const sourcesNode = ws.tree.find((n) => n.id === sourcesId);
+const child = sourcesNode?.children?.find((c) => ws.meta[c.id]?.source);
+if (!child) fail("ingested page is not nested inside the 'Sources' folder");
+console.log("sources-folder-nesting: OK (ingested page under Sources)");
 
 console.log("SMOKE_OK: import flow rendered ingested PDF content");
 await app.close();

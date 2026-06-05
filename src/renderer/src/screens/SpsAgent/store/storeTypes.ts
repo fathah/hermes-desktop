@@ -75,8 +75,14 @@ export interface WorkspaceSlice {
     parentId: string | null,
   ) => string;
   newSubPage: (parentId: string) => void;
-  /** KB Phase 0: pick a PDF, extract it, and ingest it as a page under parent. */
-  importPdf: (parentId: string | null) => Promise<void>;
+  /**
+   * KB Phase 0: pick a PDF, extract it, and ingest it as a page inside the
+   * dedicated "Sources" folder (created on first import). Failed extractions
+   * (scanned / unreadable) surface a persistent warn toast and import nothing.
+   */
+  importPdf: () => Promise<void>;
+  /** Find (by title at root) or create the "Sources" folder; returns its id. */
+  ensureSourcesFolder: () => string;
   createChildPage: () => string;
   createFromTemplate: (
     blocks: Block[],
@@ -112,7 +118,7 @@ export interface UiSlice {
   openTask: Task | null;
   emojiPick: XY | null;
   coverPick: XY | null;
-  toast: { text: string } | null;
+  toast: { text: string; tone?: "warn" } | null;
   focusReq: string | null;
   // AI Chats surface: the session currently shown (null = a fresh chat).
   activeChatSession: string | null;
@@ -135,7 +141,7 @@ export interface UiSlice {
   setEmojiPick: (v: XY | null) => void;
   setCoverPick: (v: XY | null) => void;
   setFocusReq: (id: string | null) => void;
-  flash: (text: string) => void;
+  flash: (text: string, opts?: { tone?: "warn"; ms?: number }) => void;
   setActiveChatSession: (id: string | null) => void;
   setPendingChatPrompt: (text: string | null) => void;
   /** Open the AI Chats surface on a fresh chat, optionally pre-filled. */

@@ -209,7 +209,12 @@ export function TemplatesModal() {
         <div className="modal-head">
           <h3>New page</h3>
         </div>
-        <div className="modal-body">
+        {/* Scrollable so the full template grid — incl. the last card,
+            Import PDF — stays reachable when the modal exceeds the window. */}
+        <div
+          className="modal-body"
+          style={{ maxHeight: "70vh", overflowY: "auto" }}
+        >
           <div className="tpl-grid">
             {TEMPLATES.map((tp) => (
               <div
@@ -231,7 +236,7 @@ export function TemplatesModal() {
             <div
               key="import-pdf"
               className="tpl-card"
-              onClick={() => void importPdf(parent)}
+              onClick={() => void importPdf()}
             >
               <div className="tpl-emoji">📄</div>
               <div className="tpl-name">Import PDF</div>

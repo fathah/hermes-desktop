@@ -46,9 +46,9 @@ export const createUiSlice: StateCreator<Store, [], [], UiSlice> = (set) => ({
       chatNonce: s.chatNonce + 1,
     })),
 
-  flash: (text) => {
-    set({ toast: { text } });
+  flash: (text, opts) => {
+    set({ toast: { text, ...(opts?.tone ? { tone: opts.tone } : {}) } });
     if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => set({ toast: null }), 2200);
+    toastTimer = setTimeout(() => set({ toast: null }), opts?.ms ?? 2200);
   },
 });

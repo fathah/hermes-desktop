@@ -5,9 +5,14 @@ import { useStore } from "../store";
 export function Toast() {
   const toast = useStore((s) => s.toast);
   if (!toast) return null;
+  const warn = toast.tone === "warn";
   return (
-    <div className="toast">
-      <Icon name="check" size={15} style={{ color: "var(--accent)" }} />
+    <div className={`toast${warn ? " toast-warn" : ""}`}>
+      <Icon
+        name={warn ? "flag" : "check"}
+        size={15}
+        style={{ color: warn ? "#d9822b" : "var(--accent)" }}
+      />
       {toast.text}
     </div>
   );

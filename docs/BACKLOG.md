@@ -95,10 +95,20 @@ Bet (to verify, not assert): with SOP/contract corpora (shared vocab, cross-refs
 **Status:** grounding is **local-mode only** by construction — `buildRetrievalSystemMessage` is called only when `!isRemoteMode()` in both `src/main/hermes.ts` (chat) and `spsAssistant()` (`src/main/sps-agent.ts`).
 **Left:** in remote/SSH mode the vault lives on the desktop and the remote agent can't read those paths. Either inline retrieved excerpts into the request (no path handoff) or run retrieval on the desktop and ship results. Decide the transport before coding.
 
-### 4. "Sources" folder + scanned-PDF UX
+### 4. "Sources" folder + scanned-PDF UX — ✅ DONE 2026-06-05
 
-**Status:** `importPdf` drops the ingested page under the _current_ parent (`templatesOpen.parent`), not a dedicated home; scanned PDFs surface only a transient flash.
-**Left:** create/reuse a **"Sources"** tree folder for ingested docs; make the scanned-PDF outcome clearer (persistent notice + maybe an OCR CTA once item 2 exists).
+Ingested PDFs now land in a dedicated **"Sources"** folder (`ensureSourcesFolder`,
+find-or-create by title at root — no persisted marker, so the markdown serializers
+are untouched); `importPdf` routes there and no longer takes a parent. Refused
+imports (scanned / unreadable) now show a **persistent warn toast** (8 s, amber flag
+icon) instead of a 2.2 s confirmation flash. Unit-tested (`tests/sps-sources-folder.test.ts`)
+and verified end-to-end by `scripts/sps-import-smoke.mjs` (asserts the ingested page
+nests under Sources). The OCR CTA is still N/A until item 2 exists.
+
+Bonus fixes found while verifying: the "New page" templates modal wasn't scrollable,
+so the **Import PDF card (last in the grid) was unreachable** once the template list
+grew — made `.modal-body` scrollable. Also isolated the import smoke's Electron
+`userData` so it runs with a developer's app open (single-instance lock).
 
 ### 5. Generate-from-repo — large-repo quality
 

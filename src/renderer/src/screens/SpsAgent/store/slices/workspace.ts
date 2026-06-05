@@ -18,6 +18,9 @@ import { pageFromMarkdown } from "../../editor/pageMarkdown";
 import type { Block } from "../../types";
 import type { Store, WorkspaceSlice } from "../storeTypes";
 
+/** Title of the root folder that ingested documents are filed under. */
+const SOURCES_TITLE = "Sources";
+
 /** The `source` folders of folder-backed database blocks in a block list. */
 function dbSources(blocks: Block[]): Set<string> {
   const out = new Set<string>();
@@ -103,7 +106,7 @@ export const createWorkspaceSlice: StateCreator<
     return id;
   },
 
-  importPdf: async (parentId) => {
+  importPdf: async () => {
     const api = window.hermesAPI;
     if (!api?.spsPickPdf || !api?.spsExtractPdf) {
       get().flash("PDF import needs a local workspace");
@@ -117,14 +120,16 @@ export const createWorkspaceSlice: StateCreator<
     try {
       res = await api.spsExtractPdf(filePath);
     } catch {
-      get().flash("Could not read that PDF");
+      get().flash("Could not read that PDF", { tone: "warn", ms: 8000 });
       return;
     }
     if (!res.hasTextLayer) {
+      // Persistent warn toast (not a 2.2s flash) so a refused import is noticed.
       get().flash(
         res.reason === "unreadable"
           ? "Unreadable text (broken font encoding) — not imported"
           : "No text layer — scanned PDFs need OCR (not imported)",
+        { tone: "warn", ms: 8000 },
       );
       return;
     }
@@ -138,10 +143,29 @@ export const createWorkspaceSlice: StateCreator<
         ingestedAt: Date.now(),
       },
       docBlocks,
-      parentId,
+      get().ensureSourcesFolder(),
     );
     set({ page: id });
-    get().flash(`Imported “${res.title}”`);
+    get().flash(`Imported “${res.title}” into Sources`);
+  },
+
+  ensureSourcesFolder: () => {
+    // A dedicated home for ingested documents. Identified by title at the root
+    // level (no persisted marker, so the markdown serializers stay untouched);
+    // reused if present, created at root on first import.
+    const { meta, tree } = get();
+    const existing = tree.find((n) => meta[n.id]?.title === SOURCES_TITLE);
+    if (existing) return existing.id;
+    return get().makePage(
+      { icon: "🗂️", title: SOURCES_TITLE },
+      [
+        blk(
+          "p",
+          "Imported documents live here — each ingested file becomes a page you can read, link, and ground the co-author on.",
+        ),
+      ],
+      null,
+    );
   },
 
   newSubPage: (parentId) => {
