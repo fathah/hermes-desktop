@@ -1342,6 +1342,8 @@ const hermesAPI = {
     hasTextLayer: boolean;
     reason?: "missing" | "unreadable";
   }> => ipcRenderer.invoke("sps-extract-pdf", filePath),
+  spsReadFileBytes: (filePath: string): Promise<Uint8Array> =>
+    ipcRenderer.invoke("sps-read-file-bytes", filePath),
 };
 
 if (process.contextIsolated) {

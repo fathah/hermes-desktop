@@ -1584,6 +1584,14 @@ function setupIPC(): void {
     return extractPdfToMarkdown(filePath);
   });
 
+  // Raw PDF bytes for renderer-side OCR of a scanned doc (item 2). Same trust
+  // boundary as sps-extract-pdf — a user-picked file path read locally.
+  ipcMain.handle("sps-read-file-bytes", async (_event, filePath: string) => {
+    requireLocalWorkspace();
+    const buffer = await readFile(filePath);
+    return new Uint8Array(buffer);
+  });
+
   ipcMain.handle("get-obsidian-config", async (_event, profile?: string) => {
     requireLocalWorkspace();
     return getObsidianConfig(profile);

@@ -1118,6 +1118,7 @@ interface HermesAPI {
     hasTextLayer: boolean;
     reason?: "missing" | "unreadable";
   }>;
+  spsReadFileBytes: (filePath: string) => Promise<Uint8Array>;
 }
 
 declare global {

@@ -124,13 +124,10 @@ export const createWorkspaceSlice: StateCreator<
       return;
     }
     if (!res.hasTextLayer) {
-      // Persistent warn toast (not a 2.2s flash) so a refused import is noticed.
-      get().flash(
-        res.reason === "unreadable"
-          ? "Unreadable text (broken font encoding) — not imported"
-          : "No text layer — scanned PDFs need OCR (not imported)",
-        { tone: "warn", ms: 8000 },
-      );
+      // No usable text layer — scanned image, OR a broken/unmappable font that
+      // renders correctly but extracts garbage. Both render fine to a bitmap,
+      // so OCR the rendered pages instead of refusing. Runs in the background.
+      void get().ocrImportPdf(filePath, res.title, res.pageCount);
       return;
     }
     const { blocks } = pageFromMarkdown(res.markdown);
@@ -147,6 +144,54 @@ export const createWorkspaceSlice: StateCreator<
     );
     set({ page: id });
     get().flash(`Imported “${res.title}” into Sources`);
+  },
+
+  ocrImportPdf: async (filePath, title, pageCount) => {
+    const api = window.hermesAPI;
+    if (!api?.spsReadFileBytes) {
+      get().flash("OCR needs a local workspace", { tone: "warn", ms: 8000 });
+      return;
+    }
+    const big = pageCount > 15;
+    get().flash(
+      `Scanned PDF (${pageCount}p) — running OCR in the background; ` +
+        `“${title}” will appear in Sources when ready` +
+        (big ? " (large scan, may take several minutes)" : "") +
+        ".",
+      { tone: "warn", ms: 8000 },
+    );
+    let bytes: Uint8Array;
+    try {
+      bytes = await api.spsReadFileBytes(filePath);
+    } catch {
+      get().flash(`Could not read “${title}” for OCR`, {
+        tone: "warn",
+        ms: 8000,
+      });
+      return;
+    }
+    // Lazy-load the OCR engine (tesseract + pdfjs) so it never costs startup.
+    let markdown: string;
+    try {
+      const { ocrPdfToMarkdown } = await import("../../lib/ocr");
+      markdown = await ocrPdfToMarkdown(bytes, (p) => {
+        if (p.page === 1 || p.page % 5 === 0 || p.page === p.pages) {
+          get().flash(`OCR “${title}” — page ${p.page}/${p.pages}…`);
+        }
+      });
+    } catch {
+      get().flash(`OCR failed for “${title}”`, { tone: "warn", ms: 8000 });
+      return;
+    }
+    const { blocks } = pageFromMarkdown(markdown);
+    const docBlocks = blocks.length ? blocks : [blk("p", "")];
+    const id = get().makePage(
+      { icon: "📄", title, source: filePath, ingestedAt: Date.now() },
+      docBlocks,
+      get().ensureSourcesFolder(),
+    );
+    set({ page: id });
+    get().flash(`OCR complete — imported “${title}” into Sources`);
   },
 
   ensureSourcesFolder: () => {

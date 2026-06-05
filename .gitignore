@@ -39,3 +39,4 @@ release/
 /*.bat
 /*.ps1
 graphify-out/
+src/renderer/public/tesseract/

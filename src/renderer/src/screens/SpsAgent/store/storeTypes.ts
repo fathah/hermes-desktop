@@ -77,10 +77,20 @@ export interface WorkspaceSlice {
   newSubPage: (parentId: string) => void;
   /**
    * KB Phase 0: pick a PDF, extract it, and ingest it as a page inside the
-   * dedicated "Sources" folder (created on first import). Failed extractions
-   * (scanned / unreadable) surface a persistent warn toast and import nothing.
+   * dedicated "Sources" folder (created on first import). A PDF with no usable
+   * text layer (scanned, or a broken/unmappable font) is routed to OCR instead
+   * of refused (item 2).
    */
   importPdf: () => Promise<void>;
+  /**
+   * OCR a scanned / unreadable-text-layer PDF in the background (offline) and
+   * file the result under "Sources" (item 2). Non-blocking; notifies on done.
+   */
+  ocrImportPdf: (
+    filePath: string,
+    title: string,
+    pageCount: number,
+  ) => Promise<void>;
   /** Find (by title at root) or create the "Sources" folder; returns its id. */
   ensureSourcesFolder: () => string;
   createChildPage: () => string;
