@@ -128,6 +128,13 @@ export interface PageMeta {
   // import epoch-ms. Both optional ⇒ ordinary pages serialize unchanged.
   source?: string;
   ingestedAt?: number;
+  // Journal entry metadata. Present only on journal entries (pages flagged
+  // `journal: true`); ordinary pages omit these so their markdown/JSON is
+  // byte-identical to before. The calendar surface groups entries by `date`.
+  journal?: boolean;
+  date?: string; // "YYYY-MM-DD"
+  time?: string; // "HH:mm"
+  mood?: string; // mood emoji / key (optional)
 }
 
 export interface CommentMessage {

@@ -20,6 +20,7 @@ import { ChatSurface } from "./shell/ChatSurface";
 import { AskPane } from "./panel/AskPane";
 import { GraphView } from "./graph/GraphView";
 import { EquityResearch } from "./equity/EquityResearch";
+import { JournalSurface } from "./journal/JournalSurface";
 
 export function App() {
   useHotkeys();
@@ -73,6 +74,8 @@ export function App() {
             <ChatSurface key={`chat-${chatNonce}`} />
           ) : surface === "ask" ? (
             <AskPane />
+          ) : surface === "journal" ? (
+            <JournalSurface />
           ) : (
             <div className="doc-scroll scroll">
               {surface === "insights" && <Insights profile="default" visible />}

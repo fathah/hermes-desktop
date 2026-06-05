@@ -167,6 +167,12 @@ export const createWorkspaceSlice: StateCreator<
           ...(info.ingestedAt !== undefined
             ? { ingestedAt: info.ingestedAt }
             : {}),
+          // Journal fields are written only when supplied, so ordinary pages
+          // keep their original 3-key meta shape (and serialization).
+          ...(info.journal !== undefined ? { journal: info.journal } : {}),
+          ...(info.date !== undefined ? { date: info.date } : {}),
+          ...(info.time !== undefined ? { time: info.time } : {}),
+          ...(info.mood !== undefined ? { mood: info.mood } : {}),
         },
       },
       tree: treeInsert(

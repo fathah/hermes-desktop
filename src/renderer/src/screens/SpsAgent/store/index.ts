@@ -23,6 +23,7 @@ import { createUiSlice } from "./slices/ui";
 import { createSidebarSlice, saveSidebar } from "./slices/sidebar";
 import { createTweaksSlice, saveTweaks } from "./slices/tweaks";
 import { createAssistantSlice } from "./slices/assistant";
+import { createJournalSlice } from "./slices/journal";
 
 export const useStore = create<Store>()(
   subscribeWithSelector((...a) => ({
@@ -32,6 +33,7 @@ export const useStore = create<Store>()(
     ...createSidebarSlice(...a),
     ...createTweaksSlice(...a),
     ...createAssistantSlice(...a),
+    ...createJournalSlice(...a),
   })),
 );
 

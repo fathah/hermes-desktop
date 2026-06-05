@@ -953,6 +953,146 @@
   border-left: 2px solid;
 }
 
+/* ---------- Journal / diary surface ---------- */
+.sps-scope .jr {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 28px 28px 64px;
+}
+.sps-scope .jr-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.sps-scope .jr-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--tx-1);
+  letter-spacing: -0.01em;
+}
+.sps-scope .jr-spacer {
+  flex: 1;
+}
+.sps-scope .jr-icon-btn,
+.sps-scope .jr-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--hair);
+  background: var(--surface);
+  color: var(--tx-2);
+  border-radius: 7px;
+  padding: 5px 9px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.sps-scope .jr-icon-btn {
+  padding: 5px 7px;
+}
+.sps-scope .jr-icon-btn:hover,
+.sps-scope .jr-btn:hover {
+  background: var(--surface-raised);
+}
+.sps-scope .jr-btn.primary {
+  border-color: transparent;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+.sps-scope[data-theme="dark"] .jr-btn.primary {
+  color: #1a1810;
+}
+/* calendar cells become clickable in the journal surface */
+.sps-scope .jr .cal-day {
+  cursor: pointer;
+}
+.sps-scope .jr .cal-day:hover {
+  background: var(--surface-raised);
+}
+.sps-scope .jr .cal-day.sel {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.sps-scope .cal-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--tx-3);
+}
+.sps-scope .cal-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: inline-block;
+}
+/* day timeline */
+.sps-scope .jr-day {
+  margin-top: 22px;
+}
+.sps-scope .jr-day-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.sps-scope .jr-day-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--tx-1);
+}
+.sps-scope .jr-entry {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 10px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--hair-soft);
+}
+.sps-scope .jr-entry:hover {
+  background: var(--surface-raised);
+}
+.sps-scope .jr-entry-time {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--tx-3);
+  width: 44px;
+  flex: none;
+  padding-top: 2px;
+}
+.sps-scope .jr-entry-body {
+  min-width: 0;
+  flex: 1;
+}
+.sps-scope .jr-entry-title {
+  font-size: 14px;
+  color: var(--tx-1);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.sps-scope .jr-entry-sub {
+  font-size: 12px;
+  color: var(--tx-3);
+  margin-top: 2px;
+}
+.sps-scope .jr-empty {
+  color: var(--tx-4);
+  font-size: 13px;
+  padding: 18px 8px;
+}
+.sps-scope .jr-throwback {
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--tx-3);
+}
+.sps-scope .jr-throwback a {
+  color: var(--accent);
+  cursor: pointer;
+}
+
 /* ---------- Filter / sort popover ---------- */
 .sps-scope .fs-pop {
   position: fixed;

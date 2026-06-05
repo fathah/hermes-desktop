@@ -62,6 +62,7 @@ export function Sidebar() {
   const surface = useStore((s) => s.surface);
   const setSurface = useStore((s) => s.setSurface);
   const selectPage = useStore((s) => s.selectPage);
+  const openJournal = useStore((s) => s.openJournal);
   const startNewChat = useStore((s) => s.startNewChat);
   // Selecting a page always returns to the document surface.
   const selectDoc = (id: string): void => {
@@ -166,6 +167,13 @@ export function Sidebar() {
           <span className="nav-label">Equity</span>
         </div>
         <div
+          className={`nav-item ${surface === "journal" ? "active" : ""}`}
+          onClick={() => openJournal()}
+        >
+          <Icon name="calendar" size={17} />
+          <span className="nav-label">Journal</span>
+        </div>
+        <div
           className={`nav-item ${surface === "agent" ? "active" : ""}`}
           onClick={() => setSurface("agent")}
         >
@@ -200,20 +208,24 @@ export function Sidebar() {
           onAdd={newPage}
           addTitle="New page"
         >
-          {tree.map((n) => (
-            <TreeNode
-              key={n.id}
-              node={n}
-              depth={0}
-              meta={meta}
-              activeId={activeId}
-              onSelect={selectDoc}
-              onNewSubPage={newSubPage}
-              onRename={renamePage}
-              onDelete={deletePage}
-              dnd={dnd}
-            />
-          ))}
+          {/* Journal entries are pages too, but they live behind the calendar
+              surface — keep them out of the Private tree to avoid clutter. */}
+          {tree
+            .filter((n) => !meta[n.id]?.journal)
+            .map((n) => (
+              <TreeNode
+                key={n.id}
+                node={n}
+                depth={0}
+                meta={meta}
+                activeId={activeId}
+                onSelect={selectDoc}
+                onNewSubPage={newSubPage}
+                onRename={renamePage}
+                onDelete={deletePage}
+                dnd={dnd}
+              />
+            ))}
           {tree.length === 0 && (
             <div
               className="tree-row"

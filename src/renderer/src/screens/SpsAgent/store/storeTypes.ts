@@ -26,7 +26,8 @@ export type Surface =
   | "agent"
   | "chats"
   | "graph"
-  | "equity";
+  | "equity"
+  | "journal";
 
 // Named, toggleable sidebar sections (Notion 3.1 grammar). Order here is the
 // render order in the rail.
@@ -70,6 +71,10 @@ export interface WorkspaceSlice {
       title?: string;
       source?: string;
       ingestedAt?: number;
+      journal?: boolean;
+      date?: string;
+      time?: string;
+      mood?: string;
     },
     docBlocks: Block[],
     parentId: string | null,
@@ -169,6 +174,20 @@ export interface SidebarSlice {
   toggleSection: (id: SectionId) => void;
 }
 
+export interface JournalSlice {
+  /** The day the calendar surface is focused on ("YYYY-MM-DD"). */
+  journalDate: string;
+  setJournalDate: (date: string) => void;
+  /** Open the calendar surface, optionally focused on a given day. */
+  openJournal: (date?: string) => void;
+  /**
+   * Create a new journal entry (a page flagged `journal:true`) on the given
+   * day (defaults to today), stamped with the current time, then open it in
+   * the document editor. Returns the new page id.
+   */
+  createJournalEntry: (date?: string) => string;
+}
+
 export interface TweaksSlice {
   t: Tweaks;
   setTweak: <K extends keyof Tweaks>(k: K, v: Tweaks[K]) => void;
@@ -192,5 +211,6 @@ export type Store = WorkspaceSlice &
   CommentsSlice &
   UiSlice &
   SidebarSlice &
+  JournalSlice &
   TweaksSlice &
   AssistantSlice;
