@@ -728,6 +728,14 @@ const hermesAPI = {
     profile?: string,
   ): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke("import-local-skill", sourcePath, category, profile),
+  generateSkillFromRepo: (
+    repoPath: string,
+    profile?: string,
+  ): Promise<{
+    success: boolean;
+    draft?: { name: string; description: string; body: string };
+    error?: string;
+  }> => ipcRenderer.invoke("generate-skill-from-repo", repoPath, profile),
 
   // Session cache (fast local cache with generated titles)
   listCachedSessions: (

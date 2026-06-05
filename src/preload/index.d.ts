@@ -648,6 +648,14 @@ interface HermesAPI {
     category?: string,
     profile?: string,
   ) => Promise<{ success: boolean; error?: string }>;
+  generateSkillFromRepo: (
+    repoPath: string,
+    profile?: string,
+  ) => Promise<{
+    success: boolean;
+    draft?: { name: string; description: string; body: string };
+    error?: string;
+  }>;
 
   // Session cache
   listCachedSessions: (

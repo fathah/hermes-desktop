@@ -47,4 +47,7 @@ export default {
   saveFailed: "Could not save the skill",
   importFailed: "Could not import the skill",
   toggleFailed: "Could not change the skill",
+  generateFromRepo: "Generate from repo",
+  readingRepo: "Reading repo…",
+  generateFailed: "Could not generate a skill from that repo",
 } as const;

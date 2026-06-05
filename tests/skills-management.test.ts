@@ -37,6 +37,12 @@ vi.mock("../src/main/utils", () => ({
 vi.mock("../src/main/process-options", () => ({
   HIDDEN_SUBPROCESS_OPTIONS: {},
 }));
+// skills.ts now imports the gateway helpers from ./hermes — mock them so the
+// heavy hermes module graph isn't pulled into these fs tests.
+vi.mock("../src/main/hermes", () => ({
+  getApiUrl: () => "http://127.0.0.1:8642",
+  getRemoteAuthHeader: () => ({}),
+}));
 
 // os.homedir() reads $HOME on POSIX — point it at our temp home so the
 // ~/.claude/skills discovery source is isolated (more robust than mocking os).
@@ -50,6 +56,8 @@ import {
   listDisabledSkills,
   discoverLocalSkills,
   importLocalSkill,
+  buildRepoDigest,
+  generateSkillFromRepo,
 } from "../src/main/skills";
 
 const skillsDir = join(TEST_HOME, "skills");
@@ -160,5 +168,97 @@ describe("discoverLocalSkills + importLocalSkill", () => {
     writeFileSync(join(stray, "SKILL.md"), "---\nname: stray\n---\n");
     expect(importLocalSkill(stray).success).toBe(false);
     rmSync(stray, { recursive: true, force: true });
+  });
+});
+
+describe("buildRepoDigest", () => {
+  function makeRepo(): string {
+    const repo = mkdtempSync(join(tmpdir(), "repo-"));
+    writeFileSync(join(repo, "README.md"), "# Cool Repo\n\nDoes cool things.");
+    writeFileSync(
+      join(repo, "package.json"),
+      '{"name":"cool","version":"1.0.0"}',
+    );
+    mkdirSync(join(repo, "src"), { recursive: true });
+    writeFileSync(join(repo, "src", "index.ts"), "export const answer = 42;");
+    // Noise that must be excluded.
+    mkdirSync(join(repo, "node_modules", "dep"), { recursive: true });
+    writeFileSync(
+      join(repo, "node_modules", "dep", "index.js"),
+      "module.exports={}",
+    );
+    return repo;
+  }
+
+  it("includes README + source, excludes node_modules, and is bounded", () => {
+    const repo = makeRepo();
+    const digest = buildRepoDigest(repo);
+    expect(digest).toContain("Does cool things.");
+    expect(digest).toContain("src/index.ts");
+    expect(digest).toContain("export const answer = 42;");
+    expect(digest).not.toContain("node_modules");
+    expect(digest.length).toBeLessThan(60_000);
+    rmSync(repo, { recursive: true, force: true });
+  });
+
+  it("returns '' for a non-directory path", () => {
+    expect(buildRepoDigest(join(tmpdir(), "definitely-missing-xyz"))).toBe("");
+  });
+});
+
+describe("generateSkillFromRepo", () => {
+  function makeRepo(): string {
+    const repo = mkdtempSync(join(tmpdir(), "gen-repo-"));
+    writeFileSync(join(repo, "README.md"), "# Repo\n\nDetails.");
+    return repo;
+  }
+  function mockFetch(reply: string, ok = true): void {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok,
+        status: ok ? 200 : 500,
+        json: async () => ({ choices: [{ message: { content: reply } }] }),
+        text: async () => reply,
+      }),
+    );
+  }
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("parses a SKILL.md draft into {name, description, body}", async () => {
+    const repo = makeRepo();
+    mockFetch(
+      "---\nname: cool-repo\ndescription: when working in cool-repo\n---\n\nOverview here.",
+    );
+    const r = await generateSkillFromRepo(repo);
+    expect(r.success).toBe(true);
+    expect(r.draft).toMatchObject({
+      name: "cool-repo",
+      description: "when working in cool-repo",
+      body: "Overview here.",
+    });
+    rmSync(repo, { recursive: true, force: true });
+  });
+
+  it("strips a wrapping markdown code fence", async () => {
+    const repo = makeRepo();
+    mockFetch(
+      "```markdown\n---\nname: fenced\ndescription: d\n---\n\nbody\n```",
+    );
+    const r = await generateSkillFromRepo(repo);
+    expect(r.success).toBe(true);
+    expect(r.draft?.name).toBe("fenced");
+    rmSync(repo, { recursive: true, force: true });
+  });
+
+  it("fails on a gateway error and on a bad path", async () => {
+    const repo = makeRepo();
+    mockFetch("boom", false);
+    expect((await generateSkillFromRepo(repo)).success).toBe(false);
+    expect(
+      (await generateSkillFromRepo(join(tmpdir(), "nope-xyz"))).success,
+    ).toBe(false);
+    rmSync(repo, { recursive: true, force: true });
   });
 });

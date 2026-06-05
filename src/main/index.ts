@@ -199,6 +199,7 @@ import {
   setSkillEnabled,
   discoverLocalSkills,
   importLocalSkill,
+  generateSkillFromRepo,
   type CreateSkillInput,
 } from "./skills";
 import {
@@ -1471,6 +1472,14 @@ function setupIPC(): void {
     (_event, sourcePath: string, category?: string, profile?: string) => {
       requireLocalWorkspace();
       return importLocalSkill(sourcePath, category, profile);
+    },
+  );
+  // Draft a SKILL.md from a local repo (one gateway completion; local-only).
+  ipcMain.handle(
+    "generate-skill-from-repo",
+    (_event, repoPath: string, profile?: string) => {
+      requireLocalWorkspace();
+      return generateSkillFromRepo(repoPath, profile);
     },
   );
 

@@ -33,6 +33,8 @@ function stubApi(overrides: Api = {}): Api {
     createSkill: vi.fn().mockResolvedValue({ success: true }),
     writeSkillContent: vi.fn().mockResolvedValue({ success: true }),
     importLocalSkill: vi.fn().mockResolvedValue({ success: true }),
+    selectFolder: vi.fn().mockResolvedValue(null),
+    generateSkillFromRepo: vi.fn().mockResolvedValue({ success: true }),
     ...overrides,
   };
   Object.defineProperty(window, "hermesAPI", {
@@ -167,5 +169,34 @@ describe("Skills.tsx — authoring & management", () => {
       "new content",
       undefined,
     );
+  });
+
+  it("generates a draft from a repo and prefills the New-skill modal", async () => {
+    const api = stubApi({
+      selectFolder: vi.fn().mockResolvedValue("/some/repo"),
+      generateSkillFromRepo: vi.fn().mockResolvedValue({
+        success: true,
+        draft: { name: "repo-skill", description: "use it", body: "Body." },
+      }),
+    });
+    const view = render(<Skills />);
+    await waitFor(() => expect(api.listInstalledSkills).toHaveBeenCalled());
+
+    await act(async () =>
+      fireEvent.click(view.getByText("skills.generateFromRepo")),
+    );
+
+    expect(api.selectFolder).toHaveBeenCalled();
+    expect(api.generateSkillFromRepo).toHaveBeenCalledWith(
+      "/some/repo",
+      undefined,
+    );
+    // The authoring modal opens prefilled with the draft's name.
+    await waitFor(() => {
+      const nameInput = view.getByPlaceholderText(
+        "skills.namePlaceholder",
+      ) as HTMLInputElement;
+      expect(nameInput.value).toBe("repo-skill");
+    });
   });
 });

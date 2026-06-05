@@ -64,6 +64,7 @@ function Skills({ profile, visible = true }: SkillsProps): React.JSX.Element {
     body: "",
   });
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -154,6 +155,30 @@ function Skills({ profile, visible = true }: SkillsProps): React.JSX.Element {
       if (detailSkill?.path === skill.path) setDetailSkill(null);
       await loadInstalled();
     } else setError(result.error || t("skills.toggleFailed"));
+  }
+
+  async function handleGenerateFromRepo(): Promise<void> {
+    const repoPath = await window.hermesAPI.selectFolder();
+    if (!repoPath) return;
+    setGenerating(true);
+    setError("");
+    const result = await window.hermesAPI.generateSkillFromRepo(
+      repoPath,
+      profile,
+    );
+    setGenerating(false);
+    if (result.success && result.draft) {
+      // Prefill the authoring modal with the draft for review before saving.
+      setForm({
+        name: result.draft.name,
+        description: result.draft.description,
+        category: "",
+        body: result.draft.body,
+      });
+      setShowNew(true);
+    } else {
+      setError(result.error || t("skills.generateFailed"));
+    }
   }
 
   async function handleCreate(): Promise<void> {
@@ -426,6 +451,15 @@ function Skills({ profile, visible = true }: SkillsProps): React.JSX.Element {
           >
             <Plus size={14} />
             {t("skills.newSkill")}
+          </button>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={handleGenerateFromRepo}
+            disabled={generating}
+          >
+            {generating
+              ? t("skills.readingRepo")
+              : t("skills.generateFromRepo")}
           </button>
           <button className="btn btn-secondary btn-sm" onClick={loadAll}>
             <Refresh size={14} />

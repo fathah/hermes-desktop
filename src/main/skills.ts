@@ -10,7 +10,7 @@ import {
   renameSync,
   cpSync,
 } from "fs";
-import { dirname, isAbsolute, join, relative, resolve } from "path";
+import { dirname, extname, isAbsolute, join, relative, resolve } from "path";
 import { homedir } from "os";
 import {
   HERMES_HOME,
@@ -21,6 +21,7 @@ import {
 } from "./installer";
 import { isValidNamedProfileName, profileHome } from "./utils";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
+import { getApiUrl, getRemoteAuthHeader } from "./hermes";
 
 export interface InstalledSkill {
   name: string;
@@ -692,5 +693,259 @@ export function importLocalSkill(
     return { success: true };
   } catch (e) {
     return { success: false, error: (e as Error).message };
+  }
+}
+
+// ─────────────────────── generate a skill from a repo ───────────────────────
+// Read a bounded text digest of a local repo and ask the gateway (one
+// non-streaming completion) to draft a SKILL.md. The draft is REVIEWED in the
+// UI before anything is written (via the normal createSkill path).
+
+const DIGEST_NOISE_DIRS = new Set([
+  "node_modules",
+  ".git",
+  "dist",
+  "build",
+  "out",
+  ".next",
+  "target",
+  "venv",
+  ".venv",
+  "__pycache__",
+  "coverage",
+  "vendor",
+  ".cache",
+  ".turbo",
+  ".idea",
+  ".vscode",
+  ".gradle",
+  "bin",
+  "obj",
+]);
+const DIGEST_TEXT_EXT = new Set([
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+  ".py",
+  ".rs",
+  ".go",
+  ".java",
+  ".kt",
+  ".rb",
+  ".php",
+  ".c",
+  ".h",
+  ".cpp",
+  ".cs",
+  ".swift",
+  ".md",
+  ".txt",
+  ".json",
+  ".yaml",
+  ".yml",
+  ".toml",
+  ".cfg",
+  ".ini",
+  ".sh",
+  ".sql",
+  ".html",
+  ".css",
+  ".scss",
+  ".vue",
+  ".svelte",
+]);
+const DIGEST_KEY_FILE_RE: readonly RegExp[] = [
+  /^readme(\.|$)/i,
+  /^package\.json$/i,
+  /^pyproject\.toml$/i,
+  /^cargo\.toml$/i,
+  /^go\.mod$/i,
+  /^tsconfig.*\.json$/i,
+  /^requirements\.txt$/i,
+  /^makefile$/i,
+  /^dockerfile$/i,
+  /^pom\.xml$/i,
+  /^build\.gradle/i,
+  /^composer\.json$/i,
+  /^gemfile$/i,
+  /^\.env\.example$/i,
+];
+
+const DIGEST_TOTAL = 40_000; // total digest budget (chars)
+const DIGEST_PER_FILE = 4_000; // per-file content cap
+const DIGEST_MAX_FILES = 36; // how many file bodies to inline
+const DIGEST_MAX_TREE = 500; // tree listing lines
+const DIGEST_MAX_DEPTH = 6;
+
+function walkRepo(root: string): {
+  tree: string[];
+  files: { rel: string; abs: string; isKey: boolean }[];
+} {
+  const tree: string[] = [];
+  const files: { rel: string; abs: string; isKey: boolean }[] = [];
+  const visit = (dir: string, depth: number, relBase: string): void => {
+    if (depth > DIGEST_MAX_DEPTH || tree.length >= DIGEST_MAX_TREE) return;
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    entries.sort((a, b) =>
+      a.isDirectory() === b.isDirectory()
+        ? a.name.localeCompare(b.name)
+        : a.isDirectory()
+          ? -1
+          : 1,
+    );
+    for (const e of entries) {
+      if (tree.length >= DIGEST_MAX_TREE) break;
+      const rel = relBase ? `${relBase}/${e.name}` : e.name;
+      const indent = "  ".repeat(depth);
+      if (e.isDirectory()) {
+        // Skip noise + hidden dirs. isDirectory() is false for symlinks, so we
+        // never follow a symlink out of the tree.
+        if (DIGEST_NOISE_DIRS.has(e.name) || e.name.startsWith(".")) continue;
+        tree.push(`${indent}${e.name}/`);
+        visit(join(dir, e.name), depth + 1, rel);
+      } else if (e.isFile()) {
+        // Regular files only (skip symlinks/sockets).
+        tree.push(`${indent}${e.name}`);
+        const isKey = DIGEST_KEY_FILE_RE.some((re) => re.test(e.name));
+        if (isKey || DIGEST_TEXT_EXT.has(extname(e.name).toLowerCase()))
+          files.push({ rel, abs: join(dir, e.name), isKey });
+      }
+    }
+  };
+  visit(root, 0, "");
+  return { tree, files };
+}
+
+/**
+ * A bounded, text-only digest of a repo: a capped file tree plus the contents
+ * of key files (README/manifests) and a sample of source files, each truncated
+ * to a total budget. Returns "" for a non-directory. Reads only under `root`
+ * (no symlink following). Pure-ish → unit-testable.
+ */
+export function buildRepoDigest(repoPath: string): string {
+  const root = resolve(repoPath);
+  if (!existsSync(root) || !statSync(root).isDirectory()) return "";
+
+  const { tree, files } = walkRepo(root);
+  const parts: string[] = [
+    `# Repository: ${root.split(/[\\/]+/).pop()}`,
+    `\n## File tree (truncated)\n${tree.join("\n")}`,
+  ];
+  // Key files first (README/manifests), then the rest, until the budget.
+  const ordered = [
+    ...files.filter((f) => f.isKey),
+    ...files.filter((f) => !f.isKey),
+  ];
+  let used = parts.join("\n").length;
+  let count = 0;
+  for (const f of ordered) {
+    if (count >= DIGEST_MAX_FILES || used >= DIGEST_TOTAL) break;
+    let content: string;
+    try {
+      content = readFileSync(f.abs, "utf-8");
+    } catch {
+      continue;
+    }
+    if (content.includes("\u0000")) continue; // looks binary — skip
+    const slice =
+      content.length > DIGEST_PER_FILE
+        ? `${content.slice(0, DIGEST_PER_FILE)}\n…(truncated)`
+        : content;
+    const block = `\n\n## ${f.rel}\n\`\`\`\n${slice}\n\`\`\``;
+    if (used + block.length > DIGEST_TOTAL && count > 0) break;
+    parts.push(block);
+    used += block.length;
+    count++;
+  }
+  return parts.join("\n");
+}
+
+/** Strip a single wrapping ```markdown/``` fence if the model added one. */
+function stripCodeFence(s: string): string {
+  const t = s.trim();
+  const m = t.match(/^```(?:markdown|md)?\s*\n([\s\S]*?)\n```$/);
+  return m ? m[1] : t;
+}
+
+const SKILL_AUTHOR_SYSTEM = `You are a skill author for an AI agent. Given a digest of a code repository, write ONE SKILL.md that teaches the agent how to work effectively in that repo.
+Output ONLY the SKILL.md — no surrounding prose, no code fences. It MUST begin with YAML frontmatter:
+---
+name: <kebab-case-slug>
+description: <one sentence, <=200 chars, describing WHEN the agent should use this skill>
+---
+Then a concise, practical body: a short overview, the key files/directories, important conventions, common tasks/commands, and gotchas.`;
+
+export interface SkillDraft {
+  name: string;
+  description: string;
+  body: string;
+}
+
+/**
+ * Draft a SKILL.md from a local repo via one non-streaming gateway completion.
+ * Returns a parsed {name, description, body} for the UI to review and save with
+ * createSkill (so the frontmatter is recomposed, not double-wrapped). Never
+ * throws — returns {success:false,error} on a bad path / gateway error / empty
+ * reply. Local-mode only (caller gates with requireLocalWorkspace).
+ */
+export async function generateSkillFromRepo(
+  repoPath: string,
+  profile?: string,
+): Promise<{ success: boolean; draft?: SkillDraft; error?: string }> {
+  const root = resolve(repoPath);
+  if (!existsSync(root) || !statSync(root).isDirectory())
+    return { success: false, error: "Not a valid repository folder." };
+  const digest = buildRepoDigest(root);
+  if (!digest.trim())
+    return { success: false, error: "Could not read the repository." };
+
+  try {
+    const res = await fetch(`${getApiUrl(profile)}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getRemoteAuthHeader() },
+      signal: AbortSignal.timeout(120000),
+      body: JSON.stringify({
+        model: "hermes-agent",
+        stream: false,
+        messages: [
+          { role: "system", content: SKILL_AUTHOR_SYSTEM },
+          { role: "user", content: `Repository digest:\n\n${digest}` },
+        ],
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      return {
+        success: false,
+        error: `gateway ${res.status}: ${body.slice(0, 160)}`,
+      };
+    }
+    const data = (await res.json()) as {
+      choices?: { message?: { content?: string } }[];
+    };
+    const md = stripCodeFence(
+      data?.choices?.[0]?.message?.content ?? "",
+    ).trim();
+    if (!md)
+      return { success: false, error: "The agent returned an empty draft." };
+    const meta = parseSkillFrontmatter(md);
+    const bodyText = md.replace(/^---\n[\s\S]*?\n---\n?/, "").trim();
+    return {
+      success: true,
+      draft: { name: meta.name, description: meta.description, body: bodyText },
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Generation failed.",
+    };
   }
 }
