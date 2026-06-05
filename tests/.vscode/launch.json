@@ -1,0 +1,29 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Launch Current File",
+      "type": "pwa-node",
+      "request": "launch",
+      "// ========== SETUP REQUIREMENTS ==========": "",
+      "// Step 1: Verify tasks.json contains a task with label 'tsc: build'": "Run `tsc -p tsconfig.json` or equivalent TypeScript compilation command",
+      "// Step 2: Ensure your tsconfig.json compiles to 'dist' directory": "If your outDir is different, replace 'dist' with your actual outDir below",
+      "// Step 3: Configure debugOutDir in workspace settings": "In .vscode/settings.json, add: { \"debugOutDir\": \"dist\" } to match your tsconfig.json outDir",
+      "// Step 4: After build, verify compiled .js and .js.map files exist": "Check: ${workspaceFolder}/dist/${relativeFileDirname}/${fileBasenameNoExtension}.js and corresponding .js.map",
+      "// ======== PATH DISAMBIGUATION ========": "",
+      "// NOTE: ${relativeFileDirname} expands to '.' or '' at workspace root, causing ambiguous paths like 'dist/./file.js'.": "",
+      "// For workspace-root test files, compiled output is placed directly in dist without subdirectories.": "",
+      "// ALTERNATIVE 1 (if compiled files placed directly in dist): \"program\": \"${workspaceFolder}/dist/${fileBasenameNoExtension}.js\",": "",
+      "// ALTERNATIVE 2 (if compiled files preserve source structure): Use the current config below.": "",
+      "program": "${workspaceFolder}/${debugOutDir:dist}/${relativeFileDirname:./}/${fileBasenameNoExtension}.js",
+      "preLaunchTask": "tsc: build",
+      "// ERROR HANDLING: If preLaunchTask fails or compiled file is not found at the program path above,": "VS Code will fail with 'preLaunchTask 'tsc: build' terminated with exit code 1 or file not found'. Verify: (1) tsc runs without errors; (2) sourceMap generation is enabled in tsconfig.json; (3) outDir matches debugOutDir above.",
+      "outFiles": ["${workspaceFolder}/${debugOutDir:dist}/**/*.js"],
+      "// SOURCE MAP VALIDATION: If sourceMaps is true but no .js.map files are found,": "source stepping will not work. Ensure tsconfig.json has \"sourceMap\": true and that tsc emits .map files to the same directory as .js files.",
+      "sourceMaps": true,
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    }
+  ]
+}

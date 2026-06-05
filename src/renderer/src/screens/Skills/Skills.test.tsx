@@ -52,11 +52,16 @@ describe("Skills.tsx — Install button (issue #310 diagnosis)", () => {
     });
 
     // Default tab is "installed"; switch to Browse so the bundled card renders.
-    const tabs = view.container.querySelectorAll(".skills-tab");
-    const browseTab = tabs[1] as HTMLButtonElement;
-    expect(browseTab).toBeTruthy();
+    // ✅ FIX: Wrap tab selection in waitFor to ensure DOM is ready
+    let browseTab: HTMLButtonElement | null = null;
+    await waitFor(() => {
+      const tabs = view.container.querySelectorAll(".skills-tab");
+      browseTab = tabs[1] as HTMLButtonElement;
+      expect(browseTab).toBeTruthy();
+    });
+
     await act(async () => {
-      fireEvent.click(browseTab);
+      fireEvent.click(browseTab!);
     });
 
     // Find the Install button on the bundled card.
@@ -118,6 +123,8 @@ describe("Skills.tsx — Install button (issue #310 diagnosis)", () => {
 
     let browseTab: HTMLButtonElement | null = null;
     await waitFor(() => {
+      const tabs = view.container.querySelectorAll(".skills-tab");
+      browseTab = tabs[1] as HTMLButtonElement;
       browseTab = view.container.querySelectorAll(
         ".skills-tab",
       )[1] as HTMLButtonElement | null;
