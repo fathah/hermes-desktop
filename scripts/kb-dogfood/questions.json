@@ -1,0 +1,104 @@
+{
+  "_note": "hypothesis = the failure mode this question is DESIGNED to probe. The harness measures the ACTUAL outcome (which docs retrieved, rank, excerpt offset) and reports actual-vs-hypothesis. gold = docs the answer needs; answer_doc = the doc that actually contains answer_fragment; answer_fragment = a distinctive string the harness locates in answer_doc to compute the excerpt-clamp (1500-char) signal and to grade the live answer.",
+  "questions": [
+    {
+      "id": "pass-checkcall",
+      "hypothesis": "pass",
+      "question": "How often must a guard make a radio check-call to the control room during a night shift?",
+      "gold": ["field-operations-sop.md"],
+      "answer_doc": "field-operations-sop.md",
+      "answer_fragment": "every 30 minutes",
+      "expected": "Every 30 minutes on a night shift (two consecutive misses triggers a welfare escalation)."
+    },
+    {
+      "id": "pass-uniform",
+      "hypothesis": "pass",
+      "question": "What is the standard day-shift uniform for an officer?",
+      "gold": ["guard-handbook.md"],
+      "answer_doc": "guard-handbook.md",
+      "answer_fragment": "white shirt with epaulettes",
+      "expected": "Black trousers, white shirt with epaulettes, clip-on tie, company softshell jacket, plain black safety boots; SIA licence on the upper arm."
+    },
+    {
+      "id": "pass-coderesponse",
+      "hypothesis": "pass",
+      "question": "What is the contractual response time for the on-site officer on a Code Red alarm activation?",
+      "gold": ["master-service-agreement.md"],
+      "answer_doc": "master-service-agreement.md",
+      "answer_fragment": "within 3 minutes",
+      "expected": "On-site officer attends within 3 minutes; mobile patrol within 20 minutes."
+    },
+    {
+      "id": "depth-codered",
+      "hypothesis": "depth-clamp",
+      "question": "Walk me through the full Code Red escalation timeline — who is notified, and within how many minutes at each step?",
+      "gold": ["field-operations-sop.md"],
+      "answer_doc": "field-operations-sop.md",
+      "answer_fragment": "within 5 minutes, the Operations Manager notifies",
+      "expected": "Call 999 first, then control room; within 2 min control raises the on-call Operations Manager; within 5 min the Ops Manager notifies the client emergency contact and Ops Director; within 15 min a written flash report; full review within 24 hours."
+    },
+    {
+      "id": "depth-notice",
+      "hypothesis": "depth-clamp",
+      "question": "How much written notice must a guard give to resign once they have finished probation?",
+      "gold": ["guard-handbook.md"],
+      "answer_doc": "guard-handbook.md",
+      "answer_fragment": "four weeks' written notice",
+      "expected": "Four weeks' written notice after the 12-week probation (one week during probation)."
+    },
+    {
+      "id": "depth-creditcap",
+      "hypothesis": "depth-clamp",
+      "question": "Is there an overall cap on the service credits BlueBay can net off in a single month?",
+      "gold": ["master-service-agreement.md"],
+      "answer_doc": "master-service-agreement.md",
+      "answer_fragment": "capped at 20%",
+      "expected": "Service credits are capped at 20% of the monthly charge."
+    },
+    {
+      "id": "depth-liability",
+      "hypothesis": "depth-clamp",
+      "question": "What is the most the security provider can be made to pay out in liability under the BlueBay agreement?",
+      "gold": ["master-service-agreement.md"],
+      "answer_doc": "master-service-agreement.md",
+      "answer_fragment": "capped at the total charges paid in the preceding 12 months",
+      "expected": "Aggregate liability capped at the total charges paid in the preceding 12 months (except liability that cannot lawfully be limited)."
+    },
+    {
+      "id": "multihop-medical",
+      "hypothesis": "depth-multihop",
+      "question": "At the BlueBay site, who does the guard contact first in a medical emergency, and in what order after that?",
+      "gold": ["post-orders-bluebay.md", "incident-response-matrix.md"],
+      "answer_doc": "incident-response-matrix.md",
+      "answer_fragment": "the on-site trained first aider",
+      "expected": "Order: (1) on-site trained first aider with the defibrillator, (2) dial 999, (3) control room, (4) duty manager. Post orders defer to the incident-response-matrix for the exact order."
+    },
+    {
+      "id": "multihop-penalty",
+      "hypothesis": "depth-multihop",
+      "question": "What is the financial penalty if the BlueBay mobile patrol misses a checkpoint scan?",
+      "gold": ["post-orders-bluebay.md", "master-service-agreement.md"],
+      "answer_doc": "master-service-agreement.md",
+      "answer_fragment": "service credit of £150 per occurrence",
+      "expected": "£150 service credit per missed/falsified patrol — the post orders defer to the MSA service-credit schedule for the figure."
+    },
+    {
+      "id": "recall-holiday",
+      "hypothesis": "recall-synonym",
+      "question": "What is the yearly vacation allowance for permanent staff?",
+      "gold": ["guard-handbook.md"],
+      "answer_doc": "guard-handbook.md",
+      "answer_fragment": "28 working days per annum",
+      "expected": "28 working days per annum, inclusive of public holidays (the handbook calls it 'holiday entitlement', not 'vacation')."
+    },
+    {
+      "id": "recall-aed",
+      "hypothesis": "recall-synonym",
+      "question": "What life-saving device is available on the premises, and where is it kept?",
+      "gold": ["post-orders-bluebay.md"],
+      "answer_doc": "post-orders-bluebay.md",
+      "answer_fragment": "defibrillator is mounted outside the management suite",
+      "expected": "A defibrillator, mounted outside the management suite (the post orders call it a 'defibrillator', not an 'AED' or 'life-saving device')."
+    }
+  ]
+}
