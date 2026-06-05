@@ -6422,6 +6422,69 @@ body {
   font-size: 12px;
 }
 
+/* Authoring / management additions */
+.skills-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+/* Installed cards wrap a clickable body + a footer action row. */
+.skills-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  width: 100%;
+}
+.skills-card-disabled {
+  opacity: 0.6;
+}
+.skills-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin: 18px 0 8px;
+}
+.skills-new-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 2px;
+}
+.skills-new-input,
+.skills-new-textarea,
+.skills-edit-textarea {
+  width: 100%;
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  font: inherit;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+.skills-new-textarea,
+.skills-edit-textarea {
+  resize: vertical;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.skills-edit-textarea {
+  width: 100%;
+  min-height: 360px;
+}
+.skills-new-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
 /* Empty */
 .skills-empty {
   flex: 1;

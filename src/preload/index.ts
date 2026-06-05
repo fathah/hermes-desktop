@@ -675,6 +675,59 @@ const hermesAPI = {
     profile?: string,
   ): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke("uninstall-skill", name, profile),
+  searchSkills: (
+    query: string,
+  ): Promise<
+    Array<{
+      name: string;
+      description: string;
+      category: string;
+      source: string;
+      installed: boolean;
+    }>
+  > => ipcRenderer.invoke("search-skills", query),
+  createSkill: (input: {
+    name: string;
+    description?: string;
+    category?: string;
+    body?: string;
+    profile?: string;
+  }): Promise<{ success: boolean; error?: string; path?: string }> =>
+    ipcRenderer.invoke("create-skill", input),
+  writeSkillContent: (
+    skillPath: string,
+    content: string,
+    profile?: string,
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("write-skill-content", skillPath, content, profile),
+  listDisabledSkills: (
+    profile?: string,
+  ): Promise<
+    Array<{ name: string; category: string; description: string; path: string }>
+  > => ipcRenderer.invoke("list-disabled-skills", profile),
+  setSkillEnabled: (
+    skillPath: string,
+    enabled: boolean,
+    profile?: string,
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("set-skill-enabled", skillPath, enabled, profile),
+  discoverLocalSkills: (
+    profile?: string,
+  ): Promise<
+    Array<{
+      name: string;
+      description: string;
+      category: string;
+      source: string;
+      sourcePath: string;
+    }>
+  > => ipcRenderer.invoke("discover-local-skills", profile),
+  importLocalSkill: (
+    sourcePath: string,
+    category?: string,
+    profile?: string,
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("import-local-skill", sourcePath, category, profile),
 
   // Session cache (fast local cache with generated titles)
   listCachedSessions: (

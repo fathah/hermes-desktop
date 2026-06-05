@@ -5,8 +5,12 @@ import {
   readFileSync,
   realpathSync,
   statSync,
+  mkdirSync,
+  writeFileSync,
+  renameSync,
+  cpSync,
 } from "fs";
-import { isAbsolute, join, relative, resolve } from "path";
+import { dirname, isAbsolute, join, relative, resolve } from "path";
 import { homedir } from "os";
 import {
   HERMES_HOME,
@@ -69,24 +73,19 @@ function parseSkillFrontmatter(content: string): {
 }
 
 /**
- * Walk the skills directory to find all installed skills.
- * Structure: skills/<category>/<skill-name>/SKILL.md
+ * Walk a skills-shaped root (`<root>/<category>/<skill-name>/SKILL.md`) into a
+ * sorted InstalledSkill[]. Shared by the enabled (`skills/`) and disabled
+ * (`skills-disabled/`) listings.
  */
-export function listInstalledSkills(profile?: string): InstalledSkill[] {
-  const skillsDir = join(profileHome(profile), "skills");
-  if (!existsSync(skillsDir)) return [];
-
+function collectSkillsFromRoot(root: string): InstalledSkill[] {
+  if (!existsSync(root)) return [];
   const skills: InstalledSkill[] = [];
-
   try {
-    const categories = readdirSync(skillsDir);
-
-    for (const category of categories) {
-      const categoryPath = join(skillsDir, category);
+    for (const category of readdirSync(root)) {
+      const categoryPath = join(root, category);
       if (!statSync(categoryPath).isDirectory()) continue;
 
-      const entries = readdirSync(categoryPath);
-      for (const entry of entries) {
+      for (const entry of readdirSync(categoryPath)) {
         const entryPath = join(categoryPath, entry);
         if (!statSync(entryPath).isDirectory()) continue;
 
@@ -96,7 +95,6 @@ export function listInstalledSkills(profile?: string): InstalledSkill[] {
         try {
           const content = readFileSync(skillFile, "utf-8").slice(0, 4000);
           const meta = parseSkillFrontmatter(content);
-
           skills.push({
             name: meta.name || entry,
             category,
@@ -116,11 +114,33 @@ export function listInstalledSkills(profile?: string): InstalledSkill[] {
   } catch {
     // ignore
   }
-
   return skills.sort(
     (a, b) =>
       a.category.localeCompare(b.category) || a.name.localeCompare(b.name),
   );
+}
+
+/** The active profile's enabled skills root (`<profileHome>/skills`). */
+function profileSkillsRoot(profile?: string): string {
+  return join(profileHome(profile), "skills");
+}
+
+/** The active profile's disabled-skills root (`<profileHome>/skills-disabled`). */
+function profileDisabledRoot(profile?: string): string {
+  return join(profileHome(profile), "skills-disabled");
+}
+
+/**
+ * Walk the skills directory to find all installed (enabled) skills.
+ * Structure: skills/<category>/<skill-name>/SKILL.md
+ */
+export function listInstalledSkills(profile?: string): InstalledSkill[] {
+  return collectSkillsFromRoot(profileSkillsRoot(profile));
+}
+
+/** Skills that were disabled (moved to `skills-disabled/`, gateway ignores). */
+export function listDisabledSkills(profile?: string): InstalledSkill[] {
+  return collectSkillsFromRoot(profileDisabledRoot(profile));
 }
 
 function realOrResolved(path: string): string {
@@ -405,5 +425,272 @@ export function uninstallSkill(name: string, profile?: string): SkillCliResult {
       success: false,
       error: msg || e.stdout?.toString()?.trim() || "Uninstall failed.",
     };
+  }
+}
+
+// ─────────────────────── local authoring / management ───────────────────────
+// All of the below operate on the LOCAL filesystem only (the active profile's
+// skills dirs). Writes are gated by a WRITE allowlist that is deliberately
+// narrower than the read allowlist: only the profile's own skills/ and
+// skills-disabled/ — never HERMES_REPO/skills (bundled, read-only).
+
+const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
+/** A path segment safe to use as a category/folder name (no traversal). */
+function isSafeSegment(s: string): boolean {
+  return SLUG_RE.test(s);
+}
+
+/** Lowercase-kebab a free-text name into a folder-safe slug. */
+function slugify(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+}
+
+/** Strip characters that would break a single-line quoted YAML scalar. */
+function yamlSafe(s: string): string {
+  return s.replace(/["\r\n]/g, " ").trim();
+}
+
+/**
+ * A write target is allowed ONLY inside the active profile's skills/ or
+ * skills-disabled/ roots. `resolve` collapses any `..`, so a traversal escapes
+ * the root and fails pathIsInside. Bundled repo skills are intentionally absent.
+ */
+function isWritableSkillTarget(target: string, profile?: string): boolean {
+  const roots = [profileSkillsRoot(profile), profileDisabledRoot(profile)].map(
+    realOrResolved,
+  );
+  const real = realOrResolved(target);
+  return roots.some((root) => pathIsInside(root, real));
+}
+
+export interface CreateSkillInput {
+  name: string;
+  description?: string;
+  category?: string;
+  body?: string;
+  profile?: string;
+}
+
+/** Author a new skill: write `<profileHome>/skills/<category>/<slug>/SKILL.md`. */
+export function createSkill(
+  input: CreateSkillInput,
+): SkillCliResult & { path?: string } {
+  const name = (input.name || "").trim();
+  if (!name) return { success: false, error: "A name is required." };
+  const slug = slugify(name);
+  if (!slug)
+    return { success: false, error: "Name must contain letters or numbers." };
+  const category = (input.category || "custom").trim().toLowerCase();
+  if (!isSafeSegment(category))
+    return { success: false, error: "Invalid category name." };
+
+  const dir = join(profileSkillsRoot(input.profile), category, slug);
+  if (!isWritableSkillTarget(dir, input.profile))
+    return { success: false, error: "Refused: outside the skills directory." };
+  const skillFile = join(dir, "SKILL.md");
+  if (existsSync(skillFile))
+    return {
+      success: false,
+      error: `A skill "${slug}" already exists in "${category}".`,
+    };
+
+  const desc = yamlSafe(input.description || "");
+  const body =
+    input.body?.trim() ||
+    `# ${name}\n\nDescribe what this skill does and when the agent should use it.`;
+  const content = `---\nname: "${yamlSafe(name)}"\ndescription: "${desc}"\n---\n\n${body}\n`;
+  try {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(skillFile, content, "utf-8");
+    return { success: true, path: dir };
+  } catch (e) {
+    return { success: false, error: (e as Error).message };
+  }
+}
+
+/** Overwrite an installed skill's SKILL.md (profile dirs only; not bundled). */
+export function writeSkillContent(
+  skillPath: string,
+  content: string,
+  profile?: string,
+): SkillCliResult {
+  if (typeof skillPath !== "string" || skillPath.trim() === "")
+    return { success: false, error: "Invalid skill path." };
+  if (typeof content !== "string")
+    return { success: false, error: "Invalid content." };
+  const dir = resolve(skillPath);
+  if (!isWritableSkillTarget(dir, profile))
+    return { success: false, error: "This skill is read-only." };
+  const skillFile = join(dir, "SKILL.md");
+  if (!existsSync(skillFile))
+    return { success: false, error: "Skill not found." };
+  try {
+    writeFileSync(skillFile, content, "utf-8");
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: (e as Error).message };
+  }
+}
+
+/**
+ * Enable/disable a single skill by moving its folder between `skills/` and
+ * `skills-disabled/`. The gateway reads only `skills/`, so a disabled skill
+ * disappears from the agent with no config change. `skillPath` is the skill's
+ * current directory (from listInstalled/listDisabled).
+ */
+export function setSkillEnabled(
+  skillPath: string,
+  enabled: boolean,
+  profile?: string,
+): SkillCliResult {
+  const src = realOrResolved(resolve(skillPath));
+  const enabledRoot = realOrResolved(profileSkillsRoot(profile));
+  const disabledRoot = realOrResolved(profileDisabledRoot(profile));
+  // Enabling moves FROM disabled→enabled; disabling moves FROM enabled→disabled.
+  const fromRoot = enabled ? disabledRoot : enabledRoot;
+  const toRoot = enabled ? enabledRoot : disabledRoot;
+
+  if (!pathIsInside(fromRoot, src))
+    return { success: false, error: "Skill is not in the expected location." };
+  const rel = relative(fromRoot, src); // "<category>/<name>"
+  if (!rel || rel.startsWith("..") || isAbsolute(rel))
+    return { success: false, error: "Invalid skill location." };
+  const dest = join(toRoot, rel);
+  if (existsSync(dest))
+    return {
+      success: false,
+      error: "A skill with that name already exists in the target.",
+    };
+  try {
+    mkdirSync(dirname(dest), { recursive: true });
+    renameSync(src, dest);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: (e as Error).message };
+  }
+}
+
+export interface LocalSkill {
+  name: string;
+  description: string;
+  category: string;
+  source: string;
+  sourcePath: string;
+}
+
+/** Local directories scanned for importable SKILL.md folders. */
+function localSkillSources(): { label: string; root: string }[] {
+  const sources = [
+    { label: "~/.claude/skills", root: join(homedir(), ".claude", "skills") },
+  ];
+  // Dev convenience: this repo's .agents/skills (absent in a packaged app).
+  const repoAgents = join(process.cwd(), ".agents", "skills");
+  if (existsSync(repoAgents))
+    sources.push({ label: ".agents/skills", root: repoAgents });
+  return sources;
+}
+
+/** Find a directory containing SKILL.md at depth ≤ 2 under each source root. */
+function scanForSkillDirs(root: string, label: string): LocalSkill[] {
+  if (!existsSync(root)) return [];
+  const found: LocalSkill[] = [];
+  const consider = (dir: string, category: string): void => {
+    const skillFile = join(dir, "SKILL.md");
+    if (!existsSync(skillFile)) return;
+    let meta = { name: "", description: "" };
+    try {
+      meta = parseSkillFrontmatter(
+        readFileSync(skillFile, "utf-8").slice(0, 4000),
+      );
+    } catch {
+      // keep defaults
+    }
+    found.push({
+      name: meta.name || dir.split(/[\\/]+/).pop() || "skill",
+      description: meta.description || "",
+      category: category || "local",
+      source: label,
+      sourcePath: dir,
+    });
+  };
+  try {
+    for (const entry of readdirSync(root)) {
+      const entryPath = join(root, entry);
+      if (!statSync(entryPath).isDirectory()) continue;
+      if (existsSync(join(entryPath, "SKILL.md"))) {
+        consider(entryPath, "local"); // <root>/<name>/SKILL.md
+      } else {
+        // <root>/<category>/<name>/SKILL.md
+        for (const sub of readdirSync(entryPath)) {
+          const subPath = join(entryPath, sub);
+          try {
+            if (statSync(subPath).isDirectory()) consider(subPath, entry);
+          } catch {
+            // ignore unreadable entries
+          }
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return found;
+}
+
+/** Discover SKILL.md folders already on this machine, minus installed ones. */
+export function discoverLocalSkills(profile?: string): LocalSkill[] {
+  const installed = new Set(
+    [...listInstalledSkills(profile), ...listDisabledSkills(profile)].map((s) =>
+      s.name.toLowerCase(),
+    ),
+  );
+  const out: LocalSkill[] = [];
+  for (const { label, root } of localSkillSources()) {
+    for (const skill of scanForSkillDirs(realOrResolved(root), label)) {
+      if (!installed.has(skill.name.toLowerCase())) out.push(skill);
+    }
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Copy a discovered local skill into the active profile's skills dir. */
+export function importLocalSkill(
+  sourcePath: string,
+  category?: string,
+  profile?: string,
+): SkillCliResult {
+  const src = realOrResolved(resolve(sourcePath));
+  // The source MUST be inside one of the known discovery roots — never copy an
+  // arbitrary directory the renderer hands us.
+  const roots = localSkillSources().map((s) => realOrResolved(s.root));
+  if (!roots.some((root) => pathIsInside(root, src)))
+    return { success: false, error: "Source is not a known local skill." };
+  if (!existsSync(join(src, "SKILL.md")))
+    return { success: false, error: "No SKILL.md in the source folder." };
+
+  const cat = (category || "local").trim().toLowerCase();
+  if (!isSafeSegment(cat))
+    return { success: false, error: "Invalid category name." };
+  const folder = src.split(/[\\/]+/).pop() || "skill";
+  if (!isSafeSegment(folder))
+    return { success: false, error: "Unsupported skill folder name." };
+
+  const dest = join(profileSkillsRoot(profile), cat, folder);
+  if (!isWritableSkillTarget(dest, profile))
+    return { success: false, error: "Refused: outside the skills directory." };
+  if (existsSync(dest))
+    return { success: false, error: `"${folder}" is already imported.` };
+  try {
+    mkdirSync(dirname(dest), { recursive: true });
+    cpSync(src, dest, { recursive: true });
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: (e as Error).message };
   }
 }

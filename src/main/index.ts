@@ -192,6 +192,14 @@ import {
   getSkillContent,
   installSkill,
   uninstallSkill,
+  searchSkills,
+  createSkill,
+  writeSkillContent,
+  listDisabledSkills,
+  setSkillEnabled,
+  discoverLocalSkills,
+  importLocalSkill,
+  type CreateSkillInput,
 } from "./skills";
 import {
   listCronJobs,
@@ -1424,6 +1432,45 @@ function setupIPC(): void {
       if (conn.mode === "ssh" && conn.ssh)
         return sshUninstallSkill(conn.ssh, name);
       return uninstallSkill(name, _profile);
+    },
+  );
+  // Live registry browse — expose the existing CLI search (local-mode only).
+  ipcMain.handle("search-skills", (_event, query: string) => {
+    requireLocalWorkspace();
+    return searchSkills(query);
+  });
+  // Authoring / management — operate on the local profile's skills dirs only.
+  ipcMain.handle("create-skill", (_event, input: CreateSkillInput) => {
+    requireLocalWorkspace();
+    return createSkill(input);
+  });
+  ipcMain.handle(
+    "write-skill-content",
+    (_event, skillPath: string, content: string, profile?: string) => {
+      requireLocalWorkspace();
+      return writeSkillContent(skillPath, content, profile);
+    },
+  );
+  ipcMain.handle("list-disabled-skills", (_event, profile?: string) => {
+    requireLocalWorkspace();
+    return listDisabledSkills(profile);
+  });
+  ipcMain.handle(
+    "set-skill-enabled",
+    (_event, skillPath: string, enabled: boolean, profile?: string) => {
+      requireLocalWorkspace();
+      return setSkillEnabled(skillPath, enabled, profile);
+    },
+  );
+  ipcMain.handle("discover-local-skills", (_event, profile?: string) => {
+    requireLocalWorkspace();
+    return discoverLocalSkills(profile);
+  });
+  ipcMain.handle(
+    "import-local-skill",
+    (_event, sourcePath: string, category?: string, profile?: string) => {
+      requireLocalWorkspace();
+      return importLocalSkill(sourcePath, category, profile);
     },
   );
 

@@ -603,6 +603,51 @@ interface HermesAPI {
     name: string,
     profile?: string,
   ) => Promise<{ success: boolean; error?: string }>;
+  searchSkills: (query: string) => Promise<
+    Array<{
+      name: string;
+      description: string;
+      category: string;
+      source: string;
+      installed: boolean;
+    }>
+  >;
+  createSkill: (input: {
+    name: string;
+    description?: string;
+    category?: string;
+    body?: string;
+    profile?: string;
+  }) => Promise<{ success: boolean; error?: string; path?: string }>;
+  writeSkillContent: (
+    skillPath: string,
+    content: string,
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+  listDisabledSkills: (
+    profile?: string,
+  ) => Promise<
+    Array<{ name: string; category: string; description: string; path: string }>
+  >;
+  setSkillEnabled: (
+    skillPath: string,
+    enabled: boolean,
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+  discoverLocalSkills: (profile?: string) => Promise<
+    Array<{
+      name: string;
+      description: string;
+      category: string;
+      source: string;
+      sourcePath: string;
+    }>
+  >;
+  importLocalSkill: (
+    sourcePath: string,
+    category?: string,
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
 
   // Session cache
   listCachedSessions: (
