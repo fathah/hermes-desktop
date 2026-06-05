@@ -127,3 +127,55 @@ building" — is wrong about the system even though it's right about the client.
 
 The corpus, harness, question bank, and mechanism test are committed under
 `scripts/kb-dogfood/` and are re-runnable against any gateway.
+
+---
+
+## Addendum — real-PDF run (2026-06-05)
+
+The synthetic run used hand-written 3 KB markdown. To stress the depth mechanism at
+real-document scale and through the **real ingestion path**, the harness was re-run over
+three real PDFs via the product's own `extractPdfToMarkdown` (new step:
+`scripts/kb-dogfood/ingest-pdfs.ts`): Coase, _The Nature of the Firm_ (20 pp, 57 KB text),
+Google, _Anatomy of a Personal Health Agent_ (148 pp, **355 KB text**), and a Buffett
+article. 9 questions, graded live against the same gateway (grok-4.3), then **source-verified
+by hand**.
+
+**Headline: depth holds at scale. 9/9 substantively correct, 0 depth failures, 0
+hallucinations.** The agentic file-read recovered exact figures from deep inside the 355 KB
+file — e.g. the DE-agent differential-diagnosis "top-1 accuracy of 46.1% vs DDx 41.4%" at
+offset ~253k, and the precise effort breakdown "559 + 561 = 1,120 hours" (deeper and _more_
+precise than the abstract's rounded "1,100"). Two answers initially looked wrong but were
+the model reading **deeper, more-specific real data** than the anchor fragment — both
+confirmed present in the source (lines 158–159, 784–786). Several answers explicitly cited
+`[full file: …]`. So the file-tool depth mechanism does not just read the start of a long
+file — it locates specific facts ~100 pages in, without confabulating.
+
+**Three new findings the synthetic run could not surface:**
+
+1. **An ingestion-quality bug (not OCR).** The Buffett PDF has a custom font with no
+   ToUnicode cmap, so `extractPdfToMarkdown` produced **garbage text** (`!" #$%#& "'()…`) —
+   yet `hasUsableTextLayer` returned **true** (it only counts non-space chars), so the
+   garbage would silently enter the KB and ground answers on nonsense. This is distinct from
+   the scanned-PDF/OCR case (item 2): a text layer that _exists_ but is unmappable. The
+   detector needs a real "is this text intelligible" check (e.g. dictionary-word ratio), not
+   a char count. In this run the garbage was inert (its tokens never matched English queries,
+   so it was never retrieved) — but on a vault where it _did_ rank, it would poison grounding.
+   **Recommend a new backlog item.**
+
+2. **Recall is not testable below the retrieval cap.** With only 3 docs (< `GROUNDING_HITS`
+   = 5), every on-topic query retrieves the relevant doc; both deliberately-synonym recall
+   probes still retrieved their gold doc. Confirming the recall gap (the residual failure
+   from the synthetic run) requires a corpus **larger than 5 docs**. The real test of item
+   1's recommended direction (agentic re-search) still needs a bigger corpus.
+
+3. **Answer specificity on figure-dense docs.** When a long doc reports many similar numbers
+   (the Google paper has dozens of accuracy figures), an under-specified question
+   ("what accuracy did the DE agent achieve?") gets _an_ correct figure, not necessarily
+   _the_ one the user meant. Not a grounding failure — a UX consideration for the co-author
+   on quantitative source material.
+
+Net: the depth-already-solved conclusion **strengthens** — it survives a 355 KB / 148-page
+document with deep, figure-dense content and no hallucination. The open work is unchanged:
+attack **recall** (needs a >5-doc corpus to even measure), harden ingestion (the garbage-text
+bug), and quantify latency. Real-run corpus/questions/results were kept out of the repo; only
+the reusable `ingest-pdfs.ts` step is committed.
