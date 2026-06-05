@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-06-05 · **Default branch:** `main` (local commit-to-main; remote `origin` = github.com/saxster/hermes-desktop)
 
-This is the **remaining work** for the SPS-Agent knowledgebase / agent-aware / skills surface — the deferred items behind the features already shipped. Each item records *current state* (with file pointers), *what's left*, and the *rationale / gate* so any contributor can pick one up cold. Items are independent; ship one per worktree + commit.
+This is the **remaining work** for the SPS-Agent knowledgebase / agent-aware / skills surface — the deferred items behind the features already shipped. Each item records _current state_ (with file pointers), _what's left_, and the _rationale / gate_ so any contributor can pick one up cold. Items are independent; ship one per worktree + commit.
 
 ---
 
@@ -25,6 +25,20 @@ Read those commit messages + diffs for the shipped design; this doc references f
 Ordered roughly by value.
 
 ### 1. KB Phase 2 — RLM (agentic navigation), NOT vector RAG ⟵ the big one, GATED
+
+> **⚠️ UPDATE 2026-06-05 — the gate ran (item 9) and inverted the premise. Read
+> [`docs/kb-phase2-dogfood.md`](kb-phase2-dogfood.md) before acting on this item.**
+> Dogfooding showed **depth is already solved in production**: the agentic gateway
+> reads the _full file_ via its file tool when the excerpt is insufficient (proven by
+> a controlled bogus-path experiment), so the "spsAssistant doesn't run a tool loop"
+> premise below is true of the _client_ but false of the _system_ — the server runs the
+> loop. Every depth probe answered correctly; the only live failures were **recall**
+> (right doc never retrieved — the one thing a file tool can't fix). **Revised
+> direction:** don't build a depth read-loop (it exists); attack **recall** via agentic
+> re-search (a `vault_search`/`follow_wikilink` tool the agent can re-call), embeddings
+> only if a measured recall gap survives. Caveats (model-dependence, scale reliability,
+> latency) are in the findings doc. The original analysis below is preserved as the
+> pre-evidence reasoning.
 
 **Direction decided:** do **RLM** — let the co-author _navigate_ the vault (search → read → re-search → recurse → synthesize) — instead of a vector-RAG pipeline. Embeddings are **demoted to an optional tool**, added only if a measured recall gap demands it. Short version: RLM reuses what's already built, dodges the entire vector tax, and wins exactly where top-k stuffing fails (multi-hop, whole-doc, follow-the-thread).
 
@@ -85,7 +99,15 @@ Bet (to verify, not assert): with SOP/contract corpora (shared vocab, cross-refs
 - **Cross-screen import smell:** `screens/SpsAgent/assistant/providers/BridgeAssistant.ts` imports `getGroundInWorkspace` from `../../../Chat/lib/grounding` — SPS (the product) depending on Chat (legacy), backwards. **Hoist** the setting to a shared module both import (e.g. `src/renderer/src/lib/grounding.ts` or `src/shared`).
 - **`sps-agent → hermes` coupling:** `src/main/sps-agent.ts` imports `buildRetrievalSystemMessage` from `./hermes` (one-way, no cycle, but pulls the heavy hermes graph). Optional: extract `buildRetrievalSystemMessage` / `formatRetrievalSystemMessage` / `groundingTerms` into `src/main/grounding.ts` and **re-export from `hermes.ts`** so existing test imports (`tests/workspace-grounding.test.ts`) keep working.
 
-### 9. KB dogfooding — the Phase-2 trigger evaluation ⟵ do this BEFORE item 1
+### 9. KB dogfooding — the Phase-2 trigger evaluation ⟵ ✅ DONE 2026-06-05
+
+> **Ran 2026-06-05 — see [`docs/kb-phase2-dogfood.md`](kb-phase2-dogfood.md).** A
+> designed security-guarding corpus + reproducible harness (`scripts/kb-dogfood/`)
+> drove the real grounding pipeline against the live gateway (grok-4.3). Outcome:
+> 9/11 correct, **0 depth failures, 2 recall failures** — depth is already handled by
+> the agentic file tool (proven), recall is the residual gap. This rewrote item 1
+> (above). A re-run against _real_ business docs is still worthwhile to confirm the
+> recall base-rate in the wild; the harness accepts any vault.
 
 Ingest several real business docs (SOPs, a contract, a handbook) and ask the co-author real questions with grounding on. **Don't just judge pass/fail — classify each failure** so the diagnosis picks the tool (see item 1's gate):
 
