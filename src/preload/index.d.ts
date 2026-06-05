@@ -1045,6 +1045,11 @@ interface HermesAPI {
     markdown: string,
     profile?: string,
   ) => Promise<boolean>;
+  spsReadRow: (
+    dbFolder: string,
+    rowId: string,
+    profile?: string,
+  ) => Promise<string | null>;
   spsDeleteRow: (
     dbFolder: string,
     rowId: string,

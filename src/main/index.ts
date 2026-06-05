@@ -29,6 +29,7 @@ import {
 import {
   exportPageMarkdownTo,
   exportRowMarkdownTo,
+  readRowMarkdownFrom,
   deletePageIn,
   deleteRowIn,
   deleteDbFolderIn,
@@ -2167,6 +2168,14 @@ function setupIPC(): void {
       const home = profileHome(profile || getActiveProfileNameSync());
       const dir = join(home, "sps-agent", "vault");
       return exportRowMarkdownTo(dir, dbFolder, rowId, markdown);
+    },
+  );
+  ipcMain.handle(
+    "sps-read-row",
+    (_event, dbFolder: string, rowId: string, profile?: string) => {
+      const home = profileHome(profile || getActiveProfileNameSync());
+      const dir = join(home, "sps-agent", "vault");
+      return readRowMarkdownFrom(dir, dbFolder, rowId);
     },
   );
   ipcMain.handle(

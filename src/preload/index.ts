@@ -1243,6 +1243,12 @@ const hermesAPI = {
     profile?: string,
   ): Promise<boolean> =>
     ipcRenderer.invoke("sps-export-row", dbFolder, rowId, markdown, profile),
+  spsReadRow: (
+    dbFolder: string,
+    rowId: string,
+    profile?: string,
+  ): Promise<string | null> =>
+    ipcRenderer.invoke("sps-read-row", dbFolder, rowId, profile),
   spsDeleteRow: (
     dbFolder: string,
     rowId: string,

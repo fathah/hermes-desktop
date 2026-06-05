@@ -99,6 +99,24 @@ export async function exportRowMarkdownTo(
   }
 }
 
+/** Read a database row's markdown, or null if absent / bad segment. */
+export async function readRowMarkdownFrom(
+  vaultDir: string,
+  dbFolder: string,
+  rowId: string,
+): Promise<string | null> {
+  if (!isValidSegment(dbFolder) || !isValidSegment(rowId)) return null;
+  if (isReservedFolder(dbFolder)) return null;
+  try {
+    return await fs.readFile(
+      join(vaultDir, dbFolder, pageFilename(rowId)),
+      "utf-8",
+    );
+  } catch {
+    return null;
+  }
+}
+
 /** Delete a database row file. Returns false on a bad segment. */
 export async function deleteRowIn(
   vaultDir: string,
