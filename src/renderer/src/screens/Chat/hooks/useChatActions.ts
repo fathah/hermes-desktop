@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { ChatInputHandle } from "../ChatInput";
 import type { Attachment, ChatMessage, ChatBubbleMessage } from "../types";
-import { getGroundInWorkspace } from "../lib/grounding";
+import { getGroundInWorkspace } from "../../../lib/grounding";
 
 function hasContent(msg: ChatMessage): msg is ChatBubbleMessage {
   return (

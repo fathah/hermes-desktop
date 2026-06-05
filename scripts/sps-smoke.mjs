@@ -110,7 +110,11 @@ const MOD = process.platform === "darwin" ? "Meta" : "Control";
 const shots = [];
 
 const app = await electron.launch({
-  args: ["."],
+  // Isolate Electron's userData (alongside the temp HERMES_HOME) so the smoke
+  // gets its OWN single-instance lock — otherwise a developer's running app
+  // (which holds the default lock; see requestSingleInstanceLock in main) makes
+  // this second instance quit at launch ("Target page has been closed").
+  args: [".", `--user-data-dir=${join(HOME, "electron-userdata")}`],
   env: {
     ...process.env,
     HERMES_HOME: HOME,

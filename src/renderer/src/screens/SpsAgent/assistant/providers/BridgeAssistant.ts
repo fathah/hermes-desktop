@@ -3,7 +3,7 @@
 // configured model + tools + memory and returns a validated AssistantResult.
 // Output is re-validated defensively here. Falls back to a chat reply on any error.
 import { validateResult } from "../validate";
-import { getGroundInWorkspace } from "../../../Chat/lib/grounding";
+import { getGroundInWorkspace } from "../../../../lib/grounding";
 import type { AssistantProvider, AssistantResult, PageContext } from "../types";
 
 export class BridgeAssistant implements AssistantProvider {

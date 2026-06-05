@@ -14,7 +14,10 @@ import {
 import { useI18n } from "../../components/useI18n";
 import type { UsageState } from "./types";
 import { contextGaugeInfo } from "./contextGauge";
-import { getGroundInWorkspace, setGroundInWorkspace } from "./lib/grounding";
+import {
+  getGroundInWorkspace,
+  setGroundInWorkspace,
+} from "../../lib/grounding";
 
 interface ChatHeaderProps {
   sessionId: string | null;

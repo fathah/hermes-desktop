@@ -4,6 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { Icon } from "../components/Icon";
 import { useStore } from "../store";
 import { scrollToProposal } from "../lib/scroll";
+import {
+  getGroundInWorkspace,
+  setGroundInWorkspace,
+} from "../../../lib/grounding";
 
 export function AgentBody() {
   const messages = useStore((s) => s.messages);
@@ -15,6 +19,16 @@ export function AgentBody() {
   const [val, setVal] = useState("");
   const bodyRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
+
+  // Grounding toggle: the co-author reads getGroundInWorkspace() at send time
+  // (via BridgeAssistant), so this just persists the shared preference — the
+  // same one the Chat header controls. No prop threading needed.
+  const [grounded, setGrounded] = useState(getGroundInWorkspace());
+  const toggleGrounding = (): void => {
+    const next = !grounded;
+    setGrounded(next);
+    setGroundInWorkspace(next);
+  };
 
   useEffect(() => {
     if (bodyRef.current)
@@ -155,6 +169,26 @@ export function AgentBody() {
             <span className="mini" title="Mention">
               <Icon name="comment" size={16} />
             </span>
+            <button
+              type="button"
+              className="mini"
+              aria-pressed={grounded}
+              title={
+                grounded
+                  ? "Grounding answers in your workspace — on"
+                  : "Grounding answers in your workspace — off"
+              }
+              onClick={toggleGrounding}
+              style={{
+                border: "none",
+                padding: 0,
+                cursor: "pointer",
+                background: grounded ? "var(--row-hover)" : "none",
+                color: grounded ? "var(--tx-1)" : "var(--tx-3)",
+              }}
+            >
+              <Icon name="database" size={16} />
+            </button>
             <button className="send" disabled={!val.trim()} onClick={submit}>
               <Icon name="arrowUp" size={16} stroke={2.2} />
             </button>

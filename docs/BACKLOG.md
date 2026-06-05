@@ -110,15 +110,30 @@ Bet (to verify, not assert): with SOP/contract corpora (shared vocab, cross-refs
 **Status:** the agent-action `"button"` block (`screens/SpsAgent/types.ts`, `editor/ButtonBlock.tsx`) inherits the single global grounding setting and only does `agentPrompt`.
 **Left:** optional per-button "ground on/off"; non-agent button actions (e.g., insert template, run a non-LLM action).
 
-### 7. Grounding toggle in the SPS Assistant panel
+### 7. Grounding toggle in the SPS Assistant panel — ✅ DONE 2026-06-05
 
-**Status:** the toggle exists only in the Chat header (`screens/Chat/ChatHeader.tsx`); the SPS co-author reads the same persisted setting but has no in-panel control.
-**Left:** add a small grounding toggle to `screens/SpsAgent/assistant/AgentBody.tsx` header (reads/writes `getGroundInWorkspace`/`setGroundInWorkspace`).
+A `database`-icon toggle now sits in the SPS co-author composer row
+(`screens/SpsAgent/assistant/AgentBody.tsx`), reading/writing the shared
+`getGroundInWorkspace`/`setGroundInWorkspace` — the **same** persisted preference
+the Chat header controls (so the two stay in sync). Verified by the SPS smoke.
 
 ### 8. Grounding refactors (tech debt — low risk, do alongside item 7)
 
-- **Cross-screen import smell:** `screens/SpsAgent/assistant/providers/BridgeAssistant.ts` imports `getGroundInWorkspace` from `../../../Chat/lib/grounding` — SPS (the product) depending on Chat (legacy), backwards. **Hoist** the setting to a shared module both import (e.g. `src/renderer/src/lib/grounding.ts` or `src/shared`).
-- **`sps-agent → hermes` coupling:** `src/main/sps-agent.ts` imports `buildRetrievalSystemMessage` from `./hermes` (one-way, no cycle, but pulls the heavy hermes graph). Optional: extract `buildRetrievalSystemMessage` / `formatRetrievalSystemMessage` / `groundingTerms` into `src/main/grounding.ts` and **re-export from `hermes.ts`** so existing test imports (`tests/workspace-grounding.test.ts`) keep working.
+- **Cross-screen import smell — ✅ DONE 2026-06-05.** The grounding preference is
+  hoisted to `src/renderer/src/lib/grounding.ts`; `BridgeAssistant` (SPS),
+  `ChatHeader`, and `useChatActions` (Chat) all import from there, and the legacy
+  `screens/Chat/lib/grounding.ts` is deleted. SPS no longer imports from Chat.
+  Unit-tested in `tests/grounding-setting.test.ts`.
+- **`sps-agent → hermes` coupling — ⏸ DEFERRED (no longer cheap).** The "Optional"
+  plan was to extract `buildRetrievalSystemMessage`/`formatRetrievalSystemMessage`/
+  `groundingTerms` into `src/main/grounding.ts` and re-export from `hermes.ts`. Since
+  item 1's query expansion, `buildRetrievalSystemMessage` now depends on
+  `chatCompletionOnce` (the gateway HTTP plumbing, in `hermes.ts`), so a `grounding.ts`
+  would import back from `hermes.ts` — a cycle that does NOT achieve the goal
+  (`sps-agent` → `grounding` → `hermes` still pulls the heavy graph). Doing it right
+  now means also extracting the HTTP layer — a larger cross-cutting refactor, out of
+  scope for a "low-risk tech-debt" item. Revisit only if the heavy-graph import
+  becomes a measured problem.
 
 ### 9. KB dogfooding — the Phase-2 trigger evaluation ⟵ ✅ DONE 2026-06-05
 
