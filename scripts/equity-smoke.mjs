@@ -78,7 +78,18 @@ const frontmatter = {
     { name: "NHPC", pe: 17.5, roe: 9.2 },
     { name: "SJVN", pe: 22.1, roe: 8.0 },
   ],
-  sector_heatmap: { metrics: ["pe_z"], rows: [{ name: "NTPC", values: [0.4] }] },
+  price_series: Array.from({ length: 70 }, (_, i) => {
+    const c = 300 + Math.round(Math.sin(i / 4) * 28 + i * 0.5);
+    return { date: `2026-${String((i % 12) + 1).padStart(2, "0")}-01`, o: c - 2, h: c + 4, l: c - 5, c, v: 1000000 + i * 1000 };
+  }),
+  sector_heatmap: {
+    metrics: ["pe_z", "roe_z", "mom_z"],
+    rows: [
+      { name: "NTPC", values: [0.4, -0.2, 0.6] },
+      { name: "POWERGRID", values: [-0.3, 0.8, 0.1] },
+      { name: "NHPC", values: [0.9, -0.5, -0.2] },
+    ],
+  },
   dcf_sensitivity: {
     wacc: [0.09, 0.1, 0.11],
     growth: [0.03, 0.04, 0.095],
@@ -165,6 +176,11 @@ const checks = await win.evaluate(() => {
     svgs: document.querySelectorAll(".eq-report svg").length,
     tiers: document.querySelectorAll(".eq-tier").length,
     dataGaps: document.querySelectorAll(".eq-gaps li").length,
+    technical: !!q(".eq-technical"),
+    sector: !!q(".eq-sector"),
+    pnf: !![...document.querySelectorAll(".eq-technical svg")].find((s) =>
+      s.getAttribute("aria-label") === "Point and Figure chart",
+    ),
     // confirm tokens resolved (not the old fabricated fallback blue #2d6cdf)
     ctaBg: getComputedStyle(q(".eq-run-btn")).backgroundColor,
   };
@@ -178,9 +194,12 @@ const ok =
   checks.report &&
   checks.rating === "ACCUMULATE" &&
   checks.gauges === 6 &&
-  checks.svgs >= 3 &&
+  checks.svgs >= 6 &&
   checks.tiers === 3 &&
-  checks.dataGaps >= 1;
+  checks.dataGaps >= 1 &&
+  checks.technical &&
+  checks.sector &&
+  checks.pnf;
 
 console.log(ok ? "EQUITY_SMOKE_PASS" : "EQUITY_SMOKE_FAIL", "shots:", shots.join(","));
 process.exit(ok ? 0 : 1);

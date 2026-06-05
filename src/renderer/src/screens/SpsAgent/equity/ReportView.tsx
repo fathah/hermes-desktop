@@ -8,6 +8,9 @@ import type { EquityReport } from "./reportContract";
 import { RiskRadar } from "./charts/RiskRadar";
 import { PeerCompBars } from "./charts/PeerCompBars";
 import { DcfSensitivity } from "./charts/DcfSensitivity";
+import { PriceChart } from "./charts/PriceChart";
+import { PointAndFigure } from "./charts/PointAndFigure";
+import { SectorHeatmap } from "./charts/SectorHeatmap";
 
 const SCORE_LABELS: Array<{
   key: keyof EquityReport["scores"];
@@ -125,6 +128,28 @@ export function ReportView({
           )}
         </section>
       </div>
+
+      {report.priceSeries.length >= 2 && (
+        <section className="eq-technical">
+          <h3>Technical — Price &amp; Moving Averages</h3>
+          <div className="eq-chart-scroll">
+            <PriceChart series={report.priceSeries} />
+          </div>
+          <h3>Technical — Point &amp; Figure</h3>
+          <div className="eq-chart-scroll">
+            <PointAndFigure series={report.priceSeries} />
+          </div>
+        </section>
+      )}
+
+      {report.sectorHeatmap && (
+        <section className="eq-sector">
+          <h3>Sector Heatmap</h3>
+          <div className="eq-chart-scroll">
+            <SectorHeatmap data={report.sectorHeatmap} />
+          </div>
+        </section>
+      )}
 
       {report.peers.length > 0 && (
         <section className="eq-peers">

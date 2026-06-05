@@ -225,17 +225,30 @@
 .sps-scope .eq-radar h3,
 .sps-scope .eq-provenance h3,
 .sps-scope .eq-peers h3,
-.sps-scope .eq-dcf h3 {
+.sps-scope .eq-dcf h3,
+.sps-scope .eq-technical h3,
+.sps-scope .eq-sector h3 {
   font-family: var(--font-sans);
   font-size: var(--fs-12);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink-3);
-  margin: 0 0 var(--s-3);
+  margin: var(--s-4) 0 var(--s-3);
 }
-.sps-scope .eq-radar {
+.sps-scope .eq-radar,
+.sps-scope .eq-technical,
+.sps-scope .eq-sector {
   color: var(--ink-2); /* charts use currentColor → monochrome ink */
+}
+.sps-scope .eq-technical,
+.sps-scope .eq-sector {
+  margin-bottom: var(--s-6);
+}
+/* wide charts (P&F grid, heatmap) scroll horizontally instead of overflowing */
+.sps-scope .eq-chart-scroll {
+  overflow-x: auto;
+  max-width: 100%;
 }
 .sps-scope .eq-evidence,
 .sps-scope .eq-gaps {

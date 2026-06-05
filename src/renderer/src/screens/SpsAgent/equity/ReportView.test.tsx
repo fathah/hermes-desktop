@@ -39,12 +39,21 @@ const report: EquityReport = {
     political: { severity: "Medium", factor: "PLI" },
     technical: { severity: "Medium", factor: "below SMA200" },
   },
-  priceSeries: [],
+  priceSeries: Array.from({ length: 60 }, (_, i) => ({
+    date: `2026-01-${(i % 28) + 1}`,
+    c: 300 + Math.round(Math.sin(i / 4) * 25 + i * 0.4),
+  })),
   peers: [
     { name: "NTPC", pe: 14.2 },
     { name: "POWERGRID", pe: 11.8 },
   ],
-  sectorHeatmap: null,
+  sectorHeatmap: {
+    metrics: ["pe_z", "roe_z", "mom_z"],
+    rows: [
+      { name: "NTPC", values: [0.4, -0.2, 0.6] },
+      { name: "POWERGRID", values: [-0.3, 0.8, 0.1] },
+    ],
+  },
   dcfSensitivity: {
     wacc: [0.09, 0.1],
     growth: [0.03, 0.095],
@@ -67,11 +76,15 @@ describe("ReportView", () => {
     expect(getByText("NTPC Limited")).toBeTruthy();
     expect(getByText("ACCUMULATE")).toBeTruthy();
     expect(getByText("Q4 capex guidance not yet filed")).toBeTruthy();
-    // risk radar + peer bars + dcf heatmap all render as SVG
-    expect(container.querySelectorAll("svg").length).toBeGreaterThanOrEqual(3);
+    // radar + peer bars + dcf + price + P&F + sector heatmap all render as SVG
+    expect(container.querySelectorAll("svg").length).toBeGreaterThanOrEqual(6);
     expect(getByText("tier2")).toBeTruthy();
     // composite score value shown
     expect(getAllByText("64").length).toBeGreaterThanOrEqual(1);
+    // the new technical + sector sections are present
+    expect(container.querySelector(".eq-technical")).not.toBeNull();
+    expect(container.querySelector(".eq-sector")).not.toBeNull();
+    expect(getByText("Technical — Point & Figure")).toBeTruthy();
   });
 
   it("omits chart sections when their data slice is absent", () => {
@@ -80,13 +93,17 @@ describe("ReportView", () => {
       peers: [],
       dcfSensitivity: null,
       riskMatrix: {},
+      priceSeries: [],
+      sectorHeatmap: null,
     };
     const { container, queryByText } = render(
       <ReportView report={partial} onSaveToVault={() => {}} saving={false} />,
     );
     expect(queryByText("Peer Comparison (P/E)")).toBeNull();
     expect(queryByText("DCF Sensitivity (intrinsic ₹ / share)")).toBeNull();
-    // no radar either (empty risk matrix)
     expect(container.querySelector(".eq-radar")).toBeNull();
+    // no technical / sector sections without price_series / sector_heatmap
+    expect(container.querySelector(".eq-technical")).toBeNull();
+    expect(container.querySelector(".eq-sector")).toBeNull();
   });
 });
