@@ -51,6 +51,24 @@ export const SLASH_ITEMS: SlashItem[] = [
   },
   { type: "image", icon: "doc", label: "Image", desc: "Upload or drop a file" },
   {
+    type: "audio",
+    icon: "mic",
+    label: "Voice / audio",
+    desc: "Record or upload audio",
+  },
+  {
+    type: "video",
+    icon: "play",
+    label: "Video",
+    desc: "Upload or drop a video",
+  },
+  {
+    type: "file",
+    icon: "file",
+    label: "File",
+    desc: "Attach any file",
+  },
+  {
     type: "bookmark",
     icon: "share",
     label: "Web bookmark",

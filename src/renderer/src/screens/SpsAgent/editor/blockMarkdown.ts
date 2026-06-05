@@ -20,6 +20,7 @@
 import { uid } from "../lib/ids";
 import { stripHtml } from "../lib/html";
 import { sanitizeHtml } from "../lib/sanitize";
+import { assetRel, assetNameFromRel } from "../lib/assets";
 import type { Block, BlockType } from "../types";
 
 // ── metadata comment (tier-2, unicode-safe) ───────────────────────────────────
@@ -289,11 +290,15 @@ function cleanBlockLine(block: Block): string {
       return "```\n" + (block.text || "") + "\n```";
     case "mermaid":
       return "```mermaid\n" + (block.text || "") + "\n```";
-    case "image":
     case "excalidraw":
-      // Both render as a clean image; the `.excalidraw.svg` suffix on the path
-      // is what tells the parser to reconstruct an excalidraw block.
+      // Renders as a clean image; the `.excalidraw.svg` suffix on the path is
+      // what tells the parser to reconstruct an excalidraw block.
       return `![${block.caption || ""}](${block.src || ""})`;
+    case "image": {
+      // Prefer the portable vault-asset link; fall back to a data/http src.
+      const url = block.assetPath ? assetRel(block.assetPath) : block.src || "";
+      return `![${block.caption || ""}](${url})`;
+    }
     case "h1":
     case "h2":
     case "h3":
@@ -407,11 +412,27 @@ export function markdownToBlocks(md: string): Block[] {
     const image = /^!\[([^\]]*)\]\(([^)]*)\)$/.exec(raw.trim());
     if (image) {
       const src = image[2];
-      // A `.excalidraw.svg` preview path round-trips back to a drawing block.
-      const type: BlockType = src.endsWith(".excalidraw.svg")
-        ? "excalidraw"
-        : "image";
-      blocks.push({ id: uid(), type, text: "", caption: image[1], src });
+      if (src.endsWith(".excalidraw.svg")) {
+        // A `.excalidraw.svg` preview path round-trips back to a drawing block.
+        blocks.push({
+          id: uid(),
+          type: "excalidraw",
+          text: "",
+          caption: image[1],
+          src,
+        });
+      } else {
+        // A `../_assets/<name>` link is a vault asset (→ assetPath); anything
+        // else (data:/http) stays a plain src.
+        const assetName = assetNameFromRel(src);
+        blocks.push({
+          id: uid(),
+          type: "image",
+          text: "",
+          caption: image[1],
+          ...(assetName ? { assetPath: assetName } : { src }),
+        });
+      }
       i++;
       continue;
     }

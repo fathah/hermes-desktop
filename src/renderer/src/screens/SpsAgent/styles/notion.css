@@ -1093,6 +1093,117 @@
   cursor: pointer;
 }
 
+/* ---------- Media blocks (audio / video / file) ---------- */
+.sps-scope .b-audio,
+.sps-scope .b-video,
+.sps-scope .b-file {
+  margin: 4px 0;
+}
+.sps-scope .audio-empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sps-scope .audio-empty .image-slot-drop {
+  flex: 1;
+  padding: 14px 16px;
+}
+.sps-scope .audio-or {
+  font-size: 12px;
+  color: var(--tx-4);
+}
+.sps-scope .audio-player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sps-scope .audio-player audio {
+  flex: 1;
+  height: 36px;
+}
+.sps-scope .audio-dur {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--tx-3);
+}
+/* voice-record button */
+.sps-scope .vr-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--hair);
+  background: var(--surface);
+  color: var(--tx-2);
+  border-radius: 7px;
+  padding: 7px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sps-scope .vr-btn:hover {
+  background: var(--surface-raised);
+}
+.sps-scope .vr-btn.recording {
+  border-color: transparent;
+  background: color-mix(in oklab, #e5484d 16%, transparent);
+  color: #e5484d;
+  font-variant-numeric: tabular-nums;
+}
+.sps-scope .vr-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #e5484d;
+  animation: vrPulse 1s ease-in-out infinite;
+}
+@keyframes vrPulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+/* file chip */
+.sps-scope .file-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--hair);
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 9px 11px;
+}
+.sps-scope .file-chip-ic {
+  color: var(--tx-3);
+  display: inline-flex;
+}
+.sps-scope .file-chip-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.sps-scope .file-chip-name {
+  font-size: 13.5px;
+  color: var(--tx-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sps-scope .file-chip-meta {
+  font-size: 11.5px;
+  color: var(--tx-3);
+}
+.sps-scope .file-chip-btn {
+  border: 1px solid var(--hair);
+  background: var(--surface);
+  color: var(--tx-2);
+  border-radius: 6px;
+  padding: 5px 7px;
+  cursor: pointer;
+}
+.sps-scope .file-chip-btn:hover {
+  background: var(--surface-raised);
+}
+
 /* ---------- Filter / sort popover ---------- */
 .sps-scope .fs-pop {
   position: fixed;

@@ -18,6 +18,9 @@ export type BlockType =
   | "code"
   | "divider"
   | "image"
+  | "audio"
+  | "video"
+  | "file"
   | "bookmark"
   | "page"
   | "database"
@@ -91,6 +94,14 @@ export interface Block {
   // image (data URL + caption)
   src?: string | null;
   caption?: string;
+  // media (image / audio / video / file): when set, the bytes live in the vault
+  // asset store (vault/_assets/<assetPath>) and are streamed via sps-asset://.
+  // The markdown carries the portable relative link `../_assets/<assetPath>`.
+  assetPath?: string; // bare content-addressed filename "<sha256>.<ext>"
+  mime?: string; // original mime type (e.g. "audio/webm", "application/pdf")
+  name?: string; // original file name, for display / download
+  size?: number; // byte size, for display
+  duration?: number; // audio/video length in seconds (best-effort)
   // sub-page link
   pageId?: string;
   // button: the prompt this agent-action button sends to the co-author on click

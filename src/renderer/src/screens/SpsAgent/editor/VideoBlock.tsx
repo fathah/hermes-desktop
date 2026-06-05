@@ -1,6 +1,6 @@
-// ImageBlock.tsx — image block with caption. New images are written to the
-// vault asset store (streamed via sps-asset://); legacy data-URL images in
-// `src` still render for backward compatibility.
+// VideoBlock.tsx — inline video, streamed from the vault asset store over the
+// sps-asset:// protocol (range requests → seeking works without loading the
+// whole file into memory).
 import { MediaDropZone } from "../components/MediaDropZone";
 import { assetUrl } from "../lib/assets";
 import type { Block } from "../types";
@@ -10,33 +10,33 @@ interface Props {
   setType: (id: string, patch: Partial<Block>) => void;
 }
 
-export function ImageBlock({ block, setType }: Props) {
-  const displaySrc = block.assetPath ? assetUrl(block.assetPath) : block.src;
-
-  return (
-    <div className="b-image">
-      {displaySrc ? (
-        <img
-          className="image-slot-img"
-          src={displaySrc}
-          alt={block.caption || ""}
-          style={{ display: "block", maxWidth: "100%", borderRadius: 8 }}
-        />
-      ) : (
+export function VideoBlock({ block, setType }: Props) {
+  if (!block.assetPath) {
+    return (
+      <div className="b-video">
         <MediaDropZone
-          accept="image/*"
-          placeholder="Drop an image, or click to upload"
+          accept="video/*"
+          placeholder="Drop a video, or click to upload"
           onUpload={(a) =>
             setType(block.id, {
               assetPath: a.assetPath,
               mime: a.mime,
               name: a.name,
               size: a.size,
-              src: null,
             })
           }
         />
-      )}
+      </div>
+    );
+  }
+  return (
+    <div className="b-video" contentEditable={false}>
+      <video
+        src={assetUrl(block.assetPath)}
+        controls
+        preload="metadata"
+        style={{ display: "block", maxWidth: "100%", borderRadius: 8 }}
+      />
       <div
         className="cap"
         contentEditable

@@ -5,6 +5,9 @@ import { Icon } from "../components/Icon";
 import { Editable } from "./Editable";
 import { DiffBlock } from "./DiffBlock";
 import { ImageBlock } from "./ImageBlock";
+import { AudioBlock } from "./AudioBlock";
+import { VideoBlock } from "./VideoBlock";
+import { FileBlock } from "./FileBlock";
 import { BookmarkBlock } from "./BookmarkBlock";
 import { ButtonBlock } from "./ButtonBlock";
 import { PageLinkBlock } from "./PageLinkBlock";
@@ -117,6 +120,12 @@ export function BlockInner(props: BlockInnerProps) {
       return <MermaidBlock block={block} setType={props.setType} />;
     case "excalidraw":
       return <ExcalidrawBlock block={block} setType={props.setType} />;
+    case "audio":
+      return <AudioBlock block={block} setType={props.setType} />;
+    case "video":
+      return <VideoBlock block={block} setType={props.setType} />;
+    case "file":
+      return <FileBlock block={block} setType={props.setType} />;
     case "bookmark":
       return <BookmarkBlock block={block} setType={props.setType} />;
     case "button":

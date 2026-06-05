@@ -232,8 +232,13 @@ export function Editor() {
       setType(id, { type: "database", html: "", text: "", view: "board" });
       return;
     }
-    if (item.type === "image") {
-      setType(id, { type: "image", html: "", text: "" });
+    if (
+      item.type === "image" ||
+      item.type === "audio" ||
+      item.type === "video" ||
+      item.type === "file"
+    ) {
+      setType(id, { type: item.type, html: "", text: "" });
       return;
     }
     if (item.type === "mermaid") {

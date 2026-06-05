@@ -297,3 +297,71 @@ describe("F2 — block-id persistence for comment anchors", () => {
     expect(back[0].id).toBe(d.id);
   });
 });
+
+describe("media blocks (asset store)", () => {
+  it("image with a vault asset → tier-1 ../_assets link, round-trips to assetPath", () => {
+    const img: Block = {
+      id: "i1",
+      type: "image",
+      text: "",
+      caption: "Sunset",
+      assetPath: `${"a".repeat(64)}.jpg`,
+    };
+    const md = blocksToMarkdown([img]);
+    expect(md).toBe(`![Sunset](../_assets/${"a".repeat(64)}.jpg)`);
+    const back = markdownToBlocks(md)[0];
+    expect(back.type).toBe("image");
+    expect(back.assetPath).toBe(`${"a".repeat(64)}.jpg`);
+    expect(back.caption).toBe("Sunset");
+    expect(back.src).toBeUndefined();
+  });
+
+  it("legacy data-URL image still round-trips via src", () => {
+    const img: Block = {
+      id: "i2",
+      type: "image",
+      text: "",
+      src: "data:image/png;base64,AAAA",
+    };
+    const back = markdownToBlocks(blocksToMarkdown([img]))[0];
+    expect(back.src).toBe("data:image/png;base64,AAAA");
+    expect(back.assetPath).toBeUndefined();
+  });
+
+  it("audio/video/file ride the tier-2 meta comment losslessly", () => {
+    const audio: Block = {
+      id: "a1",
+      type: "audio",
+      text: "",
+      assetPath: `${"b".repeat(64)}.webm`,
+      mime: "audio/webm",
+      name: "voice-note.webm",
+      size: 12345,
+      duration: 42,
+    };
+    const video: Block = {
+      id: "v1",
+      type: "video",
+      text: "",
+      assetPath: `${"c".repeat(64)}.mp4`,
+      mime: "video/mp4",
+      name: "clip.mp4",
+      size: 999,
+    };
+    const file: Block = {
+      id: "f1",
+      type: "file",
+      text: "",
+      assetPath: `${"d".repeat(64)}.pdf`,
+      mime: "application/pdf",
+      name: "report.pdf",
+      size: 5000,
+    };
+    for (const b of [audio, video, file]) {
+      const md = blocksToMarkdown([b]);
+      expect(md).toContain("<!-- sps:");
+      const back = bare(markdownToBlocks(md)[0]);
+      expect(back).toEqual(bare(b));
+    }
+  });
+});
