@@ -55,8 +55,21 @@ vi.mock("../src/main/note-index", () => ({
 import {
   formatRetrievalSystemMessage,
   buildRetrievalSystemMessage,
+  groundingTerms,
   type GroundingSource,
 } from "../src/main/hermes";
+
+describe("groundingTerms (pure)", () => {
+  it("drops stopwords and 1-2 char tokens, lowercases, dedupes", () => {
+    expect(
+      groundingTerms("What does the rest-period POLICY policy mean?"),
+    ).toEqual(["rest", "period", "policy", "mean"]);
+  });
+
+  it("returns [] for an all-stopwords message (nothing salient to search)", () => {
+    expect(groundingTerms("what is it to the")).toEqual([]);
+  });
+});
 
 describe("formatRetrievalSystemMessage (pure)", () => {
   it("returns null when there are no sources (skip-injection contract)", () => {
@@ -95,9 +108,26 @@ describe("buildRetrievalSystemMessage (IO)", () => {
 
   afterAll(() => rmSync(root, { recursive: true, force: true }));
 
+  it("returns null when the message has no salient terms (no search)", async () => {
+    search.mockClear();
+    expect(await buildRetrievalSystemMessage("what is the")).toBeNull();
+    expect(search).not.toHaveBeenCalled();
+  });
+
   it("returns null when the index has no hits", async () => {
     search.mockReturnValueOnce([]);
     expect(await buildRetrievalSystemMessage("anything")).toBeNull();
+  });
+
+  it("retrieves with OR semantics over salient terms (not the raw message)", async () => {
+    search.mockReturnValueOnce([]);
+    await buildRetrievalSystemMessage("What does the rest period policy mean?");
+    // Stopwords stripped, OR-mode requested — never the raw AND-of-every-word.
+    expect(search).toHaveBeenLastCalledWith(
+      "rest period policy mean",
+      expect.any(Number),
+      "any",
+    );
   });
 
   it("grounds on a hit, stripping frontmatter from the excerpt", async () => {
@@ -117,7 +147,9 @@ describe("buildRetrievalSystemMessage (IO)", () => {
     search.mockReturnValueOnce([
       { path: "missing.md", title: "Missing", snippet: "…" },
     ]);
-    // Only hit is unreadable ⇒ no sources ⇒ null.
-    expect(await buildRetrievalSystemMessage("x")).toBeNull();
+    // Salient terms present ⇒ search runs; the only hit is unreadable ⇒ null.
+    expect(
+      await buildRetrievalSystemMessage("missing handbook policy"),
+    ).toBeNull();
   });
 });

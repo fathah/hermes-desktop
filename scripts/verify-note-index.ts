@@ -73,6 +73,22 @@ async function main(): Promise<void> {
   const hits = index.search("brown").map((h) => h.path);
   assert(hits.includes("alpha.md"), "FTS search finds body text");
 
+  // "all" (default, AND) requires every term; a term not present ⇒ no match.
+  eq(
+    index.search("brown zzznotpresent").length,
+    0,
+    'search("all" mode) requires every term',
+  );
+  // "any" (OR) matches on any term — used by grounding so a natural-language
+  // question still retrieves docs that share only some words.
+  assert(
+    index
+      .search("brown zzznotpresent", 20, "any")
+      .map((h) => h.path)
+      .includes("alpha.md"),
+    'search("any" mode) matches on any term (grounding path)',
+  );
+
   eq(index.backlinks("alpha.md"), ["beta.md"], "backlinks alpha <- beta");
   eq(
     index.backlinks("projects/gamma.md"),

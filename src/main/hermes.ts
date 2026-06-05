@@ -505,6 +505,85 @@ export function contextFolderSystemMessage(
 const GROUNDING_HITS = 5;
 const GROUNDING_EXCERPT_CHARS = 1500;
 
+// Common words carry no retrieval signal; dropping them keeps an OR-query from
+// matching every note via "the"/"what". Not exhaustive — ranking handles the rest.
+const GROUNDING_STOPWORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "are",
+  "as",
+  "at",
+  "be",
+  "but",
+  "by",
+  "can",
+  "did",
+  "do",
+  "does",
+  "for",
+  "from",
+  "had",
+  "has",
+  "have",
+  "how",
+  "i",
+  "in",
+  "is",
+  "it",
+  "its",
+  "me",
+  "my",
+  "of",
+  "on",
+  "or",
+  "our",
+  "so",
+  "than",
+  "that",
+  "the",
+  "their",
+  "them",
+  "then",
+  "there",
+  "they",
+  "this",
+  "to",
+  "was",
+  "we",
+  "were",
+  "what",
+  "when",
+  "where",
+  "which",
+  "who",
+  "why",
+  "will",
+  "with",
+  "you",
+  "your",
+]);
+
+/**
+ * Reduce a natural-language chat message to salient search terms: lowercase,
+ * split on non-word chars, drop stopwords and 1–2 char tokens. Pure/testable.
+ */
+export function groundingTerms(message: string): string[] {
+  const tokens = message
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+  const seen = new Set<string>();
+  const terms: string[] = [];
+  for (const tok of tokens) {
+    if (tok.length < 3 || GROUNDING_STOPWORDS.has(tok) || seen.has(tok))
+      continue;
+    seen.add(tok);
+    terms.push(tok);
+  }
+  return terms;
+}
+
 export interface GroundingSource {
   title: string;
   /** Vault-relative path, e.g. "sources/handbook.md". */
@@ -557,8 +636,12 @@ export async function buildRetrievalSystemMessage(
   profile?: string,
 ): Promise<{ role: "system"; content: string } | null> {
   try {
+    const terms = groundingTerms(message);
+    if (terms.length === 0) return null;
     const index = await getSpsNoteIndex(profile);
-    const hits = index.search(message, GROUNDING_HITS);
+    // OR over salient terms, ranked — a full question rarely shares EVERY word
+    // with a source, so AND-matching the raw message would retrieve nothing.
+    const hits = index.search(terms.join(" "), GROUNDING_HITS, "any");
     if (hits.length === 0) return null;
     const root = index.status().root;
     const sources: GroundingSource[] = [];

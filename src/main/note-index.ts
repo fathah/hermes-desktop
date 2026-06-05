@@ -379,15 +379,29 @@ export class NoteIndex {
     return rows.map((r) => this.rowToRecord(r));
   }
 
-  /** Full-text search over title + body (FTS5). */
-  search(text: string, limit = 20): NoteSearchHit[] {
+  /**
+   * Full-text search over title + body (FTS5).
+   *
+   * `mode` controls how the query terms combine:
+   *  - "all" (default): every term must match (AND). Right for short, deliberate
+   *    in-app search boxes where the user types exactly the terms they want.
+   *  - "any": any term may match (OR), ranked by relevance. Right for grounding
+   *    a full natural-language chat message, where requiring every word (incl.
+   *    "what"/"the"/"does") would almost never match. Callers should strip
+   *    stopwords first so common words don't dominate; ranking does the rest.
+   */
+  search(
+    text: string,
+    limit = 20,
+    mode: "all" | "any" = "all",
+  ): NoteSearchHit[] {
     const cleaned = text.trim();
     if (!cleaned) return [];
     // Sanitize into a prefix-match FTS query: quote each token, append *.
     const ftsQuery = cleaned
       .split(/\s+/)
       .map((w) => `"${w.replace(/"/g, '""')}"*`)
-      .join(" ");
+      .join(mode === "any" ? " OR " : " ");
     try {
       const rows = this.db
         .prepare(
