@@ -134,6 +134,13 @@ describe("tier-2 lossless fallback (metadata comment)", () => {
     expectRoundTrip([
       blk("database", "", { view: "table", source: "db-abc" }),
     ]));
+  it("agent-action button preserves its label, emoji, and agentPrompt", () =>
+    expectRoundTrip([
+      blk("button", "Review against our SOPs", {
+        emoji: "🔎",
+        agentPrompt: "Review this against our SOPs and flag gaps.",
+      }),
+    ]));
 });
 
 describe("page links as wikilinks (S3 — feeds the vault graph)", () => {

@@ -25,7 +25,10 @@ export type BlockType =
   // ```mermaid fence). excalidraw keeps a preview-SVG path in `src` and stores
   // its scene in a sidecar asset file — never inline in the markdown.
   | "mermaid"
-  | "excalidraw";
+  | "excalidraw"
+  // Agent-action button: `text` is the label, `agentPrompt` the prompt it runs
+  // against the co-author on click. Always serialises Tier-2 (custom field).
+  | "button";
 
 export type DbView = "board" | "table" | "list" | "gallery" | "calendar";
 export type StatusKey = "todo" | "doing" | "review" | "done";
@@ -90,6 +93,9 @@ export interface Block {
   caption?: string;
   // sub-page link
   pageId?: string;
+  // button: the prompt this agent-action button sends to the co-author on click
+  // (`text` holds the visible label, `emoji` the icon).
+  agentPrompt?: string;
   // AI proposals
   diff?: BlockDiff;
   proposalId?: string;

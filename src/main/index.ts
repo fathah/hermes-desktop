@@ -2018,8 +2018,13 @@ function setupIPC(): void {
   ipcMain.handle("sps-unfurl", (_event, url: string) => spsUnfurl(url));
   ipcMain.handle(
     "sps-assistant",
-    (_event, prompt: string, ctx: SpsPageContext, profile?: string) =>
-      spsAssistant(prompt, ctx, profile),
+    (
+      _event,
+      prompt: string,
+      ctx: SpsPageContext,
+      profile?: string,
+      groundInWorkspace?: boolean,
+    ) => spsAssistant(prompt, ctx, profile, groundInWorkspace),
   );
   ipcMain.handle("sps-load", (_event, profile?: string) => spsLoad(profile));
   ipcMain.handle("sps-save", (_event, ws: unknown, profile?: string) =>

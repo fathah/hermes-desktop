@@ -250,6 +250,18 @@ export function Editor() {
       setType(id, { type: "bookmark", html: "", text: "", bm: null });
       return;
     }
+    if (item.type === "button") {
+      // Seed an editable label + empty prompt; the block opens its editor when
+      // run with no prompt set. Templates ship a preset agentPrompt instead.
+      setType(id, {
+        type: "button",
+        html: "",
+        text: "Run",
+        emoji: "✨",
+        agentPrompt: "",
+      });
+      return;
+    }
     if (item.type === "page") {
       const pid = createChildPage();
       if (pid) setType(id, { type: "page", pageId: pid, html: "", text: "" });

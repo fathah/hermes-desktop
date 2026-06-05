@@ -6,6 +6,7 @@ import { Editable } from "./Editable";
 import { DiffBlock } from "./DiffBlock";
 import { ImageBlock } from "./ImageBlock";
 import { BookmarkBlock } from "./BookmarkBlock";
+import { ButtonBlock } from "./ButtonBlock";
 import { PageLinkBlock } from "./PageLinkBlock";
 import { MermaidBlock } from "./MermaidBlock";
 import { ExcalidrawBlock } from "./ExcalidrawBlock";
@@ -118,6 +119,8 @@ export function BlockInner(props: BlockInnerProps) {
       return <ExcalidrawBlock block={block} setType={props.setType} />;
     case "bookmark":
       return <BookmarkBlock block={block} setType={props.setType} />;
+    case "button":
+      return <ButtonBlock block={block} setType={props.setType} />;
     case "page":
       return (
         <PageLinkBlock

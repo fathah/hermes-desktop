@@ -1156,8 +1156,15 @@ const hermesAPI = {
     prompt: string,
     ctx: { blocks: { type: string; text: string }[]; pageTitle: string },
     profile?: string,
+    groundInWorkspace?: boolean,
   ): Promise<unknown> =>
-    ipcRenderer.invoke("sps-assistant", prompt, ctx, profile),
+    ipcRenderer.invoke(
+      "sps-assistant",
+      prompt,
+      ctx,
+      profile,
+      groundInWorkspace,
+    ),
   spsLoad: (profile?: string): Promise<unknown | null> =>
     ipcRenderer.invoke("sps-load", profile),
   spsSave: (ws: unknown, profile?: string): Promise<boolean> =>

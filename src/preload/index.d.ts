@@ -977,6 +977,7 @@ interface HermesAPI {
     prompt: string,
     ctx: { blocks: { type: string; text: string }[]; pageTitle: string },
     profile?: string,
+    groundInWorkspace?: boolean,
   ) => Promise<unknown>;
   spsLoad: (profile?: string) => Promise<unknown | null>;
   spsSave: (ws: unknown, profile?: string) => Promise<boolean>;

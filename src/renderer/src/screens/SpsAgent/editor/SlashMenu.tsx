@@ -80,6 +80,12 @@ export const SLASH_ITEMS: SlashItem[] = [
     label: "Excalidraw drawing",
     desc: "Freeform sketch or whiteboard",
   },
+  {
+    type: "button",
+    icon: "sparkle",
+    label: "Agent button",
+    desc: "A button that runs the co-author",
+  },
 ];
 
 interface Props {
