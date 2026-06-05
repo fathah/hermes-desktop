@@ -211,6 +211,19 @@ await shot("09-getstarted", async () => {
   });
 });
 
+// 10 — Journal calendar surface (month grid + day timeline).
+await shot("10-journal", async () => {
+  await win.locator(".nav-item", { hasText: "Journal" }).first().click();
+  await win.waitForSelector(".jr .cal-grid", { timeout: 8000 });
+});
+
+// 11 — create a journal entry (drops into the block editor). Proves the
+// journal→page→editor path and that the new 'journal' surface is wired.
+await shot("11-journal-entry", async () => {
+  await win.locator(".jr-btn.primary").first().click();
+  await win.waitForSelector(".doc-scroll", { timeout: 8000 });
+});
+
 console.log("SHOTS_OK:", shots.length, "—", shots.join(", "));
 await app.close();
 console.log("SMOKE_DONE");
