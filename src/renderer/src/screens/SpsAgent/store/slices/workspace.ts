@@ -21,6 +21,12 @@ import {
   peekOcrJob,
   loadOcrQueue,
 } from "../../lib/ocrQueue";
+import {
+  getOcrDefer,
+  setOcrDefer,
+  getOcrTime,
+  isScheduledNow,
+} from "../../lib/ocrSchedule";
 import type { Block } from "../../types";
 import type { Store, WorkspaceSlice } from "../storeTypes";
 
@@ -101,6 +107,24 @@ async function drainOcrQueue(get: StoreGet, set: StoreSet): Promise<void> {
   }
 }
 
+// Overnight scheduler (P3): once started, every 30s check whether deferral is on
+// and the clock is in the configured minute; if so, drain. Only fires while the
+// app is running (open or in the tray) — no OS daemon.
+let ocrSchedulerStarted = false;
+function startOcrScheduler(get: StoreGet, set: StoreSet): void {
+  if (ocrSchedulerStarted) return;
+  ocrSchedulerStarted = true;
+  setInterval(() => {
+    if (
+      get().ocrDefer &&
+      peekOcrJob() &&
+      isScheduledNow(new Date(), getOcrTime())
+    ) {
+      void drainOcrQueue(get, set);
+    }
+  }, 30000);
+}
+
 export const createWorkspaceSlice: StateCreator<
   Store,
   [],
@@ -114,6 +138,7 @@ export const createWorkspaceSlice: StateCreator<
   docs: initial.docs,
   ocrActive: null,
   ocrPending: loadOcrQueue().length,
+  ocrDefer: getOcrDefer(),
 
   setBlocks: (updater) =>
     set((s) => {
@@ -241,6 +266,14 @@ export const createWorkspaceSlice: StateCreator<
     const pending = loadOcrQueue().length;
     set({ ocrPending: pending });
     const big = pageCount > 15;
+    if (get().ocrDefer) {
+      get().flash(
+        `Scanned PDF (${pageCount}p) queued for overnight OCR (${getOcrTime()}) — ` +
+          `“${title}” will appear in Sources after the run. Use “Run now” to start sooner.`,
+        { tone: "warn", ms: 8000 },
+      );
+      return; // wait for the scheduled window / a manual Run now
+    }
     get().flash(
       `Scanned PDF (${pageCount}p) queued for OCR — “${title}” will appear in ` +
         `Sources when ready` +
@@ -252,8 +285,19 @@ export const createWorkspaceSlice: StateCreator<
   },
 
   ocrResume: () => {
-    set({ ocrPending: loadOcrQueue().length });
-    void drainOcrQueue(get, set);
+    set({ ocrPending: loadOcrQueue().length, ocrDefer: getOcrDefer() });
+    startOcrScheduler(get, set);
+    // Resume immediately unless the user chose to defer to the overnight window.
+    if (!get().ocrDefer) void drainOcrQueue(get, set);
+  },
+
+  ocrRunNow: () => void drainOcrQueue(get, set),
+
+  ocrSetDefer: (on) => {
+    setOcrDefer(on);
+    set({ ocrDefer: on });
+    // Turning deferral OFF should start draining anything that was waiting.
+    if (!on) void drainOcrQueue(get, set);
   },
 
   ensureSourcesFolder: () => {

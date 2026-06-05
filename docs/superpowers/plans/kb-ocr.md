@@ -1,6 +1,6 @@
 # Plan — KB OCR for scanned PDFs (BACKLOG item 2)
 
-**Status:** in progress (2026-06-05) · **Owner:** SPS Agent / KB ingestion
+**Status:** ✅ COMPLETE — P1+P2+P3 shipped (2026-06-06) · **Owner:** SPS Agent / KB ingestion
 
 ## Goal
 

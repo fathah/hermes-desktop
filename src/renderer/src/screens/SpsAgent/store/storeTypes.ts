@@ -91,13 +91,19 @@ export interface WorkspaceSlice {
   ocrActive: { title: string; page: number; pages: number } | null;
   /** Number of OCR jobs still queued (persisted, survives restart). */
   ocrPending: number;
+  /** When true, queued OCR waits for the overnight window instead of draining now. */
+  ocrDefer: boolean;
   /**
    * Queue a scanned / unreadable-text-layer PDF for background OCR (item 2,
    * P2). Persisted; drains sequentially; the result is filed under "Sources".
    */
   ocrEnqueue: (filePath: string, title: string, pageCount: number) => void;
-  /** Resume any persisted OCR jobs (call on launch). */
+  /** Resume persisted OCR jobs + start the overnight scheduler (call on launch). */
   ocrResume: () => void;
+  /** Drain the OCR queue immediately, regardless of the overnight setting (P3). */
+  ocrRunNow: () => void;
+  /** Toggle deferring OCR to the overnight window (P3); persisted. */
+  ocrSetDefer: (on: boolean) => void;
   /** Find (by title at root) or create the "Sources" folder; returns its id. */
   ensureSourcesFolder: () => string;
   createChildPage: () => string;
