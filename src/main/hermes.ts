@@ -49,7 +49,7 @@ import {
   type DelegateProgress,
 } from "./sse-parser";
 import { readModels } from "./models";
-import { getSpsNoteIndex } from "./note-index";
+import { getSpsNoteIndex, type NoteSearchHit } from "./note-index";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 import { type Attachment, escapeXmlAttr } from "../shared/attachments";
 import { URL_KEY_MAP, OPENAI_COMPAT_PROVIDERS } from "../shared/url-key-map";
@@ -625,33 +625,130 @@ export function formatRetrievalSystemMessage(
   };
 }
 
+// Query expansion (BACKLOG item 1, recall work). FTS5 is keyword-only, so a
+// question phrased with synonyms ("vacation") never retrieves a doc that uses
+// different words ("holiday entitlement") — a measured recall gap (0% baseline;
+// see docs/kb-phase2-dogfood.md). We close it deterministically from the app
+// side: ask the model for a few synonym-rephrased keyword queries, search each,
+// and FUSE the ranked lists (reciprocal-rank fusion) so a doc surfaced by any
+// variant enters the candidate set and its path is handed to the agent (which
+// reads handed paths reliably — unlike self-navigation, which was stochastic).
+const QUERY_EXPANSION_VARIANTS = 3;
+const QUERY_EXPANSION_TIMEOUT_MS = 12000;
+
+/**
+ * Parse a query-expansion completion into distinct keyword query strings: one
+ * per line, list bullets/numbering stripped, deduped. Pure/testable.
+ */
+export function parseQueryVariants(raw: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const line of raw.split(/\r?\n/)) {
+    const cleaned = line.replace(/^[\s\-*•\d.)]+/, "").trim();
+    const key = cleaned.toLowerCase();
+    if (cleaned.length > 2 && !seen.has(key)) {
+      seen.add(key);
+      out.push(cleaned);
+    }
+  }
+  return out;
+}
+
+/**
+ * Reciprocal-rank fusion of several ranked path lists into one fused order.
+ * Each list contributes 1/(k + rank) to a path's score, so a path ranked high
+ * by any single query — or modestly by several — rises. Pure/testable.
+ */
+export function fuseRankings(lists: string[][], k = 60): string[] {
+  const score = new Map<string, number>();
+  for (const list of lists) {
+    list.forEach((path, i) => {
+      score.set(path, (score.get(path) ?? 0) + 1 / (k + i + 1));
+    });
+  }
+  return [...score.entries()].sort((a, b) => b[1] - a[1]).map(([path]) => path);
+}
+
+/**
+ * Best-effort synonym query variants via one cheap gateway completion, bounded
+ * by a short timeout so it never stalls the co-author. Any failure (no gateway,
+ * timeout, empty) yields [] → grounding falls back to the original query alone.
+ */
+async function expandQueryVariants(
+  message: string,
+  profile?: string,
+): Promise<string[]> {
+  const prompt =
+    `Rewrite the question below as ${QUERY_EXPANSION_VARIANTS} short full-text ` +
+    `search queries that use SYNONYMS and alternate phrasings for its key nouns ` +
+    `(e.g. "vacation" → "holiday annual leave"; "access code" → "combination ` +
+    `lock"). Keywords only, one query per line, no numbering or commentary.\n\n` +
+    `Question: ${message}`;
+  try {
+    const timeout = new Promise<{ content: string }>((resolve) =>
+      setTimeout(() => resolve({ content: "" }), QUERY_EXPANSION_TIMEOUT_MS),
+    );
+    const res = await Promise.race([
+      chatCompletionOnce([{ role: "user", content: prompt }], profile),
+      timeout,
+    ]);
+    if (!("content" in res) || !res.content) return [];
+    return parseQueryVariants(res.content).slice(0, QUERY_EXPANSION_VARIANTS);
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Search the SPS vault for the message's terms and build a grounding system
- * message from the top hits. Best-effort: any failure (no index, unreadable
- * file) yields null so chat proceeds ungrounded rather than erroring. Exported
- * for integration testing.
+ * message from the top hits. Reuses the original keyword query AND a few
+ * synonym-expanded variants (see expandQueryVariants), fused by reciprocal rank,
+ * so a recall miss on the original phrasing is recovered. Best-effort: any
+ * failure (no index, unreadable file, no gateway for expansion) degrades to the
+ * original-query behavior rather than erroring. Exported for integration testing.
  */
 export async function buildRetrievalSystemMessage(
   message: string,
   profile?: string,
+  opts: { expandQuery?: boolean } = {},
 ): Promise<{ role: "system"; content: string } | null> {
   try {
     const terms = groundingTerms(message);
     if (terms.length === 0) return null;
     const index = await getSpsNoteIndex(profile);
+
     // OR over salient terms, ranked — a full question rarely shares EVERY word
     // with a source, so AND-matching the raw message would retrieve nothing.
-    const hits = index.search(terms.join(" "), GROUNDING_HITS, "any");
-    if (hits.length === 0) return null;
+    const queries = [terms.join(" ")];
+    if (opts.expandQuery !== false) {
+      for (const variant of await expandQueryVariants(message, profile)) {
+        const variantTerms = groundingTerms(variant);
+        if (variantTerms.length > 0) queries.push(variantTerms.join(" "));
+      }
+    }
+
+    const perQuery = queries.map((q) => index.search(q, GROUNDING_HITS, "any"));
+    const hitByPath = new Map<string, NoteSearchHit>();
+    for (const list of perQuery) {
+      for (const hit of list) {
+        if (!hitByPath.has(hit.path)) hitByPath.set(hit.path, hit);
+      }
+    }
+    const fused = fuseRankings(perQuery.map((list) => list.map((h) => h.path)));
+    const topPaths = fused.slice(0, GROUNDING_HITS);
+    if (topPaths.length === 0) return null;
+
     const root = index.status().root;
     const sources: GroundingSource[] = [];
-    for (const hit of hits) {
-      const absPath = join(root, hit.path);
+    for (const path of topPaths) {
+      const hit = hitByPath.get(path);
+      if (!hit) continue;
+      const absPath = join(root, path);
       try {
         const raw = await readFile(absPath, "utf-8");
         sources.push({
-          title: hit.title || hit.path,
-          relPath: hit.path,
+          title: hit.title || path,
+          relPath: path,
           absPath,
           excerpt: excerptForGrounding(raw),
         });

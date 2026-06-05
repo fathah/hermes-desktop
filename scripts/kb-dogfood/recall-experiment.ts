@@ -26,7 +26,11 @@ import {
 } from "../../src/main/note-index";
 import { profileHome } from "../../src/main/utils";
 
-const PROFILE = "dogfood";
+// Default profile so the EXPANSION call (chatCompletionOnce → getApiUrl →
+// getProfilePort) resolves to the gateway's 8642 and reads API_SERVER_KEY from
+// HERMES_HOME/.env (which the caller seeds). A named profile would get a random
+// allocated port and no key, silently disabling expansion.
+const PROFILE = "default";
 const CORPUS_DIR = process.env.CORPUS_DIR!;
 const QUESTIONS_FILE = process.env.QUESTIONS_FILE!;
 const OUT_DIR = process.env.OUT_DIR || "/tmp/recall-out";
@@ -72,31 +76,20 @@ async function seed(): Promise<void> {
   }
 }
 
-// The experimental "vault-nav" treatment: append a hint naming the vault
-// directory so the agent could (in principle) list/read other files to beat a
-// keyword-recall miss. Kept ENTIRELY in the harness — production grounding
-// (buildRetrievalSystemMessage) is unchanged, because the experiment measured
-// this hint ineffective with the current gateway toolset.
-function withVaultNav(
-  grounding: { role: "system"; content: string } | null,
-): { role: "system"; content: string } | null {
-  if (!grounding) return null;
-  const root = join(profileHome(PROFILE), "sps-agent", "vault");
-  const hint =
-    `\n\nThe excerpts were selected by a keyword search, which can miss ` +
-    `documents that use different wording than the message. If none of the ` +
-    `excerpts answer it, the full workspace vault is the directory at ${root} ` +
-    `— list and read other files there to find a more relevant document ` +
-    `before concluding the workspace has no answer.`;
-  return { role: "system", content: grounding.content + hint };
-}
-
+// Two arms compare the SHIPPED grounding behaviour:
+//   expand=false → original keyword query only (the old baseline; recall 0%).
+//   expand=true  → query expansion ON (synonym variants fused by reciprocal
+//                  rank in buildRetrievalSystemMessage), the recall fix.
+// An earlier iteration tested a "vault-nav" prompt hint instead; that was
+// measured stochastic (see docs/kb-phase2-dogfood.md) and dropped in favour of
+// this deterministic app-side expansion.
 async function ask(
   q: Question,
-  vaultNav: boolean,
+  expand: boolean,
 ): Promise<{ answer: string; groundedOnGold: boolean }> {
-  let grounding = await buildRetrievalSystemMessage(q.question, PROFILE);
-  if (vaultNav) grounding = withVaultNav(grounding);
+  const grounding = await buildRetrievalSystemMessage(q.question, PROFILE, {
+    expandQuery: expand,
+  });
   const groundedOnGold = grounding
     ? q.gold.some((g) => grounding.content.includes(g))
     : false;
@@ -133,12 +126,12 @@ const TRIALS = Math.max(1, Number(process.env.TRIALS || "5"));
 
 async function rate(
   q: Question,
-  vaultNav: boolean,
+  expand: boolean,
 ): Promise<{ successes: number; total: number; sample: string }> {
   let successes = 0;
   let sample = "";
   for (let i = 0; i < TRIALS; i++) {
-    const { answer } = await ask(q, vaultNav);
+    const { answer } = await ask(q, expand);
     if (grades(answer, q.answer_fragment)) successes++;
     if (i === 0) sample = answer;
   }
@@ -153,7 +146,7 @@ async function main(): Promise<void> {
   await getSpsNoteIndex(PROFILE); // force index build
 
   console.log(
-    `══ RECALL EXPERIMENT — baseline vs vault-nav, ${TRIALS} trials/arm (live) ══`,
+    `══ RECALL EXPERIMENT — no-expansion vs query-expansion, ${TRIALS} trials/arm (live) ══`,
   );
   console.log(`gateway=${GATEWAY_URL} model=${GATEWAY_MODEL}\n`);
 
@@ -175,10 +168,10 @@ async function main(): Promise<void> {
     });
     console.log(`[${q.id}] (${q.hypothesis})`);
     console.log(
-      `  baseline : ${base.successes}/${base.total} correct   e.g. ${base.sample.replace(/\s+/g, " ").slice(0, 160)}`,
+      `  no-expansion : ${base.successes}/${base.total} correct   e.g. ${base.sample.replace(/\s+/g, " ").slice(0, 160)}`,
     );
     console.log(
-      `  treatment: ${treat.successes}/${treat.total} correct   e.g. ${treat.sample.replace(/\s+/g, " ").slice(0, 160)}\n`,
+      `  expansion    : ${treat.successes}/${treat.total} correct   e.g. ${treat.sample.replace(/\s+/g, " ").slice(0, 160)}\n`,
     );
   }
 
@@ -193,21 +186,21 @@ async function main(): Promise<void> {
   console.log("══ SUMMARY ══");
   for (const r of misses) {
     console.log(
-      `  ${r.id}: baseline ${(r.baseRate * 100).toFixed(0)}% → vault-nav ${(r.treatRate * 100).toFixed(0)}%`,
+      `  ${r.id}: no-expansion ${(r.baseRate * 100).toFixed(0)}% → expansion ${(r.treatRate * 100).toFixed(0)}%`,
     );
   }
   console.log(
-    `  recall-miss mean: baseline ${(meanBase * 100).toFixed(0)}% → vault-nav ${(meanTreat * 100).toFixed(0)}%`,
+    `  recall-miss mean: no-expansion ${(meanBase * 100).toFixed(0)}% → expansion ${(meanTreat * 100).toFixed(0)}%`,
   );
   console.log(
-    `  control treatment floor: ${(ctrlMinTreat * 100).toFixed(0)}% (should stay ~100%)`,
+    `  control expansion floor: ${(ctrlMinTreat * 100).toFixed(0)}% (should stay ~100%)`,
   );
   console.log(
     meanTreat >= 0.9 && ctrlMinTreat >= 0.9
-      ? "VERDICT: vault-nav reliably closes recall (≥90%) without breaking controls."
+      ? "VERDICT: query expansion reliably closes recall (≥90%) without breaking controls → ship."
       : meanTreat >= 0.5
-        ? "VERDICT: vault-nav helps but is UNRELIABLE (stochastic agent navigation). A deterministic app-side fix (query expansion) is needed for a dependable guarantee."
-        : "VERDICT: vault-nav does not reliably close recall → app-side query expansion / upstream vault_search.",
+        ? "VERDICT: query expansion helps but is not yet reliable — inspect residual misses."
+        : "VERDICT: query expansion did not close the misses — reconsider expansion prompt / embeddings.",
   );
 
   await mkdir(OUT_DIR, { recursive: true });

@@ -48,8 +48,18 @@ Ordered roughly by value.
 > harder one, 0/2 on one whole run). So the **reliable** recall fix is **app-side query
 > expansion** (broaden the FTS query so the gold doc enters the candidate set → its path is
 > handed over → the agent reads it ~deterministically), which lives in this repo's
-> "app-selects-candidates" role and needs no upstream change. **Not yet built** — this is the
-> remaining recall work. Embeddings stay unjustified until query expansion leaves a residual gap.
+> "app-selects-candidates" role and needs no upstream change.
+>
+> **UPDATE 2026-06-05 (c) — query expansion BUILT & shipped.** `buildRetrievalSystemMessage` now
+> generates synonym query variants (one cheap completion) and fuses them with the original
+> retrieval by reciprocal rank (`parseQueryVariants` / `fuseRankings` / `expandQueryVariants` in
+> `src/main/hermes.ts`, unit-tested). Measured: **clean synonym misses 0 → 80%**, controls
+> unaffected, but a **residual on hard semantic gaps** (RM-keys "safe"→"key cabinet": 0 → 20%) —
+> keyword expansion can't bridge a concept leap. **That residual is now the measured trigger for
+> embeddings** (the gate's condition is met for the hard-gap case). Remaining recall work: local
+> embeddings as one more search tool, **only** for semantic (non-keyword) gaps; cost note: query
+> expansion adds one model call per grounded question (no cheap "expand-only-when-needed" signal,
+> since a recall miss looks like successful retrieval). See the findings doc's expansion section.
 
 **Direction decided:** do **RLM** — let the co-author _navigate_ the vault (search → read → re-search → recurse → synthesize) — instead of a vector-RAG pipeline. Embeddings are **demoted to an optional tool**, added only if a measured recall gap demands it. Short version: RLM reuses what's already built, dodges the entire vector tax, and wins exactly where top-k stuffing fails (multi-hop, whole-doc, follow-the-thread).
 

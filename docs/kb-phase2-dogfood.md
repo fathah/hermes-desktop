@@ -225,3 +225,37 @@ mechanism). That sits squarely in this repo's "app selects candidates" role, nee
 change, and is testable with this same harness. **Embeddings remain unjustified** until FTS
 query expansion is shown to leave a residual synonym gap. The vault-nav hint may later be added
 as a cheap belt-and-braces, but only on top of the deterministic fix, not instead of it.
+
+### Query expansion — built & measured (2026-06-05)
+
+Implemented the reliable fix: `buildRetrievalSystemMessage` now asks the model for a few
+**synonym-rephrased keyword queries** (`expandQueryVariants` → `parseQueryVariants`), searches
+each, and **fuses the ranked lists by reciprocal rank** (`fuseRankings`) so a doc surfaced by
+any variant enters the top-K and its path is handed to the agent. Best-effort and bounded by a
+12 s timeout — any failure (no gateway, timeout) degrades to the original-query behaviour.
+Re-measuring with the same harness (`recall-experiment.ts`, now `expand=false` vs `expand=true`,
+5 trials/arm):
+
+| question                                                      | no-expansion | query-expansion   |
+| ------------------------------------------------------------- | ------------ | ----------------- |
+| RM-holiday (vacation→holiday, clean synonym)                  | 0/5          | 4/5 (80%)         |
+| RM-keys (safe/access-code→cabinet/combination, semantic leap) | 0/5          | 1/5 (20%)         |
+| controls (×2)                                                 | 5/5          | 5/5 (no breakage) |
+
+**It reliably closes clean synonym misses** (0 → 80%; the answers cite the gold doc the original
+query missed) and **leaves a residual on hard semantic gaps** (RM-keys: "safe" → "key cabinet" is
+a concept leap, not a synonym — keyword expansion can't reliably bridge it). That residual is the
+**measured justification for embeddings** as the gated next tier — exactly the gate's condition.
+Controls are unaffected. **Shipped on** (default, within the already-opt-in grounding path).
+
+Honest costs / limits, recorded:
+
+- **+1 model call per grounded question** (serial, before retrieval). We accept it because
+  recall misses are indistinguishable from successful retrieval (a miss returns a full set of
+  _wrong_ docs), so there's no cheap "expand only when needed" signal — documented as a future
+  optimisation hook.
+- **Expansion quality is itself stochastic** (the variant model may not produce the bridging
+  vocabulary), so this is a strong-mitigation, not a guarantee — embeddings are the path to a
+  semantic (non-keyword) guarantee.
+- Pure logic (`parseQueryVariants`, `fuseRankings`) is unit-tested in
+  `tests/workspace-grounding.test.ts`; end-to-end efficacy is the harness measurement above.

@@ -56,6 +56,8 @@ import {
   formatRetrievalSystemMessage,
   buildRetrievalSystemMessage,
   groundingTerms,
+  parseQueryVariants,
+  fuseRankings,
   type GroundingSource,
 } from "../src/main/hermes";
 
@@ -68,6 +70,59 @@ describe("groundingTerms (pure)", () => {
 
   it("returns [] for an all-stopwords message (nothing salient to search)", () => {
     expect(groundingTerms("what is it to the")).toEqual([]);
+  });
+});
+
+describe("parseQueryVariants (pure)", () => {
+  it("splits lines and strips list bullets / numbering", () => {
+    const raw =
+      "1. holiday annual leave\n2) vacation days entitlement\n- paid time off";
+    expect(parseQueryVariants(raw)).toEqual([
+      "holiday annual leave",
+      "vacation days entitlement",
+      "paid time off",
+    ]);
+  });
+
+  it("dedupes case-insensitively and drops 1-2 char noise lines", () => {
+    expect(parseQueryVariants("Holiday Leave\nholiday leave\n\n.\nok")).toEqual(
+      ["Holiday Leave"],
+    );
+  });
+
+  it("returns [] for empty input", () => {
+    expect(parseQueryVariants("")).toEqual([]);
+  });
+});
+
+describe("fuseRankings (pure, reciprocal-rank fusion)", () => {
+  it("ranks a doc found by multiple queries above one found by a single query", () => {
+    // 'b' appears in both lists; 'a' tops one list, 'c' tops the other.
+    const fused = fuseRankings([
+      ["a", "b", "c"],
+      ["c", "b", "a"],
+    ]);
+    expect(fused[0]).toBe(fused[0]); // deterministic order
+    expect(fused).toContain("b");
+    // 'b' (rank 2 in both) beats nothing here, but a doc in BOTH at rank ~1 wins:
+    const fused2 = fuseRankings([
+      ["x", "a"],
+      ["x", "c"],
+    ]);
+    expect(fused2[0]).toBe("x"); // found at rank 1 by both queries
+  });
+
+  it("surfaces a doc that only ONE expansion variant retrieved", () => {
+    // original query returns 5 distractors; a synonym variant alone finds 'gold'.
+    const original = ["d1", "d2", "d3", "d4", "d5"];
+    const variant = ["gold", "d2"];
+    const fused = fuseRankings([original, variant]);
+    // gold (rank 1 in the variant) must out-rank a distractor seen once at low rank
+    expect(fused.indexOf("gold")).toBeLessThan(fused.indexOf("d5"));
+  });
+
+  it("returns [] for no lists", () => {
+    expect(fuseRankings([])).toEqual([]);
   });
 });
 
