@@ -43,4 +43,9 @@ export const createJournalSlice: StateCreator<Store, [], [], JournalSlice> = (
     get().flash("Journal entry created");
     return id;
   },
+
+  setEntryMood: (id, mood) =>
+    set((s) =>
+      s.meta[id] ? { meta: { ...s.meta, [id]: { ...s.meta[id], mood } } } : {},
+    ),
 });

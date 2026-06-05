@@ -55,7 +55,17 @@ export function JournalCalendar({
               <div className="cal-dn">{dayNum}</div>
               {entries.length > 0 && (
                 <span className="cal-count">
-                  <span className="cal-dot" />
+                  {entries.some((e) => e.mood) ? (
+                    <span aria-hidden>
+                      {entries
+                        .map((e) => e.mood)
+                        .filter(Boolean)
+                        .slice(0, 3)
+                        .join("")}
+                    </span>
+                  ) : (
+                    <span className="cal-dot" />
+                  )}
                   {entries.length}
                 </span>
               )}

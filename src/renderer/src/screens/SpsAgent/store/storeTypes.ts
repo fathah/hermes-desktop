@@ -186,6 +186,8 @@ export interface JournalSlice {
    * the document editor. Returns the new page id.
    */
   createJournalEntry: (date?: string) => string;
+  /** Set (or clear) the mood emoji on a journal entry. */
+  setEntryMood: (id: string, mood: string) => void;
 }
 
 export interface TweaksSlice {

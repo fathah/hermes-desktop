@@ -1083,6 +1083,35 @@
   font-size: 13px;
   padding: 18px 8px;
 }
+.sps-scope .jr-mood-wrap {
+  position: relative;
+  flex: none;
+}
+.sps-scope .jr-mood-pop {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 30;
+  display: flex;
+  gap: 2px;
+  padding: 5px;
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+}
+.sps-scope .jr-mood-opt {
+  border: none;
+  background: transparent;
+  font-size: 17px;
+  line-height: 1;
+  padding: 4px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.sps-scope .jr-mood-opt:hover {
+  background: var(--surface-raised);
+}
 .sps-scope .jr-throwback {
   margin-top: 8px;
   font-size: 12.5px;

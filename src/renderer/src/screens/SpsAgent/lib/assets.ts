@@ -71,6 +71,31 @@ export function referencedAssets(blocks: Block[]): string[] {
   return out;
 }
 
+/** Every asset filename referenced across all docs (live + trashed pages keep
+ *  their docs, so their media is retained until the page is truly gone). */
+export function referencedAssetsInDocs(
+  docs: Record<string, Block[]>,
+): string[] {
+  const set = new Set<string>();
+  for (const blocks of Object.values(docs)) {
+    for (const b of blocks) if (b.assetPath) set.add(b.assetPath);
+  }
+  return [...set];
+}
+
+/** Best-effort GC: delete vault assets no doc references any more. Skips when
+ *  there are no docs (avoids wiping the store if a load returned nothing). */
+export function gcOrphanAssets(docs: Record<string, Block[]>): void {
+  const api = window.hermesAPI;
+  if (!api?.spsAssetGc) return;
+  if (Object.keys(docs).length === 0) return;
+  try {
+    void api.spsAssetGc(referencedAssetsInDocs(docs));
+  } catch {
+    /* GC is best-effort — never disrupt the app */
+  }
+}
+
 /** Human-readable byte size, e.g. "2.4 MB". */
 export function prettySize(bytes?: number): string {
   if (!bytes || bytes < 0) return "";

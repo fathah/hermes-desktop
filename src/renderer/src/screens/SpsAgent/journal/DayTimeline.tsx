@@ -1,10 +1,13 @@
 // DayTimeline.tsx — the time-sorted list of entries for the selected day, plus
 // a "this day in previous years" throwback. Clicking an entry opens it in the
 // document editor.
+import { useState } from "react";
 import { useStore } from "../store";
 import { Icon } from "../components/Icon";
 import { prettyDate, shiftYears } from "../lib/journalDates";
 import type { JournalEntry } from "./useJournalEntries";
+
+const MOODS = ["😄", "🙂", "😐", "😔", "😣", "😡", "🥱", "❤️"];
 
 interface Props {
   date: string;
@@ -15,6 +18,8 @@ interface Props {
 export function DayTimeline({ date, byDate, onNewEntry }: Props) {
   const selectPage = useStore((s) => s.selectPage);
   const setSurface = useStore((s) => s.setSurface);
+  const setEntryMood = useStore((s) => s.setEntryMood);
+  const [moodFor, setMoodFor] = useState<string | null>(null);
 
   const open = (id: string): void => {
     selectPage(id);
@@ -52,13 +57,42 @@ export function DayTimeline({ date, byDate, onNewEntry }: Props) {
         </div>
       ) : (
         entries.map((e) => (
-          <div key={e.id} className="jr-entry" onClick={() => open(e.id)}>
+          <div key={e.id} className="jr-entry">
             <span className="jr-entry-time">{e.time || "—"}</span>
-            <div className="jr-entry-body">
+            <div className="jr-entry-body" onClick={() => open(e.id)}>
               <div className="jr-entry-title">
                 <span aria-hidden>{e.mood || e.icon}</span>
                 {e.title}
               </div>
+            </div>
+            <div className="jr-mood-wrap">
+              <button
+                className="jr-icon-btn"
+                title="Set mood"
+                onClick={(ev) => {
+                  ev.stopPropagation();
+                  setMoodFor(moodFor === e.id ? null : e.id);
+                }}
+              >
+                {e.mood || "＋"}
+              </button>
+              {moodFor === e.id && (
+                <div className="jr-mood-pop">
+                  {MOODS.map((m) => (
+                    <button
+                      key={m}
+                      className="jr-mood-opt"
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        setEntryMood(e.id, e.mood === m ? "" : m);
+                        setMoodFor(null);
+                      }}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         ))
