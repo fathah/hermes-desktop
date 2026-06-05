@@ -121,7 +121,11 @@ export const createWorkspaceSlice: StateCreator<
       return;
     }
     if (!res.hasTextLayer) {
-      get().flash("No text layer — scanned PDFs need OCR (not imported)");
+      get().flash(
+        res.reason === "unreadable"
+          ? "Unreadable text (broken font encoding) — not imported"
+          : "No text layer — scanned PDFs need OCR (not imported)",
+      );
       return;
     }
     const { blocks } = pageFromMarkdown(res.markdown);

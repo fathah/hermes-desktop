@@ -1116,6 +1116,7 @@ interface HermesAPI {
     markdown: string;
     pageCount: number;
     hasTextLayer: boolean;
+    reason?: "missing" | "unreadable";
   }>;
 }
 

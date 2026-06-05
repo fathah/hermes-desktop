@@ -1340,6 +1340,7 @@ const hermesAPI = {
     markdown: string;
     pageCount: number;
     hasTextLayer: boolean;
+    reason?: "missing" | "unreadable";
   }> => ipcRenderer.invoke("sps-extract-pdf", filePath),
 };
 

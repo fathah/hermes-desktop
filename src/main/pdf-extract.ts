@@ -22,13 +22,191 @@ export interface PdfExtractResult {
   markdown: string;
   /** Number of pages parsed. */
   pageCount: number;
-  /** False when the PDF has no usable text layer (likely scanned ⇒ needs OCR). */
+  /**
+   * False when the PDF has no *usable* text layer — either none at all (scanned)
+   * or one that decodes to garbage (unmappable custom font). See `reason`.
+   */
   hasTextLayer: boolean;
+  /**
+   * Why a text layer was rejected, for distinct caller messaging. Undefined when
+   * `hasTextLayer` is true. `"missing"` ⇒ scanned/image-only (needs OCR).
+   * `"unreadable"` ⇒ a text layer exists but decodes to nonsense (broken font
+   * encoding, no ToUnicode cmap).
+   */
+  reason?: "missing" | "unreadable";
 }
 
 // Below this many non-whitespace characters per page on average we treat the
 // document as having no usable text layer (scanned images return ~nothing).
 const MIN_CHARS_PER_PAGE = 8;
+
+// Intelligibility gate. A PDF with an embedded custom font but no ToUnicode cmap
+// extracts a text layer of the right LENGTH but substituted glyphs — real char
+// count, no real words — so `hasUsableTextLayer` (a char-count floor) passes it.
+// We additionally require the text to read like real English prose: a minimum
+// share of its word tokens must be common English words. Garbage scores ~0;
+// genuine English (incl. technical/legal) scores well above the floor.
+//
+// Scope note: this assumes Latin-script English (the product's grounding
+// language). A non-English document could fall below the floor — so we only
+// judge once there is a substantial sample, and a fail is surfaced as
+// "unreadable encoding", never a hard error. Broader language coverage would
+// need real language detection (out of scope).
+const MIN_WORDS_FOR_INTELLIGIBILITY = 40;
+const MIN_COMMON_WORD_RATIO = 0.05;
+
+// The ~120 most frequent English words. Function words dominate real prose
+// (typically 25–50% of tokens), so their near-total absence is a strong garbage
+// signal. Deliberately small and dependency-free.
+const COMMON_WORDS = new Set([
+  "the",
+  "of",
+  "and",
+  "to",
+  "a",
+  "in",
+  "that",
+  "is",
+  "was",
+  "he",
+  "for",
+  "it",
+  "with",
+  "as",
+  "his",
+  "on",
+  "be",
+  "at",
+  "by",
+  "i",
+  "this",
+  "had",
+  "not",
+  "are",
+  "but",
+  "from",
+  "or",
+  "have",
+  "an",
+  "they",
+  "which",
+  "one",
+  "you",
+  "were",
+  "her",
+  "all",
+  "she",
+  "there",
+  "would",
+  "their",
+  "we",
+  "him",
+  "been",
+  "has",
+  "when",
+  "who",
+  "will",
+  "more",
+  "no",
+  "if",
+  "out",
+  "so",
+  "said",
+  "what",
+  "up",
+  "its",
+  "about",
+  "than",
+  "into",
+  "them",
+  "can",
+  "only",
+  "other",
+  "new",
+  "some",
+  "could",
+  "time",
+  "these",
+  "two",
+  "may",
+  "then",
+  "do",
+  "first",
+  "any",
+  "my",
+  "now",
+  "such",
+  "like",
+  "our",
+  "over",
+  "man",
+  "me",
+  "even",
+  "most",
+  "made",
+  "also",
+  "did",
+  "many",
+  "before",
+  "must",
+  "through",
+  "back",
+  "years",
+  "where",
+  "much",
+  "your",
+  "way",
+  "well",
+  "down",
+  "should",
+  "because",
+  "each",
+  "just",
+  "those",
+  "people",
+  "how",
+  "too",
+  "little",
+  "state",
+  "good",
+  "very",
+  "make",
+  "world",
+  "still",
+  "see",
+  "own",
+  "men",
+  "work",
+  "long",
+  "get",
+  "here",
+  "between",
+  "both",
+  "life",
+  "being",
+  "under",
+  "never",
+  "same",
+  "another",
+  "know",
+  "while",
+  "last",
+  "might",
+  "us",
+  "great",
+  "old",
+  "year",
+  "off",
+  "come",
+  "since",
+  "against",
+  "go",
+  "came",
+  "right",
+  "used",
+  "take",
+  "three",
+]);
 
 /** Load pdfjs' Node-safe legacy build once, lazily. */
 async function loadPdfjs(): Promise<typeof import("pdfjs-dist")> {
@@ -47,6 +225,32 @@ export function hasUsableTextLayer(
   pageCount: number,
 ): boolean {
   return totalNonSpaceChars >= MIN_CHARS_PER_PAGE * Math.max(1, pageCount);
+}
+
+/**
+ * Fraction of a text's alphabetic word tokens that are common English words.
+ * 0 when there are no alphabetic words. Pure/testable.
+ */
+export function commonWordRatio(text: string): number {
+  const words = text.toLowerCase().match(/[a-z]+/g);
+  if (!words || words.length === 0) return 0;
+  let common = 0;
+  for (const word of words) {
+    if (COMMON_WORDS.has(word)) common++;
+  }
+  return common / words.length;
+}
+
+/**
+ * Whether an extracted text layer reads like real (English) prose rather than
+ * unmappable-font garbage that has the right character count but no real words.
+ * Short samples get the benefit of the doubt (too little signal to judge).
+ * Pure/testable — see the COMMON_WORDS / threshold rationale above.
+ */
+export function looksIntelligible(text: string): boolean {
+  const words = text.toLowerCase().match(/[a-z]+/g);
+  if (!words || words.length < MIN_WORDS_FOR_INTELLIGIBILITY) return true;
+  return commonWordRatio(text) >= MIN_COMMON_WORD_RATIO;
 }
 
 /** Join a page's text items into paragraphs, using pdf.js line markers. */
@@ -111,9 +315,29 @@ export async function extractPdfToMarkdown(
   }
   await doc.destroy();
 
-  const hasTextLayer = hasUsableTextLayer(totalChars, pageCount);
   const title = metaTitle || fileTitle;
   const markdown = sections.join("\n\n");
 
-  return { title, markdown, pageCount, hasTextLayer };
+  // Two-stage gate: enough text at all, then is that text intelligible. A doc
+  // can clear the char-count floor yet decode to garbage (unmappable font).
+  if (!hasUsableTextLayer(totalChars, pageCount)) {
+    return {
+      title,
+      markdown,
+      pageCount,
+      hasTextLayer: false,
+      reason: "missing",
+    };
+  }
+  if (!looksIntelligible(markdown)) {
+    return {
+      title,
+      markdown,
+      pageCount,
+      hasTextLayer: false,
+      reason: "unreadable",
+    };
+  }
+
+  return { title, markdown, pageCount, hasTextLayer: true };
 }

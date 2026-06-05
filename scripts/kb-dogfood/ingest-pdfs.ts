@@ -52,13 +52,15 @@ async function main(): Promise<void> {
     const src = basename(pdf);
     try {
       const t0 = Number(process.hrtime.bigint() / 1000000n);
-      const { title, markdown, pageCount, hasTextLayer } =
+      const { title, markdown, pageCount, hasTextLayer, reason } =
         await extractPdfToMarkdown(pdf);
       const t1 = Number(process.hrtime.bigint() / 1000000n);
       if (!hasTextLayer) {
-        console.log(
-          `  SKIP  ${src} — no usable text layer (needs OCR), ${pageCount}p`,
-        );
+        const why =
+          reason === "unreadable"
+            ? "unreadable text layer (broken font encoding)"
+            : "no usable text layer (needs OCR)";
+        console.log(`  SKIP  ${src} — ${why}, ${pageCount}p`);
         manifest.push({
           file: src,
           title,

@@ -116,7 +116,9 @@ Ingest several real business docs (SOPs, a contract, a handbook) and ask the co-
 
 Until one-shot keyword grounding demonstrably fails, **build nothing** — it may already suffice. When it fails, the failure _type_ tells you whether to build the RLM loop (depth) or also add a vector tool (recall).
 
-### 10. Ingestion intelligibility check — `hasUsableTextLayer` false-positives on garbage text
+### 10. Ingestion intelligibility check — `hasUsableTextLayer` false-positives on garbage text — ✅ FIXED 2026-06-05
+
+> **Fixed 2026-06-05.** Added `looksIntelligible()` / `commonWordRatio()` (`src/main/pdf-extract.ts`): a text layer that clears the char-count floor must also read like real English prose (≥5% of word tokens are common English words, judged only on a ≥40-word sample). Garbage scores ~0 (the Buffett PDF: 0.011) vs real docs (Coase 0.49, Google 0.33). `extractPdfToMarkdown` now returns `reason: "missing" | "unreadable"`, and the importer (`workspace.ts`) shows a distinct "Unreadable text (broken font encoding) — not imported" flash. Tests in `tests/pdf-extract.test.ts`; verified end-to-end (Buffett refused, Coase/Google still ingest). Known limitation, documented in code: assumes Latin-script English; non-English docs would need language detection.
 
 **Found 2026-06-05 during the real-PDF dogfood (see [`docs/kb-phase2-dogfood.md`](kb-phase2-dogfood.md)).** `extractPdfToMarkdown()` (`src/main/pdf-extract.ts`) gates on `hasUsableTextLayer()`, which only counts **non-whitespace characters per page**. A PDF with an embedded custom font but **no ToUnicode cmap** extracts a text layer that is the right _length_ but semantic **garbage** (`!" #$%#& "'()…`) — and passes the check. That garbage then gets indexed and can ground answers on nonsense. This is **distinct from item 2** (scanned/image-only PDFs with _no_ text layer → OCR): here the text layer _exists_ but is unmappable.
 
