@@ -25,7 +25,8 @@ export type Surface =
   | "ask"
   | "agent"
   | "chats"
-  | "graph";
+  | "graph"
+  | "equity";
 
 // Named, toggleable sidebar sections (Notion 3.1 grammar). Order here is the
 // render order in the rail.

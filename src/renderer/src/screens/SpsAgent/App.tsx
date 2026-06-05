@@ -18,6 +18,7 @@ import Chat, { type ChatMessage } from "../Chat/Chat";
 import { ChatSurface } from "./shell/ChatSurface";
 import { AskPane } from "./panel/AskPane";
 import { GraphView } from "./graph/GraphView";
+import { EquityResearch } from "./equity/EquityResearch";
 
 export function App() {
   useHotkeys();
@@ -78,6 +79,7 @@ export function App() {
                 <MemoryTimeline profile="default" onRefresh={() => {}} />
               )}
               {surface === "graph" && <GraphView />}
+              {surface === "equity" && <EquityResearch />}
             </div>
           )}
         </main>
