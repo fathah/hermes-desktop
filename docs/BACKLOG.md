@@ -116,6 +116,13 @@ Ingest several real business docs (SOPs, a contract, a handbook) and ask the co-
 
 Until one-shot keyword grounding demonstrably fails, **build nothing** — it may already suffice. When it fails, the failure _type_ tells you whether to build the RLM loop (depth) or also add a vector tool (recall).
 
+### 10. Ingestion intelligibility check — `hasUsableTextLayer` false-positives on garbage text
+
+**Found 2026-06-05 during the real-PDF dogfood (see [`docs/kb-phase2-dogfood.md`](kb-phase2-dogfood.md)).** `extractPdfToMarkdown()` (`src/main/pdf-extract.ts`) gates on `hasUsableTextLayer()`, which only counts **non-whitespace characters per page**. A PDF with an embedded custom font but **no ToUnicode cmap** extracts a text layer that is the right _length_ but semantic **garbage** (`!" #$%#& "'()…`) — and passes the check. That garbage then gets indexed and can ground answers on nonsense. This is **distinct from item 2** (scanned/image-only PDFs with _no_ text layer → OCR): here the text layer _exists_ but is unmappable.
+
+**Repro:** `/Users/amar/Downloads/Buffett_Revisited.pdf` ingests "successfully" as gibberish (1 page, 4669 garbage chars, `hasTextLayer=true`).
+**Left:** add an _intelligibility_ heuristic alongside the char-count — e.g. ratio of recognizable dictionary words / proportion of ASCII-letter tokens / a low share of Private-Use-Area or non-mappable code points — and flag a doc that has a text layer but fails it as "unreadable encoding, not imported" (reuse the same "needs OCR" UX surface, distinct message). Low-risk, isolated to the extractor; pure-function `hasUsableTextLayer` is unit-testable. **Severity note:** in the dogfood the garbage was inert (gibberish tokens never matched real queries, so it was never retrieved), so this is correctness-hygiene, not a live failure — but on a vault where such a doc ranked, it would silently poison grounding.
+
 ---
 
 ## Process / environment (project rules)
