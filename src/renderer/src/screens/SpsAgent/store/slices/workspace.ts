@@ -15,6 +15,12 @@ import {
 import { buildInitialWorkspace } from "../../data/seed";
 import { initialWorkspace as initial } from "../initial";
 import { pageFromMarkdown } from "../../editor/pageMarkdown";
+import {
+  enqueueOcrJob,
+  removeOcrJob,
+  peekOcrJob,
+  loadOcrQueue,
+} from "../../lib/ocrQueue";
 import type { Block } from "../../types";
 import type { Store, WorkspaceSlice } from "../storeTypes";
 
@@ -30,6 +36,71 @@ function dbSources(blocks: Block[]): Set<string> {
   return out;
 }
 
+type StoreGet = () => Store;
+type StoreSet = (
+  partial: Partial<Store> | ((s: Store) => Partial<Store>),
+) => void;
+
+// One drain loop at a time across the app (the OCR worker is shared).
+let ocrDraining = false;
+
+/**
+ * Drain the persisted OCR queue sequentially: read each PDF's bytes, OCR it
+ * (offline, in a worker), and file the result under "Sources". Best-effort per
+ * job — a failed job is dropped with a warn toast so the batch keeps moving.
+ * Survives restarts: a job is only removed once it fully completes, so an
+ * interrupted job re-runs on the next ocrResume().
+ */
+async function drainOcrQueue(get: StoreGet, set: StoreSet): Promise<void> {
+  if (ocrDraining) return;
+  ocrDraining = true;
+  try {
+    let job = peekOcrJob();
+    while (job) {
+      const current = job;
+      set({
+        ocrActive: { title: current.title, page: 0, pages: current.pageCount },
+        ocrPending: loadOcrQueue().length,
+      });
+      try {
+        const api = window.hermesAPI;
+        if (!api?.spsReadFileBytes) throw new Error("no local workspace");
+        const bytes = await api.spsReadFileBytes(current.filePath);
+        const { ocrPdfToMarkdown } = await import("../../lib/ocr");
+        const markdown = await ocrPdfToMarkdown(bytes, (p) =>
+          set({
+            ocrActive: { title: current.title, page: p.page, pages: p.pages },
+          }),
+        );
+        const { blocks } = pageFromMarkdown(markdown);
+        const docBlocks = blocks.length ? blocks : [blk("p", "")];
+        get().makePage(
+          {
+            icon: "📄",
+            title: current.title,
+            source: current.filePath,
+            ingestedAt: Date.now(),
+          },
+          docBlocks,
+          get().ensureSourcesFolder(),
+        );
+        get().flash(`OCR complete — imported “${current.title}” into Sources`);
+      } catch {
+        get().flash(`OCR failed for “${current.title}” — skipped`, {
+          tone: "warn",
+          ms: 8000,
+        });
+      }
+      removeOcrJob(current.id);
+      set({ ocrPending: loadOcrQueue().length });
+      job = peekOcrJob();
+    }
+  } finally {
+    ocrDraining = false;
+    set({ ocrActive: null });
+  }
+}
+
 export const createWorkspaceSlice: StateCreator<
   Store,
   [],
@@ -41,6 +112,8 @@ export const createWorkspaceSlice: StateCreator<
   trash: initial.trash,
   page: initial.page in (initial.docs || {}) ? initial.page : "home",
   docs: initial.docs,
+  ocrActive: null,
+  ocrPending: loadOcrQueue().length,
 
   setBlocks: (updater) =>
     set((s) => {
@@ -126,8 +199,8 @@ export const createWorkspaceSlice: StateCreator<
     if (!res.hasTextLayer) {
       // No usable text layer — scanned image, OR a broken/unmappable font that
       // renders correctly but extracts garbage. Both render fine to a bitmap,
-      // so OCR the rendered pages instead of refusing. Runs in the background.
-      void get().ocrImportPdf(filePath, res.title, res.pageCount);
+      // so queue the pages for background OCR instead of refusing.
+      get().ocrEnqueue(filePath, res.title, res.pageCount);
       return;
     }
     const { blocks } = pageFromMarkdown(res.markdown);
@@ -146,52 +219,35 @@ export const createWorkspaceSlice: StateCreator<
     get().flash(`Imported “${res.title}” into Sources`);
   },
 
-  ocrImportPdf: async (filePath, title, pageCount) => {
+  ocrEnqueue: (filePath, title, pageCount) => {
     const api = window.hermesAPI;
     if (!api?.spsReadFileBytes) {
       get().flash("OCR needs a local workspace", { tone: "warn", ms: 8000 });
       return;
     }
+    enqueueOcrJob({
+      id: uid("ocr"),
+      filePath,
+      title,
+      pageCount,
+      addedAt: Date.now(),
+    });
+    const pending = loadOcrQueue().length;
+    set({ ocrPending: pending });
     const big = pageCount > 15;
     get().flash(
-      `Scanned PDF (${pageCount}p) — running OCR in the background; ` +
-        `“${title}” will appear in Sources when ready` +
+      `Scanned PDF (${pageCount}p) queued for OCR — “${title}” will appear in ` +
+        `Sources when ready` +
         (big ? " (large scan, may take several minutes)" : "") +
-        ".",
+        (pending > 1 ? `. ${pending} documents in the OCR queue.` : "."),
       { tone: "warn", ms: 8000 },
     );
-    let bytes: Uint8Array;
-    try {
-      bytes = await api.spsReadFileBytes(filePath);
-    } catch {
-      get().flash(`Could not read “${title}” for OCR`, {
-        tone: "warn",
-        ms: 8000,
-      });
-      return;
-    }
-    // Lazy-load the OCR engine (tesseract + pdfjs) so it never costs startup.
-    let markdown: string;
-    try {
-      const { ocrPdfToMarkdown } = await import("../../lib/ocr");
-      markdown = await ocrPdfToMarkdown(bytes, (p) => {
-        if (p.page === 1 || p.page % 5 === 0 || p.page === p.pages) {
-          get().flash(`OCR “${title}” — page ${p.page}/${p.pages}…`);
-        }
-      });
-    } catch {
-      get().flash(`OCR failed for “${title}”`, { tone: "warn", ms: 8000 });
-      return;
-    }
-    const { blocks } = pageFromMarkdown(markdown);
-    const docBlocks = blocks.length ? blocks : [blk("p", "")];
-    const id = get().makePage(
-      { icon: "📄", title, source: filePath, ingestedAt: Date.now() },
-      docBlocks,
-      get().ensureSourcesFolder(),
-    );
-    set({ page: id });
-    get().flash(`OCR complete — imported “${title}” into Sources`);
+    void drainOcrQueue(get, set);
+  },
+
+  ocrResume: () => {
+    set({ ocrPending: loadOcrQueue().length });
+    void drainOcrQueue(get, set);
   },
 
   ensureSourcesFolder: () => {

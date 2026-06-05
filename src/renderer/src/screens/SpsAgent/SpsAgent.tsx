@@ -33,7 +33,9 @@ export function SpsAgent() {
   useEffect(() => {
     setThemeScope(scopeRef.current);
     applyTweaks(useStore.getState().t);
-    void hydrateWorkspace();
+    // Resume any OCR jobs persisted from a previous session once the workspace
+    // is loaded (so OCR'd pages land in the real tree). No-op when idle.
+    void hydrateWorkspace().then(() => useStore.getState().ocrResume());
     // Apply the active skin onto the SPS scope (idea A6 — fixes the regression
     // where skins targeted document root with Hermes var names). No-op in the
     // standalone web app where window.hermesAPI is absent.

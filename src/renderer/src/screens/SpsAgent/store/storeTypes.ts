@@ -82,15 +82,17 @@ export interface WorkspaceSlice {
    * of refused (item 2).
    */
   importPdf: () => Promise<void>;
+  /** The OCR job currently being processed (for the progress indicator). */
+  ocrActive: { title: string; page: number; pages: number } | null;
+  /** Number of OCR jobs still queued (persisted, survives restart). */
+  ocrPending: number;
   /**
-   * OCR a scanned / unreadable-text-layer PDF in the background (offline) and
-   * file the result under "Sources" (item 2). Non-blocking; notifies on done.
+   * Queue a scanned / unreadable-text-layer PDF for background OCR (item 2,
+   * P2). Persisted; drains sequentially; the result is filed under "Sources".
    */
-  ocrImportPdf: (
-    filePath: string,
-    title: string,
-    pageCount: number,
-  ) => Promise<void>;
+  ocrEnqueue: (filePath: string, title: string, pageCount: number) => void;
+  /** Resume any persisted OCR jobs (call on launch). */
+  ocrResume: () => void;
   /** Find (by title at root) or create the "Sources" folder; returns its id. */
   ensureSourcesFolder: () => string;
   createChildPage: () => string;

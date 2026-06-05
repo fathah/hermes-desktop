@@ -12,6 +12,7 @@ import { Editor } from "./editor/Editor";
 import { RightPanel } from "./panel/RightPanel";
 import { Overlays } from "./shell/Overlays";
 import { Toast } from "./components/Toast";
+import { OcrStatus } from "./components/OcrStatus";
 import Insights from "../Insights/Insights";
 import { MemoryTimeline } from "../Memory/MemoryTimeline";
 import Chat, { type ChatMessage } from "../Chat/Chat";
@@ -90,6 +91,7 @@ export function App() {
 
       <Overlays />
       <Toast />
+      <OcrStatus />
       {/* Phase 9: command palette, templates, trash, tweaks */}
     </div>
   );
