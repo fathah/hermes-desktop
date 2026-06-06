@@ -4,12 +4,13 @@ import {
   enqueueOcrJob,
   removeOcrJob,
   peekOcrJob,
+  type OcrJob,
 } from "../src/renderer/src/screens/SpsAgent/lib/ocrQueue";
 
 // Persistent OCR job queue (item 2, P2). jsdom provides localStorage; the queue
 // is what makes a scanned-PDF batch survive restarts and drain sequentially.
 
-const job = (id: string, filePath: string, title = id) => ({
+const job = (id: string, filePath: string, title = id): OcrJob => ({
   id,
   filePath,
   title,

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/explicit-function-release-type */
 // skills-smoke.mjs — admin Skills UI smoke (build first).
 //
 // Drives the real app: open the admin overlay (gear) → Skills → author a new

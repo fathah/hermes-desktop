@@ -26,7 +26,7 @@ describe("ocrSchedule settings", () => {
 });
 
 describe("isScheduledNow", () => {
-  const at = (h: number, m: number) => new Date(2026, 5, 6, h, m, 0);
+  const at = (h: number, m: number): Date => new Date(2026, 5, 6, h, m, 0);
 
   it("is true only within the configured minute", () => {
     expect(isScheduledNow(at(2, 0), "02:00")).toBe(true);

@@ -78,14 +78,14 @@ async function main(): Promise<void> {
   console.log(
     `  excerpt contains buried tail (${BURIED}/${BURIED2}): ${excerptHasBuried}`,
   );
-  const pathMatch = real.content.match(/full file: ([^\)]+)\)/g) || [];
+  const pathMatch = real.content.match(/full file: ([^)]+)\)/g) || [];
   console.log(`  absolute paths exposed in grounding: ${pathMatch.length}`);
 
   // Variant: identical content, but every real abs path → an unreadable one.
   const bogus = {
     role: "system" as const,
     content: real.content.replace(
-      /full file: [^\)]+\)/g,
+      /full file: [^)]+\)/g,
       "full file: /nonexistent/missing.md)",
     ),
   };
