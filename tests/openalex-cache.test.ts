@@ -2,11 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { promises as fs } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import {
-  cacheGet,
-  cacheSet,
-  evictOldest,
-} from "../src/main/research-cache";
+import { cacheGet, cacheSet, evictOldest } from "../src/main/research-cache";
 
 let dir: string;
 

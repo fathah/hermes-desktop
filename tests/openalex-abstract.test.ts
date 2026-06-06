@@ -30,7 +30,7 @@ describe("reconstructAbstract", () => {
       good: [0],
       // @ts-expect-error — malformed positions are tolerated at runtime
       bad: "x",
-      // @ts-expect-error
+      // @ts-expect-error — mixed/negative positions are tolerated at runtime
       worse: [-1, "y"],
       tail: [1],
     };

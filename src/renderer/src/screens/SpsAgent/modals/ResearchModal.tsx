@@ -29,6 +29,17 @@ export function ResearchModal() {
     void window.hermesAPI?.spsResearchEnsureAgentTool?.();
   }, []);
 
+  // Global Escape closes the modal regardless of where focus is (the input may
+  // have lost focus to a result button), so the scrim never gets stuck open.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const runSearch = async () => {
     const query = q.trim();
     if (!query) return;

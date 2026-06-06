@@ -147,6 +147,20 @@ await shot("02-palette", async () => {
 });
 await win.keyboard.press("Escape").catch(() => {});
 
+// 02b — Research (OpenAlex) modal, opened from the command palette. Offline-safe:
+// we screenshot the modal's initial state (no network dependency). Proves the
+// "Research papers…" action → ResearchModal mount → ensure-agent-tool path.
+await shot("02b-research", async () => {
+  await win.keyboard.press(`${MOD}+K`);
+  await win.waitForTimeout(300);
+  await win
+    .locator(".pal-item", { hasText: "Research papers" })
+    .first()
+    .click();
+  await win.waitForSelector(".modal", { timeout: 8000 });
+});
+await win.keyboard.press("Escape").catch(() => {});
+
 // 03 — local wikilink graph view (F4).
 await shot("03-graph", async () => {
   await win.locator(".nav-item", { hasText: "Graph" }).first().click();
