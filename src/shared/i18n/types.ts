@@ -3,6 +3,7 @@ export type AppLocale =
   | "es"
   | "id"
   | "ja"
+  | "ko"
   | "pl"
   | "pt-BR"
   | "pt-PT"
