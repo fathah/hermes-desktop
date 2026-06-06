@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
 // sps-import-smoke.mjs — KB Phase 0 UI smoke: drive the "Import PDF" flow end to
 // end through the BUILT Electron app (run `npm run build` first).
 //
@@ -41,7 +40,9 @@ function makeTextPdf(lines) {
   });
   const xrefStart = pdf.length;
   pdf += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`;
-  offsets.forEach((off) => (pdf += `${String(off).padStart(10, "0")} 00000 n \n`));
+  offsets.forEach(
+    (off) => (pdf += `${String(off).padStart(10, "0")} 00000 n \n`),
+  );
   pdf += `trailer\n<</Size ${objs.length + 1}/Root 1 0 R>>\nstartxref\n${xrefStart}\n%%EOF`;
   return Buffer.from(pdf, "latin1");
 }
@@ -75,7 +76,10 @@ writeFileSync(
     page: "home",
   }),
 );
-writeFileSync(join(sps, "vault", "home.md"), `---\ntitle: "Home"\n---\n\n# Home\n`);
+writeFileSync(
+  join(sps, "vault", "home.md"),
+  `---\ntitle: "Home"\n---\n\n# Home\n`,
+);
 
 console.log("HERMES_HOME=", HOME);
 const fail = (m) => {
@@ -88,12 +92,19 @@ const app = await electron.launch({
   // Own userData dir → own single-instance lock, so the smoke runs even when a
   // developer's app is open (which holds the default lock; see main).
   args: [".", `--user-data-dir=${join(HOME, "electron-userdata")}`],
-  env: { ...process.env, HERMES_HOME: HOME, ELECTRON_DISABLE_SECURITY_WARNINGS: "1" },
+  env: {
+    ...process.env,
+    HERMES_HOME: HOME,
+    ELECTRON_DISABLE_SECURITY_WARNINGS: "1",
+  },
 });
 
 // Stub the native file picker in the MAIN process to return our fixture.
 await app.evaluate(async ({ dialog }, fixture) => {
-  dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [fixture] });
+  dialog.showOpenDialog = async () => ({
+    canceled: false,
+    filePaths: [fixture],
+  });
 }, FIXTURE);
 
 const win = await app.firstWindow();
@@ -121,7 +132,10 @@ await importCard.first().click();
 // The real flow runs (stubbed picker → real extract → makePage). Assert the
 // ingested PDF text rendered in the editor.
 try {
-  await win.getByText(SENTENCE, { exact: false }).first().waitFor({ timeout: 20000 });
+  await win
+    .getByText(SENTENCE, { exact: false })
+    .first()
+    .waitFor({ timeout: 20000 });
 } catch {
   await win.screenshot({ path: join(OUT, "99-no-content.png") });
   fail(`ingested text "${SENTENCE}" never rendered`);

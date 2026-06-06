@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+# Uses bash-only [[ ]]; the shebang guarantees bash even where /bin/sh is dash.
 BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null)
 if [[ "$BRANCH" != "release" && "$BRANCH" != release/* ]]; then
   exit 0

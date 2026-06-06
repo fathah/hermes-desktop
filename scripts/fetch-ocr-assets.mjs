@@ -27,7 +27,10 @@ const COPIES = [
   // SIMD core only (every CPU from the last decade has WASM SIMD); corePath is
   // pointed at the .wasm.js explicitly so no runtime feature-probe/fallback.
   ["tesseract.js-core/tesseract-core-simd.wasm", "tesseract-core-simd.wasm"],
-  ["tesseract.js-core/tesseract-core-simd.wasm.js", "tesseract-core-simd.wasm.js"],
+  [
+    "tesseract.js-core/tesseract-core-simd.wasm.js",
+    "tesseract-core-simd.wasm.js",
+  ],
 ];
 
 const LANG = "eng";

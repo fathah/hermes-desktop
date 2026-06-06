@@ -94,6 +94,11 @@ function Install({
       isMounted = false;
       cleanup();
     };
+    // The install must fire exactly once per phase transition. `t` is used only
+    // for fallback error strings; including it would restart startInstall() if
+    // the user switched locale mid-install (t's identity changes on language
+    // change), causing a double install. Intentionally omitted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
   useEffect(() => {

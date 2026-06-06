@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
 // equity-smoke.mjs — visual verification for the India Equity Research surface.
 //
 // Boots the BUILT Electron app (run `npm run build` first) against a throwaway
@@ -60,13 +59,27 @@ const frontmatter = {
   currency: "INR",
   rating: "ACCUMULATE",
   confidence: "medium",
-  scores: { composite: 64, fundamental: 71, technical: 55, risk: 60, sentiment: 58, macro: 67 },
-  valuation: { intrinsic_inr: 348, upside_pct: 11.4, method: "FCFF-10yr-DCF (psu-valuation)" },
+  scores: {
+    composite: 64,
+    fundamental: 71,
+    technical: 55,
+    risk: 60,
+    sentiment: 58,
+    macro: 67,
+  },
+  valuation: {
+    intrinsic_inr: 348,
+    upside_pct: 11.4,
+    method: "FCFF-10yr-DCF (psu-valuation)",
+  },
   risk_matrix: {
     financial: { severity: "Low", factor: "ROCE 11%, regulated returns" },
     governance: { severity: "Medium", factor: "GoI 51% stake, DIPAM overhang" },
     geopolitical: { severity: "Low", factor: "domestic power demand" },
-    tech_disruption: { severity: "Medium", factor: "renewable transition pace" },
+    tech_disruption: {
+      severity: "Medium",
+      factor: "renewable transition pace",
+    },
     fx_trade: { severity: "Low", factor: "partial coal import" },
     legislative: { severity: "Medium", factor: "CERC tariff regs, GST" },
     political: { severity: "Medium", factor: "PLI, election capex cycle" },
@@ -80,7 +93,14 @@ const frontmatter = {
   ],
   price_series: Array.from({ length: 70 }, (_, i) => {
     const c = 300 + Math.round(Math.sin(i / 4) * 28 + i * 0.5);
-    return { date: `2026-${String((i % 12) + 1).padStart(2, "0")}-01`, o: c - 2, h: c + 4, l: c - 5, c, v: 1000000 + i * 1000 };
+    return {
+      date: `2026-${String((i % 12) + 1).padStart(2, "0")}-01`,
+      o: c - 2,
+      h: c + 4,
+      l: c - 5,
+      c,
+      v: 1000000 + i * 1000,
+    };
   }),
   sector_heatmap: {
     metrics: ["pe_z", "roe_z", "mom_z"],
@@ -105,7 +125,11 @@ const frontmatter = {
     { uuid: "evidence-NTPC-001", source: "ntpc-ir", tier: "tier1" },
   ],
   data_gaps: ["Q4 FY26 capex guidance not yet filed; capex array is estimated"],
-  provenance: { run_id: "run_smoke_001", model: "hermes-agent", sources: ["NSE", "screener.in", "NTPC IR"] },
+  provenance: {
+    run_id: "run_smoke_001",
+    model: "hermes-agent",
+    sources: ["NSE", "screener.in", "NTPC IR"],
+  },
 };
 const REPORT_MD = `---\n${JSON.stringify(frontmatter, null, 2)}\n---\n\n# NTPC Limited (NTPC) — India Equity Research Report\n\n## Executive Summary\nDefensive regulated utility with a dividend floor; accumulate on dips.\n\n## Data Gaps & Epistemic Notes\n- Q4 FY26 capex guidance not yet filed; capex array is estimated\n\n## Disclaimer\nAI-generated analysis, not investment advice.\n`;
 
@@ -122,7 +146,11 @@ const USERDATA = join(HOME, "electron-data");
 mkdirSync(USERDATA, { recursive: true });
 const app = await electron.launch({
   args: [`--user-data-dir=${USERDATA}`, "."],
-  env: { ...process.env, HERMES_HOME: HOME, ELECTRON_DISABLE_SECURITY_WARNINGS: "1" },
+  env: {
+    ...process.env,
+    HERMES_HOME: HOME,
+    ELECTRON_DISABLE_SECURITY_WARNINGS: "1",
+  },
 });
 const win = await app.firstWindow();
 await win.waitForLoadState("domcontentloaded");
@@ -178,8 +206,8 @@ const checks = await win.evaluate(() => {
     dataGaps: document.querySelectorAll(".eq-gaps li").length,
     technical: !!q(".eq-technical"),
     sector: !!q(".eq-sector"),
-    pnf: !![...document.querySelectorAll(".eq-technical svg")].find((s) =>
-      s.getAttribute("aria-label") === "Point and Figure chart",
+    pnf: !![...document.querySelectorAll(".eq-technical svg")].find(
+      (s) => s.getAttribute("aria-label") === "Point and Figure chart",
     ),
     // confirm tokens resolved (not the old fabricated fallback blue #2d6cdf)
     ctaBg: getComputedStyle(q(".eq-run-btn")).backgroundColor,
@@ -201,5 +229,9 @@ const ok =
   checks.sector &&
   checks.pnf;
 
-console.log(ok ? "EQUITY_SMOKE_PASS" : "EQUITY_SMOKE_FAIL", "shots:", shots.join(","));
+console.log(
+  ok ? "EQUITY_SMOKE_PASS" : "EQUITY_SMOKE_FAIL",
+  "shots:",
+  shots.join(","),
+);
 process.exit(ok ? 0 : 1);

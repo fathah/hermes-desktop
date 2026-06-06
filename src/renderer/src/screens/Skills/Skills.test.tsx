@@ -132,9 +132,13 @@ describe("Skills.tsx — authoring & management", () => {
       listInstalledSkills: vi.fn().mockResolvedValue([installedSkill]),
     });
     const view = render(<Skills />);
-    await waitFor(() => expect(api.listInstalledSkills).toHaveBeenCalled());
 
-    await act(async () => fireEvent.click(view.getByText("skills.disable")));
+    // Wait for the installed-skill card to actually render its Disable button —
+    // not merely for the IPC call. The card mounts after listInstalledSkills
+    // *resolves*; querying too early (getByText doesn't retry) is what made this
+    // test flaky under parallel load. findByText polls until the button exists.
+    const disableBtn = await view.findByText("skills.disable");
+    await act(async () => fireEvent.click(disableBtn));
     expect(api.setSkillEnabled).toHaveBeenCalledWith(
       installedSkill.path,
       false,
@@ -150,14 +154,20 @@ describe("Skills.tsx — authoring & management", () => {
         .mockResolvedValue("---\nname: guard-sop\n---\nold"),
     });
     const view = render(<Skills />);
-    await waitFor(() => expect(api.listInstalledSkills).toHaveBeenCalled());
 
-    // Open detail (click the card body), enter edit mode, change text, save.
+    // Open detail (click the card body once it has rendered), enter edit mode,
+    // change text, save. Wait for the DOM, not just the IPC call — the card
+    // mounts after listInstalledSkills resolves, so a one-shot querySelector can
+    // race ahead and hit null under load.
+    const cardBody = await waitFor(() => {
+      const el = view.container.querySelector(".skills-card-body");
+      if (!el) throw new Error("skill card not rendered yet");
+      return el;
+    });
+    await act(async () => fireEvent.click(cardBody));
     await act(async () =>
-      fireEvent.click(view.container.querySelector(".skills-card-body")!),
+      fireEvent.click(await view.findByText("skills.edit")),
     );
-    await waitFor(() => expect(api.getSkillContent).toHaveBeenCalled());
-    await act(async () => fireEvent.click(view.getByText("skills.edit")));
     const textarea = view.container.querySelector(
       ".skills-edit-textarea",
     ) as HTMLTextAreaElement;

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
 // diagram-smoke.mjs — runtime verification for the Mermaid + Excalidraw blocks.
 //
 // Launches the BUILT Electron app (run `npm run build` first) against a
@@ -48,7 +47,12 @@ mkdirSync(join(vault, "assets", "diagrams"), { recursive: true });
 // pre-seed an Excalidraw sidecar (scene + preview svg) for the LOAD path
 writeFileSync(
   join(vault, "assets", "diagrams", "exseed1.excalidraw"),
-  JSON.stringify({ type: "excalidraw", version: 2, elements: [], appState: {} }),
+  JSON.stringify({
+    type: "excalidraw",
+    version: 2,
+    elements: [],
+    appState: {},
+  }),
 );
 writeFileSync(
   join(vault, "assets", "diagrams", "exseed1.excalidraw.svg"),
@@ -96,12 +100,18 @@ setTimeout(() => {
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"}: ${name}${detail ? " — " + detail : ""}`);
+  console.log(
+    `${ok ? "PASS" : "FAIL"}: ${name}${detail ? " — " + detail : ""}`,
+  );
 };
 
 const app = await electron.launch({
   args: [`--user-data-dir=${USERDATA}`, "."],
-  env: { ...process.env, HERMES_HOME: HOME, ELECTRON_DISABLE_SECURITY_WARNINGS: "1" },
+  env: {
+    ...process.env,
+    HERMES_HOME: HOME,
+    ELECTRON_DISABLE_SECURITY_WARNINGS: "1",
+  },
 });
 const win = await app.firstWindow();
 await win.waitForLoadState("domcontentloaded");
@@ -114,7 +124,11 @@ check("mermaid block renders an <svg>", mermaidSvgs >= 1, `${mermaidSvgs} svg`);
 
 // ── 2. Seeded Excalidraw loads its sidecar preview ─────────────────────────
 const excPreview = await win.locator(".b-excalidraw-preview svg").count();
-check("seeded excalidraw renders preview from sidecar", excPreview >= 1, `${excPreview} svg`);
+check(
+  "seeded excalidraw renders preview from sidecar",
+  excPreview >= 1,
+  `${excPreview} svg`,
+);
 
 await win.screenshot({ path: join(OUT, "01-diagrams.png") });
 
@@ -126,7 +140,10 @@ const diagramsMd = existsSync(join(vault, "diagrams.md"))
   : "";
 check("vault diagrams.md was written", diagramsMd.length > 0);
 check("markdown has a ```mermaid fence", diagramsMd.includes("```mermaid"));
-check("markdown has the .excalidraw.svg image ref", diagramsMd.includes(".excalidraw.svg"));
+check(
+  "markdown has the .excalidraw.svg image ref",
+  diagramsMd.includes(".excalidraw.svg"),
+);
 check("markdown has NO base64 tier-2 blob", !diagramsMd.includes("<!-- sps:"));
 
 // ── 4. Create path: insert a NEW excalidraw block + draw on it ─────────────
@@ -140,7 +157,9 @@ try {
   await win.waitForTimeout(400);
   await win.keyboard.press("Enter");
   // lazy Excalidraw chunk mounts
-  await win.waitForSelector(".excalidraw, .b-excalidraw .exc-canvas", { timeout: 20000 });
+  await win.waitForSelector(".excalidraw, .b-excalidraw .exc-canvas", {
+    timeout: 20000,
+  });
   await win.waitForTimeout(1500);
   check("excalidraw canvas mounted (lazy chunk loaded)", true);
 

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
 // skill-from-repo-smoke.mjs — "Generate skill from a repo" UI smoke (build first).
 //
 // Drives the real app: admin → Skills → Generate from repo. Playwright can't
@@ -18,7 +17,10 @@ const HOME = mkdtempSync(join(tmpdir(), "hermes-sfr-smoke-"));
 // A tiny fixture repo for the digest.
 const REPO = mkdtempSync(join(tmpdir(), "fixture-repo-"));
 writeFileSync(join(REPO, "README.md"), "# Fixture\n\nA fixture repository.");
-writeFileSync(join(REPO, "package.json"), '{"name":"fixture","version":"1.0.0"}');
+writeFileSync(
+  join(REPO, "package.json"),
+  '{"name":"fixture","version":"1.0.0"}',
+);
 
 mkdirSync(join(HOME, "hermes-agent", "venv", "bin"), { recursive: true });
 writeFileSync(join(HOME, "hermes-agent", "venv", "bin", "python"), "");
@@ -41,7 +43,10 @@ writeFileSync(
     page: "home",
   }),
 );
-writeFileSync(join(sps, "vault", "home.md"), `---\ntitle: "Home"\n---\n\n# Home\n`);
+writeFileSync(
+  join(sps, "vault", "home.md"),
+  `---\ntitle: "Home"\n---\n\n# Home\n`,
+);
 
 console.log("HERMES_HOME=", HOME);
 const fail = (m) => {
@@ -52,7 +57,11 @@ setTimeout(() => fail("WATCHDOG_TIMEOUT"), 120000).unref();
 
 const app = await electron.launch({
   args: ["."],
-  env: { ...process.env, HERMES_HOME: HOME, ELECTRON_DISABLE_SECURITY_WARNINGS: "1" },
+  env: {
+    ...process.env,
+    HERMES_HOME: HOME,
+    ELECTRON_DISABLE_SECURITY_WARNINGS: "1",
+  },
 });
 
 // Stub the folder picker → fixture repo, and the gateway fetch → canned SKILL.md.
@@ -103,9 +112,7 @@ try {
   await win.screenshot({ path: join(OUT, "98-no-save.png") });
   fail("generated skill did not appear under Installed");
 }
-if (
-  !existsSync(join(HOME, "skills", "custom", "generated-skill", "SKILL.md"))
-)
+if (!existsSync(join(HOME, "skills", "custom", "generated-skill", "SKILL.md")))
   fail("generated skill SKILL.md was not written");
 await win.screenshot({ path: join(OUT, "02-saved.png") });
 

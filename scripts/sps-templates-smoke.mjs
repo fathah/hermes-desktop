@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
 // sps-templates-smoke.mjs — agent-aware templates UI smoke (build first).
 //
 // Drives the real app: open the template picker → create the "Document / SOP
@@ -36,7 +35,10 @@ writeFileSync(
     page: "home",
   }),
 );
-writeFileSync(join(sps, "vault", "home.md"), `---\ntitle: "Home"\n---\n\n# Home\n`);
+writeFileSync(
+  join(sps, "vault", "home.md"),
+  `---\ntitle: "Home"\n---\n\n# Home\n`,
+);
 
 console.log("HERMES_HOME=", HOME);
 const fail = (m) => {
@@ -47,7 +49,11 @@ setTimeout(() => fail("WATCHDOG_TIMEOUT"), 120000).unref();
 
 const app = await electron.launch({
   args: ["."],
-  env: { ...process.env, HERMES_HOME: HOME, ELECTRON_DISABLE_SECURITY_WARNINGS: "1" },
+  env: {
+    ...process.env,
+    HERMES_HOME: HOME,
+    ELECTRON_DISABLE_SECURITY_WARNINGS: "1",
+  },
 });
 const win = await app.firstWindow();
 await win.waitForLoadState("domcontentloaded");
@@ -62,7 +68,9 @@ if ((await card.count()) === 0) fail("Document / SOP review template missing");
 await card.first().click();
 
 // The agent-action button must render in the new page.
-const button = win.locator(".b-agent-button", { hasText: "Review against our SOPs" });
+const button = win.locator(".b-agent-button", {
+  hasText: "Review against our SOPs",
+});
 try {
   await button.first().waitFor({ timeout: 10000 });
 } catch {

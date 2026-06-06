@@ -16,14 +16,19 @@ setTimeout(() => fail("WATCHDOG_TIMEOUT"), 120000).unref();
 
 const app = await electron.launch({
   args: [".", `--user-data-dir=${join(HOME, "ud")}`],
-  env: { ...process.env, HERMES_HOME: HOME, ELECTRON_DISABLE_SECURITY_WARNINGS: "1" },
+  env: {
+    ...process.env,
+    HERMES_HOME: HOME,
+    ELECTRON_DISABLE_SECURITY_WARNINGS: "1",
+  },
 });
 const win = await app.firstWindow();
 await win.waitForLoadState("domcontentloaded");
 await win.waitForSelector(".app", { timeout: 30000 });
 
 win.on("console", (m) => {
-  if (/error|denied|refused|csp|blocked/i.test(m.text())) console.log("  [page]", m.text());
+  if (/error|denied|refused|csp|blocked/i.test(m.text()))
+    console.log("  [page]", m.text());
 });
 
 const out = await win.evaluate(async () => {
@@ -59,9 +64,15 @@ const out = await win.evaluate(async () => {
 console.log("PROBE_RESULT:", JSON.stringify(out));
 await app.close();
 if (!out.ok) fail(out.error);
-const norm = (s) => s.toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim();
+const norm = (s) =>
+  s
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, " ")
+    .trim();
 if (norm(out.text).includes("INCIDENT") && norm(out.text).includes("12345")) {
-  console.log("PROBE_OK: tesseract read the rendered text offline in the built app");
+  console.log(
+    "PROBE_OK: tesseract read the rendered text offline in the built app",
+  );
 } else {
   fail(`OCR text did not match: ${JSON.stringify(out.text)}`);
 }

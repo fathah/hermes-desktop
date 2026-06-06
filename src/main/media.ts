@@ -33,7 +33,9 @@ const MIME_BY_EXT: Record<string, string> = {
  * Read a local image file and return it as a `data:` URL. Returns null when
  * the file is missing, not an image, too large, or unreadable.
  */
-export async function readMediaAsDataUrl(filePath: string): Promise<string | null> {
+export async function readMediaAsDataUrl(
+  filePath: string,
+): Promise<string | null> {
   try {
     if (!filePath) return null;
     const stat = await fsPromises.stat(filePath);

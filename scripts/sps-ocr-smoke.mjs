@@ -37,7 +37,10 @@ writeFileSync(
     page: "home",
   }),
 );
-writeFileSync(join(sps, "vault", "home.md"), `---\ntitle: "Home"\n---\n\n# Home\n`);
+writeFileSync(
+  join(sps, "vault", "home.md"),
+  `---\ntitle: "Home"\n---\n\n# Home\n`,
+);
 const FIXTURE = join(HOME, "scanned-report.pdf");
 
 console.log("HERMES_HOME=", HOME);
@@ -45,7 +48,11 @@ setTimeout(() => fail("WATCHDOG_TIMEOUT"), 180000).unref();
 
 const app = await electron.launch({
   args: [".", `--user-data-dir=${join(HOME, "ud")}`],
-  env: { ...process.env, HERMES_HOME: HOME, ELECTRON_DISABLE_SECURITY_WARNINGS: "1" },
+  env: {
+    ...process.env,
+    HERMES_HOME: HOME,
+    ELECTRON_DISABLE_SECURITY_WARNINGS: "1",
+  },
 });
 const win = await app.firstWindow();
 await win.waitForLoadState("domcontentloaded");
@@ -68,7 +75,9 @@ const pdfB64 = await win.evaluate(async (phrase) => {
   ctx.font = "bold 60px Helvetica, Arial, sans-serif";
   ctx.fillText(phrase, 20, 100);
   const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
-  const jpeg = Uint8Array.from(atob(dataUrl.split(",")[1]), (c) => c.charCodeAt(0));
+  const jpeg = Uint8Array.from(atob(dataUrl.split(",")[1]), (c) =>
+    c.charCodeAt(0),
+  );
 
   const enc = new TextEncoder();
   const parts = [];
@@ -108,7 +117,10 @@ writeFileSync(FIXTURE, Buffer.from(pdfB64, "base64"));
 console.log("fixture bytes:", readFileSync(FIXTURE).length);
 
 await app.evaluate(async ({ dialog }, fixture) => {
-  dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [fixture] });
+  dialog.showOpenDialog = async () => ({
+    canceled: false,
+    filePaths: [fixture],
+  });
 }, FIXTURE);
 
 // Drive Import PDF.
@@ -132,7 +144,9 @@ await win.waitForTimeout(2500); // let autosave flush
 
 // Assert: a page nested under "Sources" carries the OCR'd phrase.
 const ws = JSON.parse(readFileSync(join(sps, "workspace.json"), "utf-8"));
-const sourcesId = Object.keys(ws.meta).find((id) => ws.meta[id]?.title === "Sources");
+const sourcesId = Object.keys(ws.meta).find(
+  (id) => ws.meta[id]?.title === "Sources",
+);
 if (!sourcesId) fail("no 'Sources' folder for the OCR'd PDF");
 const sourcesNode = ws.tree.find((n) => n.id === sourcesId);
 const child = sourcesNode?.children?.find((c) => ws.meta[c.id]?.source);

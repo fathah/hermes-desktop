@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
 // sps-smoke.mjs — F6 visual-verification harness for the SPS Agent workspace.
 //
 // Launches the BUILT Electron app (run `npm run build` first) against a

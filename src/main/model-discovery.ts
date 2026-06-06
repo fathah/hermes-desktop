@@ -152,7 +152,9 @@ async function fetchNousFreeModelIds(
 ): Promise<string[]> {
   try {
     const auth = readAuthStore(profile) as {
-      providers?: { nous?: { access_token?: string; inference_base_url?: string } };
+      providers?: {
+        nous?: { access_token?: string; inference_base_url?: string };
+      };
     };
     const token = (auth.providers?.nous?.access_token || "").trim();
     const base = (auth.providers?.nous?.inference_base_url || "").trim();

@@ -34,7 +34,10 @@ writeFileSync(
     page: "home",
   }),
 );
-writeFileSync(join(sps, "vault", "home.md"), `---\ntitle: "Home"\n---\n\n# Home\n`);
+writeFileSync(
+  join(sps, "vault", "home.md"),
+  `---\ntitle: "Home"\n---\n\n# Home\n`,
+);
 
 console.log("HERMES_HOME=", HOME);
 const fail = (m) => {
@@ -45,7 +48,11 @@ setTimeout(() => fail("WATCHDOG_TIMEOUT"), 120000).unref();
 
 const app = await electron.launch({
   args: ["."],
-  env: { ...process.env, HERMES_HOME: HOME, ELECTRON_DISABLE_SECURITY_WARNINGS: "1" },
+  env: {
+    ...process.env,
+    HERMES_HOME: HOME,
+    ELECTRON_DISABLE_SECURITY_WARNINGS: "1",
+  },
 });
 const win = await app.firstWindow();
 await win.waitForLoadState("domcontentloaded");
