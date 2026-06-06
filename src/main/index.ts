@@ -242,6 +242,7 @@ import {
   getSkillContent,
   installSkill,
   uninstallSkill,
+  createSkill,
 } from "./skills";
 import {
   listCronJobs,
@@ -1517,6 +1518,18 @@ function setupIPC(): void {
         return sshUninstallSkill(conn.ssh, name);
       return uninstallSkill(name, _profile);
     },
+  );
+  // Skill authoring (M3 #17) — local-only scaffold of a new SKILL.md.
+  ipcMain.handle(
+    "create-skill",
+    (
+      _event,
+      name: string,
+      description: string,
+      category: string,
+      body: string,
+      profile?: string,
+    ) => createSkill(name, description, category, body, profile),
   );
 
   // Session cache (fast local cache with generated titles)

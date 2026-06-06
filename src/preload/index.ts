@@ -716,6 +716,21 @@ const hermesAPI = {
     profile?: string,
   ): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke("uninstall-skill", name, profile),
+  createSkill: (
+    name: string,
+    description: string,
+    category: string,
+    body: string,
+    profile?: string,
+  ): Promise<{ success: boolean; path?: string; error?: string }> =>
+    ipcRenderer.invoke(
+      "create-skill",
+      name,
+      description,
+      category,
+      body,
+      profile,
+    ),
 
   // Session cache (fast local cache with generated titles)
   listCachedSessions: (

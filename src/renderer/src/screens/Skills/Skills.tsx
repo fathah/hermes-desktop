@@ -39,6 +39,14 @@ function Skills({ profile, visible = true }: SkillsProps): React.JSX.Element {
   const [error, setError] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
 
+  // Skill authoring (M3 #17) — "make a skill like this one".
+  const [creating, setCreating] = useState(false);
+  const [cName, setCName] = useState("");
+  const [cDesc, setCDesc] = useState("");
+  const [cCategory, setCCategory] = useState("custom");
+  const [cBaseOn, setCBaseOn] = useState(""); // template skill path, or ""
+  const [cBusy, setCBusy] = useState(false);
+
   const loadInstalled = useCallback(async (): Promise<void> => {
     const list = await window.hermesAPI.listInstalledSkills(profile);
     setInstalledSkills(list);
@@ -88,6 +96,35 @@ function Skills({ profile, visible = true }: SkillsProps): React.JSX.Element {
       await loadInstalled();
     } else {
       setError(result.error || t("skills.uninstallFailed"));
+    }
+  }
+
+  async function handleCreate(): Promise<void> {
+    if (!cName.trim()) return;
+    setCBusy(true);
+    setError("");
+    // "Make one like this": seed the body from the chosen template skill.
+    let body = "";
+    if (cBaseOn) {
+      body = await window.hermesAPI.getSkillContent(cBaseOn);
+    }
+    const result = await window.hermesAPI.createSkill(
+      cName,
+      cDesc,
+      cCategory,
+      body,
+      profile,
+    );
+    setCBusy(false);
+    if (result.success) {
+      setCreating(false);
+      setCName("");
+      setCDesc("");
+      setCCategory("custom");
+      setCBaseOn("");
+      await loadInstalled();
+    } else {
+      setError(result.error || "Could not create the skill.");
     }
   }
 
@@ -189,11 +226,92 @@ function Skills({ profile, visible = true }: SkillsProps): React.JSX.Element {
           <h2 className="skills-title">{t("skills.title")}</h2>
           <p className="skills-subtitle">{t("skills.subtitle")}</p>
         </div>
-        <button className="btn btn-secondary btn-sm" onClick={loadAll}>
-          <Refresh size={14} />
-          {t("skills.refresh")}
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => setCreating(true)}
+          >
+            + New skill
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={loadAll}>
+            <Refresh size={14} />
+            {t("skills.refresh")}
+          </button>
+        </div>
       </div>
+
+      {/* Skill authoring form (M3 #17) */}
+      {creating && (
+        <div
+          className="skills-detail-overlay"
+          onClick={() => setCreating(false)}
+        >
+          <div className="skills-detail" onClick={(e) => e.stopPropagation()}>
+            <div className="skills-detail-header">
+              <div className="skills-detail-name">New skill</div>
+              <button className="btn-ghost" onClick={() => setCreating(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <div className="skills-detail-content">
+              <div className="settings-field">
+                <label className="settings-field-label">Name</label>
+                <input
+                  className="input"
+                  value={cName}
+                  onChange={(e) => setCName(e.target.value)}
+                  placeholder="e.g. weekly-report"
+                  autoFocus
+                />
+              </div>
+              <div className="settings-field">
+                <label className="settings-field-label">Description</label>
+                <input
+                  className="input"
+                  value={cDesc}
+                  onChange={(e) => setCDesc(e.target.value)}
+                  placeholder="When should the agent use this skill?"
+                />
+              </div>
+              <div className="settings-field">
+                <label className="settings-field-label">Category</label>
+                <input
+                  className="input"
+                  value={cCategory}
+                  onChange={(e) => setCCategory(e.target.value)}
+                  placeholder="custom"
+                />
+              </div>
+              <div className="settings-field">
+                <label className="settings-field-label">
+                  Base on (copy the shape of an existing skill)
+                </label>
+                <select
+                  className="input"
+                  value={cBaseOn}
+                  onChange={(e) => setCBaseOn(e.target.value)}
+                >
+                  <option value="">Blank template</option>
+                  {installedSkills.map((s) => (
+                    <option key={s.path} value={s.path}>
+                      {s.name} ({s.category})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="skills-detail-actions" style={{ marginTop: 12 }}>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={handleCreate}
+                  disabled={cBusy || !cName.trim()}
+                >
+                  {cBusy ? "Creating…" : "Create skill"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="skills-error">

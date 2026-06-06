@@ -1,10 +1,12 @@
 import { execFileSync } from "child_process";
 import {
   existsSync,
+  mkdirSync,
   readdirSync,
   readFileSync,
   realpathSync,
   statSync,
+  writeFileSync,
 } from "fs";
 import { isAbsolute, join, relative, resolve } from "path";
 import { homedir } from "os";
@@ -404,6 +406,90 @@ export function uninstallSkill(name: string, profile?: string): SkillCliResult {
     return {
       success: false,
       error: msg || e.stdout?.toString()?.trim() || "Uninstall failed.",
+    };
+  }
+}
+
+// ── Skill authoring (Milestone 3, hack #17) ──────────────────────────────────
+// "Anything you do more than twice, make a skill." Scaffold a new SKILL.md from
+// the GUI, optionally seeded by an existing skill's body ("make one like this").
+// The agent's frontmatter is generated from the form so name/description are
+// authoritative; any frontmatter in a seeded body is stripped first.
+
+export interface CreateSkillResult {
+  success: boolean;
+  path?: string;
+  error?: string;
+}
+
+const SKILL_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,48}$/;
+
+function slugifySkill(input: string): string {
+  return input
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+}
+
+function stripFrontmatter(md: string): string {
+  if (!md.startsWith("---")) return md;
+  const end = md.indexOf("\n---", 3);
+  if (end === -1) return md;
+  const afterFence = md.indexOf("\n", end + 1);
+  return md
+    .slice(afterFence === -1 ? md.length : afterFence + 1)
+    .replace(/^\n+/, "");
+}
+
+/** Scaffold a new SKILL.md under <profile>/skills/<category>/<slug>/. Path-safe;
+ *  refuses to overwrite an existing skill. */
+export function createSkill(
+  name: string,
+  description: string,
+  category: string,
+  body: string,
+  profile?: string,
+): CreateSkillResult {
+  const slug = slugifySkill(name);
+  const cat = slugifySkill(category) || "custom";
+  if (!SKILL_SLUG_RE.test(slug))
+    return { success: false, error: "Invalid skill name." };
+  if (!SKILL_SLUG_RE.test(cat))
+    return { success: false, error: "Invalid category." };
+
+  const skillsDir = join(profileHome(profile), "skills");
+  const dir = join(skillsDir, cat, slug);
+  // Defence in depth: the slug regex already forbids separators, but verify the
+  // resolved path stays inside the skills directory.
+  const rel = relative(skillsDir, dir);
+  if (rel.startsWith("..") || isAbsolute(rel)) {
+    return { success: false, error: "Invalid path." };
+  }
+  const file = join(dir, "SKILL.md");
+  if (existsSync(file)) {
+    return { success: false, error: "A skill with that name already exists." };
+  }
+
+  const safeName = name.trim().replace(/"/g, "'");
+  const safeDesc = (
+    description.trim() || "Describe when to use this skill."
+  ).replace(/"/g, "'");
+  const seeded = stripFrontmatter(body || "").trim();
+  const bodyMd =
+    seeded ||
+    `# ${safeName}\n\n${safeDesc}\n\n## When to use\n\n- \n\n## Steps\n\n1. \n\n## Example\n\n`;
+  const content = `---\nname: "${safeName}"\ndescription: "${safeDesc}"\n---\n\n${bodyMd}\n`;
+
+  try {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(file, content, "utf-8");
+    return { success: true, path: file };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to create skill.",
     };
   }
 }

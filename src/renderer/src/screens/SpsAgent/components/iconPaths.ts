@@ -64,6 +64,7 @@ export const ICON_PATHS = {
   flag: '<path d="M5 21V4M5 4h11l-1.5 3L16 10H5"/>',
   wand: '<path d="M15 4V2M15 10V8M19 6h-2M13 6h-2M5 21 16 10l-2-2L3 19Z"/>',
   return: '<path d="M9 10 4 15l5 5"/><path d="M4 15h11a5 5 0 0 0 5-5V5"/>',
+  mic: '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2"/><path d="M12 19v3"/>',
 } as const;
 
 export type IconName = keyof typeof ICON_PATHS;

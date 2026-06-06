@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Icon } from "../components/Icon";
 import { useStore } from "../store";
 import { scrollToProposal } from "../lib/scroll";
+import { useDictation } from "../hooks/useDictation";
 
 export function AgentBody() {
   const messages = useStore((s) => s.messages);
@@ -34,6 +35,11 @@ export function AgentBody() {
     ta.style.height = Math.min(ta.scrollHeight, 140) + "px";
     setVal(ta.value);
   };
+  // Voice dictation (M3 #4): append recognized speech to the composer.
+  const dictation = useDictation((text) => {
+    setVal((v) => (v ? `${v} ${text}` : text));
+    taRef.current?.focus();
+  });
 
   return (
     <>
@@ -155,6 +161,16 @@ export function AgentBody() {
             <span className="mini" title="Mention">
               <Icon name="comment" size={16} />
             </span>
+            {dictation.supported && (
+              <button
+                className={`mini${dictation.listening ? " on" : ""}`}
+                title={dictation.listening ? "Stop dictation" : "Dictate"}
+                aria-pressed={dictation.listening}
+                onClick={dictation.toggle}
+              >
+                <Icon name="mic" size={16} />
+              </button>
+            )}
             <button className="send" disabled={!val.trim()} onClick={submit}>
               <Icon name="arrowUp" size={16} stroke={2.2} />
             </button>

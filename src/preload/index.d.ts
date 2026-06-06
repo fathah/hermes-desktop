@@ -734,6 +734,13 @@ interface HermesAPI {
     name: string,
     profile?: string,
   ) => Promise<{ success: boolean; error?: string }>;
+  createSkill: (
+    name: string,
+    description: string,
+    category: string,
+    body: string,
+    profile?: string,
+  ) => Promise<{ success: boolean; path?: string; error?: string }>;
 
   // Session cache
   listCachedSessions: (
