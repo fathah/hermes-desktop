@@ -88,5 +88,16 @@
     "typescript": "^5.9.3",
     "vite": "^7.2.6",
     "vitest": "^4.1.4"
+  },
+  "overrides": {
+    "@xmldom/xmldom": "^0.8.13",
+    "tmp": "^0.2.6",
+    "ip-address": "^10.2.0",
+    "ws": "^8.21.0",
+    "postcss": "^8.5.15",
+    "nanoid@3.3.3": "^3.3.12",
+    "minimatch@^10.0.0": {
+      "brace-expansion": "5.0.6"
+    }
   }
 }
