@@ -11,8 +11,17 @@
 // approve/deny call live in the IPC layer (index.ts).
 import type { ApprovalRequest } from "./sse-parser";
 
-// Single, well-known inspection binaries with no mutating power. `git` is allowed
-// only for the read-only subcommands enumerated below.
+// Single, well-known inspection binaries with NO mutating or launching power.
+// `git` is allowed only for the read-only subcommands enumerated below.
+//
+// Deliberately EXCLUDED even though they look read-only (security review):
+//   • env / printenv — `env` is a meta-launcher (`env FOO=1 rm -rf /` has binary
+//     "env" and no shell metachars), and `printenv` leaks secrets/credentials.
+//   • find — `find . -delete` / `-exec` mutate, and `-delete` carries no shell
+//     metacharacter so it would slip past the metachar gate.
+//   • sort — `sort -o FILE` writes a file.
+// When unsure, leave a binary OUT: the cost is a prompt, the cost of a wrong
+// inclusion is an auto-approved destructive action.
 const SAFE_BINARIES = new Set([
   "ls",
   "pwd",
@@ -25,12 +34,9 @@ const SAFE_BINARIES = new Set([
   "wc",
   "grep",
   "rg",
-  "find",
   "stat",
   "file",
   "which",
-  "env",
-  "printenv",
   "ps",
   "df",
   "du",
@@ -39,7 +45,6 @@ const SAFE_BINARIES = new Set([
   "uname",
   "hostname",
   "cut",
-  "sort",
   "uniq",
   "git",
 ]);

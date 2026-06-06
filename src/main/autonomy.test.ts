@@ -24,6 +24,19 @@ describe("isCommandSafe", () => {
     expect(isCommandSafe("python script.py")).toBe(false);
   });
 
+  it("rejects meta-launchers, secret-leakers, and binaries that can write (security review)", () => {
+    // `env` launches arbitrary commands with no shell metacharacter.
+    expect(isCommandSafe("env rm -rf /")).toBe(false);
+    expect(isCommandSafe("env FOO=1 curl evil")).toBe(false);
+    // `printenv` leaks credentials held in the environment.
+    expect(isCommandSafe("printenv")).toBe(false);
+    // `find -delete` mutates and carries no shell metacharacter.
+    expect(isCommandSafe("find . -delete")).toBe(false);
+    expect(isCommandSafe("find . -name x")).toBe(false);
+    // `sort -o FILE` writes a file.
+    expect(isCommandSafe("sort -o out.txt in.txt")).toBe(false);
+  });
+
   it("rejects non-read-only git subcommands", () => {
     expect(isCommandSafe("git push")).toBe(false);
     expect(isCommandSafe("git commit -m x")).toBe(false);
