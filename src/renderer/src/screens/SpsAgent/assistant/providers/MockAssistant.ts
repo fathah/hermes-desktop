@@ -113,13 +113,13 @@ export function generateResponse(
       return {
         kind: "chat",
         reply: [
-          "Status: onboarding redesign is in progress (Maya), analytics migration in progress (Theo), 2.4 changelog and pricing copy still open. Two decisions pending: analytics backfill and pricing sign-off.",
+          "Here's where this page stands: a few open to-dos and notes captured. I can summarize it into a callout, draft next steps, or pull the to-dos onto the task board — say which.",
         ],
       };
     return {
       kind: "chat",
       reply: [
-        "From what's on this page: the team is mid-cycle on the 2.4 release. I can pull the relevant section into a summary, draft next steps, or open the task board — say which.",
+        "From what's on this page, I can pull the key points into a summary, draft next steps, or open the task board — say which.",
       ],
     };
   }
@@ -136,7 +136,7 @@ export function generateResponse(
       blocks: [
         blk(
           "callout",
-          "This week: ship onboarding to staging, finish the analytics migration, and lock 2.4 scope. Open: analytics backfill and pricing-copy sign-off.",
+          "Summary: the key points and open to-dos from this page, pulled up top so you can see the gist at a glance.",
           { emoji: "🧭" },
         ),
       ],
@@ -152,16 +152,15 @@ export function generateResponse(
       at: "bottom",
       blocks: [
         blk("h3", "Next steps"),
-        blk("todo", "Confirm staging deploy window with eng (Thursday)", {
+        blk("todo", "Turn the open questions on this page into decisions", {
           done: false,
         }),
-        blk("todo", "Priya circulates the migration guide draft by Friday", {
+        blk("todo", "Break the biggest item into smaller to-dos", {
           done: false,
         }),
-        blk("todo", "Decide analytics backfill vs. clean start — Theo", {
+        blk("todo", "Schedule time to follow up on what's unresolved", {
           done: false,
         }),
-        blk("todo", "Route pricing copy to Sam for sign-off", { done: false }),
       ],
     };
   }
@@ -174,11 +173,9 @@ export function generateResponse(
       label: "New action items",
       at: "bottom",
       blocks: [
-        blk("todo", "Backfill decision documented in the roadmap", {
-          done: false,
-        }),
-        blk("todo", "Migration guide draft — Priya, Fri", { done: false }),
-        blk("todo", "Pricing copy sign-off — Sam", { done: false }),
+        blk("todo", "Document the decision from this page", { done: false }),
+        blk("todo", "Draft the follow-up note", { done: false }),
+        blk("todo", "Set a reminder to review next week", { done: false }),
       ],
     };
   }
@@ -192,7 +189,7 @@ export function generateResponse(
     blocks: [
       blk(
         "p",
-        "Reminder: keep standup blockers to one line, and link the doc rather than pasting screenshots so search stays useful.",
+        "Tip: link related pages with [[wikilinks]] rather than pasting screenshots, so search and the graph stay useful.",
       ),
     ],
   };

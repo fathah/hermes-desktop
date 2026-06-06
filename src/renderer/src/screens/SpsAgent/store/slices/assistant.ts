@@ -26,7 +26,7 @@ import type { Block } from "../../types";
 import type { Store, AssistantSlice, Conversation } from "../storeTypes";
 
 const SEED_GREETING = [
-  "Hi Maya — I'm your workspace assistant. I can read this page, rewrite text as tracked changes, answer questions, and act on the task board. Try a suggestion below.",
+  "I'm your workspace assistant. I can read this page, rewrite text as tracked changes, answer questions, and act on the task board. Try a suggestion below.",
 ];
 
 const DEFAULT_TITLE_RE = /^(Chat|New chat)( \d+)?$/;

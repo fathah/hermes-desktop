@@ -21,43 +21,26 @@ import type {
 export const HOME_BLOCKS: Block[] = [
   blk(
     "p",
-    "A shared home base for the product team. Jump into this week's focus, review the task board, and let the workspace assistant tidy things up.",
+    "Your workspace and agent cockpit. Capture notes, run the task board, and let your assistant draft, summarize, and act on what's here.",
   ),
   blk(
     "callout",
-    "Standup is at 9:30. Drop blockers in the thread before you join — keep it to one line each.",
-    { emoji: "📌" },
+    "Tip: press / for blocks, ⌘K to search, and ⌘J to open the assistant on any page.",
+    { emoji: "✨" },
   ),
   blk("h2", "This week"),
-  blk("todo", "Ship onboarding redesign to staging", { done: true }),
-  blk("todo", "Review the Q3 planning doc and leave comments", { done: false }),
-  blk("todo", "Sync with design on the empty-state illustrations", {
+  blk("todo", "Ask the assistant to summarize this page", { done: false }),
+  blk("todo", "Add your first project to the board below", { done: false }),
+  blk("todo", "Make a page your own — try / blocks and a cover", {
     done: false,
   }),
-  blk("todo", "Draft the changelog for the 2.4 release", { done: false }),
   blk("h2", "Tasks"),
   blk("database", "", { view: "board" }),
-  blk("h2", "Meeting notes"),
+  blk("h2", "Notes"),
   blk(
     "p",
-    "Weekly product sync — attendees: Maya, Theo, Priya, Sam. Notes captured live; action items pulled into the board above.",
+    "Jot anything here. Select text to rewrite it as tracked changes, or pin a note to a block from the assistant panel.",
   ),
-  blk("h3", "Decisions"),
-  blk(
-    "li",
-    "Onboarding redesign goes to staging Thursday; full rollout gated on the activation metric holding for a week.",
-  ),
-  blk(
-    "li",
-    "We are cutting the multi-workspace switcher from 2.4 — it slips to 2.5.",
-  ),
-  blk("li", "Priya owns the migration guide; draft by Friday."),
-  blk("h3", "Open questions"),
-  blk(
-    "li",
-    "Do we backfill historical analytics, or start clean from the migration date?",
-  ),
-  blk("li", "Who signs off on the pricing-page copy before it ships?"),
   blk(
     "quote",
     "The fastest way to find the right answer is to make the question cheap to ask.",
@@ -67,11 +50,10 @@ export const HOME_BLOCKS: Block[] = [
 ];
 
 // ---- people / status / priority reference tables ----
+// Single-user app: the only built-in person is "you". PersonKey is a free string,
+// so additional people can still be added via @mentions / assignee pickers.
 export const PEOPLE: Record<PersonKey, Person> = {
-  maya: { name: "Maya", initials: "MR", color: "#C0392B" },
-  theo: { name: "Theo", initials: "TK", color: "#1F6B3A" },
-  priya: { name: "Priya", initials: "PS", color: "#1B4F8A" },
-  sam: { name: "Sam", initials: "SD", color: "#5A3A8A" },
+  you: { name: "You", initials: "Y", color: "#1B4F8A" },
 };
 
 export const STATUS: Record<StatusKey, StatusDef> = {
@@ -88,117 +70,90 @@ export const PRIO: Record<PrioKey, PrioDef> = {
 };
 
 // ---- tasks database seed ----
+// A light, single-user sample so the board isn't empty on first run. Everything
+// is assigned to "you"; clear these out and add your own anytime.
 export const TASKS: Task[] = [
   {
     id: "t1",
-    title: "Redesign onboarding flow",
+    title: "Draft the project brief",
     status: "doing",
     prio: "high",
-    who: "maya",
-    due: "Jun 4",
-    est: "3d",
+    who: "you",
+    due: "",
+    est: "",
   },
   {
     id: "t2",
-    title: "Migrate analytics to new pipeline",
+    title: "Review this week's notes",
     status: "doing",
     prio: "med",
-    who: "theo",
-    due: "Jun 6",
-    est: "5d",
+    who: "you",
+    due: "",
+    est: "",
   },
   {
     id: "t3",
-    title: "Write 2.4 changelog",
+    title: "Set up a recurring summary",
     status: "todo",
     prio: "med",
-    who: "sam",
-    due: "Jun 5",
-    est: "1d",
+    who: "you",
+    due: "",
+    est: "",
   },
   {
     id: "t4",
-    title: "Empty-state illustrations",
+    title: "Tidy the workspace structure",
     status: "todo",
     prio: "low",
-    who: "priya",
-    due: "Jun 9",
-    est: "2d",
+    who: "you",
+    due: "",
+    est: "",
   },
   {
     id: "t5",
-    title: "Pricing page copy pass",
+    title: "Try a template",
     status: "review",
-    prio: "high",
-    who: "sam",
-    due: "Jun 3",
-    est: "4h",
-  },
-  {
-    id: "t6",
-    title: "Activation metric dashboard",
-    status: "review",
-    prio: "med",
-    who: "theo",
-    due: "Jun 4",
-    est: "1d",
+    prio: "low",
+    who: "you",
+    due: "",
+    est: "",
   },
   {
     id: "t7",
-    title: "Q3 planning doc",
+    title: "Connect an agent profile",
     status: "done",
     prio: "high",
-    who: "maya",
-    due: "May 30",
-    est: "2d",
-  },
-  {
-    id: "t8",
-    title: "Audit accessibility on settings",
-    status: "done",
-    prio: "low",
-    who: "priya",
-    due: "May 28",
-    est: "1d",
+    who: "you",
+    due: "",
+    est: "",
   },
 ];
 
 // ---- sidebar page tree seed ----
 export const FAVORITES: SeedTreeNode[] = [
-  { id: "home", emoji: "🏠", label: "Team Home" },
-  { id: "road", emoji: "🗺️", label: "Product roadmap" },
+  { id: "home", emoji: "🏠", label: "Home" },
 ];
 
 export const TREE: SeedTreeNode[] = [
   {
     id: "home",
     emoji: "🏠",
-    label: "Team Home",
+    label: "Home",
     children: [
-      { id: "sync", emoji: "🗓️", label: "Weekly sync notes" },
-      { id: "okr", emoji: "🎯", label: "OKRs — Q3" },
+      { id: "sync", emoji: "🗓️", label: "Weekly notes" },
+      { id: "okr", emoji: "🎯", label: "Goals" },
     ],
   },
   {
     id: "road",
     emoji: "🗺️",
-    label: "Product roadmap",
+    label: "Projects",
     children: [
-      { id: "r24", emoji: "🚢", label: "Release 2.4" },
-      { id: "r25", emoji: "🧪", label: "Release 2.5 (draft)" },
+      { id: "r24", emoji: "🚀", label: "First project" },
+      { id: "r25", emoji: "🧪", label: "Ideas (draft)" },
     ],
   },
-  {
-    id: "eng",
-    emoji: "⚙️",
-    label: "Engineering",
-    children: [
-      { id: "arch", emoji: "🏗️", label: "Architecture notes" },
-      { id: "oncall", emoji: "🔔", label: "On-call runbook" },
-    ],
-  },
-  { id: "design", emoji: "🎨", label: "Design library" },
-  { id: "people", emoji: "👥", label: "Team wiki" },
+  { id: "people", emoji: "📚", label: "Reading list" },
 ];
 
 // ---- suggested assistant prompts ----
@@ -206,7 +161,7 @@ export const SUGGESTIONS = [
   { id: "summary", icon: "sparkle", label: "Summarize this page" },
   { id: "nextsteps", icon: "wand", label: "Draft next steps" },
   { id: "tasks", icon: "board", label: "Pull action items into tasks" },
-  { id: "tighten", icon: "text", label: "Tighten the meeting notes" },
+  { id: "tighten", icon: "text", label: "Tighten this writing" },
 ] as const;
 
 /** Flatten a seed tree into a flat node list (for mention/palette listings). */
@@ -259,28 +214,12 @@ function starterDoc(title: string): Block[] {
 export function buildInitialWorkspace(): Workspace {
   const tree = treeFromSeed(TREE);
   const meta = metaFromSeed(TREE, {});
-  meta.home = { icon: "🏠", title: "Team Home", cover: null };
+  meta.home = { icon: "🏠", title: "Home", cover: null };
   const docs: Record<string, Block[]> = { home: HOME_BLOCKS };
   Object.keys(meta).forEach((id) => {
     if (id !== "home" && !docs[id]) docs[id] = starterDoc(meta[id].title);
   });
-  const comments: Comment[] = [
-    {
-      id: "seed1",
-      quote: "do we backfill historical analytics",
-      blockId: null,
-      page: "home",
-      resolved: false,
-      messages: [
-        {
-          name: "Theo K",
-          initials: "TK",
-          color: "#1F6B3A",
-          time: "1h ago",
-          text: "I'd start clean from the migration date — backfill is a week of work for little payoff.",
-        },
-      ],
-    },
-  ];
+  // Single-user workspace ships with no seed annotations — you create your own.
+  const comments: Comment[] = [];
   return { tree, meta, docs, comments, trash: [], page: "home" };
 }

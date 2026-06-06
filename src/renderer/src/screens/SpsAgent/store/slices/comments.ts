@@ -74,8 +74,8 @@ export const createCommentsSlice: StateCreator<Store, [], [], CommentsSlice> = (
               messages: [
                 ...c.messages,
                 {
-                  name: "Maya Rao",
-                  initials: "MR",
+                  name: "You",
+                  initials: "Y",
                   color: get().t.accent,
                   time: "just now",
                   text,

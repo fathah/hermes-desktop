@@ -81,9 +81,6 @@ export function DocHeader({ children }: { children?: ReactNode }) {
             <span>
               Edited <b>just now</b>
             </span>
-            <span>
-              <b>4</b> contributors
-            </span>
             <span>Saved locally</span>
           </div>
           {showGetStarted && <GetStarted />}

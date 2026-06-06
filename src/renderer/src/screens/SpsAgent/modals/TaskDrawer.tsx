@@ -61,8 +61,7 @@ export function TaskDrawer({ task, onClose }: Props) {
           <div className="b-callout" style={{ marginTop: 14 }}>
             <span className="emoji">💬</span>
             <div className="block" style={{ padding: 0 }}>
-              Linked from <b>Team Home → Tasks</b>. Changes sync back to the
-              board.
+              Linked from <b>Home → Tasks</b>. Changes sync back to the board.
             </div>
           </div>
         </div>

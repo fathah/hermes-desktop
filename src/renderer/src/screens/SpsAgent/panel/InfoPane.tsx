@@ -1,8 +1,7 @@
-// InfoPane.tsx — page stats, metadata, contributors. Ported from panel.jsx InfoPane.
+// InfoPane.tsx — page stats and metadata. Ported from panel.jsx InfoPane.
 // The "Linked references" section (S3) is fed by the SPS-vault note index — pages
 // whose mirrored markdown [[wikilinks]] to this one.
 import { Icon } from "../components/Icon";
-import { PEOPLE } from "../data/seed";
 import { Avatar } from "../tasks/chips";
 import { useStore } from "../store";
 import { useVaultBacklinks } from "../hooks/useNoteIndex";
@@ -59,8 +58,8 @@ export function InfoPane({ blocks, comments, pageId }: Props) {
           </div>
           <div className="fv">
             <span className="person">
-              <Avatar who="maya" />
-              Maya Rao
+              <Avatar who="you" />
+              You
             </span>
           </div>
           <div className="fk">
@@ -97,18 +96,6 @@ export function InfoPane({ blocks, comments, pageId }: Props) {
             ))}
           </div>
         )}
-        <hr className="b-divider" style={{ margin: "16px 0" }} />
-        <div className="type-section-label" style={{ marginBottom: 10 }}>
-          Contributors
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {(["maya", "theo", "priya", "sam"] as const).map((w) => (
-            <div key={w} className="person" style={{ fontSize: 13.5 }}>
-              <Avatar who={w} size={22} />
-              {PEOPLE[w].name}
-            </div>
-          ))}
-        </div>
       </div>
     </div>
   );
