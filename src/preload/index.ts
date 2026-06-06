@@ -280,6 +280,7 @@ const hermesAPI = {
     history?: Array<{ role: string; content: string }>,
     attachments?: Attachment[],
     contextFolder?: string,
+    clientRunId?: string,
   ): Promise<{ response: string; sessionId?: string }> =>
     ipcRenderer.invoke(
       "send-message",
@@ -289,6 +290,7 @@ const hermesAPI = {
       history,
       attachments,
       contextFolder,
+      clientRunId,
     ),
 
   abortChat: (): Promise<void> => ipcRenderer.invoke("abort-chat"),
@@ -360,9 +362,14 @@ const hermesAPI = {
       profile,
     ),
 
-  onChatChunk: (callback: (chunk: string) => void): (() => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, chunk: string): void =>
-      callback(chunk);
+  onChatChunk: (
+    callback: (chunk: string, runId?: string) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      chunk: string,
+      runId?: string,
+    ): void => callback(chunk, runId);
     ipcRenderer.on("chat-chunk", handler);
     return () => ipcRenderer.removeListener("chat-chunk", handler);
   },
@@ -370,18 +377,26 @@ const hermesAPI = {
   /** Streaming reasoning / thinking tokens — separate from `onChatChunk`
    *  so the renderer can render a "thinking" bubble that grows
    *  independently of the assistant's content (#352). */
-  onChatReasoningChunk: (callback: (chunk: string) => void): (() => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, chunk: string): void =>
-      callback(chunk);
+  onChatReasoningChunk: (
+    callback: (chunk: string, runId?: string) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      chunk: string,
+      runId?: string,
+    ): void => callback(chunk, runId);
     ipcRenderer.on("chat-reasoning-chunk", handler);
     return () => ipcRenderer.removeListener("chat-reasoning-chunk", handler);
   },
 
-  onChatDone: (callback: (sessionId?: string) => void): (() => void) => {
+  onChatDone: (
+    callback: (sessionId?: string, runId?: string) => void,
+  ): (() => void) => {
     const handler = (
       _event: Electron.IpcRendererEvent,
       sessionId?: string,
-    ): void => callback(sessionId);
+      runId?: string,
+    ): void => callback(sessionId, runId);
     ipcRenderer.on("chat-done", handler);
     return () => ipcRenderer.removeListener("chat-done", handler);
   },
@@ -409,36 +424,52 @@ const hermesAPI = {
       ipcRenderer.removeListener("context-menu-select-bubble", handler);
   },
 
-  onChatToolProgress: (callback: (tool: string) => void): (() => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, tool: string): void =>
-      callback(tool);
+  onChatToolProgress: (
+    callback: (tool: string, runId?: string) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      tool: string,
+      runId?: string,
+    ): void => callback(tool, runId);
     ipcRenderer.on("chat-tool-progress", handler);
     return () => ipcRenderer.removeListener("chat-tool-progress", handler);
   },
 
   onChatUsage: (
-    callback: (usage: {
-      promptTokens: number;
-      completionTokens: number;
-      totalTokens: number;
-      cost?: number;
-      rateLimitRemaining?: number;
-      rateLimitReset?: number;
-      model?: string;
-      sessionId?: string;
-      cacheRead?: number;
-      cacheWrite?: number;
-    }) => void,
+    callback: (
+      usage: {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+        cost?: number;
+        rateLimitRemaining?: number;
+        rateLimitReset?: number;
+        model?: string;
+        sessionId?: string;
+        cacheRead?: number;
+        cacheWrite?: number;
+      },
+      runId?: string,
+    ) => void,
   ): (() => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, usage: unknown): void =>
-      callback(usage as Parameters<typeof callback>[0]);
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      usage: unknown,
+      runId?: string,
+    ): void => callback(usage as Parameters<typeof callback>[0], runId);
     ipcRenderer.on("chat-usage", handler);
     return () => ipcRenderer.removeListener("chat-usage", handler);
   },
 
-  onChatError: (callback: (error: string) => void): (() => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, error: string): void =>
-      callback(error);
+  onChatError: (
+    callback: (error: string, runId?: string) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      error: string,
+      runId?: string,
+    ): void => callback(error, runId);
     ipcRenderer.on("chat-error", handler);
     return () => ipcRenderer.removeListener("chat-error", handler);
   },

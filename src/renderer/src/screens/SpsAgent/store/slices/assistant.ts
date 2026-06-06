@@ -169,16 +169,16 @@ export const createAssistantSlice: StateCreator<
   // first run and reused on later runs so a context blow-up doesn't lose progress;
   // the plan page is the durable checkpoint. Tokens stream live into one bot bubble.
   //
-  // NOTE: the gateway's chat-chunk SSE events are not session-correlated, so if the
-  // Hermes admin Chat overlay is ALSO streaming at the same instant, output could
-  // cross-talk. Listeners live only for the duration of this run to keep that window
-  // minimal; full correlation is a shared-contract change left for later.
+  // Streaming events are correlated by a per-run `clientRunId`: this run only
+  // consumes its own tokens, so it never cross-talks with the Hermes admin Chat
+  // (which owns the uncorrelated stream) or a concurrent run.
   runWork: async () => {
     const s = get();
     const pageId = s.page;
     const blocks = s.docs[pageId] || [];
     const meta = s.meta[pageId] || { title: "Untitled" };
     const resumeId = meta.workSessionId;
+    const runId = uid("run");
 
     const planText = serializePlanBlocks(blocks);
     const message = `${buildWorkPrompt()}\n\n--- PLAN: ${meta.title} ---\n${planText}`;
@@ -204,11 +204,13 @@ export const createAssistantSlice: StateCreator<
     };
 
     const cleanups = [
-      window.hermesAPI.onChatChunk((chunk) => {
+      window.hermesAPI.onChatChunk((chunk, rid) => {
+        if (rid !== runId) return;
         acc += chunk;
         render();
       }),
-      window.hermesAPI.onChatToolProgress((t) => {
+      window.hermesAPI.onChatToolProgress((t, rid) => {
+        if (rid !== runId) return;
         tool = t;
         render();
       }),
@@ -219,6 +221,10 @@ export const createAssistantSlice: StateCreator<
         message,
         undefined,
         resumeId,
+        undefined,
+        undefined,
+        undefined,
+        runId,
       );
       if (result.response && !acc) acc = result.response;
       tool = null;

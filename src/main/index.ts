@@ -1011,6 +1011,7 @@ function setupIPC(): void {
       history?: Array<{ role: string; content: string }>,
       attachments?: Attachment[],
       contextFolder?: string,
+      clientRunId?: string,
     ) => {
       if (!isRemoteMode() && !isGatewayRunning(profile)) {
         startGateway(profile);
@@ -1033,7 +1034,14 @@ function setupIPC(): void {
         }
       }
 
-      const sessionKey = resumeSessionId || `sender-${event.sender.id}`;
+      // `clientRunId` is a desktop-side correlation token (never sent to the
+      // gateway): it isolates concurrent runs from the SAME window — two fresh
+      // runs would otherwise share `sender-<id>` and abort/cross-talk each other.
+      // It is also echoed on every streaming event so a consumer can route only
+      // its own run's tokens (the foundation for parallel session tabs). A run
+      // with no clientRunId is the legacy/global stream owned by the main Chat.
+      const sessionKey =
+        resumeSessionId || clientRunId || `sender-${event.sender.id}`;
 
       const existing = activeChatAborts.get(sessionKey);
       if (existing) {
@@ -1056,10 +1064,12 @@ function setupIPC(): void {
       // (window closed, reloaded, navigated away). Guard every send so a
       // dead sender doesn't crash the IPC handler, and abort the in-flight
       // chat the first time we see one — there's nobody listening anymore.
+      // Streaming events carry `clientRunId` as a trailing arg so each renderer
+      // consumer can filter to its own run (undefined === the legacy stream).
       const safeSend = (channel: string, payload: unknown): boolean => {
         if (event.sender.isDestroyed()) return false;
         try {
-          event.sender.send(channel, payload);
+          event.sender.send(channel, payload, clientRunId);
           return true;
         } catch {
           return false;

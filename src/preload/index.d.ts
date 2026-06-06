@@ -453,6 +453,7 @@ interface HermesAPI {
     history?: Array<{ role: string; content: string }>,
     attachments?: Attachment[],
     contextFolder?: string,
+    clientRunId?: string,
   ) => Promise<{ response: string; sessionId?: string }>;
   abortChat: () => Promise<void>;
   getApiServerKeyStatus: (profile?: string) => Promise<{ hasKey: boolean }>;
@@ -491,25 +492,38 @@ interface HermesAPI {
     /** Subset of `models` flagged as free (Nous Portal today). #367. */
     freeModels?: string[];
   }>;
-  onChatChunk: (callback: (chunk: string) => void) => () => void;
-  onChatReasoningChunk: (callback: (chunk: string) => void) => () => void;
-  onChatDone: (callback: (sessionId?: string) => void) => () => void;
-  onChatToolProgress: (callback: (tool: string) => void) => () => void;
-  onChatUsage: (
-    callback: (usage: {
-      promptTokens: number;
-      completionTokens: number;
-      totalTokens: number;
-      cost?: number;
-      rateLimitRemaining?: number;
-      rateLimitReset?: number;
-      model?: string;
-      sessionId?: string;
-      cacheRead?: number;
-      cacheWrite?: number;
-    }) => void,
+  onChatChunk: (
+    callback: (chunk: string, runId?: string) => void,
   ) => () => void;
-  onChatError: (callback: (error: string) => void) => () => void;
+  onChatReasoningChunk: (
+    callback: (chunk: string, runId?: string) => void,
+  ) => () => void;
+  onChatDone: (
+    callback: (sessionId?: string, runId?: string) => void,
+  ) => () => void;
+  onChatToolProgress: (
+    callback: (tool: string, runId?: string) => void,
+  ) => () => void;
+  onChatUsage: (
+    callback: (
+      usage: {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+        cost?: number;
+        rateLimitRemaining?: number;
+        rateLimitReset?: number;
+        model?: string;
+        sessionId?: string;
+        cacheRead?: number;
+        cacheWrite?: number;
+      },
+      runId?: string,
+    ) => void,
+  ) => () => void;
+  onChatError: (
+    callback: (error: string, runId?: string) => void,
+  ) => () => void;
   onChatApprovalRequest: (
     callback: (req: {
       id: string;
