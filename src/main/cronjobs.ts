@@ -2,7 +2,7 @@ import { existsSync } from "fs";
 import { readFile } from "fs/promises";
 import { join } from "path";
 import { execFile } from "child_process";
-import { HERMES_HOME, HERMES_PYTHON, hermesCliArgs } from "./installer";
+import { HERMES_HOME, HERMES_PYTHON, hermesCliArgs, requireLocalHermes } from "./installer";
 import { profileHome } from "./utils";
 import { isRemoteMode, getApiUrl, getRemoteAuthHeader } from "./hermes";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
@@ -143,6 +143,15 @@ function runCronCommand(
   args: string[],
   profile?: string,
 ): Promise<{ success: boolean; output: string; error?: string }> {
+  const localCheck = requireLocalHermes();
+  if (!localCheck.allowed) {
+    return Promise.resolve({
+      success: false,
+      output: "",
+      error: localCheck.error,
+    });
+  }
+
   const cliArgs = hermesCliArgs();
   if (profile && profile !== "default") {
     cliArgs.push("-p", profile);
