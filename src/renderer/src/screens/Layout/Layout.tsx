@@ -9,6 +9,7 @@ import Agents from "../Agents/Agents";
 import Settings from "../Settings/Settings";
 import Skills from "../Skills/Skills";
 import Memory from "../Memory/Memory";
+import Personalization from "../Personalization/Personalization";
 import Tools from "../Tools/Tools";
 import Gateway from "../Gateway/Gateway";
 import Office from "../Office/Office";
@@ -39,7 +40,7 @@ import {
   Kanban as KanbanIcon,
   Download,
 } from "../../assets/icons";
-import { FileText, Sparkles, BarChart3 } from "lucide-react";
+import { FileText, Sparkles, BarChart3, UserCog } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 import { loadAndApplyActiveSkin } from "../../utils/skin";
@@ -54,6 +55,7 @@ type View =
   | "providers"
   | "skills"
   | "memory"
+  | "personalization"
   | "tools"
   | "schedules"
   | "kanban"
@@ -84,6 +86,12 @@ const NAV_ITEMS: {
   { view: "providers", icon: KeyRound, labelKey: "navigation.providers" },
   { view: "skills", icon: Puzzle, labelKey: "navigation.skills" },
   { view: "memory", icon: Brain, labelKey: "navigation.memory" },
+  {
+    view: "personalization",
+    icon: UserCog,
+    labelKey: "navigation.personalization",
+    label: "Personalization",
+  },
   { view: "tools", icon: Wrench, labelKey: "navigation.tools" },
   { view: "schedules", icon: Timer, labelKey: "navigation.schedules" },
   { view: "gateway", icon: Signal, labelKey: "navigation.gateway" },
@@ -447,6 +455,19 @@ function Layout({
               <RemoteNotice feature="Memory" />
             ) : (
               <Memory profile={activeProfile} visible={view === "memory"} />
+            )}
+          </div>
+        )}
+
+        {visitedViews.has("personalization") && (
+          <div style={paneStyle("personalization")}>
+            {remoteMode ? (
+              <RemoteNotice feature="Personalization" />
+            ) : (
+              <Personalization
+                profile={activeProfile}
+                visible={view === "personalization"}
+              />
             )}
           </div>
         )}

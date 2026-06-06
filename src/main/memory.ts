@@ -5,7 +5,9 @@ import { profileHome, safeWriteFile } from "./utils";
 
 const ENTRY_DELIMITER = "\n§\n";
 const MEMORY_CHAR_LIMIT = 2200;
-const USER_CHAR_LIMIT = 1375;
+// Matches Hermes' own cap (config.yaml `memory_char_limit: 2200`, AGENTS.md).
+// Was 1375, which silently blocked saving a normal-length USER.md.
+const USER_CHAR_LIMIT = 2200;
 
 export interface MemoryEntry {
   index: number;
@@ -202,5 +204,24 @@ export function writeUserProfile(
     };
   }
   writeFileSafe(userPath(profile), content);
+  return { success: true };
+}
+
+/**
+ * Whole-file write of MEMORY.md (durable facts). Sibling of writeUserProfile;
+ * the entry-based add/update/remove helpers above stay for the Memory screen,
+ * while the Personalization screen edits the file as one document.
+ */
+export function writeMemory(
+  content: string,
+  profile?: string,
+): { success: boolean; error?: string } {
+  if (content.length > MEMORY_CHAR_LIMIT) {
+    return {
+      success: false,
+      error: `Exceeds limit (${content.length}/${MEMORY_CHAR_LIMIT} chars)`,
+    };
+  }
+  writeFileSafe(memoryPath(profile), content);
   return { success: true };
 }
