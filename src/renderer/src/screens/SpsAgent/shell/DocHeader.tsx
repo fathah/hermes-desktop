@@ -5,14 +5,17 @@ import type { ReactNode } from "react";
 import { Icon } from "../components/Icon";
 import { GetStarted } from "../components/GetStarted";
 import { useStore } from "../store";
+import { treeFind } from "../lib/tree";
 import { selectCurrentBlocks, selectPmeta } from "../store/selectors";
 
 export function DocHeader({ children }: { children?: ReactNode }) {
   const page = useStore((s) => s.page);
   const pmeta = useStore(selectPmeta);
   const blocks = useStore(selectCurrentBlocks);
+  const tree = useStore((s) => s.tree);
   const setPMeta = useStore((s) => s.setPMeta);
   const setCoverPick = useStore((s) => s.setCoverPick);
+  const setResearchOpen = useStore((s) => s.setResearchOpen);
 
   // Empty page = no title and no real content (0–1 empty blocks). Mirror
   // Notion's empty-state launcher here, above the editor body.
@@ -21,6 +24,14 @@ export function DocHeader({ children }: { children?: ReactNode }) {
     blocks.length === 0 ||
     (blocks.length === 1 && !(blocks[0].text || "").trim());
   const showGetStarted = titleEmpty && contentEmpty;
+
+  // Research folder with no saved papers yet → an on-ramp that teaches its own
+  // use (mirrors the GetStarted launcher, but specific to the Research surface).
+  const node = treeFind(tree, page);
+  const showResearchNudge =
+    (pmeta.title || "").trim() === "Research" &&
+    !!node &&
+    node.children.length === 0;
 
   return (
     <>
@@ -76,6 +87,21 @@ export function DocHeader({ children }: { children?: ReactNode }) {
             <span>Saved locally</span>
           </div>
           {showGetStarted && <GetStarted />}
+          {showResearchNudge && (
+            <div className="gs-row">
+              <div className="gs-label">No papers yet</div>
+              <div className="gs-chips">
+                <button
+                  className="gs-chip"
+                  onClick={() => setResearchOpen(true)}
+                  title="Search OpenAlex"
+                >
+                  <Icon name="search" size={15} />
+                  <span>Search for papers</span>
+                </button>
+              </div>
+            </div>
+          )}
           {children}
         </div>
       </div>
