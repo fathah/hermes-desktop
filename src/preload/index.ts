@@ -1255,6 +1255,22 @@ const hermesAPI = {
     ipcRenderer.invoke("sps-load", profile),
   spsSave: (ws: unknown, profile?: string): Promise<boolean> =>
     ipcRenderer.invoke("sps-save", ws, profile),
+  equityListBaskets: (profile?: string): Promise<unknown[]> =>
+    ipcRenderer.invoke("equity-list-baskets", profile),
+  equitySaveBasket: (basket: unknown, profile?: string): Promise<unknown> =>
+    ipcRenderer.invoke("equity-save-basket", basket, profile),
+  equityDeleteBasket: (basketId: string, profile?: string): Promise<boolean> =>
+    ipcRenderer.invoke("equity-delete-basket", basketId, profile),
+  equityListAlerts: (limit?: number, profile?: string): Promise<unknown[]> =>
+    ipcRenderer.invoke("equity-list-alerts", limit, profile),
+  equityMarkAlertRead: (alertId: string, profile?: string): Promise<boolean> =>
+    ipcRenderer.invoke("equity-mark-alert-read", alertId, profile),
+  onEquityAlert: (callback: (alert: unknown) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, alert: unknown): void =>
+      callback(alert);
+    ipcRenderer.on("equity-alert", handler);
+    return () => ipcRenderer.removeListener("equity-alert", handler);
+  },
   spsExportPage: (
     pageId: string,
     markdown: string,

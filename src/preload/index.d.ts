@@ -200,6 +200,30 @@ interface KanbanCreateTaskInput {
   maxRetries?: number;
 }
 
+interface EquityBasketHolding {
+  ticker: string;
+  exchange?: string;
+  qty?: number;
+  avg_cost?: number;
+}
+
+interface EquityBasket {
+  id: string;
+  name: string;
+  created_at: string;
+  holdings: EquityBasketHolding[];
+}
+
+interface EquityAlert {
+  id: string;
+  ts: string;
+  ticker: string | null;
+  trigger: string;
+  direction?: string;
+  message: string;
+  read?: boolean;
+}
+
 interface HermesAPI {
   // Installation
   checkInstall: () => Promise<InstallStatus>;
@@ -1054,6 +1078,18 @@ interface HermesAPI {
   ) => Promise<unknown>;
   spsLoad: (profile?: string) => Promise<unknown | null>;
   spsSave: (ws: unknown, profile?: string) => Promise<boolean>;
+  equityListBaskets: (profile?: string) => Promise<EquityBasket[]>;
+  equitySaveBasket: (
+    basket: Partial<EquityBasket>,
+    profile?: string,
+  ) => Promise<EquityBasket>;
+  equityDeleteBasket: (basketId: string, profile?: string) => Promise<boolean>;
+  equityListAlerts: (
+    limit?: number,
+    profile?: string,
+  ) => Promise<EquityAlert[]>;
+  equityMarkAlertRead: (alertId: string, profile?: string) => Promise<boolean>;
+  onEquityAlert: (callback: (alert: EquityAlert) => void) => () => void;
   spsExportPage: (
     pageId: string,
     markdown: string,

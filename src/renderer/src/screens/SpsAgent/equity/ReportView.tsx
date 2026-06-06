@@ -5,6 +5,7 @@
 import React from "react";
 import AgentMarkdown from "../../../components/AgentMarkdown";
 import type { EquityReport } from "./reportContract";
+import { dataConfidence } from "./dataConfidence";
 import { RiskRadar } from "./charts/RiskRadar";
 import { PeerCompBars } from "./charts/PeerCompBars";
 import { DcfSensitivity } from "./charts/DcfSensitivity";
@@ -55,6 +56,7 @@ export function ReportView({
   saving: boolean;
 }): React.JSX.Element {
   const hasRisk = Object.keys(report.riskMatrix).length > 0;
+  const confidence = dataConfidence(report);
   return (
     <div className="eq-report">
       <header className="eq-report-head">
@@ -76,6 +78,12 @@ export function ReportView({
             {report.rating}
           </span>
           <span className="eq-confidence">conf: {report.confidence}</span>
+          <span
+            className={`eq-data-conf eq-data-conf-${confidence.level}`}
+            title={confidence.reason}
+          >
+            data: {confidence.level}
+          </span>
           <button
             className="eq-save-btn"
             onClick={onSaveToVault}
