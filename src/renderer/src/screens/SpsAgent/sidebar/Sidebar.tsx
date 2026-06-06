@@ -64,6 +64,7 @@ export function Sidebar() {
   const selectPage = useStore((s) => s.selectPage);
   const openJournal = useStore((s) => s.openJournal);
   const startNewChat = useStore((s) => s.startNewChat);
+  const setResearchOpen = useStore((s) => s.setResearchOpen);
   // Selecting a page always returns to the document surface.
   const selectDoc = (id: string): void => {
     selectPage(id);
@@ -165,6 +166,10 @@ export function Sidebar() {
         >
           <Icon name="table" size={17} />
           <span className="nav-label">Equity</span>
+        </div>
+        <div className="nav-item" onClick={() => setResearchOpen(true)}>
+          <Icon name="doc" size={17} />
+          <span className="nav-label">Research</span>
         </div>
         <div
           className={`nav-item ${surface === "journal" ? "active" : ""}`}
