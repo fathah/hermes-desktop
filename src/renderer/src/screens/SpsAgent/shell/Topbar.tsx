@@ -11,7 +11,6 @@ export function Topbar() {
   const panelOpen = useStore((s) => s.panelOpen);
   const rightTab = useStore((s) => s.rightTab);
   const openPanelTab = useStore((s) => s.openPanelTab);
-  const setPanelOpen = useStore((s) => s.setPanelOpen);
   const page = useStore((s) => s.page);
   const deletePage = useStore((s) => s.deletePage);
   const newSubPage = useStore((s) => s.newSubPage);
@@ -32,22 +31,14 @@ export function Topbar() {
       <Breadcrumbs />
       <button
         className={`tb-btn ${panelOpen && rightTab === "comments" ? "on" : ""}`}
-        onClick={() =>
-          panelOpen && rightTab === "comments"
-            ? setPanelOpen(false)
-            : openPanelTab("comments")
-        }
+        onClick={() => openPanelTab("comments")}
         title="Comments"
       >
         <Icon name="comment" size={16} />
       </button>
       <button
         className={`tb-btn ${panelOpen && rightTab === "assistant" ? "on" : ""}`}
-        onClick={() =>
-          panelOpen && rightTab === "assistant"
-            ? setPanelOpen(false)
-            : openPanelTab("assistant")
-        }
+        onClick={() => openPanelTab("assistant")}
         title="Assistant (⌘J)"
       >
         <Icon name="sparkle" size={16} />{" "}

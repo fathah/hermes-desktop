@@ -1,13 +1,37 @@
 // ui.ts — transient UI state: panel, palette, modals, popovers, toast, focus.
 // Ported from the UI useState calls in app.jsx.
 import type { StateCreator } from "zustand";
-import type { Store, UiSlice } from "../storeTypes";
+import type { Store, UiSlice, RightTab } from "../storeTypes";
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
+// The active right-panel tab is the one bit of "transient" UI worth persisting:
+// users expect Outline/Comments/Info to still be selected after a reload, not to
+// silently snap back to Assistant. panelOpen stays transient (defaults open).
+const RIGHT_TAB_KEY = "sps-agent-righttab-v1";
+const RIGHT_TABS: RightTab[] = ["assistant", "outline", "comments", "info"];
+
+function loadRightTab(): RightTab {
+  try {
+    const v = localStorage.getItem(RIGHT_TAB_KEY) as RightTab | null;
+    if (v && RIGHT_TABS.includes(v)) return v;
+  } catch {
+    /* localStorage unavailable — fall through to default */
+  }
+  return "assistant";
+}
+
+function saveRightTab(t: RightTab): void {
+  try {
+    localStorage.setItem(RIGHT_TAB_KEY, t);
+  } catch {
+    /* non-fatal: persistence is a nicety, not a correctness requirement */
+  }
+}
+
 export const createUiSlice: StateCreator<Store, [], [], UiSlice> = (set) => ({
   panelOpen: true,
-  rightTab: "assistant",
+  rightTab: loadRightTab(),
   surface: "doc",
   paletteOpen: false,
   templatesOpen: null,
@@ -24,8 +48,16 @@ export const createUiSlice: StateCreator<Store, [], [], UiSlice> = (set) => ({
   chatNonce: 0,
 
   setPanelOpen: (v) => set({ panelOpen: v }),
-  setRightTab: (t) => set({ rightTab: t }),
-  openPanelTab: (t) => set({ panelOpen: true, rightTab: t }),
+  setRightTab: (t) => {
+    saveRightTab(t);
+    set({ rightTab: t });
+  },
+  // Always opens the panel AND selects the tab — never closes. Closing the panel
+  // is the dedicated X button's / ⌘J's job, so the tab buttons stay predictable.
+  openPanelTab: (t) => {
+    saveRightTab(t);
+    set({ panelOpen: true, rightTab: t });
+  },
   setSurface: (s) => set({ surface: s }),
   setPaletteOpen: (v) => set({ paletteOpen: v }),
   setTemplatesOpen: (v) => set({ templatesOpen: v }),

@@ -14,7 +14,7 @@ import { InfoPane } from "./InfoPane";
 
 export function RightPanel() {
   const tab = useStore((s) => s.rightTab);
-  const setTab = useStore((s) => s.setRightTab);
+  const setTab = useStore((s) => s.openPanelTab);
   const setPanelOpen = useStore((s) => s.setPanelOpen);
   const blocks = useStore(selectCurrentBlocks);
   // select raw state, derive per-page comments via useMemo (a selector that
