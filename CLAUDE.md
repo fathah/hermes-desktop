@@ -12,7 +12,7 @@ local on `127.0.0.1:8642` or remote/SSH), and gives a GUI for chat, providers, p
 skills, tools, scheduling, and messaging gateways.
 
 The current product surface is **SPS Agent** — a Notion-style workspace (docs + tasks + AI
-co-author) that is *the* app; the Hermes admin screens (Providers/Gateway/Settings/…) open on demand
+co-author) that is _the_ app; the Hermes admin screens (Providers/Gateway/Settings/…) open on demand
 as an overlay (gear button or ⌘,).
 
 ## Commands
@@ -47,10 +47,12 @@ Three processes (electron-vite builds each separately — `electron.vite.config.
 - **`src/shared/`** — types/helpers imported by both main and renderer (attachments, usage, i18n, …).
 
 ### Connection modes
+
 Hermes runs **local** (managed subprocess), **remote** (URL + API key to a remote Hermes server), or
 **ssh** (tunnel to a remote box). `getConnectionConfig()` drives this; the renderer adapts screens to it.
 
 ### SPS Agent storage substrate (read `docs/STORAGE.md` before touching it)
+
 The one rule: **markdown on disk is the only source of truth; SQLite is a rebuildable index. Writes go
 file-first.** Per-profile layout under `<profileHome>/sps-agent/`: `workspace.json` (the blob),
 `vault/<pageId>.md` (one page per file, frontmatter + blocks), `vault/<dbFolder>/<rowId>.md`
@@ -62,6 +64,7 @@ lossy cutover. Markdown↔block serializers live in `screens/SpsAgent/editor/` (
 lossless-fallback `<!-- sps:… -->` comments) and have golden byte-for-byte tests.
 
 ### The SPS design system
+
 The SPS look is **not** re-derived in Tailwind — the prototype stylesheets are carried over verbatim
 into `screens/SpsAgent/styles/` and confined to a `.sps-scope` container by `scripts/scope-sps-css.mjs`
 (so its global `:root`/`body`/`*` rules don't leak into the Hermes renderer). Theme/layout switches are
@@ -72,7 +75,7 @@ pure attribute swaps on the scope element. The standalone `sps-agent/` (runnable
 
 - **Preload API parity is enforced.** Every method must appear in BOTH `src/preload/index.ts` and
   `src/preload/index.d.ts`, or `tests/preload-api-surface.test.ts` fails.
-- **`better-sqlite3` is compiled for Electron's node ABI, not vitest's.** Any code that *opens* the
+- **`better-sqlite3` is compiled for Electron's node ABI, not vitest's.** Any code that _opens_ the
   index cannot run under vitest. Split: pure logic + IPC-mocked hooks/components → vitest (jsdom);
   anything that opens the index → `npm run verify:note-index` (runs under `ELECTRON_RUN_AS_NODE=1`);
   renderer UI → the Playwright-Electron smoke harness `scripts/sps-smoke.mjs`.
@@ -85,6 +88,11 @@ pure attribute swaps on the scope element. The standalone `sps-agent/` (runnable
 - **Keep PRs small and single-purpose** (CONTRIBUTING.md); don't bundle formatting sweeps with logic.
 - Husky `pre-commit`/`pre-push` only run lint+tests on `release`/`release/*` branches — feature
   branches are NOT gated by the hook, so run checks manually.
+- **Each git worktree needs its OWN `node_modules` — run `bash scripts/setup-worktree.sh` (or
+  `npm ci`) after creating one. Do NOT symlink `node_modules` to another tree:** native modules
+  (`better-sqlite3`) plus a concurrent session's `npm install` in the other tree will corrupt your
+  build mid-flight and surface as phantom "cannot find module" typecheck errors in files you never
+  touched.
 
 ## Related directories
 
