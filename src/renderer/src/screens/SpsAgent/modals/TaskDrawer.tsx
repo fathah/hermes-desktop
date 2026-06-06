@@ -18,12 +18,6 @@ export function TaskDrawer({ task, onClose }: Props) {
             <Icon name="x" size={17} />
           </button>
           <span style={{ flex: 1 }}></span>
-          <button className="tb-btn">
-            <Icon name="share" size={16} />
-          </button>
-          <button className="tb-btn">
-            <Icon name="dots" size={16} />
-          </button>
         </div>
         <div className="drawer-body scroll">
           <h1 className="drawer-title">{task.title}</h1>

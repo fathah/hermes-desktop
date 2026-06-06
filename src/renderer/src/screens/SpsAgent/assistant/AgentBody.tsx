@@ -25,6 +25,7 @@ export function AgentBody() {
   const onSend = useStore((s) => s.runAgent);
   const onApplyDb = useStore((s) => s.applyDbAction);
   const onDismissDb = useStore((s) => s.dismissDbAction);
+  const flash = useStore((s) => s.flash);
 
   const [val, setVal] = useState("");
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -38,6 +39,11 @@ export function AgentBody() {
     const next = !grounded;
     setGrounded(next);
     setGroundInWorkspace(next);
+    flash(
+      next
+        ? "Grounding on — answers use your workspace"
+        : "Grounding off — answers ignore your workspace",
+    );
   };
 
   useEffect(() => {
@@ -55,7 +61,7 @@ export function AgentBody() {
   const grow = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const ta = e.target;
     ta.style.height = "auto";
-    ta.style.height = Math.min(ta.scrollHeight, 140) + "px";
+    ta.style.height = Math.min(ta.scrollHeight, 200) + "px";
     setVal(ta.value);
   };
   // Voice dictation (M3 #4): append recognized speech to the composer.
@@ -245,12 +251,6 @@ export function AgentBody() {
             }}
           />
           <div className="composer-row">
-            <span className="mini" title="Reference a page">
-              <Icon name="doc" size={16} />
-            </span>
-            <span className="mini" title="Mention">
-              <Icon name="comment" size={16} />
-            </span>
             {dictation.supported && (
               <button
                 className={`mini${dictation.listening ? " on" : ""}`}

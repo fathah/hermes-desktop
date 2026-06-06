@@ -288,6 +288,21 @@
   font-size: 11px;
   color: var(--tx-4);
 }
+.sps-scope .nav-add {
+  opacity: 0;
+  flex: none;
+  color: var(--tx-3);
+  border-radius: 4px;
+  padding: 2px;
+  display: inline-flex;
+}
+.sps-scope .nav-item:hover .nav-add {
+  opacity: 1;
+}
+.sps-scope .nav-add:hover {
+  background: var(--hair);
+  color: var(--tx-1);
+}
 
 .sps-scope .sec {
   display: flex;
@@ -1576,7 +1591,8 @@
   font-size: 14px;
   color: var(--tx-1);
   line-height: 1.5;
-  max-height: 140px;
+  min-height: 60px;
+  max-height: 200px;
 }
 .sps-scope .composer textarea::placeholder {
   color: var(--tx-3);

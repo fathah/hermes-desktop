@@ -61,7 +61,9 @@ export function ChatSurface() {
         setMessages([]);
         setActiveChatSession(null);
       }}
-      onOpenDiagnose={() => {}}
+      onOpenDiagnose={() =>
+        window.dispatchEvent(new CustomEvent("hermes:open-settings"))
+      }
     />
   );
 }
