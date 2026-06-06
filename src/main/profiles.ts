@@ -21,7 +21,6 @@ import { getConnectionConfig } from "./config";
 import {
   sshCreateProfile,
   sshDeleteProfile,
-  sshSetActiveProfile,
   sshListProfiles,
 } from "./ssh-remote";
 
@@ -243,7 +242,7 @@ export async function createProfile(
     try {
       const conn = getConnectionConfig();
       if (conn.mode === "ssh" && conn.ssh.host) {
-        const ok = await sshCreateProfile(conn.ssh, name);
+        const ok = await sshCreateProfile(conn.ssh, name, clone);
         if (ok) return { success: true };
         return {
           success: false,

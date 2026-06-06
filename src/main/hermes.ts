@@ -448,7 +448,7 @@ function sendMessageViaCli(
 ): ChatHandle {
   if (isRemoteMode()) {
     cb.onError("Local Hermes CLI operations are disabled in SSH/Remote mode.");
-    return { stop: () => {} } as ChatHandle;
+    return { stop: () => {}, abort: () => {} } as ChatHandle;
   }
 
   const mc = getModelConfig(profile);
