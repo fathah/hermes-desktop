@@ -13,6 +13,7 @@ import {
 import { join, extname } from "path";
 import { pathToFileURL } from "url";
 import { readdir, readFile } from "fs/promises";
+import { existsSync } from "fs";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import type { AppUpdater } from "electron-updater";
 import icon from "../../resources/icon.png?asset";
@@ -27,8 +28,48 @@ import {
   type PageContext as SpsPageContext,
 } from "./sps-agent";
 import {
+  oaSearchWorks,
+  oaGetWork,
+  getResearchConfig,
+  getPublicResearchConfig,
+  setResearchConfig,
+} from "./openalex";
+import type { SearchOpts } from "../shared/openalex/core";
+
+/**
+ * Register the bundled OpenAlex MCP server in the active profile's config.yaml
+ * so the Hermes agent can call it from chat ("find me papers on X"). Idempotent
+ * and non-clobbering: if an `openalex` entry already exists (even one the user
+ * disabled) it is left alone. No-op when the bundle is missing (build:mcp hasn't
+ * run yet). The gateway picks the entry up on its next restart.
+ */
+function ensureResearchMcpRegistered(profile?: string): {
+  registered: boolean;
+  alreadyPresent: boolean;
+} {
+  const name = "openalex";
+  if (hasMcpServer(name, profile)) {
+    return { registered: true, alreadyPresent: true };
+  }
+  const serverPath = openAlexMcpServerPath();
+  if (!existsSync(serverPath)) {
+    return { registered: false, alreadyPresent: false };
+  }
+  const { mailto, apiKey } = getResearchConfig();
+  const env: Record<string, string> = { ELECTRON_RUN_AS_NODE: "1" };
+  if (mailto) env.HERMES_OPENALEX_MAILTO = mailto;
+  if (apiKey) env.HERMES_OPENALEX_API_KEY = apiKey;
+  writeMcpServerEntry(
+    name,
+    { command: process.execPath, args: [serverPath], env, enabled: true },
+    profile,
+  );
+  return { registered: true, alreadyPresent: false };
+}
+import {
   exportPageMarkdownTo,
   exportRowMarkdownTo,
+  readRowMarkdownFrom,
   deletePageIn,
   deleteRowIn,
   deleteDbFolderIn,
@@ -66,6 +107,9 @@ import {
   runHermesImport,
   runHermesDump,
   listMcpServers,
+  hasMcpServer,
+  writeMcpServerEntry,
+  openAlexMcpServerPath,
   discoverMemoryProviders,
   readLogs,
   InstallProgress,
@@ -2201,6 +2245,31 @@ function setupIPC(): void {
     spsSave(ws, profile),
   );
 
+  // Research (OpenAlex): scholarly search/fetch demystified into clean DTOs.
+  // The dense JSON is normalized in the main process (src/main/openalex.ts);
+  // the renderer only ever sees small WorkSummary/WorkDetail objects.
+  ipcMain.handle(
+    "sps-research-search-works",
+    (_event, q: string, opts?: SearchOpts, profile?: string) =>
+      oaSearchWorks(q, opts ?? {}, profile),
+  );
+  ipcMain.handle(
+    "sps-research-get-work",
+    (_event, id: string, profile?: string) => oaGetWork(id, profile),
+  );
+  ipcMain.handle("sps-research-get-config", () => getPublicResearchConfig());
+  ipcMain.handle(
+    "sps-research-set-config",
+    (_event, mailto: string, apiKey?: string) => {
+      setResearchConfig(mailto, apiKey);
+      return getPublicResearchConfig();
+    },
+  );
+  // Make OpenAlex callable by the Hermes agent in chat (bundled MCP server).
+  ipcMain.handle("sps-research-ensure-agent-tool", (_event, profile?: string) =>
+    ensureResearchMcpRegistered(profile),
+  );
+
   // Additive markdown mirror (S2b): write a page's markdown into the SPS vault
   // so the substrate + note-index materialize. The JSON blob stays authoritative.
   ipcMain.handle(
@@ -2225,6 +2294,14 @@ function setupIPC(): void {
       const home = profileHome(profile || getActiveProfileNameSync());
       const dir = join(home, "sps-agent", "vault");
       return exportRowMarkdownTo(dir, dbFolder, rowId, markdown);
+    },
+  );
+  ipcMain.handle(
+    "sps-read-row",
+    (_event, dbFolder: string, rowId: string, profile?: string) => {
+      const home = profileHome(profile || getActiveProfileNameSync());
+      const dir = join(home, "sps-agent", "vault");
+      return readRowMarkdownFrom(dir, dbFolder, rowId);
     },
   );
   ipcMain.handle(

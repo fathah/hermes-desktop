@@ -205,6 +205,8 @@ const checks = await win.evaluate(() => {
     tiers: document.querySelectorAll(".eq-tier").length,
     dataGaps: document.querySelectorAll(".eq-gaps li").length,
     technical: !!q(".eq-technical"),
+    activeBar: !!q(".eq-active-bar"),
+    tagEditor: !!q(".eq-tags"),
     sector: !!q(".eq-sector"),
     pnf: !![...document.querySelectorAll(".eq-technical svg")].find(
       (s) => s.getAttribute("aria-label") === "Point and Figure chart",
@@ -227,7 +229,9 @@ const ok =
   checks.dataGaps >= 1 &&
   checks.technical &&
   checks.sector &&
-  checks.pnf;
+  checks.pnf &&
+  checks.activeBar &&
+  checks.tagEditor;
 
 console.log(
   ok ? "EQUITY_SMOKE_PASS" : "EQUITY_SMOKE_FAIL",

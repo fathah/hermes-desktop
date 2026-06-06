@@ -29,9 +29,38 @@ import {
 } from "../../lib/ocrSchedule";
 import type { Block } from "../../types";
 import type { Store, WorkspaceSlice } from "../storeTypes";
+import type { WorkDetail } from "../../../../../../shared/openalex/core";
 
 /** Title of the root folder that ingested documents are filed under. */
 const SOURCES_TITLE = "Sources";
+/** Title of the folder (under Sources) that saved OpenAlex papers are filed under. */
+const RESEARCH_TITLE = "Research";
+
+/** First `n` sentences of `text`, or a trimmed clamp when it has no punctuation. */
+function firstSentences(text: string, n: number): string {
+  const clean = text.trim();
+  if (!clean) return "";
+  const sentences = clean.match(/[^.!?]+[.!?]+/g);
+  if (!sentences) return clean.length > 280 ? `${clean.slice(0, 277)}…` : clean;
+  return sentences.slice(0, n).join(" ").trim();
+}
+
+/** Failure sentinels the gateway-backed assistant returns when it can't help. */
+const ASSISTANT_FAILURE = [
+  "couldn't reach the assistant",
+  "couldn't structure",
+];
+
+/** Coerce an spsAssistant result into a TL;DR string, or "" if unusable. */
+function tldrFromAssistant(res: unknown): string {
+  if (!res || typeof res !== "object") return "";
+  const reply = (res as { reply?: unknown }).reply;
+  if (!Array.isArray(reply)) return "";
+  const joined = reply.map(String).join(" ").trim();
+  const low = joined.toLowerCase();
+  if (!joined || ASSISTANT_FAILURE.some((s) => low.includes(s))) return "";
+  return joined;
+}
 
 /** The `source` folders of folder-backed database blocks in a block list. */
 function dbSources(blocks: Block[]): Set<string> {
@@ -317,6 +346,95 @@ export const createWorkspaceSlice: StateCreator<
       ],
       null,
     );
+  },
+
+  ensureResearchFolder: () => {
+    // A "Research" folder nested under "Sources", so saved papers live alongside
+    // imported PDFs and are equally linkable/groundable. Identified by title
+    // among the Sources folder's children; reused if present.
+    const sources = get().ensureSourcesFolder();
+    const { meta, tree } = get();
+    const sourcesNode = treeFind(tree, sources);
+    const existing = sourcesNode?.children.find(
+      (n) => meta[n.id]?.title === RESEARCH_TITLE,
+    );
+    if (existing) return existing.id;
+    return get().makePage(
+      { icon: "📚", title: RESEARCH_TITLE },
+      [
+        blk(
+          "p",
+          "Scholarly papers you saved from OpenAlex live here — each one a plain-language summary you can read, link, and ground the co-author on.",
+        ),
+      ],
+      sources,
+    );
+  },
+
+  importResearchWork: async (work: WorkDetail) => {
+    // Plain-language TL;DR via the gateway co-author; degrade to the abstract's
+    // first sentences if the gateway is down so the feature never hard-fails.
+    let tldr = firstSentences(work.abstract, 2);
+    const api = window.hermesAPI;
+    if (api?.spsAssistant && work.abstract) {
+      try {
+        const res = await api.spsAssistant(
+          `Summarize this paper in 2 plain-language sentences for a non-specialist. ` +
+            `Title: ${work.title}\n\nAbstract: ${work.abstract}`,
+          { blocks: [], pageTitle: work.title },
+        );
+        const candidate = tldrFromAssistant(res);
+        if (candidate) tldr = candidate;
+      } catch {
+        /* keep the abstract-derived fallback */
+      }
+    }
+
+    const glance = [
+      `${work.citedByCount} citation${work.citedByCount === 1 ? "" : "s"}`,
+      work.year ? String(work.year) : null,
+      work.venue || null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+
+    const blocks: Block[] = [
+      blk("callout", tldr || "No summary available.", { emoji: "🧭" }),
+      blk("h3", "Abstract"),
+      blk("p", work.abstract || "No abstract available."),
+      blk("h3", "At a glance"),
+      blk("p", glance),
+    ];
+    if (work.oaUrl) {
+      blocks.push(
+        blk("bookmark", "", {
+          bm: {
+            url: work.oaUrl,
+            title: "Open-access PDF",
+            desc: work.venue || "",
+          },
+        }),
+      );
+    }
+    if (work.topics.length) {
+      const tags = work.topics
+        .map((t) => `#${t.trim().replace(/\s+/g, "-")}`)
+        .join(" ");
+      blocks.push(blk("p", tags));
+    }
+
+    const id = get().makePage(
+      {
+        icon: "📄",
+        title: work.title,
+        source: `openalex:${work.id}`,
+        ingestedAt: Date.now(),
+      },
+      blocks,
+      get().ensureResearchFolder(),
+    );
+    set({ page: id });
+    get().flash(`Saved “${work.title}” to Research`);
   },
 
   newSubPage: (parentId) => {
