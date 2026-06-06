@@ -8,6 +8,7 @@ import {
   HERMES_REPO,
   hermesCliArgs,
   getEnhancedPath,
+  requireLocalHermes,
 } from "./installer";
 import { profileHome } from "./utils";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
@@ -239,6 +240,11 @@ export function installSkill(
   identifier: string,
   profile?: string,
 ): { success: boolean; error?: string } {
+  const localCheck = requireLocalHermes();
+  if (!localCheck.allowed) {
+    return { success: false, error: localCheck.error };
+  }
+
   try {
     const args = hermesCliArgs(["skills", "install", identifier, "--yes"]);
     if (profile && profile !== "default") {
@@ -269,6 +275,11 @@ export function uninstallSkill(
   name: string,
   profile?: string,
 ): { success: boolean; error?: string } {
+  const localCheck = requireLocalHermes();
+  if (!localCheck.allowed) {
+    return { success: false, error: localCheck.error };
+  }
+
   try {
     const args = hermesCliArgs(["skills", "uninstall", name]);
     if (profile && profile !== "default") {

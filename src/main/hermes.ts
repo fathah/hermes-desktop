@@ -446,6 +446,11 @@ function sendMessageViaCli(
   profile?: string,
   resumeSessionId?: string,
 ): ChatHandle {
+  if (isRemoteMode()) {
+    cb.onError("Local Hermes CLI operations are disabled in SSH/Remote mode.");
+    return { stop: () => {} } as ChatHandle;
+  }
+
   const mc = getModelConfig(profile);
   const profileEnv = readEnv(profile);
 
@@ -719,6 +724,9 @@ let gatewayProcess: ChildProcess | null = null;
 let gatewayStartedByApp = false;
 
 export function startGateway(profile?: string): boolean {
+  if (isRemoteMode()) {
+    return false; // Gateway is managed on the remote server in SSH/Remote mode
+  }
   ensureInitialized();
   if (isGatewayRunning()) return false;
 

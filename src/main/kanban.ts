@@ -5,6 +5,7 @@ import {
   HERMES_PYTHON,
   hermesCliArgs,
   getEnhancedPath,
+  requireLocalHermes,
 } from "./installer";
 import { isRemoteMode } from "./hermes";
 
@@ -99,6 +100,14 @@ function runKanban(
   args: string[],
   opts: RunOpts = {},
 ): Promise<KanbanResult<unknown>> {
+  const localCheck = requireLocalHermes();
+  if (!localCheck.allowed) {
+    return Promise.resolve({
+      success: false,
+      error: localCheck.error,
+    });
+  }
+
   const cliArgs = hermesCliArgs();
   if (opts.profile && opts.profile !== "default") {
     cliArgs.push("-p", opts.profile);

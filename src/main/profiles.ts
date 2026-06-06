@@ -8,6 +8,7 @@ import {
   HERMES_PYTHON,
   hermesCliArgs,
   getEnhancedPath,
+  requireLocalHermes,
 } from "./installer";
 import {
   isValidNamedProfileName,
@@ -204,6 +205,11 @@ export function createProfile(
     return { success: false, error: PROFILE_NAME_ERROR };
   }
 
+  const localCheck = requireLocalHermes();
+  if (!localCheck.allowed) {
+    return { success: false, error: localCheck.error };
+  }
+
   try {
     const args = clone
       ? ["profile", "create", name, "--clone"]
@@ -238,6 +244,11 @@ export function deleteProfile(name: string): {
     return { success: false, error: PROFILE_NAME_ERROR };
   }
 
+  const localCheck = requireLocalHermes();
+  if (!localCheck.allowed) {
+    return { success: false, error: localCheck.error };
+  }
+
   try {
     execFileSync(
       HERMES_PYTHON,
@@ -266,6 +277,11 @@ export function deleteProfile(name: string): {
 export function setActiveProfile(name: string): void {
   if (!isValidProfileName(name)) {
     throw new Error(PROFILE_NAME_ERROR);
+  }
+
+  const localCheck = requireLocalHermes();
+  if (!localCheck.allowed) {
+    throw new Error(localCheck.error);
   }
 
   try {

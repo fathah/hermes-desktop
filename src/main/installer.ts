@@ -15,6 +15,7 @@ import { profileHome, stripAnsi } from "./utils";
 import { setupAskpass, AskpassHandle } from "./askpass";
 import { precacheSudoCredentials } from "./sudoCreds";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
+import { isRemoteMode } from "./hermes";
 
 const IS_WINDOWS = process.platform === "win32";
 
@@ -31,6 +32,16 @@ export const HERMES_SCRIPT = IS_WINDOWS
 export const HERMES_ENV_FILE = join(HERMES_HOME, ".env");
 export const HERMES_CONFIG_FILE = join(HERMES_HOME, "config.yaml");
 export const HERMES_AUTH_FILE = join(HERMES_HOME, "auth.json");
+
+export function requireLocalHermes(): { allowed: false; error: string } | { allowed: true } {
+  if (isRemoteMode()) {
+    return { allowed: false, error: "Local Hermes operations are disabled in SSH/Remote mode. Manage the agent on the remote server." };
+  }
+  if (!existsSync(HERMES_PYTHON) || !existsSync(HERMES_SCRIPT)) {
+    return { allowed: false, error: "Hermes is not installed locally." };
+  }
+  return { allowed: true };
+}
 
 export function hermesCliArgs(args: string[] = []): string[] {
   if (process.platform === "win32") {
@@ -299,8 +310,9 @@ export function clearVersionCache(): void {
 }
 
 export function runHermesDoctor(): string {
-  if (!existsSync(HERMES_PYTHON) || !existsSync(HERMES_SCRIPT)) {
-    return "Hermes is not installed.";
+  const localCheck = requireLocalHermes();
+  if (!localCheck.allowed) {
+    return localCheck.error;
   }
   try {
     const output = execFileSync(HERMES_PYTHON, hermesCliArgs(["doctor"]), {
@@ -337,8 +349,9 @@ export function checkOpenClawExists(): { found: boolean; path: string | null } {
 export async function runClawMigrate(
   onProgress: (progress: InstallProgress) => void,
 ): Promise<void> {
-  if (!existsSync(HERMES_PYTHON) || !existsSync(HERMES_SCRIPT)) {
-    throw new Error("Hermes is not installed.");
+  const localCheck = requireLocalHermes();
+  if (!localCheck.allowed) {
+    throw new Error(localCheck.error);
   }
 
   const openclaw = checkOpenClawExists();
@@ -402,8 +415,9 @@ export async function runClawMigrate(
 export async function runHermesUpdate(
   onProgress: (progress: InstallProgress) => void,
 ): Promise<void> {
-  if (!existsSync(HERMES_PYTHON) || !existsSync(HERMES_SCRIPT)) {
-    throw new Error("Hermes is not installed. Please install it first.");
+  const localCheck = requireLocalHermes();
+  if (!localCheck.allowed) {
+    throw new Error(localCheck.error);
   }
 
   let log = "";
