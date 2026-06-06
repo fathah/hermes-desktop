@@ -272,6 +272,12 @@ export const createAssistantSlice: StateCreator<
     // `/work` (Milestone 1C): execute the plan over the STREAMING, RESUMABLE Hermes
     // session path. Captures its conversation id so live tokens land in the right
     // tab even if the user switches tabs mid-run.
+    //
+    // NOTE: no trust chip here (unlike runAgent). This path streams the full
+    // tool-using agent via sendMessage, where grounding (memory/USER.md/rules) is
+    // applied server-side and the desktop never receives a notes/memory/rules
+    // count. A chip would have to fabricate one — so provenance is surfaced as the
+    // visible tool stream (onChatToolProgress) instead. Don't bolt on a fake count.
     runWork: async () => {
       const convId = get().activeConvId;
       const s = get();
