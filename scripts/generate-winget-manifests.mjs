@@ -12,7 +12,6 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 export function generateWingetManifests({
   rootDir,
   version,
@@ -43,7 +42,6 @@ export function generateWingetManifests({
     RELEASE_NOTES_URL: releaseNotesUrl,
   };
 
-  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
   const fillTemplate = (str) =>
     Object.entries(replacements).reduce(
       (acc, [key, value]) => acc.replaceAll(`{{${key}}}`, value),

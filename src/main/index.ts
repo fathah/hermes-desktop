@@ -7,9 +7,13 @@ import {
   Notification,
   dialog,
   clipboard,
+  protocol,
+  net,
 } from "electron";
 import { join, extname } from "path";
+import { pathToFileURL } from "url";
 import { readdir, readFile } from "fs/promises";
+import { existsSync } from "fs";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import type { AppUpdater } from "electron-updater";
 import icon from "../../resources/icon.png?asset";
@@ -24,19 +28,74 @@ import {
   type PageContext as SpsPageContext,
 } from "./sps-agent";
 import { spsGetWorkSession, spsSetWorkSession } from "./sps-work-sessions";
+import { listBaskets, saveBasket, deleteBasket } from "./equity-baskets";
+import {
+  listAlerts,
+  markAlertRead,
+  startEquityAlertWatcher,
+} from "./equity-alerts";
+import {
+  oaSearchWorks,
+  oaGetWork,
+  getResearchConfig,
+  getPublicResearchConfig,
+  setResearchConfig,
+} from "./openalex";
+import type { SearchOpts } from "../shared/openalex/core";
+
+/**
+ * Register the bundled OpenAlex MCP server in the active profile's config.yaml
+ * so the Hermes agent can call it from chat ("find me papers on X"). Idempotent
+ * and non-clobbering: if an `openalex` entry already exists (even one the user
+ * disabled) it is left alone. No-op when the bundle is missing (build:mcp hasn't
+ * run yet). The gateway picks the entry up on its next restart.
+ */
+function ensureResearchMcpRegistered(profile?: string): {
+  registered: boolean;
+  alreadyPresent: boolean;
+} {
+  const name = "openalex";
+  if (hasMcpServer(name, profile)) {
+    return { registered: true, alreadyPresent: true };
+  }
+  const serverPath = openAlexMcpServerPath();
+  if (!existsSync(serverPath)) {
+    return { registered: false, alreadyPresent: false };
+  }
+  const { mailto, apiKey } = getResearchConfig();
+  const env: Record<string, string> = { ELECTRON_RUN_AS_NODE: "1" };
+  if (mailto) env.HERMES_OPENALEX_MAILTO = mailto;
+  if (apiKey) env.HERMES_OPENALEX_API_KEY = apiKey;
+  writeMcpServerEntry(
+    name,
+    { command: process.execPath, args: [serverPath], env, enabled: true },
+    profile,
+  );
+  return { registered: true, alreadyPresent: false };
+}
 import {
   exportPageMarkdownTo,
   exportRowMarkdownTo,
+  readRowMarkdownFrom,
   deletePageIn,
   deleteRowIn,
   deleteDbFolderIn,
   readVaultPages,
   readVaultManifest,
   writeVaultManifest,
+  writeAssetTo,
+  readAssetFrom,
 } from "./sps-vault";
 import { profileHome, getActiveProfileNameSync } from "./utils";
+import {
+  writeAsset,
+  assetExists,
+  resolveAssetPath,
+  gcAssets,
+} from "./sps-assets";
 import { discoverProviderModels } from "./model-discovery";
 import { readMediaAsDataUrl, saveMedia, mediaFileExists } from "./media";
+import { getVoiceStatus, transcribeAudio, speakText } from "./voice";
 import {
   checkInstallStatus,
   verifyInstall,
@@ -48,12 +107,16 @@ import {
   clearVersionCache,
   runHermesDoctor,
   runHermesUpdate,
+  checkHermesUpdate,
   checkOpenClawExists,
   runClawMigrate,
   runHermesBackup,
   runHermesImport,
   runHermesDump,
   listMcpServers,
+  hasMcpServer,
+  writeMcpServerEntry,
+  openAlexMcpServerPath,
   discoverMemoryProviders,
   readLogs,
   InstallProgress,
@@ -136,59 +199,11 @@ import {
   deleteSession,
 } from "./sessions";
 import {
-  acceptAgentWorkspaceProposal,
-  acceptAgentWorkspaceProposalHunk,
-  createAgentWorkspaceProposal,
-  createWorkspacePage,
-  getWorkspaceTree,
-  getWorkspaceMetadata,
-  duplicateWorkspacePage,
-  favoriteWorkspacePage,
-  listAgentWorkspaceProposals,
-  listWorkspaceHistory,
-  moveWorkspacePage,
-  recordWorkspaceVisit,
-  readWorkspaceFile,
-  rejectAgentWorkspaceProposal,
-  rejectAgentWorkspaceProposalHunk,
-  renameWorkspacePage,
-  restoreWorkspacePage,
-  restoreWorkspaceVersion,
-  trashWorkspacePage,
-  updateWorkspacePageOrder,
-  deleteWorkspaceFile,
-  exportWorkspaceMarkdownBundle,
-  searchWorkspace,
-  watchWorkspace,
-  writeWorkspaceFile,
-} from "./workspace";
-import {
-  getNoteIndex,
   getSpsNoteIndex,
   closeAllNoteIndexes,
   type NoteQuery,
 } from "./note-index";
-import {
-  getWorkspaceBacklinks,
-  getWorkspacePageGraph,
-  updateWorkspaceSidebarState,
-} from "./workspace-page-graph";
-import {
-  listWorkspaceTemplates,
-  renderWorkspaceButtonBlock,
-  saveWorkspaceTemplate,
-} from "./workspace-templates";
-import {
-  createWorkspaceSyncedBlock,
-  listWorkspaceSyncedBlocks,
-  removeWorkspaceSyncedBlockReference,
-  updateWorkspaceSyncedBlockContent,
-} from "./workspace-synced-blocks";
-import {
-  createWorkspaceComment,
-  listWorkspaceComments,
-  resolveWorkspaceComment,
-} from "./workspace-comments";
+import { extractPdfToMarkdown } from "./pdf-extract";
 import {
   appendObsidianFile,
   buildObsidianOpenUri,
@@ -249,7 +264,15 @@ import {
   getSkillContent,
   installSkill,
   uninstallSkill,
+  searchSkills,
   createSkill,
+  writeSkillContent,
+  listDisabledSkills,
+  setSkillEnabled,
+  discoverLocalSkills,
+  importLocalSkill,
+  generateSkillFromRepo,
+  type CreateSkillInput,
 } from "./skills";
 import {
   listCronJobs,
@@ -347,48 +370,8 @@ process.on("unhandledRejection", (reason) => {
 
 let mainWindow: BrowserWindow | null = null;
 const activeChatAborts = new Map<string, () => void>();
-let workspaceWatcher: Awaited<ReturnType<typeof watchWorkspace>> | null = null;
-let workspaceWatcherProfile = "";
 let obsidianWatcher: Awaited<ReturnType<typeof watchObsidian>> | null = null;
 let obsidianWatcherProfile = "";
-
-const ADMIN_SEARCH_ITEMS = [
-  { kind: "admin" as const, view: "models", title: "Models" },
-  { kind: "admin" as const, view: "providers", title: "Providers" },
-  { kind: "admin" as const, view: "schedules", title: "Schedules" },
-  { kind: "admin" as const, view: "memory", title: "Memory" },
-  { kind: "admin" as const, view: "tools", title: "Tools" },
-  { kind: "admin" as const, view: "kanban", title: "Kanban" },
-  { kind: "admin" as const, view: "gateway", title: "Gateway" },
-  { kind: "admin" as const, view: "settings", title: "Settings" },
-];
-
-const COMMAND_SEARCH_ITEMS = [
-  "/new",
-  "/clear",
-  "/btw",
-  "/approve",
-  "/deny",
-  "/status",
-  "/reset",
-  "/compact",
-  "/undo",
-  "/retry",
-  "/fast",
-  "/usage",
-  "/web",
-  "/image",
-  "/browse",
-  "/code",
-  "/file",
-  "/shell",
-  "/help",
-  "/tools",
-  "/skills",
-  "/kanban",
-  "/memory",
-  "/model",
-].map((command) => ({ kind: "command" as const, command, title: command }));
 
 function openExternalUrl(rawUrl: unknown): void {
   if (!isAllowedExternalUrl(rawUrl) && !isAllowedObsidianExternalUrl(rawUrl)) {
@@ -399,6 +382,31 @@ function openExternalUrl(rawUrl: unknown): void {
   shell.openExternal(rawUrl).catch((err) => {
     console.error("[SECURITY] Failed to open external URL:", err);
   });
+}
+
+// The SPS asset store streams journal/editor media (photos, voice, video,
+// files) from the vault over a custom scheme instead of inlining base64. It
+// must be registered as privileged BEFORE app `ready`, and listed in the
+// renderer CSP (img-src/media-src) — see src/renderer/index.html.
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "sps-asset",
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true, // range requests → video/audio seeking
+    },
+  },
+]);
+
+/** Absolute path to the active (or named) profile's SPS vault directory. */
+function spsVaultDirFor(profile?: string): string {
+  return join(
+    profileHome(profile || getActiveProfileNameSync()),
+    "sps-agent",
+    "vault",
+  );
 }
 
 function createWindow(): void {
@@ -434,6 +442,8 @@ function createWindow(): void {
 
   mainWindow.on("ready-to-show", () => {
     mainWindow!.show();
+    // Watch the equity alert log → OS notification + renderer event per new line.
+    void startEquityAlertWatcher(() => mainWindow);
   });
 
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
@@ -465,6 +475,20 @@ function createWindow(): void {
     return { action: "deny" };
   });
 
+  // Mic access for in-app voice notes. Grant `media` ONLY to the app renderer
+  // (file:// or the dev server); attached webviews must never gain mic/camera.
+  // All other permissions keep their prior (handler-less) allow behavior.
+  mainWindow.webContents.session.setPermissionRequestHandler(
+    (wc, permission, callback) => {
+      const url = wc?.getURL?.() ?? "";
+      const devUrl = is.dev ? process.env["ELECTRON_RENDERER_URL"] : undefined;
+      const isAppRenderer =
+        url.startsWith("file://") || (!!devUrl && url.startsWith(devUrl));
+      if (permission === "media") return callback(isAppRenderer);
+      return callback(true);
+    },
+  );
+
   mainWindow.webContents.on("will-navigate", (event, url) => {
     if (
       isAllowedAppNavigationUrl(
@@ -479,6 +503,21 @@ function createWindow(): void {
     event.preventDefault();
     openExternalUrl(url);
   });
+
+  // Microphone access for push-to-talk voice input (WS4). Grant audio-only
+  // `media`; deny camera and every other permission. getUserMedia still shows
+  // the OS-level mic prompt, so the user explicitly consents at capture time.
+  mainWindow.webContents.session.setPermissionRequestHandler(
+    (_wc, permission, callback, details) => {
+      if (permission === "media") {
+        const mediaTypes =
+          (details as { mediaTypes?: string[] }).mediaTypes ?? [];
+        callback(!mediaTypes.includes("video"));
+        return;
+      }
+      callback(false);
+    },
+  );
 
   mainWindow.webContents.on(
     "will-attach-webview",
@@ -555,19 +594,6 @@ function setupIPC(): void {
         "Workspace files are only available in local mode in this version.",
       );
     }
-  }
-
-  async function ensureWorkspaceWatcher(profile?: string): Promise<void> {
-    const profileKey = profile || "";
-    if (workspaceWatcher && workspaceWatcherProfile === profileKey) return;
-    if (workspaceWatcher) {
-      await workspaceWatcher.close();
-      workspaceWatcher = null;
-    }
-    workspaceWatcherProfile = profileKey;
-    workspaceWatcher = await watchWorkspace({ profile }, (payload) => {
-      mainWindow?.webContents.send("workspace-file-changed", payload);
-    });
   }
 
   async function ensureObsidianWatcher(profile?: string): Promise<void> {
@@ -670,11 +696,46 @@ function setupIPC(): void {
       await runHermesUpdate((progress: InstallProgress) => {
         event.sender.send("install-progress", progress);
       });
+      // The local gateway is a long-lived subprocess running the now-stale
+      // code; restart it so the freshly-pulled runtime takes effect. Only
+      // when one is actually running (restartGateway self-gates on remote
+      // mode) — don't spawn a gateway the user had stopped.
+      if (isGatewayRunning()) {
+        restartGateway();
+      }
       return { success: true };
     } catch (err) {
       return { success: false, error: (err as Error).message };
     }
   });
+
+  // Detect whether the locally-checked-out Hermes runtime is behind upstream
+  // (WS3). Skipped in remote/SSH mode — there the local repo isn't the one
+  // serving the gateway, so a local git compare would be misleading.
+  ipcMain.handle("check-hermes-update", async () => {
+    if (isRemoteMode()) return { available: false, reason: "remote-mode" };
+    try {
+      return await checkHermesUpdate();
+    } catch (err) {
+      return { available: false, reason: (err as Error).message };
+    }
+  });
+
+  // Voice I/O (WS4) — speech-to-text and text-to-speech via OpenAI, keyed by
+  // the profile's VOICE_TOOLS_OPENAI_KEY (read in main; never sent to renderer).
+  ipcMain.handle("get-voice-status", (_event, profile?: string) =>
+    getVoiceStatus(profile),
+  );
+  ipcMain.handle(
+    "transcribe-audio",
+    (_event, audio: ArrayBuffer, mime: string, profile?: string) =>
+      transcribeAudio(audio, mime, profile),
+  );
+  ipcMain.handle(
+    "speak-text",
+    (_event, text: string, voice: string | undefined, profile?: string) =>
+      speakText(text, voice, profile),
+  );
 
   // OpenClaw migration
   ipcMain.handle("check-openclaw", () => checkOpenClawExists());
@@ -1040,6 +1101,7 @@ function setupIPC(): void {
       history?: Array<{ role: string; content: string }>,
       attachments?: Attachment[],
       contextFolder?: string,
+      groundInWorkspace?: boolean,
       clientRunId?: string,
     ) => {
       if (!isRemoteMode() && !isGatewayRunning(profile)) {
@@ -1215,6 +1277,7 @@ function setupIPC(): void {
         history,
         attachments,
         contextFolder,
+        groundInWorkspace,
       );
 
       activeChatAborts.set(sessionKey, handle.abort);
@@ -1577,17 +1640,52 @@ function setupIPC(): void {
       return uninstallSkill(name, _profile);
     },
   );
-  // Skill authoring (M3 #17) — local-only scaffold of a new SKILL.md.
+  // Live registry browse — expose the existing CLI search (local-mode only).
+  ipcMain.handle("search-skills", (_event, query: string) => {
+    requireLocalWorkspace();
+    return searchSkills(query);
+  });
+  // Authoring / management — operate on the local profile's skills dirs only.
+  ipcMain.handle("create-skill", (_event, input: CreateSkillInput) => {
+    requireLocalWorkspace();
+    return createSkill(input);
+  });
   ipcMain.handle(
-    "create-skill",
-    (
-      _event,
-      name: string,
-      description: string,
-      category: string,
-      body: string,
-      profile?: string,
-    ) => createSkill(name, description, category, body, profile),
+    "write-skill-content",
+    (_event, skillPath: string, content: string, profile?: string) => {
+      requireLocalWorkspace();
+      return writeSkillContent(skillPath, content, profile);
+    },
+  );
+  ipcMain.handle("list-disabled-skills", (_event, profile?: string) => {
+    requireLocalWorkspace();
+    return listDisabledSkills(profile);
+  });
+  ipcMain.handle(
+    "set-skill-enabled",
+    (_event, skillPath: string, enabled: boolean, profile?: string) => {
+      requireLocalWorkspace();
+      return setSkillEnabled(skillPath, enabled, profile);
+    },
+  );
+  ipcMain.handle("discover-local-skills", (_event, profile?: string) => {
+    requireLocalWorkspace();
+    return discoverLocalSkills(profile);
+  });
+  ipcMain.handle(
+    "import-local-skill",
+    (_event, sourcePath: string, category?: string, profile?: string) => {
+      requireLocalWorkspace();
+      return importLocalSkill(sourcePath, category, profile);
+    },
+  );
+  // Draft a SKILL.md from a local repo (one gateway completion; local-only).
+  ipcMain.handle(
+    "generate-skill-from-repo",
+    (_event, repoPath: string, profile?: string) => {
+      requireLocalWorkspace();
+      return generateSkillFromRepo(repoPath, profile);
+    },
   );
 
   // Session cache (fast local cache with generated titles)
@@ -1623,80 +1721,6 @@ function setupIPC(): void {
     if (conn.mode === "ssh" && conn.ssh)
       return sshSearchSessions(conn.ssh, query, limit);
     return searchSessions(query, limit);
-  });
-
-  ipcMain.handle("get-workspace-tree", async (_event, profile?: string) => {
-    requireLocalWorkspace();
-    await ensureWorkspaceWatcher(profile);
-    return getWorkspaceTree({ profile });
-  });
-
-  ipcMain.handle(
-    "read-workspace-file",
-    async (_event, path: string, profile?: string) => {
-      requireLocalWorkspace();
-      await ensureWorkspaceWatcher(profile);
-      return readWorkspaceFile(path, { profile });
-    },
-  );
-
-  ipcMain.handle(
-    "write-workspace-file",
-    async (_event, path: string, content: string, profile?: string) => {
-      requireLocalWorkspace();
-      await ensureWorkspaceWatcher(profile);
-      return writeWorkspaceFile(path, content, { profile });
-    },
-  );
-
-  ipcMain.handle(
-    "delete-workspace-file",
-    async (_event, path: string, profile?: string) => {
-      requireLocalWorkspace();
-      await ensureWorkspaceWatcher(profile);
-      return deleteWorkspaceFile(path, { profile });
-    },
-  );
-
-  // ── Note index (Part 2 / S1): derived SQLite index over the markdown vault.
-  //    Read-only over the files; powers database views, search and backlinks.
-  ipcMain.handle(
-    "index-query",
-    async (_event, query: NoteQuery, profile?: string) => {
-      requireLocalWorkspace();
-      const index = await getNoteIndex(profile);
-      return index.query(query ?? {});
-    },
-  );
-
-  ipcMain.handle(
-    "index-search",
-    async (_event, text: string, limit?: number, profile?: string) => {
-      requireLocalWorkspace();
-      const index = await getNoteIndex(profile);
-      return index.search(text, limit ?? 20);
-    },
-  );
-
-  ipcMain.handle(
-    "index-backlinks",
-    async (_event, path: string, profile?: string) => {
-      requireLocalWorkspace();
-      const index = await getNoteIndex(profile);
-      return index.backlinks(path);
-    },
-  );
-
-  ipcMain.handle("index-rebuild", async (_event, profile?: string) => {
-    requireLocalWorkspace();
-    const index = await getNoteIndex(profile);
-    return index.rebuild();
-  });
-
-  ipcMain.handle("index-status", async (_event, profile?: string) => {
-    requireLocalWorkspace();
-    const index = await getNoteIndex(profile);
-    return index.status();
   });
 
   // ── SPS-vault index (S3): the same engine pointed at sps-agent/vault/, so the
@@ -1741,375 +1765,37 @@ function setupIPC(): void {
     return (await getSpsNoteIndex(profile)).rebuild();
   });
 
-  ipcMain.handle(
-    "search-workspace-and-sessions",
-    async (_event, query: string, limit?: number, profile?: string) => {
-      requireLocalWorkspace();
-      const maxResults = limit ?? 20;
-      const workspaceResults = await searchWorkspace(query, maxResults, {
-        profile,
-      });
-      const obsidianResults = await searchObsidian(
-        query,
-        maxResults,
-        profile,
-      ).catch(() => []);
-      const sessionResults = searchSessions(query, maxResults).map(
-        (result) => ({
-          kind: "session" as const,
-          sessionId: result.sessionId,
-          title: result.title,
-          snippet: result.snippet,
-        }),
-      );
-      const needle = query.trim().toLowerCase();
-      const adminResults = ADMIN_SEARCH_ITEMS.filter((item) =>
-        item.title.toLowerCase().includes(needle),
-      );
-      const commandResults = COMMAND_SEARCH_ITEMS.filter((item) =>
-        item.command.toLowerCase().includes(needle),
-      );
-      return [
-        ...workspaceResults,
-        ...obsidianResults,
-        ...sessionResults,
-        ...adminResults,
-        ...commandResults,
-      ].slice(0, maxResults);
-    },
-  );
-
-  ipcMain.handle(
-    "create-workspace-page",
-    async (
-      _event,
-      input: { title: string; parentPath?: string | null; content?: string },
-      profile?: string,
-    ) => {
-      requireLocalWorkspace();
-      await ensureWorkspaceWatcher(profile);
-      return createWorkspacePage(input, { profile });
-    },
-  );
-
-  ipcMain.handle(
-    "rename-workspace-page",
-    async (_event, path: string, title: string, profile?: string) => {
-      requireLocalWorkspace();
-      await ensureWorkspaceWatcher(profile);
-      return renameWorkspacePage(path, title, { profile });
-    },
-  );
-
-  ipcMain.handle(
-    "move-workspace-page",
-    async (
-      _event,
-      path: string,
-      parentPath: string | null,
-      profile?: string,
-    ) => {
-      requireLocalWorkspace();
-      await ensureWorkspaceWatcher(profile);
-      return moveWorkspacePage(path, parentPath, { profile });
-    },
-  );
-
-  ipcMain.handle(
-    "duplicate-workspace-page",
-    async (_event, path: string, profile?: string) => {
-      requireLocalWorkspace();
-      await ensureWorkspaceWatcher(profile);
-      return duplicateWorkspacePage(path, { profile });
-    },
-  );
-
-  ipcMain.handle(
-    "trash-workspace-page",
-    async (_event, path: string, profile?: string) => {
-      requireLocalWorkspace();
-      await ensureWorkspaceWatcher(profile);
-      return trashWorkspacePage(path, { profile });
-    },
-  );
-
-  ipcMain.handle(
-    "restore-workspace-page",
-    async (_event, path: string, profile?: string) => {
-      requireLocalWorkspace();
-      await ensureWorkspaceWatcher(profile);
-      return restoreWorkspacePage(path, { profile });
-    },
-  );
-
-  ipcMain.handle(
-    "favorite-workspace-page",
-    async (_event, path: string, favorite: boolean, profile?: string) => {
-      requireLocalWorkspace();
-      await ensureWorkspaceWatcher(profile);
-      return favoriteWorkspacePage(path, favorite, { profile });
-    },
-  );
-
-  ipcMain.handle("get-workspace-metadata", async (_event, profile?: string) => {
+  // KB Phase 0: open a file dialog scoped to PDFs; returns the absolute path or
+  // null if cancelled. Local workspace only (the agent reads these files later).
+  ipcMain.handle("sps-pick-pdf", async (event) => {
     requireLocalWorkspace();
-    await ensureWorkspaceWatcher(profile);
-    return getWorkspaceMetadata({ profile });
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const opts: Electron.OpenDialogOptions = {
+      properties: ["openFile"],
+      filters: [{ name: "PDF", extensions: ["pdf"] }],
+    };
+    const result = win
+      ? await dialog.showOpenDialog(win, opts)
+      : await dialog.showOpenDialog(opts);
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
   });
 
-  ipcMain.handle(
-    "get-workspace-page-graph",
-    async (_event, profile?: string) => {
-      requireLocalWorkspace();
-      await ensureWorkspaceWatcher(profile);
-      return getWorkspacePageGraph({ profile });
-    },
-  );
+  // KB Phase 0: extract a text-layer PDF into markdown for ingestion. Stateless
+  // — the renderer turns the result into a real page via pageFromMarkdown +
+  // makePage so markdown-on-disk stays authoritative.
+  ipcMain.handle("sps-extract-pdf", async (_event, filePath: string) => {
+    requireLocalWorkspace();
+    return extractPdfToMarkdown(filePath);
+  });
 
-  ipcMain.handle(
-    "update-workspace-sidebar-state",
-    async (
-      _event,
-      state: {
-        collapsedSections?: string[];
-        width?: number;
-        collapsed?: boolean;
-      },
-      profile?: string,
-    ) => {
-      requireLocalWorkspace();
-      await ensureWorkspaceWatcher(profile);
-      return updateWorkspaceSidebarState(state, { profile });
-    },
-  );
-
-  ipcMain.handle(
-    "get-workspace-backlinks",
-    async (_event, path: string, profile?: string) => {
-      requireLocalWorkspace();
-      await ensureWorkspaceWatcher(profile);
-      return getWorkspaceBacklinks(path, { profile });
-    },
-  );
-
-  ipcMain.handle(
-    "list-workspace-templates",
-    async (_event, profile?: string) => {
-      requireLocalWorkspace();
-      return listWorkspaceTemplates({ profile });
-    },
-  );
-
-  ipcMain.handle(
-    "save-workspace-template",
-    async (
-      _event,
-      input: {
-        kind: "page" | "database-row" | "button";
-        title: string;
-        content: string;
-        properties?: Record<string, unknown>;
-      },
-      profile?: string,
-    ) => {
-      requireLocalWorkspace();
-      return saveWorkspaceTemplate(input, { profile });
-    },
-  );
-
-  ipcMain.handle(
-    "render-workspace-button-block",
-    (_event, input: { label: string; prompt: string }) =>
-      renderWorkspaceButtonBlock(input),
-  );
-
-  ipcMain.handle(
-    "list-workspace-synced-blocks",
-    async (_event, profile?: string) => {
-      requireLocalWorkspace();
-      return listWorkspaceSyncedBlocks({ profile });
-    },
-  );
-
-  ipcMain.handle(
-    "create-workspace-synced-block",
-    async (
-      _event,
-      input: {
-        sourcePath: string;
-        sourceBlockId: string;
-        content: string;
-        references?: Array<{ path: string; blockId: string }>;
-      },
-      profile?: string,
-    ) => {
-      requireLocalWorkspace();
-      return createWorkspaceSyncedBlock(input, { profile });
-    },
-  );
-
-  ipcMain.handle(
-    "update-workspace-synced-block-content",
-    async (_event, id: string, content: string, profile?: string) => {
-      requireLocalWorkspace();
-      return updateWorkspaceSyncedBlockContent(id, content, { profile });
-    },
-  );
-
-  ipcMain.handle(
-    "remove-workspace-synced-block-reference",
-    async (
-      _event,
-      id: string,
-      path: string,
-      blockId: string,
-      profile?: string,
-    ) => {
-      requireLocalWorkspace();
-      return removeWorkspaceSyncedBlockReference(id, path, blockId, {
-        profile,
-      });
-    },
-  );
-
-  ipcMain.handle(
-    "list-workspace-comments",
-    async (_event, path?: string, profile?: string) => {
-      requireLocalWorkspace();
-      return listWorkspaceComments(path, { profile });
-    },
-  );
-
-  ipcMain.handle(
-    "create-workspace-comment",
-    async (
-      _event,
-      input: {
-        path: string;
-        blockId?: string;
-        body: string;
-        reminderAt?: number;
-      },
-      profile?: string,
-    ) => {
-      requireLocalWorkspace();
-      return createWorkspaceComment(input, { profile });
-    },
-  );
-
-  ipcMain.handle(
-    "resolve-workspace-comment",
-    async (_event, id: string, profile?: string) => {
-      requireLocalWorkspace();
-      return resolveWorkspaceComment(id, { profile });
-    },
-  );
-
-  ipcMain.handle(
-    "update-workspace-page-order",
-    async (
-      _event,
-      parentPath: string | null,
-      orderedPaths: string[],
-      profile?: string,
-    ) => {
-      requireLocalWorkspace();
-      await ensureWorkspaceWatcher(profile);
-      return updateWorkspacePageOrder(parentPath, orderedPaths, { profile });
-    },
-  );
-
-  ipcMain.handle(
-    "record-workspace-visit",
-    async (_event, path: string, profile?: string) => {
-      requireLocalWorkspace();
-      await ensureWorkspaceWatcher(profile);
-      return recordWorkspaceVisit(path, { profile });
-    },
-  );
-
-  ipcMain.handle(
-    "list-workspace-history",
-    async (_event, path: string, profile?: string) => {
-      requireLocalWorkspace();
-      return listWorkspaceHistory(path, { profile });
-    },
-  );
-
-  ipcMain.handle(
-    "restore-workspace-version",
-    async (_event, path: string, historyId: string, profile?: string) => {
-      requireLocalWorkspace();
-      await ensureWorkspaceWatcher(profile);
-      return restoreWorkspaceVersion(path, historyId, { profile });
-    },
-  );
-
-  ipcMain.handle(
-    "export-workspace-markdown-bundle",
-    async (_event, profile?: string) => {
-      requireLocalWorkspace();
-      return exportWorkspaceMarkdownBundle({ profile });
-    },
-  );
-
-  ipcMain.handle(
-    "list-agent-workspace-proposals",
-    async (_event, profile?: string) => {
-      requireLocalWorkspace();
-      return listAgentWorkspaceProposals({ profile });
-    },
-  );
-
-  ipcMain.handle(
-    "create-agent-workspace-proposal",
-    async (
-      _event,
-      path: string,
-      proposedContent: string,
-      baseContent: string,
-      profile?: string,
-    ) => {
-      requireLocalWorkspace();
-      return createAgentWorkspaceProposal(path, proposedContent, baseContent, {
-        profile,
-      });
-    },
-  );
-
-  ipcMain.handle(
-    "accept-agent-workspace-proposal",
-    async (_event, id: string, profile?: string) => {
-      requireLocalWorkspace();
-      await ensureWorkspaceWatcher(profile);
-      return acceptAgentWorkspaceProposal(id, { profile });
-    },
-  );
-
-  ipcMain.handle(
-    "reject-agent-workspace-proposal",
-    async (_event, id: string, profile?: string) => {
-      requireLocalWorkspace();
-      return rejectAgentWorkspaceProposal(id, { profile });
-    },
-  );
-
-  ipcMain.handle(
-    "accept-agent-workspace-proposal-hunk",
-    async (_event, id: string, hunkId: string, profile?: string) => {
-      requireLocalWorkspace();
-      await ensureWorkspaceWatcher(profile);
-      return acceptAgentWorkspaceProposalHunk(id, hunkId, { profile });
-    },
-  );
-
-  ipcMain.handle(
-    "reject-agent-workspace-proposal-hunk",
-    async (_event, id: string, hunkId: string, profile?: string) => {
-      requireLocalWorkspace();
-      return rejectAgentWorkspaceProposalHunk(id, hunkId, { profile });
-    },
-  );
+  // Raw PDF bytes for renderer-side OCR of a scanned doc (item 2). Same trust
+  // boundary as sps-extract-pdf — a user-picked file path read locally.
+  ipcMain.handle("sps-read-file-bytes", async (_event, filePath: string) => {
+    requireLocalWorkspace();
+    const buffer = await readFile(filePath);
+    return new Uint8Array(buffer);
+  });
 
   ipcMain.handle("get-obsidian-config", async (_event, profile?: string) => {
     requireLocalWorkspace();
@@ -2601,8 +2287,13 @@ function setupIPC(): void {
   ipcMain.handle("sps-unfurl", (_event, url: string) => spsUnfurl(url));
   ipcMain.handle(
     "sps-assistant",
-    (_event, prompt: string, ctx: SpsPageContext, profile?: string) =>
-      spsAssistant(prompt, ctx, profile),
+    (
+      _event,
+      prompt: string,
+      ctx: SpsPageContext,
+      profile?: string,
+      groundInWorkspace?: boolean,
+    ) => spsAssistant(prompt, ctx, profile, groundInWorkspace),
   );
   ipcMain.handle("sps-load", (_event, profile?: string) => spsLoad(profile));
   ipcMain.handle("sps-save", (_event, ws: unknown, profile?: string) =>
@@ -2619,6 +2310,31 @@ function setupIPC(): void {
     "sps-set-work-session",
     (_event, pageId: string, sessionId: string, profile?: string) =>
       spsSetWorkSession(pageId, sessionId, profile),
+  );
+
+  // Research (OpenAlex): scholarly search/fetch demystified into clean DTOs.
+  // The dense JSON is normalized in the main process (src/main/openalex.ts);
+  // the renderer only ever sees small WorkSummary/WorkDetail objects.
+  ipcMain.handle(
+    "sps-research-search-works",
+    (_event, q: string, opts?: SearchOpts, profile?: string) =>
+      oaSearchWorks(q, opts ?? {}, profile),
+  );
+  ipcMain.handle(
+    "sps-research-get-work",
+    (_event, id: string, profile?: string) => oaGetWork(id, profile),
+  );
+  ipcMain.handle("sps-research-get-config", () => getPublicResearchConfig());
+  ipcMain.handle(
+    "sps-research-set-config",
+    (_event, mailto: string, apiKey?: string) => {
+      setResearchConfig(mailto, apiKey);
+      return getPublicResearchConfig();
+    },
+  );
+  // Make OpenAlex callable by the Hermes agent in chat (bundled MCP server).
+  ipcMain.handle("sps-research-ensure-agent-tool", (_event, profile?: string) =>
+    ensureResearchMcpRegistered(profile),
   );
 
   // Additive markdown mirror (S2b): write a page's markdown into the SPS vault
@@ -2645,6 +2361,14 @@ function setupIPC(): void {
       const home = profileHome(profile || getActiveProfileNameSync());
       const dir = join(home, "sps-agent", "vault");
       return exportRowMarkdownTo(dir, dbFolder, rowId, markdown);
+    },
+  );
+  ipcMain.handle(
+    "sps-read-row",
+    (_event, dbFolder: string, rowId: string, profile?: string) => {
+      const home = profileHome(profile || getActiveProfileNameSync());
+      const dir = join(home, "sps-agent", "vault");
+      return readRowMarkdownFrom(dir, dbFolder, rowId);
     },
   );
   ipcMain.handle(
@@ -2677,14 +2401,37 @@ function setupIPC(): void {
     },
   );
 
+  // Equity baskets: persisted holdings shared with the Python skill pack
+  // (basket_store.py reads/writes the SAME equity-baskets.json). Thin fs
+  // wrappers — no gateway involved.
+  ipcMain.handle("equity-list-baskets", (_event, profile?: string) =>
+    listBaskets(profile),
+  );
+  ipcMain.handle(
+    "equity-save-basket",
+    (_event, basket: unknown, profile?: string) => saveBasket(basket, profile),
+  );
+  ipcMain.handle(
+    "equity-delete-basket",
+    (_event, basketId: string, profile?: string) =>
+      deleteBasket(basketId, profile),
+  );
+
+  // Equity alerts: the in-app Alert Center reads the jsonl the headless
+  // evaluator (india-equity-alerts) appends; markRead flips read in place.
+  ipcMain.handle(
+    "equity-list-alerts",
+    (_event, limit?: number, profile?: string) => listAlerts(limit, profile),
+  );
+  ipcMain.handle(
+    "equity-mark-alert-read",
+    (_event, alertId: string, profile?: string) =>
+      markAlertRead(alertId, profile),
+  );
+
   // S6: vault-as-authoritative-store I/O (page files + structure manifest) and
   // a pre-migration backup of the JSON blob.
-  const spsVaultDir = (profile?: string): string =>
-    join(
-      profileHome(profile || getActiveProfileNameSync()),
-      "sps-agent",
-      "vault",
-    );
+  const spsVaultDir = (profile?: string): string => spsVaultDirFor(profile);
   ipcMain.handle("sps-vault-read", async (_event, profile?: string) => {
     const dir = spsVaultDir(profile);
     const [pages, manifest] = await Promise.all([
@@ -2700,6 +2447,64 @@ function setupIPC(): void {
   );
   ipcMain.handle("sps-backup-workspace", (_event, profile?: string) =>
     spsBackupWorkspace(profile),
+  );
+
+  // Excalidraw sidecar assets: the scene JSON (.excalidraw) + its rendered
+  // preview (.excalidraw.svg) live under the vault's assets/<pageId>/ folder,
+  // keeping the page markdown clean. assetId is a stable, path-embedded handle.
+  ipcMain.handle(
+    "sps-write-excalidraw",
+    async (
+      _event,
+      pageId: string,
+      assetId: string,
+      sceneJson: string,
+      svg: string,
+      profile?: string,
+    ) => {
+      const dir = spsVaultDir(profile);
+      const okScene = await writeAssetTo(
+        dir,
+        pageId,
+        `${assetId}.excalidraw`,
+        sceneJson,
+      );
+      const okSvg = await writeAssetTo(
+        dir,
+        pageId,
+        `${assetId}.excalidraw.svg`,
+        svg,
+      );
+      return okScene && okSvg;
+    },
+  );
+  ipcMain.handle(
+    "sps-read-excalidraw",
+    async (_event, pageId: string, assetId: string, profile?: string) => {
+      const dir = spsVaultDir(profile);
+      const [scene, svg] = await Promise.all([
+        readAssetFrom(dir, pageId, `${assetId}.excalidraw`),
+        readAssetFrom(dir, pageId, `${assetId}.excalidraw.svg`),
+      ]);
+      return { scene, svg };
+    },
+  );
+  // Asset store: write media bytes to vault/_assets/<sha256>.<ext> and return
+  // the bare filename. Reads happen via the sps-asset:// protocol, not IPC.
+  ipcMain.handle(
+    "sps-asset-write",
+    (_event, bytes: Uint8Array, ext: string, profile?: string) =>
+      writeAsset(spsVaultDirFor(profile), Buffer.from(bytes), ext),
+  );
+  ipcMain.handle("sps-asset-exists", (_event, name: string, profile?: string) =>
+    assetExists(spsVaultDirFor(profile), name),
+  );
+  // GC: delete any asset not referenced by a live block. `referenced` is the
+  // set of asset filenames the renderer still points at.
+  ipcMain.handle(
+    "sps-asset-gc",
+    (_event, referenced: string[], profile?: string) =>
+      gcAssets(spsVaultDirFor(profile), referenced),
   );
 }
 
@@ -2934,6 +2739,24 @@ app.whenReady().then(() => {
   app.on("web-contents-created", (_event, contents) => {
     if (contents.getType() === "webview") {
       hardenAttachedWebContents(contents);
+    }
+  });
+
+  // Stream SPS vault assets to the renderer. URL shape: sps-asset://asset/<name>
+  // where <name> is a content-addressed `<sha256>.<ext>`. The strict name check
+  // in resolveAssetPath makes this traversal-proof; net.fetch on a file URL
+  // gives us range requests (video/audio seeking) for free.
+  protocol.handle("sps-asset", async (request) => {
+    try {
+      const name = decodeURIComponent(new URL(request.url).pathname).replace(
+        /^\/+/,
+        "",
+      );
+      const abs = resolveAssetPath(spsVaultDirFor(), name);
+      if (!abs) return new Response("Bad asset name", { status: 400 });
+      return net.fetch(pathToFileURL(abs).toString());
+    } catch {
+      return new Response("Not found", { status: 404 });
     }
   });
 

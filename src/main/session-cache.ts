@@ -1,10 +1,6 @@
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
-import {
-  profileHome,
-  getActiveProfileNameSync,
-  safeWriteFile,
-} from "./utils";
+import { profileHome, getActiveProfileNameSync, safeWriteFile } from "./utils";
 import Database from "better-sqlite3";
 import { getSharedDb } from "./db";
 import { t } from "../shared/i18n";

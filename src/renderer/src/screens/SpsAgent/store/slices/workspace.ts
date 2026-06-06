@@ -14,8 +14,53 @@ import {
 } from "../../lib/tree";
 import { buildInitialWorkspace } from "../../data/seed";
 import { initialWorkspace as initial } from "../initial";
+import { pageFromMarkdown } from "../../editor/pageMarkdown";
+import {
+  enqueueOcrJob,
+  removeOcrJob,
+  peekOcrJob,
+  loadOcrQueue,
+} from "../../lib/ocrQueue";
+import {
+  getOcrDefer,
+  setOcrDefer,
+  getOcrTime,
+  isScheduledNow,
+} from "../../lib/ocrSchedule";
 import type { Block } from "../../types";
 import type { Store, WorkspaceSlice } from "../storeTypes";
+import type { WorkDetail } from "../../../../../../shared/openalex/core";
+
+/** Title of the root folder that ingested documents are filed under. */
+const SOURCES_TITLE = "Sources";
+/** Title of the folder (under Sources) that saved OpenAlex papers are filed under. */
+const RESEARCH_TITLE = "Research";
+
+/** First `n` sentences of `text`, or a trimmed clamp when it has no punctuation. */
+function firstSentences(text: string, n: number): string {
+  const clean = text.trim();
+  if (!clean) return "";
+  const sentences = clean.match(/[^.!?]+[.!?]+/g);
+  if (!sentences) return clean.length > 280 ? `${clean.slice(0, 277)}…` : clean;
+  return sentences.slice(0, n).join(" ").trim();
+}
+
+/** Failure sentinels the gateway-backed assistant returns when it can't help. */
+const ASSISTANT_FAILURE = [
+  "couldn't reach the assistant",
+  "couldn't structure",
+];
+
+/** Coerce an spsAssistant result into a TL;DR string, or "" if unusable. */
+function tldrFromAssistant(res: unknown): string {
+  if (!res || typeof res !== "object") return "";
+  const reply = (res as { reply?: unknown }).reply;
+  if (!Array.isArray(reply)) return "";
+  const joined = reply.map(String).join(" ").trim();
+  const low = joined.toLowerCase();
+  if (!joined || ASSISTANT_FAILURE.some((s) => low.includes(s))) return "";
+  return joined;
+}
 
 /** The `source` folders of folder-backed database blocks in a block list. */
 function dbSources(blocks: Block[]): Set<string> {
@@ -24,6 +69,89 @@ function dbSources(blocks: Block[]): Set<string> {
     if (b.type === "database" && b.source) out.add(b.source);
   }
   return out;
+}
+
+type StoreGet = () => Store;
+type StoreSet = (
+  partial: Partial<Store> | ((s: Store) => Partial<Store>),
+) => void;
+
+// One drain loop at a time across the app (the OCR worker is shared).
+let ocrDraining = false;
+
+/**
+ * Drain the persisted OCR queue sequentially: read each PDF's bytes, OCR it
+ * (offline, in a worker), and file the result under "Sources". Best-effort per
+ * job — a failed job is dropped with a warn toast so the batch keeps moving.
+ * Survives restarts: a job is only removed once it fully completes, so an
+ * interrupted job re-runs on the next ocrResume().
+ */
+async function drainOcrQueue(get: StoreGet, set: StoreSet): Promise<void> {
+  if (ocrDraining) return;
+  ocrDraining = true;
+  try {
+    let job = peekOcrJob();
+    while (job) {
+      const current = job;
+      set({
+        ocrActive: { title: current.title, page: 0, pages: current.pageCount },
+        ocrPending: loadOcrQueue().length,
+      });
+      try {
+        const api = window.hermesAPI;
+        if (!api?.spsReadFileBytes) throw new Error("no local workspace");
+        const bytes = await api.spsReadFileBytes(current.filePath);
+        const { ocrPdfToMarkdown } = await import("../../lib/ocr");
+        const markdown = await ocrPdfToMarkdown(bytes, (p) =>
+          set({
+            ocrActive: { title: current.title, page: p.page, pages: p.pages },
+          }),
+        );
+        const { blocks } = pageFromMarkdown(markdown);
+        const docBlocks = blocks.length ? blocks : [blk("p", "")];
+        get().makePage(
+          {
+            icon: "📄",
+            title: current.title,
+            source: current.filePath,
+            ingestedAt: Date.now(),
+          },
+          docBlocks,
+          get().ensureSourcesFolder(),
+        );
+        get().flash(`OCR complete — imported “${current.title}” into Sources`);
+      } catch {
+        get().flash(`OCR failed for “${current.title}” — skipped`, {
+          tone: "warn",
+          ms: 8000,
+        });
+      }
+      removeOcrJob(current.id);
+      set({ ocrPending: loadOcrQueue().length });
+      job = peekOcrJob();
+    }
+  } finally {
+    ocrDraining = false;
+    set({ ocrActive: null });
+  }
+}
+
+// Overnight scheduler (P3): once started, every 30s check whether deferral is on
+// and the clock is in the configured minute; if so, drain. Only fires while the
+// app is running (open or in the tray) — no OS daemon.
+let ocrSchedulerStarted = false;
+function startOcrScheduler(get: StoreGet, set: StoreSet): void {
+  if (ocrSchedulerStarted) return;
+  ocrSchedulerStarted = true;
+  setInterval(() => {
+    if (
+      get().ocrDefer &&
+      peekOcrJob() &&
+      isScheduledNow(new Date(), getOcrTime())
+    ) {
+      void drainOcrQueue(get, set);
+    }
+  }, 30000);
 }
 
 export const createWorkspaceSlice: StateCreator<
@@ -37,6 +165,9 @@ export const createWorkspaceSlice: StateCreator<
   trash: initial.trash,
   page: initial.page in (initial.docs || {}) ? initial.page : "home",
   docs: initial.docs,
+  ocrActive: null,
+  ocrPending: loadOcrQueue().length,
+  ocrDefer: getOcrDefer(),
 
   setBlocks: (updater) =>
     set((s) => {
@@ -85,6 +216,17 @@ export const createWorkspaceSlice: StateCreator<
           icon: info.icon || "📄",
           title: info.title || "Untitled",
           cover: null,
+          // KB ingestion provenance — only stamped when supplied.
+          ...(info.source !== undefined ? { source: info.source } : {}),
+          ...(info.ingestedAt !== undefined
+            ? { ingestedAt: info.ingestedAt }
+            : {}),
+          // Journal fields are written only when supplied, so ordinary pages
+          // keep their original 3-key meta shape (and serialization).
+          ...(info.journal !== undefined ? { journal: info.journal } : {}),
+          ...(info.date !== undefined ? { date: info.date } : {}),
+          ...(info.time !== undefined ? { time: info.time } : {}),
+          ...(info.mood !== undefined ? { mood: info.mood } : {}),
         },
       },
       tree: treeInsert(
@@ -95,6 +237,204 @@ export const createWorkspaceSlice: StateCreator<
       ),
     }));
     return id;
+  },
+
+  importPdf: async () => {
+    const api = window.hermesAPI;
+    if (!api?.spsPickPdf || !api?.spsExtractPdf) {
+      get().flash("PDF import needs a local workspace");
+      return;
+    }
+    set({ templatesOpen: null });
+    const filePath = await api.spsPickPdf();
+    if (!filePath) return;
+    get().flash("Extracting PDF…");
+    let res: Awaited<ReturnType<typeof api.spsExtractPdf>>;
+    try {
+      res = await api.spsExtractPdf(filePath);
+    } catch {
+      get().flash("Could not read that PDF", { tone: "warn", ms: 8000 });
+      return;
+    }
+    if (!res.hasTextLayer) {
+      // No usable text layer — scanned image, OR a broken/unmappable font that
+      // renders correctly but extracts garbage. Both render fine to a bitmap,
+      // so queue the pages for background OCR instead of refusing.
+      get().ocrEnqueue(filePath, res.title, res.pageCount);
+      return;
+    }
+    const { blocks } = pageFromMarkdown(res.markdown);
+    const docBlocks = blocks.length ? blocks : [blk("p", "")];
+    const id = get().makePage(
+      {
+        icon: "📄",
+        title: res.title,
+        source: filePath,
+        ingestedAt: Date.now(),
+      },
+      docBlocks,
+      get().ensureSourcesFolder(),
+    );
+    set({ page: id });
+    get().flash(`Imported “${res.title}” into Sources`);
+  },
+
+  ocrEnqueue: (filePath, title, pageCount) => {
+    const api = window.hermesAPI;
+    if (!api?.spsReadFileBytes) {
+      get().flash("OCR needs a local workspace", { tone: "warn", ms: 8000 });
+      return;
+    }
+    enqueueOcrJob({
+      id: uid("ocr"),
+      filePath,
+      title,
+      pageCount,
+      addedAt: Date.now(),
+    });
+    const pending = loadOcrQueue().length;
+    set({ ocrPending: pending });
+    const big = pageCount > 15;
+    if (get().ocrDefer) {
+      get().flash(
+        `Scanned PDF (${pageCount}p) queued for overnight OCR (${getOcrTime()}) — ` +
+          `“${title}” will appear in Sources after the run. Use “Run now” to start sooner.`,
+        { tone: "warn", ms: 8000 },
+      );
+      return; // wait for the scheduled window / a manual Run now
+    }
+    get().flash(
+      `Scanned PDF (${pageCount}p) queued for OCR — “${title}” will appear in ` +
+        `Sources when ready` +
+        (big ? " (large scan, may take several minutes)" : "") +
+        (pending > 1 ? `. ${pending} documents in the OCR queue.` : "."),
+      { tone: "warn", ms: 8000 },
+    );
+    void drainOcrQueue(get, set);
+  },
+
+  ocrResume: () => {
+    set({ ocrPending: loadOcrQueue().length, ocrDefer: getOcrDefer() });
+    startOcrScheduler(get, set);
+    // Resume immediately unless the user chose to defer to the overnight window.
+    if (!get().ocrDefer) void drainOcrQueue(get, set);
+  },
+
+  ocrRunNow: () => void drainOcrQueue(get, set),
+
+  ocrSetDefer: (on) => {
+    setOcrDefer(on);
+    set({ ocrDefer: on });
+    // Turning deferral OFF should start draining anything that was waiting.
+    if (!on) void drainOcrQueue(get, set);
+  },
+
+  ensureSourcesFolder: () => {
+    // A dedicated home for ingested documents. Identified by title at the root
+    // level (no persisted marker, so the markdown serializers stay untouched);
+    // reused if present, created at root on first import.
+    const { meta, tree } = get();
+    const existing = tree.find((n) => meta[n.id]?.title === SOURCES_TITLE);
+    if (existing) return existing.id;
+    return get().makePage(
+      { icon: "🗂️", title: SOURCES_TITLE },
+      [
+        blk(
+          "p",
+          "Imported documents live here — each ingested file becomes a page you can read, link, and ground the co-author on.",
+        ),
+      ],
+      null,
+    );
+  },
+
+  ensureResearchFolder: () => {
+    // A "Research" folder nested under "Sources", so saved papers live alongside
+    // imported PDFs and are equally linkable/groundable. Identified by title
+    // among the Sources folder's children; reused if present.
+    const sources = get().ensureSourcesFolder();
+    const { meta, tree } = get();
+    const sourcesNode = treeFind(tree, sources);
+    const existing = sourcesNode?.children.find(
+      (n) => meta[n.id]?.title === RESEARCH_TITLE,
+    );
+    if (existing) return existing.id;
+    return get().makePage(
+      { icon: "📚", title: RESEARCH_TITLE },
+      [
+        blk(
+          "p",
+          "Scholarly papers you saved from OpenAlex live here — each one a plain-language summary you can read, link, and ground the co-author on.",
+        ),
+      ],
+      sources,
+    );
+  },
+
+  importResearchWork: async (work: WorkDetail) => {
+    // Plain-language TL;DR via the gateway co-author; degrade to the abstract's
+    // first sentences if the gateway is down so the feature never hard-fails.
+    let tldr = firstSentences(work.abstract, 2);
+    const api = window.hermesAPI;
+    if (api?.spsAssistant && work.abstract) {
+      try {
+        const res = await api.spsAssistant(
+          `Summarize this paper in 2 plain-language sentences for a non-specialist. ` +
+            `Title: ${work.title}\n\nAbstract: ${work.abstract}`,
+          { blocks: [], pageTitle: work.title },
+        );
+        const candidate = tldrFromAssistant(res);
+        if (candidate) tldr = candidate;
+      } catch {
+        /* keep the abstract-derived fallback */
+      }
+    }
+
+    const glance = [
+      `${work.citedByCount} citation${work.citedByCount === 1 ? "" : "s"}`,
+      work.year ? String(work.year) : null,
+      work.venue || null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+
+    const blocks: Block[] = [
+      blk("callout", tldr || "No summary available.", { emoji: "🧭" }),
+      blk("h3", "Abstract"),
+      blk("p", work.abstract || "No abstract available."),
+      blk("h3", "At a glance"),
+      blk("p", glance),
+    ];
+    if (work.oaUrl) {
+      blocks.push(
+        blk("bookmark", "", {
+          bm: {
+            url: work.oaUrl,
+            title: "Open-access PDF",
+            desc: work.venue || "",
+          },
+        }),
+      );
+    }
+    if (work.topics.length) {
+      const tags = work.topics
+        .map((t) => `#${t.trim().replace(/\s+/g, "-")}`)
+        .join(" ");
+      blocks.push(blk("p", tags));
+    }
+
+    const id = get().makePage(
+      {
+        icon: "📄",
+        title: work.title,
+        source: `openalex:${work.id}`,
+        ingestedAt: Date.now(),
+      },
+      blocks,
+      get().ensureResearchFolder(),
+    );
+    set({ page: id });
+    get().flash(`Saved “${work.title}” to Research`);
   },
 
   newSubPage: (parentId) => {

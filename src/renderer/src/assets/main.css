@@ -2318,6 +2318,134 @@ body {
   overflow: hidden;
 }
 
+/* Voice (WS4): push-to-talk mic button + per-message speaker button */
+.chat-mic-btn.chat-mic-recording {
+  color: var(--danger, #e5484d);
+  animation: chat-mic-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes chat-mic-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.chat-msg-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+  padding-left: 2px;
+}
+
+.chat-speak-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0.6;
+  transition:
+    opacity var(--transition),
+    background-color var(--transition);
+}
+
+.chat-speak-btn:hover:not(:disabled) {
+  opacity: 1;
+  background: var(--bg-hover);
+}
+
+.chat-speak-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.chat-speak-btn.chat-speak-active {
+  opacity: 1;
+  color: var(--accent-text);
+}
+
+/* Preview panel (WS2) - visual tool output on the right (screenshot / HTML) */
+.preview-panel {
+  width: 420px;
+  flex-shrink: 0;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.preview-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  flex-shrink: 0;
+}
+
+.preview-header-icon {
+  color: var(--accent-text);
+  flex-shrink: 0;
+}
+
+.preview-header-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.preview-close {
+  flex-shrink: 0;
+  padding: 2px;
+}
+
+.preview-progress {
+  padding: 6px 14px;
+  font-size: 12px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.preview-content {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  background: var(--bg-primary);
+}
+
+.preview-image {
+  max-width: 100%;
+  height: auto;
+  margin: auto;
+  object-fit: contain;
+}
+
+.preview-frame {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #fff;
+}
+
 /* Worktree panel - file explorer on the right */
 .worktree-panel {
   width: 240px;
@@ -6292,6 +6420,69 @@ body {
 .skills-card-install-btn {
   padding: 4px 12px;
   font-size: 12px;
+}
+
+/* Authoring / management additions */
+.skills-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+/* Installed cards wrap a clickable body + a footer action row. */
+.skills-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  width: 100%;
+}
+.skills-card-disabled {
+  opacity: 0.6;
+}
+.skills-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin: 18px 0 8px;
+}
+.skills-new-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 2px;
+}
+.skills-new-input,
+.skills-new-textarea,
+.skills-edit-textarea {
+  width: 100%;
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  font: inherit;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+.skills-new-textarea,
+.skills-edit-textarea {
+  resize: vertical;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.skills-edit-textarea {
+  width: 100%;
+  min-height: 360px;
+}
+.skills-new-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
 }
 
 /* Empty */

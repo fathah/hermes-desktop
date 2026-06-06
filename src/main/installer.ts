@@ -17,7 +17,12 @@ import {
   hasOAuthCredentials,
 } from "./config";
 import { providerDoesNotNeedApiKey } from "./providers";
-import { getActiveProfileNameSync, profileHome, stripAnsi } from "./utils";
+import {
+  escapeRegex,
+  getActiveProfileNameSync,
+  profileHome,
+  stripAnsi,
+} from "./utils";
 import { setupAskpass, AskpassHandle } from "./askpass";
 import { precacheSudoCredentials } from "./sudoCreds";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
@@ -72,7 +77,9 @@ function shQuote(s: string): string {
 }
 
 function getBundledScriptPath(scriptName: string): string {
-  const appPath = app?.getAppPath ? app.getAppPath() : resolve(__dirname, "../..");
+  const appPath = app?.getAppPath
+    ? app.getAppPath()
+    : resolve(__dirname, "../..");
   const isPackaged = app?.isPackaged ?? false;
   if (isPackaged) {
     return join(appPath, "..", "app.asar.unpacked", "resources", scriptName);
@@ -784,6 +791,101 @@ export async function runHermesUpdate(
   });
 }
 
+// ────────────────────────────────────────────────────
+//  Runtime update detection (WS3)
+// ────────────────────────────────────────────────────
+
+export interface HermesUpdateStatus {
+  /** True when upstream is ahead of the local checkout. */
+  available: boolean;
+  /** Commits the local HEAD is behind upstream, when known. */
+  behindBy?: number;
+  localHead?: string;
+  upstreamHead?: string;
+  /** Why a check couldn't conclude (not-a-git-repo, no-upstream, error…). */
+  reason?: string;
+}
+
+/**
+ * Pure interpretation of a local-vs-upstream HEAD comparison. Extracted from
+ * the git I/O so the decision logic is unit-testable. `behindRaw` is the raw
+ * stdout of `git rev-list --count HEAD..@{u}` (or null if that call failed).
+ */
+export function interpretHeadComparison(
+  localHead: string | null,
+  upstreamHead: string | null,
+  behindRaw: string | null,
+): HermesUpdateStatus {
+  if (!localHead) return { available: false, reason: "no-head" };
+  if (!upstreamHead)
+    return { available: false, reason: "no-upstream", localHead };
+  if (localHead === upstreamHead) {
+    return { available: false, localHead, upstreamHead };
+  }
+  const parsed = behindRaw ? parseInt(behindRaw, 10) : NaN;
+  const behindBy = Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+  return { available: true, behindBy, localHead, upstreamHead };
+}
+
+/**
+ * Check whether the locally-checked-out Hermes Agent repo is behind its
+ * upstream tracking branch. Best-effort: a missing `.git`, no tracking
+ * branch, or an offline `git fetch` all resolve to `available: false` with a
+ * `reason` rather than throwing. Never auto-updates — the caller surfaces the
+ * result and lets the user trigger `hermes update`.
+ */
+export async function checkHermesUpdate(): Promise<HermesUpdateStatus> {
+  if (!existsSync(join(HERMES_REPO, ".git"))) {
+    return { available: false, reason: "not-a-git-repo" };
+  }
+
+  const gitEnv = {
+    ...process.env,
+    PATH: getEnhancedPath(),
+    HOME: homedir(),
+    HERMES_HOME,
+  };
+  const runGit = (
+    args: string[],
+    timeout: number,
+  ): Promise<{ ok: boolean; out: string }> =>
+    new Promise((resolve) => {
+      execFile(
+        "git",
+        args,
+        {
+          cwd: HERMES_REPO,
+          env: gitEnv,
+          timeout,
+          ...HIDDEN_SUBPROCESS_OPTIONS,
+        },
+        (error, stdout) => {
+          resolve({
+            ok: !error,
+            out: stripAnsi((stdout || "").toString()).trim(),
+          });
+        },
+      );
+    });
+
+  // Refresh remote-tracking refs (best-effort; offline is fine — we then
+  // compare against whatever was last fetched).
+  await runGit(["fetch", "--quiet"], 30000);
+
+  const local = await runGit(["rev-parse", "HEAD"], 5000);
+  const upstream = await runGit(["rev-parse", "@{u}"], 5000);
+  const behind =
+    local.ok && upstream.ok
+      ? await runGit(["rev-list", "--count", "HEAD..@{u}"], 5000)
+      : { ok: false, out: "" };
+
+  return interpretHeadComparison(
+    local.ok ? local.out : null,
+    upstream.ok ? upstream.out : null,
+    behind.ok ? behind.out : null,
+  );
+}
+
 function getShellProfile(home: string): string | null {
   // Check for the user's shell profile to source their PATH
   const candidates = [
@@ -1454,6 +1556,128 @@ export function listMcpServers(
   } catch {
     return [];
   }
+}
+
+// ── MCP server registration (config.yaml mcp_servers.<name>) ──────────
+//
+// Lets the desktop register a gateway-callable MCP server (e.g. the bundled
+// OpenAlex research server) by writing config.yaml. The config lives in the
+// profile dir, so the entry SURVIVES a Hermes reinstall (which re-clones the
+// agent repo but never touches the profile).
+
+export interface McpServerEntry {
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+  enabled: boolean;
+}
+
+/** Render one `mcp_servers` child as indented YAML (2/4/6-space nesting). */
+export function renderMcpServerEntry(
+  name: string,
+  entry: McpServerEntry,
+): string {
+  const q = (v: string): string => JSON.stringify(v); // safe quoting/escaping
+  const lines = [`  ${name}:`, `    command: ${q(entry.command)}`];
+  if (entry.args.length) {
+    lines.push(`    args:`);
+    for (const arg of entry.args) lines.push(`      - ${q(arg)}`);
+  }
+  const envKeys = Object.keys(entry.env);
+  if (envKeys.length) {
+    lines.push(`    env:`);
+    for (const key of envKeys) lines.push(`      ${key}: ${q(entry.env[key])}`);
+  }
+  lines.push(`    enabled: ${entry.enabled ? "true" : "false"}`);
+  return `${lines.join("\n")}\n`;
+}
+
+/** Drop an existing `  <name>:` child sub-block (header + its indented body). */
+function removeMcpChild(block: string, name: string): string {
+  const lines = block.split("\n");
+  const childHeader = new RegExp(`^  ${escapeRegex(name)}:`);
+  const out: string[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    if (childHeader.test(lines[i])) {
+      i++; // skip the header line
+      // skip its body: blank lines or anything indented 3+ spaces (4/6-deep)
+      while (
+        i < lines.length &&
+        (lines[i].trim() === "" || /^\s{3,}/.test(lines[i]))
+      ) {
+        i++;
+      }
+      continue;
+    }
+    out.push(lines[i]);
+    i++;
+  }
+  return out.join("\n");
+}
+
+/**
+ * Upsert one server under the top-level `mcp_servers:` block, replacing any
+ * existing same-named child. Pure string surgery (testable without fs): when
+ * the block is absent it is appended; otherwise the rendered entry is inserted
+ * at the top of the existing block.
+ */
+export function upsertMcpServerInYaml(
+  content: string,
+  name: string,
+  renderedEntry: string,
+): string {
+  const header = content.match(/^mcp_servers:[ \t]*\r?\n/m);
+  if (!header || header.index === undefined) {
+    const sep = content === "" || content.endsWith("\n") ? "" : "\n";
+    return `${content}${sep}mcp_servers:\n${renderedEntry}`;
+  }
+  const blockStart = header.index + header[0].length;
+  const after = content.slice(blockStart);
+  const nextTop = after.match(/^\S/m); // next column-0 key ends the block
+  const blockEnd =
+    nextTop?.index !== undefined ? blockStart + nextTop.index : content.length;
+  const block = removeMcpChild(content.slice(blockStart, blockEnd), name);
+  return (
+    content.slice(0, blockStart) +
+    renderedEntry +
+    block +
+    content.slice(blockEnd)
+  );
+}
+
+/** Write/replace an mcp_servers entry in the profile's config.yaml. */
+export function writeMcpServerEntry(
+  name: string,
+  entry: McpServerEntry,
+  profile?: string,
+): void {
+  const configPath = join(profileHome(profile), "config.yaml");
+  const content = existsSync(configPath)
+    ? readFileSync(configPath, "utf-8")
+    : "";
+  const rendered = renderMcpServerEntry(name, entry);
+  writeFileSync(configPath, upsertMcpServerInYaml(content, name, rendered), {
+    encoding: "utf-8",
+  });
+}
+
+/** True iff an mcp_servers entry with this name already exists for the profile. */
+export function hasMcpServer(name: string, profile?: string): boolean {
+  return listMcpServers(profile).some((s) => s.name === name);
+}
+
+/** Absolute path to the bundled OpenAlex MCP server (resources are asar-unpacked). */
+export function openAlexMcpServerPath(): string {
+  if (app.isPackaged) {
+    return join(
+      process.resourcesPath,
+      "app.asar.unpacked",
+      "resources",
+      "openalex-mcp.cjs",
+    );
+  }
+  return join(app.getAppPath(), "resources", "openalex-mcp.cjs");
 }
 
 // ────────────────────────────────────────────────────

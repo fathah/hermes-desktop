@@ -8,6 +8,7 @@ import { CommandPalette } from "../components/CommandPalette";
 import { TaskDrawer } from "../modals/TaskDrawer";
 import { TemplatesModal } from "../modals/TemplatesModal";
 import { TrashModal } from "../modals/TrashModal";
+import { ResearchModal } from "../modals/ResearchModal";
 import { TweaksPanel } from "../tweaks/TweaksPanel";
 
 export function Overlays() {
@@ -17,6 +18,7 @@ export function Overlays() {
   const paletteOpen = useStore((s) => s.paletteOpen);
   const templatesOpen = useStore((s) => s.templatesOpen);
   const trashOpen = useStore((s) => s.trashOpen);
+  const researchOpen = useStore((s) => s.researchOpen);
   const setEmojiPick = useStore((s) => s.setEmojiPick);
   const setCoverPick = useStore((s) => s.setCoverPick);
   const setOpenTask = useStore((s) => s.setOpenTask);
@@ -36,6 +38,7 @@ export function Overlays() {
       {paletteOpen && <CommandPalette />}
       {templatesOpen && <TemplatesModal />}
       {trashOpen && <TrashModal />}
+      {researchOpen && <ResearchModal />}
       <TweaksPanel />
 
       {openTask && (

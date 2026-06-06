@@ -19,6 +19,9 @@ import {
   readVaultManifest,
   writeVaultManifest,
   backupFile,
+  writeAssetTo,
+  readAssetFrom,
+  ASSETS_DIR,
 } from "./sps-vault";
 
 let dir: string;
@@ -41,6 +44,45 @@ describe("page id validation", () => {
     expect(isValidPageId("a/b")).toBe(false);
     expect(isValidPageId("a.md")).toBe(false);
     expect(isValidPageId("")).toBe(false);
+  });
+});
+
+describe("sidecar assets (writeAssetTo / readAssetFrom)", () => {
+  it("round-trips a scene + preview under assets/<pageId>/", async () => {
+    expect(await writeAssetTo(dir, "home", "ex1.excalidraw", "{json}")).toBe(
+      true,
+    );
+    expect(
+      await writeAssetTo(dir, "home", "ex1.excalidraw.svg", "<svg/>"),
+    ).toBe(true);
+    expect(existsSync(join(dir, ASSETS_DIR, "home", "ex1.excalidraw"))).toBe(
+      true,
+    );
+    expect(await readAssetFrom(dir, "home", "ex1.excalidraw")).toBe("{json}");
+    expect(await readAssetFrom(dir, "home", "ex1.excalidraw.svg")).toBe(
+      "<svg/>",
+    );
+  });
+
+  it("refuses a hostile pageId or filename (no escape from assets/)", async () => {
+    expect(await writeAssetTo(dir, "../escape", "a.excalidraw", "x")).toBe(
+      false,
+    );
+    expect(await writeAssetTo(dir, "home", "../../a.excalidraw", "x")).toBe(
+      false,
+    );
+    expect(await writeAssetTo(dir, "home", "a/b.excalidraw", "x")).toBe(false);
+    expect(await readAssetFrom(dir, "home", "..")).toBeNull();
+  });
+
+  it("returns null for a missing asset", async () => {
+    expect(await readAssetFrom(dir, "home", "nope.excalidraw")).toBeNull();
+  });
+
+  it("reserves the assets folder from database rows", async () => {
+    expect(await exportRowMarkdownTo(dir, ASSETS_DIR, "r1", "x")).toBe(false);
+    expect(await listRowIdsIn(dir, ASSETS_DIR)).toEqual([]);
+    expect(await deleteRowIn(dir, ASSETS_DIR, "r1")).toBe(false);
   });
 });
 

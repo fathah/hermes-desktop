@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { ChatHeader } from "./ChatHeader";
 import { useChatSignals } from "./useChatSignals";
@@ -9,6 +9,8 @@ import { ChatEmptyState } from "./ChatEmptyState";
 import { MessageList } from "./MessageList";
 import { ModelPicker } from "./ModelPicker";
 import { WorktreePanel } from "./WorktreePanel";
+import { PreviewPanel } from "./PreviewPanel";
+import { selectPreviewItem } from "./previewSelect";
 import { useChatScroll } from "./hooks/useChatScroll";
 import { useChatIPC } from "./hooks/useChatIPC";
 import { useChatActions } from "./hooks/useChatActions";
@@ -71,6 +73,12 @@ function Chat({
   const [contextFolder, setContextFolder] = useState<string | null>(null);
   // Whether the worktree panel is visible (only applies when contextFolder is set)
   const [worktreeVisible, setWorktreeVisible] = useState<boolean>(true);
+  // Preview pane (WS2): the most recent visual tool output (screenshot / HTML
+  // doc), and whether the pane is shown. Auto-opens once per conversation the
+  // first time something previewable appears; reset on session switch below.
+  const previewItem = useMemo(() => selectPreviewItem(messages), [messages]);
+  const [previewVisible, setPreviewVisible] = useState<boolean>(false);
+  const previewAutoOpenedRef = useRef(false);
   const dragCounter = useRef(0);
   const chatInputRef = useRef<ChatInputHandle>(null);
   const queueRef = useRef<QueuedMessage[]>([]);
@@ -145,8 +153,20 @@ function Chat({
       setContextFolder(null);
       queueRef.current = [];
       setQueuedCount(0);
+      setPreviewVisible(false);
+      previewAutoOpenedRef.current = false;
     }
   }, [messages]);
+
+  // Auto-open the preview pane once per conversation, the first time a
+  // previewable tool output appears. After that, visibility is user-driven
+  // (the header toggle) — we never re-open it on subsequent outputs.
+  useEffect(() => {
+    if (previewItem && !previewAutoOpenedRef.current) {
+      previewAutoOpenedRef.current = true;
+      setPreviewVisible(true);
+    }
+  }, [previewItem]);
 
   // When the parent swaps to a different session, sync local state to it:
   // the gateway session id (a stale one resumes/deletes the WRONG session —
@@ -157,6 +177,8 @@ function Chat({
     setContextFolder(null);
     queueRef.current = [];
     setQueuedCount(0);
+    setPreviewVisible(false);
+    previewAutoOpenedRef.current = false;
   }, [sessionId]);
 
   // Cmd/Ctrl+N → new chat
@@ -372,10 +394,13 @@ function Chat({
         contextFolder={effectiveContextFolder}
         showContextFolder={!remoteMode && !contextFolderOverride}
         worktreeVisible={worktreeVisible}
+        previewAvailable={!!previewItem}
+        previewVisible={previewVisible}
         onPickFolder={handlePickFolder}
         onClearFolder={handleClearFolder}
         onToggleFast={toggleFastMode}
         onToggleWorktree={() => setWorktreeVisible((v) => !v)}
+        onTogglePreview={() => setPreviewVisible((v) => !v)}
         onNewChat={onNewChat}
         onClear={handleClear}
         model={modelConfig.currentModel}
@@ -398,6 +423,7 @@ function Chat({
               messages={messages}
               isLoading={isLoading}
               toolProgress={toolProgress}
+              profile={profile}
               onApprove={actions.handleApprove}
               onDeny={actions.handleDeny}
             />
@@ -412,6 +438,14 @@ function Chat({
           !contextFolderOverride && (
             <WorktreePanel folderPath={effectiveContextFolder} />
           )}
+
+        {previewItem && previewVisible && (
+          <PreviewPanel
+            item={previewItem}
+            toolProgress={toolProgress}
+            onClose={() => setPreviewVisible(false)}
+          />
+        )}
       </div>
 
       {queuedCount > 0 && (
@@ -425,6 +459,7 @@ function Chat({
           isLoading={isLoading}
           hasSession={!!hermesSessionId}
           sessionId={hermesSessionId}
+          profile={profile}
           remoteMode={remoteMode}
           readiness={readiness}
           onSubmit={handleSubmitOrQueue}

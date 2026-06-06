@@ -242,12 +242,39 @@ export function Editor() {
       setType(id, { type: "database", html: "", text: "", view: "board" });
       return;
     }
-    if (item.type === "image") {
-      setType(id, { type: "image", html: "", text: "" });
+    if (
+      item.type === "image" ||
+      item.type === "audio" ||
+      item.type === "video" ||
+      item.type === "file"
+    ) {
+      setType(id, { type: item.type, html: "", text: "" });
+      return;
+    }
+    if (item.type === "mermaid") {
+      setType(id, { type: "mermaid", html: "", text: "" });
+      return;
+    }
+    if (item.type === "excalidraw") {
+      // No src yet — the block mints its assetId and writes the sidecar on the
+      // first edit, then records the preview-svg path back into `src`.
+      setType(id, { type: "excalidraw", html: "", text: "", src: null });
       return;
     }
     if (item.type === "bookmark") {
       setType(id, { type: "bookmark", html: "", text: "", bm: null });
+      return;
+    }
+    if (item.type === "button") {
+      // Seed an editable label + empty prompt; the block opens its editor when
+      // run with no prompt set. Templates ship a preset agentPrompt instead.
+      setType(id, {
+        type: "button",
+        html: "",
+        text: "Run",
+        emoji: "✨",
+        agentPrompt: "",
+      });
       return;
     }
     if (item.type === "page") {

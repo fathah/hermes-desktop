@@ -457,6 +457,98 @@
   color: var(--tx-4);
 }
 
+/* ---------- Mermaid diagram block ---------- */
+.sps-scope .b-mermaid {
+  margin: 6px 0;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface);
+  cursor: pointer;
+}
+.sps-scope .b-mermaid.editing {
+  cursor: default;
+}
+.sps-scope .b-mermaid-src {
+  width: 100%;
+  min-height: 110px;
+  resize: vertical;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--tx-1);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.sps-scope .b-mermaid-preview {
+  display: flex;
+  justify-content: center;
+}
+.sps-scope .b-mermaid-preview svg {
+  max-width: 100%;
+  height: auto;
+}
+.sps-scope .b-mermaid-error {
+  color: var(--danger, #d04545);
+  font-size: 12.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  margin-top: 8px;
+}
+
+/* ---------- Excalidraw drawing block ---------- */
+.sps-scope .b-excalidraw {
+  margin: 6px 0;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface);
+  cursor: pointer;
+}
+.sps-scope .b-excalidraw.editing {
+  cursor: default;
+  width: 100%;
+}
+.sps-scope .b-excalidraw .exc-canvas {
+  position: relative;
+  height: 460px;
+  width: 100%;
+}
+/* Excalidraw measures its own root; force it to fill the block-width host so the
+   canvas + toolbar render full-width instead of collapsing to a thin column. */
+.sps-scope .b-excalidraw .exc-canvas > .excalidraw {
+  width: 100%;
+  height: 100%;
+}
+.sps-scope .b-excalidraw-preview {
+  display: flex;
+  justify-content: center;
+  padding: 8px;
+}
+.sps-scope .b-excalidraw-preview svg {
+  max-width: 100%;
+  height: auto;
+}
+.sps-scope .b-excalidraw-empty,
+.sps-scope .b-excalidraw-load {
+  padding: 28px;
+  text-align: center;
+  color: var(--tx-3);
+  font-size: 13px;
+}
+.sps-scope .b-excalidraw-done {
+  display: block;
+  margin: 8px;
+  padding: 5px 12px;
+  border: 1px solid var(--hair);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--tx-1);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
 /* ---------- Bookmark block ---------- */
 .sps-scope .b-bookmark {
   display: flex;
@@ -859,6 +951,286 @@
   overflow: hidden;
   text-overflow: ellipsis;
   border-left: 2px solid;
+}
+
+/* ---------- Journal / diary surface ---------- */
+.sps-scope .jr {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 28px 28px 64px;
+}
+.sps-scope .jr-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.sps-scope .jr-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--tx-1);
+  letter-spacing: -0.01em;
+}
+.sps-scope .jr-spacer {
+  flex: 1;
+}
+.sps-scope .jr-icon-btn,
+.sps-scope .jr-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--hair);
+  background: var(--surface);
+  color: var(--tx-2);
+  border-radius: 7px;
+  padding: 5px 9px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.sps-scope .jr-icon-btn {
+  padding: 5px 7px;
+}
+.sps-scope .jr-icon-btn:hover,
+.sps-scope .jr-btn:hover {
+  background: var(--surface-raised);
+}
+.sps-scope .jr-btn.primary {
+  border-color: transparent;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+.sps-scope[data-theme="dark"] .jr-btn.primary {
+  color: #1a1810;
+}
+/* calendar cells become clickable in the journal surface */
+.sps-scope .jr .cal-day {
+  cursor: pointer;
+}
+.sps-scope .jr .cal-day:hover {
+  background: var(--surface-raised);
+}
+.sps-scope .jr .cal-day.sel {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.sps-scope .cal-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--tx-3);
+}
+.sps-scope .cal-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: inline-block;
+}
+/* day timeline */
+.sps-scope .jr-day {
+  margin-top: 22px;
+}
+.sps-scope .jr-day-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.sps-scope .jr-day-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--tx-1);
+}
+.sps-scope .jr-entry {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 10px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--hair-soft);
+}
+.sps-scope .jr-entry:hover {
+  background: var(--surface-raised);
+}
+.sps-scope .jr-entry-time {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--tx-3);
+  width: 44px;
+  flex: none;
+  padding-top: 2px;
+}
+.sps-scope .jr-entry-body {
+  min-width: 0;
+  flex: 1;
+}
+.sps-scope .jr-entry-title {
+  font-size: 14px;
+  color: var(--tx-1);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.sps-scope .jr-entry-sub {
+  font-size: 12px;
+  color: var(--tx-3);
+  margin-top: 2px;
+}
+.sps-scope .jr-empty {
+  color: var(--tx-4);
+  font-size: 13px;
+  padding: 18px 8px;
+}
+.sps-scope .jr-mood-wrap {
+  position: relative;
+  flex: none;
+}
+.sps-scope .jr-mood-pop {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 30;
+  display: flex;
+  gap: 2px;
+  padding: 5px;
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+}
+.sps-scope .jr-mood-opt {
+  border: none;
+  background: transparent;
+  font-size: 17px;
+  line-height: 1;
+  padding: 4px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.sps-scope .jr-mood-opt:hover {
+  background: var(--surface-raised);
+}
+.sps-scope .jr-throwback {
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--tx-3);
+}
+.sps-scope .jr-throwback a {
+  color: var(--accent);
+  cursor: pointer;
+}
+
+/* ---------- Media blocks (audio / video / file) ---------- */
+.sps-scope .b-audio,
+.sps-scope .b-video,
+.sps-scope .b-file {
+  margin: 4px 0;
+}
+.sps-scope .audio-empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sps-scope .audio-empty .image-slot-drop {
+  flex: 1;
+  padding: 14px 16px;
+}
+.sps-scope .audio-or {
+  font-size: 12px;
+  color: var(--tx-4);
+}
+.sps-scope .audio-player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sps-scope .audio-player audio {
+  flex: 1;
+  height: 36px;
+}
+.sps-scope .audio-dur {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--tx-3);
+}
+/* voice-record button */
+.sps-scope .vr-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--hair);
+  background: var(--surface);
+  color: var(--tx-2);
+  border-radius: 7px;
+  padding: 7px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sps-scope .vr-btn:hover {
+  background: var(--surface-raised);
+}
+.sps-scope .vr-btn.recording {
+  border-color: transparent;
+  background: color-mix(in oklab, #e5484d 16%, transparent);
+  color: #e5484d;
+  font-variant-numeric: tabular-nums;
+}
+.sps-scope .vr-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #e5484d;
+  animation: vrPulse 1s ease-in-out infinite;
+}
+@keyframes vrPulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+/* file chip */
+.sps-scope .file-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--hair);
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 9px 11px;
+}
+.sps-scope .file-chip-ic {
+  color: var(--tx-3);
+  display: inline-flex;
+}
+.sps-scope .file-chip-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.sps-scope .file-chip-name {
+  font-size: 13.5px;
+  color: var(--tx-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sps-scope .file-chip-meta {
+  font-size: 11.5px;
+  color: var(--tx-3);
+}
+.sps-scope .file-chip-btn {
+  border: 1px solid var(--hair);
+  background: var(--surface);
+  color: var(--tx-2);
+  border-radius: 6px;
+  padding: 5px 7px;
+  cursor: pointer;
+}
+.sps-scope .file-chip-btn:hover {
+  background: var(--surface-raised);
 }
 
 /* ---------- Filter / sort popover ---------- */

@@ -15,7 +15,12 @@ import dns from "node:dns";
 import net from "node:net";
 import { Agent, fetch as undiciFetch } from "undici";
 import ipaddr from "ipaddr.js";
-import { getApiUrl, getRemoteAuthHeader } from "./hermes";
+import {
+  getApiUrl,
+  getRemoteAuthHeader,
+  isRemoteMode,
+  buildRetrievalSystemMessage,
+} from "./hermes";
 import { profileHome, getActiveProfileNameSync } from "./utils";
 import { assembleVaultContext } from "./sps-context";
 
@@ -94,7 +99,10 @@ function guardedLookup(
   });
 }
 
-const guardedAgent = new Agent({ connect: { lookup: guardedLookup } });
+// Exported so other main-process fetchers (e.g. src/main/openalex.ts) reuse the
+// SAME IP-pinning dispatcher instead of cloning the SSRF guard — keeps the
+// load-bearing audit surface single-sourced (see CLAUDE.md).
+export const guardedAgent = new Agent({ connect: { lookup: guardedLookup } });
 
 // ───────────────────────── unfurl ─────────────────────────
 interface BookmarkMeta {
@@ -336,24 +344,57 @@ function pageToText(blocks: { type: string; text: string }[]): string {
     .join("\n");
 }
 
+/**
+ * Build the OpenAI-style messages for an SPS assistant request. Pure/testable.
+ * The grounding system message (when present) goes AFTER the SYSTEM_PROMPT so
+ * its JSON-shape contract stays first, and before the user turn — it only adds
+ * workspace context, never reshapes the required structured-output instruction.
+ */
+export function buildSpsAssistantMessages(
+  prompt: string,
+  ctx: PageContext,
+  grounding?: { role: "system"; content: string } | null,
+): Array<{ role: string; content: string }> {
+  const messages: Array<{ role: string; content: string }> = [
+    { role: "system", content: SYSTEM_PROMPT },
+  ];
+  if (grounding) messages.push(grounding);
+  messages.push({
+    role: "user",
+    content: `Page title: ${ctx.pageTitle}\n\nPage content:\n${pageToText(ctx.blocks)}\n\nRequest: ${prompt}`,
+  });
+  return messages;
+}
+
 export async function spsAssistant(
   prompt: string,
   ctx: PageContext,
   profile?: string,
+  groundInWorkspace?: boolean,
 ): Promise<AssistantResult> {
   try {
+    // KB grounding: local-only (the vault lives on this machine). Reuses the
+    // chat path's retrieval verbatim so the co-author reads ingested docs.
+    const grounding =
+      groundInWorkspace && !isRemoteMode()
+        ? await buildRetrievalSystemMessage(prompt, profile)
+        : null;
     const url = `${getApiUrl(profile)}/v1/chat/completions`;
-    // Ground the run in the user's own vault + memory (Milestone 1A). Additive:
-    // an empty bundle (or retrieval failure) just omits the extra system message.
+    // Ground the run in the user's own vault + memory (Milestone 1A) AND, when
+    // enabled, the opt-in KB retrieval (`grounding`). Both are merged into one
+    // system message placed after the SYSTEM_PROMPT by buildSpsAssistantMessages,
+    // so the structured-output contract stays first.
     const vaultContext = await assembleVaultContext(
       prompt,
       ctx.pageTitle,
       profile,
     );
-    const systemMessages = [{ role: "system", content: SYSTEM_PROMPT }];
-    if (vaultContext) {
-      systemMessages.push({ role: "system", content: vaultContext });
-    }
+    const extraGrounding = [grounding?.content, vaultContext]
+      .filter(Boolean)
+      .join("\n\n");
+    const combinedGrounding = extraGrounding
+      ? { role: "system" as const, content: extraGrounding }
+      : null;
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...getRemoteAuthHeader() },
@@ -361,13 +402,7 @@ export async function spsAssistant(
       body: JSON.stringify({
         model: "hermes-agent",
         stream: false,
-        messages: [
-          ...systemMessages,
-          {
-            role: "user",
-            content: `Page title: ${ctx.pageTitle}\n\nPage content:\n${pageToText(ctx.blocks)}\n\nRequest: ${prompt}`,
-          },
-        ],
+        messages: buildSpsAssistantMessages(prompt, ctx, combinedGrounding),
       }),
     });
     if (!res.ok) {

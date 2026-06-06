@@ -4,6 +4,11 @@ import type { UsageAggregate } from "../shared/usage";
 import type { MemoryTimeline } from "../shared/memoryTimeline";
 import type { SearchSummary } from "../shared/searchSummary";
 import type { LoadedSkin } from "../shared/skins";
+import type {
+  SearchOpts as ResearchSearchOpts,
+  WorkSummary as ResearchWorkSummary,
+  WorkDetail as ResearchWorkDetail,
+} from "../shared/openalex/core";
 
 interface ElectronAPI {
   process: {
@@ -83,13 +88,6 @@ interface CredentialPoolEntry {
   key?: string;
 }
 
-interface WorkspaceFileNode {
-  name: string;
-  path: string;
-  kind: "file" | "directory";
-  children?: WorkspaceFileNode[];
-}
-
 interface ObsidianFileNode {
   name: string;
   path: string;
@@ -122,118 +120,6 @@ type ObsidianFunctionName =
   | "replace-selection"
   | "run-command"
   | "write-note";
-
-type WorkspaceSearchResult =
-  | { kind: "workspace"; path: string; title: string; snippet: string }
-  | { kind: "obsidian"; path: string; title: string; snippet: string }
-  | {
-      kind: "session";
-      sessionId: string;
-      title: string | null;
-      snippet: string;
-    }
-  | { kind: "admin"; view: string; title: string }
-  | { kind: "command"; command: string; title: string };
-
-interface WorkspacePageMeta {
-  id: string;
-  path: string;
-  displayName: string;
-  parentPath: string | null;
-  childOrder: string[];
-  favorite: boolean;
-  trashed: boolean;
-  createdAt: number;
-  updatedAt: number;
-  lastVisitedAt?: number;
-}
-
-interface WorkspaceMetadata {
-  version: 1;
-  pages: Record<string, WorkspacePageMeta>;
-  rootOrder: string[];
-  favorites: string[];
-  recentVisits: Array<{ path: string; visitedAt: number }>;
-}
-
-interface WorkspacePageGraph {
-  version: 2;
-  pages: Record<string, WorkspacePageMeta>;
-  rootOrder: string[];
-  childOrder: Record<string, string[]>;
-  favorites: string[];
-  recentVisits: Array<{ path: string; visitedAt: number }>;
-  backlinks: Record<string, string[]>;
-  sidebar: {
-    collapsedSections: string[];
-    width: number;
-    collapsed: boolean;
-  };
-}
-
-interface WorkspaceHistoryEntry {
-  id: string;
-  pageId: string;
-  path: string;
-  createdAt: number;
-  reason: "user-save" | "page-operation" | "agent-proposal" | "restore";
-  content: string;
-  summary: Array<{ kind: "added" | "removed" | "changed"; text: string }>;
-}
-
-interface WorkspaceTemplate {
-  id: string;
-  kind: "page" | "database-row" | "button";
-  title: string;
-  content: string;
-  properties?: Record<string, unknown>;
-  createdAt: number;
-  updatedAt: number;
-  builtin?: boolean;
-}
-
-interface WorkspaceSyncedBlockReference {
-  path: string;
-  blockId: string;
-}
-
-interface WorkspaceSyncedBlock {
-  id: string;
-  sourcePath: string;
-  sourceBlockId: string;
-  content: string;
-  references: WorkspaceSyncedBlockReference[];
-  updatedAt: number;
-}
-
-interface WorkspaceComment {
-  id: string;
-  path: string;
-  blockId?: string;
-  body: string;
-  reminderAt?: number;
-  status: "open" | "resolved";
-  createdAt: number;
-  resolvedAt?: number;
-}
-
-interface AgentWorkspaceProposal {
-  id: string;
-  path: string;
-  baseContent: string;
-  proposedContent: string;
-  hunks: AgentWorkspaceProposalHunk[];
-  createdAt: number;
-  status: "pending";
-}
-
-interface AgentWorkspaceProposalHunk {
-  id: string;
-  blockId?: string;
-  before: string;
-  after: string;
-  status: "pending" | "accepted" | "rejected";
-}
 
 interface KanbanTask {
   id: string;
@@ -319,6 +205,30 @@ interface KanbanCreateTaskInput {
   maxRetries?: number;
 }
 
+interface EquityBasketHolding {
+  ticker: string;
+  exchange?: string;
+  qty?: number;
+  avg_cost?: number;
+}
+
+interface EquityBasket {
+  id: string;
+  name: string;
+  created_at: string;
+  holdings: EquityBasketHolding[];
+}
+
+interface EquityAlert {
+  id: string;
+  ts: string;
+  ticker: string | null;
+  trigger: string;
+  direction?: string;
+  message: string;
+  read?: boolean;
+}
+
 interface HermesAPI {
   // Installation
   checkInstall: () => Promise<InstallStatus>;
@@ -341,6 +251,24 @@ interface HermesAPI {
   refreshHermesVersion: () => Promise<string | null>;
   runHermesDoctor: () => Promise<string>;
   runHermesUpdate: () => Promise<{ success: boolean; error?: string }>;
+  checkHermesUpdate: () => Promise<{
+    available: boolean;
+    behindBy?: number;
+    localHead?: string;
+    upstreamHead?: string;
+    reason?: string;
+  }>;
+  getVoiceStatus: (profile?: string) => Promise<{ hasKey: boolean }>;
+  transcribeAudio: (
+    audio: ArrayBuffer,
+    mime: string,
+    profile?: string,
+  ) => Promise<{ text?: string; error?: string }>;
+  speakText: (
+    text: string,
+    voice?: string,
+    profile?: string,
+  ) => Promise<{ audioUrl?: string; error?: string }>;
 
   // OpenClaw migration
   checkOpenClaw: () => Promise<{ found: boolean; path: string | null }>;
@@ -457,6 +385,7 @@ interface HermesAPI {
     history?: Array<{ role: string; content: string }>,
     attachments?: Attachment[],
     contextFolder?: string,
+    groundInWorkspace?: boolean,
     clientRunId?: string,
   ) => Promise<{ response: string; sessionId?: string }>;
   abortChat: () => Promise<void>;
@@ -754,13 +683,59 @@ interface HermesAPI {
     name: string,
     profile?: string,
   ) => Promise<{ success: boolean; error?: string }>;
-  createSkill: (
-    name: string,
-    description: string,
-    category: string,
-    body: string,
+  searchSkills: (query: string) => Promise<
+    Array<{
+      name: string;
+      description: string;
+      category: string;
+      source: string;
+      installed: boolean;
+    }>
+  >;
+  createSkill: (input: {
+    name: string;
+    description?: string;
+    category?: string;
+    body?: string;
+    profile?: string;
+  }) => Promise<{ success: boolean; error?: string; path?: string }>;
+  writeSkillContent: (
+    skillPath: string,
+    content: string,
     profile?: string,
-  ) => Promise<{ success: boolean; path?: string; error?: string }>;
+  ) => Promise<{ success: boolean; error?: string }>;
+  listDisabledSkills: (
+    profile?: string,
+  ) => Promise<
+    Array<{ name: string; category: string; description: string; path: string }>
+  >;
+  setSkillEnabled: (
+    skillPath: string,
+    enabled: boolean,
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+  discoverLocalSkills: (profile?: string) => Promise<
+    Array<{
+      name: string;
+      description: string;
+      category: string;
+      source: string;
+      sourcePath: string;
+    }>
+  >;
+  importLocalSkill: (
+    sourcePath: string,
+    category?: string,
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+  generateSkillFromRepo: (
+    repoPath: string,
+    profile?: string,
+  ) => Promise<{
+    success: boolean;
+    draft?: { name: string; description: string; body: string };
+    error?: string;
+  }>;
 
   // Session cache
   listCachedSessions: (
@@ -804,191 +779,6 @@ interface HermesAPI {
       snippet: string;
     }>
   >;
-  getWorkspaceTree: (profile?: string) => Promise<WorkspaceFileNode[]>;
-  readWorkspaceFile: (path: string, profile?: string) => Promise<string>;
-  writeWorkspaceFile: (
-    path: string,
-    content: string,
-    profile?: string,
-  ) => Promise<boolean>;
-  deleteWorkspaceFile: (path: string, profile?: string) => Promise<boolean>;
-  indexQuery: (
-    query: {
-      scope?: string;
-      filters?: Array<{
-        prop: string;
-        op: "eq" | "neq" | "contains" | "exists";
-        value?: unknown;
-      }>;
-      sort?: { prop: string; dir: "asc" | "desc" };
-      limit?: number;
-    },
-    profile?: string,
-  ) => Promise<
-    Array<{
-      path: string;
-      title: string;
-      props: Record<string, unknown>;
-      mtime: number;
-    }>
-  >;
-  indexSearch: (
-    text: string,
-    limit?: number,
-    profile?: string,
-  ) => Promise<Array<{ path: string; title: string; snippet: string }>>;
-  indexBacklinks: (path: string, profile?: string) => Promise<string[]>;
-  indexRebuild: (profile?: string) => Promise<{
-    root: string;
-    notes: number;
-    links: number;
-    indexedAt: number | null;
-  }>;
-  indexStatus: (profile?: string) => Promise<{
-    root: string;
-    notes: number;
-    links: number;
-    indexedAt: number | null;
-  }>;
-  searchWorkspaceAndSessions: (
-    query: string,
-    limit?: number,
-    profile?: string,
-  ) => Promise<WorkspaceSearchResult[]>;
-  createWorkspacePage: (
-    input: { title: string; parentPath?: string | null; content?: string },
-    profile?: string,
-  ) => Promise<WorkspacePageMeta>;
-  renameWorkspacePage: (
-    path: string,
-    title: string,
-    profile?: string,
-  ) => Promise<WorkspacePageMeta>;
-  moveWorkspacePage: (
-    path: string,
-    parentPath: string | null,
-    profile?: string,
-  ) => Promise<WorkspacePageMeta>;
-  duplicateWorkspacePage: (
-    path: string,
-    profile?: string,
-  ) => Promise<WorkspacePageMeta>;
-  trashWorkspacePage: (path: string, profile?: string) => Promise<boolean>;
-  restoreWorkspacePage: (path: string, profile?: string) => Promise<boolean>;
-  favoriteWorkspacePage: (
-    path: string,
-    favorite: boolean,
-    profile?: string,
-  ) => Promise<WorkspacePageMeta>;
-  getWorkspaceMetadata: (profile?: string) => Promise<WorkspaceMetadata>;
-  getWorkspacePageGraph: (profile?: string) => Promise<WorkspacePageGraph>;
-  updateWorkspaceSidebarState: (
-    state: Partial<WorkspacePageGraph["sidebar"]>,
-    profile?: string,
-  ) => Promise<WorkspacePageGraph>;
-  getWorkspaceBacklinks: (path: string, profile?: string) => Promise<string[]>;
-  listWorkspaceTemplates: (profile?: string) => Promise<WorkspaceTemplate[]>;
-  saveWorkspaceTemplate: (
-    input: {
-      kind: "page" | "database-row" | "button";
-      title: string;
-      content: string;
-      properties?: Record<string, unknown>;
-    },
-    profile?: string,
-  ) => Promise<WorkspaceTemplate>;
-  renderWorkspaceButtonBlock: (input: {
-    label: string;
-    prompt: string;
-  }) => Promise<string>;
-  listWorkspaceSyncedBlocks: (
-    profile?: string,
-  ) => Promise<WorkspaceSyncedBlock[]>;
-  createWorkspaceSyncedBlock: (
-    input: {
-      sourcePath: string;
-      sourceBlockId: string;
-      content: string;
-      references?: WorkspaceSyncedBlockReference[];
-    },
-    profile?: string,
-  ) => Promise<WorkspaceSyncedBlock>;
-  updateWorkspaceSyncedBlockContent: (
-    id: string,
-    content: string,
-    profile?: string,
-  ) => Promise<WorkspaceSyncedBlock>;
-  removeWorkspaceSyncedBlockReference: (
-    id: string,
-    path: string,
-    blockId: string,
-    profile?: string,
-  ) => Promise<WorkspaceSyncedBlock>;
-  listWorkspaceComments: (
-    path?: string,
-    profile?: string,
-  ) => Promise<WorkspaceComment[]>;
-  createWorkspaceComment: (
-    input: {
-      path: string;
-      blockId?: string;
-      body: string;
-      reminderAt?: number;
-    },
-    profile?: string,
-  ) => Promise<WorkspaceComment>;
-  resolveWorkspaceComment: (
-    id: string,
-    profile?: string,
-  ) => Promise<WorkspaceComment>;
-  updateWorkspacePageOrder: (
-    parentPath: string | null,
-    orderedPaths: string[],
-    profile?: string,
-  ) => Promise<WorkspaceMetadata>;
-  recordWorkspaceVisit: (path: string, profile?: string) => Promise<boolean>;
-  listWorkspaceHistory: (
-    path: string,
-    profile?: string,
-  ) => Promise<WorkspaceHistoryEntry[]>;
-  restoreWorkspaceVersion: (
-    path: string,
-    historyId: string,
-    profile?: string,
-  ) => Promise<string>;
-  exportWorkspaceMarkdownBundle: (
-    profile?: string,
-  ) => Promise<Array<{ path: string; content: string }>>;
-  listAgentWorkspaceProposals: (
-    profile?: string,
-  ) => Promise<AgentWorkspaceProposal[]>;
-  createAgentWorkspaceProposal: (
-    path: string,
-    proposedContent: string,
-    baseContent: string,
-    profile?: string,
-  ) => Promise<AgentWorkspaceProposal>;
-  acceptAgentWorkspaceProposal: (
-    id: string,
-    profile?: string,
-  ) => Promise<boolean>;
-  rejectAgentWorkspaceProposal: (
-    id: string,
-    profile?: string,
-  ) => Promise<boolean>;
-  acceptAgentWorkspaceProposalHunk: (
-    id: string,
-    hunkId: string,
-    profile?: string,
-  ) => Promise<boolean>;
-  rejectAgentWorkspaceProposalHunk: (
-    id: string,
-    hunkId: string,
-    profile?: string,
-  ) => Promise<boolean>;
-  onWorkspaceFileChanged: (
-    callback: (event: { path: string; content: string }) => void,
-  ) => () => void;
   getObsidianConfig: (profile?: string) => Promise<ObsidianConfig>;
   setObsidianConfig: (
     input: ObsidianConfigInput,
@@ -1320,6 +1110,7 @@ interface HermesAPI {
     prompt: string,
     ctx: { blocks: { type: string; text: string }[]; pageTitle: string },
     profile?: string,
+    groundInWorkspace?: boolean,
   ) => Promise<unknown>;
   spsLoad: (profile?: string) => Promise<unknown | null>;
   spsSave: (ws: unknown, profile?: string) => Promise<boolean>;
@@ -1332,6 +1123,35 @@ interface HermesAPI {
     sessionId: string,
     profile?: string,
   ) => Promise<boolean>;
+  equityListBaskets: (profile?: string) => Promise<EquityBasket[]>;
+  equitySaveBasket: (
+    basket: Partial<EquityBasket>,
+    profile?: string,
+  ) => Promise<EquityBasket>;
+  equityDeleteBasket: (basketId: string, profile?: string) => Promise<boolean>;
+  equityListAlerts: (
+    limit?: number,
+    profile?: string,
+  ) => Promise<EquityAlert[]>;
+  equityMarkAlertRead: (alertId: string, profile?: string) => Promise<boolean>;
+  onEquityAlert: (callback: (alert: EquityAlert) => void) => () => void;
+  spsResearchSearchWorks: (
+    q: string,
+    opts?: ResearchSearchOpts,
+    profile?: string,
+  ) => Promise<ResearchWorkSummary[]>;
+  spsResearchGetWork: (
+    id: string,
+    profile?: string,
+  ) => Promise<ResearchWorkDetail>;
+  spsResearchGetConfig: () => Promise<{ mailto: string; hasApiKey: boolean }>;
+  spsResearchSetConfig: (
+    mailto: string,
+    apiKey?: string,
+  ) => Promise<{ mailto: string; hasApiKey: boolean }>;
+  spsResearchEnsureAgentTool: (
+    profile?: string,
+  ) => Promise<{ registered: boolean; alreadyPresent: boolean }>;
   spsExportPage: (
     pageId: string,
     markdown: string,
@@ -1343,6 +1163,11 @@ interface HermesAPI {
     markdown: string,
     profile?: string,
   ) => Promise<boolean>;
+  spsReadRow: (
+    dbFolder: string,
+    rowId: string,
+    profile?: string,
+  ) => Promise<string | null>;
   spsDeleteRow: (
     dbFolder: string,
     rowId: string,
@@ -1355,6 +1180,25 @@ interface HermesAPI {
   ) => Promise<{ pages: Record<string, string>; manifest: string | null }>;
   spsVaultWriteManifest: (json: string, profile?: string) => Promise<boolean>;
   spsBackupWorkspace: (profile?: string) => Promise<string | null>;
+  spsWriteExcalidraw: (
+    pageId: string,
+    assetId: string,
+    sceneJson: string,
+    svg: string,
+    profile?: string,
+  ) => Promise<boolean>;
+  spsReadExcalidraw: (
+    pageId: string,
+    assetId: string,
+    profile?: string,
+  ) => Promise<{ scene: string | null; svg: string | null }>;
+  spsAssetWrite: (
+    bytes: Uint8Array,
+    ext: string,
+    profile?: string,
+  ) => Promise<string>;
+  spsAssetExists: (name: string, profile?: string) => Promise<boolean>;
+  spsAssetGc: (referenced: string[], profile?: string) => Promise<number>;
   spsIndexQuery: (
     query: {
       scope?: string;
@@ -1396,6 +1240,15 @@ interface HermesAPI {
     links: number;
     indexedAt: number | null;
   }>;
+  spsPickPdf: () => Promise<string | null>;
+  spsExtractPdf: (filePath: string) => Promise<{
+    title: string;
+    markdown: string;
+    pageCount: number;
+    hasTextLayer: boolean;
+    reason?: "missing" | "unreadable";
+  }>;
+  spsReadFileBytes: (filePath: string) => Promise<Uint8Array>;
 }
 
 declare global {

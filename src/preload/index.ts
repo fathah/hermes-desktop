@@ -5,6 +5,11 @@ import type { UsageAggregate } from "../shared/usage";
 import type { MemoryTimeline } from "../shared/memoryTimeline";
 import type { SearchSummary } from "../shared/searchSummary";
 import type { LoadedSkin } from "../shared/skins";
+import type {
+  SearchOpts as ResearchSearchOpts,
+  WorkSummary as ResearchWorkSummary,
+  WorkDetail as ResearchWorkDetail,
+} from "../shared/openalex/core";
 
 /**
  * Mirror of the renderer-side `CredentialPoolEntry` ambient type
@@ -99,6 +104,29 @@ const hermesAPI = {
     ipcRenderer.invoke("run-hermes-doctor"),
   runHermesUpdate: (): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke("run-hermes-update"),
+  checkHermesUpdate: (): Promise<{
+    available: boolean;
+    behindBy?: number;
+    localHead?: string;
+    upstreamHead?: string;
+    reason?: string;
+  }> => ipcRenderer.invoke("check-hermes-update"),
+
+  // Voice I/O (WS4)
+  getVoiceStatus: (profile?: string): Promise<{ hasKey: boolean }> =>
+    ipcRenderer.invoke("get-voice-status", profile),
+  transcribeAudio: (
+    audio: ArrayBuffer,
+    mime: string,
+    profile?: string,
+  ): Promise<{ text?: string; error?: string }> =>
+    ipcRenderer.invoke("transcribe-audio", audio, mime, profile),
+  speakText: (
+    text: string,
+    voice?: string,
+    profile?: string,
+  ): Promise<{ audioUrl?: string; error?: string }> =>
+    ipcRenderer.invoke("speak-text", text, voice, profile),
 
   // OpenClaw migration
   checkOpenClaw: (): Promise<{ found: boolean; path: string | null }> =>
@@ -291,6 +319,7 @@ const hermesAPI = {
     history?: Array<{ role: string; content: string }>,
     attachments?: Attachment[],
     contextFolder?: string,
+    groundInWorkspace?: boolean,
     clientRunId?: string,
   ): Promise<{ response: string; sessionId?: string }> =>
     ipcRenderer.invoke(
@@ -301,6 +330,7 @@ const hermesAPI = {
       history,
       attachments,
       contextFolder,
+      groundInWorkspace,
       clientRunId,
     ),
 
@@ -741,21 +771,67 @@ const hermesAPI = {
     profile?: string,
   ): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke("uninstall-skill", name, profile),
-  createSkill: (
-    name: string,
-    description: string,
-    category: string,
-    body: string,
+  searchSkills: (
+    query: string,
+  ): Promise<
+    Array<{
+      name: string;
+      description: string;
+      category: string;
+      source: string;
+      installed: boolean;
+    }>
+  > => ipcRenderer.invoke("search-skills", query),
+  createSkill: (input: {
+    name: string;
+    description?: string;
+    category?: string;
+    body?: string;
+    profile?: string;
+  }): Promise<{ success: boolean; error?: string; path?: string }> =>
+    ipcRenderer.invoke("create-skill", input),
+  writeSkillContent: (
+    skillPath: string,
+    content: string,
     profile?: string,
-  ): Promise<{ success: boolean; path?: string; error?: string }> =>
-    ipcRenderer.invoke(
-      "create-skill",
-      name,
-      description,
-      category,
-      body,
-      profile,
-    ),
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("write-skill-content", skillPath, content, profile),
+  listDisabledSkills: (
+    profile?: string,
+  ): Promise<
+    Array<{ name: string; category: string; description: string; path: string }>
+  > => ipcRenderer.invoke("list-disabled-skills", profile),
+  setSkillEnabled: (
+    skillPath: string,
+    enabled: boolean,
+    profile?: string,
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("set-skill-enabled", skillPath, enabled, profile),
+  discoverLocalSkills: (
+    profile?: string,
+  ): Promise<
+    Array<{
+      name: string;
+      description: string;
+      category: string;
+      source: string;
+      sourcePath: string;
+    }>
+  > => ipcRenderer.invoke("discover-local-skills", profile),
+  importLocalSkill: (
+    sourcePath: string,
+    category?: string,
+    profile?: string,
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("import-local-skill", sourcePath, category, profile),
+  generateSkillFromRepo: (
+    repoPath: string,
+    profile?: string,
+  ): Promise<{
+    success: boolean;
+    draft?: { name: string; description: string; body: string };
+    error?: string;
+  }> => ipcRenderer.invoke("generate-skill-from-repo", repoPath, profile),
 
   // Session cache (fast local cache with generated titles)
   listCachedSessions: (
@@ -804,234 +880,6 @@ const hermesAPI = {
     }>
   > => ipcRenderer.invoke("search-sessions", query, limit),
 
-  getWorkspaceTree: (profile?: string) =>
-    ipcRenderer.invoke("get-workspace-tree", profile),
-  readWorkspaceFile: (path: string, profile?: string) =>
-    ipcRenderer.invoke("read-workspace-file", path, profile),
-  writeWorkspaceFile: (path: string, content: string, profile?: string) =>
-    ipcRenderer.invoke("write-workspace-file", path, content, profile),
-  deleteWorkspaceFile: (path: string, profile?: string) =>
-    ipcRenderer.invoke("delete-workspace-file", path, profile),
-
-  // Note index (S1): derived SQLite query/search/graph layer over the vault.
-  indexQuery: (
-    query: {
-      scope?: string;
-      filters?: Array<{
-        prop: string;
-        op: "eq" | "neq" | "contains" | "exists";
-        value?: unknown;
-      }>;
-      sort?: { prop: string; dir: "asc" | "desc" };
-      limit?: number;
-    },
-    profile?: string,
-  ): Promise<
-    Array<{
-      path: string;
-      title: string;
-      props: Record<string, unknown>;
-      mtime: number;
-    }>
-  > => ipcRenderer.invoke("index-query", query, profile),
-  indexSearch: (
-    text: string,
-    limit?: number,
-    profile?: string,
-  ): Promise<Array<{ path: string; title: string; snippet: string }>> =>
-    ipcRenderer.invoke("index-search", text, limit, profile),
-  indexBacklinks: (path: string, profile?: string): Promise<string[]> =>
-    ipcRenderer.invoke("index-backlinks", path, profile),
-  indexRebuild: (
-    profile?: string,
-  ): Promise<{
-    root: string;
-    notes: number;
-    links: number;
-    indexedAt: number | null;
-  }> => ipcRenderer.invoke("index-rebuild", profile),
-  indexStatus: (
-    profile?: string,
-  ): Promise<{
-    root: string;
-    notes: number;
-    links: number;
-    indexedAt: number | null;
-  }> => ipcRenderer.invoke("index-status", profile),
-  searchWorkspaceAndSessions: (
-    query: string,
-    limit?: number,
-    profile?: string,
-  ) =>
-    ipcRenderer.invoke("search-workspace-and-sessions", query, limit, profile),
-  createWorkspacePage: (
-    input: { title: string; parentPath?: string | null; content?: string },
-    profile?: string,
-  ) => ipcRenderer.invoke("create-workspace-page", input, profile),
-  renameWorkspacePage: (path: string, title: string, profile?: string) =>
-    ipcRenderer.invoke("rename-workspace-page", path, title, profile),
-  moveWorkspacePage: (
-    path: string,
-    parentPath: string | null,
-    profile?: string,
-  ) => ipcRenderer.invoke("move-workspace-page", path, parentPath, profile),
-  duplicateWorkspacePage: (path: string, profile?: string) =>
-    ipcRenderer.invoke("duplicate-workspace-page", path, profile),
-  trashWorkspacePage: (path: string, profile?: string) =>
-    ipcRenderer.invoke("trash-workspace-page", path, profile),
-  restoreWorkspacePage: (path: string, profile?: string) =>
-    ipcRenderer.invoke("restore-workspace-page", path, profile),
-  favoriteWorkspacePage: (path: string, favorite: boolean, profile?: string) =>
-    ipcRenderer.invoke("favorite-workspace-page", path, favorite, profile),
-  getWorkspaceMetadata: (profile?: string) =>
-    ipcRenderer.invoke("get-workspace-metadata", profile),
-  getWorkspacePageGraph: (profile?: string) =>
-    ipcRenderer.invoke("get-workspace-page-graph", profile),
-  updateWorkspaceSidebarState: (
-    state: {
-      collapsedSections?: string[];
-      width?: number;
-      collapsed?: boolean;
-    },
-    profile?: string,
-  ) => ipcRenderer.invoke("update-workspace-sidebar-state", state, profile),
-  getWorkspaceBacklinks: (path: string, profile?: string) =>
-    ipcRenderer.invoke("get-workspace-backlinks", path, profile),
-  listWorkspaceTemplates: (profile?: string) =>
-    ipcRenderer.invoke("list-workspace-templates", profile),
-  saveWorkspaceTemplate: (
-    input: {
-      kind: "page" | "database-row" | "button";
-      title: string;
-      content: string;
-      properties?: Record<string, unknown>;
-    },
-    profile?: string,
-  ) => ipcRenderer.invoke("save-workspace-template", input, profile),
-  renderWorkspaceButtonBlock: (input: { label: string; prompt: string }) =>
-    ipcRenderer.invoke("render-workspace-button-block", input),
-  listWorkspaceSyncedBlocks: (profile?: string) =>
-    ipcRenderer.invoke("list-workspace-synced-blocks", profile),
-  createWorkspaceSyncedBlock: (
-    input: {
-      sourcePath: string;
-      sourceBlockId: string;
-      content: string;
-      references?: Array<{ path: string; blockId: string }>;
-    },
-    profile?: string,
-  ) => ipcRenderer.invoke("create-workspace-synced-block", input, profile),
-  updateWorkspaceSyncedBlockContent: (
-    id: string,
-    content: string,
-    profile?: string,
-  ) =>
-    ipcRenderer.invoke(
-      "update-workspace-synced-block-content",
-      id,
-      content,
-      profile,
-    ),
-  removeWorkspaceSyncedBlockReference: (
-    id: string,
-    path: string,
-    blockId: string,
-    profile?: string,
-  ) =>
-    ipcRenderer.invoke(
-      "remove-workspace-synced-block-reference",
-      id,
-      path,
-      blockId,
-      profile,
-    ),
-  listWorkspaceComments: (path?: string, profile?: string) =>
-    ipcRenderer.invoke("list-workspace-comments", path, profile),
-  createWorkspaceComment: (
-    input: {
-      path: string;
-      blockId?: string;
-      body: string;
-      reminderAt?: number;
-    },
-    profile?: string,
-  ) => ipcRenderer.invoke("create-workspace-comment", input, profile),
-  resolveWorkspaceComment: (id: string, profile?: string) =>
-    ipcRenderer.invoke("resolve-workspace-comment", id, profile),
-  updateWorkspacePageOrder: (
-    parentPath: string | null,
-    orderedPaths: string[],
-    profile?: string,
-  ) =>
-    ipcRenderer.invoke(
-      "update-workspace-page-order",
-      parentPath,
-      orderedPaths,
-      profile,
-    ),
-  recordWorkspaceVisit: (path: string, profile?: string) =>
-    ipcRenderer.invoke("record-workspace-visit", path, profile),
-  listWorkspaceHistory: (path: string, profile?: string) =>
-    ipcRenderer.invoke("list-workspace-history", path, profile),
-  restoreWorkspaceVersion: (
-    path: string,
-    historyId: string,
-    profile?: string,
-  ) =>
-    ipcRenderer.invoke("restore-workspace-version", path, historyId, profile),
-  exportWorkspaceMarkdownBundle: (profile?: string) =>
-    ipcRenderer.invoke("export-workspace-markdown-bundle", profile),
-  listAgentWorkspaceProposals: (profile?: string) =>
-    ipcRenderer.invoke("list-agent-workspace-proposals", profile),
-  createAgentWorkspaceProposal: (
-    path: string,
-    proposedContent: string,
-    baseContent: string,
-    profile?: string,
-  ) =>
-    ipcRenderer.invoke(
-      "create-agent-workspace-proposal",
-      path,
-      proposedContent,
-      baseContent,
-      profile,
-    ),
-  acceptAgentWorkspaceProposal: (id: string, profile?: string) =>
-    ipcRenderer.invoke("accept-agent-workspace-proposal", id, profile),
-  rejectAgentWorkspaceProposal: (id: string, profile?: string) =>
-    ipcRenderer.invoke("reject-agent-workspace-proposal", id, profile),
-  acceptAgentWorkspaceProposalHunk: (
-    id: string,
-    hunkId: string,
-    profile?: string,
-  ) =>
-    ipcRenderer.invoke(
-      "accept-agent-workspace-proposal-hunk",
-      id,
-      hunkId,
-      profile,
-    ),
-  rejectAgentWorkspaceProposalHunk: (
-    id: string,
-    hunkId: string,
-    profile?: string,
-  ) =>
-    ipcRenderer.invoke(
-      "reject-agent-workspace-proposal-hunk",
-      id,
-      hunkId,
-      profile,
-    ),
-  onWorkspaceFileChanged: (
-    callback: (event: { path: string; content: string }) => void,
-  ): (() => void) => {
-    const handler = (
-      _event: Electron.IpcRendererEvent,
-      payload: unknown,
-    ): void => callback(payload as { path: string; content: string });
-    ipcRenderer.on("workspace-file-changed", handler);
-    return () => ipcRenderer.removeListener("workspace-file-changed", handler);
-  },
   getObsidianConfig: (profile?: string) =>
     ipcRenderer.invoke("get-obsidian-config", profile),
   setObsidianConfig: (
@@ -1465,8 +1313,15 @@ const hermesAPI = {
     prompt: string,
     ctx: { blocks: { type: string; text: string }[]; pageTitle: string },
     profile?: string,
+    groundInWorkspace?: boolean,
   ): Promise<unknown> =>
-    ipcRenderer.invoke("sps-assistant", prompt, ctx, profile),
+    ipcRenderer.invoke(
+      "sps-assistant",
+      prompt,
+      ctx,
+      profile,
+      groundInWorkspace,
+    ),
   spsLoad: (profile?: string): Promise<unknown | null> =>
     ipcRenderer.invoke("sps-load", profile),
   spsSave: (ws: unknown, profile?: string): Promise<boolean> =>
@@ -1482,6 +1337,44 @@ const hermesAPI = {
     profile?: string,
   ): Promise<boolean> =>
     ipcRenderer.invoke("sps-set-work-session", pageId, sessionId, profile),
+  equityListBaskets: (profile?: string): Promise<unknown[]> =>
+    ipcRenderer.invoke("equity-list-baskets", profile),
+  equitySaveBasket: (basket: unknown, profile?: string): Promise<unknown> =>
+    ipcRenderer.invoke("equity-save-basket", basket, profile),
+  equityDeleteBasket: (basketId: string, profile?: string): Promise<boolean> =>
+    ipcRenderer.invoke("equity-delete-basket", basketId, profile),
+  equityListAlerts: (limit?: number, profile?: string): Promise<unknown[]> =>
+    ipcRenderer.invoke("equity-list-alerts", limit, profile),
+  equityMarkAlertRead: (alertId: string, profile?: string): Promise<boolean> =>
+    ipcRenderer.invoke("equity-mark-alert-read", alertId, profile),
+  onEquityAlert: (callback: (alert: unknown) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, alert: unknown): void =>
+      callback(alert);
+    ipcRenderer.on("equity-alert", handler);
+    return () => ipcRenderer.removeListener("equity-alert", handler);
+  },
+  spsResearchSearchWorks: (
+    q: string,
+    opts?: ResearchSearchOpts,
+    profile?: string,
+  ): Promise<ResearchWorkSummary[]> =>
+    ipcRenderer.invoke("sps-research-search-works", q, opts, profile),
+  spsResearchGetWork: (
+    id: string,
+    profile?: string,
+  ): Promise<ResearchWorkDetail> =>
+    ipcRenderer.invoke("sps-research-get-work", id, profile),
+  spsResearchGetConfig: (): Promise<{ mailto: string; hasApiKey: boolean }> =>
+    ipcRenderer.invoke("sps-research-get-config"),
+  spsResearchSetConfig: (
+    mailto: string,
+    apiKey?: string,
+  ): Promise<{ mailto: string; hasApiKey: boolean }> =>
+    ipcRenderer.invoke("sps-research-set-config", mailto, apiKey),
+  spsResearchEnsureAgentTool: (
+    profile?: string,
+  ): Promise<{ registered: boolean; alreadyPresent: boolean }> =>
+    ipcRenderer.invoke("sps-research-ensure-agent-tool", profile),
   spsExportPage: (
     pageId: string,
     markdown: string,
@@ -1495,6 +1388,12 @@ const hermesAPI = {
     profile?: string,
   ): Promise<boolean> =>
     ipcRenderer.invoke("sps-export-row", dbFolder, rowId, markdown, profile),
+  spsReadRow: (
+    dbFolder: string,
+    rowId: string,
+    profile?: string,
+  ): Promise<string | null> =>
+    ipcRenderer.invoke("sps-read-row", dbFolder, rowId, profile),
   spsDeleteRow: (
     dbFolder: string,
     rowId: string,
@@ -1513,6 +1412,37 @@ const hermesAPI = {
     ipcRenderer.invoke("sps-vault-write-manifest", json, profile),
   spsBackupWorkspace: (profile?: string): Promise<string | null> =>
     ipcRenderer.invoke("sps-backup-workspace", profile),
+  spsWriteExcalidraw: (
+    pageId: string,
+    assetId: string,
+    sceneJson: string,
+    svg: string,
+    profile?: string,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke(
+      "sps-write-excalidraw",
+      pageId,
+      assetId,
+      sceneJson,
+      svg,
+      profile,
+    ),
+  spsReadExcalidraw: (
+    pageId: string,
+    assetId: string,
+    profile?: string,
+  ): Promise<{ scene: string | null; svg: string | null }> =>
+    ipcRenderer.invoke("sps-read-excalidraw", pageId, assetId, profile),
+  spsAssetWrite: (
+    bytes: Uint8Array,
+    ext: string,
+    profile?: string,
+  ): Promise<string> =>
+    ipcRenderer.invoke("sps-asset-write", bytes, ext, profile),
+  spsAssetExists: (name: string, profile?: string): Promise<boolean> =>
+    ipcRenderer.invoke("sps-asset-exists", name, profile),
+  spsAssetGc: (referenced: string[], profile?: string): Promise<number> =>
+    ipcRenderer.invoke("sps-asset-gc", referenced, profile),
   spsIndexQuery: (
     query: {
       scope?: string;
@@ -1561,6 +1491,20 @@ const hermesAPI = {
     links: number;
     indexedAt: number | null;
   }> => ipcRenderer.invoke("sps-index-rebuild", profile),
+
+  // KB Phase 0: pick + extract a PDF for ingestion into the SPS vault.
+  spsPickPdf: (): Promise<string | null> => ipcRenderer.invoke("sps-pick-pdf"),
+  spsExtractPdf: (
+    filePath: string,
+  ): Promise<{
+    title: string;
+    markdown: string;
+    pageCount: number;
+    hasTextLayer: boolean;
+    reason?: "missing" | "unreadable";
+  }> => ipcRenderer.invoke("sps-extract-pdf", filePath),
+  spsReadFileBytes: (filePath: string): Promise<Uint8Array> =>
+    ipcRenderer.invoke("sps-read-file-bytes", filePath),
 };
 
 if (process.contextIsolated) {

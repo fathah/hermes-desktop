@@ -58,9 +58,9 @@ describe("expectedEnvKeyForModel — URL fallback for custom/auto providers", ()
     expect(
       expectedEnvKeyForModel("custom", "https://openrouter.ai/api/v1"),
     ).toBe("OPENROUTER_API_KEY");
-    expect(
-      expectedEnvKeyForModel("custom", "https://api.moonshot.ai/v1"),
-    ).toBe("KIMI_API_KEY");
+    expect(expectedEnvKeyForModel("custom", "https://api.moonshot.ai/v1")).toBe(
+      "KIMI_API_KEY",
+    );
     expect(
       expectedEnvKeyForModel("custom", "https://api.z.ai/api/paas/v4"),
     ).toBe("GLM_API_KEY");

@@ -14,6 +14,13 @@ export default defineConfig(
       ".claude/**",
       ".agents/**",
       "build/**",
+      // Bundled MCP server output (esbuild via the `build:mcp` script). A
+      // generated, git-ignored single-file CJS bundle — not our source to lint.
+      "resources/*.cjs",
+      // Vendored Tesseract.js WASM glue (worker.min.js / *-core*.wasm.js),
+      // fetched into public/ at build time by scripts/fetch-ocr-assets.mjs and
+      // git-ignored. Third-party minified artifacts — not our source to lint.
+      "src/renderer/public/tesseract/**",
       // Standalone SPS Agent app + its design reference: separate sub-projects
       // with their own tooling. The integrated copy under
       // src/renderer/src/screens/SpsAgent IS linted.
@@ -62,6 +69,15 @@ export default defineConfig(
     // app (inferred return types). Relax the explicit-return-type rule for it
     // rather than annotating ~110 components/handlers.
     files: ["src/renderer/src/screens/SpsAgent/**/*.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/explicit-function-return-type": "off",
+    },
+  },
+  {
+    // Plain-JS build/smoke scripts (.mjs/.cjs/.js): explicit-function-return-type
+    // is a TypeScript-only rule that cannot be satisfied without type annotations,
+    // which aren't valid JavaScript. Other rules still apply.
+    files: ["**/*.{js,mjs,cjs}"],
     rules: {
       "@typescript-eslint/explicit-function-return-type": "off",
     },

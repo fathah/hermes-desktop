@@ -39,3 +39,7 @@ release/
 /*.bat
 /*.ps1
 graphify-out/
+src/renderer/public/tesseract/
+
+# Bundled OpenAlex MCP server (built by `npm run build:mcp`)
+resources/openalex-mcp.cjs

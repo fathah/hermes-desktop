@@ -3,15 +3,21 @@
 // configured model + tools + memory and returns a validated AssistantResult.
 // Output is re-validated defensively here. Falls back to a chat reply on any error.
 import { validateResult } from "../validate";
+import { getGroundInWorkspace } from "../../../../lib/grounding";
 import type { AssistantProvider, AssistantResult, PageContext } from "../types";
 
 export class BridgeAssistant implements AssistantProvider {
   async respond(prompt: string, ctx: PageContext): Promise<AssistantResult> {
     try {
-      const raw = await window.hermesAPI.spsAssistant(prompt, {
-        blocks: ctx.blocks.map((b) => ({ type: b.type, text: b.text })),
-        pageTitle: ctx.pageTitle,
-      });
+      const raw = await window.hermesAPI.spsAssistant(
+        prompt,
+        {
+          blocks: ctx.blocks.map((b) => ({ type: b.type, text: b.text })),
+          pageTitle: ctx.pageTitle,
+        },
+        undefined,
+        getGroundInWorkspace(),
+      );
       return (
         validateResult(raw) ?? {
           kind: "chat",

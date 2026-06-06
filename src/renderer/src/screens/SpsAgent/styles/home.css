@@ -781,6 +781,73 @@
   padding: 0;
 }
 
+/* agent-action button block */
+.sps-scope .b-button-wrap {
+  margin: 8px 0;
+}
+.sps-scope .b-button-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sps-scope .b-agent-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--accent);
+  color: var(--accent-on);
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.sps-scope .b-agent-button:hover {
+  filter: brightness(1.05);
+}
+.sps-scope .b-agent-button .emoji {
+  font-size: 15px;
+}
+.sps-scope .b-agent-button-edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--hair);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.6;
+}
+.sps-scope .b-agent-button-edit:hover {
+  opacity: 1;
+}
+.sps-scope .b-button-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 10px;
+  background: var(--sunk);
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  max-width: 480px;
+}
+.sps-scope .b-button-edit-label,
+.sps-scope .b-button-edit-prompt {
+  width: 100%;
+  border: 1px solid var(--hair);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+  background: var(--card, transparent);
+  color: inherit;
+  resize: vertical;
+}
+
 /* proposed (agent co-author) */
 .sps-scope .block-wrap.proposed {
   position: relative;

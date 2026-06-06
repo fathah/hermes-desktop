@@ -15,6 +15,7 @@ import {
 } from "../lib/persistence";
 import { getStorageMode } from "../lib/storageMode";
 import { readVaultWorkspace, saveVaultPage } from "../lib/vaultStore";
+import { gcOrphanAssets } from "../lib/assets";
 import type { Workspace } from "../types";
 import type { Store } from "./storeTypes";
 import { createWorkspaceSlice } from "./slices/workspace";
@@ -23,6 +24,7 @@ import { createUiSlice } from "./slices/ui";
 import { createSidebarSlice, saveSidebar } from "./slices/sidebar";
 import { createTweaksSlice, saveTweaks } from "./slices/tweaks";
 import { createAssistantSlice } from "./slices/assistant";
+import { createJournalSlice } from "./slices/journal";
 
 export const useStore = create<Store>()(
   subscribeWithSelector((...a) => ({
@@ -32,6 +34,7 @@ export const useStore = create<Store>()(
     ...createSidebarSlice(...a),
     ...createTweaksSlice(...a),
     ...createAssistantSlice(...a),
+    ...createJournalSlice(...a),
   })),
 );
 
@@ -108,6 +111,7 @@ export async function hydrateWorkspace(): Promise<void> {
     const vault = await readVaultWorkspace();
     if (vault && vault.docs && vault.tree) {
       applyWorkspace(vault);
+      gcOrphanAssets(vault.docs);
       return;
     }
     // Vault not populated yet — fall back to the blob (and mirror) so the user
@@ -119,4 +123,6 @@ export async function hydrateWorkspace(): Promise<void> {
   applyWorkspace(ws);
   // Materialize the markdown substrate for every page once on load (S2b).
   mirrorAllPages(snapshotWorkspace(useStore.getState()));
+  // Reclaim vault assets no page references any more (best-effort).
+  gcOrphanAssets(useStore.getState().docs);
 }

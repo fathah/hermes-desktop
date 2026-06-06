@@ -24,6 +24,19 @@ export function pageToMarkdown(
   if (meta.title !== undefined) fm.push(`title: ${JSON.stringify(meta.title)}`);
   if (meta.icon !== undefined) fm.push(`icon: ${JSON.stringify(meta.icon)}`);
   if (meta.cover !== undefined) fm.push(`cover: ${JSON.stringify(meta.cover)}`);
+  // KB ingestion keys (Phase 0) — appended after cover so pages without them
+  // serialize byte-for-byte identically to before (golden tests stay green).
+  if (meta.source !== undefined)
+    fm.push(`source: ${JSON.stringify(meta.source)}`);
+  if (meta.ingestedAt !== undefined)
+    fm.push(`ingestedAt: ${JSON.stringify(meta.ingestedAt)}`);
+  // Journal entry properties — emitted only when set so non-journal pages stay
+  // byte-identical (and so the note-index can query entries by date/mood).
+  if (meta.journal !== undefined)
+    fm.push(`journal: ${JSON.stringify(meta.journal)}`);
+  if (meta.date !== undefined) fm.push(`date: ${JSON.stringify(meta.date)}`);
+  if (meta.time !== undefined) fm.push(`time: ${JSON.stringify(meta.time)}`);
+  if (meta.mood !== undefined) fm.push(`mood: ${JSON.stringify(meta.mood)}`);
   const body = blocksToMarkdown(blocks, anchoredIds);
   if (fm.length === 0) return body;
   return `---\n${fm.join("\n")}\n---\n\n${body}`;
@@ -59,6 +72,14 @@ function parseScalarFrontmatter(text: string): Partial<PageMeta> {
     if (key === "title" && typeof value === "string") out.title = value;
     else if (key === "icon" && typeof value === "string") out.icon = value;
     else if (key === "cover") out.cover = value as PageMeta["cover"];
+    else if (key === "source" && typeof value === "string") out.source = value;
+    else if (key === "ingestedAt" && typeof value === "number")
+      out.ingestedAt = value;
+    else if (key === "journal" && typeof value === "boolean")
+      out.journal = value;
+    else if (key === "date" && typeof value === "string") out.date = value;
+    else if (key === "time" && typeof value === "string") out.time = value;
+    else if (key === "mood" && typeof value === "string") out.mood = value;
   }
   return out;
 }

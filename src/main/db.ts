@@ -16,7 +16,10 @@ export function getSharedDb(readonly = true): Database.Database | null {
   // Recycle connection if:
   // 1. Path has changed (e.g. profile switched)
   // 2. We need a write connection (readonly=false) but the cached one is readonly (readonly=true)
-  if (cachedDb && (cachedDbPath !== dbPath || (!readonly && cachedDbReadonly))) {
+  if (
+    cachedDb &&
+    (cachedDbPath !== dbPath || (!readonly && cachedDbReadonly))
+  ) {
     closeSharedDb();
   }
 
@@ -30,7 +33,10 @@ export function getSharedDb(readonly = true): Database.Database | null {
         cachedDb.pragma("synchronous = NORMAL");
       }
     } catch (err) {
-      console.error("[db] Failed to open shared SQLite database connection:", err);
+      console.error(
+        "[db] Failed to open shared SQLite database connection:",
+        err,
+      );
       return null;
     }
   }

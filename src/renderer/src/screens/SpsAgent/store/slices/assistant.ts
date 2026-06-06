@@ -317,12 +317,13 @@ export const createAssistantSlice: StateCreator<
       try {
         const result = await window.hermesAPI.sendMessage(
           message,
-          undefined,
+          undefined, // profile
           resumeId,
-          undefined,
-          undefined,
-          undefined,
-          runId,
+          undefined, // history
+          undefined, // attachments
+          undefined, // contextFolder
+          undefined, // groundInWorkspace
+          runId, // clientRunId
         );
         if (result.response && !acc) acc = result.response;
         tool = null;

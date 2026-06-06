@@ -134,6 +134,13 @@ describe("tier-2 lossless fallback (metadata comment)", () => {
     expectRoundTrip([
       blk("database", "", { view: "table", source: "db-abc" }),
     ]));
+  it("agent-action button preserves its label, emoji, and agentPrompt", () =>
+    expectRoundTrip([
+      blk("button", "Review against our SOPs", {
+        emoji: "🔎",
+        agentPrompt: "Review this against our SOPs and flag gaps.",
+      }),
+    ]));
 });
 
 describe("page links as wikilinks (S3 — feeds the vault graph)", () => {
@@ -150,6 +157,61 @@ describe("page links as wikilinks (S3 — feeds the vault graph)", () => {
   });
   it("round-trips a plain sub-page link losslessly", () =>
     expectRoundTrip([blk("page", "", { pageId: "pg-123" })]));
+});
+
+describe("mermaid diagram block", () => {
+  it("round-trips a mermaid block as a clean ```mermaid fence", () => {
+    const source = "graph TD;\n  A[Start] --> B[End]";
+    const blocks: Block[] = [blk("mermaid", source)];
+    const md = blocksToMarkdown(blocks);
+    expect(md).toBe("```mermaid\n" + source + "\n```");
+    expectRoundTrip(blocks);
+  });
+
+  it("keeps a plain fence as a code block (no mermaid info-string)", () => {
+    const out = markdownToBlocks("```\necho hi\n```");
+    expect(out).toHaveLength(1);
+    expect(out[0].type).toBe("code");
+    expect(out[0].text).toBe("echo hi");
+  });
+
+  it("does not embed base64/metadata for a mermaid block", () => {
+    const md = blocksToMarkdown([
+      blk("mermaid", "sequenceDiagram\n  A->>B: hi"),
+    ]);
+    expect(md).not.toContain("<!-- sps:");
+  });
+});
+
+describe("excalidraw drawing block", () => {
+  const src = "assets/home/exb1abc.excalidraw.svg";
+
+  it("round-trips a drawn block as a clean image ref (no base64)", () => {
+    const blocks: Block[] = [blk("excalidraw", "", { src, caption: "" })];
+    const md = blocksToMarkdown(blocks);
+    expect(md).toBe(`![](${src})`);
+    expect(md).not.toContain("<!-- sps:");
+    expectRoundTrip(blocks);
+  });
+
+  it("reconstructs an excalidraw block from the .excalidraw.svg suffix", () => {
+    const out = markdownToBlocks(`![](${src})`);
+    expect(out).toHaveLength(1);
+    expect(out[0].type).toBe("excalidraw");
+    expect(out[0].src).toBe(src);
+  });
+
+  it("keeps an ordinary image as an image block", () => {
+    const out = markdownToBlocks("![cat](assets/home/p.png)");
+    expect(out[0].type).toBe("image");
+  });
+
+  it("preserves the type of an undrawn block via the tier-2 stub", () => {
+    const md = blocksToMarkdown([blk("excalidraw", "", { src: null })]);
+    expect(md).toContain("<!-- sps:");
+    const out = markdownToBlocks(md);
+    expect(out[0].type).toBe("excalidraw");
+  });
 });
 
 describe("full-document round-trip", () => {
@@ -233,5 +295,73 @@ describe("F2 — block-id persistence for comment anchors", () => {
     const back = markdownToBlocks(md);
     expect(back[0].type).toBe("divider");
     expect(back[0].id).toBe(d.id);
+  });
+});
+
+describe("media blocks (asset store)", () => {
+  it("image with a vault asset → tier-1 ../_assets link, round-trips to assetPath", () => {
+    const img: Block = {
+      id: "i1",
+      type: "image",
+      text: "",
+      caption: "Sunset",
+      assetPath: `${"a".repeat(64)}.jpg`,
+    };
+    const md = blocksToMarkdown([img]);
+    expect(md).toBe(`![Sunset](../_assets/${"a".repeat(64)}.jpg)`);
+    const back = markdownToBlocks(md)[0];
+    expect(back.type).toBe("image");
+    expect(back.assetPath).toBe(`${"a".repeat(64)}.jpg`);
+    expect(back.caption).toBe("Sunset");
+    expect(back.src).toBeUndefined();
+  });
+
+  it("legacy data-URL image still round-trips via src", () => {
+    const img: Block = {
+      id: "i2",
+      type: "image",
+      text: "",
+      src: "data:image/png;base64,AAAA",
+    };
+    const back = markdownToBlocks(blocksToMarkdown([img]))[0];
+    expect(back.src).toBe("data:image/png;base64,AAAA");
+    expect(back.assetPath).toBeUndefined();
+  });
+
+  it("audio/video/file ride the tier-2 meta comment losslessly", () => {
+    const audio: Block = {
+      id: "a1",
+      type: "audio",
+      text: "",
+      assetPath: `${"b".repeat(64)}.webm`,
+      mime: "audio/webm",
+      name: "voice-note.webm",
+      size: 12345,
+      duration: 42,
+    };
+    const video: Block = {
+      id: "v1",
+      type: "video",
+      text: "",
+      assetPath: `${"c".repeat(64)}.mp4`,
+      mime: "video/mp4",
+      name: "clip.mp4",
+      size: 999,
+    };
+    const file: Block = {
+      id: "f1",
+      type: "file",
+      text: "",
+      assetPath: `${"d".repeat(64)}.pdf`,
+      mime: "application/pdf",
+      name: "report.pdf",
+      size: 5000,
+    };
+    for (const b of [audio, video, file]) {
+      const md = blocksToMarkdown([b]);
+      expect(md).toContain("<!-- sps:");
+      const back = bare(markdownToBlocks(md)[0]);
+      expect(back).toEqual(bare(b));
+    }
   });
 });

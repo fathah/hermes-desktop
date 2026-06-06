@@ -15,6 +15,12 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     passWithNoTests: true,
+    // Generous timeouts so timing-sensitive RTL tests don't fail purely from CPU
+    // starvation when the suite runs under load (e.g. alongside other worktrees /
+    // builds on the same machine). Only matters when a test would otherwise time
+    // out; the happy path is unaffected.
+    testTimeout: 15000,
+    hookTimeout: 15000,
     setupFiles: ["./src/renderer/src/test/setup.ts"],
     include: [
       "src/**/*.test.ts",

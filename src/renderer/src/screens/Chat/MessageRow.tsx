@@ -1,4 +1,5 @@
 import { memo, useMemo, useState } from "react";
+import { Volume2, Square as StopIcon } from "lucide-react";
 import icon from "../../assets/icon.png";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
 import { AttachmentChip } from "../../components/AttachmentChip";
@@ -49,6 +50,14 @@ interface MessageRowProps {
   /** False on continuation rows of a turn — render a spacer instead of the
    *  avatar so the turn reads as one grouped block. Defaults to true. */
   showAvatar?: boolean;
+  /** Voice TTS (WS4): whether a key is configured (shows the speaker button). */
+  ttsHasKey?: boolean;
+  /** This message's reply is currently being spoken. */
+  ttsSpeaking?: boolean;
+  /** This message's audio is being synthesized (request in flight). */
+  ttsBusy?: boolean;
+  /** Toggle speaking this message's reply. */
+  onSpeak?: () => void;
 }
 
 export const MessageRow = memo(function MessageRow({
@@ -58,6 +67,10 @@ export const MessageRow = memo(function MessageRow({
   onApprove,
   onDeny,
   showAvatar = true,
+  ttsHasKey = false,
+  ttsSpeaking = false,
+  ttsBusy = false,
+  onSpeak,
 }: MessageRowProps): React.JSX.Element {
   const { t } = useI18n();
   const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(
@@ -151,6 +164,26 @@ export const MessageRow = memo(function MessageRow({
               )
             : msg.content)}
       </div>
+      {msg.role === "agent" && ttsHasKey && !!msg.content && onSpeak && (
+        <div className="chat-msg-actions">
+          <button
+            className={`chat-speak-btn ${ttsSpeaking ? "chat-speak-active" : ""}`}
+            onClick={onSpeak}
+            disabled={ttsBusy}
+            title={
+              ttsBusy
+                ? t("chat.voiceSynthesizing")
+                : ttsSpeaking
+                  ? t("chat.voiceStopPlayback")
+                  : t("chat.voicePlay")
+            }
+            aria-label={t("chat.voicePlay")}
+            type="button"
+          >
+            {ttsSpeaking ? <StopIcon size={13} /> : <Volume2 size={13} />}
+          </button>
+        </div>
+      )}
       {showApprovalBar && (
         <div className="chat-approval-bar">
           <button

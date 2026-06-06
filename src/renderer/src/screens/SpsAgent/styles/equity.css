@@ -1,0 +1,736 @@
+/* Equity Research surface — styled with the SPS Financial Control Plane tokens
+   (sps-tokens.css). Scoped under .sps-scope. No fabricated vars, no off-brand
+   colors: Sukhi-red hero CTA, semantic ok/warn/danger pills, 4pt spacing scale,
+   conservative radii, mono numerals — matching the "no gradients, functional
+   color coding" design mandate. */
+
+.sps-scope .eq-surface {
+  padding: var(--s-7) var(--s-8);
+  max-width: 1000px;
+  margin: 0 auto;
+  color: var(--tx-1);
+}
+
+/* ---------- Launcher ---------- */
+.sps-scope .eq-launcher {
+  display: flex;
+  gap: var(--s-3);
+  align-items: center;
+  margin-bottom: var(--s-5);
+}
+.sps-scope .eq-ticker-input {
+  flex: 1;
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-2);
+  border: 1px solid var(--hair-strong);
+  background: var(--surface);
+  color: var(--tx-1);
+  font-family: var(--font-sans);
+  font-size: var(--fs-14);
+}
+.sps-scope .eq-ticker-input::placeholder {
+  color: var(--tx-4);
+}
+.sps-scope .eq-ticker-input:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+  border-color: var(--focus-ring);
+}
+.sps-scope .eq-run-btn {
+  padding: var(--s-3) var(--s-5);
+  border-radius: var(--r-2);
+  border: 1px solid var(--sukhi-red);
+  background: var(--sukhi-red);
+  color: var(--ink-inverse);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: var(--fs-13);
+  font-weight: 600;
+  transition: background var(--dur-1) var(--ease-out);
+}
+.sps-scope .eq-run-btn:hover:not(:disabled) {
+  background: var(--sukhi-red-hover);
+  border-color: var(--sukhi-red-hover);
+}
+.sps-scope .eq-run-btn.eq-secondary {
+  background: var(--surface);
+  color: var(--tx-1);
+  border-color: var(--hair-strong);
+}
+.sps-scope .eq-run-btn.eq-secondary:hover:not(:disabled) {
+  background: var(--row-hover);
+}
+.sps-scope .eq-run-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ---------- Notices ---------- */
+.sps-scope .eq-notice {
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-2);
+  background: var(--info-bg);
+  color: var(--info-fg);
+  border: 1px solid var(--info-border);
+  margin-bottom: var(--s-4);
+  font-size: var(--fs-13);
+}
+.sps-scope .eq-error {
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-2);
+  background: var(--danger-bg);
+  color: var(--danger-fg);
+  border: 1px solid var(--danger-border);
+  margin-bottom: var(--s-4);
+  font-size: var(--fs-13);
+}
+.sps-scope .eq-empty,
+.sps-scope .eq-muted {
+  color: var(--tx-2);
+  font-size: var(--fs-13);
+}
+
+/* ---------- Live monitor ---------- */
+.sps-scope .eq-monitor {
+  border: 1px solid var(--hair);
+  border-radius: var(--r-3);
+  background: var(--surface);
+  padding: var(--s-4);
+  margin-bottom: var(--s-5);
+  box-shadow: var(--shadow-1);
+}
+.sps-scope .eq-tool-progress {
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  color: var(--tx-2);
+  margin-bottom: var(--s-3);
+}
+
+/* ---------- Report header ---------- */
+.sps-scope .eq-report-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--s-4);
+  margin-bottom: var(--s-5);
+}
+.sps-scope .eq-report-title {
+  font-family: var(--font-sans);
+  font-size: var(--fs-22);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: var(--lh-tight);
+  color: var(--tx-1);
+  margin: 0;
+}
+.sps-scope .eq-report-ticker {
+  color: var(--tx-2);
+  font-size: var(--fs-14);
+  font-weight: 500;
+  margin-left: var(--s-2);
+}
+.sps-scope .eq-report-sub {
+  font-size: var(--fs-12);
+  color: var(--tx-2);
+  margin-top: var(--s-1);
+}
+.sps-scope .eq-report-verdict {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+}
+.sps-scope .eq-rating {
+  font-weight: 600;
+  padding: var(--s-1) var(--s-3);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-12);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--neutral-bg);
+  color: var(--neutral-fg);
+  border: 1px solid var(--neutral-border);
+}
+.sps-scope .eq-rating-buy,
+.sps-scope .eq-rating-accumulate {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+  border-color: var(--ok-border);
+}
+.sps-scope .eq-rating-hold {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  border-color: var(--warn-border);
+}
+.sps-scope .eq-rating-reduce,
+.sps-scope .eq-rating-avoid {
+  background: var(--danger-bg);
+  color: var(--danger-fg);
+  border-color: var(--danger-border);
+}
+.sps-scope .eq-confidence {
+  font-size: var(--fs-12);
+  color: var(--tx-2);
+}
+.sps-scope .eq-save-btn {
+  padding: var(--s-2) var(--s-4);
+  border-radius: var(--r-2);
+  border: 1px solid var(--hair-strong);
+  background: var(--surface);
+  color: var(--tx-1);
+  cursor: pointer;
+  font-size: var(--fs-12);
+}
+.sps-scope .eq-save-btn:hover:not(:disabled) {
+  background: var(--row-hover);
+}
+
+/* ---------- Score gauges ---------- */
+.sps-scope .eq-scores {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--s-4);
+  margin-bottom: var(--s-6);
+}
+.sps-scope .eq-gauge-label {
+  font-size: var(--fs-12);
+  color: var(--tx-2);
+  margin-bottom: var(--s-1);
+}
+.sps-scope .eq-gauge-track {
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--sunk);
+  overflow: hidden;
+}
+.sps-scope .eq-gauge-fill {
+  height: 100%;
+  background: var(--sukhi-gold-deep);
+}
+.sps-scope .eq-gauge-value {
+  font-family: var(--font-mono);
+  font-size: var(--fs-13);
+  font-weight: 600;
+  color: var(--tx-1);
+  font-variant-numeric: tabular-nums lining-nums;
+  margin-top: var(--s-1);
+}
+
+/* ---------- Two-column (radar + provenance) ---------- */
+.sps-scope .eq-twocol {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s-6);
+  margin-bottom: var(--s-6);
+}
+.sps-scope .eq-radar h3,
+.sps-scope .eq-provenance h3,
+.sps-scope .eq-peers h3,
+.sps-scope .eq-dcf h3,
+.sps-scope .eq-technical h3,
+.sps-scope .eq-sector h3 {
+  font-family: var(--font-sans);
+  font-size: var(--fs-12);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tx-1);
+  margin: var(--s-4) 0 var(--s-3);
+}
+.sps-scope .eq-radar,
+.sps-scope .eq-technical,
+.sps-scope .eq-sector {
+  color: var(--tx-2); /* charts use currentColor → monochrome ink */
+}
+.sps-scope .eq-technical,
+.sps-scope .eq-sector {
+  margin-bottom: var(--s-6);
+}
+/* wide charts (P&F grid, heatmap) scroll horizontally instead of overflowing */
+.sps-scope .eq-chart-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.sps-scope .eq-evidence,
+.sps-scope .eq-gaps {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--s-4);
+  font-size: var(--fs-12);
+}
+.sps-scope .eq-evidence li,
+.sps-scope .eq-gaps li {
+  margin-bottom: var(--s-2);
+  color: var(--tx-2);
+}
+.sps-scope .eq-tier {
+  display: inline-block;
+  padding: 0 var(--s-2);
+  border-radius: var(--r-1);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  margin-right: var(--s-2);
+  background: var(--neutral-bg);
+  color: var(--neutral-fg);
+}
+.sps-scope .eq-tier1 {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+}
+.sps-scope .eq-tier2 {
+  background: var(--info-bg);
+  color: var(--info-fg);
+}
+.sps-scope .eq-tier3 {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+}
+
+/* ---------- Chart sections ---------- */
+.sps-scope .eq-peers,
+.sps-scope .eq-dcf {
+  margin-bottom: var(--s-6);
+  color: var(--tx-2);
+}
+
+@media (max-width: 720px) {
+  .sps-scope .eq-twocol {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- Mode tabs (single name ⇄ basket) ---------- */
+.sps-scope .eq-mode-tabs {
+  display: flex;
+  gap: var(--s-2);
+  margin-bottom: var(--s-4);
+}
+.sps-scope .eq-mode-tab {
+  padding: var(--s-2) var(--s-4);
+  border-radius: var(--r-2);
+  border: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  font-size: var(--fs-12);
+}
+.sps-scope .eq-mode-active {
+  background: var(--surface);
+  color: var(--ink-1);
+  border-color: var(--hairline-strong);
+  font-weight: 600;
+}
+.sps-scope .eq-launcher-basket {
+  flex-wrap: wrap;
+}
+.sps-scope .eq-basket-picker {
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-2);
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface);
+  color: var(--ink-1);
+  font-size: var(--fs-12);
+}
+.sps-scope .eq-basket-tickers {
+  min-width: 280px;
+  flex: 1;
+}
+
+/* ---------- Basket ranking board ---------- */
+.sps-scope .eq-basket {
+  margin-top: var(--s-4);
+}
+.sps-scope .eq-basket-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-4);
+  margin-bottom: var(--s-3);
+}
+.sps-scope .eq-basket-title {
+  margin: 0;
+  font-size: var(--fs-18, 1.125rem);
+  color: var(--ink-1);
+}
+.sps-scope .eq-basket-sub {
+  font-size: var(--fs-12);
+  color: var(--ink-3);
+  margin-top: var(--s-1);
+}
+.sps-scope .eq-basket-actions {
+  display: flex;
+  gap: var(--s-2);
+}
+.sps-scope .eq-basket-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-12);
+}
+.sps-scope .eq-basket-table th,
+.sps-scope .eq-basket-table td {
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 1px solid var(--hairline);
+  text-align: left;
+  white-space: nowrap;
+}
+.sps-scope .eq-basket-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-family: var(--font-mono);
+}
+.sps-scope .eq-basket-sortable {
+  cursor: pointer;
+  user-select: none;
+  color: var(--ink-2);
+}
+.sps-scope .eq-basket-ticker {
+  font-weight: 600;
+  color: var(--ink-1);
+}
+.sps-scope .eq-basket-risk {
+  text-transform: capitalize;
+}
+.sps-scope .eq-basket-why {
+  white-space: normal;
+  color: var(--ink-3);
+  max-width: 260px;
+}
+.sps-scope .eq-basket-call {
+  font-weight: 600;
+  padding: var(--s-1) var(--s-2);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-12);
+  border: 1px solid var(--neutral-border);
+  background: var(--neutral-bg);
+  color: var(--neutral-fg);
+}
+.sps-scope .eq-basket-add {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+  border-color: var(--ok-border);
+}
+.sps-scope .eq-basket-trim {
+  background: var(--danger-bg);
+  color: var(--danger-fg);
+  border-color: var(--danger-border);
+}
+.sps-scope .eq-basket-hold {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  border-color: var(--warn-border);
+}
+.sps-scope .eq-basket-gaps {
+  margin-top: var(--s-3);
+  font-size: var(--fs-12);
+  color: var(--ink-3);
+}
+
+/* ---------- Alert Center ---------- */
+.sps-scope .eq-alert-center {
+  margin-top: var(--s-4);
+}
+.sps-scope .eq-alert-header {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-bottom: var(--s-3);
+}
+.sps-scope .eq-alert-badge {
+  background: var(--danger-bg);
+  color: var(--danger-fg);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--r-pill);
+  padding: 0 var(--s-2);
+  font-size: var(--fs-12);
+  font-weight: 600;
+  min-width: 18px;
+  text-align: center;
+}
+.sps-scope .eq-alert-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+.sps-scope .eq-alert-item {
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-2);
+  padding: var(--s-2) var(--s-3);
+  background: var(--surface);
+}
+.sps-scope .eq-alert-read {
+  opacity: 0.55;
+}
+.sps-scope .eq-alert-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--fs-12);
+}
+.sps-scope .eq-alert-tag {
+  font-weight: 600;
+  padding: var(--s-1) var(--s-2);
+  border-radius: var(--r-pill);
+  border: 1px solid var(--neutral-border);
+  background: var(--neutral-bg);
+  color: var(--neutral-fg);
+}
+.sps-scope .eq-alert-pos {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+  border-color: var(--ok-border);
+}
+.sps-scope .eq-alert-neg {
+  background: var(--danger-bg);
+  color: var(--danger-fg);
+  border-color: var(--danger-border);
+}
+.sps-scope .eq-alert-ticker {
+  font-weight: 600;
+  color: var(--ink-1);
+}
+.sps-scope .eq-alert-ts {
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+}
+.sps-scope .eq-alert-mark {
+  margin-left: auto;
+  border: 1px solid var(--hairline-strong);
+  background: transparent;
+  color: var(--ink-2);
+  border-radius: var(--r-2);
+  padding: var(--s-1) var(--s-2);
+  font-size: var(--fs-12);
+  cursor: pointer;
+}
+.sps-scope .eq-alert-msg {
+  margin-top: var(--s-1);
+  color: var(--ink-2);
+  font-size: var(--fs-13, 0.8125rem);
+}
+
+/* ---------- Calibration ---------- */
+.sps-scope .eq-cal {
+  margin-top: var(--s-4);
+}
+.sps-scope .eq-cal-h3 {
+  margin: var(--s-4) 0 var(--s-2);
+  font-size: var(--fs-13, 0.8125rem);
+  color: var(--ink-2);
+}
+.sps-scope .eq-cal-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+.sps-scope .eq-cal-badge {
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-2);
+  padding: var(--s-2) var(--s-3);
+  min-width: 100px;
+  background: var(--surface);
+}
+.sps-scope .eq-cal-badge-label {
+  font-size: var(--fs-12);
+  color: var(--ink-3);
+  text-transform: capitalize;
+}
+.sps-scope .eq-cal-badge-rate {
+  font-size: var(--fs-18, 1.125rem);
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--ink-1);
+}
+.sps-scope .eq-cal-badge-sub {
+  font-size: var(--fs-12);
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+}
+.sps-scope .eq-cal-tag {
+  padding: var(--s-1) var(--s-2);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-12);
+  font-weight: 600;
+  text-transform: capitalize;
+  border: 1px solid var(--neutral-border);
+  background: var(--neutral-bg);
+  color: var(--neutral-fg);
+}
+.sps-scope .eq-cal-hit {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+  border-color: var(--ok-border);
+}
+.sps-scope .eq-cal-miss {
+  background: var(--danger-bg);
+  color: var(--danger-fg);
+  border-color: var(--danger-border);
+}
+
+/* ---------- Data-confidence badge ---------- */
+.sps-scope .eq-data-conf {
+  font-size: var(--fs-12);
+  font-weight: 600;
+  padding: var(--s-1) var(--s-2);
+  border-radius: var(--r-pill);
+  border: 1px solid var(--neutral-border);
+  background: var(--neutral-bg);
+  color: var(--neutral-fg);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: help;
+}
+.sps-scope .eq-data-conf-high {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+  border-color: var(--ok-border);
+}
+.sps-scope .eq-data-conf-medium {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  border-color: var(--warn-border);
+}
+.sps-scope .eq-data-conf-low {
+  background: var(--danger-bg);
+  color: var(--danger-fg);
+  border-color: var(--danger-border);
+}
+/* ---- Research ledger + tags ---- */
+.sps-scope .eq-ledger-bar {
+  display: flex;
+  gap: var(--s-3);
+  margin-bottom: var(--s-4);
+  flex-wrap: wrap;
+}
+.sps-scope .eq-facet {
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-2);
+  border: 1px solid var(--hair-strong);
+  background: var(--surface);
+  color: var(--tx-1);
+  font-size: var(--fs-13);
+}
+.sps-scope .eq-ledger-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-13);
+}
+.sps-scope .eq-ledger-table th {
+  text-align: left;
+  font-size: var(--fs-12);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--tx-1);
+  border-bottom: 1px solid var(--hair);
+  padding: var(--s-2) var(--s-3);
+}
+.sps-scope .eq-ledger-row {
+  cursor: pointer;
+}
+.sps-scope .eq-ledger-row:hover {
+  background: var(--row-hover);
+}
+.sps-scope .eq-ledger-table td {
+  border-bottom: 1px solid var(--hair-soft);
+  padding: var(--s-2) var(--s-3);
+  color: var(--tx-2);
+}
+.sps-scope .eq-ledger-tags {
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  color: var(--tx-2);
+}
+.sps-scope .eq-hits {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.sps-scope .eq-hit {
+  padding: var(--s-3);
+  border-bottom: 1px solid var(--hair-soft);
+  cursor: pointer;
+}
+.sps-scope .eq-hit:hover {
+  background: var(--row-hover);
+}
+.sps-scope .eq-hit-title {
+  font-weight: 600;
+  margin-right: var(--s-3);
+}
+.sps-scope .eq-hit-snippet {
+  color: var(--tx-2);
+  font-size: var(--fs-12);
+}
+.sps-scope .eq-active-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  margin-bottom: var(--s-4);
+  flex-wrap: wrap;
+}
+.sps-scope .eq-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  align-items: center;
+}
+.sps-scope .eq-tag {
+  font-size: var(--fs-12);
+  padding: 0 var(--s-2);
+  border-radius: var(--r-1);
+  font-family: var(--font-mono);
+}
+.sps-scope .eq-tag-auto {
+  background: var(--neutral-bg);
+  color: var(--neutral-fg);
+}
+.sps-scope .eq-tag-user {
+  background: var(--accent-ochre-tint);
+  color: var(--accent-ochre);
+  cursor: pointer;
+}
+.sps-scope .eq-tag-input {
+  width: 80px;
+  border: none;
+  border-bottom: 1px solid var(--hair-strong);
+  background: transparent;
+  color: inherit;
+  font-size: var(--fs-12);
+  outline: none;
+}
+
+.sps-scope .eq-search-input {
+  flex: 1;
+  min-width: 220px;
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-2);
+  border: 1px solid var(--hair-strong);
+  background: var(--surface);
+  color: var(--tx-1);
+  font-size: var(--fs-14);
+}
+.sps-scope .eq-search-input::placeholder {
+  color: var(--tx-4);
+}
+
+/* ---- Run history + notes panel ---- */
+.sps-scope .eq-history {
+  margin-top: var(--s-6);
+  display: grid;
+  gap: var(--s-6);
+}
+.sps-scope .eq-runlog h3,
+.sps-scope .eq-notes h3 {
+  font-family: var(--font-sans);
+  font-size: var(--fs-12);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tx-1);
+  margin: 0 0 var(--s-3);
+}
+.sps-scope .eq-notes {
+  color: var(--tx-2);
+  font-size: var(--fs-13);
+}

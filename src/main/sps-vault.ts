@@ -25,6 +25,11 @@ function isValidSegment(seg: string): boolean {
   return PAGE_ID_RE.test(seg);
 }
 
+/** `assets` is reserved for sidecar files — never a database folder. */
+function isReservedFolder(seg: string): boolean {
+  return seg === ASSETS_DIR;
+}
+
 export function pageFilename(pageId: string): string {
   return `${pageId}.md`;
 }
@@ -83,6 +88,7 @@ export async function exportRowMarkdownTo(
   markdown: string,
 ): Promise<boolean> {
   if (!isValidSegment(dbFolder) || !isValidSegment(rowId)) return false;
+  if (isReservedFolder(dbFolder)) return false;
   try {
     const dir = join(vaultDir, dbFolder);
     await fs.mkdir(dir, { recursive: true });
@@ -93,6 +99,24 @@ export async function exportRowMarkdownTo(
   }
 }
 
+/** Read a database row's markdown, or null if absent / bad segment. */
+export async function readRowMarkdownFrom(
+  vaultDir: string,
+  dbFolder: string,
+  rowId: string,
+): Promise<string | null> {
+  if (!isValidSegment(dbFolder) || !isValidSegment(rowId)) return null;
+  if (isReservedFolder(dbFolder)) return null;
+  try {
+    return await fs.readFile(
+      join(vaultDir, dbFolder, pageFilename(rowId)),
+      "utf-8",
+    );
+  } catch {
+    return null;
+  }
+}
+
 /** Delete a database row file. Returns false on a bad segment. */
 export async function deleteRowIn(
   vaultDir: string,
@@ -100,6 +124,7 @@ export async function deleteRowIn(
   rowId: string,
 ): Promise<boolean> {
   if (!isValidSegment(dbFolder) || !isValidSegment(rowId)) return false;
+  if (isReservedFolder(dbFolder)) return false;
   try {
     await fs.rm(join(vaultDir, dbFolder, pageFilename(rowId)));
     return true;
@@ -130,6 +155,7 @@ export async function listRowIdsIn(
   dbFolder: string,
 ): Promise<string[]> {
   if (!isValidSegment(dbFolder)) return [];
+  if (isReservedFolder(dbFolder)) return [];
   try {
     const names = await fs.readdir(join(vaultDir, dbFolder));
     return names
@@ -137,6 +163,56 @@ export async function listRowIdsIn(
       .map((n) => n.replace(/\.md$/, ""));
   } catch {
     return [];
+  }
+}
+
+// ── Sidecar assets — <vaultDir>/assets/<pageId>/<file> ──────────────────────────
+//
+// Diagram scenes (Excalidraw) and their rendered previews live BESIDE the notes,
+// never inline in the markdown, so the .md files stay clean and Obsidian-
+// renderable. `assets` is a reserved vault folder: it is never a page (page
+// reads only see root .md files) and never a database folder (guarded below).
+export const ASSETS_DIR = "assets";
+
+// An asset filename: one id-safe stem plus a dotted extension, no traversal.
+const ASSET_FILE_RE = /^[A-Za-z0-9_-]+\.[A-Za-z0-9.]+$/;
+
+function isValidAssetFile(name: string): boolean {
+  return ASSET_FILE_RE.test(name) && !name.includes("..");
+}
+
+/** Write a per-page sidecar asset. Both id segments must be safe (no traversal). */
+export async function writeAssetTo(
+  vaultDir: string,
+  pageId: string,
+  filename: string,
+  data: string,
+): Promise<boolean> {
+  if (!isValidPageId(pageId) || !isValidAssetFile(filename)) return false;
+  try {
+    const dir = join(vaultDir, ASSETS_DIR, pageId);
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(join(dir, filename), data, "utf-8");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Read a per-page sidecar asset back, or null if absent / bad id. */
+export async function readAssetFrom(
+  vaultDir: string,
+  pageId: string,
+  filename: string,
+): Promise<string | null> {
+  if (!isValidPageId(pageId) || !isValidAssetFile(filename)) return null;
+  try {
+    return await fs.readFile(
+      join(vaultDir, ASSETS_DIR, pageId, filename),
+      "utf-8",
+    );
+  } catch {
+    return null;
   }
 }
 

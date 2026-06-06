@@ -20,6 +20,7 @@
 import { uid } from "../lib/ids";
 import { stripHtml } from "../lib/html";
 import { sanitizeHtml } from "../lib/sanitize";
+import { assetRel, assetNameFromRel } from "../lib/assets";
 import type { Block, BlockType } from "../types";
 
 // ── metadata comment (tier-2, unicode-safe) ───────────────────────────────────
@@ -243,6 +244,9 @@ function isCleanBlock(block: Block): boolean {
   // A sub-page link is clean only when it is a plain pageId reference.
   if (block.type === "page")
     return !!block.pageId && PAGE_ID_RE.test(block.pageId);
+  // An excalidraw block is clean once it has a preview-svg path; an undrawn one
+  // falls to the tier-2 stub so its block type survives the round-trip.
+  if (block.type === "excalidraw") return !!block.src;
   const cleanTypes: BlockType[] = [
     "p",
     "h1",
@@ -255,9 +259,13 @@ function isCleanBlock(block: Block): boolean {
     "code",
     "divider",
     "image",
+    // mermaid -> ```mermaid fence (clean, Obsidian/GitHub render it natively).
+    "mermaid",
   ];
   if (!cleanTypes.includes(block.type)) return false;
-  if (block.html && block.type !== "code") {
+  // code/mermaid carry verbatim source in `text`; their `html` (if any) is not
+  // inline-markdown and must not gate cleanliness.
+  if (block.html && block.type !== "code" && block.type !== "mermaid") {
     return inlineHtmlToMd(block.html).clean;
   }
   return true;
@@ -280,8 +288,17 @@ function cleanBlockLine(block: Block): string {
       return "---";
     case "code":
       return "```\n" + (block.text || "") + "\n```";
-    case "image":
+    case "mermaid":
+      return "```mermaid\n" + (block.text || "") + "\n```";
+    case "excalidraw":
+      // Renders as a clean image; the `.excalidraw.svg` suffix on the path is
+      // what tells the parser to reconstruct an excalidraw block.
       return `![${block.caption || ""}](${block.src || ""})`;
+    case "image": {
+      // Prefer the portable vault-asset link; fall back to a data/http src.
+      const url = block.assetPath ? assetRel(block.assetPath) : block.src || "";
+      return `![${block.caption || ""}](${url})`;
+    }
     case "h1":
     case "h2":
     case "h3":
@@ -364,6 +381,9 @@ export function markdownToBlocks(md: string): Block[] {
     }
 
     if (raw.trimStart().startsWith("```")) {
+      // The info-string after the opening fence selects the block type:
+      // ```mermaid → a mermaid diagram, anything else → a plain code block.
+      const lang = raw.trim().slice(3).trim().toLowerCase();
       const body: string[] = [];
       i++;
       while (i < lines.length && !lines[i].trimStart().startsWith("```")) {
@@ -371,7 +391,8 @@ export function markdownToBlocks(md: string): Block[] {
         i++;
       }
       i++; // consume closing fence
-      blocks.push({ id: uid(), type: "code", text: body.join("\n") });
+      const type: BlockType = lang === "mermaid" ? "mermaid" : "code";
+      blocks.push({ id: uid(), type, text: body.join("\n") });
       continue;
     }
 
@@ -390,13 +411,28 @@ export function markdownToBlocks(md: string): Block[] {
 
     const image = /^!\[([^\]]*)\]\(([^)]*)\)$/.exec(raw.trim());
     if (image) {
-      blocks.push({
-        id: uid(),
-        type: "image",
-        text: "",
-        caption: image[1],
-        src: image[2],
-      });
+      const src = image[2];
+      if (src.endsWith(".excalidraw.svg")) {
+        // A `.excalidraw.svg` preview path round-trips back to a drawing block.
+        blocks.push({
+          id: uid(),
+          type: "excalidraw",
+          text: "",
+          caption: image[1],
+          src,
+        });
+      } else {
+        // A `../_assets/<name>` link is a vault asset (→ assetPath); anything
+        // else (data:/http) stays a plain src.
+        const assetName = assetNameFromRel(src);
+        blocks.push({
+          id: uid(),
+          type: "image",
+          text: "",
+          caption: image[1],
+          ...(assetName ? { assetPath: assetName } : { src }),
+        });
+      }
       i++;
       continue;
     }

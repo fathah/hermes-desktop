@@ -18,9 +18,20 @@ export type BlockType =
   | "code"
   | "divider"
   | "image"
+  | "audio"
+  | "video"
+  | "file"
   | "bookmark"
   | "page"
-  | "database";
+  | "database"
+  // Diagram blocks. mermaid keeps its source in `text` (serialises to a clean
+  // ```mermaid fence). excalidraw keeps a preview-SVG path in `src` and stores
+  // its scene in a sidecar asset file — never inline in the markdown.
+  | "mermaid"
+  | "excalidraw"
+  // Agent-action button: `text` is the label, `agentPrompt` the prompt it runs
+  // against the co-author on click. Always serialises Tier-2 (custom field).
+  | "button";
 
 export type DbView = "board" | "table" | "list" | "gallery" | "calendar";
 export type StatusKey = "todo" | "doing" | "review" | "done";
@@ -83,8 +94,19 @@ export interface Block {
   // image (data URL + caption)
   src?: string | null;
   caption?: string;
+  // media (image / audio / video / file): when set, the bytes live in the vault
+  // asset store (vault/_assets/<assetPath>) and are streamed via sps-asset://.
+  // The markdown carries the portable relative link `../_assets/<assetPath>`.
+  assetPath?: string; // bare content-addressed filename "<sha256>.<ext>"
+  mime?: string; // original mime type (e.g. "audio/webm", "application/pdf")
+  name?: string; // original file name, for display / download
+  size?: number; // byte size, for display
+  duration?: number; // audio/video length in seconds (best-effort)
   // sub-page link
   pageId?: string;
+  // button: the prompt this agent-action button sends to the co-author on click
+  // (`text` holds the visible label, `emoji` the icon).
+  agentPrompt?: string;
   // AI proposals
   diff?: BlockDiff;
   proposalId?: string;
@@ -116,6 +138,18 @@ export interface PageMeta {
    *  Persisted in the workspace blob only — never serialized to markdown
    *  frontmatter (the serializer emits title/icon/cover only). */
   workSessionId?: string;
+  // KB ingestion (Phase 0): set on pages created from an imported document.
+  // `source` is the absolute path of the original file; `ingestedAt` is the
+  // import epoch-ms. Both optional ⇒ ordinary pages serialize unchanged.
+  source?: string;
+  ingestedAt?: number;
+  // Journal entry metadata. Present only on journal entries (pages flagged
+  // `journal: true`); ordinary pages omit these so their markdown/JSON is
+  // byte-identical to before. The calendar surface groups entries by `date`.
+  journal?: boolean;
+  date?: string; // "YYYY-MM-DD"
+  time?: string; // "HH:mm"
+  mood?: string; // mood emoji / key (optional)
 }
 
 export interface CommentMessage {

@@ -12,6 +12,7 @@ export const createUiSlice: StateCreator<Store, [], [], UiSlice> = (set) => ({
   paletteOpen: false,
   templatesOpen: null,
   trashOpen: false,
+  researchOpen: false,
   tweaksOpen: false,
   openTask: null,
   emojiPick: null,
@@ -29,6 +30,7 @@ export const createUiSlice: StateCreator<Store, [], [], UiSlice> = (set) => ({
   setPaletteOpen: (v) => set({ paletteOpen: v }),
   setTemplatesOpen: (v) => set({ templatesOpen: v }),
   setTrashOpen: (v) => set({ trashOpen: v }),
+  setResearchOpen: (v) => set({ researchOpen: v }),
   setTweaksOpen: (v) => set({ tweaksOpen: v }),
   setOpenTask: (t) => set({ openTask: t }),
   setEmojiPick: (v) => set({ emojiPick: v }),
@@ -46,9 +48,9 @@ export const createUiSlice: StateCreator<Store, [], [], UiSlice> = (set) => ({
       chatNonce: s.chatNonce + 1,
     })),
 
-  flash: (text) => {
-    set({ toast: { text } });
+  flash: (text, opts) => {
+    set({ toast: { text, ...(opts?.tone ? { tone: opts.tone } : {}) } });
     if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => set({ toast: null }), 2200);
+    toastTimer = setTimeout(() => set({ toast: null }), opts?.ms ?? 2200);
   },
 });

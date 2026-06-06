@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
 // sps-smoke.mjs — F6 visual-verification harness for the SPS Agent workspace.
 //
 // Launches the BUILT Electron app (run `npm run build` first) against a
@@ -46,6 +45,8 @@ const workspace = {
     { id: "alpha", children: [] },
     { id: "db", children: [] },
     { id: "blank", children: [] },
+    // An empty "Research" folder ⇒ DocHeader shows the "No papers yet" nudge.
+    { id: "research", children: [] },
   ],
   meta: {
     home: { icon: "🏠", title: "Home", cover: null },
@@ -53,6 +54,7 @@ const workspace = {
     db: { icon: "🗃️", title: "Projects DB", cover: null },
     // Empty title + no content ⇒ the DocHeader shows the "Get started" launcher.
     blank: { icon: "📄", title: "", cover: null },
+    research: { icon: "📚", title: "Research", cover: null },
   },
   docs: {
     home: [
@@ -75,6 +77,13 @@ const workspace = {
       },
     ],
     blank: [],
+    research: [
+      {
+        id: "rh",
+        type: "p",
+        text: "Scholarly papers you saved from OpenAlex live here.",
+      },
+    ],
   },
   comments: [],
   trash: [],
@@ -110,7 +119,11 @@ const MOD = process.platform === "darwin" ? "Meta" : "Control";
 const shots = [];
 
 const app = await electron.launch({
-  args: ["."],
+  // Isolate Electron's userData (alongside the temp HERMES_HOME) so the smoke
+  // gets its OWN single-instance lock — otherwise a developer's running app
+  // (which holds the default lock; see requestSingleInstanceLock in main) makes
+  // this second instance quit at launch ("Target page has been closed").
+  args: [".", `--user-data-dir=${join(HOME, "electron-userdata")}`],
   env: {
     ...process.env,
     HERMES_HOME: HOME,
@@ -142,6 +155,30 @@ await shot("02-palette", async () => {
   await win.keyboard.press(`${MOD}+K`);
 });
 await win.keyboard.press("Escape").catch(() => {});
+
+// 02b — Research (OpenAlex) modal, opened from the first-class sidebar rail item.
+// Offline-safe: we screenshot the modal's initial state (no network dependency).
+// Proves the "Research" rail affordance → ResearchModal mount → ensure-agent-tool.
+await shot("02b-research", async () => {
+  await win.locator(".nav-item", { hasText: "Research" }).first().click();
+  await win.waitForSelector(".modal", { timeout: 8000 });
+});
+await win.keyboard.press("Escape").catch(() => {});
+
+// 02c — empty "Research" folder shows the "No papers yet → Search for papers"
+// nudge (DocHeader teaches the folder's use). Click the tree node, not the rail
+// item (both read "Research"), via the tree-label like the get-started step.
+await shot("02c-research-nudge", async () => {
+  await win.evaluate(() => {
+    const label = [...document.querySelectorAll(".tree-label")].find(
+      (l) => (l.textContent || "").trim() === "Research",
+    );
+    label?.parentElement?.dispatchEvent(
+      new MouseEvent("click", { bubbles: true }),
+    );
+  });
+  await win.waitForSelector(".gs-row", { timeout: 8000 });
+});
 
 // 03 — local wikilink graph view (F4).
 await shot("03-graph", async () => {
@@ -205,6 +242,19 @@ await shot("09-getstarted", async () => {
       new MouseEvent("click", { bubbles: true }),
     );
   });
+});
+
+// 10 — Journal calendar surface (month grid + day timeline).
+await shot("10-journal", async () => {
+  await win.locator(".nav-item", { hasText: "Journal" }).first().click();
+  await win.waitForSelector(".jr .cal-grid", { timeout: 8000 });
+});
+
+// 11 — create a journal entry (drops into the block editor). Proves the
+// journal→page→editor path and that the new 'journal' surface is wired.
+await shot("11-journal-entry", async () => {
+  await win.locator(".jr-btn.primary").first().click();
+  await win.waitForSelector(".doc-scroll", { timeout: 8000 });
 });
 
 console.log("SHOTS_OK:", shots.length, "—", shots.join(", "));

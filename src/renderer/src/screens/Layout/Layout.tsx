@@ -18,7 +18,6 @@ import Providers from "../Providers/Providers";
 import Schedules from "../Schedules/Schedules";
 import Kanban from "../Kanban/Kanban";
 import Insights from "../Insights/Insights";
-import Workspace from "../Workspace/Workspace";
 import SpsAgent from "../SpsAgent/SpsAgent";
 import RemoteNotice from "../../components/RemoteNotice";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
@@ -40,13 +39,12 @@ import {
   Kanban as KanbanIcon,
   Download,
 } from "../../assets/icons";
-import { FileText, Sparkles, BarChart3, UserCog } from "lucide-react";
+import { Sparkles, BarChart3, UserCog } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 import { loadAndApplyActiveSkin } from "../../utils/skin";
 
 type View =
-  | "workspace"
   | "chat"
   | "sessions"
   | "agents"
@@ -98,8 +96,9 @@ const NAV_ITEMS: {
   { view: "settings", icon: SettingsIcon, labelKey: "navigation.settings" },
 ];
 
+// The legacy Workspace (TipTap) engine has been retired in favour of SPS Agent
+// as the single wiki surface; its nav entry is intentionally gone.
 const WORKSPACE_NAV_ITEMS: { view: View; icon: LucideIcon; label: string }[] = [
-  { view: "workspace", icon: FileText, label: "Workspace" },
   { view: "spsAgent", icon: Sparkles, label: "SPS Agent" },
   { view: "chat", icon: ChatBubble, label: "Chat" },
 ];
@@ -119,14 +118,14 @@ function Layout({
   initialView,
 }: LayoutProps = {}): React.JSX.Element {
   const { t } = useI18n();
-  const [view, setView] = useState<View>(initialView ?? "workspace");
+  const [view, setView] = useState<View>(initialView ?? "settings");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [activeProfile, setActiveProfile] = useState("default");
   // Tabs lazy-mount on first visit, then stay mounted (display:none toggle).
   // Keeps IPC refetch / DOM rebuild off the tab-switch hot path.
   const [visitedViews, setVisitedViews] = useState<Set<View>>(
-    () => new Set<View>(["workspace", ...(initialView ? [initialView] : [])]),
+    () => new Set<View>(["settings", ...(initialView ? [initialView] : [])]),
   );
   // Remote-only mode — SSH tunnel has full access; only pure HTTP remote mode restricts screens
   const [remoteMode, setRemoteMode] = useState(false);
@@ -182,6 +181,16 @@ function Layout({
   const [downloadPercent, setDownloadPercent] = useState(0);
   const [updateError, setUpdateError] = useState<string | null>(null);
 
+  // Hermes *runtime* update (WS3) — distinct from the Electron-shell auto-update
+  // above. Detects when the locally-checked-out agent is behind upstream and
+  // offers an in-place `hermes update`.
+  const [hermesUpdateState, setHermesUpdateState] = useState<
+    "available" | "updating" | "done" | "error" | null
+  >(null);
+  const [hermesUpdateDetail, setHermesUpdateDetail] = useState<string | null>(
+    null,
+  );
+
   useEffect(() => {
     const cleanupAvailable = window.hermesAPI.onUpdateAvailable((info) => {
       setUpdateVersion(info.version);
@@ -210,6 +219,41 @@ function Layout({
       cleanupError();
     };
   }, []);
+
+  // Probe the runtime once on mount (best-effort, non-blocking).
+  useEffect(() => {
+    let cancelled = false;
+    window.hermesAPI
+      .checkHermesUpdate()
+      .then((status) => {
+        if (!cancelled && status.available) setHermesUpdateState("available");
+      })
+      .catch(() => {
+        /* offline / not a git checkout — stay silent */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handleHermesUpdate(): Promise<void> {
+    if (hermesUpdateState === "updating") return;
+    setHermesUpdateState("updating");
+    setHermesUpdateDetail(null);
+    const cleanup = window.hermesAPI.onInstallProgress((p) => {
+      setHermesUpdateDetail(p.detail || null);
+    });
+    try {
+      const result = await window.hermesAPI.runHermesUpdate();
+      setHermesUpdateState(result.success ? "done" : "error");
+      if (!result.success) setHermesUpdateDetail(result.error ?? null);
+    } catch (err) {
+      setHermesUpdateState("error");
+      setHermesUpdateDetail(err instanceof Error ? err.message : String(err));
+    } finally {
+      cleanup();
+    }
+  }
 
   async function handleUpdate(): Promise<void> {
     if (updateState === "available" || updateState === "error") {
@@ -341,6 +385,32 @@ function Layout({
               )}
             </button>
           )}
+          {hermesUpdateState && (
+            <button
+              className={`sidebar-update-btn ${
+                hermesUpdateState === "error" ? "error" : ""
+              }`}
+              onClick={handleHermesUpdate}
+              disabled={
+                hermesUpdateState === "updating" || hermesUpdateState === "done"
+              }
+              title={hermesUpdateDetail ?? undefined}
+            >
+              <Download size={13} />
+              {hermesUpdateState === "available" && (
+                <span>{t("common.agentUpdateAvailable")}</span>
+              )}
+              {hermesUpdateState === "updating" && (
+                <span>{t("common.agentUpdating")}</span>
+              )}
+              {hermesUpdateState === "done" && (
+                <span>{t("common.agentUpdated")}</span>
+              )}
+              {hermesUpdateState === "error" && (
+                <span>{t("common.agentUpdateFailed")}</span>
+              )}
+            </button>
+          )}
           <div className="sidebar-footer-text">
             {activeProfile === "default" ? t("common.appName") : activeProfile}
           </div>
@@ -354,14 +424,6 @@ function Layout({
             onDismiss={onDismissVerifyWarning}
           />
         )}
-        <div style={paneStyle("workspace")}>
-          <Workspace
-            profile={activeProfile}
-            onOpenAdmin={(target) => goTo(target as View)}
-            onOpenSession={handleResumeSession}
-          />
-        </div>
-
         {/* SPS Agent: mount only while active — its zustand store is a module
             singleton so workspace state survives unmount, and this keeps its
             global ⌘K/⌘J hotkeys from firing on other views. */}

@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useState } from "react";
 import {
   Trash2 as Trash,
   Plus,
@@ -6,12 +6,18 @@ import {
   FolderOpen,
   X,
   FolderTree,
+  PanelRight,
   Minimize2,
   History,
+  BookOpen,
 } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 import type { UsageState } from "./types";
 import { contextGaugeInfo } from "./contextGauge";
+import {
+  getGroundInWorkspace,
+  setGroundInWorkspace,
+} from "../../lib/grounding";
 
 interface ChatHeaderProps {
   sessionId: string | null;
@@ -25,10 +31,15 @@ interface ChatHeaderProps {
   showContextFolder: boolean;
   /** Whether the worktree panel is visible (when contextFolder is set). */
   worktreeVisible: boolean;
+  /** Whether there is previewable visual output to show (WS2). */
+  previewAvailable: boolean;
+  /** Whether the preview pane is currently shown. */
+  previewVisible: boolean;
   onPickFolder: () => void;
   onClearFolder: () => void;
   onToggleFast: () => void;
   onToggleWorktree: () => void;
+  onTogglePreview: () => void;
   onNewChat?: () => void;
   onClear: () => void;
   /** Current model id — drives the context-fill gauge (idea A3). */
@@ -95,10 +106,13 @@ export const ChatHeader = memo(function ChatHeader({
   contextFolder,
   showContextFolder,
   worktreeVisible,
+  previewAvailable,
+  previewVisible,
   onPickFolder,
   onClearFolder,
   onToggleFast,
   onToggleWorktree,
+  onTogglePreview,
   onNewChat,
   onClear,
   model,
@@ -106,6 +120,14 @@ export const ChatHeader = memo(function ChatHeader({
   onCheckpoints,
 }: ChatHeaderProps): React.JSX.Element {
   const { t } = useI18n();
+  // KB Phase 1: self-managed grounding toggle. The send path reads this from
+  // localStorage at send time, so no prop threading is needed.
+  const [grounded, setGrounded] = useState(getGroundInWorkspace());
+  const toggleGrounding = (): void => {
+    const next = !grounded;
+    setGrounded(next);
+    setGroundInWorkspace(next);
+  };
 
   return (
     <div className="chat-header">
@@ -162,6 +184,13 @@ export const ChatHeader = memo(function ChatHeader({
               <FolderOpen size={14} />
             </button>
           ))}
+        <button
+          className={`btn-ghost chat-grounding-toggle ${grounded ? "chat-worktree-active" : ""}`}
+          onClick={toggleGrounding}
+          title={grounded ? t("chat.groundingOn") : t("chat.groundingOff")}
+        >
+          <BookOpen size={14} />
+        </button>
         <div className="chat-fast-wrapper">
           <button
             className={`btn-ghost chat-fast-btn ${fastMode ? "chat-fast-active" : ""}`}
@@ -178,6 +207,17 @@ export const ChatHeader = memo(function ChatHeader({
             </span>
           </div>
         </div>
+        {previewAvailable && (
+          <button
+            className={`btn-ghost chat-worktree-toggle ${previewVisible ? "chat-worktree-active" : ""}`}
+            onClick={onTogglePreview}
+            title={
+              previewVisible ? t("chat.hidePreview") : t("chat.showPreview")
+            }
+          >
+            <PanelRight size={14} />
+          </button>
+        )}
         {onCheckpoints && hasMessages && (
           <button
             className="btn-ghost chat-clear-btn"

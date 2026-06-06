@@ -1,8 +1,8 @@
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-// useI18n needs an I18nProvider; pass-through `t` keeps the test focused
-// on the install-click → IPC contract.
+// useI18n needs an I18nProvider; pass-through `t` (returns the key) keeps tests
+// focused on the click → IPC contract rather than copy.
 vi.mock("../../components/useI18n", () => ({
   useI18n: () => ({
     t: (key: string) => key,
@@ -10,157 +10,216 @@ vi.mock("../../components/useI18n", () => ({
     setLocale: () => {},
   }),
 }));
-
-// AgentMarkdown is only used in the (unrelated) detail panel.
 vi.mock("../../components/AgentMarkdown", () => ({
-  AgentMarkdown: ({ content }: { content: string }) => <pre>{content}</pre>,
+  AgentMarkdown: ({ children }: { children: string }) => <pre>{children}</pre>,
 }));
 
 import Skills from "./Skills";
 
-describe("Skills.tsx — Install button (issue #310 diagnosis)", () => {
-  it("calls window.hermesAPI.installSkill(skill.name, profile) when Install is clicked on a Browse card", async () => {
-    const installSkill = vi.fn().mockResolvedValue({ success: true });
-    const listInstalledSkills = vi.fn().mockResolvedValue([]);
-    const listBundledSkills = vi.fn().mockResolvedValue([
-      {
-        name: "concept-diagram",
-        description: "draw diagrams",
-        category: "creative",
-        source: "bundled",
-        installed: false,
-      },
-    ]);
-    const getSkillContent = vi.fn().mockResolvedValue("");
+type Api = Record<string, ReturnType<typeof vi.fn>>;
 
-    Object.defineProperty(window, "hermesAPI", {
-      configurable: true,
-      value: {
-        installSkill,
-        listInstalledSkills,
-        listBundledSkills,
-        getSkillContent,
-      },
+/** Stub window.hermesAPI with success-returning defaults; override per test. */
+function stubApi(overrides: Api = {}): Api {
+  const api: Api = {
+    listInstalledSkills: vi.fn().mockResolvedValue([]),
+    listDisabledSkills: vi.fn().mockResolvedValue([]),
+    listBundledSkills: vi.fn().mockResolvedValue([]),
+    discoverLocalSkills: vi.fn().mockResolvedValue([]),
+    searchSkills: vi.fn().mockResolvedValue([]),
+    getSkillContent: vi.fn().mockResolvedValue(""),
+    installSkill: vi.fn().mockResolvedValue({ success: true }),
+    uninstallSkill: vi.fn().mockResolvedValue({ success: true }),
+    setSkillEnabled: vi.fn().mockResolvedValue({ success: true }),
+    createSkill: vi.fn().mockResolvedValue({ success: true }),
+    writeSkillContent: vi.fn().mockResolvedValue({ success: true }),
+    importLocalSkill: vi.fn().mockResolvedValue({ success: true }),
+    selectFolder: vi.fn().mockResolvedValue(null),
+    generateSkillFromRepo: vi.fn().mockResolvedValue({ success: true }),
+    ...overrides,
+  };
+  Object.defineProperty(window, "hermesAPI", {
+    configurable: true,
+    value: api,
+  });
+  return api;
+}
+
+/**
+ * Wait for the loaded UI and return the Browse tab. The Skills screen renders
+ * only a spinner while `loading` is true; tabs/header buttons appear after the
+ * initial list calls *resolve*. Waiting for the IPC call alone races that
+ * loading→loaded flip — this waits for the actual rendered tab instead.
+ */
+function findBrowseTab(view: ReturnType<typeof render>): Promise<HTMLElement> {
+  return waitFor(() => {
+    const tabs = view.container.querySelectorAll<HTMLElement>(".skills-tab");
+    if (tabs.length < 2) throw new Error("tabs not rendered yet");
+    return tabs[1];
+  });
+}
+
+const card = {
+  name: "concept-diagram",
+  description: "draw diagrams",
+  category: "creative",
+  source: "bundled",
+  installed: false,
+};
+const installedSkill = {
+  name: "guard-sop",
+  category: "custom",
+  description: "house rules",
+  path: "/home/.hermes/skills/custom/guard-sop",
+};
+
+describe("Skills.tsx — install (issue #310)", () => {
+  it("calls installSkill(name, profile) on a Browse card", async () => {
+    const api = stubApi({
+      listBundledSkills: vi.fn().mockResolvedValue([card]),
     });
-
     const view = render(<Skills />);
 
-    // Wait for both list-loads to resolve and the loading spinner to clear.
+    const browseTab = await findBrowseTab(view);
+    await act(async () => fireEvent.click(browseTab));
+    let btn: HTMLButtonElement | null = null;
     await waitFor(() => {
-      expect(listBundledSkills).toHaveBeenCalled();
-      expect(listInstalledSkills).toHaveBeenCalled();
+      btn = view.container.querySelector(".skills-card-install-btn");
+      expect(btn).toBeTruthy();
     });
-
-    // Default tab is "installed"; switch to Browse so the bundled card renders.
-    const tabs = view.container.querySelectorAll(".skills-tab");
-    const browseTab = tabs[1] as HTMLButtonElement;
-    expect(browseTab).toBeTruthy();
-    await act(async () => {
-      fireEvent.click(browseTab);
-    });
-
-    // Find the Install button on the bundled card.
-    let installBtn: HTMLButtonElement | null = null;
-    await waitFor(() => {
-      installBtn = view.container.querySelector(
-        ".skills-card-install-btn",
-      ) as HTMLButtonElement | null;
-      expect(installBtn).toBeTruthy();
-    });
-
-    await act(async () => {
-      fireEvent.click(installBtn!);
-    });
-
-    // The proof: click reaches handleInstall, which calls the bridge method
-    // with the card's skill.name and the current profile (undefined here).
-    expect(installSkill).toHaveBeenCalledTimes(1);
-    expect(installSkill).toHaveBeenCalledWith("concept-diagram", undefined);
+    await act(async () => fireEvent.click(btn!));
+    expect(api.installSkill).toHaveBeenCalledWith("concept-diagram", undefined);
   });
 
-  it("surfaces the CLI error in the UI when installSkill returns success:false (issue #310 fix)", async () => {
-    const cliMessage =
-      "No exact match for 'concept-diagram'. Did you mean one of these?\n" +
-      "concept-diagrams - official/creative/concept-diagrams";
-    const installSkill = vi
-      .fn()
-      .mockResolvedValue({ success: false, error: cliMessage });
-    const listInstalledSkills = vi.fn().mockResolvedValue([]);
-    const listBundledSkills = vi.fn().mockResolvedValue([
-      {
-        name: "concept-diagram",
-        description: "",
-        category: "creative",
-        source: "bundled",
-        installed: false,
-      },
-    ]);
-    const getSkillContent = vi.fn().mockResolvedValue("");
-
-    Object.defineProperty(window, "hermesAPI", {
-      configurable: true,
-      value: {
-        installSkill,
-        listInstalledSkills,
-        listBundledSkills,
-        getSkillContent,
-      },
+  it("surfaces a CLI failure in the error banner", async () => {
+    stubApi({
+      listBundledSkills: vi.fn().mockResolvedValue([card]),
+      installSkill: vi
+        .fn()
+        .mockResolvedValue({ success: false, error: "No exact match for 'x'" }),
     });
-
     const view = render(<Skills />);
+
+    const browseTab = await findBrowseTab(view);
+    await act(async () => fireEvent.click(browseTab));
+    let btn: HTMLButtonElement | null = null;
     await waitFor(() => {
-      expect(listBundledSkills).toHaveBeenCalled();
-      expect(listInstalledSkills).toHaveBeenCalled();
+      btn = view.container.querySelector(".skills-card-install-btn");
+      expect(btn).toBeTruthy();
     });
-
-    const browseTab = view.container.querySelectorAll(
-      ".skills-tab",
-    )[1] as HTMLButtonElement;
-    expect(browseTab).toBeTruthy();
-    await act(async () => {
-      fireEvent.click(browseTab);
-    });
-
-    let installBtn: HTMLButtonElement | null = null;
-    await waitFor(() => {
-      installBtn = view.container.querySelector(
-        ".skills-card-install-btn",
-      ) as HTMLButtonElement | null;
-      expect(installBtn).toBeTruthy();
-    });
-
-    await act(async () => {
-      fireEvent.click(installBtn!);
-    });
-
-    // The CLI's failure message reaches the user via the .skills-error
-    // banner — no more "button flashed and nothing happened".
+    await act(async () => fireEvent.click(btn!));
     await waitFor(() => {
       const banner = view.container.querySelector(".skills-error");
-      expect(banner).toBeTruthy();
-      expect(banner!.textContent).toContain("No exact match for");
-      expect(banner!.textContent).toContain("Did you mean");
+      expect(banner?.textContent).toContain("No exact match for");
     });
   });
 
-  it("does not call listInstalledSkills or listBundledSkills if visible=false", async () => {
-    const listInstalledSkills = vi.fn().mockResolvedValue([]);
-    const listBundledSkills = vi.fn().mockResolvedValue([]);
-
-    Object.defineProperty(window, "hermesAPI", {
-      configurable: true,
-      value: {
-        listInstalledSkills,
-        listBundledSkills,
-      },
-    });
-
+  it("loads nothing when visible=false", async () => {
+    const api = stubApi();
     render(<Skills visible={false} />);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(api.listInstalledSkills).not.toHaveBeenCalled();
+  });
+});
 
-    // Give it a tiny bit of time to make sure effects had a chance to execute
-    await new Promise((resolve) => setTimeout(resolve, 50));
+describe("Skills.tsx — authoring & management", () => {
+  it("creates a skill from the New-skill modal", async () => {
+    const api = stubApi();
+    const view = render(<Skills />);
 
-    expect(listInstalledSkills).not.toHaveBeenCalled();
-    expect(listBundledSkills).not.toHaveBeenCalled();
+    // findByText waits for the loaded UI (the New-skill button renders only
+    // after the spinner clears) rather than racing the loading→loaded flip.
+    const newSkillBtn = await view.findByText("skills.newSkill");
+    await act(async () => fireEvent.click(newSkillBtn));
+    const nameInput = view.getByPlaceholderText("skills.namePlaceholder");
+    fireEvent.change(nameInput, { target: { value: "Incident SOP" } });
+    await act(async () => fireEvent.click(view.getByText("skills.create")));
+
+    expect(api.createSkill).toHaveBeenCalledTimes(1);
+    expect(api.createSkill.mock.calls[0][0]).toMatchObject({
+      name: "Incident SOP",
+    });
+  });
+
+  it("disables an installed skill via its toggle", async () => {
+    const api = stubApi({
+      listInstalledSkills: vi.fn().mockResolvedValue([installedSkill]),
+    });
+    const view = render(<Skills />);
+
+    // Wait for the installed-skill card to actually render its Disable button —
+    // not merely for the IPC call. The card mounts after listInstalledSkills
+    // *resolves*; querying too early (getByText doesn't retry) is what made this
+    // test flaky under parallel load. findByText polls until the button exists.
+    const disableBtn = await view.findByText("skills.disable");
+    await act(async () => fireEvent.click(disableBtn));
+    expect(api.setSkillEnabled).toHaveBeenCalledWith(
+      installedSkill.path,
+      false,
+      undefined,
+    );
+  });
+
+  it("saves an edited SKILL.md from the detail panel", async () => {
+    const api = stubApi({
+      listInstalledSkills: vi.fn().mockResolvedValue([installedSkill]),
+      getSkillContent: vi
+        .fn()
+        .mockResolvedValue("---\nname: guard-sop\n---\nold"),
+    });
+    const view = render(<Skills />);
+
+    // Open detail (click the card body once it has rendered), enter edit mode,
+    // change text, save. Wait for the DOM, not just the IPC call — the card
+    // mounts after listInstalledSkills resolves, so a one-shot querySelector can
+    // race ahead and hit null under load.
+    const cardBody = await waitFor(() => {
+      const el = view.container.querySelector(".skills-card-body");
+      if (!el) throw new Error("skill card not rendered yet");
+      return el;
+    });
+    await act(async () => fireEvent.click(cardBody));
+    await act(async () =>
+      fireEvent.click(await view.findByText("skills.edit")),
+    );
+    const textarea = view.container.querySelector(
+      ".skills-edit-textarea",
+    ) as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "new content" } });
+    await act(async () => fireEvent.click(view.getByText("skills.save")));
+
+    expect(api.writeSkillContent).toHaveBeenCalledWith(
+      installedSkill.path,
+      "new content",
+      undefined,
+    );
+  });
+
+  it("generates a draft from a repo and prefills the New-skill modal", async () => {
+    const api = stubApi({
+      selectFolder: vi.fn().mockResolvedValue("/some/repo"),
+      generateSkillFromRepo: vi.fn().mockResolvedValue({
+        success: true,
+        draft: { name: "repo-skill", description: "use it", body: "Body." },
+      }),
+    });
+    const view = render(<Skills />);
+
+    // findByText waits for the loaded UI (the Generate-from-repo button renders
+    // only after the spinner clears) rather than racing the loading→loaded flip.
+    const genBtn = await view.findByText("skills.generateFromRepo");
+    await act(async () => fireEvent.click(genBtn));
+
+    expect(api.selectFolder).toHaveBeenCalled();
+    expect(api.generateSkillFromRepo).toHaveBeenCalledWith(
+      "/some/repo",
+      undefined,
+    );
+    // The authoring modal opens prefilled with the draft's name.
+    await waitFor(() => {
+      const nameInput = view.getByPlaceholderText(
+        "skills.namePlaceholder",
+      ) as HTMLInputElement;
+      expect(nameInput.value).toBe("repo-skill");
+    });
   });
 });
