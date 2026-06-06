@@ -1314,29 +1314,6 @@
   border-radius: 8px;
 }
 
-/* ---------- Presence ---------- */
-.sps-scope .presence {
-  display: flex;
-  align-items: center;
-  padding-right: 4px;
-}
-.sps-scope .pres-av {
-  width: 25px;
-  height: 25px;
-  border-radius: 50%;
-  border: 2px solid var(--canvas);
-  margin-left: -7px;
-  display: grid;
-  place-items: center;
-  font-size: 10px;
-  font-weight: 600;
-  color: #fff;
-  cursor: default;
-}
-.sps-scope .pres-av:first-child {
-  margin-left: 0;
-}
-
 /* ---------- Templates modal ---------- */
 .sps-scope .tpl-grid {
   display: grid;

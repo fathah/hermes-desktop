@@ -1,6 +1,7 @@
 // PageMenu.tsx — the "…" page actions menu in the topbar. Ported from app.jsx.
 import { useRef, useState } from "react";
 import { Icon } from "../components/Icon";
+import { useStore } from "../store";
 
 interface Props {
   onTemplate: () => void;
@@ -12,6 +13,21 @@ interface Props {
 export function PageMenu({ onTemplate, onDelete, onSub, onCover }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLButtonElement>(null);
+  const page = useStore((s) => s.page);
+  const meta = useStore((s) => s.meta);
+  const flash = useStore((s) => s.flash);
+
+  // Copy an in-app wikilink to the current page — the app's native, resolvable
+  // link format (the note-index graph links pages by [[Title]]).
+  const copyLink = (): void => {
+    const title = meta[page]?.title || "Untitled";
+    const link = `[[${title}]]`;
+    void navigator.clipboard
+      ?.writeText(link)
+      .then(() => flash("Link copied"))
+      .catch(() => flash("Couldn't copy link", { tone: "warn" }));
+    setOpen(false);
+  };
   return (
     <>
       <button className="tb-btn" ref={ref} onClick={() => setOpen((v) => !v)}>
@@ -54,7 +70,7 @@ export function PageMenu({ onTemplate, onDelete, onSub, onCover }: Props) {
             >
               <Icon name="doc" size={16} /> New from template
             </div>
-            <div className="menu-mini" onClick={() => setOpen(false)}>
+            <div className="menu-mini" onClick={copyLink}>
               <Icon name="share" size={16} /> Copy link
             </div>
             <div className="menu-divider"></div>

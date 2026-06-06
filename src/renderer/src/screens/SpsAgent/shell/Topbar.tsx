@@ -1,9 +1,8 @@
-// Topbar.tsx — document top bar: breadcrumbs, presence, share, comments + assistant
-// toggles, page menu. Ported from app.jsx topbar block.
+// Topbar.tsx — document top bar: breadcrumbs, comments + assistant toggles, page
+// menu. Ported from app.jsx topbar block.
 import { Icon } from "../components/Icon";
 import { useStore } from "../store";
 import { Breadcrumbs } from "./Breadcrumbs";
-import { Presence } from "./Presence";
 import { PageMenu } from "./PageMenu";
 
 export function Topbar() {
@@ -31,21 +30,23 @@ export function Topbar() {
         </button>
       )}
       <Breadcrumbs />
-      <Presence />
-      <button className="tb-btn">
-        <Icon name="share" size={16} /> <span className="tb-label">Share</span>
-      </button>
       <button
         className={`tb-btn ${panelOpen && rightTab === "comments" ? "on" : ""}`}
-        onClick={() => openPanelTab("comments")}
+        onClick={() =>
+          panelOpen && rightTab === "comments"
+            ? setPanelOpen(false)
+            : openPanelTab("comments")
+        }
         title="Comments"
       >
         <Icon name="comment" size={16} />
       </button>
       <button
-        className={`tb-btn ${panelOpen ? "on" : ""}`}
+        className={`tb-btn ${panelOpen && rightTab === "assistant" ? "on" : ""}`}
         onClick={() =>
-          panelOpen ? setPanelOpen(false) : openPanelTab("assistant")
+          panelOpen && rightTab === "assistant"
+            ? setPanelOpen(false)
+            : openPanelTab("assistant")
         }
         title="Assistant (⌘J)"
       >

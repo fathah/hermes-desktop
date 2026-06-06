@@ -143,6 +143,18 @@ function Layout({
     setView(v);
   }, []);
 
+  // Bridge: SPS surfaces (which can't reach goTo directly) ask the host to open
+  // Hermes Settings — e.g. the config-health banner's "Show details" link.
+  useEffect(() => {
+    const openSettings = (): void => {
+      setAdminOpen(true);
+      goTo("settings");
+    };
+    window.addEventListener("hermes:open-settings", openSettings);
+    return () =>
+      window.removeEventListener("hermes:open-settings", openSettings);
+  }, [goTo]);
+
   // Re-check remote mode on tab switch (picks up Settings changes)
   useEffect(() => {
     window.hermesAPI.isRemoteOnlyMode().then(setRemoteMode);

@@ -54,6 +54,17 @@ export function Editor() {
   const runPlan = useStore((s) => s.runPlan);
   const runWork = useStore((s) => s.runWork);
   const pageMeta = useStore((s) => s.meta);
+  const page = useStore((s) => s.page);
+
+  // Copy an in-app wikilink to a specific block — the note-index graph's native
+  // [[Title]] format, with the block id as a fragment for precision.
+  const copyBlockLink = (id: string): void => {
+    const title = pageMeta[page]?.title || "Untitled";
+    void navigator.clipboard
+      ?.writeText(`[[${title}#${id}]]`)
+      .then(() => onToast("Link to block copied"))
+      .catch(() => onToast("Couldn't copy link", { tone: "warn" }));
+  };
 
   const refs = useRef<Record<string, RefObject<HTMLDivElement | null>>>({});
   const blocksRef = useRef<HTMLDivElement>(null);
@@ -525,7 +536,7 @@ export function Editor() {
           onTurnInto={turnInto}
           onColor={colorBlock}
           onDuplicate={duplicate}
-          onCopyLink={() => onToast("Link to block copied")}
+          onCopyLink={copyBlockLink}
           onDelete={removeBlock}
           onComment={(id) => onComment(id, bmenu.block.text || "block")}
         />

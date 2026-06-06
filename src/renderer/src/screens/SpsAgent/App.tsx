@@ -68,7 +68,9 @@ export function App() {
                 setAgentMessages([]);
                 setAgentSession(null);
               }}
-              onOpenDiagnose={() => {}}
+              onOpenDiagnose={() =>
+                window.dispatchEvent(new CustomEvent("hermes:open-settings"))
+              }
             />
           ) : surface === "chats" ? (
             // AI Chats: recent sessions + guided new chats (shares <Chat>).
