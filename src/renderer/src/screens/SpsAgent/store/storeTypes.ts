@@ -10,6 +10,7 @@ import type {
   TreeNode,
   TrashEntry,
 } from "../types";
+import type { WorkDetail } from "../../../../../shared/openalex/core";
 
 export type RightTab = "assistant" | "outline" | "comments" | "info";
 
@@ -106,6 +107,15 @@ export interface WorkspaceSlice {
   ocrSetDefer: (on: boolean) => void;
   /** Find (by title at root) or create the "Sources" folder; returns its id. */
   ensureSourcesFolder: () => string;
+  /** Find (by title) or create the "Research" folder under "Sources"; returns its id. */
+  ensureResearchFolder: () => string;
+  /**
+   * Ingest an OpenAlex work as a curated, plain-language page under
+   * Sources/Research: a co-author TL;DR callout, the reconstructed abstract,
+   * an at-a-glance line, the open-access PDF as a bookmark, and topic tags.
+   * Never hard-fails — the TL;DR degrades to the abstract if the gateway is down.
+   */
+  importResearchWork: (work: WorkDetail) => Promise<void>;
   createChildPage: () => string;
   createFromTemplate: (
     blocks: Block[],
@@ -137,6 +147,8 @@ export interface UiSlice {
   paletteOpen: boolean;
   templatesOpen: { parent: string | null } | null;
   trashOpen: boolean;
+  /** The Research (OpenAlex paper search) modal is open. */
+  researchOpen: boolean;
   tweaksOpen: boolean;
   openTask: Task | null;
   emojiPick: XY | null;
@@ -159,6 +171,7 @@ export interface UiSlice {
   setPaletteOpen: (v: boolean) => void;
   setTemplatesOpen: (v: { parent: string | null } | null) => void;
   setTrashOpen: (v: boolean) => void;
+  setResearchOpen: (v: boolean) => void;
   setTweaksOpen: (v: boolean) => void;
   setOpenTask: (t: Task | null) => void;
   setEmojiPick: (v: XY | null) => void;
