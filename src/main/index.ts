@@ -61,7 +61,6 @@ import {
   runHermesAuthLogin,
   cancelHermesAuthLogin,
   detectDeviceCode,
-  detectAuthUrl,
 } from "./hermes-auth";
 import {
   isRemoteMode,
@@ -543,9 +542,8 @@ function setupIPC(): void {
     // Codex uses a device-code flow: it prints a URL + code instead
     // of opening a browser. Watch the stream for that prompt, then
     // open the page and pre-copy the code so the user just pastes.
-    // Loopback OAuth flows print an authorize URL; watch for it and open it.
     let buffer = "";
-    let urlHandled = false;
+    let deviceHandled = false;
     return runHermesAuthLogin(
       provider,
       (chunk) => {
@@ -553,26 +551,16 @@ function setupIPC(): void {
         // tears down the subprocess; any send on a destroyed sender throws.
         if (event.sender.isDestroyed()) return;
         event.sender.send("oauth-login-progress", chunk);
-        if (urlHandled) return;
+        if (deviceHandled) return;
         buffer += chunk;
         const device = detectDeviceCode(buffer);
         if (device) {
-          urlHandled = true;
+          deviceHandled = true;
           openExternalUrl(device.url);
           clipboard.writeText(device.code);
           event.sender.send(
             "oauth-login-progress",
             `\n→ Code ${device.code} copied to clipboard — opening browser...\n`,
-          );
-          return;
-        }
-        const authUrl = detectAuthUrl(buffer);
-        if (authUrl) {
-          urlHandled = true;
-          openExternalUrl(authUrl);
-          event.sender.send(
-            "oauth-login-progress",
-            `\n→ Opening browser for authorization...\n`,
           );
         }
       },
