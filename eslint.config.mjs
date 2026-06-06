@@ -14,6 +14,9 @@ export default defineConfig(
       ".claude/**",
       ".agents/**",
       "build/**",
+      // Bundled MCP server output (esbuild via the `build:mcp` script). A
+      // generated, git-ignored single-file CJS bundle — not our source to lint.
+      "resources/*.cjs",
       // Vendored Tesseract.js WASM glue (worker.min.js / *-core*.wasm.js),
       // fetched into public/ at build time by scripts/fetch-ocr-assets.mjs and
       // git-ignored. Third-party minified artifacts — not our source to lint.
