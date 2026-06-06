@@ -667,6 +667,31 @@ const hermesAPI = {
     profile?: string,
   ): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke("write-user-profile", content, profile),
+  writeMemory: (
+    content: string,
+    profile?: string,
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("write-memory", content, profile),
+
+  // Personalization (focus.md + daily-context hook)
+  readFocus: (): Promise<string> => ipcRenderer.invoke("read-focus"),
+  writeFocus: (
+    content: string,
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("write-focus", content),
+  getDailyContextHookStatus: (
+    profile?: string,
+  ): Promise<{
+    configured: boolean;
+    allowlisted: boolean;
+    scriptExists: boolean;
+    enabled: boolean;
+  }> => ipcRenderer.invoke("get-daily-context-hook-status", profile),
+  setDailyContextHookEnabled: (
+    enabled: boolean,
+    profile?: string,
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("set-daily-context-hook-enabled", enabled, profile),
 
   // Soul
   readSoul: (profile?: string): Promise<string> =>

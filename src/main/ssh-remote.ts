@@ -303,7 +303,8 @@ export async function sshListBundledSkills(
 
 const ENTRY_DELIMITER = "\n§\n";
 const MEMORY_CHAR_LIMIT = 2200;
-const USER_CHAR_LIMIT = 1375;
+// Matches Hermes' own cap (config.yaml `memory_char_limit: 2200`); was 1375.
+const USER_CHAR_LIMIT = 2200;
 
 function parseMemoryEntries(
   content: string,
