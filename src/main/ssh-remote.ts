@@ -465,6 +465,62 @@ export async function sshGetToolsets(config: SshConfig, profile?: string): Promi
   return localizeToolDefs((key) => enabled.has(key));
 }
 
+export async function sshListMcpServers(
+  config: SshConfig,
+  profile?: string,
+): Promise<Array<{ name: string; type: string; enabled: boolean; detail: string }>> {
+  try {
+    const content = await sshReadFile(config, remoteConfigPath(profile));
+    if (!content) return [];
+
+    const match = content.match(/^mcp_servers:\s*\n((?:[ \t]+.+\n)*)/m);
+    if (!match) return [];
+
+    const servers: Array<{
+      name: string;
+      type: string;
+      enabled: boolean;
+      detail: string;
+    }> = [];
+    const block = match[1];
+    const nameRe = /^[ ]{2}(\w[\w-]*):\s*$/gm;
+    let m: RegExpExecArray | null;
+    while ((m = nameRe.exec(block)) !== null) {
+      const name = m[1];
+      const start = m.index + m[0].length;
+      const nextMatch = /\n {2}\w/g;
+      nextMatch.lastIndex = start;
+      const next = nextMatch.exec(block);
+      const serverBlock = block.slice(start, next ? next.index : undefined);
+      const hasUrl = /url:/.test(serverBlock);
+      const hasCommand = /command:/.test(serverBlock);
+      const enabledMatch = serverBlock.match(/enabled:\s*(true|false)/i);
+      const enabled =
+        enabledMatch === null || enabledMatch[1].toLowerCase() === "true";
+
+      let detail = "";
+      const urlMatch = serverBlock.match(/url:\s*(.+)/);
+      if (urlMatch) detail = urlMatch[1].trim();
+      const cmdMatch = serverBlock.match(/command:\s*(.+)/);
+      if (cmdMatch) {
+        detail = cmdMatch[1].trim();
+        const argsMatch = serverBlock.match(/args:\s*\n((?:\s+- .+\n?)*)/);
+        if (argsMatch) detail += " " + argsMatch[1].trim();
+      }
+
+      servers.push({
+        name,
+        type: hasUrl ? "url" : hasCommand ? "stdio" : "unknown",
+        enabled,
+        detail,
+      });
+    }
+    return servers;
+  } catch {
+    return [];
+  }
+}
+
 export async function sshSetToolsetEnabled(
   config: SshConfig,
   key: string,

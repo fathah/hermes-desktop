@@ -152,6 +152,7 @@ import {
   sshInstallSkill,
   sshUninstallSkill,
   sshListBundledSkills,
+  sshListMcpServers,
   sshReadMemory,
   sshAddMemoryEntry,
   sshUpdateMemoryEntry,
@@ -1102,9 +1103,11 @@ function setupIPC(): void {
   });
 
   // MCP servers
-  ipcMain.handle("list-mcp-servers", (_event, profile?: string) =>
-    listMcpServers(profile),
-  );
+  ipcMain.handle("list-mcp-servers", (_event, profile?: string) => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" && conn.ssh) return sshListMcpServers(conn.ssh, profile);
+    return listMcpServers(profile);
+  });
 
   // Memory providers
   ipcMain.handle("discover-memory-providers", (_event, profile?: string) => {
