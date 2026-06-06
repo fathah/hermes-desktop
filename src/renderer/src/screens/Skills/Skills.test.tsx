@@ -44,6 +44,20 @@ function stubApi(overrides: Api = {}): Api {
   return api;
 }
 
+/**
+ * Wait for the loaded UI and return the Browse tab. The Skills screen renders
+ * only a spinner while `loading` is true; tabs/header buttons appear after the
+ * initial list calls *resolve*. Waiting for the IPC call alone races that
+ * loading→loaded flip — this waits for the actual rendered tab instead.
+ */
+function findBrowseTab(view: ReturnType<typeof render>): Promise<HTMLElement> {
+  return waitFor(() => {
+    const tabs = view.container.querySelectorAll<HTMLElement>(".skills-tab");
+    if (tabs.length < 2) throw new Error("tabs not rendered yet");
+    return tabs[1];
+  });
+}
+
 const card = {
   name: "concept-diagram",
   description: "draw diagrams",
@@ -64,11 +78,9 @@ describe("Skills.tsx — install (issue #310)", () => {
       listBundledSkills: vi.fn().mockResolvedValue([card]),
     });
     const view = render(<Skills />);
-    await waitFor(() => expect(api.listBundledSkills).toHaveBeenCalled());
 
-    await act(async () => {
-      fireEvent.click(view.container.querySelectorAll(".skills-tab")[1]);
-    });
+    const browseTab = await findBrowseTab(view);
+    await act(async () => fireEvent.click(browseTab));
     let btn: HTMLButtonElement | null = null;
     await waitFor(() => {
       btn = view.container.querySelector(".skills-card-install-btn");
@@ -79,17 +91,16 @@ describe("Skills.tsx — install (issue #310)", () => {
   });
 
   it("surfaces a CLI failure in the error banner", async () => {
-    const api = stubApi({
+    stubApi({
       listBundledSkills: vi.fn().mockResolvedValue([card]),
       installSkill: vi
         .fn()
         .mockResolvedValue({ success: false, error: "No exact match for 'x'" }),
     });
     const view = render(<Skills />);
-    await waitFor(() => expect(api.listBundledSkills).toHaveBeenCalled());
-    await act(async () => {
-      fireEvent.click(view.container.querySelectorAll(".skills-tab")[1]);
-    });
+
+    const browseTab = await findBrowseTab(view);
+    await act(async () => fireEvent.click(browseTab));
     let btn: HTMLButtonElement | null = null;
     await waitFor(() => {
       btn = view.container.querySelector(".skills-card-install-btn");
@@ -114,9 +125,11 @@ describe("Skills.tsx — authoring & management", () => {
   it("creates a skill from the New-skill modal", async () => {
     const api = stubApi();
     const view = render(<Skills />);
-    await waitFor(() => expect(api.listInstalledSkills).toHaveBeenCalled());
 
-    await act(async () => fireEvent.click(view.getByText("skills.newSkill")));
+    // findByText waits for the loaded UI (the New-skill button renders only
+    // after the spinner clears) rather than racing the loading→loaded flip.
+    const newSkillBtn = await view.findByText("skills.newSkill");
+    await act(async () => fireEvent.click(newSkillBtn));
     const nameInput = view.getByPlaceholderText("skills.namePlaceholder");
     fireEvent.change(nameInput, { target: { value: "Incident SOP" } });
     await act(async () => fireEvent.click(view.getByText("skills.create")));
@@ -190,11 +203,11 @@ describe("Skills.tsx — authoring & management", () => {
       }),
     });
     const view = render(<Skills />);
-    await waitFor(() => expect(api.listInstalledSkills).toHaveBeenCalled());
 
-    await act(async () =>
-      fireEvent.click(view.getByText("skills.generateFromRepo")),
-    );
+    // findByText waits for the loaded UI (the Generate-from-repo button renders
+    // only after the spinner clears) rather than racing the loading→loaded flip.
+    const genBtn = await view.findByText("skills.generateFromRepo");
+    await act(async () => fireEvent.click(genBtn));
 
     expect(api.selectFolder).toHaveBeenCalled();
     expect(api.generateSkillFromRepo).toHaveBeenCalledWith(
