@@ -16,6 +16,14 @@ import {
   PROFILE_NAME_ERROR,
 } from "./utils";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
+import { isRemoteMode } from "./hermes";
+import { getConnectionConfig } from "./config";
+import {
+  sshCreateProfile,
+  sshDeleteProfile,
+  sshSetActiveProfile,
+  sshListProfiles,
+} from "./ssh-remote";
 
 const PROFILES_DIR = join(HERMES_HOME, "profiles");
 
@@ -111,6 +119,31 @@ async function fileExists(path: string): Promise<boolean> {
 }
 
 export async function listProfiles(): Promise<ProfileInfo[]> {
+  // In SSH/Remote mode, list profiles from the remote server via SSH
+  if (isRemoteMode()) {
+    try {
+      const conn = getConnectionConfig();
+      if (conn.mode === "ssh" && conn.ssh.host) {
+        const remoteProfiles = await sshListProfiles(conn.ssh);
+        const activeName = await getActiveProfileName();
+        return remoteProfiles.map((p) => ({
+          name: p.name,
+          path: p.path,
+          isDefault: p.name === "default",
+          isActive: activeName === p.name,
+          model: p.model,
+          provider: p.provider,
+          hasEnv: p.hasEnv,
+          hasSoul: p.hasSoul,
+          skillCount: p.skillCount,
+          gatewayRunning: p.gatewayRunning,
+        }));
+      }
+    } catch {
+      // fall through to local
+    }
+  }
+
   const activeName = await getActiveProfileName();
   const profiles: ProfileInfo[] = [];
 
@@ -194,15 +227,39 @@ export async function listProfiles(): Promise<ProfileInfo[]> {
   return profiles;
 }
 
-export function createProfile(
+export async function createProfile(
   name: string,
   clone: boolean,
-): { success: boolean; error?: string } {
+): Promise<{ success: boolean; error?: string }> {
   if (name === "default") {
     return { success: false, error: "Cannot create the default profile" };
   }
   if (!isValidNamedProfileName(name)) {
     return { success: false, error: PROFILE_NAME_ERROR };
+  }
+
+  // In SSH/Remote mode, create the profile on the remote server via SSH
+  if (isRemoteMode()) {
+    try {
+      const conn = getConnectionConfig();
+      if (conn.mode === "ssh" && conn.ssh.host) {
+        const ok = await sshCreateProfile(conn.ssh, name);
+        if (ok) return { success: true };
+        return {
+          success: false,
+          error: "Failed to create profile on the remote server. Check your SSH connection.",
+        };
+      }
+      return {
+        success: false,
+        error: "Remote mode is active but no SSH host is configured. Use the Hermes gateway API directly.",
+      };
+    } catch (err) {
+      return {
+        success: false,
+        error: `Remote profile creation failed: ${(err as Error).message}`,
+      };
+    }
   }
 
   const localCheck = requireLocalHermes();
@@ -234,14 +291,38 @@ export function createProfile(
   }
 }
 
-export function deleteProfile(name: string): {
+export async function deleteProfile(name: string): Promise<{
   success: boolean;
   error?: string;
-} {
+}> {
   if (name === "default")
     return { success: false, error: "Cannot delete the default profile" };
   if (!isValidNamedProfileName(name)) {
     return { success: false, error: PROFILE_NAME_ERROR };
+  }
+
+  // In SSH/Remote mode, delete the profile on the remote server via SSH
+  if (isRemoteMode()) {
+    try {
+      const conn = getConnectionConfig();
+      if (conn.mode === "ssh" && conn.ssh.host) {
+        const ok = await sshDeleteProfile(conn.ssh, name);
+        if (ok) return { success: true };
+        return {
+          success: false,
+          error: "Failed to delete profile on the remote server. Check your SSH connection.",
+        };
+      }
+      return {
+        success: false,
+        error: "Remote mode is active but no SSH host is configured.",
+      };
+    } catch (err) {
+      return {
+        success: false,
+        error: `Remote profile deletion failed: ${(err as Error).message}`,
+      };
+    }
   }
 
   const localCheck = requireLocalHermes();
