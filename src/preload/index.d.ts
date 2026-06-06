@@ -4,6 +4,12 @@ import type { UsageAggregate } from "../shared/usage";
 import type { MemoryTimeline } from "../shared/memoryTimeline";
 import type { SearchSummary } from "../shared/searchSummary";
 import type { LoadedSkin } from "../shared/skins";
+import type {
+  SearchOpts as ResearchSearchOpts,
+  WorkSummary as ResearchWorkSummary,
+  WorkDetail as ResearchWorkDetail,
+  AutocompleteItem as ResearchAutocompleteItem,
+} from "../shared/openalex/core";
 
 interface ElectronAPI {
   process: {
@@ -1034,6 +1040,24 @@ interface HermesAPI {
   ) => Promise<unknown>;
   spsLoad: (profile?: string) => Promise<unknown | null>;
   spsSave: (ws: unknown, profile?: string) => Promise<boolean>;
+  spsResearchSearchWorks: (
+    q: string,
+    opts?: ResearchSearchOpts,
+    profile?: string,
+  ) => Promise<ResearchWorkSummary[]>;
+  spsResearchGetWork: (
+    id: string,
+    profile?: string,
+  ) => Promise<ResearchWorkDetail>;
+  spsResearchAutocomplete: (
+    entity: string,
+    q: string,
+  ) => Promise<ResearchAutocompleteItem[]>;
+  spsResearchGetConfig: () => Promise<{ mailto: string; hasApiKey: boolean }>;
+  spsResearchSetConfig: (
+    mailto: string,
+    apiKey?: string,
+  ) => Promise<{ mailto: string; hasApiKey: boolean }>;
   spsExportPage: (
     pageId: string,
     markdown: string,

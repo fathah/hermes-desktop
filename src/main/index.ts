@@ -27,6 +27,14 @@ import {
   type PageContext as SpsPageContext,
 } from "./sps-agent";
 import {
+  oaSearchWorks,
+  oaGetWork,
+  oaAutocomplete,
+  getPublicResearchConfig,
+  setResearchConfig,
+} from "./openalex";
+import type { SearchOpts } from "../shared/openalex/core";
+import {
   exportPageMarkdownTo,
   exportRowMarkdownTo,
   readRowMarkdownFrom,
@@ -2142,6 +2150,31 @@ function setupIPC(): void {
   ipcMain.handle("sps-load", (_event, profile?: string) => spsLoad(profile));
   ipcMain.handle("sps-save", (_event, ws: unknown, profile?: string) =>
     spsSave(ws, profile),
+  );
+
+  // Research (OpenAlex): scholarly search/fetch demystified into clean DTOs.
+  // The dense JSON is normalized in the main process (src/main/openalex.ts);
+  // the renderer only ever sees small WorkSummary/WorkDetail objects.
+  ipcMain.handle(
+    "sps-research-search-works",
+    (_event, q: string, opts?: SearchOpts, profile?: string) =>
+      oaSearchWorks(q, opts ?? {}, profile),
+  );
+  ipcMain.handle(
+    "sps-research-get-work",
+    (_event, id: string, profile?: string) => oaGetWork(id, profile),
+  );
+  ipcMain.handle(
+    "sps-research-autocomplete",
+    (_event, entity: string, q: string) => oaAutocomplete(entity, q),
+  );
+  ipcMain.handle("sps-research-get-config", () => getPublicResearchConfig());
+  ipcMain.handle(
+    "sps-research-set-config",
+    (_event, mailto: string, apiKey?: string) => {
+      setResearchConfig(mailto, apiKey);
+      return getPublicResearchConfig();
+    },
   );
 
   // Additive markdown mirror (S2b): write a page's markdown into the SPS vault
