@@ -149,9 +149,21 @@ export interface TweaksSlice {
   setTweak: <K extends keyof Tweaks>(k: K, v: Tweaks[K]) => void;
 }
 
-export interface AssistantSlice {
+/** One assistant conversation = one tab (M3 #5: parallel agent runs). */
+export interface Conversation {
+  id: string;
+  title: string;
   messages: AgentMessage[];
   thinking: boolean;
+}
+
+export interface AssistantSlice {
+  conversations: Conversation[];
+  activeConvId: string;
+  /** Tab management — open / switch / close conversations. */
+  newConversation: () => void;
+  selectConversation: (id: string) => void;
+  closeConversation: (id: string) => void;
   setThinking: (v: boolean) => void;
   pushUser: (text: string) => void;
   pushBot: (msg: Omit<AgentMessage, "id" | "role">) => void;

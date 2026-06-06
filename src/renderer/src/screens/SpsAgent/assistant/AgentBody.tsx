@@ -7,8 +7,17 @@ import { scrollToProposal } from "../lib/scroll";
 import { useDictation } from "../hooks/useDictation";
 
 export function AgentBody() {
-  const messages = useStore((s) => s.messages);
-  const thinking = useStore((s) => s.thinking);
+  // Parallel conversations (M3 #5): the panel renders the ACTIVE tab; each tab is
+  // an independent run so several can stream at once.
+  const conversations = useStore((s) => s.conversations);
+  const activeConvId = useStore((s) => s.activeConvId);
+  const newConversation = useStore((s) => s.newConversation);
+  const selectConversation = useStore((s) => s.selectConversation);
+  const closeConversation = useStore((s) => s.closeConversation);
+  const active =
+    conversations.find((c) => c.id === activeConvId) ?? conversations[0];
+  const messages = active.messages;
+  const thinking = active.thinking;
   const onSend = useStore((s) => s.runAgent);
   const onApplyDb = useStore((s) => s.applyDbAction);
   const onDismissDb = useStore((s) => s.dismissDbAction);
@@ -43,6 +52,73 @@ export function AgentBody() {
 
   return (
     <>
+      {/* Tab strip (M3 #5) — one tab per concurrent conversation. */}
+      <div
+        className="agent-tabs"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
+          padding: "4px 6px",
+          borderBottom: "1px solid var(--bd-1, rgba(0,0,0,0.08))",
+          overflowX: "auto",
+        }}
+      >
+        {conversations.map((c) => (
+          <div
+            key={c.id}
+            onClick={() => selectConversation(c.id)}
+            title={c.title}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              padding: "3px 8px",
+              borderRadius: 6,
+              cursor: "pointer",
+              maxWidth: 160,
+              fontSize: 12,
+              background:
+                c.id === activeConvId
+                  ? "var(--bg-2, rgba(0,0,0,0.06))"
+                  : "transparent",
+              fontWeight: c.id === activeConvId ? 600 : 400,
+            }}
+          >
+            {c.thinking && <span aria-label="running">●</span>}
+            <span
+              style={{
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {c.title}
+            </span>
+            {conversations.length > 1 && (
+              <button
+                className="btn-ghost"
+                title="Close tab"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  closeConversation(c.id);
+                }}
+                style={{ lineHeight: 1, padding: 0 }}
+              >
+                ×
+              </button>
+            )}
+          </div>
+        ))}
+        <button
+          className="btn-ghost"
+          title="New conversation"
+          onClick={newConversation}
+          style={{ padding: "2px 6px" }}
+        >
+          <Icon name="plus" size={14} />
+        </button>
+      </div>
       <div className="agent-body scroll" ref={bodyRef}>
         {messages.map((m) => (
           <div key={m.id} className={`msg ${m.role}`}>

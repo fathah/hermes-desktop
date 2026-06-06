@@ -150,6 +150,33 @@ try {
   check("Settings Automation toggles", false, e.message);
 }
 
+// ── 4. Parallel conversation tabs (M3 #5) ────────────────────────────────────
+try {
+  await win.keyboard.press("Escape").catch(() => {});
+  // Reopen the SPS workspace (Settings overlay may still be up) and the assistant.
+  await win.evaluate(() => {
+    const tab = [...document.querySelectorAll(".rp-tab")].find((t) =>
+      /Assistant/i.test(t.textContent || ""),
+    );
+    tab?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+  await win.waitForTimeout(400);
+  await win.waitForSelector(".agent-tabs", { timeout: 4000 });
+  const before = await win.locator(".agent-tabs > div").count();
+  await win.locator('.agent-tabs button[title="New conversation"]').click();
+  await win.waitForTimeout(300);
+  const after = await win.locator(".agent-tabs > div").count();
+  check("assistant has a conversation tab strip", before >= 1);
+  check(
+    "new-conversation button adds a tab",
+    after === before + 1,
+    `${before}→${after}`,
+  );
+  await win.screenshot({ path: join(OUT, "tabs.png") });
+} catch (e) {
+  check("parallel conversation tabs", false, e.message);
+}
+
 await app.close();
 const failed = results.filter((r) => !r.ok);
 console.log(
