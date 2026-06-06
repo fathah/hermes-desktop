@@ -143,6 +143,10 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
     getAnalyticsConsent(),
   );
 
+  // Automation prefs (M2): scoped auto-approve + completion chime
+  const [autoApprove, setAutoApproveState] = useState(false);
+  const [completionSound, setCompletionSoundState] = useState(false);
+
   const loadConfig = useCallback(async (): Promise<void> => {
     // Load fast config first (cached in main process)
     const [home, aVersion, conn, keyStatus] = await Promise.all([
@@ -166,6 +170,10 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
     setSshRemotePort(conn.ssh?.remotePort ? String(conn.ssh.remotePort) : "");
     setApiServerKeyMissing(!keyStatus.hasKey);
     connLoaded.current = true;
+
+    // Automation prefs (app-level, desktop.json)
+    window.hermesAPI.getAutoApprove().then(setAutoApproveState);
+    window.hermesAPI.getCompletionSound().then(setCompletionSoundState);
 
     // Load network settings from config.yaml
     window.hermesAPI.getConfig("network.force_ipv4", profile).then((v) => {
@@ -958,6 +966,60 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
             <li>{t("settings.analytics.disclosure.endpoint")}</li>
             <li>{t("settings.analytics.disclosure.notCollected")}</li>
           </ul>
+        </div>
+      </div>
+
+      <div className="settings-section">
+        <div className="settings-section-title">Automation</div>
+        <div className="settings-field">
+          <label className="settings-field-label">
+            Scoped auto-approve
+            <label
+              className="tools-toggle"
+              style={{ marginLeft: 12, verticalAlign: "middle" }}
+            >
+              <input
+                type="checkbox"
+                checked={autoApprove}
+                onChange={async (e) => {
+                  const val = e.target.checked;
+                  setAutoApproveState(val);
+                  await window.hermesAPI.setAutoApprove(val);
+                }}
+              />
+              <span className="tools-toggle-track" />
+            </label>
+          </label>
+          <div className="settings-field-hint">
+            Auto-approves only provably-safe, read-only commands (ls, cat, git
+            status, grep…). Writes, deletes, installs, network sends, and
+            anything chained or redirected always ask for your approval. Off by
+            default. Turn this off any time to require manual approval again.
+          </div>
+        </div>
+        <div className="settings-field">
+          <label className="settings-field-label">
+            Completion sound
+            <label
+              className="tools-toggle"
+              style={{ marginLeft: 12, verticalAlign: "middle" }}
+            >
+              <input
+                type="checkbox"
+                checked={completionSound}
+                onChange={async (e) => {
+                  const val = e.target.checked;
+                  setCompletionSoundState(val);
+                  await window.hermesAPI.setCompletionSound(val);
+                }}
+              />
+              <span className="tools-toggle-track" />
+            </label>
+          </label>
+          <div className="settings-field-hint">
+            Play a system chime when an agent run finishes — the cue for which
+            of several parallel runs just landed.
+          </div>
         </div>
       </div>
 

@@ -220,6 +220,17 @@ const hermesAPI = {
   ): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke("respond-approval", runId, choice, profile),
 
+  /** Scoped auto-approve toggle (M2B) — desktop-enforced policy. */
+  getAutoApprove: (): Promise<boolean> =>
+    ipcRenderer.invoke("get-auto-approve"),
+  setAutoApprove: (enabled: boolean): Promise<void> =>
+    ipcRenderer.invoke("set-auto-approve", enabled),
+  /** Completion-chime toggle (M2C). */
+  getCompletionSound: (): Promise<boolean> =>
+    ipcRenderer.invoke("get-completion-sound"),
+  setCompletionSound: (enabled: boolean): Promise<void> =>
+    ipcRenderer.invoke("set-completion-sound", enabled),
+
   setConnectionConfig: (
     mode: "local" | "remote" | "ssh",
     remoteUrl: string,

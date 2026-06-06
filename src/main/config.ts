@@ -128,6 +128,32 @@ export function writeDesktopConfig(data: Record<string, unknown>): void {
   writeFileSync(desktopConfigFile(), JSON.stringify(clone, null, 2), "utf-8");
 }
 
+// ── Desktop automation prefs (M2) ────────────────────────────────────────────
+// App-level, desktop-owned policy/UX toggles stored in desktop.json. They live
+// here (not config.yaml) because they are enforced by the desktop main process,
+// not the gateway, and because setConfigValue silently drops new nested YAML keys.
+
+/** Scoped auto-approve: let the desktop auto-resolve provably-safe, read-only
+ *  command approvals (see autonomy.ts). Default OFF — opt-in only. */
+export function getAutoApprove(): boolean {
+  return readDesktopConfig().autoApprove === true;
+}
+export function setAutoApprove(enabled: boolean): void {
+  const data = readDesktopConfig();
+  data.autoApprove = enabled;
+  writeDesktopConfig(data);
+}
+
+/** Play a system chime when an agent run completes (handy with parallel runs). */
+export function getCompletionSound(): boolean {
+  return readDesktopConfig().completionSound === true;
+}
+export function setCompletionSound(enabled: boolean): void {
+  const data = readDesktopConfig();
+  data.completionSound = enabled;
+  writeDesktopConfig(data);
+}
+
 export function getConnectionConfig(): ConnectionConfig {
   const data = readDesktopConfig();
   const ssh = (data.sshConfig as Partial<SshConnectionConfig>) ?? {};

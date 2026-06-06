@@ -123,8 +123,13 @@ import {
   getPlatformEnabled,
   setPlatformEnabled,
   getApiServerKey,
+  getAutoApprove,
+  setAutoApprove,
+  getCompletionSound,
+  setCompletionSound,
   type SshConnectionConfig,
 } from "./config";
+import { canAutoApprove } from "./autonomy";
 import {
   listSessions,
   getSessionMessages,
@@ -910,6 +915,17 @@ function setupIPC(): void {
       profile?: string,
     ) => respondRunApproval(runId, choice, profile),
   );
+
+  // Desktop automation prefs (M2): scoped auto-approve + completion chime.
+  ipcMain.handle("get-auto-approve", () => getAutoApprove());
+  ipcMain.handle("set-auto-approve", (_event, enabled: boolean) =>
+    setAutoApprove(enabled),
+  );
+  ipcMain.handle("get-completion-sound", () => getCompletionSound());
+  ipcMain.handle("set-completion-sound", (_event, enabled: boolean) =>
+    setCompletionSound(enabled),
+  );
+
   ipcMain.handle("is-ssh-tunnel-active", () => isSshTunnelActive());
 
   ipcMain.handle(
@@ -1103,6 +1119,9 @@ function setupIPC(): void {
           onDone: (sessionId) => {
             activeChatAborts.delete(sessionKey);
             safeSend("chat-done", sessionId || "");
+            // Completion chime (M2C): a system beep when a run finishes — the
+            // signal that tells you which of several parallel runs just landed.
+            if (getCompletionSound()) shell.beep();
             resolveChat({ response: fullResponse, sessionId });
             // Desktop notification when window is not focused and response took >10s
             if (
@@ -1158,6 +1177,18 @@ function setupIPC(): void {
           // renderer with `sessionKey` so it can route the approval reply /
           // checkpoint panel / delegation tree to the right conversation.
           onApprovalRequest: (req) => {
+            // Scoped autonomy (M2B): when the user has opted in, auto-resolve
+            // provably-safe read-only commands so parallel/headless runs aren't
+            // blocked on a click. Everything else still prompts. Enforced here
+            // in main so the policy holds even for inbound (Telegram) sessions
+            // that have no renderer to click approve.
+            if (getAutoApprove() && canAutoApprove(req)) {
+              void respondRunApproval(req.id, "once", profile);
+              // Traceability: the executed command still surfaces live via the
+              // chat-tool-progress channel, so the auto-approval isn't invisible.
+              console.log(`[autonomy] auto-approved: ${req.command ?? req.id}`);
+              return;
+            }
             safeSend("chat-approval-request", { ...req, sessionKey });
           },
           onCheckpoint: (cp) => {

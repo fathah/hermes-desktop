@@ -401,6 +401,10 @@ interface HermesAPI {
   getUsageStats: (profile?: string) => Promise<UsageAggregate>;
   summarizeSearch: (query: string, profile?: string) => Promise<SearchSummary>;
   listSkins: (profile?: string) => Promise<LoadedSkin[]>;
+  getAutoApprove: () => Promise<boolean>;
+  setAutoApprove: (enabled: boolean) => Promise<void>;
+  getCompletionSound: () => Promise<boolean>;
+  setCompletionSound: (enabled: boolean) => Promise<void>;
   respondApproval: (
     runId: string,
     choice: "once" | "session" | "always" | "deny",
