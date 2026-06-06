@@ -111,6 +111,7 @@ export interface OpenedRow {
   userTags: string[];
   runHistory: RunHistoryRow[];
   notes: string;
+  updated: string;
 }
 
 /** Read a saved row by ticker slug and parse its report + tags + run history + notes. */
@@ -130,6 +131,7 @@ export async function openRow(slug: string): Promise<OpenedRow | null> {
     userTags: asStrings(props.user_tags),
     runHistory: regions.runHistory,
     notes: regions.notes,
+    updated: typeof props.updated === "string" ? props.updated : "",
   };
 }
 

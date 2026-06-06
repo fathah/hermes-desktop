@@ -240,12 +240,19 @@ export function mergeRow(
   }
 
   const prior = splitRegions(existing.body);
+  // Skip a no-op history row (same rating/score/intrinsic as the last entry) so
+  // repeated/duplicate saves don't spam the timeline; only real changes append.
+  const last = prior.runHistory[prior.runHistory.length - 1];
+  const unchanged =
+    last &&
+    last.rating === runRow.rating &&
+    last.composite === runRow.composite &&
+    last.intrinsic === runRow.intrinsic;
+  const runHistory = unchanged
+    ? prior.runHistory
+    : [...prior.runHistory, runRow];
   return {
     props: mergeRowProps(existing.props, fresh),
-    body: buildRowBody({
-      report: reportMd,
-      runHistory: [...prior.runHistory, runRow],
-      notes: prior.notes,
-    }),
+    body: buildRowBody({ report: reportMd, runHistory, notes: prior.notes }),
   };
 }

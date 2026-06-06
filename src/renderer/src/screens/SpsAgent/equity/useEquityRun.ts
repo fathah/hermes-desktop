@@ -92,7 +92,7 @@ export function useEquityRun(): EquityRunState {
             ? "Quick mode (3 lanes: fundamentals, technical, risk)"
             : "Full depth (5-specialist council + red-team)";
         const directive = `${lanes} india-equity-research report for ${symbol} (NSE ticker: ${symbol}).
-Use ONE evidence_id. Call india-equity-data.fetch for quote, fundamentals AND history (history returns value['price_series']); put the real bars into price_series. NSE 403 is expected — degrade and record a data gap. Cite ONLY real evidence_refs returned by fetch(). Assemble with report_builder.build_report and return the canonical markdown report.`;
+Use ONE evidence_id. Call india-equity-data.fetch for quote, fundamentals AND history (history returns value['price_series']); put the real bars into price_series. NSE 403 is expected — degrade and record a data gap. Cite ONLY real evidence_refs returned by fetch(). Assemble with report_builder.build_report, then PERSIST it by path-importing india-equity-research/scripts/vault_row.py and calling vault_row.save_report(report, markdown) — this writes the canonical row to vault/equity-research/${symbol.toLowerCase()}.md. Finally reply with exactly: SAVED ${symbol}.`;
         const prompt = skillMd
           ? `Operate strictly per the india-equity-research skill below.\n\n${skillMd}\n\n---\n\n${directive}`
           : `Use the india-equity-research skill. ${directive}`;

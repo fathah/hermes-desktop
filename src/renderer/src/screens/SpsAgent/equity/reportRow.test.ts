@@ -200,6 +200,21 @@ describe("mergeRow — refresh-in-place (the crux)", () => {
     expect(second.props.rating).toBe("ACCUMULATE");
   });
 
+  it("dedups no-op refreshes but appends real changes", () => {
+    const r1 = mergeRow(null, report(), REPORT_MD, "2026-06-01T00:00:00Z");
+    // identical re-save → history stays at 1 row
+    const r2 = mergeRow(r1, report(), REPORT_MD, "2026-06-02T00:00:00Z");
+    expect(splitRegions(r2.body).runHistory).toHaveLength(1);
+    // a real change (rating/score) → appends
+    const r3 = mergeRow(
+      r2,
+      report({ rating: "REDUCE", scores: { composite: 40 } }),
+      REPORT_MD,
+      "2026-06-03T00:00:00Z",
+    );
+    expect(splitRegions(r3.body).runHistory).toHaveLength(2);
+  });
+
   it("survives a full rowToMarkdown→rowFromMarkdown disk round-trip", () => {
     const m = mergeRow(null, report(), REPORT_MD, "2026-06-06T00:00:00Z");
     const onDisk = rowToMarkdown(m.props, m.body);

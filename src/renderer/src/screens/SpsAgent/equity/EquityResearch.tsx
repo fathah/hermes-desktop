@@ -31,41 +31,69 @@ export function EquityResearch(): React.JSX.Element {
   const [runHistory, setRunHistory] = useState<RunHistoryRow[]>([]);
   const [notes, setNotes] = useState("");
   const [ledgerKey, setLedgerKey] = useState(0);
-  const savedFor = useRef<string>("");
+  const runStartedAt = useRef<string>("");
+  const processedRun = useRef<string>("");
 
-  // Auto-persist a finished run as a row, then load its merged tags.
-  useEffect(() => {
-    if (run.status !== "done" || !run.report) return;
-    if (savedFor.current === run.transcript) return;
-    savedFor.current = run.transcript;
-    const report = run.report;
-    const slug = tickerSlug(report.ticker);
-    // Show the report immediately; persistence is decoupled from rendering.
-    setActive(report);
+  const applyOpened = (
+    slug: string,
+    opened: NonNullable<Awaited<ReturnType<typeof openRow>>>,
+  ): void => {
+    setActive(opened.report);
     setActiveSlug(slug);
-    setAutoTags(deriveAutoTags(report));
-    setUserTags([]);
+    setAutoTags(opened.autoTags);
+    setUserTags(opened.userTags);
+    setRunHistory(opened.runHistory);
+    setNotes(opened.notes);
+  };
+
+  // When a run finishes, prefer the canonical row the agent SAVED (deterministic,
+  // via vault_row.save_report) — poll for it; fall back to parsing the transcript.
+  useEffect(() => {
+    if (run.status !== "done") return;
+    if (processedRun.current === runStartedAt.current) return;
+    processedRun.current = runStartedAt.current;
+    const startedAt = runStartedAt.current;
+    const slug = tickerSlug(run.ticker);
     void (async () => {
-      try {
-        await landReportToDb(report, run.transcript);
+      // 1) poll for the agent-saved row (updated since the run began)
+      for (let i = 0; i < 10; i++) {
         const opened = await openRow(slug);
-        if (opened) {
-          setAutoTags(opened.autoTags);
-          setUserTags(opened.userTags);
-          setRunHistory(opened.runHistory);
-          setNotes(opened.notes);
+        if (opened?.report && (!startedAt || opened.updated >= startedAt)) {
+          applyOpened(slug, opened);
+          setLedgerKey((k) => k + 1);
+          setNotice(`Saved ${run.ticker} to the research ledger.`);
+          return;
         }
-        setLedgerKey((k) => k + 1);
-        setNotice(`Saved ${report.ticker} to the research ledger.`);
-      } catch (e) {
-        setNotice(`Save failed: ${String(e)}`);
+        await new Promise((r) => setTimeout(r, 2500));
       }
+      // 2) fallback — the run returned a parseable report in the response
+      if (run.report) {
+        try {
+          await landReportToDb(run.report, run.transcript);
+          const opened = await openRow(slug);
+          if (opened) applyOpened(slug, opened);
+          else {
+            setActive(run.report);
+            setActiveSlug(slug);
+            setAutoTags(deriveAutoTags(run.report));
+          }
+          setLedgerKey((k) => k + 1);
+          setNotice(`Saved ${run.ticker} to the research ledger.`);
+        } catch (e) {
+          setNotice(`Save failed: ${String(e)}`);
+        }
+        return;
+      }
+      setNotice(
+        `${run.ticker}: the run finished but produced no saved report. Check the Agent Console, or try again.`,
+      );
     })();
-  }, [run.status, run.report, run.transcript]);
+  }, [run.status, run.ticker, run.report, run.transcript]);
 
   const launch = (depth: "full" | "quick"): void => {
     setNotice(null);
     setActive(null);
+    runStartedAt.current = new Date().toISOString().replace(/\.\d+Z$/, "Z");
     run.start(input, depth);
   };
 
@@ -88,6 +116,7 @@ export function EquityResearch(): React.JSX.Element {
     setInput(active.ticker);
     setNotice(null);
     setActive(null);
+    runStartedAt.current = new Date().toISOString().replace(/\.\d+Z$/, "Z");
     run.start(active.ticker, "full");
   };
 
