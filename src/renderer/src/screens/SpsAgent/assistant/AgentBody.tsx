@@ -9,6 +9,7 @@ import {
   getGroundInWorkspace,
   setGroundInWorkspace,
 } from "../../../lib/grounding";
+import { contextChipLabel } from "./contextChip";
 
 export function AgentBody() {
   // Parallel conversations (M3 #5): the panel renders the ACTIVE tab; each tab is
@@ -27,8 +28,18 @@ export function AgentBody() {
   const onDismissDb = useStore((s) => s.dismissDbAction);
 
   const [val, setVal] = useState("");
+  // Trust chips are dismissable per-message (the user can hide "used your …").
+  const [dismissedChips, setDismissedChips] = useState<Set<string>>(new Set());
   const bodyRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
+
+  const dismissChip = (id: string): void => {
+    setDismissedChips((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  };
 
   // Grounding toggle: the co-author reads getGroundInWorkspace() at send time
   // (via BridgeAssistant), so this just persists the shared preference — the
@@ -143,6 +154,24 @@ export function AgentBody() {
               {m.text.map((para, i) => (
                 <p key={i}>{para}</p>
               ))}
+              {m.context &&
+                !dismissedChips.has(m.id) &&
+                contextChipLabel(m.context) && (
+                  <div
+                    className="ctx-chip"
+                    title="This reply was grounded in your own workspace — your standing rules, saved memory, and related notes."
+                  >
+                    <Icon name="sparkle" size={11} />
+                    <span>Used your {contextChipLabel(m.context)}</span>
+                    <button
+                      className="ctx-chip-x"
+                      title="Dismiss"
+                      onClick={() => dismissChip(m.id)}
+                    >
+                      <Icon name="x" size={11} />
+                    </button>
+                  </div>
+                )}
               {m.proposalId && (
                 <div onClick={() => scrollToProposal(m.proposalId!)}>
                   {m.status === "applied" ? (

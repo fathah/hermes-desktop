@@ -9,8 +9,15 @@ export type DbAction =
   | { type: "addTask"; title: string }
   | { type: "view"; view: DbView };
 
+/** What the user's own workspace contributed to a reply — drives the trust chip. */
+export interface AssistantContext {
+  notes: number;
+  memory: number;
+  rules: number;
+}
+
 /** The discriminated result every AssistantProvider must return. */
-export type AssistantResult =
+export type AssistantResult = (
   | { kind: "chat"; reply: string[] }
   | {
       kind: "append";
@@ -25,7 +32,8 @@ export type AssistantResult =
       label: string;
       edits: { find: string; html: string }[];
     }
-  | { kind: "db"; reply: string[]; label: string; action: DbAction };
+  | { kind: "db"; reply: string[]; label: string; action: DbAction }
+) & { context?: AssistantContext };
 
 /** Context handed to the provider so it can reason about the current page. */
 export interface PageContext {
@@ -47,4 +55,6 @@ export interface AgentMessage {
   status?: "pending" | "applied" | "rejected";
   diff?: boolean;
   dbAction?: DbAction;
+  /** Present when the reply was grounded in the user's notes/memory/rules. */
+  context?: AssistantContext;
 }

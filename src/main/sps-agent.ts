@@ -22,7 +22,7 @@ import {
   buildRetrievalSystemMessage,
 } from "./hermes";
 import { profileHome, getActiveProfileNameSync } from "./utils";
-import { assembleVaultContext } from "./sps-context";
+import { assembleVaultContext, type VaultContextUsage } from "./sps-context";
 
 // ───────────────────────── SSRF guard ─────────────────────────
 const BLOCKED_RANGES = new Set([
@@ -194,7 +194,7 @@ interface AssistantBlock {
   done?: boolean;
   emoji?: string;
 }
-type AssistantResult =
+type AssistantResult = (
   | { kind: "chat"; reply: string[] }
   | {
       kind: "append";
@@ -209,7 +209,12 @@ type AssistantResult =
       label: string;
       edits: { find: string; html: string }[];
     }
-  | { kind: "db"; reply: string[]; label: string; action: DbAction };
+  | { kind: "db"; reply: string[]; label: string; action: DbAction }
+) & {
+  // What the user's own workspace contributed to this reply (drives the trust
+  // chip). Attached after validation, omitted when nothing was injected.
+  context?: VaultContextUsage;
+};
 
 interface PageContext {
   blocks: { type: string; text: string }[];
@@ -389,12 +394,17 @@ export async function spsAssistant(
       ctx.pageTitle,
       profile,
     );
-    const extraGrounding = [grounding?.content, vaultContext]
+    const extraGrounding = [grounding?.content, vaultContext.text]
       .filter(Boolean)
       .join("\n\n");
     const combinedGrounding = extraGrounding
       ? { role: "system" as const, content: extraGrounding }
       : null;
+    const used = vaultContext.used;
+    const usedAnything = used.notes + used.memory + used.rules > 0;
+    const context: VaultContextUsage | undefined = usedAnything
+      ? used
+      : undefined;
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...getRemoteAuthHeader() },
@@ -415,12 +425,11 @@ export async function spsAssistant(
     const content = data?.choices?.[0]?.message?.content ?? "";
     const parsed = extractJson(content);
     const valid = validateResult(parsed);
-    return (
-      valid ?? {
-        kind: "chat",
-        reply: [content || "I couldn't structure that as an action."],
-      }
-    );
+    const result: AssistantResult = valid ?? {
+      kind: "chat",
+      reply: [content || "I couldn't structure that as an action."],
+    };
+    return context ? { ...result, context } : result;
   } catch (err) {
     return {
       kind: "chat",

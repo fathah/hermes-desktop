@@ -142,7 +142,12 @@ export const createAssistantSlice: StateCreator<
         .then((resp) => {
           setConvThinking(convId, false);
           if (resp.kind === "chat") {
-            addMsg(convId, { id: uid("m"), role: "bot", text: resp.reply });
+            addMsg(convId, {
+              id: uid("m"),
+              role: "bot",
+              text: resp.reply,
+              context: resp.context,
+            });
             return;
           }
           if (resp.kind === "db") {
@@ -153,6 +158,7 @@ export const createAssistantSlice: StateCreator<
               dbAction: resp.action,
               label: resp.label,
               status: "pending",
+              context: resp.context,
             });
             return;
           }
@@ -190,6 +196,7 @@ export const createAssistantSlice: StateCreator<
               label: resp.label,
               status: "pending",
               diff: true,
+              context: resp.context,
             });
             requestAnimationFrame(() => scrollToProposal(pid));
             return;
@@ -224,6 +231,7 @@ export const createAssistantSlice: StateCreator<
             proposalId: pid,
             label: resp.label,
             status: "pending",
+            context: resp.context,
           });
           requestAnimationFrame(() => scrollToProposal(pid));
         });

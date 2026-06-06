@@ -15,7 +15,11 @@ import {
   type SaveResult,
 } from "../../Personalization/parts";
 import { RulesManager } from "./RulesManager";
-import { parseUserMd, serializeUserMd, type Rule } from "./userMd";
+import {
+  parseUserMd,
+  serializeUserMd,
+  type Rule,
+} from "../../../../../shared/userMd";
 
 interface YouSurfaceProps {
   profile?: string;

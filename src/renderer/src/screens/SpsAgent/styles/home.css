@@ -1492,6 +1492,43 @@
   color: var(--tx-3);
 }
 
+/* Trust chip: shows what the reply was grounded in (rules / memory / notes). */
+.sps-scope .ctx-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  padding: 2px 6px 2px 8px;
+  font-size: 11.5px;
+  color: var(--tx-3);
+  background: var(--row-hover, rgba(127, 127, 127, 0.08));
+  border: 1px solid var(--bd-1, rgba(127, 127, 127, 0.16));
+  border-radius: 999px;
+  max-width: 100%;
+}
+.sps-scope .ctx-chip > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sps-scope .ctx-chip .ic {
+  color: var(--accent);
+  flex: none;
+}
+.sps-scope .ctx-chip-x {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  background: none;
+  padding: 0 0 0 1px;
+  cursor: pointer;
+  color: var(--tx-4);
+  flex: none;
+}
+.sps-scope .ctx-chip-x:hover {
+  color: var(--tx-2);
+}
+
 .sps-scope .thinking {
   display: flex;
   gap: 5px;

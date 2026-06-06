@@ -4,7 +4,7 @@
 // USER.md via the userMd serializer.
 import { useState } from "react";
 import { Icon } from "../components/Icon";
-import { STARTER_RULES, type Rule } from "./userMd";
+import { STARTER_RULES, type Rule } from "../../../../../shared/userMd";
 
 interface RulesManagerProps {
   rules: Rule[];

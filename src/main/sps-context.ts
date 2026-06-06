@@ -23,14 +23,31 @@ export interface VaultHit {
 export interface VaultContextInput {
   hits: VaultHit[];
   memoryEntries: string[];
+  /** Enabled standing rules from the user's USER.md `## Rules` block. */
+  rules: string[];
   vaultPath?: string;
+}
+
+/** What `assembleVaultContext` actually injected — drives the renderer's trust chip. */
+export interface VaultContextUsage {
+  notes: number;
+  memory: number;
+  rules: number;
+}
+
+/** The assembled preamble plus a summary of what went into it. */
+export interface VaultContextResult {
+  text: string;
+  used: VaultContextUsage;
 }
 
 const MAX_CONTEXT_CHARS = 4000;
 const MAX_SNIPPET_CHARS = 240;
 const MAX_MEMORY_ENTRY_CHARS = 280;
+const MAX_RULE_CHARS = 200;
 const MAX_HITS = 6;
 const MAX_MEMORY_ENTRIES = 8;
+const MAX_RULES = 12;
 
 /** Collapse the FTS snippet markers and whitespace into a single tidy line. */
 function tidySnippet(snippet: string): string {
@@ -47,6 +64,13 @@ function tidyMemoryEntry(entry: string): string {
   return collapsed.slice(0, MAX_MEMORY_ENTRY_CHARS).trimEnd() + "…";
 }
 
+/** Clamp a single rule to one budgeted line. */
+function tidyRule(rule: string): string {
+  const collapsed = rule.replace(/\s+/g, " ").trim();
+  if (collapsed.length <= MAX_RULE_CHARS) return collapsed;
+  return collapsed.slice(0, MAX_RULE_CHARS).trimEnd() + "…";
+}
+
 /**
  * Render the retrieved context into a system-message preamble. PURE — given the
  * same input it returns the same string. Returns "" when there is nothing to add
@@ -54,6 +78,17 @@ function tidyMemoryEntry(entry: string): string {
  */
 export function formatVaultContext(input: VaultContextInput): string {
   const sections: string[] = [];
+
+  const rules = (input.rules ?? [])
+    .map(tidyRule)
+    .filter(Boolean)
+    .slice(0, MAX_RULES);
+  if (rules.length > 0) {
+    const lines = rules.map((rule) => `- ${rule}`);
+    sections.push(
+      `The user's standing rules — follow these in every reply:\n${lines.join("\n")}`,
+    );
+  }
 
   const hits = input.hits.slice(0, MAX_HITS);
   if (hits.length > 0) {
@@ -89,6 +124,24 @@ export function formatVaultContext(input: VaultContextInput): string {
 }
 
 /**
+ * Count what `formatVaultContext` would actually include, after the same caps
+ * and empty-filtering. PURE — drives the renderer's trust chip so it can never
+ * claim more than was injected.
+ */
+export function vaultUsage(input: VaultContextInput): VaultContextUsage {
+  const notes = input.hits.slice(0, MAX_HITS).length;
+  const memory = input.memoryEntries
+    .map(tidyMemoryEntry)
+    .filter(Boolean)
+    .slice(0, MAX_MEMORY_ENTRIES).length;
+  const rules = (input.rules ?? [])
+    .map(tidyRule)
+    .filter(Boolean)
+    .slice(0, MAX_RULES).length;
+  return { notes, memory, rules };
+}
+
+/**
  * Retrieve vault hits + memory for a request and render the preamble. Returns ""
  * if nothing relevant is found or retrieval fails (the assistant still works
  * without context — this is purely additive). DB access is dynamically imported
@@ -98,10 +151,15 @@ export async function assembleVaultContext(
   query: string,
   pageTitle: string,
   profile?: string,
-): Promise<string> {
+): Promise<VaultContextResult> {
+  const empty: VaultContextResult = {
+    text: "",
+    used: { notes: 0, memory: 0, rules: 0 },
+  };
   try {
     const { getSpsNoteIndex } = await import("./note-index");
     const { readMemory } = await import("./memory");
+    const { parseUserMd } = await import("../shared/userMd");
 
     const searchText = `${pageTitle} ${query}`.trim();
     const index = await getSpsNoteIndex(profile);
@@ -112,17 +170,29 @@ export async function assembleVaultContext(
       path: hit.path,
     }));
 
+    // MEMORY.md durable facts + enabled USER.md rules. Both are optional context
+    // — never fail the request over them, and a disabled rule is never injected.
     let memoryEntries: string[] = [];
+    let rules: string[] = [];
     try {
       const mem = readMemory(profile);
       memoryEntries = mem.memory.entries.map((entry) => entry.content);
+      rules = parseUserMd(mem.user.content)
+        .rules.filter((rule) => rule.enabled)
+        .map((rule) => rule.text);
     } catch {
-      // Memory is optional context — never fail the request over it.
+      // Optional — proceed with whatever we have.
     }
 
     const vaultPath = index.status().root;
-    return formatVaultContext({ hits, memoryEntries, vaultPath });
+    const input: VaultContextInput = {
+      hits,
+      memoryEntries,
+      rules,
+      vaultPath,
+    };
+    return { text: formatVaultContext(input), used: vaultUsage(input) };
   } catch {
-    return "";
+    return empty;
   }
 }
