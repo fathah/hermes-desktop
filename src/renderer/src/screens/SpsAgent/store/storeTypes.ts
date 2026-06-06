@@ -1,5 +1,6 @@
 // storeTypes.ts — the composed store shape, split into slice interfaces.
 import type { AgentMessage, DbAction } from "../assistant/types";
+import type { AiActionKind } from "../assistant/prompts";
 import type { DropWhere } from "../lib/tree";
 import type { Tweaks } from "../lib/theme";
 import type {
@@ -155,8 +156,14 @@ export interface AssistantSlice {
   pushUser: (text: string) => void;
   pushBot: (msg: Omit<AgentMessage, "id" | "role">) => void;
   /** Phase 8 wires these to a provider + page orchestration. */
-  runAgent: (prompt: string) => void;
+  runAgent: (prompt: string, displayText?: string) => void;
   askAbout: (text: string) => void;
+  /** Inline co-author affordances (Milestone 1D). */
+  aiAction: (kind: AiActionKind, text: string) => void;
+  /** `/plan` — produce a structured, vault-grounded plan (Milestone 1B). */
+  runPlan: (idea: string, opts?: { planForThePlan?: boolean }) => void;
+  /** `/work` — execute the plan on the current page (Milestone 1C). */
+  runWork: () => void;
   decideProposal: (proposalId: string, accept: boolean) => void;
   applyDbAction: (messageId: string, action: DbAction) => void;
   dismissDbAction: (messageId: string) => void;

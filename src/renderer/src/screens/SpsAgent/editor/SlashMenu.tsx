@@ -4,12 +4,33 @@ import { Icon } from "../components/Icon";
 import type { IconName } from "../components/iconPaths";
 import type { BlockType } from "../types";
 
+/** AI/workflow actions that don't insert a block (Milestone 1B/1C). */
+export type SlashAction = "plan" | "work";
+
 export interface SlashItem {
-  type: BlockType;
+  /** Block-insert items carry a block type; action items carry an action. */
+  type?: BlockType;
+  action?: SlashAction;
   icon: IconName;
   label: string;
   desc: string;
 }
+
+/** AI actions, shown above the basic blocks. */
+export const AI_SLASH_ITEMS: SlashItem[] = [
+  {
+    action: "plan",
+    icon: "sparkle",
+    label: "Plan",
+    desc: "Research & draft a grounded plan",
+  },
+  {
+    action: "work",
+    icon: "sparkle",
+    label: "Work this plan",
+    desc: "Execute the plan on this page",
+  },
+];
 
 export const SLASH_ITEMS: SlashItem[] = [
   { type: "p", icon: "text", label: "Text", desc: "Plain paragraph" },
@@ -80,11 +101,12 @@ interface Props {
 
 export function SlashMenu({ x, y, query, onPick, onClose }: Props) {
   const [sel, setSel] = useState(0);
-  const items = SLASH_ITEMS.filter(
+  const q = query.toLowerCase();
+  const items = [...AI_SLASH_ITEMS, ...SLASH_ITEMS].filter(
     (it) =>
       !query ||
-      it.label.toLowerCase().includes(query.toLowerCase()) ||
-      it.type.includes(query.toLowerCase()),
+      it.label.toLowerCase().includes(q) ||
+      (it.type ?? it.action ?? "").includes(q),
   );
   useEffect(() => {
     setSel(0);
@@ -115,26 +137,32 @@ export function SlashMenu({ x, y, query, onPick, onClose }: Props) {
         onMouseDown={onClose}
       />
       <div className="menu scroll" style={{ left, top }}>
-        <div className="menu-label">Basic blocks</div>
-        {items.map((it, i) => (
-          <div
-            key={it.type}
-            className={`menu-item ${i === sel ? "sel" : ""}`}
-            onMouseEnter={() => setSel(i)}
-            onMouseDown={(e) => {
-              e.preventDefault();
-              onPick(it);
-            }}
-          >
-            <div className="menu-ic">
-              <Icon name={it.icon} size={17} />
+        {items.map((it, i) => {
+          const firstAction = it.action && (i === 0 || !items[i - 1].action);
+          const firstBlock = it.type && (i === 0 || items[i - 1].action);
+          return (
+            <div key={it.type ?? it.action}>
+              {firstAction && <div className="menu-label">AI</div>}
+              {firstBlock && <div className="menu-label">Basic blocks</div>}
+              <div
+                className={`menu-item ${i === sel ? "sel" : ""}`}
+                onMouseEnter={() => setSel(i)}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onPick(it);
+                }}
+              >
+                <div className="menu-ic">
+                  <Icon name={it.icon} size={17} />
+                </div>
+                <div className="menu-tx">
+                  <b>{it.label}</b>
+                  <small>{it.desc}</small>
+                </div>
+              </div>
             </div>
-            <div className="menu-tx">
-              <b>{it.label}</b>
-              <small>{it.desc}</small>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </>
   );

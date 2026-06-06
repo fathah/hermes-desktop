@@ -6,6 +6,12 @@ import { uid } from "../../lib/ids";
 import { escapeHtml, stripHtml } from "../../lib/html";
 import { scrollToProposal } from "../../lib/scroll";
 import { getAssistantProvider } from "../../assistant/AssistantProvider";
+import {
+  buildAiActionPrompt,
+  buildPlanPrompt,
+  buildWorkPrompt,
+  aiActionLabel,
+} from "../../assistant/prompts";
 import { TASKS } from "../../data/seed";
 import type { Block } from "../../types";
 import type { Store, AssistantSlice } from "../storeTypes";
@@ -38,9 +44,9 @@ export const createAssistantSlice: StateCreator<
   // Send a prompt to the active AssistantProvider and route the typed result onto
   // the page (chat / db-action card / tracked diff / appended proposal).
   // Ported from app.jsx runAgent.
-  runAgent: (prompt) => {
+  runAgent: (prompt, displayText) => {
     const s = get();
-    s.pushUser(prompt);
+    s.pushUser(displayText ?? prompt);
     s.setThinking(true);
     const blocks = s.docs[s.page] || [];
     const pageTitle = (s.meta[s.page] || { title: "Untitled" }).title;
@@ -135,6 +141,32 @@ export const createAssistantSlice: StateCreator<
     get().openPanelTab("assistant");
     const snippet = text.slice(0, 60) + (text.length > 60 ? "…" : "");
     get().runAgent(`About “${snippet}” — explain this.`);
+  },
+
+  // Inline co-author affordance (Milestone 1D): TLDR / eli5 / rewrite / summarize
+  // / why over a selection. Routes through the same provider + result orchestration
+  // as runAgent; only the prompt and the chat-bubble label differ.
+  aiAction: (kind, text) => {
+    get().openPanelTab("assistant");
+    const prompt = buildAiActionPrompt(kind, text);
+    get().runAgent(prompt, aiActionLabel(kind, text));
+  },
+
+  // `/plan` (Milestone 1B): produce a structured, vault-grounded plan as appended
+  // blocks on the current page — Problem / Approach / Steps / Acceptance criteria
+  // (as todos) / References. The acceptance todos are the checklist `/work` ticks.
+  runPlan: (idea, opts) => {
+    get().openPanelTab("assistant");
+    const prompt = buildPlanPrompt(idea, opts);
+    const label = idea.trim() ? `Plan: ${idea.trim()}` : "Plan this page";
+    get().runAgent(prompt, label);
+  },
+
+  // `/work` (Milestone 1C): execute the plan on the current page. Single-shot for
+  // now; the streaming + resumable path is a follow-up.
+  runWork: () => {
+    get().openPanelTab("assistant");
+    get().runAgent(buildWorkPrompt(), "Work this plan");
   },
 
   decideProposal: (pid, accept) => {

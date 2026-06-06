@@ -17,6 +17,7 @@ import { Agent, fetch as undiciFetch } from "undici";
 import ipaddr from "ipaddr.js";
 import { getApiUrl, getRemoteAuthHeader } from "./hermes";
 import { profileHome, getActiveProfileNameSync } from "./utils";
+import { assembleVaultContext } from "./sps-context";
 
 // ───────────────────────── SSRF guard ─────────────────────────
 const BLOCKED_RANGES = new Set([
@@ -342,6 +343,17 @@ export async function spsAssistant(
 ): Promise<AssistantResult> {
   try {
     const url = `${getApiUrl(profile)}/v1/chat/completions`;
+    // Ground the run in the user's own vault + memory (Milestone 1A). Additive:
+    // an empty bundle (or retrieval failure) just omits the extra system message.
+    const vaultContext = await assembleVaultContext(
+      prompt,
+      ctx.pageTitle,
+      profile,
+    );
+    const systemMessages = [{ role: "system", content: SYSTEM_PROMPT }];
+    if (vaultContext) {
+      systemMessages.push({ role: "system", content: vaultContext });
+    }
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...getRemoteAuthHeader() },
@@ -350,7 +362,7 @@ export async function spsAssistant(
         model: "hermes-agent",
         stream: false,
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
+          ...systemMessages,
           {
             role: "user",
             content: `Page title: ${ctx.pageTitle}\n\nPage content:\n${pageToText(ctx.blocks)}\n\nRequest: ${prompt}`,

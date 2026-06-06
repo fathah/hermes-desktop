@@ -23,10 +23,15 @@ export function Overlays() {
   const setPMeta = useStore((s) => s.setPMeta);
   const addSelectionComment = useStore((s) => s.addSelectionComment);
   const askAbout = useStore((s) => s.askAbout);
+  const aiAction = useStore((s) => s.aiAction);
 
   return (
     <>
-      <SelectionToolbar onComment={addSelectionComment} onAsk={askAbout} />
+      <SelectionToolbar
+        onComment={addSelectionComment}
+        onAsk={askAbout}
+        onAiAction={aiAction}
+      />
 
       {paletteOpen && <CommandPalette />}
       {templatesOpen && <TemplatesModal />}

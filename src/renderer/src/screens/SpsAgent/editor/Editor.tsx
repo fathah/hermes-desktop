@@ -51,6 +51,8 @@ export function Editor() {
   const onToast = useStore((s) => s.flash);
   const createChildPage = useStore((s) => s.createChildPage);
   const onOpenPage = useStore((s) => s.selectPage);
+  const runPlan = useStore((s) => s.runPlan);
+  const runWork = useStore((s) => s.runWork);
   const pageMeta = useStore((s) => s.meta);
 
   const refs = useRef<Record<string, RefObject<HTMLDivElement | null>>>({});
@@ -221,6 +223,14 @@ export function Editor() {
     if (!slash) return;
     const id = slash.blockId;
     setSlash(null);
+    // AI/workflow actions don't insert a block — they dispatch to the assistant.
+    if (item.action) {
+      const block = blocks.find((b) => b.id === id);
+      const idea = block?.text ?? "";
+      if (item.action === "plan") runPlan(idea);
+      else if (item.action === "work") runWork();
+      return;
+    }
     if (item.type === "divider") {
       setType(id, { type: "divider", html: "", text: "" });
       const nb = blk("p", "");
@@ -245,6 +255,7 @@ export function Editor() {
       if (pid) setType(id, { type: "page", pageId: pid, html: "", text: "" });
       return;
     }
+    if (!item.type) return;
     setType(id, {
       type: item.type,
       html: "",

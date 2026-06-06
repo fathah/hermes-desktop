@@ -1,0 +1,84 @@
+// prompts.ts — prompt builders for the agentic-workflow affordances (Milestone 1).
+//
+// These compose the natural-language `prompt` string that the assistant backend
+// (`spsAssistant`) wraps with its fixed SYSTEM_PROMPT. That system prompt already
+// defines the AssistantResult JSON shapes (chat | append | diff | db); each builder
+// here just steers WHICH shape to return and WHAT to put in it. Keeping these as
+// pure string builders makes them trivially unit-testable and keeps the store thin.
+
+/** The inline co-author actions surfaced on the selection toolbar + slash menu. */
+export type AiActionKind = "tldr" | "eli5" | "rewrite" | "summarize" | "why";
+
+/** Short label shown as the user's chat bubble for an inline action. */
+export function aiActionLabel(kind: AiActionKind, selection: string): string {
+  const snippet =
+    selection.length > 48 ? selection.slice(0, 48).trimEnd() + "…" : selection;
+  const verb: Record<AiActionKind, string> = {
+    tldr: "TLDR",
+    eli5: "ELI5",
+    rewrite: "Rewrite",
+    summarize: "Summarize",
+    why: "Why this approach",
+  };
+  return snippet ? `${verb[kind]}: “${snippet}”` : verb[kind];
+}
+
+/** Build the model prompt for an inline co-author action over a selection. */
+export function buildAiActionPrompt(
+  kind: AiActionKind,
+  selection: string,
+): string {
+  const target = selection.trim();
+  switch (kind) {
+    case "tldr":
+      return `Give a one- or two-sentence TLDR of the following. Reply as {"kind":"chat"}.\n\n${target}`;
+    case "eli5":
+      return `Explain the following like I'm five — plain words, no jargon. Reply as {"kind":"chat"}.\n\n${target}`;
+    case "summarize":
+      return `Summarize the key points of the following as a short bulleted list. Reply as {"kind":"chat"}.\n\n${target}`;
+    case "why":
+      return `Explain WHY this approach or decision makes sense, and name the main trade-off or risk. Reply as {"kind":"chat"}.\n\n${target}`;
+    case "rewrite":
+      return `Rewrite the following to be clearer and tighter without changing its meaning. Return a {"kind":"diff"} edit whose "find" is the first ~18 characters of the text and whose "html" is the rewrite.\n\n${target}`;
+  }
+}
+
+/**
+ * Build the prompt for `/plan` — produce a structured, vault-grounded plan as
+ * appended blocks (article hacks #1/#3). The acceptance criteria are emitted as
+ * `todo` blocks so they become the executable checklist `/work` ticks off.
+ */
+export function buildPlanPrompt(
+  idea: string,
+  opts: { planForThePlan?: boolean } = {},
+): string {
+  const trimmed = idea.trim() || "the idea described on this page";
+  const intro = opts.planForThePlan
+    ? `First make a PLAN FOR THE PLAN for: ${trimmed}. Describe how you will research and produce the eventual deliverable — do not produce the deliverable itself yet.`
+    : `Make a concrete, grounded plan for: ${trimmed}.`;
+  return [
+    intro,
+    "Use the workspace context you were given (the user's own notes + memory); prefer their existing terminology and link related notes with [[wikilinks]].",
+    'Return {"kind":"append","at":"bottom"} with these blocks in order:',
+    '- an "h3" titled "Problem" followed by a "p" stating what is wrong / what is needed,',
+    '- an "h3" titled "Approach" followed by 1–3 "p" blocks describing the approach and the main trade-off,',
+    '- an "h3" titled "Steps" followed by "li" blocks, one per concrete step,',
+    '- an "h3" titled "Acceptance criteria" followed by "todo" blocks (done:false), one per testable condition,',
+    '- an "h3" titled "References" followed by "p" blocks linking related notes as [[wikilinks]].',
+    'Keep the "reply" to a one-line summary of the plan.',
+  ].join("\n");
+}
+
+/**
+ * Build the prompt for `/work` — execute the plan on the current page. Single-shot
+ * for now (the streaming + resumable path is a Milestone-1C follow-up); the agent
+ * uses its tools where it can and reports progress against the acceptance criteria.
+ */
+export function buildWorkPrompt(): string {
+  return [
+    "The current page is a plan with an 'Acceptance criteria' checklist.",
+    "Execute the steps using your available tools where possible.",
+    "Then report what you did and what remains.",
+    'If you completed acceptance criteria, return a {"kind":"diff"} that rewrites each finished "- [ ]" line to "- [x]"; otherwise return {"kind":"chat"} summarizing progress and the single next action.',
+  ].join("\n");
+}

@@ -5,6 +5,16 @@ import { Icon } from "../components/Icon";
 import { escapeHtml } from "../lib/html";
 import { safeLinkHref } from "../lib/sanitize";
 import { uid } from "../lib/ids";
+import type { AiActionKind } from "../assistant/prompts";
+
+/** Inline co-author actions offered in the toolbar's AI menu (Milestone 1D). */
+const AI_ACTIONS: { kind: AiActionKind; label: string }[] = [
+  { kind: "tldr", label: "TLDR" },
+  { kind: "eli5", label: "Explain like I'm 5" },
+  { kind: "rewrite", label: "Rewrite clearer" },
+  { kind: "summarize", label: "Summarize" },
+  { kind: "why", label: "Why this approach" },
+];
 
 const TEXT_COLORS: [string, string][] = [
   ["default", "inherit"],
@@ -44,12 +54,13 @@ function inEditableBlock(node: Node | null): HTMLElement | null {
 interface Props {
   onComment: (cid: string, text: string) => void;
   onAsk: (text: string) => void;
+  onAiAction: (kind: AiActionKind, text: string) => void;
 }
 
-export function SelectionToolbar({ onComment, onAsk }: Props) {
+export function SelectionToolbar({ onComment, onAsk, onAiAction }: Props) {
   const [box, setBox] = useState<{ x: number; y: number } | null>(null);
   const [marks, setMarks] = useState<Record<string, boolean>>({});
-  const [pop, setPop] = useState<"color" | "link" | null>(null);
+  const [pop, setPop] = useState<"color" | "link" | "ai" | null>(null);
   const [linkVal, setLinkVal] = useState("");
   const savedRange = useRef<Range | null>(null);
 
@@ -163,6 +174,13 @@ export function SelectionToolbar({ onComment, onAsk }: Props) {
     window.getSelection()?.removeAllRanges();
     if (onAsk && txt) onAsk(txt);
   };
+  const doAi = (kind: AiActionKind) => {
+    const txt = savedRange.current ? savedRange.current.toString() : "";
+    setPop(null);
+    setBox(null);
+    window.getSelection()?.removeAllRanges();
+    if (txt) onAiAction(kind, txt);
+  };
 
   if (!box) return null;
   const top = Math.max(box.y - 46, 8);
@@ -225,11 +243,41 @@ export function SelectionToolbar({ onComment, onAsk }: Props) {
         <button className="st-btn" onClick={doAsk} title="Ask the assistant">
           <Icon name="sparkle" size={15} /> Ask AI
         </button>
+        <button
+          className="st-btn"
+          onClick={() => setPop(pop === "ai" ? null : "ai")}
+          title="AI actions"
+        >
+          <Icon name="chevD" size={11} />
+        </button>
         <button className="st-btn" onClick={doComment} title="Comment">
           <Icon name="comment" size={15} />
         </button>
       </div>
 
+      {pop === "ai" && (
+        <div
+          className="st-pop"
+          style={{ left: box.x - 80, top: top + 38 }}
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          <div className="menu-label">AI</div>
+          {AI_ACTIONS.map((a) => (
+            <div
+              key={a.kind}
+              className="menu-item"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                doAi(a.kind);
+              }}
+            >
+              <div className="menu-tx">
+                <b>{a.label}</b>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       {pop === "color" && (
         <div
           className="st-pop"
