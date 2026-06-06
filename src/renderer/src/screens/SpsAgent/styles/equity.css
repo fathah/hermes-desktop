@@ -415,3 +415,24 @@
 .sps-scope .eq-search-input::placeholder {
   color: var(--tx-4);
 }
+
+/* ---- Run history + notes panel ---- */
+.sps-scope .eq-history {
+  margin-top: var(--s-6);
+  display: grid;
+  gap: var(--s-6);
+}
+.sps-scope .eq-runlog h3,
+.sps-scope .eq-notes h3 {
+  font-family: var(--font-sans);
+  font-size: var(--fs-12);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tx-1);
+  margin: 0 0 var(--s-3);
+}
+.sps-scope .eq-notes {
+  color: var(--tx-2);
+  font-size: var(--fs-13);
+}

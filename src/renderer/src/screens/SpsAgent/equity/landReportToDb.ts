@@ -18,6 +18,8 @@ import {
   tickerSlug,
   mergeRow,
   extractGeneratedReport,
+  splitRegions,
+  type RunHistoryRow,
 } from "./reportRow";
 
 export { DB_FOLDER } from "./reportRow";
@@ -107,9 +109,11 @@ export interface OpenedRow {
   report: EquityReport | null;
   autoTags: string[];
   userTags: string[];
+  runHistory: RunHistoryRow[];
+  notes: string;
 }
 
-/** Read a saved row by ticker slug and parse its generated report + tags. */
+/** Read a saved row by ticker slug and parse its report + tags + run history + notes. */
 export async function openRow(slug: string): Promise<OpenedRow | null> {
   const api = window.hermesAPI;
   const md = api.spsReadRow
@@ -119,10 +123,13 @@ export async function openRow(slug: string): Promise<OpenedRow | null> {
   const { props, body } = rowFromMarkdown(md);
   const asStrings = (v: unknown): string[] =>
     Array.isArray(v) ? v.map(String) : [];
+  const regions = splitRegions(body);
   return {
-    report: parseEquityReport(extractGeneratedReport(body)),
+    report: parseEquityReport(regions.report || extractGeneratedReport(body)),
     autoTags: asStrings(props.tags),
     userTags: asStrings(props.user_tags),
+    runHistory: regions.runHistory,
+    notes: regions.notes,
   };
 }
 

@@ -10,8 +10,9 @@ import { useEquityRun } from "./useEquityRun";
 import { ReportView } from "./ReportView";
 import { ReportLedger } from "./ReportLedger";
 import { TagChips } from "./TagChips";
+import { RunHistoryPanel } from "./RunHistoryPanel";
 import { landReportToDb, openRow, updateUserTags } from "./landReportToDb";
-import { deriveAutoTags, tickerSlug } from "./reportRow";
+import { deriveAutoTags, tickerSlug, type RunHistoryRow } from "./reportRow";
 import type { EquityReport } from "./reportContract";
 
 const PROFILE = "default";
@@ -27,6 +28,8 @@ export function EquityResearch(): React.JSX.Element {
   const [activeSlug, setActiveSlug] = useState("");
   const [autoTags, setAutoTags] = useState<string[]>([]);
   const [userTags, setUserTags] = useState<string[]>([]);
+  const [runHistory, setRunHistory] = useState<RunHistoryRow[]>([]);
+  const [notes, setNotes] = useState("");
   const [ledgerKey, setLedgerKey] = useState(0);
   const savedFor = useRef<string>("");
 
@@ -49,6 +52,8 @@ export function EquityResearch(): React.JSX.Element {
         if (opened) {
           setAutoTags(opened.autoTags);
           setUserTags(opened.userTags);
+          setRunHistory(opened.runHistory);
+          setNotes(opened.notes);
         }
         setLedgerKey((k) => k + 1);
         setNotice(`Saved ${report.ticker} to the research ledger.`);
@@ -74,6 +79,8 @@ export function EquityResearch(): React.JSX.Element {
     setActiveSlug(slug);
     setAutoTags(opened.autoTags);
     setUserTags(opened.userTags);
+    setRunHistory(opened.runHistory);
+    setNotes(opened.notes);
   };
 
   const refresh = (): void => {
@@ -197,6 +204,7 @@ export function EquityResearch(): React.JSX.Element {
             onSaveToVault={() => void saveNow()}
             saving={saving}
           />
+          <RunHistoryPanel runHistory={runHistory} notes={notes} />
         </>
       ) : running ? (
         run.transcript && (
