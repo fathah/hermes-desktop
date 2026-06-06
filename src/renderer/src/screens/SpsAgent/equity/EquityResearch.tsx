@@ -1,18 +1,25 @@
-// Equity Research surface root: launch a run for a ticker OR rank a whole
-// basket, watch the live multi-agent delegation tree + tool progress, render the
-// charted report / ranking board, and (a) save it (vault page / persisted
-// basket) or (b) schedule a recurring refresh via cron. Reuses the existing chat
-// send path, DelegationTree, AgentMarkdown, makePage.
+// Equity Research surface: a mode-tabbed workspace.
+//   • Single name — a research ledger (saved, searchable, taggable reports) +
+//     active report view; running/opening shows the report, else the ledger.
+//   • Basket — rank the names you hold; Save the basket or Discard.
+//   • Alerts — the in-app feed for the alert engine.
+//   • Calibration — were-my-calls-right hit-rate; Save the scorecard or Discard.
+// Reuses the chat send path, DelegationTree, AgentMarkdown.
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { DelegationTree } from "../../Chat/DelegationTree";
 import AgentMarkdown from "../../../components/AgentMarkdown";
 import { useEquityRun } from "./useEquityRun";
 import { ReportView } from "./ReportView";
+import { ReportLedger } from "./ReportLedger";
+import { TagChips } from "./TagChips";
+import { RunHistoryPanel } from "./RunHistoryPanel";
 import { BasketBoard } from "./BasketBoard";
 import { AlertCenter } from "./AlertCenter";
 import { CalibrationView } from "./CalibrationView";
-import { landReportToVault } from "./landReportToVault";
+import { landReportToDb, openRow, updateUserTags } from "./landReportToDb";
+import { deriveAutoTags, tickerSlug, type RunHistoryRow } from "./reportRow";
+import type { EquityReport } from "./reportContract";
 
 const PROFILE = "default";
 
@@ -28,13 +35,26 @@ export function EquityResearch(): React.JSX.Element {
   const run = useEquityRun();
   const [mode, setMode] = useState<Mode>("single");
   const [input, setInput] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // basket mode
   const [basketTickers, setBasketTickers] = useState("");
   const [basketName, setBasketName] = useState("");
   const [saved, setSaved] = useState<SavedBasket[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
   const [boardDiscarded, setBoardDiscarded] = useState(false);
   const [scorecardDiscarded, setScorecardDiscarded] = useState(false);
+
+  // single-name research ledger: active report = just-run or opened from ledger
+  const [active, setActive] = useState<EquityReport | null>(null);
+  const [activeSlug, setActiveSlug] = useState("");
+  const [autoTags, setAutoTags] = useState<string[]>([]);
+  const [userTags, setUserTags] = useState<string[]>([]);
+  const [runHistory, setRunHistory] = useState<RunHistoryRow[]>([]);
+  const [notes, setNotes] = useState("");
+  const [ledgerKey, setLedgerKey] = useState(0);
+  const runStartedAt = useRef<string>("");
+  const processedRun = useRef<string>("");
 
   useEffect(() => {
     void window.hermesAPI
@@ -43,8 +63,67 @@ export function EquityResearch(): React.JSX.Element {
       .catch(() => setSaved([]));
   }, []);
 
+  const applyOpened = (
+    slug: string,
+    opened: NonNullable<Awaited<ReturnType<typeof openRow>>>,
+  ): void => {
+    setActive(opened.report);
+    setActiveSlug(slug);
+    setAutoTags(opened.autoTags);
+    setUserTags(opened.userTags);
+    setRunHistory(opened.runHistory);
+    setNotes(opened.notes);
+  };
+
+  // When a SINGLE-NAME run finishes, prefer the canonical row the agent SAVED
+  // (deterministic, via vault_row.save_report) — poll for it; fall back to
+  // parsing the transcript. Basket/calibration runs are handled separately, so
+  // this is gated to single mode (their transcripts aren't equity-research rows).
+  useEffect(() => {
+    if (mode !== "single") return;
+    if (run.status !== "done") return;
+    if (processedRun.current === runStartedAt.current) return;
+    processedRun.current = runStartedAt.current;
+    const startedAt = runStartedAt.current;
+    const slug = tickerSlug(run.ticker);
+    void (async () => {
+      for (let i = 0; i < 10; i++) {
+        const opened = await openRow(slug);
+        if (opened?.report && (!startedAt || opened.updated >= startedAt)) {
+          applyOpened(slug, opened);
+          setLedgerKey((k) => k + 1);
+          setNotice(`Saved ${run.ticker} to the research ledger.`);
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 2500));
+      }
+      if (run.report) {
+        try {
+          await landReportToDb(run.report, run.transcript);
+          const opened = await openRow(slug);
+          if (opened) applyOpened(slug, opened);
+          else {
+            setActive(run.report);
+            setActiveSlug(slug);
+            setAutoTags(deriveAutoTags(run.report));
+          }
+          setLedgerKey((k) => k + 1);
+          setNotice(`Saved ${run.ticker} to the research ledger.`);
+        } catch (e) {
+          setNotice(`Save failed: ${String(e)}`);
+        }
+        return;
+      }
+      setNotice(
+        `${run.ticker}: the run finished but produced no saved report. Check the Agent Console, or try again.`,
+      );
+    })();
+  }, [mode, run.status, run.ticker, run.report, run.transcript]);
+
   const launch = (depth: "full" | "quick"): void => {
     setNotice(null);
+    setActive(null);
+    runStartedAt.current = new Date().toISOString().replace(/\.\d+Z$/, "Z");
     run.start(input, depth);
   };
 
@@ -62,14 +141,38 @@ export function EquityResearch(): React.JSX.Element {
     setBasketTickers(basket.holdings.map((h) => h.ticker).join(", "));
   };
 
-  const saveToVault = async (): Promise<void> => {
-    if (!run.report) return;
+  const open = async (slug: string): Promise<void> => {
+    const opened = await openRow(slug);
+    if (!opened?.report) {
+      setNotice(`Could not open ${slug}.`);
+      return;
+    }
+    applyOpened(slug, opened);
+  };
+
+  const refresh = (): void => {
+    if (!active) return;
+    setInput(active.ticker);
+    setNotice(null);
+    setActive(null);
+    runStartedAt.current = new Date().toISOString().replace(/\.\d+Z$/, "Z");
+    run.start(active.ticker, "full");
+  };
+
+  const onTags = (next: string[]): void => {
+    setUserTags(next);
+    void updateUserTags(activeSlug, next).then(() =>
+      setLedgerKey((k) => k + 1),
+    );
+  };
+
+  const saveNow = async (): Promise<void> => {
+    if (!active) return;
     setSaving(true);
     try {
-      const pageId = await landReportToVault(run.report, run.transcript);
-      setNotice(`Saved to vault page ${pageId}.`);
-    } catch (e) {
-      setNotice(`Save failed: ${String(e)}`);
+      await landReportToDb(active, run.transcript);
+      setLedgerKey((k) => k + 1);
+      setNotice("Saved.");
     } finally {
       setSaving(false);
     }
@@ -121,11 +224,11 @@ export function EquityResearch(): React.JSX.Element {
   };
 
   const scheduleWeekly = async (): Promise<void> => {
-    const symbol = input.trim().toUpperCase();
+    const symbol = (active?.ticker || input).trim().toUpperCase();
     if (!symbol) return;
     const res = await window.hermesAPI.createCronJob(
       "0 7 * * 1",
-      `Use the india-equity-research skill to refresh the report for ${symbol} (NSE) and write it to the SPS vault.`,
+      `Use the india-equity-research skill to refresh the report for ${symbol} (NSE) and save it to the equity-research vault DB.`,
       `Equity refresh: ${symbol}`,
       "local",
       PROFILE,
@@ -137,6 +240,7 @@ export function EquityResearch(): React.JSX.Element {
     );
   };
 
+  const running = run.status === "running";
   const board = boardDiscarded ? null : run.board;
   const scorecard = scorecardDiscarded ? null : run.scorecard;
 
@@ -167,25 +271,17 @@ export function EquityResearch(): React.JSX.Element {
         >
           Calibration
         </button>
+        {mode === "single" && active && (
+          <button
+            className="eq-run-btn eq-secondary"
+            onClick={() => setActive(null)}
+          >
+            ← Ledger
+          </button>
+        )}
       </div>
 
-      {mode === "alerts" ? (
-        <AlertCenter />
-      ) : mode === "calibration" ? (
-        <div className="eq-launcher">
-          <button
-            className="eq-run-btn"
-            onClick={runCalibration}
-            disabled={run.status === "running"}
-          >
-            {run.status === "running" ? "Scoring…" : "Run calibration"}
-          </button>
-          <span className="eq-confidence">
-            Scores past calls vs actual forward price (90d). Save or discard the
-            scorecard.
-          </span>
-        </div>
-      ) : mode === "single" ? (
+      {mode === "single" ? (
         <div className="eq-launcher">
           <input
             className="eq-ticker-input"
@@ -199,14 +295,14 @@ export function EquityResearch(): React.JSX.Element {
           <button
             className="eq-run-btn"
             onClick={() => launch("full")}
-            disabled={run.status === "running"}
+            disabled={running}
           >
-            {run.status === "running" ? "Researching…" : "Run research"}
+            {running ? "Researching…" : "Run research"}
           </button>
           <button
             className="eq-run-btn eq-secondary"
             onClick={() => launch("quick")}
-            disabled={run.status === "running"}
+            disabled={running}
           >
             Quick
           </button>
@@ -217,7 +313,7 @@ export function EquityResearch(): React.JSX.Element {
             Schedule weekly
           </button>
         </div>
-      ) : (
+      ) : mode === "basket" ? (
         <div className="eq-launcher eq-launcher-basket">
           {saved.length > 0 && (
             <select
@@ -253,17 +349,31 @@ export function EquityResearch(): React.JSX.Element {
           <button
             className="eq-run-btn"
             onClick={launchBasket}
-            disabled={run.status === "running"}
+            disabled={running}
           >
-            {run.status === "running" ? "Ranking…" : "Run basket"}
+            {running ? "Ranking…" : "Run basket"}
           </button>
         </div>
-      )}
+      ) : mode === "calibration" ? (
+        <div className="eq-launcher">
+          <button
+            className="eq-run-btn"
+            onClick={runCalibration}
+            disabled={running}
+          >
+            {running ? "Scoring…" : "Run calibration"}
+          </button>
+          <span className="eq-confidence">
+            Scores past calls vs actual forward price (90d). Save or discard the
+            scorecard.
+          </span>
+        </div>
+      ) : null}
 
       {notice && <div className="eq-notice">{notice}</div>}
       {run.error && <div className="eq-error">{run.error}</div>}
 
-      {run.status === "running" && (
+      {running && (
         <div className="eq-monitor">
           {run.toolProgress && (
             <div className="eq-tool-progress">{run.toolProgress}</div>
@@ -272,46 +382,77 @@ export function EquityResearch(): React.JSX.Element {
         </div>
       )}
 
-      {scorecard ? (
-        <CalibrationView
-          scorecard={scorecard}
-          saving={saving}
-          onSave={() => void saveScorecard()}
-          onDiscard={() => {
-            setScorecardDiscarded(true);
-            setNotice("Scorecard discarded (not saved).");
-          }}
-        />
-      ) : board ? (
-        <BasketBoard
-          board={board}
-          saving={saving}
-          onSave={() => void saveBasket()}
-          onDiscard={() => {
-            setBoardDiscarded(true);
-            setNotice("Basket discarded (not saved).");
-          }}
-        />
-      ) : run.report ? (
-        <ReportView
-          report={run.report}
-          onSaveToVault={() => void saveToVault()}
-          saving={saving}
-        />
-      ) : (
+      {mode === "alerts" ? (
+        <AlertCenter />
+      ) : mode === "calibration" ? (
+        scorecard ? (
+          <CalibrationView
+            scorecard={scorecard}
+            saving={saving}
+            onSave={() => void saveScorecard()}
+            onDiscard={() => {
+              setScorecardDiscarded(true);
+              setNotice("Scorecard discarded (not saved).");
+            }}
+          />
+        ) : (
+          running &&
+          run.transcript && (
+            <div className="eq-raw">
+              <AgentMarkdown>{run.transcript}</AgentMarkdown>
+            </div>
+          )
+        )
+      ) : mode === "basket" ? (
+        board ? (
+          <BasketBoard
+            board={board}
+            saving={saving}
+            onSave={() => void saveBasket()}
+            onDiscard={() => {
+              setBoardDiscarded(true);
+              setNotice("Basket discarded (not saved).");
+            }}
+          />
+        ) : (
+          running &&
+          run.transcript && (
+            <div className="eq-raw">
+              <AgentMarkdown>{run.transcript}</AgentMarkdown>
+            </div>
+          )
+        )
+      ) : active ? (
+        <>
+          <div className="eq-active-bar">
+            <button
+              className="eq-run-btn eq-secondary"
+              onClick={refresh}
+              disabled={running}
+            >
+              ↻ Refresh
+            </button>
+            <TagChips
+              autoTags={autoTags}
+              userTags={userTags}
+              onChange={onTags}
+            />
+          </div>
+          <ReportView
+            report={active}
+            onSaveToVault={() => void saveNow()}
+            saving={saving}
+          />
+          <RunHistoryPanel runHistory={runHistory} notes={notes} />
+        </>
+      ) : running ? (
         run.transcript && (
           <div className="eq-raw">
             <AgentMarkdown>{run.transcript}</AgentMarkdown>
           </div>
         )
-      )}
-
-      {run.status === "idle" && !run.transcript && (
-        <div className="eq-empty">
-          {mode === "single"
-            ? "Enter an NSE ticker and run a top-down, multi-specialist research pass. Results render here and can be saved as a vault page."
-            : "Enter the names you hold and rank the basket on relative value, dividend yield, floor cushion, and risk. Save the basket to watch it with alerts."}
-        </div>
+      ) : (
+        <ReportLedger onOpen={(s) => void open(s)} reloadKey={ledgerKey} />
       )}
     </div>
   );

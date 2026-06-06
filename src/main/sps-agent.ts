@@ -98,7 +98,10 @@ function guardedLookup(
   });
 }
 
-const guardedAgent = new Agent({ connect: { lookup: guardedLookup } });
+// Exported so other main-process fetchers (e.g. src/main/openalex.ts) reuse the
+// SAME IP-pinning dispatcher instead of cloning the SSRF guard — keeps the
+// load-bearing audit surface single-sourced (see CLAUDE.md).
+export const guardedAgent = new Agent({ connect: { lookup: guardedLookup } });
 
 // ───────────────────────── unfurl ─────────────────────────
 interface BookmarkMeta {

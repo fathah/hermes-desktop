@@ -4,6 +4,11 @@ import type { UsageAggregate } from "../shared/usage";
 import type { MemoryTimeline } from "../shared/memoryTimeline";
 import type { SearchSummary } from "../shared/searchSummary";
 import type { LoadedSkin } from "../shared/skins";
+import type {
+  SearchOpts as ResearchSearchOpts,
+  WorkSummary as ResearchWorkSummary,
+  WorkDetail as ResearchWorkDetail,
+} from "../shared/openalex/core";
 
 interface ElectronAPI {
   process: {
@@ -1090,6 +1095,23 @@ interface HermesAPI {
   ) => Promise<EquityAlert[]>;
   equityMarkAlertRead: (alertId: string, profile?: string) => Promise<boolean>;
   onEquityAlert: (callback: (alert: EquityAlert) => void) => () => void;
+  spsResearchSearchWorks: (
+    q: string,
+    opts?: ResearchSearchOpts,
+    profile?: string,
+  ) => Promise<ResearchWorkSummary[]>;
+  spsResearchGetWork: (
+    id: string,
+    profile?: string,
+  ) => Promise<ResearchWorkDetail>;
+  spsResearchGetConfig: () => Promise<{ mailto: string; hasApiKey: boolean }>;
+  spsResearchSetConfig: (
+    mailto: string,
+    apiKey?: string,
+  ) => Promise<{ mailto: string; hasApiKey: boolean }>;
+  spsResearchEnsureAgentTool: (
+    profile?: string,
+  ) => Promise<{ registered: boolean; alreadyPresent: boolean }>;
   spsExportPage: (
     pageId: string,
     markdown: string,
@@ -1101,6 +1123,11 @@ interface HermesAPI {
     markdown: string,
     profile?: string,
   ) => Promise<boolean>;
+  spsReadRow: (
+    dbFolder: string,
+    rowId: string,
+    profile?: string,
+  ) => Promise<string | null>;
   spsDeleteRow: (
     dbFolder: string,
     rowId: string,
