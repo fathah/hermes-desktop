@@ -27,6 +27,12 @@ import {
   spsBackupWorkspace,
   type PageContext as SpsPageContext,
 } from "./sps-agent";
+import { listBaskets, saveBasket, deleteBasket } from "./equity-baskets";
+import {
+  listAlerts,
+  markAlertRead,
+  startEquityAlertWatcher,
+} from "./equity-alerts";
 import {
   oaSearchWorks,
   oaGetWork,
@@ -430,6 +436,8 @@ function createWindow(): void {
 
   mainWindow.on("ready-to-show", () => {
     mainWindow!.show();
+    // Watch the equity alert log → OS notification + renderer event per new line.
+    void startEquityAlertWatcher(() => mainWindow);
   });
 
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
@@ -2332,6 +2340,34 @@ function setupIPC(): void {
       const dir = join(home, "sps-agent", "vault");
       return deleteDbFolderIn(dir, dbFolder);
     },
+  );
+
+  // Equity baskets: persisted holdings shared with the Python skill pack
+  // (basket_store.py reads/writes the SAME equity-baskets.json). Thin fs
+  // wrappers — no gateway involved.
+  ipcMain.handle("equity-list-baskets", (_event, profile?: string) =>
+    listBaskets(profile),
+  );
+  ipcMain.handle(
+    "equity-save-basket",
+    (_event, basket: unknown, profile?: string) => saveBasket(basket, profile),
+  );
+  ipcMain.handle(
+    "equity-delete-basket",
+    (_event, basketId: string, profile?: string) =>
+      deleteBasket(basketId, profile),
+  );
+
+  // Equity alerts: the in-app Alert Center reads the jsonl the headless
+  // evaluator (india-equity-alerts) appends; markRead flips read in place.
+  ipcMain.handle(
+    "equity-list-alerts",
+    (_event, limit?: number, profile?: string) => listAlerts(limit, profile),
+  );
+  ipcMain.handle(
+    "equity-mark-alert-read",
+    (_event, alertId: string, profile?: string) =>
+      markAlertRead(alertId, profile),
   );
 
   // S6: vault-as-authoritative-store I/O (page files + structure manifest) and

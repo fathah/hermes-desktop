@@ -1,5 +1,13 @@
 import { memo } from "react";
-import { Search, Clock, Mail, Code, ChartLine, Bell } from "lucide-react";
+import {
+  Search,
+  Clock,
+  Mail,
+  Code,
+  ChartLine,
+  Bell,
+  BookOpen,
+} from "lucide-react";
 import icon from "../../assets/icon.png";
 import { useI18n } from "../../components/useI18n";
 
@@ -39,6 +47,11 @@ const SUGGESTIONS: Suggestion[] = [
     i18nKey: "chat.suggestionAnalyze",
     text: "Analyze this CSV file and show key insights",
     Icon: ChartLine,
+  },
+  {
+    i18nKey: "chat.suggestionResearch",
+    text: "Find recent open-access papers on CRISPR gene editing and summarize the top 3",
+    Icon: BookOpen,
   },
 ];
 

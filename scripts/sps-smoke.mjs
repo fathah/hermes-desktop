@@ -45,6 +45,8 @@ const workspace = {
     { id: "alpha", children: [] },
     { id: "db", children: [] },
     { id: "blank", children: [] },
+    // An empty "Research" folder ⇒ DocHeader shows the "No papers yet" nudge.
+    { id: "research", children: [] },
   ],
   meta: {
     home: { icon: "🏠", title: "Home", cover: null },
@@ -52,6 +54,7 @@ const workspace = {
     db: { icon: "🗃️", title: "Projects DB", cover: null },
     // Empty title + no content ⇒ the DocHeader shows the "Get started" launcher.
     blank: { icon: "📄", title: "", cover: null },
+    research: { icon: "📚", title: "Research", cover: null },
   },
   docs: {
     home: [
@@ -74,6 +77,13 @@ const workspace = {
       },
     ],
     blank: [],
+    research: [
+      {
+        id: "rh",
+        type: "p",
+        text: "Scholarly papers you saved from OpenAlex live here.",
+      },
+    ],
   },
   comments: [],
   trash: [],
@@ -146,19 +156,29 @@ await shot("02-palette", async () => {
 });
 await win.keyboard.press("Escape").catch(() => {});
 
-// 02b — Research (OpenAlex) modal, opened from the command palette. Offline-safe:
-// we screenshot the modal's initial state (no network dependency). Proves the
-// "Research papers…" action → ResearchModal mount → ensure-agent-tool path.
+// 02b — Research (OpenAlex) modal, opened from the first-class sidebar rail item.
+// Offline-safe: we screenshot the modal's initial state (no network dependency).
+// Proves the "Research" rail affordance → ResearchModal mount → ensure-agent-tool.
 await shot("02b-research", async () => {
-  await win.keyboard.press(`${MOD}+K`);
-  await win.waitForTimeout(300);
-  await win
-    .locator(".pal-item", { hasText: "Research papers" })
-    .first()
-    .click();
+  await win.locator(".nav-item", { hasText: "Research" }).first().click();
   await win.waitForSelector(".modal", { timeout: 8000 });
 });
 await win.keyboard.press("Escape").catch(() => {});
+
+// 02c — empty "Research" folder shows the "No papers yet → Search for papers"
+// nudge (DocHeader teaches the folder's use). Click the tree node, not the rail
+// item (both read "Research"), via the tree-label like the get-started step.
+await shot("02c-research-nudge", async () => {
+  await win.evaluate(() => {
+    const label = [...document.querySelectorAll(".tree-label")].find(
+      (l) => (l.textContent || "").trim() === "Research",
+    );
+    label?.parentElement?.dispatchEvent(
+      new MouseEvent("click", { bubbles: true }),
+    );
+  });
+  await win.waitForSelector(".gs-row", { timeout: 8000 });
+});
 
 // 03 — local wikilink graph view (F4).
 await shot("03-graph", async () => {

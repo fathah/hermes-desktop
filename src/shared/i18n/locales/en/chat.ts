@@ -18,6 +18,7 @@ export default {
   suggestionScript: "Write a script",
   suggestionSchedule: "Schedule a cron job",
   suggestionAnalyze: "Analyze data",
+  suggestionResearch: "Find research papers",
   approve: "Approve",
   deny: "Deny",
   thinking: "Thinking…",
