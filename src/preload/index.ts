@@ -220,11 +220,11 @@ const hermesAPI = {
   ): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke("respond-approval", runId, choice, profile),
 
-  /** Scoped auto-approve toggle (M2B) — desktop-enforced policy. */
-  getAutoApprove: (): Promise<boolean> =>
-    ipcRenderer.invoke("get-auto-approve"),
-  setAutoApprove: (enabled: boolean): Promise<void> =>
-    ipcRenderer.invoke("set-auto-approve", enabled),
+  /** Scoped auto-approve toggle (M2B) — desktop-enforced, per-profile policy. */
+  getAutoApprove: (profile?: string): Promise<boolean> =>
+    ipcRenderer.invoke("get-auto-approve", profile),
+  setAutoApprove: (enabled: boolean, profile?: string): Promise<void> =>
+    ipcRenderer.invoke("set-auto-approve", enabled, profile),
   /** Completion-chime toggle (M2C). */
   getCompletionSound: (): Promise<boolean> =>
     ipcRenderer.invoke("get-completion-sound"),
@@ -501,6 +501,30 @@ const hermesAPI = {
       callback(req as Parameters<typeof callback>[0]);
     ipcRenderer.on("chat-approval-request", handler);
     return () => ipcRenderer.removeListener("chat-approval-request", handler);
+  },
+
+  /** A dangerous-command approval that scoped-autonomy auto-resolved (M2B).
+   *  Carries the same req shape so the renderer can show an audit notice. */
+  onChatApprovalAuto: (
+    callback: (
+      req: {
+        id: string;
+        command?: string;
+        toolName?: string;
+        patternKey?: string;
+        description?: string;
+        sessionKey?: string;
+      },
+      runId?: string,
+    ) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      req: unknown,
+      runId?: string,
+    ): void => callback(req as Parameters<typeof callback>[0], runId);
+    ipcRenderer.on("chat-approval-auto", handler);
+    return () => ipcRenderer.removeListener("chat-approval-auto", handler);
   },
 
   /** Gateway recorded a filesystem checkpoint (idea B2). */

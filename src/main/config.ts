@@ -134,13 +134,27 @@ export function writeDesktopConfig(data: Record<string, unknown>): void {
 // not the gateway, and because setConfigValue silently drops new nested YAML keys.
 
 /** Scoped auto-approve: let the desktop auto-resolve provably-safe, read-only
- *  command approvals (see autonomy.ts). Default OFF — opt-in only. */
-export function getAutoApprove(): boolean {
-  return readDesktopConfig().autoApprove === true;
+ *  command approvals (see autonomy.ts). PER-PROFILE (different profiles carry
+ *  different risk), keyed by the resolved profile name in desktop.json. Default
+ *  OFF — opt-in only. Resolving undefined → active profile keeps the key stable
+ *  between the Settings UI (passes a name) and the chat path (often passes none). */
+function autoApproveKey(profile?: string): string {
+  return profile || getActiveProfileNameSync();
 }
-export function setAutoApprove(enabled: boolean): void {
+export function getAutoApprove(profile?: string): boolean {
+  const map = readDesktopConfig().autoApproveByProfile;
+  if (!map || typeof map !== "object") return false;
+  return (map as Record<string, unknown>)[autoApproveKey(profile)] === true;
+}
+export function setAutoApprove(enabled: boolean, profile?: string): void {
   const data = readDesktopConfig();
-  data.autoApprove = enabled;
+  const existing = data.autoApproveByProfile;
+  const map: Record<string, boolean> =
+    existing && typeof existing === "object"
+      ? (existing as Record<string, boolean>)
+      : {};
+  map[autoApproveKey(profile)] = enabled;
+  data.autoApproveByProfile = map;
   writeDesktopConfig(data);
 }
 

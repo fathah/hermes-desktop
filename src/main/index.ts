@@ -20,11 +20,10 @@ import {
   spsAssistant,
   spsLoad,
   spsSave,
-  spsGetWorkSession,
-  spsSetWorkSession,
   spsBackupWorkspace,
   type PageContext as SpsPageContext,
 } from "./sps-agent";
+import { spsGetWorkSession, spsSetWorkSession } from "./sps-work-sessions";
 import {
   exportPageMarkdownTo,
   exportRowMarkdownTo,
@@ -916,10 +915,14 @@ function setupIPC(): void {
     ) => respondRunApproval(runId, choice, profile),
   );
 
-  // Desktop automation prefs (M2): scoped auto-approve + completion chime.
-  ipcMain.handle("get-auto-approve", () => getAutoApprove());
-  ipcMain.handle("set-auto-approve", (_event, enabled: boolean) =>
-    setAutoApprove(enabled),
+  // Desktop automation prefs (M2): scoped auto-approve (per-profile) + chime.
+  ipcMain.handle("get-auto-approve", (_event, profile?: string) =>
+    getAutoApprove(profile),
+  );
+  ipcMain.handle(
+    "set-auto-approve",
+    (_event, enabled: boolean, profile?: string) =>
+      setAutoApprove(enabled, profile),
   );
   ipcMain.handle("get-completion-sound", () => getCompletionSound());
   ipcMain.handle("set-completion-sound", (_event, enabled: boolean) =>
@@ -1182,11 +1185,12 @@ function setupIPC(): void {
             // blocked on a click. Everything else still prompts. Enforced here
             // in main so the policy holds even for inbound (Telegram) sessions
             // that have no renderer to click approve.
-            if (getAutoApprove() && canAutoApprove(req)) {
+            if (getAutoApprove(profile) && canAutoApprove(req)) {
               void respondRunApproval(req.id, "once", profile);
-              // Traceability: the executed command still surfaces live via the
-              // chat-tool-progress channel, so the auto-approval isn't invisible.
+              // Transparency (M2B): surface the auto-approval to the renderer so
+              // it can show an audit notice; the run also still emits tool-progress.
               console.log(`[autonomy] auto-approved: ${req.command ?? req.id}`);
+              safeSend("chat-approval-auto", { ...req, sessionKey });
               return;
             }
             safeSend("chat-approval-request", { ...req, sessionKey });

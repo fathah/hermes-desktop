@@ -425,57 +425,6 @@ export async function spsSave(ws: unknown, profile?: string): Promise<boolean> {
   }
 }
 
-// ───────────────────────── /work session map (M1C) ─────────────────────────
-// Resumable `/work` needs a page→Hermes-session map that survives reload in BOTH
-// storage modes. PageMeta.workSessionId rides the workspace blob, but in `vault`
-// mode the blob is frozen as a rollback net and meta is rebuilt from frontmatter
-// (title/icon/cover only) — so the id would be lost. This sidecar is derived
-// RUNTIME state (same category as .note-index.db), deliberately kept OUT of the
-// markdown source of truth so plan files stay clean.
-function workSessionsPath(profile?: string): string {
-  return join(
-    profileHome(profile || getActiveProfileNameSync()),
-    "sps-agent",
-    "work-sessions.json",
-  );
-}
-
-export async function spsGetWorkSession(
-  pageId: string,
-  profile?: string,
-): Promise<string | null> {
-  try {
-    const raw = await fs.readFile(workSessionsPath(profile), "utf-8");
-    const map = JSON.parse(raw) as Record<string, string>;
-    const id = map[pageId];
-    return typeof id === "string" && id ? id : null;
-  } catch {
-    return null;
-  }
-}
-
-export async function spsSetWorkSession(
-  pageId: string,
-  sessionId: string,
-  profile?: string,
-): Promise<boolean> {
-  try {
-    const p = workSessionsPath(profile);
-    await fs.mkdir(dirname(p), { recursive: true });
-    let map: Record<string, string> = {};
-    try {
-      map = JSON.parse(await fs.readFile(p, "utf-8")) as Record<string, string>;
-    } catch {
-      // No sidecar yet — start fresh.
-    }
-    map[pageId] = sessionId;
-    await fs.writeFile(p, JSON.stringify(map), "utf-8");
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /** Copy the JSON blob to a timestamped backup before a vault migration (S6). */
 export async function spsBackupWorkspace(
   profile?: string,

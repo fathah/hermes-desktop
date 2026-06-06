@@ -151,6 +151,22 @@ export function useChatIPC({
       },
     );
 
+    // Scoped-autonomy audit notice (M2B): show what was auto-approved so the
+    // behaviour isn't invisible. Legacy/global stream only (runId === undefined).
+    const cleanupApprovalAuto = window.hermesAPI.onChatApprovalAuto(
+      (req, runId) => {
+        if (runId !== undefined) return;
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `auto-approve-${Date.now()}`,
+            role: "agent",
+            content: `✓ Auto-approved: ${req.command ?? req.toolName ?? "command"}`,
+          },
+        ]);
+      },
+    );
+
     const cleanupUsage = window.hermesAPI.onChatUsage((u, runId) => {
       if (runId !== undefined) return;
       setUsage((prev) => ({
@@ -167,6 +183,7 @@ export function useChatIPC({
       cleanupDone();
       cleanupError();
       cleanupToolProgress();
+      cleanupApprovalAuto();
       cleanupUsage();
     };
   }, [

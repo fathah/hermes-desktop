@@ -2,7 +2,7 @@
 // to the page (proposals, diffs, db actions). Ported from app.jsx:117-194.
 // `runAgent` / `askAbout` are wired to a real AssistantProvider in Phase 8.
 import type { StateCreator } from "zustand";
-import { uid } from "../../lib/ids";
+import { blk, uid } from "../../lib/ids";
 import { escapeHtml, stripHtml } from "../../lib/html";
 import { scrollToProposal } from "../../lib/scroll";
 import { getAssistantProvider } from "../../assistant/AssistantProvider";
@@ -153,14 +153,26 @@ export const createAssistantSlice: StateCreator<
     get().runAgent(prompt, aiActionLabel(kind, text));
   },
 
-  // `/plan` (Milestone 1B): produce a structured, vault-grounded plan as appended
-  // blocks on the current page — Problem / Approach / Steps / Acceptance criteria
-  // (as todos) / References. The acceptance todos are the checklist `/work` ticks.
+  // `/plan` (Milestone 1B): produce a structured, vault-grounded plan as its OWN
+  // page — Problem / Approach / Steps / Acceptance criteria (as todos) / References.
+  // A dedicated page makes the plan a first-class artifact (it joins the vault +
+  // note-index + graph and becomes the durable `/work` checkpoint) instead of
+  // burying the plan in whatever page you happened to be on.
   runPlan: (idea, opts) => {
+    const trimmed = idea.trim();
+    const title =
+      trimmed.length > 60 ? `${trimmed.slice(0, 60)}…` : trimmed || "Plan";
+    // New plan page nested under the current page for context, then switch to it
+    // so the appended plan blocks land in the new page.
+    const pageId = get().makePage(
+      { icon: "🧭", title },
+      [blk("p", "")],
+      get().page,
+    );
+    get().selectPage(pageId);
     get().openPanelTab("assistant");
     const prompt = buildPlanPrompt(idea, opts);
-    const label = idea.trim() ? `Plan: ${idea.trim()}` : "Plan this page";
-    get().runAgent(prompt, label);
+    get().runAgent(prompt, trimmed ? `Plan: ${trimmed}` : "Plan this page");
   },
 
   // `/work` (Milestone 1C): execute the plan on the current page over the
@@ -217,6 +229,13 @@ export const createAssistantSlice: StateCreator<
       window.hermesAPI.onChatToolProgress((t, rid) => {
         if (rid !== runId) return;
         tool = t;
+        render();
+      }),
+      window.hermesAPI.onChatApprovalAuto((req, rid) => {
+        if (rid !== runId) return;
+        // Audit trail: note each auto-approved command inline so scoped
+        // autonomy is never fully silent.
+        acc += `\n\n_✓ auto-approved: ${req.command ?? req.toolName ?? "command"}_`;
         render();
       }),
     ];

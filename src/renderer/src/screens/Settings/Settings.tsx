@@ -171,8 +171,8 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
     setApiServerKeyMissing(!keyStatus.hasKey);
     connLoaded.current = true;
 
-    // Automation prefs (app-level, desktop.json)
-    window.hermesAPI.getAutoApprove().then(setAutoApproveState);
+    // Automation prefs (auto-approve is per-profile; chime is app-level)
+    window.hermesAPI.getAutoApprove(profile).then(setAutoApproveState);
     window.hermesAPI.getCompletionSound().then(setCompletionSoundState);
 
     // Load network settings from config.yaml
@@ -984,17 +984,18 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
                 onChange={async (e) => {
                   const val = e.target.checked;
                   setAutoApproveState(val);
-                  await window.hermesAPI.setAutoApprove(val);
+                  await window.hermesAPI.setAutoApprove(val, profile);
                 }}
               />
               <span className="tools-toggle-track" />
             </label>
           </label>
           <div className="settings-field-hint">
-            Auto-approves only provably-safe, read-only commands (ls, cat, git
-            status, grep…). Writes, deletes, installs, network sends, and
-            anything chained or redirected always ask for your approval. Off by
-            default. Turn this off any time to require manual approval again.
+            Applies to this profile only. Auto-approves just provably-safe,
+            read-only commands (ls, cat, git status, grep…). Writes, deletes,
+            installs, network sends, and anything chained or redirected always
+            ask for your approval. Off by default; turn it off any time to
+            require manual approval again.
           </div>
         </div>
         <div className="settings-field">

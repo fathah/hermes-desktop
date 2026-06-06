@@ -401,8 +401,8 @@ interface HermesAPI {
   getUsageStats: (profile?: string) => Promise<UsageAggregate>;
   summarizeSearch: (query: string, profile?: string) => Promise<SearchSummary>;
   listSkins: (profile?: string) => Promise<LoadedSkin[]>;
-  getAutoApprove: () => Promise<boolean>;
-  setAutoApprove: (enabled: boolean) => Promise<void>;
+  getAutoApprove: (profile?: string) => Promise<boolean>;
+  setAutoApprove: (enabled: boolean, profile?: string) => Promise<void>;
   getCompletionSound: () => Promise<boolean>;
   setCompletionSound: (enabled: boolean) => Promise<void>;
   respondApproval: (
@@ -537,6 +537,19 @@ interface HermesAPI {
       description?: string;
       sessionKey?: string;
     }) => void,
+  ) => () => void;
+  onChatApprovalAuto: (
+    callback: (
+      req: {
+        id: string;
+        command?: string;
+        toolName?: string;
+        patternKey?: string;
+        description?: string;
+        sessionKey?: string;
+      },
+      runId?: string,
+    ) => void,
   ) => () => void;
   onChatCheckpoint: (
     callback: (cp: {
