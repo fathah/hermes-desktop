@@ -10,6 +10,11 @@ import {
 } from "../hooks/useNoteIndex";
 import { DB_FOLDER } from "./reportRow";
 
+// The note index ingests vault writes via a live watcher — but rows written
+// while the app was closed (cron/headless refreshes) are missed. Rebuild once
+// per session when the ledger first opens so it always reflects disk.
+let rebuiltThisSession = false;
+
 const RATINGS = ["", "BUY", "ACCUMULATE", "HOLD", "REDUCE", "AVOID"];
 
 function slugOf(path: string): string {
@@ -51,6 +56,15 @@ export function ReportLedger({
   useEffect(() => {
     refetch();
   }, [reloadKey, refetch]);
+
+  // One reindex per session so cron/headless rows written while closed appear.
+  useEffect(() => {
+    if (rebuiltThisSession) return;
+    rebuiltThisSession = true;
+    const api = window.hermesAPI;
+    if (!api?.spsIndexRebuild) return;
+    void api.spsIndexRebuild().then(() => refetch());
+  }, [refetch]);
 
   // FTS over report bodies; scope to our folder.
   const hits = useVaultSearch(query.trim());

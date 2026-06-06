@@ -8,7 +8,7 @@
   padding: var(--s-7) var(--s-8);
   max-width: 1000px;
   margin: 0 auto;
-  color: var(--ink-1);
+  color: var(--tx-1);
 }
 
 /* ---------- Launcher ---------- */
@@ -22,14 +22,14 @@
   flex: 1;
   padding: var(--s-3) var(--s-4);
   border-radius: var(--r-2);
-  border: 1px solid var(--hairline-strong);
+  border: 1px solid var(--hair-strong);
   background: var(--surface);
-  color: var(--ink-1);
+  color: var(--tx-1);
   font-family: var(--font-sans);
   font-size: var(--fs-14);
 }
 .sps-scope .eq-ticker-input::placeholder {
-  color: var(--ink-4);
+  color: var(--tx-4);
 }
 .sps-scope .eq-ticker-input:focus-visible {
   outline: none;
@@ -54,8 +54,8 @@
 }
 .sps-scope .eq-run-btn.eq-secondary {
   background: var(--surface);
-  color: var(--ink-1);
-  border-color: var(--hairline-strong);
+  color: var(--tx-1);
+  border-color: var(--hair-strong);
 }
 .sps-scope .eq-run-btn.eq-secondary:hover:not(:disabled) {
   background: var(--row-hover);
@@ -86,13 +86,13 @@
 }
 .sps-scope .eq-empty,
 .sps-scope .eq-muted {
-  color: var(--ink-3);
+  color: var(--tx-2);
   font-size: var(--fs-13);
 }
 
 /* ---------- Live monitor ---------- */
 .sps-scope .eq-monitor {
-  border: 1px solid var(--hairline);
+  border: 1px solid var(--hair);
   border-radius: var(--r-3);
   background: var(--surface);
   padding: var(--s-4);
@@ -102,7 +102,7 @@
 .sps-scope .eq-tool-progress {
   font-family: var(--font-mono);
   font-size: var(--fs-12);
-  color: var(--ink-3);
+  color: var(--tx-2);
   margin-bottom: var(--s-3);
 }
 
@@ -120,18 +120,18 @@
   font-weight: 600;
   letter-spacing: -0.01em;
   line-height: var(--lh-tight);
-  color: var(--ink-1);
+  color: var(--tx-1);
   margin: 0;
 }
 .sps-scope .eq-report-ticker {
-  color: var(--ink-3);
+  color: var(--tx-2);
   font-size: var(--fs-14);
   font-weight: 500;
   margin-left: var(--s-2);
 }
 .sps-scope .eq-report-sub {
   font-size: var(--fs-12);
-  color: var(--ink-3);
+  color: var(--tx-2);
   margin-top: var(--s-1);
 }
 .sps-scope .eq-report-verdict {
@@ -169,14 +169,14 @@
 }
 .sps-scope .eq-confidence {
   font-size: var(--fs-12);
-  color: var(--ink-3);
+  color: var(--tx-2);
 }
 .sps-scope .eq-save-btn {
   padding: var(--s-2) var(--s-4);
   border-radius: var(--r-2);
-  border: 1px solid var(--hairline-strong);
+  border: 1px solid var(--hair-strong);
   background: var(--surface);
-  color: var(--ink-1);
+  color: var(--tx-1);
   cursor: pointer;
   font-size: var(--fs-12);
 }
@@ -193,13 +193,13 @@
 }
 .sps-scope .eq-gauge-label {
   font-size: var(--fs-12);
-  color: var(--ink-3);
+  color: var(--tx-2);
   margin-bottom: var(--s-1);
 }
 .sps-scope .eq-gauge-track {
   height: 6px;
   border-radius: var(--r-pill);
-  background: var(--surface-sunk);
+  background: var(--sunk);
   overflow: hidden;
 }
 .sps-scope .eq-gauge-fill {
@@ -210,7 +210,7 @@
   font-family: var(--font-mono);
   font-size: var(--fs-13);
   font-weight: 600;
-  color: var(--ink-1);
+  color: var(--tx-1);
   font-variant-numeric: tabular-nums lining-nums;
   margin-top: var(--s-1);
 }
@@ -233,13 +233,13 @@
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--ink-3);
+  color: var(--tx-1);
   margin: var(--s-4) 0 var(--s-3);
 }
 .sps-scope .eq-radar,
 .sps-scope .eq-technical,
 .sps-scope .eq-sector {
-  color: var(--ink-2); /* charts use currentColor → monochrome ink */
+  color: var(--tx-2); /* charts use currentColor → monochrome ink */
 }
 .sps-scope .eq-technical,
 .sps-scope .eq-sector {
@@ -260,7 +260,7 @@
 .sps-scope .eq-evidence li,
 .sps-scope .eq-gaps li {
   margin-bottom: var(--s-2);
-  color: var(--ink-2);
+  color: var(--tx-2);
 }
 .sps-scope .eq-tier {
   display: inline-block;
@@ -289,7 +289,7 @@
 .sps-scope .eq-peers,
 .sps-scope .eq-dcf {
   margin-bottom: var(--s-6);
-  color: var(--ink-2);
+  color: var(--tx-2);
 }
 
 @media (max-width: 720px) {
@@ -308,9 +308,9 @@
 .sps-scope .eq-facet {
   padding: var(--s-2) var(--s-3);
   border-radius: var(--r-2);
-  border: 1px solid var(--hairline-strong);
+  border: 1px solid var(--hair-strong);
   background: var(--surface);
-  color: var(--ink-1);
+  color: var(--tx-1);
   font-size: var(--fs-13);
 }
 .sps-scope .eq-ledger-table {
@@ -323,8 +323,8 @@
   font-size: var(--fs-12);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--ink-3);
-  border-bottom: 1px solid var(--hairline);
+  color: var(--tx-1);
+  border-bottom: 1px solid var(--hair);
   padding: var(--s-2) var(--s-3);
 }
 .sps-scope .eq-ledger-row {
@@ -334,14 +334,14 @@
   background: var(--row-hover);
 }
 .sps-scope .eq-ledger-table td {
-  border-bottom: 1px solid var(--rule);
+  border-bottom: 1px solid var(--hair-soft);
   padding: var(--s-2) var(--s-3);
-  color: var(--ink-2);
+  color: var(--tx-2);
 }
 .sps-scope .eq-ledger-tags {
   font-family: var(--font-mono);
   font-size: var(--fs-12);
-  color: var(--ink-3);
+  color: var(--tx-2);
 }
 .sps-scope .eq-hits {
   list-style: none;
@@ -350,7 +350,7 @@
 }
 .sps-scope .eq-hit {
   padding: var(--s-3);
-  border-bottom: 1px solid var(--rule);
+  border-bottom: 1px solid var(--hair-soft);
   cursor: pointer;
 }
 .sps-scope .eq-hit:hover {
@@ -361,7 +361,7 @@
   margin-right: var(--s-3);
 }
 .sps-scope .eq-hit-snippet {
-  color: var(--ink-3);
+  color: var(--tx-2);
   font-size: var(--fs-12);
 }
 .sps-scope .eq-active-bar {
@@ -395,7 +395,7 @@
 .sps-scope .eq-tag-input {
   width: 80px;
   border: none;
-  border-bottom: 1px solid var(--hairline-strong);
+  border-bottom: 1px solid var(--hair-strong);
   background: transparent;
   color: inherit;
   font-size: var(--fs-12);
@@ -407,11 +407,11 @@
   min-width: 220px;
   padding: var(--s-3) var(--s-4);
   border-radius: var(--r-2);
-  border: 1px solid var(--hairline-strong);
+  border: 1px solid var(--hair-strong);
   background: var(--surface);
-  color: var(--ink-1);
+  color: var(--tx-1);
   font-size: var(--fs-14);
 }
 .sps-scope .eq-search-input::placeholder {
-  color: var(--ink-4);
+  color: var(--tx-4);
 }
