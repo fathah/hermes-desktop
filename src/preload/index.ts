@@ -1259,6 +1259,10 @@ const hermesAPI = {
     apiKey?: string,
   ): Promise<{ mailto: string; hasApiKey: boolean }> =>
     ipcRenderer.invoke("sps-research-set-config", mailto, apiKey),
+  spsResearchEnsureAgentTool: (
+    profile?: string,
+  ): Promise<{ registered: boolean; alreadyPresent: boolean }> =>
+    ipcRenderer.invoke("sps-research-ensure-agent-tool", profile),
   spsExportPage: (
     pageId: string,
     markdown: string,

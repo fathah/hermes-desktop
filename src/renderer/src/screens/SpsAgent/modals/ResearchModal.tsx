@@ -24,6 +24,9 @@ export function ResearchModal() {
 
   useEffect(() => {
     inputRef.current?.focus();
+    // Best-effort: make OpenAlex callable by the Hermes agent in chat the first
+    // time the user opens Research (idempotent; the gateway loads it on restart).
+    void window.hermesAPI?.spsResearchEnsureAgentTool?.();
   }, []);
 
   const runSearch = async () => {

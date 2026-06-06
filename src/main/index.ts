@@ -13,6 +13,7 @@ import {
 import { join, extname } from "path";
 import { pathToFileURL } from "url";
 import { readdir, readFile } from "fs/promises";
+import { existsSync } from "fs";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import type { AppUpdater } from "electron-updater";
 import icon from "../../resources/icon.png?asset";
@@ -30,10 +31,42 @@ import {
   oaSearchWorks,
   oaGetWork,
   oaAutocomplete,
+  getResearchConfig,
   getPublicResearchConfig,
   setResearchConfig,
 } from "./openalex";
 import type { SearchOpts } from "../shared/openalex/core";
+
+/**
+ * Register the bundled OpenAlex MCP server in the active profile's config.yaml
+ * so the Hermes agent can call it from chat ("find me papers on X"). Idempotent
+ * and non-clobbering: if an `openalex` entry already exists (even one the user
+ * disabled) it is left alone. No-op when the bundle is missing (build:mcp hasn't
+ * run yet). The gateway picks the entry up on its next restart.
+ */
+function ensureResearchMcpRegistered(profile?: string): {
+  registered: boolean;
+  alreadyPresent: boolean;
+} {
+  const name = "openalex";
+  if (hasMcpServer(name, profile)) {
+    return { registered: true, alreadyPresent: true };
+  }
+  const serverPath = openAlexMcpServerPath();
+  if (!existsSync(serverPath)) {
+    return { registered: false, alreadyPresent: false };
+  }
+  const { mailto, apiKey } = getResearchConfig();
+  const env: Record<string, string> = { ELECTRON_RUN_AS_NODE: "1" };
+  if (mailto) env.HERMES_OPENALEX_MAILTO = mailto;
+  if (apiKey) env.HERMES_OPENALEX_API_KEY = apiKey;
+  writeMcpServerEntry(
+    name,
+    { command: process.execPath, args: [serverPath], env, enabled: true },
+    profile,
+  );
+  return { registered: true, alreadyPresent: false };
+}
 import {
   exportPageMarkdownTo,
   exportRowMarkdownTo,
@@ -75,6 +108,9 @@ import {
   runHermesImport,
   runHermesDump,
   listMcpServers,
+  hasMcpServer,
+  writeMcpServerEntry,
+  openAlexMcpServerPath,
   discoverMemoryProviders,
   readLogs,
   InstallProgress,
@@ -2175,6 +2211,10 @@ function setupIPC(): void {
       setResearchConfig(mailto, apiKey);
       return getPublicResearchConfig();
     },
+  );
+  // Make OpenAlex callable by the Hermes agent in chat (bundled MCP server).
+  ipcMain.handle("sps-research-ensure-agent-tool", (_event, profile?: string) =>
+    ensureResearchMcpRegistered(profile),
   );
 
   // Additive markdown mirror (S2b): write a page's markdown into the SPS vault

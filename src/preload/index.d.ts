@@ -1058,6 +1058,9 @@ interface HermesAPI {
     mailto: string,
     apiKey?: string,
   ) => Promise<{ mailto: string; hasApiKey: boolean }>;
+  spsResearchEnsureAgentTool: (
+    profile?: string,
+  ) => Promise<{ registered: boolean; alreadyPresent: boolean }>;
   spsExportPage: (
     pageId: string,
     markdown: string,
