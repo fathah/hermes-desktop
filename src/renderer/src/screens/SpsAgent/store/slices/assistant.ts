@@ -11,6 +11,7 @@ import {
   buildPlanPrompt,
   buildWorkPrompt,
   aiActionLabel,
+  serializePlanBlocks,
 } from "../../assistant/prompts";
 import { TASKS } from "../../data/seed";
 import type { Block } from "../../types";
@@ -162,11 +163,85 @@ export const createAssistantSlice: StateCreator<
     get().runAgent(prompt, label);
   },
 
-  // `/work` (Milestone 1C): execute the plan on the current page. Single-shot for
-  // now; the streaming + resumable path is a follow-up.
-  runWork: () => {
+  // `/work` (Milestone 1C): execute the plan on the current page over the
+  // STREAMING, RESUMABLE Hermes session path (`sendMessage` SSE) — not the
+  // single-shot assistant fetch. The page's Hermes session id is captured on the
+  // first run and reused on later runs so a context blow-up doesn't lose progress;
+  // the plan page is the durable checkpoint. Tokens stream live into one bot bubble.
+  //
+  // NOTE: the gateway's chat-chunk SSE events are not session-correlated, so if the
+  // Hermes admin Chat overlay is ALSO streaming at the same instant, output could
+  // cross-talk. Listeners live only for the duration of this run to keep that window
+  // minimal; full correlation is a shared-contract change left for later.
+  runWork: async () => {
+    const s = get();
+    const pageId = s.page;
+    const blocks = s.docs[pageId] || [];
+    const meta = s.meta[pageId] || { title: "Untitled" };
+    const resumeId = meta.workSessionId;
+
+    const planText = serializePlanBlocks(blocks);
+    const message = `${buildWorkPrompt()}\n\n--- PLAN: ${meta.title} ---\n${planText}`;
+
     get().openPanelTab("assistant");
-    get().runAgent(buildWorkPrompt(), "Work this plan");
+    s.pushUser(resumeId ? "Resume work on this plan" : "Work this plan");
+    s.setThinking(true);
+
+    // One growing bot bubble fed by the live token stream.
+    const botId = uid("m");
+    set((st) => ({
+      messages: [...st.messages, { id: botId, role: "bot", text: [""] }],
+    }));
+    let acc = "";
+    let tool: string | null = null;
+    const render = (): void => {
+      const note = tool ? `\n\n_running ${tool}…_` : "";
+      set((st) => ({
+        messages: st.messages.map((m) =>
+          m.id === botId ? { ...m, text: [acc + note] } : m,
+        ),
+      }));
+    };
+
+    const cleanups = [
+      window.hermesAPI.onChatChunk((chunk) => {
+        acc += chunk;
+        render();
+      }),
+      window.hermesAPI.onChatToolProgress((t) => {
+        tool = t;
+        render();
+      }),
+    ];
+
+    try {
+      const result = await window.hermesAPI.sendMessage(
+        message,
+        undefined,
+        resumeId,
+      );
+      if (result.response && !acc) acc = result.response;
+      tool = null;
+      render();
+      // Persist the session id onto THIS plan page (the user may have navigated
+      // away mid-run) so the next `/work` resumes the same agent session.
+      if (result.sessionId) {
+        const sessionId = result.sessionId;
+        set((st) => ({
+          meta: {
+            ...st.meta,
+            [pageId]: { ...st.meta[pageId], workSessionId: sessionId },
+          },
+        }));
+      }
+    } catch (err) {
+      acc += `\n\nError: ${err instanceof Error ? err.message : "work failed"}.`;
+      tool = null;
+      render();
+    } finally {
+      cleanups.forEach((off) => off());
+      get().setThinking(false);
+    }
   },
 
   decideProposal: (pid, accept) => {

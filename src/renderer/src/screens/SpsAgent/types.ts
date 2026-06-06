@@ -112,6 +112,10 @@ export interface PageMeta {
   icon: string;
   title: string;
   cover: Cover;
+  /** Hermes session id for a resumable `/work` run on this plan page (M1C).
+   *  Persisted in the workspace blob only — never serialized to markdown
+   *  frontmatter (the serializer emits title/icon/cover only). */
+  workSessionId?: string;
 }
 
 export interface CommentMessage {

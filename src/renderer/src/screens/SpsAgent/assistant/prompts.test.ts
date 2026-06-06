@@ -5,6 +5,7 @@ import {
   buildAiActionPrompt,
   buildPlanPrompt,
   buildWorkPrompt,
+  serializePlanBlocks,
 } from "./prompts";
 
 describe("buildAiActionPrompt", () => {
@@ -54,5 +55,30 @@ describe("buildWorkPrompt", () => {
     const out = buildWorkPrompt();
     expect(out).toContain("- [x]");
     expect(out).toContain("Acceptance criteria");
+  });
+});
+
+describe("serializePlanBlocks", () => {
+  it("renders todos as checkbox lines reflecting done state", () => {
+    const out = serializePlanBlocks([
+      { type: "todo", text: "ship it", done: false },
+      { type: "todo", text: "tested", done: true },
+    ]);
+    expect(out).toContain("- [ ] ship it");
+    expect(out).toContain("- [x] tested");
+  });
+
+  it("marks headings and drops structural blocks", () => {
+    const out = serializePlanBlocks([
+      { type: "h3", text: "Steps" },
+      { type: "li", text: "do a thing" },
+      { type: "divider", text: "" },
+      { type: "database", text: "" },
+      { type: "p", text: "a paragraph" },
+    ]);
+    expect(out).toContain("## Steps");
+    expect(out).toContain("- do a thing");
+    expect(out).toContain("a paragraph");
+    expect(out).not.toContain("divider");
   });
 });

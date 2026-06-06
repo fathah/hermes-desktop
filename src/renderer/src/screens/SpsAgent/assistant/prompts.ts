@@ -69,10 +69,36 @@ export function buildPlanPrompt(
   ].join("\n");
 }
 
+/** A plan block reduced to the fields the work serializer needs. */
+export interface PlanBlock {
+  type: string;
+  text: string;
+  done?: boolean;
+}
+
 /**
- * Build the prompt for `/work` — execute the plan on the current page. Single-shot
- * for now (the streaming + resumable path is a Milestone-1C follow-up); the agent
- * uses its tools where it can and reports progress against the acceptance criteria.
+ * Serialize a plan page's blocks into compact markdown for the `/work` message.
+ * Acceptance-criteria todos become `- [ ]` / `- [x]` lines so the agent can tick
+ * them; headings/lists/quotes get their markdown markers; structural blocks drop.
+ */
+export function serializePlanBlocks(blocks: PlanBlock[]): string {
+  const lines = blocks.map((b) => {
+    if (b.type === "todo") return `- [${b.done ? "x" : " "}] ${b.text}`;
+    if (b.type === "h1" || b.type === "h2" || b.type === "h3")
+      return `\n## ${b.text}`;
+    if (b.type === "li") return `- ${b.text}`;
+    if (b.type === "numli") return `1. ${b.text}`;
+    if (b.type === "quote") return `> ${b.text}`;
+    if (b.type === "divider" || b.type === "database") return "";
+    return b.text;
+  });
+  return lines.filter((line) => line.trim()).join("\n");
+}
+
+/**
+ * Build the prompt for `/work` — execute the plan on the current page. Runs over
+ * the streaming, resumable Hermes session path (the agent uses its tools and the
+ * run can be resumed via the page's persisted session id).
  */
 export function buildWorkPrompt(): string {
   return [
