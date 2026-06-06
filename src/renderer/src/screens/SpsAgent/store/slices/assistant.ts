@@ -177,7 +177,12 @@ export const createAssistantSlice: StateCreator<
     const pageId = s.page;
     const blocks = s.docs[pageId] || [];
     const meta = s.meta[pageId] || { title: "Untitled" };
-    const resumeId = meta.workSessionId;
+    // Resume id: prefer the in-memory meta (fast path), else the durable sidecar
+    // (survives reload in vault mode, where meta is rebuilt from frontmatter).
+    const resumeId =
+      meta.workSessionId ??
+      (await window.hermesAPI.spsGetWorkSession(pageId)) ??
+      undefined;
     const runId = uid("run");
 
     const planText = serializePlanBlocks(blocks);
@@ -239,6 +244,8 @@ export const createAssistantSlice: StateCreator<
             [pageId]: { ...st.meta[pageId], workSessionId: sessionId },
           },
         }));
+        // Durable copy so resume survives a reload in either storage mode.
+        void window.hermesAPI.spsSetWorkSession(pageId, sessionId);
       }
     } catch (err) {
       acc += `\n\nError: ${err instanceof Error ? err.message : "work failed"}.`;

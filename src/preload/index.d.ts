@@ -1279,6 +1279,15 @@ interface HermesAPI {
   ) => Promise<unknown>;
   spsLoad: (profile?: string) => Promise<unknown | null>;
   spsSave: (ws: unknown, profile?: string) => Promise<boolean>;
+  spsGetWorkSession: (
+    pageId: string,
+    profile?: string,
+  ) => Promise<string | null>;
+  spsSetWorkSession: (
+    pageId: string,
+    sessionId: string,
+    profile?: string,
+  ) => Promise<boolean>;
   spsExportPage: (
     pageId: string,
     markdown: string,

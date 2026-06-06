@@ -20,6 +20,8 @@ import {
   spsAssistant,
   spsLoad,
   spsSave,
+  spsGetWorkSession,
+  spsSetWorkSession,
   spsBackupWorkspace,
   type PageContext as SpsPageContext,
 } from "./sps-agent";
@@ -2499,6 +2501,18 @@ function setupIPC(): void {
   ipcMain.handle("sps-load", (_event, profile?: string) => spsLoad(profile));
   ipcMain.handle("sps-save", (_event, ws: unknown, profile?: string) =>
     spsSave(ws, profile),
+  );
+
+  // Resumable /work session map (M1C) — survives reload in both storage modes.
+  ipcMain.handle(
+    "sps-get-work-session",
+    (_event, pageId: string, profile?: string) =>
+      spsGetWorkSession(pageId, profile),
+  );
+  ipcMain.handle(
+    "sps-set-work-session",
+    (_event, pageId: string, sessionId: string, profile?: string) =>
+      spsSetWorkSession(pageId, sessionId, profile),
   );
 
   // Additive markdown mirror (S2b): write a page's markdown into the SPS vault
