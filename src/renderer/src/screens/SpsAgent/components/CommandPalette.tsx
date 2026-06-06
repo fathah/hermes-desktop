@@ -64,6 +64,7 @@ export function CommandPalette() {
   const setTrashOpen = useStore((s) => s.setTrashOpen);
   const resetWorkspace = useStore((s) => s.resetWorkspace);
   const startNewChat = useStore((s) => s.startNewChat);
+  const setResearchOpen = useStore((s) => s.setResearchOpen);
   const flash = useStore((s) => s.flash);
 
   const [q, setQ] = useState("");
@@ -94,6 +95,14 @@ export function CommandPalette() {
         label: "New page",
         desc: "Create a new page from a template.",
         run: () => setTemplatesOpen({ parent: null }),
+      },
+      {
+        kind: "action",
+        id: "research",
+        icon: "search",
+        label: "Research papers…",
+        desc: "Search OpenAlex's 250M+ scholarly works and save a plain-language summary into your workspace.",
+        run: () => setResearchOpen(true),
       },
       {
         kind: "action",
@@ -212,6 +221,7 @@ export function CommandPalette() {
       setTrashOpen,
       resetWorkspace,
       startNewChat,
+      setResearchOpen,
       flash,
     ],
   );
