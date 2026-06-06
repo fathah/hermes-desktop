@@ -21,6 +21,7 @@ import { AskPane } from "./panel/AskPane";
 import { GraphView } from "./graph/GraphView";
 import { EquityResearch } from "./equity/EquityResearch";
 import { JournalSurface } from "./journal/JournalSurface";
+import { YouSurface } from "./you/YouSurface";
 
 export function App() {
   useHotkeys();
@@ -84,6 +85,7 @@ export function App() {
               {surface === "memory" && (
                 <MemoryTimeline profile="default" onRefresh={() => {}} />
               )}
+              {surface === "you" && <YouSurface profile="default" />}
               {surface === "graph" && <GraphView />}
               {surface === "equity" && <EquityResearch />}
             </div>

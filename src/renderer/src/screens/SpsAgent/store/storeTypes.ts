@@ -24,6 +24,7 @@ export type Surface =
   | "doc"
   | "insights"
   | "memory"
+  | "you"
   | "ask"
   | "agent"
   | "chats"
