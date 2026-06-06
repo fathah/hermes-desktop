@@ -18,6 +18,11 @@ export function ResearchModal() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [mailto, setMailto] = useState("");
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [hasApiKey, setHasApiKey] = useState(false);
+  const [savingCfg, setSavingCfg] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   // Guards against an earlier slow search overwriting a later one.
   const reqSeq = useRef(0);
@@ -27,7 +32,35 @@ export function ResearchModal() {
     // Best-effort: make OpenAlex callable by the Hermes agent in chat the first
     // time the user opens Research (idempotent; the gateway loads it on restart).
     void window.hermesAPI?.spsResearchEnsureAgentTool?.();
+    // Load the current polite-pool / api-key config (the key is never returned —
+    // only whether one is set, mirroring the connection-config pattern).
+    void window.hermesAPI?.spsResearchGetConfig?.().then((cfg) => {
+      if (!cfg) return;
+      setMailto(cfg.mailto || "");
+      setHasApiKey(!!cfg.hasApiKey);
+    });
   }, []);
+
+  const saveConfig = async () => {
+    setSavingCfg(true);
+    try {
+      // Blank api-key field = keep the existing key (pass undefined); a typed
+      // value replaces it. The stored key never round-trips to the renderer.
+      const apiKeyArg = apiKeyInput.trim() ? apiKeyInput.trim() : undefined;
+      const cfg = await window.hermesAPI?.spsResearchSetConfig?.(
+        mailto.trim(),
+        apiKeyArg,
+      );
+      if (cfg) {
+        setMailto(cfg.mailto || "");
+        setHasApiKey(!!cfg.hasApiKey);
+      }
+      setApiKeyInput("");
+      setSettingsOpen(false);
+    } finally {
+      setSavingCfg(false);
+    }
+  };
 
   // Global Escape closes the modal regardless of where focus is (the input may
   // have lost focus to a result button), so the scrim never gets stuck open.
@@ -80,10 +113,77 @@ export function ResearchModal() {
         style={{ width: 640, maxWidth: "92vw" }}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="modal-head">
+        <div
+          className="modal-head"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
           <h3>📚 Research papers</h3>
+          <button
+            className="cover-btn"
+            onClick={() => setSettingsOpen((v) => !v)}
+            title="Polite pool email & API key"
+          >
+            ⚙ Settings
+          </button>
         </div>
         <div className="modal-body">
+          {settingsOpen && (
+            <div
+              style={{
+                marginBottom: 12,
+                padding: 12,
+                border: "1px solid var(--bd)",
+                borderRadius: 8,
+                display: "grid",
+                gap: 10,
+              }}
+            >
+              <label style={{ fontSize: 12, color: "var(--tx-3)" }}>
+                Contact email — opts into OpenAlex&apos;s faster “polite pool”
+                <div className="pal-input" style={{ marginTop: 4 }}>
+                  <input
+                    type="email"
+                    value={mailto}
+                    onChange={(e) => setMailto(e.target.value)}
+                    placeholder="you@example.com"
+                  />
+                </div>
+              </label>
+              <label style={{ fontSize: 12, color: "var(--tx-3)" }}>
+                API key (optional) — raises the free daily allowance
+                <div className="pal-input" style={{ marginTop: 4 }}>
+                  <input
+                    type="password"
+                    value={apiKeyInput}
+                    onChange={(e) => setApiKeyInput(e.target.value)}
+                    placeholder={
+                      hasApiKey
+                        ? "•••••••• set — leave blank to keep"
+                        : "OpenAlex API key"
+                    }
+                  />
+                </div>
+              </label>
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <button
+                  className="cover-btn"
+                  onClick={() => void saveConfig()}
+                  disabled={savingCfg}
+                >
+                  {savingCfg ? "Saving…" : "Save"}
+                </button>
+              </div>
+              <small style={{ color: "var(--tx-4)", fontSize: 11 }}>
+                Stored locally on this machine. Both are optional — search works
+                without them.
+              </small>
+            </div>
+          )}
+
           <div className="pal-input" style={{ marginBottom: 12 }}>
             <Icon name="search" size={18} style={{ color: "var(--tx-3)" }} />
             <input

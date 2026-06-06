@@ -8,7 +8,6 @@ import type {
   SearchOpts as ResearchSearchOpts,
   WorkSummary as ResearchWorkSummary,
   WorkDetail as ResearchWorkDetail,
-  AutocompleteItem as ResearchAutocompleteItem,
 } from "../shared/openalex/core";
 
 interface ElectronAPI {
@@ -1049,10 +1048,6 @@ interface HermesAPI {
     id: string,
     profile?: string,
   ) => Promise<ResearchWorkDetail>;
-  spsResearchAutocomplete: (
-    entity: string,
-    q: string,
-  ) => Promise<ResearchAutocompleteItem[]>;
   spsResearchGetConfig: () => Promise<{ mailto: string; hasApiKey: boolean }>;
   spsResearchSetConfig: (
     mailto: string,

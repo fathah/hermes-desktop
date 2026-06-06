@@ -40,12 +40,6 @@ export interface GroupBucket {
   count: number;
 }
 
-export interface AutocompleteItem {
-  id: string;
-  label: string;
-  hint?: string;
-}
-
 export interface SearchOpts {
   perPage?: number;
   filter?: string;
@@ -69,7 +63,6 @@ export interface OpenAlexClient {
   searchWorks(q: string, opts?: SearchOpts): Promise<WorkSummary[]>;
   getWork(id: string): Promise<WorkDetail>;
   groupBy(filter: string, groupBy: string): Promise<GroupBucket[]>;
-  autocomplete(entity: string, q: string): Promise<AutocompleteItem[]>;
   /** Exposed for testing the URL/param/auth construction in isolation. */
   buildUrl(
     path: string,
@@ -263,20 +256,5 @@ export function createOpenAlexClient(opts: OpenAlexClientOpts): OpenAlexClient {
     }));
   }
 
-  async function autocomplete(
-    entity: string,
-    q: string,
-  ): Promise<AutocompleteItem[]> {
-    const url = buildUrl(`/autocomplete/${encodeURIComponent(entity)}`, { q });
-    const data = (await getJson(url)) as {
-      results?: { id?: string; display_name?: string; hint?: string }[];
-    };
-    return (data.results ?? []).map((r) => ({
-      id: bareId(r.id),
-      label: r.display_name ?? "",
-      hint: r.hint || undefined,
-    }));
-  }
-
-  return { searchWorks, getWork, groupBy, autocomplete, buildUrl };
+  return { searchWorks, getWork, groupBy, buildUrl };
 }

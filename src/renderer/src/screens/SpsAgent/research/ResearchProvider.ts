@@ -8,8 +8,6 @@
 export type {
   WorkSummary,
   WorkDetail,
-  GroupBucket,
-  AutocompleteItem,
   SearchOpts,
 } from "../../../../../shared/openalex/core";
 

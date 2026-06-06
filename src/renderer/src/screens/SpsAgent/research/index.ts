@@ -4,10 +4,4 @@ import { BridgeResearch } from "./BridgeResearch";
 
 export const research = new BridgeResearch();
 export type { ResearchProvider } from "./ResearchProvider";
-export type {
-  WorkSummary,
-  WorkDetail,
-  GroupBucket,
-  AutocompleteItem,
-  SearchOpts,
-} from "./ResearchProvider";
+export type { WorkSummary, WorkDetail, SearchOpts } from "./ResearchProvider";

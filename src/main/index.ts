@@ -30,7 +30,6 @@ import {
 import {
   oaSearchWorks,
   oaGetWork,
-  oaAutocomplete,
   getResearchConfig,
   getPublicResearchConfig,
   setResearchConfig,
@@ -2199,10 +2198,6 @@ function setupIPC(): void {
   ipcMain.handle(
     "sps-research-get-work",
     (_event, id: string, profile?: string) => oaGetWork(id, profile),
-  );
-  ipcMain.handle(
-    "sps-research-autocomplete",
-    (_event, entity: string, q: string) => oaAutocomplete(entity, q),
   );
   ipcMain.handle("sps-research-get-config", () => getPublicResearchConfig());
   ipcMain.handle(

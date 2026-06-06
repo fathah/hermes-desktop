@@ -9,7 +9,6 @@ import type {
   SearchOpts as ResearchSearchOpts,
   WorkSummary as ResearchWorkSummary,
   WorkDetail as ResearchWorkDetail,
-  AutocompleteItem as ResearchAutocompleteItem,
 } from "../shared/openalex/core";
 
 /**
@@ -1247,11 +1246,6 @@ const hermesAPI = {
     profile?: string,
   ): Promise<ResearchWorkDetail> =>
     ipcRenderer.invoke("sps-research-get-work", id, profile),
-  spsResearchAutocomplete: (
-    entity: string,
-    q: string,
-  ): Promise<ResearchAutocompleteItem[]> =>
-    ipcRenderer.invoke("sps-research-autocomplete", entity, q),
   spsResearchGetConfig: (): Promise<{ mailto: string; hasApiKey: boolean }> =>
     ipcRenderer.invoke("sps-research-get-config"),
   spsResearchSetConfig: (

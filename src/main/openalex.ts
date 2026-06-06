@@ -17,8 +17,6 @@ import {
   type SearchOpts,
   type WorkSummary,
   type WorkDetail,
-  type GroupBucket,
-  type AutocompleteItem,
 } from "../shared/openalex/core";
 import { guardedAgent } from "./sps-agent";
 import { profileHome, getActiveProfileNameSync } from "./utils";
@@ -114,27 +112,4 @@ export async function oaGetWork(
   const work = await client().getWork(id);
   await cacheSet(dir, key, work);
   return work;
-}
-
-// Type-ahead is short-lived and high-cardinality — not worth caching to disk.
-export async function oaAutocomplete(
-  entity: string,
-  q: string,
-): Promise<AutocompleteItem[]> {
-  return client().autocomplete(entity, q);
-}
-
-// Phase 2 (landscape) — cached like searches.
-export async function oaGroupBy(
-  filter: string,
-  groupBy: string,
-  profile?: string,
-): Promise<GroupBucket[]> {
-  const key = `works:group:${filter}:${groupBy}`;
-  const dir = cacheDir(profile);
-  const hit = await cacheGet<GroupBucket[]>(dir, key, SEARCH_TTL_MS);
-  if (hit) return hit;
-  const buckets = await client().groupBy(filter, groupBy);
-  await cacheSet(dir, key, buckets);
-  return buckets;
 }
