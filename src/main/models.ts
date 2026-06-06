@@ -5,7 +5,9 @@ import { HERMES_HOME } from "./installer";
 import { safeWriteFile, profilePaths } from "./utils";
 import DEFAULT_MODELS from "./default-models";
 
-const MODELS_FILE = join(HERMES_HOME, "models.json");
+function modelsFile(): string {
+  return join(HERMES_HOME, "models.json");
+}
 
 export interface SavedModel {
   id: string;
@@ -19,6 +21,7 @@ export interface SavedModel {
 
 export function readModels(): SavedModel[] {
   try {
+    const MODELS_FILE = modelsFile();
     if (!existsSync(MODELS_FILE)) return [];
     return JSON.parse(readFileSync(MODELS_FILE, "utf-8"));
   } catch {
@@ -27,7 +30,7 @@ export function readModels(): SavedModel[] {
 }
 
 function writeModels(models: SavedModel[]): void {
-  safeWriteFile(MODELS_FILE, JSON.stringify(models, null, 2));
+  safeWriteFile(modelsFile(), JSON.stringify(models, null, 2));
 }
 
 interface CustomProviderEntry {
@@ -114,7 +117,7 @@ function seedDefaults(profile?: string): SavedModel[] {
 }
 
 export function listModels(): SavedModel[] {
-  if (!existsSync(MODELS_FILE)) {
+  if (!existsSync(modelsFile())) {
     return seedDefaults();
   }
   return readModels();
