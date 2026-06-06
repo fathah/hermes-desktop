@@ -561,6 +561,26 @@ interface HermesAPI {
     content: string,
     profile?: string,
   ) => Promise<{ success: boolean; error?: string }>;
+  writeMemory: (
+    content: string,
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+
+  // Personalization (focus.md + daily-context hook)
+  readFocus: () => Promise<string>;
+  writeFocus: (
+    content: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+  getDailyContextHookStatus: (profile?: string) => Promise<{
+    configured: boolean;
+    allowlisted: boolean;
+    scriptExists: boolean;
+    enabled: boolean;
+  }>;
+  setDailyContextHookEnabled: (
+    enabled: boolean,
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
 
   // Soul
   readSoul: (profile?: string) => Promise<string>;

@@ -189,7 +189,14 @@ import {
   updateMemoryEntry,
   removeMemoryEntry,
   writeUserProfile,
+  writeMemory,
 } from "./memory";
+import {
+  readFocus,
+  writeFocus,
+  getDailyContextHookStatus,
+  setDailyContextHookEnabled,
+} from "./personalization";
 import { getMemoryTimeline } from "./memory-timeline";
 import { summarizeSearch } from "./session-summary";
 import { listSkins } from "./skins";
@@ -1409,6 +1416,57 @@ function setupIPC(): void {
       if (conn.mode === "ssh" && conn.ssh)
         return sshWriteUserProfile(conn.ssh, content, profile);
       return writeUserProfile(content, profile);
+    },
+  );
+
+  // Personalization: whole-file MEMORY.md edit + focus.md + daily-context hook.
+  // Local-only for now — SSH/remote variants are a follow-up, so over SSH these
+  // return a no-op/notice rather than editing the wrong host's files.
+  ipcMain.handle(
+    "write-memory",
+    (_event, content: string, profile?: string) => {
+      if (getConnectionConfig().mode === "ssh")
+        return {
+          success: false,
+          error: "Editing memory isn't available over SSH yet.",
+        };
+      return writeMemory(content, profile);
+    },
+  );
+  ipcMain.handle("read-focus", () => {
+    if (getConnectionConfig().mode === "ssh") return "";
+    return readFocus();
+  });
+  ipcMain.handle("write-focus", (_event, content: string) => {
+    if (getConnectionConfig().mode === "ssh")
+      return {
+        success: false,
+        error: "Editing focus isn't available over SSH yet.",
+      };
+    return writeFocus(content);
+  });
+  ipcMain.handle(
+    "get-daily-context-hook-status",
+    (_event, profile?: string) => {
+      if (getConnectionConfig().mode === "ssh")
+        return {
+          configured: false,
+          allowlisted: false,
+          scriptExists: false,
+          enabled: false,
+        };
+      return getDailyContextHookStatus(profile);
+    },
+  );
+  ipcMain.handle(
+    "set-daily-context-hook-enabled",
+    (_event, enabled: boolean, profile?: string) => {
+      if (getConnectionConfig().mode === "ssh")
+        return {
+          success: false,
+          error: "The daily-context hook isn't available over SSH yet.",
+        };
+      return setDailyContextHookEnabled(enabled, profile);
     },
   );
 
