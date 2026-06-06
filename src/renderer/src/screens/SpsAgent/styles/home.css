@@ -229,6 +229,29 @@
   color: var(--tx-3);
   flex: none;
 }
+.sps-scope .rail-collapse {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-left: 2px;
+  border-radius: 6px;
+  color: var(--tx-3);
+  opacity: 0.5;
+  transition:
+    opacity 0.12s ease,
+    background 0.12s ease,
+    color 0.12s ease;
+}
+.sps-scope .rail-top:hover .rail-collapse {
+  opacity: 1;
+}
+.sps-scope .rail-collapse:hover {
+  background: var(--row-hover);
+  color: var(--tx-1);
+}
 .sps-scope[data-rail="icons"] .wname,
 .sps-scope[data-rail="icons"] .rail-chev,
 .sps-scope[data-rail="icons"] .nav-label,
@@ -237,7 +260,8 @@
 .sps-scope[data-rail="icons"] .rail-foot-name,
 .sps-scope[data-rail="icons"] .nav-kbd,
 .sps-scope[data-rail="icons"] .tree-toggle,
-.sps-scope[data-rail="icons"] .tree-add {
+.sps-scope[data-rail="icons"] .tree-add,
+.sps-scope[data-rail="icons"] .rail-collapse {
   display: none;
 }
 .sps-scope[data-rail="icons"] .rail-top {

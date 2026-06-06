@@ -325,15 +325,6 @@ export function CommandPalette() {
           >
             <Icon name="text" size={13} /> Title only
           </button>
-          <button className="pal-chip" disabled title="Coming soon">
-            <Icon name="sparkle" size={13} /> Created by
-          </button>
-          <button className="pal-chip" disabled title="Coming soon">
-            <Icon name="doc" size={13} /> In
-          </button>
-          <button className="pal-chip" disabled title="Coming soon">
-            <Icon name="plus" size={13} /> Filter
-          </button>
         </div>
 
         <div className="pal-body">

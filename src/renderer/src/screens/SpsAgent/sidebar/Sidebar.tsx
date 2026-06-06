@@ -21,7 +21,7 @@ interface Identity {
 
 const DEMO_IDENTITY: Identity = {
   workspace: "SPS Agent",
-  user: "Maya Rao",
+  user: "You",
   initial: "S",
 };
 
@@ -78,6 +78,7 @@ export function Sidebar() {
   const setTemplatesOpen = useStore((s) => s.setTemplatesOpen);
   const setTrashOpen = useStore((s) => s.setTrashOpen);
   const setTweaksOpen = useStore((s) => s.setTweaksOpen);
+  const setTweak = useStore((s) => s.setTweak);
 
   const [drag, setDrag] = useState<string | null>(null);
   const [over, setOver] = useState<{ id: string; where: DropWhere } | null>(
@@ -105,6 +106,17 @@ export function Sidebar() {
         <span className="rail-chev">
           <Icon name="chevD" size={15} />
         </span>
+        <button
+          className="rail-collapse"
+          title="Hide sidebar"
+          aria-label="Hide sidebar"
+          onClick={(e) => {
+            e.stopPropagation();
+            setTweak("sidebar", "hidden");
+          }}
+        >
+          <Icon name="panelLeft" size={16} />
+        </button>
       </div>
 
       <div className="rail-scroll scroll">
@@ -126,11 +138,6 @@ export function Sidebar() {
         >
           <Icon name="comment" size={17} />
           <span className="nav-label">AI Chats</span>
-        </div>
-        <div className="nav-item" onClick={openPalette}>
-          <Icon name="inbox" size={17} />
-          <span className="nav-label">Inbox</span>
-          <span className="nav-kbd">3</span>
         </div>
         <div
           className={`nav-item ${surface === "ask" ? "active" : ""}`}
@@ -252,7 +259,7 @@ export function Sidebar() {
           </div>
         </SidebarSection>
 
-        <SidebarSection id="apps" label="Notion apps">
+        <SidebarSection id="apps" label="Apps">
           <SidebarApps />
         </SidebarSection>
 
