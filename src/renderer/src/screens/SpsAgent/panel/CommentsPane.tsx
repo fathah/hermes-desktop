@@ -23,9 +23,10 @@ export function CommentsPane({
       <div className="rp-body scroll">
         <div className="cmts-empty">
           <Icon name="comment" size={22} style={{ color: "var(--tx-4)" }} />
-          <div style={{ marginTop: 8 }}>No comments yet.</div>
+          <div style={{ marginTop: 8 }}>No notes yet.</div>
           <div style={{ fontSize: 12, marginTop: 4 }}>
-            Select text and click the comment icon to start a thread.
+            Select text and click the note icon to pin a private note. Your
+            assistant can read these.
           </div>
         </div>
       </div>
@@ -71,7 +72,7 @@ function CommentThread({ c, api }: { c: Comment; api: CommentApi }) {
       <div className="cmt-input">
         <textarea
           rows={1}
-          placeholder="Reply…"
+          placeholder="Add a note…"
           value={reply}
           onChange={(e) => setReply(e.target.value)}
           onKeyDown={(e) => {
@@ -87,7 +88,7 @@ function CommentThread({ c, api }: { c: Comment; api: CommentApi }) {
       </div>
       <div className="cmt-actions" style={{ marginTop: 8 }}>
         <button onClick={() => api.resolve(c.id)}>
-          {c.resolved ? "Re-open" : "Resolve"}
+          {c.resolved ? "Restore" : "Archive"}
         </button>
         <button onClick={() => api.remove(c.id)}>Delete</button>
       </div>

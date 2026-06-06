@@ -250,7 +250,7 @@ export function SelectionToolbar({ onComment, onAsk, onAiAction }: Props) {
         >
           <Icon name="chevD" size={11} />
         </button>
-        <button className="st-btn" onClick={doComment} title="Comment">
+        <button className="st-btn" onClick={doComment} title="Add note">
           <Icon name="comment" size={15} />
         </button>
       </div>

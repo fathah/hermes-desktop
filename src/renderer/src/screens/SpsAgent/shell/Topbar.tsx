@@ -32,7 +32,7 @@ export function Topbar() {
       <button
         className={`tb-btn ${panelOpen && rightTab === "comments" ? "on" : ""}`}
         onClick={() => openPanelTab("comments")}
-        title="Comments"
+        title="Notes"
       >
         <Icon name="comment" size={16} />
       </button>

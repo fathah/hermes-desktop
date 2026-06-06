@@ -33,7 +33,7 @@ export function RightPanel() {
   const tabs: [RightTab, string, IconName, number | null][] = [
     ["assistant", "Assistant", "sparkle", null],
     ["outline", "Outline", "list", null],
-    ["comments", "Comments", "comment", openCmts || null],
+    ["comments", "Notes", "comment", openCmts || null],
     ["info", "Info", "clock", null],
   ];
 
