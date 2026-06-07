@@ -34,10 +34,15 @@ const TWEAKS_STYLE = `
   .twk-hd{display:flex;align-items:center;justify-content:space-between;
     padding:10px 8px 10px 14px;cursor:move;user-select:none}
   .twk-hd b{font-size:12px;font-weight:600;letter-spacing:.01em}
-  .twk-x{appearance:none;border:0;background:transparent;color:rgba(41,38,27,.55);
-    width:22px;height:22px;border-radius:6px;cursor:pointer;font-size:13px;line-height:1}
-  [data-theme="dark"] .twk-x{color:rgba(236,231,216,.55)}
-  .twk-x:hover{background:rgba(0,0,0,.06);color:#29261b}
+  .twk-x{appearance:none;border:0;background:transparent;color:rgba(41,38,27,.6);
+    width:28px;height:28px;border-radius:7px;cursor:pointer;font-size:15px;line-height:1;
+    flex:none;display:grid;place-items:center;
+    transition:background .12s ease,color .12s ease,transform .08s ease}
+  [data-theme="dark"] .twk-x{color:rgba(236,231,216,.6)}
+  .twk-x:hover{background:rgba(0,0,0,.10);color:#000}
+  [data-theme="dark"] .twk-x:hover{background:rgba(255,255,255,.16);color:#fff}
+  .twk-x:active{background:rgba(0,0,0,.2);transform:scale(.9)}
+  [data-theme="dark"] .twk-x:active{background:rgba(255,255,255,.28);transform:scale(.9)}
   .twk-body{padding:2px 14px 14px;display:flex;flex-direction:column;gap:10px;
     overflow-y:auto;overflow-x:hidden;min-height:0}
   .twk-row{display:flex;flex-direction:column;gap:5px}
