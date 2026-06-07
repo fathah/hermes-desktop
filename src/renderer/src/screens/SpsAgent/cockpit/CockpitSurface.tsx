@@ -7,7 +7,7 @@ import { Icon } from "../components/Icon";
 import type { IconName } from "../components/iconPaths";
 import { useStore } from "../store";
 import type { WidgetKind } from "../store/storeTypes";
-import type { Block } from "../types";
+import type { Block, SessionRow } from "../types";
 import { OPERATOR_GUIDE } from "../../../lib/operatorGuide";
 import { pageFromMarkdown } from "../editor/pageMarkdown";
 import { blk } from "../lib/ids";
@@ -314,12 +314,6 @@ function AskWidget() {
       </button>
     </div>
   );
-}
-
-interface SessionRow {
-  id: string;
-  title: string | null;
-  preview: string;
 }
 
 function RecentChats() {

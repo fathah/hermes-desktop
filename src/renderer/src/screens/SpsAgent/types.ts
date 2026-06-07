@@ -4,6 +4,15 @@
 // fields stay optional (a single Block interface) to keep the dynamic editor
 // behaviour a faithful, low-friction port.
 
+// A recent-session row as shown in the sidebar / cockpit (a display-only subset
+// of the main SessionSummary). Consolidated from duplicate copies that lived in
+// SidebarRecents and CockpitSurface.
+export interface SessionRow {
+  id: string;
+  title: string | null;
+  preview: string;
+}
+
 export type BlockType =
   | "p"
   | "h1"

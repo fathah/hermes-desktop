@@ -5,12 +5,7 @@
 import { useEffect, useState } from "react";
 import { Icon } from "../components/Icon";
 import { useStore } from "../store";
-
-interface SessionRow {
-  id: string;
-  title: string | null;
-  preview: string;
-}
+import type { SessionRow } from "../types";
 
 export function SidebarRecents() {
   const [sessions, setSessions] = useState<SessionRow[]>([]);
