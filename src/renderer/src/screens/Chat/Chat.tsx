@@ -261,6 +261,13 @@ function Chat({
   });
   const effectiveContextFolder = contextFolderOverride ?? contextFolder;
 
+  // `/compact` handoff: when a compact turn is in flight, this flag tells the
+  // completion effect below to seed a fresh session with the produced brief.
+  const compactPendingRef = useRef(false);
+  const markCompactPending = useCallback(() => {
+    compactPendingRef.current = true;
+  }, []);
+
   const actions = useChatActions({
     profile,
     hermesSessionId,
@@ -272,7 +279,35 @@ function Chat({
     chatInputRef,
     localCommands,
     contextFolder: effectiveContextFolder,
+    onCompactRequested: markCompactPending,
   });
+
+  // When the `/compact` turn finishes, carry its handoff brief into a fresh
+  // session: start a new chat and pre-fill the composer with the brief, so the
+  // user reviews it and sends to continue with a clean context (doc ch.15.2).
+  const prevLoadingRef = useRef(false);
+  useEffect(() => {
+    const was = prevLoadingRef.current;
+    prevLoadingRef.current = isLoading;
+    if (!was || isLoading || !compactPendingRef.current) return;
+    compactPendingRef.current = false;
+    const brief = [...messages].reverse().find((m) => {
+      if (!("content" in m) || typeof m.content !== "string") return false;
+      if (m.content.trim().length <= 40) return false;
+      const kind = "kind" in m ? m.kind : undefined;
+      if (kind === "assistant") return true;
+      const role = "role" in m ? (m as { role?: string }).role : undefined;
+      return !kind && role === "agent";
+    });
+    const text =
+      brief && "content" in brief && typeof brief.content === "string"
+        ? brief.content
+        : "";
+    if (!text) return;
+    onNewChat?.();
+    const seed = `Context carried over from my previous session — continue from here:\n\n${text}`;
+    window.setTimeout(() => chatInputRef.current?.setText(seed), 80);
+  }, [isLoading, messages, onNewChat]);
 
   // Stable ref to handleSend so the drain effect doesn't re-trigger on
   // identity changes (regression #5 from PR #315).

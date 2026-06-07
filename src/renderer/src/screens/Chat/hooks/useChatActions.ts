@@ -29,6 +29,9 @@ interface UseChatActionsArgs {
   localCommands: LocalCommands;
   /** Working folder bound to this conversation (issue #27), or null. */
   contextFolder: string | null;
+  /** Called when a `/compact` turn is sent, so the host can seed a fresh
+   *  session with the resulting handoff brief once the turn completes. */
+  onCompactRequested?: () => void;
 }
 
 interface UseChatActionsResult {
@@ -60,6 +63,7 @@ export function useChatActions({
   chatInputRef,
   localCommands,
   contextFolder,
+  onCompactRequested,
 }: UseChatActionsArgs): UseChatActionsResult {
   const messagesRef = useRef(messages);
   const isLoadingRef = useRef(isLoading);
@@ -120,6 +124,7 @@ export function useChatActions({
       // in context, so the brief is produced regardless of backend support.
       if (text.trim().toLowerCase().split(/\s+/)[0] === "/compact") {
         const focus = text.trim().slice("/compact".length).trim();
+        onCompactRequested?.();
         setIsLoading(true);
         pushUser(text);
         onSessionStarted?.();
@@ -139,7 +144,14 @@ export function useChatActions({
       onSessionStarted?.();
       await sendToAgent(text, attachments);
     },
-    [localCommands, pushUser, onSessionStarted, sendToAgent, setIsLoading],
+    [
+      localCommands,
+      pushUser,
+      onSessionStarted,
+      sendToAgent,
+      setIsLoading,
+      onCompactRequested,
+    ],
   );
 
   const handleQuickAsk = useCallback(
