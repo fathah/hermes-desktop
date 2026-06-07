@@ -10,6 +10,7 @@ import {
 } from "../../assets/icons";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
 import { useI18n } from "../../components/useI18n";
+import type { SkillEntry } from "../../../../shared/skills";
 
 interface InstalledSkill {
   name: string;
@@ -70,7 +71,7 @@ function Skills({ profile, visible = true }: SkillsProps): React.JSX.Element {
 
   // SQLite registry state
   const [registryCount, setRegistryCount] = useState(0);
-  const [registrySkills, setRegistrySkills] = useState<any[]>([]);
+  const [registrySkills, setRegistrySkills] = useState<SkillEntry[]>([]);
   const [lastSyncTime, setLastSyncTime] = useState<string>("");
   const [syncing, setSyncing] = useState(false);
 
@@ -123,8 +124,8 @@ function Skills({ profile, visible = true }: SkillsProps): React.JSX.Element {
       } else {
         setError(result.error || "Sync failed");
       }
-    } catch (err: any) {
-      setError(err.message || "Sync failed");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sync failed");
     } finally {
       setSyncing(false);
     }

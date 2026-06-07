@@ -19,16 +19,8 @@ import {
 } from "./installer";
 import { stripAnsi } from "./utils";
 
-export interface SkillEntry {
-  id?: number;
-  name: string;
-  description: string;
-  keywords: string;
-  status: string;
-  entrypoint: string;
-  dependencies: string;
-  created_at?: string;
-}
+import type { SkillEntry } from "../shared/skills";
+export type { SkillEntry };
 
 function parseSkillFrontmatter(content: string): {
   name: string;
@@ -240,7 +232,7 @@ export async function syncDiskSkillsToDb(
         status = excluded.status
     `);
 
-    const tx = db.transaction((list: any[]) => {
+    const tx = db.transaction((list: SkillEntry[]) => {
       for (const item of list) {
         insert.run(
           item.name,

@@ -13,23 +13,14 @@ import type { InstallStatus, InstallProgress } from "../shared/install";
 import type {
   KanbanTask,
   KanbanBoard,
-  KanbanComment,
-  KanbanEvent,
-  KanbanRun,
   KanbanTaskDetail,
   KanbanCreateTaskInput,
 } from "../shared/kanban";
-import type {
-  ConfigHealthIssue,
-  ConfigHealthReport,
-} from "../shared/config-health";
-import type {
-  EquityBasket,
-  EquityBasketHolding,
-  EquityAlert,
-} from "../shared/equity";
+import type { ConfigHealthReport } from "../shared/config-health";
+import type { EquityBasket, EquityAlert } from "../shared/equity";
 import type { PublicConnectionConfig } from "../shared/connection";
 import type { ChatReadiness } from "../shared/validation";
+import type { SkillEntry } from "../shared/skills";
 
 interface ElectronAPI {
   process: {
@@ -106,17 +97,6 @@ type ObsidianFunctionName =
   | "replace-selection"
   | "run-command"
   | "write-note";
-
-interface SkillEntry {
-  id?: number;
-  name: string;
-  description: string;
-  keywords: string;
-  status: string;
-  entrypoint: string;
-  dependencies: string;
-  created_at?: string;
-}
 
 interface HermesAPI {
   // Installation

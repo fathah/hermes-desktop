@@ -5,6 +5,7 @@ import type { UsageAggregate, RunLedgerEntry } from "../shared/usage";
 import type { MemoryTimeline } from "../shared/memoryTimeline";
 import type { SearchSummary } from "../shared/searchSummary";
 import type { LoadedSkin } from "../shared/skins";
+import type { SkillEntry } from "../shared/skills";
 import type {
   SearchOpts as ResearchSearchOpts,
   WorkSummary as ResearchWorkSummary,
@@ -1718,10 +1719,13 @@ const hermesAPI = {
     profile?: string,
   ): Promise<{ success: boolean; count: number; error?: string }> =>
     ipcRenderer.invoke("skills-registry-sync", profile),
-  lookupSkillRegistry: (query: string, profile?: string): Promise<any[]> =>
+  lookupSkillRegistry: (
+    query: string,
+    profile?: string,
+  ): Promise<SkillEntry[]> =>
     ipcRenderer.invoke("skills-registry-lookup", query, profile),
   registerSkillRegistry: (
-    skill: any,
+    skill: Omit<SkillEntry, "id" | "created_at">,
     profile?: string,
   ): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke("skills-registry-register", skill, profile),

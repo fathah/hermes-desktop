@@ -156,6 +156,7 @@ import {
   registerLocalSkill,
   scaffoldNewSkill,
   testSkillRun,
+  type SkillEntry,
 } from "./skills-registry";
 import {
   startSshTunnel,
@@ -3029,7 +3030,11 @@ function setupUpdater(): void {
 
   ipcMain.handle(
     "skills-registry-register",
-    async (_event, skill: any, profile?: string) => {
+    async (
+      _event,
+      skill: Omit<SkillEntry, "id" | "created_at">,
+      profile?: string,
+    ) => {
       return registerLocalSkill(skill, profile);
     },
   );
