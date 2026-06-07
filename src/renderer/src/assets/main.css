@@ -4563,6 +4563,72 @@ body {
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
 }
 
+/* ---- Capability review (read-only audit) ---- */
+.cap-count {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.cap-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+.cap-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border, rgba(127, 127, 127, 0.1));
+}
+.cap-item.cap-off {
+  opacity: 0.55;
+}
+.cap-item-name {
+  font-weight: 500;
+  flex: 0 0 auto;
+}
+.cap-item-tag {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: rgba(127, 127, 127, 0.1);
+}
+.cap-badge {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 1px 6px;
+  border-radius: 5px;
+}
+.cap-badge.on {
+  color: #1a7f44;
+  background: rgba(34, 160, 84, 0.14);
+}
+.cap-badge.off {
+  color: var(--text-muted);
+  background: rgba(127, 127, 127, 0.12);
+}
+.cap-item-desc {
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.cap-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
 /* ---- Context gauge + compress marker (idea A3) ---- */
 .chat-context-gauge {
   display: inline-flex;

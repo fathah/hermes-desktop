@@ -18,6 +18,7 @@ import Providers from "../Providers/Providers";
 import Schedules from "../Schedules/Schedules";
 import Kanban from "../Kanban/Kanban";
 import Insights from "../Insights/Insights";
+import CapabilityReview from "../CapabilityReview/CapabilityReview";
 import RemoteNotice from "../../components/RemoteNotice";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
 import hermeslogo from "../../assets/hermes.png";
@@ -37,7 +38,7 @@ import {
   Kanban as KanbanIcon,
   Download,
 } from "../../assets/icons";
-import { BarChart3, UserCog } from "lucide-react";
+import { BarChart3, UserCog, ShieldCheck } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 import { loadAndApplyActiveSkin } from "../../utils/skin";
@@ -56,6 +57,7 @@ type View =
   | "schedules"
   | "kanban"
   | "insights"
+  | "capabilityReview"
   | "gateway"
   | "spsAgent"
   | "settings";
@@ -97,6 +99,12 @@ const NAV_ITEMS: {
     label: "Personalization",
   },
   { view: "tools", icon: Wrench, labelKey: "navigation.tools" },
+  {
+    view: "capabilityReview",
+    icon: ShieldCheck,
+    labelKey: "navigation.capabilityReview",
+    label: "Capabilities",
+  },
   { view: "schedules", icon: Timer, labelKey: "navigation.schedules" },
   { view: "gateway", icon: Signal, labelKey: "navigation.gateway" },
   { view: "settings", icon: SettingsIcon, labelKey: "navigation.settings" },
@@ -553,6 +561,15 @@ function Layout({
         {visitedViews.has("insights") && (
           <div style={paneStyle("insights")}>
             <Insights profile={activeProfile} visible={view === "insights"} />
+          </div>
+        )}
+
+        {visitedViews.has("capabilityReview") && (
+          <div style={paneStyle("capabilityReview")}>
+            <CapabilityReview
+              profile={activeProfile}
+              visible={view === "capabilityReview"}
+            />
           </div>
         )}
 
