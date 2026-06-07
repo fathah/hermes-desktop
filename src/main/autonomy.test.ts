@@ -43,6 +43,17 @@ describe("isCommandSafe", () => {
     expect(isCommandSafe("git reset --hard")).toBe(false);
   });
 
+  it("rejects dangerous options passed to safe git subcommands", () => {
+    expect(isCommandSafe("git diff --ext-cmd=calc")).toBe(false);
+    expect(isCommandSafe("git show --ext-cmd=evil")).toBe(false);
+    expect(isCommandSafe("git diff --output=out.txt")).toBe(false);
+    expect(isCommandSafe("git log --output=/tmp/leak")).toBe(false);
+    expect(isCommandSafe("git diff -c core.pager=calc")).toBe(false);
+    expect(isCommandSafe("git show --config core.pager=calc")).toBe(false);
+    expect(isCommandSafe("git diff --pager=calc")).toBe(false);
+    expect(isCommandSafe("git log -P less")).toBe(false);
+  });
+
   it("fails closed on any shell metacharacter (chain/redirect/subst/glob)", () => {
     expect(isCommandSafe("ls; rm -rf /")).toBe(false);
     expect(isCommandSafe("cat a && rm b")).toBe(false);

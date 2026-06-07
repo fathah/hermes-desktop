@@ -83,7 +83,24 @@ export function isCommandSafe(command: string): boolean {
   if (!SAFE_BINARIES.has(binary)) return false;
   if (binary === "git") {
     const subcommand = parts[1] ?? "";
-    return SAFE_GIT_SUBCOMMANDS.has(subcommand);
+    if (!SAFE_GIT_SUBCOMMANDS.has(subcommand)) return false;
+    // Restrict dangerous arguments that could bypass read-only mode or execute programs
+    const dangerousGitArgs = [
+      /^-c$/,
+      /^--config$/,
+      /^--ext-cmd/,
+      /^--exec-path/,
+      /^--output/,
+      /^--pager/,
+      /^-P$/,
+    ];
+    for (let i = 2; i < parts.length; i++) {
+      const arg = parts[i];
+      if (dangerousGitArgs.some((pattern) => pattern.test(arg))) {
+        return false;
+      }
+    }
+    return true;
   }
   return true;
 }

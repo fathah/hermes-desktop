@@ -195,6 +195,7 @@ import {
   type SshConnectionConfig,
 } from "./config";
 import { canAutoApprove } from "./autonomy";
+import { StreamRedactor } from "./redactor";
 import {
   listSessions,
   getSessionMessages,
@@ -1180,6 +1181,22 @@ function setupIPC(): void {
         },
       );
 
+      // Initialize StreamRedactor with sensitive keys to prevent credential leaks / exfiltration (Zero Trust compliance)
+      const secretsToRedact: string[] = [];
+      const apiServerKey = getApiServerKey(profile);
+      if (apiServerKey) {
+        secretsToRedact.push(apiServerKey);
+      }
+      const remoteAuth = getRemoteAuthHeader();
+      if (remoteAuth.Authorization) {
+        const match = remoteAuth.Authorization.match(/^Bearer\s+(.+)$/);
+        if (match && match[1]) {
+          secretsToRedact.push(match[1]);
+        }
+      }
+      const contentRedactor = new StreamRedactor(secretsToRedact);
+      const reasoningRedactor = new StreamRedactor(secretsToRedact);
+
       // Streaming sends to `event.sender` will throw "Object has been
       // destroyed" if the renderer WebContents goes away mid-response
       // (window closed, reloaded, navigated away). Guard every send so a
@@ -1201,25 +1218,40 @@ function setupIPC(): void {
         message,
         {
           onChunk: (chunk) => {
-            fullResponse += chunk;
-            if (!safeSend("chat-chunk", chunk)) {
-              // Renderer is gone — stop generating and resolve with what we
-              // have so the awaiting promise doesn't leak.
-              const abort = activeChatAborts.get(sessionKey);
-              if (abort) abort();
+            const { chunkToEmit } = contentRedactor.process(chunk);
+            if (chunkToEmit) {
+              fullResponse += chunkToEmit;
+              if (!safeSend("chat-chunk", chunkToEmit)) {
+                // Renderer is gone — stop generating and resolve with what we
+                // have so the awaiting promise doesn't leak.
+                const abort = activeChatAborts.get(sessionKey);
+                if (abort) abort();
+              }
             }
           },
           onReasoningChunk: (chunk) => {
-            // Forward reasoning/thinking tokens on a dedicated channel so
-            // the renderer can render the thinking bubble live during the
-            // stream rather than waiting for a focus-change refresh (#352).
-            // Same renderer-gone abort guard as the content channel.
-            if (!safeSend("chat-reasoning-chunk", chunk)) {
-              const abort = activeChatAborts.get(sessionKey);
-              if (abort) abort();
+            const { chunkToEmit } = reasoningRedactor.process(chunk);
+            if (chunkToEmit) {
+              // Forward reasoning/thinking tokens on a dedicated channel so
+              // the renderer can render the thinking bubble live during the
+              // stream rather than waiting for a focus-change refresh (#352).
+              // Same renderer-gone abort guard as the content channel.
+              if (!safeSend("chat-reasoning-chunk", chunkToEmit)) {
+                const abort = activeChatAborts.get(sessionKey);
+                if (abort) abort();
+              }
             }
           },
           onDone: (sessionId) => {
+            const contentFlush = contentRedactor.flush();
+            if (contentFlush) {
+              fullResponse += contentFlush;
+              safeSend("chat-chunk", contentFlush);
+            }
+            const reasoningFlush = reasoningRedactor.flush();
+            if (reasoningFlush) {
+              safeSend("chat-reasoning-chunk", reasoningFlush);
+            }
             activeChatAborts.delete(sessionKey);
             safeSend("chat-done", sessionId || "");
             // Completion chime (M2C): a system beep when a run finishes — the
@@ -1243,6 +1275,8 @@ function setupIPC(): void {
             }
           },
           onError: (error) => {
+            contentRedactor.flush();
+            reasoningRedactor.flush();
             activeChatAborts.delete(sessionKey);
             safeSend("chat-error", error);
             rejectChat(new Error(error));
