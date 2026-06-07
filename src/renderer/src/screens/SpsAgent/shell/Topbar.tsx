@@ -1,5 +1,6 @@
-// Topbar.tsx — document top bar: breadcrumbs, comments + assistant toggles, page
-// menu. Ported from app.jsx topbar block.
+// Topbar.tsx — document top bar: breadcrumbs, page menu, and a single side-panel
+// toggle. Tab selection (Assistant/Outline/Notes/Info) lives in the panel itself,
+// so the topbar carries one panel control, not three. Ported from app.jsx topbar.
 import { Icon } from "../components/Icon";
 import { useStore } from "../store";
 import { Breadcrumbs } from "./Breadcrumbs";
@@ -9,8 +10,6 @@ export function Topbar() {
   const sidebar = useStore((s) => s.t.sidebar);
   const setTweak = useStore((s) => s.setTweak);
   const panelOpen = useStore((s) => s.panelOpen);
-  const rightTab = useStore((s) => s.rightTab);
-  const openPanelTab = useStore((s) => s.openPanelTab);
   const setPanelOpen = useStore((s) => s.setPanelOpen);
   const page = useStore((s) => s.page);
   const deletePage = useStore((s) => s.deletePage);
@@ -30,21 +29,6 @@ export function Topbar() {
         </button>
       )}
       <Breadcrumbs />
-      <button
-        className={`tb-btn ${panelOpen && rightTab === "comments" ? "on" : ""}`}
-        onClick={() => openPanelTab("comments")}
-        title="Notes"
-      >
-        <Icon name="comment" size={16} />
-      </button>
-      <button
-        className={`tb-btn ${panelOpen && rightTab === "assistant" ? "on" : ""}`}
-        onClick={() => openPanelTab("assistant")}
-        title="Assistant (⌘J)"
-      >
-        <Icon name="sparkle" size={16} />{" "}
-        <span className="tb-label">Assistant</span>
-      </button>
       <PageMenu
         onTemplate={() => setTemplatesOpen({ parent: page })}
         onDelete={() => deletePage(page)}
@@ -54,7 +38,9 @@ export function Topbar() {
       <button
         className={`tb-btn ${panelOpen ? "on" : ""}`}
         onClick={() => setPanelOpen(!panelOpen)}
-        title={panelOpen ? "Hide panel (⌘J)" : "Show panel (⌘J)"}
+        title={
+          panelOpen ? "Hide assistant panel (⌘J)" : "Show assistant panel (⌘J)"
+        }
         aria-label="Toggle side panel"
       >
         <Icon name="panelRight" size={17} />

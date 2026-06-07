@@ -40,6 +40,9 @@ function App(): React.JSX.Element {
   }, [isMac]);
 
   // ⌘, (mac) / Ctrl+, toggles the admin overlay, only once on the main screen.
+  // The SPS chrome (sidebar "Settings" item) opens it via a `hermes:open-settings`
+  // event instead of a floating gear, so the trigger lives in the layout, not on
+  // top of the content.
   useEffect(() => {
     if (screen !== "main") return;
     const onKey = (e: KeyboardEvent): void => {
@@ -50,8 +53,13 @@ function App(): React.JSX.Element {
         setAdminOpen(false);
       }
     };
+    const onOpenSettings = (): void => setAdminOpen(true);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("hermes:open-settings", onOpenSettings);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("hermes:open-settings", onOpenSettings);
+    };
   }, [screen]);
 
   const runInstallCheck = useCallback(async () => {
@@ -202,14 +210,9 @@ function App(): React.JSX.Element {
         return (
           <>
             <SpsAgent />
-            <button
-              className="sps-admin-gear"
-              onClick={() => setAdminOpen(true)}
-              title="Settings (⌘,)"
-              aria-label="Open settings"
-            >
-              ⚙
-            </button>
+            {/* No floating gear — the SPS sidebar's "Settings" item (and ⌘,) open
+                this overlay via the `hermes:open-settings` event, so the trigger
+                stays in the layout instead of floating over the workspace. */}
             {adminOpen && (
               <div className="sps-admin-overlay">
                 <button

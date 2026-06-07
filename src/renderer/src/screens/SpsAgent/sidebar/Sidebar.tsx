@@ -277,6 +277,20 @@ export function Sidebar() {
           <Icon name="trash" size={17} />
           <span className="nav-label">Trash</span>
         </div>
+        <div className="nav-item" onClick={() => setTweaksOpen(true)}>
+          <Icon name="sun" size={17} />
+          <span className="nav-label">Appearance</span>
+        </div>
+        <div
+          className="nav-item"
+          onClick={() =>
+            window.dispatchEvent(new CustomEvent("hermes:open-settings"))
+          }
+        >
+          <Icon name="settings" size={17} />
+          <span className="nav-label">Settings</span>
+          <span className="nav-kbd">⌘,</span>
+        </div>
       </div>
 
       <div className="rail-newchat-bar">
@@ -295,13 +309,6 @@ export function Sidebar() {
         <span className="rail-foot-name">
           {identity.user}
           <small>Hermes Agent</small>
-        </span>
-        <span
-          title="Tweaks"
-          style={{ cursor: "pointer", display: "inline-flex" }}
-          onClick={() => setTweaksOpen(true)}
-        >
-          <Icon name="settings" size={16} style={{ color: "var(--tx-3)" }} />
         </span>
       </div>
     </nav>
