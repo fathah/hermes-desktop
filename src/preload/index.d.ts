@@ -1,6 +1,6 @@
 import type { AppLocale } from "../shared/i18n/types";
 import type { Attachment } from "../shared/attachments";
-import type { UsageAggregate } from "../shared/usage";
+import type { UsageAggregate, RunLedgerEntry } from "../shared/usage";
 import type { MemoryTimeline } from "../shared/memoryTimeline";
 import type { SearchSummary } from "../shared/searchSummary";
 import type { LoadedSkin } from "../shared/skins";
@@ -327,6 +327,7 @@ interface HermesAPI {
   isRemoteMode: () => Promise<boolean>;
   isRemoteOnlyMode: () => Promise<boolean>;
   getUsageStats: (profile?: string) => Promise<UsageAggregate>;
+  getRunLedger: (profile?: string) => Promise<RunLedgerEntry[]>;
   summarizeSearch: (query: string, profile?: string) => Promise<SearchSummary>;
   listSkins: (profile?: string) => Promise<LoadedSkin[]>;
   getAutoApprove: (profile?: string) => Promise<boolean>;

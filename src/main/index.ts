@@ -230,7 +230,12 @@ import {
   listCachedSessions,
   updateSessionTitle,
 } from "./session-cache";
-import { recordUsage, getUsageStats } from "./usage-store";
+import {
+  recordUsage,
+  getUsageStats,
+  readUsageRecords,
+  sessionLedger,
+} from "./usage-store";
 import { listModels, addModel, removeModel, updateModel } from "./models";
 import { validateChatReadiness } from "./validation";
 import {
@@ -960,6 +965,20 @@ function setupIPC(): void {
   ipcMain.handle("get-usage-stats", (_event, profile?: string) =>
     getUsageStats({ profile }),
   );
+
+  // Run ledger (per-session cost rollup) — a read view over the same desktop
+  // usage JSONL, joined to session titles from the gateway's session store.
+  // Titles degrade to null when the session db isn't reachable (e.g. remote).
+  ipcMain.handle("get-run-ledger", (_event, profile?: string) => {
+    const rows = sessionLedger(readUsageRecords({ profile }));
+    const titles = new Map<string, string | null>();
+    try {
+      for (const s of listSessions(1000, 0)) titles.set(s.id, s.title);
+    } catch {
+      // no session db (remote/ssh, or not yet created) — leave titles empty
+    }
+    return rows.map((r) => ({ ...r, title: titles.get(r.sessionId) ?? null }));
+  });
 
   // Session-search summarization (idea A5): synthesize a cited summary of the
   // FTS hits for a query via one non-streaming gateway completion.

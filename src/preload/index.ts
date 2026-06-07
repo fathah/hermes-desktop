@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { AppLocale } from "../shared/i18n/types";
 import type { Attachment } from "../shared/attachments";
-import type { UsageAggregate } from "../shared/usage";
+import type { UsageAggregate, RunLedgerEntry } from "../shared/usage";
 import type { MemoryTimeline } from "../shared/memoryTimeline";
 import type { SearchSummary } from "../shared/searchSummary";
 import type { LoadedSkin } from "../shared/skins";
@@ -231,6 +231,10 @@ const hermesAPI = {
   /** Usage / cost analytics for a profile (idea A2). */
   getUsageStats: (profile?: string): Promise<UsageAggregate> =>
     ipcRenderer.invoke("get-usage-stats", profile),
+
+  /** Per-session run ledger (cost rollup joined to session titles). */
+  getRunLedger: (profile?: string): Promise<RunLedgerEntry[]> =>
+    ipcRenderer.invoke("get-run-ledger", profile),
 
   /** Summarize session-search results for a query, with citations (idea A5). */
   summarizeSearch: (query: string, profile?: string): Promise<SearchSummary> =>

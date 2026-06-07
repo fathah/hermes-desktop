@@ -1,10 +1,26 @@
 import { useEffect, useState } from "react";
 import {
   type UsageAggregate,
+  type RunLedgerEntry,
   toDaySeries,
   topModels,
   formatCost,
 } from "../../../../shared/usage";
+
+const RUN_CAP = 25;
+
+function runLabel(entry: RunLedgerEntry): string {
+  if (entry.title && entry.title.trim()) return entry.title.trim();
+  return `Session ${entry.sessionId.slice(0, 8)}`;
+}
+
+function runDate(ts: number): string {
+  const d = new Date(ts);
+  return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  })}`;
+}
 
 /**
  * Usage / cost analytics dashboard (idea A2). Read-only view over the
@@ -20,19 +36,28 @@ function Insights({
   visible?: boolean;
 }): React.JSX.Element {
   const [stats, setStats] = useState<UsageAggregate | null>(null);
+  const [ledger, setLedger] = useState<RunLedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!visible) return;
     let cancelled = false;
     setLoading(true);
-    window.hermesAPI
-      .getUsageStats(profile)
-      .then((s) => {
-        if (!cancelled) setStats(s);
+    Promise.all([
+      window.hermesAPI.getUsageStats(profile),
+      window.hermesAPI.getRunLedger(profile),
+    ])
+      .then(([s, runs]) => {
+        if (!cancelled) {
+          setStats(s);
+          setLedger(runs);
+        }
       })
       .catch(() => {
-        if (!cancelled) setStats(null);
+        if (!cancelled) {
+          setStats(null);
+          setLedger([]);
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -136,6 +161,43 @@ function Insights({
               </tbody>
             </table>
           </section>
+
+          {ledger.length > 0 && (
+            <section className="insights-section">
+              <h2>Recent runs</h2>
+              <table className="insights-table">
+                <thead>
+                  <tr>
+                    <th>Run</th>
+                    <th>Last active</th>
+                    <th>Model</th>
+                    <th>Turns</th>
+                    <th>Tokens</th>
+                    <th>Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ledger.slice(0, RUN_CAP).map((run) => (
+                    <tr key={run.sessionId}>
+                      <td>{runLabel(run)}</td>
+                      <td>{runDate(run.lastTs)}</td>
+                      <td className="insights-model-name">
+                        {run.models.join(", ") || "—"}
+                      </td>
+                      <td>{run.turns.toLocaleString()}</td>
+                      <td>{run.totalTokens.toLocaleString()}</td>
+                      <td>{formatCost(run.cost)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {ledger.length > RUN_CAP && (
+                <p className="insights-subtitle">
+                  Showing the {RUN_CAP} most recent of {ledger.length} runs.
+                </p>
+              )}
+            </section>
+          )}
         </div>
       )}
     </div>

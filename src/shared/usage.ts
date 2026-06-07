@@ -149,6 +149,56 @@ export function aggregateUsage(records: UsageRecord[]): UsageAggregate {
   return { totals, byModel, byDay, bySession, cacheHitRatio };
 }
 
+// ─── run ledger (per-session rollup, "what did that run cost") ──
+
+/** One run = one session's worth of turns, rolled up. `models` is first-seen order. */
+export interface RunLedgerRow {
+  sessionId: string;
+  turns: number;
+  totalTokens: number;
+  cost: number;
+  models: string[];
+  firstTs: number;
+  lastTs: number;
+}
+
+/** A ledger row joined to its session title (null when the title is unknown). */
+export type RunLedgerEntry = RunLedgerRow & { title: string | null };
+
+/**
+ * Group usage records by session into per-run rows, most recent activity first.
+ * Records without a sessionId are skipped (they can't be attributed to a run).
+ * Pure — the title join happens in main against the session store.
+ */
+export function sessionLedger(records: UsageRecord[]): RunLedgerRow[] {
+  const map = new Map<string, RunLedgerRow>();
+  for (const rec of records) {
+    if (!rec.sessionId) continue;
+    let row = map.get(rec.sessionId);
+    if (!row) {
+      row = {
+        sessionId: rec.sessionId,
+        turns: 0,
+        totalTokens: 0,
+        cost: 0,
+        models: [],
+        firstTs: rec.ts,
+        lastTs: rec.ts,
+      };
+      map.set(rec.sessionId, row);
+    }
+    row.turns += 1;
+    row.totalTokens += rec.totalTokens;
+    row.cost += rec.cost ?? 0;
+    if (rec.model && !row.models.includes(rec.model)) {
+      row.models.push(rec.model);
+    }
+    if (rec.ts < row.firstTs) row.firstTs = rec.ts;
+    if (rec.ts > row.lastTs) row.lastTs = rec.ts;
+  }
+  return [...map.values()].sort((a, b) => b.lastTs - a.lastTs);
+}
+
 // ─── presentation helpers (used by the Insights screen, A2) ──
 
 /** byDay map → ascending-by-date array, convenient for charting. */
