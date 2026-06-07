@@ -14,6 +14,16 @@ export interface CronQualityOpts {
   firstRunManual?: boolean;
 }
 
+/**
+ * Parse the new job id from `hermes cron create` stdout, which prints
+ * `Created job: <id>` on success. Returns null if not found. Pure — lets the
+ * first-run-manual pause target the job directly instead of diffing the job set.
+ */
+export function parseCreatedJobId(output: string): string | null {
+  const match = /Created job:\s*(\S+)/i.exec(output || "");
+  return match ? match[1] : null;
+}
+
 /** Human-readable freshness window ("6 hour(s)", "1 day(s)", "1 week(s)"). */
 export function freshnessLabel(minutes: number): string {
   if (minutes % 10080 === 0) return `${minutes / 10080} week(s)`;

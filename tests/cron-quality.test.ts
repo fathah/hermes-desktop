@@ -1,5 +1,22 @@
 import { describe, it, expect } from "vitest";
-import { augmentPrompt, freshnessLabel } from "../src/main/cron-quality";
+import {
+  augmentPrompt,
+  freshnessLabel,
+  parseCreatedJobId,
+} from "../src/main/cron-quality";
+
+describe("parseCreatedJobId", () => {
+  it("extracts the id from create's stdout", () => {
+    expect(parseCreatedJobId("Created job: abc123\n  Name: x")).toBe("abc123");
+  });
+  it("is case-insensitive and tolerates color/whitespace", () => {
+    expect(parseCreatedJobId("created job:   job_99  ")).toBe("job_99");
+  });
+  it("returns null when there's no id line", () => {
+    expect(parseCreatedJobId("Failed to create job: boom")).toBeNull();
+    expect(parseCreatedJobId("")).toBeNull();
+  });
+});
 
 describe("freshnessLabel", () => {
   it("renders the coarsest natural unit", () => {

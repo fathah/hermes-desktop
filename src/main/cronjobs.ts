@@ -12,7 +12,11 @@ import {
 } from "./hermes";
 import { getConnectionConfig } from "./config";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
-import { type CronQualityOpts, augmentPrompt } from "./cron-quality";
+import {
+  type CronQualityOpts,
+  augmentPrompt,
+  parseCreatedJobId,
+} from "./cron-quality";
 
 export interface CronJob {
   id: string;
@@ -268,6 +272,9 @@ export async function createCronJob(
   }
 
   let created: { success: boolean; error?: string };
+  // The id of the new job, parsed directly from create's response when possible
+  // (robust); the job-set diff is only a fallback.
+  let createdId: string | null = null;
   if (isRemoteMode()) {
     try {
       const res = await remoteFetch("/api/jobs", {
@@ -280,9 +287,21 @@ export async function createCronJob(
           deliver: deliver || "local",
         }),
       });
-      created = res.ok
-        ? { success: true }
-        : { success: false, error: await remoteJsonError(res) };
+      if (res.ok) {
+        created = { success: true };
+        try {
+          const body = (await res.json()) as {
+            job_id?: string;
+            id?: string;
+            job?: { id?: string };
+          };
+          createdId = body.job_id || body.id || body.job?.id || null;
+        } catch {
+          // no/!json body — fall back to the diff below
+        }
+      } else {
+        created = { success: false, error: await remoteJsonError(res) };
+      }
     } catch (err) {
       created = { success: false, error: (err as Error).message };
     }
@@ -293,15 +312,17 @@ export async function createCronJob(
     if (deliver) args.push("--deliver", deliver);
     const result = await runCronCommand(args, profile);
     created = { success: result.success, error: result.error };
+    if (result.success) createdId = parseCreatedJobId(result.output);
   }
 
   if (!created.success) return created;
 
   // First-run-manual: pause the new job so the operator reviews run #1 before
-  // trusting it. Best-effort — if the id can't be resolved, leave it active.
+  // trusting it. Prefer the id parsed from create; fall back to the job-set
+  // diff. Best-effort — if the id can't be resolved at all, leave it active.
   let paused = false;
   if (opts?.firstRunManual) {
-    const newId = await findNewJobId(beforeIds, name, profile);
+    const newId = createdId ?? (await findNewJobId(beforeIds, name, profile));
     if (newId) {
       const res = await pauseCronJob(newId, profile);
       paused = res.success;
