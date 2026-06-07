@@ -423,7 +423,14 @@ function Shell({
       <div ref={ref} className="twk-panel">
         <div className="twk-hd" onMouseDown={onDragStart}>
           <b>Tweaks</b>
-          <button className="twk-x" aria-label="Close tweaks" onClick={onClose}>
+          <button
+            className="twk-x"
+            aria-label="Close tweaks"
+            // Stop the header's drag handler from claiming this press — otherwise
+            // a pixel of jitter moves the panel and the click misses the button.
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={onClose}
+          >
             ✕
           </button>
         </div>
