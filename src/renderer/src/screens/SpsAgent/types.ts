@@ -31,7 +31,11 @@ export type BlockType =
   | "excalidraw"
   // Agent-action button: `text` is the label, `agentPrompt` the prompt it runs
   // against the co-author on click. Always serialises Tier-2 (custom field).
-  | "button";
+  | "button"
+  // Side-by-side layout: holds 2–3 columns of rich text in `columns` (HTML per
+  // column). A "special" block — NOT in the serializer's cleanTypes, so it
+  // round-trips losslessly via the generic Tier-2 meta comment.
+  | "columns";
 
 export type DbView = "board" | "table" | "list" | "gallery" | "calendar";
 export type StatusKey = "todo" | "doing" | "review" | "done";
@@ -107,6 +111,8 @@ export interface Block {
   // button: the prompt this agent-action button sends to the co-author on click
   // (`text` holds the visible label, `emoji` the icon).
   agentPrompt?: string;
+  // columns: rich-text HTML for each side-by-side column (2–3 entries).
+  columns?: string[];
   // AI proposals
   diff?: BlockDiff;
   proposalId?: string;

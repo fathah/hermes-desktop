@@ -276,6 +276,11 @@ export function Editor() {
       setType(id, { type: "bookmark", html: "", text: "", bm: null });
       return;
     }
+    if (item.type === "columns") {
+      // Seed two empty columns; the block's own control adds a third (max 3).
+      setType(id, { type: "columns", html: "", text: "", columns: ["", ""] });
+      return;
+    }
     if (item.type === "button") {
       // Seed an editable label + empty prompt; the block opens its editor when
       // run with no prompt set. Templates ship a preset agentPrompt instead.

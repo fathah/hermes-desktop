@@ -10,6 +10,7 @@ import { VideoBlock } from "./VideoBlock";
 import { FileBlock } from "./FileBlock";
 import { BookmarkBlock } from "./BookmarkBlock";
 import { ButtonBlock } from "./ButtonBlock";
+import { ColumnsBlock } from "./ColumnsBlock";
 import { PageLinkBlock } from "./PageLinkBlock";
 import { MermaidBlock } from "./MermaidBlock";
 import { ExcalidrawBlock } from "./ExcalidrawBlock";
@@ -130,6 +131,8 @@ export function BlockInner(props: BlockInnerProps) {
       return <BookmarkBlock block={block} setType={props.setType} />;
     case "button":
       return <ButtonBlock block={block} setType={props.setType} />;
+    case "columns":
+      return <ColumnsBlock block={block} setType={props.setType} />;
     case "page":
       return (
         <PageLinkBlock

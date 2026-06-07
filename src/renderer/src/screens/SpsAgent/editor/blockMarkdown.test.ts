@@ -105,6 +105,10 @@ describe("tier-2 lossless fallback (metadata comment)", () => {
     expectRoundTrip([blk("p", "warn", { color: "red", bg: "yellow" })]));
   it("toggle with collapsed state", () =>
     expectRoundTrip([blk("toggle", "Details", { collapsed: true })]));
+  it("columns layout block preserves its column array", () =>
+    expectRoundTrip([
+      blk("columns", "", { columns: ["<strong>Pros</strong>", "Cons"] }),
+    ]));
   it("coloured sub-page link falls back to a comment", () =>
     expectRoundTrip([blk("page", "", { pageId: "pg-9", color: "red" })]));
   it("bookmark", () =>

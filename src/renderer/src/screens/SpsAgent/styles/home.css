@@ -820,6 +820,68 @@
   padding: 0;
 }
 
+/* columns layout block — side-by-side rich-text regions */
+.sps-scope .b-columns {
+  display: grid;
+  gap: 14px;
+  align-items: start;
+  margin: 6px 0;
+}
+.sps-scope .b-col {
+  position: relative;
+  min-width: 0;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--surface);
+}
+.sps-scope .b-col-body {
+  min-height: 32px;
+  padding: 0;
+}
+.sps-scope .b-col-del {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  color: var(--tx-4);
+  opacity: 0;
+  transition:
+    opacity 0.12s ease,
+    background 0.12s ease,
+    color 0.12s ease;
+}
+.sps-scope .b-col:hover .b-col-del {
+  opacity: 1;
+}
+.sps-scope .b-col-del:hover {
+  background: var(--row-hover);
+  color: var(--tx-1);
+}
+.sps-scope .b-col-add {
+  align-self: stretch;
+  min-height: 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--hair);
+  border-radius: 8px;
+  color: var(--tx-4);
+  background: transparent;
+  transition:
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+.sps-scope .b-col-add:hover {
+  border-color: var(--accent);
+  color: var(--tx-1);
+}
+
 /* agent-action button block */
 .sps-scope .b-button-wrap {
   margin: 8px 0;

@@ -63,6 +63,12 @@ export const SLASH_ITEMS: SlashItem[] = [
     label: "Callout",
     desc: "Highlighted note",
   },
+  {
+    type: "columns",
+    icon: "table",
+    label: "Columns",
+    desc: "Side-by-side layout",
+  },
   { type: "code", icon: "code", label: "Code", desc: "Monospaced block" },
   {
     type: "divider",
