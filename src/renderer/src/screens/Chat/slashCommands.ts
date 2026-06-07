@@ -44,7 +44,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   },
   {
     name: "/compact",
-    description: "Compact and summarize the conversation",
+    description: "Summarize this chat into a handoff brief for a fresh session",
     category: "agent",
   },
   { name: "/undo", description: "Undo the last action", category: "agent" },

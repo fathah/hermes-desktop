@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import type { ChatInputHandle } from "../ChatInput";
 import type { Attachment, ChatMessage, ChatBubbleMessage } from "../types";
 import { getGroundInWorkspace } from "../../../lib/grounding";
+import { buildHandoffPrompt } from "../handoff";
 
 function hasContent(msg: ChatMessage): msg is ChatBubbleMessage {
   return (
@@ -113,6 +114,18 @@ export function useChatActions({
       const hasPayload = text.length > 0 || (attachments?.length ?? 0) > 0;
       if (!hasPayload) return;
       if (!skipLoadingCheck && isLoadingRef.current) return;
+
+      // /compact [focus] — rewrite into an explicit handoff-brief instruction
+      // (doc ch.6.2/15.2) and send it to the agent with the full conversation
+      // in context, so the brief is produced regardless of backend support.
+      if (text.trim().toLowerCase().split(/\s+/)[0] === "/compact") {
+        const focus = text.trim().slice("/compact".length).trim();
+        setIsLoading(true);
+        pushUser(text);
+        onSessionStarted?.();
+        await sendToAgent(buildHandoffPrompt(focus));
+        return;
+      }
 
       if (text && localCommands.isLocal(text)) {
         const cmd = text.split(/\s+/)[0].toLowerCase();
