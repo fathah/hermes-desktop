@@ -64,9 +64,10 @@
 /* ---------- Dark palette variants (data-skin) ----------------------------------
    Default dark mode is "black" (near-black bg + off-white text, tuned off-pure to
    avoid white-on-black halation while keeping subtle elevation). "warm" falls back
-   to the gold-tinted [data-theme="dark"] palette above. "terminal" shares the black
-   palette but paints the DOCUMENT text terminal-green — chrome (sidebar/menus) stays
-   neutral so the app stays scannable. Accent is unchanged across all three. */
+   to the gold-tinted [data-theme="dark"] palette above. "terminal" replicates macOS
+   Terminal.app's "Homebrew" profile — pure-black bg + phosphor-green (#28FE14)
+   monospace DOCUMENT text; chrome (sidebar/menus) stays neutral so the app stays
+   scannable. Accent is unchanged across all three. */
 .sps-scope[data-theme="dark"][data-skin="black"],
 .sps-scope[data-theme="dark"][data-skin="terminal"] {
   --app-bg: #0a0a0a;
@@ -84,14 +85,20 @@
   --row-sel: #222222;
   --block-hover: rgba(255, 255, 255, 0.05);
 }
-.sps-scope[data-theme="dark"][data-skin="terminal"] .doc .block {
-  color: #3fb950;
+/* Homebrew profile: pure black, phosphor-green monospace document text. */
+.sps-scope[data-theme="dark"][data-skin="terminal"] {
+  --app-bg: #000000;
+  --canvas: #000000;
+  --surface: #0d0d0d;
+  --sunk: #000000;
+  --row-hover: #0d0d0d;
+  --row-sel: #12300c; /* Homebrew's dark-green selection */
+  --block-hover: rgba(40, 254, 20, 0.06);
 }
-.sps-scope[data-theme="dark"][data-skin="terminal"] .doc-title,
-.sps-scope[data-theme="dark"][data-skin="terminal"] .doc .b-h1,
-.sps-scope[data-theme="dark"][data-skin="terminal"] .doc .b-h2,
-.sps-scope[data-theme="dark"][data-skin="terminal"] .doc .b-h3 {
-  color: #4ade80;
+.sps-scope[data-theme="dark"][data-skin="terminal"] .doc .block,
+.sps-scope[data-theme="dark"][data-skin="terminal"] .doc-title {
+  color: #28fe14; /* macOS Terminal Homebrew foreground */
+  font-family: var(--font-mono);
 }
 
 /* ---------- Accent (driven by Tweaks) ---------- */
