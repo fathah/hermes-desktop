@@ -88,7 +88,7 @@ export function YouSurface({
       window.hermesAPI.readFocus(),
       window.hermesAPI.getDailyContextHookStatus(profile),
     ]);
-    const m = mem as unknown as { user: MemoryFile; memory: MemoryFile };
+    const m = mem;
     const parsed = parseUserMd(m.user.content);
     setProse(parsed.prose);
     setRules(parsed.rules);

@@ -36,7 +36,7 @@ function Personalization({
       window.hermesAPI.readFocus(),
       window.hermesAPI.getDailyContextHookStatus(profile),
     ]);
-    const m = mem as unknown as { user: MemoryFile; memory: MemoryFile };
+    const m = mem;
     setUser({ content: m.user.content, charLimit: m.user.charLimit ?? 2200 });
     setMemory({
       content: m.memory.content,

@@ -3,6 +3,7 @@ import type { AppLocale } from "../shared/i18n/types";
 import type { Attachment } from "../shared/attachments";
 import type { UsageAggregate, RunLedgerEntry } from "../shared/usage";
 import type { MemoryTimeline } from "../shared/memoryTimeline";
+import type { MemoryInfo } from "../shared/memory";
 import type { SearchSummary } from "../shared/searchSummary";
 import type { LoadedSkin } from "../shared/skins";
 import type { SkillEntry } from "../shared/skills";
@@ -672,13 +673,8 @@ const hermesAPI = {
     ipcRenderer.invoke("set-active-profile", name),
 
   // Memory
-  readMemory: (
-    profile?: string,
-  ): Promise<{
-    memory: { content: string; exists: boolean; lastModified: number | null };
-    user: { content: string; exists: boolean; lastModified: number | null };
-    stats: { totalSessions: number; totalMessages: number };
-  }> => ipcRenderer.invoke("read-memory", profile),
+  readMemory: (profile?: string): Promise<MemoryInfo> =>
+    ipcRenderer.invoke("read-memory", profile),
 
   /** Memory entries enriched with originating-session provenance (idea A4). */
   getMemoryTimeline: (profile?: string): Promise<MemoryTimeline> =>

@@ -2,6 +2,7 @@ import type { AppLocale } from "../shared/i18n/types";
 import type { Attachment } from "../shared/attachments";
 import type { UsageAggregate, RunLedgerEntry } from "../shared/usage";
 import type { MemoryTimeline } from "../shared/memoryTimeline";
+import type { MemoryInfo } from "../shared/memory";
 import type { SearchSummary } from "../shared/searchSummary";
 import type { LoadedSkin } from "../shared/skins";
 import type {
@@ -446,11 +447,7 @@ interface HermesAPI {
   setActiveProfile: (name: string) => Promise<boolean>;
 
   // Memory
-  readMemory: (profile?: string) => Promise<{
-    memory: { content: string; exists: boolean; lastModified: number | null };
-    user: { content: string; exists: boolean; lastModified: number | null };
-    stats: { totalSessions: number; totalMessages: number };
-  }>;
+  readMemory: (profile?: string) => Promise<MemoryInfo>;
   getMemoryTimeline: (profile?: string) => Promise<MemoryTimeline>;
 
   addMemoryEntry: (

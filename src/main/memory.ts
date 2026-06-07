@@ -2,36 +2,14 @@ import { existsSync, readFileSync, statSync } from "fs";
 import { join } from "path";
 import Database from "better-sqlite3";
 import { profileHome, safeWriteFile } from "./utils";
+import type { MemoryEntry, MemoryInfo } from "../shared/memory";
+export type { MemoryEntry, MemoryInfo };
 
 const ENTRY_DELIMITER = "\n§\n";
 const MEMORY_CHAR_LIMIT = 2200;
 // Matches Hermes' own cap (config.yaml `memory_char_limit: 2200`, AGENTS.md).
 // Was 1375, which silently blocked saving a normal-length USER.md.
 const USER_CHAR_LIMIT = 2200;
-
-export interface MemoryEntry {
-  index: number;
-  content: string;
-}
-
-export interface MemoryInfo {
-  memory: {
-    content: string;
-    exists: boolean;
-    lastModified: number | null;
-    entries: MemoryEntry[];
-    charCount: number;
-    charLimit: number;
-  };
-  user: {
-    content: string;
-    exists: boolean;
-    lastModified: number | null;
-    charCount: number;
-    charLimit: number;
-  };
-  stats: { totalSessions: number; totalMessages: number };
-}
 
 function memoryPath(profile?: string): string {
   return join(profileHome(profile), "memories", "MEMORY.md");
