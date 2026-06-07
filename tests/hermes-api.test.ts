@@ -23,7 +23,7 @@ const { capturedRequests, makeMockRequest } = vi.hoisted(() => {
         capturedRequests.push({ url, options, body });
       },
       end: () => {},
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
       on: (_event: string, _cb: () => void) => {},
       destroy: () => {},
     };

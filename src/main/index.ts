@@ -2998,7 +2998,7 @@ function setupUpdater(): void {
       _event,
       vaultDir: string,
       pageId: string,
-      metadata: any,
+      metadata: Record<string, unknown>,
       body: string,
     ) => {
       return pythonMemorySave(vaultDir, pageId, metadata, body);

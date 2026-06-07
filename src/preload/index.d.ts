@@ -1242,7 +1242,7 @@ interface HermesAPI {
   pythonMemorySave: (
     vaultDir: string,
     pageId: string,
-    metadata: any,
+    metadata: Record<string, unknown>,
     body: string,
   ) => Promise<void>;
   pythonMemorySearch: (

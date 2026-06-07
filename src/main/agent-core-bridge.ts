@@ -8,8 +8,11 @@ const CLI_PATH = join(process.cwd(), ".agents", "lib", "agent_core_cli.py");
 /**
  * Helper to run the Python agent core CLI and parse its JSON output.
  */
-function runPythonBridge(subcommand: string, args: string[]): Promise<any> {
-  return new Promise((resolve, reject) => {
+function runPythonBridge<T = unknown>(
+  subcommand: string,
+  args: string[],
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
     // Resolve the right Python executable path
     let pythonPath = "python3";
     if (typeof HERMES_PYTHON === "string" && existsSync(HERMES_PYTHON)) {
@@ -45,11 +48,15 @@ function runPythonBridge(subcommand: string, args: string[]): Promise<any> {
               new Error(`Bridge CLI returned error: ${parsed.error}`),
             );
           }
-          resolve(parsed);
-        } catch (parseError: any) {
+          resolve(parsed as T);
+        } catch (parseError) {
+          const detail =
+            parseError instanceof Error
+              ? parseError.message
+              : String(parseError);
           reject(
             new Error(
-              `Failed to parse Bridge CLI output: ${parseError.message}\nRaw stdout: ${stdout}`,
+              `Failed to parse Bridge CLI output: ${detail}\nRaw stdout: ${stdout}`,
             ),
           );
         }
@@ -69,7 +76,10 @@ export async function pythonCompress(
   if (tool) {
     args.push("--tool", tool);
   }
-  const result = await runPythonBridge("compress", args);
+  const result = await runPythonBridge<{ compressed: string }>(
+    "compress",
+    args,
+  );
   return result.compressed;
 }
 
@@ -80,12 +90,10 @@ export async function pythonIsPathAllowed(
   targetPath: string,
   actionDir: string,
 ): Promise<boolean> {
-  const result = await runPythonBridge("is-path-allowed", [
-    "--path",
-    targetPath,
-    "--action-dir",
-    actionDir,
-  ]);
+  const result = await runPythonBridge<{ allowed?: boolean }>(
+    "is-path-allowed",
+    ["--path", targetPath, "--action-dir", actionDir],
+  );
   return !!result.allowed;
 }
 
@@ -109,9 +117,12 @@ export async function pythonEvaluateExecution(
   if (paths && paths.length > 0) {
     args.push("--paths", JSON.stringify(paths));
   }
-  const result = await runPythonBridge("evaluate-execution", args);
+  const result = await runPythonBridge<{
+    decision: "ALLOW" | "PROMPT" | "BLOCK";
+    reason: string;
+  }>("evaluate-execution", args);
   return {
-    decision: result.decision as "ALLOW" | "PROMPT" | "BLOCK",
+    decision: result.decision,
     reason: result.reason,
   };
 }
@@ -122,7 +133,7 @@ export async function pythonEvaluateExecution(
 export async function pythonMemorySave(
   vaultDir: string,
   pageId: string,
-  metadata: any,
+  metadata: Record<string, unknown>,
   body: string,
 ): Promise<void> {
   await runPythonBridge("memory-save", [
@@ -144,12 +155,9 @@ export async function pythonMemorySearch(
   vaultDir: string,
   query: string,
 ): Promise<Array<{ id: string; score: number }>> {
-  const result = await runPythonBridge("memory-search", [
-    "--vault",
-    vaultDir,
-    "--query",
-    query,
-  ]);
+  const result = await runPythonBridge<{
+    results?: Array<{ id: string; score: number }>;
+  }>("memory-search", ["--vault", vaultDir, "--query", query]);
   return result.results || [];
 }
 
@@ -160,7 +168,10 @@ export async function pythonMemoryGraph(vaultDir: string): Promise<{
   outgoing: Record<string, string[]>;
   backlinks: Record<string, string[]>;
 }> {
-  const result = await runPythonBridge("memory-graph", ["--vault", vaultDir]);
+  const result = await runPythonBridge<{
+    outgoing?: Record<string, string[]>;
+    backlinks?: Record<string, string[]>;
+  }>("memory-graph", ["--vault", vaultDir]);
   return {
     outgoing: result.outgoing || {},
     backlinks: result.backlinks || {},

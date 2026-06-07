@@ -1698,7 +1698,7 @@ const hermesAPI = {
   pythonMemorySave: (
     vaultDir: string,
     pageId: string,
-    metadata: any,
+    metadata: Record<string, unknown>,
     body: string,
   ): Promise<void> =>
     ipcRenderer.invoke("python-memory-save", vaultDir, pageId, metadata, body),

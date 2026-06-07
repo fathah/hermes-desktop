@@ -768,16 +768,14 @@ export async function buildSelfAwarenessSystemMessage(
   profile?: string,
 ): Promise<{ role: "system"; content: string } | null> {
   try {
-    const { getToolsets } = require("./tools");
-    const { listInstalledSkills } = require("./skills");
-    const { getSharedDb } = require("./db");
+    const { getToolsets } = await import("./tools");
+    const { listInstalledSkills } = await import("./skills");
+    const { getSharedDb } = await import("./db");
     const activeProfile = resolveProfile(profile) || "default";
     const enabledTools = getToolsets(profile)
-      .filter((t: any) => t.enabled)
-      .map((t: any) => t.key);
-    const installedSkills = listInstalledSkills(profile).map(
-      (s: any) => s.name,
-    );
+      .filter((t) => t.enabled)
+      .map((t) => t.key);
+    const installedSkills = listInstalledSkills(profile).map((s) => s.name);
     const version = (await getHermesVersion()) || "Unknown Version";
 
     let registryCount = 0;
