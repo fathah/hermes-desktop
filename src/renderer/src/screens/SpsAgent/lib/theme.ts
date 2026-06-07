@@ -4,6 +4,10 @@
 
 export type Tweaks = {
   dark: boolean;
+  // Dark-mode palette variant: "black" (near-black + off-white, the default),
+  // "warm" (the original gold-tinted dark), "terminal" (green doc text on black).
+  // Only takes visual effect when dark is true.
+  darkSkin: "black" | "warm" | "terminal";
   accent: string;
   sidebar: "full" | "icons" | "hidden";
   width: "narrow" | "comfortable" | "wide" | "full";
@@ -13,6 +17,7 @@ export type Tweaks = {
 
 export const TWEAK_DEFAULTS: Tweaks = {
   dark: true, // dark is the default app mode
+  darkSkin: "black", // near-black + off-white is the default dark palette
   accent: "#C79400", // sukhi gold-deep
   sidebar: "full",
   width: "comfortable",
@@ -80,6 +85,7 @@ export function setSkinVars(vars: Record<string, string>): void {
 export function applyTweaks(t: Tweaks): void {
   const r = scopeEl ?? document.documentElement;
   r.setAttribute("data-theme", t.dark ? "dark" : "light");
+  r.setAttribute("data-skin", t.darkSkin);
   r.setAttribute(
     "data-density",
     t.density === "compact" ? "compact" : "comfortable",
@@ -96,6 +102,7 @@ export function applyTweaks(t: Tweaks): void {
   if (scopeEl && scopeEl !== document.documentElement) {
     const root = document.documentElement;
     root.setAttribute("data-theme", t.dark ? "dark" : "light");
+    root.setAttribute("data-skin", t.darkSkin);
     root.style.setProperty("--accent", t.accent);
   }
 }

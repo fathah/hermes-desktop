@@ -447,6 +447,14 @@ export function TweaksPanel() {
         value={t.dark}
         onChange={(v) => setTweak("dark", v)}
       />
+      {t.dark && (
+        <Segmented<Tweaks["darkSkin"]>
+          label="Dark palette"
+          value={t.darkSkin}
+          options={["black", "warm", "terminal"]}
+          onChange={(v) => setTweak("darkSkin", v)}
+        />
+      )}
       <ColorChips
         label="Accent"
         value={t.accent}
