@@ -15,11 +15,10 @@ import {
   type SaveResult,
 } from "../../Personalization/parts";
 import { RulesManager } from "./RulesManager";
-import {
-  parseUserMd,
-  serializeUserMd,
-  type Rule,
-} from "../../../../../shared/userMd";
+import { parseUserMd, serializeUserMd, type Rule } from "../../../../../shared/userMd";
+import { useStore } from "../store";
+import { pageFromMarkdown } from "../editor/pageMarkdown";
+import { blk } from "../lib/ids";
 
 interface YouSurfaceProps {
   profile?: string;
@@ -41,6 +40,43 @@ export function YouSurface({
   const [hookBusy, setHookBusy] = useState(false);
   const [hookError, setHookError] = useState("");
   const [rulesError, setRulesError] = useState("");
+  const [auditing, setAuditing] = useState(false);
+  const [auditError, setAuditError] = useState("");
+
+  const selectPage = useStore((s) => s.selectPage);
+  const makePage = useStore((s) => s.makePage);
+  const setSurface = useStore((s) => s.setSurface);
+
+  async function handleRunAudit() {
+    setAuditing(true);
+    setAuditError("");
+    try {
+      const res = await window.hermesAPI.runTelosAudit(profile);
+      if (!res.success) {
+        setAuditError(res.error || "Alignment audit failed.");
+      } else if (res.markdown && res.title) {
+        const { blocks } = pageFromMarkdown(res.markdown);
+        const docBlocks = blocks.length ? blocks : [blk("p", "")];
+        const pageId = makePage(
+          {
+            icon: "🔍",
+            title: res.title,
+            ingestedAt: Date.now(),
+          },
+          docBlocks,
+          null,
+        );
+        selectPage(pageId);
+        setSurface("doc");
+      } else {
+        setAuditError("Audit failed to generate content.");
+      }
+    } catch (err) {
+      setAuditError(err instanceof Error ? err.message : "Audit failed.");
+    } finally {
+      setAuditing(false);
+    }
+  }
 
   const load = useCallback(async () => {
     const [mem, foc, hk] = await Promise.all([
@@ -193,6 +229,28 @@ export function YouSurface({
           <div className="settings-field-hint" style={{ marginTop: 4 }}>
             Takes effect on the next gateway restart (relaunch the app).
           </div>
+        </div>
+      </div>
+
+      <div className="settings-section">
+        <div className="settings-section-title">Telos Alignment Auditor</div>
+        <div className="settings-field">
+          <p className="settings-field-hint" style={{ marginBottom: 12 }}>
+            Compare your recent vault file modifications against your core objectives in <strong>TELOS.md</strong> to audit alignment and generate a roadmap.
+          </p>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={handleRunAudit}
+            disabled={auditing}
+            style={{ minWidth: 140 }}
+          >
+            {auditing ? "Auditing..." : "Run Alignment Audit"}
+          </button>
+          {auditError && (
+            <div className="memory-error" style={{ marginTop: 8 }}>
+              {auditError}
+            </div>
+          )}
         </div>
       </div>
     </div>

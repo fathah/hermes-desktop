@@ -1303,6 +1303,23 @@ interface HermesAPI {
     reason?: "missing" | "unreadable";
   }>;
   spsReadFileBytes: (filePath: string) => Promise<Uint8Array>;
+  runTelosAudit: (
+    profile?: string,
+  ) => Promise<{
+    success: boolean;
+    title?: string;
+    markdown?: string;
+    error?: string;
+  }>;
+  runPipingPattern: (
+    text: string,
+    pattern: string,
+    profile?: string,
+  ) => Promise<{
+    success: boolean;
+    result?: string;
+    error?: string;
+  }>;
 }
 
 declare global {

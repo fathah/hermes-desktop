@@ -8,6 +8,8 @@ import type { IconName } from "../components/iconPaths";
 import { useStore } from "../store";
 import type { WidgetKind } from "../store/storeTypes";
 import { OPERATOR_GUIDE } from "../../../lib/operatorGuide";
+import { pageFromMarkdown } from "../editor/pageMarkdown";
+import { blk } from "../lib/ids";
 
 const WIDGET_META: Record<WidgetKind, { title: string; icon: IconName }> = {
   quick: { title: "Quick actions", icon: "wand" },
@@ -20,6 +22,7 @@ const WIDGET_META: Record<WidgetKind, { title: string; icon: IconName }> = {
   agent: { title: "Agent status", icon: "code" },
   guide: { title: "Operator guide", icon: "checkbox" },
   pulse: { title: "Pulse Dashboard", icon: "sparkle" },
+  piping: { title: "Piping Console", icon: "wand" },
 };
 
 export function CockpitSurface() {
@@ -167,6 +170,8 @@ function Widget({ kind }: { kind: WidgetKind }) {
       return <OperatorGuideWidget />;
     case "pulse":
       return <PulseWidget />;
+    case "piping":
+      return <PipingWidget />;
   }
 }
 
@@ -470,6 +475,7 @@ function PulseWidget() {
   const [focus, setFocus] = useState("");
   const [editingFocus, setEditingFocus] = useState(false);
   const [focusInput, setFocusInput] = useState("");
+  const [briefingLoading, setBriefingLoading] = useState(false);
   const meta = useStore((s) => s.meta);
   const docs = useStore((s) => s.docs);
   const selectPage = useStore((s) => s.selectPage);
@@ -552,20 +558,83 @@ function PulseWidget() {
     }
   }
 
+  const playVoiceBriefing = async () => {
+    setBriefingLoading(true);
+    try {
+      const focusText = focus || "";
+      const missionText = telosData.mission || "";
+      const goalsText = telosData.goals.join(", ");
+      const context = `Daily Focus: ${focusText}\nMission: ${missionText}\nGoals: ${goalsText}`;
+      
+      const res = await window.hermesAPI.runPipingPattern(context, "voice_briefing");
+      if (!res.success || !res.result) {
+        flash(res.error || "Failed to generate briefing", { tone: "warn" });
+        return;
+      }
+      
+      const textToSpeak = res.result;
+
+      const voiceStatus = await window.hermesAPI.getVoiceStatus();
+      if (voiceStatus?.hasKey) {
+        const speakRes = await window.hermesAPI.speakText(textToSpeak);
+        if (speakRes && speakRes.audioUrl) {
+          const audio = new Audio(speakRes.audioUrl);
+          audio.play();
+          flash("Playing briefing...");
+        } else {
+          speakBrowserNative(textToSpeak);
+        }
+      } else {
+        speakBrowserNative(textToSpeak);
+      }
+    } catch (err) {
+      flash("Failed to run spoken briefing", { tone: "warn" });
+    } finally {
+      setBriefingLoading(false);
+    }
+  };
+
+  const speakBrowserNative = (text: string) => {
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      const voices = window.speechSynthesis.getVoices();
+      const defaultVoice = voices.find(v => v.lang.startsWith("en")) || voices[0];
+      if (defaultVoice) utterance.voice = defaultVoice;
+      window.speechSynthesis.speak(utterance);
+      flash("Playing briefing (browser voice fallback)...");
+    } else {
+      flash("Speech synthesis not supported in this browser.", { tone: "warn" });
+    }
+  };
+
   return (
     <div className="ck-pulse">
       {/* Daily Focus Section */}
       <div className="ck-pulse-section">
         <div className="ck-pulse-title-row">
           <span className="ck-pulse-sect-title">Daily Focus</span>
-          {!editingFocus ? (
-            <button className="ck-pulse-link-btn" onClick={() => setEditingFocus(true)}>Edit</button>
-          ) : (
-            <div style={{ display: "flex", gap: 8 }}>
-              <button className="ck-pulse-link-btn" onClick={saveFocus}>Save</button>
-              <button className="ck-pulse-link-btn cancel" onClick={() => { setFocusInput(focus); setEditingFocus(false); }}>Cancel</button>
-            </div>
-          )}
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {!editingFocus && (
+              <button
+                className="ck-pulse-link-btn"
+                onClick={playVoiceBriefing}
+                disabled={briefingLoading}
+                title="Listen to today's focus briefing"
+              >
+                <Icon name="play" size={12} style={{ marginRight: 4, verticalAlign: "middle" }} />
+                {briefingLoading ? "Generating..." : "Listen"}
+              </button>
+            )}
+            {!editingFocus ? (
+              <button className="ck-pulse-link-btn" onClick={() => setEditingFocus(true)}>Edit</button>
+            ) : (
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="ck-pulse-link-btn" onClick={saveFocus}>Save</button>
+                <button className="ck-pulse-link-btn cancel" onClick={() => { setFocusInput(focus); setEditingFocus(false); }}>Cancel</button>
+              </div>
+            )}
+          </div>
         </div>
         {!editingFocus ? (
           <p className="ck-pulse-focus-text">{focus || "No daily focus set. Click Edit to focus your day."}</p>
@@ -622,6 +691,168 @@ function PulseWidget() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function PipingWidget() {
+  const [inputText, setInputText] = useState("");
+  const [pattern, setPattern] = useState("wisdom");
+  const [outputResult, setOutputResult] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const activePage = useStore((s) => s.page);
+  const selectPage = useStore((s) => s.selectPage);
+  const makePage = useStore((s) => s.makePage);
+  const setSurface = useStore((s) => s.setSurface);
+  const setPageDoc = useStore((s) => s.setPageDoc);
+  const getPageDoc = useStore((s) => s.docs);
+  const flash = useStore((s) => s.flash);
+
+  const PATTERNS = [
+    { value: "wisdom", label: "Extract Wisdom" },
+    { value: "redteam", label: "Red Team Critique" },
+    { value: "critique", label: "General Critique" },
+    { value: "tldr", label: "TL;DR Summary" },
+    { value: "eli5", label: "ELI5 (Explain Like I'm 5)" },
+    { value: "summarize", label: "Detailed Summary" },
+    { value: "rewrite", label: "Rewrite/Polish" },
+  ];
+
+  async function handlePipe() {
+    if (!inputText.trim()) return;
+    setLoading(true);
+    setErrorMsg("");
+    setOutputResult("");
+    try {
+      const res = await window.hermesAPI.runPipingPattern(inputText, pattern);
+      if (res.success && res.result) {
+        setOutputResult(res.result);
+      } else {
+        setErrorMsg(res.error || "Piping failed.");
+      }
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Piping failed.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(outputResult);
+    flash("Copied result to clipboard!");
+  };
+
+  const handleCreatePage = () => {
+    if (!outputResult) return;
+    const { blocks } = pageFromMarkdown(outputResult);
+    const docBlocks = blocks.length ? blocks : [blk("p", "")];
+    const patLabel = PATTERNS.find((p) => p.value === pattern)?.label || "Piped Output";
+    const pageId = makePage(
+      {
+        icon: "⚡",
+        title: `${patLabel} - ${new Date().toLocaleDateString()}`,
+        ingestedAt: Date.now(),
+      },
+      docBlocks,
+      null
+    );
+    selectPage(pageId);
+    setSurface("doc");
+    flash("Created new page with piped output!");
+  };
+
+  const handleAppend = () => {
+    if (!outputResult || !activePage || activePage === "home") {
+      flash("Please open a valid document to append to.", { tone: "warn" });
+      return;
+    }
+    const currentBlocks = getPageDoc[activePage] || [];
+    const { blocks: newBlocks } = pageFromMarkdown(outputResult);
+    setPageDoc(activePage, [...currentBlocks, ...newBlocks]);
+    flash("Appended output to the active document!");
+  };
+
+  return (
+    <div className="ck-piping">
+      <div className="ck-piping-input-group">
+        <textarea
+          placeholder="Paste text to pipe here..."
+          value={inputText}
+          onChange={(e) => setInputText(e.target.value)}
+          rows={3}
+          style={{
+            width: "100%",
+            resize: "vertical",
+            padding: 8,
+            borderRadius: 4,
+            background: "var(--bg-3)",
+            border: "1px solid var(--border-color)",
+            color: "var(--tx-1)",
+            fontFamily: "inherit"
+          }}
+        />
+      </div>
+      <div className="ck-piping-controls" style={{ display: "flex", gap: 8, margin: "8px 0", alignItems: "center" }}>
+        <select
+          value={pattern}
+          onChange={(e) => setPattern(e.target.value)}
+          className="ck-select"
+          style={{
+            flexGrow: 1,
+            padding: "4px 8px",
+            borderRadius: 4,
+            background: "var(--bg-3)",
+            border: "1px solid var(--border-color)",
+            color: "var(--tx-1)"
+          }}
+        >
+          {PATTERNS.map((p) => (
+            <option key={p.value} value={p.value}>{p.label}</option>
+          ))}
+        </select>
+        <button
+          className="btn btn-primary btn-sm"
+          onClick={handlePipe}
+          disabled={loading || !inputText.trim()}
+          style={{ minWidth: 80 }}
+        >
+          {loading ? "Piping..." : "Pipe Text"}
+        </button>
+      </div>
+
+      {errorMsg && (
+        <div className="memory-error" style={{ margin: "8px 0" }}>{errorMsg}</div>
+      )}
+
+      {outputResult && (
+        <div className="ck-piping-result" style={{ marginTop: 12, borderTop: "1px solid var(--border-color)", paddingTop: 12 }}>
+          <div style={{
+            maxHeight: 180,
+            overflowY: "auto",
+            background: "var(--bg-2)",
+            padding: 10,
+            borderRadius: 4,
+            whiteSpace: "pre-wrap",
+            fontSize: "0.9em",
+            color: "var(--tx-2)"
+          }}>
+            {outputResult}
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <button className="btn btn-secondary btn-sm" onClick={handleCopy}>Copy</button>
+            <button className="btn btn-secondary btn-sm" onClick={handleCreatePage}>Create Page</button>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={handleAppend}
+              disabled={!activePage || activePage === "home"}
+            >
+              Append to Active
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1572,6 +1572,23 @@ const hermesAPI = {
   }> => ipcRenderer.invoke("sps-extract-pdf", filePath),
   spsReadFileBytes: (filePath: string): Promise<Uint8Array> =>
     ipcRenderer.invoke("sps-read-file-bytes", filePath),
+  runTelosAudit: (
+    profile?: string,
+  ): Promise<{
+    success: boolean;
+    title?: string;
+    markdown?: string;
+    error?: string;
+  }> => ipcRenderer.invoke("sps-run-telos-audit", profile),
+  runPipingPattern: (
+    text: string,
+    pattern: string,
+    profile?: string,
+  ): Promise<{
+    success: boolean;
+    result?: string;
+    error?: string;
+  }> => ipcRenderer.invoke("sps-run-piping", text, pattern, profile),
 };
 
 if (process.contextIsolated) {

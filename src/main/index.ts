@@ -29,6 +29,7 @@ import {
   type PageContext as SpsPageContext,
 } from "./sps-agent";
 import { spsGetWorkSession, spsSetWorkSession } from "./sps-work-sessions";
+import { runTelosAudit, runPipingPattern } from "./telos-auditor";
 import { listBaskets, saveBasket, deleteBasket } from "./equity-baskets";
 import {
   listAlerts,
@@ -2447,6 +2448,14 @@ function setupIPC(): void {
   ipcMain.handle("sps-load", (_event, profile?: string) => spsLoad(profile));
   ipcMain.handle("sps-save", (_event, ws: unknown, profile?: string) =>
     spsSave(ws, profile),
+  );
+  ipcMain.handle("sps-run-telos-audit", (_event, profile?: string) =>
+    runTelosAudit(profile)
+  );
+  ipcMain.handle(
+    "sps-run-piping",
+    (_event, text: string, pattern: string, profile?: string) =>
+      runPipingPattern(text, pattern, profile)
   );
 
   // Resumable /work session map (M1C) — survives reload in both storage modes.

@@ -300,7 +300,8 @@ export type WidgetKind =
   | "today"
   | "agent"
   | "guide"
-  | "pulse";
+  | "pulse"
+  | "piping";
 
 /** A placed cockpit widget: which widget, and how many columns it spans. */
 export interface CockpitWidget {
