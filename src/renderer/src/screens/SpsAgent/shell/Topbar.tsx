@@ -11,6 +11,7 @@ export function Topbar() {
   const panelOpen = useStore((s) => s.panelOpen);
   const rightTab = useStore((s) => s.rightTab);
   const openPanelTab = useStore((s) => s.openPanelTab);
+  const setPanelOpen = useStore((s) => s.setPanelOpen);
   const page = useStore((s) => s.page);
   const deletePage = useStore((s) => s.deletePage);
   const newSubPage = useStore((s) => s.newSubPage);
@@ -50,6 +51,14 @@ export function Topbar() {
         onSub={() => newSubPage(page)}
         onCover={(r) => setCoverPick({ x: r.left - 200, y: r.bottom + 6 })}
       />
+      <button
+        className={`tb-btn ${panelOpen ? "on" : ""}`}
+        onClick={() => setPanelOpen(!panelOpen)}
+        title={panelOpen ? "Hide panel (⌘J)" : "Show panel (⌘J)"}
+        aria-label="Toggle side panel"
+      >
+        <Icon name="panelRight" size={17} />
+      </button>
     </div>
   );
 }

@@ -42,7 +42,11 @@ export function App() {
   }, []);
 
   return (
-    <div className="app" data-rail={sidebar}>
+    <div
+      className="app"
+      data-rail={sidebar}
+      data-panel={panelOpen && surface === "doc" ? "open" : "closed"}
+    >
       <Sidebar />
 
       <div style={{ display: "flex", minWidth: 0 }}>

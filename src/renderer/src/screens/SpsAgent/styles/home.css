@@ -479,10 +479,18 @@
 .sps-scope .main {
   display: flex;
   flex-direction: column;
+  /* Grow to fill the column so the right panel sits flush against the window's
+     right edge — without flex:1 the panel floats with a dead band to its right. */
+  flex: 1;
   min-width: 0;
   min-height: 0;
   height: 100%;
   background: var(--canvas);
+}
+/* When the right panel is closed the topbar spans full width; reserve room on the
+   right so its controls clear the floating admin gear (fixed top-right, z 9000). */
+.sps-scope .app[data-panel="closed"] .topbar {
+  padding-right: 50px;
 }
 .sps-scope .topbar {
   height: 46px;
