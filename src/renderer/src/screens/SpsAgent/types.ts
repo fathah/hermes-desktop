@@ -157,6 +157,10 @@ export interface PageMeta {
   date?: string; // "YYYY-MM-DD"
   time?: string; // "HH:mm"
   mood?: string; // mood emoji / key (optional)
+  // Obsidian-compatible tags. Emitted as a YAML flow sequence (`tags: ["a"]`)
+  // only when present, so non-tagged pages serialize byte-identically. The
+  // note-index also harvests inline `#tag`s from the body.
+  tags?: string[];
 }
 
 export interface CommentMessage {

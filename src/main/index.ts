@@ -22,6 +22,7 @@ import { stageAttachment, clearStagedAttachments } from "./attachment-staging";
 import {
   spsUnfurl,
   spsAssistant,
+  spsIngestInbox,
   spsLoad,
   spsSave,
   spsBackupWorkspace,
@@ -86,7 +87,6 @@ import {
   writeAssetTo,
   readAssetFrom,
 } from "./sps-vault";
-import { profileHome, getActiveProfileNameSync } from "./utils";
 import {
   writeAsset,
   assetExists,
@@ -203,6 +203,12 @@ import {
   closeAllNoteIndexes,
   type NoteQuery,
 } from "./note-index";
+import {
+  resolveSpsVaultDir,
+  getVaultLocation,
+  setVaultLocation,
+  resetVaultLocation,
+} from "./sps-storage";
 import { extractPdfToMarkdown } from "./pdf-extract";
 import {
   appendObsidianFile,
@@ -400,13 +406,10 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 
-/** Absolute path to the active (or named) profile's SPS vault directory. */
+/** Absolute path to the active (or named) profile's SPS vault directory.
+ *  Honors a shared-directory override (e.g. an Obsidian vault) via sps-storage. */
 function spsVaultDirFor(profile?: string): string {
-  return join(
-    profileHome(profile || getActiveProfileNameSync()),
-    "sps-agent",
-    "vault",
-  );
+  return resolveSpsVaultDir(profile);
 }
 
 function createWindow(): void {
@@ -1755,6 +1758,33 @@ function setupIPC(): void {
     return (await getSpsNoteIndex(profile)).links();
   });
 
+  // Obsidian-native tags (frontmatter + inline #tag) for tag clouds/filters.
+  ipcMain.handle("sps-index-tags", async (_event, profile?: string) => {
+    requireLocalWorkspace();
+    return (await getSpsNoteIndex(profile)).allTags();
+  });
+
+  // Vault lint (second-brain "Lint"): orphans, broken [[wikilinks]], stale notes.
+  ipcMain.handle(
+    "sps-lint-vault",
+    async (_event, staleDays?: number, profile?: string) => {
+      requireLocalWorkspace();
+      const staleBeforeMs =
+        staleDays && staleDays > 0
+          ? Date.now() - staleDays * 24 * 60 * 60 * 1000
+          : undefined;
+      return (await getSpsNoteIndex(profile)).lint(staleBeforeMs);
+    },
+  );
+
+  ipcMain.handle(
+    "sps-index-by-tag",
+    async (_event, tag: string, profile?: string) => {
+      requireLocalWorkspace();
+      return (await getSpsNoteIndex(profile)).notesByTag(tag);
+    },
+  );
+
   ipcMain.handle("sps-index-status", async (_event, profile?: string) => {
     requireLocalWorkspace();
     return (await getSpsNoteIndex(profile)).status();
@@ -1763,6 +1793,46 @@ function setupIPC(): void {
   ipcMain.handle("sps-index-rebuild", async (_event, profile?: string) => {
     requireLocalWorkspace();
     return (await getSpsNoteIndex(profile)).rebuild();
+  });
+
+  // Shared-directory Obsidian mode: where the SPS vault lives on disk. Pointing
+  // it at an Obsidian vault (ideally a dedicated subfolder) makes the same
+  // markdown a first-class Obsidian vault. Non-destructive — never moves files.
+  ipcMain.handle("sps-get-vault-location", (_event, profile?: string) => {
+    requireLocalWorkspace();
+    return getVaultLocation(profile);
+  });
+
+  ipcMain.handle(
+    "sps-set-vault-location",
+    async (_event, dir: string, profile?: string) => {
+      requireLocalWorkspace();
+      const result = setVaultLocation(dir, profile);
+      // Drop cached indexes so the next access opens at the new root.
+      if (result.ok) await closeAllNoteIndexes();
+      return result;
+    },
+  );
+
+  ipcMain.handle(
+    "sps-reset-vault-location",
+    async (_event, profile?: string) => {
+      requireLocalWorkspace();
+      const location = resetVaultLocation(profile);
+      await closeAllNoteIndexes();
+      return location;
+    },
+  );
+
+  // Folder picker for the vault-location setting (createDirectory allowed).
+  ipcMain.handle("sps-pick-vault-dir", async () => {
+    requireLocalWorkspace();
+    const res = await dialog.showOpenDialog({
+      title: "Choose a folder for the SPS vault",
+      properties: ["openDirectory", "createDirectory"],
+    });
+    if (res.canceled || res.filePaths.length === 0) return null;
+    return res.filePaths[0];
   });
 
   // KB Phase 0: open a file dialog scoped to PDFs; returns the absolute path or
@@ -2295,6 +2365,11 @@ function setupIPC(): void {
       groundInWorkspace?: boolean,
     ) => spsAssistant(prompt, ctx, profile, groundInWorkspace),
   );
+  // Second-brain ingest: propose a wiki changeset from unprocessed inbox
+  // captures (read-only; the renderer reviews + commits).
+  ipcMain.handle("sps-ingest-inbox", (_event, profile?: string) =>
+    spsIngestInbox(profile),
+  );
   ipcMain.handle("sps-load", (_event, profile?: string) => spsLoad(profile));
   ipcMain.handle("sps-save", (_event, ws: unknown, profile?: string) =>
     spsSave(ws, profile),
@@ -2342,8 +2417,7 @@ function setupIPC(): void {
   ipcMain.handle(
     "sps-export-page",
     (_event, pageId: string, markdown: string, profile?: string) => {
-      const home = profileHome(profile || getActiveProfileNameSync());
-      const dir = join(home, "sps-agent", "vault");
+      const dir = spsVaultDirFor(profile);
       return exportPageMarkdownTo(dir, pageId, markdown);
     },
   );
@@ -2358,24 +2432,21 @@ function setupIPC(): void {
       markdown: string,
       profile?: string,
     ) => {
-      const home = profileHome(profile || getActiveProfileNameSync());
-      const dir = join(home, "sps-agent", "vault");
+      const dir = spsVaultDirFor(profile);
       return exportRowMarkdownTo(dir, dbFolder, rowId, markdown);
     },
   );
   ipcMain.handle(
     "sps-read-row",
     (_event, dbFolder: string, rowId: string, profile?: string) => {
-      const home = profileHome(profile || getActiveProfileNameSync());
-      const dir = join(home, "sps-agent", "vault");
+      const dir = spsVaultDirFor(profile);
       return readRowMarkdownFrom(dir, dbFolder, rowId);
     },
   );
   ipcMain.handle(
     "sps-delete-row",
     (_event, dbFolder: string, rowId: string, profile?: string) => {
-      const home = profileHome(profile || getActiveProfileNameSync());
-      const dir = join(home, "sps-agent", "vault");
+      const dir = spsVaultDirFor(profile);
       return deleteRowIn(dir, dbFolder, rowId);
     },
   );
@@ -2384,8 +2455,7 @@ function setupIPC(): void {
   ipcMain.handle(
     "sps-delete-page",
     (_event, pageId: string, profile?: string) => {
-      const home = profileHome(profile || getActiveProfileNameSync());
-      const dir = join(home, "sps-agent", "vault");
+      const dir = spsVaultDirFor(profile);
       return deletePageIn(dir, pageId);
     },
   );
@@ -2395,8 +2465,7 @@ function setupIPC(): void {
   ipcMain.handle(
     "sps-delete-db-folder",
     (_event, dbFolder: string, profile?: string) => {
-      const home = profileHome(profile || getActiveProfileNameSync());
-      const dir = join(home, "sps-agent", "vault");
+      const dir = spsVaultDirFor(profile);
       return deleteDbFolderIn(dir, dbFolder);
     },
   );

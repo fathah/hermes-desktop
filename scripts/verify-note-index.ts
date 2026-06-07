@@ -26,7 +26,7 @@ async function main(): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), "note-index-verify-"));
   await writeFile(
     join(root, "alpha.md"),
-    `---\nstatus: doing\npriority: high\n---\n# Alpha\nThe quick brown fox links to [[beta]].\n`,
+    `---\nstatus: doing\npriority: high\ntags: [research, "ml/nlp"]\n---\n# Alpha\nThe quick brown fox links to [[beta]]. Filed #urgent.\n`,
   );
   await writeFile(
     join(root, "beta.md"),
@@ -110,6 +110,32 @@ async function main(): Promise<void> {
     "links() resolves wikilink edges to indexed notes",
   );
 
+  // Tags: frontmatter array + inline #tag, case-insensitive lookup.
+  const tagNames = index
+    .allTags()
+    .map((t) => t.tag)
+    .sort();
+  eq(
+    tagNames,
+    ["ml/nlp", "research", "urgent"],
+    "allTags harvests frontmatter + inline #tags",
+  );
+  eq(
+    index.notesByTag("research"),
+    ["alpha.md"],
+    "notesByTag finds the frontmatter-tagged note",
+  );
+  eq(
+    index.notesByTag("RESEARCH"),
+    ["alpha.md"],
+    "notesByTag is case-insensitive",
+  );
+  eq(
+    index.notesByTag("urgent"),
+    ["alpha.md"],
+    "notesByTag finds an inline #tag",
+  );
+
   const before = index
     .query({})
     .map((n) => `${n.path}:${n.title}`)
@@ -168,6 +194,29 @@ async function main(): Promise<void> {
 
   await closeAllNoteIndexes();
   await rm(vault, { recursive: true, force: true });
+
+  // ── Lint: orphans + broken [[wikilinks]] over a small vault.
+  console.log("\nLint — orphans + broken links:");
+  const lroot = await mkdtemp(join(tmpdir(), "note-index-lint-"));
+  await writeFile(
+    join(lroot, "a.md"),
+    `# A\nLinks to [[b]] and a missing [[ghost]].\n`,
+  );
+  await writeFile(join(lroot, "b.md"), `# B\nLinks back to [[a]].\n`);
+  await writeFile(join(lroot, "lonely.md"), `# Lonely\nNo links here.\n`);
+
+  const li = await NoteIndex.open(lroot);
+  eq(
+    li.unresolvedLinks().map((e) => `${e.source}->${e.target}`),
+    ["a.md->ghost"],
+    "unresolvedLinks flags the broken [[ghost]] link only",
+  );
+  eq(li.orphans(), ["lonely.md"], "orphans flags the isolated note only");
+  const report = li.lint();
+  eq(report.brokenLinks.length, 1, "lint() composes broken links");
+  eq(report.orphans, ["lonely.md"], "lint() composes orphans");
+  await li.close();
+  await rm(lroot, { recursive: true, force: true });
 
   console.log("\nALL NOTE-INDEX CHECKS PASSED");
 }

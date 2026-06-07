@@ -23,7 +23,7 @@ import { mkdir, readdir, readFile, stat } from "fs/promises";
 import { basename, extname, join, relative, sep } from "path";
 import chokidar, { type FSWatcher } from "chokidar";
 import YAML from "yaml";
-import { getActiveProfileNameSync, profileHome } from "./utils";
+import { resolveSpsVaultDir } from "./sps-storage";
 
 const NOTE_EXTENSIONS = new Set([".md", ".markdown"]);
 
@@ -37,6 +37,37 @@ function extractBacklinks(content: string): string[] {
     if (target) links.add(target);
   }
   return [...links];
+}
+
+/** Normalize a tag: drop a leading `#`, trim. Empty → "". */
+function normalizeTag(raw: string): string {
+  return raw.replace(/^#+/, "").trim();
+}
+
+/** Frontmatter tags: an array, or a string of comma/space-separated tags
+ *  (Obsidian accepts both forms). */
+function frontmatterTags(props: Record<string, unknown>): string[] {
+  const raw = props.tags;
+  if (Array.isArray(raw)) {
+    return raw.filter((t): t is string => typeof t === "string");
+  }
+  if (typeof raw === "string") {
+    return raw.split(/[,\s]+/).filter(Boolean);
+  }
+  return [];
+}
+
+/** Inline `#tag`s in the body (Obsidian style: letter-led, allows `-_/`). The
+ *  `#` must be preceded by start/whitespace so `# Heading` and `##` aren't tags
+ *  (the char after `#` must be a letter). */
+function extractInlineTags(body: string): string[] {
+  const tags = new Set<string>();
+  const re = /(?:^|\s)#([A-Za-z][\w-]*(?:\/[\w-]+)*)/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(body)) !== null) {
+    tags.add(match[1]);
+  }
+  return [...tags];
 }
 const INDEX_DB_FILE = ".note-index.db";
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
@@ -196,6 +227,12 @@ export class NoteIndex {
       );
       CREATE INDEX IF NOT EXISTS idx_links_target ON links(target_norm);
       CREATE INDEX IF NOT EXISTS idx_links_source ON links(source);
+      CREATE TABLE IF NOT EXISTS tags (
+        source TEXT NOT NULL,
+        tag TEXT NOT NULL COLLATE NOCASE
+      );
+      CREATE INDEX IF NOT EXISTS idx_tags_tag ON tags(tag);
+      CREATE INDEX IF NOT EXISTS idx_tags_source ON tags(source);
       CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts
         USING fts5(path UNINDEXED, title, body, tokenize='porter');
     `);
@@ -238,6 +275,18 @@ export class NoteIndex {
         `INSERT INTO links(source,target_norm) VALUES(?,?)`,
       );
       for (const target of new Set(targets)) insLink.run(relPath, target);
+
+      // Tags: frontmatter `tags` (array or string) + inline `#tag`s in the body.
+      this.db.prepare(`DELETE FROM tags WHERE source = ?`).run(relPath);
+      const fmTags = frontmatterTags(props);
+      const inlineTags = extractInlineTags(body);
+      const tags = new Set(
+        [...fmTags, ...inlineTags].map(normalizeTag).filter(Boolean),
+      );
+      const insTag = this.db.prepare(
+        `INSERT INTO tags(source,tag) VALUES(?,?)`,
+      );
+      for (const tag of tags) insTag.run(relPath, tag);
     });
     tx();
   }
@@ -247,6 +296,7 @@ export class NoteIndex {
       this.db.prepare(`DELETE FROM notes WHERE path = ?`).run(relPath);
       this.db.prepare(`DELETE FROM notes_fts WHERE path = ?`).run(relPath);
       this.db.prepare(`DELETE FROM links WHERE source = ?`).run(relPath);
+      this.db.prepare(`DELETE FROM tags WHERE source = ?`).run(relPath);
     });
     tx();
   }
@@ -268,7 +318,7 @@ export class NoteIndex {
   /** Wipe and rebuild from disk. Always safe: the markdown files are the truth. */
   async rebuild(): Promise<NoteIndexStatus> {
     this.db.exec(
-      `DELETE FROM notes; DELETE FROM notes_fts; DELETE FROM links;`,
+      `DELETE FROM notes; DELETE FROM notes_fts; DELETE FROM links; DELETE FROM tags;`,
     );
     for (const absPath of await this.walk(this.root)) {
       await this.indexAbsolute(absPath);
@@ -463,6 +513,94 @@ export class NoteIndex {
     return edges;
   }
 
+  /** Raw [[wikilink]]s whose target does NOT resolve to an indexed note
+   *  (broken links — the inverse of links(), for lint). Deduped per edge. */
+  unresolvedLinks(): Array<{ source: string; target: string }> {
+    const notes = this.db.prepare(`SELECT path FROM notes`).all() as Array<{
+      path: string;
+    }>;
+    const known = new Set<string>();
+    for (const { path } of notes) {
+      for (const name of candidateNames(path)) known.add(name);
+    }
+    const rows = this.db
+      .prepare(`SELECT source, target_norm FROM links`)
+      .all() as Array<{ source: string; target_norm: string }>;
+    const out: Array<{ source: string; target: string }> = [];
+    const seen = new Set<string>();
+    for (const { source, target_norm } of rows) {
+      if (known.has(target_norm)) continue;
+      const key = `${source} ${target_norm}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ source, target: target_norm });
+    }
+    return out;
+  }
+
+  /** Root-level pages with no resolved inbound OR outbound [[wikilink]] — isolated
+   *  pages. Excludes nested files (folder-DB rows, _inbox captures): those aren't
+   *  wiki pages and aren't meant to be linked. */
+  orphans(): string[] {
+    const notes = this.db.prepare(`SELECT path FROM notes`).all() as Array<{
+      path: string;
+    }>;
+    const connected = new Set<string>();
+    for (const edge of this.links()) {
+      connected.add(edge.source);
+      connected.add(edge.target);
+    }
+    const result: string[] = [];
+    for (const { path } of notes) {
+      if (path.includes("/")) continue; // skip rows / captures / assets
+      if (!connected.has(path)) result.push(path);
+    }
+    return result.sort();
+  }
+
+  /** A composed lint report over the vault. `staleBeforeMs` (optional) flags
+   *  notes whose file mtime predates it. */
+  lint(staleBeforeMs?: number): {
+    orphans: string[];
+    brokenLinks: Array<{ source: string; target: string }>;
+    stale: string[];
+  } {
+    const orphans = this.orphans();
+    const brokenLinks = this.unresolvedLinks();
+    let stale: string[] = [];
+    if (staleBeforeMs && staleBeforeMs > 0) {
+      // Root-level pages only (exclude rows / captures), like orphans().
+      const rows = this.db
+        .prepare(
+          `SELECT path FROM notes WHERE mtime > 0 AND mtime < ? AND instr(path,'/') = 0 ORDER BY mtime ASC`,
+        )
+        .all(staleBeforeMs) as Array<{ path: string }>;
+      stale = rows.map((r) => r.path);
+    }
+    return { orphans, brokenLinks, stale };
+  }
+
+  /** All tags with their note counts, most-used first (for tag clouds/filters). */
+  allTags(): Array<{ tag: string; count: number }> {
+    return this.db
+      .prepare(
+        `SELECT tag, COUNT(DISTINCT source) AS count
+         FROM tags GROUP BY tag COLLATE NOCASE
+         ORDER BY count DESC, tag ASC`,
+      )
+      .all() as Array<{ tag: string; count: number }>;
+  }
+
+  /** Relpaths of notes carrying the given tag (case-insensitive). */
+  notesByTag(tag: string): string[] {
+    const clean = normalizeTag(tag);
+    if (!clean) return [];
+    const rows = this.db
+      .prepare(`SELECT DISTINCT source FROM tags WHERE tag = ? COLLATE NOCASE`)
+      .all(clean) as Array<{ source: string }>;
+    return rows.map((r) => r.source);
+  }
+
   status(): NoteIndexStatus {
     return {
       root: this.root,
@@ -520,10 +658,10 @@ export async function getNoteIndexForRoot(root: string): Promise<NoteIndex> {
   return pending;
 }
 
-/** The live index for a profile's SPS page vault (the S2b mirror target). */
+/** The live index for a profile's SPS page vault (the S2b mirror target).
+ *  Honors a shared-directory override (e.g. an Obsidian vault) via sps-storage. */
 export async function getSpsNoteIndex(profile?: string): Promise<NoteIndex> {
-  const home = profileHome(profile || getActiveProfileNameSync());
-  return getNoteIndexForRoot(join(home, "sps-agent", "vault"));
+  return getNoteIndexForRoot(resolveSpsVaultDir(profile));
 }
 
 /** Close every open index (call on profile switch / app quit). */

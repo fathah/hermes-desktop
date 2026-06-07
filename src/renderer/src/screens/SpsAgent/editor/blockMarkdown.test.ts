@@ -99,8 +99,6 @@ describe("tier-1 block round-trips", () => {
 });
 
 describe("tier-2 lossless fallback (metadata comment)", () => {
-  it("callout with emoji", () =>
-    expectRoundTrip([blk("callout", "Standup at 9:30", { emoji: "📌" })]));
   it("a coloured paragraph (markdown can't carry colour)", () =>
     expectRoundTrip([blk("p", "warn", { color: "red", bg: "yellow" })]));
   it("toggle with collapsed state", () =>
@@ -153,6 +151,51 @@ describe("tier-2 lossless fallback (metadata comment)", () => {
         agentPrompt: "Review this against our SOPs and flag gaps.",
       }),
     ]));
+});
+
+describe("Obsidian-native callouts (> [!type])", () => {
+  it("serializes a mapped-emoji callout to native > [!type] (no tier-2)", () => {
+    const md = blocksToMarkdown([
+      blk("callout", "Standup at 9:30", { emoji: "📌" }),
+    ]);
+    expect(md).toBe("> [!note] Standup at 9:30");
+    expect(md).not.toContain("<!-- sps:");
+  });
+  it("round-trips a mapped-emoji callout losslessly", () =>
+    expectRoundTrip([blk("callout", "Heads up", { emoji: "⚠️" })]));
+  it("emits a bare header for an empty callout", () => {
+    expect(blocksToMarkdown([blk("callout", "", { emoji: "💡" })])).toBe(
+      "> [!tip]",
+    );
+  });
+  it("parses a callout BEFORE a plain quote (ordering)", () => {
+    const out = markdownToBlocks("> [!warning] Careful");
+    expect(out).toHaveLength(1);
+    expect(out[0].type).toBe("callout");
+    expect(out[0].emoji).toBe("⚠️");
+    expect(out[0].text).toBe("Careful");
+  });
+  it("still parses a plain blockquote as a quote", () => {
+    const out = markdownToBlocks("> just a quote");
+    expect(out[0].type).toBe("quote");
+    expect(out[0].text).toBe("just a quote");
+  });
+  it("normalizes an Obsidian alias type to the canonical emoji", () => {
+    const out = markdownToBlocks("> [!summary] TL;DR");
+    expect(out[0].type).toBe("callout");
+    expect(out[0].emoji).toBe("📋"); // summary → abstract → 📋
+  });
+  it("keeps an unmapped-emoji callout on tier-2 to preserve the emoji", () => {
+    const md = blocksToMarkdown([blk("callout", "party", { emoji: "🎉" })]);
+    expect(md).toContain("<!-- sps:");
+    expectRoundTrip([blk("callout", "party", { emoji: "🎉" })]);
+  });
+  it("keeps a coloured callout on tier-2 (colour isn't markdown-expressible)", () => {
+    const md = blocksToMarkdown([
+      blk("callout", "x", { emoji: "📌", bg: "yellow" }),
+    ]);
+    expect(md).toContain("<!-- sps:");
+  });
 });
 
 describe("page links as wikilinks (S3 — feeds the vault graph)", () => {

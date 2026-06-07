@@ -31,6 +31,8 @@ export type Surface =
   | "chats"
   | "graph"
   | "equity"
+  | "inbox"
+  | "health"
   | "journal";
 
 // Named, toggleable sidebar sections (Notion 3.1 grammar). Order here is the
@@ -83,6 +85,28 @@ export interface WorkspaceSlice {
     docBlocks: Block[],
     parentId: string | null,
   ) => string;
+  /** Like makePage but with a caller-supplied id (ingest needs slug ids so
+   *  [[wikilink]] targets resolve to the page file's basename). */
+  makePageWithId: (
+    id: string,
+    info: {
+      icon?: string;
+      title?: string;
+      source?: string;
+      ingestedAt?: number;
+    },
+    docBlocks: Block[],
+    parentId: string | null,
+  ) => string;
+  /** Find (by title at root) or create the "Wiki" folder; returns its id. */
+  ensureWikiFolder: () => string;
+  /** Commit one proposed ingest page (create under Wiki, or update in place). */
+  ingestCommitPage: (page: {
+    op: "create" | "update";
+    pageId: string;
+    title: string;
+    markdown: string;
+  }) => string;
   newSubPage: (parentId: string) => void;
   /**
    * KB Phase 0: pick a PDF, extract it, and ingest it as a page inside the

@@ -61,6 +61,35 @@ describe("pageMarkdown frontmatter", () => {
       '---\ntitle: "My Page"\nicon: "📄"\ncover: null\n---\n\nhi',
     );
   });
+
+  it("emits tags as a YAML flow sequence, appended last, only when present", () => {
+    const md = pageToMarkdown(
+      { title: "T", icon: "📄", cover: null, tags: ["work", "urgent"] },
+      [blk("p", "x")],
+    );
+    expect(md).toContain('tags: ["work","urgent"]');
+    // Appended after the other keys.
+    expect(md.indexOf("tags:")).toBeGreaterThan(md.indexOf("cover:"));
+  });
+
+  it("omits tags when empty or absent (keeps non-tagged pages byte-identical)", () => {
+    const noTags = pageToMarkdown({ title: "T", cover: null }, [blk("p", "x")]);
+    expect(noTags).not.toContain("tags:");
+    const emptyTags = pageToMarkdown({ title: "T", cover: null, tags: [] }, [
+      blk("p", "x"),
+    ]);
+    expect(emptyTags).not.toContain("tags:");
+  });
+
+  it("round-trips tags", () => {
+    const meta: Partial<PageMeta> = {
+      title: "T",
+      icon: "📄",
+      cover: null,
+      tags: ["alpha", "beta-1", "ns/child"],
+    };
+    expect(roundTrip(meta, [blk("p", "x")]).meta).toEqual(meta);
+  });
 });
 
 describe("pageMarkdown full round-trip", () => {

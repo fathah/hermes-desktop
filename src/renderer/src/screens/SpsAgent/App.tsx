@@ -23,6 +23,14 @@ import { EquityResearch } from "./equity/EquityResearch";
 import { JournalSurface } from "./journal/JournalSurface";
 import { YouSurface } from "./you/YouSurface";
 import { CockpitSurface } from "./cockpit/CockpitSurface";
+import { InboxSurface } from "./inbox/InboxSurface";
+import { HealthSurface } from "./health/HealthSurface";
+import { runAutoIngest } from "./inbox/ingestApply";
+import {
+  getAutoApply,
+  getIngestIntervalMin,
+  INGEST_PREFS_EVENT,
+} from "./inbox/ingestPrefs";
 
 export function App() {
   useHotkeys();
@@ -39,6 +47,43 @@ export function App() {
   useEffect(() => {
     setScrollContainer(docScrollRef.current);
     return () => setScrollContainer(null);
+  }, []);
+
+  // Scheduled in-app ingest: while the app is open and auto-apply is on, run the
+  // ingest loop every N minutes (0 = off). Reconfigures live on a prefs change.
+  // (Truly headless scheduling needs the deferred direct-write agent mode.)
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const configure = (): void => {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+      const min = getIngestIntervalMin();
+      if (min <= 0) return;
+      timer = setInterval(
+        () => {
+          if (!getAutoApply()) return;
+          const commitPage = useStore.getState().ingestCommitPage;
+          void runAutoIngest(commitPage).then((res) => {
+            if (res.ok && (res.pages || res.memory)) {
+              useStore
+                .getState()
+                .flash(
+                  `Auto-filed ${res.pages} page${res.pages === 1 ? "" : "s"}`,
+                );
+            }
+          });
+        },
+        min * 60 * 1000,
+      );
+    };
+    configure();
+    window.addEventListener(INGEST_PREFS_EVENT, configure);
+    return () => {
+      if (timer) clearInterval(timer);
+      window.removeEventListener(INGEST_PREFS_EVENT, configure);
+    };
   }, []);
 
   return (
@@ -92,6 +137,8 @@ export function App() {
                 <MemoryTimeline profile="default" onRefresh={() => {}} />
               )}
               {surface === "you" && <YouSurface profile="default" />}
+              {surface === "inbox" && <InboxSurface profile="default" />}
+              {surface === "health" && <HealthSurface profile="default" />}
               {surface === "graph" && <GraphView />}
               {surface === "equity" && <EquityResearch />}
             </div>

@@ -237,6 +237,57 @@ const BLOCK_ID_RE = /\s+\^([A-Za-z0-9_-]+)\s*$/;
 const PAGE_ID_RE = /^[A-Za-z0-9_-]+$/;
 const WIKILINK_RE = /^\[\[([A-Za-z0-9_-]+)\]\]$/;
 
+// Obsidian callouts (`> [!type] title`) ↔ our single-line callout block (an
+// emoji + text). EMOJI_TO_CALLOUT is a bijection over a curated set: each emoji
+// has one canonical Obsidian type, so mapped callouts round-trip exactly and
+// render natively in Obsidian. A callout whose emoji is NOT in this table stays
+// on tier-2 (the `<!-- sps:… -->` fallback) so its exact emoji is preserved.
+// On parse, Obsidian alias types (summary→abstract, …) and unknown types
+// resolve through CALLOUT_TO_EMOJI / DEFAULT_CALLOUT_EMOJI — a documented
+// normalization that keeps the common Obsidian set native (lossy only on the
+// exotic-type *name*, never on content).
+const EMOJI_TO_CALLOUT = new Map<string, string>([
+  ["📌", "note"],
+  ["💡", "tip"],
+  ["ℹ️", "info"],
+  ["📋", "abstract"],
+  ["✅", "success"],
+  ["❓", "question"],
+  ["⚠️", "warning"],
+  ["❌", "failure"],
+  ["🔥", "danger"],
+  ["❗", "important"],
+  ["🐛", "bug"],
+  ["💬", "quote"],
+]);
+// Canonical inverse, then Obsidian alias types that map to the same emoji.
+const CALLOUT_TO_EMOJI = new Map<string, string>();
+for (const [emoji, type] of EMOJI_TO_CALLOUT) {
+  CALLOUT_TO_EMOJI.set(type, emoji);
+}
+const CALLOUT_ALIASES: Array<[string, string]> = [
+  ["summary", "📋"],
+  ["tldr", "📋"],
+  ["hint", "💡"],
+  ["check", "✅"],
+  ["done", "✅"],
+  ["help", "❓"],
+  ["faq", "❓"],
+  ["caution", "⚠️"],
+  ["attention", "⚠️"],
+  ["fail", "❌"],
+  ["missing", "❌"],
+  ["error", "🔥"],
+  ["cite", "💬"],
+];
+for (const [alias, emoji] of CALLOUT_ALIASES) {
+  CALLOUT_TO_EMOJI.set(alias, emoji);
+}
+const DEFAULT_CALLOUT_EMOJI = "📌";
+// Matches an Obsidian callout header line: `> [!type]` + optional fold marker
+// + optional inline title. Must be tested BEFORE the plain-quote matcher.
+const CALLOUT_RE = /^>\s*\[!([A-Za-z][\w-]*)\][+-]?\s?(.*)$/;
+
 /** A block is tier-1 (clean markdown) only if markdown can express it fully. */
 function isCleanBlock(block: Block): boolean {
   if (block.color || block.bg) return false;
@@ -247,6 +298,13 @@ function isCleanBlock(block: Block): boolean {
   // An excalidraw block is clean once it has a preview-svg path; an undrawn one
   // falls to the tier-2 stub so its block type survives the round-trip.
   if (block.type === "excalidraw") return !!block.src;
+  // A callout is native (`> [!type]`) only when its emoji maps to a known
+  // Obsidian type; otherwise it stays tier-2 so the exact emoji is preserved.
+  if (block.type === "callout") {
+    if (!block.emoji || !EMOJI_TO_CALLOUT.has(block.emoji)) return false;
+    if (block.html) return inlineHtmlToMd(block.html).clean;
+    return true;
+  }
   const cleanTypes: BlockType[] = [
     "p",
     "h1",
@@ -305,6 +363,12 @@ function cleanBlockLine(block: Block): string {
       return HEADING_PREFIX[block.type] + renderInline(block);
     case "quote":
       return "> " + renderInline(block);
+    case "callout": {
+      // isCleanBlock guarantees the emoji is mapped when we reach here.
+      const type = EMOJI_TO_CALLOUT.get(block.emoji as string) ?? "note";
+      const inline = renderInline(block);
+      return inline ? `> [!${type}] ${inline}` : `> [!${type}]`;
+    }
     case "li":
       return indent + "- " + renderInline(block);
     case "numli":
@@ -478,6 +542,15 @@ export function markdownToBlocks(md: string): Block[] {
       blocks.push(
         mk("numli", numbered[1], { ...(indent ? { indent } : {}), ...idExtra }),
       );
+      i++;
+      continue;
+    }
+    // Obsidian callout — must precede the plain-quote matcher (both start `>`).
+    const callout = CALLOUT_RE.exec(body);
+    if (callout) {
+      const type = callout[1].toLowerCase();
+      const emoji = CALLOUT_TO_EMOJI.get(type) ?? DEFAULT_CALLOUT_EMOJI;
+      blocks.push(mk("callout", callout[2], { emoji, ...idExtra }));
       i++;
       continue;
     }

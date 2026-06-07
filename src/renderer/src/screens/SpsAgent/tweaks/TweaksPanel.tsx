@@ -309,6 +309,42 @@ function StorageSettings() {
   const [parity, setParity] = useState<ParityReport | null>(null);
   const [backup, setBackup] = useState<string | null>(() => getLastBackup());
   const [busy, setBusy] = useState(false);
+  const [vault, setVault] = useState<{
+    dir: string;
+    isDefault: boolean;
+    default: string;
+  } | null>(null);
+
+  useEffect(() => {
+    window.hermesAPI
+      .spsGetVaultLocation?.()
+      .then(setVault)
+      .catch(() => {});
+  }, []);
+
+  const chooseVault = async (): Promise<void> => {
+    const dir = await window.hermesAPI.spsPickVaultDir?.();
+    if (!dir) return;
+    const res = await window.hermesAPI.spsSetVaultLocation?.(dir);
+    if (res?.ok && res.location) {
+      setVault(res.location);
+      flash(
+        res.nonEmpty
+          ? "Vault repointed — existing files in that folder are now indexed."
+          : "Vault location updated.",
+      );
+    } else if (res?.error) {
+      flash(res.error);
+    }
+  };
+
+  const resetVault = async (): Promise<void> => {
+    const loc = await window.hermesAPI.spsResetVaultLocation?.();
+    if (loc) {
+      setVault(loc);
+      flash("Vault location reset to default.");
+    }
+  };
 
   const snapshot = (): Workspace => {
     const s = useStore.getState();
@@ -388,6 +424,42 @@ function StorageSettings() {
             {backup}
           </span>
         </div>
+      )}
+      {vault && (
+        <>
+          <div className="twk-row">
+            <span className="twk-lbl">
+              <span>Vault location</span>
+            </span>
+            <span
+              style={{
+                fontSize: 10.5,
+                opacity: 0.7,
+                wordBreak: "break-all",
+                fontFamily: "var(--font-mono)",
+              }}
+            >
+              {vault.dir}
+              {vault.isDefault ? "  (default)" : ""}
+            </span>
+          </div>
+          <button
+            className="twk-field"
+            style={{ cursor: "pointer" }}
+            onClick={() => void chooseVault()}
+          >
+            Point at an Obsidian vault folder…
+          </button>
+          {!vault.isDefault && (
+            <button
+              className="twk-field"
+              style={{ cursor: "pointer" }}
+              onClick={() => void resetVault()}
+            >
+              Reset to default location
+            </button>
+          )}
+        </>
       )}
     </>
   );

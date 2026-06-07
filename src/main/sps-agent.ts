@@ -23,6 +23,14 @@ import {
 } from "./hermes";
 import { profileHome, getActiveProfileNameSync } from "./utils";
 import { assembleVaultContext, type VaultContextUsage } from "./sps-context";
+import { resolveSpsVaultDir } from "./sps-storage";
+import {
+  buildIngestMessages,
+  parseChangeset,
+  readUnprocessedCaptures,
+  readWikiSchema,
+  type IngestChangeset,
+} from "./sps-ingest";
 
 // ───────────────────────── SSRF guard ─────────────────────────
 const BLOCKED_RANGES = new Set([
@@ -453,6 +461,82 @@ export async function spsAssistant(
       reply: [
         `I couldn't reach the assistant: ${err instanceof Error ? err.message : "error"}. Make sure the Hermes gateway is running and a model is configured.`,
       ],
+    };
+  }
+}
+
+// ───────────────────────── ingest (second-brain loop) ─────────────────────────
+
+export interface IngestResult {
+  ok: boolean;
+  changeset?: IngestChangeset;
+  captureCount: number;
+  error?: string;
+}
+
+/**
+ * Process unprocessed inbox captures into a proposed wiki changeset.
+ * READ-ONLY over the vault: returns a changeset the desktop reviews/commits —
+ * this never writes pages itself (the propose-then-commit keystone).
+ */
+export async function spsIngestInbox(profile?: string): Promise<IngestResult> {
+  try {
+    if (isRemoteMode()) {
+      return {
+        ok: false,
+        captureCount: 0,
+        error: "Ingest needs a local workspace.",
+      };
+    }
+    const vaultDir = resolveSpsVaultDir(profile);
+    const captures = await readUnprocessedCaptures(vaultDir);
+    if (captures.length === 0) {
+      return {
+        ok: true,
+        captureCount: 0,
+        changeset: {
+          summary: "No unprocessed captures.",
+          pages: [],
+          captures: [],
+          memory: [],
+        },
+      };
+    }
+    const schema = await readWikiSchema(vaultDir);
+    const messages = buildIngestMessages(schema, captures);
+    const url = `${getApiUrl(profile)}/v1/chat/completions`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getRemoteAuthHeader() },
+      signal: AbortSignal.timeout(180000),
+      body: JSON.stringify({ model: "hermes-agent", stream: false, messages }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      return {
+        ok: false,
+        captureCount: captures.length,
+        error: `gateway ${res.status}: ${body.slice(0, 160)}`,
+      };
+    }
+    const data = (await res.json()) as {
+      choices?: { message?: { content?: string } }[];
+    };
+    const content = data?.choices?.[0]?.message?.content ?? "";
+    const changeset = parseChangeset(extractJson(content));
+    if (!changeset) {
+      return {
+        ok: false,
+        captureCount: captures.length,
+        error: "The agent didn't return a usable changeset.",
+      };
+    }
+    return { ok: true, captureCount: captures.length, changeset };
+  } catch (err) {
+    return {
+      ok: false,
+      captureCount: 0,
+      error: err instanceof Error ? err.message : "ingest error",
     };
   }
 }

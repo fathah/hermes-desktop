@@ -37,6 +37,11 @@ export function pageToMarkdown(
   if (meta.date !== undefined) fm.push(`date: ${JSON.stringify(meta.date)}`);
   if (meta.time !== undefined) fm.push(`time: ${JSON.stringify(meta.time)}`);
   if (meta.mood !== undefined) fm.push(`mood: ${JSON.stringify(meta.mood)}`);
+  // Tags appended last and only when non-empty — keeps non-tagged pages
+  // byte-identical. `JSON.stringify(string[])` is a valid YAML flow sequence,
+  // which the note-index's real YAML parser reads as an array.
+  if (meta.tags !== undefined && meta.tags.length > 0)
+    fm.push(`tags: ${JSON.stringify(meta.tags)}`);
   const body = blocksToMarkdown(blocks, anchoredIds);
   if (fm.length === 0) return body;
   return `---\n${fm.join("\n")}\n---\n\n${body}`;
@@ -80,6 +85,8 @@ function parseScalarFrontmatter(text: string): Partial<PageMeta> {
     else if (key === "date" && typeof value === "string") out.date = value;
     else if (key === "time" && typeof value === "string") out.time = value;
     else if (key === "mood" && typeof value === "string") out.mood = value;
+    else if (key === "tags" && Array.isArray(value))
+      out.tags = value.filter((t): t is string => typeof t === "string");
   }
   return out;
 }

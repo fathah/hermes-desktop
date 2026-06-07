@@ -1326,6 +1326,24 @@ const hermesAPI = {
       profile,
       groundInWorkspace,
     ),
+  spsIngestInbox: (
+    profile?: string,
+  ): Promise<{
+    ok: boolean;
+    captureCount: number;
+    error?: string;
+    changeset?: {
+      summary: string;
+      pages: Array<{
+        op: "create" | "update";
+        pageId: string;
+        title: string;
+        markdown: string;
+      }>;
+      captures: Array<{ id: string; status: "processed" | "discarded" }>;
+      memory: string[];
+    };
+  }> => ipcRenderer.invoke("sps-ingest-inbox", profile),
   spsLoad: (profile?: string): Promise<unknown | null> =>
     ipcRenderer.invoke("sps-load", profile),
   spsSave: (ws: unknown, profile?: string): Promise<boolean> =>
@@ -1479,6 +1497,20 @@ const hermesAPI = {
     profile?: string,
   ): Promise<Array<{ source: string; target: string }>> =>
     ipcRenderer.invoke("sps-index-links", profile),
+  spsIndexTags: (
+    profile?: string,
+  ): Promise<Array<{ tag: string; count: number }>> =>
+    ipcRenderer.invoke("sps-index-tags", profile),
+  spsIndexByTag: (tag: string, profile?: string): Promise<string[]> =>
+    ipcRenderer.invoke("sps-index-by-tag", tag, profile),
+  spsLintVault: (
+    staleDays?: number,
+    profile?: string,
+  ): Promise<{
+    orphans: string[];
+    brokenLinks: Array<{ source: string; target: string }>;
+    stale: string[];
+  }> => ipcRenderer.invoke("sps-lint-vault", staleDays, profile),
   spsIndexStatus: (
     profile?: string,
   ): Promise<{
@@ -1495,6 +1527,27 @@ const hermesAPI = {
     links: number;
     indexedAt: number | null;
   }> => ipcRenderer.invoke("sps-index-rebuild", profile),
+
+  // Shared-directory Obsidian mode: where the SPS vault lives on disk.
+  spsGetVaultLocation: (
+    profile?: string,
+  ): Promise<{ dir: string; isDefault: boolean; default: string }> =>
+    ipcRenderer.invoke("sps-get-vault-location", profile),
+  spsSetVaultLocation: (
+    dir: string,
+    profile?: string,
+  ): Promise<{
+    ok: boolean;
+    error?: string;
+    location?: { dir: string; isDefault: boolean; default: string };
+    nonEmpty?: boolean;
+  }> => ipcRenderer.invoke("sps-set-vault-location", dir, profile),
+  spsResetVaultLocation: (
+    profile?: string,
+  ): Promise<{ dir: string; isDefault: boolean; default: string }> =>
+    ipcRenderer.invoke("sps-reset-vault-location", profile),
+  spsPickVaultDir: (): Promise<string | null> =>
+    ipcRenderer.invoke("sps-pick-vault-dir"),
 
   // KB Phase 0: pick + extract a PDF for ingestion into the SPS vault.
   spsPickPdf: (): Promise<string | null> => ipcRenderer.invoke("sps-pick-pdf"),

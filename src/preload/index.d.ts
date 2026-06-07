@@ -1116,6 +1116,22 @@ interface HermesAPI {
     profile?: string,
     groundInWorkspace?: boolean,
   ) => Promise<unknown>;
+  spsIngestInbox: (profile?: string) => Promise<{
+    ok: boolean;
+    captureCount: number;
+    error?: string;
+    changeset?: {
+      summary: string;
+      pages: Array<{
+        op: "create" | "update";
+        pageId: string;
+        title: string;
+        markdown: string;
+      }>;
+      captures: Array<{ id: string; status: "processed" | "discarded" }>;
+      memory: string[];
+    };
+  }>;
   spsLoad: (profile?: string) => Promise<unknown | null>;
   spsSave: (ws: unknown, profile?: string) => Promise<boolean>;
   spsGetWorkSession: (
@@ -1232,6 +1248,18 @@ interface HermesAPI {
   spsIndexLinks: (
     profile?: string,
   ) => Promise<Array<{ source: string; target: string }>>;
+  spsIndexTags: (
+    profile?: string,
+  ) => Promise<Array<{ tag: string; count: number }>>;
+  spsIndexByTag: (tag: string, profile?: string) => Promise<string[]>;
+  spsLintVault: (
+    staleDays?: number,
+    profile?: string,
+  ) => Promise<{
+    orphans: string[];
+    brokenLinks: Array<{ source: string; target: string }>;
+    stale: string[];
+  }>;
   spsIndexStatus: (profile?: string) => Promise<{
     root: string;
     notes: number;
@@ -1244,6 +1272,22 @@ interface HermesAPI {
     links: number;
     indexedAt: number | null;
   }>;
+  spsGetVaultLocation: (
+    profile?: string,
+  ) => Promise<{ dir: string; isDefault: boolean; default: string }>;
+  spsSetVaultLocation: (
+    dir: string,
+    profile?: string,
+  ) => Promise<{
+    ok: boolean;
+    error?: string;
+    location?: { dir: string; isDefault: boolean; default: string };
+    nonEmpty?: boolean;
+  }>;
+  spsResetVaultLocation: (
+    profile?: string,
+  ) => Promise<{ dir: string; isDefault: boolean; default: string }>;
+  spsPickVaultDir: () => Promise<string | null>;
   spsPickPdf: () => Promise<string | null>;
   spsExtractPdf: (filePath: string) => Promise<{
     title: string;

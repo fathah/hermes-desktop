@@ -35,6 +35,8 @@ import type { WorkDetail } from "../../../../../../shared/openalex/core";
 const SOURCES_TITLE = "Sources";
 /** Title of the folder (under Sources) that saved OpenAlex papers are filed under. */
 const RESEARCH_TITLE = "Research";
+/** Title of the root folder that agent-maintained wiki pages are filed under. */
+const WIKI_TITLE = "Wiki";
 
 /** First `n` sentences of `text`, or a trimmed clamp when it has no punctuation. */
 function firstSentences(text: string, n: number): string {
@@ -239,6 +241,33 @@ export const createWorkspaceSlice: StateCreator<
     return id;
   },
 
+  // Like makePage, but uses a CALLER-supplied id so [[wikilink]] targets resolve
+  // to the page's file basename (the second-brain ingest needs slug ids).
+  makePageWithId: (id, info, docBlocks, parentId) => {
+    set((s) => ({
+      docs: { ...s.docs, [id]: docBlocks },
+      meta: {
+        ...s.meta,
+        [id]: {
+          icon: info.icon || "📄",
+          title: info.title || "Untitled",
+          cover: null,
+          ...(info.source !== undefined ? { source: info.source } : {}),
+          ...(info.ingestedAt !== undefined
+            ? { ingestedAt: info.ingestedAt }
+            : {}),
+        },
+      },
+      tree: treeInsert(
+        s.tree,
+        parentId,
+        { id, children: [] },
+        parentId ? "inside" : "root",
+      ),
+    }));
+    return id;
+  },
+
   importPdf: async () => {
     const api = window.hermesAPI;
     if (!api?.spsPickPdf || !api?.spsExtractPdf) {
@@ -368,6 +397,59 @@ export const createWorkspaceSlice: StateCreator<
         ),
       ],
       sources,
+    );
+  },
+
+  ensureWikiFolder: () => {
+    // A dedicated root home for agent-maintained wiki pages (second brain).
+    const { meta, tree } = get();
+    const existing = tree.find((n) => meta[n.id]?.title === WIKI_TITLE);
+    if (existing) return existing.id;
+    return get().makePage(
+      { icon: "🧠", title: WIKI_TITLE },
+      [
+        blk(
+          "p",
+          "Your second brain — interlinked pages the agent maintains from the captures you process in the Inbox.",
+        ),
+      ],
+      null,
+    );
+  },
+
+  ingestCommitPage: (page) => {
+    // Commit one proposed wiki page through the canonical store path so it shows
+    // in BOTH storage modes (the editor materializes it; autosave mirrors it to
+    // the vault as <pageId>.md, which is what [[wikilinks]] resolve to).
+    const { blocks } = pageFromMarkdown(page.markdown);
+    const docBlocks = blocks.length ? blocks : [blk("p", "")];
+    const exists = !!get().docs[page.pageId] || !!get().meta[page.pageId];
+    if (exists) {
+      get().setPageDoc(page.pageId, docBlocks);
+      set((s) => ({
+        meta: {
+          ...s.meta,
+          [page.pageId]: {
+            ...s.meta[page.pageId],
+            icon: s.meta[page.pageId]?.icon || "📝",
+            cover: s.meta[page.pageId]?.cover ?? null,
+            title: page.title,
+          },
+        },
+      }));
+      return page.pageId;
+    }
+    const parent = get().ensureWikiFolder();
+    return get().makePageWithId(
+      page.pageId,
+      {
+        icon: "📝",
+        title: page.title,
+        source: "ingest",
+        ingestedAt: Date.now(),
+      },
+      docBlocks,
+      parent,
     );
   },
 

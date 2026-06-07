@@ -12,6 +12,8 @@ import { SidebarSection } from "./SidebarSection";
 import { SidebarRecents } from "./SidebarRecents";
 import { SidebarAgents } from "./SidebarAgents";
 import { SidebarApps, SidebarMeetings, SidebarShared } from "./SidebarStubs";
+import { useVaultQuery } from "../hooks/useNoteIndex";
+import { INBOX_FOLDER } from "../inbox/capture";
 
 interface Identity {
   workspace: string;
@@ -86,6 +88,11 @@ export function Sidebar() {
   );
   const dnd: TreeDnd = { drag, setDrag, over, setOver, onMove: movePage };
   const identity = useIdentity();
+  // Live count of unprocessed captures for the Inbox badge.
+  const { rows: inboxRows } = useVaultQuery(INBOX_FOLDER, [
+    { prop: "status", op: "eq", value: "unprocessed" },
+  ]);
+  const inboxCount = inboxRows.length;
 
   const openPalette = (): void => setPaletteOpen(true);
   const newPage = (): void => setTemplatesOpen({ parent: null });
@@ -147,6 +154,14 @@ export function Sidebar() {
           <span className="nav-label">AI Chats</span>
         </div>
         <div
+          className={`nav-item ${surface === "inbox" ? "active" : ""}`}
+          onClick={() => setSurface("inbox")}
+        >
+          <Icon name="inbox" size={17} />
+          <span className="nav-label">Inbox</span>
+          {inboxCount > 0 && <span className="nav-kbd">{inboxCount}</span>}
+        </div>
+        <div
           className={`nav-item ${surface === "ask" ? "active" : ""}`}
           onClick={() => setSurface("ask")}
         >
@@ -180,6 +195,13 @@ export function Sidebar() {
         >
           <Icon name="pageGraph" size={17} />
           <span className="nav-label">Graph</span>
+        </div>
+        <div
+          className={`nav-item ${surface === "health" ? "active" : ""}`}
+          onClick={() => setSurface("health")}
+        >
+          <Icon name="check" size={17} />
+          <span className="nav-label">Vault health</span>
         </div>
         <div
           className={`nav-item ${surface === "equity" ? "active" : ""}`}
