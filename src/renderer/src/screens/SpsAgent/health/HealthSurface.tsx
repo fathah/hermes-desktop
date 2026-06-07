@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Icon } from "../components/Icon";
 import { useStore } from "../store";
+import { pageIdFromPath } from "../lib/pageId";
 
 interface HealthSurfaceProps {
   profile?: string;
@@ -20,11 +21,6 @@ interface LintReport {
 }
 
 const STALE_DAYS = 30;
-
-/** "Wiki/acme-corp.md" → "acme-corp" (the page id the store keys on). */
-function pageIdOf(relPath: string): string {
-  return (relPath.split("/").pop() ?? relPath).replace(/\.md$/, "");
-}
 
 export function HealthSurface({
   profile = "default",
@@ -54,7 +50,7 @@ export function HealthSurface({
   }, [run]);
 
   const open = (relPath: string): void => {
-    selectPage(pageIdOf(relPath));
+    selectPage(pageIdFromPath(relPath));
     setSurface("doc");
   };
 
@@ -125,7 +121,7 @@ export function HealthSurface({
             {report.brokenLinks.map((b, i) => (
               <li key={`${b.source}-${b.target}-${i}`} style={rowStyle}>
                 <button style={linkStyle} onClick={() => open(b.source)}>
-                  {pageIdOf(b.source)}
+                  {pageIdFromPath(b.source)}
                 </button>
                 <span style={{ color: "var(--tx-4)" }}>→</span>
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>
@@ -143,7 +139,7 @@ export function HealthSurface({
             {report.orphans.map((p) => (
               <li key={p} style={rowStyle}>
                 <button style={linkStyle} onClick={() => open(p)}>
-                  {pageIdOf(p)}
+                  {pageIdFromPath(p)}
                 </button>
               </li>
             ))}
@@ -157,7 +153,7 @@ export function HealthSurface({
             {report.stale.map((p) => (
               <li key={p} style={rowStyle}>
                 <button style={linkStyle} onClick={() => open(p)}>
-                  {pageIdOf(p)}
+                  {pageIdFromPath(p)}
                 </button>
               </li>
             ))}

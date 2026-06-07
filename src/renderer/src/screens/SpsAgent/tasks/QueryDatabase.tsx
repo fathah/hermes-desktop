@@ -11,6 +11,7 @@ import { Icon } from "../components/Icon";
 import { useVaultQuery } from "../hooks/useNoteIndex";
 import { rowToMarkdown, type RowProps } from "../editor/rowMarkdown";
 import { uid } from "../lib/ids";
+import { pageIdFromPath } from "../lib/pageId";
 import type { Block, DbCol, DbView, StatusKey, Task } from "../types";
 import { vaultRowToTask } from "./vaultRowToTask";
 import { BoardView } from "./BoardView";
@@ -24,10 +25,6 @@ import { VIEWS } from "./taskUtils";
 const STATUSES: StatusKey[] = ["todo", "doing", "review", "done"];
 // Let the chokidar-backed index pick up the new/removed file before refetching.
 const INDEX_LAG_MS = 200;
-
-const MD_SUFFIX = /\.md$/;
-const rowIdOf = (path: string): string =>
-  (path.split("/").pop() || "").replace(MD_SUFFIX, "");
 
 interface Props {
   block: Block;
@@ -59,7 +56,7 @@ export function QueryDatabase({ block, update }: Props) {
     if (!row || !source || !api?.spsExportRow) return;
     const next: RowProps = { title: row.title, ...row.props, ...patch };
     const markdown = rowToMarkdown(next);
-    await api.spsExportRow(source, rowIdOf(row.path), markdown);
+    await api.spsExportRow(source, pageIdFromPath(row.path), markdown);
     setTimeout(refetch, INDEX_LAG_MS);
   };
 
@@ -95,7 +92,7 @@ export function QueryDatabase({ block, update }: Props) {
 
   const deleteRow = async (taskId: string): Promise<void> => {
     const api = window.hermesAPI;
-    const rowId = rowIdOf(taskId);
+    const rowId = pageIdFromPath(taskId);
     if (!api?.spsDeleteRow || !source || !rowId) return;
     await api.spsDeleteRow(source, rowId);
     setTimeout(refetch, INDEX_LAG_MS);

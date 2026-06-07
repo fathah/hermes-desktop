@@ -16,6 +16,14 @@ export interface AuditResult {
   error?: string;
 }
 
+// Models sometimes wrap their answer in a ```markdown fence. Trim it and strip
+// the wrapping fence so callers get the raw body.
+function stripMarkdownFences(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith("```")) return trimmed;
+  return trimmed.replace(/^```(?:markdown|md)?\s*\n/, "").replace(/\n```$/, "");
+}
+
 export async function runTelosAudit(profile?: string): Promise<AuditResult> {
   try {
     const vaultPath = resolveSpsVaultDir(profile);
@@ -116,15 +124,9 @@ export async function runTelosAudit(profile?: string): Promise<AuditResult> {
     const data = (await res.json()) as {
       choices?: { message?: { content?: string } }[];
     };
-    let content = data?.choices?.[0]?.message?.content ?? "";
-    content = content.trim();
-
-    // Strip wrapping markdown code fences if model outputted them
-    if (content.startsWith("```")) {
-      content = content
-        .replace(/^```(?:markdown|md)?\s*\n/, "")
-        .replace(/\n```$/, "");
-    }
+    const content = stripMarkdownFences(
+      data?.choices?.[0]?.message?.content ?? "",
+    );
 
     return {
       success: true,
@@ -222,14 +224,9 @@ ${text}`;
     const data = (await res.json()) as {
       choices?: { message?: { content?: string } }[];
     };
-    let content = data?.choices?.[0]?.message?.content ?? "";
-    content = content.trim();
-
-    if (content.startsWith("```")) {
-      content = content
-        .replace(/^```(?:markdown|md)?\s*\n/, "")
-        .replace(/\n```$/, "");
-    }
+    const content = stripMarkdownFences(
+      data?.choices?.[0]?.message?.content ?? "",
+    );
 
     return {
       success: true,

@@ -9,6 +9,7 @@ import {
   type VaultRow,
 } from "../hooks/useNoteIndex";
 import { DB_FOLDER } from "./reportRow";
+import { pageIdFromPath } from "../lib/pageId";
 
 // The note index ingests vault writes via a live watcher — but rows written
 // while the app was closed (cron/headless refreshes) are missed. Rebuild once
@@ -16,10 +17,6 @@ import { DB_FOLDER } from "./reportRow";
 let rebuiltThisSession = false;
 
 const RATINGS = ["", "BUY", "ACCUMULATE", "HOLD", "REDUCE", "AVOID"];
-
-function slugOf(path: string): string {
-  return (path.split("/").pop() || "").replace(/\.md$/, "");
-}
 
 function tagsOf(row: VaultRow): string[] {
   const a = Array.isArray(row.props.tags) ? row.props.tags.map(String) : [];
@@ -106,7 +103,7 @@ export function ReportLedger({
             <li
               key={h.pageId}
               className="eq-hit"
-              onClick={() => onOpen(slugOf(h.pageId))}
+              onClick={() => onOpen(pageIdFromPath(h.pageId))}
             >
               <span className="eq-hit-title">{h.title}</span>
               <span className="eq-hit-snippet">{h.snippet}</span>
@@ -137,9 +134,9 @@ export function ReportLedger({
               <tr
                 key={r.path}
                 className="eq-ledger-row"
-                onClick={() => onOpen(slugOf(r.path))}
+                onClick={() => onOpen(pageIdFromPath(r.path))}
               >
-                <td>{String(r.props.ticker ?? slugOf(r.path))}</td>
+                <td>{String(r.props.ticker ?? pageIdFromPath(r.path))}</td>
                 <td>{String(r.props.sector ?? "")}</td>
                 <td>
                   <span

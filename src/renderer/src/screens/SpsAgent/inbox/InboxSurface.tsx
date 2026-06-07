@@ -29,6 +29,7 @@ import {
 } from "./ingestPrefs";
 import { installVaultSkill } from "./vaultSkill";
 import { blk } from "../lib/ids";
+import { pageIdFromPath } from "../lib/pageId";
 import { pageFromMarkdown } from "../editor/pageMarkdown";
 import { DEFAULT_WIKI_SCHEMA } from "../../../../../shared/wikiSchema";
 
@@ -49,11 +50,6 @@ interface Changeset {
   pages: ProposedPage[];
   captures: Array<{ id: string; status: "processed" | "discarded" }>;
   memory: string[];
-}
-
-/** Strip the folder + .md suffix from an index path to get the row id. */
-function rowIdOf(path: string): string {
-  return (path.split("/").pop() ?? path).replace(/\.md$/, "");
 }
 
 function timeLabel(capturedAt: unknown): string {
@@ -169,7 +165,7 @@ export function InboxSurface({
     async (row: VaultRow, status: CaptureStatus) => {
       const api = window.hermesAPI;
       if (!api?.spsReadRow || !api?.spsExportRow) return;
-      const id = rowIdOf(row.path);
+      const id = pageIdFromPath(row.path);
       setHidden((prev) => new Set(prev).add(row.path));
       try {
         const current = await api.spsReadRow(INBOX_FOLDER, id, profile);
