@@ -18,12 +18,10 @@ import Providers from "../Providers/Providers";
 import Schedules from "../Schedules/Schedules";
 import Kanban from "../Kanban/Kanban";
 import Insights from "../Insights/Insights";
-import SpsAgent from "../SpsAgent/SpsAgent";
 import RemoteNotice from "../../components/RemoteNotice";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
 import hermeslogo from "../../assets/hermes.png";
 import {
-  ChatBubble,
   ChevronDown,
   Clock,
   Users,
@@ -39,7 +37,7 @@ import {
   Kanban as KanbanIcon,
   Download,
 } from "../../assets/icons";
-import { Sparkles, BarChart3, UserCog } from "lucide-react";
+import { BarChart3, UserCog } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 import { loadAndApplyActiveSkin } from "../../utils/skin";
@@ -94,13 +92,6 @@ const NAV_ITEMS: {
   { view: "schedules", icon: Timer, labelKey: "navigation.schedules" },
   { view: "gateway", icon: Signal, labelKey: "navigation.gateway" },
   { view: "settings", icon: SettingsIcon, labelKey: "navigation.settings" },
-];
-
-// The legacy Workspace (TipTap) engine has been retired in favour of SPS Agent
-// as the single wiki surface; its nav entry is intentionally gone.
-const WORKSPACE_NAV_ITEMS: { view: View; icon: LucideIcon; label: string }[] = [
-  { view: "spsAgent", icon: Sparkles, label: "SPS Agent" },
-  { view: "chat", icon: ChatBubble, label: "Chat" },
 ];
 
 interface LayoutProps {
@@ -332,18 +323,6 @@ function Layout({
         </div>
 
         <nav className="sidebar-nav">
-          <div className="sidebar-nav-section">
-            {WORKSPACE_NAV_ITEMS.map(({ view: v, icon: Icon, label }) => (
-              <button
-                key={v}
-                className={`sidebar-nav-item ${view === v ? "active" : ""}`}
-                onClick={() => goTo(v)}
-              >
-                <Icon size={16} />
-                {label}
-              </button>
-            ))}
-          </div>
           <button
             type="button"
             className="sidebar-section-toggle"
@@ -436,15 +415,6 @@ function Layout({
             onDismiss={onDismissVerifyWarning}
           />
         )}
-        {/* SPS Agent: mount only while active — its zustand store is a module
-            singleton so workspace state survives unmount, and this keeps its
-            global ⌘K/⌘J hotkeys from firing on other views. */}
-        {view === "spsAgent" && (
-          <div style={paneStyle("spsAgent")}>
-            <SpsAgent />
-          </div>
-        )}
-
         <div style={paneStyle("chat")}>
           <Chat
             messages={messages}
