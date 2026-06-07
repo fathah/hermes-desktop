@@ -77,6 +77,17 @@ describe("formatVaultContext", () => {
     });
     expect(out.length).toBeLessThanOrEqual(4002);
   });
+
+  it("renders telos context when provided", () => {
+    const out = formatVaultContext({
+      hits: [],
+      memoryEntries: [],
+      rules: [],
+      telosText: "User's Deep Context (Telos):\nMission:\nTo live a peaceful life.",
+    });
+    expect(out).toContain("User's Deep Context (Telos):");
+    expect(out).toContain("Mission:\nTo live a peaceful life.");
+  });
 });
 
 describe("vaultUsage", () => {
@@ -100,6 +111,7 @@ describe("vaultUsage", () => {
       notes: 0,
       memory: 0,
       rules: 0,
+      telos: false,
     });
   });
 });

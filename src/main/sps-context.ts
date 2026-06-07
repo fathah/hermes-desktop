@@ -26,6 +26,8 @@ export interface VaultContextInput {
   /** Enabled standing rules from the user's USER.md `## Rules` block. */
   rules: string[];
   vaultPath?: string;
+  /** Structured user deep context (Telos) if available. */
+  telosText?: string;
 }
 
 /** What `assembleVaultContext` actually injected — drives the renderer's trust chip. */
@@ -33,6 +35,7 @@ export interface VaultContextUsage {
   notes: number;
   memory: number;
   rules: number;
+  telos?: boolean;
 }
 
 /** The assembled preamble plus a summary of what went into it. */
@@ -90,6 +93,10 @@ export function formatVaultContext(input: VaultContextInput): string {
     );
   }
 
+  if (input.telosText) {
+    sections.push(input.telosText);
+  }
+
   const hits = input.hits.slice(0, MAX_HITS);
   if (hits.length > 0) {
     const lines = hits.map((hit) => {
@@ -138,7 +145,8 @@ export function vaultUsage(input: VaultContextInput): VaultContextUsage {
     .map(tidyRule)
     .filter(Boolean)
     .slice(0, MAX_RULES).length;
-  return { notes, memory, rules };
+  const telos = !!input.telosText;
+  return { notes, memory, rules, telos };
 }
 
 /**
@@ -154,12 +162,15 @@ export async function assembleVaultContext(
 ): Promise<VaultContextResult> {
   const empty: VaultContextResult = {
     text: "",
-    used: { notes: 0, memory: 0, rules: 0 },
+    used: { notes: 0, memory: 0, rules: 0, telos: false },
   };
   try {
     const { getSpsNoteIndex } = await import("./note-index");
     const { readMemory } = await import("./memory");
     const { parseUserMd } = await import("../shared/userMd");
+    const { parseTelos, formatTelosContext } = await import("../shared/telos");
+    const { existsSync, readFileSync } = await import("fs");
+    const { join } = await import("path");
 
     const searchText = `${pageTitle} ${query}`.trim();
     const index = await getSpsNoteIndex(profile);
@@ -185,11 +196,26 @@ export async function assembleVaultContext(
     }
 
     const vaultPath = index.status().root;
+
+    // Check for TELOS.md in the vault root
+    let telosText = "";
+    try {
+      const telosPath = join(vaultPath, "TELOS.md");
+      if (existsSync(telosPath)) {
+        const telosContent = readFileSync(telosPath, "utf-8");
+        const telosData = parseTelos(telosContent);
+        telosText = formatTelosContext(telosData);
+      }
+    } catch {
+      // Optional — proceed
+    }
+
     const input: VaultContextInput = {
       hits,
       memoryEntries,
       rules,
       vaultPath,
+      telosText,
     };
     return { text: formatVaultContext(input), used: vaultUsage(input) };
   } catch {

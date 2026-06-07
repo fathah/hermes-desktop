@@ -1332,6 +1332,82 @@
   }
 }
 
+/* pulse dashboard widget */
+.sps-scope .ck-pulse {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px;
+}
+.sps-scope .ck-pulse-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sps-scope .ck-pulse-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.sps-scope .ck-pulse-sect-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--tx-3);
+}
+.sps-scope .ck-pulse-focus-text {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--tx-1);
+  margin: 0;
+  white-space: pre-wrap;
+}
+.sps-scope .ck-pulse-focus-input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--hair);
+  border-radius: 6px;
+  background: var(--canvas, transparent);
+  color: inherit;
+  font: inherit;
+  resize: none;
+}
+.sps-scope .ck-pulse-link-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 0;
+}
+.sps-scope .ck-pulse-link-btn:hover {
+  text-decoration: underline;
+}
+.sps-scope .ck-pulse-link-btn.cancel {
+  color: var(--tx-3);
+}
+.sps-scope .ck-pulse-mission-text {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--tx-1);
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--sunk);
+  border-radius: 6px;
+  border-left: 3px solid var(--accent);
+}
+.sps-scope .ck-pulse-empty {
+  padding: 16px;
+  text-align: center;
+  border: 1px dashed var(--hair);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--tx-3);
+}
+
+
 /* agent-action button block */
 .sps-scope .b-button-wrap {
   margin: 8px 0;

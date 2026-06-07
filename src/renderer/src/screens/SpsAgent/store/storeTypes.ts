@@ -299,7 +299,8 @@ export type WidgetKind =
   | "recentChats"
   | "today"
   | "agent"
-  | "guide";
+  | "guide"
+  | "pulse";
 
 /** A placed cockpit widget: which widget, and how many columns it spans. */
 export interface CockpitWidget {

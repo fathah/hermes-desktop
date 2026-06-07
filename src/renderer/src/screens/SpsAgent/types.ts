@@ -66,6 +66,7 @@ export interface Task {
   due: string;
   est: string;
   custom?: Record<string, string>;
+  isc?: string[];
 }
 
 /** One editor block. Most fields are block-type specific and optional. */

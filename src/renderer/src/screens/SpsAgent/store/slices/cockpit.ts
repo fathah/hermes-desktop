@@ -21,10 +21,12 @@ const ALL_KINDS: WidgetKind[] = [
   "today",
   "agent",
   "guide",
+  "pulse",
 ];
 
 const DEFAULT_COCKPIT: CockpitWidget[] = [
   { kind: "quick", span: 2 },
+  { kind: "pulse", span: 2 },
   { kind: "agent", span: 1 },
   { kind: "today", span: 1 },
   { kind: "glance", span: 1 },

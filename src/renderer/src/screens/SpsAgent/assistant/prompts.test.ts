@@ -20,6 +20,23 @@ describe("buildAiActionPrompt", () => {
     expect(out).toContain('{"kind":"diff"}');
     expect(out).toContain("some prose");
   });
+
+  it("builds correct prompt for wisdom, redteam, and critique", () => {
+    const wisdom = buildAiActionPrompt("wisdom", "some input");
+    expect(wisdom).toContain('{"kind":"chat"}');
+    expect(wisdom).toContain("world-class researcher");
+    expect(wisdom).toContain("some input");
+
+    const redteam = buildAiActionPrompt("redteam", "some plan");
+    expect(redteam).toContain('{"kind":"chat"}');
+    expect(redteam).toContain("red team operator");
+    expect(redteam).toContain("some plan");
+
+    const critique = buildAiActionPrompt("critique", "some draft");
+    expect(critique).toContain('{"kind":"chat"}');
+    expect(critique).toContain("premium editor");
+    expect(critique).toContain("some draft");
+  });
 });
 
 describe("aiActionLabel", () => {

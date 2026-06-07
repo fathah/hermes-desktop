@@ -7,7 +7,7 @@
 // pure string builders makes them trivially unit-testable and keeps the store thin.
 
 /** The inline co-author actions surfaced on the selection toolbar + slash menu. */
-export type AiActionKind = "tldr" | "eli5" | "rewrite" | "summarize" | "why";
+export type AiActionKind = "tldr" | "eli5" | "rewrite" | "summarize" | "why" | "wisdom" | "redteam" | "critique";
 
 /** Short label shown as the user's chat bubble for an inline action. */
 export function aiActionLabel(kind: AiActionKind, selection: string): string {
@@ -19,6 +19,9 @@ export function aiActionLabel(kind: AiActionKind, selection: string): string {
     rewrite: "Rewrite",
     summarize: "Summarize",
     why: "Why this approach",
+    wisdom: "Extract Wisdom",
+    redteam: "Red Team",
+    critique: "Critique Writing",
   };
   return snippet ? `${verb[kind]}: “${snippet}”` : verb[kind];
 }
@@ -40,6 +43,51 @@ export function buildAiActionPrompt(
       return `Explain WHY this approach or decision makes sense, and name the main trade-off or risk. Reply as {"kind":"chat"}.\n\n${target}`;
     case "rewrite":
       return `Rewrite the following to be clearer and tighter without changing its meaning. Return a {"kind":"diff"} edit whose "find" is the first ~18 characters of the text and whose "html" is the rewrite.\n\n${target}`;
+    case "wisdom":
+      return [
+        `Extract key insights, facts, lessons, and quotes from the following text. Reply as {"kind":"chat"}.`,
+        "",
+        "Identity & Purpose:",
+        "You are a world-class researcher. You extract the core essence of inputs.",
+        "",
+        "Steps:",
+        "1. Extract 1-3 high-level insights.",
+        "2. Extract 3-5 core facts or lessons.",
+        "3. Extract 1-3 most memorable quotes.",
+        "",
+        "Output format:",
+        "Clean, readable markdown with bold headers.",
+        "",
+        `Input text:\n${target}`
+      ].join("\n");
+    case "redteam":
+      return [
+        `Red Team the following plan, proposal, or statement. Look for hidden vulnerabilities, cognitive biases, unstated assumptions, and worst-case scenarios. Reply as {"kind":"chat"}.`,
+        "",
+        "Identity & Purpose:",
+        "You are a critical red team operator. Your job is to challenge ideas and identify risks before they manifest.",
+        "",
+        "Steps:",
+        "1. List 3 critical vulnerabilities or logical flaws.",
+        "2. List 2 unstated assumptions.",
+        "3. Provide 1 worst-case failure mode.",
+        "",
+        `Input text:\n${target}`
+      ].join("\n");
+    case "critique":
+      return [
+        `Provide a severe, constructive writing critique of the following text. Review its structure, clarity, impact, and style. Reply as {"kind":"chat"}.`,
+        "",
+        "Identity & Purpose:",
+        "You are a premium editor. You help authors maximize clarity and impact.",
+        "",
+        "Steps:",
+        "1. Analyze the structure and flow.",
+        "2. Highlight areas of wordiness or ambiguity.",
+        "3. Propose 3 specific improvements.",
+        "",
+        `Input text:\n${target}`
+      ].join("\n");
   }
 }
 

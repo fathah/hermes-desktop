@@ -19,6 +19,7 @@ const WIDGET_META: Record<WidgetKind, { title: string; icon: IconName }> = {
   today: { title: "Today", icon: "calendar" },
   agent: { title: "Agent status", icon: "code" },
   guide: { title: "Operator guide", icon: "checkbox" },
+  pulse: { title: "Pulse Dashboard", icon: "sparkle" },
 };
 
 export function CockpitSurface() {
@@ -164,6 +165,8 @@ function Widget({ kind }: { kind: WidgetKind }) {
       return <AgentStatus />;
     case "guide":
       return <OperatorGuideWidget />;
+    case "pulse":
+      return <PulseWidget />;
   }
 }
 
@@ -458,6 +461,166 @@ function OperatorGuideWidget() {
       <div className="ck-guide-foot">
         Type <code>/guide</code> in chat for the automation &amp; skill-install
         checklists.
+      </div>
+    </div>
+  );
+}
+
+function PulseWidget() {
+  const [focus, setFocus] = useState("");
+  const [editingFocus, setEditingFocus] = useState(false);
+  const [focusInput, setFocusInput] = useState("");
+  const meta = useStore((s) => s.meta);
+  const docs = useStore((s) => s.docs);
+  const selectPage = useStore((s) => s.selectPage);
+  const setSurface = useStore((s) => s.setSurface);
+  const makePage = useStore((s) => s.makePage);
+  const flash = useStore((s) => s.flash);
+
+  useEffect(() => {
+    window.hermesAPI.readFocus().then((f) => {
+      setFocus(f);
+      setFocusInput(f);
+    });
+  }, []);
+
+  const saveFocus = async () => {
+    const res = await window.hermesAPI.writeFocus(focusInput);
+    if (res.success) {
+      setFocus(focusInput);
+      setEditingFocus(false);
+      flash("Daily Focus updated");
+    } else {
+      flash(res.error || "Failed to save focus", { tone: "warn" });
+    }
+  };
+
+  // Find TELOS page
+  const telosPageId = Object.keys(meta).find(
+    (id) => meta[id]?.title?.toUpperCase() === "TELOS" || meta[id]?.title?.toUpperCase() === "TELOS.MD"
+  );
+
+  const createTelosPage = () => {
+    const initialTelosBlocks = [
+      { id: "b1", type: "h2", text: "Mission" },
+      { id: "b2", type: "p", text: "To align efforts, optimize focus, and build systems that magnify potential." },
+      { id: "b3", type: "h2", text: "Goals" },
+      { id: "b4", type: "todo", text: "Define core life priorities.", done: false },
+      { id: "b5", type: "todo", text: "Verify local Hermes models are running at peak throughput.", done: false },
+      { id: "b6", type: "h2", text: "KPIs" },
+      { id: "b7", type: "li", text: "Daily focused hours: 4+" },
+      { id: "b8", type: "li", text: "Weekly active sprint tasks completed: 85%+" },
+      { id: "b9", type: "h2", text: "Problems" },
+      { id: "b10", type: "li", text: "Information fragmentation across tabs." },
+    ] as any[];
+
+    const id = makePage({ icon: "🎯", title: "TELOS" }, initialTelosBlocks, null);
+    selectPage(id);
+    setSurface("doc");
+    flash("TELOS page created in your vault!");
+  };
+
+  const telosData = { mission: "", goals: [] as string[], kpis: [] as string[], problems: [] as string[] };
+  if (telosPageId) {
+    const blocks = docs[telosPageId] || [];
+    let currentSection: "mission" | "goals" | "kpis" | "problems" | null = null;
+    for (const b of blocks) {
+      if (b.type === "h1" || b.type === "h2" || b.type === "h3") {
+        const heading = b.text.toLowerCase();
+        if (heading.includes("mission")) {
+          currentSection = "mission";
+        } else if (heading.includes("goal")) {
+          currentSection = "goals";
+        } else if (heading.includes("kpi")) {
+          currentSection = "kpis";
+        } else if (heading.includes("problem")) {
+          currentSection = "problems";
+        } else {
+          currentSection = null;
+        }
+      } else if (b.text.trim()) {
+        if (currentSection === "mission") {
+          telosData.mission += (telosData.mission ? "\n" : "") + b.text;
+        } else if (currentSection === "goals") {
+          telosData.goals.push(b.text);
+        } else if (currentSection === "kpis") {
+          telosData.kpis.push(b.text);
+        } else if (currentSection === "problems") {
+          telosData.problems.push(b.text);
+        }
+      }
+    }
+  }
+
+  return (
+    <div className="ck-pulse">
+      {/* Daily Focus Section */}
+      <div className="ck-pulse-section">
+        <div className="ck-pulse-title-row">
+          <span className="ck-pulse-sect-title">Daily Focus</span>
+          {!editingFocus ? (
+            <button className="ck-pulse-link-btn" onClick={() => setEditingFocus(true)}>Edit</button>
+          ) : (
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="ck-pulse-link-btn" onClick={saveFocus}>Save</button>
+              <button className="ck-pulse-link-btn cancel" onClick={() => { setFocusInput(focus); setEditingFocus(false); }}>Cancel</button>
+            </div>
+          )}
+        </div>
+        {!editingFocus ? (
+          <p className="ck-pulse-focus-text">{focus || "No daily focus set. Click Edit to focus your day."}</p>
+        ) : (
+          <textarea
+            className="ck-pulse-focus-input"
+            value={focusInput}
+            onChange={(e) => setFocusInput(e.target.value)}
+            rows={2}
+            placeholder="Focusing on..."
+          />
+        )}
+      </div>
+
+      <div style={{ borderBottom: "1px solid var(--border-color)", margin: "12px 0" }} />
+
+      {/* Telos Alignment Section */}
+      <div className="ck-pulse-section">
+        {telosPageId ? (
+          <div>
+            <div className="ck-pulse-title-row">
+              <span className="ck-pulse-sect-title">Mission</span>
+              <button
+                className="ck-pulse-link-btn"
+                onClick={() => {
+                  selectPage(telosPageId);
+                  setSurface("doc");
+                }}
+              >
+                Go to TELOS
+              </button>
+            </div>
+            <p className="ck-pulse-mission-text">
+              {telosData.mission || "No mission statement written yet."}
+            </p>
+            
+            {telosData.goals.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <span className="ck-pulse-sect-title">Key Goals</span>
+                <ul className="ck-pulse-list" style={{ marginTop: 6, paddingLeft: 16, listStyleType: "disc" }}>
+                  {telosData.goals.slice(0, 3).map((goal, idx) => (
+                    <li key={idx} className="ck-pulse-item" style={{ marginBottom: 4 }}>{goal}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="ck-pulse-empty">
+            <p>No <code>TELOS.md</code> found in your vault. Create one to track your mission, goals, and KPIs.</p>
+            <button className="ck-btn" onClick={createTelosPage} style={{ marginTop: 8 }}>
+              <Icon name="plus" size={14} /> Initialize TELOS.md
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
