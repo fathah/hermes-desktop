@@ -32,8 +32,8 @@ vi.mock("fs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("fs")>();
   const mockFs = {
     ...actual,
-    existsSync: (_path: string) => true,
-    readFileSync: (_path: string) => "mock content",
+    existsSync: () => true,
+    readFileSync: () => "mock content",
   };
   return {
     ...mockFs,
@@ -124,8 +124,8 @@ describe("Piping Console Patterns", () => {
     expect(res.result).toBe("Piped Output");
 
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
-    const [, fetchOpts] = (globalThis.fetch as any).mock.calls[0];
-    const body = JSON.parse(fetchOpts.body);
+    const [, fetchOpts] = vi.mocked(globalThis.fetch).mock.calls[0];
+    const body = JSON.parse((fetchOpts as RequestInit).body as string);
     expect(body.messages[1].content).toContain(
       "Extract the most important wisdom",
     );
@@ -141,8 +141,8 @@ describe("Piping Console Patterns", () => {
     expect(res.result).toBe("Piped Output");
 
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
-    const [, fetchOpts] = (globalThis.fetch as any).mock.calls[0];
-    const body = JSON.parse(fetchOpts.body);
+    const [, fetchOpts] = vi.mocked(globalThis.fetch).mock.calls[0];
+    const body = JSON.parse((fetchOpts as RequestInit).body as string);
     expect(body.messages[1].content).toContain(
       "Write a spoken briefing summarizing my day",
     );

@@ -11,7 +11,10 @@ import {
 } from "../../../lib/grounding";
 import { contextChipLabel } from "./contextChip";
 
-function getPlainEnglishExplanation(m: any): string {
+function getPlainEnglishExplanation(m: {
+  sshAction?: { action?: string };
+  configAction?: { provider?: string };
+}): string {
   if (m.sshAction) {
     const act = m.sshAction.action;
     if (act === "start") {
@@ -21,7 +24,7 @@ function getPlainEnglishExplanation(m: any): string {
     }
   }
   if (m.configAction) {
-    const prov = m.configAction.provider;
+    const prov = m.configAction.provider ?? "";
     return `I need your permission to save your API key for ${prov.toUpperCase()}. This will allow the assistant to securely communicate with the model provider. The key will be stored locally on your hard drive.`;
   }
   return "";

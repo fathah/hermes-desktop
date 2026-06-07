@@ -5,31 +5,37 @@ import {
 } from "../src/main/skills-registry";
 import * as dbModule from "../src/main/db";
 
-class MockDatabase {
-  public prepareCalls: { sql: string; params: any[] }[] = [];
-  public runResults: any[] = [];
-  public allResults: any[] = [];
-  public getResults: any[] = [];
+interface PreparedMock {
+  run: (...params: unknown[]) => unknown;
+  all: (...params: unknown[]) => unknown;
+  get: (...params: unknown[]) => unknown;
+}
 
-  prepare(sql: string) {
+class MockDatabase {
+  public prepareCalls: { sql: string; params: unknown[] }[] = [];
+  public runResults: unknown[] = [];
+  public allResults: unknown[][] = [];
+  public getResults: unknown[] = [];
+
+  prepare(sql: string): PreparedMock {
     return {
-      run: (...params: any[]) => {
+      run: (...params: unknown[]) => {
         this.prepareCalls.push({ sql, params });
         return this.runResults.shift() || { changes: 1 };
       },
-      all: (...params: any[]) => {
+      all: (...params: unknown[]) => {
         this.prepareCalls.push({ sql, params });
         return this.allResults.shift() || [];
       },
-      get: (...params: any[]) => {
+      get: (...params: unknown[]) => {
         this.prepareCalls.push({ sql, params });
         return this.getResults.shift() || undefined;
       },
     };
   }
 
-  transaction(fn: any) {
-    return (list: any[]) => fn(list);
+  transaction(fn: (list: unknown[]) => unknown): (list: unknown[]) => unknown {
+    return (list: unknown[]) => fn(list);
   }
 }
 
@@ -39,7 +45,9 @@ describe("Skills Registry", () => {
   beforeEach(() => {
     mockDb = new MockDatabase();
     // Mock getSharedDb to return our mock database
-    vi.spyOn(dbModule, "getSharedDb").mockReturnValue(mockDb as any);
+    vi.spyOn(dbModule, "getSharedDb").mockReturnValue(
+      mockDb as unknown as ReturnType<typeof dbModule.getSharedDb>,
+    );
   });
 
   afterEach(() => {

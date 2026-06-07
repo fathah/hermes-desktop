@@ -150,7 +150,15 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
   const [approvalTimeout, setApprovalTimeout] = useState("0");
 
   // Prompt budget & Security states
-  const [promptSize, setPromptSize] = useState<any>(null);
+  interface PromptSizeBreakdown {
+    total?: number;
+    limit?: number;
+    breakdown?: Record<string, number>;
+    [key: string]: number | Record<string, number> | undefined;
+  }
+  const [promptSize, setPromptSize] = useState<PromptSizeBreakdown | null>(
+    null,
+  );
   const [promptSizeLoading, setPromptSizeLoading] = useState(false);
   const [securityRunning, setSecurityRunning] = useState(false);
   const [securityOutput, setSecurityOutput] = useState<string | null>(null);
@@ -160,7 +168,7 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
     try {
       const breakdownStr =
         await window.hermesAPI.getPromptSizeBreakdown(profile);
-      const data = JSON.parse(breakdownStr);
+      const data = JSON.parse(breakdownStr) as PromptSizeBreakdown;
       setPromptSize(data);
     } catch (err) {
       console.error("Failed to parse prompt budget size breakdown:", err);
@@ -599,8 +607,8 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
         <div className="settings-field">
           <div className="settings-field-hint" style={{ marginBottom: 12 }}>
             This visualizer shows the token usage budget for the active agent
-            profile context window. If the prompt exceeds the model's budget,
-            some memory or history may be truncated.
+            profile context window. If the prompt exceeds the model&apos;s
+            budget, some memory or history may be truncated.
           </div>
           {promptSizeLoading ? (
             <div

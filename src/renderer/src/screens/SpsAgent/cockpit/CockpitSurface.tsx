@@ -7,6 +7,7 @@ import { Icon } from "../components/Icon";
 import type { IconName } from "../components/iconPaths";
 import { useStore } from "../store";
 import type { WidgetKind } from "../store/storeTypes";
+import type { Block } from "../types";
 import { OPERATOR_GUIDE } from "../../../lib/operatorGuide";
 import { pageFromMarkdown } from "../editor/pageMarkdown";
 import { blk } from "../lib/ids";
@@ -538,7 +539,7 @@ function PulseWidget() {
       },
       { id: "b9", type: "h2", text: "Problems" },
       { id: "b10", type: "li", text: "Information fragmentation across tabs." },
-    ] as any[];
+    ] as Block[];
 
     const id = makePage(
       { icon: "🎯", title: "TELOS" },
@@ -619,7 +620,7 @@ function PulseWidget() {
       } else {
         speakBrowserNative(textToSpeak);
       }
-    } catch (err) {
+    } catch {
       flash("Failed to run spoken briefing", { tone: "warn" });
     } finally {
       setBriefingLoading(false);
