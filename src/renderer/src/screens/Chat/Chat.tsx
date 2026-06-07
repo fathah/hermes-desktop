@@ -64,7 +64,8 @@ function Chat({
   const [hermesSessionId, setHermesSessionId] = useState<string | null>(null);
   const [toolProgress, setToolProgress] = useState<string | null>(null);
   // Gateway approval (B1) + delegation (B3) signals, forward-compatible.
-  const { approvals, respond, delegationTree } = useChatSignals(profile);
+  const { approvals, respond, delegationTree, approvalTimeout, now } =
+    useChatSignals(profile);
   const [usage, setUsage] = useState<UsageState | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [remoteMode, setRemoteMode] = useState(false);
@@ -429,7 +430,12 @@ function Chat({
             />
           )}
           <DelegationTree tree={delegationTree} />
-          <ApprovalQueue state={approvals} onRespond={respond} />
+          <ApprovalQueue
+            state={approvals}
+            onRespond={respond}
+            timeoutSeconds={approvalTimeout}
+            now={now}
+          />
           <div ref={bottomRef} />
         </div>
 

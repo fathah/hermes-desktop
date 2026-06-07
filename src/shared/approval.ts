@@ -18,6 +18,8 @@ export interface PendingApproval {
   toolName?: string;
   patternKey?: string;
   description?: string;
+  /** Epoch ms the request was enqueued (stamped desktop-side, for countdown). */
+  enqueuedAt?: number;
 }
 
 export interface ApprovalState {
@@ -95,4 +97,20 @@ export function resolveApproval(
 /** Default-deny response for a timed-out request (UI calls resolveApproval). */
 export function timeoutChoice(): ApprovalChoice {
   return "deny";
+}
+
+/**
+ * Seconds left before a pending approval auto-denies, or null when the timeout
+ * is disabled (0/negative) or the request has no enqueue stamp. Pure; the UI
+ * uses it for the countdown and the hook uses it to fire the auto-deny.
+ */
+export function remainingSeconds(
+  enqueuedAt: number | undefined,
+  now: number,
+  timeoutSeconds: number,
+): number | null {
+  if (!timeoutSeconds || timeoutSeconds <= 0) return null;
+  if (enqueuedAt === undefined) return null;
+  const elapsed = (now - enqueuedAt) / 1000;
+  return Math.max(0, Math.ceil(timeoutSeconds - elapsed));
 }

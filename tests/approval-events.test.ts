@@ -6,8 +6,30 @@ import {
   isRemembered,
   safeKey,
   timeoutChoice,
+  remainingSeconds,
   type PendingApproval,
 } from "../src/shared/approval";
+
+describe("remainingSeconds", () => {
+  const t0 = 1_000_000;
+  it("is null when the timeout is disabled (0 or negative)", () => {
+    expect(remainingSeconds(t0, t0, 0)).toBeNull();
+    expect(remainingSeconds(t0, t0, -5)).toBeNull();
+  });
+  it("is null when the request has no enqueue stamp", () => {
+    expect(remainingSeconds(undefined, t0, 60)).toBeNull();
+  });
+  it("counts down and floors at zero (never negative)", () => {
+    expect(remainingSeconds(t0, t0, 60)).toBe(60);
+    expect(remainingSeconds(t0, t0 + 10_000, 60)).toBe(50);
+    expect(remainingSeconds(t0, t0 + 60_000, 60)).toBe(0);
+    expect(remainingSeconds(t0, t0 + 90_000, 60)).toBe(0);
+  });
+  it("rounds up partial seconds so the badge shows whole seconds", () => {
+    expect(remainingSeconds(t0, t0 + 500, 60)).toBe(60);
+    expect(remainingSeconds(t0, t0 + 1500, 60)).toBe(59);
+  });
+});
 
 const req = (over: Partial<PendingApproval> = {}): PendingApproval => ({
   id: "a1",

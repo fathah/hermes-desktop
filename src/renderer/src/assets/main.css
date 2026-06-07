@@ -4822,6 +4822,13 @@ body {
   font-size: 11px;
   color: var(--text-muted);
 }
+.chat-approval-countdown {
+  margin-left: auto;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--danger-fg, #a1202c);
+  opacity: 0.85;
+}
 .chat-approval-command {
   margin: 8px 0 0;
   padding: 8px 10px;

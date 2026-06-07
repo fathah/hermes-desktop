@@ -146,6 +146,8 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
   // Automation prefs (M2): scoped auto-approve + completion chime
   const [autoApprove, setAutoApproveState] = useState(false);
   const [completionSound, setCompletionSoundState] = useState(false);
+  // Approval auto-deny timeout (seconds; 0 = off). Opt-in operator safety.
+  const [approvalTimeout, setApprovalTimeout] = useState("0");
 
   const loadConfig = useCallback(async (): Promise<void> => {
     // Load fast config first (cached in main process)
@@ -174,6 +176,9 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
     // Automation prefs (auto-approve is per-profile; chime is app-level)
     window.hermesAPI.getAutoApprove(profile).then(setAutoApproveState);
     window.hermesAPI.getCompletionSound().then(setCompletionSoundState);
+    window.hermesAPI
+      .getConfig("approval.timeout_seconds", profile)
+      .then((v) => setApprovalTimeout(String(parseInt(v || "0", 10) || 0)));
 
     // Load network settings from config.yaml
     window.hermesAPI.getConfig("network.force_ipv4", profile).then((v) => {
@@ -1020,6 +1025,36 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
           <div className="settings-field-hint">
             Play a system chime when an agent run finishes — the cue for which
             of several parallel runs just landed.
+          </div>
+        </div>
+        <div className="settings-field">
+          <label className="settings-field-label" htmlFor="approval-timeout">
+            Approval auto-deny timeout
+          </label>
+          <input
+            id="approval-timeout"
+            className="input"
+            type="number"
+            min={0}
+            step={5}
+            style={{ maxWidth: 140 }}
+            value={approvalTimeout}
+            onChange={(e) => {
+              const next = String(
+                Math.max(0, parseInt(e.target.value, 10) || 0),
+              );
+              setApprovalTimeout(next);
+              void window.hermesAPI.setConfig(
+                "approval.timeout_seconds",
+                next,
+                profile,
+              );
+            }}
+          />
+          <div className="settings-field-hint">
+            Seconds before an unanswered command-approval auto-denies (a safety
+            default for when you operate from mobile). <strong>0 = off</strong>;
+            approvals then wait indefinitely for your decision.
           </div>
         </div>
       </div>
