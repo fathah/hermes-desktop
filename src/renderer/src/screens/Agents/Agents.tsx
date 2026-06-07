@@ -2,19 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Plus, Trash, ChatBubble } from "../../assets/icons";
 import HermesLogo from "../../components/common/HermesLogo";
 import { useI18n } from "../../components/useI18n";
-
-interface ProfileInfo {
-  name: string;
-  path: string;
-  isDefault: boolean;
-  isActive: boolean;
-  model: string;
-  provider: string;
-  hasEnv: boolean;
-  hasSoul: boolean;
-  skillCount: number;
-  gatewayRunning: boolean;
-}
+import type { ProfileInfo } from "../../../../shared/profiles";
 
 interface AgentsProps {
   activeProfile: string;

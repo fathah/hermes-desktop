@@ -4,22 +4,13 @@ import type { Attachment } from "../shared/attachments";
 import { isImageMime } from "../shared/attachments";
 import { clearStagedAttachments } from "./attachment-staging";
 import { removeSessionFromCache } from "./session-cache";
+import type { SessionSummary } from "../shared/sessions";
+export type { SessionSummary };
 
 // Sentinel prefix used by hermes-agent's hermes_state.py to mark
 // JSON-encoded multimodal content in the messages.content column.
 // See agent source: hermes_state._CONTENT_JSON_PREFIX = "\x00json:".
 const CONTENT_JSON_PREFIX = "\x00json:";
-
-export interface SessionSummary {
-  id: string;
-  source: string;
-  startedAt: number;
-  endedAt: number | null;
-  messageCount: number;
-  model: string;
-  title: string | null;
-  preview: string;
-}
 
 export interface SessionMessage {
   id: number;

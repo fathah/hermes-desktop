@@ -12,6 +12,8 @@ import { createConnection } from "net";
 import { getEnhancedPath, HERMES_HOME } from "./installer";
 import { stripAnsi, safeWriteFile } from "./utils";
 import { getApiServerKey, getConnectionConfig, getModelConfig } from "./config";
+import type { Claw3dStatus } from "../shared/claw3d";
+export type { Claw3dStatus };
 import http from "http";
 
 const HERMES_OFFICE_REPO = "https://github.com/fathah/hermes-office";
@@ -421,24 +423,6 @@ async function prepareLocalAdapterPort(): Promise<{
     safeWriteFile(WS_URL_FILE, adapterUrlForPort(port));
   }
   return { port, changed };
-}
-
-export interface Claw3dStatus {
-  cloned: boolean;
-  installed: boolean;
-  devServerRunning: boolean;
-  adapterRunning: boolean;
-  running: boolean; // true when both dev + adapter are up
-  port: number;
-  portInUse: boolean;
-  wsUrl: string;
-  error: string; // last error from either process
-  // Populated in SSH tunnel mode when a Claw3D / hermes-office service is
-  // running on the remote host. Renderer should prefer this over launching
-  // a local dev server. Null/undefined when not in SSH mode or when the
-  // remote service is unreachable.
-  remoteUrl?: string | null;
-  remoteSource?: "ssh" | null;
 }
 
 export interface Claw3dSetupProgress {

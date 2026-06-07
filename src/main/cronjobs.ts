@@ -17,23 +17,8 @@ import {
   augmentPrompt,
   parseCreatedJobId,
 } from "./cron-quality";
-
-export interface CronJob {
-  id: string;
-  name: string;
-  schedule: string;
-  prompt: string;
-  state: "active" | "paused" | "completed";
-  enabled: boolean;
-  next_run_at: string | null;
-  last_run_at: string | null;
-  last_status: string | null;
-  last_error: string | null;
-  repeat: { times: number | null; completed: number } | null;
-  deliver: string[];
-  skills: string[];
-  script: string | null;
-}
+import type { CronJob } from "../shared/cronjobs";
+export type { CronJob };
 
 function jobsFilePath(profile?: string): string {
   return join(profileHome(profile), "cron", "jobs.json");

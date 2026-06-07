@@ -22,6 +22,10 @@ import type { EquityBasket, EquityAlert } from "../shared/equity";
 import type { PublicConnectionConfig } from "../shared/connection";
 import type { ChatReadiness } from "../shared/validation";
 import type { SkillEntry } from "../shared/skills";
+import type { ProfileInfo } from "../shared/profiles";
+import type { CronJob } from "../shared/cronjobs";
+import type { Claw3dStatus } from "../shared/claw3d";
+import type { SessionSummary } from "../shared/sessions";
 
 interface ElectronAPI {
   process: {
@@ -363,21 +367,7 @@ interface HermesAPI {
   ) => Promise<boolean>;
 
   // Sessions
-  listSessions: (
-    limit?: number,
-    offset?: number,
-  ) => Promise<
-    Array<{
-      id: string;
-      source: string;
-      startedAt: number;
-      endedAt: number | null;
-      messageCount: number;
-      model: string;
-      title: string | null;
-      preview: string;
-    }>
-  >;
+  listSessions: (limit?: number, offset?: number) => Promise<SessionSummary[]>;
   getSessionMessages: (sessionId: string) => Promise<
     Array<
       | {
@@ -423,20 +413,7 @@ interface HermesAPI {
   >;
 
   // Profiles
-  listProfiles: () => Promise<
-    Array<{
-      name: string;
-      path: string;
-      isDefault: boolean;
-      isActive: boolean;
-      model: string;
-      provider: string;
-      hasEnv: boolean;
-      hasSoul: boolean;
-      skillCount: number;
-      gatewayRunning: boolean;
-    }>
-  >;
+  listProfiles: () => Promise<ProfileInfo[]>;
   createProfile: (
     name: string,
     clone: boolean,
@@ -701,19 +678,7 @@ interface HermesAPI {
   updateModel: (id: string, fields: Record<string, string>) => Promise<boolean>;
 
   // Claw3D
-  claw3dStatus: () => Promise<{
-    cloned: boolean;
-    installed: boolean;
-    devServerRunning: boolean;
-    adapterRunning: boolean;
-    port: number;
-    portInUse: boolean;
-    wsUrl: string;
-    running: boolean;
-    error: string;
-    remoteUrl?: string | null;
-    remoteSource?: "ssh" | null;
-  }>;
+  claw3dStatus: () => Promise<Claw3dStatus>;
   claw3dSetup: () => Promise<{ success: boolean; error?: string }>;
   onClaw3dSetupProgress: (
     callback: (progress: {
@@ -760,24 +725,7 @@ interface HermesAPI {
   listCronJobs: (
     includeDisabled?: boolean,
     profile?: string,
-  ) => Promise<
-    Array<{
-      id: string;
-      name: string;
-      schedule: string;
-      prompt: string;
-      state: "active" | "paused" | "completed";
-      enabled: boolean;
-      next_run_at: string | null;
-      last_run_at: string | null;
-      last_status: string | null;
-      last_error: string | null;
-      repeat: { times: number | null; completed: number } | null;
-      deliver: string[];
-      skills: string[];
-      script: string | null;
-    }>
-  >;
+  ) => Promise<CronJob[]>;
   createCronJob: (
     schedule: string,
     prompt?: string,

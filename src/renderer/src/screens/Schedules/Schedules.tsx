@@ -10,6 +10,7 @@ import {
   Alert,
 } from "../../assets/icons";
 import { useI18n } from "../../components/useI18n";
+import type { CronJob } from "../../../../shared/cronjobs";
 
 const DELIVER_TARGETS = [
   { value: "local", label: "Local" },
@@ -29,23 +30,6 @@ const DELIVER_TARGETS = [
   { value: "feishu", label: "Feishu" },
   { value: "wecom", label: "WeCom" },
 ];
-
-interface CronJob {
-  id: string;
-  name: string;
-  schedule: string;
-  prompt: string;
-  state: "active" | "paused" | "completed";
-  enabled: boolean;
-  next_run_at: string | null;
-  last_run_at: string | null;
-  last_status: string | null;
-  last_error: string | null;
-  repeat: { times: number | null; completed: number } | null;
-  deliver: string[];
-  skills: string[];
-  script: string | null;
-}
 
 type FrequencyType = "minutes" | "hourly" | "daily" | "weekly" | "custom";
 

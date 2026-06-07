@@ -17,6 +17,8 @@ import {
   PROFILE_NAME_ERROR,
 } from "./utils";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
+import type { ProfileInfo } from "../shared/profiles";
+export type { ProfileInfo };
 
 const PROFILES_DIR = join(HERMES_HOME, "profiles");
 
@@ -29,19 +31,6 @@ function commandErrorMessage(err: unknown): string {
   const stdout = e.stdout?.toString().trim();
   const stderr = e.stderr?.toString().trim();
   return stdout || stderr || e.message || "Command failed";
-}
-
-export interface ProfileInfo {
-  name: string;
-  path: string;
-  isDefault: boolean;
-  isActive: boolean;
-  model: string;
-  provider: string;
-  hasEnv: boolean;
-  hasSoul: boolean;
-  skillCount: number;
-  gatewayRunning: boolean;
 }
 
 async function readProfileConfig(profilePath: string): Promise<{
