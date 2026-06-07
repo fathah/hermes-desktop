@@ -1311,7 +1311,11 @@ const hermesAPI = {
   }> => ipcRenderer.invoke("sps-unfurl", url),
   spsAssistant: (
     prompt: string,
-    ctx: { blocks: { type: string; text: string }[]; pageTitle: string },
+    ctx: {
+      blocks: { type: string; text: string }[];
+      pageTitle: string;
+      notes?: string[];
+    },
     profile?: string,
     groundInWorkspace?: boolean,
   ): Promise<unknown> =>

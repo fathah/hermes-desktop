@@ -35,6 +35,7 @@ export class BridgeAssistant implements AssistantProvider {
         {
           blocks: ctx.blocks.map((b) => ({ type: b.type, text: b.text })),
           pageTitle: ctx.pageTitle,
+          ...(ctx.notes && ctx.notes.length ? { notes: ctx.notes } : {}),
         },
         undefined,
         getGroundInWorkspace(),

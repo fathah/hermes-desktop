@@ -39,6 +39,9 @@ export type AssistantResult = (
 export interface PageContext {
   blocks: Block[];
   pageTitle: string;
+  /** Private notes the user pinned to text on this page (unarchived). The agent
+   *  treats these as authoritative intent. Empty/absent when there are none. */
+  notes?: string[];
 }
 
 export interface AssistantProvider {

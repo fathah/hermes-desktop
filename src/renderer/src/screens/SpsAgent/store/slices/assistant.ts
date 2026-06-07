@@ -137,8 +137,20 @@ export const createAssistantSlice: StateCreator<
       setConvThinking(convId, true);
       const blocks = s.docs[s.page] || [];
       const pageTitle = (s.meta[s.page] || { title: "Untitled" }).title;
+      // Private notes the user pinned to text on this page (unarchived). Fed to
+      // the agent as authoritative intent — see PageContext.notes.
+      const notes = s.comments
+        .filter((c) => (!c.page || c.page === s.page) && !c.resolved)
+        .map((c) => {
+          const body = c.messages
+            .map((m) => m.text)
+            .filter(Boolean)
+            .join(" ");
+          return c.quote ? `On “${c.quote}”: ${body}` : body;
+        })
+        .filter(Boolean);
       getAssistantProvider()
-        .respond(prompt, { blocks, pageTitle })
+        .respond(prompt, { blocks, pageTitle, notes })
         .then((resp) => {
           setConvThinking(convId, false);
           if (resp.kind === "chat") {

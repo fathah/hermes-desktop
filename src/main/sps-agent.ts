@@ -219,6 +219,9 @@ type AssistantResult = (
 interface PageContext {
   blocks: { type: string; text: string }[];
   pageTitle: string;
+  /** Private notes the user pinned to text on this page (unarchived). Injected
+   *  into the user turn as authoritative intent; counted in the trust chip. */
+  notes?: string[];
 }
 
 const ALLOWED_BLOCK_TYPES = new Set([
@@ -364,9 +367,15 @@ export function buildSpsAssistantMessages(
     { role: "system", content: SYSTEM_PROMPT },
   ];
   if (grounding) messages.push(grounding);
+  const cleanNotes = (ctx.notes ?? []).map((n) => n.trim()).filter(Boolean);
+  const notesSection = cleanNotes.length
+    ? `\n\nYour notes on this page (private annotations you pinned — treat as authoritative intent):\n${cleanNotes
+        .map((n) => `- ${n}`)
+        .join("\n")}`
+    : "";
   messages.push({
     role: "user",
-    content: `Page title: ${ctx.pageTitle}\n\nPage content:\n${pageToText(ctx.blocks)}\n\nRequest: ${prompt}`,
+    content: `Page title: ${ctx.pageTitle}\n\nPage content:\n${pageToText(ctx.blocks)}${notesSection}\n\nRequest: ${prompt}`,
   });
   return messages;
 }
@@ -400,7 +409,15 @@ export async function spsAssistant(
     const combinedGrounding = extraGrounding
       ? { role: "system" as const, content: extraGrounding }
       : null;
-    const used = vaultContext.used;
+    // Page annotations the user pinned are their own notes too — fold them into
+    // the trust chip's note count so it reflects everything that grounded the run.
+    const pageNoteCount = (ctx.notes ?? [])
+      .map((n) => n.trim())
+      .filter(Boolean).length;
+    const used = {
+      ...vaultContext.used,
+      notes: vaultContext.used.notes + pageNoteCount,
+    };
     const usedAnything = used.notes + used.memory + used.rules > 0;
     const context: VaultContextUsage | undefined = usedAnything
       ? used

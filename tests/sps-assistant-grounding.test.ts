@@ -43,4 +43,19 @@ describe("buildSpsAssistantMessages", () => {
     // The user turn remains last so the request is the final instruction.
     expect(msgs[2].role).toBe("user");
   });
+
+  it("injects pinned page notes into the user turn as authoritative intent", () => {
+    const withNotes = {
+      ...ctx,
+      notes: ["On “Rest periods”: confirm this is the 2026 figure"],
+    };
+    const msgs = buildSpsAssistantMessages("x", withNotes, null);
+    expect(msgs[1].content).toContain("Your notes on this page");
+    expect(msgs[1].content).toContain("confirm this is the 2026 figure");
+  });
+
+  it("omits the notes section entirely when there are no notes", () => {
+    const msgs = buildSpsAssistantMessages("x", { ...ctx, notes: [] }, null);
+    expect(msgs[1].content).not.toContain("Your notes on this page");
+  });
 });
