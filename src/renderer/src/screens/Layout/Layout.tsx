@@ -76,12 +76,20 @@ const NAV_ITEMS: {
     view: "insights",
     icon: BarChart3,
     labelKey: "navigation.insights",
-    label: "Insights",
+    // Disambiguate from the SPS workspace's own "Insights" surface — this is the
+    // Hermes agent-level view.
+    label: "Agent Insights",
   },
   { view: "models", icon: Layers, labelKey: "navigation.models" },
   { view: "providers", icon: KeyRound, labelKey: "navigation.providers" },
   { view: "skills", icon: Puzzle, labelKey: "navigation.skills" },
-  { view: "memory", icon: Brain, labelKey: "navigation.memory" },
+  {
+    view: "memory",
+    icon: Brain,
+    labelKey: "navigation.memory",
+    // Disambiguate from the SPS workspace's "Memory" surface.
+    label: "Agent Memory",
+  },
   {
     view: "personalization",
     icon: UserCog,

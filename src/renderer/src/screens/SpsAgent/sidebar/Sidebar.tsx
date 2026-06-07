@@ -277,10 +277,6 @@ export function Sidebar() {
           <Icon name="trash" size={17} />
           <span className="nav-label">Trash</span>
         </div>
-        <div className="nav-item" onClick={() => setTweaksOpen(true)}>
-          <Icon name="sun" size={17} />
-          <span className="nav-label">Appearance</span>
-        </div>
       </div>
 
       <div className="rail-newchat-bar">
@@ -300,6 +296,14 @@ export function Sidebar() {
           {identity.user}
           <small>Hermes Agent</small>
         </span>
+        <button
+          className="rail-foot-gear"
+          title="Appearance"
+          aria-label="Appearance"
+          onClick={() => setTweaksOpen(true)}
+        >
+          <Icon name="sun" size={16} />
+        </button>
         <button
           className="rail-foot-gear"
           title="Settings (⌘,)"
