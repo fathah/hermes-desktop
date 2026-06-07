@@ -53,6 +53,7 @@ import { getSpsNoteIndex, type NoteSearchHit } from "./note-index";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 import { type Attachment, escapeXmlAttr } from "../shared/attachments";
 import { URL_KEY_MAP, OPENAI_COMPAT_PROVIDERS } from "../shared/url-key-map";
+import { redactSensitiveData } from "./security";
 
 /**
  * Resolve which profile a gateway call targets. An explicit profile always
@@ -1012,7 +1013,7 @@ function sendMessageViaApi(
       // diagnostic probe.
       const reasoningDelta = extractReasoningDelta(delta);
       if (reasoningDelta && cb.onReasoningChunk) {
-        cb.onReasoningChunk(reasoningDelta);
+        cb.onReasoningChunk(redactSensitiveData(reasoningDelta));
       }
 
       if (delta?.content) {
@@ -1023,7 +1024,7 @@ function sendMessageViaApi(
           cb.onToolProgress(`${match[1]} ${match[2]}`);
         } else {
           hasContent = true;
-          cb.onChunk(delta.content);
+          cb.onChunk(redactSensitiveData(delta.content));
         }
       }
     } catch {
@@ -1336,7 +1337,7 @@ function sendMessageViaCli(
     const output = result.join("\n");
     if (output) {
       hasOutput = true;
-      cb.onChunk(output);
+      cb.onChunk(redactSensitiveData(output));
     }
   }
 
@@ -1360,7 +1361,7 @@ function sendMessageViaCli(
       )
     ) {
       hasOutput = true;
-      cb.onChunk(text);
+      cb.onChunk(redactSensitiveData(text));
     } else {
       // Buffer other stderr for reporting on non-zero exit
       stderrBuffer += text;

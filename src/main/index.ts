@@ -13,7 +13,7 @@ import {
 import { join, extname } from "path";
 import { pathToFileURL } from "url";
 import { readdir, readFile } from "fs/promises";
-import { existsSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import type { AppUpdater } from "electron-updater";
 import icon from "../../resources/icon.png?asset";
@@ -120,6 +120,7 @@ import {
   discoverMemoryProviders,
   readLogs,
   InstallProgress,
+  HERMES_HOME,
 } from "./installer";
 import { updaterLogger } from "./updater-log";
 import {
@@ -189,6 +190,8 @@ import {
   setAutoApprove,
   getCompletionSound,
   setCompletionSound,
+  readDesktopConfig,
+  writeDesktopConfig,
   type SshConnectionConfig,
 } from "./config";
 import { canAutoApprove } from "./autonomy";
@@ -938,13 +941,18 @@ function setupIPC(): void {
     async (_event, profile?: string) => {
       const { randomUUID } = await import("crypto");
       const key = `desk-${randomUUID()}`;
-      // Write to both the active profile .env and the default .env so the
-      // gateway (which reads the profile .env) and the desktop (which reads
-      // the default .env as fallback) both see the same key.
-      setEnvValue("API_SERVER_KEY", key, profile);
+      
+      // Store in desktop.json (encrypted using OS-level secure storage)
+      const data = readDesktopConfig();
+      data.apiServerKey = key;
+      writeDesktopConfig(data);
+
+      // Remove any plaintext key from .env to prevent leaks and ensure the desktop.json key takes precedence
+      setEnvValue("API_SERVER_KEY", "", profile);
       if (profile && profile !== "default") {
-        setEnvValue("API_SERVER_KEY", key);
+        setEnvValue("API_SERVER_KEY", "");
       }
+
       // Restart gateway so it picks up the new key immediately.
       if (isGatewayRunning(profile)) {
         stopGateway(profile, true);
@@ -1279,6 +1287,14 @@ function setupIPC(): void {
             // that have no renderer to click approve.
             if (getAutoApprove(profile) && canAutoApprove(req)) {
               void respondRunApproval(req.id, "once", profile);
+              // Audit log (Zero Trust compliance): persistently log the auto-approval
+              appendAuditLog({
+                ts: Date.now(),
+                action: "auto-approve",
+                command: req.command,
+                runId: req.id,
+                profile: profile || "default",
+              });
               // Transparency (M2B): surface the auto-approval to the renderer so
               // it can show an audit notice; the run also still emits tool-progress.
               console.log(`[autonomy] auto-approved: ${req.command ?? req.id}`);
@@ -2902,3 +2918,37 @@ app.on("before-quit", () => {
   stopClaw3d();
   void closeAllNoteIndexes();
 });
+
+interface AuditLogEntry {
+  ts: number;
+  action: string;
+  command?: string;
+  runId?: string;
+  profile?: string;
+}
+
+const AUDIT_LOG_MAX_LINES = 1000;
+
+export function appendAuditLog(entry: AuditLogEntry): void {
+  try {
+    const logDir = join(HERMES_HOME, "logs");
+    if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
+    const logFile = join(logDir, "audit.log");
+    let existing = "";
+    if (existsSync(logFile)) {
+      existing = readFileSync(logFile, "utf-8");
+      const lines = existing.split("\n").filter((l) => l.trim() !== "");
+      if (lines.length >= AUDIT_LOG_MAX_LINES) {
+        existing =
+          lines.slice(lines.length - AUDIT_LOG_MAX_LINES + 1).join("\n") +
+          "\n";
+      } else if (existing && !existing.endsWith("\n")) {
+        existing += "\n";
+      }
+    }
+    const line = JSON.stringify(entry) + "\n";
+    writeFileSync(logFile, existing + line, "utf-8");
+  } catch {
+    // intentionally silent
+  }
+}

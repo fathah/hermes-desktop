@@ -100,12 +100,13 @@ export function readDesktopConfig(): Record<string, unknown> {
     const f = desktopConfigFile();
     if (!existsSync(f)) return {};
     const data = JSON.parse(readFileSync(f, "utf-8"));
-    if (
-      data &&
-      typeof data === "object" &&
-      typeof data.remoteApiKey === "string"
-    ) {
-      data.remoteApiKey = decryptSecret(data.remoteApiKey);
+    if (data && typeof data === "object") {
+      if (typeof data.remoteApiKey === "string") {
+        data.remoteApiKey = decryptSecret(data.remoteApiKey);
+      }
+      if (typeof data.apiServerKey === "string") {
+        data.apiServerKey = decryptSecret(data.apiServerKey);
+      }
     }
     return data;
   } catch {
@@ -118,12 +119,13 @@ export function writeDesktopConfig(data: Record<string, unknown>): void {
     mkdirSync(HERMES_HOME, { recursive: true });
   }
   const clone = JSON.parse(JSON.stringify(data));
-  if (
-    clone &&
-    typeof clone === "object" &&
-    typeof clone.remoteApiKey === "string"
-  ) {
-    clone.remoteApiKey = encryptSecret(clone.remoteApiKey);
+  if (clone && typeof clone === "object") {
+    if (typeof clone.remoteApiKey === "string") {
+      clone.remoteApiKey = encryptSecret(clone.remoteApiKey);
+    }
+    if (typeof clone.apiServerKey === "string") {
+      clone.apiServerKey = encryptSecret(clone.apiServerKey);
+    }
   }
   writeFileSync(desktopConfigFile(), JSON.stringify(clone, null, 2), "utf-8");
 }
@@ -1057,7 +1059,20 @@ export function getApiServerKey(profile?: string): string {
         ? getConfigValue("api_server.token")
         : null,
   };
-  const { value, source } = resolveApiServerKeyWithSource(sources);
+  let { value, source } = resolveApiServerKeyWithSource(sources);
+
+  if (!value) {
+    // Zero Trust Secure Fallback: Retrieve the key encrypted inside desktop.json
+    try {
+      const desktopConfig = readDesktopConfig();
+      if (typeof desktopConfig.apiServerKey === "string" && desktopConfig.apiServerKey) {
+        value = desktopConfig.apiServerKey;
+        source = "envProfile"; // Skip migration warning to plaintext .env
+      }
+    } catch {
+      value = "";
+    }
+  }
 
   // Migration on read — if we resolved the key from a non-canonical
   // location AND the canonical `.env` slot is empty for this profile,
