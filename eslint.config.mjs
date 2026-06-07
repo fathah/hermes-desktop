@@ -82,5 +82,21 @@ export default defineConfig(
       "@typescript-eslint/explicit-function-return-type": "off",
     },
   },
+  {
+    // Honor the `_`-prefix convention already used across the codebase for
+    // intentionally-unused params / vars / caught errors (e.g. `_event`,
+    // `_profile`, `_path`). Without this, trailing `_`-prefixed args still error.
+    files: ["**/*.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+        },
+      ],
+    },
+  },
   eslintConfigPrettier,
 );
