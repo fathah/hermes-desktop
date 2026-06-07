@@ -213,39 +213,83 @@ export const createAssistantSlice: StateCreator<
             requestAnimationFrame(() => scrollToProposal(pid));
             return;
           }
-          // append
-          const pid = uid("prop");
-          const tagged: Block[] = resp.blocks.map((b) => ({
-            ...b,
-            id: uid("pb"),
-            proposalId: pid,
-            proposalLabel: resp.label,
-          }));
-          get().setBlocks((bs) => {
-            const next = [...bs];
-            if (resp.at === "top") next.splice(1, 0, ...tagged);
-            else {
-              let idx = next.length;
-              if (
-                next[idx - 1] &&
-                next[idx - 1].type === "p" &&
-                !next[idx - 1].text
-              )
-                idx -= 1;
-              next.splice(idx, 0, ...tagged);
-            }
-            return next;
-          });
-          addMsg(convId, {
-            id: uid("m"),
-            role: "bot",
-            text: resp.reply,
-            proposalId: pid,
-            label: resp.label,
-            status: "pending",
-            context: resp.context,
-          });
-          requestAnimationFrame(() => scrollToProposal(pid));
+          if (resp.kind === "append") {
+            const pid = uid("prop");
+            const tagged: Block[] = resp.blocks.map((b) => ({
+              ...b,
+              id: uid("pb"),
+              proposalId: pid,
+              proposalLabel: resp.label,
+            }));
+            get().setBlocks((bs) => {
+              const next = [...bs];
+              if (resp.at === "top") next.splice(1, 0, ...tagged);
+              else {
+                let idx = next.length;
+                if (
+                  next[idx - 1] &&
+                  next[idx - 1].type === "p" &&
+                  !next[idx - 1].text
+                )
+                  idx -= 1;
+                next.splice(idx, 0, ...tagged);
+              }
+              return next;
+            });
+            addMsg(convId, {
+              id: uid("m"),
+              role: "bot",
+              text: resp.reply,
+              proposalId: pid,
+              label: resp.label,
+              status: "pending",
+              context: resp.context,
+            });
+            requestAnimationFrame(() => scrollToProposal(pid));
+            return;
+          }
+          if (resp.kind === "page") {
+            const pageId = get().makePage(
+              { icon: "📄", title: resp.title },
+              [{ id: uid("b"), type: "p", text: "" }],
+              get().page
+            );
+            get().selectPage(pageId);
+            addMsg(convId, {
+              id: uid("m"),
+              role: "bot",
+              text: resp.reply,
+              pageAction: { title: resp.title, template: resp.template },
+              label: resp.label,
+              status: "applied",
+              context: resp.context,
+            });
+            return;
+          }
+          if (resp.kind === "ssh") {
+            addMsg(convId, {
+              id: uid("m"),
+              role: "bot",
+              text: resp.reply,
+              sshAction: { action: resp.action },
+              label: resp.label,
+              status: "pending",
+              context: resp.context,
+            });
+            return;
+          }
+          if (resp.kind === "config") {
+            addMsg(convId, {
+              id: uid("m"),
+              role: "bot",
+              text: resp.reply,
+              configAction: { provider: resp.provider, key: resp.key },
+              label: resp.label,
+              status: "pending",
+              context: resp.context,
+            });
+            return;
+          }
         });
     },
 
@@ -464,5 +508,64 @@ export const createAssistantSlice: StateCreator<
           ),
         })),
       })),
+
+    applySshAction: async (mid, action) => {
+      try {
+        let ok = false;
+        if (action === "start") {
+          ok = await window.hermesAPI.startSshTunnel();
+        } else {
+          ok = await window.hermesAPI.stopSshTunnel();
+        }
+        set((s) => ({
+          conversations: s.conversations.map((c) => ({
+            ...c,
+            messages: c.messages.map((m) =>
+              m.id === mid ? { ...m, status: ok ? "applied" : "rejected" } : m,
+            ),
+          })),
+        }));
+        get().flash(
+          ok ? `SSH tunnel ${action}ed` : `Failed to ${action} SSH tunnel`,
+          ok ? undefined : { tone: "warn" },
+        );
+      } catch (err) {
+        get().flash(
+          `SSH error: ${err instanceof Error ? err.message : String(err)}`,
+          { tone: "warn" },
+        );
+      }
+    },
+
+    applyConfigAction: async (mid, provider, key) => {
+      try {
+        const envKeyMap: Record<string, string> = {
+          openai: "OPENAI_API_KEY",
+          anthropic: "ANTHROPIC_API_KEY",
+          google: "GEMINI_API_KEY",
+        };
+        const envKey =
+          envKeyMap[provider.toLowerCase()] ||
+          `${provider.toUpperCase()}_API_KEY`;
+        const ok = await window.hermesAPI.setEnv(envKey, key);
+        set((s) => ({
+          conversations: s.conversations.map((c) => ({
+            ...c,
+            messages: c.messages.map((m) =>
+              m.id === mid ? { ...m, status: ok ? "applied" : "rejected" } : m,
+            ),
+          })),
+        }));
+        get().flash(
+          ok ? `Saved key for ${provider}` : `Failed to save key for ${provider}`,
+          ok ? undefined : { tone: "warn" },
+        );
+      } catch (err) {
+        get().flash(
+          `Config error: ${err instanceof Error ? err.message : String(err)}`,
+          { tone: "warn" },
+        );
+      }
+    },
   };
 };

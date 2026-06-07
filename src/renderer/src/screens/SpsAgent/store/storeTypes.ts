@@ -271,6 +271,8 @@ export interface AssistantSlice {
   decideProposal: (proposalId: string, accept: boolean) => void;
   applyDbAction: (messageId: string, action: DbAction) => void;
   dismissDbAction: (messageId: string) => void;
+  applySshAction: (messageId: string, action: "start" | "stop") => void;
+  applyConfigAction: (messageId: string, provider: string, key: string) => void;
 }
 
 /** A template the user saved from one of their own pages (localStorage-backed). */

@@ -261,10 +261,27 @@ export function CommandPalette() {
   // "Title only" scopes search to page/action titles, skipping in-page content.
   const content = q && !titleOnly ? searchContent(q) : [];
 
+  const butlerAct = q
+    ? [
+        {
+          kind: "action" as const,
+          id: "askbutler",
+          icon: "sparkle" as const,
+          label: `Ask Butler: “${q}”`,
+          desc: "Send this query to your AI assistant to execute matching actions.",
+          run: () => {
+            openPanelTab("assistant");
+            useStore.getState().runAgent(q);
+          },
+        },
+      ]
+    : [];
+
   const grouped = [
     { label: "Actions", items: fActs as Item[] },
     { label: "Jump to", items: fPages as Item[] },
     { label: "In pages", items: content as Item[] },
+    ...(butlerAct.length ? [{ label: "AI Assistant", items: butlerAct as Item[] }] : []),
   ].filter((g) => g.items.length);
   const flat = grouped.flatMap((g) => g.items);
 

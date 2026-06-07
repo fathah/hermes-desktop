@@ -33,6 +33,26 @@ export type AssistantResult = (
       edits: { find: string; html: string }[];
     }
   | { kind: "db"; reply: string[]; label: string; action: DbAction }
+  | {
+      kind: "page";
+      reply: string[];
+      label: string;
+      title: string;
+      template?: string;
+    }
+  | {
+      kind: "ssh";
+      reply: string[];
+      label: string;
+      action: "start" | "stop";
+    }
+  | {
+      kind: "config";
+      reply: string[];
+      label: string;
+      provider: string;
+      key: string;
+    }
 ) & { context?: AssistantContext };
 
 /** Context handed to the provider so it can reason about the current page. */
@@ -58,6 +78,9 @@ export interface AgentMessage {
   status?: "pending" | "applied" | "rejected";
   diff?: boolean;
   dbAction?: DbAction;
+  pageAction?: { title: string; template?: string };
+  sshAction?: { action: "start" | "stop" };
+  configAction?: { provider: string; key: string };
   /** Present when the reply was grounded in the user's notes/memory/rules. */
   context?: AssistantContext;
 }

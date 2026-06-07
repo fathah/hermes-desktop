@@ -218,6 +218,26 @@ type AssistantResult = (
       edits: { find: string; html: string }[];
     }
   | { kind: "db"; reply: string[]; label: string; action: DbAction }
+  | {
+      kind: "page";
+      reply: string[];
+      label: string;
+      title: string;
+      template?: string;
+    }
+  | {
+      kind: "ssh";
+      reply: string[];
+      label: string;
+      action: "start" | "stop";
+    }
+  | {
+      kind: "config";
+      reply: string[];
+      label: string;
+      provider: string;
+      key: string;
+    }
 ) & {
   // What the user's own workspace contributed to this reply (drives the trust
   // chip). Attached after validation, omitted when nothing was injected.
@@ -254,7 +274,10 @@ Respond with EXACTLY ONE JSON object (no prose, no markdown fence) matching one 
 {"kind":"append","reply":["..."],"label":"short label","at":"top"|"bottom","blocks":[{"type":"h3|p|todo|li|callout|quote","text":"...","done":false,"emoji":"🧭"}]}
 {"kind":"diff","reply":["..."],"label":"short label","edits":[{"find":"first ~18 chars of the target paragraph","html":"the rewritten text"}]}
 {"kind":"db","reply":["..."],"label":"short label","action":{"type":"markDone","who":"maya|theo|priya|sam|null"} | {"type":"addTask","title":"..."} | {"type":"view","view":"board|table|list|gallery|calendar"}}
-Use "diff" to rewrite/tighten existing text, "append" to add new blocks, "db" for board actions, "chat" otherwise.`;
+{"kind":"page","reply":["..."],"label":"short label","title":"Page Title","template":"prd|meeting|research|blank"}
+{"kind":"ssh","reply":["..."],"label":"short label","action":"start|stop"}
+{"kind":"config","reply":["..."],"label":"short label","provider":"openai|anthropic|google","key":"api_key_here"}
+Use "diff" to rewrite/tighten existing text, "append" to add new blocks, "db" for board actions, "page" to create new pages, "ssh" to connect/disconnect the remote tunnel, "config" to set provider API credentials, "chat" otherwise.`;
 
 function coerceAction(raw: unknown): DbAction | null {
   if (!raw || typeof raw !== "object") return null;
@@ -325,6 +348,40 @@ function validateResult(raw: unknown): AssistantResult | null {
       if (typeof r.label !== "string") return null;
       const action = coerceAction(r.action);
       return action ? { kind: "db", reply, label: r.label, action } : null;
+    }
+    case "page": {
+      if (typeof r.label !== "string" || typeof r.title !== "string") return null;
+      return {
+        kind: "page",
+        reply,
+        label: r.label,
+        title: r.title,
+        template: typeof r.template === "string" ? r.template : undefined,
+      };
+    }
+    case "ssh": {
+      if (typeof r.label !== "string" || (r.action !== "start" && r.action !== "stop")) return null;
+      return {
+        kind: "ssh",
+        reply,
+        label: r.label,
+        action: r.action as "start" | "stop",
+      };
+    }
+    case "config": {
+      if (
+        typeof r.label !== "string" ||
+        typeof r.provider !== "string" ||
+        typeof r.key !== "string"
+      )
+        return null;
+      return {
+        kind: "config",
+        reply,
+        label: r.label,
+        provider: r.provider,
+        key: r.key,
+      };
     }
     default:
       return null;

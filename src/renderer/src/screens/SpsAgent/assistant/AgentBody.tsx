@@ -11,6 +11,22 @@ import {
 } from "../../../lib/grounding";
 import { contextChipLabel } from "./contextChip";
 
+function getPlainEnglishExplanation(m: any): string {
+  if (m.sshAction) {
+    const act = m.sshAction.action;
+    if (act === "start") {
+      return "I need your permission to start a secure, private network connection to your remote server so we can use its artificial intelligence model. This connection is private and does not expose your local files to the public internet.";
+    } else {
+      return "I need your permission to stop the secure, private connection to your remote server.";
+    }
+  }
+  if (m.configAction) {
+    const prov = m.configAction.provider;
+    return `I need your permission to save your API key for ${prov.toUpperCase()}. This will allow the assistant to securely communicate with the model provider. The key will be stored locally on your hard drive.`;
+  }
+  return "";
+}
+
 export function AgentBody() {
   // Parallel conversations (M3 #5): the panel renders the ACTIVE tab; each tab is
   // an independent run so several can stream at once.
@@ -26,6 +42,8 @@ export function AgentBody() {
   const onSend = useStore((s) => s.runAgent);
   const onApplyDb = useStore((s) => s.applyDbAction);
   const onDismissDb = useStore((s) => s.dismissDbAction);
+  const onApplySsh = useStore((s) => s.applySshAction);
+  const onApplyConfig = useStore((s) => s.applyConfigAction);
   const flash = useStore((s) => s.flash);
 
   const [val, setVal] = useState("");
@@ -216,6 +234,144 @@ export function AgentBody() {
                     >
                       Dismiss
                     </button>
+                  </div>
+                ))}
+              {m.sshAction &&
+                (m.status === "applied" ? (
+                  <span className="applied-note">
+                    <Icon name="check" size={14} /> SSH tunnel updated
+                  </span>
+                ) : m.status === "rejected" ? (
+                  <span className="applied-note rejected-note">
+                    <Icon name="x" size={13} /> Connection request canceled
+                  </span>
+                ) : (
+                  <div
+                    className="security-consent-box"
+                    style={{
+                      marginTop: 8,
+                      padding: 10,
+                      borderRadius: 8,
+                      background: "rgba(255, 100, 100, 0.08)",
+                      border: "1px solid rgba(255, 100, 100, 0.2)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontWeight: 600,
+                        color: "var(--tx-1)",
+                        fontSize: 13,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        marginBottom: 4,
+                      }}
+                    >
+                      <Icon
+                        name="settings"
+                        size={14}
+                        style={{ color: "var(--warn, #e65100)" }}
+                      />{" "}
+                      Security Permission Required
+                    </div>
+                    <p
+                      style={{
+                        fontSize: 12,
+                        color: "var(--tx-2)",
+                        lineHeight: 1.4,
+                        margin: "0 0 8px 0",
+                      }}
+                    >
+                      {getPlainEnglishExplanation(m)}
+                    </p>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button
+                        className="pa-btn pa-accept"
+                        style={{ padding: "4px 8px", fontSize: 12 }}
+                        onClick={() => onApplySsh(m.id, m.sshAction!.action)}
+                      >
+                        Approve & Execute
+                      </button>
+                      <button
+                        className="pa-btn pa-reject"
+                        style={{ padding: "4px 8px", fontSize: 12 }}
+                        onClick={() => onDismissDb(m.id)}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              {m.configAction &&
+                (m.status === "applied" ? (
+                  <span className="applied-note">
+                    <Icon name="check" size={14} /> Credentials saved
+                  </span>
+                ) : m.status === "rejected" ? (
+                  <span className="applied-note rejected-note">
+                    <Icon name="x" size={13} /> Key save request canceled
+                  </span>
+                ) : (
+                  <div
+                    className="security-consent-box"
+                    style={{
+                      marginTop: 8,
+                      padding: 10,
+                      borderRadius: 8,
+                      background: "rgba(255, 100, 100, 0.08)",
+                      border: "1px solid rgba(255, 100, 100, 0.2)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontWeight: 600,
+                        color: "var(--tx-1)",
+                        fontSize: 13,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        marginBottom: 4,
+                      }}
+                    >
+                      <Icon
+                        name="settings"
+                        size={14}
+                        style={{ color: "var(--warn, #e65100)" }}
+                      />{" "}
+                      Security Permission Required
+                    </div>
+                    <p
+                      style={{
+                        fontSize: 12,
+                        color: "var(--tx-2)",
+                        lineHeight: 1.4,
+                        margin: "0 0 8px 0",
+                      }}
+                    >
+                      {getPlainEnglishExplanation(m)}
+                    </p>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button
+                        className="pa-btn pa-accept"
+                        style={{ padding: "4px 8px", fontSize: 12 }}
+                        onClick={() =>
+                          onApplyConfig(
+                            m.id,
+                            m.configAction!.provider,
+                            m.configAction!.key,
+                          )
+                        }
+                      >
+                        Approve & Save
+                      </button>
+                      <button
+                        className="pa-btn pa-reject"
+                        style={{ padding: "4px 8px", fontSize: 12 }}
+                        onClick={() => onDismissDb(m.id)}
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </div>
                 ))}
             </div>
