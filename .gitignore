@@ -44,6 +44,9 @@ src/renderer/public/tesseract/
 # Bundled OpenAlex MCP server (built by `npm run build:mcp`)
 resources/openalex-mcp.cjs
 
+# Scratch / local experiment dirs (never commit)
+scratch/
+
 # Python bytecode and caches
 __pycache__/
 *.pyc
