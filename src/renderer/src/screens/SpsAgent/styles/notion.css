@@ -629,6 +629,15 @@
   gap: 1px;
   padding: 0 6px;
   border-bottom: 1px solid var(--hair-soft);
+  /* Same macOS drag-region trap as the topbar: this tab row sits in the top 28px
+     window-drag strip (.drag-region, fixed, z 1000). Lift it above so the tabs are
+     clickable; empty space stays a drag handle, the tab buttons opt out. */
+  position: relative;
+  z-index: 1001;
+  -webkit-app-region: drag;
+}
+.sps-scope .rp-tabs button {
+  -webkit-app-region: no-drag;
 }
 .sps-scope .rp-tab {
   height: 30px;
