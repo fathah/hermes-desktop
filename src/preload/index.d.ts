@@ -21,22 +21,6 @@ interface ElectronAPI {
   };
 }
 
-interface InstallStatus {
-  installed: boolean;
-  configured: boolean;
-  hasApiKey: boolean;
-  verified: boolean;
-  activeProfile?: string;
-}
-
-interface InstallProgress {
-  step: number;
-  totalSteps: number;
-  title: string;
-  detail: string;
-  log: string;
-}
-
 interface ConfigHealthIssue {
   code: string;
   severity: "error" | "warning" | "info";

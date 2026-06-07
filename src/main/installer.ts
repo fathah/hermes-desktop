@@ -183,21 +183,8 @@ export function hermesCliArgs(args: string[] = []): string[] {
   return [HERMES_SCRIPT, ...args];
 }
 
-export interface InstallStatus {
-  installed: boolean;
-  configured: boolean;
-  hasApiKey: boolean;
-  verified: boolean;
-  activeProfile?: string;
-}
-
-export interface InstallProgress {
-  step: number;
-  totalSteps: number;
-  title: string;
-  detail: string;
-  log: string;
-}
+import type { InstallStatus, InstallProgress } from "../shared/install";
+export type { InstallStatus, InstallProgress };
 
 export function getEnhancedPath(): string {
   const home = homedir();

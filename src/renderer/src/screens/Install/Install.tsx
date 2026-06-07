@@ -3,14 +3,7 @@ import { ArrowRight, Copy, Send } from "../../assets/icons";
 
 const TELEGRAM_COMMUNITY_URL = "https://t.me/hermes_agent_desktop";
 import { useI18n } from "../../components/useI18n";
-
-interface InstallProgress {
-  step: number;
-  totalSteps: number;
-  title: string;
-  detail: string;
-  log: string;
-}
+import type { InstallProgress } from "../../../../shared/install";
 
 interface InstallTarget {
   hermesHome: string;
