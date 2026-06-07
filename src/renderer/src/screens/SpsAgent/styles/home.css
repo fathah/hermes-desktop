@@ -173,6 +173,12 @@
 [data-platform="mac"] .sps-scope .rail-top {
   margin-top: 24px;
 }
+/* When the sidebar is hidden the topbar reaches the window's left edge, where the
+   macOS traffic lights sit (x:16). Inset the topbar so the breadcrumb + show-sidebar
+   control clear them. */
+[data-platform="mac"] .sps-scope .app[data-rail="hidden"] .topbar {
+  padding-left: 78px;
+}
 .sps-scope .rail-top {
   display: flex;
   align-items: center;
