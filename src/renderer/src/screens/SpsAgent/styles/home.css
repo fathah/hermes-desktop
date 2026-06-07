@@ -502,6 +502,18 @@
   border-bottom: 1px solid var(--hair-soft);
   background: var(--canvas);
   overflow: hidden;
+  /* macOS frameless window: the renderer's .drag-region (position:fixed, top 0,
+     height 28px, z-index 1000) overlays the top strip and would swallow clicks on
+     the topbar controls that sit within it. Lift the topbar above the drag layer
+     and make its OWN empty space the drag handle, with controls opted back out. */
+  position: relative;
+  z-index: 1001;
+  -webkit-app-region: drag;
+}
+.sps-scope .topbar button,
+.sps-scope .topbar .seg,
+.sps-scope .topbar .crumb {
+  -webkit-app-region: no-drag;
 }
 .sps-scope .tb-btn {
   height: 28px;
