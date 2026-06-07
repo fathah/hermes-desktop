@@ -194,8 +194,9 @@ await win
 await win.waitForTimeout(500);
 
 // 04 — Tweaks panel (sidebar-section toggles + the new Storage section, F5).
+// The rail button is titled "Appearance" (it opens the Tweaks panel).
 await shot("04-tweaks", async () => {
-  await win.locator('[title="Tweaks"]').click();
+  await win.locator('[title="Appearance"]').click();
 });
 // 05 — toggle a sidebar section (Notion "customize sidebar").
 await shot("05-tweaks-section-toggled", async () => {

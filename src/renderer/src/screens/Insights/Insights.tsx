@@ -165,6 +165,10 @@ function Insights({
           {ledger.length > 0 && (
             <section className="insights-section">
               <h2>Recent runs</h2>
+              <p className="insights-subtitle">
+                Chat sessions on this device, newest first. (Scheduled jobs run
+                on the gateway and aren&apos;t billed through the desktop.)
+              </p>
               <table className="insights-table">
                 <thead>
                   <tr>
