@@ -28,6 +28,8 @@ import type {
   EquityBasketHolding,
   EquityAlert,
 } from "../shared/equity";
+import type { PublicConnectionConfig } from "../shared/connection";
+import type { ChatReadiness } from "../shared/validation";
 
 interface ElectronAPI {
   process: {
@@ -175,18 +177,7 @@ interface HermesAPI {
   // Configuration (profile-aware)
   getEnv: (profile?: string) => Promise<Record<string, string>>;
   setEnv: (key: string, value: string, profile?: string) => Promise<boolean>;
-  validateChatReadiness: (profile?: string) => Promise<{
-    ok: boolean;
-    code?:
-      | "NO_ACTIVE_MODEL"
-      | "NO_PROVIDER"
-      | "NO_BASE_URL"
-      | "MISSING_API_KEY"
-      | "GATEWAY_DOWN";
-    message?: string;
-    fixLocation?: "providers" | "models" | "gateway" | "setup";
-    expectedEnvKey?: string;
-  }>;
+  validateChatReadiness: (profile?: string) => Promise<ChatReadiness>;
 
   // Config-health audit (Diagnose section)
   getConfigHealth: (profile?: string) => Promise<ConfigHealthReport>;
@@ -226,20 +217,7 @@ interface HermesAPI {
     choice: "once" | "session" | "always" | "deny",
     profile?: string,
   ) => Promise<{ ok: boolean; error?: string }>;
-  getConnectionConfig: () => Promise<{
-    mode: "local" | "remote" | "ssh";
-    remoteUrl: string;
-    hasApiKey: boolean;
-    apiKeyLength: number;
-    ssh: {
-      host: string;
-      port: number;
-      username: string;
-      keyPath: string;
-      remotePort: number;
-      localPort: number;
-    };
-  }>;
+  getConnectionConfig: () => Promise<PublicConnectionConfig>;
   setConnectionConfig: (
     mode: "local" | "remote" | "ssh",
     remoteUrl: string,

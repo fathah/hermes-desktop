@@ -2,6 +2,11 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { randomBytes } from "crypto";
 import { join } from "path";
 import { HERMES_HOME, expectedEnvKeyForModel } from "./installer";
+import type {
+  SshConnectionConfig,
+  PublicConnectionConfig,
+} from "../shared/connection";
+export type { SshConnectionConfig, PublicConnectionConfig };
 import {
   escapeRegex,
   getActiveProfileNameSync,
@@ -34,30 +39,10 @@ function getSafeStorage(): typeof safeStorage {
 
 // ── Connection Config (local / remote / ssh) ─────────────
 
-export interface SshConnectionConfig {
-  host: string;
-  port: number;
-  username: string;
-  keyPath: string;
-  remotePort: number;
-  localPort: number;
-}
-
 export interface ConnectionConfig {
   mode: "local" | "remote" | "ssh";
   remoteUrl: string;
   apiKey: string;
-  ssh: SshConnectionConfig;
-}
-
-export interface PublicConnectionConfig {
-  mode: "local" | "remote" | "ssh";
-  remoteUrl: string;
-  hasApiKey: boolean;
-  // Length of the stored API key, exposed so the renderer can show a
-  // mask that matches the real value's width. The secret itself never
-  // leaves the main process. 0 when no key is set.
-  apiKeyLength: number;
   ssh: SshConnectionConfig;
 }
 
