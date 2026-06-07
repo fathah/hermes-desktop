@@ -2,7 +2,7 @@
 // of widgets the user arranges (drag to reorder, 1×/2× width, add/remove). Layout
 // lives in the cockpit store slice (localStorage); each widget reads live store
 // state. Dependency-free: a CSS grid + HTML5 drag, no react-grid-layout.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Icon } from "../components/Icon";
 import type { IconName } from "../components/iconPaths";
 import { useStore } from "../store";
@@ -14,6 +14,9 @@ const WIDGET_META: Record<WidgetKind, { title: string; icon: IconName }> = {
   notes: { title: "Pinned notes", icon: "comment" },
   pages: { title: "Jump to a page", icon: "doc" },
   ask: { title: "Ask your assistant", icon: "sparkle" },
+  recentChats: { title: "Recent chats", icon: "comment" },
+  today: { title: "Today", icon: "calendar" },
+  agent: { title: "Agent status", icon: "code" },
 };
 
 export function CockpitSurface() {
@@ -151,6 +154,12 @@ function Widget({ kind }: { kind: WidgetKind }) {
       return <JumpPages />;
     case "ask":
       return <AskWidget />;
+    case "recentChats":
+      return <RecentChats />;
+    case "today":
+      return <Today />;
+    case "agent":
+      return <AgentStatus />;
   }
 }
 
@@ -291,5 +300,138 @@ function AskWidget() {
         <Icon name="send" size={15} /> Start chat
       </button>
     </div>
+  );
+}
+
+interface SessionRow {
+  id: string;
+  title: string | null;
+  preview: string;
+}
+
+function RecentChats() {
+  const setSurface = useStore((s) => s.setSurface);
+  const setActiveChatSession = useStore((s) => s.setActiveChatSession);
+  const startNewChat = useStore((s) => s.startNewChat);
+  const [sessions, setSessions] = useState<SessionRow[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    const api = window.hermesAPI;
+    if (!api?.listSessions) return;
+    api
+      .listSessions(6, 0)
+      .then((rows) => {
+        if (!cancelled) setSessions((rows as SessionRow[]).slice(0, 6));
+      })
+      .catch(() => {
+        /* offline / no gateway — leave empty */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const open = (id: string): void => {
+    setSurface("chats");
+    setActiveChatSession(id);
+  };
+  if (!sessions.length)
+    return (
+      <div className="ck-empty">
+        No recent chats.{" "}
+        <button className="ck-inline-link" onClick={() => startNewChat()}>
+          Start one
+        </button>
+        .
+      </div>
+    );
+  return (
+    <div className="ck-list">
+      {sessions.map((sn) => (
+        <button key={sn.id} className="ck-row" onClick={() => open(sn.id)}>
+          <span className="ck-row-t">{sn.title || "Untitled chat"}</span>
+          {sn.preview && <span className="ck-row-q">{sn.preview}</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Today() {
+  const openJournal = useStore((s) => s.openJournal);
+  // Renderer context — new Date() is fine here (the no-clock rule is workflow-only).
+  const now = new Date();
+  const weekday = now.toLocaleDateString(undefined, { weekday: "long" });
+  const date = now.toLocaleDateString(undefined, {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+  return (
+    <div className="ck-today">
+      <div className="ck-today-day">{weekday}</div>
+      <div className="ck-today-date">{date}</div>
+      <button className="ck-today-go" onClick={() => openJournal()}>
+        <Icon name="calendar" size={14} /> Open today’s journal
+      </button>
+    </div>
+  );
+}
+
+interface AgentInfo {
+  name: string;
+  model: string;
+  running: boolean;
+}
+
+function AgentStatus() {
+  const setSurface = useStore((s) => s.setSurface);
+  const [info, setInfo] = useState<AgentInfo | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const api = window.hermesAPI;
+    if (!api?.listProfiles) return;
+    api
+      .listProfiles()
+      .then((rows) => {
+        const active = rows.find((r) => r.isActive) ?? rows[0];
+        if (active && !cancelled)
+          setInfo({
+            name: active.name,
+            model: active.model,
+            running: active.gatewayRunning,
+          });
+      })
+      .catch(() => {
+        /* offline — leave null */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  if (!info)
+    return (
+      <div className="ck-empty">
+        No agent connected.{" "}
+        <button
+          className="ck-inline-link"
+          onClick={() =>
+            window.dispatchEvent(new CustomEvent("hermes:open-settings"))
+          }
+        >
+          Set one up
+        </button>
+        .
+      </div>
+    );
+  return (
+    <button className="ck-agent" onClick={() => setSurface("agent")}>
+      <span className={`ck-agent-dot ${info.running ? "on" : ""}`} />
+      <span className="ck-agent-body">
+        <span className="ck-agent-name">{info.name}</span>
+        <span className="ck-agent-meta">
+          {info.model} · {info.running ? "running" : "stopped"}
+        </span>
+      </span>
+    </button>
   );
 }

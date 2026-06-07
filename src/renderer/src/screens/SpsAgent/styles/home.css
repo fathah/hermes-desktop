@@ -1124,6 +1124,78 @@
 .sps-scope .ck-ask-go:disabled {
   opacity: 0.5;
 }
+.sps-scope .ck-inline-link {
+  color: var(--accent);
+  font: inherit;
+}
+.sps-scope .ck-inline-link:hover {
+  text-decoration: underline;
+}
+/* today widget */
+.sps-scope .ck-today-day {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--tx-1);
+}
+.sps-scope .ck-today-date {
+  font-size: 13px;
+  color: var(--tx-3);
+  margin-bottom: 12px;
+}
+.sps-scope .ck-today-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--hair);
+  border-radius: 7px;
+  background: var(--sunk);
+  color: var(--tx-1);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.sps-scope .ck-today-go:hover {
+  border-color: var(--accent);
+}
+/* agent status widget */
+.sps-scope .ck-agent {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 6px 4px;
+  border-radius: 8px;
+}
+.sps-scope .ck-agent:hover {
+  background: var(--row-hover);
+}
+.sps-scope .ck-agent-dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--tx-4);
+}
+.sps-scope .ck-agent-dot.on {
+  background: #1f8a4c;
+  box-shadow: 0 0 0 3px rgba(31, 138, 76, 0.18);
+}
+.sps-scope .ck-agent-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.sps-scope .ck-agent-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--tx-1);
+}
+.sps-scope .ck-agent-meta {
+  font-size: 12px;
+  color: var(--tx-3);
+}
 @media (max-width: 720px) {
   .sps-scope .ck-grid {
     grid-template-columns: minmax(0, 1fr);

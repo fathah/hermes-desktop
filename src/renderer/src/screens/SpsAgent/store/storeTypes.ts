@@ -266,7 +266,15 @@ export interface TemplatesSlice {
 }
 
 /** The widgets available on the customizable cockpit home dashboard. */
-export type WidgetKind = "quick" | "glance" | "notes" | "pages" | "ask";
+export type WidgetKind =
+  | "quick"
+  | "glance"
+  | "notes"
+  | "pages"
+  | "ask"
+  | "recentChats"
+  | "today"
+  | "agent";
 
 /** A placed cockpit widget: which widget, and how many columns it spans. */
 export interface CockpitWidget {

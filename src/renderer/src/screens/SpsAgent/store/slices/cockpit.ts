@@ -11,12 +11,24 @@ import type {
 } from "../storeTypes";
 
 const KEY = "sps-agent-cockpit-v1";
-const ALL_KINDS: WidgetKind[] = ["quick", "glance", "notes", "pages", "ask"];
+const ALL_KINDS: WidgetKind[] = [
+  "quick",
+  "glance",
+  "notes",
+  "pages",
+  "ask",
+  "recentChats",
+  "today",
+  "agent",
+];
 
 const DEFAULT_COCKPIT: CockpitWidget[] = [
   { kind: "quick", span: 2 },
+  { kind: "agent", span: 1 },
+  { kind: "today", span: 1 },
   { kind: "glance", span: 1 },
   { kind: "ask", span: 1 },
+  { kind: "recentChats", span: 2 },
   { kind: "notes", span: 1 },
   { kind: "pages", span: 1 },
 ];
