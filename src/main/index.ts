@@ -2122,7 +2122,12 @@ function setupIPC(): void {
       name?: string,
       deliver?: string,
       profile?: string,
-    ) => createCronJob(schedule, prompt, name, deliver, profile),
+      opts?: {
+        freshnessWindowMinutes?: number;
+        failureBehavior?: "retry" | "notify" | "ignore";
+        firstRunManual?: boolean;
+      },
+    ) => createCronJob(schedule, prompt, name, deliver, profile, opts),
   );
   ipcMain.handle("remove-cron-job", (_event, jobId: string, profile?: string) =>
     removeCronJob(jobId, profile),

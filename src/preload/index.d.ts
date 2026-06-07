@@ -942,7 +942,12 @@ interface HermesAPI {
     name?: string,
     deliver?: string,
     profile?: string,
-  ) => Promise<{ success: boolean; error?: string }>;
+    opts?: {
+      freshnessWindowMinutes?: number;
+      failureBehavior?: "retry" | "notify" | "ignore";
+      firstRunManual?: boolean;
+    },
+  ) => Promise<{ success: boolean; error?: string; paused?: boolean }>;
   removeCronJob: (
     jobId: string,
     profile?: string,

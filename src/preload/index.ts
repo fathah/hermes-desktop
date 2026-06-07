@@ -1145,7 +1145,12 @@ const hermesAPI = {
     name?: string,
     deliver?: string,
     profile?: string,
-  ): Promise<{ success: boolean; error?: string }> =>
+    opts?: {
+      freshnessWindowMinutes?: number;
+      failureBehavior?: "retry" | "notify" | "ignore";
+      firstRunManual?: boolean;
+    },
+  ): Promise<{ success: boolean; error?: string; paused?: boolean }> =>
     ipcRenderer.invoke(
       "create-cron-job",
       schedule,
@@ -1153,6 +1158,7 @@ const hermesAPI = {
       name,
       deliver,
       profile,
+      opts,
     ),
 
   removeCronJob: (

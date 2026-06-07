@@ -66,6 +66,12 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
   const [newName, setNewName] = useState("");
   const [newPrompt, setNewPrompt] = useState("");
   const [newDeliver, setNewDeliver] = useState("local");
+  // Cron-quality fields (folded into the job instruction; first run gated).
+  const [freshnessWindow, setFreshnessWindow] = useState("0");
+  const [failureBehavior, setFailureBehavior] = useState<
+    "retry" | "notify" | "ignore"
+  >("notify");
+  const [firstRunManual, setFirstRunManual] = useState(true);
 
   // Schedule builder state
   const [frequency, setFrequency] = useState<FrequencyType>("daily");
@@ -115,6 +121,9 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
     setWeeklyDay("1");
     setWeeklyTime("09:00");
     setCustomCron("");
+    setFreshnessWindow("0");
+    setFailureBehavior("notify");
+    setFirstRunManual(true);
   }
 
   function closeCreateModal(): void {
@@ -159,6 +168,11 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
         newName.trim() || undefined,
         newDeliver !== "local" ? newDeliver : undefined,
         profile,
+        {
+          freshnessWindowMinutes: parseInt(freshnessWindow, 10) || 0,
+          failureBehavior,
+          firstRunManual,
+        },
       );
       if (result.success) {
         closeCreateModal();
@@ -444,6 +458,60 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
                 </select>
                 <div className="schedules-field-hint">
                   {t("schedules.deliverHint")}
+                </div>
+              </div>
+              <div className="schedules-field">
+                <label className="schedules-field-label">
+                  Freshness window
+                </label>
+                <select
+                  className="input"
+                  value={freshnessWindow}
+                  onChange={(e) => setFreshnessWindow(e.target.value)}
+                >
+                  <option value="0">No window — consider everything</option>
+                  <option value="60">Last 1 hour</option>
+                  <option value="360">Last 6 hours</option>
+                  <option value="720">Last 12 hours</option>
+                  <option value="1440">Last 24 hours</option>
+                  <option value="10080">Last 7 days</option>
+                </select>
+                <div className="schedules-field-hint">
+                  Tells the agent how recent items must be — and to say so
+                  plainly when there&apos;s nothing new, instead of inventing
+                  updates.
+                </div>
+              </div>
+              <div className="schedules-field">
+                <label className="schedules-field-label">On failure</label>
+                <select
+                  className="input"
+                  value={failureBehavior}
+                  onChange={(e) =>
+                    setFailureBehavior(
+                      e.target.value as "retry" | "notify" | "ignore",
+                    )
+                  }
+                >
+                  <option value="notify">Report the failure</option>
+                  <option value="retry">Retry once, then report</option>
+                  <option value="ignore">
+                    Stay silent if nothing to report
+                  </option>
+                </select>
+              </div>
+              <div className="schedules-field">
+                <label className="schedules-field-check">
+                  <input
+                    type="checkbox"
+                    checked={firstRunManual}
+                    onChange={(e) => setFirstRunManual(e.target.checked)}
+                  />
+                  <span>Review the first run before trusting it</span>
+                </label>
+                <div className="schedules-field-hint">
+                  Creates the job paused. Run it once, check the output, then
+                  resume it from the job card.
                 </div>
               </div>
             </div>

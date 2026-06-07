@@ -12,6 +12,7 @@ import {
 } from "./hermes";
 import { getConnectionConfig } from "./config";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
+import { type CronQualityOpts, augmentPrompt } from "./cron-quality";
 
 export interface CronJob {
   id: string;
@@ -221,13 +222,52 @@ function runCronCommand(
   });
 }
 
+/**
+ * Best-effort: find the id of the job just created by diffing the job set
+ * (createCronJob has no id in its return). Single-writer desktop, so a one-job
+ * diff is reliable; falls back to the newest job matching `name`.
+ */
+async function findNewJobId(
+  beforeIds: Set<string> | null,
+  name?: string,
+  profile?: string,
+): Promise<string | null> {
+  try {
+    const after = await listCronJobs(true, profile);
+    const fresh = beforeIds ? after.filter((j) => !beforeIds.has(j.id)) : after;
+    if (fresh.length === 1) return fresh[0].id;
+    if (name) {
+      const named = [...fresh].reverse().find((j) => j.name === name);
+      if (named) return named.id;
+    }
+    return fresh.length ? fresh[fresh.length - 1].id : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function createCronJob(
   schedule: string,
   prompt?: string,
   name?: string,
   deliver?: string,
   profile?: string,
-): Promise<{ success: boolean; error?: string }> {
+  opts?: CronQualityOpts,
+): Promise<{ success: boolean; error?: string; paused?: boolean }> {
+  const finalPrompt = augmentPrompt(prompt ?? "", opts);
+
+  // For the first-run-manual gate we need the new job's id (which create does
+  // not return), so snapshot the existing ids first.
+  let beforeIds: Set<string> | null = null;
+  if (opts?.firstRunManual) {
+    try {
+      beforeIds = new Set((await listCronJobs(true, profile)).map((j) => j.id));
+    } catch {
+      beforeIds = null;
+    }
+  }
+
+  let created: { success: boolean; error?: string };
   if (isRemoteMode()) {
     try {
       const res = await remoteFetch("/api/jobs", {
@@ -236,26 +276,38 @@ export async function createCronJob(
         body: JSON.stringify({
           name: name || "",
           schedule,
-          prompt: prompt || "",
+          prompt: finalPrompt,
           deliver: deliver || "local",
         }),
       });
-      if (!res.ok) {
-        return { success: false, error: await remoteJsonError(res) };
-      }
-      return { success: true };
+      created = res.ok
+        ? { success: true }
+        : { success: false, error: await remoteJsonError(res) };
     } catch (err) {
-      return { success: false, error: (err as Error).message };
+      created = { success: false, error: (err as Error).message };
     }
+  } else {
+    const args = ["create", schedule];
+    if (finalPrompt) args.push(finalPrompt);
+    if (name) args.push("--name", name);
+    if (deliver) args.push("--deliver", deliver);
+    const result = await runCronCommand(args, profile);
+    created = { success: result.success, error: result.error };
   }
 
-  const args = ["create", schedule];
-  if (prompt) args.push(prompt);
-  if (name) args.push("--name", name);
-  if (deliver) args.push("--deliver", deliver);
+  if (!created.success) return created;
 
-  const result = await runCronCommand(args, profile);
-  return { success: result.success, error: result.error };
+  // First-run-manual: pause the new job so the operator reviews run #1 before
+  // trusting it. Best-effort — if the id can't be resolved, leave it active.
+  let paused = false;
+  if (opts?.firstRunManual) {
+    const newId = await findNewJobId(beforeIds, name, profile);
+    if (newId) {
+      const res = await pauseCronJob(newId, profile);
+      paused = res.success;
+    }
+  }
+  return { success: true, paused };
 }
 
 export async function removeCronJob(

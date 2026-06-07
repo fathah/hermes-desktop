@@ -6970,6 +6970,19 @@ body {
   font-family: var(--font-sans);
 }
 
+.schedules-field-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.schedules-field-check input {
+  cursor: pointer;
+}
+
 .kanban-folder-picker {
   display: flex;
   gap: 8px;
