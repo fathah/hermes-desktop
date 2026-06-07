@@ -94,11 +94,6 @@ export function resolveApproval(
   return { state: { queue, safe }, response: { id, choice } };
 }
 
-/** Default-deny response for a timed-out request (UI calls resolveApproval). */
-export function timeoutChoice(): ApprovalChoice {
-  return "deny";
-}
-
 /**
  * Seconds left before a pending approval auto-denies, or null when the timeout
  * is disabled (0/negative) or the request has no enqueue stamp. Pure; the UI

@@ -3,7 +3,6 @@ import {
   URL_KEY_MAP,
   expectedEnvKeyForUrl,
   isLocalBaseUrl,
-  isKnownProviderUrl,
   CUSTOM_API_KEY_ENV,
 } from "../src/shared/url-key-map";
 
@@ -74,21 +73,6 @@ describe("URL_KEY_MAP", () => {
     expect(
       expectedEnvKeyForUrl("https://openrouter.ai/api/v1/chat/completions"),
     ).toBe("OPENROUTER_API_KEY");
-  });
-});
-
-describe("isKnownProviderUrl", () => {
-  it("returns true for hosts in URL_KEY_MAP", () => {
-    expect(isKnownProviderUrl("https://api.openai.com/v1")).toBe(true);
-    expect(isKnownProviderUrl("https://openrouter.ai/api/v1")).toBe(true);
-  });
-
-  it("returns false for unknown hosts and falsy inputs", () => {
-    expect(isKnownProviderUrl("https://example.com")).toBe(false);
-    expect(isKnownProviderUrl("http://localhost:11434")).toBe(false);
-    expect(isKnownProviderUrl("")).toBe(false);
-    expect(isKnownProviderUrl(null)).toBe(false);
-    expect(isKnownProviderUrl(undefined)).toBe(false);
   });
 });
 

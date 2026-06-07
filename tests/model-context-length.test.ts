@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   normalizeModelId,
   getContextLength,
-  isKnownModel,
   contextFillFraction,
   contextFillPercent,
   DEFAULT_CONTEXT_LENGTH,
@@ -64,19 +63,6 @@ describe("getContextLength", () => {
         overrides: { "gpt-4.1": -5 },
       }),
     ).toBe(1_000_000);
-  });
-});
-
-describe("isKnownModel", () => {
-  it("is true for table/family matches and false otherwise", () => {
-    expect(isKnownModel("anthropic/claude-opus-4.6")).toBe(true);
-    expect(isKnownModel("brand-new-claude")).toBe(true); // family
-    expect(isKnownModel("totally-made-up")).toBe(false);
-    expect(isKnownModel(undefined)).toBe(false);
-  });
-
-  it("is true when an override supplies the value", () => {
-    expect(isKnownModel("xyz", { overrides: { xyz: 42_000 } })).toBe(true);
   });
 });
 

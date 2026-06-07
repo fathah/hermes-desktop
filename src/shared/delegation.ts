@@ -133,16 +133,3 @@ export function buildTree(state: DelegationState): DelegateNode[] {
     .map((id) => build(id, 0))
     .filter((n): n is DelegateNode => n !== null);
 }
-
-/** Count nodes by status — handy for a summary badge. */
-export function countByStatus(
-  state: DelegationState,
-): Record<DelegateStatus, number> {
-  const counts: Record<DelegateStatus, number> = {
-    running: 0,
-    done: 0,
-    error: 0,
-  };
-  for (const n of Object.values(state.nodes)) counts[n.status] += 1;
-  return counts;
-}

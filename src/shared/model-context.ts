@@ -131,26 +131,6 @@ export function getContextLength(
   return DEFAULT_CONTEXT_LENGTH;
 }
 
-/** True when the model was matched explicitly (not via DEFAULT fallback). */
-export function isKnownModel(
-  model: string | undefined | null,
-  opts?: ContextLengthOpts,
-): boolean {
-  if (!model) return false;
-  const normalized = normalizeModelId(model);
-  const bare = withoutProvider(normalized);
-  if (opts?.overrides) {
-    for (const key of [model, normalized, bare]) {
-      const hit = opts.overrides[key];
-      if (typeof hit === "number" && hit > 0) return true;
-    }
-  }
-  if (Object.keys(KNOWN_CONTEXT_LENGTHS).some((k) => bare.includes(k))) {
-    return true;
-  }
-  return FAMILY_FALLBACKS.some(([needle]) => bare.includes(needle));
-}
-
 /**
  * Fraction of the context window consumed, clamped to [0, 1]. Returns 0 for
  * non-positive usage and never exceeds 1 (overflow shows as full).

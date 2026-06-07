@@ -3,7 +3,6 @@ import {
   initDelegationState,
   applyDelegateEvent,
   buildTree,
-  countByStatus,
   MAX_CONCURRENT_CHILDREN,
   type DelegateEvent,
   type DelegationState,
@@ -92,15 +91,5 @@ describe("applyDelegateEvent / buildTree", () => {
     const d2 = tree[0].children[0].children[0];
     expect(d2.id).toBe("d2");
     expect(d2.children).toEqual([]);
-  });
-
-  it("counts nodes by status", () => {
-    const s = feed([
-      { id: "a", status: "running" },
-      { id: "b", status: "done" },
-      { id: "c", status: "error" },
-      { id: "d", status: "completed" },
-    ]);
-    expect(countByStatus(s)).toEqual({ running: 1, done: 2, error: 1 });
   });
 });

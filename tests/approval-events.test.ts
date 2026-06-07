@@ -5,7 +5,6 @@ import {
   resolveApproval,
   isRemembered,
   safeKey,
-  timeoutChoice,
   remainingSeconds,
   type PendingApproval,
 } from "../src/shared/approval";
@@ -98,8 +97,5 @@ describe("safeKey / timeout", () => {
   it("prefers patternKey, falls back to command", () => {
     expect(safeKey(req())).toBe("rm_recursive");
     expect(safeKey(req({ patternKey: undefined }))).toBe("rm -rf /tmp/x");
-  });
-  it("times out to deny", () => {
-    expect(timeoutChoice()).toBe("deny");
   });
 });

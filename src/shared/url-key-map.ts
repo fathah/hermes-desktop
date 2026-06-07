@@ -56,17 +56,6 @@ export function expectedEnvKeyForUrl(url: string | null | undefined): string {
 }
 
 /**
- * `true` iff the URL points at a known commercial OpenAI-compatible
- * provider that we have a dedicated env var for. Useful for "do we have
- * a canonical key location for this URL or are we falling back to the
- * generic CUSTOM_API_KEY bucket?" checks (e.g. health-audit warnings).
- */
-export function isKnownProviderUrl(url: string | null | undefined): boolean {
-  if (!url) return false;
-  return URL_KEY_MAP.some(({ pattern }) => pattern.test(url));
-}
-
-/**
  * `true` iff the URL points at a local/private host that commonly runs
  * without provider API-key auth (LM Studio, Ollama, LAN gateways, etc.).
  */
