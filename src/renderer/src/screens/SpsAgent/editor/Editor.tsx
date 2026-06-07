@@ -277,8 +277,14 @@ export function Editor() {
       return;
     }
     if (item.type === "columns") {
-      // Seed two empty columns; the block's own control adds a third (max 3).
-      setType(id, { type: "columns", html: "", text: "", columns: ["", ""] });
+      // Seed two columns, each with one empty paragraph to type into; the block's
+      // own control adds a third (max 3).
+      setType(id, {
+        type: "columns",
+        html: "",
+        text: "",
+        columns: [[blk("p", "")], [blk("p", "")]],
+      });
       return;
     }
     if (item.type === "button") {

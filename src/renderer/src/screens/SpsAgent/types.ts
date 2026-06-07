@@ -111,8 +111,9 @@ export interface Block {
   // button: the prompt this agent-action button sends to the co-author on click
   // (`text` holds the visible label, `emoji` the icon).
   agentPrompt?: string;
-  // columns: rich-text HTML for each side-by-side column (2–3 entries).
-  columns?: string[];
+  // columns: a list of blocks for each side-by-side column (2–3 columns). Each
+  // column is its own mini block-list (todos, headings, lists, …).
+  columns?: Block[][];
   // AI proposals
   diff?: BlockDiff;
   proposalId?: string;

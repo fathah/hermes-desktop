@@ -843,9 +843,14 @@
   padding: 10px 12px;
   background: var(--surface);
 }
-.sps-scope .b-col-body {
-  min-height: 32px;
-  padding: 0;
+.sps-scope .col-editor {
+  min-height: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sps-scope .col-block {
+  min-width: 0;
 }
 .sps-scope .b-col-del {
   position: absolute;
