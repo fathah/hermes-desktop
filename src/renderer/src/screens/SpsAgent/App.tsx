@@ -22,6 +22,7 @@ import { GraphView } from "./graph/GraphView";
 import { EquityResearch } from "./equity/EquityResearch";
 import { JournalSurface } from "./journal/JournalSurface";
 import { YouSurface } from "./you/YouSurface";
+import { CockpitSurface } from "./cockpit/CockpitSurface";
 
 export function App() {
   useHotkeys();
@@ -81,6 +82,7 @@ export function App() {
             <JournalSurface />
           ) : (
             <div className="doc-scroll scroll">
+              {surface === "cockpit" && <CockpitSurface />}
               {surface === "insights" && <Insights profile="default" visible />}
               {surface === "memory" && (
                 <MemoryTimeline profile="default" onRefresh={() => {}} />

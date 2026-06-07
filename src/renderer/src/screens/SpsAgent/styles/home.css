@@ -882,6 +882,249 @@
   color: var(--tx-1);
 }
 
+/* ── cockpit dashboard ─────────────────────────────────────────────────────── */
+.sps-scope .ck-wrap {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 32px 40px 80px;
+}
+.sps-scope .ck-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+.sps-scope .ck-title {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--tx-1);
+}
+.sps-scope .ck-sub {
+  font-size: 13.5px;
+  color: var(--tx-3);
+  margin-top: 4px;
+}
+.sps-scope .ck-head-actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+.sps-scope .ck-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--hair);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--tx-1);
+  font-size: 13px;
+  font-weight: 500;
+}
+.sps-scope .ck-btn:hover {
+  border-color: var(--accent);
+}
+.sps-scope .ck-btn:disabled {
+  opacity: 0.5;
+}
+.sps-scope .ck-btn.ghost {
+  color: var(--tx-3);
+}
+.sps-scope .ck-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.sps-scope .ck-card {
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.sps-scope .ck-card.span-2 {
+  grid-column: span 2;
+}
+.sps-scope .ck-card.dragging {
+  opacity: 0.45;
+  border-color: var(--accent);
+}
+.sps-scope .ck-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 13px;
+  border-bottom: 1px solid var(--hair);
+  color: var(--tx-2);
+}
+.sps-scope .ck-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tx-1);
+  flex: 1;
+  min-width: 0;
+}
+.sps-scope .ck-drag {
+  cursor: grab;
+  color: var(--tx-4);
+  display: inline-flex;
+}
+.sps-scope .ck-card-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.sps-scope .ck-card:hover .ck-card-controls {
+  opacity: 1;
+}
+.sps-scope .ck-card-controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 5px;
+  border-radius: 6px;
+  color: var(--tx-3);
+  font-size: 11px;
+  font-weight: 600;
+}
+.sps-scope .ck-card-controls button:hover {
+  background: var(--row-hover);
+  color: var(--tx-1);
+}
+.sps-scope .ck-card-body {
+  padding: 14px;
+  flex: 1;
+}
+.sps-scope .ck-empty,
+.sps-scope .ck-empty-surface {
+  color: var(--tx-4);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.sps-scope .ck-empty-surface {
+  padding: 40px;
+  text-align: center;
+  border: 1px dashed var(--hair);
+  border-radius: 12px;
+}
+/* widgets */
+.sps-scope .ck-quick {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+.sps-scope .ck-quick-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 14px 8px;
+  border: 1px solid var(--hair);
+  border-radius: 9px;
+  background: var(--sunk);
+  color: var(--tx-1);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.sps-scope .ck-quick-btn:hover {
+  border-color: var(--accent);
+}
+.sps-scope .ck-stats {
+  display: flex;
+  gap: 22px;
+}
+.sps-scope .ck-stat .n {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--tx-1);
+}
+.sps-scope .ck-stat .l {
+  font-size: 12px;
+  color: var(--tx-3);
+}
+.sps-scope .ck-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sps-scope .ck-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  text-align: left;
+  color: var(--tx-2);
+  font-size: 13px;
+}
+.sps-scope .ck-row:hover {
+  background: var(--row-hover);
+}
+.sps-scope .ck-row-page {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  color: var(--tx-1);
+}
+.sps-scope .ck-row-q {
+  font-size: 12px;
+  color: var(--tx-4);
+}
+.sps-scope .ck-row-t {
+  color: var(--tx-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sps-scope .ck-ask {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sps-scope .ck-ask textarea {
+  width: 100%;
+  resize: none;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--sunk);
+  color: var(--tx-1);
+  font: inherit;
+  font-size: 13.5px;
+}
+.sps-scope .ck-ask-go {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+}
+.sps-scope .ck-ask-go:disabled {
+  opacity: 0.5;
+}
+@media (max-width: 720px) {
+  .sps-scope .ck-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sps-scope .ck-card.span-2 {
+    grid-column: span 1;
+  }
+}
+
 /* agent-action button block */
 .sps-scope .b-button-wrap {
   margin: 8px 0;

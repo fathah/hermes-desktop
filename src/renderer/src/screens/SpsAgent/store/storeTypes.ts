@@ -22,6 +22,7 @@ export type RightTab = "assistant" | "outline" | "comments" | "info";
 // "graph" is the local wikilink graph view (F4).
 export type Surface =
   | "doc"
+  | "cockpit"
   | "insights"
   | "memory"
   | "you"
@@ -264,6 +265,24 @@ export interface TemplatesSlice {
   removeUserTemplate: (id: string) => void;
 }
 
+/** The widgets available on the customizable cockpit home dashboard. */
+export type WidgetKind = "quick" | "glance" | "notes" | "pages" | "ask";
+
+/** A placed cockpit widget: which widget, and how many columns it spans. */
+export interface CockpitWidget {
+  kind: WidgetKind;
+  span: 1 | 2;
+}
+
+export interface CockpitSlice {
+  cockpit: CockpitWidget[];
+  reorderCockpit: (from: number, to: number) => void;
+  setCockpitSpan: (index: number, span: 1 | 2) => void;
+  removeCockpitWidget: (index: number) => void;
+  addCockpitWidget: (kind: WidgetKind) => void;
+  resetCockpit: () => void;
+}
+
 export type Store = WorkspaceSlice &
   CommentsSlice &
   UiSlice &
@@ -271,4 +290,5 @@ export type Store = WorkspaceSlice &
   JournalSlice &
   TweaksSlice &
   TemplatesSlice &
+  CockpitSlice &
   AssistantSlice;

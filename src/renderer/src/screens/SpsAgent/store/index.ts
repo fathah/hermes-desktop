@@ -24,6 +24,7 @@ import { createUiSlice } from "./slices/ui";
 import { createSidebarSlice, saveSidebar } from "./slices/sidebar";
 import { createTweaksSlice, saveTweaks } from "./slices/tweaks";
 import { createTemplatesSlice, saveUserTemplates } from "./slices/templates";
+import { createCockpitSlice, saveCockpit } from "./slices/cockpit";
 import { createAssistantSlice } from "./slices/assistant";
 import { createJournalSlice } from "./slices/journal";
 
@@ -35,6 +36,7 @@ export const useStore = create<Store>()(
     ...createSidebarSlice(...a),
     ...createTweaksSlice(...a),
     ...createTemplatesSlice(...a),
+    ...createCockpitSlice(...a),
     ...createAssistantSlice(...a),
     ...createJournalSlice(...a),
   })),
@@ -60,6 +62,12 @@ useStore.subscribe(
 useStore.subscribe(
   (s) => s.userTemplates,
   (userTemplates) => saveUserTemplates(userTemplates),
+);
+
+// ---- persist the cockpit dashboard layout (localStorage) ----
+useStore.subscribe(
+  (s) => s.cockpit,
+  (cockpit) => saveCockpit(cockpit),
 );
 
 // ---- debounced workspace persistence (to the main process) ----

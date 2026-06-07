@@ -133,6 +133,13 @@ export function Sidebar() {
           <span className="nav-label">Home</span>
         </div>
         <div
+          className={`nav-item ${surface === "cockpit" ? "active" : ""}`}
+          onClick={() => setSurface("cockpit")}
+        >
+          <Icon name="board" size={17} />
+          <span className="nav-label">Cockpit</span>
+        </div>
+        <div
           className={`nav-item ${surface === "chats" ? "active" : ""}`}
           onClick={() => setSurface("chats")}
         >
