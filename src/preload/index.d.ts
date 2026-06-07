@@ -1320,6 +1320,29 @@ interface HermesAPI {
     result?: string;
     error?: string;
   }>;
+
+  // Python Core Bridge Integration
+  pythonCompress: (text: string, tool?: string) => Promise<string>;
+  pythonIsPathAllowed: (targetPath: string, actionDir: string) => Promise<boolean>;
+  pythonEvaluateExecution: (
+    cmdArgs: string[],
+    tier: "readonly" | "supervised" | "full",
+    paths: string[],
+    actionDir: string,
+  ) => Promise<{ decision: "ALLOW" | "PROMPT" | "BLOCK"; reason: string }>;
+  pythonMemorySave: (
+    vaultDir: string,
+    pageId: string,
+    metadata: any,
+    body: string,
+  ) => Promise<void>;
+  pythonMemorySearch: (
+    vaultDir: string,
+    query: string,
+  ) => Promise<Array<{ id: string; score: number }>>;
+  pythonMemoryGraph: (
+    vaultDir: string,
+  ) => Promise<{ outgoing: Record<string, string[]>; backlinks: Record<string, string[]> }>;
 }
 
 declare global {

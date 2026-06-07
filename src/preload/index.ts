@@ -1589,6 +1589,35 @@ const hermesAPI = {
     result?: string;
     error?: string;
   }> => ipcRenderer.invoke("sps-run-piping", text, pattern, profile),
+
+  // Python Core Bridge Integration
+  pythonCompress: (text: string, tool?: string): Promise<string> =>
+    ipcRenderer.invoke("python-compress", text, tool),
+  pythonIsPathAllowed: (targetPath: string, actionDir: string): Promise<boolean> =>
+    ipcRenderer.invoke("python-is-path-allowed", targetPath, actionDir),
+  pythonEvaluateExecution: (
+    cmdArgs: string[],
+    tier: "readonly" | "supervised" | "full",
+    paths: string[],
+    actionDir: string,
+  ): Promise<{ decision: "ALLOW" | "PROMPT" | "BLOCK"; reason: string }> =>
+    ipcRenderer.invoke("python-evaluate-execution", cmdArgs, tier, paths, actionDir),
+  pythonMemorySave: (
+    vaultDir: string,
+    pageId: string,
+    metadata: any,
+    body: string,
+  ): Promise<void> =>
+    ipcRenderer.invoke("python-memory-save", vaultDir, pageId, metadata, body),
+  pythonMemorySearch: (
+    vaultDir: string,
+    query: string,
+  ): Promise<Array<{ id: string; score: number }>> =>
+    ipcRenderer.invoke("python-memory-search", vaultDir, query),
+  pythonMemoryGraph: (
+    vaultDir: string,
+  ): Promise<{ outgoing: Record<string, string[]>; backlinks: Record<string, string[]> }> =>
+    ipcRenderer.invoke("python-memory-graph", vaultDir),
 };
 
 if (process.contextIsolated) {

@@ -31,8 +31,8 @@ vi.mock("fs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("fs")>();
   const mockFs = {
     ...actual,
-    existsSync: (path: string) => true,
-    readFileSync: (path: string) => "mock content",
+    existsSync: (_path: string) => true,
+    readFileSync: (_path: string) => "mock content",
   };
   return {
     ...mockFs,

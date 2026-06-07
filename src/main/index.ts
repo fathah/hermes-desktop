@@ -376,6 +376,15 @@ import {
   sshDiscoverMemoryProviders,
 } from "./ssh-remote";
 
+import {
+  pythonCompress,
+  pythonIsPathAllowed,
+  pythonEvaluateExecution,
+  pythonMemorySave,
+  pythonMemorySearch,
+  pythonMemoryGraph,
+} from "./agent-core-bridge";
+
 process.on("uncaughtException", (err) => {
   console.error("[MAIN UNCAUGHT]", err);
 });
@@ -2843,6 +2852,42 @@ function setupUpdater(): void {
       "Restart requested by user — calling quitAndInstall(isSilent=false, isForceRunAfter=true)",
     );
     autoUpdater.quitAndInstall(false, true);
+  });
+
+  ipcMain.handle("python-compress", async (_event, text: string, tool?: string) => {
+    return pythonCompress(text, tool);
+  });
+
+  ipcMain.handle("python-is-path-allowed", async (_event, targetPath: string, actionDir: string) => {
+    return pythonIsPathAllowed(targetPath, actionDir);
+  });
+
+  ipcMain.handle(
+    "python-evaluate-execution",
+    async (
+      _event,
+      cmdArgs: string[],
+      tier: "readonly" | "supervised" | "full",
+      paths: string[],
+      actionDir: string,
+    ) => {
+      return pythonEvaluateExecution(cmdArgs, tier, paths, actionDir);
+    },
+  );
+
+  ipcMain.handle(
+    "python-memory-save",
+    async (_event, vaultDir: string, pageId: string, metadata: any, body: string) => {
+      return pythonMemorySave(vaultDir, pageId, metadata, body);
+    },
+  );
+
+  ipcMain.handle("python-memory-search", async (_event, vaultDir: string, query: string) => {
+    return pythonMemorySearch(vaultDir, query);
+  });
+
+  ipcMain.handle("python-memory-graph", async (_event, vaultDir: string) => {
+    return pythonMemoryGraph(vaultDir);
   });
 
   setTimeout(() => {
