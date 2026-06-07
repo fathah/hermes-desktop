@@ -37,12 +37,14 @@ export async function getCheckpointsStatus(profile?: string): Promise<string> {
       },
       (_error, stdout, stderr) => {
         resolve(stripAnsi(stdout.toString() + stderr.toString()));
-      }
+      },
     );
   });
 }
 
-export async function pruneCheckpoints(profile?: string): Promise<{ success: boolean; output: string }> {
+export async function pruneCheckpoints(
+  profile?: string,
+): Promise<{ success: boolean; output: string }> {
   if (!existsSync(HERMES_PYTHON) || !existsSync(HERMES_SCRIPT_PATH())) {
     return { success: false, output: "Hermes is not installed." };
   }
@@ -68,12 +70,14 @@ export async function pruneCheckpoints(profile?: string): Promise<{ success: boo
       (error, stdout, stderr) => {
         const output = stdout.toString() + stderr.toString();
         resolve({ success: !error, output: stripAnsi(output) });
-      }
+      },
     );
   });
 }
 
-export async function clearCheckpoints(profile?: string): Promise<{ success: boolean; output: string }> {
+export async function clearCheckpoints(
+  profile?: string,
+): Promise<{ success: boolean; output: string }> {
   if (!existsSync(HERMES_PYTHON) || !existsSync(HERMES_SCRIPT_PATH())) {
     return { success: false, output: "Hermes is not installed." };
   }
@@ -99,11 +103,15 @@ export async function clearCheckpoints(profile?: string): Promise<{ success: boo
       (error, stdout, stderr) => {
         const output = stdout.toString() + stderr.toString();
         resolve({ success: !error, output: stripAnsi(output) });
-      }
+      },
     );
   });
 }
 
 function HERMES_SCRIPT_PATH(): string {
-  return join(HERMES_HOME, "hermes-agent", process.platform === "win32" ? "venv/Scripts/hermes.exe" : "hermes");
+  return join(
+    HERMES_HOME,
+    "hermes-agent",
+    process.platform === "win32" ? "venv/Scripts/hermes.exe" : "hermes",
+  );
 }

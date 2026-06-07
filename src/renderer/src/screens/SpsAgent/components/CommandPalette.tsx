@@ -281,7 +281,9 @@ export function CommandPalette() {
     { label: "Actions", items: fActs as Item[] },
     { label: "Jump to", items: fPages as Item[] },
     { label: "In pages", items: content as Item[] },
-    ...(butlerAct.length ? [{ label: "AI Assistant", items: butlerAct as Item[] }] : []),
+    ...(butlerAct.length
+      ? [{ label: "AI Assistant", items: butlerAct as Item[] }]
+      : []),
   ].filter((g) => g.items.length);
   const flat = grouped.flatMap((g) => g.items);
 

@@ -1734,12 +1734,14 @@ export async function runSecurityAudit(profile?: string): Promise<string> {
       (_error, stdout, stderr) => {
         const output = stdout.toString() + stderr.toString();
         resolve(stripAnsi(output));
-      }
+      },
     );
   });
 }
 
-export async function getPromptSizeBreakdown(profile?: string): Promise<string> {
+export async function getPromptSizeBreakdown(
+  profile?: string,
+): Promise<string> {
   if (!existsSync(HERMES_PYTHON) || !existsSync(HERMES_SCRIPT)) {
     return JSON.stringify({ error: "Hermes is not installed." });
   }
@@ -1764,12 +1766,14 @@ export async function getPromptSizeBreakdown(profile?: string): Promise<string> 
       },
       (_error, stdout) => {
         resolve(stdout.toString().trim() || "{}");
-      }
+      },
     );
   });
 }
 
-export async function getComputerUseStatus(profile?: string): Promise<{ installed: boolean; output: string }> {
+export async function getComputerUseStatus(
+  profile?: string,
+): Promise<{ installed: boolean; output: string }> {
   if (!existsSync(HERMES_PYTHON) || !existsSync(HERMES_SCRIPT)) {
     return { installed: false, output: "Hermes is not installed." };
   }
@@ -1794,9 +1798,10 @@ export async function getComputerUseStatus(profile?: string): Promise<{ installe
       },
       (_error, stdout) => {
         const out = stdout.toString().trim();
-        const installed = out.includes("installed") && !out.includes("not installed");
+        const installed =
+          out.includes("installed") && !out.includes("not installed");
         resolve({ installed, output: stripAnsi(out) });
-      }
+      },
     );
   });
 }
@@ -1884,7 +1889,7 @@ export async function getChangelog(): Promise<string> {
       },
       (_error, stdout) => {
         resolve(stripAnsi(stdout.toString()));
-      }
+      },
     );
   });
 }

@@ -33,10 +33,18 @@ describe("parseTelos", () => {
     ].join("\n");
 
     const parsed = parseTelos(md);
-    expect(parsed.mission).toBe("To live a balanced, peaceful, and productive life.");
+    expect(parsed.mission).toBe(
+      "To live a balanced, peaceful, and productive life.",
+    );
     expect(parsed.goals).toEqual(["Run a marathon", "Read 50 books this year"]);
-    expect(parsed.kpis).toEqual(["Running miles per week: 25", "Pages read daily: 30"]);
-    expect(parsed.problems).toEqual(["Not enough hours in the day", "Mindless scrolling"]);
+    expect(parsed.kpis).toEqual([
+      "Running miles per week: 25",
+      "Pages read daily: 30",
+    ]);
+    expect(parsed.problems).toEqual([
+      "Not enough hours in the day",
+      "Mindless scrolling",
+    ]);
   });
 
   it("handles headers with slightly different casing or plurals", () => {

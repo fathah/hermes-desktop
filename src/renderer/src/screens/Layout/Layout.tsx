@@ -249,7 +249,8 @@ function Layout({
       .then((status) => {
         if (!cancelled && status.available) {
           setHermesUpdateState("available");
-          window.hermesAPI.getGitChangelog()
+          window.hermesAPI
+            .getGitChangelog()
             .then((log) => {
               if (!cancelled) setGitChangelog(log);
             })
@@ -607,36 +608,56 @@ function Layout({
 
       {/* Git Changelog / What's New Modal */}
       {showChangelogModal && (
-        <div className="skills-detail-overlay" onClick={() => setShowChangelogModal(false)}>
-          <div className="schedules-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 500 }}>
+        <div
+          className="skills-detail-overlay"
+          onClick={() => setShowChangelogModal(false)}
+        >
+          <div
+            className="schedules-modal"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 500 }}
+          >
             <div className="schedules-modal-header">
               <h3>What&apos;s New in Hermes Agent</h3>
-              <button className="btn-ghost" onClick={() => setShowChangelogModal(false)} style={{ fontSize: 24, lineHeight: 1 }}>
+              <button
+                className="btn-ghost"
+                onClick={() => setShowChangelogModal(false)}
+                style={{ fontSize: 24, lineHeight: 1 }}
+              >
                 &times;
               </button>
             </div>
-            <div className="schedules-modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                An update is available for your Hermes Agent engine. Review the changes below before installing:
+            <div
+              className="schedules-modal-body"
+              style={{ display: "flex", flexDirection: "column", gap: 12 }}
+            >
+              <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>
+                An update is available for your Hermes Agent engine. Review the
+                changes below before installing:
               </p>
-              
-              <div style={{
-                maxHeight: 250,
-                overflowY: 'auto',
-                background: 'var(--bg-tertiary, rgba(127,127,127,0.06))',
-                border: '1px solid var(--border)',
-                borderRadius: 6,
-                padding: 12,
-                fontFamily: 'var(--font-mono)',
-                fontSize: 12,
-                whiteSpace: 'pre-wrap',
-                lineHeight: 1.4
-              }}>
+
+              <div
+                style={{
+                  maxHeight: 250,
+                  overflowY: "auto",
+                  background: "var(--bg-tertiary, rgba(127,127,127,0.06))",
+                  border: "1px solid var(--border)",
+                  borderRadius: 6,
+                  padding: 12,
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 12,
+                  whiteSpace: "pre-wrap",
+                  lineHeight: 1.4,
+                }}
+              >
                 {gitChangelog || "Fetching commits..."}
               </div>
             </div>
             <div className="schedules-modal-footer">
-              <button className="btn btn-secondary" onClick={() => setShowChangelogModal(false)}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => setShowChangelogModal(false)}
+              >
                 Cancel
               </button>
               <button

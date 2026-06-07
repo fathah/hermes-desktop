@@ -7,7 +7,15 @@
 // pure string builders makes them trivially unit-testable and keeps the store thin.
 
 /** The inline co-author actions surfaced on the selection toolbar + slash menu. */
-export type AiActionKind = "tldr" | "eli5" | "rewrite" | "summarize" | "why" | "wisdom" | "redteam" | "critique";
+export type AiActionKind =
+  | "tldr"
+  | "eli5"
+  | "rewrite"
+  | "summarize"
+  | "why"
+  | "wisdom"
+  | "redteam"
+  | "critique";
 
 /** Short label shown as the user's chat bubble for an inline action. */
 export function aiActionLabel(kind: AiActionKind, selection: string): string {
@@ -58,7 +66,7 @@ export function buildAiActionPrompt(
         "Output format:",
         "Clean, readable markdown with bold headers.",
         "",
-        `Input text:\n${target}`
+        `Input text:\n${target}`,
       ].join("\n");
     case "redteam":
       return [
@@ -72,7 +80,7 @@ export function buildAiActionPrompt(
         "2. List 2 unstated assumptions.",
         "3. Provide 1 worst-case failure mode.",
         "",
-        `Input text:\n${target}`
+        `Input text:\n${target}`,
       ].join("\n");
     case "critique":
       return [
@@ -86,7 +94,7 @@ export function buildAiActionPrompt(
         "2. Highlight areas of wordiness or ambiguity.",
         "3. Propose 3 specific improvements.",
         "",
-        `Input text:\n${target}`
+        `Input text:\n${target}`,
       ].join("\n");
   }
 }

@@ -983,7 +983,7 @@ function setupIPC(): void {
     async (_event, profile?: string) => {
       const { randomUUID } = await import("crypto");
       const key = `desk-${randomUUID()}`;
-      
+
       // Store in desktop.json (encrypted using OS-level secure storage)
       const data = readDesktopConfig();
       data.apiServerKey = key;
@@ -2250,8 +2250,10 @@ function setupIPC(): void {
   ipcMain.handle("list-archived-skills", (_event, profile?: string) =>
     listArchivedSkills(profile),
   );
-  ipcMain.handle("restore-archived-skill", (_event, name: string, profile?: string) =>
-    restoreArchivedSkill(name, profile),
+  ipcMain.handle(
+    "restore-archived-skill",
+    (_event, name: string, profile?: string) =>
+      restoreArchivedSkill(name, profile),
   );
   ipcMain.handle("pin-skill", (_event, name: string, profile?: string) =>
     pinSkill(name, profile),
@@ -2297,18 +2299,19 @@ function setupIPC(): void {
   ipcMain.handle("get-computer-use-status", (_event, profile?: string) =>
     getComputerUseStatus(profile),
   );
-  ipcMain.handle("install-computer-use-driver", async (event, profile?: string) => {
-    return installComputerUseDriver((progress) => {
-      if (!event.sender.isDestroyed()) {
-        event.sender.send("install-progress", progress);
-      }
-    }, profile);
-  });
+  ipcMain.handle(
+    "install-computer-use-driver",
+    async (event, profile?: string) => {
+      return installComputerUseDriver((progress) => {
+        if (!event.sender.isDestroyed()) {
+          event.sender.send("install-progress", progress);
+        }
+      }, profile);
+    },
+  );
 
   // Git Changelog
-  ipcMain.handle("get-git-changelog", (_event) =>
-    getChangelog(),
-  );
+  ipcMain.handle("get-git-changelog", (_event) => getChangelog());
 
   // Kanban
   ipcMain.handle(
@@ -2566,12 +2569,12 @@ function setupIPC(): void {
     spsSave(ws, profile),
   );
   ipcMain.handle("sps-run-telos-audit", (_event, profile?: string) =>
-    runTelosAudit(profile)
+    runTelosAudit(profile),
   );
   ipcMain.handle(
     "sps-run-piping",
     (_event, text: string, pattern: string, profile?: string) =>
-      runPipingPattern(text, pattern, profile)
+      runPipingPattern(text, pattern, profile),
   );
 
   // Resumable /work session map (M1C) — survives reload in both storage modes.
@@ -2961,13 +2964,19 @@ function setupUpdater(): void {
     autoUpdater.quitAndInstall(false, true);
   });
 
-  ipcMain.handle("python-compress", async (_event, text: string, tool?: string) => {
-    return pythonCompress(text, tool);
-  });
+  ipcMain.handle(
+    "python-compress",
+    async (_event, text: string, tool?: string) => {
+      return pythonCompress(text, tool);
+    },
+  );
 
-  ipcMain.handle("python-is-path-allowed", async (_event, targetPath: string, actionDir: string) => {
-    return pythonIsPathAllowed(targetPath, actionDir);
-  });
+  ipcMain.handle(
+    "python-is-path-allowed",
+    async (_event, targetPath: string, actionDir: string) => {
+      return pythonIsPathAllowed(targetPath, actionDir);
+    },
+  );
 
   ipcMain.handle(
     "python-evaluate-execution",
@@ -2984,14 +2993,23 @@ function setupUpdater(): void {
 
   ipcMain.handle(
     "python-memory-save",
-    async (_event, vaultDir: string, pageId: string, metadata: any, body: string) => {
+    async (
+      _event,
+      vaultDir: string,
+      pageId: string,
+      metadata: any,
+      body: string,
+    ) => {
       return pythonMemorySave(vaultDir, pageId, metadata, body);
     },
   );
 
-  ipcMain.handle("python-memory-search", async (_event, vaultDir: string, query: string) => {
-    return pythonMemorySearch(vaultDir, query);
-  });
+  ipcMain.handle(
+    "python-memory-search",
+    async (_event, vaultDir: string, query: string) => {
+      return pythonMemorySearch(vaultDir, query);
+    },
+  );
 
   ipcMain.handle("python-memory-graph", async (_event, vaultDir: string) => {
     return pythonMemoryGraph(vaultDir);
@@ -3002,24 +3020,40 @@ function setupUpdater(): void {
     return syncDiskSkillsToDb(profile);
   });
 
-  ipcMain.handle("skills-registry-lookup", async (_event, query: string, profile?: string) => {
-    return lookupLocalSkill(query, profile);
-  });
+  ipcMain.handle(
+    "skills-registry-lookup",
+    async (_event, query: string, profile?: string) => {
+      return lookupLocalSkill(query, profile);
+    },
+  );
 
-  ipcMain.handle("skills-registry-register", async (_event, skill: any, profile?: string) => {
-    return registerLocalSkill(skill, profile);
-  });
+  ipcMain.handle(
+    "skills-registry-register",
+    async (_event, skill: any, profile?: string) => {
+      return registerLocalSkill(skill, profile);
+    },
+  );
 
   ipcMain.handle(
     "skills-registry-scaffold",
-    async (_event, name: string, description: string, code: string, deps: string[], profile?: string) => {
+    async (
+      _event,
+      name: string,
+      description: string,
+      code: string,
+      deps: string[],
+      profile?: string,
+    ) => {
       return scaffoldNewSkill(name, description, code, deps, profile);
-    }
+    },
   );
 
-  ipcMain.handle("skills-registry-test", async (_event, name: string, args?: string, profile?: string) => {
-    return testSkillRun(name, args, profile);
-  });
+  ipcMain.handle(
+    "skills-registry-test",
+    async (_event, name: string, args?: string, profile?: string) => {
+      return testSkillRun(name, args, profile);
+    },
+  );
 
   setTimeout(() => {
     autoUpdater.checkForUpdates().catch(() => {});
@@ -3159,8 +3193,7 @@ export function appendAuditLog(entry: AuditLogEntry): void {
       const lines = existing.split("\n").filter((l) => l.trim() !== "");
       if (lines.length >= AUDIT_LOG_MAX_LINES) {
         existing =
-          lines.slice(lines.length - AUDIT_LOG_MAX_LINES + 1).join("\n") +
-          "\n";
+          lines.slice(lines.length - AUDIT_LOG_MAX_LINES + 1).join("\n") + "\n";
       } else if (existing && !existing.endsWith("\n")) {
         existing += "\n";
       }

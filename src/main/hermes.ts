@@ -775,16 +775,24 @@ export async function buildSelfAwarenessSystemMessage(
     const enabledTools = getToolsets(profile)
       .filter((t: any) => t.enabled)
       .map((t: any) => t.key);
-    const installedSkills = listInstalledSkills(profile).map((s: any) => s.name);
+    const installedSkills = listInstalledSkills(profile).map(
+      (s: any) => s.name,
+    );
     const version = (await getHermesVersion()) || "Unknown Version";
 
     let registryCount = 0;
     try {
       const db = getSharedDb(true);
       if (db) {
-        const tableCheck = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='skills_registry'").get();
+        const tableCheck = db
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='skills_registry'",
+          )
+          .get();
         if (tableCheck) {
-          const row = db.prepare("SELECT COUNT(*) as count FROM skills_registry").get() as { count: number };
+          const row = db
+            .prepare("SELECT COUNT(*) as count FROM skills_registry")
+            .get() as { count: number };
           registryCount = row.count;
         }
       }
@@ -808,12 +816,13 @@ export async function buildSelfAwarenessSystemMessage(
         `guide them to enable or install it in the Desktop GUI (e.g., in the "Tools" or "Skills" tab), or attempt to search/scaffold it if appropriate.`,
     };
   } catch (err) {
-    console.error("[hermes] Failed to build self-awareness system message:", err);
+    console.error(
+      "[hermes] Failed to build self-awareness system message:",
+      err,
+    );
     return null;
   }
 }
-
-
 
 function sendMessageViaApi(
   message: string,

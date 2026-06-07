@@ -83,7 +83,8 @@ describe("formatVaultContext", () => {
       hits: [],
       memoryEntries: [],
       rules: [],
-      telosText: "User's Deep Context (Telos):\nMission:\nTo live a peaceful life.",
+      telosText:
+        "User's Deep Context (Telos):\nMission:\nTo live a peaceful life.",
     });
     expect(out).toContain("User's Deep Context (Telos):");
     expect(out).toContain("Mission:\nTo live a peaceful life.");

@@ -24,7 +24,8 @@ export async function runTelosAudit(profile?: string): Promise<AuditResult> {
     if (!fs.existsSync(telosPath)) {
       return {
         success: false,
-        error: "No TELOS.md found in vault root. Please initialize it on the cockpit dashboard first.",
+        error:
+          "No TELOS.md found in vault root. Please initialize it on the cockpit dashboard first.",
       };
     }
 
@@ -37,7 +38,7 @@ export async function runTelosAudit(profile?: string): Promise<AuditResult> {
       (r) =>
         r.path !== "TELOS.md" &&
         r.path !== "_manifest.json" &&
-        !r.path.includes("/")
+        !r.path.includes("/"),
     );
 
     const summaries: string[] = [];
@@ -49,7 +50,7 @@ export async function runTelosAudit(profile?: string): Promise<AuditResult> {
           // Extract a snippet to avoid context window explosion
           const snippet = content.slice(0, 800);
           summaries.push(
-            `Note Title: ${r.title}\nPath: ${r.path}\nSnippet:\n${snippet}`
+            `Note Title: ${r.title}\nPath: ${r.path}\nSnippet:\n${snippet}`,
           );
         }
       } catch {
@@ -63,7 +64,8 @@ export async function runTelosAudit(profile?: string): Promise<AuditResult> {
       day: "numeric",
     });
 
-    const systemPrompt = "You are the Principal Alignment Auditor. You review user workspace data and grade their alignment with their core goals.";
+    const systemPrompt =
+      "You are the Principal Alignment Auditor. You review user workspace data and grade their alignment with their core goals.";
     const prompt = [
       "Analyze my recent work compared to my core objectives stored in TELOS.md.",
       "",
@@ -85,7 +87,7 @@ export async function runTelosAudit(profile?: string): Promise<AuditResult> {
       "## Divergences & Risks",
       "Where did I drift? What tasks/pages spent time on represent drift or hidden distraction risks?",
       "## Realignment Roadmap",
-      "List 3 concrete, actionable things I should prioritize next to get back on track."
+      "List 3 concrete, actionable things I should prioritize next to get back on track.",
     ].join("\n");
 
     const apiUrl = `${getApiUrl(profile)}/v1/chat/completions`;
@@ -119,7 +121,9 @@ export async function runTelosAudit(profile?: string): Promise<AuditResult> {
 
     // Strip wrapping markdown code fences if model outputted them
     if (content.startsWith("```")) {
-      content = content.replace(/^```(?:markdown|md)?\s*\n/, "").replace(/\n```$/, "");
+      content = content
+        .replace(/^```(?:markdown|md)?\s*\n/, "")
+        .replace(/\n```$/, "");
     }
 
     return {
@@ -146,35 +150,43 @@ export async function runPipingPattern(
 
     switch (pattern) {
       case "wisdom":
-        systemPrompt = "You are the Master of Wisdom. Extract key insights, principles, and actionable advice from the user's input.";
+        systemPrompt =
+          "You are the Master of Wisdom. Extract key insights, principles, and actionable advice from the user's input.";
         userPrompt = `Extract the most important wisdom, key concepts, and actionable ideas from the following text. Present them as a clean, structured bulleted list in markdown:\n\n${text}`;
         break;
       case "redteam":
-        systemPrompt = "You are an elite Red Team Auditor. Analyze inputs to discover flaws, assumptions, vulnerabilities, and risks.";
+        systemPrompt =
+          "You are an elite Red Team Auditor. Analyze inputs to discover flaws, assumptions, vulnerabilities, and risks.";
         userPrompt = `Perform a comprehensive Red Team analysis of this text. Identify hidden assumptions, logical vulnerabilities, security/business risks, and potential points of failure. Present your findings in clean markdown:\n\n${text}`;
         break;
       case "critique":
-        systemPrompt = "You are a harsh but constructive critic. Analyze inputs and provide detailed, actionable feedback.";
+        systemPrompt =
+          "You are a harsh but constructive critic. Analyze inputs and provide detailed, actionable feedback.";
         userPrompt = `Provide a severe, constructive critique of the following text. Evaluate its logic, clarity, tone, and persuasiveness. Offer specific suggestions to improve it. Present in clean markdown:\n\n${text}`;
         break;
       case "tldr":
-        systemPrompt = "You are a summarizing assistant that writes very brief TL;DRs.";
+        systemPrompt =
+          "You are a summarizing assistant that writes very brief TL;DRs.";
         userPrompt = `Provide a brief, single-sentence TL;DR (Too Long; Didn't Read) summarizing the essence of the following text:\n\n${text}`;
         break;
       case "eli5":
-        systemPrompt = "You explain complex concepts in simple terms suitable for a 5-year-old.";
+        systemPrompt =
+          "You explain complex concepts in simple terms suitable for a 5-year-old.";
         userPrompt = `Explain the core concepts and meaning of this text like I am 5 years old. Use simple language, analogies, and keep it very easy to understand:\n\n${text}`;
         break;
       case "summarize":
-        systemPrompt = "You write clear, detailed, and structured summaries of texts.";
+        systemPrompt =
+          "You write clear, detailed, and structured summaries of texts.";
         userPrompt = `Create a detailed and structured markdown summary of the following text, highlighting main themes, major points, and supporting details:\n\n${text}`;
         break;
       case "rewrite":
-        systemPrompt = "You rewrite and polish texts to improve readability, flow, and professional tone while keeping the original meaning.";
+        systemPrompt =
+          "You rewrite and polish texts to improve readability, flow, and professional tone while keeping the original meaning.";
         userPrompt = `Rewrite the following text to improve its clarity, flow, style, and professional polish. Retain all original ideas and meaning:\n\n${text}`;
         break;
       case "voice_briefing":
-        systemPrompt = "You are Louis, the principal mentor. Speak encouragingly but directly to the user.";
+        systemPrompt =
+          "You are Louis, the principal mentor. Speak encouragingly but directly to the user.";
         userPrompt = `Write a spoken briefing summarizing my day in ~100-150 words. Speak as Louis, the principal mentor. Be encouraging but direct. Mention my daily focus, my mission, and my goals. Output ONLY the spoken briefing itself, no extra chat or meta-commentary.
 
 Input context:
@@ -214,7 +226,9 @@ ${text}`;
     content = content.trim();
 
     if (content.startsWith("```")) {
-      content = content.replace(/^```(?:markdown|md)?\s*\n/, "").replace(/\n```$/, "");
+      content = content
+        .replace(/^```(?:markdown|md)?\s*\n/, "")
+        .replace(/\n```$/, "");
     }
 
     return {
@@ -228,4 +242,3 @@ ${text}`;
     };
   }
 }
-

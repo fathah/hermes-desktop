@@ -61,9 +61,9 @@ describe("StreamRedactor", () => {
     const redactor = new StreamRedactor([secretKey1, secretKey2]);
 
     expect(redactor.process(`key1: desk-`).chunkToEmit).toBe("key1: ");
-    expect(redactor.process(`1234-5678-abcd and key2: remote-`).chunkToEmit).toBe(
-      "[REDACTED] and key2: ",
-    );
+    expect(
+      redactor.process(`1234-5678-abcd and key2: remote-`).chunkToEmit,
+    ).toBe("[REDACTED] and key2: ");
     expect(redactor.process(`token-secret-999!`).chunkToEmit).toBe(
       "[REDACTED]!",
     );

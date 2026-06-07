@@ -4,12 +4,13 @@ import { vi } from "vitest";
 // Mock main process dependencies first to avoid ESM caching issues
 vi.mock("./note-index", () => {
   return {
-    getSpsNoteIndex: () => Promise.resolve({
-      query: () => [
-        { path: "note1.md", title: "Note 1" },
-        { path: "note2.md", title: "Note 2" },
-      ],
-    }),
+    getSpsNoteIndex: () =>
+      Promise.resolve({
+        query: () => [
+          { path: "note1.md", title: "Note 1" },
+          { path: "note2.md", title: "Note 2" },
+        ],
+      }),
   };
 });
 
@@ -52,7 +53,7 @@ describe("Telos Alignment Auditor", () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        choices: [{ message: { content: "### Mocked Audit Report" } }]
+        choices: [{ message: { content: "### Mocked Audit Report" } }],
       }),
     });
   });
@@ -108,7 +109,7 @@ describe("Piping Console Patterns", () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        choices: [{ message: { content: "Piped Output" } }]
+        choices: [{ message: { content: "Piped Output" } }],
       }),
     });
   });
@@ -125,22 +126,34 @@ describe("Piping Console Patterns", () => {
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
     const [, fetchOpts] = (globalThis.fetch as any).mock.calls[0];
     const body = JSON.parse(fetchOpts.body);
-    expect(body.messages[1].content).toContain("Extract the most important wisdom");
+    expect(body.messages[1].content).toContain(
+      "Extract the most important wisdom",
+    );
   });
 
   it("calls completions API with correct prompt for 'voice_briefing'", async () => {
-    const res = await runPipingPattern("Daily Focus: coding", "voice_briefing", "default");
+    const res = await runPipingPattern(
+      "Daily Focus: coding",
+      "voice_briefing",
+      "default",
+    );
     expect(res.success).toBe(true);
     expect(res.result).toBe("Piped Output");
 
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
     const [, fetchOpts] = (globalThis.fetch as any).mock.calls[0];
     const body = JSON.parse(fetchOpts.body);
-    expect(body.messages[1].content).toContain("Write a spoken briefing summarizing my day");
+    expect(body.messages[1].content).toContain(
+      "Write a spoken briefing summarizing my day",
+    );
   });
 
   it("returns error for unknown pattern", async () => {
-    const res = await runPipingPattern("Hello world", "unknown-pattern", "default");
+    const res = await runPipingPattern(
+      "Hello world",
+      "unknown-pattern",
+      "default",
+    );
     expect(res.success).toBe(false);
     expect(res.error).toContain("Unknown pattern");
     expect(globalThis.fetch).not.toHaveBeenCalled();

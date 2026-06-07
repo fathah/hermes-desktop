@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { registerLocalSkill, lookupLocalSkill } from "../src/main/skills-registry";
+import {
+  registerLocalSkill,
+  lookupLocalSkill,
+} from "../src/main/skills-registry";
 import * as dbModule from "../src/main/db";
 
 class MockDatabase {
@@ -21,7 +24,7 @@ class MockDatabase {
       get: (...params: any[]) => {
         this.prepareCalls.push({ sql, params });
         return this.getResults.shift() || undefined;
-      }
+      },
     };
   }
 
@@ -50,7 +53,7 @@ describe("Skills Registry", () => {
       keywords: "test, mock",
       status: "active",
       entrypoint: "/path/to/main.py",
-      dependencies: "[]"
+      dependencies: "[]",
     };
 
     const result = await registerLocalSkill(mockSkill);
@@ -64,7 +67,7 @@ describe("Skills Registry", () => {
       "test, mock",
       "active",
       "/path/to/main.py",
-      "[]"
+      "[]",
     ]);
   });
 
@@ -76,7 +79,7 @@ describe("Skills Registry", () => {
       keywords: "test, mock",
       status: "active",
       entrypoint: "/path/to/main.py",
-      dependencies: "[]"
+      dependencies: "[]",
     };
 
     mockDb.allResults.push([mockSkillEntry]);
@@ -86,8 +89,14 @@ describe("Skills Registry", () => {
     expect(result[0].name).toBe("Test Skill");
 
     expect(mockDb.prepareCalls.length).toBe(1);
-    expect(mockDb.prepareCalls[0].sql).toContain("SELECT * FROM skills_registry");
-    expect(mockDb.prepareCalls[0].params).toEqual(["%test%", "%test%", "%test%"]);
+    expect(mockDb.prepareCalls[0].sql).toContain(
+      "SELECT * FROM skills_registry",
+    );
+    expect(mockDb.prepareCalls[0].params).toEqual([
+      "%test%",
+      "%test%",
+      "%test%",
+    ]);
   });
 
   it("handles multi-word lookup queries correctly", async () => {

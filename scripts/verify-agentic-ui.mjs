@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
 // verify-agentic.mjs — throwaway live verification of the M1/M2 renderer UI:
 //   • slash menu shows the AI group (Plan / Work)
 //   • selection toolbar shows the AI actions menu (TLDR / Rewrite / …)

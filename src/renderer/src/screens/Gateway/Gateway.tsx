@@ -58,8 +58,16 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
     setPairingActioning(true);
     setPairingOutput(null);
     try {
-      const res = await window.hermesAPI.approvePairing(pairingCode.trim(), profile);
-      setPairingOutput(res.output || (res.success ? "Successfully approved pairing code" : "Failed to approve pairing code"));
+      const res = await window.hermesAPI.approvePairing(
+        pairingCode.trim(),
+        profile,
+      );
+      setPairingOutput(
+        res.output ||
+          (res.success
+            ? "Successfully approved pairing code"
+            : "Failed to approve pairing code"),
+      );
       setPairingCode("");
       await loadPairings();
     } catch (err) {
@@ -74,8 +82,16 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
     setPairingActioning(true);
     setPairingOutput(null);
     try {
-      const res = await window.hermesAPI.revokePairing(userIdToRevoke.trim(), profile);
-      setPairingOutput(res.output || (res.success ? "Successfully revoked pairing" : "Failed to revoke pairing"));
+      const res = await window.hermesAPI.revokePairing(
+        userIdToRevoke.trim(),
+        profile,
+      );
+      setPairingOutput(
+        res.output ||
+          (res.success
+            ? "Successfully revoked pairing"
+            : "Failed to revoke pairing"),
+      );
       setUserIdToRevoke("");
       await loadPairings();
     } catch (err) {
@@ -90,7 +106,12 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
     setPairingOutput(null);
     try {
       const res = await window.hermesAPI.clearPendingPairings(profile);
-      setPairingOutput(res.output || (res.success ? "Successfully cleared pending pairings" : "Failed to clear pending pairings"));
+      setPairingOutput(
+        res.output ||
+          (res.success
+            ? "Successfully cleared pending pairings"
+            : "Failed to clear pending pairings"),
+      );
       await loadPairings();
     } catch (err) {
       setPairingOutput("Error: " + (err as Error).message);
@@ -323,36 +344,95 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
 
       {/* Access Control & Pairing Section */}
       <div className="settings-section">
-        <div className="settings-section-title">Gateway Access Control & Pairing</div>
-        
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px', marginBottom: pairingOutput ? 16 : 0 }}>
+        <div className="settings-section-title">
+          Gateway Access Control & Pairing
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+            gap: "24px",
+            marginBottom: pairingOutput ? 16 : 0,
+          }}
+        >
           {/* Active / Pending Pairings list */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span className="settings-field-label" style={{ margin: 0 }}>Paired Devices & Requests</span>
-              <button className="btn btn-secondary btn-sm" onClick={loadPairings} disabled={pairingsLoading} style={{ padding: '2px 8px', fontSize: 11 }}>
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: "10px" }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <span className="settings-field-label" style={{ margin: 0 }}>
+                Paired Devices & Requests
+              </span>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={loadPairings}
+                disabled={pairingsLoading}
+                style={{ padding: "2px 8px", fontSize: 11 }}
+              >
                 Refresh List
               </button>
             </div>
             {pairingsLoading ? (
-              <div className="settings-loading" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 0' }}>
-                <div className="loading-spinner" style={{ width: 14, height: 14, border: '2px solid rgba(127,127,127,0.2)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+              <div
+                className="settings-loading"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  padding: "12px 0",
+                }}
+              >
+                <div
+                  className="loading-spinner"
+                  style={{
+                    width: 14,
+                    height: 14,
+                    border: "2px solid rgba(127,127,127,0.2)",
+                    borderTopColor: "var(--accent)",
+                    borderRadius: "50%",
+                    animation: "spin 1s linear infinite",
+                  }}
+                />
                 <span className="settings-field-hint">Loading pairings...</span>
               </div>
             ) : (
-              <pre className="settings-hermes-doctor" style={{ maxHeight: 200, overflowY: 'auto', fontSize: 11, margin: 0 }}>
+              <pre
+                className="settings-hermes-doctor"
+                style={{
+                  maxHeight: 200,
+                  overflowY: "auto",
+                  fontSize: 11,
+                  margin: 0,
+                }}
+              >
                 {pairingsList || "No pairings or requests found."}
               </pre>
             )}
-            <button className="btn btn-secondary btn-sm" onClick={handleClearPendingPairings} disabled={pairingActioning} style={{ alignSelf: 'flex-start' }}>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={handleClearPendingPairings}
+              disabled={pairingActioning}
+              style={{ alignSelf: "flex-start" }}
+            >
               Clear All Pending Requests
             </button>
           </div>
 
           {/* Action inputs */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: "16px" }}
+          >
             <div className="settings-field" style={{ margin: 0 }}>
-              <label className="settings-field-label">Approve Pairing Code</label>
+              <label className="settings-field-label">
+                Approve Pairing Code
+              </label>
               <div className="settings-input-row">
                 <input
                   className="input"
@@ -362,15 +442,24 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
                   onChange={(e) => setPairingCode(e.target.value)}
                   maxLength={6}
                 />
-                <button className="btn btn-primary" onClick={handleApprovePairing} disabled={pairingActioning || !pairingCode.trim()}>
+                <button
+                  className="btn btn-primary"
+                  onClick={handleApprovePairing}
+                  disabled={pairingActioning || !pairingCode.trim()}
+                >
                   Approve
                 </button>
               </div>
-              <div className="settings-field-hint">Approve a new client (e.g. mobile app, browser extension) using the code shown on that device.</div>
+              <div className="settings-field-hint">
+                Approve a new client (e.g. mobile app, browser extension) using
+                the code shown on that device.
+              </div>
             </div>
 
             <div className="settings-field" style={{ margin: 0 }}>
-              <label className="settings-field-label">Revoke Client/User ID</label>
+              <label className="settings-field-label">
+                Revoke Client/User ID
+              </label>
               <div className="settings-input-row">
                 <input
                   className="input"
@@ -379,11 +468,17 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
                   value={userIdToRevoke}
                   onChange={(e) => setUserIdToRevoke(e.target.value)}
                 />
-                <button className="btn btn-secondary" onClick={handleRevokePairing} disabled={pairingActioning || !userIdToRevoke.trim()}>
+                <button
+                  className="btn btn-secondary"
+                  onClick={handleRevokePairing}
+                  disabled={pairingActioning || !userIdToRevoke.trim()}
+                >
                   Revoke
                 </button>
               </div>
-              <div className="settings-field-hint">Revoke access for a paired device using its user/device ID.</div>
+              <div className="settings-field-hint">
+                Revoke access for a paired device using its user/device ID.
+              </div>
             </div>
           </div>
         </div>
@@ -391,7 +486,15 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
         {pairingOutput && (
           <div style={{ marginTop: 16 }}>
             <div className="settings-field-label">Action Log</div>
-            <pre className="settings-hermes-doctor" style={{ maxHeight: 150, overflowY: 'auto', fontSize: 11, margin: 0 }}>
+            <pre
+              className="settings-hermes-doctor"
+              style={{
+                maxHeight: 150,
+                overflowY: "auto",
+                fontSize: 11,
+                margin: 0,
+              }}
+            >
               {pairingOutput}
             </pre>
           </div>

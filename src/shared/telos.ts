@@ -16,8 +16,16 @@ function parseListItems(text: string): string[] {
   return text
     .split("\n")
     .map((line) => line.trim())
-    .filter((line) => line.startsWith("- ") || line.startsWith("* ") || /^\d+\.\s/.test(line))
-    .map((line) => line.replace(/^[-*]\s+/, "").replace(/^\d+\.\s+/, "").trim())
+    .filter(
+      (line) =>
+        line.startsWith("- ") || line.startsWith("* ") || /^\d+\.\s/.test(line),
+    )
+    .map((line) =>
+      line
+        .replace(/^[-*]\s+/, "")
+        .replace(/^\d+\.\s+/, "")
+        .trim(),
+    )
     .filter(Boolean);
 }
 
@@ -95,7 +103,9 @@ export function formatTelosContext(data: TelosData): string {
     parts.push(`KPIs:\n${data.kpis.map((k) => `- ${k}`).join("\n")}`);
   }
   if (data.problems.length > 0) {
-    parts.push(`Problems being solved:\n${data.problems.map((p) => `- ${p}`).join("\n")}`);
+    parts.push(
+      `Problems being solved:\n${data.problems.map((p) => `- ${p}`).join("\n")}`,
+    );
   }
 
   if (parts.length === 0) return "";

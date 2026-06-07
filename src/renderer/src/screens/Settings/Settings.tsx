@@ -158,7 +158,8 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
   const loadPromptSize = useCallback(async (): Promise<void> => {
     setPromptSizeLoading(true);
     try {
-      const breakdownStr = await window.hermesAPI.getPromptSizeBreakdown(profile);
+      const breakdownStr =
+        await window.hermesAPI.getPromptSizeBreakdown(profile);
       const data = JSON.parse(breakdownStr);
       setPromptSize(data);
     } catch (err) {
@@ -597,68 +598,169 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
         <div className="settings-section-title">Prompt Budget Breakdown</div>
         <div className="settings-field">
           <div className="settings-field-hint" style={{ marginBottom: 12 }}>
-            This visualizer shows the token usage budget for the active agent profile context window. If the prompt exceeds the model's budget, some memory or history may be truncated.
+            This visualizer shows the token usage budget for the active agent
+            profile context window. If the prompt exceeds the model's budget,
+            some memory or history may be truncated.
           </div>
           {promptSizeLoading ? (
-            <div className="settings-loading" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 0' }}>
-              <div className="loading-spinner" style={{ width: 16, height: 16, border: '2px solid rgba(127,127,127,0.2)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-              <span className="settings-field-hint">Loading prompt size breakdown...</span>
+            <div
+              className="settings-loading"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "12px 0",
+              }}
+            >
+              <div
+                className="loading-spinner"
+                style={{
+                  width: 16,
+                  height: 16,
+                  border: "2px solid rgba(127,127,127,0.2)",
+                  borderTopColor: "var(--accent)",
+                  borderRadius: "50%",
+                  animation: "spin 1s linear infinite",
+                }}
+              />
+              <span className="settings-field-hint">
+                Loading prompt size breakdown...
+              </span>
             </div>
-          ) : promptSize ? (() => {
-            let total = promptSize.total || 0;
-            let limit = promptSize.limit || 8192;
-            let percent = Math.min(Math.round((total / limit) * 100), 100);
-            
-            // Build breakdown items
-            let breakdown: Record<string, number> = {};
-            const src = promptSize.breakdown || promptSize;
-            for (const [key, val] of Object.entries(src)) {
-              if (key !== 'total' && key !== 'limit' && key !== 'breakdown' && typeof val === 'number') {
-                breakdown[key] = val;
+          ) : promptSize ? (
+            (() => {
+              const total = promptSize.total || 0;
+              const limit = promptSize.limit || 8192;
+              const percent = Math.min(Math.round((total / limit) * 100), 100);
+
+              // Build breakdown items
+              const breakdown: Record<string, number> = {};
+              const src = promptSize.breakdown || promptSize;
+              for (const [key, val] of Object.entries(src)) {
+                if (
+                  key !== "total" &&
+                  key !== "limit" &&
+                  key !== "breakdown" &&
+                  typeof val === "number"
+                ) {
+                  breakdown[key] = val;
+                }
               }
-            }
-            
-            return (
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 13, fontWeight: 600 }}>
-                  <span>Usage: {total.toLocaleString()} / {limit.toLocaleString()} tokens</span>
-                  <span>{percent}%</span>
-                </div>
-                {/* Progress bar */}
-                <div style={{ height: 10, background: 'var(--bg-tertiary, rgba(127,127,127,0.1))', borderRadius: 5, overflow: 'hidden', marginBottom: 16, border: '1px solid var(--border)' }}>
-                  <div style={{
-                    height: '100%',
-                    width: `${percent}%`,
-                    background: percent > 90 ? 'var(--error, #ef4444)' : percent > 75 ? 'var(--warning, #f59e0b)' : 'var(--accent, #3b82f6)',
-                    transition: 'width 0.4s ease'
-                  }} />
-                </div>
-                {/* Breakdown list */}
-                {Object.keys(breakdown).length > 0 ? (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px' }}>
-                    {Object.entries(breakdown).map(([key, val]) => {
-                      const itemPercent = limit > 0 ? Math.round((val / limit) * 100) : 0;
-                      return (
-                        <div key={key} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 10px' }}>
-                          <div style={{ fontSize: 11, textTransform: 'capitalize', color: 'var(--text-muted)', fontWeight: 600, marginBottom: 2 }}>
-                            {key.replace(/_/g, ' ')}
-                          </div>
-                          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
-                            {val.toLocaleString()} <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-muted)' }}>({itemPercent}%)</span>
-                          </div>
-                        </div>
-                      );
-                    })}
+
+              return (
+                <div>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      marginBottom: 6,
+                      fontSize: 13,
+                      fontWeight: 600,
+                    }}
+                  >
+                    <span>
+                      Usage: {total.toLocaleString()} / {limit.toLocaleString()}{" "}
+                      tokens
+                    </span>
+                    <span>{percent}%</span>
                   </div>
-                ) : (
-                  <div className="settings-field-hint">No breakdown available.</div>
-                )}
-              </div>
-            );
-          })() : (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <span className="settings-field-hint">No prompt budget data loaded.</span>
-              <button className="btn btn-secondary" onClick={loadPromptSize}>Reload</button>
+                  {/* Progress bar */}
+                  <div
+                    style={{
+                      height: 10,
+                      background: "var(--bg-tertiary, rgba(127,127,127,0.1))",
+                      borderRadius: 5,
+                      overflow: "hidden",
+                      marginBottom: 16,
+                      border: "1px solid var(--border)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: "100%",
+                        width: `${percent}%`,
+                        background:
+                          percent > 90
+                            ? "var(--error, #ef4444)"
+                            : percent > 75
+                              ? "var(--warning, #f59e0b)"
+                              : "var(--accent, #3b82f6)",
+                        transition: "width 0.4s ease",
+                      }}
+                    />
+                  </div>
+                  {/* Breakdown list */}
+                  {Object.keys(breakdown).length > 0 ? (
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns:
+                          "repeat(auto-fill, minmax(200px, 1fr))",
+                        gap: "12px",
+                      }}
+                    >
+                      {Object.entries(breakdown).map(([key, val]) => {
+                        const itemPercent =
+                          limit > 0 ? Math.round((val / limit) * 100) : 0;
+                        return (
+                          <div
+                            key={key}
+                            style={{
+                              background: "var(--bg-secondary)",
+                              border: "1px solid var(--border)",
+                              borderRadius: 6,
+                              padding: "8px 10px",
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontSize: 11,
+                                textTransform: "capitalize",
+                                color: "var(--text-muted)",
+                                fontWeight: 600,
+                                marginBottom: 2,
+                              }}
+                            >
+                              {key.replace(/_/g, " ")}
+                            </div>
+                            <div
+                              style={{
+                                fontSize: 14,
+                                fontWeight: 700,
+                                color: "var(--text-primary)",
+                              }}
+                            >
+                              {val.toLocaleString()}{" "}
+                              <span
+                                style={{
+                                  fontSize: 11,
+                                  fontWeight: 400,
+                                  color: "var(--text-muted)",
+                                }}
+                              >
+                                ({itemPercent}%)
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="settings-field-hint">
+                      No breakdown available.
+                    </div>
+                  )}
+                </div>
+              );
+            })()
+          ) : (
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <span className="settings-field-hint">
+                No prompt budget data loaded.
+              </span>
+              <button className="btn btn-secondary" onClick={loadPromptSize}>
+                Reload
+              </button>
             </div>
           )}
         </div>
@@ -666,33 +768,47 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
 
       {/* Security Audit Section */}
       <div className="settings-section">
-        <div className="settings-section-title">Supply-Chain Security Audit</div>
+        <div className="settings-section-title">
+          Supply-Chain Security Audit
+        </div>
         <div className="settings-field">
           <div className="settings-field-hint" style={{ marginBottom: 12 }}>
-            Scan local package locks and skill dependencies against the OSV.dev database to identify known vulnerabilities.
+            Scan local package locks and skill dependencies against the OSV.dev
+            database to identify known vulnerabilities.
           </div>
-          <div className="settings-hermes-actions" style={{ marginBottom: securityOutput ? 12 : 0 }}>
+          <div
+            className="settings-hermes-actions"
+            style={{ marginBottom: securityOutput ? 12 : 0 }}
+          >
             <button
               className="btn btn-secondary"
               onClick={async () => {
                 setSecurityRunning(true);
                 setSecurityOutput(null);
                 try {
-                  const output = await window.hermesAPI.runSecurityAudit(profile);
+                  const output =
+                    await window.hermesAPI.runSecurityAudit(profile);
                   setSecurityOutput(output);
                 } catch (err) {
-                  setSecurityOutput("Error running security audit: " + (err as Error).message);
+                  setSecurityOutput(
+                    "Error running security audit: " + (err as Error).message,
+                  );
                 } finally {
                   setSecurityRunning(false);
                 }
               }}
               disabled={securityRunning}
             >
-              {securityRunning ? "Scanning Dependencies..." : "Run Security Scan"}
+              {securityRunning
+                ? "Scanning Dependencies..."
+                : "Run Security Scan"}
             </button>
           </div>
           {securityOutput && (
-            <pre className="settings-hermes-doctor" style={{ maxHeight: 300, overflowY: 'auto', fontSize: 12 }}>
+            <pre
+              className="settings-hermes-doctor"
+              style={{ maxHeight: 300, overflowY: "auto", fontSize: 12 }}
+            >
               {securityOutput}
             </pre>
           )}

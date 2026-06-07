@@ -47,7 +47,8 @@ export function getSharedDb(readonly = true): Database.Database | null {
 
 export function initializeSkillsTable(db: Database.Database): void {
   try {
-    db.prepare(`
+    db.prepare(
+      `
       CREATE TABLE IF NOT EXISTS skills_registry (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT UNIQUE,
@@ -58,7 +59,8 @@ export function initializeSkillsTable(db: Database.Database): void {
         dependencies TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
-    `).run();
+    `,
+    ).run();
   } catch (err) {
     console.error("[db] Failed to initialize skills_registry table:", err);
   }

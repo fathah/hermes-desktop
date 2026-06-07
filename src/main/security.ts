@@ -90,11 +90,16 @@ export function redactSensitiveData(text: string): string {
   result = result.replace(/\b(desk-[a-zA-Z0-9-_]{20,})\b/g, "[REDACTED]");
 
   // 2. Redact Bearer tokens in Authorization headers or inline
-  result = result.replace(/(Bearer[^\S\r\n]+)[a-zA-Z0-9-_=+.]{20,}/gi, "$1[REDACTED]");
+  result = result.replace(
+    /(Bearer[^\S\r\n]+)[a-zA-Z0-9-_=+.]{20,}/gi,
+    "$1[REDACTED]",
+  );
 
   // 3. Redact PEM private keys
-  result = result.replace(/-----BEGIN [A-Z ]+ PRIVATE KEY-----[\s\S]*?-----END [A-Z ]+ PRIVATE KEY-----/g, "[REDACTED PRIVATE KEY]");
+  result = result.replace(
+    /-----BEGIN [A-Z ]+ PRIVATE KEY-----[\s\S]*?-----END [A-Z ]+ PRIVATE KEY-----/g,
+    "[REDACTED PRIVATE KEY]",
+  );
 
   return result;
 }
-

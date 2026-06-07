@@ -252,7 +252,7 @@ export const createAssistantSlice: StateCreator<
             const pageId = get().makePage(
               { icon: "📄", title: resp.title },
               [{ id: uid("b"), type: "p", text: "" }],
-              get().page
+              get().page,
             );
             get().selectPage(pageId);
             addMsg(convId, {
@@ -557,7 +557,9 @@ export const createAssistantSlice: StateCreator<
           })),
         }));
         get().flash(
-          ok ? `Saved key for ${provider}` : `Failed to save key for ${provider}`,
+          ok
+            ? `Saved key for ${provider}`
+            : `Failed to save key for ${provider}`,
           ok ? undefined : { tone: "warn" },
         );
       } catch (err) {

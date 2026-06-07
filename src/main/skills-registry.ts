@@ -1,10 +1,22 @@
-import { existsSync, readdirSync, statSync, readFileSync, mkdirSync, writeFileSync } from "fs";
+import {
+  existsSync,
+  readdirSync,
+  statSync,
+  readFileSync,
+  mkdirSync,
+  writeFileSync,
+} from "fs";
 import { join, dirname } from "path";
 import { homedir } from "os";
 import { execFile } from "child_process";
 import { getSharedDb } from "./db";
 import { profileHome } from "./utils";
-import { HERMES_HOME, HERMES_REPO, HERMES_PYTHON, getEnhancedPath } from "./installer";
+import {
+  HERMES_HOME,
+  HERMES_REPO,
+  HERMES_PYTHON,
+  getEnhancedPath,
+} from "./installer";
 import { stripAnsi } from "./utils";
 
 export interface SkillEntry {
@@ -42,10 +54,14 @@ function parseSkillFrontmatter(content: string): {
   const nameMatch = frontmatter.match(/^\s*name:\s*["']?([^"'\n]+)["']?\s*$/m);
   if (nameMatch) result.name = nameMatch[1].trim();
 
-  const descMatch = frontmatter.match(/^\s*description:\s*["']?([^"'\n]+)["']?\s*$/m);
+  const descMatch = frontmatter.match(
+    /^\s*description:\s*["']?([^"'\n]+)["']?\s*$/m,
+  );
   if (descMatch) result.description = descMatch[1].trim();
 
-  const keywordsMatch = frontmatter.match(/^\s*keywords:\s*["']?([^"'\n]+)["']?\s*$/m);
+  const keywordsMatch = frontmatter.match(
+    /^\s*keywords:\s*["']?([^"'\n]+)["']?\s*$/m,
+  );
   if (keywordsMatch) result.keywords = keywordsMatch[1].trim();
 
   return result;
@@ -53,13 +69,14 @@ function parseSkillFrontmatter(content: string): {
 
 export async function registerLocalSkill(
   skill: Omit<SkillEntry, "id" | "created_at">,
-  _profile?: string
+  _profile?: string,
 ): Promise<{ success: boolean; error?: string }> {
   const db = getSharedDb(false);
   if (!db) return { success: false, error: "Database not available." };
 
   try {
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO skills_registry (name, description, keywords, status, entrypoint, dependencies)
       VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(name) DO UPDATE SET
@@ -68,13 +85,14 @@ export async function registerLocalSkill(
         entrypoint = excluded.entrypoint,
         dependencies = excluded.dependencies,
         status = excluded.status
-    `).run(
+    `,
+    ).run(
       skill.name,
       skill.description,
       skill.keywords,
       skill.status,
       skill.entrypoint,
-      skill.dependencies
+      skill.dependencies,
     );
     return { success: true };
   } catch (err) {
@@ -85,7 +103,7 @@ export async function registerLocalSkill(
 
 export async function lookupLocalSkill(
   query: string,
-  _profile?: string
+  _profile?: string,
 ): Promise<SkillEntry[]> {
   const db = getSharedDb(true);
   if (!db) return [];
@@ -97,7 +115,9 @@ export async function lookupLocalSkill(
 
   if (words.length === 0) {
     try {
-      return db.prepare("SELECT * FROM skills_registry LIMIT 10").all() as SkillEntry[];
+      return db
+        .prepare("SELECT * FROM skills_registry LIMIT 10")
+        .all() as SkillEntry[];
     } catch {
       return [];
     }
@@ -106,7 +126,9 @@ export async function lookupLocalSkill(
   const clauses: string[] = [];
   const params: string[] = [];
   for (const word of words) {
-    clauses.push("(LOWER(name) LIKE ? OR LOWER(description) LIKE ? OR LOWER(keywords) LIKE ?)");
+    clauses.push(
+      "(LOWER(name) LIKE ? OR LOWER(description) LIKE ? OR LOWER(keywords) LIKE ?)",
+    );
     const likeVal = `%${word}%`;
     params.push(likeVal, likeVal, likeVal);
   }
@@ -121,10 +143,11 @@ export async function lookupLocalSkill(
 }
 
 export async function syncDiskSkillsToDb(
-  profile?: string
+  profile?: string,
 ): Promise<{ success: boolean; count: number; error?: string }> {
   const db = getSharedDb(false);
-  if (!db) return { success: false, count: 0, error: "Database not available." };
+  if (!db)
+    return { success: false, count: 0, error: "Database not available." };
 
   const pHome = profileHome(profile || "default");
   const scanDirs = [
@@ -173,7 +196,7 @@ export async function syncDiskSkillsToDb(
                 readFileSync(reqFile, "utf-8")
                   .split("\n")
                   .map((l) => l.trim())
-                  .filter((l) => l && !l.startsWith("#"))
+                  .filter((l) => l && !l.startsWith("#")),
               );
             }
 
@@ -186,12 +209,18 @@ export async function syncDiskSkillsToDb(
               dependencies,
             });
           } catch (e) {
-            console.error(`[skills-registry] Failed to read skill folder: ${entryPath}`, e);
+            console.error(
+              `[skills-registry] Failed to read skill folder: ${entryPath}`,
+              e,
+            );
           }
         }
       }
     } catch (err) {
-      console.error(`[skills-registry] Error scanning skills directory: ${dir}`, err);
+      console.error(
+        `[skills-registry] Error scanning skills directory: ${dir}`,
+        err,
+      );
     }
   }
 
@@ -219,7 +248,7 @@ export async function syncDiskSkillsToDb(
           item.keywords,
           item.status,
           item.entrypoint,
-          item.dependencies
+          item.dependencies,
         );
       }
     });
@@ -237,7 +266,7 @@ export async function scaffoldNewSkill(
   description: string,
   code: string,
   deps: string[],
-  profile?: string
+  profile?: string,
 ): Promise<{ success: boolean; path?: string; error?: string }> {
   try {
     const pHome = profileHome(profile || "default");
@@ -263,7 +292,11 @@ export async function scaffoldNewSkill(
 
     // Write requirements.txt
     if (deps && deps.length > 0) {
-      writeFileSync(join(skillDir, "requirements.txt"), deps.join("\n"), "utf-8");
+      writeFileSync(
+        join(skillDir, "requirements.txt"),
+        deps.join("\n"),
+        "utf-8",
+      );
 
       // Attempt background pip install
       await new Promise<void>((resolvePip) => {
@@ -280,7 +313,7 @@ export async function scaffoldNewSkill(
           },
           () => {
             resolvePip();
-          }
+          },
         );
       });
     }
@@ -298,20 +331,28 @@ export async function scaffoldNewSkill(
 export async function testSkillRun(
   name: string,
   args?: string,
-  _profile?: string
+  _profile?: string,
 ): Promise<{ success: boolean; output: string }> {
   const db = getSharedDb(true);
   if (!db) return { success: false, output: "Database not available." };
 
   try {
-    const entry = db.prepare("SELECT * FROM skills_registry WHERE name = ?").get(name) as SkillEntry | undefined;
+    const entry = db
+      .prepare("SELECT * FROM skills_registry WHERE name = ?")
+      .get(name) as SkillEntry | undefined;
     if (!entry || !entry.entrypoint) {
-      return { success: false, output: `Skill '${name}' not found or has no execution entrypoint.` };
+      return {
+        success: false,
+        output: `Skill '${name}' not found or has no execution entrypoint.`,
+      };
     }
 
     const entrypoint = entry.entrypoint;
     if (!existsSync(entrypoint)) {
-      return { success: false, output: `Entrypoint file not found: ${entrypoint}` };
+      return {
+        success: false,
+        output: `Entrypoint file not found: ${entrypoint}`,
+      };
     }
 
     const runArgs = args ? [entrypoint, ...args.split(/\s+/)] : [entrypoint];
@@ -333,7 +374,7 @@ export async function testSkillRun(
         (error, stdout, stderr) => {
           const output = stdout.toString() + stderr.toString();
           resolve({ success: !error, output: stripAnsi(output) });
-        }
+        },
       );
     });
   } catch (err) {

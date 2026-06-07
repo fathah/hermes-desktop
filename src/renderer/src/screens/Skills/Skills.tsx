@@ -103,7 +103,12 @@ function Skills({ profile, visible = true }: SkillsProps): React.JSX.Element {
 
   const loadAll = useCallback(async (): Promise<void> => {
     setLoading(true);
-    await Promise.all([loadInstalled(), loadBundled(), loadLocal(), loadRegistry()]);
+    await Promise.all([
+      loadInstalled(),
+      loadBundled(),
+      loadLocal(),
+      loadRegistry(),
+    ]);
     setLoading(false);
   }, [loadInstalled, loadBundled, loadLocal, loadRegistry]);
 
@@ -517,8 +522,12 @@ function Skills({ profile, visible = true }: SkillsProps): React.JSX.Element {
           <div className="registry-widget-title">Registry Status</div>
           <div className="registry-widget-stats">
             <div className="registry-stat-item">
-              <span className="registry-stat-label">SQLite Database Count:</span>
-              <span className="registry-stat-value">{registryCount} Skills</span>
+              <span className="registry-stat-label">
+                SQLite Database Count:
+              </span>
+              <span className="registry-stat-value">
+                {registryCount} Skills
+              </span>
             </div>
             {lastSyncTime && (
               <div className="registry-stat-item">
@@ -528,7 +537,12 @@ function Skills({ profile, visible = true }: SkillsProps): React.JSX.Element {
             )}
             <div className="registry-stat-item">
               <span className="registry-stat-label">Status:</span>
-              <span className="registry-stat-value" style={{ color: "var(--success)" }}>Active & Synced</span>
+              <span
+                className="registry-stat-value"
+                style={{ color: "var(--success)" }}
+              >
+                Active & Synced
+              </span>
             </div>
           </div>
           <button
@@ -543,11 +557,22 @@ function Skills({ profile, visible = true }: SkillsProps): React.JSX.Element {
         <div className="skills-autopoietic-widget">
           <div className="registry-widget-title">Autopoietic Activity Log</div>
           <div className="autopoietic-log-list">
-            {registrySkills.filter(s => s.keywords?.includes("custom") || s.keywords?.includes("generated")).length === 0 ? (
-              <div className="autopoietic-log-empty">No autopoietic skills generated yet. Ask Hermes Chat to create one!</div>
+            {registrySkills.filter(
+              (s) =>
+                s.keywords?.includes("custom") ||
+                s.keywords?.includes("generated"),
+            ).length === 0 ? (
+              <div className="autopoietic-log-empty">
+                No autopoietic skills generated yet. Ask Hermes Chat to create
+                one!
+              </div>
             ) : (
               registrySkills
-                .filter(s => s.keywords?.includes("custom") || s.keywords?.includes("generated"))
+                .filter(
+                  (s) =>
+                    s.keywords?.includes("custom") ||
+                    s.keywords?.includes("generated"),
+                )
                 .slice(0, 3)
                 .map((s) => (
                   <div key={s.name} className="autopoietic-log-item">

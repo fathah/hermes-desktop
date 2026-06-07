@@ -92,7 +92,8 @@ export function validateResult(raw: unknown): AssistantResult | null {
       return action ? { kind: "db", reply, label: r.label, action } : null;
     }
     case "page": {
-      if (typeof r.label !== "string" || typeof r.title !== "string") return null;
+      if (typeof r.label !== "string" || typeof r.title !== "string")
+        return null;
       return {
         kind: "page",
         reply,
@@ -102,7 +103,11 @@ export function validateResult(raw: unknown): AssistantResult | null {
       };
     }
     case "ssh": {
-      if (typeof r.label !== "string" || (r.action !== "start" && r.action !== "stop")) return null;
+      if (
+        typeof r.label !== "string" ||
+        (r.action !== "start" && r.action !== "stop")
+      )
+        return null;
       return {
         kind: "ssh",
         reply,

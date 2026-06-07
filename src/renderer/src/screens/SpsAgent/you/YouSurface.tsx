@@ -15,7 +15,11 @@ import {
   type SaveResult,
 } from "../../Personalization/parts";
 import { RulesManager } from "./RulesManager";
-import { parseUserMd, serializeUserMd, type Rule } from "../../../../../shared/userMd";
+import {
+  parseUserMd,
+  serializeUserMd,
+  type Rule,
+} from "../../../../../shared/userMd";
 import { useStore } from "../store";
 import { pageFromMarkdown } from "../editor/pageMarkdown";
 import { blk } from "../lib/ids";
@@ -236,7 +240,9 @@ export function YouSurface({
         <div className="settings-section-title">Telos Alignment Auditor</div>
         <div className="settings-field">
           <p className="settings-field-hint" style={{ marginBottom: 12 }}>
-            Compare your recent vault file modifications against your core objectives in <strong>TELOS.md</strong> to audit alignment and generate a roadmap.
+            Compare your recent vault file modifications against your core
+            objectives in <strong>TELOS.md</strong> to audit alignment and
+            generate a roadmap.
           </p>
           <button
             className="btn btn-primary btn-sm"

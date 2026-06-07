@@ -37,7 +37,7 @@ export async function listPairings(profile?: string): Promise<string> {
       },
       (_error, stdout, stderr) => {
         resolve(stripAnsi(stdout.toString() + stderr.toString()));
-      }
+      },
     );
   });
 }
@@ -72,7 +72,7 @@ export async function approvePairing(
       (error, stdout, stderr) => {
         const output = stdout.toString() + stderr.toString();
         resolve({ success: !error, output: stripAnsi(output) });
-      }
+      },
     );
   });
 }
@@ -107,7 +107,7 @@ export async function revokePairing(
       (error, stdout, stderr) => {
         const output = stdout.toString() + stderr.toString();
         resolve({ success: !error, output: stripAnsi(output) });
-      }
+      },
     );
   });
 }
@@ -140,11 +140,15 @@ export async function clearPendingPairings(
       (error, stdout, stderr) => {
         const output = stdout.toString() + stderr.toString();
         resolve({ success: !error, output: stripAnsi(output) });
-      }
+      },
     );
   });
 }
 
 function HERMES_SCRIPT_PATH(): string {
-  return join(HERMES_HOME, "hermes-agent", process.platform === "win32" ? "venv/Scripts/hermes.exe" : "hermes");
+  return join(
+    HERMES_HOME,
+    "hermes-agent",
+    process.platform === "win32" ? "venv/Scripts/hermes.exe" : "hermes",
+  );
 }

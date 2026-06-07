@@ -503,30 +503,59 @@ function PulseWidget() {
 
   // Find TELOS page
   const telosPageId = Object.keys(meta).find(
-    (id) => meta[id]?.title?.toUpperCase() === "TELOS" || meta[id]?.title?.toUpperCase() === "TELOS.MD"
+    (id) =>
+      meta[id]?.title?.toUpperCase() === "TELOS" ||
+      meta[id]?.title?.toUpperCase() === "TELOS.MD",
   );
 
   const createTelosPage = () => {
     const initialTelosBlocks = [
       { id: "b1", type: "h2", text: "Mission" },
-      { id: "b2", type: "p", text: "To align efforts, optimize focus, and build systems that magnify potential." },
+      {
+        id: "b2",
+        type: "p",
+        text: "To align efforts, optimize focus, and build systems that magnify potential.",
+      },
       { id: "b3", type: "h2", text: "Goals" },
-      { id: "b4", type: "todo", text: "Define core life priorities.", done: false },
-      { id: "b5", type: "todo", text: "Verify local Hermes models are running at peak throughput.", done: false },
+      {
+        id: "b4",
+        type: "todo",
+        text: "Define core life priorities.",
+        done: false,
+      },
+      {
+        id: "b5",
+        type: "todo",
+        text: "Verify local Hermes models are running at peak throughput.",
+        done: false,
+      },
       { id: "b6", type: "h2", text: "KPIs" },
       { id: "b7", type: "li", text: "Daily focused hours: 4+" },
-      { id: "b8", type: "li", text: "Weekly active sprint tasks completed: 85%+" },
+      {
+        id: "b8",
+        type: "li",
+        text: "Weekly active sprint tasks completed: 85%+",
+      },
       { id: "b9", type: "h2", text: "Problems" },
       { id: "b10", type: "li", text: "Information fragmentation across tabs." },
     ] as any[];
 
-    const id = makePage({ icon: "🎯", title: "TELOS" }, initialTelosBlocks, null);
+    const id = makePage(
+      { icon: "🎯", title: "TELOS" },
+      initialTelosBlocks,
+      null,
+    );
     selectPage(id);
     setSurface("doc");
     flash("TELOS page created in your vault!");
   };
 
-  const telosData = { mission: "", goals: [] as string[], kpis: [] as string[], problems: [] as string[] };
+  const telosData = {
+    mission: "",
+    goals: [] as string[],
+    kpis: [] as string[],
+    problems: [] as string[],
+  };
   if (telosPageId) {
     const blocks = docs[telosPageId] || [];
     let currentSection: "mission" | "goals" | "kpis" | "problems" | null = null;
@@ -565,13 +594,16 @@ function PulseWidget() {
       const missionText = telosData.mission || "";
       const goalsText = telosData.goals.join(", ");
       const context = `Daily Focus: ${focusText}\nMission: ${missionText}\nGoals: ${goalsText}`;
-      
-      const res = await window.hermesAPI.runPipingPattern(context, "voice_briefing");
+
+      const res = await window.hermesAPI.runPipingPattern(
+        context,
+        "voice_briefing",
+      );
       if (!res.success || !res.result) {
         flash(res.error || "Failed to generate briefing", { tone: "warn" });
         return;
       }
-      
+
       const textToSpeak = res.result;
 
       const voiceStatus = await window.hermesAPI.getVoiceStatus();
@@ -599,12 +631,15 @@ function PulseWidget() {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       const voices = window.speechSynthesis.getVoices();
-      const defaultVoice = voices.find(v => v.lang.startsWith("en")) || voices[0];
+      const defaultVoice =
+        voices.find((v) => v.lang.startsWith("en")) || voices[0];
       if (defaultVoice) utterance.voice = defaultVoice;
       window.speechSynthesis.speak(utterance);
       flash("Playing briefing (browser voice fallback)...");
     } else {
-      flash("Speech synthesis not supported in this browser.", { tone: "warn" });
+      flash("Speech synthesis not supported in this browser.", {
+        tone: "warn",
+      });
     }
   };
 
@@ -622,22 +657,43 @@ function PulseWidget() {
                 disabled={briefingLoading}
                 title="Listen to today's focus briefing"
               >
-                <Icon name="play" size={12} style={{ marginRight: 4, verticalAlign: "middle" }} />
+                <Icon
+                  name="play"
+                  size={12}
+                  style={{ marginRight: 4, verticalAlign: "middle" }}
+                />
                 {briefingLoading ? "Generating..." : "Listen"}
               </button>
             )}
             {!editingFocus ? (
-              <button className="ck-pulse-link-btn" onClick={() => setEditingFocus(true)}>Edit</button>
+              <button
+                className="ck-pulse-link-btn"
+                onClick={() => setEditingFocus(true)}
+              >
+                Edit
+              </button>
             ) : (
               <div style={{ display: "flex", gap: 8 }}>
-                <button className="ck-pulse-link-btn" onClick={saveFocus}>Save</button>
-                <button className="ck-pulse-link-btn cancel" onClick={() => { setFocusInput(focus); setEditingFocus(false); }}>Cancel</button>
+                <button className="ck-pulse-link-btn" onClick={saveFocus}>
+                  Save
+                </button>
+                <button
+                  className="ck-pulse-link-btn cancel"
+                  onClick={() => {
+                    setFocusInput(focus);
+                    setEditingFocus(false);
+                  }}
+                >
+                  Cancel
+                </button>
               </div>
             )}
           </div>
         </div>
         {!editingFocus ? (
-          <p className="ck-pulse-focus-text">{focus || "No daily focus set. Click Edit to focus your day."}</p>
+          <p className="ck-pulse-focus-text">
+            {focus || "No daily focus set. Click Edit to focus your day."}
+          </p>
         ) : (
           <textarea
             className="ck-pulse-focus-input"
@@ -649,7 +705,12 @@ function PulseWidget() {
         )}
       </div>
 
-      <div style={{ borderBottom: "1px solid var(--border-color)", margin: "12px 0" }} />
+      <div
+        style={{
+          borderBottom: "1px solid var(--border-color)",
+          margin: "12px 0",
+        }}
+      />
 
       {/* Telos Alignment Section */}
       <div className="ck-pulse-section">
@@ -670,13 +731,26 @@ function PulseWidget() {
             <p className="ck-pulse-mission-text">
               {telosData.mission || "No mission statement written yet."}
             </p>
-            
+
             {telosData.goals.length > 0 && (
               <div style={{ marginTop: 12 }}>
                 <span className="ck-pulse-sect-title">Key Goals</span>
-                <ul className="ck-pulse-list" style={{ marginTop: 6, paddingLeft: 16, listStyleType: "disc" }}>
+                <ul
+                  className="ck-pulse-list"
+                  style={{
+                    marginTop: 6,
+                    paddingLeft: 16,
+                    listStyleType: "disc",
+                  }}
+                >
                   {telosData.goals.slice(0, 3).map((goal, idx) => (
-                    <li key={idx} className="ck-pulse-item" style={{ marginBottom: 4 }}>{goal}</li>
+                    <li
+                      key={idx}
+                      className="ck-pulse-item"
+                      style={{ marginBottom: 4 }}
+                    >
+                      {goal}
+                    </li>
                   ))}
                 </ul>
               </div>
@@ -684,8 +758,15 @@ function PulseWidget() {
           </div>
         ) : (
           <div className="ck-pulse-empty">
-            <p>No <code>TELOS.md</code> found in your vault. Create one to track your mission, goals, and KPIs.</p>
-            <button className="ck-btn" onClick={createTelosPage} style={{ marginTop: 8 }}>
+            <p>
+              No <code>TELOS.md</code> found in your vault. Create one to track
+              your mission, goals, and KPIs.
+            </p>
+            <button
+              className="ck-btn"
+              onClick={createTelosPage}
+              style={{ marginTop: 8 }}
+            >
               <Icon name="plus" size={14} /> Initialize TELOS.md
             </button>
           </div>
@@ -748,7 +829,8 @@ function PipingWidget() {
     if (!outputResult) return;
     const { blocks } = pageFromMarkdown(outputResult);
     const docBlocks = blocks.length ? blocks : [blk("p", "")];
-    const patLabel = PATTERNS.find((p) => p.value === pattern)?.label || "Piped Output";
+    const patLabel =
+      PATTERNS.find((p) => p.value === pattern)?.label || "Piped Output";
     const pageId = makePage(
       {
         icon: "⚡",
@@ -756,7 +838,7 @@ function PipingWidget() {
         ingestedAt: Date.now(),
       },
       docBlocks,
-      null
+      null,
     );
     selectPage(pageId);
     setSurface("doc");
@@ -790,11 +872,19 @@ function PipingWidget() {
             background: "var(--bg-3)",
             border: "1px solid var(--border-color)",
             color: "var(--tx-1)",
-            fontFamily: "inherit"
+            fontFamily: "inherit",
           }}
         />
       </div>
-      <div className="ck-piping-controls" style={{ display: "flex", gap: 8, margin: "8px 0", alignItems: "center" }}>
+      <div
+        className="ck-piping-controls"
+        style={{
+          display: "flex",
+          gap: 8,
+          margin: "8px 0",
+          alignItems: "center",
+        }}
+      >
         <select
           value={pattern}
           onChange={(e) => setPattern(e.target.value)}
@@ -805,11 +895,13 @@ function PipingWidget() {
             borderRadius: 4,
             background: "var(--bg-3)",
             border: "1px solid var(--border-color)",
-            color: "var(--tx-1)"
+            color: "var(--tx-1)",
           }}
         >
           {PATTERNS.map((p) => (
-            <option key={p.value} value={p.value}>{p.label}</option>
+            <option key={p.value} value={p.value}>
+              {p.label}
+            </option>
           ))}
         </select>
         <button
@@ -823,26 +915,44 @@ function PipingWidget() {
       </div>
 
       {errorMsg && (
-        <div className="memory-error" style={{ margin: "8px 0" }}>{errorMsg}</div>
+        <div className="memory-error" style={{ margin: "8px 0" }}>
+          {errorMsg}
+        </div>
       )}
 
       {outputResult && (
-        <div className="ck-piping-result" style={{ marginTop: 12, borderTop: "1px solid var(--border-color)", paddingTop: 12 }}>
-          <div style={{
-            maxHeight: 180,
-            overflowY: "auto",
-            background: "var(--bg-2)",
-            padding: 10,
-            borderRadius: 4,
-            whiteSpace: "pre-wrap",
-            fontSize: "0.9em",
-            color: "var(--tx-2)"
-          }}>
+        <div
+          className="ck-piping-result"
+          style={{
+            marginTop: 12,
+            borderTop: "1px solid var(--border-color)",
+            paddingTop: 12,
+          }}
+        >
+          <div
+            style={{
+              maxHeight: 180,
+              overflowY: "auto",
+              background: "var(--bg-2)",
+              padding: 10,
+              borderRadius: 4,
+              whiteSpace: "pre-wrap",
+              fontSize: "0.9em",
+              color: "var(--tx-2)",
+            }}
+          >
             {outputResult}
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-            <button className="btn btn-secondary btn-sm" onClick={handleCopy}>Copy</button>
-            <button className="btn btn-secondary btn-sm" onClick={handleCreatePage}>Create Page</button>
+            <button className="btn btn-secondary btn-sm" onClick={handleCopy}>
+              Copy
+            </button>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={handleCreatePage}
+            >
+              Create Page
+            </button>
             <button
               className="btn btn-secondary btn-sm"
               onClick={handleAppend}

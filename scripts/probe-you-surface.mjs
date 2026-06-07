@@ -5,7 +5,13 @@
 //
 // Usage:  npm run build && node scripts/probe-you-surface.mjs
 import { _electron as electron } from "playwright";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from "fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  readFileSync,
+  existsSync,
+} from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -24,12 +30,21 @@ writeFileSync(
 mkdirSync(join(HOME, "sps-agent", "vault"), { recursive: true });
 writeFileSync(
   join(HOME, "sps-agent", "workspace.json"),
-  JSON.stringify({ tree: [{ id: "home", children: [] }], meta: { home: { title: "Home" } }, docs: { home: [] }, page: "home" }),
+  JSON.stringify({
+    tree: [{ id: "home", children: [] }],
+    meta: { home: { title: "Home" } },
+    docs: { home: [] },
+    page: "home",
+  }),
 );
 
 const app = await electron.launch({
   args: [".", `--user-data-dir=${join(HOME, "electron-userdata")}`],
-  env: { ...process.env, HERMES_HOME: HOME, ELECTRON_DISABLE_SECURITY_WARNINGS: "1" },
+  env: {
+    ...process.env,
+    HERMES_HOME: HOME,
+    ELECTRON_DISABLE_SECURITY_WARNINGS: "1",
+  },
 });
 const win = await app.firstWindow();
 await win.waitForLoadState("domcontentloaded");
@@ -45,7 +60,8 @@ function fail(msg) {
 await win.locator(".nav-item", { hasText: "You" }).first().click();
 await win.waitForSelector(".settings-header", { timeout: 8000 });
 const header = await win.locator(".settings-header").first().textContent();
-if (!header || !header.includes("You")) fail(`You header not shown (got: ${header})`);
+if (!header || !header.includes("You"))
+  fail(`You header not shown (got: ${header})`);
 
 // The rules manager + its suggestions should render.
 await win.waitForSelector("text=How I like things", { timeout: 8000 });

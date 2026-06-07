@@ -276,7 +276,10 @@ function Tools({ profile }: ToolsProps): React.JSX.Element {
   const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
 
   // Computer Use Accessibility driver status
-  const [cuaStatus, setCuaStatus] = useState<{ installed: boolean; output: string } | null>(null);
+  const [cuaStatus, setCuaStatus] = useState<{
+    installed: boolean;
+    output: string;
+  } | null>(null);
   const [cuaInstalling, setCuaInstalling] = useState(false);
   const [cuaError, setCuaError] = useState("");
 
@@ -378,16 +381,43 @@ function Tools({ profile }: ToolsProps): React.JSX.Element {
 
       {/* Computer Use Driver Health Widget */}
       {cuaStatus && (
-        <div className="settings-section" style={{ marginTop: 32, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', padding: '16px 20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                background: cuaStatus.installed ? 'var(--success, #10b981)' : 'var(--error, #ef4444)'
-              }} />
-              <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+        <div
+          className="settings-section"
+          style={{
+            marginTop: 32,
+            background: "var(--surface)",
+            border: "1px solid var(--border)",
+            borderRadius: "8px",
+            padding: "16px 20px",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 12,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <div
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: "50%",
+                  background: cuaStatus.installed
+                    ? "var(--success, #10b981)"
+                    : "var(--error, #ef4444)",
+                }}
+              />
+              <h3
+                style={{
+                  fontSize: 14,
+                  fontWeight: 700,
+                  margin: 0,
+                  color: "var(--text-primary)",
+                }}
+              >
                 Computer Use Driver Health
               </h3>
             </div>
@@ -396,28 +426,54 @@ function Tools({ profile }: ToolsProps): React.JSX.Element {
                 className="btn btn-primary btn-sm"
                 onClick={handleRepairCua}
                 disabled={cuaInstalling}
-                style={{ padding: '4px 12px', fontSize: 12 }}
+                style={{ padding: "4px 12px", fontSize: 12 }}
               >
-                {cuaInstalling ? "Installing Driver..." : "Install / Repair Driver"}
+                {cuaInstalling
+                  ? "Installing Driver..."
+                  : "Install / Repair Driver"}
               </button>
             )}
           </div>
-          
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: 8 }}>
-            {cuaStatus.installed 
+
+          <div
+            style={{
+              fontSize: 12,
+              color: "var(--text-secondary)",
+              lineHeight: 1.5,
+              marginBottom: 8,
+            }}
+          >
+            {cuaStatus.installed
               ? "The OSWorld Computer Use accessibility driver is correctly configured and active."
-              : "The OSWorld accessibility driver is missing or needs permission setup to enable mouse/keyboard controls."
-            }
+              : "The OSWorld accessibility driver is missing or needs permission setup to enable mouse/keyboard controls."}
           </div>
-          
+
           {cuaError && (
-            <div style={{ fontSize: 12, color: 'var(--error, #ef4444)', marginTop: 8 }}>
+            <div
+              style={{
+                fontSize: 12,
+                color: "var(--error, #ef4444)",
+                marginTop: 8,
+              }}
+            >
               {cuaError}
             </div>
           )}
 
           {cuaStatus.output && (
-            <pre className="settings-hermes-doctor" style={{ maxHeight: 120, overflowY: 'auto', fontSize: 11, marginTop: 10, background: 'var(--bg-tertiary, rgba(127,127,127,0.06))', padding: 8, borderRadius: 4, border: '1px solid var(--border)' }}>
+            <pre
+              className="settings-hermes-doctor"
+              style={{
+                maxHeight: 120,
+                overflowY: "auto",
+                fontSize: 11,
+                marginTop: 10,
+                background: "var(--bg-tertiary, rgba(127,127,127,0.06))",
+                padding: 8,
+                borderRadius: 4,
+                border: "1px solid var(--border)",
+              }}
+            >
               {cuaStatus.output}
             </pre>
           )}

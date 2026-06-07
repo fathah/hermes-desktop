@@ -1188,37 +1188,64 @@ const hermesAPI = {
   // Curator
   getCuratorStatus: (profile?: string): Promise<string> =>
     ipcRenderer.invoke("get-curator-status", profile),
-  runCuratorNow: (profile?: string): Promise<{ success: boolean; output: string }> =>
+  runCuratorNow: (
+    profile?: string,
+  ): Promise<{ success: boolean; output: string }> =>
     ipcRenderer.invoke("run-curator-now", profile),
-  pauseCurator: (profile?: string): Promise<{ success: boolean; output: string }> =>
+  pauseCurator: (
+    profile?: string,
+  ): Promise<{ success: boolean; output: string }> =>
     ipcRenderer.invoke("pause-curator", profile),
-  resumeCurator: (profile?: string): Promise<{ success: boolean; output: string }> =>
+  resumeCurator: (
+    profile?: string,
+  ): Promise<{ success: boolean; output: string }> =>
     ipcRenderer.invoke("resume-curator", profile),
   listArchivedSkills: (profile?: string): Promise<string> =>
     ipcRenderer.invoke("list-archived-skills", profile),
-  restoreArchivedSkill: (name: string, profile?: string): Promise<{ success: boolean; output: string }> =>
+  restoreArchivedSkill: (
+    name: string,
+    profile?: string,
+  ): Promise<{ success: boolean; output: string }> =>
     ipcRenderer.invoke("restore-archived-skill", name, profile),
-  pinSkill: (name: string, profile?: string): Promise<{ success: boolean; output: string }> =>
+  pinSkill: (
+    name: string,
+    profile?: string,
+  ): Promise<{ success: boolean; output: string }> =>
     ipcRenderer.invoke("pin-skill", name, profile),
-  unpinSkill: (name: string, profile?: string): Promise<{ success: boolean; output: string }> =>
+  unpinSkill: (
+    name: string,
+    profile?: string,
+  ): Promise<{ success: boolean; output: string }> =>
     ipcRenderer.invoke("unpin-skill", name, profile),
 
   // Checkpoints
   getCheckpointsStatus: (profile?: string): Promise<string> =>
     ipcRenderer.invoke("get-checkpoints-status", profile),
-  pruneCheckpoints: (profile?: string): Promise<{ success: boolean; output: string }> =>
+  pruneCheckpoints: (
+    profile?: string,
+  ): Promise<{ success: boolean; output: string }> =>
     ipcRenderer.invoke("prune-checkpoints", profile),
-  clearCheckpoints: (profile?: string): Promise<{ success: boolean; output: string }> =>
+  clearCheckpoints: (
+    profile?: string,
+  ): Promise<{ success: boolean; output: string }> =>
     ipcRenderer.invoke("clear-checkpoints", profile),
 
   // Pairing
   listPairings: (profile?: string): Promise<string> =>
     ipcRenderer.invoke("list-pairings", profile),
-  approvePairing: (code: string, profile?: string): Promise<{ success: boolean; output: string }> =>
+  approvePairing: (
+    code: string,
+    profile?: string,
+  ): Promise<{ success: boolean; output: string }> =>
     ipcRenderer.invoke("approve-pairing", code, profile),
-  revokePairing: (userId: string, profile?: string): Promise<{ success: boolean; output: string }> =>
+  revokePairing: (
+    userId: string,
+    profile?: string,
+  ): Promise<{ success: boolean; output: string }> =>
     ipcRenderer.invoke("revoke-pairing", userId, profile),
-  clearPendingPairings: (profile?: string): Promise<{ success: boolean; output: string }> =>
+  clearPendingPairings: (
+    profile?: string,
+  ): Promise<{ success: boolean; output: string }> =>
     ipcRenderer.invoke("clear-pending-pairings", profile),
 
   // Security & Prompt Size
@@ -1228,9 +1255,13 @@ const hermesAPI = {
     ipcRenderer.invoke("get-prompt-size-breakdown", profile),
 
   // Computer Use
-  getComputerUseStatus: (profile?: string): Promise<{ installed: boolean; output: string }> =>
+  getComputerUseStatus: (
+    profile?: string,
+  ): Promise<{ installed: boolean; output: string }> =>
     ipcRenderer.invoke("get-computer-use-status", profile),
-  installComputerUseDriver: (profile?: string): Promise<{ success: boolean; error?: string }> =>
+  installComputerUseDriver: (
+    profile?: string,
+  ): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke("install-computer-use-driver", profile),
 
   // Git Changelog
@@ -1645,7 +1676,10 @@ const hermesAPI = {
   // Python Core Bridge Integration
   pythonCompress: (text: string, tool?: string): Promise<string> =>
     ipcRenderer.invoke("python-compress", text, tool),
-  pythonIsPathAllowed: (targetPath: string, actionDir: string): Promise<boolean> =>
+  pythonIsPathAllowed: (
+    targetPath: string,
+    actionDir: string,
+  ): Promise<boolean> =>
     ipcRenderer.invoke("python-is-path-allowed", targetPath, actionDir),
   pythonEvaluateExecution: (
     cmdArgs: string[],
@@ -1653,7 +1687,13 @@ const hermesAPI = {
     paths: string[],
     actionDir: string,
   ): Promise<{ decision: "ALLOW" | "PROMPT" | "BLOCK"; reason: string }> =>
-    ipcRenderer.invoke("python-evaluate-execution", cmdArgs, tier, paths, actionDir),
+    ipcRenderer.invoke(
+      "python-evaluate-execution",
+      cmdArgs,
+      tier,
+      paths,
+      actionDir,
+    ),
   pythonMemorySave: (
     vaultDir: string,
     pageId: string,
@@ -1668,19 +1708,43 @@ const hermesAPI = {
     ipcRenderer.invoke("python-memory-search", vaultDir, query),
   pythonMemoryGraph: (
     vaultDir: string,
-  ): Promise<{ outgoing: Record<string, string[]>; backlinks: Record<string, string[]> }> =>
-    ipcRenderer.invoke("python-memory-graph", vaultDir),
+  ): Promise<{
+    outgoing: Record<string, string[]>;
+    backlinks: Record<string, string[]>;
+  }> => ipcRenderer.invoke("python-memory-graph", vaultDir),
 
   // Autopoietic Skills Registry & Generator
-  syncSkillsRegistry: (profile?: string): Promise<{ success: boolean; count: number; error?: string }> =>
+  syncSkillsRegistry: (
+    profile?: string,
+  ): Promise<{ success: boolean; count: number; error?: string }> =>
     ipcRenderer.invoke("skills-registry-sync", profile),
   lookupSkillRegistry: (query: string, profile?: string): Promise<any[]> =>
     ipcRenderer.invoke("skills-registry-lookup", query, profile),
-  registerSkillRegistry: (skill: any, profile?: string): Promise<{ success: boolean; error?: string }> =>
+  registerSkillRegistry: (
+    skill: any,
+    profile?: string,
+  ): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke("skills-registry-register", skill, profile),
-  scaffoldSkill: (name: string, description: string, code: string, deps: string[], profile?: string): Promise<{ success: boolean; path?: string; error?: string }> =>
-    ipcRenderer.invoke("skills-registry-scaffold", name, description, code, deps, profile),
-  testSkill: (name: string, args?: string, profile?: string): Promise<{ success: boolean; output: string }> =>
+  scaffoldSkill: (
+    name: string,
+    description: string,
+    code: string,
+    deps: string[],
+    profile?: string,
+  ): Promise<{ success: boolean; path?: string; error?: string }> =>
+    ipcRenderer.invoke(
+      "skills-registry-scaffold",
+      name,
+      description,
+      code,
+      deps,
+      profile,
+    ),
+  testSkill: (
+    name: string,
+    args?: string,
+    profile?: string,
+  ): Promise<{ success: boolean; output: string }> =>
     ipcRenderer.invoke("skills-registry-test", name, args, profile),
 };
 

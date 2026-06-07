@@ -978,32 +978,63 @@ interface HermesAPI {
 
   // Curator
   getCuratorStatus: (profile?: string) => Promise<string>;
-  runCuratorNow: (profile?: string) => Promise<{ success: boolean; output: string }>;
-  pauseCurator: (profile?: string) => Promise<{ success: boolean; output: string }>;
-  resumeCurator: (profile?: string) => Promise<{ success: boolean; output: string }>;
+  runCuratorNow: (
+    profile?: string,
+  ) => Promise<{ success: boolean; output: string }>;
+  pauseCurator: (
+    profile?: string,
+  ) => Promise<{ success: boolean; output: string }>;
+  resumeCurator: (
+    profile?: string,
+  ) => Promise<{ success: boolean; output: string }>;
   listArchivedSkills: (profile?: string) => Promise<string>;
-  restoreArchivedSkill: (name: string, profile?: string) => Promise<{ success: boolean; output: string }>;
-  pinSkill: (name: string, profile?: string) => Promise<{ success: boolean; output: string }>;
-  unpinSkill: (name: string, profile?: string) => Promise<{ success: boolean; output: string }>;
+  restoreArchivedSkill: (
+    name: string,
+    profile?: string,
+  ) => Promise<{ success: boolean; output: string }>;
+  pinSkill: (
+    name: string,
+    profile?: string,
+  ) => Promise<{ success: boolean; output: string }>;
+  unpinSkill: (
+    name: string,
+    profile?: string,
+  ) => Promise<{ success: boolean; output: string }>;
 
   // Checkpoints
   getCheckpointsStatus: (profile?: string) => Promise<string>;
-  pruneCheckpoints: (profile?: string) => Promise<{ success: boolean; output: string }>;
-  clearCheckpoints: (profile?: string) => Promise<{ success: boolean; output: string }>;
+  pruneCheckpoints: (
+    profile?: string,
+  ) => Promise<{ success: boolean; output: string }>;
+  clearCheckpoints: (
+    profile?: string,
+  ) => Promise<{ success: boolean; output: string }>;
 
   // Pairing
   listPairings: (profile?: string) => Promise<string>;
-  approvePairing: (code: string, profile?: string) => Promise<{ success: boolean; output: string }>;
-  revokePairing: (userId: string, profile?: string) => Promise<{ success: boolean; output: string }>;
-  clearPendingPairings: (profile?: string) => Promise<{ success: boolean; output: string }>;
+  approvePairing: (
+    code: string,
+    profile?: string,
+  ) => Promise<{ success: boolean; output: string }>;
+  revokePairing: (
+    userId: string,
+    profile?: string,
+  ) => Promise<{ success: boolean; output: string }>;
+  clearPendingPairings: (
+    profile?: string,
+  ) => Promise<{ success: boolean; output: string }>;
 
   // Security & Prompt Size
   runSecurityAudit: (profile?: string) => Promise<string>;
   getPromptSizeBreakdown: (profile?: string) => Promise<string>;
 
   // Computer Use
-  getComputerUseStatus: (profile?: string) => Promise<{ installed: boolean; output: string }>;
-  installComputerUseDriver: (profile?: string) => Promise<{ success: boolean; error?: string }>;
+  getComputerUseStatus: (
+    profile?: string,
+  ) => Promise<{ installed: boolean; output: string }>;
+  installComputerUseDriver: (
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
 
   // Git Changelog
   getGitChangelog: () => Promise<string>;
@@ -1346,9 +1377,7 @@ interface HermesAPI {
     reason?: "missing" | "unreadable";
   }>;
   spsReadFileBytes: (filePath: string) => Promise<Uint8Array>;
-  runTelosAudit: (
-    profile?: string,
-  ) => Promise<{
+  runTelosAudit: (profile?: string) => Promise<{
     success: boolean;
     title?: string;
     markdown?: string;
@@ -1366,7 +1395,10 @@ interface HermesAPI {
 
   // Python Core Bridge Integration
   pythonCompress: (text: string, tool?: string) => Promise<string>;
-  pythonIsPathAllowed: (targetPath: string, actionDir: string) => Promise<boolean>;
+  pythonIsPathAllowed: (
+    targetPath: string,
+    actionDir: string,
+  ) => Promise<boolean>;
   pythonEvaluateExecution: (
     cmdArgs: string[],
     tier: "readonly" | "supervised" | "full",
@@ -1383,16 +1415,35 @@ interface HermesAPI {
     vaultDir: string,
     query: string,
   ) => Promise<Array<{ id: string; score: number }>>;
-  pythonMemoryGraph: (
-    vaultDir: string,
-  ) => Promise<{ outgoing: Record<string, string[]>; backlinks: Record<string, string[]> }>;
+  pythonMemoryGraph: (vaultDir: string) => Promise<{
+    outgoing: Record<string, string[]>;
+    backlinks: Record<string, string[]>;
+  }>;
 
   // Autopoietic Skills Registry & Generator
-  syncSkillsRegistry: (profile?: string) => Promise<{ success: boolean; count: number; error?: string }>;
-  lookupSkillRegistry: (query: string, profile?: string) => Promise<SkillEntry[]>;
-  registerSkillRegistry: (skill: Omit<SkillEntry, "id" | "created_at">, profile?: string) => Promise<{ success: boolean; error?: string }>;
-  scaffoldSkill: (name: string, description: string, code: string, deps: string[], profile?: string) => Promise<{ success: boolean; path?: string; error?: string }>;
-  testSkill: (name: string, args?: string, profile?: string) => Promise<{ success: boolean; output: string }>;
+  syncSkillsRegistry: (
+    profile?: string,
+  ) => Promise<{ success: boolean; count: number; error?: string }>;
+  lookupSkillRegistry: (
+    query: string,
+    profile?: string,
+  ) => Promise<SkillEntry[]>;
+  registerSkillRegistry: (
+    skill: Omit<SkillEntry, "id" | "created_at">,
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+  scaffoldSkill: (
+    name: string,
+    description: string,
+    code: string,
+    deps: string[],
+    profile?: string,
+  ) => Promise<{ success: boolean; path?: string; error?: string }>;
+  testSkill: (
+    name: string,
+    args?: string,
+    profile?: string,
+  ) => Promise<{ success: boolean; output: string }>;
 }
 
 declare global {

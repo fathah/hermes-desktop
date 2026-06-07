@@ -437,43 +437,80 @@ function runCuratorCommand(
 
 export async function getCuratorStatus(profile?: string): Promise<string> {
   const result = await runCuratorCommand(["status"], profile);
-  return result.success ? result.output : result.error || "Failed to check curator status";
+  return result.success
+    ? result.output
+    : result.error || "Failed to check curator status";
 }
 
-export async function runCuratorNow(profile?: string): Promise<{ success: boolean; output: string }> {
+export async function runCuratorNow(
+  profile?: string,
+): Promise<{ success: boolean; output: string }> {
   const result = await runCuratorCommand(["run"], profile);
-  return { success: result.success, output: result.success ? result.output : result.error || "" };
+  return {
+    success: result.success,
+    output: result.success ? result.output : result.error || "",
+  };
 }
 
-export async function pauseCurator(profile?: string): Promise<{ success: boolean; output: string }> {
+export async function pauseCurator(
+  profile?: string,
+): Promise<{ success: boolean; output: string }> {
   const result = await runCuratorCommand(["pause"], profile);
-  return { success: result.success, output: result.success ? result.output : result.error || "" };
+  return {
+    success: result.success,
+    output: result.success ? result.output : result.error || "",
+  };
 }
 
-export async function resumeCurator(profile?: string): Promise<{ success: boolean; output: string }> {
+export async function resumeCurator(
+  profile?: string,
+): Promise<{ success: boolean; output: string }> {
   const result = await runCuratorCommand(["resume"], profile);
-  return { success: result.success, output: result.success ? result.output : result.error || "" };
+  return {
+    success: result.success,
+    output: result.success ? result.output : result.error || "",
+  };
 }
 
 export async function listArchivedSkills(profile?: string): Promise<string> {
   const result = await runCuratorCommand(["list-archived"], profile);
-  return result.success ? result.output : result.error || "Failed to list archived skills";
+  return result.success
+    ? result.output
+    : result.error || "Failed to list archived skills";
 }
 
-export async function restoreArchivedSkill(name: string, profile?: string): Promise<{ success: boolean; output: string }> {
+export async function restoreArchivedSkill(
+  name: string,
+  profile?: string,
+): Promise<{ success: boolean; output: string }> {
   if (!name) return { success: false, output: "Skill name is required" };
   const result = await runCuratorCommand(["restore", name], profile);
-  return { success: result.success, output: result.success ? result.output : result.error || "" };
+  return {
+    success: result.success,
+    output: result.success ? result.output : result.error || "",
+  };
 }
 
-export async function pinSkill(name: string, profile?: string): Promise<{ success: boolean; output: string }> {
+export async function pinSkill(
+  name: string,
+  profile?: string,
+): Promise<{ success: boolean; output: string }> {
   if (!name) return { success: false, output: "Skill name is required" };
   const result = await runCuratorCommand(["pin", name], profile);
-  return { success: result.success, output: result.success ? result.output : result.error || "" };
+  return {
+    success: result.success,
+    output: result.success ? result.output : result.error || "",
+  };
 }
 
-export async function unpinSkill(name: string, profile?: string): Promise<{ success: boolean; output: string }> {
+export async function unpinSkill(
+  name: string,
+  profile?: string,
+): Promise<{ success: boolean; output: string }> {
   if (!name) return { success: false, output: "Skill name is required" };
   const result = await runCuratorCommand(["unpin", name], profile);
-  return { success: result.success, output: result.success ? result.output : result.error || "" };
+  return {
+    success: result.success,
+    output: result.success ? result.output : result.error || "",
+  };
 }

@@ -1065,7 +1065,10 @@ export function getApiServerKey(profile?: string): string {
     // Zero Trust Secure Fallback: Retrieve the key encrypted inside desktop.json
     try {
       const desktopConfig = readDesktopConfig();
-      if (typeof desktopConfig.apiServerKey === "string" && desktopConfig.apiServerKey) {
+      if (
+        typeof desktopConfig.apiServerKey === "string" &&
+        desktopConfig.apiServerKey
+      ) {
         value = desktopConfig.apiServerKey;
         source = "envProfile"; // Skip migration warning to plaintext .env
       }

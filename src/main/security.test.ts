@@ -29,9 +29,7 @@ vi.mock("electron", () => ({
 
 const TEST_DIR = join(tmpdir(), `hermes-test-security-${Date.now()}`);
 
-async function freshConfig(
-  home: string,
-): Promise<typeof import("./config")> {
+async function freshConfig(home: string): Promise<typeof import("./config")> {
   vi.resetModules();
   process.env.HERMES_HOME = home;
   return await import("./config");
@@ -40,12 +38,16 @@ async function freshConfig(
 describe("redactSensitiveData", () => {
   it("leaves normal text untouched", () => {
     expect(redactSensitiveData("Hello World!")).toBe("Hello World!");
-    expect(redactSensitiveData("My name is John Doe")).toBe("My name is John Doe");
+    expect(redactSensitiveData("My name is John Doe")).toBe(
+      "My name is John Doe",
+    );
   });
 
   it("redacts OpenAI API keys", () => {
     const key = "sk-proj-abcdefghijklmnopqrstuvwxyz0123456789ABCDEF";
-    expect(redactSensitiveData(`My key is ${key}`)).toBe("My key is [REDACTED]");
+    expect(redactSensitiveData(`My key is ${key}`)).toBe(
+      "My key is [REDACTED]",
+    );
   });
 
   it("redacts local desk API keys", () => {
@@ -54,8 +56,12 @@ describe("redactSensitiveData", () => {
   });
 
   it("redacts bearer tokens in headers", () => {
-    expect(redactSensitiveData("Authorization: Bearer sk-12345678901234567890")).toBe("Authorization: Bearer [REDACTED]");
-    expect(redactSensitiveData("Bearer someLongToken1234567890")).toBe("Bearer [REDACTED]");
+    expect(
+      redactSensitiveData("Authorization: Bearer sk-12345678901234567890"),
+    ).toBe("Authorization: Bearer [REDACTED]");
+    expect(redactSensitiveData("Bearer someLongToken1234567890")).toBe(
+      "Bearer [REDACTED]",
+    );
   });
 
   it("redacts PEM private keys", () => {

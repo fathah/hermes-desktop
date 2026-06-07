@@ -19,38 +19,52 @@ function runPythonBridge(subcommand: string, args: string[]): Promise<any> {
     }
 
     if (!existsSync(CLI_PATH)) {
-      return reject(new Error(`Python core bridge CLI not found at path: ${CLI_PATH}`));
+      return reject(
+        new Error(`Python core bridge CLI not found at path: ${CLI_PATH}`),
+      );
     }
 
     const fullArgs = [CLI_PATH, subcommand, ...args];
 
-    execFile(pythonPath, fullArgs, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
-      if (error) {
-        return reject(
-          new Error(`Bridge CLI execution failed: ${error.message}\nStderr: ${stderr}`)
-        );
-      }
-      try {
-        const parsed = JSON.parse(stdout.trim());
-        if (parsed.error) {
-          return reject(new Error(`Bridge CLI returned error: ${parsed.error}`));
+    execFile(
+      pythonPath,
+      fullArgs,
+      { maxBuffer: 10 * 1024 * 1024 },
+      (error, stdout, stderr) => {
+        if (error) {
+          return reject(
+            new Error(
+              `Bridge CLI execution failed: ${error.message}\nStderr: ${stderr}`,
+            ),
+          );
         }
-        resolve(parsed);
-      } catch (parseError: any) {
-        reject(
-          new Error(
-            `Failed to parse Bridge CLI output: ${parseError.message}\nRaw stdout: ${stdout}`
-          )
-        );
-      }
-    });
+        try {
+          const parsed = JSON.parse(stdout.trim());
+          if (parsed.error) {
+            return reject(
+              new Error(`Bridge CLI returned error: ${parsed.error}`),
+            );
+          }
+          resolve(parsed);
+        } catch (parseError: any) {
+          reject(
+            new Error(
+              `Failed to parse Bridge CLI output: ${parseError.message}\nRaw stdout: ${stdout}`,
+            ),
+          );
+        }
+      },
+    );
   });
 }
 
 /**
  * Calls TokenJuice to compress text (e.g. tool output, html, shell logs).
  */
-export async function pythonCompress(text: string, tool?: string): Promise<string> {
+export async function pythonCompress(
+  text: string,
+  tool?: string,
+): Promise<string> {
   const args = ["--text", text];
   if (tool) {
     args.push("--tool", tool);
@@ -62,7 +76,10 @@ export async function pythonCompress(text: string, tool?: string): Promise<strin
 /**
  * Checks if a target path is allowed under the action_dir sandbox bounds.
  */
-export async function pythonIsPathAllowed(targetPath: string, actionDir: string): Promise<boolean> {
+export async function pythonIsPathAllowed(
+  targetPath: string,
+  actionDir: string,
+): Promise<boolean> {
   const result = await runPythonBridge("is-path-allowed", [
     "--path",
     targetPath,
@@ -79,7 +96,7 @@ export async function pythonEvaluateExecution(
   cmdArgs: string[],
   tier: "readonly" | "supervised" | "full",
   paths: string[],
-  actionDir: string
+  actionDir: string,
 ): Promise<{ decision: "ALLOW" | "PROMPT" | "BLOCK"; reason: string }> {
   const args = [
     "--args",
@@ -106,7 +123,7 @@ export async function pythonMemorySave(
   vaultDir: string,
   pageId: string,
   metadata: any,
-  body: string
+  body: string,
 ): Promise<void> {
   await runPythonBridge("memory-save", [
     "--vault",
@@ -125,7 +142,7 @@ export async function pythonMemorySave(
  */
 export async function pythonMemorySearch(
   vaultDir: string,
-  query: string
+  query: string,
 ): Promise<Array<{ id: string; score: number }>> {
   const result = await runPythonBridge("memory-search", [
     "--vault",
@@ -139,9 +156,10 @@ export async function pythonMemorySearch(
 /**
  * Builds incoming/outgoing backlinks graph for the Obsidian memory vault.
  */
-export async function pythonMemoryGraph(
-  vaultDir: string
-): Promise<{ outgoing: Record<string, string[]>; backlinks: Record<string, string[]> }> {
+export async function pythonMemoryGraph(vaultDir: string): Promise<{
+  outgoing: Record<string, string[]>;
+  backlinks: Record<string, string[]>;
+}> {
   const result = await runPythonBridge("memory-graph", ["--vault", vaultDir]);
   return {
     outgoing: result.outgoing || {},
