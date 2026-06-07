@@ -19,6 +19,10 @@ import type {
   KanbanTaskDetail,
   KanbanCreateTaskInput,
 } from "../shared/kanban";
+import type {
+  ConfigHealthIssue,
+  ConfigHealthReport,
+} from "../shared/config-health";
 
 interface ElectronAPI {
   process: {
@@ -29,25 +33,6 @@ interface ElectronAPI {
       node: string;
     };
   };
-}
-
-interface ConfigHealthIssue {
-  code: string;
-  severity: "error" | "warning" | "info";
-  message: string;
-  detail?: string;
-  locations: string[];
-  autoFixable: boolean;
-  fixDescription?: string;
-  fixLocation?: "providers" | "models" | ".env" | "config.yaml" | "setup";
-  context?: Record<string, string>;
-}
-
-interface ConfigHealthReport {
-  ranAt: number;
-  profile: string;
-  issues: ConfigHealthIssue[];
-  summary: { errors: number; warnings: number; infos: number };
 }
 
 interface ConfigFixLogEntry {
