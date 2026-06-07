@@ -23,6 +23,11 @@ import type {
   ConfigHealthIssue,
   ConfigHealthReport,
 } from "../shared/config-health";
+import type {
+  EquityBasket,
+  EquityBasketHolding,
+  EquityAlert,
+} from "../shared/equity";
 
 interface ElectronAPI {
   process: {
@@ -99,30 +104,6 @@ type ObsidianFunctionName =
   | "replace-selection"
   | "run-command"
   | "write-note";
-
-interface EquityBasketHolding {
-  ticker: string;
-  exchange?: string;
-  qty?: number;
-  avg_cost?: number;
-}
-
-interface EquityBasket {
-  id: string;
-  name: string;
-  created_at: string;
-  holdings: EquityBasketHolding[];
-}
-
-interface EquityAlert {
-  id: string;
-  ts: string;
-  ticker: string | null;
-  trigger: string;
-  direction?: string;
-  message: string;
-  read?: boolean;
-}
 
 interface SkillEntry {
   id?: number;

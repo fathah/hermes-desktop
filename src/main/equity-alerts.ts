@@ -13,15 +13,8 @@ import { join } from "path";
 import { Notification, type BrowserWindow } from "electron";
 import { profileHome, getActiveProfileNameSync } from "./utils";
 
-export interface EquityAlert {
-  id: string;
-  ts: string;
-  ticker: string | null;
-  trigger: string;
-  direction?: string;
-  message: string;
-  read?: boolean;
-}
+import type { EquityAlert } from "../shared/equity";
+export type { EquityAlert };
 
 const ALERTS_FILE = "equity-alerts.jsonl";
 

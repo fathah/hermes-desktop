@@ -16,19 +16,11 @@ import { promises as fs } from "fs";
 import { join } from "path";
 import { profileHome, getActiveProfileNameSync } from "./utils";
 
-export interface BasketHolding {
-  ticker: string;
-  exchange?: string;
-  qty?: number;
-  avg_cost?: number;
-}
-
-export interface Basket {
-  id: string;
-  name: string;
-  created_at: string;
-  holdings: BasketHolding[];
-}
+import type {
+  EquityBasket as Basket,
+  EquityBasketHolding as BasketHolding,
+} from "../shared/equity";
+export type { EquityBasket, EquityBasketHolding } from "../shared/equity";
 
 const BASKETS_FILE = "equity-baskets.json";
 
