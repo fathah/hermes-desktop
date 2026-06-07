@@ -33,7 +33,8 @@ export type Surface =
   | "equity"
   | "inbox"
   | "health"
-  | "journal";
+  | "journal"
+  | "board";
 
 // Named, toggleable sidebar sections (Notion 3.1 grammar). Order here is the
 // render order in the rail.

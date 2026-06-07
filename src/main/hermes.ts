@@ -20,6 +20,7 @@ import {
   HERMES_PYTHON,
   hermesCliArgs,
   getEnhancedPath,
+  getHermesVersion,
 } from "./installer";
 import {
   getApiServerKey,
@@ -763,6 +764,57 @@ export async function buildRetrievalSystemMessage(
   }
 }
 
+export async function buildSelfAwarenessSystemMessage(
+  profile?: string,
+): Promise<{ role: "system"; content: string } | null> {
+  try {
+    const { getToolsets } = require("./tools");
+    const { listInstalledSkills } = require("./skills");
+    const { getSharedDb } = require("./db");
+    const activeProfile = resolveProfile(profile) || "default";
+    const enabledTools = getToolsets(profile)
+      .filter((t: any) => t.enabled)
+      .map((t: any) => t.key);
+    const installedSkills = listInstalledSkills(profile).map((s: any) => s.name);
+    const version = (await getHermesVersion()) || "Unknown Version";
+
+    let registryCount = 0;
+    try {
+      const db = getSharedDb(true);
+      if (db) {
+        const tableCheck = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='skills_registry'").get();
+        if (tableCheck) {
+          const row = db.prepare("SELECT COUNT(*) as count FROM skills_registry").get() as { count: number };
+          registryCount = row.count;
+        }
+      }
+    } catch (e) {
+      console.error("[hermes] Failed to count registered skills:", e);
+    }
+
+    return {
+      role: "system",
+      content:
+        `You are Hermes, running inside the Hermes Desktop app.\n` +
+        `- Active Desktop Profile: ${activeProfile}\n` +
+        `- Hermes Engine Version: ${version}\n` +
+        `- Enabled Toolsets: [${enabledTools.join(", ")}]\n` +
+        `- Installed Skills: [${installedSkills.join(", ")}]\n` +
+        `- SQLite Skills Registry: ${registryCount} skills indexed\n\n` +
+        `You have access to a local SQLite skills registry containing all indexed capabilities.\n` +
+        `- To search the SQLite registry for skills matching keywords: run the terminal command 'python .agents/lib/agent_core_cli.py lookup-skill --query "<keywords>"'\n` +
+        `- To dynamically research, scaffold, test, and register a new python skill when a capability is missing: run the terminal command 'python .agents/lib/agent_core_cli.py scaffold-skill --name "<SkillName>" --desc "<Description>" --code "<body>" --deps "<comma,separated,deps>"'\n\n` +
+        `If the user asks you to perform an action that requires a disabled tool or uninstalled skill, ` +
+        `guide them to enable or install it in the Desktop GUI (e.g., in the "Tools" or "Skills" tab), or attempt to search/scaffold it if appropriate.`,
+    };
+  } catch (err) {
+    console.error("[hermes] Failed to build self-awareness system message:", err);
+    return null;
+  }
+}
+
+
+
 function sendMessageViaApi(
   message: string,
   cb: ChatCallbacks,
@@ -772,6 +824,7 @@ function sendMessageViaApi(
   attachments?: Attachment[],
   contextFolder?: string,
   groundingSystem?: { role: "system"; content: string } | null,
+  selfAwarenessSystem?: { role: "system"; content: string } | null,
 ): ChatHandle {
   const mc = getModelConfig(profile);
   const controller = new AbortController();
@@ -803,6 +856,8 @@ function sendMessageViaApi(
   // the context-folder message), so the visible transcript stays clean and
   // reloaded sessions — which filter non-user/assistant roles — stay clean too.
   if (groundingSystem) messages.unshift(groundingSystem);
+
+  if (selfAwarenessSystem) messages.unshift(selfAwarenessSystem);
 
   const body = JSON.stringify({
     model: mc.model || "hermes-agent",
@@ -1421,6 +1476,8 @@ export async function sendMessage(
       ? await buildRetrievalSystemMessage(message, profile)
       : null;
 
+  const selfAwarenessSystem = await buildSelfAwarenessSystemMessage(profile);
+
   // Remote mode: always use API, no CLI fallback
   if (isRemoteMode()) {
     return sendMessageViaApi(
@@ -1432,6 +1489,7 @@ export async function sendMessage(
       attachments,
       contextFolder,
       groundingSystem,
+      selfAwarenessSystem,
     );
   }
 
@@ -1460,6 +1518,7 @@ export async function sendMessage(
       attachments,
       contextFolder,
       groundingSystem,
+      selfAwarenessSystem,
     );
   }
 

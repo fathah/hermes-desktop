@@ -209,6 +209,8 @@ function Layout({
   const [hermesUpdateDetail, setHermesUpdateDetail] = useState<string | null>(
     null,
   );
+  const [gitChangelog, setGitChangelog] = useState<string | null>(null);
+  const [showChangelogModal, setShowChangelogModal] = useState(false);
 
   useEffect(() => {
     const cleanupAvailable = window.hermesAPI.onUpdateAvailable((info) => {
@@ -245,7 +247,14 @@ function Layout({
     window.hermesAPI
       .checkHermesUpdate()
       .then((status) => {
-        if (!cancelled && status.available) setHermesUpdateState("available");
+        if (!cancelled && status.available) {
+          setHermesUpdateState("available");
+          window.hermesAPI.getGitChangelog()
+            .then((log) => {
+              if (!cancelled) setGitChangelog(log);
+            })
+            .catch(() => {});
+        }
       })
       .catch(() => {
         /* offline / not a git checkout — stay silent */
@@ -397,7 +406,13 @@ function Layout({
               className={`sidebar-update-btn ${
                 hermesUpdateState === "error" ? "error" : ""
               }`}
-              onClick={handleHermesUpdate}
+              onClick={() => {
+                if (hermesUpdateState === "available") {
+                  setShowChangelogModal(true);
+                } else {
+                  handleHermesUpdate();
+                }
+              }}
               disabled={
                 hermesUpdateState === "updating" || hermesUpdateState === "done"
               }
@@ -589,6 +604,54 @@ function Layout({
           </div>
         )}
       </main>
+
+      {/* Git Changelog / What's New Modal */}
+      {showChangelogModal && (
+        <div className="skills-detail-overlay" onClick={() => setShowChangelogModal(false)}>
+          <div className="schedules-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 500 }}>
+            <div className="schedules-modal-header">
+              <h3>What&apos;s New in Hermes Agent</h3>
+              <button className="btn-ghost" onClick={() => setShowChangelogModal(false)} style={{ fontSize: 24, lineHeight: 1 }}>
+                &times;
+              </button>
+            </div>
+            <div className="schedules-modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                An update is available for your Hermes Agent engine. Review the changes below before installing:
+              </p>
+              
+              <div style={{
+                maxHeight: 250,
+                overflowY: 'auto',
+                background: 'var(--bg-tertiary, rgba(127,127,127,0.06))',
+                border: '1px solid var(--border)',
+                borderRadius: 6,
+                padding: 12,
+                fontFamily: 'var(--font-mono)',
+                fontSize: 12,
+                whiteSpace: 'pre-wrap',
+                lineHeight: 1.4
+              }}>
+                {gitChangelog || "Fetching commits..."}
+              </div>
+            </div>
+            <div className="schedules-modal-footer">
+              <button className="btn btn-secondary" onClick={() => setShowChangelogModal(false)}>
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  setShowChangelogModal(false);
+                  handleHermesUpdate();
+                }}
+              >
+                Update Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

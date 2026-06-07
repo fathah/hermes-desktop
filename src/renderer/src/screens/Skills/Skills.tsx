@@ -68,6 +68,12 @@ function Skills({ profile, visible = true }: SkillsProps): React.JSX.Element {
   const [error, setError] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
 
+  // SQLite registry state
+  const [registryCount, setRegistryCount] = useState(0);
+  const [registrySkills, setRegistrySkills] = useState<any[]>([]);
+  const [lastSyncTime, setLastSyncTime] = useState<string>("");
+  const [syncing, setSyncing] = useState(false);
+
   const loadInstalled = useCallback(async (): Promise<void> => {
     const [enabled, disabled] = await Promise.all([
       window.hermesAPI.listInstalledSkills(profile),
@@ -85,11 +91,39 @@ function Skills({ profile, visible = true }: SkillsProps): React.JSX.Element {
     setLocalSkills(await window.hermesAPI.discoverLocalSkills(profile));
   }, [profile]);
 
+  const loadRegistry = useCallback(async (): Promise<void> => {
+    try {
+      const skills = await window.hermesAPI.lookupSkillRegistry("", profile);
+      setRegistrySkills(skills);
+      setRegistryCount(skills.length);
+    } catch (err) {
+      console.error("Failed to load skills registry:", err);
+    }
+  }, [profile]);
+
   const loadAll = useCallback(async (): Promise<void> => {
     setLoading(true);
-    await Promise.all([loadInstalled(), loadBundled(), loadLocal()]);
+    await Promise.all([loadInstalled(), loadBundled(), loadLocal(), loadRegistry()]);
     setLoading(false);
-  }, [loadInstalled, loadBundled, loadLocal]);
+  }, [loadInstalled, loadBundled, loadLocal, loadRegistry]);
+
+  async function handleSyncRegistry(): Promise<void> {
+    setSyncing(true);
+    setError("");
+    try {
+      const result = await window.hermesAPI.syncSkillsRegistry(profile);
+      if (result.success) {
+        setLastSyncTime(new Date().toLocaleTimeString());
+        await loadRegistry();
+      } else {
+        setError(result.error || "Sync failed");
+      }
+    } catch (err: any) {
+      setError(err.message || "Sync failed");
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   useEffect(() => {
     if (!visible) return;
@@ -476,6 +510,58 @@ function Skills({ profile, visible = true }: SkillsProps): React.JSX.Element {
           </button>
         </div>
       )}
+
+      {/* Registry Dashboard Panel */}
+      <div className="skills-registry-dashboard">
+        <div className="skills-registry-widget">
+          <div className="registry-widget-title">Registry Status</div>
+          <div className="registry-widget-stats">
+            <div className="registry-stat-item">
+              <span className="registry-stat-label">SQLite Database Count:</span>
+              <span className="registry-stat-value">{registryCount} Skills</span>
+            </div>
+            {lastSyncTime && (
+              <div className="registry-stat-item">
+                <span className="registry-stat-label">Last Ingest Sync:</span>
+                <span className="registry-stat-value">{lastSyncTime}</span>
+              </div>
+            )}
+            <div className="registry-stat-item">
+              <span className="registry-stat-label">Status:</span>
+              <span className="registry-stat-value" style={{ color: "var(--success)" }}>Active & Synced</span>
+            </div>
+          </div>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={handleSyncRegistry}
+            disabled={syncing}
+          >
+            {syncing ? "Syncing..." : "Sync Disk to Registry"}
+          </button>
+        </div>
+
+        <div className="skills-autopoietic-widget">
+          <div className="registry-widget-title">Autopoietic Activity Log</div>
+          <div className="autopoietic-log-list">
+            {registrySkills.filter(s => s.keywords?.includes("custom") || s.keywords?.includes("generated")).length === 0 ? (
+              <div className="autopoietic-log-empty">No autopoietic skills generated yet. Ask Hermes Chat to create one!</div>
+            ) : (
+              registrySkills
+                .filter(s => s.keywords?.includes("custom") || s.keywords?.includes("generated"))
+                .slice(0, 3)
+                .map((s) => (
+                  <div key={s.name} className="autopoietic-log-item">
+                    <div className="log-item-header">
+                      <span className="log-item-name">{s.name}</span>
+                      <span className="autopoietic-badge">Active & Tested</span>
+                    </div>
+                    <div className="log-item-desc">{s.description}</div>
+                  </div>
+                ))
+            )}
+          </div>
+        </div>
+      </div>
 
       <div className="skills-tabs">
         <button

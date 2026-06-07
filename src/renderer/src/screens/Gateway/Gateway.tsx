@@ -19,6 +19,26 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
     null,
   );
 
+  // Pairing / Access Control states
+  const [pairingsList, setPairingsList] = useState("");
+  const [pairingsLoading, setPairingsLoading] = useState(false);
+  const [pairingCode, setPairingCode] = useState("");
+  const [userIdToRevoke, setUserIdToRevoke] = useState("");
+  const [pairingOutput, setPairingOutput] = useState<string | null>(null);
+  const [pairingActioning, setPairingActioning] = useState(false);
+
+  const loadPairings = useCallback(async (): Promise<void> => {
+    setPairingsLoading(true);
+    try {
+      const list = await window.hermesAPI.listPairings(profile);
+      setPairingsList(list);
+    } catch (err) {
+      console.error("Failed to list pairings:", err);
+    } finally {
+      setPairingsLoading(false);
+    }
+  }, [profile]);
+
   const loadConfig = useCallback(async (): Promise<void> => {
     const envData = await window.hermesAPI.getEnv(profile);
     setEnv(envData);
@@ -30,7 +50,54 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
 
   useEffect(() => {
     loadConfig();
-  }, [loadConfig]);
+    loadPairings();
+  }, [loadConfig, loadPairings]);
+
+  async function handleApprovePairing(): Promise<void> {
+    if (!pairingCode.trim()) return;
+    setPairingActioning(true);
+    setPairingOutput(null);
+    try {
+      const res = await window.hermesAPI.approvePairing(pairingCode.trim(), profile);
+      setPairingOutput(res.output || (res.success ? "Successfully approved pairing code" : "Failed to approve pairing code"));
+      setPairingCode("");
+      await loadPairings();
+    } catch (err) {
+      setPairingOutput("Error: " + (err as Error).message);
+    } finally {
+      setPairingActioning(false);
+    }
+  }
+
+  async function handleRevokePairing(): Promise<void> {
+    if (!userIdToRevoke.trim()) return;
+    setPairingActioning(true);
+    setPairingOutput(null);
+    try {
+      const res = await window.hermesAPI.revokePairing(userIdToRevoke.trim(), profile);
+      setPairingOutput(res.output || (res.success ? "Successfully revoked pairing" : "Failed to revoke pairing"));
+      setUserIdToRevoke("");
+      await loadPairings();
+    } catch (err) {
+      setPairingOutput("Error: " + (err as Error).message);
+    } finally {
+      setPairingActioning(false);
+    }
+  }
+
+  async function handleClearPendingPairings(): Promise<void> {
+    setPairingActioning(true);
+    setPairingOutput(null);
+    try {
+      const res = await window.hermesAPI.clearPendingPairings(profile);
+      setPairingOutput(res.output || (res.success ? "Successfully cleared pending pairings" : "Failed to clear pending pairings"));
+      await loadPairings();
+    } catch (err) {
+      setPairingOutput("Error: " + (err as Error).message);
+    } finally {
+      setPairingActioning(false);
+    }
+  }
 
   // Poll gateway status (10s interval to reduce IPC overhead)
   useEffect(() => {
@@ -253,6 +320,83 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
           ))}
         </div>
       ))}
+
+      {/* Access Control & Pairing Section */}
+      <div className="settings-section">
+        <div className="settings-section-title">Gateway Access Control & Pairing</div>
+        
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px', marginBottom: pairingOutput ? 16 : 0 }}>
+          {/* Active / Pending Pairings list */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span className="settings-field-label" style={{ margin: 0 }}>Paired Devices & Requests</span>
+              <button className="btn btn-secondary btn-sm" onClick={loadPairings} disabled={pairingsLoading} style={{ padding: '2px 8px', fontSize: 11 }}>
+                Refresh List
+              </button>
+            </div>
+            {pairingsLoading ? (
+              <div className="settings-loading" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 0' }}>
+                <div className="loading-spinner" style={{ width: 14, height: 14, border: '2px solid rgba(127,127,127,0.2)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                <span className="settings-field-hint">Loading pairings...</span>
+              </div>
+            ) : (
+              <pre className="settings-hermes-doctor" style={{ maxHeight: 200, overflowY: 'auto', fontSize: 11, margin: 0 }}>
+                {pairingsList || "No pairings or requests found."}
+              </pre>
+            )}
+            <button className="btn btn-secondary btn-sm" onClick={handleClearPendingPairings} disabled={pairingActioning} style={{ alignSelf: 'flex-start' }}>
+              Clear All Pending Requests
+            </button>
+          </div>
+
+          {/* Action inputs */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className="settings-field" style={{ margin: 0 }}>
+              <label className="settings-field-label">Approve Pairing Code</label>
+              <div className="settings-input-row">
+                <input
+                  className="input"
+                  type="text"
+                  placeholder="Enter 6-character code"
+                  value={pairingCode}
+                  onChange={(e) => setPairingCode(e.target.value)}
+                  maxLength={6}
+                />
+                <button className="btn btn-primary" onClick={handleApprovePairing} disabled={pairingActioning || !pairingCode.trim()}>
+                  Approve
+                </button>
+              </div>
+              <div className="settings-field-hint">Approve a new client (e.g. mobile app, browser extension) using the code shown on that device.</div>
+            </div>
+
+            <div className="settings-field" style={{ margin: 0 }}>
+              <label className="settings-field-label">Revoke Client/User ID</label>
+              <div className="settings-input-row">
+                <input
+                  className="input"
+                  type="text"
+                  placeholder="Enter user or device ID"
+                  value={userIdToRevoke}
+                  onChange={(e) => setUserIdToRevoke(e.target.value)}
+                />
+                <button className="btn btn-secondary" onClick={handleRevokePairing} disabled={pairingActioning || !userIdToRevoke.trim()}>
+                  Revoke
+                </button>
+              </div>
+              <div className="settings-field-hint">Revoke access for a paired device using its user/device ID.</div>
+            </div>
+          </div>
+        </div>
+
+        {pairingOutput && (
+          <div style={{ marginTop: 16 }}>
+            <div className="settings-field-label">Action Log</div>
+            <pre className="settings-hermes-doctor" style={{ maxHeight: 150, overflowY: 'auto', fontSize: 11, margin: 0 }}>
+              {pairingOutput}
+            </pre>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

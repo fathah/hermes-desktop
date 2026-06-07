@@ -31,6 +31,7 @@ export function getSharedDb(readonly = true): Database.Database | null {
       if (!readonly && typeof cachedDb.pragma === "function") {
         cachedDb.pragma("journal_mode = WAL");
         cachedDb.pragma("synchronous = NORMAL");
+        initializeSkillsTable(cachedDb);
       }
     } catch (err) {
       console.error(
@@ -42,6 +43,25 @@ export function getSharedDb(readonly = true): Database.Database | null {
   }
 
   return cachedDb;
+}
+
+export function initializeSkillsTable(db: Database.Database): void {
+  try {
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS skills_registry (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE,
+        description TEXT,
+        keywords TEXT,
+        status TEXT DEFAULT 'active',
+        entrypoint TEXT,
+        dependencies TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+  } catch (err) {
+    console.error("[db] Failed to initialize skills_registry table:", err);
+  }
 }
 
 export function closeSharedDb(): void {

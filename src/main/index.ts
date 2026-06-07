@@ -122,6 +122,11 @@ import {
   readLogs,
   InstallProgress,
   HERMES_HOME,
+  runSecurityAudit,
+  getPromptSizeBreakdown,
+  getComputerUseStatus,
+  installComputerUseDriver,
+  getChangelog,
 } from "./installer";
 import { updaterLogger } from "./updater-log";
 import {
@@ -145,6 +150,13 @@ import {
   getRemoteAuthHeader,
   respondRunApproval,
 } from "./hermes";
+import {
+  syncDiskSkillsToDb,
+  lookupLocalSkill,
+  registerLocalSkill,
+  scaffoldNewSkill,
+  testSkillRun,
+} from "./skills-registry";
 import {
   startSshTunnel,
   stopSshTunnel,
@@ -297,7 +309,26 @@ import {
   pauseCronJob,
   resumeCronJob,
   triggerCronJob,
+  getCuratorStatus,
+  runCuratorNow,
+  pauseCurator,
+  resumeCurator,
+  listArchivedSkills,
+  restoreArchivedSkill,
+  pinSkill,
+  unpinSkill,
 } from "./cronjobs";
+import {
+  getCheckpointsStatus,
+  pruneCheckpoints,
+  clearCheckpoints,
+} from "./checkpoints";
+import {
+  listPairings,
+  approvePairing,
+  revokePairing,
+  clearPendingPairings,
+} from "./pairing";
 import {
   listBoards as kanbanListBoards,
   currentBoard as kanbanCurrentBoard,
@@ -2203,6 +2234,82 @@ function setupIPC(): void {
     (_event, jobId: string, profile?: string) => triggerCronJob(jobId, profile),
   );
 
+  // Curator
+  ipcMain.handle("get-curator-status", (_event, profile?: string) =>
+    getCuratorStatus(profile),
+  );
+  ipcMain.handle("run-curator-now", (_event, profile?: string) =>
+    runCuratorNow(profile),
+  );
+  ipcMain.handle("pause-curator", (_event, profile?: string) =>
+    pauseCurator(profile),
+  );
+  ipcMain.handle("resume-curator", (_event, profile?: string) =>
+    resumeCurator(profile),
+  );
+  ipcMain.handle("list-archived-skills", (_event, profile?: string) =>
+    listArchivedSkills(profile),
+  );
+  ipcMain.handle("restore-archived-skill", (_event, name: string, profile?: string) =>
+    restoreArchivedSkill(name, profile),
+  );
+  ipcMain.handle("pin-skill", (_event, name: string, profile?: string) =>
+    pinSkill(name, profile),
+  );
+  ipcMain.handle("unpin-skill", (_event, name: string, profile?: string) =>
+    unpinSkill(name, profile),
+  );
+
+  // Checkpoints
+  ipcMain.handle("get-checkpoints-status", (_event, profile?: string) =>
+    getCheckpointsStatus(profile),
+  );
+  ipcMain.handle("prune-checkpoints", (_event, profile?: string) =>
+    pruneCheckpoints(profile),
+  );
+  ipcMain.handle("clear-checkpoints", (_event, profile?: string) =>
+    clearCheckpoints(profile),
+  );
+
+  // Pairing
+  ipcMain.handle("list-pairings", (_event, profile?: string) =>
+    listPairings(profile),
+  );
+  ipcMain.handle("approve-pairing", (_event, code: string, profile?: string) =>
+    approvePairing(code, profile),
+  );
+  ipcMain.handle("revoke-pairing", (_event, userId: string, profile?: string) =>
+    revokePairing(userId, profile),
+  );
+  ipcMain.handle("clear-pending-pairings", (_event, profile?: string) =>
+    clearPendingPairings(profile),
+  );
+
+  // Security Audit & Prompt Size
+  ipcMain.handle("run-security-audit", (_event, profile?: string) =>
+    runSecurityAudit(profile),
+  );
+  ipcMain.handle("get-prompt-size-breakdown", (_event, profile?: string) =>
+    getPromptSizeBreakdown(profile),
+  );
+
+  // Computer Use
+  ipcMain.handle("get-computer-use-status", (_event, profile?: string) =>
+    getComputerUseStatus(profile),
+  );
+  ipcMain.handle("install-computer-use-driver", async (event, profile?: string) => {
+    return installComputerUseDriver((progress) => {
+      if (!event.sender.isDestroyed()) {
+        event.sender.send("install-progress", progress);
+      }
+    }, profile);
+  });
+
+  // Git Changelog
+  ipcMain.handle("get-git-changelog", (_event) =>
+    getChangelog(),
+  );
+
   // Kanban
   ipcMain.handle(
     "kanban-list-boards",
@@ -2888,6 +2995,30 @@ function setupUpdater(): void {
 
   ipcMain.handle("python-memory-graph", async (_event, vaultDir: string) => {
     return pythonMemoryGraph(vaultDir);
+  });
+
+  // Autopoietic Skills Registry & Generator
+  ipcMain.handle("skills-registry-sync", async (_event, profile?: string) => {
+    return syncDiskSkillsToDb(profile);
+  });
+
+  ipcMain.handle("skills-registry-lookup", async (_event, query: string, profile?: string) => {
+    return lookupLocalSkill(query, profile);
+  });
+
+  ipcMain.handle("skills-registry-register", async (_event, skill: any, profile?: string) => {
+    return registerLocalSkill(skill, profile);
+  });
+
+  ipcMain.handle(
+    "skills-registry-scaffold",
+    async (_event, name: string, description: string, code: string, deps: string[], profile?: string) => {
+      return scaffoldNewSkill(name, description, code, deps, profile);
+    }
+  );
+
+  ipcMain.handle("skills-registry-test", async (_event, name: string, args?: string, profile?: string) => {
+    return testSkillRun(name, args, profile);
   });
 
   setTimeout(() => {
