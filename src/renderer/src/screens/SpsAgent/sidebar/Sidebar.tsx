@@ -281,16 +281,6 @@ export function Sidebar() {
           <Icon name="sun" size={17} />
           <span className="nav-label">Appearance</span>
         </div>
-        <div
-          className="nav-item"
-          onClick={() =>
-            window.dispatchEvent(new CustomEvent("hermes:open-settings"))
-          }
-        >
-          <Icon name="settings" size={17} />
-          <span className="nav-label">Settings</span>
-          <span className="nav-kbd">⌘,</span>
-        </div>
       </div>
 
       <div className="rail-newchat-bar">
@@ -310,6 +300,16 @@ export function Sidebar() {
           {identity.user}
           <small>Hermes Agent</small>
         </span>
+        <button
+          className="rail-foot-gear"
+          title="Settings (⌘,)"
+          aria-label="Settings"
+          onClick={() =>
+            window.dispatchEvent(new CustomEvent("hermes:open-settings"))
+          }
+        >
+          <Icon name="settings" size={16} />
+        </button>
       </div>
     </nav>
   );

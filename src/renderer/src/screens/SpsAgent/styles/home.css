@@ -472,6 +472,28 @@
   font-size: 11px;
   color: var(--tx-3);
 }
+/* Settings gear pinned in the foot — always visible (no scrolling), pushed right
+   by the name's flex:1. */
+.sps-scope .rail-foot-gear {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--tx-3);
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+.sps-scope .rail-foot-gear:hover {
+  background: var(--row-hover);
+  color: var(--tx-1);
+}
+.sps-scope[data-rail="icons"] .rail-foot-gear {
+  display: none;
+}
 
 /* ============================================================
    Main column
