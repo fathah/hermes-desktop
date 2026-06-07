@@ -7,6 +7,7 @@ import { Icon } from "../components/Icon";
 import type { IconName } from "../components/iconPaths";
 import { useStore } from "../store";
 import type { WidgetKind } from "../store/storeTypes";
+import { OPERATOR_GUIDE } from "../../../lib/operatorGuide";
 
 const WIDGET_META: Record<WidgetKind, { title: string; icon: IconName }> = {
   quick: { title: "Quick actions", icon: "wand" },
@@ -17,6 +18,7 @@ const WIDGET_META: Record<WidgetKind, { title: string; icon: IconName }> = {
   recentChats: { title: "Recent chats", icon: "comment" },
   today: { title: "Today", icon: "calendar" },
   agent: { title: "Agent status", icon: "code" },
+  guide: { title: "Operator guide", icon: "checkbox" },
 };
 
 export function CockpitSurface() {
@@ -160,6 +162,8 @@ function Widget({ kind }: { kind: WidgetKind }) {
       return <Today />;
     case "agent":
       return <AgentStatus />;
+    case "guide":
+      return <OperatorGuideWidget />;
   }
 }
 
@@ -433,5 +437,28 @@ function AgentStatus() {
         </span>
       </span>
     </button>
+  );
+}
+
+function OperatorGuideWidget() {
+  // Surface the most-used checklist (daily ops) inline; the full guide —
+  // automation-trust + skill-install checklists — prints via `/guide` in chat.
+  const daily = OPERATOR_GUIDE[0];
+  return (
+    <div className="ck-guide">
+      <div className="ck-guide-head">{daily.title}</div>
+      <ul className="ck-guide-list">
+        {daily.items.map((item) => (
+          <li key={item} className="ck-guide-item">
+            <Icon name="checkbox" size={13} />
+            <span>{item}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="ck-guide-foot">
+        Type <code>/guide</code> in chat for the automation &amp; skill-install
+        checklists.
+      </div>
+    </div>
   );
 }

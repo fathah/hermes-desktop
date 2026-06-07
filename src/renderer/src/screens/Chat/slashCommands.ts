@@ -109,6 +109,12 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     description: "Show available commands and help",
     category: "info",
   },
+  {
+    name: "/guide",
+    description: "Show the operator checklists (daily ops, automation, skills)",
+    category: "info",
+    local: true,
+  },
   { name: "/tools", description: "List available tools", category: "info" },
   { name: "/skills", description: "List installed skills", category: "info" },
   {

@@ -20,6 +20,7 @@ const ALL_KINDS: WidgetKind[] = [
   "recentChats",
   "today",
   "agent",
+  "guide",
 ];
 
 const DEFAULT_COCKPIT: CockpitWidget[] = [
@@ -28,6 +29,7 @@ const DEFAULT_COCKPIT: CockpitWidget[] = [
   { kind: "today", span: 1 },
   { kind: "glance", span: 1 },
   { kind: "ask", span: 1 },
+  { kind: "guide", span: 2 },
   { kind: "recentChats", span: 2 },
   { kind: "notes", span: 1 },
   { kind: "pages", span: 1 },

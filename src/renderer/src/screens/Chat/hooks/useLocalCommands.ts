@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useI18n } from "../../../components/useI18n";
 import { SLASH_COMMANDS } from "../slashCommands";
+import { operatorGuideMarkdown } from "../../../lib/operatorGuide";
 import type { UsageState } from "../types";
 
 interface UseLocalCommandsArgs {
@@ -165,6 +166,11 @@ export function useLocalCommands({
           } else {
             addAgentMessage(t("chat.noUsageData"));
           }
+          return true;
+        }
+
+        case "/guide": {
+          addAgentMessage(operatorGuideMarkdown());
           return true;
         }
 
