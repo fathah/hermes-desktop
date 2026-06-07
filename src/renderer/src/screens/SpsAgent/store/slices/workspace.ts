@@ -595,6 +595,11 @@ export const createWorkspaceSlice: StateCreator<
       meta: { ...s.meta, [s.page]: { ...s.meta[s.page], ...patch } },
     })),
 
+  setPageMeta: (id, patch) =>
+    set((s) => ({
+      meta: { ...s.meta, [id]: { ...(s.meta[id] || {}), ...patch } },
+    })),
+
   resetWorkspace: () => {
     const oldIds = Object.keys(get().docs);
     clearWorkspace();

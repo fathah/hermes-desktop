@@ -1,0 +1,325 @@
+/* board.css — Styling for SpsAgent Cyber-BBS Corkboard */
+
+.cyber-board-viewport {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  background-color: #030804;
+  color: #33ff33;
+  font-family: "JetBrains Mono", "Courier New", Courier, monospace;
+  font-size: 13px;
+  user-select: none;
+  --phosphor-glow: #33ff33;
+  --phosphor-bg: #030804;
+  --phosphor-border: #22c55e;
+  --phosphor-dim: #14532d;
+  --phosphor-text: #86efac;
+  --phosphor-amber-glow: #ffb000;
+  --phosphor-amber-bg: #0f0700;
+  --phosphor-amber-border: #d97706;
+  --phosphor-amber-dim: #78350f;
+  --phosphor-amber-text: #fde68a;
+  transition: background-color 0.3s ease;
+}
+
+.cyber-board-viewport.theme-amber {
+  background-color: var(--phosphor-amber-bg);
+  color: var(--phosphor-amber-glow);
+  --phosphor-glow: var(--phosphor-amber-glow);
+  --phosphor-bg: var(--phosphor-amber-bg);
+  --phosphor-border: var(--phosphor-amber-border);
+  --phosphor-dim: var(--phosphor-amber-dim);
+  --phosphor-text: var(--phosphor-amber-text);
+}
+
+/* Infinite panning grid backdrop */
+.cyber-grid {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image:
+    radial-gradient(circle, rgba(51, 255, 51, 0.1) 1px, transparent 1px),
+    linear-gradient(rgba(51, 255, 51, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(51, 255, 51, 0.02) 1px, transparent 1px);
+  background-size:
+    20px 20px,
+    100px 100px,
+    100px 100px;
+  transform-origin: 0 0;
+}
+
+.theme-amber .cyber-grid {
+  background-image:
+    radial-gradient(circle, rgba(255, 176, 0, 0.08) 1px, transparent 1px),
+    linear-gradient(rgba(255, 176, 0, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 176, 0, 0.02) 1px, transparent 1px);
+}
+
+/* CRT monitor effects overlay */
+.crt-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 999;
+  pointer-events: none;
+}
+
+/* Phosphor scanlines */
+.crt-scanlines {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.12) 50%);
+  background-size: 100% 4px;
+}
+
+/* Glass vignette curvature shadow */
+.crt-vignette {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.85);
+}
+
+/* Subtle phosphor flicker */
+@keyframes crt-flicker {
+  0% {
+    opacity: 0.995;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.995;
+  }
+}
+
+.crt-flicker-anim {
+  animation: crt-flicker 0.15s infinite;
+}
+
+/* Draggable TUI window cards */
+.ansi-card {
+  position: absolute;
+  background-color: rgba(3, 8, 4, 0.92);
+  border: 1px solid var(--phosphor-border);
+  box-shadow:
+    0 0 15px rgba(34, 197, 94, 0.2),
+    inset 0 0 10px rgba(34, 197, 94, 0.1);
+  display: flex;
+  flex-direction: column;
+  color: var(--phosphor-text);
+  overflow: hidden;
+  border-radius: 2px;
+}
+
+.theme-amber .ansi-card {
+  background-color: rgba(15, 7, 0, 0.94);
+  border-color: var(--phosphor-border);
+  box-shadow:
+    0 0 15px rgba(217, 119, 6, 0.2),
+    inset 0 0 10px rgba(217, 119, 6, 0.1);
+  color: var(--phosphor-text);
+}
+
+/* Header bar styled like terminal menus */
+.ansi-card-header {
+  padding: 4px 8px;
+  background-color: var(--phosphor-dim);
+  color: var(--phosphor-glow);
+  font-weight: bold;
+  font-size: 11px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: move;
+  border-bottom: 1px solid var(--phosphor-border);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.theme-amber .ansi-card-header {
+  background-color: var(--phosphor-dim);
+}
+
+/* Glowing text classes */
+.glow-text {
+  text-shadow: 0 0 4px var(--phosphor-glow);
+}
+
+/* Scrollbars for terminal cards */
+.ansi-card-body {
+  flex: 1;
+  padding: 8px;
+  overflow-y: auto;
+  font-family: inherit;
+}
+
+.ansi-card-body::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.ansi-card-body::-webkit-scrollbar-track {
+  background: var(--phosphor-bg);
+  border-left: 1px solid var(--phosphor-dim);
+}
+.ansi-card-body::-webkit-scrollbar-thumb {
+  background: var(--phosphor-dim);
+  border: 1px solid var(--phosphor-border);
+}
+
+/* Command Prompt bar in cards */
+.ansi-card-prompt {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-top: 1px dashed var(--phosphor-border);
+  background: rgba(0, 0, 0, 0.3);
+  font-size: 12px;
+}
+
+.ansi-card-prompt span {
+  color: var(--phosphor-glow);
+  margin-right: 6px;
+  font-weight: bold;
+}
+
+.ansi-card-prompt input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--phosphor-text);
+  font-family: inherit;
+  font-size: inherit;
+  outline: none;
+}
+
+/* SVG Wires Layer */
+.cables-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Glowing connecting cable lines */
+.cable-path {
+  fill: none;
+  stroke: var(--phosphor-border);
+  stroke-width: 2px;
+  filter: drop-shadow(0 0 3px var(--phosphor-glow));
+  opacity: 0.65;
+  transition: stroke 0.3s ease;
+}
+
+/* Moving electron pulse simulation */
+.cable-pulse {
+  fill: none;
+  stroke: var(--phosphor-glow);
+  stroke-width: 2px;
+  stroke-dasharray: 6 12;
+  animation: data-flow 1.5s linear infinite;
+  opacity: 0.95;
+}
+
+@keyframes data-flow {
+  from {
+    stroke-dashoffset: 54;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Central BBS Node styling overrides */
+.bbs-node {
+  min-width: 320px;
+  min-height: 280px;
+}
+
+.bbs-node .ansi-card-body {
+  display: flex;
+  flex-direction: column;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.bbs-ansi-banner {
+  white-space: pre;
+  color: var(--phosphor-glow);
+  line-height: 1.15;
+  font-size: 9px;
+  margin-bottom: 8px;
+  text-shadow: 0 0 5px var(--phosphor-glow);
+}
+
+.bbs-menu-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0;
+}
+
+.bbs-menu-item {
+  margin: 4px 0;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+
+.bbs-menu-item:hover {
+  background-color: var(--phosphor-dim);
+  color: var(--phosphor-glow);
+  text-shadow: 0 0 4px var(--phosphor-glow);
+}
+
+.bbs-menu-key {
+  color: var(--phosphor-glow);
+  font-weight: bold;
+}
+
+/* Floating HUD Controls */
+.cyber-hud {
+  position: absolute;
+  top: 16px;
+  right: 64px;
+  z-index: 1000;
+  display: flex;
+  gap: 8px;
+  background: rgba(3, 8, 4, 0.85);
+  border: 1px solid var(--phosphor-border);
+  padding: 4px 8px;
+  border-radius: 2px;
+}
+
+.cyber-hud-btn {
+  background: transparent;
+  border: none;
+  color: var(--phosphor-text);
+  cursor: pointer;
+  padding: 4px;
+  font-family: inherit;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cyber-hud-btn:hover {
+  color: var(--phosphor-glow);
+  text-shadow: 0 0 3px var(--phosphor-glow);
+}
+
+.cyber-hud-btn.active {
+  background: var(--phosphor-dim);
+  color: var(--phosphor-glow);
+}

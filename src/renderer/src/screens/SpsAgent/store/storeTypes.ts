@@ -155,6 +155,7 @@ export interface WorkspaceSlice {
   renamePage: (id: string, title: string) => void;
   movePage: (dragId: string, targetId: string, where: DropWhere) => void;
   setPMeta: (patch: Partial<PageMeta>) => void;
+  setPageMeta: (id: string, patch: Partial<PageMeta>) => void;
   resetWorkspace: () => void;
 }
 
