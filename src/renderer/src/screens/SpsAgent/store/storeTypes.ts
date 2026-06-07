@@ -248,10 +248,27 @@ export interface AssistantSlice {
   dismissDbAction: (messageId: string) => void;
 }
 
+/** A template the user saved from one of their own pages (localStorage-backed). */
+export interface UserTemplate {
+  id: string;
+  emoji: string;
+  name: string;
+  desc: string;
+  blocks: Block[];
+}
+
+export interface TemplatesSlice {
+  userTemplates: UserTemplate[];
+  /** Snapshot a page's blocks + icon/title into a reusable template. */
+  saveAsTemplate: (pageId: string) => void;
+  removeUserTemplate: (id: string) => void;
+}
+
 export type Store = WorkspaceSlice &
   CommentsSlice &
   UiSlice &
   SidebarSlice &
   JournalSlice &
   TweaksSlice &
+  TemplatesSlice &
   AssistantSlice;

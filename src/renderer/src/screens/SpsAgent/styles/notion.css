@@ -1331,6 +1331,33 @@
 .sps-scope .tpl-card:hover {
   border-color: var(--accent);
 }
+.sps-scope .tpl-card-user {
+  position: relative;
+}
+.sps-scope .tpl-del {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  color: var(--tx-4);
+  opacity: 0;
+  transition:
+    opacity 0.12s ease,
+    background 0.12s ease,
+    color 0.12s ease;
+}
+.sps-scope .tpl-card-user:hover .tpl-del {
+  opacity: 1;
+}
+.sps-scope .tpl-del:hover {
+  background: var(--row-hover);
+  color: var(--danger, #c0392b);
+}
 .sps-scope .tpl-emoji {
   font-size: 22px;
   margin-bottom: 8px;

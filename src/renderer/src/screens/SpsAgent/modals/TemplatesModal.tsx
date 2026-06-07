@@ -1,6 +1,7 @@
 // TemplatesModal.tsx — "New page" template picker. Ported from app.jsx (TEMPLATES + modal).
-import { blk } from "../lib/ids";
+import { blk, uid } from "../lib/ids";
 import { useStore } from "../store";
+import { Icon } from "../components/Icon";
 import type { Block } from "../types";
 
 interface Template {
@@ -196,6 +197,8 @@ export function TemplatesModal() {
   const setTemplatesOpen = useStore((s) => s.setTemplatesOpen);
   const createFromTemplate = useStore((s) => s.createFromTemplate);
   const importPdf = useStore((s) => s.importPdf);
+  const userTemplates = useStore((s) => s.userTemplates);
+  const removeUserTemplate = useStore((s) => s.removeUserTemplate);
   const onClose = () => setTemplatesOpen(null);
   const parent = templatesOpen?.parent ?? null;
 
@@ -215,6 +218,47 @@ export function TemplatesModal() {
           className="modal-body"
           style={{ maxHeight: "70vh", overflowY: "auto" }}
         >
+          {userTemplates.length > 0 && (
+            <>
+              <div className="type-section-label" style={{ marginBottom: 8 }}>
+                Your templates
+              </div>
+              <div className="tpl-grid" style={{ marginBottom: 18 }}>
+                {userTemplates.map((tp) => (
+                  <div
+                    key={tp.id}
+                    className="tpl-card tpl-card-user"
+                    onClick={() =>
+                      createFromTemplate(
+                        // Mint fresh block ids per instantiation so two pages
+                        // made from one template never share block identity.
+                        tp.blocks.map((b) => ({ ...b, id: uid() })),
+                        { emoji: tp.emoji, name: tp.name },
+                        parent,
+                      )
+                    }
+                  >
+                    <button
+                      className="tpl-del"
+                      title="Delete template"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeUserTemplate(tp.id);
+                      }}
+                    >
+                      <Icon name="trash" size={13} />
+                    </button>
+                    <div className="tpl-emoji">{tp.emoji}</div>
+                    <div className="tpl-name">{tp.name}</div>
+                    <div className="tpl-desc">{tp.desc}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="type-section-label" style={{ marginBottom: 8 }}>
+                Start from a template
+              </div>
+            </>
+          )}
           <div className="tpl-grid">
             {TEMPLATES.map((tp) => (
               <div

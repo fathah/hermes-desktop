@@ -23,6 +23,7 @@ import { createCommentsSlice } from "./slices/comments";
 import { createUiSlice } from "./slices/ui";
 import { createSidebarSlice, saveSidebar } from "./slices/sidebar";
 import { createTweaksSlice, saveTweaks } from "./slices/tweaks";
+import { createTemplatesSlice, saveUserTemplates } from "./slices/templates";
 import { createAssistantSlice } from "./slices/assistant";
 import { createJournalSlice } from "./slices/journal";
 
@@ -33,6 +34,7 @@ export const useStore = create<Store>()(
     ...createUiSlice(...a),
     ...createSidebarSlice(...a),
     ...createTweaksSlice(...a),
+    ...createTemplatesSlice(...a),
     ...createAssistantSlice(...a),
     ...createJournalSlice(...a),
   })),
@@ -52,6 +54,12 @@ useStore.subscribe(
   (s) => [s.sectionsEnabled, s.sectionsOpen] as const,
   ([sectionsEnabled, sectionsOpen]) =>
     saveSidebar({ sectionsEnabled, sectionsOpen }),
+);
+
+// ---- persist user-saved templates (localStorage) ----
+useStore.subscribe(
+  (s) => s.userTemplates,
+  (userTemplates) => saveUserTemplates(userTemplates),
 );
 
 // ---- debounced workspace persistence (to the main process) ----

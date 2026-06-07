@@ -16,6 +16,7 @@ export function PageMenu({ onTemplate, onDelete, onSub, onCover }: Props) {
   const page = useStore((s) => s.page);
   const meta = useStore((s) => s.meta);
   const flash = useStore((s) => s.flash);
+  const saveAsTemplate = useStore((s) => s.saveAsTemplate);
 
   // Copy an in-app wikilink to the current page — the app's native, resolvable
   // link format (the note-index graph links pages by [[Title]]).
@@ -69,6 +70,15 @@ export function PageMenu({ onTemplate, onDelete, onSub, onCover }: Props) {
               }}
             >
               <Icon name="doc" size={16} /> New from template
+            </div>
+            <div
+              className="menu-mini"
+              onClick={() => {
+                saveAsTemplate(page);
+                setOpen(false);
+              }}
+            >
+              <Icon name="star" size={16} /> Save as template
             </div>
             <div className="menu-mini" onClick={copyLink}>
               <Icon name="share" size={16} /> Copy link
