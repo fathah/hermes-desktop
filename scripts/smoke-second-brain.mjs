@@ -117,7 +117,7 @@ try {
   // 2 — capture a quick note; it should appear in the unprocessed list.
   const NOTE =
     "Met Sarah from Acme Corp re: the Q3 security guarding contract.";
-  await win.locator(".inbox-body").fill(NOTE);
+  await win.locator(".inbox-textarea").fill(NOTE);
   await win.locator("button.btn-primary", { hasText: "Capture" }).click();
   await win.waitForTimeout(1600); // reconcile + chokidar re-index
   const listed = await win

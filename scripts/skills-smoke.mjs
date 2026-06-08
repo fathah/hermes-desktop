@@ -60,7 +60,7 @@ await win.waitForSelector(".app", { timeout: 30000 });
 await win.waitForTimeout(1500);
 
 // Open the admin overlay and navigate to Skills.
-await win.locator(".sps-admin-gear").first().click();
+await win.locator('button[aria-label="Settings"]').first().click();
 await win.waitForTimeout(600);
 await win.locator(".sidebar-nav-item", { hasText: "Skills" }).first().click();
 await win.waitForSelector(".skills-container", { timeout: 10000 });

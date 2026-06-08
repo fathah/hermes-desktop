@@ -51,6 +51,7 @@ const frontmatter = {
   hermes_report: "india-equity-research",
   schema: 1,
   ticker: "NTPC",
+  updated: "2030-01-01T00:00:00Z",
   exchange: "NSE",
   company: "NTPC Limited",
   sector: "Power Generation (PSU)",
@@ -131,7 +132,12 @@ const frontmatter = {
     sources: ["NSE", "screener.in", "NTPC IR"],
   },
 };
-const REPORT_MD = `---\n${JSON.stringify(frontmatter, null, 2)}\n---\n\n# NTPC Limited (NTPC) — India Equity Research Report\n\n## Executive Summary\nDefensive regulated utility with a dividend floor; accumulate on dips.\n\n## Data Gaps & Epistemic Notes\n- Q4 FY26 capex guidance not yet filed; capex array is estimated\n\n## Disclaimer\nAI-generated analysis, not investment advice.\n`;
+const frontmatterLines = Object.keys(frontmatter).map(
+  (k) => `${k}: ${JSON.stringify(frontmatter[k])}`,
+);
+const REPORT_MD = `---\n${frontmatterLines.join("\n")}\n---\n\n# NTPC Limited (NTPC) — India Equity Research Report\n\n## Executive Summary\nDefensive regulated utility with a dividend floor; accumulate on dips.\n\n## Data Gaps & Epistemic Notes\n- Q4 FY26 capex guidance not yet filed; capex array is estimated\n\n## Disclaimer\nAI-generated analysis, not investment advice.\n`;
+
+const ROW_MD = `---\n${frontmatterLines.join("\n")}\n---\n\n<!-- sps:equity:report -->\n${REPORT_MD}\n<!-- /sps:equity:report -->\n\n## Run history\n| Date | Rating | Composite | Intrinsic | Note |\n|---|---|---|---|---|\n| 2026-06-08 | ACCUMULATE | 64 | 348 | initial |\n\n## My notes\n_Your notes, theses, and addenda — never overwritten by a refresh._\n`;
 
 console.log("HERMES_HOME=", HOME);
 console.log("SMOKE_OUT=", OUT);
@@ -152,7 +158,11 @@ const app = await electron.launch({
     ELECTRON_DISABLE_SECURITY_WARNINGS: "1",
   },
 });
+app.process().stdout.on('data', (data) => console.log('MAIN STDOUT:', data.toString().trim()));
+app.process().stderr.on('data', (data) => console.log('MAIN STDERR:', data.toString().trim()));
+
 const win = await app.firstWindow();
+win.on('console', msg => console.log('BROWSER CONSOLE:', msg.text()));
 await win.waitForLoadState("domcontentloaded");
 await win.waitForSelector(".app", { timeout: 30000 });
 await win.waitForTimeout(1800);
@@ -183,14 +193,59 @@ await shot("02-equity-launcher", async () => {
 
 // 03 — push a fixture report through the real chat IPC; renders full report+charts
 await shot("03-equity-report", async () => {
-  await app.evaluate(({ BrowserWindow }, md) => {
-    const w = BrowserWindow.getAllWindows()[0];
-    w.webContents.send("chat-chunk", md);
-    w.webContents.send("chat-done");
-  }, REPORT_MD);
+  // Stub the main process IPC send-message and sps-read-row handlers to return the report
+  await app.evaluate(({ ipcMain }, stubs) => {
+    console.log("STUBBING send-message AND sps-read-row");
+    ipcMain.removeHandler("send-message");
+    ipcMain.handle("send-message", async (event, prompt, profile) => {
+      console.log("MOCK send-message called with prompt:", prompt.slice(0, 100));
+      return { response: stubs.REPORT_MD };
+    });
+    ipcMain.removeHandler("sps-read-row");
+    ipcMain.handle("sps-read-row", async (event, dbFolder, rowId) => {
+      console.log("MOCK sps-read-row called:", dbFolder, rowId);
+      if (dbFolder === "equity-research" && rowId === "ntpc") {
+        console.log("MOCK sps-read-row matches ntpc! Returning ROW_MD.");
+        return stubs.ROW_MD;
+      }
+      return null;
+    });
+  }, { REPORT_MD, ROW_MD });
+
+  // Click the run button to trigger the run flow
+  console.log("Clicking Run research...");
+  await win.evaluate(() => {
+    const buttons = [...document.querySelectorAll(".eq-run-btn")].map(b => ({
+      text: (b.textContent || "").trim(),
+      outerHTML: b.outerHTML,
+      visible: b.offsetWidth > 0 && b.offsetHeight > 0,
+      disabled: b.disabled
+    }));
+    console.log("ALL FOUND RUN BUTTONS:", JSON.stringify(buttons));
+
+    const btn = [...document.querySelectorAll(".eq-run-btn")].find(
+      (b) => (b.textContent || "").trim() === "Run research",
+    );
+    if (btn) {
+      console.log("Clicking button:", btn.outerHTML);
+      btn.click();
+      console.log("Click dispatched successfully.");
+    } else {
+      console.log("ERROR: Run research button NOT found.");
+    }
+  });
+
   // wait for the parsed report + charts to mount
-  await win.waitForSelector(".eq-report", { timeout: 8000 });
-  await win.waitForSelector(".eq-radar svg", { timeout: 8000 });
+  try {
+    await win.waitForSelector(".eq-report", { timeout: 12000 });
+    await win.waitForSelector(".eq-radar svg", { timeout: 12000 });
+  } catch (e) {
+    const surfaceText = await win.evaluate(() => document.querySelector(".eq-surface")?.innerText || "not found");
+    const html = await win.evaluate(() => document.querySelector(".eq-surface")?.innerHTML || "not found");
+    console.log("TIMEOUT ON SELECTOR! SURFACE_TEXT=", surfaceText);
+    console.log("TIMEOUT ON SELECTOR! HTML=", html.slice(0, 1000));
+    throw e;
+  }
 });
 
 // quick assertions so the harness fails loudly if the surface is broken
