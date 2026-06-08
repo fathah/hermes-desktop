@@ -9,6 +9,10 @@ export interface ParsedUsage {
   cost?: number;
   rateLimitRemaining?: number;
   rateLimitReset?: number;
+  model?: string;
+  sessionId?: string;
+  cacheRead?: number;
+  cacheWrite?: number;
 }
 
 /**
@@ -47,10 +51,11 @@ export interface DelegateProgress {
 
 export interface SseCallbacks {
   onChunk: (text: string) => void;
+  onReasoningChunk?: (text: string) => void;
   onToolProgress?: (tool: string) => void;
   onUsage?: (usage: ParsedUsage) => void;
   onError?: (message: string) => void;
-  onDone?: () => void;
+  onDone?: (sessionId?: string) => void;
   /** Gateway requested approval for a dangerous command (idea B1). */
   onApprovalRequest?: (req: ApprovalRequest) => void;
   /** Gateway recorded a filesystem checkpoint (idea B2). */
@@ -168,6 +173,26 @@ export interface SseDataResult {
 }
 
 /**
+ * Pull the streaming reasoning / thinking text from one SSE `delta`
+ * object, if present. Two shapes seen in the wild:
+ *
+ *   - DeepSeek (reasoning models): `delta.reasoning_content`
+ *   - OpenAI o1/o3-style streams + some OpenRouter routes:
+ *     `delta.reasoning` (older OpenAI thinking-mode docs also use this
+ *     field name).
+ *
+ * Returns `""` (falsy) for any other shape.
+ */
+export function extractReasoningDelta(delta: unknown): string {
+  if (!delta || typeof delta !== "object") return "";
+  const d = delta as Record<string, unknown>;
+  if (typeof d.reasoning_content === "string" && d.reasoning_content)
+    return d.reasoning_content;
+  if (typeof d.reasoning === "string" && d.reasoning) return d.reasoning;
+  return "";
+}
+
+/**
  * Process a single SSE data payload (after `data: ` prefix is stripped).
  * Returns parsing result.
  */
@@ -175,10 +200,15 @@ export function processSseData(
   data: string,
   cb: SseCallbacks,
   state: { hasContent: boolean; lastError: string },
+  options?: {
+    redact?: (text: string) => string;
+    model?: string;
+    sessionId?: string;
+  },
 ): SseDataResult {
   if (data === "[DONE]") {
     if (state.hasContent) {
-      cb.onDone?.();
+      cb.onDone?.(options?.sessionId);
     }
     return { done: true, hasContent: state.hasContent, error: state.lastError };
   }
@@ -196,14 +226,29 @@ export function processSseData(
 
     // Extract usage from final chunk
     if (parsed.usage && cb.onUsage) {
+      const u = parsed.usage;
       cb.onUsage({
-        promptTokens: parsed.usage.prompt_tokens || 0,
-        completionTokens: parsed.usage.completion_tokens || 0,
-        totalTokens: parsed.usage.total_tokens || 0,
-        cost: parsed.usage.cost,
-        rateLimitRemaining: parsed.usage.rate_limit_remaining,
-        rateLimitReset: parsed.usage.rate_limit_reset,
+        promptTokens: u.prompt_tokens || 0,
+        completionTokens: u.completion_tokens || 0,
+        totalTokens: u.total_tokens || 0,
+        cost: u.cost,
+        rateLimitRemaining: u.rate_limit_remaining,
+        rateLimitReset: u.rate_limit_reset,
+        model: options?.model,
+        sessionId: options?.sessionId,
+        cacheRead:
+          u.cache_read_input_tokens ?? u.prompt_tokens_details?.cached_tokens,
+        cacheWrite: u.cache_creation_input_tokens,
       });
+    }
+
+    // Extract reasoning chunk
+    const reasoningDelta = extractReasoningDelta(delta);
+    if (reasoningDelta && cb.onReasoningChunk) {
+      const redacted = options?.redact
+        ? options.redact(reasoningDelta)
+        : reasoningDelta;
+      cb.onReasoningChunk(redacted);
     }
 
     if (delta?.content) {
@@ -214,7 +259,10 @@ export function processSseData(
         cb.onToolProgress(`${match[1]} ${match[2]}`);
       } else {
         state.hasContent = true;
-        cb.onChunk(delta.content);
+        const processed = options?.redact
+          ? options.redact(delta.content)
+          : delta.content;
+        cb.onChunk(processed);
       }
     }
   } catch {

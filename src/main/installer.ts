@@ -1,16 +1,9 @@
 import { spawn, execFile, execFileSync } from "child_process";
-import {
-  existsSync,
-  readFileSync,
-  readdirSync,
-  statSync,
-  writeFileSync,
-  unlinkSync,
-} from "fs";
-import { join, delimiter, resolve } from "path";
+import { existsSync, readFileSync, readdirSync, writeFileSync, unlinkSync } from "fs";
+import { join } from "path";
 import { homedir, tmpdir } from "os";
 import { randomBytes } from "crypto";
-import { app, type BrowserWindow } from "electron";
+import type { BrowserWindow } from "electron";
 import {
   getConnectionConfig,
   getModelConfig,
@@ -18,253 +11,71 @@ import {
 } from "./config";
 import { providerDoesNotNeedApiKey } from "./providers";
 import {
-  escapeRegex,
   getActiveProfileNameSync,
   profileHome,
   stripAnsi,
 } from "./utils";
-import { setupAskpass, AskpassHandle } from "./askpass";
+import { setupAskpass } from "./askpass";
 import { precacheSudoCredentials } from "./sudoCreds";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 
-const IS_WINDOWS = process.platform === "win32";
+// Re-exports of paths and env
+export {
+  IS_WINDOWS,
+  HERMES_HOME,
+  HERMES_REPO,
+  HERMES_VENV,
+  HERMES_PYTHON,
+  HERMES_SCRIPT,
+  HERMES_ENV_FILE,
+  HERMES_CONFIG_FILE,
+  HERMES_AUTH_FILE,
+  setHermesHomeOverride,
+  hermesCliArgs,
+  getEnhancedPath,
+} from "./installer/paths";
 
-// Resolve the Hermes data directory. Precedence:
-//   1. HERMES_HOME env var if set (install.ps1 sets it User-scope on
-//      Windows; users may also override manually for WSL/custom setups).
-//   2. On Windows, probe both candidates and pick whichever already has
-//      data. install.ps1's default is %LOCALAPPDATA%\hermes, but some
-//      setups put data at ~/.hermes (e.g. a junction into WSL, or a
-//      custom -HermesHome flag on install). Without probing we'd silently
-//      switch directories on users who had it working before.
-//   3. Fresh install fallback: %LOCALAPPDATA%\hermes on Windows (matches
-//      install.ps1's default), ~/.hermes elsewhere.
-//
-// Motivating bug: Electron launched from the Start Menu doesn't always
-// inherit shell-set env vars, so relying on HERMES_HOME alone left
-// Windows users staring at an empty ~/.hermes while their real data
-// sat in %LOCALAPPDATA%\hermes.
-function looksLikeHermesHome(dir: string): boolean {
-  if (!existsSync(dir)) return false;
-  return (
-    existsSync(join(dir, "hermes-agent")) ||
-    existsSync(join(dir, "gateway.pid")) ||
-    existsSync(join(dir, "config.yaml")) ||
-    existsSync(join(dir, "active_profile")) ||
-    existsSync(join(dir, ".env"))
-  );
-}
+import {
+  IS_WINDOWS,
+  HERMES_HOME,
+  HERMES_REPO,
+  HERMES_PYTHON,
+  HERMES_SCRIPT,
+  HERMES_ENV_FILE,
+  HERMES_AUTH_FILE,
+  getBundledScriptPath,
+  installBinariesFor,
+  hermesCliArgs,
+  getEnhancedPath,
+  shQuote,
+} from "./installer/paths";
 
-function defaultHermesHome(): string {
-  const homeDot = join(homedir(), ".hermes");
-  if (!IS_WINDOWS) return homeDot;
+// Re-exports of MCP
+export type { McpServerEntry } from "./installer/mcp";
+export {
+  listMcpServers,
+  renderMcpServerEntry,
+  upsertMcpServerInYaml,
+  writeMcpServerEntry,
+  hasMcpServer,
+  openAlexMcpServerPath,
+} from "./installer/mcp";
 
-  const localApp = process.env.LOCALAPPDATA
-    ? join(process.env.LOCALAPPDATA, "hermes")
-    : null;
+// Re-exports of Backup & Import
+export {
+  runHermesBackup,
+  runHermesImport,
+  validateImportArchivePath,
+} from "./installer/backup-import";
 
-  // Prefer whichever location already has hermes data.
-  if (localApp && looksLikeHermesHome(localApp)) return localApp;
-  if (looksLikeHermesHome(homeDot)) return homeDot;
-
-  // Neither populated yet — fall back to install.ps1's default so a
-  // fresh install lines up with where the installer will write.
-  return localApp ?? homeDot;
-}
-
-function shQuote(s: string): string {
-  return `'${s.replace(/'/g, "'\"'\"'")}'`;
-}
-
-function getBundledScriptPath(scriptName: string): string {
-  const appPath = app?.getAppPath
-    ? app.getAppPath()
-    : resolve(__dirname, "../..");
-  const isPackaged = app?.isPackaged ?? false;
-  if (isPackaged) {
-    return join(appPath, "..", "app.asar.unpacked", "resources", scriptName);
-  } else {
-    return join(appPath, "resources", scriptName);
-  }
-}
-
-// A Hermes home the user explicitly pointed the app at via the "use an
-// existing installation" flow (issue #272). Persisted in the desktop's own
-// userData dir — outside any Hermes home — so it can be read here, before
-// HERMES_HOME is resolved. Strictly additive: with no override file the
-// behaviour is identical to before.
-function hermesHomeOverrideFile(): string {
-  // `app` is undefined outside an Electron runtime (e.g. unit tests) —
-  // optional-chain it so module load degrades to "no override" instead of
-  // throwing.
-  const userData = app?.getPath?.("userData");
-  return userData ? join(userData, "hermes-home.json") : "";
-}
-
-function readHermesHomeOverride(): string {
-  try {
-    const file = hermesHomeOverrideFile();
-    if (!file || !existsSync(file)) return "";
-    const parsed = JSON.parse(readFileSync(file, "utf-8")) as {
-      hermesHome?: unknown;
-    };
-    const p =
-      typeof parsed.hermesHome === "string" ? parsed.hermesHome.trim() : "";
-    // Ignore a stale override whose directory no longer exists.
-    return p && existsSync(p) ? p : "";
-  } catch {
-    return "";
-  }
-}
-
-/** Persist (when `home` is set) or clear (when "") the Hermes home override. */
-export function setHermesHomeOverride(home: string): void {
-  try {
-    const file = hermesHomeOverrideFile();
-    if (!file) return;
-    if (!home.trim()) {
-      if (existsSync(file)) unlinkSync(file);
-      return;
-    }
-    writeFileSync(
-      file,
-      JSON.stringify({ hermesHome: home.trim() }, null, 2),
-      "utf-8",
-    );
-  } catch {
-    /* best effort — a failed write just means no override next launch */
-  }
-}
-
-export const HERMES_HOME =
-  process.env.HERMES_HOME?.trim() ||
-  readHermesHomeOverride() ||
-  defaultHermesHome();
-export const HERMES_REPO = join(HERMES_HOME, "hermes-agent");
-export const HERMES_VENV = join(HERMES_REPO, "venv");
-// On Windows, use `pythonw.exe` (the GUI-subsystem interpreter that ships in
-// every venv) instead of `python.exe` so that subprocess spawns don't flash
-// a blank console window before `windowsHide: true` / CREATE_NO_WINDOW takes
-// effect. Issue #342: on every chat send the `sendMessageViaCli` fallback
-// path spawned `python.exe`, and the console appeared for a few hundred ms
-// despite `windowsHide: true` — a well-known race between console allocation
-// and CREATE_NO_WINDOW on console-subsystem child binaries. `pythonw.exe`
-// is linked as Windows subsystem, so the OS can never allocate a console
-// for it regardless of creation flags. It's a bit-identical interpreter
-// otherwise — same modules, same stdout/stderr behaviour over piped stdio
-// (which is what every call site here uses).
-export const HERMES_PYTHON = IS_WINDOWS
-  ? join(HERMES_VENV, "Scripts", "pythonw.exe")
-  : join(HERMES_VENV, "bin", "python");
-export const HERMES_SCRIPT = IS_WINDOWS
-  ? join(HERMES_VENV, "Scripts", "hermes.exe")
-  : join(HERMES_REPO, "hermes");
-export const HERMES_ENV_FILE = join(HERMES_HOME, ".env");
-export const HERMES_CONFIG_FILE = join(HERMES_HOME, "config.yaml");
-export const HERMES_AUTH_FILE = join(HERMES_HOME, "auth.json");
-
-/** The Python + hermes-script paths for a Hermes install rooted at `home`,
- *  in the layout the desktop's own installer produces. */
-function installBinariesFor(home: string): { python: string; script: string } {
-  const repo = join(home, "hermes-agent");
-  const venv = join(repo, "venv");
-  return IS_WINDOWS
-    ? {
-        python: join(venv, "Scripts", "python.exe"),
-        script: join(venv, "Scripts", "hermes.exe"),
-      }
-    : { python: join(venv, "bin", "python"), script: join(repo, "hermes") };
-}
-
-export function hermesCliArgs(args: string[] = []): string[] {
-  if (process.platform === "win32") {
-    return ["-m", "hermes_cli.main", ...args];
-  }
-  return [HERMES_SCRIPT, ...args];
-}
+// Re-exports of Computer Use
+export {
+  getComputerUseStatus,
+  installComputerUseDriver,
+} from "./installer/computer-use";
 
 import type { InstallStatus, InstallProgress } from "../shared/install";
 export type { InstallStatus, InstallProgress };
-
-export function getEnhancedPath(): string {
-  const home = homedir();
-  const extra = (
-    IS_WINDOWS
-      ? [
-          // Bundled by install.ps1 inside HERMES_HOME — these matter when the
-          // user's system PATH doesn't include git or node yet.
-          join(HERMES_HOME, "git", "bin"),
-          join(HERMES_HOME, "git", "cmd"),
-          join(HERMES_HOME, "git", "usr", "bin"),
-          join(HERMES_HOME, "node"),
-          join(HERMES_VENV, "Scripts"),
-          // Common user/system installs used when Claw3D setup runs before or
-          // outside the bundled installer.
-          process.env.NVM_SYMLINK,
-          process.env.APPDATA ? join(process.env.APPDATA, "npm") : undefined,
-          process.env.ProgramFiles
-            ? join(process.env.ProgramFiles, "nodejs")
-            : undefined,
-          process.env["ProgramFiles(x86)"]
-            ? join(process.env["ProgramFiles(x86)"], "nodejs")
-            : undefined,
-          process.env.ProgramFiles
-            ? join(process.env.ProgramFiles, "Git", "cmd")
-            : undefined,
-          process.env.LOCALAPPDATA
-            ? join(process.env.LOCALAPPDATA, "Programs", "Git", "cmd")
-            : undefined,
-          // Where `uv` lands when astral.sh's installer runs.
-          join(home, ".local", "bin"),
-          join(home, ".cargo", "bin"),
-        ]
-      : [
-          join(home, ".local", "bin"),
-          join(home, ".cargo", "bin"),
-          join(HERMES_VENV, "bin"),
-          // Node version manager shim directories
-          join(home, ".volta", "bin"),
-          join(home, ".asdf", "shims"),
-          join(home, ".local", "share", "fnm", "aliases", "default", "bin"),
-          join(home, ".fnm", "aliases", "default", "bin"),
-          ...resolveNvmBin(home),
-          "/usr/local/bin",
-          "/opt/homebrew/bin",
-          "/opt/homebrew/sbin",
-        ]
-  ).filter((entry): entry is string => Boolean(entry));
-  return [...extra, process.env.PATH || ""].filter(Boolean).join(delimiter);
-}
-
-/** Resolve the active nvm node version's bin directory. */
-function resolveNvmBin(home: string): string[] {
-  const nvmDir = process.env.NVM_DIR || join(home, ".nvm");
-  const versionsDir = join(nvmDir, "versions", "node");
-  if (!existsSync(versionsDir)) return [];
-  try {
-    // Try to read the default alias to find the active version
-    const aliasFile = join(nvmDir, "alias", "default");
-    if (existsSync(aliasFile)) {
-      const alias = readFileSync(aliasFile, "utf-8").trim();
-      // alias can be a full version "v20.11.0" or a partial "20" or "lts/*"
-      if (alias.startsWith("v")) {
-        const bin = join(versionsDir, alias, "bin");
-        if (existsSync(bin)) return [bin];
-      }
-    }
-    // Fallback: pick the latest installed version
-    const versions = (readdirSync(versionsDir) as string[])
-      .filter((d: string) => d.startsWith("v"))
-      .sort()
-      .reverse();
-    if (versions.length > 0) {
-      return [join(versionsDir, versions[0], "bin")];
-    }
-  } catch {
-    /* non-fatal */
-  }
-  return [];
-}
 
 function activeEnvFile(profile: string): string {
   return profile === "default"
@@ -278,17 +89,6 @@ function activeAuthFile(profile: string): string {
     : join(HERMES_HOME, "profiles", profile, "auth.json");
 }
 
-// Canonical env-var name per known model provider. Keys here are values
-// the user might see in `model.provider` in config.yaml; values are the
-// env vars the gateway expects to read from .env. Names that don't
-// appear here either don't need a key (local providers, nous) or have
-// OAuth-style credentials (covered separately via hasHermesAuthCredential).
-//
-// Used by the install-gate check below. Previously that check
-// hard-coded only OPENROUTER_API_KEY / ANTHROPIC_API_KEY / OPENAI_API_KEY,
-// so any user configured for DeepSeek, Groq, Mistral, etc. saw the
-// "set AI provider" first-run screen even with a valid key in .env.
-// See issue #236.
 const PROVIDER_ENV_KEYS: Record<string, string> = {
   openrouter: "OPENROUTER_API_KEY",
   anthropic: "ANTHROPIC_API_KEY",
@@ -311,19 +111,10 @@ const PROVIDER_ENV_KEYS: Record<string, string> = {
   kimi: "KIMI_API_KEY",
   "kimi-coding": "KIMI_API_KEY",
   nvidia: "NVIDIA_API_KEY",
-  // Nous Portal supports BOTH OAuth (`nous` variant) AND API key
-  // (`nous-api` variant). Register the env var name under both ids so
-  // the install-gate + pre-send validation + config-health audit can
-  // detect a missing key — whichever id the user's profile happens to
-  // be configured under. The OAuth case is handled separately by
-  // checking auth.json via hasOAuthCredentials() (config.ts).
   nous: "NOUS_API_KEY",
   "nous-api": "NOUS_API_KEY",
 };
 
-// When provider is "custom" or "auto", the desktop's setup flow falls
-// back to recognizing the endpoint by base URL. Same patterns hermes.ts
-// uses for runtime header injection.
 const URL_TO_ENV_KEY: Array<[RegExp, string]> = [
   [/openrouter\.ai/i, "OPENROUTER_API_KEY"],
   [/anthropic\.com/i, "ANTHROPIC_API_KEY"],
@@ -340,14 +131,6 @@ const URL_TO_ENV_KEY: Array<[RegExp, string]> = [
   [/api\.perplexity\.ai/i, "PERPLEXITY_API_KEY"],
 ];
 
-/**
- * Resolve the env var name the gateway expects for a given model config.
- * Returns null when the provider/URL combination has no known canonical
- * env var (the caller falls back to a permissive `*_API_KEY|*_TOKEN`
- * scan, matching the spirit of the prior hard-coded check).
- *
- * Exported for unit testing.
- */
 export function expectedEnvKeyForModel(
   provider: string,
   baseUrl: string,
@@ -371,8 +154,6 @@ function envHasUsableValue(
     if (!m) continue;
     const key = m[1];
     let value = m[2].trim();
-    // Strip surrounding quotes so `KEY=""` or `KEY="abc"` parse the
-    // same way as `KEY=abc`.
     if (
       (value.startsWith('"') && value.endsWith('"')) ||
       (value.startsWith("'") && value.endsWith("'"))
@@ -384,35 +165,20 @@ function envHasUsableValue(
     if (expectedKey) {
       if (key === expectedKey) return true;
     } else {
-      // No known mapping for this provider/URL — accept any value that
-      // looks like a credential. Avoids regressing users on providers
-      // we haven't catalogued explicitly, while still rejecting
-      // unrelated env vars (TELEGRAM_BOT_TOKEN etc. shouldn't satisfy
-      // the model install gate, but a custom `*_API_KEY` should).
       if (/_API_KEY$/.test(key)) return true;
     }
   }
   return false;
 }
 
-// ── Pre-install inspection (issue #272) ──────────────────────────────────────
-
 export type InstallTargetState = "fresh" | "update" | "replace";
 
 export interface InstallTargetInfo {
-  /** Where the desktop will install — shown to the user before they commit. */
   hermesHome: string;
   repoPath: string;
-  /** What the installer will do to `repoPath`:
-   *  - `fresh`   — nothing is there; a clean install.
-   *  - `update`  — a valid git checkout; install.sh/ps1 updates it in place.
-   *  - `replace` — a directory is there but not a valid checkout, so the
-   *                install script deletes and re-clones it. */
   state: InstallTargetState;
 }
 
-/** Classify what the installer will do to the target directory. Pure — the
- *  filesystem probing lives in `inspectInstallTarget`. */
 export function classifyInstallTarget(
   repoExists: boolean,
   repoIsGitRepo: boolean,
@@ -421,7 +187,6 @@ export function classifyInstallTarget(
   return repoIsGitRepo ? "update" : "replace";
 }
 
-/** Inspect the install target so the renderer can warn before installing. */
 export function inspectInstallTarget(): InstallTargetInfo {
   const repoExists = existsSync(HERMES_REPO);
   const repoIsGitRepo = repoExists && existsSync(join(HERMES_REPO, ".git"));
@@ -432,10 +197,6 @@ export function inspectInstallTarget(): InstallTargetInfo {
   };
 }
 
-/** True when `dir` is a Hermes home the desktop can drive as-is — it must
- *  contain a `hermes-agent` install with the venv binaries in the layout the
- *  desktop expects. A hand-rolled install with a different layout fails here
- *  rather than being silently adopted into a broken state (issue #272). */
 export function validateHermesHome(dir: string): boolean {
   const home = dir?.trim();
   if (!home || !existsSync(home)) return false;
@@ -446,7 +207,6 @@ export function validateHermesHome(dir: string): boolean {
 export function checkInstallStatus(): InstallStatus {
   const activeProfile = getActiveProfileNameSync();
 
-  // Remote mode: skip local checks entirely
   const conn = getConnectionConfig();
   if (conn.mode === "remote" && conn.remoteUrl) {
     return {
@@ -458,10 +218,6 @@ export function checkInstallStatus(): InstallStatus {
     };
   }
 
-  // Fast path: file existence is enough to gate the UI. The deep
-  // `python --version` check used to run here adds 1–10s of cold-start
-  // latency, so it now lives in `verifyInstall()` and is invoked lazily
-  // by the renderer after the main UI is mounted.
   const installed = existsSync(HERMES_PYTHON) && existsSync(HERMES_SCRIPT);
   const envFile = activeEnvFile(activeProfile);
   const authFile = activeAuthFile(activeProfile);
@@ -469,9 +225,6 @@ export function checkInstallStatus(): InstallStatus {
   let hasApiKey = false;
   const verified = installed;
 
-  // Local/custom providers don't need an API key. OAuth-backed providers
-  // (including credential-pool entries) can be configured through Hermes
-  // auth.json instead of .env, so check those before falling back to keys.
   let mc: { provider: string; model: string; baseUrl: string } | null = null;
   try {
     mc = getModelConfig(activeProfile);
@@ -500,8 +253,6 @@ export function checkInstallStatus(): InstallStatus {
   return { installed, configured, hasApiKey, verified, activeProfile };
 }
 
-// Lazy background verification: actually invoke Python to confirm the
-// install runs. Called from the renderer after the UI is already up.
 let _verifyCache: { ok: boolean; ts: number } | null = null;
 const VERIFY_TTL_MS = 5 * 60 * 1000;
 
@@ -534,7 +285,6 @@ export async function verifyInstall(): Promise<boolean> {
   });
 }
 
-// Cached version to avoid re-running the Python process
 let _cachedVersion: string | null = null;
 let _versionFetching = false;
 
@@ -542,15 +292,6 @@ export async function getHermesVersion(): Promise<string | null> {
   if (_cachedVersion !== null) return _cachedVersion;
   if (!existsSync(HERMES_PYTHON) || !existsSync(HERMES_SCRIPT)) return null;
   if (_versionFetching) {
-    // Wait for the in-flight fetch but cap the wait. The execFile below
-    // has a 15s timeout and its callback unconditionally clears
-    // `_versionFetching`, so under normal failure paths the poll
-    // unblocks on its own. Pathological cases (callback never invoked,
-    // worker killed mid-callback, async exception in handler) would
-    // otherwise leak a 100 ms interval per caller forever. Cap at 20s
-    // — comfortably above the execFile timeout — and resolve with
-    // whatever `_cachedVersion` happens to be (typically `null`),
-    // which matches the same return shape callers already handle.
     return new Promise((resolve) => {
       const startedAt = Date.now();
       const check = setInterval(() => {
@@ -620,11 +361,6 @@ export function runHermesDoctor(): string {
 
 const OPENCLAW_DIR_NAMES = [".openclaw", ".clawdbot", ".moldbot"];
 
-// hermes-desktop itself creates ~/.openclaw/claw3d/ as a stub when preparing
-// Claw3D settings (see claw3d.ts:writeClaw3dSettings), so a bare `existsSync`
-// check would surface that empty stub as a "real" OpenClaw install and
-// prompt the user to migrate from themselves. Require at least one regular
-// file anywhere in the tree so empty scaffolding doesn't trigger the banner.
 function dirContainsAnyFile(dir: string, maxDepth = 3): boolean {
   try {
     const entries = readdirSync(dir, { withFileTypes: true });
@@ -637,7 +373,7 @@ function dirContainsAnyFile(dir: string, maxDepth = 3): boolean {
       }
     }
   } catch {
-    // unreadable → treat as empty
+    // unreadable
   }
   return false;
 }
@@ -778,26 +514,14 @@ export async function runHermesUpdate(
   });
 }
 
-// ────────────────────────────────────────────────────
-//  Runtime update detection (WS3)
-// ────────────────────────────────────────────────────
-
 export interface HermesUpdateStatus {
-  /** True when upstream is ahead of the local checkout. */
   available: boolean;
-  /** Commits the local HEAD is behind upstream, when known. */
   behindBy?: number;
   localHead?: string;
   upstreamHead?: string;
-  /** Why a check couldn't conclude (not-a-git-repo, no-upstream, error…). */
   reason?: string;
 }
 
-/**
- * Pure interpretation of a local-vs-upstream HEAD comparison. Extracted from
- * the git I/O so the decision logic is unit-testable. `behindRaw` is the raw
- * stdout of `git rev-list --count HEAD..@{u}` (or null if that call failed).
- */
 export function interpretHeadComparison(
   localHead: string | null,
   upstreamHead: string | null,
@@ -814,13 +538,6 @@ export function interpretHeadComparison(
   return { available: true, behindBy, localHead, upstreamHead };
 }
 
-/**
- * Check whether the locally-checked-out Hermes Agent repo is behind its
- * upstream tracking branch. Best-effort: a missing `.git`, no tracking
- * branch, or an offline `git fetch` all resolve to `available: false` with a
- * `reason` rather than throwing. Never auto-updates — the caller surfaces the
- * result and lets the user trigger `hermes update`.
- */
 export async function checkHermesUpdate(): Promise<HermesUpdateStatus> {
   if (!existsSync(join(HERMES_REPO, ".git"))) {
     return { available: false, reason: "not-a-git-repo" };
@@ -855,8 +572,6 @@ export async function checkHermesUpdate(): Promise<HermesUpdateStatus> {
       );
     });
 
-  // Refresh remote-tracking refs (best-effort; offline is fine — we then
-  // compare against whatever was last fetched).
   await runGit(["fetch", "--quiet"], 30000);
 
   const local = await runGit(["rev-parse", "HEAD"], 5000);
@@ -874,7 +589,6 @@ export async function checkHermesUpdate(): Promise<HermesUpdateStatus> {
 }
 
 function getShellProfile(home: string): string | null {
-  // Check for the user's shell profile to source their PATH
   const candidates = [
     join(home, ".zshrc"),
     join(home, ".bashrc"),
@@ -887,8 +601,6 @@ function getShellProfile(home: string): string | null {
   return null;
 }
 
-// Parse install.sh / install.ps1 output to detect progress stages.
-// Patterns are tuned to match both bash and PowerShell installer phrasing.
 const STAGE_MARKERS: { pattern: RegExp; step: number; title: string }[] = [
   {
     pattern: /Checking (for )?(git|uv|python|node|ripgrep|ffmpeg)/i,
@@ -923,10 +635,6 @@ const STAGE_MARKERS: { pattern: RegExp; step: number; title: string }[] = [
     title: "Installing dependencies",
   },
   {
-    // Only fire step 7 on the install script's actual final lines.
-    // Intermediate "Browser engine setup complete" / "All dependencies installed"
-    // used to match here and pinned the progress bar at 100% while Playwright
-    // and TUI deps were still running — see issue #104.
     pattern:
       /Installation complete|hermes command ready|Configuration directory ready|Hermes (installation )?(finished|is ready)/i,
     step: 7,
@@ -945,7 +653,6 @@ export async function runInstall(
 
   function emit(text: string): void {
     log += text;
-    // Try to detect which stage we're in from the output
     for (const marker of STAGE_MARKERS) {
       if (marker.pattern.test(text)) {
         if (marker.step >= currentStep) {
@@ -970,10 +677,6 @@ export async function runInstall(
     return runInstallWindows(emit);
   }
 
-  // Ask for the sudo password ONCE upfront and warm sudo's credential cache
-  // before install.sh runs. Playwright's `install --with-deps` later invokes
-  // `sudo apt-get` from a subprocess with no TTY — without a warm cache it
-  // hangs forever waiting on stdin. See issues #104 and #109.
   emit("→ Checking administrator access...\n");
   const sudoPrecache = await precacheSudoCredentials(parentWindow ?? null);
   if (sudoPrecache.cancelled) {
@@ -989,10 +692,7 @@ export async function runInstall(
     emit("✓ Administrator access granted\n");
   }
 
-  // Keep the legacy askpass bridge as a fallback for any sudo call that
-  // somehow escapes the cred cache (e.g. install runs past sudo's 15min TTL
-  // and the keepalive failed).
-  let askpass: AskpassHandle | null = null;
+  let askpass: any = null;
   try {
     askpass = await setupAskpass(parentWindow ?? null);
   } catch (err) {
@@ -1005,9 +705,6 @@ export async function runInstall(
     return await new Promise<void>((resolve, reject) => {
       const home = homedir();
 
-      // Source the user's shell profile to get the same PATH as their terminal,
-      // then run the official install script. Electron apps launched from Finder
-      // don't inherit the terminal environment.
       const shellProfile = getShellProfile(home);
       const scriptPath = getBundledScriptPath("install.sh");
       const installCmd = [
@@ -1042,9 +739,6 @@ export async function runInstall(
           emit("\nInstallation complete!\n");
           resolve();
         } else {
-          // The install script can exit non-zero due to benign issues
-          // (e.g. git stash pop failure on already-clean repo).
-          // If Hermes is actually installed and working, treat as success.
           if (existsSync(HERMES_PYTHON) && existsSync(HERMES_SCRIPT)) {
             emit(
               "\nInstall script exited with warnings, but Hermes is installed successfully.\n",
@@ -1070,16 +764,11 @@ export async function runInstall(
   }
 }
 
-// PS single-quoted string escape: ' → ''
 function psQuote(s: string): string {
   return `'${s.replace(/'/g, "''")}'`;
 }
 
-// Resolve a powershell executable. Prefer PowerShell 7 (`pwsh`) when present,
-// fall back to Windows PowerShell 5.1 (`powershell.exe`). Both ship the same
-// flags we use; pwsh is faster and writes UTF-8 without a BOM by default.
 function resolvePowerShellExe(): string {
-  // Spawn will resolve from PATH; we test for pwsh.exe first.
   const programFiles = process.env["ProgramFiles"];
   const candidates = [
     programFiles ? join(programFiles, "PowerShell", "7", "pwsh.exe") : null,
@@ -1089,16 +778,10 @@ function resolvePowerShellExe(): string {
   for (const c of candidates) {
     if (c.includes("\\") && existsSync(c)) return c;
   }
-  // Let spawn search PATH for the bare names; powershell.exe ships on every
-  // supported Windows version, so this is always resolvable.
   return "powershell.exe";
 }
 
 async function runInstallWindows(emit: (t: string) => void): Promise<void> {
-  // We can't `irm | iex` and pass parameters, and we want to override the
-  // upstream defaults (which install to %LOCALAPPDATA%\hermes) so the
-  // desktop app's HERMES_HOME == ~\.hermes convention keeps working.
-  // Strategy: write a small wrapper .ps1 to %TEMP%, run it with -File.
   const home = homedir();
   const hermesHome = HERMES_HOME;
   const installDir = HERMES_REPO;
@@ -1108,14 +791,11 @@ async function runInstallWindows(emit: (t: string) => void): Promise<void> {
     `hermes-install-${randomBytes(6).toString("hex")}.ps1`,
   );
 
-  // The wrapper downloads install.ps1 to a sibling temp file and invokes it
-  // with our parameters. This sidesteps the `iex`-can't-pass-args limitation.
   const scriptPath = getBundledScriptPath("install.ps1");
   const wrapperScript = [
     "$ErrorActionPreference = 'Stop'",
     `$localScript = ${psQuote(scriptPath)}`,
     `$installer = Join-Path $env:TEMP ("hermes-install-script-" + [guid]::NewGuid().ToString() + ".ps1")`,
-    // Read the bundled script and save with UTF-8 BOM so PS 5.1 doesn't mangle glyphs
     "$text = [System.IO.File]::ReadAllText($localScript)",
     "[System.IO.File]::WriteAllText($installer, $text, (New-Object System.Text.UTF8Encoding $true))",
     `& $installer -SkipSetup -HermesHome ${psQuote(hermesHome)} -InstallDir ${psQuote(installDir)}`,
@@ -1153,8 +833,6 @@ async function runInstallWindows(emit: (t: string) => void): Promise<void> {
           ...process.env,
           PATH: basePath,
           HERMES_HOME: hermesHome,
-          // Hint that we're not interactive so install.ps1 doesn't `pause`
-          // (the .cmd wrapper does on failure, but -File on .ps1 won't).
           NO_COLOR: "1",
         },
         stdio: ["ignore", "pipe", "pipe"],
@@ -1181,7 +859,6 @@ async function runInstallWindows(emit: (t: string) => void): Promise<void> {
         resolve();
         return;
       }
-      // Same tolerance as the bash path: if the binary tree exists, count it.
       if (existsSync(HERMES_PYTHON) && existsSync(HERMES_SCRIPT)) {
         emit(
           "\nInstall script exited with warnings, but Hermes is installed successfully.\n",
@@ -1202,7 +879,6 @@ async function runInstallWindows(emit: (t: string) => void): Promise<void> {
       } catch {
         /* best-effort */
       }
-      // Most common failure: PowerShell is missing or blocked by policy.
       const hint =
         (err as NodeJS.ErrnoException).code === "ENOENT"
           ? " PowerShell was not found. Reinstall Windows PowerShell or run the installer manually from a terminal."
@@ -1211,131 +887,6 @@ async function runInstallWindows(emit: (t: string) => void): Promise<void> {
     });
   });
 }
-
-// ────────────────────────────────────────────────────
-//  Backup & Import
-// ────────────────────────────────────────────────────
-
-export async function runHermesBackup(
-  profile?: string,
-): Promise<{ success: boolean; path?: string; error?: string }> {
-  if (!existsSync(HERMES_PYTHON) || !existsSync(HERMES_SCRIPT)) {
-    return { success: false, error: "Hermes is not installed." };
-  }
-  const args = hermesCliArgs();
-  if (profile && profile !== "default") args.push("-p", profile);
-  args.push("backup");
-
-  return new Promise((resolve) => {
-    execFile(
-      HERMES_PYTHON,
-      args,
-      {
-        cwd: HERMES_REPO,
-        env: {
-          ...process.env,
-          PATH: getEnhancedPath(),
-          HOME: homedir(),
-          HERMES_HOME,
-          TERM: "dumb",
-        },
-        timeout: 120000,
-        ...HIDDEN_SUBPROCESS_OPTIONS,
-      },
-      (error, stdout, stderr) => {
-        if (error) {
-          resolve({
-            success: false,
-            error: stripAnsi(stderr || error.message).slice(0, 500),
-          });
-          return;
-        }
-        const output = stripAnsi(stdout);
-        // Try to extract the backup file path from output
-        const pathMatch = output.match(
-          /(?:Backup saved|Written|Created).*?(\S+\.(?:tar\.gz|zip|tgz))/i,
-        );
-        resolve({
-          success: true,
-          path: pathMatch?.[1] || output.trim().split("\n").pop()?.trim(),
-        });
-      },
-    );
-  });
-}
-
-export async function runHermesImport(
-  archivePath: string,
-  profile?: string,
-): Promise<{ success: boolean; error?: string }> {
-  const archive = validateImportArchivePath(archivePath);
-  if (!archive.success) {
-    return { success: false, error: archive.error };
-  }
-
-  if (!existsSync(HERMES_PYTHON) || !existsSync(HERMES_SCRIPT)) {
-    return { success: false, error: "Hermes is not installed." };
-  }
-  const args = hermesCliArgs();
-  if (profile && profile !== "default") args.push("-p", profile);
-  args.push("import", archive.path);
-
-  return new Promise((resolve) => {
-    execFile(
-      HERMES_PYTHON,
-      args,
-      {
-        cwd: HERMES_REPO,
-        env: {
-          ...process.env,
-          PATH: getEnhancedPath(),
-          HOME: homedir(),
-          HERMES_HOME,
-          TERM: "dumb",
-        },
-        timeout: 120000,
-        ...HIDDEN_SUBPROCESS_OPTIONS,
-      },
-      (error, _stdout, stderr) => {
-        if (error) {
-          resolve({
-            success: false,
-            error: stripAnsi(stderr || error.message).slice(0, 500),
-          });
-          return;
-        }
-        resolve({ success: true });
-      },
-    );
-  });
-}
-
-export function validateImportArchivePath(
-  archivePath: unknown,
-): { success: true; path: string } | { success: false; error: string } {
-  if (typeof archivePath !== "string" || archivePath.trim() === "") {
-    return { success: false, error: "Import archive path is required." };
-  }
-
-  const path = resolve(archivePath);
-  if (!existsSync(path)) {
-    return { success: false, error: "Import archive does not exist." };
-  }
-
-  try {
-    if (!statSync(path).isFile()) {
-      return { success: false, error: "Import archive must be a file." };
-    }
-  } catch {
-    return { success: false, error: "Import archive is not readable." };
-  }
-
-  return { success: true, path };
-}
-
-// ────────────────────────────────────────────────────
-//  Debug dump
-// ────────────────────────────────────────────────────
 
 export function runHermesDump(): Promise<string> {
   if (!existsSync(HERMES_PYTHON) || !existsSync(HERMES_SCRIPT)) {
@@ -1368,10 +919,6 @@ export function runHermesDump(): Promise<string> {
   });
 }
 
-// ────────────────────────────────────────────────────
-//  Memory provider discovery
-// ────────────────────────────────────────────────────
-
 export interface MemoryProviderInfo {
   name: string;
   description: string;
@@ -1380,10 +927,6 @@ export interface MemoryProviderInfo {
   envVars: string[];
 }
 
-/**
- * Discover available memory providers by scanning the plugins directory
- * and reading config.yaml for the active provider.
- */
 export function discoverMemoryProviders(
   profile?: string,
 ): MemoryProviderInfo[] {
@@ -1392,7 +935,6 @@ export function discoverMemoryProviders(
 
   const activeProvider = getActiveMemoryProvider(profile);
 
-  // Known providers with their metadata (from plugin.yaml files)
   const KNOWN_PROVIDERS: Record<
     string,
     { description: string; envVars: string[]; pip?: string }
@@ -1458,7 +1000,6 @@ export function discoverMemoryProviders(
     /* non-fatal */
   }
 
-  // Sort: active first, then installed, then alphabetical
   results.sort((a, b) => {
     if (a.active !== b.active) return a.active ? -1 : 1;
     if (a.installed !== b.installed) return a.installed ? -1 : 1;
@@ -1468,9 +1009,6 @@ export function discoverMemoryProviders(
   return results;
 }
 
-/**
- * Read the active memory provider from config.yaml.
- */
 export function getActiveMemoryProvider(profile?: string): string {
   try {
     const configPath = join(profileHome(profile), "config.yaml");
@@ -1483,200 +1021,11 @@ export function getActiveMemoryProvider(profile?: string): string {
   }
 }
 
-// ────────────────────────────────────────────────────
-//  MCP server management
-// ────────────────────────────────────────────────────
-
-export function listMcpServers(
-  profile?: string,
-): Array<{ name: string; type: string; enabled: boolean; detail: string }> {
-  try {
-    const configPath = join(profileHome(profile), "config.yaml");
-    if (!existsSync(configPath)) return [];
-    const content = readFileSync(configPath, "utf-8");
-    // Simple YAML parse for mcp_servers section
-    const match = content.match(/^mcp_servers:\s*\n((?:[ \t]+.+\n)*)/m);
-    if (!match) return [];
-
-    const servers: Array<{
-      name: string;
-      type: string;
-      enabled: boolean;
-      detail: string;
-    }> = [];
-    const block = match[1];
-    // Each top-level key under mcp_servers is a server name (2-space indent)
-    const nameRe = /^[ ]{2}(\w[\w-]*):\s*$/gm;
-    let m: RegExpExecArray | null;
-    while ((m = nameRe.exec(block)) !== null) {
-      const name = m[1];
-      // Extract following indented block for this server.
-      // Find the next line at exactly 2-space indent (next server name).
-      const start = m.index + m[0].length;
-      const nextMatch = /\n {2}\w/g;
-      nextMatch.lastIndex = start;
-      const next = nextMatch.exec(block);
-      const serverBlock = block.slice(start, next ? next.index : undefined);
-      const hasUrl = /url:/.test(serverBlock);
-      const hasCommand = /command:/.test(serverBlock);
-      const enabledMatch = serverBlock.match(/enabled:\s*(true|false)/i);
-      const enabled =
-        enabledMatch === null || enabledMatch[1].toLowerCase() === "true";
-
-      let detail = "";
-      if (hasUrl) {
-        const urlMatch = serverBlock.match(/url:\s*["']?([^\s"']+)/);
-        detail = urlMatch?.[1] || "HTTP";
-      } else if (hasCommand) {
-        const cmdMatch = serverBlock.match(/command:\s*["']?([^\s"']+)/);
-        detail = cmdMatch?.[1] || "stdio";
-      }
-
-      servers.push({
-        name,
-        type: hasUrl ? "http" : "stdio",
-        enabled,
-        detail,
-      });
-    }
-    return servers;
-  } catch {
-    return [];
-  }
-}
-
-// ── MCP server registration (config.yaml mcp_servers.<name>) ──────────
-//
-// Lets the desktop register a gateway-callable MCP server (e.g. the bundled
-// OpenAlex research server) by writing config.yaml. The config lives in the
-// profile dir, so the entry SURVIVES a Hermes reinstall (which re-clones the
-// agent repo but never touches the profile).
-
-export interface McpServerEntry {
-  command: string;
-  args: string[];
-  env: Record<string, string>;
-  enabled: boolean;
-}
-
-/** Render one `mcp_servers` child as indented YAML (2/4/6-space nesting). */
-export function renderMcpServerEntry(
-  name: string,
-  entry: McpServerEntry,
-): string {
-  const q = (v: string): string => JSON.stringify(v); // safe quoting/escaping
-  const lines = [`  ${name}:`, `    command: ${q(entry.command)}`];
-  if (entry.args.length) {
-    lines.push(`    args:`);
-    for (const arg of entry.args) lines.push(`      - ${q(arg)}`);
-  }
-  const envKeys = Object.keys(entry.env);
-  if (envKeys.length) {
-    lines.push(`    env:`);
-    for (const key of envKeys) lines.push(`      ${key}: ${q(entry.env[key])}`);
-  }
-  lines.push(`    enabled: ${entry.enabled ? "true" : "false"}`);
-  return `${lines.join("\n")}\n`;
-}
-
-/** Drop an existing `  <name>:` child sub-block (header + its indented body). */
-function removeMcpChild(block: string, name: string): string {
-  const lines = block.split("\n");
-  const childHeader = new RegExp(`^  ${escapeRegex(name)}:`);
-  const out: string[] = [];
-  let i = 0;
-  while (i < lines.length) {
-    if (childHeader.test(lines[i])) {
-      i++; // skip the header line
-      // skip its body: blank lines or anything indented 3+ spaces (4/6-deep)
-      while (
-        i < lines.length &&
-        (lines[i].trim() === "" || /^\s{3,}/.test(lines[i]))
-      ) {
-        i++;
-      }
-      continue;
-    }
-    out.push(lines[i]);
-    i++;
-  }
-  return out.join("\n");
-}
-
-/**
- * Upsert one server under the top-level `mcp_servers:` block, replacing any
- * existing same-named child. Pure string surgery (testable without fs): when
- * the block is absent it is appended; otherwise the rendered entry is inserted
- * at the top of the existing block.
- */
-export function upsertMcpServerInYaml(
-  content: string,
-  name: string,
-  renderedEntry: string,
-): string {
-  const header = content.match(/^mcp_servers:[ \t]*\r?\n/m);
-  if (!header || header.index === undefined) {
-    const sep = content === "" || content.endsWith("\n") ? "" : "\n";
-    return `${content}${sep}mcp_servers:\n${renderedEntry}`;
-  }
-  const blockStart = header.index + header[0].length;
-  const after = content.slice(blockStart);
-  const nextTop = after.match(/^\S/m); // next column-0 key ends the block
-  const blockEnd =
-    nextTop?.index !== undefined ? blockStart + nextTop.index : content.length;
-  const block = removeMcpChild(content.slice(blockStart, blockEnd), name);
-  return (
-    content.slice(0, blockStart) +
-    renderedEntry +
-    block +
-    content.slice(blockEnd)
-  );
-}
-
-/** Write/replace an mcp_servers entry in the profile's config.yaml. */
-export function writeMcpServerEntry(
-  name: string,
-  entry: McpServerEntry,
-  profile?: string,
-): void {
-  const configPath = join(profileHome(profile), "config.yaml");
-  const content = existsSync(configPath)
-    ? readFileSync(configPath, "utf-8")
-    : "";
-  const rendered = renderMcpServerEntry(name, entry);
-  writeFileSync(configPath, upsertMcpServerInYaml(content, name, rendered), {
-    encoding: "utf-8",
-  });
-}
-
-/** True iff an mcp_servers entry with this name already exists for the profile. */
-export function hasMcpServer(name: string, profile?: string): boolean {
-  return listMcpServers(profile).some((s) => s.name === name);
-}
-
-/** Absolute path to the bundled OpenAlex MCP server (resources are asar-unpacked). */
-export function openAlexMcpServerPath(): string {
-  if (app.isPackaged) {
-    return join(
-      process.resourcesPath,
-      "app.asar.unpacked",
-      "resources",
-      "openalex-mcp.cjs",
-    );
-  }
-  return join(app.getAppPath(), "resources", "openalex-mcp.cjs");
-}
-
-// ────────────────────────────────────────────────────
-//  Log viewer
-// ────────────────────────────────────────────────────
-
 export function readLogs(
   logFile = "agent.log",
   lines = 200,
 ): { content: string; path: string } {
   const logsDir = join(HERMES_HOME, "logs");
-  // Sanitize: only allow known log file names
   const allowed = ["agent.log", "errors.log", "gateway.log"];
   const file = allowed.includes(logFile) ? logFile : "agent.log";
   const fullPath = join(logsDir, file);
@@ -1686,7 +1035,6 @@ export function readLogs(
   }
   try {
     const content = readFileSync(fullPath, "utf-8");
-    // Return the last N lines
     const allLines = content.split("\n");
     const tail = allLines.slice(-lines).join("\n");
     return { content: tail, path: fullPath };
@@ -1755,103 +1103,6 @@ export async function getPromptSizeBreakdown(
         resolve(stdout.toString().trim() || "{}");
       },
     );
-  });
-}
-
-export async function getComputerUseStatus(
-  profile?: string,
-): Promise<{ installed: boolean; output: string }> {
-  if (!existsSync(HERMES_PYTHON) || !existsSync(HERMES_SCRIPT)) {
-    return { installed: false, output: "Hermes is not installed." };
-  }
-  return new Promise((resolve) => {
-    const args = hermesCliArgs(["computer-use", "status"]);
-    if (profile && profile !== "default") {
-      args.splice(process.platform === "win32" ? 2 : 1, 0, "-p", profile);
-    }
-    execFile(
-      HERMES_PYTHON,
-      args,
-      {
-        cwd: HERMES_REPO,
-        env: {
-          ...process.env,
-          PATH: getEnhancedPath(),
-          HOME: homedir(),
-          HERMES_HOME,
-        },
-        timeout: 10000,
-        ...HIDDEN_SUBPROCESS_OPTIONS,
-      },
-      (_error, stdout) => {
-        const out = stdout.toString().trim();
-        const installed =
-          out.includes("installed") && !out.includes("not installed");
-        resolve({ installed, output: stripAnsi(out) });
-      },
-    );
-  });
-}
-
-export async function installComputerUseDriver(
-  onProgress: (progress: InstallProgress) => void,
-  profile?: string,
-): Promise<{ success: boolean; error?: string }> {
-  if (!existsSync(HERMES_PYTHON) || !existsSync(HERMES_SCRIPT)) {
-    throw new Error("Hermes is not installed.");
-  }
-  let log = "";
-  function emit(text: string): void {
-    log += text;
-    onProgress({
-      step: 1,
-      totalSteps: 1,
-      title: "Installing CUA Driver",
-      detail: text.trim().slice(0, 120),
-      log,
-    });
-  }
-
-  emit("Starting computer-use driver installation...\n");
-
-  return new Promise((resolve) => {
-    const args = hermesCliArgs(["computer-use", "install"]);
-    if (profile && profile !== "default") {
-      args.splice(process.platform === "win32" ? 2 : 1, 0, "-p", profile);
-    }
-    const proc = spawn(HERMES_PYTHON, args, {
-      cwd: HERMES_REPO,
-      env: {
-        ...process.env,
-        PATH: getEnhancedPath(),
-        HOME: homedir(),
-        HERMES_HOME,
-        TERM: "dumb",
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-      ...HIDDEN_SUBPROCESS_OPTIONS,
-    });
-
-    proc.stdout?.on("data", (data: Buffer) => {
-      emit(stripAnsi(data.toString()));
-    });
-
-    proc.stderr?.on("data", (data: Buffer) => {
-      emit(stripAnsi(data.toString()));
-    });
-
-    proc.on("close", (code) => {
-      if (code === 0) {
-        emit("\nInstallation complete!\n");
-        resolve({ success: true });
-      } else {
-        resolve({ success: false, error: `Failed with exit code ${code}` });
-      }
-    });
-
-    proc.on("error", (err) => {
-      resolve({ success: false, error: err.message });
-    });
   });
 }
 

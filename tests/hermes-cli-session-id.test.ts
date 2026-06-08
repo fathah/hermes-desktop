@@ -138,6 +138,7 @@ vi.mock("../src/main/installer", () => ({
   HERMES_REPO: TEST_REPO,
   hermesCliArgs: (extra?: string[]) => ["/dev/null", ...(extra || [])],
   getEnhancedPath: () => process.env.PATH || "",
+  getHermesVersion: () => Promise.resolve("1.0.0"),
 }));
 
 vi.mock("../src/main/config", () => ({
@@ -145,6 +146,7 @@ vi.mock("../src/main/config", () => ({
   readEnv: () => ({}),
   getApiServerKey: () => "",
   getConnectionConfig: () => ({ mode: "local" as const }),
+  readDesktopConfig: () => ({}),
 }));
 
 vi.mock("../src/main/ssh-tunnel", () => ({
@@ -275,10 +277,12 @@ describe("CLI fallback session id propagation", () => {
 
     expect(apiRequests).toHaveLength(1);
     expect(apiRequests[0].headers["X-Hermes-Session-Id"]).toBe(cliSessionId);
-    expect(JSON.parse(apiRequests[0].body)).toMatchObject({
-      session_id: cliSessionId,
-      messages: [{ role: "user", content: "what time is it?" }],
-      stream: true,
+    const body0 = JSON.parse(apiRequests[0].body);
+    expect(body0.session_id).toBe(cliSessionId);
+    expect(body0.stream).toBe(true);
+    expect(body0.messages[body0.messages.length - 1]).toMatchObject({
+      role: "user",
+      content: "what time is it?",
     });
   });
 
@@ -301,9 +305,11 @@ describe("CLI fallback session id propagation", () => {
     expect(chunks.join("")).toBe("Hi from API");
     expect(spawned).toHaveLength(1);
     expect(apiRequests).toHaveLength(1);
-    expect(JSON.parse(apiRequests[0].body)).toMatchObject({
-      messages: [{ role: "user", content: "hi" }],
-      stream: true,
+    const body0 = JSON.parse(apiRequests[0].body);
+    expect(body0.stream).toBe(true);
+    expect(body0.messages[body0.messages.length - 1]).toMatchObject({
+      role: "user",
+      content: "hi",
     });
   });
 
@@ -339,9 +345,11 @@ describe("CLI fallback session id propagation", () => {
     expect(chunks.join("")).toBe("Hi from API");
     expect(spawned).toHaveLength(1);
     expect(apiRequests).toHaveLength(2);
-    expect(JSON.parse(apiRequests[1].body)).toMatchObject({
-      messages: [{ role: "user", content: "hi after restart" }],
-      stream: true,
+    const body1 = JSON.parse(apiRequests[1].body);
+    expect(body1.stream).toBe(true);
+    expect(body1.messages[body1.messages.length - 1]).toMatchObject({
+      role: "user",
+      content: "hi after restart",
     });
   });
 });
