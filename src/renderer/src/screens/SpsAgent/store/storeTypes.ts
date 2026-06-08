@@ -34,7 +34,8 @@ export type Surface =
   | "inbox"
   | "health"
   | "journal"
-  | "board";
+  | "board"
+  | "obsidian-note";
 
 // Named, toggleable sidebar sections (Notion 3.1 grammar). Order here is the
 // render order in the rail.
@@ -192,6 +193,7 @@ export interface UiSlice {
   // Bumped on every new-chat / session-select so the chat surface remounts
   // cleanly (re-captures the pending prompt, reloads the transcript).
   chatNonce: number;
+  activeObsidianPath: string | null;
 
   setPanelOpen: (v: boolean) => void;
   setRightTab: (t: RightTab) => void;
@@ -211,6 +213,7 @@ export interface UiSlice {
   setPendingChatPrompt: (text: string | null) => void;
   /** Open the AI Chats surface on a fresh chat, optionally pre-filled. */
   startNewChat: (prompt?: string) => void;
+  setActiveObsidianPath: (path: string | null) => void;
 }
 
 export interface SidebarSlice {

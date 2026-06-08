@@ -1618,6 +1618,15 @@ const hermesAPI = {
     indexedAt: number | null;
   }> => ipcRenderer.invoke("sps-index-rebuild", profile),
 
+  spsSemanticIndex: (profile?: string): Promise<any> =>
+    ipcRenderer.invoke("sps-semantic-index", profile),
+  spsSemanticSearch: (query: string, limit?: number): Promise<any> =>
+    ipcRenderer.invoke("sps-semantic-search", query, limit),
+  spsSemanticGraph: (): Promise<any> =>
+    ipcRenderer.invoke("sps-semantic-graph"),
+  spsSemanticRag: (query: string, limit?: number): Promise<any> =>
+    ipcRenderer.invoke("sps-semantic-rag", query, limit),
+
   // Shared-directory Obsidian mode: where the SPS vault lives on disk.
   spsGetVaultLocation: (
     profile?: string,

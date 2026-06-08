@@ -11,6 +11,7 @@ import {
   resetVaultLocation,
   resolveSpsVaultDir,
 } from "../sps-storage";
+import { semanticManager } from "../semantic-index";
 import { extractPdfToMarkdown } from "../pdf-extract";
 import {
   getObsidianConfig,
@@ -441,5 +442,33 @@ export function registerNotesIpc(mainWindowGetter: () => BrowserWindow | null): 
     "sps-asset-gc",
     (_event, referenced: string[], profile?: string) =>
       gcAssets(spsVaultDirFor(profile), referenced),
+  );
+
+  // Semantic Graph / txtai Integration
+  ipcMain.handle("sps-semantic-index", async (_event, profile?: string) => {
+    requireLocalWorkspace();
+    const vaultPath = spsVaultDirFor(profile);
+    return semanticManager.index(vaultPath);
+  });
+
+  ipcMain.handle(
+    "sps-semantic-search",
+    async (_event, query: string, limit?: number) => {
+      requireLocalWorkspace();
+      return semanticManager.search(query, limit);
+    },
+  );
+
+  ipcMain.handle("sps-semantic-graph", async () => {
+    requireLocalWorkspace();
+    return semanticManager.graph();
+  });
+
+  ipcMain.handle(
+    "sps-semantic-rag",
+    async (_event, query: string, limit?: number) => {
+      requireLocalWorkspace();
+      return semanticManager.rag(query, limit);
+    },
   );
 }

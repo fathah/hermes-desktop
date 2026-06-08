@@ -32,6 +32,7 @@ import {
   getIngestIntervalMin,
   INGEST_PREFS_EVENT,
 } from "./inbox/ingestPrefs";
+import { ObsidianEditor } from "./editor/ObsidianEditor";
 
 export function App() {
   useHotkeys();
@@ -144,6 +145,7 @@ export function App() {
               {surface === "health" && <HealthSurface profile="default" />}
               {surface === "graph" && <GraphView />}
               {surface === "equity" && <EquityResearch />}
+              {surface === "obsidian-note" && <ObsidianEditor />}
             </div>
           )}
         </main>

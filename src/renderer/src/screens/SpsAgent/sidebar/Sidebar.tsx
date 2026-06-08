@@ -14,6 +14,7 @@ import { SidebarAgents } from "./SidebarAgents";
 import { SidebarApps, SidebarMeetings, SidebarShared } from "./SidebarStubs";
 import { useVaultQuery } from "../hooks/useNoteIndex";
 import { INBOX_FOLDER } from "../inbox/capture";
+import { ObsidianExplorer } from "./ObsidianExplorer";
 
 interface Identity {
   workspace: string;
@@ -87,6 +88,7 @@ export function Sidebar() {
   const [over, setOver] = useState<{ id: string; where: DropWhere } | null>(
     null,
   );
+  const [obsidianOpen, setObsidianOpen] = useState(true);
   const dnd: TreeDnd = { drag, setDrag, over, setOver, onMove: movePage };
   const identity = useIdentity();
   // Live count of unprocessed captures for the Inbox badge.
@@ -306,6 +308,18 @@ export function Sidebar() {
             <span className="nav-label">Add new</span>
           </div>
         </SidebarSection>
+
+        <div className="sec-group">
+          <div className="sec" onClick={() => setObsidianOpen(!obsidianOpen)}>
+            <span className="sec-head">
+              <span className={`sec-chev ${obsidianOpen ? "open" : ""}`}>
+                <Icon name="chevR" size={12} />
+              </span>
+              <span className="sec-label">Obsidian Vault</span>
+            </span>
+          </div>
+          {obsidianOpen && <ObsidianExplorer />}
+        </div>
 
         <SidebarSection id="apps" label="Apps">
           <SidebarApps />

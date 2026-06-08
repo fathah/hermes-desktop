@@ -1131,6 +1131,10 @@ interface HermesAPI {
     links: number;
     indexedAt: number | null;
   }>;
+  spsSemanticIndex: (profile?: string) => Promise<any>;
+  spsSemanticSearch: (query: string, limit?: number) => Promise<any>;
+  spsSemanticGraph: () => Promise<any>;
+  spsSemanticRag: (query: string, limit?: number) => Promise<any>;
   spsGetVaultLocation: (
     profile?: string,
   ) => Promise<{ dir: string; isDefault: boolean; default: string }>;

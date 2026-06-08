@@ -28,6 +28,7 @@ import {
 } from "./utils";
 import { assembleVaultContext, type VaultContextUsage } from "./sps-context";
 import { resolveSpsVaultDir } from "./sps-storage";
+import { semanticManager } from "./semantic-index";
 import {
   buildIngestMessages,
   parseChangeset,
@@ -504,7 +505,23 @@ export async function spsAssistant(
       ctx.pageTitle,
       profile,
     );
-    const extraGrounding = [grounding?.content, vaultContext.text]
+    let graphRagContextText = "";
+    let graphRagNoteCount = 0;
+    if (groundInWorkspace && !isRemoteMode()) {
+      try {
+        const ragRes = await semanticManager.rag(prompt);
+        if (ragRes && Array.isArray(ragRes.context) && ragRes.context.length > 0) {
+          const docs = ragRes.context;
+          graphRagNoteCount = docs.length;
+          graphRagContextText = `Semantically related notes from the graph:\n${docs
+            .map((d: any) => `- ${d.title}: ${d.content.slice(0, 800)}`)
+            .join("\n")}`;
+        }
+      } catch (err) {
+        console.warn("[spsAssistant] GraphRAG retrieval failed:", err);
+      }
+    }
+    const extraGrounding = [grounding?.content, vaultContext.text, graphRagContextText]
       .filter(Boolean)
       .join("\n\n");
     const combinedGrounding = extraGrounding
@@ -517,7 +534,7 @@ export async function spsAssistant(
       .filter(Boolean).length;
     const used = {
       ...vaultContext.used,
-      notes: vaultContext.used.notes + pageNoteCount,
+      notes: vaultContext.used.notes + pageNoteCount + graphRagNoteCount,
     };
     const usedAnything = used.notes + used.memory + used.rules > 0;
     const context: VaultContextUsage | undefined = usedAnything

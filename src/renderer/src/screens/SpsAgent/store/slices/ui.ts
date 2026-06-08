@@ -47,6 +47,7 @@ export const createUiSlice: StateCreator<Store, [], [], UiSlice> = (set) => ({
   activeChatSession: null,
   pendingChatPrompt: null,
   chatNonce: 0,
+  activeObsidianPath: null,
 
   setPanelOpen: (v) => set({ panelOpen: v }),
   setRightTab: (t) => {
@@ -72,6 +73,7 @@ export const createUiSlice: StateCreator<Store, [], [], UiSlice> = (set) => ({
   setActiveChatSession: (id) =>
     set((s) => ({ activeChatSession: id, chatNonce: s.chatNonce + 1 })),
   setPendingChatPrompt: (text) => set({ pendingChatPrompt: text }),
+  setActiveObsidianPath: (path) => set({ activeObsidianPath: path }),
 
   startNewChat: (prompt) =>
     set((s) => ({

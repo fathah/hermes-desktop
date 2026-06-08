@@ -24,6 +24,7 @@ import { basename, extname, join, relative, sep } from "path";
 import chokidar, { type FSWatcher } from "chokidar";
 import YAML from "yaml";
 import { resolveSpsVaultDir } from "./sps-storage";
+import { semanticManager } from "./semantic-index";
 
 const NOTE_EXTENSIONS = new Set([".md", ".markdown"]);
 
@@ -370,6 +371,7 @@ export class NoteIndex {
       await this.indexAbsolute(absPath);
     }
     this.indexedAt = Date.now();
+    semanticManager.triggerIndex(this.root);
     return this.status();
   }
 
@@ -671,11 +673,16 @@ export class NoteIndex {
       ignored: (path) => path.split(sep).some((p) => p.startsWith(".")),
     });
     const onUpsert = (abs: string): void => {
-      void this.indexAbsolute(abs);
+      this.indexAbsolute(abs)
+        .then(() => {
+          semanticManager.triggerIndex(this.root);
+        })
+        .catch(() => {});
     };
     const onUnlink = (abs: string): void => {
       const relPath = relative(this.root, abs).split(sep).join("/");
       this.remove(relPath);
+      semanticManager.triggerIndex(this.root);
     };
     this.watcher.on("add", onUpsert);
     this.watcher.on("change", onUpsert);
@@ -703,6 +710,7 @@ export async function getNoteIndexForRoot(root: string): Promise<NoteIndex> {
       await mkdir(root, { recursive: true }); // better-sqlite3 needs the dir
       const idx = await NoteIndex.open(root);
       idx.startWatcher();
+      semanticManager.triggerIndex(root);
       return idx;
     })();
     instances.set(root, pending);
