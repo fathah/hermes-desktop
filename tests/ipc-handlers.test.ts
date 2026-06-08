@@ -1,13 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "fs";
+import { readFileSync, readdirSync } from "fs";
 import { join } from "path";
 
 const ROOT = join(__dirname, "..");
-const indexSrc = readFileSync(join(ROOT, "src/main/index.ts"), "utf-8");
-const preloadSrc = readFileSync(join(ROOT, "src/preload/index.ts"), "utf-8");
 
 /**
- * Extract all IPC channel names registered in main/index.ts.
+ * Extract all IPC channel names registered.
  */
 function extractIpcHandleChannels(src: string): string[] {
   const channels: string[] = [];
@@ -32,7 +30,26 @@ function extractPreloadInvokeChannels(src: string): string[] {
   return [...new Set(channels)];
 }
 
-const mainChannels = extractIpcHandleChannels(indexSrc);
+function getIpcSources(): string[] {
+  const sources: string[] = [];
+  sources.push(readFileSync(join(ROOT, "src/main/index.ts"), "utf-8"));
+
+  const ipcDir = join(ROOT, "src/main/ipc");
+  try {
+    const files = readdirSync(ipcDir);
+    for (const file of files) {
+      if (file.endsWith(".ts")) {
+        sources.push(readFileSync(join(ipcDir, file), "utf-8"));
+      }
+    }
+  } catch (err) {
+    console.warn("Failed to read src/main/ipc directory:", err);
+  }
+  return sources;
+}
+
+const mainChannels = [...new Set(getIpcSources().flatMap(src => extractIpcHandleChannels(src)))];
+const preloadSrc = readFileSync(join(ROOT, "src/preload/index.ts"), "utf-8");
 const preloadChannels = extractPreloadInvokeChannels(preloadSrc);
 
 describe("IPC Handler ↔ Preload Consistency", () => {

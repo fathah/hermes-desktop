@@ -184,15 +184,37 @@ import {
 } from "../src/main/hermes";
 
 describe("CLI fallback session id propagation", () => {
+  let originalFetch: typeof globalThis.fetch;
+
   beforeEach(() => {
     healthStatuses.length = 0;
     apiRequests.length = 0;
+    originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
+      const urlStr = String(url);
+      if (urlStr.endsWith("/health")) {
+        const status = healthStatuses.shift() ?? 503;
+        return {
+          status,
+          ok: status === 200,
+          text: async () => "",
+          json: async () => ({}),
+        } as Response;
+      }
+      return {
+        status: 404,
+        ok: false,
+        text: async () => "",
+        json: async () => ({}),
+      } as Response;
+    }) as any;
   });
 
   afterEach(() => {
     stopGateway(undefined, true);
     stopHealthPolling();
     spawned.length = 0;
+    globalThis.fetch = originalFetch;
   });
 
   it("captures the quiet CLI session id from stderr so the next desktop turn can resume it", async () => {

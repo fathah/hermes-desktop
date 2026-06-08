@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getYamlPath } from "../src/main/yaml-path";
+import { getYamlValue } from "../src/main/yaml-utils";
 
 const HERMES_LIKE_CONFIG = `
 # A real-world-shaped Hermes config.yaml fragment.
@@ -87,5 +88,62 @@ describe("getYamlPath", () => {
   it("handles CRLF line endings", () => {
     const crlf = "memory:\r\n  provider: honcho\r\n";
     expect(getYamlPath(crlf, "memory.provider")).toBe("honcho");
+  });
+});
+
+describe("getYamlValue", () => {
+  it("returns the leaf scalar for a nested dotted-path key", () => {
+    expect(getYamlValue(HERMES_LIKE_CONFIG, "memory.provider")).toBe("honcho");
+    expect(getYamlValue(HERMES_LIKE_CONFIG, "model.provider")).toBe("openai");
+    expect(getYamlValue(HERMES_LIKE_CONFIG, "model.default")).toBe("gpt-4o");
+    expect(getYamlValue(HERMES_LIKE_CONFIG, "model.base_url")).toBe(
+      "https://api.openai.com/v1",
+    );
+    expect(getYamlValue(HERMES_LIKE_CONFIG, "agent.service_tier")).toBe("");
+    expect(getYamlValue(HERMES_LIKE_CONFIG, "network.force_ipv4")).toBe("false");
+    expect(getYamlValue(HERMES_LIKE_CONFIG, "security.redact_secrets")).toBe(
+      "true",
+    );
+  });
+
+  it("disambiguates same-name keys at different nesting levels", () => {
+    expect(getYamlValue(HERMES_LIKE_CONFIG, "memory.provider")).toBe("honcho");
+    expect(getYamlValue(HERMES_LIKE_CONFIG, "model.provider")).toBe("openai");
+    expect(getYamlValue(HERMES_LIKE_CONFIG, "delegation.provider")).toBe("");
+  });
+
+  it("returns null for keys that don't exist", () => {
+    expect(getYamlValue(HERMES_LIKE_CONFIG, "memory.nonexistent")).toBeNull();
+    expect(getYamlValue(HERMES_LIKE_CONFIG, "nonexistent.provider")).toBeNull();
+    expect(getYamlValue(HERMES_LIKE_CONFIG, "")).toBeNull();
+  });
+
+  it("handles inline empty maps and lists by returning the literal", () => {
+    expect(getYamlValue(HERMES_LIKE_CONFIG, "providers")).toBe("{}");
+    expect(getYamlValue(HERMES_LIKE_CONFIG, "fallback_providers")).toBe("[]");
+  });
+
+  it("strips quotes from quoted scalar values", () => {
+    expect(getYamlValue("k: 'honcho'", "k")).toBe("honcho");
+    expect(getYamlValue('k: "honcho"', "k")).toBe("honcho");
+  });
+
+  it("strips trailing line comments", () => {
+    expect(getYamlValue("model: gpt-4  # default", "model")).toBe("gpt-4");
+  });
+
+  it("returns top-level keys without nesting", () => {
+    expect(getYamlValue("top: value\n", "top")).toBe("value");
+  });
+
+  it("returns null when an intermediate parent isn't a map", () => {
+    expect(
+      getYamlValue(HERMES_LIKE_CONFIG, "memory.provider.something"),
+    ).toBeNull();
+  });
+
+  it("handles CRLF line endings", () => {
+    const crlf = "memory:\r\n  provider: honcho\r\n";
+    expect(getYamlValue(crlf, "memory.provider")).toBe("honcho");
   });
 });

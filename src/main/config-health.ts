@@ -26,8 +26,8 @@ import {
   readEnv,
   setConfigValue,
   setEnvValue,
-  upsertBlockChild,
 } from "./config";
+import { getYamlValue } from "./yaml-utils";
 import { safeWriteFile } from "./utils";
 import { HERMES_HOME } from "./installer";
 import { expectedEnvKeyForModel } from "./installer";
@@ -597,35 +597,10 @@ function readSiblingFields(home: string): SiblingEnv {
     if (source === "env") {
       values[field] = (envMap[field] ?? "").trim();
     } else {
-      // simple dotted-path read against the YAML text — enough for
-      // the flat 1- or 2-segment paths we care about
-      values[field] = readDottedYaml(configText, field);
+      values[field] = getYamlValue(configText, field) || "";
     }
   }
   return { values, envFile, configFile };
-}
-
-/** Tiny dotted-path YAML reader. Handles the 1- and 2-segment cases
- *  we use here. Returns "" for missing values. Not a general YAML
- *  parser — duplicates a slice of what `getConfigValue` does
- *  internally, but takes a string instead of a profile so we can
- *  point it at sibling files. */
-function readDottedYaml(text: string, dotted: string): string {
-  const parts = dotted.split(".");
-  if (parts.length === 1) {
-    const re = new RegExp(`^\\s*${parts[0]}\\s*:\\s*(.+?)\\s*$`, "m");
-    const m = text.match(re);
-    return m ? m[1].replace(/^["']|["']$/g, "").trim() : "";
-  }
-  if (parts.length === 2) {
-    const blockRe = new RegExp(`^${parts[0]}:\\s*\\n((?:[ \\t]+.*\\n?)*)`, "m");
-    const blockM = text.match(blockRe);
-    if (!blockM) return "";
-    const child = new RegExp(`^[ \\t]+${parts[1]}\\s*:\\s*(.+?)\\s*$`, "m");
-    const m = blockM[1].match(child);
-    return m ? m[1].replace(/^["']|["']$/g, "").trim() : "";
-  }
-  return "";
 }
 
 /** Current Windows-side fields, read with the same readers so the
@@ -767,30 +742,7 @@ function fixSiblingHermesHomeDrift(
     if (fieldDef.source === "env") {
       setEnvValue(field, value, profile);
     } else {
-      // config.yaml field. For top-level keys (e.g. `API_SERVER_KEY`)
-      // `setConfigValue` handles both update + append. For dotted
-      // paths under an existing block (`model.api_key`,
-      // `api_server.token`), `setConfigValue` only updates — it
-      // refuses to insert a missing leaf to avoid corrupting the
-      // file. We DO want to insert here (that's the whole point of
-      // the fix), so use `upsertBlockChild` directly for the
-      // 2-segment case.
-      const segments = field.split(".");
-      if (segments.length === 1) {
-        setConfigValue(field, value, profile);
-      } else if (segments.length === 2) {
-        const { configFile } = profilePaths(profile);
-        const content = existsSync(configFile)
-          ? readFileSync(configFile, "utf-8")
-          : "";
-        const next = upsertBlockChild(content, segments[0], segments[1], value);
-        safeWriteFile(configFile, next);
-      } else {
-        return {
-          ok: false,
-          message: `Unsupported config.yaml path depth: ${field}`,
-        };
-      }
+      setConfigValue(field, value, profile);
     }
     appendConfigFixLog({
       ts: Date.now(),

@@ -14,7 +14,7 @@ import {
   profilePaths,
   safeWriteFile,
 } from "./utils";
-import { getYamlPath } from "./yaml-path";
+import { getYamlValue, setYamlValue, deleteYamlValue } from "./yaml-utils";
 import { canonicalProviderBaseUrl } from "./provider-registry";
 import {
   expectedEnvKeyForUrl,
@@ -314,17 +314,7 @@ export function validateEnvEntry(key: string, value: string): void {
   }
 }
 
-function stripYamlQuotes(raw: string): string {
-  const trimmed = raw.trim();
-  if (trimmed.length >= 2) {
-    const first = trimmed[0];
-    const last = trimmed[trimmed.length - 1];
-    if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
-      return trimmed.slice(1, -1);
-    }
-  }
-  return trimmed;
-}
+
 
 /**
  * Locate a dotted YAML path in `content` (e.g. "agent.service_tier" finds
@@ -349,169 +339,14 @@ function stripYamlQuotes(raw: string): string {
  * duplicates at the same level are ignored, matching YAML semantics for
  * mappings.
  */
-interface YamlPathHit {
-  value: string;
-  /** Absolute offset where the writer should splice the new value. */
-  valueStart: number;
-  /** Absolute offset just past the substring the writer should replace.
-   *  Excludes any trailing comment so we don't clobber `# notes`. */
-  valueEnd: number;
-}
 
-function findYamlPath(content: string, dottedPath: string): YamlPathHit | null {
-  const segments = dottedPath.split(".").filter(Boolean);
-  if (segments.length === 0) return null;
-
-  let cursor = 0;
-  let parentIndent = -1;
-
-  for (let i = 0; i < segments.length; i++) {
-    const segment = segments[i];
-    const isLast = i === segments.length - 1;
-    const found = findSegmentInBlock(content, cursor, parentIndent, segment);
-    if (!found) return null;
-
-    if (isLast) {
-      return {
-        value: stripYamlQuotes(found.rawValue),
-        valueStart: found.valueStart,
-        valueEnd: found.valueEnd,
-      };
-    }
-
-    // Descend: subsequent search continues after the segment's header
-    // line, bounded by indent > parentIndent.
-    cursor = found.afterLine;
-    parentIndent = found.indent;
-  }
-
-  return null;
-}
-
-interface SegmentMatch {
-  /** Indent length of the matched line. */
-  indent: number;
-  /** Raw value substring (between the colon's gap and any trailing comment). */
-  rawValue: string;
-  valueStart: number;
-  valueEnd: number;
-  /** Absolute offset of the byte just past the matched line's newline. */
-  afterLine: number;
-}
-
-function findSegmentInBlock(
-  content: string,
-  startAt: number,
-  parentIndent: number,
-  segment: string,
-): SegmentMatch | null {
-  // Walk lines from startAt until we leave the parent's block (a line
-  // with indent <= parentIndent). Within the block, return the first
-  // line whose key matches `segment` at the *minimum* indent > parent's
-  // — which is the depth of direct children.
-  const escapedSegment = escapeRegex(segment);
-  let directChildIndent: number | null = null;
-  let cursor = startAt;
-
-  while (cursor < content.length) {
-    const lineEnd = content.indexOf("\n", cursor);
-    const lineEndExclusive = lineEnd === -1 ? content.length : lineEnd;
-    const line = content.slice(cursor, lineEndExclusive);
-    const trimmed = line.trim();
-
-    if (trimmed === "" || trimmed.startsWith("#")) {
-      cursor =
-        lineEndExclusive === content.length
-          ? content.length
-          : lineEndExclusive + 1;
-      continue;
-    }
-
-    const indent = line.length - line.trimStart().length;
-
-    // Block boundary: a non-blank line at or shallower than the parent
-    // closes the parent's block.
-    if (indent <= parentIndent) return null;
-
-    // First non-blank child sets the canonical "direct child" indent for
-    // this block. Deeper-nested lines (grandchildren) are walked past
-    // without being treated as siblings of `segment`.
-    if (directChildIndent === null) directChildIndent = indent;
-
-    if (indent === directChildIndent) {
-      // `[ \t]*` (zero-or-more) so this works at column 0 too — the
-      // first segment of a dotted path is a top-level key with no
-      // leading whitespace. The `indent === directChildIndent` gate
-      // above already enforces depth.
-      const m = line.match(
-        new RegExp(
-          `^([ \\t]*)(${escapedSegment}):([ \\t]*)([^\\n#]*?)([ \\t]*)(#.*)?$`,
-        ),
-      );
-      if (m) {
-        const indentStr = m[1];
-        const gapBeforeValue = m[3];
-        const rawValue = m[4];
-        const keyEnd = cursor + indentStr.length + segment.length + 1; // past `:`
-        const valueStart = keyEnd + gapBeforeValue.length;
-        const valueEnd = valueStart + rawValue.length;
-        return {
-          indent: indentStr.length,
-          rawValue,
-          valueStart,
-          valueEnd,
-          afterLine:
-            lineEndExclusive === content.length
-              ? content.length
-              : lineEndExclusive + 1,
-        };
-      }
-    }
-
-    cursor =
-      lineEndExclusive === content.length
-        ? content.length
-        : lineEndExclusive + 1;
-  }
-
-  return null;
-}
-
-/**
- * Read a top-level key at column 0 (no indent). Used when a caller
- * passes a single-segment "path" — we don't want it to silently match
- * a nested occurrence with the same name.
- */
-function findTopLevelKey(content: string, key: string): YamlPathHit | null {
-  const re = new RegExp(
-    `^(${escapeRegex(key)}):([ \\t]*)([^\\n#]*?)([ \\t]*)(#.*)?$`,
-    "m",
-  );
-  const m = content.match(re);
-  if (!m || m.index === undefined) return null;
-  const gap = m[2];
-  const rawValue = m[3];
-  const lineStart = m.index;
-  const valueStart = lineStart + key.length + 1 + gap.length; // past `:` and gap
-  const valueEnd = valueStart + rawValue.length;
-  return {
-    value: stripYamlQuotes(rawValue),
-    valueStart,
-    valueEnd,
-  };
-}
 
 export function getConfigValue(key: string, profile?: string): string | null {
   const { configFile } = profilePaths(profile);
   if (!existsSync(configFile)) return null;
 
   const content = readFileSync(configFile, "utf-8");
-  // Use the indentation-aware reader so dotted keys like `memory.provider`,
-  // `network.force_ipv4`, `agent.service_tier` resolve correctly. The old
-  // regex matched only literal `dotted.key:` lines which don't exist in
-  // YAML, so nested lookups silently returned null and the UI rendered
-  // every memory provider as inactive, every nested toggle as default, etc.
-  return getYamlPath(content, key);
+  return getYamlValue(content, key);
 }
 
 export function setConfigValue(
@@ -519,11 +354,6 @@ export function setConfigValue(
   value: string,
   profile?: string,
 ): void {
-  // Invalidate the apiServerKey cache when either of the two canonical
-  // gateway-secret locations is written: the legacy top-level
-  // `API_SERVER_KEY` *or* the hermes-agent canonical `api_server.token`
-  // path. Without the second check, editing `api_server.token` via the
-  // desktop would leave the cached value stale for up to the 5s TTL.
   if (
     key === "API_SERVER_KEY" ||
     key === "api_server.token" ||
@@ -534,148 +364,12 @@ export function setConfigValue(
   const { configFile } = profilePaths(profile);
   if (!existsSync(configFile)) return;
 
-  let content = readFileSync(configFile, "utf-8");
-  const segments = key.split(".").filter(Boolean);
-  if (segments.length === 0) return;
-
-  const hit =
-    segments.length === 1
-      ? findTopLevelKey(content, segments[0])
-      : findYamlPath(content, key);
-
-  // Existing key → in-place replace, preserving surrounding whitespace
-  // and any trailing comment.
-  if (hit) {
-    content =
-      content.slice(0, hit.valueStart) +
-      `"${value}"` +
-      content.slice(hit.valueEnd);
-    safeWriteFile(configFile, content);
-    return;
-  }
-
-  // Key missing. For multi-segment paths we don't know how deep the
-  // user's existing parent block goes (or which segments exist), so
-  // avoid guessing — drop the write rather than corrupting the file.
-  // Top-level single keys are safe to append.
-  if (segments.length === 1) {
-    const sep = content.endsWith("\n") || content === "" ? "" : "\n";
-    content = `${content}${sep}${key}: "${value}"\n`;
-    safeWriteFile(configFile, content);
-  }
+  const content = readFileSync(configFile, "utf-8");
+  const updated = setYamlValue(content, key, value, { upsert: false });
+  safeWriteFile(configFile, updated);
 }
 
-/**
- * Locate the direct children of a top-level YAML block. Each child is
- * keyed by name and carries the substring offsets needed to read or
- * rewrite its value in-place.
- *
- * Why this exists: the model-field readers/writers used to run loose
- * regexes like `^\s*default:` against the whole file, which match any
- * `default:` at any indent — so a `personalities.default` description
- * would be picked up as the model name (issue #242), and toggling the
- * model in the UI would overwrite that personality string instead of
- * `model.default`. Scoping reads and writes to a named top-level block
- * fixes both directions.
- *
- * Direct (sibling) children only: keys nested deeper than one indent
- * under the block are ignored. The block ends at the first non-indented,
- * non-empty line — the next top-level key. Anchored block-header search
- * means a `model:` later in some other context (e.g. a YAML string
- * literal, or nested under another block) won't be mistaken for the
- * top-level `model:` we want.
- */
-interface BlockChild {
-  key: string;
-  /** Parsed value, with surrounding single/double quotes stripped. */
-  value: string;
-  /** Indent string of this child's line (e.g. "  "). */
-  indent: string;
-  /** Absolute offset of the child line start. */
-  lineStart: number;
-  /** Absolute offset just past the child line, including its newline. */
-  lineEnd: number;
-  /** Absolute offset of the substring after `key: ` and any leading
-   *  whitespace — where a writer should splice the new value. */
-  valueStart: number;
-  /** Absolute offset just past the substring the writer should replace
-   *  (excludes any trailing comment so we don't clobber `# notes`). */
-  valueEnd: number;
-}
 
-function readTopLevelBlock(
-  content: string,
-  blockName: string,
-): {
-  children: Map<string, BlockChild>;
-  blockBodyStart: number | null;
-  childIndent: string;
-} {
-  const startRe = new RegExp(`^${escapeRegex(blockName)}:[ \\t]*\\r?\\n`, "m");
-  const start = content.match(startRe);
-  if (!start || start.index === undefined) {
-    return { children: new Map(), blockBodyStart: null, childIndent: "  " };
-  }
-
-  const blockBodyStart = start.index + start[0].length;
-  const children = new Map<string, BlockChild>();
-  let firstChildIndent: string | null = null;
-  let cursor = blockBodyStart;
-
-  while (cursor < content.length) {
-    const lineEnd = content.indexOf("\n", cursor);
-    const lineEndExclusive = lineEnd === -1 ? content.length : lineEnd;
-    const line = content.slice(cursor, lineEndExclusive);
-
-    // Stop at a non-indented, non-empty line (= next top-level key).
-    if (line.trim() !== "" && !/^\s/.test(line)) break;
-
-    const m = line.match(
-      /^([ \t]+)([A-Za-z_][A-Za-z0-9_-]*):([ \t]*)([^\n#]*?)([ \t]*)(#.*)?$/,
-    );
-    if (m) {
-      const indent = m[1];
-      const key = m[2];
-      const gapBeforeValue = m[3];
-      const rawValue = m[4];
-      const trailingWhitespace = m[5];
-      void trailingWhitespace; // not used for replacement boundaries
-
-      // First child encountered sets the canonical indent. Anything more
-      // indented is a nested child (skip); anything less is malformed.
-      if (firstChildIndent === null) firstChildIndent = indent;
-      if (indent === firstChildIndent && !children.has(key)) {
-        const keyEnd = cursor + indent.length + key.length + 1; // past `:`
-        const valueStart = keyEnd + gapBeforeValue.length;
-        const valueEnd = valueStart + rawValue.length;
-        const lineEndWithNewline =
-          lineEndExclusive === content.length
-            ? content.length
-            : lineEndExclusive + 1;
-        children.set(key, {
-          key,
-          value: stripYamlQuotes(rawValue),
-          indent,
-          lineStart: cursor,
-          lineEnd: lineEndWithNewline,
-          valueStart,
-          valueEnd,
-        });
-      }
-    }
-
-    cursor =
-      lineEndExclusive === content.length
-        ? content.length
-        : lineEndExclusive + 1;
-  }
-
-  return {
-    children,
-    blockBodyStart,
-    childIndent: firstChildIndent ?? "  ",
-  };
-}
 
 export function getModelConfig(profile?: string): {
   provider: string;
@@ -695,12 +389,10 @@ export function getModelConfig(profile?: string): {
   if (!existsSync(configFile)) return defaults;
 
   const content = readFileSync(configFile, "utf-8");
-  const { children } = readTopLevelBlock(content, "model");
-
   const result = {
-    provider: children.get("provider")?.value || defaults.provider,
-    model: children.get("default")?.value || defaults.model,
-    baseUrl: children.get("base_url")?.value || defaults.baseUrl,
+    provider: getYamlValue(content, "model.provider") || defaults.provider,
+    model: getYamlValue(content, "model.default") || defaults.model,
+    baseUrl: getYamlValue(content, "model.base_url") || defaults.baseUrl,
   };
 
   setCache(cacheKey, result);
@@ -747,60 +439,7 @@ export function customEndpointKeyResolvable(
   return false;
 }
 
-/**
- * Replace a direct child's value inside a top-level YAML block in-place,
- * preserving the key's surrounding whitespace and any trailing comment.
- * When the child doesn't exist, insert it as the first sibling at the
- * block's existing indent. When the block itself doesn't exist, append
- * one with the new key inside.
- */
-export function upsertBlockChild(
-  content: string,
-  blockName: string,
-  key: string,
-  value: string,
-): string {
-  const { children, blockBodyStart, childIndent } = readTopLevelBlock(
-    content,
-    blockName,
-  );
 
-  const existing = children.get(key);
-  if (existing) {
-    return (
-      content.slice(0, existing.valueStart) +
-      `"${value}"` +
-      content.slice(existing.valueEnd)
-    );
-  }
-
-  if (blockBodyStart !== null) {
-    const insertion = `${childIndent}${key}: "${value}"\n`;
-    return (
-      content.slice(0, blockBodyStart) +
-      insertion +
-      content.slice(blockBodyStart)
-    );
-  }
-
-  // No block at all → append one. Match the existing file's trailing
-  // newline conventions; if the file is empty (e.g. setModelConfig is
-  // bootstrapping a fresh config.yaml) skip the separator so we don't
-  // leave a stray leading blank line.
-  const sep = content === "" || content.endsWith("\n") ? "" : "\n";
-  return `${content}${sep}${blockName}:\n  ${key}: "${value}"\n`;
-}
-
-function removeBlockChild(
-  content: string,
-  blockName: string,
-  key: string,
-): string {
-  const { children } = readTopLevelBlock(content, blockName);
-  const existing = children.get(key);
-  if (!existing) return content;
-  return content.slice(0, existing.lineStart) + content.slice(existing.lineEnd);
-}
 
 /**
  * Pick a value to write under model.api_key when the user configures a
@@ -836,29 +475,7 @@ function pickAutoApiKeyForCustomProvider(
   return trimmed || null;
 }
 
-/**
- * Locate the `model:` block in a YAML document and return the offsets that
- * bracket its body (children lines, not counting the `model:` header line).
- * Returns null when there's no `model:` block at all.
- *
- * The boundaries are needed to scope `api_key` add/update/remove operations
- * to the model block — every `auxiliary.*` subsection has its own
- * `api_key:` line, and a naive `/^api_key:/m` replace would clobber those
- * instead.
- */
-function findModelBlockBody(
-  content: string,
-): { start: number; end: number } | null {
-  const headerMatch = content.match(/^model:[^\S\r\n]*\r?\n/m);
-  if (!headerMatch) return null;
-  const start = headerMatch.index! + headerMatch[0].length;
-  // The body runs until the next line that starts at column 0 (next
-  // top-level key) or end of file.  Blank lines stay inside the block.
-  const after = content.slice(start);
-  const nextTopMatch = after.match(/^\S/m);
-  const end = nextTopMatch ? start + nextTopMatch.index! : content.length;
-  return { start, end };
-}
+
 
 export function setModelConfig(
   provider: string,
@@ -869,112 +486,35 @@ export function setModelConfig(
   invalidateCache(`mc:${profile || "default"}`);
   const { configFile } = profilePaths(profile);
 
-  // Bootstrap an empty config.yaml when it's missing — previously this
-  // function early-returned, so users on a custom HERMES_HOME where the
-  // file hadn't been created (issue #228) had their model selection
-  // silently dropped: the desktop appeared to save it but config.yaml
-  // never got written, and the Python gateway saw an empty model and
-  // returned 404s. `safeWriteFile` (used below) will create parent dirs
-  // as needed; `upsertBlockChild` produces a valid minimal YAML doc
-  // from an empty starting string.
   let content = existsSync(configFile) ? readFileSync(configFile, "utf-8") : "";
 
-  content = upsertBlockChild(content, "model", "provider", provider);
-  content = upsertBlockChild(content, "model", "default", model);
+  content = setYamlValue(content, "model.provider", provider);
+  content = setYamlValue(content, "model.default", model);
 
-  // Pick the effective base_url to write.  Precedence:
-  //   1. User-supplied `baseUrl` (the renderer passes this when the user
-  //      typed an explicit value into the "Base URL (optional)" field).
-  //   2. Otherwise, the canonical default for built-in providers
-  //      (DeepSeek → api.deepseek.com, Groq → api.groq.com, etc. — see
-  //      `provider-registry.ts`).
-  //   3. Otherwise (custom / auto / unknown provider with no baseUrl),
-  //      leave `base_url:` out of the model block entirely.
-  //
-  // Without (2), switching from a model with an explicit baseUrl (e.g.
-  // a previous OAuth Codex selection at `chatgpt.com/backend-api/codex`)
-  // to a built-in provider with no baseUrl in its library entry used to
-  // leave the stale URL in `config.yaml`. Chat then routed to the wrong
-  // host while still sending the new provider's key, producing a 401
-  // from OpenAI carrying e.g. a DeepSeek key. See issue analysis in
-  // PR description.
   const effectiveBaseUrl = baseUrl || canonicalProviderBaseUrl(provider) || "";
   if (effectiveBaseUrl) {
-    content = upsertBlockChild(content, "model", "base_url", effectiveBaseUrl);
+    content = setYamlValue(content, "model.base_url", effectiveBaseUrl);
   } else {
-    content = removeBlockChild(content, "model", "base_url");
+    content = deleteYamlValue(content, "model.base_url");
   }
 
-  // Workaround for upstream gateway bug — see pickAutoApiKeyForCustomProvider.
-  // Scope all api_key add/update/remove operations to the `model:` block —
-  // `auxiliary.*` subsections each carry their own `api_key:` line and must
-  // not be touched.
   const autoApiKey = pickAutoApiKeyForCustomProvider(
     provider,
     baseUrl,
     profile,
   );
-  const body = findModelBlockBody(content);
-  if (body) {
-    const block = content.slice(body.start, body.end);
-    const apiKeyInBlock = /^[ \t]+api_key:\s*.*\r?\n?/m;
-    let newBlock = block;
-    if (autoApiKey) {
-      if (apiKeyInBlock.test(block)) {
-        newBlock = block.replace(
-          /^([ \t]+api_key:\s*).*$/m,
-          `$1"${autoApiKey}"`,
-        );
-      } else {
-        // Insert after base_url within the block, otherwise after provider.
-        const eolMatch = block.match(/\r?\n/);
-        const eol = eolMatch ? eolMatch[0] : "\n";
-        const indentMatch = block.match(/^([ \t]+)\S/m);
-        const indent = indentMatch ? indentMatch[1] : "  ";
-        const apiKeyLine = `${indent}api_key: "${autoApiKey}"${eol}`;
-        const afterBaseUrl = block.replace(
-          /^([ \t]+base_url:\s*"[^"]*"\s*\r?\n)/m,
-          `$1${apiKeyLine}`,
-        );
-        newBlock =
-          afterBaseUrl !== block
-            ? afterBaseUrl
-            : block.replace(
-                /^([ \t]+provider:\s*"[^"]*"\s*\r?\n)/m,
-                `$1${apiKeyLine}`,
-              );
-        // Last-resort: if neither base_url nor provider lines were found
-        // (config got hand-edited), prepend api_key to the block.
-        if (newBlock === block) {
-          newBlock = `${apiKeyLine}${block}`;
-        }
-      }
-    } else if (apiKeyInBlock.test(block)) {
-      newBlock = block.replace(apiKeyInBlock, "");
-    }
-    if (newBlock !== block) {
-      content =
-        content.slice(0, body.start) + newBlock + content.slice(body.end);
-    }
+  if (autoApiKey) {
+    content = setYamlValue(content, "model.api_key", autoApiKey);
+  } else {
+    content = deleteYamlValue(content, "model.api_key");
   }
 
   // Disable smart_model_routing
-  const lines = content.split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    if (
-      /^\s*enabled:\s*(true|false)/.test(lines[i]) &&
-      i > 0 &&
-      /smart_model_routing/.test(lines[i - 1])
-    ) {
-      lines[i] = lines[i].replace(/(enabled:\s*)(true|false)/, "$1false");
-    }
-  }
-  content = lines.join("\n");
+  content = setYamlValue(content, "smart_model_routing.enabled", "false");
 
   // Enable streaming
-  const streamingRegex = /^(\s*streaming:\s*)(\S+)/m;
-  if (streamingRegex.test(content)) {
-    content = content.replace(streamingRegex, "$1true");
+  if (getYamlValue(content, "streaming") !== null) {
+    content = setYamlValue(content, "streaming", "true");
   }
 
   safeWriteFile(configFile, content);

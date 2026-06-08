@@ -201,6 +201,20 @@ export class NoteIndex {
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("synchronous = NORMAL");
     this.ensureSchema();
+    this.loadExistingPropIndexes();
+  }
+
+  private loadExistingPropIndexes(): void {
+    try {
+      const rows = this.db.prepare(
+        `SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'idx_prop_%'`
+      ).all() as Array<{ name: string }>;
+      for (const row of rows) {
+        this.ensuredPropIndexes.add(row.name);
+      }
+    } catch (err) {
+      console.error("[NoteIndex] failed to load existing expression indexes:", err);
+    }
   }
 
   /** Open (or create) the index for a workspace root and do an initial scan. */
@@ -254,6 +268,12 @@ export class NoteIndex {
     const propsJson = JSON.stringify(props ?? {});
     const targets = extractBacklinks(raw).map(normalizeName).filter(Boolean);
     const now = Date.now();
+
+    if (props && typeof props === "object") {
+      for (const key of Object.keys(props)) {
+        this.ensurePropIndex(key);
+      }
+    }
 
     const tx = this.db.transaction(() => {
       this.db
@@ -366,14 +386,18 @@ export class NoteIndex {
 
   /** Ensure an expression index over a frontmatter property exists (lazy). */
   private ensurePropIndex(prop: string): void {
-    if (this.ensuredPropIndexes.has(prop)) return;
     const safe = safeProp(prop);
     if (!safe) return;
     const name = `idx_prop_${safe.replace(/\./g, "_")}`;
-    this.db.exec(
-      `CREATE INDEX IF NOT EXISTS ${name} ON notes(json_extract(props,'$.${safe}'))`,
-    );
-    this.ensuredPropIndexes.add(prop);
+    if (this.ensuredPropIndexes.has(name)) return;
+    try {
+      this.db.exec(
+        `CREATE INDEX IF NOT EXISTS ${name} ON notes(json_extract(props,'$.${safe}'))`,
+      );
+      this.ensuredPropIndexes.add(name);
+    } catch (err) {
+      console.error(`[NoteIndex] failed to create expression index for ${prop}:`, err);
+    }
   }
 
   /** Query notes as a database view (scope + property filters + sort). */
@@ -390,7 +414,6 @@ export class NoteIndex {
     for (const f of q.filters ?? []) {
       const safe = safeProp(f.prop);
       if (!safe) continue;
-      this.ensurePropIndex(safe);
       const expr = `json_extract(props,'$.${safe}')`;
       if (f.op === "exists") {
         clauses.push(`${expr} IS NOT NULL`);
@@ -410,7 +433,6 @@ export class NoteIndex {
     if (q.sort) {
       const safe = safeProp(q.sort.prop);
       if (safe) {
-        this.ensurePropIndex(safe);
         const dir = q.sort.dir === "desc" ? "DESC" : "ASC";
         sql += ` ORDER BY json_extract(props,'$.${safe}') ${dir}`;
       }

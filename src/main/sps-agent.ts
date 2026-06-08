@@ -160,7 +160,34 @@ export async function spsUnfurl(raw: string): Promise<BookmarkMeta> {
     signal: AbortSignal.timeout(6000),
     headers: { "User-Agent": "SPSAgentBot/1.0 (+link-preview)" },
   });
-  const html = (await res.text()).slice(0, 200_000);
+
+  let html = "";
+  if (res.body) {
+    const reader = res.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let bytesRead = 0;
+    try {
+      while (bytesRead < 200_000) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          chunks.push(value);
+          bytesRead += value.length;
+        }
+      }
+    } finally {
+      try {
+        await reader.cancel();
+      } catch {
+        // ignore errors on cancel
+      }
+    }
+    const totalBuffer = Buffer.concat(chunks.map((c) => Buffer.from(c)));
+    html = totalBuffer.toString("utf-8", 0, 200_000);
+  } else {
+    html = await res.text();
+  }
+
   const finalUrl = res.url || target.href;
   const host = new URL(finalUrl).hostname.replace("www.", "");
   const title =

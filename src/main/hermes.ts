@@ -115,65 +115,65 @@ export function getApiUrl(profile?: string): string {
  * other auxiliary single-turn calls). Reuses the same gateway URL + auth header
  * logic as the streaming path. Never throws — returns `{ content, error? }`.
  */
-export function chatCompletionOnce(
+export async function chatCompletionOnce(
   messages: Array<{ role: string; content: string }>,
   profile?: string,
 ): Promise<{ content: string; error?: string }> {
-  return new Promise((resolve) => {
-    const mc = getModelConfig(profile);
-    const body = JSON.stringify({
-      model: mc.model || "hermes-agent",
-      messages,
-      stream: false,
-    });
-    const bodyBuf = Buffer.from(body, "utf-8");
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      "Content-Length": String(bodyBuf.length),
-      ...getRemoteAuthHeader(),
-    };
-    if (!isRemoteMode()) {
-      const apiServerKey = getApiServerKey(profile);
-      if (apiServerKey) headers.Authorization = `Bearer ${apiServerKey}`;
-    }
-    const url = `${getApiUrl(profile)}/v1/chat/completions`;
-    const requester = url.startsWith("https") ? https.request : http.request;
-    const req = requester(
-      url,
-      { method: "POST", headers, timeout: 120000 },
-      (res) => {
-        let data = "";
-        res.on("data", (d) => (data += d.toString()));
-        res.on("end", () => {
-          try {
-            const parsed = JSON.parse(data);
-            if (parsed.error) {
-              resolve({
-                content: "",
-                error: parsed.error.message || "Gateway error",
-              });
-              return;
-            }
-            resolve({
-              content: parsed.choices?.[0]?.message?.content || "",
-            });
-          } catch {
-            resolve({
-              content: "",
-              error: `Bad response from gateway (${res.statusCode})`,
-            });
-          }
-        });
-      },
-    );
-    req.on("error", (e) => resolve({ content: "", error: e.message }));
-    req.on("timeout", () => {
-      req.destroy();
-      resolve({ content: "", error: "Request timed out" });
-    });
-    req.write(bodyBuf);
-    req.end();
+  const mc = getModelConfig(profile);
+  const body = JSON.stringify({
+    model: mc.model || "hermes-agent",
+    messages,
+    stream: false,
   });
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...getRemoteAuthHeader(),
+  };
+  if (!isRemoteMode()) {
+    const apiServerKey = getApiServerKey(profile);
+    if (apiServerKey) headers.Authorization = `Bearer ${apiServerKey}`;
+  }
+  const url = `${getApiUrl(profile)}/v1/chat/completions`;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers,
+      body,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    const text = await res.text();
+    let parsed: any;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      return {
+        content: "",
+        error: `Bad response from gateway (${res.status})`,
+      };
+    }
+
+    if (parsed.error) {
+      return {
+        content: "",
+        error: parsed.error.message || "Gateway error",
+      };
+    }
+
+    return {
+      content: parsed.choices?.[0]?.message?.content || "",
+    };
+  } catch (err: any) {
+    if (err.name === "AbortError") {
+      return { content: "", error: "Request timed out" };
+    }
+    return { content: "", error: err.message || String(err) };
+  }
 }
 
 /**
@@ -284,25 +284,23 @@ interface ChatHandle {
 //  API Server health check
 // ────────────────────────────────────────────────────
 
-function isApiServerReady(profile?: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const url = `${getApiUrl(profile)}/health`;
-    const mod = url.startsWith("https") ? https : http;
-    const req = mod.request(
-      url,
-      { method: "GET", timeout: 1500, headers: getRemoteAuthHeader() },
-      (res) => {
-        resolve(res.statusCode === 200);
-        res.resume();
-      },
-    );
-    req.on("error", () => resolve(false));
-    req.on("timeout", () => {
-      req.destroy();
-      resolve(false);
+async function isApiServerReady(profile?: string): Promise<boolean> {
+  const url = `${getApiUrl(profile)}/health`;
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1500);
+
+    const res = await fetch(url, {
+      method: "GET",
+      headers: getRemoteAuthHeader(),
+      signal: controller.signal,
     });
-    req.end();
-  });
+    clearTimeout(timeoutId);
+
+    return res.status === 200;
+  } catch {
+    return false;
+  }
 }
 
 function delay(ms: number): Promise<void> {
