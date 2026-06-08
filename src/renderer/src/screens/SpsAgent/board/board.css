@@ -5,11 +5,11 @@
   width: 100%;
   height: 100vh;
   overflow: hidden;
-  --phosphor-glow: var(--skin-phosphor-glow, #33ff33);
-  --phosphor-bg: var(--skin-phosphor-bg, #030804);
-  --phosphor-border: var(--skin-phosphor-border, #22c55e);
-  --phosphor-dim: var(--skin-phosphor-dim, #14532d);
-  --phosphor-text: var(--skin-phosphor-text, #86efac);
+  --phosphor-glow: #33ff33;
+  --phosphor-bg: #030804;
+  --phosphor-border: #22c55e;
+  --phosphor-dim: #14532d;
+  --phosphor-text: #86efac;
   --phosphor-amber-glow: #ffb000;
   --phosphor-amber-bg: #0f0700;
   --phosphor-amber-border: #d97706;
@@ -24,11 +24,11 @@
 }
 
 .cyber-board-viewport.theme-amber {
-  --phosphor-glow: var(--skin-phosphor-glow, var(--phosphor-amber-glow));
-  --phosphor-bg: var(--skin-phosphor-bg, var(--phosphor-amber-bg));
-  --phosphor-border: var(--skin-phosphor-border, var(--phosphor-amber-border));
-  --phosphor-dim: var(--skin-phosphor-dim, var(--phosphor-amber-dim));
-  --phosphor-text: var(--skin-phosphor-text, var(--phosphor-amber-text));
+  --phosphor-glow: var(--phosphor-amber-glow);
+  --phosphor-bg: var(--phosphor-amber-bg);
+  --phosphor-border: var(--phosphor-amber-border);
+  --phosphor-dim: var(--phosphor-amber-dim);
+  --phosphor-text: var(--phosphor-amber-text);
   background-color: var(--phosphor-bg);
   color: var(--phosphor-glow);
 }
@@ -41,9 +41,9 @@
   width: 100%;
   height: 100%;
   background-image:
-    radial-gradient(circle, color-mix(in srgb, var(--phosphor-glow) 10%, transparent) 1px, transparent 1px),
-    linear-gradient(color-mix(in srgb, var(--phosphor-glow) 2%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in srgb, var(--phosphor-glow) 2%, transparent) 1px, transparent 1px);
+    radial-gradient(circle, color-mix(in srgb, var(--phosphor-glow) 20%, transparent) 1.5px, transparent 1.5px),
+    linear-gradient(color-mix(in srgb, var(--phosphor-glow) 4%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--phosphor-glow) 4%, transparent) 1px, transparent 1px);
   background-size:
     20px 20px,
     100px 100px,
@@ -238,14 +238,29 @@
 
 /* Central BBS Node styling overrides */
 .bbs-node {
-  min-width: 320px;
-  min-height: 280px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100% !important;
+  height: 100% !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background-color: var(--phosphor-bg) !important;
+  transform: none !important;
 }
 
 .bbs-node .ansi-card-body {
   display: flex;
   flex-direction: column;
   background: rgba(0, 0, 0, 0.4);
+  transition: background-image 0.2s ease;
+}
+
+.show-grid-bg .bbs-node .ansi-card-body {
+  background-image:
+    radial-gradient(circle, color-mix(in srgb, var(--phosphor-glow) 15%, transparent) 1px, transparent 1px);
+  background-size: 20px 20px;
 }
 
 .bbs-ansi-banner {
@@ -493,5 +508,69 @@
 .bbs-chat-msg.louis {
   border-left: 2px solid var(--phosphor-text);
   color: var(--phosphor-text);
+}
+
+/* Color swatches in note card */
+.bbs-color-swatches {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 6px;
+  margin-bottom: 8px;
+}
+
+.bbs-color-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.bbs-color-swatch:hover {
+  transform: scale(1.2);
+}
+
+.bbs-color-swatch.active {
+  border-color: #fff;
+  box-shadow: 0 0 4px var(--phosphor-glow);
+}
+
+/* Select element styling */
+.bbs-wire-linker {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0;
+  font-family: inherit;
+  font-size: 11px;
+}
+
+.bbs-select {
+  background: var(--phosphor-bg);
+  border: 1px solid var(--phosphor-border);
+  color: var(--phosphor-text);
+  font-family: inherit;
+  font-size: 11px;
+  padding: 2px 4px;
+  outline: none;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.bbs-select option {
+  background: var(--phosphor-bg);
+  color: var(--phosphor-text);
+}
+
+.bbs-card-content {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--phosphor-text);
+  margin-bottom: 8px;
+  opacity: 0.95;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 

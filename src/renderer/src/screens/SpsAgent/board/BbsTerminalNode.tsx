@@ -4,12 +4,14 @@ import { useStore } from "../store";
 import { useVaultQuery } from "../hooks/useNoteIndex";
 
 interface BbsTerminalNodeProps {
-  x: number;
-  y: number;
   activeTheme: "green" | "amber";
   onThemeToggle: () => void;
-  onDragStart: (e: React.PointerEvent) => void;
-  onEjectPage: (pageId: string) => void;
+  showGrid: boolean;
+  onGridToggle: () => void;
+  scanlines: boolean;
+  onScanlinesToggle: () => void;
+  homeSurface: string;
+  onSetHomeToggle: () => void;
   allPages: { id: string; meta: PageMeta }[];
 }
 
@@ -22,12 +24,14 @@ interface ChatMessage {
 }
 
 export function BbsTerminalNode({
-  x,
-  y,
   activeTheme,
   onThemeToggle,
-  onDragStart,
-  onEjectPage,
+  showGrid,
+  onGridToggle,
+  scanlines,
+  onScanlinesToggle,
+  homeSurface,
+  onSetHomeToggle,
   allPages,
 }: BbsTerminalNodeProps) {
   const [currentMode, setCurrentMode] = useState<BbsMode>("home");
@@ -42,7 +46,6 @@ export function BbsTerminalNode({
   const selectPage = useStore((s) => s.selectPage);
   const setSurface = useStore((s) => s.setSurface);
   const createJournalEntry = useStore((s) => s.createJournalEntry);
-  const setPageMeta = useStore((s) => s.setPageMeta);
   const flash = useStore((s) => s.flash);
 
   // Inbox capture hook (real captured workspace notes)
@@ -298,7 +301,7 @@ export function BbsTerminalNode({
         if (!isNaN(idx)) {
           handleToggleTask(idx);
         } else {
-          flash("Usage: toggle <task_number>");
+          flash("Usage: toggle [number]");
         }
         break;
       case "chat":
@@ -307,13 +310,13 @@ export function BbsTerminalNode({
         }
         setCurrentMode("chat");
         break;
-      case "eject":
-      case "pin": {
+      case "open": {
         const targetId = argsText.trim().toLowerCase();
         const matched = allPages.find((p) => p.id.toLowerCase().endsWith(targetId));
         if (matched) {
-          onEjectPage(matched.id);
-          flash(`Pinned ${matched.meta.title} to corkboard`);
+          selectPage(matched.id);
+          setSurface("doc");
+          flash(`Opened ${matched.meta.title} in document editor`);
         } else {
           flash("Page matching ID suffix not found");
         }
@@ -387,16 +390,61 @@ export function BbsTerminalNode({
     <div
       className="ansi-card bbs-node"
       style={{
-        transform: `translate(${x}px, ${y}px)`,
-        width: 440,
-        height: 400,
+        width: "100%",
+        height: "100%",
+        position: "absolute",
+        top: 0,
+        left: 0,
         zIndex: 50,
       }}
     >
       {/* Draggable Terminal Window Header */}
-      <div className="ansi-card-header" onPointerDown={onDragStart}>
-        <span>┌─── S P S  B B S ───┐</span>
-        <span style={{ fontSize: "10px", opacity: 0.8 }}>ONLINE [{port}]</span>
+      <div className="ansi-card-header" style={{ cursor: "default" }}>
+        {/* Preserving spaces in SPS BBS via non-breaking spaces */}
+        <span style={{ fontFamily: "monospace", whiteSpace: "pre" }}>
+          ┌─── S P S{"\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0"}B B S ───┐
+        </span>
+
+        {/* Integrated HUD Controls inside the terminal header */}
+        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <button
+            type="button"
+            className={`bbs-tui-btn ${showGrid ? "active" : ""}`}
+            onClick={onGridToggle}
+            title="Toggle Background Grid"
+            style={{ fontSize: "10px", padding: "0 4px" }}
+          >
+            [GRID]
+          </button>
+          <button
+            type="button"
+            className={`bbs-tui-btn ${scanlines ? "active" : ""}`}
+            onClick={onScanlinesToggle}
+            title="Toggle CRT Scanlines"
+            style={{ fontSize: "10px", padding: "0 4px" }}
+          >
+            [CRT]
+          </button>
+          <button
+            type="button"
+            className="bbs-tui-btn"
+            onClick={onThemeToggle}
+            title="Toggle Color Theme"
+            style={{ fontSize: "10px", padding: "0 4px" }}
+          >
+            [{activeTheme.toUpperCase()}]
+          </button>
+          <button
+            type="button"
+            className={`bbs-tui-btn ${homeSurface === "board" ? "active" : ""}`}
+            onClick={onSetHomeToggle}
+            title={homeSurface === "board" ? "Board set as home" : "Set Board as Home"}
+            style={{ fontSize: "10px", padding: "0 4px" }}
+          >
+            [SET AS HOME]
+          </button>
+          <span style={{ fontSize: "10px", opacity: 0.8, marginLeft: "8px" }}>ONLINE [{port}]</span>
+        </div>
       </div>
 
       {/* Modern Dashboard Tab Controls Row */}
@@ -421,13 +469,13 @@ export function BbsTerminalNode({
         {currentMode === "home" && (
           <div>
             <div className="bbs-ansi-banner glow-text">
-              {` ___  ___  ___  
-/ __|| _ \\/ __| 
-\\__ \\|  _/\\__ \\ 
-|___/|_|  |___/ BBS`}
+              {` ___  ___  ___      ___  ___  ___ 
+/ __|| _ \\/ __|    | _ \\| _ \\/ __|
+\\__ \\|  _/\\__ \\    | _ <| _ <\\__ \\
+|___/|_|  |___/    |___/|___/|___/`}
             </div>
             <div style={{ fontSize: "11px", lineHeight: "1.4", color: "var(--phosphor-text)" }}>
-              WELCOME TO THE SPS WORKSPACE TERMINAL v2.2.0
+              WELCOME TO THE SPS WORKSPACE TERMINAL v3.0.0
               <br />
               ESTABLISHED: 2026-06-08 LOCAL
               <br />
@@ -614,25 +662,12 @@ export function BbsTerminalNode({
             </div>
             <div className="bbs-list-container">
               {allPages.map((p) => {
-                const isPinned = p.meta.x !== undefined && p.meta.y !== undefined;
                 return (
                   <div key={p.id} className="bbs-list-item">
                     <span className="bbs-item-text" style={{ fontWeight: p.id === "home" ? "bold" : "normal" }}>
                       {p.meta.icon} {p.meta.title}
                     </span>
                     <div className="bbs-item-actions">
-                      <span
-                        className="bbs-action-link"
-                        onClick={() => {
-                          if (isPinned) {
-                            setPageMeta(p.id, { x: undefined, y: undefined, connections: undefined });
-                          } else {
-                            onEjectPage(p.id);
-                          }
-                        }}
-                      >
-                        {isPinned ? "[UNPIN]" : "[PIN ON BOARD]"}
-                      </span>
                       <span className="bbs-action-link" onClick={() => { selectPage(p.id); setSurface("doc"); }}>
                         [OPEN EDITOR]
                       </span>
@@ -659,9 +694,6 @@ export function BbsTerminalNode({
             <br />
             --------------------------------------------------
             <div style={{ marginTop: "8px", display: "flex", gap: "10px" }}>
-              <button type="button" className="bbs-tui-btn" onClick={onThemeToggle}>
-                Toggle Green/Amber Theme
-              </button>
               <button type="button" className="bbs-tui-btn" onClick={() => setChatLogs([])}>
                 Wipe Chat History
               </button>

@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect } from "react";
+import { useMemo } from "react";
 import type { PageMeta } from "../types";
+import { useStore } from "../store";
 
 interface AnsiWindowCardProps {
   id: string;
@@ -8,12 +9,12 @@ interface AnsiWindowCardProps {
   y: number;
   width?: number;
   height?: number;
-  color?: string;
   onDragStart: (e: React.PointerEvent, id: string) => void;
   onSelect: (id: string) => void;
   onUpdateMeta: (id: string, patch: Partial<PageMeta>) => void;
   onRemove: (id: string) => void;
   onAddConnection: (sourceId: string, targetId: string) => void;
+  allPages: { id: string; meta: PageMeta }[];
 }
 
 export function AnsiWindowCard({
@@ -22,94 +23,71 @@ export function AnsiWindowCard({
   x,
   y,
   width = 280,
-  height = 180,
+  height = 240, // Expanded height to hold card content summaries and visual selectors
   onDragStart,
   onSelect,
   onUpdateMeta,
   onRemove,
   onAddConnection,
+  allPages,
 }: AnsiWindowCardProps) {
-  const [cmdInput, setCmdInput] = useState("");
-  const [consoleLogs, setConsoleLogs] = useState<string[]>([]);
-  const logsEndRef = useRef<HTMLDivElement>(null);
+  // Query actual blocks from global Zustand store
+  const docs = useStore((s) => s.docs);
+  const blocks = docs[id] || [];
 
-  useEffect(() => {
-    logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [consoleLogs]);
-
-  const handleCommandSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const cmd = cmdInput.trim();
-    if (!cmd) return;
-
-    setConsoleLogs((prev) => [...prev, `> ${cmd}`]);
-    setCmdInput("");
-
-    const args = cmd.split(" ");
-    const primary = args[0].toLowerCase();
-
-    switch (primary) {
-      case "help":
-        setConsoleLogs((prev) => [
-          ...prev,
-          "Commands: color [c], wire [id], rename [name], clear, rm",
-        ]);
-        break;
-      case "color":
-        if (args[1]) {
-          onUpdateMeta(id, { color: args[1] });
-          setConsoleLogs((prev) => [...prev, `Color updated to ${args[1]}`]);
-        } else {
-          setConsoleLogs((prev) => [...prev, "Usage: color <name/hex>"]);
-        }
-        break;
-      case "wire":
-      case "connect":
-        if (args[1]) {
-          onAddConnection(id, args[1]);
-          setConsoleLogs((prev) => [...prev, `Wired to ${args[1]}`]);
-        } else {
-          setConsoleLogs((prev) => [...prev, "Usage: wire <nodeId>"]);
-        }
-        break;
-      case "rename": {
-        const newTitle = args.slice(1).join(" ");
-        if (newTitle) {
-          onUpdateMeta(id, { title: newTitle });
-          setConsoleLogs((prev) => [...prev, `Renamed to: ${newTitle}`]);
-        } else {
-          setConsoleLogs((prev) => [...prev, "Usage: rename <new title>"]);
-        }
-        break;
-      }
-      case "clear":
-        setConsoleLogs([]);
-        break;
-      case "rm":
-      case "delete":
-        onRemove(id);
-        break;
-      default:
-        setConsoleLogs((prev) => [...prev, `Unknown command: ${primary}`]);
-        break;
-    }
-  };
+  // Extract the first few text blocks to show note contents
+  const textSummary = useMemo(() => {
+    const textBlocks = blocks.filter(
+      (b) =>
+        b.text &&
+        (b.type === "p" ||
+          b.type === "h1" ||
+          b.type === "h2" ||
+          b.type === "h3" ||
+          b.type === "quote" ||
+          b.type === "callout" ||
+          b.type === "todo" ||
+          b.type === "li" ||
+          b.type === "numli")
+    );
+    if (textBlocks.length === 0) return "No content.";
+    return textBlocks
+      .map((b) => (b.type === "todo" ? `${b.done ? "☑" : "☐"} ${b.text}` : b.text))
+      .slice(0, 3)
+      .join("\n");
+  }, [blocks]);
 
   const cleanTitle = meta.title || "Untitled Note";
+  const activeColor = meta.color || "green";
+
+  // Color options for swatches
+  const colorOptions = [
+    { name: "green", hex: "#22c55e" },
+    { name: "amber", hex: "#d97706" },
+    { name: "red", hex: "#ef4444" },
+    { name: "blue", hex: "#3b82f6" },
+  ];
 
   return (
     <div
-      className="ansi-card"
+      className={`ansi-card border-${activeColor}`}
       style={{
         transform: `translate(${x}px, ${y}px)`,
         width,
         height,
         zIndex: 20,
+        // Override border-color dynamically if a theme color is active
+        borderColor: colorOptions.find((c) => c.name === activeColor)?.hex,
+        boxShadow: `0 0 15px ${colorOptions.find((c) => c.name === activeColor)?.hex}33`,
       }}
     >
+      {/* Draggable Header */}
       <div
         className="ansi-card-header"
         onPointerDown={(e) => onDragStart(e, id)}
+        style={{
+          backgroundColor: `${colorOptions.find((c) => c.name === activeColor)?.hex}22`,
+        }}
       >
         <span>
           [{id.slice(-4).toUpperCase()}] {cleanTitle.slice(0, 16)}
@@ -123,6 +101,7 @@ export function AnsiWindowCard({
               color: "inherit",
               cursor: "pointer",
               padding: "0 2px",
+              fontSize: "10px",
             }}
             onClick={(e) => {
               e.stopPropagation();
@@ -139,6 +118,7 @@ export function AnsiWindowCard({
               color: "inherit",
               cursor: "pointer",
               padding: "0 2px",
+              fontSize: "10px",
             }}
             onClick={(e) => {
               e.stopPropagation();
@@ -151,82 +131,74 @@ export function AnsiWindowCard({
         </div>
       </div>
 
+      {/* Note Body with Content and Visual Controls */}
       <div
         className="ansi-card-body scroll"
         onDoubleClick={() => onSelect(id)}
-        style={{ cursor: "pointer" }}
-        title="Double-click to open in document editor"
+        style={{ display: "flex", flexDirection: "column", gap: "8px" }}
       >
-        {consoleLogs.length === 0 ? (
-          <div
-            style={{
-              color: "var(--phosphor-text)",
-              fontSize: "12px",
-              lineHeight: "1.4",
+        {/* Title and Icon */}
+        <div style={{ fontWeight: "bold", fontSize: "12px", display: "flex", gap: "4px" }}>
+          <span>{meta.icon || "📄"}</span>
+          <span>{cleanTitle}</span>
+        </div>
+
+        {/* Real Content Preview */}
+        <div className="bbs-card-content">{textSummary}</div>
+
+        {/* Color Swatch Selectors */}
+        <div style={{ marginTop: "auto" }}>
+          <div style={{ fontSize: "10px", opacity: 0.6, marginBottom: "3px" }}>CARD THEME COLOR:</div>
+          <div className="bbs-color-swatches">
+            {colorOptions.map((c) => (
+              <button
+                key={c.name}
+                type="button"
+                className={`bbs-color-swatch ${activeColor === c.name ? "active" : ""}`}
+                style={{ backgroundColor: c.hex }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onUpdateMeta(id, { color: c.name });
+                }}
+                title={`Change color to ${c.name}`}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Visual Wire Linker Dropdown */}
+        <div className="bbs-wire-linker" onClick={(e) => e.stopPropagation()}>
+          <span style={{ fontSize: "10px", opacity: 0.6 }}>WIRE LINK TO:</span>
+          <select
+            className="bbs-select"
+            value=""
+            onChange={(e) => {
+              if (e.target.value) {
+                onAddConnection(id, e.target.value);
+              }
             }}
           >
-            <div style={{ fontWeight: "bold", marginBottom: "4px" }}>
-              {meta.icon || "📄"} {cleanTitle}
-            </div>
-            <div
-              style={{
-                color: "rgba(255,255,255,0.4)",
-                fontSize: "11px",
-                marginBottom: "8px",
-              }}
-            >
-              {
-                "Type 'wire <nodeId>' to connect nodes. Double-click grid to eject a page."
-              }
-            </div>
-            {meta.tags && meta.tags.length > 0 && (
-              <div
-                style={{
-                  display: "flex",
-                  gap: "4px",
-                  flexWrap: "wrap",
-                  marginTop: "4px",
-                }}
-              >
-                {meta.tags.map((t) => (
-                  <span
-                    key={t}
-                    style={{
-                      color: "var(--phosphor-glow)",
-                      fontSize: "10px",
-                      background: "rgba(0,255,0,0.1)",
-                      padding: "1px 4px",
-                    }}
-                  >
-                    #{t}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div style={{ fontSize: "11px", fontFamily: "monospace" }}>
-            {consoleLogs.map((log, index) => (
-              <div key={index} style={{ marginBottom: "2px" }}>
-                {log}
-              </div>
-            ))}
-            <div ref={logsEndRef} />
-          </div>
-        )}
-      </div>
+            <option value="">-- select connection node --</option>
+            {allPages
+              .filter((p) => p.id !== id)
+              .map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.meta.icon || "📄"} {p.meta.title || p.id}
+                </option>
+              ))}
+          </select>
+        </div>
 
-      <form onSubmit={handleCommandSubmit} className="ansi-card-prompt">
-        <span>&gt;</span>
-        <input
-          type="text"
-          value={cmdInput}
-          onChange={(e) => setCmdInput(e.target.value)}
-          placeholder="type cmd..."
-          autoCapitalize="off"
-          autoComplete="off"
-        />
-      </form>
+        {/* Action Links */}
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", borderTop: "1px dashed rgba(255, 255, 255, 0.15)", paddingTop: "4px" }}>
+          <span className="bbs-action-link" onClick={() => onSelect(id)}>
+            OPEN IN EDITOR
+          </span>
+          <span className="bbs-action-link" style={{ color: "#ef4444" }} onClick={() => onRemove(id)}>
+            REMOVE
+          </span>
+        </div>
+      </div>
     </div>
   );
 }

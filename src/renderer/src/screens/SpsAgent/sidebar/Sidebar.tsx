@@ -165,7 +165,7 @@ export function Sidebar() {
           onClick={() => setSurface("board")}
         >
           <Icon name="code" size={17} />
-          <span className="nav-label">BBS Board</span>
+          <span className="nav-label">SPS BBS</span>
         </div>
         <div
           className={`nav-item ${surface === "chats" ? "active" : ""}`}
