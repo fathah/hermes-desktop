@@ -13,6 +13,7 @@ export type Tweaks = {
   width: "narrow" | "comfortable" | "wide" | "full";
   density: "comfortable" | "compact";
   bodyfont: "sans" | "serif" | "mono";
+  homeSurface: "doc" | "cockpit" | "board" | "chats" | "inbox";
 };
 
 export const TWEAK_DEFAULTS: Tweaks = {
@@ -23,6 +24,7 @@ export const TWEAK_DEFAULTS: Tweaks = {
   width: "comfortable",
   density: "comfortable",
   bodyfont: "sans",
+  homeSurface: "doc",
 };
 
 export const ACCENTS = ["#C79400", "#1B4F8A", "#A1202C", "#1F6B3A", "#5A3A8A"];

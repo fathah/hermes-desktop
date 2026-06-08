@@ -60,53 +60,29 @@ export function HealthSurface({
     (report?.stale.length ?? 0);
 
   return (
-    <div style={{ maxWidth: 760, margin: "0 auto", padding: "32px 24px" }}>
-      <header
-        style={{
-          marginBottom: 20,
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-        }}
-      >
-        <h1
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            fontSize: 24,
-            margin: 0,
-            flex: 1,
-          }}
-        >
+    <div className="health-surface">
+      <header className="health-header">
+        <h1 className="health-title">
           <Icon name="check" size={22} />
           Vault health
         </h1>
         <button
-          className="btn-primary"
+          className="health-recheck-btn"
           disabled={busy}
           onClick={() => void run()}
-          style={{
-            padding: "7px 14px",
-            borderRadius: 7,
-            border: "none",
-            background: "var(--accent, #2d7ff9)",
-            color: "#fff",
-            cursor: busy ? "default" : "pointer",
-          }}
         >
           {busy ? "Checking…" : "Re-check"}
         </button>
       </header>
 
       {error && (
-        <div style={{ color: "var(--danger, #c0392b)", fontSize: 13 }}>
+        <div className="health-error">
           {error}
         </div>
       )}
 
       {report && total === 0 && !error && (
-        <div style={{ color: "var(--tx-4)", padding: "24px 0" }}>
+        <div className="health-empty">
           Everything looks healthy — no orphans, broken links, or stale pages.
         </div>
       )}
@@ -119,12 +95,12 @@ export function HealthSurface({
             count={report.brokenLinks.length}
           >
             {report.brokenLinks.map((b, i) => (
-              <li key={`${b.source}-${b.target}-${i}`} style={rowStyle}>
-                <button style={linkStyle} onClick={() => open(b.source)}>
+              <li key={`${b.source}-${b.target}-${i}`} className="health-row">
+                <button className="health-link" onClick={() => open(b.source)}>
                   {pageIdFromPath(b.source)}
                 </button>
-                <span style={{ color: "var(--tx-4)" }}>→</span>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>
+                <span className="health-arrow">→</span>
+                <span className="health-mono-text">
                   [[{b.target}]]
                 </span>
               </li>
@@ -137,8 +113,8 @@ export function HealthSurface({
             count={report.orphans.length}
           >
             {report.orphans.map((p) => (
-              <li key={p} style={rowStyle}>
-                <button style={linkStyle} onClick={() => open(p)}>
+              <li key={p} className="health-row">
+                <button className="health-link" onClick={() => open(p)}>
                   {pageIdFromPath(p)}
                 </button>
               </li>
@@ -151,8 +127,8 @@ export function HealthSurface({
             count={report.stale.length}
           >
             {report.stale.map((p) => (
-              <li key={p} style={rowStyle}>
-                <button style={linkStyle} onClick={() => open(p)}>
+              <li key={p} className="health-row">
+                <button className="health-link" onClick={() => open(p)}>
                   {pageIdFromPath(p)}
                 </button>
               </li>
@@ -176,59 +152,19 @@ function LintGroup({
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <section style={{ marginBottom: 22 }}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "baseline",
-          gap: 8,
-          marginBottom: 8,
-        }}
-      >
-        <span style={{ fontWeight: 600 }}>{label}</span>
-        <span
-          style={{
-            background: "var(--bd-1, rgba(0,0,0,0.06))",
-            borderRadius: 10,
-            padding: "1px 8px",
-            fontSize: 12,
-          }}
-        >
-          {count}
-        </span>
-        <span style={{ color: "var(--tx-4)", fontSize: 12 }}>{hint}</span>
+    <section className="health-section">
+      <div className="health-sec-header">
+        <span className="health-sec-label">{label}</span>
+        <span className="health-sec-count">{count}</span>
+        <span className="health-sec-hint">{hint}</span>
       </div>
       {count === 0 ? (
-        <div style={{ color: "var(--tx-4)", fontSize: 13 }}>None</div>
+        <div className="health-sec-hint">None</div>
       ) : (
-        <ul
-          style={{
-            listStyle: "none",
-            margin: 0,
-            padding: 0,
-            display: "flex",
-            flexDirection: "column",
-            gap: 4,
-          }}
-        >
+        <ul className="health-list">
           {children}
         </ul>
       )}
     </section>
   );
 }
-
-const rowStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 8,
-};
-
-const linkStyle: React.CSSProperties = {
-  border: "none",
-  background: "transparent",
-  color: "var(--accent, #2d7ff9)",
-  cursor: "pointer",
-  padding: 0,
-  fontSize: 14,
-};

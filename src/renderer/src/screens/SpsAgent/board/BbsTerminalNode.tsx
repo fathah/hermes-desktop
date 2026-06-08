@@ -30,25 +30,51 @@ export function BbsTerminalNode({
     "CHOOSE MENU OPTION OR TYPE COMMAND AT PROMPT:",
   ]);
 
+  const [profileInfo, setProfileInfo] = useState<{
+    profileName: string;
+    model: string;
+    gatewayRunning: boolean;
+  }>({
+    profileName: "default",
+    model: "Llama-3-Hermes",
+    gatewayRunning: true,
+  });
+
   const outputEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     outputEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [terminalLines]);
 
+  useEffect(() => {
+    const api = (window as any).hermesAPI;
+    if (!api?.listProfiles) return;
+    api
+      .listProfiles()
+      .then((profiles: any[]) => {
+        const active = profiles.find((p) => p.isActive) || profiles[0];
+        if (active) {
+          setProfileInfo({
+            profileName: active.name,
+            model: active.model,
+            gatewayRunning: active.gatewayRunning,
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const printLine = (msg: string) => {
     setTerminalLines((prev) => [...prev, msg]);
   };
 
-  const handleCommand = (e: React.FormEvent) => {
-    e.preventDefault();
-    const cmd = inputVal.trim();
-    if (!cmd) return;
+  const executeCommand = (cmd: string) => {
+    const cleanCmd = cmd.trim();
+    if (!cleanCmd) return;
 
-    printLine(`> ${cmd}`);
-    setInputVal("");
+    printLine(`> ${cleanCmd}`);
 
-    const parts = cmd.toLowerCase().split(" ");
+    const parts = cleanCmd.toLowerCase().split(" ");
     const action = parts[0];
 
     switch (action) {
@@ -71,7 +97,8 @@ export function BbsTerminalNode({
         setTerminalLines((prev) => [
           ...prev,
           "--- ACTIVE SWARM DIRECTORY ---",
-          "[PROFILE] Default: Running model Llama-3-Hermes",
+          `[PROFILE] ${profileInfo.profileName}: Running model ${profileInfo.model}`,
+          `[GATEWAY] Status: ${profileInfo.gatewayRunning ? "ONLINE" : "OFFLINE"}`,
           "[AGENT] Louis (Principal) - STATUS: Idle, monitoring vault",
           "[AGENT] Researcher - STATUS: Ingestion pipeline active",
           "[SYSTEM] SQLite Note Indexer - Rebuilt successfully",
@@ -106,7 +133,9 @@ export function BbsTerminalNode({
       case "user":
         onThemeToggle();
         printLine(
-          `Monochrome display theme toggled. Active: ${activeTheme === "green" ? "Amber" : "Green"}`,
+          `Monochrome display theme toggled. Active: ${
+            activeTheme === "green" ? "Amber" : "Green"
+          }`,
         );
         break;
       case "eject": {
@@ -134,29 +163,29 @@ export function BbsTerminalNode({
         setTerminalLines([]);
         break;
       default:
-        if (cmd.length === 1) {
-          const char = cmd.toLowerCase();
-          if (char === "m") {
-            setInputVal("message");
-            break;
-          }
-          if (char === "f") {
-            setInputVal("files");
-            break;
-          }
-          if (char === "s") {
-            setInputVal("sysop");
-            break;
-          }
-          if (char === "u") {
-            setInputVal("user");
-            break;
-          }
-        }
         printLine(
           `Unknown terminal command: ${action}. Type 'help' for support.`,
         );
         break;
+    }
+  };
+
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cmd = inputVal.trim();
+    if (!cmd) return;
+    executeCommand(cmd);
+    setInputVal("");
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    const clean = val.trim().toLowerCase();
+    if (clean === "m" || clean === "f" || clean === "s" || clean === "u") {
+      executeCommand(clean);
+      setInputVal("");
+    } else {
+      setInputVal(val);
     }
   };
 
@@ -166,7 +195,7 @@ export function BbsTerminalNode({
       style={{
         transform: `translate(${x}px, ${y}px)`,
         width: 380,
-        height: 280,
+        height: 350,
         zIndex: 50,
       }}
     >
@@ -200,12 +229,64 @@ export function BbsTerminalNode({
         </div>
       </div>
 
-      <form onSubmit={handleCommand} className="ansi-card-prompt">
+      <div
+        style={{
+          display: "flex",
+          gap: "8px",
+          padding: "4px 8px",
+          borderTop: "1px dashed var(--phosphor-border)",
+          fontSize: "11px",
+          fontFamily: "monospace",
+          background: "rgba(0, 0, 0, 0.2)",
+          flexWrap: "wrap",
+        }}
+      >
+        <span style={{ color: "var(--phosphor-text)", opacity: 0.6 }}>
+          TUI:
+        </span>
+        <button
+          type="button"
+          onClick={() => executeCommand("message")}
+          className="bbs-tui-btn"
+        >
+          [M]essages
+        </button>
+        <button
+          type="button"
+          onClick={() => executeCommand("files")}
+          className="bbs-tui-btn"
+        >
+          [F]iles
+        </button>
+        <button
+          type="button"
+          onClick={() => executeCommand("sysop")}
+          className="bbs-tui-btn"
+        >
+          [S]ysop
+        </button>
+        <button
+          type="button"
+          onClick={() => executeCommand("user")}
+          className="bbs-tui-btn"
+        >
+          [U]ser Theme
+        </button>
+        <button
+          type="button"
+          onClick={() => executeCommand("clear")}
+          className="bbs-tui-btn"
+        >
+          [C]lear
+        </button>
+      </div>
+
+      <form onSubmit={handleFormSubmit} className="ansi-card-prompt">
         <span>BBS&gt;</span>
         <input
           type="text"
           value={inputVal}
-          onChange={(e) => setInputVal(e.target.value)}
+          onChange={handleInputChange}
           placeholder="type m, f, s, u or command..."
           autoComplete="off"
           autoCapitalize="off"

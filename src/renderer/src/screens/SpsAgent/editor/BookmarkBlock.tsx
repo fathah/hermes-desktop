@@ -13,21 +13,25 @@ interface Props {
 export function BookmarkBlock({ block, setType }: Props) {
   const [url, setUrl] = useState("");
 
-  if (block.bm) {
+  const bm = block.bm;
+  if (bm) {
     return (
       <a
         className="b-bookmark"
-        href={block.bm.url}
+        href={bm.url}
         target="_blank"
         rel="noreferrer"
-        onClick={(e) => e.preventDefault()}
+        onClick={(e) => {
+          e.preventDefault();
+          void window.hermesAPI.openExternal(bm.url);
+        }}
       >
         <div className="bm-main">
-          <div className="bm-title">{block.bm.title}</div>
-          <div className="bm-desc">{block.bm.desc}</div>
+          <div className="bm-title">{bm.title}</div>
+          <div className="bm-desc">{bm.desc}</div>
           <div className="bm-url">
             <span className="fav"></span>
-            {block.bm.url}
+            {bm.url}
           </div>
         </div>
         <div className="bm-thumb">

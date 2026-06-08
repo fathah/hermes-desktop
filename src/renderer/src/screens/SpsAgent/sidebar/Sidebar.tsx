@@ -67,6 +67,7 @@ export function Sidebar() {
   const openJournal = useStore((s) => s.openJournal);
   const startNewChat = useStore((s) => s.startNewChat);
   const setResearchOpen = useStore((s) => s.setResearchOpen);
+  const homeSurface = useStore((s) => s.t.homeSurface ?? "doc");
   // Selecting a page always returns to the document surface.
   const selectDoc = (id: string): void => {
     selectPage(id);
@@ -133,8 +134,19 @@ export function Sidebar() {
           <span className="nav-kbd">⌘K</span>
         </div>
         <div
-          className={`nav-item ${activeId === "home" && surface === "doc" ? "active" : ""}`}
-          onClick={() => selectDoc("home")}
+          className={`nav-item ${
+            (homeSurface === "doc" && activeId === "home" && surface === "doc") ||
+            (homeSurface !== "doc" && surface === homeSurface)
+              ? "active"
+              : ""
+          }`}
+          onClick={() => {
+            if (homeSurface === "doc") {
+              selectDoc("home");
+            } else {
+              setSurface(homeSurface);
+            }
+          }}
         >
           <Icon name="home" size={17} />
           <span className="nav-label">Home</span>

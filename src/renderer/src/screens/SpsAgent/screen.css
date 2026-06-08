@@ -242,3 +242,181 @@
   color: var(--ink-1);
   padding: 2px 4px;
 }
+
+/* ==========================================================================
+   Health Surface Styling
+   ========================================================================== */
+.sps-scope .health-surface {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+.sps-scope .health-header {
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sps-scope .health-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-24, 24px);
+  margin: 0;
+  flex: 1;
+  color: var(--ink-1);
+}
+
+.sps-scope .health-recheck-btn {
+  padding: 7px 14px;
+  border-radius: var(--r-2, 7px);
+  border: none;
+  background: var(--accent, #2d7ff9);
+  color: #fff;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--fs-13, 13px);
+  transition: opacity var(--dur-1) var(--ease-out);
+}
+
+.sps-scope .health-recheck-btn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.sps-scope .health-error {
+  color: var(--danger, #c0392b);
+  font-size: var(--fs-13, 13px);
+  margin-bottom: 12px;
+}
+
+.sps-scope .health-empty {
+  color: var(--ink-3, var(--tx-4));
+  padding: 24px 0;
+  font-size: var(--fs-13, 13px);
+}
+
+.sps-scope .health-section {
+  margin-bottom: 22px;
+}
+
+.sps-scope .health-sec-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.sps-scope .health-sec-label {
+  font-weight: 600;
+  color: var(--ink-1);
+}
+
+.sps-scope .health-sec-count {
+  background: var(--bd-1, rgba(0, 0, 0, 0.06));
+  border-radius: 10px;
+  padding: 1px 8px;
+  font-size: var(--fs-12, 12px);
+  color: var(--ink-2);
+}
+
+.sps-scope .health-sec-hint {
+  color: var(--ink-3, var(--tx-4));
+  font-size: var(--fs-12, 12px);
+}
+
+.sps-scope .health-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sps-scope .health-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sps-scope .health-link {
+  border: none;
+  background: transparent;
+  color: var(--accent, #2d7ff9);
+  cursor: pointer;
+  padding: 0;
+  font-size: var(--fs-14, 14px);
+  font-family: inherit;
+  text-align: left;
+}
+
+.sps-scope .health-link:hover {
+  text-decoration: underline;
+}
+
+.sps-scope .health-arrow {
+  color: var(--ink-3, var(--tx-4));
+}
+
+.sps-scope .health-mono-text {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--fs-12, 12px);
+  color: var(--ink-1);
+}
+
+/* ==========================================================================
+   Inbox Surface Extras
+   ========================================================================== */
+.sps-scope .inbox-error {
+  color: var(--danger-fg, var(--sukhi-red, #a1202c));
+  font-size: var(--fs-13);
+  margin-top: 8px;
+}
+
+.sps-scope .inbox-badge {
+  background: var(--surface-sunk);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 1px 8px;
+  font-size: var(--fs-12);
+  color: var(--ink-2);
+}
+
+.sps-scope .inbox-footer-container {
+  margin-top: 28px;
+  padding-top: 14px;
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  gap: 16px;
+  font-size: var(--fs-13, 12.5px);
+}
+
+.sps-scope .inbox-footer-btn {
+  border: none;
+  background: transparent;
+  color: var(--sukhi-gold-deep);
+  cursor: pointer;
+  padding: 0;
+  font-size: var(--fs-13, 12.5px);
+  font-family: inherit;
+}
+
+.sps-scope .inbox-footer-btn:hover {
+  text-decoration: underline;
+}
+
+.sps-scope .inbox-settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sps-scope .inbox-settings-title {
+  border-bottom: 1px solid var(--hairline);
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+}
+

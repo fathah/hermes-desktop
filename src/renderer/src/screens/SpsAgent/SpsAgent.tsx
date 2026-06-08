@@ -21,6 +21,7 @@ import "./styles/notion.css";
 import "./styles/v3.css";
 import "./styles/ask.css";
 import "./styles/equity.css";
+import "./styles/tweaks.css";
 import "./screen.css";
 import { App } from "./App";
 import { useStore, hydrateWorkspace } from "./store";

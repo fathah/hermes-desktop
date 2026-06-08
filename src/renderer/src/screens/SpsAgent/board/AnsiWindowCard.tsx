@@ -115,25 +115,48 @@ export function AnsiWindowCard({
           [{id.slice(-4).toUpperCase()}] {cleanTitle.slice(0, 16)}
           {cleanTitle.length > 16 ? "..." : ""}
         </span>
-        <button
-          style={{
-            background: "transparent",
-            border: "none",
-            color: "inherit",
-            cursor: "pointer",
-            padding: "0 4px",
-          }}
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove(id);
-          }}
-          title="Remove from board"
-        >
-          [X]
-        </button>
+        <div style={{ display: "flex", gap: "6px" }}>
+          <button
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "inherit",
+              cursor: "pointer",
+              padding: "0 2px",
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect(id);
+            }}
+            title="Open note in editor"
+          >
+            [EDIT]
+          </button>
+          <button
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "inherit",
+              cursor: "pointer",
+              padding: "0 2px",
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove(id);
+            }}
+            title="Remove from board"
+          >
+            [X]
+          </button>
+        </div>
       </div>
 
-      <div className="ansi-card-body scroll" onClick={() => onSelect(id)}>
+      <div
+        className="ansi-card-body scroll"
+        onDoubleClick={() => onSelect(id)}
+        style={{ cursor: "pointer" }}
+        title="Double-click to open in document editor"
+      >
         {consoleLogs.length === 0 ? (
           <div
             style={{

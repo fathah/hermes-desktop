@@ -323,3 +323,21 @@
   background: var(--phosphor-dim);
   color: var(--phosphor-glow);
 }
+
+.bbs-tui-btn {
+  background: transparent;
+  border: none;
+  border-bottom: 1px dotted var(--phosphor-border);
+  color: var(--phosphor-text);
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  padding: 0 2px;
+  transition: all 0.2s ease;
+}
+
+.bbs-tui-btn:hover {
+  color: var(--phosphor-glow);
+  border-bottom-style: solid;
+  text-shadow: 0 0 4px var(--phosphor-glow);
+}

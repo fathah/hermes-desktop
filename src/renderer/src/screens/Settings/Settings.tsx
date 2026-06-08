@@ -611,26 +611,8 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
             budget, some memory or history may be truncated.
           </div>
           {promptSizeLoading ? (
-            <div
-              className="settings-loading"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                padding: "12px 0",
-              }}
-            >
-              <div
-                className="loading-spinner"
-                style={{
-                  width: 16,
-                  height: 16,
-                  border: "2px solid rgba(127,127,127,0.2)",
-                  borderTopColor: "var(--accent)",
-                  borderRadius: "50%",
-                  animation: "spin 1s linear infinite",
-                }}
-              />
+            <div className="settings-loading prompt-budget-loading">
+              <div className="loading-spinner prompt-budget-spinner" />
               <span className="settings-field-hint">
                 Loading prompt size breakdown...
               </span>
@@ -657,15 +639,7 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
 
               return (
                 <div>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      marginBottom: 6,
-                      fontSize: 13,
-                      fontWeight: 600,
-                    }}
-                  >
+                  <div className="prompt-budget-header">
                     <span>
                       Usage: {total.toLocaleString()} / {limit.toLocaleString()}{" "}
                       tokens
@@ -673,79 +647,34 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
                     <span>{percent}%</span>
                   </div>
                   {/* Progress bar */}
-                  <div
-                    style={{
-                      height: 10,
-                      background: "var(--bg-tertiary, rgba(127,127,127,0.1))",
-                      borderRadius: 5,
-                      overflow: "hidden",
-                      marginBottom: 16,
-                      border: "1px solid var(--border)",
-                    }}
-                  >
+                  <div className="prompt-budget-progress-track">
                     <div
+                      className={`prompt-budget-progress-bar ${
+                        percent > 90
+                          ? "bar-danger"
+                          : percent > 75
+                            ? "bar-warning"
+                            : "bar-success"
+                      }`}
                       style={{
-                        height: "100%",
                         width: `${percent}%`,
-                        background:
-                          percent > 90
-                            ? "var(--error, #ef4444)"
-                            : percent > 75
-                              ? "var(--warning, #f59e0b)"
-                              : "var(--accent, #3b82f6)",
-                        transition: "width 0.4s ease",
                       }}
                     />
                   </div>
                   {/* Breakdown list */}
                   {Object.keys(breakdown).length > 0 ? (
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns:
-                          "repeat(auto-fill, minmax(200px, 1fr))",
-                        gap: "12px",
-                      }}
-                    >
+                    <div className="prompt-budget-grid">
                       {Object.entries(breakdown).map(([key, val]) => {
                         const itemPercent =
                           limit > 0 ? Math.round((val / limit) * 100) : 0;
                         return (
-                          <div
-                            key={key}
-                            style={{
-                              background: "var(--bg-secondary)",
-                              border: "1px solid var(--border)",
-                              borderRadius: 6,
-                              padding: "8px 10px",
-                            }}
-                          >
-                            <div
-                              style={{
-                                fontSize: 11,
-                                textTransform: "capitalize",
-                                color: "var(--text-muted)",
-                                fontWeight: 600,
-                                marginBottom: 2,
-                              }}
-                            >
+                          <div key={key} className="prompt-budget-card">
+                            <div className="prompt-budget-card-title">
                               {key.replace(/_/g, " ")}
                             </div>
-                            <div
-                              style={{
-                                fontSize: 14,
-                                fontWeight: 700,
-                                color: "var(--text-primary)",
-                              }}
-                            >
+                            <div className="prompt-budget-card-value">
                               {val.toLocaleString()}{" "}
-                              <span
-                                style={{
-                                  fontSize: 11,
-                                  fontWeight: 400,
-                                  color: "var(--text-muted)",
-                                }}
-                              >
+                              <span className="prompt-budget-card-percent">
                                 ({itemPercent}%)
                               </span>
                             </div>

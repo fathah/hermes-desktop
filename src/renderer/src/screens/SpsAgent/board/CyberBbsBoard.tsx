@@ -18,6 +18,8 @@ export function CyberBbsBoard() {
   const setPageMeta = useStore((s) => s.setPageMeta);
   const selectPage = useStore((s) => s.selectPage);
   const setSurface = useStore((s) => s.setSurface);
+  const homeSurface = useStore((s) => s.t.homeSurface ?? "doc");
+  const setTweak = useStore((s) => s.setTweak);
 
   // Board display preferences
   const [theme, setTheme] = useState<"green" | "amber">("green");
@@ -256,6 +258,14 @@ export function CyberBbsBoard() {
         >
           <Icon name="home" size={13} />
           <span>CENTER</span>
+        </button>
+        <button
+          className={`cyber-hud-btn ${homeSurface === "board" ? "active" : ""}`}
+          onClick={() => setTweak("homeSurface", homeSurface === "board" ? "doc" : "board")}
+          title={homeSurface === "board" ? "Currently set as home page" : "Set board as home page"}
+        >
+          <Icon name="star" size={13} />
+          <span>{homeSurface === "board" ? "HOME" : "SET AS HOME"}</span>
         </button>
       </div>
 

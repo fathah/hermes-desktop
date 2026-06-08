@@ -19,70 +19,6 @@ import { workspaceParity, type ParityReport } from "../editor/workspaceVault";
 import type { Workspace } from "../types";
 import type { LoadedSkin } from "../../../../../shared/skins";
 
-// ── styles (ported verbatim from tweaks-panel.jsx __TWEAKS_STYLE) ──────────────
-const TWEAKS_STYLE = `
-  .twk-panel{position:fixed;right:16px;bottom:16px;z-index:2147483646;width:280px;
-    max-height:calc(100vh - 32px);display:flex;flex-direction:column;
-    background:rgba(250,249,247,.78);color:#29261b;
-    -webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%);
-    border:.5px solid rgba(255,255,255,.6);border-radius:14px;
-    box-shadow:0 1px 0 rgba(255,255,255,.5) inset,0 12px 40px rgba(0,0,0,.18);
-    font:11.5px/1.4 ui-sans-serif,system-ui,-apple-system,sans-serif;overflow:hidden}
-  [data-theme="dark"] .twk-panel{background:rgba(28,27,22,.82);color:#ECE7D8;
-    border:.5px solid rgba(255,255,255,.12);
-    box-shadow:0 1px 0 rgba(255,255,255,.06) inset,0 12px 40px rgba(0,0,0,.5)}
-  .twk-hd{display:flex;align-items:center;justify-content:space-between;
-    padding:10px 8px 10px 14px;cursor:move;user-select:none}
-  .twk-hd b{font-size:12px;font-weight:600;letter-spacing:.01em}
-  .twk-x{appearance:none;border:0;background:transparent;color:rgba(41,38,27,.6);
-    width:28px;height:28px;border-radius:7px;cursor:pointer;font-size:15px;line-height:1;
-    flex:none;display:grid;place-items:center;
-    transition:background .12s ease,color .12s ease,transform .08s ease}
-  [data-theme="dark"] .twk-x{color:rgba(236,231,216,.6)}
-  .twk-x:hover{background:rgba(0,0,0,.10);color:#000}
-  [data-theme="dark"] .twk-x:hover{background:rgba(255,255,255,.16);color:#fff}
-  .twk-x:active{background:rgba(0,0,0,.2);transform:scale(.9)}
-  [data-theme="dark"] .twk-x:active{background:rgba(255,255,255,.28);transform:scale(.9)}
-  .twk-body{padding:2px 14px 14px;display:flex;flex-direction:column;gap:10px;
-    overflow-y:auto;overflow-x:hidden;min-height:0}
-  .twk-row{display:flex;flex-direction:column;gap:5px}
-  .twk-row-h{flex-direction:row;align-items:center;justify-content:space-between;gap:10px}
-  .twk-lbl{display:flex;justify-content:space-between;align-items:baseline;color:rgba(41,38,27,.72)}
-  [data-theme="dark"] .twk-lbl{color:rgba(236,231,216,.72)}
-  .twk-lbl>span:first-child{font-weight:500}
-  .twk-sect{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
-    color:rgba(41,38,27,.45);padding:10px 0 0}
-  [data-theme="dark"] .twk-sect{color:rgba(236,231,216,.4)}
-  .twk-sect:first-child{padding-top:0}
-  .twk-field{appearance:none;box-sizing:border-box;width:100%;min-width:0;height:26px;padding:0 8px;
-    border:.5px solid rgba(0,0,0,.1);border-radius:7px;
-    background:rgba(255,255,255,.6);color:inherit;font:inherit;outline:none}
-  [data-theme="dark"] .twk-field{border-color:rgba(255,255,255,.14);background:rgba(255,255,255,.06)}
-  .twk-seg{position:relative;display:flex;padding:2px;border-radius:8px;background:rgba(0,0,0,.06);user-select:none}
-  [data-theme="dark"] .twk-seg{background:rgba(255,255,255,.08)}
-  .twk-seg-thumb{position:absolute;top:2px;bottom:2px;border-radius:6px;
-    background:rgba(255,255,255,.9);box-shadow:0 1px 2px rgba(0,0,0,.12);
-    transition:left .15s cubic-bezier(.3,.7,.4,1),width .15s}
-  [data-theme="dark"] .twk-seg-thumb{background:rgba(255,255,255,.16)}
-  .twk-seg button{appearance:none;position:relative;z-index:1;flex:1;border:0;
-    background:transparent;color:inherit;font:inherit;font-weight:500;min-height:22px;
-    border-radius:6px;cursor:pointer;padding:4px 6px;line-height:1.2;text-transform:capitalize}
-  .twk-toggle{position:relative;width:32px;height:18px;border:0;border-radius:999px;
-    background:rgba(0,0,0,.15);transition:background .15s;cursor:pointer;padding:0}
-  [data-theme="dark"] .twk-toggle{background:rgba(255,255,255,.18)}
-  .twk-toggle[data-on="1"]{background:#34c759}
-  .twk-toggle i{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;
-    background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
-  .twk-toggle[data-on="1"] i{transform:translateX(14px)}
-  .twk-chips{display:flex;gap:6px}
-  .twk-chip{position:relative;appearance:none;flex:1;min-width:0;height:30px;
-    padding:0;border:0;border-radius:6px;overflow:hidden;cursor:pointer;
-    box-shadow:0 0 0 .5px rgba(0,0,0,.12),0 1px 2px rgba(0,0,0,.06);transition:transform .12s,box-shadow .12s}
-  .twk-chip:hover{transform:translateY(-1px)}
-  .twk-chip[data-on="1"]{box-shadow:0 0 0 1.5px rgba(0,0,0,.85),0 2px 6px rgba(0,0,0,.15)}
-  [data-theme="dark"] .twk-chip[data-on="1"]{box-shadow:0 0 0 1.5px rgba(255,255,255,.9),0 2px 6px rgba(0,0,0,.4)}
-`;
-
 function Section({ label }: { label: string }) {
   return <div className="twk-sect">{label}</div>;
 }
@@ -213,11 +149,13 @@ function Select<T extends string>({
   label,
   value,
   options,
+  labels,
   onChange,
 }: {
   label: string;
   value: T;
   options: T[];
+  labels?: Record<T, string>;
   onChange: (v: T) => void;
 }) {
   return (
@@ -233,7 +171,7 @@ function Select<T extends string>({
       >
         {options.map((o) => (
           <option key={o} value={o}>
-            {o}
+            {labels && labels[o] ? labels[o] : o}
           </option>
         ))}
       </select>
@@ -495,25 +433,22 @@ function Shell({
     window.addEventListener("mouseup", up);
   };
   return (
-    <>
-      <style>{TWEAKS_STYLE}</style>
-      <div ref={ref} className="twk-panel">
-        <div className="twk-hd" onMouseDown={onDragStart}>
-          <b>Tweaks</b>
-          <button
-            className="twk-x"
-            aria-label="Close tweaks"
-            // Stop the header's drag handler from claiming this press — otherwise
-            // a pixel of jitter moves the panel and the click misses the button.
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={onClose}
-          >
-            ✕
-          </button>
-        </div>
-        <div className="twk-body">{children}</div>
+    <div ref={ref} className="twk-panel">
+      <div className="twk-hd" onMouseDown={onDragStart}>
+        <b>Tweaks</b>
+        <button
+          className="twk-x"
+          aria-label="Close tweaks"
+          // Stop the header's drag handler from claiming this press — otherwise
+          // a pixel of jitter moves the panel and the click misses the button.
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={onClose}
+        >
+          ✕
+        </button>
       </div>
-    </>
+      <div className="twk-body">{children}</div>
+    </div>
   );
 }
 
@@ -557,6 +492,19 @@ export function TweaksPanel() {
         value={t.width}
         options={["narrow", "comfortable", "wide", "full"]}
         onChange={(v) => setTweak("width", v)}
+      />
+      <Select<Tweaks["homeSurface"]>
+        label="Home page"
+        value={t.homeSurface ?? "doc"}
+        options={["doc", "cockpit", "board", "chats", "inbox"]}
+        labels={{
+          doc: "Document Editor",
+          cockpit: "Cockpit Dashboard",
+          board: "BBS Board",
+          chats: "AI Chats",
+          inbox: "Inbox Review",
+        }}
+        onChange={(v) => setTweak("homeSurface", v)}
       />
       <Segmented<Tweaks["density"]>
         label="Density"

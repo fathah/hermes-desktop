@@ -435,13 +435,7 @@ export function InboxSurface({
             )}
 
             {error && (
-              <div
-                style={{
-                  color: "var(--danger-fg, #a1202c)",
-                  fontSize: 13,
-                  marginTop: 8,
-                }}
-              >
+              <div className="inbox-error">
                 {error}
               </div>
             )}
@@ -469,14 +463,7 @@ export function InboxSurface({
             }}
           >
             <span>Unprocessed</span>
-            <span
-              style={{
-                background: "var(--surface-sunk, rgba(0,0,0,0.06))",
-                border: "1px solid var(--hairline)",
-                borderRadius: 10,
-                padding: "1px 8px",
-              }}
-            >
+            <span className="inbox-badge">
               {visible.length}
             </span>
             <span style={{ flex: 1 }} />
@@ -731,8 +718,8 @@ export function InboxSurface({
         </>
       ) : (
         /* Settings Tab */
-        <section className="inbox-section" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <div className="type-h3" style={{ borderBottom: "1px solid var(--hairline)", paddingBottom: 8, marginBottom: 8 }}>
+        <section className="inbox-section inbox-settings-section">
+          <div className="type-h3 inbox-settings-title">
             News Curator Preferences
           </div>
           
@@ -875,20 +862,11 @@ export function InboxSurface({
         </section>
       )}
 
-      <div
-        style={{
-          marginTop: 28,
-          paddingTop: 14,
-          borderTop: "1px solid var(--hairline, rgba(0,0,0,0.08))",
-          display: "flex",
-          gap: 16,
-          fontSize: 12.5,
-        }}
-      >
-        <button onClick={editWikiSchema} style={footerLinkStyle}>
+      <div className="inbox-footer-container">
+        <button onClick={editWikiSchema} className="inbox-footer-btn">
           Edit wiki schema
         </button>
-        <button onClick={() => void installSkill()} style={footerLinkStyle}>
+        <button onClick={() => void installSkill()} className="inbox-footer-btn">
           Install agent vault skill
         </button>
       </div>
@@ -956,11 +934,4 @@ function PillEditor({
   );
 }
 
-const footerLinkStyle: React.CSSProperties = {
-  border: "none",
-  background: "transparent",
-  color: "var(--sukhi-gold-deep, #c79400)",
-  cursor: "pointer",
-  padding: 0,
-  fontSize: 12.5,
-};
+

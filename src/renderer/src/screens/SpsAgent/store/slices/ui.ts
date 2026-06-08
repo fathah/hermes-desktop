@@ -2,6 +2,7 @@
 // Ported from the UI useState calls in app.jsx.
 import type { StateCreator } from "zustand";
 import type { Store, UiSlice, RightTab } from "../storeTypes";
+import { loadTweaks } from "./tweaks";
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -32,7 +33,7 @@ function saveRightTab(t: RightTab): void {
 export const createUiSlice: StateCreator<Store, [], [], UiSlice> = (set) => ({
   panelOpen: true,
   rightTab: loadRightTab(),
-  surface: "doc",
+  surface: loadTweaks().homeSurface ?? "doc",
   paletteOpen: false,
   templatesOpen: null,
   trashOpen: false,

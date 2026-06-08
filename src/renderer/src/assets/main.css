@@ -8864,3 +8864,90 @@ body {
   font-size: 11px;
   color: var(--text-muted);
 }
+
+/* ========================================================================
+   Prompt Budget Visualizer
+   ======================================================================== */
+.prompt-budget-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0;
+}
+
+.prompt-budget-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border, rgba(127,127,127,0.2));
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.prompt-budget-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.prompt-budget-progress-track {
+  height: 10px;
+  background: var(--bg-tertiary, rgba(127,127,127,0.1));
+  border-radius: 5px;
+  overflow: hidden;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+}
+
+.prompt-budget-progress-bar {
+  height: 100%;
+  transition: width 0.4s ease;
+}
+
+.prompt-budget-progress-bar.bar-success {
+  background: var(--accent, #3b82f6);
+}
+
+.prompt-budget-progress-bar.bar-warning {
+  background: var(--warning, #f59e0b);
+}
+
+.prompt-budget-progress-bar.bar-danger {
+  background: var(--error, #ef4444);
+}
+
+.prompt-budget-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.prompt-budget-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.prompt-budget-card-title {
+  font-size: 11px;
+  text-transform: capitalize;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.prompt-budget-card-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.prompt-budget-card-percent {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
