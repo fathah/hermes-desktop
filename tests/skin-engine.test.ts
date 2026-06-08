@@ -49,37 +49,6 @@ describe("validateSkin", () => {
     expect(res.errors.length).toBeGreaterThan(0);
   });
 
-  it("accepts corkboard customizations in validateSkin", () => {
-    const res = validateSkin({
-      name: "Neon",
-      corkboard: {
-        bgColor: "#111",
-        phosphorGlow: "#0f0",
-        cableStyle: "curved",
-      },
-    });
-    expect(res.valid).toBe(true);
-    expect(res.skin?.corkboard?.bgColor).toBe("#111");
-    expect(res.skin?.corkboard?.phosphorGlow).toBe("#0f0");
-    expect(res.skin?.corkboard?.cableStyle).toBe("curved");
-  });
-
-  it("rejects invalid corkboard options in validateSkin", () => {
-    const res1 = validateSkin({
-      name: "Bad",
-      corkboard: "not-an-object",
-    });
-    expect(res1.skin?.corkboard).toBeUndefined();
-    expect(res1.errors.length).toBeGreaterThan(0);
-
-    const res2 = validateSkin({
-      name: "Bad",
-      corkboard: { bgColor: 123, cableStyle: "wavy" },
-    });
-    expect(res2.skin?.corkboard?.bgColor).toBeUndefined();
-    expect(res2.skin?.corkboard?.cableStyle).toBeUndefined();
-    expect(res2.errors.length).toBeGreaterThan(0);
-  });
 });
 
 describe("skinToCssVars", () => {
@@ -160,24 +129,5 @@ describe("skinToSpsVars (SPS scope mapping)", () => {
     expect(vars["--hair"]).toBe("#f0f");
     expect(vars["--hair-soft"]).toBe("#f0f");
     expect(vars["--hair-strong"]).toBe("#f0f");
-  });
-
-  it("maps corkboard options to skin-phosphor variables", () => {
-    const vars = skinToSpsVars({
-      name: "NeonBoard",
-      corkboard: {
-        bgColor: "#090011",
-        phosphorGlow: "#ff0088",
-        phosphorBorder: "#ff33aa",
-        phosphorDim: "#550022",
-        phosphorText: "#ffccd8",
-        cableStyle: "curved",
-      },
-    });
-    expect(vars["--skin-phosphor-bg"]).toBe("#090011");
-    expect(vars["--skin-phosphor-glow"]).toBe("#ff0088");
-    expect(vars["--skin-phosphor-border"]).toBe("#ff33aa");
-    expect(vars["--skin-phosphor-dim"]).toBe("#550022");
-    expect(vars["--skin-phosphor-text"]).toBe("#ffccd8");
   });
 });

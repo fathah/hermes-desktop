@@ -31,17 +31,5 @@ export function skinToSpsVars(
   }
   if (skin.fonts?.body) vars["--font-sans"] = skin.fonts.body;
   if (skin.fonts?.mono) vars["--font-mono"] = skin.fonts.mono;
-  if (skin.corkboard) {
-    if (skin.corkboard.bgColor)
-      vars["--skin-phosphor-bg"] = skin.corkboard.bgColor;
-    if (skin.corkboard.phosphorGlow)
-      vars["--skin-phosphor-glow"] = skin.corkboard.phosphorGlow;
-    if (skin.corkboard.phosphorBorder)
-      vars["--skin-phosphor-border"] = skin.corkboard.phosphorBorder;
-    if (skin.corkboard.phosphorDim)
-      vars["--skin-phosphor-dim"] = skin.corkboard.phosphorDim;
-    if (skin.corkboard.phosphorText)
-      vars["--skin-phosphor-text"] = skin.corkboard.phosphorText;
-  }
   return vars;
 }

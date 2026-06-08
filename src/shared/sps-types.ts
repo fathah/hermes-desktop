@@ -171,13 +171,6 @@ export interface PageMeta {
   // only when present, so non-tagged pages serialize byte-identically. The
   // note-index also harvests inline `#tag`s from the body.
   tags?: string[];
-  // Spatial properties for Cyber-BBS Corkboard (optional)
-  x?: number;
-  y?: number;
-  width?: number;
-  height?: number;
-  color?: string;
-  connections?: string[];
 }
 
 export interface CommentMessage {

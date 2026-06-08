@@ -42,14 +42,6 @@ export function pageToMarkdown(
   // which the note-index's real YAML parser reads as an array.
   if (meta.tags !== undefined && meta.tags.length > 0)
     fm.push(`tags: ${JSON.stringify(meta.tags)}`);
-  if (meta.x !== undefined) fm.push(`x: ${JSON.stringify(meta.x)}`);
-  if (meta.y !== undefined) fm.push(`y: ${JSON.stringify(meta.y)}`);
-  if (meta.width !== undefined) fm.push(`width: ${JSON.stringify(meta.width)}`);
-  if (meta.height !== undefined)
-    fm.push(`height: ${JSON.stringify(meta.height)}`);
-  if (meta.color !== undefined) fm.push(`color: ${JSON.stringify(meta.color)}`);
-  if (meta.connections !== undefined && meta.connections.length > 0)
-    fm.push(`connections: ${JSON.stringify(meta.connections)}`);
   const body = blocksToMarkdown(blocks, anchoredIds);
   if (fm.length === 0) return body;
   return `---\n${fm.join("\n")}\n---\n\n${body}`;
@@ -95,13 +87,6 @@ function parseScalarFrontmatter(text: string): Partial<PageMeta> {
     else if (key === "mood" && typeof value === "string") out.mood = value;
     else if (key === "tags" && Array.isArray(value))
       out.tags = value.filter((t): t is string => typeof t === "string");
-    else if (key === "x" && typeof value === "number") out.x = value;
-    else if (key === "y" && typeof value === "number") out.y = value;
-    else if (key === "width" && typeof value === "number") out.width = value;
-    else if (key === "height" && typeof value === "number") out.height = value;
-    else if (key === "color" && typeof value === "string") out.color = value;
-    else if (key === "connections" && Array.isArray(value))
-      out.connections = value.filter((t): t is string => typeof t === "string");
   }
   return out;
 }
