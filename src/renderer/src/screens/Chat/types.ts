@@ -15,6 +15,9 @@ export interface ChatBubbleMessage {
   role: "user" | "agent";
   content: string;
   attachments?: Attachment[];
+  model?: string;
+  provider?: string;
+  councilGroupId?: string;
 }
 
 /**
@@ -49,11 +52,37 @@ export interface ToolResultMessage {
   attachments?: Attachment[];
 }
 
+export interface ToolGroupMessage {
+  id: string;
+  kind: "tool_group";
+  role: "agent";
+  messages: Array<ReasoningMessage | ToolCallMessage | ToolResultMessage>;
+}
+
+export interface CouncilTurnMessage {
+  id: string;
+  kind: "council_turn";
+  role: "agent";
+  responses: {
+    [modelKey: string]: {
+      modelLabel: string;
+      provider: string;
+      model: string;
+      content: string;
+      isLoading: boolean;
+      reasoning?: string;
+      error?: string;
+    };
+  };
+}
+
 export type ChatMessage =
   | ChatBubbleMessage
   | ReasoningMessage
   | ToolCallMessage
-  | ToolResultMessage;
+  | ToolResultMessage
+  | ToolGroupMessage
+  | CouncilTurnMessage;
 
 export interface ModelGroup {
   provider: string;

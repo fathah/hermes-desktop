@@ -17,6 +17,7 @@ const { capturedRequests, makeMockRequest } = vi.hoisted(() => {
     end: () => void;
     on: (event: string, cb: () => void) => void;
     destroy: () => void;
+    setTimeout: (timeout: number) => void;
   } {
     return {
       write: (body: string) => {
@@ -26,6 +27,7 @@ const { capturedRequests, makeMockRequest } = vi.hoisted(() => {
 
       on: (_event: string, _cb: () => void) => {},
       destroy: () => {},
+      setTimeout: () => {},
     };
   }
 

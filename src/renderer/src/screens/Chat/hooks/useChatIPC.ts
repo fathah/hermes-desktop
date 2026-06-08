@@ -32,7 +32,29 @@ export function useChatIPC({
     // Events tagged with a clientRunId belong to a specific run elsewhere
     // (e.g. SPS /work, or a parallel session tab) — ignore them here.
     const cleanupChunk = window.hermesAPI.onChatChunk((chunk, runId) => {
-      if (runId !== undefined) return;
+      if (runId !== undefined) {
+        if (runId.startsWith("council-turn-")) {
+          const [turnId, modelKey] = runId.split("::");
+          setMessages((prev) =>
+            prev.map((m) => {
+              if (m.id === turnId && m.kind === "council_turn") {
+                const resp = m.responses[modelKey];
+                if (resp) {
+                  return {
+                    ...m,
+                    responses: {
+                      ...m.responses,
+                      [modelKey]: { ...resp, content: resp.content + chunk },
+                    },
+                  };
+                }
+              }
+              return m;
+            }),
+          );
+        }
+        return;
+      }
       setMessages((prev) => {
         const last = prev[prev.length - 1];
         if (
@@ -64,7 +86,32 @@ export function useChatIPC({
     // turn so the visual order is reasoning → answer.
     const cleanupReasoning = window.hermesAPI.onChatReasoningChunk(
       (chunk, runId) => {
-        if (runId !== undefined) return;
+        if (runId !== undefined) {
+          if (runId.startsWith("council-turn-")) {
+            const [turnId, modelKey] = runId.split("::");
+            setMessages((prev) =>
+              prev.map((m) => {
+                if (m.id === turnId && m.kind === "council_turn") {
+                  const resp = m.responses[modelKey];
+                  if (resp) {
+                    return {
+                      ...m,
+                      responses: {
+                        ...m.responses,
+                        [modelKey]: {
+                          ...resp,
+                          reasoning: (resp.reasoning || "") + chunk,
+                        },
+                      },
+                    };
+                  }
+                }
+                return m;
+              }),
+            );
+          }
+          return;
+        }
         if (!chunk) return;
         setMessages((prev) => {
           let insertAt = prev.length;
@@ -100,7 +147,40 @@ export function useChatIPC({
 
     const cleanupDone = window.hermesAPI.onChatDone(
       async (sessionId, runId) => {
-        if (runId !== undefined) return;
+        if (runId !== undefined) {
+          if (runId.startsWith("council-turn-")) {
+            const [turnId, modelKey] = runId.split("::");
+            setMessages((prev) => {
+              const updated = prev.map((m) => {
+                if (m.id === turnId && m.kind === "council_turn") {
+                  const resp = m.responses[modelKey];
+                  if (resp) {
+                    return {
+                      ...m,
+                      responses: {
+                        ...m.responses,
+                        [modelKey]: { ...resp, isLoading: false },
+                      },
+                    };
+                  }
+                }
+                return m;
+              });
+
+              // Check if any council responses are still loading
+              const anyLoading = updated.some(
+                (m) =>
+                  m.kind === "council_turn" &&
+                  Object.values(m.responses).some((r: any) => r.isLoading),
+              );
+              if (!anyLoading) {
+                setIsLoading(false);
+              }
+              return updated;
+            });
+          }
+          return;
+        }
         if (sessionId) setHermesSessionId(sessionId);
         setToolProgress(null);
         setIsLoading(false);
@@ -131,7 +211,40 @@ export function useChatIPC({
     );
 
     const cleanupError = window.hermesAPI.onChatError((error, runId) => {
-      if (runId !== undefined) return;
+      if (runId !== undefined) {
+        if (runId.startsWith("council-turn-")) {
+          const [turnId, modelKey] = runId.split("::");
+          setMessages((prev) => {
+            const updated = prev.map((m) => {
+              if (m.id === turnId && m.kind === "council_turn") {
+                const resp = m.responses[modelKey];
+                if (resp) {
+                  return {
+                    ...m,
+                    responses: {
+                      ...m.responses,
+                      [modelKey]: { ...resp, isLoading: false, error },
+                    },
+                  };
+                }
+              }
+              return m;
+            });
+
+            // Check if any council responses are still loading
+            const anyLoading = updated.some(
+              (m) =>
+                m.kind === "council_turn" &&
+                Object.values(m.responses).some((r: any) => r.isLoading),
+            );
+            if (!anyLoading) {
+              setIsLoading(false);
+            }
+            return updated;
+          });
+        }
+        return;
+      }
       setMessages((prev) => [
         ...prev,
         {

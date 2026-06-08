@@ -44,7 +44,9 @@ export type SectionId =
   | "agents"
   | "shared"
   | "private"
-  | "apps";
+  | "apps"
+  | "aiAssistant"
+  | "workspaceTools";
 
 export const SECTION_ORDER: SectionId[] = [
   "meetings",
@@ -53,6 +55,8 @@ export const SECTION_ORDER: SectionId[] = [
   "shared",
   "private",
   "apps",
+  "aiAssistant",
+  "workspaceTools",
 ];
 
 export interface XY {

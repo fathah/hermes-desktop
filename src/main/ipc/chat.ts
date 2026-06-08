@@ -96,6 +96,7 @@ export function registerChatIpc(mainWindowGetter: () => BrowserWindow | null): v
       contextFolder?: string,
       groundInWorkspace?: boolean,
       clientRunId?: string,
+      modelOverride?: { model?: string; provider?: string; baseUrl?: string },
     ) => {
       if (!isRemoteMode() && !isGatewayRunning(profile)) {
         startGateway(profile);
@@ -194,6 +195,43 @@ export function registerChatIpc(mainWindowGetter: () => BrowserWindow | null): v
             }
             activeChatAborts.delete(sessionKey);
             safeSend("chat-done", sessionId || "");
+
+            // Save metadata for the completed assistant message
+            if (sessionId) {
+              try {
+                const { getSharedDb } = require("../db");
+                const { getModelConfig } = require("../config");
+                const db = getSharedDb(false);
+                if (db) {
+                  const mc = getModelConfig(profile);
+                  const finalModel = modelOverride?.model || mc.model;
+                  const finalProvider = modelOverride?.provider || mc.provider;
+
+                  const lastMsg = db.prepare(`
+                    SELECT id FROM messages
+                    WHERE session_id = ? AND role = 'assistant'
+                    ORDER BY timestamp DESC, id DESC
+                    LIMIT 1
+                  `).get(sessionId) as { id: number } | undefined;
+
+                  if (lastMsg) {
+                    let councilGroupId: string | null = null;
+                    if (clientRunId && clientRunId.startsWith("council-turn-")) {
+                      const parts = clientRunId.split("::");
+                      councilGroupId = parts[0];
+                    }
+
+                    db.prepare(`
+                      INSERT OR REPLACE INTO messages_metadata (message_id, model, provider, council_group_id)
+                      VALUES (?, ?, ?, ?)
+                    `).run(lastMsg.id, finalModel, finalProvider, councilGroupId);
+                  }
+                }
+              } catch (err) {
+                console.error("[chat] Failed to save message metadata to DB:", err);
+              }
+            }
+
             if (getCompletionSound()) shell.beep();
             resolveChat({ response: fullResponse, sessionId });
             if (
@@ -272,6 +310,7 @@ export function registerChatIpc(mainWindowGetter: () => BrowserWindow | null): v
         attachments,
         contextFolder,
         groundInWorkspace,
+        modelOverride,
       );
 
       activeChatAborts.set(sessionKey, handle.abort);
@@ -287,6 +326,14 @@ export function registerChatIpc(mainWindowGetter: () => BrowserWindow | null): v
       activeChatAborts.delete(sessionKey);
     }
   });
+
+  ipcMain.handle(
+    "adopt-council-response",
+    (_event, messageId: number, sessionId: string, councilGroupId: string) => {
+      const { adoptCouncilResponse } = require("../sessions");
+      return adoptCouncilResponse(messageId, sessionId, councilGroupId);
+    },
+  );
 
   // Voice I/O (WS4)
   ipcMain.handle("get-voice-status", (_event, profile?: string) =>

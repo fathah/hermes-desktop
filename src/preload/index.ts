@@ -322,7 +322,6 @@ const hermesAPI = {
 
   stopSshTunnel: (): Promise<boolean> => ipcRenderer.invoke("stop-ssh-tunnel"),
 
-  // Chat
   sendMessage: (
     message: string,
     profile?: string,
@@ -332,6 +331,7 @@ const hermesAPI = {
     contextFolder?: string,
     groundInWorkspace?: boolean,
     clientRunId?: string,
+    modelOverride?: { model?: string; provider?: string; baseUrl?: string },
   ): Promise<{ response: string; sessionId?: string }> =>
     ipcRenderer.invoke(
       "send-message",
@@ -343,6 +343,19 @@ const hermesAPI = {
       contextFolder,
       groundInWorkspace,
       clientRunId,
+      modelOverride,
+    ),
+
+  adoptCouncilResponse: (
+    messageId: number,
+    sessionId: string,
+    councilGroupId: string,
+  ): Promise<void> =>
+    ipcRenderer.invoke(
+      "adopt-council-response",
+      messageId,
+      sessionId,
+      councilGroupId,
     ),
 
   abortChat: (): Promise<void> => ipcRenderer.invoke("abort-chat"),

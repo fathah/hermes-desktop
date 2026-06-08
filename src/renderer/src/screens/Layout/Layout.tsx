@@ -8,7 +8,6 @@ import Sessions from "../Sessions/Sessions";
 import Agents from "../Agents/Agents";
 import Settings from "../Settings/Settings";
 import Skills from "../Skills/Skills";
-import Memory from "../Memory/Memory";
 import Personalization from "../Personalization/Personalization";
 import Tools from "../Tools/Tools";
 import Gateway from "../Gateway/Gateway";
@@ -28,7 +27,6 @@ import {
   Users,
   Settings as SettingsIcon,
   Puzzle,
-  Brain,
   Wrench,
   Signal,
   Building,
@@ -51,7 +49,6 @@ type View =
   | "models"
   | "providers"
   | "skills"
-  | "memory"
   | "personalization"
   | "tools"
   | "schedules"
@@ -85,13 +82,6 @@ const NAV_ITEMS: {
   { view: "models", icon: Layers, labelKey: "navigation.models" },
   { view: "providers", icon: KeyRound, labelKey: "navigation.providers" },
   { view: "skills", icon: Puzzle, labelKey: "navigation.skills" },
-  {
-    view: "memory",
-    icon: Brain,
-    labelKey: "navigation.memory",
-    // Disambiguate from the SPS workspace's "Memory" surface.
-    label: "Agent Memory",
-  },
   {
     view: "personalization",
     icon: UserCog,
@@ -521,16 +511,6 @@ function Layout({
               <RemoteNotice feature="Skills" />
             ) : (
               <Skills profile={activeProfile} visible={view === "skills"} />
-            )}
-          </div>
-        )}
-
-        {visitedViews.has("memory") && (
-          <div style={paneStyle("memory")}>
-            {remoteMode ? (
-              <RemoteNotice feature="Memory" />
-            ) : (
-              <Memory profile={activeProfile} visible={view === "memory"} />
             )}
           </div>
         )}

@@ -239,7 +239,13 @@ interface HermesAPI {
     contextFolder?: string,
     groundInWorkspace?: boolean,
     clientRunId?: string,
+    modelOverride?: { model?: string; provider?: string; baseUrl?: string },
   ) => Promise<{ response: string; sessionId?: string }>;
+  adoptCouncilResponse: (
+    messageId: number,
+    sessionId: string,
+    councilGroupId: string,
+  ) => Promise<void>;
   abortChat: () => Promise<void>;
   getApiServerKeyStatus: (profile?: string) => Promise<{ hasKey: boolean }>;
   generateApiServerKey: (profile?: string) => Promise<{ key: string }>;
@@ -384,6 +390,9 @@ interface HermesAPI {
           content: string;
           timestamp: number;
           attachments?: Attachment[];
+          model?: string;
+          provider?: string;
+          councilGroupId?: string;
         }
       | {
           kind: "reasoning";

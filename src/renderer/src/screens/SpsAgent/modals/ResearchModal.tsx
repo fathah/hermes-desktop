@@ -222,7 +222,14 @@ export function ResearchModal() {
               <div
                 key={w.id}
                 className="lst-row"
-                style={{ borderRadius: 6, alignItems: "flex-start", gap: 10 }}
+                style={{
+                  borderRadius: 6,
+                  alignItems: "flex-start",
+                  gap: 10,
+                  height: "auto",
+                  minHeight: "var(--row-h, 32px)",
+                  padding: "8px 6px",
+                }}
               >
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="c-name" style={{ whiteSpace: "normal" }}>

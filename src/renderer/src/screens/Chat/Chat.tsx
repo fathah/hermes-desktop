@@ -98,6 +98,66 @@ function Chat({
 
   const { containerRef, bottomRef } = useChatScroll(messages);
   const modelConfig = useModelConfig(profile);
+  const [selectedModels, setSelectedModels] = useState<
+    Array<{ provider: string; model: string; baseUrl: string; label: string }>
+  >([]);
+
+  // Sync selectedModels with modelConfig on load/change
+  useEffect(() => {
+    if (modelConfig.currentModel) {
+      setSelectedModels([
+        {
+          provider: modelConfig.currentProvider,
+          model: modelConfig.currentModel,
+          baseUrl: modelConfig.currentBaseUrl,
+          label: modelConfig.displayModel,
+        },
+      ]);
+    }
+  }, [
+    modelConfig.currentModel,
+    modelConfig.currentProvider,
+    modelConfig.currentBaseUrl,
+    modelConfig.displayModel,
+  ]);
+
+  const handleSelectModel = useCallback(
+    async (provider: string, model: string, baseUrl: string) => {
+      let label = model.split("/").pop() || model;
+      for (const group of modelConfig.modelGroups) {
+        const found = group.models.find(
+          (m) => m.model === model && m.provider === provider,
+        );
+        if (found) {
+          label = found.label;
+          break;
+        }
+      }
+      await modelConfig.selectModel(provider, model, baseUrl);
+      setSelectedModels([{ provider, model, baseUrl, label }]);
+    },
+    [modelConfig],
+  );
+
+  const handleToggleCouncilModel = useCallback(
+    (provider: string, model: string, baseUrl: string, label: string) => {
+      setSelectedModels((prev) => {
+        const exists = prev.some(
+          (m) => m.model === model && m.provider === provider,
+        );
+        if (exists) {
+          if (prev.length <= 1) return prev;
+          return prev.filter(
+            (m) => !(m.model === model && m.provider === provider),
+          );
+        } else {
+          return [...prev, { provider, model, baseUrl, label }];
+        }
+      });
+    },
+    [],
+  );
+
   const {
     fastMode,
     toggle: toggleFastMode,
@@ -280,6 +340,7 @@ function Chat({
     localCommands,
     contextFolder: effectiveContextFolder,
     onCompactRequested: markCompactPending,
+    selectedModels,
   });
 
   // When the `/compact` turn finishes, carry its handoff brief into a fresh
@@ -414,6 +475,75 @@ function Chat({
     [eventHasFiles],
   );
 
+  const handleAdoptResponse = useCallback(
+    async (
+      messageId: string | number,
+      councilGroupId: string,
+      responseContent: string,
+      model: string,
+      provider: string,
+    ) => {
+      const activeSessionId = hermesSessionId ?? sessionId;
+      if (!activeSessionId) return;
+
+      // Replace the council turn with the adopted single assistant message
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id === councilGroupId) {
+            return {
+              id: typeof messageId === "string" ? messageId : `db-${messageId}`,
+              role: "agent",
+              content: responseContent,
+              model,
+              provider,
+            };
+          }
+          return m;
+        }),
+      );
+
+      let dbId: number | null = null;
+      if (typeof messageId === "number") {
+        dbId = messageId;
+      } else if (typeof messageId === "string" && messageId.startsWith("db-")) {
+        dbId = parseInt(messageId.replace("db-", ""), 10);
+      }
+
+      if (dbId !== null && !isNaN(dbId)) {
+        try {
+          await window.hermesAPI.adoptCouncilResponse(
+            dbId,
+            activeSessionId,
+            councilGroupId,
+          );
+        } catch (err) {
+          console.error("Failed to adopt response on DB:", err);
+        }
+      }
+    },
+    [hermesSessionId, sessionId, setMessages],
+  );
+
+  const handleSteelmanCritique = useCallback(
+    async (responses: Array<{ model: string; provider: string; content: string }>) => {
+      const responsesText = responses
+        .map((r) => `[${r.model}]:\n${r.content}`)
+        .join("\n\n---\n\n");
+
+      const promptText =
+        `You are the Council Moderator. Below are the responses from the Council of LLMs (different models) to my original query. ` +
+        `Please synthesize them into a single, cohesive response that steelmans my original thought, reconciles the best parts of each answer, and critiques any weaknesses or blind spots:\n\n${responsesText}`;
+
+      // Reset selection back to standard single model before sending critique
+      if (selectedModels.length > 1) {
+        setSelectedModels([selectedModels[0]]);
+      }
+
+      void actions.handleSend(promptText);
+    },
+    [actions, selectedModels],
+  );
+
   return (
     <div
       className={`chat-container${compact ? " chat-container-compact" : ""}`}
@@ -462,6 +592,8 @@ function Chat({
               profile={profile}
               onApprove={actions.handleApprove}
               onDeny={actions.handleDeny}
+              onAdoptResponse={handleAdoptResponse}
+              onSteelmanCritique={handleSteelmanCritique}
             />
           )}
           <DelegationTree tree={delegationTree} />
@@ -514,7 +646,9 @@ function Chat({
           modelGroups={modelConfig.modelGroups}
           displayModel={modelConfig.displayModel}
           onOpen={modelConfig.reload}
-          onSelectModel={modelConfig.selectModel}
+          onSelectModel={handleSelectModel}
+          selectedModels={selectedModels}
+          onToggleCouncilModel={handleToggleCouncilModel}
         />
       </div>
       {dragActive && (

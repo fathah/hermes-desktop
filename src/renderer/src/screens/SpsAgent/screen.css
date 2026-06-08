@@ -281,6 +281,114 @@
   transition: opacity var(--dur-1) var(--ease-out);
 }
 
+.sps-scope .health-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sps-scope .health-help-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: var(--r-2, 7px);
+  border: 1px solid var(--hairline-strong, rgba(127, 127, 127, 0.25));
+  background: var(--surface-sunk, transparent);
+  color: var(--ink-2, #333);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--fs-13, 13px);
+  transition: all var(--dur-1) var(--ease-out);
+}
+
+.sps-scope .health-help-btn:hover {
+  background: var(--row-hover, rgba(127, 127, 127, 0.08));
+  color: var(--ink-1, #000);
+}
+
+.sps-scope .health-help-card {
+  background: var(--surface-sunk, rgba(127, 127, 127, 0.05));
+  border: 1px solid var(--hairline, rgba(127, 127, 127, 0.18));
+  border-radius: var(--r-2, 8px);
+  padding: 20px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow-1, 0 1px 3px rgba(0, 0, 0, 0.05));
+  animation: healthFadeIn 0.2s ease;
+}
+
+@keyframes healthFadeIn {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.sps-scope .health-help-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.sps-scope .health-help-card-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: var(--fs-15, 15px);
+  color: var(--ink-1);
+}
+
+.sps-scope .health-help-card-close {
+  border: none;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--dur-1) var(--ease-out);
+}
+
+.sps-scope .health-help-card-close:hover {
+  background: var(--row-hover, rgba(127, 127, 127, 0.12));
+  color: var(--ink-1);
+}
+
+.sps-scope .health-help-intro {
+  font-size: var(--fs-14, 14px);
+  color: var(--ink-2);
+  line-height: 1.5;
+  margin: 0 0 16px 0;
+}
+
+.sps-scope .health-help-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  border-top: 1px solid var(--hairline, rgba(127, 127, 127, 0.15));
+  padding-top: 16px;
+}
+
+.sps-scope .health-help-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sps-scope .health-help-item-title {
+  font-weight: 600;
+  font-size: var(--fs-13, 13px);
+  color: var(--ink-1);
+}
+
+.sps-scope .health-help-item-desc {
+  font-size: var(--fs-12, 12.5px);
+  color: var(--ink-3);
+  line-height: 1.4;
+}
+
 .sps-scope .health-recheck-btn:disabled {
   cursor: default;
   opacity: 0.6;
@@ -288,29 +396,30 @@
 
 .sps-scope .health-error {
   color: var(--danger, #c0392b);
-  font-size: var(--fs-13, 13px);
+  font-size: var(--fs-14, 14px);
   margin-bottom: 12px;
 }
 
 .sps-scope .health-empty {
   color: var(--ink-3, var(--tx-4));
   padding: 24px 0;
-  font-size: var(--fs-13, 13px);
+  font-size: var(--fs-15, 15px);
 }
 
 .sps-scope .health-section {
-  margin-bottom: 22px;
+  margin-bottom: 24px;
 }
 
 .sps-scope .health-sec-header {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .sps-scope .health-sec-label {
   font-weight: 600;
+  font-size: var(--fs-15, 15px);
   color: var(--ink-1);
 }
 
@@ -318,13 +427,13 @@
   background: var(--bd-1, rgba(0, 0, 0, 0.06));
   border-radius: 10px;
   padding: 1px 8px;
-  font-size: var(--fs-12, 12px);
+  font-size: var(--fs-13, 13px);
   color: var(--ink-2);
 }
 
 .sps-scope .health-sec-hint {
   color: var(--ink-3, var(--tx-4));
-  font-size: var(--fs-12, 12px);
+  font-size: var(--fs-13, 13px);
 }
 
 .sps-scope .health-list {
@@ -333,7 +442,7 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .sps-scope .health-row {
@@ -348,7 +457,7 @@
   color: var(--accent, #2d7ff9);
   cursor: pointer;
   padding: 0;
-  font-size: var(--fs-14, 14px);
+  font-size: var(--fs-16, 16px);
   font-family: inherit;
   text-align: left;
 }
@@ -363,7 +472,7 @@
 
 .sps-scope .health-mono-text {
   font-family: var(--font-mono, monospace);
-  font-size: var(--fs-12, 12px);
+  font-size: var(--fs-13, 13px);
   color: var(--ink-1);
 }
 
@@ -418,5 +527,15 @@
   border-bottom: 1px solid var(--hairline);
   padding-bottom: 8px;
   margin-bottom: 8px;
+}
+
+/* Embedded Vault Health styling inside Settings */
+.sps-scope .health-embedded {
+  width: 100%;
+}
+.sps-scope .health-embedded .health-header {
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--hairline);
 }
 

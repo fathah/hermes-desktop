@@ -309,8 +309,10 @@ export function sendMessageViaApi(
   contextFolder?: string,
   groundingSystem?: { role: "system"; content: string } | null,
   selfAwarenessSystem?: { role: "system"; content: string } | null,
+  modelOverride?: { model?: string; provider?: string; baseUrl?: string },
 ): ChatHandle {
   const mc = getModelConfig(profile);
+  const effectiveModel = modelOverride?.model || mc.model;
   const controller = new AbortController();
 
   const messages: Array<{ role: string; content: ChatContent }> = [];
@@ -333,7 +335,7 @@ export function sendMessageViaApi(
   if (selfAwarenessSystem) messages.unshift(selfAwarenessSystem);
 
   const body = JSON.stringify({
-    model: mc.model || "hermes-agent",
+    model: effectiveModel || "hermes-agent",
     messages,
     stream: true,
     ...(_resumeSessionId ? { session_id: _resumeSessionId } : {}),
@@ -386,7 +388,7 @@ export function sendMessageViaApi(
 
   function probeRealError(): void {
     const probeBody = JSON.stringify({
-      model: mc.model || "hermes-agent",
+      model: effectiveModel || "hermes-agent",
       messages: [{ role: "user", content: userContent }],
       stream: false,
     });
@@ -445,6 +447,7 @@ export function sendMessageViaApi(
       method: "POST",
       headers,
       signal: controller.signal,
+      timeout: 120000,
     },
     (res) => {
       const sid = res.headers["x-hermes-session-id"];
@@ -513,12 +516,14 @@ export function sendMessageViaApi(
       });
     },
   );
+  req.setTimeout(120000);
 
   req.on("error", (err) => {
     if (err.name === "AbortError") return;
     finish(`API request failed: ${err.message}`);
   });
   req.on("timeout", () => {
+    console.warn("[hermes] ClientRequest timeout event fired! req.timeout =", (req as any).timeout);
     req.destroy();
     finish(
       "API request timed out. Check the SSH tunnel and remote Hermes gateway.",
@@ -780,6 +785,7 @@ export async function sendMessage(
   attachments?: Attachment[],
   contextFolder?: string,
   groundInWorkspace?: boolean,
+  modelOverride?: { model?: string; provider?: string; baseUrl?: string },
 ): Promise<ChatHandle> {
   startHealthPolling();
 
@@ -802,6 +808,7 @@ export async function sendMessage(
       contextFolder,
       groundingSystem,
       selfAwarenessSystem,
+      modelOverride,
     );
   }
 
@@ -830,6 +837,7 @@ export async function sendMessage(
       contextFolder,
       groundingSystem,
       selfAwarenessSystem,
+      modelOverride,
     );
   }
 

@@ -13,9 +13,11 @@ import type { MemoryData, MemoryProviderInfo, MemoryTab } from "./types";
 function Memory({
   profile,
   visible = true,
+  embedded = false,
 }: {
   profile?: string;
   visible?: boolean;
+  embedded?: boolean;
 }): React.JSX.Element {
   const { t } = useI18n();
   const [data, setData] = useState<MemoryData | null>(null);
@@ -44,6 +46,13 @@ function Memory({
   }, [loadData, visible]);
 
   if (loading || !data) {
+    if (embedded) {
+      return (
+        <div style={{ display: "flex", justifyContent: "center", padding: 32 }}>
+          <div className="loading-spinner" />
+        </div>
+      );
+    }
     return (
       <div className="settings-container">
         <h1 className="settings-header">{t("memory.title")}</h1>
@@ -55,12 +64,14 @@ function Memory({
   }
 
   return (
-    <div className="settings-container">
+    <div className={embedded ? "memory-embedded" : "settings-container"}>
       <div className="memory-header">
         <div>
-          <h1 className="settings-header" style={{ marginBottom: 4 }}>
-            {t("memory.title")}
-          </h1>
+          {!embedded && (
+            <h1 className="settings-header" style={{ marginBottom: 4 }}>
+              {t("memory.title")}
+            </h1>
+          )}
           <p className="memory-subtitle">{t("memory.subtitle")}</p>
         </div>
         <button className="btn btn-secondary btn-sm" onClick={loadData}>

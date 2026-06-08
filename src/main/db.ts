@@ -45,6 +45,33 @@ export function getSharedDb(readonly = true): Database.Database | null {
   return cachedDb;
 }
 
+export function initializeMetadataTable(db: Database.Database): void {
+  try {
+    db.prepare(
+      `
+      CREATE TABLE IF NOT EXISTS messages_metadata (
+        message_id INTEGER PRIMARY KEY,
+        model TEXT,
+        provider TEXT,
+        council_group_id TEXT
+      )
+      `,
+    ).run();
+
+    db.prepare(
+      `
+      CREATE TRIGGER IF NOT EXISTS delete_message_metadata
+      AFTER DELETE ON messages
+      BEGIN
+        DELETE FROM messages_metadata WHERE message_id = OLD.id;
+      END;
+      `,
+    ).run();
+  } catch (err) {
+    console.error("[db] Failed to initialize messages_metadata table/trigger:", err);
+  }
+}
+
 export function initializeSkillsTable(db: Database.Database): void {
   try {
     db.prepare(
@@ -61,6 +88,7 @@ export function initializeSkillsTable(db: Database.Database): void {
       )
     `,
     ).run();
+    initializeMetadataTable(db);
   } catch (err) {
     console.error("[db] Failed to initialize skills_registry table:", err);
   }

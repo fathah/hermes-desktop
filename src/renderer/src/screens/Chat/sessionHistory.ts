@@ -16,6 +16,9 @@ export interface DbHistoryItem {
   args?: string;
   timestamp?: number;
   attachments?: Attachment[];
+  model?: string;
+  provider?: string;
+  councilGroupId?: string;
 }
 
 /**
@@ -33,10 +36,66 @@ export interface DbHistoryItem {
  * makes them appear without the user having to focus-change to
  * trigger a re-sync (issue #352).
  */
+export function groupCouncilTurns(messages: ChatMessage[]): ChatMessage[] {
+  const grouped: ChatMessage[] = [];
+  let currentCouncilTurn: any = null;
+
+  for (const msg of messages) {
+    if (
+      msg.role === "agent" &&
+      !("kind" in msg) &&
+      (msg as any).councilGroupId
+    ) {
+      const gId = (msg as any).councilGroupId;
+      const modelKey = `${(msg as any).provider || "unknown"}:${(msg as any).model || "unknown"}`;
+
+      if (currentCouncilTurn && currentCouncilTurn.id === `council-turn-${gId}`) {
+        currentCouncilTurn.responses[modelKey] = {
+          modelLabel: (msg as any).model || "Unknown Model",
+          provider: (msg as any).provider || "unknown",
+          model: (msg as any).model || "unknown",
+          content: msg.content || "",
+          isLoading: false,
+        };
+      } else {
+        if (currentCouncilTurn) {
+          grouped.push(currentCouncilTurn);
+        }
+        currentCouncilTurn = {
+          id: `council-turn-${gId}`,
+          kind: "council_turn",
+          role: "agent",
+          responses: {
+            [modelKey]: {
+              modelLabel: (msg as any).model || "Unknown Model",
+              provider: (msg as any).provider || "unknown",
+              model: (msg as any).model || "unknown",
+              content: msg.content || "",
+              isLoading: false,
+            },
+          },
+        };
+      }
+    } else {
+      if (currentCouncilTurn) {
+        grouped.push(currentCouncilTurn);
+        currentCouncilTurn = null;
+      }
+      grouped.push(msg);
+    }
+  }
+
+  if (currentCouncilTurn) {
+    grouped.push(currentCouncilTurn);
+  }
+
+  return grouped;
+}
+
 export function dbItemsToChatMessages(
   items: ReadonlyArray<DbHistoryItem>,
 ): ChatMessage[] {
-  return items
+  const mapped = items
     .map((it): ChatMessage | null => {
       switch (it.kind) {
         case "user":
@@ -56,6 +115,9 @@ export function dbItemsToChatMessages(
             ...(it.attachments && it.attachments.length > 0
               ? { attachments: it.attachments }
               : {}),
+            model: it.model,
+            provider: it.provider,
+            councilGroupId: it.councilGroupId,
           };
         case "reasoning":
           return {
@@ -90,6 +152,8 @@ export function dbItemsToChatMessages(
       }
     })
     .filter((m): m is ChatMessage => m !== null);
+
+  return groupCouncilTurns(mapped);
 }
 
 /**
@@ -145,6 +209,8 @@ function reconciliationKey(m: ChatMessage): string | null {
         return `tool_call:${m.callId || m.id}`;
       case "tool_result":
         return `tool_result:${m.callId || m.id}`;
+      case "council_turn":
+        return `council_turn:${m.id}`;
       default:
         return null;
     }
@@ -163,6 +229,9 @@ function mergeDbMetadataIntoStreamed(
   streamed: ChatMessage,
   db: ChatMessage,
 ): ChatMessage {
+  if (streamed.kind === "council_turn") {
+    return db;
+  }
   // Only bubble messages carry mergeable metadata.
   if ("kind" in streamed) return streamed;
   const s = streamed as ChatBubbleMessage;

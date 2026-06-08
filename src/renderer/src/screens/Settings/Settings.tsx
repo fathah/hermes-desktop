@@ -11,12 +11,15 @@ import {
   Upload,
   FileText,
   Send,
+  Brain,
 } from "lucide-react";
 import {
   getAnalyticsConsent,
   setAnalyticsConsent,
 } from "../../utils/analytics";
 import { ConfigHealth } from "./ConfigHealth";
+import Memory from "../Memory/Memory";
+import { HealthSurface } from "../SpsAgent/health/HealthSurface";
 
 const TELEGRAM_COMMUNITY_URL = "https://t.me/hermes_agent_desktop";
 
@@ -65,6 +68,8 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
   const { t, locale, setLocale } = useI18n();
   const [hermesHome, setHermesHome] = useState("");
   const { theme, setTheme } = useTheme();
+  const [memoryExpanded, setMemoryExpanded] = useState(false);
+  const [healthExpanded, setHealthExpanded] = useState(false);
 
   // Hermes engine info — initialize from localStorage cache for instant display
   const [hermesVersion, setHermesVersion] = useState<string | null>(
@@ -701,6 +706,64 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Agent Memory & Soul Section */}
+      <div className="settings-section">
+        <div className="settings-section-title">
+          <span
+            style={{
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+            }}
+            onClick={() => setMemoryExpanded(!memoryExpanded)}
+          >
+            <Brain size={14} style={{ marginRight: 6 }} />
+            {t("memory.title")} {memoryExpanded ? "▾" : "▸"}
+          </span>
+        </div>
+        {memoryExpanded && (
+          <div
+            className="settings-field"
+            style={{
+              borderTop: "1px solid var(--border)",
+              paddingTop: 16,
+              marginTop: 12,
+            }}
+          >
+            <Memory profile={profile} embedded={true} />
+          </div>
+        )}
+      </div>
+
+      {/* Vault Health Section */}
+      <div className="settings-section">
+        <div className="settings-section-title">
+          <span
+            style={{
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+            }}
+            onClick={() => setHealthExpanded(!healthExpanded)}
+          >
+            <Check size={14} style={{ marginRight: 6 }} />
+            Vault Health {healthExpanded ? "▾" : "▸"}
+          </span>
+        </div>
+        {healthExpanded && (
+          <div
+            className="settings-field"
+            style={{
+              borderTop: "1px solid var(--border)",
+              paddingTop: 16,
+              marginTop: 12,
+            }}
+          >
+            <HealthSurface profile={profile} embedded={true} />
+          </div>
+        )}
       </div>
 
       {/* Security Audit Section */}

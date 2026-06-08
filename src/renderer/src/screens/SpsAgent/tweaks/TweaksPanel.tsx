@@ -30,6 +30,8 @@ const SECTION_LABELS: Record<SectionId, string> = {
   shared: "Shared",
   private: "Private",
   apps: "Notion apps",
+  aiAssistant: "AI Assistant",
+  workspaceTools: "Workspace Tools",
 };
 
 /** Toggle individual sidebar sections on/off (Notion 3.1 "customize sidebar"). */

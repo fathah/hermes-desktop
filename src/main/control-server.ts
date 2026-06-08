@@ -236,18 +236,13 @@ function listenOnPort(port: number, maxAttempts = 10): Promise<number> {
       return;
     }
 
-    serverInstance.once("error", (err: { code?: string }) => {
-      if (err.code === "EADDRINUSE" && maxAttempts > 0) {
-        console.warn(
-          `[CONTROL SERVER] Port ${port} is in use, retrying on ${port + 1}...`,
-        );
-        resolve(listenOnPort(port + 1, maxAttempts - 1));
-      } else {
-        reject(err);
-      }
-    });
+    const cleanup = () => {
+      serverInstance?.removeListener("listening", onListening);
+      serverInstance?.removeListener("error", onError);
+    };
 
-    serverInstance.listen(port, "127.0.0.1", () => {
+    const onListening = () => {
+      cleanup();
       currentPort = port;
       console.log(
         `[CONTROL SERVER] Running successfully on http://127.0.0.1:${port}`,
@@ -265,7 +260,23 @@ function listenOnPort(port: number, maxAttempts = 10): Promise<number> {
       manageLaunchAgent(backgroundEnabled);
 
       resolve(port);
-    });
+    };
+
+    const onError = (err: { code?: string }) => {
+      cleanup();
+      if (err.code === "EADDRINUSE" && maxAttempts > 0) {
+        console.warn(
+          `[CONTROL SERVER] Port ${port} is in use, retrying on ${port + 1}...`,
+        );
+        resolve(listenOnPort(port + 1, maxAttempts - 1));
+      } else {
+        reject(err);
+      }
+    };
+
+    serverInstance.on("listening", onListening);
+    serverInstance.on("error", onError);
+    serverInstance.listen(port, "127.0.0.1");
   });
 }
 

@@ -32,6 +32,7 @@ interface UseChatActionsArgs {
   /** Called when a `/compact` turn is sent, so the host can seed a fresh
    *  session with the resulting handoff brief once the turn completes. */
   onCompactRequested?: () => void;
+  selectedModels: Array<{ provider: string; model: string; baseUrl: string; label: string }>;
 }
 
 interface UseChatActionsResult {
@@ -64,12 +65,15 @@ export function useChatActions({
   localCommands,
   contextFolder,
   onCompactRequested,
+  selectedModels,
 }: UseChatActionsArgs): UseChatActionsResult {
   const messagesRef = useRef(messages);
   const isLoadingRef = useRef(isLoading);
+  const selectedModelsRef = useRef(selectedModels);
   useEffect(() => {
     messagesRef.current = messages;
     isLoadingRef.current = isLoading;
+    selectedModelsRef.current = selectedModels;
   });
 
   const pushUser = useCallback(
@@ -88,7 +92,12 @@ export function useChatActions({
   );
 
   const sendToAgent = useCallback(
-    async (text: string, attachments?: Attachment[]): Promise<void> => {
+    async (
+      text: string,
+      attachments?: Attachment[],
+      modelOverride?: { model?: string; provider?: string; baseUrl?: string },
+      runId?: string,
+    ): Promise<void> => {
       try {
         await window.hermesAPI.sendMessage(
           text,
@@ -101,6 +110,8 @@ export function useChatActions({
           attachments,
           contextFolder ?? undefined,
           getGroundInWorkspace(),
+          runId,
+          modelOverride,
         );
       } catch {
         // onChatError IPC already surfaces this to the user
@@ -142,7 +153,53 @@ export function useChatActions({
       setIsLoading(true);
       pushUser(text, "user", attachments);
       onSessionStarted?.();
-      await sendToAgent(text, attachments);
+
+      const activeModels = selectedModelsRef.current;
+      if (activeModels.length > 1) {
+        // Council Mode: Query multiple models in parallel
+        const turnId = `council-turn-${Date.now()}`;
+        const responses = activeModels.reduce((acc, m) => {
+          const modelKey = `${m.provider}:${m.model}`;
+          acc[modelKey] = {
+            modelLabel: m.label,
+            provider: m.provider,
+            model: m.model,
+            content: "",
+            isLoading: true,
+          };
+          return acc;
+        }, {} as any);
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: turnId,
+            kind: "council_turn",
+            role: "agent",
+            responses,
+          },
+        ]);
+
+        await Promise.all(
+          activeModels.map((m) => {
+            const modelKey = `${m.provider}:${m.model}`;
+            const runId = `${turnId}::${modelKey}`;
+            return sendToAgent(
+              text,
+              attachments,
+              { model: m.model, provider: m.provider, baseUrl: m.baseUrl },
+              runId,
+            );
+          }),
+        );
+      } else {
+        // Standard Single-Model Mode with override
+        const primaryModel = activeModels[0];
+        const override = primaryModel
+          ? { model: primaryModel.model, provider: primaryModel.provider, baseUrl: primaryModel.baseUrl }
+          : undefined;
+        await sendToAgent(text, attachments, override);
+      }
     },
     [
       localCommands,
@@ -159,7 +216,12 @@ export function useChatActions({
       if (!text || isLoadingRef.current) return;
       setIsLoading(true);
       pushUser(`💭 ${text}`, "user-btw", attachments);
-      await sendToAgent(`/btw ${text}`, attachments);
+      const activeModels = selectedModelsRef.current;
+      const primaryModel = activeModels[0];
+      const override = primaryModel
+        ? { model: primaryModel.model, provider: primaryModel.provider, baseUrl: primaryModel.baseUrl }
+        : undefined;
+      await sendToAgent(`/btw ${text}`, attachments, override);
     },
     [pushUser, sendToAgent, setIsLoading],
   );

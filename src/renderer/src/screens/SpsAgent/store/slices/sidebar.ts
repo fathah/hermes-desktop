@@ -19,6 +19,8 @@ const ENABLED_DEFAULTS: Record<SectionId, boolean> = {
   shared: false,
   private: true,
   apps: false,
+  aiAssistant: true,
+  workspaceTools: true,
 };
 
 const OPEN_DEFAULTS: Record<SectionId, boolean> = {
@@ -28,6 +30,8 @@ const OPEN_DEFAULTS: Record<SectionId, boolean> = {
   shared: true,
   private: true,
   apps: true,
+  aiAssistant: true,
+  workspaceTools: true,
 };
 
 function loadSidebar(): SidebarPersist {

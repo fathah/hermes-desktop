@@ -11,6 +11,8 @@ interface ModelPickerProps {
   displayModel: string;
   onOpen: () => void;
   onSelectModel: (provider: string, model: string, baseUrl: string) => void;
+  selectedModels: Array<{ provider: string; model: string; baseUrl: string; label: string }>;
+  onToggleCouncilModel: (provider: string, model: string, baseUrl: string, label: string) => void;
 }
 
 export const ModelPicker = memo(function ModelPicker({
@@ -21,6 +23,8 @@ export const ModelPicker = memo(function ModelPicker({
   displayModel,
   onOpen,
   onSelectModel,
+  selectedModels,
+  onToggleCouncilModel,
 }: ModelPickerProps): React.JSX.Element {
   const { t } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
@@ -59,10 +63,20 @@ export const ModelPicker = memo(function ModelPicker({
     );
   }
 
+  const isCouncil = selectedModels.length > 1;
+
   return (
     <div className="chat-model-bar" ref={pickerRef}>
-      <button className="chat-model-trigger" onClick={toggle}>
-        <span className="chat-model-name">{displayModel}</span>
+      <button
+        className={`chat-model-trigger ${isCouncil ? "council-active" : ""}`}
+        onClick={toggle}
+        type="button"
+      >
+        <span className="chat-model-name">
+          {isCouncil
+            ? `Council of LLMs (${selectedModels.length})`
+            : displayModel}
+        </span>
         <ChevronDown size={12} />
       </button>
 
@@ -76,15 +90,43 @@ export const ModelPicker = memo(function ModelPicker({
               {group.models.map((m) => {
                 const active =
                   currentModel === m.model && currentProvider === m.provider;
+                const isSelectedInCouncil = selectedModels.some(
+                  (sm) => sm.model === m.model && sm.provider === m.provider,
+                );
                 return (
-                  <button
+                  <div
                     key={`${m.provider}:${m.model}`}
-                    className={`chat-model-option ${active ? "active" : ""}`}
-                    onClick={() => select(m.provider, m.model, m.baseUrl)}
+                    className="chat-model-option-wrapper"
                   >
-                    <span className="chat-model-option-label">{m.label}</span>
-                    <span className="chat-model-option-id">{m.model}</span>
-                  </button>
+                    <button
+                      className={`chat-model-option ${active ? "active" : ""}`}
+                      onClick={() => select(m.provider, m.model, m.baseUrl)}
+                      type="button"
+                    >
+                      <span className="chat-model-option-label">{m.label}</span>
+                      <span className="chat-model-option-id">{m.model}</span>
+                    </button>
+                    <div
+                      className="chat-model-option-checkbox-container"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleCouncilModel(
+                          m.provider,
+                          m.model,
+                          m.baseUrl,
+                          m.label,
+                        );
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        className="chat-model-option-checkbox"
+                        checked={isSelectedInCouncil}
+                        onChange={() => {}}
+                        title="Add to Council of LLMs"
+                      />
+                    </div>
+                  </div>
                 );
               })}
             </div>

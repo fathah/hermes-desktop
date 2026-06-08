@@ -4343,6 +4343,13 @@ body {
   overflow-y: auto;
 }
 
+.chat-history-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+
 /* ---- SPS admin overlay (opened via the sidebar "Settings" item / ⌘,) ---- */
 .sps-admin-overlay {
   position: fixed;
@@ -7277,6 +7284,10 @@ body {
   margin: 0;
 }
 
+.memory-embedded {
+  width: 100%;
+}
+
 /* Capacity Grid Cards */
 .memory-capacity-grid {
   display: grid;
@@ -8950,4 +8961,242 @@ body {
   font-weight: 400;
   color: var(--text-muted);
 }
+
+/* ========================================================================
+   COUNCIL OF LLMS & DYNAMIC PROVIDERS
+   ======================================================================== */
+
+.chat-council-turn {
+  display: flex;
+  gap: 16px;
+  width: 100%;
+  overflow-x: auto;
+  padding: 12px 0;
+  margin-top: 8px;
+}
+
+.chat-council-col {
+  flex: 1;
+  min-width: 320px;
+  max-width: 600px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.chat-council-col:hover {
+  border-color: var(--accent-subtle);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.chat-council-col-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border);
+}
+
+.chat-council-col-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.chat-council-col-status {
+  font-size: 9px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+}
+
+.chat-council-col-body {
+  padding: 16px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  flex-grow: 1;
+  overflow-y: auto;
+  max-height: 480px;
+}
+
+.chat-council-col-footer {
+  padding: 10px 14px;
+  background: var(--bg-tertiary);
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.chat-council-col-action {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all var(--transition);
+}
+
+.chat-council-col-action:hover {
+  background: var(--accent-subtle);
+  color: var(--accent-text);
+  border-color: var(--accent-border);
+}
+
+.chat-council-synthesize-bar {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
+  margin-bottom: 8px;
+  width: 100%;
+}
+
+.chat-council-synthesize-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  background: linear-gradient(135deg, var(--accent, #a855f7), var(--accent-subtle, #d8b4fe));
+  color: #fff !important;
+  border: none;
+  padding: 8px 20px;
+  border-radius: 20px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(168, 85, 247, 0.4);
+  transition: all 0.2s ease;
+}
+
+.chat-council-synthesize-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(168, 85, 247, 0.6);
+  opacity: 0.95;
+}
+
+/* Checkboxes in Model Selector */
+.chat-model-option-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding-right: 10px;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition);
+}
+
+.chat-model-option-wrapper:hover {
+  background: var(--bg-hover);
+}
+
+.chat-model-option-wrapper .chat-model-option {
+  flex-grow: 1;
+  background: none;
+  border-radius: 0;
+  padding-right: 0;
+}
+
+.chat-model-option-wrapper .chat-model-option:hover {
+  background: none;
+}
+
+.chat-model-option-checkbox-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  cursor: pointer;
+}
+
+.chat-model-option-checkbox {
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  border: 1.5px solid var(--border);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  position: relative;
+  background: var(--bg-secondary);
+}
+
+.chat-model-option-checkbox:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.chat-model-option-checkbox:checked::after {
+  content: "";
+  width: 4px;
+  height: 8px;
+  border: solid white;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+  position: absolute;
+  top: 1px;
+}
+
+.chat-model-option-checkbox:hover {
+  border-color: var(--accent);
+}
+
+/* Model Badges and Pills */
+.chat-model-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1.5px solid var(--border-bright);
+  padding: 3px 8px;
+  border-radius: 12px;
+  margin-left: 8px;
+  margin-top: 4px;
+  align-self: flex-start;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+.chat-model-badge-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-model-badge-name {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  text-transform: capitalize;
+}
+
+/* Gradient indicator for Council Mode trigger */
+.chat-model-trigger.council-active {
+  background: linear-gradient(135deg, var(--bg-hover), var(--accent-subtle));
+  border: 1px solid var(--accent-border);
+  color: var(--accent-text);
+  padding: 3px 8px;
+  font-weight: 600;
+}
+
 

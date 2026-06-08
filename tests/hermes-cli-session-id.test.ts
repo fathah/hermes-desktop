@@ -88,6 +88,7 @@ vi.mock("http", () => ({
         destroy: () => {
           handlers.get("error")?.(new Error("destroyed"));
         },
+        setTimeout: () => req,
       };
       return req;
     },

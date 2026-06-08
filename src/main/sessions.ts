@@ -43,6 +43,9 @@ export type HistoryItem =
       content: string;
       timestamp: number;
       attachments?: Attachment[];
+      model?: string;
+      provider?: string;
+      councilGroupId?: string;
     }
   | {
       kind: "reasoning";
@@ -385,6 +388,9 @@ export interface RawMessageRow {
   reasoning: string | null;
   reasoning_content: string | null;
   reasoning_details: string | null;
+  model?: string | null;
+  provider?: string | null;
+  council_group_id?: string | null;
 }
 
 /**
@@ -432,6 +438,9 @@ export function expandRowsToHistory(rows: RawMessageRow[]): HistoryItem[] {
           ...(decoded.attachments.length > 0
             ? { attachments: decoded.attachments }
             : {}),
+          ...(r.model ? { model: r.model } : {}),
+          ...(r.provider ? { provider: r.provider } : {}),
+          ...(r.council_group_id ? { councilGroupId: r.council_group_id } : {}),
         });
       }
 
@@ -472,16 +481,31 @@ export function getSessionMessages(sessionId: string): HistoryItem[] {
   const db = getDb();
   if (!db) return [];
 
-  const rows = db
-    .prepare(
-      `SELECT id, role, content, timestamp,
+  let hasMeta = false;
+  try {
+    const tableCheck = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='messages_metadata'").get();
+    if (tableCheck) hasMeta = true;
+  } catch {
+    hasMeta = false;
+  }
+
+  const query = hasMeta
+    ? `SELECT m.id, m.role, m.content, m.timestamp,
+              m.tool_call_id, m.tool_calls, m.tool_name,
+              m.reasoning, m.reasoning_content, m.reasoning_details,
+              meta.model, meta.provider, meta.council_group_id
+       FROM messages m
+       LEFT JOIN messages_metadata meta ON m.id = meta.message_id
+       WHERE m.session_id = ? AND m.role IN ('user', 'assistant', 'tool')
+       ORDER BY m.timestamp, m.id`
+    : `SELECT id, role, content, timestamp,
               tool_call_id, tool_calls, tool_name,
               reasoning, reasoning_content, reasoning_details
        FROM messages
        WHERE session_id = ? AND role IN ('user', 'assistant', 'tool')
-       ORDER BY timestamp, id`,
-    )
-    .all(sessionId) as RawMessageRow[];
+       ORDER BY timestamp, id`;
+
+  const rows = db.prepare(query).all(sessionId) as RawMessageRow[];
 
   return expandRowsToHistory(rows);
 }
@@ -499,4 +523,43 @@ export function deleteSession(sessionId: string): void {
 
   clearStagedAttachments(sessionId);
   removeSessionFromCache(sessionId);
+}
+
+export function adoptCouncilResponse(
+  messageId: number,
+  sessionId: string,
+  councilGroupId: string,
+): void {
+  const db = getDb(false);
+  if (!db) return;
+  try {
+    const tx = db.transaction(() => {
+      // Find all messages in the council group except the one we adopt
+      const idsToDelete = db
+        .prepare(
+          `SELECT message_id FROM messages_metadata
+           WHERE council_group_id = ? AND message_id != ?`,
+        )
+        .all(councilGroupId, messageId) as Array<{ message_id: number }>;
+
+      if (idsToDelete.length > 0) {
+        const placeholders = idsToDelete.map(() => "?").join(",");
+        const ids = idsToDelete.map((row) => row.message_id);
+
+        // Delete other messages from the messages table
+        db.prepare(
+          `DELETE FROM messages
+           WHERE session_id = ? AND id IN (${placeholders})`,
+        ).run(sessionId, ...ids);
+      }
+
+      // Clear the council_group_id for the adopted message so it is no longer grouped
+      db.prepare(
+        `UPDATE messages_metadata SET council_group_id = NULL WHERE message_id = ?`,
+      ).run(messageId);
+    });
+    tx();
+  } catch (err) {
+    console.error("[sessions] Failed to adopt council response:", err);
+  }
 }

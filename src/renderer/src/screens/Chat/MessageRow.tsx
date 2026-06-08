@@ -1,5 +1,5 @@
 import { memo, useMemo, useState } from "react";
-import { Volume2, Square as StopIcon } from "lucide-react";
+import { Volume2, Square as StopIcon, Sparkles, Brain, Cpu, Bot } from "lucide-react";
 import icon from "../../assets/icon.png";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
 import { AttachmentChip } from "../../components/AttachmentChip";
@@ -7,6 +7,39 @@ import { MediaSegmentView } from "../../components/MediaImage";
 import { useI18n } from "../../components/useI18n";
 import { parseMediaTokens } from "./mediaUtils";
 import type { Attachment, ChatBubbleMessage, ChatMessage } from "./types";
+
+function ModelBadge({ model, provider }: { model?: string; provider?: string }): React.JSX.Element | null {
+  if (!model) return null;
+  const p = (provider || "").toLowerCase() || (model || "").toLowerCase();
+
+  let Icon = Bot;
+  let color = "#8e8e93";
+
+  if (p.includes("anthropic") || p.includes("claude")) {
+    Icon = Sparkles;
+    color = "#e05a47";
+  } else if (p.includes("openai") || p.includes("gpt")) {
+    Icon = Brain;
+    color = "#10a37f";
+  } else if (p.includes("google") || p.includes("gemini")) {
+    Icon = Cpu;
+    color = "#4285f4";
+  } else if (p.includes("deepseek")) {
+    Icon = Bot;
+    color = "#0052ff";
+  }
+
+  const modelName = model.split("/").pop() || model;
+
+  return (
+    <div className="chat-model-badge" style={{ borderColor: `${color}40` }}>
+      <span className="chat-model-badge-icon" style={{ color }}>
+        <Icon size={10} />
+      </span>
+      <span className="chat-model-badge-name">{modelName}</span>
+    </div>
+  );
+}
 
 export const APPROVAL_RE =
   /⚠️.*dangerous|requires? (your )?approval|\/approve.*\/deny|do you want (me )?to (proceed|continue|run|execute)/i;
@@ -128,6 +161,7 @@ export const MessageRow = memo(function MessageRow({
         <HermesAvatar />
       )}
       <div className={`chat-bubble chat-bubble-${msg.role}`}>
+        {msg.role === "agent" && <ModelBadge model={(msg as any).model} provider={(msg as any).provider} />}
         {hasAttachments && (
           <div className="chat-message-attachments">
             {msg.attachments!.map((att) => (
