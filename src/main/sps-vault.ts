@@ -11,6 +11,7 @@
 import { promises as fs } from "fs";
 import type { Dirent } from "fs";
 import { join } from "path";
+import { safeWriteFileAsync } from "./utils";
 
 // Page ids are internal handles ("home", "b<seed><n>"). Validate strictly so a
 // crafted id can never escape the vault directory.
@@ -42,8 +43,7 @@ export async function exportPageMarkdownTo(
 ): Promise<boolean> {
   if (!isValidPageId(pageId)) return false;
   try {
-    await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(join(dir, pageFilename(pageId)), markdown, "utf-8");
+    await safeWriteFileAsync(join(dir, pageFilename(pageId)), markdown);
     return true;
   } catch {
     return false;
@@ -90,9 +90,10 @@ export async function exportRowMarkdownTo(
   if (!isValidSegment(dbFolder) || !isValidSegment(rowId)) return false;
   if (isReservedFolder(dbFolder)) return false;
   try {
-    const dir = join(vaultDir, dbFolder);
-    await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(join(dir, pageFilename(rowId)), markdown, "utf-8");
+    await safeWriteFileAsync(
+      join(vaultDir, dbFolder, pageFilename(rowId)),
+      markdown,
+    );
     return true;
   } catch {
     return false;
@@ -190,9 +191,10 @@ export async function writeAssetTo(
 ): Promise<boolean> {
   if (!isValidPageId(pageId) || !isValidAssetFile(filename)) return false;
   try {
-    const dir = join(vaultDir, ASSETS_DIR, pageId);
-    await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(join(dir, filename), data, "utf-8");
+    await safeWriteFileAsync(
+      join(vaultDir, ASSETS_DIR, pageId, filename),
+      data,
+    );
     return true;
   } catch {
     return false;
@@ -261,8 +263,7 @@ export async function writeVaultManifest(
   json: string,
 ): Promise<boolean> {
   try {
-    await fs.mkdir(vaultDir, { recursive: true });
-    await fs.writeFile(join(vaultDir, MANIFEST_FILE), json, "utf-8");
+    await safeWriteFileAsync(join(vaultDir, MANIFEST_FILE), json);
     return true;
   } catch {
     return false;

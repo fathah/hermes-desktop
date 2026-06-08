@@ -148,7 +148,10 @@ export async function chatCompletionOnce(
     clearTimeout(timeoutId);
 
     const text = await res.text();
-    let parsed: any;
+    let parsed: {
+      error?: { message?: string };
+      choices?: Array<{ message?: { content?: string } }>;
+    };
     try {
       parsed = JSON.parse(text);
     } catch {
@@ -168,11 +171,13 @@ export async function chatCompletionOnce(
     return {
       content: parsed.choices?.[0]?.message?.content || "",
     };
-  } catch (err: any) {
-    if (err.name === "AbortError") {
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    const errorName = err instanceof Error ? err.name : "";
+    if (errorName === "AbortError") {
       return { content: "", error: "Request timed out" };
     }
-    return { content: "", error: err.message || String(err) };
+    return { content: "", error: errorMsg };
   }
 }
 

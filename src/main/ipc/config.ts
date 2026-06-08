@@ -23,7 +23,6 @@ import {
   setCompletionSound,
   readDesktopConfig,
   writeDesktopConfig,
-  type SshConnectionConfig,
 } from "../config";
 import {
   isRemoteMode,
@@ -80,23 +79,7 @@ import {
 } from "../hermes-auth";
 import { isAllowedExternalUrl } from "../security";
 import { isAllowedObsidianExternalUrl } from "../obsidian";
-
-function registerDualHandler<Args extends unknown[], RetLocal, RetSsh>(
-  channel: string,
-  localFn: (...args: Args) => Promise<RetLocal> | RetLocal,
-  sshFn: (
-    ssh: SshConnectionConfig,
-    ...args: Args
-  ) => Promise<RetSsh> | RetSsh,
-): void {
-  ipcMain.handle(channel, async (_event, ...args: unknown[]) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh) {
-      return sshFn(conn.ssh, ...(args as Args));
-    }
-    return localFn(...(args as Args));
-  });
-}
+import { registerDualHandler } from "./utility";
 
 function openExternalUrl(rawUrl: unknown): void {
   if (!isAllowedExternalUrl(rawUrl) && !isAllowedObsidianExternalUrl(rawUrl)) {
@@ -111,20 +94,11 @@ function openExternalUrl(rawUrl: unknown): void {
 
 export function registerConfigIpc(): void {
   // Env
-  ipcMain.handle("get-env", (_event, profile?: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh) return sshReadEnv(conn.ssh, profile);
-    return readEnv(profile);
-  });
+  registerDualHandler("get-env", readEnv, sshReadEnv);
 
-  ipcMain.handle(
+  registerDualHandler(
     "set-env",
-    async (_event, key: string, value: string, profile?: string) => {
-      const conn = getConnectionConfig();
-      if (conn.mode === "ssh" && conn.ssh) {
-        await sshSetEnvValue(conn.ssh, key, value, profile);
-        return true;
-      }
+    async (key: string, value: string, profile?: string) => {
       setEnvValue(key, value, profile);
       const looksLikeCredential =
         key.endsWith("_API_KEY") ||
@@ -133,6 +107,10 @@ export function registerConfigIpc(): void {
       if (isGatewayRunning(profile) && looksLikeCredential) {
         restartGateway(profile);
       }
+      return true;
+    },
+    async (ssh, key: string, value: string, profile?: string) => {
+      await sshSetEnvValue(ssh, key, value, profile);
       return true;
     },
   );
@@ -157,30 +135,14 @@ export function registerConfigIpc(): void {
   // Model Config
   registerDualHandler("get-model-config", getModelConfig, sshGetModelConfig);
 
-  ipcMain.handle(
+  registerDualHandler(
     "set-model-config",
     async (
-      _event,
       provider: string,
       model: string,
       baseUrl: string,
       profile?: string,
     ) => {
-      const conn = getConnectionConfig();
-      if (conn.mode === "ssh" && conn.ssh) {
-        const prev = await sshGetModelConfig(conn.ssh, profile);
-        await sshSetModelConfig(conn.ssh, provider, model, baseUrl, profile);
-        if (
-          (await sshGatewayStatus(conn.ssh)) &&
-          (prev.provider !== provider ||
-            prev.model !== model ||
-            prev.baseUrl !== baseUrl)
-        ) {
-          await sshStopGateway(conn.ssh);
-          await sshStartGateway(conn.ssh);
-        }
-        return true;
-      }
       const prev = getModelConfig(profile);
       setModelConfig(provider, model, baseUrl, profile);
 
@@ -193,6 +155,26 @@ export function registerConfigIpc(): void {
         restartGateway(profile);
       }
 
+      return true;
+    },
+    async (
+      ssh,
+      provider: string,
+      model: string,
+      baseUrl: string,
+      profile?: string,
+    ) => {
+      const prev = await sshGetModelConfig(ssh, profile);
+      await sshSetModelConfig(ssh, provider, model, baseUrl, profile);
+      if (
+        (await sshGatewayStatus(ssh)) &&
+        (prev.provider !== provider ||
+          prev.model !== model ||
+          prev.baseUrl !== baseUrl)
+      ) {
+        await sshStopGateway(ssh);
+        await sshStartGateway(ssh);
+      }
       return true;
     },
   );
@@ -368,40 +350,19 @@ export function registerConfigIpc(): void {
   );
 
   // Models
-  ipcMain.handle("list-models", () => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh) return sshListModels(conn.ssh);
-    return listModels();
-  });
-  ipcMain.handle(
+  registerDualHandler("list-models", listModels, sshListModels);
+  registerDualHandler(
     "add-model",
-    (
-      _event,
-      name: string,
-      provider: string,
-      model: string,
-      baseUrl: string,
-    ) => {
-      const conn = getConnectionConfig();
-      if (conn.mode === "ssh" && conn.ssh) {
-        return sshAddModel(conn.ssh, name, provider, model, baseUrl);
-      }
-      return addModel(name, provider, model, baseUrl);
-    },
+    addModel,
+    (ssh, name: string, provider: string, model: string, baseUrl: string) =>
+      sshAddModel(ssh, name, provider, model, baseUrl),
   );
-  ipcMain.handle("remove-model", (_event, id: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh) return sshRemoveModel(conn.ssh, id);
-    return removeModel(id);
-  });
-  ipcMain.handle(
+  registerDualHandler("remove-model", removeModel, sshRemoveModel);
+  registerDualHandler(
     "update-model",
-    (_event, id: string, fields: Record<string, string>) => {
-      const conn = getConnectionConfig();
-      if (conn.mode === "ssh" && conn.ssh)
-        return sshUpdateModel(conn.ssh, id, fields);
-      return updateModel(id, fields);
-    },
+    updateModel,
+    (ssh, id: string, fields: Record<string, string>) =>
+      sshUpdateModel(ssh, id, fields),
   );
 
   // OAuth Sign-In
@@ -434,54 +395,58 @@ export function registerConfigIpc(): void {
   ipcMain.handle("oauth-login-cancel", () => cancelHermesAuthLogin());
 
   // Gateway
-  ipcMain.handle("start-gateway", async () => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh) {
-      await sshStartGateway(conn.ssh);
-      return true;
-    }
-    if (conn.mode === "remote") {
-      return false;
-    }
-    return startGateway();
-  });
-  ipcMain.handle("stop-gateway", async () => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh) {
-      await sshStopGateway(conn.ssh);
-      return true;
-    }
-    if (conn.mode === "remote") {
-      return true;
-    }
-    stopGateway(undefined, true);
-    return true;
-  });
-  ipcMain.handle("gateway-status", () => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh) return sshGatewayStatus(conn.ssh);
-    return isGatewayRunning();
-  });
-
-  // Platform toggles
-  ipcMain.handle("get-platform-enabled", (_event, profile?: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh)
-      return sshGetPlatformEnabled(conn.ssh, profile);
-    return getPlatformEnabled(profile);
-  });
-  ipcMain.handle(
-    "set-platform-enabled",
-    async (_event, platform: string, enabled: boolean, profile?: string) => {
+  registerDualHandler(
+    "start-gateway",
+    async () => {
       const conn = getConnectionConfig();
-      if (conn.mode === "ssh" && conn.ssh) {
-        await sshSetPlatformEnabled(conn.ssh, platform, enabled, profile);
+      if (conn.mode === "remote") {
+        return false;
+      }
+      return startGateway();
+    },
+    async (ssh) => {
+      await sshStartGateway(ssh);
+      return true;
+    },
+  );
+  registerDualHandler(
+    "stop-gateway",
+    async () => {
+      const conn = getConnectionConfig();
+      if (conn.mode === "remote") {
         return true;
       }
+      stopGateway(undefined, true);
+      return true;
+    },
+    async (ssh) => {
+      await sshStopGateway(ssh);
+      return true;
+    },
+  );
+  registerDualHandler(
+    "gateway-status",
+    () => isGatewayRunning(),
+    (ssh) => sshGatewayStatus(ssh),
+  );
+
+  // Platform toggles
+  registerDualHandler(
+    "get-platform-enabled",
+    getPlatformEnabled,
+    sshGetPlatformEnabled,
+  );
+  registerDualHandler(
+    "set-platform-enabled",
+    async (platform: string, enabled: boolean, profile?: string) => {
       setPlatformEnabled(platform, enabled, profile);
       if (isGatewayRunning(profile)) {
         restartGateway(profile);
       }
+      return true;
+    },
+    async (ssh, platform: string, enabled: boolean, profile?: string) => {
+      await sshSetPlatformEnabled(ssh, platform, enabled, profile);
       return true;
     },
   );

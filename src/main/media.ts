@@ -15,6 +15,8 @@ import {
 } from "fs";
 import { extname } from "path";
 import { BrowserWindow, dialog } from "electron";
+import { fetch as undiciFetch } from "undici";
+import { guardedAgent } from "./sps-agent";
 
 const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
 
@@ -88,7 +90,11 @@ export async function saveMedia(
     }
 
     if (/^https?:\/\//i.test(src)) {
-      const response = await fetch(src);
+      const response = await undiciFetch(src, {
+        dispatcher: guardedAgent,
+        redirect: "follow",
+        headers: { "User-Agent": "HermesDesktop/1.0 (+media-saver)" },
+      });
       if (!response.ok) return false;
       const buffer = Buffer.from(await response.arrayBuffer());
       writeFileSync(dest, buffer);

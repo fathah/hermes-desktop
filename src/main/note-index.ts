@@ -27,6 +27,27 @@ import { resolveSpsVaultDir } from "./sps-storage";
 
 const NOTE_EXTENSIONS = new Set([".md", ".markdown"]);
 
+/** Predefined allowlist of frontmatter properties to index in SQLite.
+ *  Prevents B-tree index bloat for dynamic/ad-hoc frontmatter keys. */
+const INDEXED_PROPERTIES = new Set([
+  "title",
+  "icon",
+  "cover",
+  "source",
+  "ingestedat",
+  "journal",
+  "date",
+  "time",
+  "mood",
+  "tags",
+  "status",
+  "rating",
+  "updated",
+  "prio",
+  "assignee",
+  "tenant",
+]);
+
 /** Extract `[[wikilink]]` targets from raw note content. */
 function extractBacklinks(content: string): string[] {
   const links = new Set<string>();
@@ -206,14 +227,19 @@ export class NoteIndex {
 
   private loadExistingPropIndexes(): void {
     try {
-      const rows = this.db.prepare(
-        `SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'idx_prop_%'`
-      ).all() as Array<{ name: string }>;
+      const rows = this.db
+        .prepare(
+          `SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'idx_prop_%'`,
+        )
+        .all() as Array<{ name: string }>;
       for (const row of rows) {
         this.ensuredPropIndexes.add(row.name);
       }
     } catch (err) {
-      console.error("[NoteIndex] failed to load existing expression indexes:", err);
+      console.error(
+        "[NoteIndex] failed to load existing expression indexes:",
+        err,
+      );
     }
   }
 
@@ -388,6 +414,7 @@ export class NoteIndex {
   private ensurePropIndex(prop: string): void {
     const safe = safeProp(prop);
     if (!safe) return;
+    if (!INDEXED_PROPERTIES.has(safe.toLowerCase())) return;
     const name = `idx_prop_${safe.replace(/\./g, "_")}`;
     if (this.ensuredPropIndexes.has(name)) return;
     try {
@@ -396,7 +423,10 @@ export class NoteIndex {
       );
       this.ensuredPropIndexes.add(name);
     } catch (err) {
-      console.error(`[NoteIndex] failed to create expression index for ${prop}:`, err);
+      console.error(
+        `[NoteIndex] failed to create expression index for ${prop}:`,
+        err,
+      );
     }
   }
 

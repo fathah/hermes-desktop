@@ -10,7 +10,7 @@
 //                     Real model + tools + memory; no canned logic, no browser key.
 //   • sps:load / sps:save — durable workspace persistence under the profile home.
 import { promises as fs } from "fs";
-import { join, dirname } from "path";
+import { join } from "path";
 import dns from "node:dns";
 import net from "node:net";
 import { Agent, fetch as undiciFetch } from "undici";
@@ -21,7 +21,11 @@ import {
   isRemoteMode,
   buildRetrievalSystemMessage,
 } from "./hermes";
-import { profileHome, getActiveProfileNameSync } from "./utils";
+import {
+  profileHome,
+  getActiveProfileNameSync,
+  safeWriteFileAsync,
+} from "./utils";
 import { assembleVaultContext, type VaultContextUsage } from "./sps-context";
 import { resolveSpsVaultDir } from "./sps-storage";
 import {
@@ -651,8 +655,7 @@ export async function spsLoad(profile?: string): Promise<unknown | null> {
 export async function spsSave(ws: unknown, profile?: string): Promise<boolean> {
   try {
     const p = workspacePath(profile);
-    await fs.mkdir(dirname(p), { recursive: true });
-    await fs.writeFile(p, JSON.stringify(ws), "utf-8");
+    await safeWriteFileAsync(p, JSON.stringify(ws));
     return true;
   } catch {
     return false;

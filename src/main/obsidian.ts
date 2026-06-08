@@ -285,24 +285,47 @@ export async function searchObsidian(
   profile?: string,
 ): Promise<ObsidianSearchResult[]> {
   const root = configuredVault(profile);
-  const needle = query.trim().toLowerCase();
+  const needle = query.trim();
   if (!needle) return [];
-  const files = await collectMarkdownFiles(root, root);
-  const results: ObsidianSearchResult[] = [];
-  for (const file of files) {
-    const content = await readFile(file, "utf-8");
-    const index = content.toLowerCase().indexOf(needle);
-    if (index === -1) continue;
-    const snippet = content.slice(Math.max(0, index - 80), index + 160).trim();
-    results.push({
+  try {
+    const { getNoteIndexForRoot } = await import("./note-index");
+    const index = await getNoteIndexForRoot(root);
+    const hits = index.search(needle, limit, "any");
+    return hits.map((hit) => ({
       kind: "obsidian",
-      path: toVaultRelative(root, file),
-      title: toVaultRelative(root, file).split("/").pop() ?? "",
-      snippet,
-    });
-    if (results.length >= limit) break;
+      path: hit.path,
+      title: hit.title,
+      snippet: hit.snippet,
+    }));
+  } catch (err) {
+    console.error(
+      "[obsidian] search failed, falling back to naive search:",
+      err,
+    );
+    const cleanNeedle = needle.toLowerCase();
+    const files = await collectMarkdownFiles(root, root);
+    const results: ObsidianSearchResult[] = [];
+    for (const file of files) {
+      try {
+        const content = await readFile(file, "utf-8");
+        const index = content.toLowerCase().indexOf(cleanNeedle);
+        if (index === -1) continue;
+        const snippet = content
+          .slice(Math.max(0, index - 80), index + 160)
+          .trim();
+        results.push({
+          kind: "obsidian",
+          path: toVaultRelative(root, file),
+          title: toVaultRelative(root, file).split("/").pop() ?? "",
+          snippet,
+        });
+        if (results.length >= limit) break;
+      } catch {
+        // ignore read errors on individual files
+      }
+    }
+    return results;
   }
-  return results;
 }
 
 export function buildObsidianOpenUri(input: {

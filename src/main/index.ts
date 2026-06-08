@@ -1,11 +1,4 @@
-import {
-  app,
-  BrowserWindow,
-  Menu,
-  net,
-  protocol,
-  shell,
-} from "electron";
+import { app, BrowserWindow, Menu, net, protocol, shell } from "electron";
 import { join } from "path";
 import { pathToFileURL } from "url";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
@@ -32,7 +25,11 @@ import { resolveAssetPath } from "./sps-assets";
 import { startEquityAlertWatcher } from "./equity-alerts";
 import { updaterLogger } from "./updater-log";
 import { getConnectionConfig } from "./config";
-import { sshGatewayStatus, sshStartGateway, sshReadRemoteApiKey } from "./ssh-remote";
+import {
+  sshGatewayStatus,
+  sshStartGateway,
+  sshReadRemoteApiKey,
+} from "./ssh-remote";
 
 import { registerSystemIpc } from "./ipc/system";
 import { registerConfigIpc } from "./ipc/config";
@@ -150,17 +147,25 @@ function createWindow(): void {
     return { action: "deny" };
   });
 
-  // Mic access for in-app voice notes. Grant `media` ONLY to the app renderer
-  // (file:// or the dev server); attached webviews must never gain mic/camera.
-  // All other permissions keep their prior (handler-less) allow behavior.
+  // Microphone access for push-to-talk voice input and voice notes. Grant audio-only
+  // `media` ONLY to the app renderer (file:// or the dev server); deny camera,
+  // attached webviews, and any other untrusted permission requests.
   mainWindow.webContents.session.setPermissionRequestHandler(
-    (wc, permission, callback) => {
+    (wc, permission, callback, details) => {
       const url = wc?.getURL?.() ?? "";
       const devUrl = is.dev ? process.env["ELECTRON_RENDERER_URL"] : undefined;
       const isAppRenderer =
         url.startsWith("file://") || (!!devUrl && url.startsWith(devUrl));
-      if (permission === "media") return callback(isAppRenderer);
-      return callback(true);
+
+      if (permission === "media") {
+        if (!isAppRenderer) return callback(false);
+        const mediaTypes =
+          (details as { mediaTypes?: string[] }).mediaTypes ?? [];
+        callback(!mediaTypes.includes("video")); // Grant audio-only, deny video/camera
+        return;
+      }
+
+      callback(isAppRenderer);
     },
   );
 
@@ -178,21 +183,6 @@ function createWindow(): void {
     event.preventDefault();
     openExternalUrl(url);
   });
-
-  // Microphone access for push-to-talk voice input (WS4). Grant audio-only
-  // `media`; deny camera and every other permission. getUserMedia still shows
-  // the OS-level mic prompt, so the user explicitly consents at capture time.
-  mainWindow.webContents.session.setPermissionRequestHandler(
-    (_wc, permission, callback, details) => {
-      if (permission === "media") {
-        const mediaTypes =
-          (details as { mediaTypes?: string[] }).mediaTypes ?? [];
-        callback(!mediaTypes.includes("video"));
-        return;
-      }
-      callback(false);
-    },
-  );
 
   mainWindow.webContents.on(
     "will-attach-webview",

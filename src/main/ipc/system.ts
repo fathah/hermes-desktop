@@ -22,10 +22,7 @@ import {
   runHermesImport,
   type InstallProgress,
 } from "../installer";
-import {
-  getConnectionConfig,
-  type SshConnectionConfig,
-} from "../config";
+import { getConnectionConfig } from "../config";
 import {
   sshGetHermesVersion,
   sshRunDoctor,
@@ -42,14 +39,15 @@ import {
   isRemoteMode,
   setSshRemoteApiKey,
 } from "../hermes";
-import {
-  startSshTunnel,
-} from "../ssh-tunnel";
+import { startSshTunnel } from "../ssh-tunnel";
 import { getAppLocale, setAppLocale } from "../locale";
 import type { AppLocale } from "../../shared/i18n/types";
+import type { AppUpdater } from "electron-updater";
 
 // Dynamic import or check for updates depending on packaging
-let autoUpdater: any = null;
+import { registerDualHandler } from "./utility";
+
+let autoUpdater: AppUpdater | null = null;
 try {
   if (app.isPackaged && !process.env.PORTABLE_EXECUTABLE_DIR) {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -59,24 +57,9 @@ try {
   console.error("[updater] Failed to load autoUpdater:", err);
 }
 
-function registerDualHandler<Args extends unknown[], RetLocal, RetSsh>(
-  channel: string,
-  localFn: (...args: Args) => Promise<RetLocal> | RetLocal,
-  sshFn: (
-    ssh: SshConnectionConfig,
-    ...args: Args
-  ) => Promise<RetSsh> | RetSsh,
+export function registerSystemIpc(
+  mainWindowGetter: () => BrowserWindow | null,
 ): void {
-  ipcMain.handle(channel, async (_event, ...args: unknown[]) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh) {
-      return sshFn(conn.ssh, ...(args as Args));
-    }
-    return localFn(...(args as Args));
-  });
-}
-
-export function registerSystemIpc(mainWindowGetter: () => BrowserWindow | null): void {
   // Installation
   ipcMain.handle("check-install", () => {
     return checkInstallStatus();
@@ -206,11 +189,7 @@ export function registerSystemIpc(mainWindowGetter: () => BrowserWindow | null):
   );
 
   // Debug dump
-  ipcMain.handle("run-hermes-dump", () => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh) return sshRunDump(conn.ssh);
-    return runHermesDump();
-  });
+  registerDualHandler("run-hermes-dump", runHermesDump, sshRunDump);
 
   // MCP servers
   ipcMain.handle("list-mcp-servers", (_event, profile?: string) =>
@@ -218,20 +197,14 @@ export function registerSystemIpc(mainWindowGetter: () => BrowserWindow | null):
   );
 
   // Memory providers
-  ipcMain.handle("discover-memory-providers", (_event, profile?: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh)
-      return sshDiscoverMemoryProviders(conn.ssh, profile);
-    return discoverMemoryProviders(profile);
-  });
+  registerDualHandler(
+    "discover-memory-providers",
+    discoverMemoryProviders,
+    sshDiscoverMemoryProviders,
+  );
 
   // Log viewer
-  ipcMain.handle("read-logs", (_event, logFile?: string, lines?: number) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh)
-      return sshReadLogs(conn.ssh, logFile, lines);
-    return readLogs(logFile, lines);
-  });
+  registerDualHandler("read-logs", readLogs, sshReadLogs);
 
   // Auto-updater handlers
   const isPortableBuild = !!process.env.PORTABLE_EXECUTABLE_DIR;

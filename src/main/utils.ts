@@ -8,6 +8,7 @@ import {
   unlinkSync,
   writeFileSync,
   chmodSync,
+  promises as fs,
 } from "fs";
 import { HERMES_HOME } from "./installer";
 
@@ -221,6 +222,46 @@ export function safeWriteFile(filePath: string, content: string): void {
     if (tempWritten) {
       try {
         unlinkSync(tempPath);
+      } catch {
+        // Best-effort cleanup. Preserve the original write/rename error.
+      }
+    }
+    throw err;
+  }
+}
+
+/**
+ * Write a file asynchronously and atomically, creating parent directories if they don't exist.
+ * Prevents corruption on crashes/power cuts.
+ */
+export async function safeWriteFileAsync(
+  filePath: string,
+  content: string,
+): Promise<void> {
+  const dir = dirname(filePath);
+  await fs.mkdir(dir, { recursive: true });
+
+  const tempPath = join(
+    dir,
+    `.${basename(filePath)}.${process.pid}.${Date.now()}.${Math.random()
+      .toString(16)
+      .slice(2)}.tmp`,
+  );
+
+  let tempWritten = false;
+  try {
+    await fs.writeFile(tempPath, content, "utf-8");
+    try {
+      await fs.chmod(tempPath, 0o600);
+    } catch {
+      // Ignore chmod failures on filesystems that do not support Unix-like permissions (e.g. FAT32)
+    }
+    tempWritten = true;
+    await fs.rename(tempPath, filePath);
+  } catch (err) {
+    if (tempWritten) {
+      try {
+        await fs.unlink(tempPath);
       } catch {
         // Best-effort cleanup. Preserve the original write/rename error.
       }

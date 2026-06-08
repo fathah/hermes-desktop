@@ -1,4 +1,11 @@
-import { ipcMain, BrowserWindow, clipboard, shell, dialog, Menu } from "electron";
+import {
+  ipcMain,
+  BrowserWindow,
+  clipboard,
+  shell,
+  dialog,
+  Menu,
+} from "electron";
 import { readdir, readFile } from "fs/promises";
 import { extname } from "path";
 import { readMediaAsDataUrl, saveMedia, mediaFileExists } from "../media";
@@ -28,9 +35,13 @@ import {
   pythonMemorySearch,
   pythonMemoryGraph,
 } from "../agent-core-bridge";
-import { getConnectionConfig } from "../config";
+import { getConnectionConfig, type SshConnectionConfig } from "../config";
 import { isGatewayRunning, startGateway, setSshRemoteApiKey } from "../hermes";
-import { sshGatewayStatus, sshStartGateway, sshReadRemoteApiKey } from "../ssh-remote";
+import {
+  sshGatewayStatus,
+  sshStartGateway,
+  sshReadRemoteApiKey,
+} from "../ssh-remote";
 import { startSshTunnel } from "../ssh-tunnel";
 import { isAllowedExternalUrl } from "../security";
 import { isAllowedObsidianExternalUrl } from "../obsidian";
@@ -39,7 +50,6 @@ import { listSessions } from "../sessions";
 import { summarizeSearch } from "../session-summary";
 import { listSkins } from "../skins";
 import { runSecurityAudit, getPromptSizeBreakdown } from "../installer";
-
 
 function openExternalUrl(rawUrl: unknown): void {
   if (!isAllowedExternalUrl(rawUrl) && !isAllowedObsidianExternalUrl(rawUrl)) {
@@ -52,7 +62,23 @@ function openExternalUrl(rawUrl: unknown): void {
   });
 }
 
-export function registerUtilityIpc(_mainWindowGetter: () => BrowserWindow | null): void {
+export function registerDualHandler<Args extends unknown[], RetLocal, RetSsh>(
+  channel: string,
+  localFn: (...args: Args) => Promise<RetLocal> | RetLocal,
+  sshFn: (ssh: SshConnectionConfig, ...args: Args) => Promise<RetSsh> | RetSsh,
+): void {
+  ipcMain.handle(channel, async (_event, ...args: unknown[]) => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" && conn.ssh) {
+      return sshFn(conn.ssh, ...(args as Args));
+    }
+    return localFn(...(args as Args));
+  });
+}
+
+export function registerUtilityIpc(
+  _mainWindowGetter: () => BrowserWindow | null,
+): void {
   // Shell
   ipcMain.handle("open-external", (_event, url: string) => {
     openExternalUrl(url);

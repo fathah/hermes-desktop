@@ -125,7 +125,7 @@ import {
 } from "../personalization";
 import { readSoul, writeSoul, resetSoul } from "../soul";
 import { getToolsets, setToolsetEnabled } from "../tools";
-import { getConnectionConfig, type SshConnectionConfig } from "../config";
+import { getConnectionConfig } from "../config";
 import {
   sshListInstalledSkills,
   sshGetSkillContent,
@@ -157,24 +157,11 @@ function requireLocalWorkspace(): void {
   }
 }
 
-function registerDualHandler<Args extends unknown[], RetLocal, RetSsh>(
-  channel: string,
-  localFn: (...args: Args) => Promise<RetLocal> | RetLocal,
-  sshFn: (
-    ssh: SshConnectionConfig,
-    ...args: Args
-  ) => Promise<RetSsh> | RetSsh,
-): void {
-  ipcMain.handle(channel, async (_event, ...args: unknown[]) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh) {
-      return sshFn(conn.ssh, ...(args as Args));
-    }
-    return localFn(...(args as Args));
-  });
-}
+import { registerDualHandler } from "./utility";
 
-export function registerWorkspaceIpc(_mainWindowGetter: () => BrowserWindow | null): void {
+export function registerWorkspaceIpc(
+  _mainWindowGetter: () => BrowserWindow | null,
+): void {
   // Kanban
   ipcMain.handle(
     "kanban-list-boards",
@@ -389,8 +376,16 @@ export function registerWorkspaceIpc(_mainWindowGetter: () => BrowserWindow | nu
   );
 
   // Skills
-  registerDualHandler("list-installed-skills", listInstalledSkills, sshListInstalledSkills);
-  registerDualHandler("list-bundled-skills", listBundledSkills, sshListBundledSkills);
+  registerDualHandler(
+    "list-installed-skills",
+    listInstalledSkills,
+    sshListInstalledSkills,
+  );
+  registerDualHandler(
+    "list-bundled-skills",
+    listBundledSkills,
+    sshListBundledSkills,
+  );
   registerDualHandler("get-skill-content", getSkillContent, sshGetSkillContent);
   registerDualHandler("install-skill", installSkill, sshInstallSkill);
   registerDualHandler("uninstall-skill", uninstallSkill, sshUninstallSkill);
@@ -482,38 +477,34 @@ export function registerWorkspaceIpc(_mainWindowGetter: () => BrowserWindow | nu
 
   // Sessions
   registerDualHandler("list-sessions", listSessions, sshListSessions);
-  registerDualHandler("get-session-messages", getSessionMessages, sshGetSessionMessages);
+  registerDualHandler(
+    "get-session-messages",
+    getSessionMessages,
+    sshGetSessionMessages,
+  );
   ipcMain.handle("delete-session", (_event, sessionId: string) => {
     return deleteSession(sessionId);
   });
-  ipcMain.handle("search-sessions", (_event, query: string, limit?: number) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh)
-      return sshSearchSessions(conn.ssh, query, limit);
-    return searchSessions(query, limit);
-  });
+  registerDualHandler("search-sessions", searchSessions, sshSearchSessions);
 
   // Cached Sessions
-  ipcMain.handle(
+  registerDualHandler(
     "list-cached-sessions",
-    (_event, limit?: number, offset?: number) => {
-      const conn = getConnectionConfig();
-      if (conn.mode === "ssh" && conn.ssh)
-        return sshListCachedSessions(conn.ssh, limit, offset);
-      return listCachedSessions(limit, offset);
-    },
+    listCachedSessions,
+    sshListCachedSessions,
   );
-  ipcMain.handle("sync-session-cache", () => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh)
-      return sshListCachedSessions(conn.ssh, 50);
-    try {
-      return syncSessionCache();
-    } catch (error) {
-      console.error("sync-session-cache failed; using local cache", error);
-      return listCachedSessions(50);
-    }
-  });
+  registerDualHandler(
+    "sync-session-cache",
+    () => {
+      try {
+        return syncSessionCache();
+      } catch (error) {
+        console.error("sync-session-cache failed; using local cache", error);
+        return listCachedSessions(50);
+      }
+    },
+    async (ssh) => sshListCachedSessions(ssh, 50),
+  );
   ipcMain.handle(
     "update-session-title",
     (_event, sessionId: string, title: string) =>
@@ -525,123 +516,74 @@ export function registerWorkspaceIpc(_mainWindowGetter: () => BrowserWindow | nu
   ipcMain.handle("get-memory-timeline", (_event, profile?: string) =>
     getMemoryTimeline(profile),
   );
-  ipcMain.handle(
-    "add-memory-entry",
-    (_event, content: string, profile?: string) => {
-      const conn = getConnectionConfig();
-      if (conn.mode === "ssh" && conn.ssh)
-        return sshAddMemoryEntry(conn.ssh, content, profile);
-      return addMemoryEntry(content, profile);
-    },
-  );
-  ipcMain.handle(
+  registerDualHandler("add-memory-entry", addMemoryEntry, sshAddMemoryEntry);
+  registerDualHandler(
     "update-memory-entry",
-    (_event, index: number, content: string, profile?: string) => {
-      const conn = getConnectionConfig();
-      if (conn.mode === "ssh" && conn.ssh)
-        return sshUpdateMemoryEntry(conn.ssh, index, content, profile);
-      return updateMemoryEntry(index, content, profile);
-    },
+    updateMemoryEntry,
+    sshUpdateMemoryEntry,
   );
-  ipcMain.handle(
+  registerDualHandler(
     "remove-memory-entry",
-    (_event, index: number, profile?: string) => {
-      const conn = getConnectionConfig();
-      if (conn.mode === "ssh" && conn.ssh)
-        return sshRemoveMemoryEntry(conn.ssh, index, profile);
-      return removeMemoryEntry(index, profile);
-    },
+    removeMemoryEntry,
+    sshRemoveMemoryEntry,
   );
-  ipcMain.handle(
+  registerDualHandler(
     "write-user-profile",
-    (_event, content: string, profile?: string) => {
-      const conn = getConnectionConfig();
-      if (conn.mode === "ssh" && conn.ssh)
-        return sshWriteUserProfile(conn.ssh, content, profile);
-      return writeUserProfile(content, profile);
-    },
+    writeUserProfile,
+    sshWriteUserProfile,
   );
-  ipcMain.handle(
+  registerDualHandler(
     "write-memory",
-    (_event, content: string, profile?: string) => {
-      if (getConnectionConfig().mode === "ssh")
-        return {
-          success: false,
-          error: "Editing memory isn't available over SSH yet.",
-        };
-      return writeMemory(content, profile);
-    },
+    (content: string, profile?: string) => writeMemory(content, profile),
+    () => ({
+      success: false,
+      error: "Editing memory isn't available over SSH yet.",
+    }),
   );
-  ipcMain.handle("read-focus", () => {
-    if (getConnectionConfig().mode === "ssh") return "";
-    return readFocus();
-  });
-  ipcMain.handle("write-focus", (_event, content: string) => {
-    if (getConnectionConfig().mode === "ssh")
-      return {
-        success: false,
-        error: "Editing focus isn't available over SSH yet.",
-      };
-    return writeFocus(content);
-  });
-  ipcMain.handle(
+  registerDualHandler(
+    "read-focus",
+    () => readFocus(),
+    () => "",
+  );
+  registerDualHandler(
+    "write-focus",
+    (content: string) => writeFocus(content),
+    () => ({
+      success: false,
+      error: "Editing focus isn't available over SSH yet.",
+    }),
+  );
+  registerDualHandler(
     "get-daily-context-hook-status",
-    (_event, profile?: string) => {
-      if (getConnectionConfig().mode === "ssh")
-        return {
-          configured: false,
-          allowlisted: false,
-          scriptExists: false,
-          enabled: false,
-        };
-      return getDailyContextHookStatus(profile);
-    },
+    (profile?: string) => getDailyContextHookStatus(profile),
+    () => ({
+      configured: false,
+      allowlisted: false,
+      scriptExists: false,
+      enabled: false,
+    }),
   );
-  ipcMain.handle(
+  registerDualHandler(
     "set-daily-context-hook-enabled",
-    (_event, enabled: boolean, profile?: string) => {
-      if (getConnectionConfig().mode === "ssh")
-        return {
-          success: false,
-          error: "The daily-context hook isn't available over SSH yet.",
-        };
-      return setDailyContextHookEnabled(enabled, profile);
-    },
+    (enabled: boolean, profile?: string) =>
+      setDailyContextHookEnabled(enabled, profile),
+    () => ({
+      success: false,
+      error: "The daily-context hook isn't available over SSH yet.",
+    }),
   );
 
   // Soul
-  ipcMain.handle("read-soul", (_event, profile?: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh) return sshReadSoul(conn.ssh, profile);
-    return readSoul(profile);
-  });
-  ipcMain.handle("write-soul", (_event, content: string, profile?: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh)
-      return sshWriteSoul(conn.ssh, content, profile);
-    return writeSoul(content, profile);
-  });
-  ipcMain.handle("reset-soul", (_event, profile?: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh) return sshResetSoul(conn.ssh, profile);
-    return resetSoul(profile);
-  });
+  registerDualHandler("read-soul", readSoul, sshReadSoul);
+  registerDualHandler("write-soul", writeSoul, sshWriteSoul);
+  registerDualHandler("reset-soul", resetSoul, sshResetSoul);
 
   // Tools
-  ipcMain.handle("get-toolsets", (_event, profile?: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh)
-      return sshGetToolsets(conn.ssh, profile);
-    return getToolsets(profile);
-  });
-  ipcMain.handle(
+  registerDualHandler("get-toolsets", getToolsets, sshGetToolsets);
+  registerDualHandler(
     "set-toolset-enabled",
-    (_event, key: string, enabled: boolean, profile?: string) => {
-      const conn = getConnectionConfig();
-      if (conn.mode === "ssh" && conn.ssh)
-        return sshSetToolsetEnabled(conn.ssh, key, enabled, profile);
-      return setToolsetEnabled(key, enabled, profile);
-    },
+    setToolsetEnabled,
+    sshSetToolsetEnabled,
   );
 
   // SPS Agent workspace (unfurl / assistant / persistence)
