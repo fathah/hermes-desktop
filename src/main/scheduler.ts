@@ -8,12 +8,13 @@ import {
 } from "fs";
 import { join } from "path";
 import { homedir } from "os";
-import { desktopCapturer, app } from "electron";
+import { desktopCapturer, app, powerMonitor } from "electron";
 import { HERMES_HOME, HERMES_PYTHON, hermesCliArgs } from "./installer";
 import { getActiveProfileNameSync, profileHome } from "./utils";
 import { listCronJobs } from "./cronjobs";
 import { triggerSelfHealing } from "./self-healing";
 import { readDesktopConfig, writeDesktopConfig } from "./config";
+import { runDreamCycle } from "./dream-cycle";
 
 export async function captureScreenshot(
   jobId: string,
@@ -97,11 +98,46 @@ export function setSchedulerConfig(settings: Partial<SchedulerConfig>): void {
   }
 }
 
+let last3AmRunDate = "";
+let wasIdle = false;
+
 /**
  * Check and execute due cron jobs for the active profile.
  */
 export async function tickScheduler(profile?: string): Promise<void> {
   const activeProfile = profile ?? getActiveProfileNameSync();
+
+  // Check 3:00 AM local time Dream Cycle trigger
+  try {
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    const currentHour = now.getHours();
+    if (currentHour >= 3 && last3AmRunDate !== todayStr) {
+      last3AmRunDate = todayStr;
+      console.log(`[SCHEDULER] Triggering 3:00 AM local time Dream Cycle (Date: ${todayStr})`);
+      void runDreamCycle(activeProfile);
+    }
+  } catch (err) {
+    console.error("[SCHEDULER] Error checking 3:00 AM Dream Cycle:", err);
+  }
+
+  // Check 15 minutes of idle time Dream Cycle trigger
+  try {
+    if (typeof app !== "undefined" && app.isReady() && typeof powerMonitor !== "undefined" && powerMonitor && typeof powerMonitor.getSystemIdleTime === "function") {
+      const idleTime = powerMonitor.getSystemIdleTime();
+      const isIdleNow = idleTime >= 900; // 15 minutes
+      if (isIdleNow && !wasIdle) {
+        wasIdle = true;
+        console.log(`[SCHEDULER] System idle for 15 minutes (idle time: ${idleTime}s). Triggering Dream Cycle.`);
+        void runDreamCycle(activeProfile);
+      } else if (!isIdleNow) {
+        wasIdle = false;
+      }
+    }
+  } catch (err) {
+    console.error("[SCHEDULER] Error checking idle Dream Cycle:", err);
+  }
+
   try {
     const jobs = await listCronJobs(true, activeProfile);
     const now = Date.now();

@@ -218,6 +218,38 @@ async function main(): Promise<void> {
   await li.close();
   await rm(lroot, { recursive: true, force: true });
 
+  // ── Typed Links: relationship type extraction
+  console.log("\nTyped Links — relationship type extraction:");
+  const tlroot = await mkdtemp(join(tmpdir(), "note-index-typed-"));
+  await writeFile(
+    join(tlroot, "employer.md"),
+    `# Employer\nEmploying [[works_at::Garry Tan]].\n`,
+  );
+  await writeFile(
+    join(tlroot, "garry tan.md"),
+    `# Garry Tan\nCEO.\n`,
+  );
+  const tli = await NoteIndex.open(tlroot);
+  const tledges = tli.links();
+  eq(tledges.length, 1, "finds one resolved edge");
+  eq(tledges[0].type, "works_at", "typed link has the relation type 'works_at'");
+
+  const tlunresolved = tli.unresolvedLinks();
+  eq(tlunresolved.length, 0, "no unresolved links yet");
+
+  await writeFile(
+    join(tlroot, "employer.md"),
+    `# Employer\nEmploying [[works_at::Garry Tan]] and [[advises::Unknown Person]].\n`,
+  );
+  await tli.rebuild();
+  const tlunresolvedAfter = tli.unresolvedLinks();
+  eq(tlunresolvedAfter.length, 1, "finds one unresolved edge");
+  eq(tlunresolvedAfter[0].target, "unknown person", "broken link target normalized name");
+  eq(tlunresolvedAfter[0].type, "advises", "broken typed link has the type 'advises'");
+
+  await tli.close();
+  await rm(tlroot, { recursive: true, force: true });
+
   console.log("\nALL NOTE-INDEX CHECKS PASSED");
 }
 

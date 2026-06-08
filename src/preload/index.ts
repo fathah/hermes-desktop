@@ -1603,7 +1603,7 @@ const hermesAPI = {
     ipcRenderer.invoke("sps-index-backlinks", path, profile),
   spsIndexLinks: (
     profile?: string,
-  ): Promise<Array<{ source: string; target: string }>> =>
+  ): Promise<Array<{ source: string; target: string; type: string }>> =>
     ipcRenderer.invoke("sps-index-links", profile),
   spsIndexTags: (
     profile?: string,
@@ -1616,7 +1616,7 @@ const hermesAPI = {
     profile?: string,
   ): Promise<{
     orphans: string[];
-    brokenLinks: Array<{ source: string; target: string }>;
+    brokenLinks: Array<{ source: string; target: string; type: string }>;
     stale: string[];
   }> => ipcRenderer.invoke("sps-lint-vault", staleDays, profile),
   spsIndexStatus: (

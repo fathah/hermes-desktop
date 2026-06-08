@@ -17,6 +17,7 @@ export interface SimNode {
 export interface SimEdge {
   source: string;
   target: string;
+  type?: string;
 }
 
 export class ForceSimulation {

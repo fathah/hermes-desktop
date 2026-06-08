@@ -74,6 +74,7 @@ export function useVaultBacklinks(pageId: string | null): string[] {
 export interface VaultEdge {
   source: string;
   target: string;
+  type?: string;
 }
 
 /** All [[wikilink]] edges between pages (pageIds, .md stripped) for the graph
@@ -90,6 +91,7 @@ export function useVaultGraph(): { edges: VaultEdge[]; refetch: () => void } {
           rows.map((e) => ({
             source: e.source.replace(MD_SUFFIX, ""),
             target: e.target.replace(MD_SUFFIX, ""),
+            type: e.type,
           })),
         ),
       )

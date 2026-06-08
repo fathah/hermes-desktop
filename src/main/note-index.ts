@@ -50,15 +50,50 @@ const INDEXED_PROPERTIES = new Set([
 ]);
 
 /** Extract `[[wikilink]]` targets from raw note content. */
-function extractBacklinks(content: string): string[] {
-  const links = new Set<string>();
+export interface TypedLink {
+  target_norm: string;
+  type: string;
+}
+
+/** Extract `[[wikilink]]` targets and relationship types from raw note content. */
+function extractBacklinks(content: string): TypedLink[] {
+  const linksMap = new Map<string, string>(); // target_norm -> type
   const re = /\[\[([^\]]+)\]\]/g;
   let match: RegExpExecArray | null;
   while ((match = re.exec(content)) !== null) {
-    const target = match[1]?.trim();
-    if (target) links.add(target);
+    const rawLink = match[1]?.trim();
+    if (!rawLink) continue;
+
+    let type = "link";
+    let target = rawLink;
+
+    // Check for double colon relationship syntax: [[relation_type::target]]
+    const doubleColonIdx = rawLink.indexOf("::");
+    if (doubleColonIdx !== -1) {
+      const parsedType = rawLink.substring(0, doubleColonIdx).trim();
+      const parsedTarget = rawLink.substring(doubleColonIdx + 2).trim();
+      // Relation type must be alphanumeric/dashes (injection protection)
+      if (parsedType && /^[A-Za-z0-9_-]+$/.test(parsedType) && parsedTarget) {
+        type = parsedType;
+        target = parsedTarget;
+      }
+    }
+
+    const norm = normalizeName(target);
+    if (norm) {
+      // Prefer specific relationship types over generic 'link'
+      const existing = linksMap.get(norm);
+      if (!existing || existing === "link") {
+        linksMap.set(norm, type);
+      }
+    }
   }
-  return [...links];
+
+  const result: TypedLink[] = [];
+  for (const [target_norm, type] of linksMap.entries()) {
+    result.push({ target_norm, type });
+  }
+  return result;
 }
 
 /** Normalize a tag: drop a leading `#`, trim. Empty → "". */
@@ -264,7 +299,8 @@ export class NoteIndex {
       );
       CREATE TABLE IF NOT EXISTS links (
         source TEXT NOT NULL,
-        target_norm TEXT NOT NULL
+        target_norm TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'link'
       );
       CREATE INDEX IF NOT EXISTS idx_links_target ON links(target_norm);
       CREATE INDEX IF NOT EXISTS idx_links_source ON links(source);
@@ -277,6 +313,17 @@ export class NoteIndex {
       CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts
         USING fts5(path UNINDEXED, title, body, tokenize='porter');
     `);
+
+    // Migrate existing DB if links table does not have 'type' column
+    try {
+      const columns = this.db.prepare("PRAGMA table_info(links)").all() as Array<{ name: string }>;
+      const hasType = columns.some((col) => col.name === "type");
+      if (columns.length > 0 && !hasType) {
+        this.db.exec("ALTER TABLE links ADD COLUMN type TEXT NOT NULL DEFAULT 'link'");
+      }
+    } catch (err) {
+      console.error("[NoteIndex] failed to run links table migration:", err);
+    }
   }
 
   private count(table: "notes" | "links"): number {
@@ -293,7 +340,7 @@ export class NoteIndex {
     const { props, body } = parseFrontmatter(raw);
     const title = deriveTitle(props, body, relPath);
     const propsJson = JSON.stringify(props ?? {});
-    const targets = extractBacklinks(raw).map(normalizeName).filter(Boolean);
+    const typedLinks = extractBacklinks(raw);
     const now = Date.now();
 
     if (props && typeof props === "object") {
@@ -319,9 +366,9 @@ export class NoteIndex {
 
       this.db.prepare(`DELETE FROM links WHERE source = ?`).run(relPath);
       const insLink = this.db.prepare(
-        `INSERT INTO links(source,target_norm) VALUES(?,?)`,
+        `INSERT INTO links(source,target_norm,type) VALUES(?,?,?)`,
       );
-      for (const target of new Set(targets)) insLink.run(relPath, target);
+      for (const link of typedLinks) insLink.run(relPath, link.target_norm, link.type);
 
       // Tags: frontmatter `tags` (array or string) + inline `#tag`s in the body.
       this.db.prepare(`DELETE FROM tags WHERE source = ?`).run(relPath);
@@ -539,7 +586,7 @@ export class NoteIndex {
   /** All resolved [[wikilink]] edges as {source, target} relPaths (F4 graph
    *  view). Only edges whose target resolves to an indexed note are returned;
    *  self-links and duplicate edges are dropped. */
-  links(): Array<{ source: string; target: string }> {
+  links(): Array<{ source: string; target: string; type: string }> {
     const notes = this.db.prepare(`SELECT path FROM notes`).all() as Array<{
       path: string;
     }>;
@@ -552,24 +599,24 @@ export class NoteIndex {
       }
     }
     const rows = this.db
-      .prepare(`SELECT source, target_norm FROM links`)
-      .all() as Array<{ source: string; target_norm: string }>;
-    const edges: Array<{ source: string; target: string }> = [];
+      .prepare(`SELECT source, target_norm, type FROM links`)
+      .all() as Array<{ source: string; target_norm: string; type: string }>;
+    const edges: Array<{ source: string; target: string; type: string }> = [];
     const seen = new Set<string>();
-    for (const { source, target_norm } of rows) {
+    for (const { source, target_norm, type } of rows) {
       const target = nameToPath.get(target_norm);
       if (!target || target === source) continue;
       const key = `${source} ${target}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      edges.push({ source, target });
+      edges.push({ source, target, type });
     }
     return edges;
   }
 
   /** Raw [[wikilink]]s whose target does NOT resolve to an indexed note
    *  (broken links — the inverse of links(), for lint). Deduped per edge. */
-  unresolvedLinks(): Array<{ source: string; target: string }> {
+  unresolvedLinks(): Array<{ source: string; target: string; type: string }> {
     const notes = this.db.prepare(`SELECT path FROM notes`).all() as Array<{
       path: string;
     }>;
@@ -578,16 +625,16 @@ export class NoteIndex {
       for (const name of candidateNames(path)) known.add(name);
     }
     const rows = this.db
-      .prepare(`SELECT source, target_norm FROM links`)
-      .all() as Array<{ source: string; target_norm: string }>;
-    const out: Array<{ source: string; target: string }> = [];
+      .prepare(`SELECT source, target_norm, type FROM links`)
+      .all() as Array<{ source: string; target_norm: string; type: string }>;
+    const out: Array<{ source: string; target: string; type: string }> = [];
     const seen = new Set<string>();
-    for (const { source, target_norm } of rows) {
+    for (const { source, target_norm, type } of rows) {
       if (known.has(target_norm)) continue;
       const key = `${source} ${target_norm}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      out.push({ source, target: target_norm });
+      out.push({ source, target: target_norm, type });
     }
     return out;
   }
@@ -616,7 +663,7 @@ export class NoteIndex {
    *  notes whose file mtime predates it. */
   lint(staleBeforeMs?: number): {
     orphans: string[];
-    brokenLinks: Array<{ source: string; target: string }>;
+    brokenLinks: Array<{ source: string; target: string; type: string }>;
     stale: string[];
   } {
     const orphans = this.orphans();

@@ -1116,7 +1116,7 @@ interface HermesAPI {
   spsIndexBacklinks: (path: string, profile?: string) => Promise<string[]>;
   spsIndexLinks: (
     profile?: string,
-  ) => Promise<Array<{ source: string; target: string }>>;
+  ) => Promise<Array<{ source: string; target: string; type: string }>>;
   spsIndexTags: (
     profile?: string,
   ) => Promise<Array<{ tag: string; count: number }>>;
@@ -1126,7 +1126,7 @@ interface HermesAPI {
     profile?: string,
   ) => Promise<{
     orphans: string[];
-    brokenLinks: Array<{ source: string; target: string }>;
+    brokenLinks: Array<{ source: string; target: string; type: string }>;
     stale: string[];
   }>;
   spsIndexStatus: (profile?: string) => Promise<{

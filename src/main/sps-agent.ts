@@ -514,8 +514,8 @@ export async function spsAssistant(
           const docs = ragRes.context;
           graphRagNoteCount = docs.length;
           graphRagContextText = `Semantically related notes from the graph:\n${docs
-            .map((d: any) => `- ${d.title}: ${d.content.slice(0, 800)}`)
-            .join("\n")}`;
+            .map((d: any) => `- Note: [[${d.title}]] (path: ${d.path})\nContent:\n${d.content.slice(0, 800)}`)
+            .join("\n\n")}\n\nWhen referencing these notes in your response, you MUST cite them using Obsidian wikilinks (e.g. [[Note Title]]).`;
         }
       } catch (err) {
         console.warn("[spsAssistant] GraphRAG retrieval failed:", err);

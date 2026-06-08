@@ -105,7 +105,7 @@ export function formatRetrievalSystemMessage(
     content:
       `The following excerpts are from the user's workspace and are the ` +
       `most relevant to their message. Ground your answer in them and cite ` +
-      `the source path in brackets. If an excerpt is insufficient, read the ` +
+      `the source path using Obsidian wikilinks like [[Page Title]] or markdown links pointing to their file:/// absolute path. If an excerpt is insufficient, read the ` +
       `full file at its absolute path with the file tool. If none are ` +
       `relevant, say so and answer normally.\n\n${blocks.join("\n\n")}`,
   };

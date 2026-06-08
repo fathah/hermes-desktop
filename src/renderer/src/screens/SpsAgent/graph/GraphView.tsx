@@ -112,17 +112,57 @@ export function GraphView() {
       ctx.scale(zoomRef.current, zoomRef.current);
 
       // 1. Draw link lines
-      ctx.strokeStyle = border;
-      ctx.lineWidth = 1.2;
       for (const edge of sim.edges) {
         const u = sim.nodes.find((n) => n.id === edge.source);
         const v = sim.nodes.find((n) => n.id === edge.target);
         if (!u || !v) continue;
+
+        const type = edge.type || "link";
+        let color = border;
+        let dash = [] as number[];
+        let width = 1.2;
+
+        if (type !== "link") {
+          switch (type.toLowerCase()) {
+            case "works_at":
+            case "works-at":
+              color = "#3b82f6"; // professional blue
+              width = 1.8;
+              break;
+            case "advises":
+              color = "#10b981"; // emerald green
+              dash = [4, 4];
+              width = 1.8;
+              break;
+            case "depends_on":
+            case "depends-on":
+              color = "#ef4444"; // alert red
+              dash = [6, 3];
+              width = 1.8;
+              break;
+            default: {
+              let hash = 0;
+              for (let i = 0; i < type.length; i++) {
+                hash = type.charCodeAt(i) + ((hash << 5) - hash);
+              }
+              const hue = Math.abs(hash) % 360;
+              color = `hsl(${hue}, 65%, 50%)`;
+              dash = [5, 5];
+              width = 1.5;
+            }
+          }
+        }
+
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.setLineDash(dash);
+
         ctx.beginPath();
         ctx.moveTo(u.x, u.y);
         ctx.lineTo(v.x, v.y);
         ctx.stroke();
       }
+      ctx.setLineDash([]); // Reset line dash
 
       // 2. Draw nodes & labels
       for (const node of sim.nodes) {
