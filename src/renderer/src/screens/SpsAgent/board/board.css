@@ -325,12 +325,173 @@
   font-family: inherit;
   font-size: inherit;
   cursor: pointer;
-  padding: 0 2px;
+  padding: 1px 4px;
   transition: all 0.2s ease;
+  border-radius: 2px;
 }
 
 .bbs-tui-btn:hover {
   color: var(--phosphor-glow);
+  background-color: var(--phosphor-dim);
   border-bottom-style: solid;
   text-shadow: 0 0 4px var(--phosphor-glow);
 }
+
+.bbs-tui-btn.active {
+  background-color: var(--phosphor-border);
+  color: var(--phosphor-bg) !important;
+  border-bottom: none;
+  font-weight: bold;
+  text-shadow: none !important;
+}
+
+/* Modern terminal dashboard additions */
+.bbs-tabs-row {
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px dashed var(--phosphor-border);
+  background: rgba(0, 0, 0, 0.3);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.bbs-list-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.bbs-list-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+}
+
+.bbs-list-item:hover {
+  background-color: rgba(34, 197, 94, 0.05);
+  border-color: rgba(34, 197, 94, 0.15);
+}
+
+.theme-amber .bbs-list-item:hover {
+  background-color: rgba(217, 119, 6, 0.05);
+  border-color: rgba(217, 119, 6, 0.15);
+}
+
+.bbs-item-text {
+  font-size: 11px;
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+.bbs-item-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.bbs-action-link {
+  font-size: 10px;
+  color: var(--phosphor-glow);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.bbs-action-link:hover {
+  text-shadow: 0 0 3px var(--phosphor-glow);
+  text-decoration: underline;
+}
+
+/* Checkbox alignment */
+.bbs-todo-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--phosphor-border);
+  margin-right: 6px;
+  font-size: 9px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.bbs-todo-checkbox.checked {
+  background-color: var(--phosphor-border);
+  color: var(--phosphor-bg);
+}
+
+/* Calendar grid */
+.bbs-calendar-container {
+  margin: 8px 0;
+  border: 1px solid var(--phosphor-border);
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.bbs-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  text-align: center;
+  font-size: 11px;
+  font-family: monospace;
+}
+
+.bbs-calendar-day-header {
+  font-weight: bold;
+  border-bottom: 1px solid var(--phosphor-border);
+  padding-bottom: 2px;
+  color: var(--phosphor-glow);
+}
+
+.bbs-calendar-cell {
+  padding: 2px;
+  border: 1px solid transparent;
+}
+
+.bbs-calendar-cell.today {
+  background-color: var(--phosphor-dim);
+  border-color: var(--phosphor-border);
+  color: var(--phosphor-glow);
+  font-weight: bold;
+}
+
+.bbs-calendar-cell.has-event {
+  border-bottom: 2px solid var(--phosphor-glow);
+}
+
+/* Chat bubble styling */
+.bbs-chat-log {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  overflow-y: auto;
+  margin-bottom: 6px;
+}
+
+.bbs-chat-msg {
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 4px 6px;
+  border-radius: 2px;
+}
+
+.bbs-chat-msg.operator {
+  border-left: 2px solid var(--phosphor-glow);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.bbs-chat-msg.louis {
+  border-left: 2px solid var(--phosphor-text);
+  color: var(--phosphor-text);
+}
+

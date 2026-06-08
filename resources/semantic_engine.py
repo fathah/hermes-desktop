@@ -104,7 +104,7 @@ class SemanticEngine:
             for f in files:
                 if f.endswith((".md", ".markdown")):
                     full_path = os.path.join(root, f)
-                    rel_path = os.relpath(full_path, vault_path).replace("\\", "/")
+                    rel_path = os.path.relpath(full_path, vault_path).replace("\\", "/")
                     try:
                         with open(full_path, "r", encoding="utf-8") as file:
                             content = file.read()

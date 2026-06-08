@@ -101,7 +101,7 @@ export function CyberBbsBoard() {
         height: p.meta.height || 180,
       };
     }
-    dimMap["bbs-console"] = { width: 380, height: 280 };
+    dimMap["bbs-console"] = { width: 440, height: 400 };
     return dimMap;
   }, [boardPages]);
 
