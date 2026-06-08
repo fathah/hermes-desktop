@@ -175,7 +175,9 @@ export function AnsiWindowCard({
                 marginBottom: "8px",
               }}
             >
-              {"Double-click grid to connect nodes. Type 'help' below."}
+              {
+                "Type 'wire <nodeId>' to connect nodes. Double-click grid to eject a page."
+              }
             </div>
             {meta.tags && meta.tags.length > 0 && (
               <div

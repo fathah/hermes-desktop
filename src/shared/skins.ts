@@ -8,6 +8,17 @@
  * testable); file IO lives in `src/main/skins.ts`.
  */
 
+export interface CorkboardSkin {
+  bgColor?: string;
+  gridColor?: string;
+  scanlineColor?: string;
+  phosphorGlow?: string;
+  phosphorDim?: string;
+  phosphorText?: string;
+  phosphorBorder?: string;
+  cableStyle?: "straight" | "curved" | "diagonal";
+}
+
 export interface Skin {
   name: string;
   /** Semantic color tokens (CSS color strings). */
@@ -15,6 +26,8 @@ export interface Skin {
   fonts?: { body?: string; mono?: string };
   /** UI density preset. */
   density?: "compact" | "comfortable" | "spacious";
+  /** Corkboard/BBS customization tokens */
+  corkboard?: CorkboardSkin;
 }
 
 export interface SkinValidation {
@@ -98,6 +111,47 @@ export function validateSkin(input: unknown): SkinValidation {
     }
   }
 
+  if (input.corkboard !== undefined) {
+    if (!isPlainObject(input.corkboard)) {
+      errors.push('"corkboard" must be an object');
+    } else {
+      const cb: CorkboardSkin = {};
+      const cbKeys: Exclude<keyof CorkboardSkin, "cableStyle">[] = [
+        "bgColor",
+        "gridColor",
+        "scanlineColor",
+        "phosphorGlow",
+        "phosphorDim",
+        "phosphorText",
+        "phosphorBorder",
+      ];
+      for (const k of cbKeys) {
+        if (input.corkboard[k] !== undefined) {
+          if (typeof input.corkboard[k] === "string") {
+            cb[k] = input.corkboard[k] as string;
+          } else {
+            errors.push(`corkboard "${k}" must be a string`);
+          }
+        }
+      }
+      if (input.corkboard.cableStyle !== undefined) {
+        const style = input.corkboard.cableStyle;
+        if (
+          style === "straight" ||
+          style === "curved" ||
+          style === "diagonal"
+        ) {
+          cb.cableStyle = style;
+        } else {
+          errors.push('"cableStyle" must be straight | curved | diagonal');
+        }
+      }
+      if (Object.keys(cb).length > 0) {
+        skin.corkboard = cb;
+      }
+    }
+  }
+
   return { valid: true, skin, errors };
 }
 
@@ -115,5 +169,17 @@ export function skinToCssVars(skin: Skin): Record<string, string> {
   }
   if (skin.fonts?.body) vars["--font-body"] = skin.fonts.body;
   if (skin.fonts?.mono) vars["--font-mono"] = skin.fonts.mono;
+  if (skin.corkboard) {
+    if (skin.corkboard.bgColor)
+      vars["--skin-phosphor-bg"] = skin.corkboard.bgColor;
+    if (skin.corkboard.phosphorGlow)
+      vars["--skin-phosphor-glow"] = skin.corkboard.phosphorGlow;
+    if (skin.corkboard.phosphorBorder)
+      vars["--skin-phosphor-border"] = skin.corkboard.phosphorBorder;
+    if (skin.corkboard.phosphorDim)
+      vars["--skin-phosphor-dim"] = skin.corkboard.phosphorDim;
+    if (skin.corkboard.phosphorText)
+      vars["--skin-phosphor-text"] = skin.corkboard.phosphorText;
+  }
   return vars;
 }

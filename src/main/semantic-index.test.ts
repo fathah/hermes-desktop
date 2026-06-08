@@ -75,7 +75,7 @@ describe("SemanticGraphManager", () => {
     stdoutEmitter.resume = vi.fn();
     stdoutEmitter.pause = vi.fn();
     const stdinMock = {
-      write: vi.fn((data: string, encoding: string, cb: any) => {
+      write: vi.fn((data: string, _encoding: string, cb: any) => {
         // Parse the message sent to stdin
         const req = JSON.parse(data.trim());
         // Simulate python process reply on stdout after a brief delay

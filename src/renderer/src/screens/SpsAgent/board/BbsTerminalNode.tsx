@@ -21,6 +21,7 @@ export function BbsTerminalNode({
   allPages,
 }: BbsTerminalNodeProps) {
   const [inputVal, setInputVal] = useState("");
+  const [port, setPort] = useState(8642);
   const [terminalLines, setTerminalLines] = useState<string[]>([
     "WELCOME TO NOUS HERMES BBS v1.5.0",
     "ESTABLISHED: 2026-06-07 20:49 LOCAL",
@@ -47,11 +48,11 @@ export function BbsTerminalNode({
   }, [terminalLines]);
 
   useEffect(() => {
-    const api = (window as any).hermesAPI;
+    const api = window.hermesAPI;
     if (!api?.listProfiles) return;
     api
       .listProfiles()
-      .then((profiles: any[]) => {
+      .then((profiles) => {
         const active = profiles.find((p) => p.isActive) || profiles[0];
         if (active) {
           setProfileInfo({
@@ -59,6 +60,15 @@ export function BbsTerminalNode({
             model: active.model,
             gatewayRunning: active.gatewayRunning,
           });
+          if (active.name && active.name !== "default" && api.getConfig) {
+            api
+              .getConfig("platforms.api_server.extra.port", active.name)
+              .then((pStr: string | null) => {
+                const pNum = pStr ? parseInt(pStr, 10) : null;
+                if (pNum) setPort(pNum);
+              })
+              .catch(() => {});
+          }
         }
       })
       .catch(() => {});
@@ -201,7 +211,7 @@ export function BbsTerminalNode({
     >
       <div className="ansi-card-header" onPointerDown={onDragStart}>
         <span>┌─── H E R M E S B B S ───┐</span>
-        <span style={{ fontSize: "10px", opacity: 0.8 }}>ONLINE [8642]</span>
+        <span style={{ fontSize: "10px", opacity: 0.8 }}>ONLINE [{port}]</span>
       </div>
 
       <div className="ansi-card-body scroll">
@@ -220,11 +230,14 @@ export function BbsTerminalNode({
             color: "var(--phosphor-text)",
           }}
         >
-          {terminalLines.map((line, idx) => (
-            <div key={idx} style={{ marginBottom: "2px" }}>
-              {line}
-            </div>
-          ))}
+          {terminalLines.map((line, idx) => {
+            const resolvedLine = line.replace("PORT 8642", `PORT ${port}`);
+            return (
+              <div key={idx} style={{ marginBottom: "2px" }}>
+                {resolvedLine}
+              </div>
+            );
+          })}
           <div ref={outputEndRef} />
         </div>
       </div>

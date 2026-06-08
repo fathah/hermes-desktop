@@ -1,4 +1,12 @@
-import { app, BrowserWindow, Menu, net, protocol, shell } from "electron";
+import {
+  app,
+  BrowserWindow,
+  Menu,
+  net,
+  protocol,
+  screen,
+  shell,
+} from "electron";
 import { join } from "path";
 import { pathToFileURL } from "url";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
@@ -81,12 +89,87 @@ function spsVaultDirFor(profile?: string): string {
   return resolveSpsVaultDir(profile);
 }
 
+interface WindowState {
+  width: number;
+  height: number;
+  x?: number;
+  y?: number;
+  isMaximized?: boolean;
+}
+
+function getSavedWindowState(): WindowState {
+  const statePath = join(HERMES_HOME, "window-state.json");
+  try {
+    if (existsSync(statePath)) {
+      const data = JSON.parse(readFileSync(statePath, "utf-8"));
+      if (typeof data.width === "number" && typeof data.height === "number") {
+        return data;
+      }
+    }
+  } catch (err) {
+    console.error("[WINDOW STATE] Failed to load window state:", err);
+  }
+  return { width: 1100, height: 850 };
+}
+
+function saveWindowState(win: BrowserWindow): void {
+  const statePath = join(HERMES_HOME, "window-state.json");
+  try {
+    const isMaximized = win.isMaximized();
+    let bounds;
+    if (isMaximized) {
+      const existing = getSavedWindowState();
+      bounds = {
+        width: existing.width,
+        height: existing.height,
+        x: existing.x,
+        y: existing.y,
+      };
+    } else {
+      bounds = win.getBounds();
+    }
+    const state: WindowState = {
+      width: bounds.width,
+      height: bounds.height,
+      x: bounds.x,
+      y: bounds.y,
+      isMaximized,
+    };
+    const dir = join(HERMES_HOME);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    writeFileSync(statePath, JSON.stringify(state), "utf-8");
+  } catch (err) {
+    console.error("[WINDOW STATE] Failed to save window state:", err);
+  }
+}
+
 function createWindow(): void {
   const rendererHtmlPath = join(__dirname, "../renderer/index.html");
+  const state = getSavedWindowState();
+
+  // Validate coordinates: verify they are within display bounds
+  if (state.x !== undefined && state.y !== undefined) {
+    const displays = screen.getAllDisplays();
+    const isVisible = displays.some((display) => {
+      const db = display.bounds;
+      return (
+        state.x! >= db.x &&
+        state.x! < db.x + db.width &&
+        state.y! >= db.y &&
+        state.y! < db.y + db.height
+      );
+    });
+    if (!isVisible) {
+      state.x = undefined;
+      state.y = undefined;
+    }
+  }
 
   mainWindow = new BrowserWindow({
-    width: 1100,
-    height: 850,
+    width: state.width,
+    height: state.height,
+    x: state.x,
+    y: state.y,
     minWidth: 900,
     // Lowered from 820 to fit on 768p / 720p displays — Linux WMs
     // enforce minHeight strictly, clipping content (chat input, bottom
@@ -111,6 +194,20 @@ function createWindow(): void {
       webviewTag: true,
     },
   });
+
+  if (state.isMaximized) {
+    mainWindow.maximize();
+  }
+
+  const handleSaveState = (): void => {
+    if (mainWindow) {
+      saveWindowState(mainWindow);
+    }
+  };
+
+  mainWindow.on("resize", handleSaveState);
+  mainWindow.on("move", handleSaveState);
+  mainWindow.on("close", handleSaveState);
 
   mainWindow.on("ready-to-show", () => {
     mainWindow!.show();

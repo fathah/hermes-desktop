@@ -14,7 +14,7 @@ const SPS_COLOR_VARS: Record<string, string[]> = {
   text: ["--tx-1"],
   textSecondary: ["--tx-2"],
   textMuted: ["--tx-3"],
-  border: ["--hairline"],
+  border: ["--hairline", "--hair", "--hair-soft", "--hair-strong"],
 };
 
 /** Map a skin's semantic tokens to the SPS CSS variables they should set. */
@@ -31,5 +31,17 @@ export function skinToSpsVars(
   }
   if (skin.fonts?.body) vars["--font-sans"] = skin.fonts.body;
   if (skin.fonts?.mono) vars["--font-mono"] = skin.fonts.mono;
+  if (skin.corkboard) {
+    if (skin.corkboard.bgColor)
+      vars["--skin-phosphor-bg"] = skin.corkboard.bgColor;
+    if (skin.corkboard.phosphorGlow)
+      vars["--skin-phosphor-glow"] = skin.corkboard.phosphorGlow;
+    if (skin.corkboard.phosphorBorder)
+      vars["--skin-phosphor-border"] = skin.corkboard.phosphorBorder;
+    if (skin.corkboard.phosphorDim)
+      vars["--skin-phosphor-dim"] = skin.corkboard.phosphorDim;
+    if (skin.corkboard.phosphorText)
+      vars["--skin-phosphor-text"] = skin.corkboard.phosphorText;
+  }
   return vars;
 }
