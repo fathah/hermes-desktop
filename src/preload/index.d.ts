@@ -143,6 +143,7 @@ interface HermesAPI {
     voice?: string,
     profile?: string,
   ) => Promise<{ audioUrl?: string; error?: string }>;
+  onGlobalVoiceTrigger: (callback: () => void) => () => void;
 
   // OpenClaw migration
   checkOpenClaw: () => Promise<{ found: boolean; path: string | null }>;
@@ -1131,10 +1132,10 @@ interface HermesAPI {
     links: number;
     indexedAt: number | null;
   }>;
-  spsSemanticIndex: (profile?: string) => Promise<any>;
-  spsSemanticSearch: (query: string, limit?: number) => Promise<any>;
-  spsSemanticGraph: () => Promise<any>;
-  spsSemanticRag: (query: string, limit?: number) => Promise<any>;
+  spsSemanticIndex: (profile?: string) => Promise<unknown>;
+  spsSemanticSearch: (query: string, limit?: number) => Promise<unknown>;
+  spsSemanticGraph: () => Promise<unknown>;
+  spsSemanticRag: (query: string, limit?: number) => Promise<unknown>;
   spsGetVaultLocation: (
     profile?: string,
   ) => Promise<{ dir: string; isDefault: boolean; default: string }>;
@@ -1227,6 +1228,34 @@ interface HermesAPI {
     args?: string,
     profile?: string,
   ) => Promise<{ success: boolean; output: string }>;
+
+  onSystemStabilized: (
+    callback: (info: {
+      jobId: string;
+      jobName: string;
+      explanation: string;
+      filePatched: string;
+      diff: string;
+    }) => void,
+  ) => () => void;
+
+  getSchedulerConfig: () => Promise<{
+    enabled: boolean;
+    tickIntervalMs: number;
+  }>;
+  setSchedulerConfig: (settings: {
+    enabled?: boolean;
+    tickIntervalMs?: number;
+  }) => Promise<boolean>;
+
+  getSpendingCapConfig: () => Promise<{
+    maxSpendingLimit: number;
+    spendingCapAction: string;
+  }>;
+  setSpendingCapConfig: (settings: {
+    maxSpendingLimit?: number;
+    spendingCapAction?: string;
+  }) => Promise<boolean>;
 }
 
 declare global {

@@ -101,19 +101,41 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       applyText: applyHistoryText,
     });
 
+    const isGlobalTrigger = useRef(false);
+
     // Voice input (WS4): append dictated text to the current draft so the user
     // can dictate then keep typing, rather than overwriting what's there.
     const injectVoiceText = useCallback(
       (text: string): void => {
-        setInput((prev) => (prev ? `${prev} ${text}` : text));
-        requestAnimationFrame(() => {
-          autoResize();
-          inputRef.current?.focus();
-        });
+        if (isGlobalTrigger.current) {
+          isGlobalTrigger.current = false;
+          setInput("");
+          onSubmit(text, []);
+        } else {
+          setInput((prev) => (prev ? `${prev} ${text}` : text));
+          requestAnimationFrame(() => {
+            autoResize();
+            inputRef.current?.focus();
+          });
+        }
       },
-      [autoResize],
+      [autoResize, onSubmit],
     );
     const voice = useVoiceInput(profile, injectVoiceText);
+
+    useEffect(() => {
+      if (typeof window.hermesAPI?.onGlobalVoiceTrigger === "function") {
+        const unsubscribe = window.hermesAPI.onGlobalVoiceTrigger(() => {
+          if (voice.busy || !voice.hasKey || !voice.supported) return;
+          if (!voice.recording) {
+            isGlobalTrigger.current = true;
+          }
+          voice.toggle();
+        });
+        return () => unsubscribe();
+      }
+      return undefined;
+    }, [voice]);
 
     const formatError = useCallback(
       (err: AttachmentError): string => {

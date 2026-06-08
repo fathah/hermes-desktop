@@ -129,6 +129,11 @@ const hermesAPI = {
     profile?: string,
   ): Promise<{ audioUrl?: string; error?: string }> =>
     ipcRenderer.invoke("speak-text", text, voice, profile),
+  onGlobalVoiceTrigger: (callback: () => void): (() => void) => {
+    const handler = (): void => callback();
+    ipcRenderer.on("global-voice-trigger", handler);
+    return () => ipcRenderer.removeListener("global-voice-trigger", handler);
+  },
 
   // OpenClaw migration
   checkOpenClaw: (): Promise<{ found: boolean; path: string | null }> =>
@@ -1618,13 +1623,13 @@ const hermesAPI = {
     indexedAt: number | null;
   }> => ipcRenderer.invoke("sps-index-rebuild", profile),
 
-  spsSemanticIndex: (profile?: string): Promise<any> =>
+  spsSemanticIndex: (profile?: string): Promise<unknown> =>
     ipcRenderer.invoke("sps-semantic-index", profile),
-  spsSemanticSearch: (query: string, limit?: number): Promise<any> =>
+  spsSemanticSearch: (query: string, limit?: number): Promise<unknown> =>
     ipcRenderer.invoke("sps-semantic-search", query, limit),
-  spsSemanticGraph: (): Promise<any> =>
+  spsSemanticGraph: (): Promise<unknown> =>
     ipcRenderer.invoke("sps-semantic-graph"),
-  spsSemanticRag: (query: string, limit?: number): Promise<any> =>
+  spsSemanticRag: (query: string, limit?: number): Promise<unknown> =>
     ipcRenderer.invoke("sps-semantic-rag", query, limit),
 
   // Shared-directory Obsidian mode: where the SPS vault lives on disk.
@@ -1755,6 +1760,42 @@ const hermesAPI = {
     profile?: string,
   ): Promise<{ success: boolean; output: string }> =>
     ipcRenderer.invoke("skills-registry-test", name, args, profile),
+
+  onSystemStabilized: (
+    callback: (info: {
+      jobId: string;
+      jobName: string;
+      explanation: string;
+      filePatched: string;
+      diff: string;
+    }) => void,
+  ): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, info: unknown): void =>
+      callback(info as Parameters<typeof callback>[0]);
+    ipcRenderer.on("system-stabilized", handler);
+    return () => ipcRenderer.removeListener("system-stabilized", handler);
+  },
+
+  getSchedulerConfig: (): Promise<{
+    enabled: boolean;
+    tickIntervalMs: number;
+  }> => ipcRenderer.invoke("get-scheduler-config"),
+
+  setSchedulerConfig: (settings: {
+    enabled?: boolean;
+    tickIntervalMs?: number;
+  }): Promise<boolean> => ipcRenderer.invoke("set-scheduler-config", settings),
+
+  getSpendingCapConfig: (): Promise<{
+    maxSpendingLimit: number;
+    spendingCapAction: string;
+  }> => ipcRenderer.invoke("get-spending-cap-config"),
+
+  setSpendingCapConfig: (settings: {
+    maxSpendingLimit?: number;
+    spendingCapAction?: string;
+  }): Promise<boolean> =>
+    ipcRenderer.invoke("set-spending-cap-config", settings),
 };
 
 if (process.contextIsolated) {

@@ -93,6 +93,11 @@ describe("New APIs from v0.8/v0.9 features", () => {
     expect(typeMethods).toContain("discoverMemoryProviders");
   });
 
+  it("has global voice trigger API", () => {
+    expect(preloadMethods).toContain("onGlobalVoiceTrigger");
+    expect(typeMethods).toContain("onGlobalVoiceTrigger");
+  });
+
   it("has obsidian APIs", () => {
     for (const method of [
       "getObsidianConfig",

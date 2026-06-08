@@ -6,6 +6,7 @@ import {
   protocol,
   screen,
   shell,
+  globalShortcut,
 } from "electron";
 import { join } from "path";
 import { pathToFileURL } from "url";
@@ -45,6 +46,9 @@ import { registerChatIpc, abortAllChats } from "./ipc/chat";
 import { registerNotesIpc, closeObsidianWatcher } from "./ipc/notes";
 import { registerWorkspaceIpc } from "./ipc/workspace";
 import { registerUtilityIpc } from "./ipc/utility";
+import { startScheduler, stopScheduler } from "./scheduler";
+import { startControlServer, stopControlServer } from "./control-server";
+import { setMainWindowGetter } from "./self-healing";
 
 process.on("uncaughtException", (err) => {
   console.error("[MAIN UNCAUGHT]", err);
@@ -543,6 +547,13 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window);
   });
 
+  // Register global shortcut for voice input trigger (Feature D)
+  globalShortcut.register("Control+Shift+V", () => {
+    if (mainWindow) {
+      mainWindow.webContents.send("global-voice-trigger");
+    }
+  });
+
   app.on("web-contents-created", (_event, contents) => {
     if (contents.getType() === "webview") {
       hardenAttachedWebContents(contents);
@@ -570,7 +581,14 @@ app.whenReady().then(() => {
   buildMenu();
   setupIPC();
   createWindow();
+  setMainWindowGetter(() => mainWindow);
   setupUpdater();
+
+  // Start background routines scheduler and control server
+  startScheduler();
+  startControlServer().catch((err) => {
+    console.error("[CONTROL SERVER] Failed to auto-start:", err);
+  });
 
   // Auto-start SSH tunnel if configured
   const conn = getConnectionConfig();
@@ -605,6 +623,9 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
+  globalShortcut.unregisterAll();
+  stopScheduler();
+  stopControlServer();
   stopHealthPolling();
   abortAllChats();
   void closeObsidianWatcher();

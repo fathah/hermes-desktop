@@ -1,0 +1,135 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+
+const mockWriteFileSync = vi.fn();
+const mockChmodSync = vi.fn();
+
+vi.mock("fs", () => {
+  const fns = {
+    existsSync: () => true,
+    mkdirSync: () => {},
+    writeFileSync: (...args: unknown[]) => mockWriteFileSync(...args),
+    chmodSync: (...args: unknown[]) => mockChmodSync(...args),
+  };
+  return { ...fns, default: fns };
+});
+
+vi.mock("os", () => {
+  const fns = {
+    homedir: () => "/tmp/hermes-test-home",
+  };
+  return { ...fns, default: fns };
+});
+
+const mockReadDesktopConfig = vi.fn(() => ({}));
+const mockWriteDesktopConfig = vi.fn();
+const mockSendMessage = vi.fn();
+const mockIsGatewayRunning = vi.fn(() => false);
+const mockRunJobHeadless = vi.fn(() => Promise.resolve(true));
+
+vi.mock("../src/main/config", () => ({
+  readDesktopConfig: () => mockReadDesktopConfig(),
+  writeDesktopConfig: (c: unknown) => mockWriteDesktopConfig(c),
+  getConnectionConfig: () => ({ mode: "local" }),
+}));
+
+vi.mock("../src/main/hermes", () => ({
+  isGatewayRunning: () => mockIsGatewayRunning(),
+  sendMessage: (msg: string, callbacks: unknown) =>
+    mockSendMessage(msg, callbacks),
+}));
+
+vi.mock("../src/main/scheduler", () => ({
+  runJobHeadless: (jobId: string, jobName: string, profile: string) =>
+    mockRunJobHeadless(jobId, jobName, profile),
+}));
+
+vi.mock("../src/main/utils", () => ({
+  getActiveProfileNameSync: () => "test-profile",
+}));
+
+import {
+  startControlServer,
+  stopControlServer,
+} from "../src/main/control-server";
+
+describe("Local Control Server Integration", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    stopControlServer();
+  });
+
+  it("should start control server, write token to config, and handle GET /state", async () => {
+    const desktopConfig: Record<string, unknown> = {};
+    mockReadDesktopConfig.mockReturnValue(desktopConfig);
+
+    const port = await startControlServer();
+    expect(port).toBeGreaterThanOrEqual(8645);
+    expect(desktopConfig.controlServerToken).toBeDefined();
+    const token = desktopConfig.controlServerToken;
+
+    // Verify OS-native script helper is generated
+    expect(mockWriteFileSync).toHaveBeenCalled();
+    const filePath = mockWriteFileSync.mock.calls[0][0];
+    const fileContent = mockWriteFileSync.mock.calls[0][1];
+    expect(filePath).toContain("/tmp/hermes-test-home/.hermes/bin/hermes-ask");
+    expect(fileContent).toContain(`PORT="${port}"`);
+    expect(fileContent).toContain(`TOKEN="${token}"`);
+    expect(mockChmodSync).toHaveBeenCalledWith(filePath, 0o755);
+
+    // Send HTTP query
+    const res = await fetch(`http://127.0.0.1:${port}/state`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as Record<string, unknown>;
+    expect(data.profile).toBe("test-profile");
+    expect(data.controlPort).toBe(port);
+  });
+
+  it("should reject unauthorized requests", async () => {
+    const desktopConfig: Record<string, unknown> = {};
+    mockReadDesktopConfig.mockReturnValue(desktopConfig);
+
+    const port = await startControlServer();
+
+    const res = await fetch(`http://127.0.0.1:${port}/state`, {
+      headers: {
+        Authorization: `Bearer invalid-token`,
+      },
+    });
+
+    expect(res.status).toBe(401);
+  });
+
+  it("should trigger a background job on POST /cron/trigger", async () => {
+    const desktopConfig: Record<string, unknown> = {};
+    mockReadDesktopConfig.mockReturnValue(desktopConfig);
+
+    const port = await startControlServer();
+    const token = desktopConfig.controlServerToken;
+
+    const res = await fetch(`http://127.0.0.1:${port}/cron/trigger`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ jobId: "job-123", jobName: "Test Run" }),
+    });
+
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as Record<string, unknown>;
+    expect(data.success).toBe(true);
+    expect(mockRunJobHeadless).toHaveBeenCalledWith(
+      "job-123",
+      "Test Run",
+      "test-profile",
+    );
+  });
+});

@@ -80,6 +80,16 @@ import {
 import { isAllowedExternalUrl } from "../security";
 import { isAllowedObsidianExternalUrl } from "../obsidian";
 import { registerDualHandler } from "./utility";
+import {
+  getSchedulerConfig,
+  setSchedulerConfig,
+  SchedulerConfig,
+} from "../scheduler";
+import {
+  getSpendingCapConfig,
+  setSpendingCapConfig,
+  SpendingCapConfig,
+} from "../spending-limits";
 
 function openExternalUrl(rawUrl: unknown): void {
   if (!isAllowedExternalUrl(rawUrl) && !isAllowedObsidianExternalUrl(rawUrl)) {
@@ -488,5 +498,25 @@ export function registerConfigIpc(): void {
   ipcMain.handle("get-completion-sound", () => getCompletionSound());
   ipcMain.handle("set-completion-sound", (_event, enabled: boolean) =>
     setCompletionSound(enabled),
+  );
+
+  // Scheduler Config
+  ipcMain.handle("get-scheduler-config", () => getSchedulerConfig());
+  ipcMain.handle(
+    "set-scheduler-config",
+    (_event, settings: Partial<SchedulerConfig>) => {
+      setSchedulerConfig(settings);
+      return true;
+    },
+  );
+
+  // Spending Cap Config
+  ipcMain.handle("get-spending-cap-config", () => getSpendingCapConfig());
+  ipcMain.handle(
+    "set-spending-cap-config",
+    (_event, settings: Partial<SpendingCapConfig>) => {
+      setSpendingCapConfig(settings);
+      return true;
+    },
   );
 }
