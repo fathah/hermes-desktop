@@ -18,7 +18,7 @@
   background-color: var(--phosphor-bg);
   color: var(--phosphor-glow);
   font-family: "JetBrains Mono", "Courier New", Courier, monospace;
-  font-size: 13px;
+  font-size: 15px;
   user-select: none;
   transition: background-color 0.3s ease;
 }
@@ -33,22 +33,34 @@
   color: var(--phosphor-glow);
 }
 
-/* Infinite panning grid backdrop */
-.cyber-grid {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-image:
-    radial-gradient(circle, color-mix(in srgb, var(--phosphor-glow) 20%, transparent) 1.5px, transparent 1.5px),
-    linear-gradient(color-mix(in srgb, var(--phosphor-glow) 4%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in srgb, var(--phosphor-glow) 4%, transparent) 1px, transparent 1px);
-  background-size:
-    20px 20px,
-    100px 100px,
-    100px 100px;
-  transform-origin: 0 0;
+/* Force Green/Amber Phosphor Theme Wildcard Overrides to bypass external skins */
+.cyber-board-viewport,
+.cyber-board-viewport * {
+  color: var(--phosphor-text) !important;
+  border-color: var(--phosphor-border) !important;
+}
+
+/* Specific exceptions to the global wildcard override */
+.cyber-board-viewport .glow-text,
+.cyber-board-viewport .bbs-menu-key,
+.cyber-board-viewport .ansi-card-header span,
+.cyber-board-viewport .bbs-calendar-day-header,
+.cyber-board-viewport .ansi-card-prompt span,
+.cyber-board-viewport .bbs-action-link,
+.cyber-board-viewport .bbs-ansi-banner,
+.cyber-board-viewport .bbs-chat-msg span.chat-sender {
+  color: var(--phosphor-glow) !important;
+}
+
+.cyber-board-viewport .bbs-tui-btn.active,
+.cyber-board-viewport .bbs-todo-checkbox.checked,
+.cyber-board-viewport .bbs-calendar-cell.today {
+  background-color: var(--phosphor-border) !important;
+  color: var(--phosphor-bg) !important;
+}
+
+.cyber-board-viewport .bbs-calendar-cell.today {
+  font-weight: bold !important;
 }
 
 /* CRT monitor effects overlay */
@@ -130,7 +142,7 @@
   background-color: var(--phosphor-dim);
   color: var(--phosphor-glow);
   font-weight: bold;
-  font-size: 11px;
+  font-size: 14px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -177,7 +189,7 @@
   padding: 4px 8px;
   border-top: 1px dashed var(--phosphor-border);
   background: rgba(0, 0, 0, 0.3);
-  font-size: 12px;
+  font-size: 16px;
 }
 
 .ansi-card-prompt span {
@@ -192,7 +204,7 @@
   border: none;
   color: var(--phosphor-text);
   font-family: inherit;
-  font-size: inherit;
+  font-size: 16px;
   outline: none;
 }
 
@@ -256,19 +268,13 @@
   background: rgba(0, 0, 0, 0.4);
   transition: background-image 0.2s ease;
 }
-
-.show-grid-bg .bbs-node .ansi-card-body {
-  background-image:
-    radial-gradient(circle, color-mix(in srgb, var(--phosphor-glow) 15%, transparent) 1px, transparent 1px);
-  background-size: 20px 20px;
-}
-
 .bbs-ansi-banner {
   white-space: pre;
   color: var(--phosphor-glow);
   line-height: 1.15;
-  font-size: 9px;
-  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: bold;
+  margin-bottom: 12px;
   text-shadow: 0 0 5px var(--phosphor-glow);
 }
 
@@ -338,9 +344,10 @@
   border-bottom: 1px dotted var(--phosphor-border);
   color: var(--phosphor-text);
   font-family: inherit;
-  font-size: inherit;
+  font-size: 15px;
   cursor: pointer;
-  padding: 1px 4px;
+  padding: 3px 8px;
+  margin: 2px;
   transition: all 0.2s ease;
   border-radius: 2px;
 }
@@ -363,8 +370,8 @@
 /* Modern terminal dashboard additions */
 .bbs-tabs-row {
   display: flex;
-  gap: 4px;
-  padding: 6px 8px;
+  gap: 8px;
+  padding: 8px 12px;
   border-bottom: 1px dashed var(--phosphor-border);
   background: rgba(0, 0, 0, 0.3);
   flex-wrap: wrap;
@@ -383,7 +390,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
-  padding: 4px 6px;
+  padding: 6px 8px;
   border: 1px solid transparent;
   border-radius: 2px;
 }
@@ -399,7 +406,7 @@
 }
 
 .bbs-item-text {
-  font-size: 11px;
+  font-size: 15px;
   line-height: 1.4;
   word-break: break-all;
 }
@@ -411,7 +418,7 @@
 }
 
 .bbs-action-link {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--phosphor-glow);
   text-decoration: none;
   cursor: pointer;
@@ -427,11 +434,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
   border: 1px solid var(--phosphor-border);
-  margin-right: 6px;
-  font-size: 9px;
+  margin-right: 8px;
+  font-size: 12px;
   line-height: 1;
   cursor: pointer;
   flex-shrink: 0;
@@ -445,69 +452,70 @@
 
 /* Calendar grid */
 .bbs-calendar-container {
-  margin: 8px 0;
+  margin: 16px 0;
   border: 1px solid var(--phosphor-border);
-  padding: 8px;
+  padding: 16px;
   background: rgba(0, 0, 0, 0.2);
 }
 
 .bbs-calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
+  gap: 12px;
   text-align: center;
-  font-size: 11px;
+  font-size: 18px;
   font-family: monospace;
 }
 
 .bbs-calendar-day-header {
   font-weight: bold;
+  font-size: 16px;
   border-bottom: 1px solid var(--phosphor-border);
-  padding-bottom: 2px;
+  padding-bottom: 6px;
   color: var(--phosphor-glow);
 }
 
 .bbs-calendar-cell {
-  padding: 2px;
+  padding: 12px 8px;
+  font-size: 20px;
   border: 1px solid transparent;
 }
 
 .bbs-calendar-cell.today {
-  background-color: var(--phosphor-dim);
-  border-color: var(--phosphor-border);
-  color: var(--phosphor-glow);
-  font-weight: bold;
+  background-color: var(--phosphor-border) !important;
+  color: var(--phosphor-bg) !important;
+  font-weight: bold !important;
 }
 
 .bbs-calendar-cell.has-event {
-  border-bottom: 2px solid var(--phosphor-glow);
+  border-bottom: 3px solid var(--phosphor-glow);
 }
 
 /* Chat bubble styling */
 .bbs-chat-log {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 12px;
   flex: 1;
   overflow-y: auto;
-  margin-bottom: 6px;
+  margin-bottom: 12px;
 }
 
 .bbs-chat-msg {
-  font-size: 11px;
+  font-size: 15px;
   line-height: 1.4;
-  padding: 4px 6px;
-  border-radius: 2px;
+  padding: 8px 12px;
+  border-radius: 0px;
 }
 
 .bbs-chat-msg.operator {
-  border-left: 2px solid var(--phosphor-glow);
-  background: rgba(255, 255, 255, 0.03);
+  border-left: 3px solid var(--phosphor-glow);
+  background: transparent !important;
 }
 
 .bbs-chat-msg.louis {
-  border-left: 2px solid var(--phosphor-text);
-  color: var(--phosphor-text);
+  border-left: 3px solid var(--phosphor-text);
+  background: transparent !important;
 }
 
 /* Color swatches in note card */
@@ -544,7 +552,7 @@
   gap: 4px;
   margin: 8px 0;
   font-family: inherit;
-  font-size: 11px;
+  font-size: 14px;
 }
 
 .bbs-select {
@@ -552,8 +560,8 @@
   border: 1px solid var(--phosphor-border);
   color: var(--phosphor-text);
   font-family: inherit;
-  font-size: 11px;
-  padding: 2px 4px;
+  font-size: 14px;
+  padding: 4px 6px;
   outline: none;
   border-radius: 2px;
   cursor: pointer;
@@ -565,7 +573,7 @@
 }
 
 .bbs-card-content {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.4;
   color: var(--phosphor-text);
   margin-bottom: 8px;

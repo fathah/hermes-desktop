@@ -6,10 +6,6 @@ import { useVaultQuery } from "../hooks/useNoteIndex";
 interface BbsTerminalNodeProps {
   activeTheme: "green" | "amber";
   onThemeToggle: () => void;
-  showGrid: boolean;
-  onGridToggle: () => void;
-  scanlines: boolean;
-  onScanlinesToggle: () => void;
   homeSurface: string;
   onSetHomeToggle: () => void;
   allPages: { id: string; meta: PageMeta }[];
@@ -26,10 +22,6 @@ interface ChatMessage {
 export function BbsTerminalNode({
   activeTheme,
   onThemeToggle,
-  showGrid,
-  onGridToggle,
-  scanlines,
-  onScanlinesToggle,
   homeSurface,
   onSetHomeToggle,
   allPages,
@@ -356,9 +348,14 @@ export function BbsTerminalNode({
       [28, 29, 30, null, null, null, null],
     ];
 
+    const todayObj = new Date();
+    const currentYear = todayObj.getFullYear();
+    const currentMonth = todayObj.getMonth() + 1; // 1-indexed
+    const currentDay = todayObj.getDate();
+
     return (
       <div className="bbs-calendar-container">
-        <div style={{ textAlign: "center", fontWeight: "bold", marginBottom: "6px", color: "var(--phosphor-glow)" }}>
+        <div style={{ textAlign: "center", fontWeight: "bold", marginBottom: "12px", color: "var(--phosphor-glow)", fontSize: "18px" }}>
           JUNE 2026
         </div>
         <div className="bbs-calendar-grid">
@@ -369,7 +366,7 @@ export function BbsTerminalNode({
           ))}
           {monthWeeks.flat().map((day, idx) => {
             if (day === null) return <div key={`empty-${idx}`} className="bbs-calendar-cell" />;
-            const isToday = day === 8; // Highlight today Jun 8
+            const isToday = currentYear === 2026 && currentMonth === 6 && day === currentDay;
             const hasEvent = scheduledEvents.some((e) => e.date === `2026-06-${day.toString().padStart(2, "0")}`);
             return (
               <div
@@ -407,24 +404,6 @@ export function BbsTerminalNode({
 
         {/* Integrated HUD Controls inside the terminal header */}
         <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-          <button
-            type="button"
-            className={`bbs-tui-btn ${showGrid ? "active" : ""}`}
-            onClick={onGridToggle}
-            title="Toggle Background Grid"
-            style={{ fontSize: "10px", padding: "0 4px" }}
-          >
-            [GRID]
-          </button>
-          <button
-            type="button"
-            className={`bbs-tui-btn ${scanlines ? "active" : ""}`}
-            onClick={onScanlinesToggle}
-            title="Toggle CRT Scanlines"
-            style={{ fontSize: "10px", padding: "0 4px" }}
-          >
-            [CRT]
-          </button>
           <button
             type="button"
             className="bbs-tui-btn"
@@ -643,13 +622,15 @@ export function BbsTerminalNode({
             <div className="bbs-chat-log">
               {chatLogs.map((log, idx) => (
                 <div key={idx} className={`bbs-chat-msg ${log.sender.toLowerCase()}`}>
-                  <div style={{ fontSize: "9px", opacity: 0.5, marginBottom: "2px" }}>
-                    [{log.time}] {log.sender}
-                  </div>
-                  <div style={{ whiteSpace: "pre-wrap" }}>{log.text}</div>
+                  <span className="chat-sender" style={{ fontWeight: "bold", marginRight: "8px" }}>
+                    {log.sender.toUpperCase()}&gt;
+                  </span>
+                  <span className="chat-text" style={{ whiteSpace: "pre-wrap" }}>
+                    {log.text}
+                  </span>
                 </div>
               ))}
-              {chatLoading && <div style={{ fontSize: "11px", opacity: 0.5 }}>Louis thinking...</div>}
+              {chatLoading && <div style={{ fontSize: "15px", opacity: 0.5 }}>Louis thinking...</div>}
               <div ref={outputEndRef} />
             </div>
           </div>
