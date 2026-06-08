@@ -13,7 +13,7 @@ export type Tweaks = {
   width: "narrow" | "comfortable" | "wide" | "full";
   density: "comfortable" | "compact";
   bodyfont: "sans" | "serif" | "mono";
-  homeSurface: "doc" | "cockpit" | "board" | "chats" | "inbox";
+  homeSurface: "doc" | "cockpit" | "chats" | "inbox";
 };
 
 export const TWEAK_DEFAULTS: Tweaks = {

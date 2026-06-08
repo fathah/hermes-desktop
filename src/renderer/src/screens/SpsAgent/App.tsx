@@ -25,7 +25,6 @@ import { YouSurface } from "./you/YouSurface";
 import { CockpitSurface } from "./cockpit/CockpitSurface";
 import { InboxSurface } from "./inbox/InboxSurface";
 import { HealthSurface } from "./health/HealthSurface";
-import { CyberBbsBoard } from "./board/CyberBbsBoard";
 import { runAutoIngest } from "./inbox/ingestApply";
 import {
   getAutoApply,
@@ -131,8 +130,6 @@ export function App() {
             <AskPane />
           ) : surface === "journal" ? (
             <JournalSurface />
-          ) : surface === "board" ? (
-            <CyberBbsBoard />
           ) : (
             <div className="doc-scroll scroll">
               {surface === "cockpit" && <CockpitSurface />}
