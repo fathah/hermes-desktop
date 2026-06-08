@@ -8,3 +8,237 @@
 .sps-scope .app {
   height: 100%;
 }
+
+/* ==========================================================================
+   Inbox & News Curation Settings Styling
+   ========================================================================== */
+.sps-scope .inbox-surface {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+.sps-scope .inbox-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-sans);
+  font-size: var(--fs-22);
+  font-weight: 600;
+  line-height: var(--lh-tight);
+  color: var(--ink-1);
+  margin: 0;
+}
+
+.sps-scope .inbox-subtitle {
+  color: var(--ink-3);
+  font-size: var(--fs-13);
+  margin-top: 6px;
+  margin-bottom: 20px;
+}
+
+.sps-scope .inbox-section {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-2);
+  padding: 16px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow-1);
+}
+
+.sps-scope .inbox-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--hairline);
+  margin-bottom: 20px;
+  padding-bottom: 0px;
+}
+
+.sps-scope .inbox-tab-btn {
+  background: none;
+  border: none;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: var(--fs-13);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  color: var(--ink-3);
+  border-bottom: 2px solid transparent;
+  transition: all var(--dur-1) var(--ease-out);
+}
+
+.sps-scope .inbox-tab-btn:hover {
+  color: var(--ink-1);
+}
+
+.sps-scope .inbox-tab-btn.active {
+  color: var(--ink-1);
+  font-weight: 600;
+  border-bottom-color: var(--sukhi-gold-deep);
+}
+
+.sps-scope .inbox-input,
+.sps-scope .inbox-select,
+.sps-scope .inbox-textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--r-1);
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface);
+  color: var(--ink-1);
+  font-family: inherit;
+  font-size: var(--fs-13);
+  margin-bottom: 12px;
+  box-sizing: border-box;
+}
+
+.sps-scope .inbox-input:focus,
+.sps-scope .inbox-select:focus,
+.sps-scope .inbox-textarea:focus {
+  outline: none;
+  border-color: var(--focus-ring);
+  box-shadow: var(--focus-ring-soft);
+}
+
+.sps-scope .inbox-card-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sps-scope .inbox-card {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-2);
+  padding: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  box-shadow: var(--shadow-1);
+  transition: background-color var(--dur-1) var(--ease-out);
+}
+
+.sps-scope .inbox-card:hover {
+  background-color: var(--row-hover);
+}
+
+.sps-scope .inbox-card-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.sps-scope .inbox-card-title {
+  font-weight: 600;
+  font-size: var(--fs-13);
+  color: var(--ink-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sps-scope .inbox-card-meta {
+  color: var(--ink-3);
+  font-size: var(--fs-12);
+  margin-top: 4px;
+  display: flex;
+  gap: 8px;
+}
+
+.sps-scope .inbox-card-badge {
+  font-size: var(--fs-12);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-4);
+  font-weight: 600;
+}
+
+.sps-scope .inbox-btn-group {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.sps-scope .inbox-proposal-section {
+  border: 1px solid var(--sukhi-gold-deep);
+  background: var(--surface-sunk);
+  border-radius: var(--r-2);
+  padding: 16px;
+  margin-bottom: 24px;
+}
+
+.sps-scope .inbox-proposal-title {
+  font-weight: 600;
+  font-size: var(--fs-14);
+  color: var(--ink-1);
+  margin-bottom: 4px;
+}
+
+.sps-scope .inbox-proposal-summary {
+  color: var(--ink-2);
+  font-size: var(--fs-13);
+  margin-bottom: 16px;
+}
+
+.sps-scope .inbox-proposed-page {
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  border-radius: var(--r-2);
+  padding: 12px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow-1);
+}
+
+.sps-scope .inbox-pill-input-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-1);
+  background: var(--surface);
+  margin-bottom: 12px;
+}
+
+.sps-scope .inbox-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--surface-sunk);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-1);
+  padding: 2px 8px;
+  font-size: var(--fs-12);
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+.sps-scope .inbox-pill-remove {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--ink-3);
+  padding: 0;
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+}
+
+.sps-scope .inbox-pill-remove:hover {
+  color: var(--sukhi-red);
+}
+
+.sps-scope .inbox-pill-input {
+  border: none;
+  outline: none;
+  background: transparent;
+  flex: 1;
+  min-width: 120px;
+  font-family: inherit;
+  font-size: var(--fs-13);
+  color: var(--ink-1);
+  padding: 2px 4px;
+}

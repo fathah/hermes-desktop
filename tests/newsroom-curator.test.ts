@@ -8,17 +8,20 @@ const HERMES_PYTHON = "/Users/amar/.hermes/hermes-agent/venv/bin/python";
 const CLUSTER_SCRIPT = "/Users/amar/.hermes/skills/curation/newsroom-curator/cluster_news.py";
 
 describe("Newsroom Curator: Semantic Similarity Clustering", () => {
+  let tempVaultDir: string;
   let tempInboxDir: string;
 
   beforeEach(() => {
-    // Create a temporary inbox directory for raw captures
-    tempInboxDir = mkdtempSync(join(tmpdir(), "newsroom-inbox-test-"));
+    // Create a temporary vault and inbox directory for raw captures
+    tempVaultDir = mkdtempSync(join(tmpdir(), "newsroom-vault-test-"));
+    tempInboxDir = join(tempVaultDir, "_inbox");
+    mkdirSync(tempInboxDir);
   });
 
   afterEach(() => {
-    // Clean up temporary directory
-    if (tempInboxDir) {
-      rmSync(tempInboxDir, { recursive: true, force: true });
+    // Clean up temporary directories
+    if (tempVaultDir) {
+      rmSync(tempVaultDir, { recursive: true, force: true });
     }
   });
 
@@ -162,5 +165,97 @@ This is an old document.`
 
     expect(allItems.map(i => i.id)).toContain("fresh-capture");
     expect(allItems.map(i => i.id)).not.toContain("old-capture");
+  });
+
+  it("respects custom similarity threshold from curator-settings.md", () => {
+    // Group 1: GPT-5 articles (moderately similar, group together under threshold=0.45)
+    writeFileSync(
+      join(tempInboxDir, "openai-gpt5-release.md"),
+      `---
+status: unprocessed
+title: OpenAI Announces GPT-5
+source: tech-news
+---
+Today OpenAI officially released their next generation model GPT-5, outlining massive capabilities in multimodal logic and system reasoning.`
+    );
+
+    writeFileSync(
+      join(tempInboxDir, "gpt5-reasoning-analysis.md"),
+      `---
+status: unprocessed
+title: Detailed Analysis of GPT-5 Logic
+source: research-blog
+---
+An initial review of OpenAI's new GPT-5 model reveals substantial logic capabilities, proving it is a significant upgrade in multi-step coding reasoning.`
+    );
+
+    // 1. Write curator-settings.md with high threshold (0.95)
+    writeFileSync(
+      join(tempVaultDir, "curator-settings.md"),
+      `# Settings
+\`\`\`json
+{
+  "threshold": 0.95
+}
+\`\`\`
+`
+    );
+
+    // Execute clustering
+    const outputRaw = execFileSync(HERMES_PYTHON, [CLUSTER_SCRIPT, tempInboxDir]);
+    const clusters = JSON.parse(outputRaw.toString().trim());
+
+    // With 0.95 similarity threshold, they should not group together
+    const clusterKeys = Object.keys(clusters);
+    expect(clusterKeys.length).toBe(2); // Two separate clusters
+  });
+
+  it("filters out captures containing keywords from ignored_topics", () => {
+    // Article 1: Interesting topic
+    writeFileSync(
+      join(tempInboxDir, "interesting-article.md"),
+      `---
+status: unprocessed
+title: Important breakthroughs in Quantum Computing
+source: tech-news
+---
+Researchers have achieved a stable logical qubit milestone.`
+    );
+
+    // Article 2: Ignored topic
+    writeFileSync(
+      join(tempInboxDir, "ignored-gossip.md"),
+      `---
+status: unprocessed
+title: Hollywood Celebrity Gossip Weekly Review
+source: clickbait
+---
+Some celebrity did something trivial today.`
+    );
+
+    // Write curator-settings.md with ignored_topics
+    writeFileSync(
+      join(tempVaultDir, "curator-settings.md"),
+      `# Settings
+\`\`\`json
+{
+  "ignored_topics": ["gossip", "celebrity"]
+}
+\`\`\`
+`
+    );
+
+    // Execute clustering
+    const outputRaw = execFileSync(HERMES_PYTHON, [CLUSTER_SCRIPT, tempInboxDir]);
+    const clusters = JSON.parse(outputRaw.toString().trim());
+
+    // Accumulate all articles
+    const allItems: any[] = [];
+    for (const key of Object.keys(clusters)) {
+      allItems.push(...clusters[key]);
+    }
+
+    expect(allItems.map(i => i.id)).toContain("interesting-article");
+    expect(allItems.map(i => i.id)).not.toContain("ignored-gossip");
   });
 });

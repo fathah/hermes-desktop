@@ -1,4 +1,4 @@
-// InboxSurface.tsx — the capture inbox + ingest review queue (second-brain loop).
+// InboxSurface.tsx — the capture inbox + ingest review queue (second-brain loop) + curation settings.
 //
 // The inbox is the "Raw Sources" layer: quick notes and web-clips land here as
 // immutable markdown rows under vault/_inbox/, awaiting agent ingest. Writes go
@@ -10,7 +10,7 @@
 // the user applies it, and the desktop COMMITS each page through the store
 // (ingestCommitPage) so it appears in both storage modes — the propose-then-
 // commit keystone. Nothing the agent proposes lands until you approve it.
-import { useCallback, useState } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { Icon } from "../components/Icon";
 import { useStore } from "../store";
 import { useVaultQuery, type VaultRow } from "../hooks/useNoteIndex";
@@ -38,6 +38,7 @@ interface InboxSurfaceProps {
 }
 
 type Mode = "note" | "web";
+type Tab = "inbox" | "settings";
 
 interface ProposedPage {
   op: "create" | "update";
@@ -71,11 +72,13 @@ export function InboxSurface({
   // useVaultQuery lands a beat after the write, so we reconcile on refetch.
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [mode, setMode] = useState<Mode>("note");
+  const [activeTab, setActiveTab] = useState<Tab>("inbox");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
   // Ingest review queue.
   const ingestCommitPage = useStore((s) => s.ingestCommitPage);
   const flash = useStore((s) => s.flash);
@@ -85,6 +88,71 @@ export function InboxSurface({
   const [skipMem, setSkipMem] = useState<Set<number>>(new Set());
   const [autoApply, setAutoApplyState] = useState(() => getAutoApply());
   const [intervalMin, setIntervalMin] = useState(() => getIngestIntervalMin());
+
+  // Curation settings fields
+  const [threshold, setThreshold] = useState(0.45);
+  const [model, setModel] = useState("hermes-agent");
+  const [voice, setVoice] = useState("en-US-AriaNeural");
+  const [topics, setTopics] = useState<string[]>([]);
+  const [ignoredTopics, setIgnoredTopics] = useState<string[]>([]);
+  const [digestPath, setDigestPath] = useState("daily-digests");
+  const [flashcardPath, setFlashcardPath] = useState("flashcards/daily_news_flashcards.md");
+  const [audioPath, setAudioPath] = useState("audio");
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [settingsError, setSettingsError] = useState("");
+  const [settingsSaved, setSettingsSaved] = useState(false);
+
+  // Load curator settings from vault
+  useEffect(() => {
+    async function loadSettings() {
+      try {
+        const content = await window.hermesAPI.readObsidianFile("curator-settings.md", profile);
+        if (content) {
+          const match = /```json\s*([\s\S]*?)\s*```/.exec(content);
+          if (match) {
+            const parsed = JSON.parse(match[1]);
+            if (typeof parsed.threshold === "number") setThreshold(parsed.threshold);
+            if (typeof parsed.model === "string") setModel(parsed.model);
+            if (typeof parsed.voice === "string") setVoice(parsed.voice);
+            if (Array.isArray(parsed.topics)) setTopics(parsed.topics);
+            if (Array.isArray(parsed.ignored_topics)) setIgnoredTopics(parsed.ignored_topics);
+            if (typeof parsed.digest_path === "string") setDigestPath(parsed.digest_path);
+            if (typeof parsed.flashcard_path === "string") setFlashcardPath(parsed.flashcard_path);
+            if (typeof parsed.audio_path === "string") setAudioPath(parsed.audio_path);
+          }
+        }
+      } catch (e) {
+        console.warn("Could not load curator settings (file may not exist yet):", e);
+      }
+    }
+    loadSettings();
+  }, [profile]);
+
+  const saveSettings = async (): Promise<void> => {
+    setSavingSettings(true);
+    setSettingsError("");
+    setSettingsSaved(false);
+    try {
+      const configObj = {
+        threshold,
+        model,
+        voice,
+        topics,
+        ignored_topics: ignoredTopics,
+        digest_path: digestPath,
+        flashcard_path: flashcardPath,
+        audio_path: audioPath,
+      };
+      const markdown = `# Newsroom Curator Settings\n\nThis file is managed by the SPS Agent dashboard. It controls the local \`newsroom-curator\` skill execution parameters.\n\n\`\`\`json\n${JSON.stringify(configObj, null, 2)}\n\`\`\`\n`;
+      await window.hermesAPI.writeObsidianFile("curator-settings.md", markdown, profile);
+      setSettingsSaved(true);
+      setTimeout(() => setSettingsSaved(false), 3000);
+    } catch (e) {
+      setSettingsError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavingSettings(false);
+    }
+  };
 
   const visible = rows.filter((r) => !hidden.has(r.path));
 
@@ -285,507 +353,533 @@ export function InboxSurface({
     mode === "note" ? body.trim().length > 0 : url.trim().length > 0;
 
   return (
-    <div
-      className="inbox-surface"
-      style={{ maxWidth: 760, margin: "0 auto", padding: "32px 24px" }}
-    >
-      <header style={{ marginBottom: 20 }}>
-        <h1
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            fontSize: 24,
-            margin: 0,
-          }}
-        >
+    <div className="inbox-surface">
+      <header style={{ marginBottom: 8 }}>
+        <h1 className="inbox-title">
           <Icon name="inbox" size={22} />
           Inbox
         </h1>
-        <p style={{ color: "var(--tx-3)", marginTop: 6 }}>
+        <p className="inbox-subtitle">
           Capture rough thoughts and links. The agent turns these raw sources
           into linked wiki pages — they stay untouched until then.
         </p>
       </header>
 
-      <section
-        style={{
-          border: "1px solid var(--bd-1, rgba(0,0,0,0.08))",
-          borderRadius: 10,
-          padding: 14,
-          marginBottom: 24,
-        }}
-      >
-        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-          <button
-            className={`nav-item ${mode === "note" ? "active" : ""}`}
-            style={{ flex: "0 0 auto" }}
-            onClick={() => setMode("note")}
-          >
-            <Icon name="callout" size={15} />
-            <span className="nav-label">Quick note</span>
-          </button>
-          <button
-            className={`nav-item ${mode === "web" ? "active" : ""}`}
-            style={{ flex: "0 0 auto" }}
-            onClick={() => setMode("web")}
-          >
-            <Icon name="doc" size={15} />
-            <span className="nav-label">Web clip</span>
-          </button>
-        </div>
-
-        <input
-          className="inbox-input"
-          placeholder="Title (optional)"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          style={inputStyle}
-        />
-
-        {mode === "note" ? (
-          <textarea
-            className="inbox-body"
-            placeholder="What's on your mind?  (⌘↵ to capture)"
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            onKeyDown={(e) => {
-              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") captureNote();
-            }}
-            rows={4}
-            style={{ ...inputStyle, resize: "vertical", fontFamily: "inherit" }}
-          />
-        ) : (
-          <input
-            className="inbox-url"
-            placeholder="https://…  (↵ to clip)"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") captureWeb();
-            }}
-            style={inputStyle}
-          />
-        )}
-
-        {error && (
-          <div
-            style={{
-              color: "var(--danger, #c0392b)",
-              fontSize: 13,
-              marginTop: 8,
-            }}
-          >
-            {error}
-          </div>
-        )}
-
-        <div
-          style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}
-        >
-          <button
-            className="btn-primary"
-            disabled={busy || !canCapture}
-            onClick={mode === "note" ? captureNote : captureWeb}
-            style={{
-              padding: "7px 16px",
-              borderRadius: 7,
-              border: "none",
-              background: canCapture
-                ? "var(--accent, #2d7ff9)"
-                : "var(--bd-1, #ddd)",
-              color: "#fff",
-              cursor: canCapture && !busy ? "pointer" : "default",
-            }}
-          >
-            {busy ? "Capturing…" : "Capture"}
-          </button>
-        </div>
-      </section>
-
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          marginBottom: 10,
-          color: "var(--tx-3)",
-          fontSize: 13,
-          fontWeight: 600,
-        }}
-      >
-        <span>Unprocessed</span>
-        <span
-          style={{
-            background: "var(--bd-1, rgba(0,0,0,0.06))",
-            borderRadius: 10,
-            padding: "1px 8px",
-          }}
-        >
-          {visible.length}
-        </span>
-        <span style={{ flex: 1 }} />
+      {/* Tabs */}
+      <div className="inbox-tabs">
         <button
-          className="btn-primary"
-          disabled={ingesting || visible.length === 0}
-          onClick={() => void processInbox()}
-          title="Run the agent to turn these captures into wiki pages"
-          style={{
-            padding: "6px 12px",
-            borderRadius: 7,
-            border: "none",
-            background:
-              visible.length > 0
-                ? "var(--accent, #2d7ff9)"
-                : "var(--bd-1, #ddd)",
-            color: "#fff",
-            cursor: ingesting || visible.length === 0 ? "default" : "pointer",
-            fontSize: 12.5,
-          }}
+          className={`inbox-tab-btn ${activeTab === "inbox" ? "active" : ""}`}
+          onClick={() => setActiveTab("inbox")}
         >
-          {ingesting ? "Processing…" : "Process inbox"}
+          Inbox Review
+        </button>
+        <button
+          className={`inbox-tab-btn ${activeTab === "settings" ? "active" : ""}`}
+          onClick={() => setActiveTab("settings")}
+        >
+          Curation Settings
         </button>
       </div>
 
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 16,
-          marginBottom: 16,
-          color: "var(--tx-3)",
-          fontSize: 12.5,
-        }}
-      >
-        <label
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            cursor: "pointer",
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={autoApply}
-            onChange={(e) => {
-              setAutoApply(e.target.checked);
-              setAutoApplyState(e.target.checked);
-            }}
-          />
-          Auto-apply (skip review)
-        </label>
-        <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          Auto-process every
-          <select
-            value={intervalMin}
-            onChange={(e) => {
-              const m = Number(e.target.value);
-              setIngestIntervalMin(m);
-              setIntervalMin(m);
-            }}
-            style={{ padding: "2px 6px", borderRadius: 6 }}
-          >
-            <option value={0}>Off</option>
-            <option value={15}>15 min</option>
-            <option value={30}>30 min</option>
-            <option value={60}>60 min</option>
-          </select>
-        </label>
-        {intervalMin > 0 && !autoApply && (
-          <span style={{ color: "var(--tx-4)" }}>
-            enable auto-apply for scheduled runs to land
-          </span>
-        )}
-      </div>
-
-      {changeset && (
-        <section
-          style={{
-            border: "1px solid var(--accent, #2d7ff9)",
-            borderRadius: 10,
-            padding: 14,
-            marginBottom: 20,
-          }}
-        >
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>
-            Proposed changes
-          </div>
-          <div style={{ color: "var(--tx-3)", fontSize: 13, marginBottom: 12 }}>
-            {changeset.summary || "Review the agent's proposed wiki pages."}
-          </div>
-          {changeset.pages.length === 0 ? (
-            <div style={{ color: "var(--tx-4)", fontSize: 13 }}>
-              No new pages — the captures will just be marked processed.
+      {activeTab === "inbox" ? (
+        <>
+          <section className="inbox-section">
+            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+              <button
+                className={`nav-item ${mode === "note" ? "active" : ""}`}
+                style={{ flex: "0 0 auto" }}
+                onClick={() => setMode("note")}
+              >
+                <Icon name="callout" size={15} />
+                <span className="nav-label">Quick note</span>
+              </button>
+              <button
+                className={`nav-item ${mode === "web" ? "active" : ""}`}
+                style={{ flex: "0 0 auto" }}
+                onClick={() => setMode("web")}
+              >
+                <Icon name="doc" size={15} />
+                <span className="nav-label">Web clip</span>
+              </button>
             </div>
-          ) : (
-            <ul
-              style={{
-                listStyle: "none",
-                margin: 0,
-                padding: 0,
-                display: "flex",
-                flexDirection: "column",
-                gap: 10,
-              }}
-            >
-              {changeset.pages.map((p) => {
-                const skipped = skip.has(p.pageId);
-                return (
-                  <li
-                    key={p.pageId}
-                    style={{
-                      border: "1px solid var(--bd-1, rgba(0,0,0,0.08))",
-                      borderRadius: 8,
-                      padding: "10px 12px",
-                      opacity: skipped ? 0.5 : 1,
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        marginBottom: 6,
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontSize: 10.5,
-                          textTransform: "uppercase",
-                          letterSpacing: 0.4,
-                          color: "var(--tx-4)",
-                        }}
-                      >
-                        {p.op}
-                      </span>
-                      <strong>{p.title}</strong>
-                      <span
-                        style={{
-                          fontSize: 11,
-                          color: "var(--tx-4)",
-                          fontFamily: "var(--font-mono)",
-                        }}
-                      >
-                        [[{p.pageId}]]
-                      </span>
-                      <span style={{ flex: 1 }} />
-                      <button
-                        className="icon-btn"
-                        onClick={() => toggleSkip(p.pageId)}
-                        style={{
-                          border: "none",
-                          background: "transparent",
-                          color: "var(--tx-3)",
-                          cursor: "pointer",
-                          fontSize: 12,
-                        }}
-                      >
-                        {skipped ? "Include" : "Skip"}
-                      </button>
-                    </div>
-                    <pre
-                      style={{
-                        margin: 0,
-                        whiteSpace: "pre-wrap",
-                        wordBreak: "break-word",
-                        fontSize: 12,
-                        color: "var(--tx-2)",
-                        maxHeight: 140,
-                        overflow: "auto",
-                      }}
-                    >
-                      {p.markdown.slice(0, 600)}
-                      {p.markdown.length > 600 ? "…" : ""}
-                    </pre>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          {changeset.memory.length > 0 && (
-            <div style={{ marginTop: 14 }}>
+
+            <input
+              className="inbox-input"
+              placeholder="Title (optional)"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+
+            {mode === "note" ? (
+              <textarea
+                className="inbox-textarea"
+                placeholder="What's on your mind?  (⌘↵ to capture)"
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                onKeyDown={(e) => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") captureNote();
+                }}
+                rows={4}
+                style={{ resize: "vertical" }}
+              />
+            ) : (
+              <input
+                className="inbox-input"
+                placeholder="https://…  (↵ to clip)"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") captureWeb();
+                }}
+              />
+            )}
+
+            {error && (
               <div
                 style={{
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: "var(--tx-3)",
-                  marginBottom: 6,
+                  color: "var(--danger-fg, #a1202c)",
+                  fontSize: 13,
+                  marginTop: 8,
                 }}
               >
-                Remember about you
+                {error}
               </div>
-              <ul
-                style={{
-                  listStyle: "none",
-                  margin: 0,
-                  padding: 0,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 6,
-                }}
+            )}
+
+            <div className="inbox-btn-group">
+              <button
+                className="btn btn-primary"
+                disabled={busy || !canCapture}
+                onClick={mode === "note" ? captureNote : captureWeb}
               >
-                {changeset.memory.map((fact, i) => {
-                  const skipped = skipMem.has(i);
-                  return (
-                    <li
-                      key={i}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        fontSize: 13,
-                        opacity: skipped ? 0.5 : 1,
-                      }}
-                    >
-                      <Icon name="wand" size={13} />
-                      <span style={{ flex: 1 }}>{fact}</span>
-                      <button
-                        className="icon-btn"
-                        onClick={() => toggleSkipMem(i)}
-                        style={{
-                          border: "none",
-                          background: "transparent",
-                          color: "var(--tx-3)",
-                          cursor: "pointer",
-                          fontSize: 12,
-                        }}
-                      >
-                        {skipped ? "Include" : "Skip"}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+                {busy ? "Capturing…" : "Capture"}
+              </button>
             </div>
-          )}
+          </section>
+
           <div
             style={{
               display: "flex",
-              justifyContent: "flex-end",
+              alignItems: "center",
               gap: 8,
-              marginTop: 12,
+              marginBottom: 10,
+              color: "var(--ink-2)",
+              fontSize: 13,
+              fontWeight: 600,
             }}
           >
-            <button
-              className="icon-btn"
-              onClick={() => setChangeset(null)}
+            <span>Unprocessed</span>
+            <span
               style={{
-                border: "1px solid var(--bd-1, #ddd)",
-                background: "transparent",
-                color: "var(--tx-2)",
-                borderRadius: 7,
-                padding: "7px 14px",
+                background: "var(--surface-sunk, rgba(0,0,0,0.06))",
+                border: "1px solid var(--hairline)",
+                borderRadius: 10,
+                padding: "1px 8px",
+              }}
+            >
+              {visible.length}
+            </span>
+            <span style={{ flex: 1 }} />
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={ingesting || visible.length === 0}
+              onClick={() => void processInbox()}
+              title="Run the agent to turn these captures into wiki pages"
+            >
+              {ingesting ? "Processing…" : "Process inbox"}
+            </button>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 16,
+              marginBottom: 16,
+              color: "var(--ink-3)",
+              fontSize: 12.5,
+            }}
+          >
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
                 cursor: "pointer",
               }}
             >
-              Discard
-            </button>
-            <button
-              className="btn-primary"
-              disabled={ingesting}
-              onClick={() => void applyChangeset()}
+              <input
+                type="checkbox"
+                checked={autoApply}
+                onChange={(e) => {
+                  setAutoApply(e.target.checked);
+                  setAutoApplyState(e.target.checked);
+                }}
+              />
+              Auto-apply (skip review)
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              Auto-process every
+              <select
+                className="inbox-select"
+                value={intervalMin}
+                onChange={(e) => {
+                  const m = Number(e.target.value);
+                  setIngestIntervalMin(m);
+                  setIntervalMin(m);
+                }}
+                style={{ padding: "2px 6px", borderRadius: 4, margin: 0, width: "auto" }}
+              >
+                <option value={0}>Off</option>
+                <option value={15}>15 min</option>
+                <option value={30}>30 min</option>
+                <option value={60}>60 min</option>
+              </select>
+            </label>
+            {intervalMin > 0 && !autoApply && (
+              <span style={{ color: "var(--ink-4)" }}>
+                enable auto-apply for scheduled runs to land
+              </span>
+            )}
+          </div>
+
+          {changeset && (
+            <section className="inbox-proposal-section">
+              <div className="inbox-proposal-title">
+                Proposed changes
+              </div>
+              <div className="inbox-proposal-summary">
+                {changeset.summary || "Review the agent's proposed wiki pages."}
+              </div>
+              {changeset.pages.length === 0 ? (
+                <div style={{ color: "var(--ink-3)", fontSize: 13 }}>
+                  No new pages — the captures will just be marked processed.
+                </div>
+              ) : (
+                <ul className="inbox-card-list">
+                  {changeset.pages.map((p) => {
+                    const skipped = skip.has(p.pageId);
+                    return (
+                      <li
+                        key={p.pageId}
+                        className="inbox-proposed-page"
+                        style={{ opacity: skipped ? 0.5 : 1 }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            marginBottom: 6,
+                          }}
+                        >
+                          <span className="inbox-card-badge">
+                            {p.op}
+                          </span>
+                          <strong>{p.title}</strong>
+                          <span
+                            style={{
+                              fontSize: 11,
+                              color: "var(--ink-3)",
+                              fontFamily: "var(--font-mono)",
+                            }}
+                          >
+                            [[{p.pageId}]]
+                          </span>
+                          <span style={{ flex: 1 }} />
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => toggleSkip(p.pageId)}
+                            style={{ padding: "2px 6px" }}
+                          >
+                            {skipped ? "Include" : "Skip"}
+                          </button>
+                        </div>
+                        <pre
+                          style={{
+                            margin: 0,
+                            whiteSpace: "pre-wrap",
+                            wordBreak: "break-word",
+                            fontSize: 12,
+                            color: "var(--ink-2)",
+                            maxHeight: 140,
+                            overflow: "auto",
+                          }}
+                        >
+                          {p.markdown.slice(0, 600)}
+                          {p.markdown.length > 600 ? "…" : ""}
+                        </pre>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              {changeset.memory.length > 0 && (
+                <div style={{ marginTop: 14 }}>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: "var(--ink-2)",
+                      marginBottom: 6,
+                    }}
+                  >
+                    Remember about you
+                  </div>
+                  <ul
+                    style={{
+                      listStyle: "none",
+                      margin: 0,
+                      padding: 0,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 6,
+                    }}
+                  >
+                    {changeset.memory.map((fact, i) => {
+                      const skipped = skipMem.has(i);
+                      return (
+                        <li
+                          key={i}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            fontSize: 13,
+                            opacity: skipped ? 0.5 : 1,
+                          }}
+                        >
+                          <Icon name="wand" size={13} />
+                          <span style={{ flex: 1 }}>{fact}</span>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => toggleSkipMem(i)}
+                            style={{ padding: "2px 6px" }}
+                          >
+                            {skipped ? "Include" : "Skip"}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+              <div className="inbox-btn-group">
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setChangeset(null)}
+                >
+                  Discard
+                </button>
+                <button
+                  className="btn btn-primary btn-sm"
+                  disabled={ingesting}
+                  onClick={() => void applyChangeset()}
+                >
+                  {ingesting ? "Applying…" : "Apply"}
+                </button>
+              </div>
+            </section>
+          )}
+
+          {visible.length === 0 ? (
+            <div
               style={{
-                padding: "7px 16px",
-                borderRadius: 7,
-                border: "none",
-                background: "var(--accent, #2d7ff9)",
-                color: "#fff",
-                cursor: ingesting ? "default" : "pointer",
+                color: "var(--ink-3)",
+                padding: "24px 0",
+                textAlign: "center",
               }}
             >
-              {ingesting ? "Applying…" : "Apply"}
+              Nothing waiting. Captures you add land here.
+            </div>
+          ) : (
+            <ul className="inbox-card-list">
+              {visible.map((row) => (
+                <li key={row.path} className="inbox-card">
+                  <div className="inbox-card-content">
+                    <div className="inbox-card-title">
+                      {String(row.props.title ?? "Untitled capture")}
+                    </div>
+                    <div className="inbox-card-meta">
+                      <span style={{ textTransform: "capitalize" }}>
+                        {String(row.props.source ?? "note")}
+                      </span>
+                      <span>·</span>
+                      <span>{timeLabel(row.props.capturedAt)}</span>
+                    </div>
+                  </div>
+                  <button
+                    title="Mark processed"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setStatus(row, "processed")}
+                    style={{ padding: 4 }}
+                  >
+                    <Icon name="check" size={15} />
+                  </button>
+                  <button
+                    title="Discard"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setStatus(row, "discarded")}
+                    style={{ padding: 4 }}
+                  >
+                    <Icon name="trash" size={15} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      ) : (
+        /* Settings Tab */
+        <section className="inbox-section" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div className="type-h3" style={{ borderBottom: "1px solid var(--hairline)", paddingBottom: 8, marginBottom: 8 }}>
+            News Curator Preferences
+          </div>
+          
+          {settingsError && (
+            <div style={{ color: "var(--danger-fg)", fontSize: 13, marginBottom: 8 }}>
+              {settingsError}
+            </div>
+          )}
+
+          {settingsSaved && (
+            <div style={{ color: "var(--ok-fg)", background: "var(--ok-bg)", border: "1px solid var(--ok-border)", padding: "6px 10px", borderRadius: 4, fontSize: 13, marginBottom: 8 }}>
+              Settings saved successfully!
+            </div>
+          )}
+
+          <div className="settings-field">
+            <label className="settings-field-label">Similarity Threshold ({threshold.toFixed(2)})</label>
+            <div className="settings-field-hint" style={{ marginBottom: 6 }}>
+              Controls how similar articles must be to group into the same cluster. Higher threshold yields tighter groups with fewer, more distinct articles.
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <input
+                type="range"
+                min="0.10"
+                max="1.00"
+                step="0.05"
+                value={threshold}
+                onChange={(e) => setThreshold(Number(e.target.value))}
+                style={{ flex: 1 }}
+              />
+              <input
+                type="number"
+                min="0.10"
+                max="1.00"
+                step="0.05"
+                className="inbox-input"
+                value={threshold}
+                onChange={(e) => setThreshold(Math.max(0.1, Math.min(1.0, Number(e.target.value))))}
+                style={{ width: 70, margin: 0 }}
+              />
+            </div>
+          </div>
+
+          <PillEditor
+            label="Prioritized Topics"
+            hint="Keywords of topics you want to flag or prioritize. If articles in a cluster match these, they are highlighted and tagged."
+            tags={topics}
+            onChange={setTopics}
+            placeholder="e.g. AI, Fed, Finance"
+          />
+
+          <PillEditor
+            label="Ignored Topics"
+            hint="Keywords of topics you want to automatically filter out from your feed. Any capture containing these words will be skipped."
+            tags={ignoredTopics}
+            onChange={setIgnoredTopics}
+            placeholder="e.g. Clickbait, Gossip"
+          />
+
+          <div className="settings-field">
+            <label className="settings-field-label">Synthesis LLM Model</label>
+            <div className="settings-field-hint" style={{ marginBottom: 6 }}>
+              Model used to summarize clustered articles and write daily briefs.
+            </div>
+            <input
+              type="text"
+              className="inbox-input"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              placeholder="e.g. hermes-agent"
+            />
+          </div>
+
+          <div className="settings-field">
+            <label className="settings-field-label">TTS Auditory Voice</label>
+            <div className="settings-field-hint" style={{ marginBottom: 6 }}>
+              Voice utilized by edge-tts for compiling the 2-minute Pimsleur audio drills.
+            </div>
+            <select
+              className="inbox-select"
+              value={voice}
+              onChange={(e) => setVoice(e.target.value)}
+            >
+              <option value="en-US-AriaNeural">en-US-AriaNeural (US, Female)</option>
+              <option value="en-US-GuyNeural">en-US-GuyNeural (US, Male)</option>
+              <option value="en-GB-SoniaNeural">en-GB-SoniaNeural (UK, Female)</option>
+              <option value="en-GB-RyanNeural">en-GB-RyanNeural (UK, Male)</option>
+              <option value="en-AU-NatashaNeural">en-AU-NatashaNeural (AU, Female)</option>
+            </select>
+          </div>
+
+          <div className="settings-field">
+            <label className="settings-field-label">Daily Digest Subfolder</label>
+            <div className="settings-field-hint" style={{ marginBottom: 6 }}>
+              Folder inside your vault where daily briefs land (e.g. daily-digests).
+            </div>
+            <input
+              type="text"
+              className="inbox-input"
+              value={digestPath}
+              onChange={(e) => setDigestPath(e.target.value)}
+            />
+          </div>
+
+          <div className="settings-field">
+            <label className="settings-field-label">Flashcard Output File</label>
+            <div className="settings-field-hint" style={{ marginBottom: 6 }}>
+              Path to the markdown file where cloze-deletion flashcards are appended.
+            </div>
+            <input
+              type="text"
+              className="inbox-input"
+              value={flashcardPath}
+              onChange={(e) => setFlashcardPath(e.target.value)}
+            />
+          </div>
+
+          <div className="settings-field">
+            <label className="settings-field-label">Audio Loops Subfolder</label>
+            <div className="settings-field-hint" style={{ marginBottom: 6 }}>
+              Folder where Pimsleur Q&A scripts and MP3 loops are written.
+            </div>
+            <input
+              type="text"
+              className="inbox-input"
+              value={audioPath}
+              onChange={(e) => setAudioPath(e.target.value)}
+            />
+          </div>
+
+          <div className="inbox-btn-group" style={{ borderTop: "1px solid var(--hairline)", paddingTop: 16 }}>
+            <button
+              className="btn btn-primary"
+              disabled={savingSettings}
+              onClick={() => void saveSettings()}
+            >
+              {savingSettings ? "Saving..." : "Save Settings"}
             </button>
           </div>
         </section>
-      )}
-
-      {visible.length === 0 ? (
-        <div
-          style={{
-            color: "var(--tx-4)",
-            padding: "24px 0",
-            textAlign: "center",
-          }}
-        >
-          Nothing waiting. Captures you add land here.
-        </div>
-      ) : (
-        <ul
-          style={{
-            listStyle: "none",
-            margin: 0,
-            padding: 0,
-            display: "flex",
-            flexDirection: "column",
-            gap: 8,
-          }}
-        >
-          {visible.map((row) => (
-            <li
-              key={row.path}
-              style={{
-                border: "1px solid var(--bd-1, rgba(0,0,0,0.08))",
-                borderRadius: 9,
-                padding: "10px 12px",
-                display: "flex",
-                alignItems: "flex-start",
-                gap: 10,
-              }}
-            >
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div
-                  style={{
-                    fontWeight: 600,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {String(row.props.title ?? "Untitled capture")}
-                </div>
-                <div
-                  style={{
-                    color: "var(--tx-4)",
-                    fontSize: 12,
-                    marginTop: 3,
-                    display: "flex",
-                    gap: 8,
-                  }}
-                >
-                  <span style={{ textTransform: "capitalize" }}>
-                    {String(row.props.source ?? "note")}
-                  </span>
-                  <span>·</span>
-                  <span>{timeLabel(row.props.capturedAt)}</span>
-                </div>
-              </div>
-              <button
-                title="Mark processed"
-                className="icon-btn"
-                onClick={() => setStatus(row, "processed")}
-                style={iconBtnStyle}
-              >
-                <Icon name="check" size={15} />
-              </button>
-              <button
-                title="Discard"
-                className="icon-btn"
-                onClick={() => setStatus(row, "discarded")}
-                style={iconBtnStyle}
-              >
-                <Icon name="trash" size={15} />
-              </button>
-            </li>
-          ))}
-        </ul>
       )}
 
       <div
         style={{
           marginTop: 28,
           paddingTop: 14,
-          borderTop: "1px solid var(--bd-1, rgba(0,0,0,0.08))",
+          borderTop: "1px solid var(--hairline, rgba(0,0,0,0.08))",
           display: "flex",
           gap: 16,
           fontSize: 12.5,
@@ -802,32 +896,71 @@ export function InboxSurface({
   );
 }
 
+function PillEditor({
+  label,
+  hint,
+  tags,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  hint?: string;
+  tags: string[];
+  onChange: (tags: string[]) => void;
+  placeholder?: string;
+}) {
+  const [input, setInput] = useState("");
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      const val = input.trim();
+      if (val && !tags.includes(val)) {
+        onChange([...tags, val]);
+      }
+      setInput("");
+    }
+  };
+
+  const removeTag = (index: number) => {
+    onChange(tags.filter((_, i) => i !== index));
+  };
+
+  return (
+    <div className="settings-field">
+      <label className="settings-field-label">{label}</label>
+      {hint && <div className="settings-field-hint" style={{ marginBottom: 6 }}>{hint}</div>}
+      <div className="inbox-pill-input-container">
+        {tags.map((tag, i) => (
+          <span key={i} className="inbox-pill">
+            {tag}
+            <button
+              type="button"
+              className="inbox-pill-remove"
+              onClick={() => removeTag(i)}
+            >
+              &times;
+            </button>
+          </span>
+        ))}
+        <input
+          type="text"
+          className="inbox-pill-input"
+          placeholder={placeholder || "Type and press Enter..."}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+        />
+      </div>
+    </div>
+  );
+}
+
 const footerLinkStyle: React.CSSProperties = {
   border: "none",
   background: "transparent",
-  color: "var(--accent, #2d7ff9)",
+  color: "var(--sukhi-gold-deep, #c79400)",
   cursor: "pointer",
   padding: 0,
   fontSize: 12.5,
-};
-
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  padding: "8px 10px",
-  borderRadius: 7,
-  border: "1px solid var(--bd-1, rgba(0,0,0,0.12))",
-  background: "var(--bg-1, transparent)",
-  color: "inherit",
-  marginBottom: 8,
-  boxSizing: "border-box",
-};
-
-const iconBtnStyle: React.CSSProperties = {
-  flex: "0 0 auto",
-  border: "none",
-  background: "transparent",
-  color: "var(--tx-3)",
-  cursor: "pointer",
-  padding: 4,
-  borderRadius: 6,
 };
