@@ -93,6 +93,7 @@ import {
   setSpendingCapConfig,
   SpendingCapConfig,
 } from "../spending-limits";
+import { getTelegramScope, setTelegramReadInfoScope } from "../tools";
 
 function openExternalUrl(rawUrl: unknown): void {
   if (!isAllowedExternalUrl(rawUrl) && !isAllowedObsidianExternalUrl(rawUrl)) {
@@ -485,6 +486,16 @@ export function registerConfigIpc(): void {
       return true;
     },
   );
+
+  // Telegram remote-control capability scope (read/info-only is the safe default).
+  ipcMain.handle("telegram-get-scope", (_e, profile?: string) =>
+    getTelegramScope(profile),
+  );
+  ipcMain.handle("telegram-set-read-info-scope", (_e, profile?: string) => {
+    const ok = setTelegramReadInfoScope(profile);
+    if (ok && isGatewayRunning(profile)) restartGateway(profile);
+    return ok;
+  });
 
   // Model discovery
   ipcMain.handle(

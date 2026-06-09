@@ -6,7 +6,7 @@
 // gateway) → pair YOUR account (message bot → paste the code it replies with →
 // allowlist exactly you) → done. The allowlist (only your Telegram id) + pairing
 // approval are the load-bearing security controls.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const box: React.CSSProperties = {
   position: "fixed",
@@ -55,7 +55,8 @@ const input: React.CSSProperties = {
   marginTop: 6,
 };
 
-type Step = "intro" | "token" | "pair" | "done";
+type Step = "intro" | "token" | "pair" | "done" | "manage";
+type Scope = "read-info" | "broad" | "custom" | "?";
 
 export function TelegramSetupWizard({
   onClose,
@@ -69,6 +70,53 @@ export function TelegramSetupWizard({
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
+  const [scope, setScope] = useState<Scope>("?");
+
+  const loadScope = async (): Promise<void> => {
+    try {
+      const s = await window.hermesAPI.telegramGetScope?.();
+      setScope((s as Scope) ?? "?");
+    } catch {
+      setScope("?");
+    }
+  };
+
+  // If Telegram is already connected, open straight to the manage/status view.
+  useEffect(() => {
+    void (async () => {
+      try {
+        const platforms = await window.hermesAPI.getPlatformEnabled();
+        if (platforms?.telegram) {
+          await loadScope();
+          setStep("manage");
+        }
+      } catch {
+        /* not connected — stay on intro */
+      }
+    })();
+  }, []);
+
+  const lockReadInfo = async (): Promise<void> => {
+    setBusy(true);
+    try {
+      await window.hermesAPI.telegramSetReadInfoScope?.();
+      await loadScope();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const killSwitch = async (): Promise<void> => {
+    setBusy(true);
+    try {
+      await window.hermesAPI.setPlatformEnabled("telegram", false, undefined);
+      setNote(
+        "Remote control disabled. Your bot will no longer act on messages.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const saveToken = async (): Promise<void> => {
     const t = token.trim();
@@ -78,13 +126,10 @@ export function TelegramSetupWizard({
     try {
       await window.hermesAPI.setEnv("TELEGRAM_BOT_TOKEN", t, undefined);
       await window.hermesAPI.setPlatformEnabled("telegram", true, undefined);
-      // Restart so the gateway picks up the token and starts listening.
-      try {
-        await window.hermesAPI.stopGateway();
-      } catch {
-        /* may not be running */
-      }
-      await window.hermesAPI.startGateway();
+      // Security default: scope the Telegram agent to read/info-only (no
+      // terminal/file/computer-use). This also restarts the gateway so the token
+      // + scope take effect.
+      await window.hermesAPI.telegramSetReadInfoScope?.();
       setNote("");
       setStep("pair");
     } catch (e) {
@@ -226,6 +271,79 @@ export function TelegramSetupWizard({
               message your bot to ask things. Only your account can command it.
             </p>
             <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+              <button style={btn} onClick={() => setStep("manage")}>
+                Manage
+              </button>
+              <button
+                style={ghost}
+                onClick={() => {
+                  onDone?.();
+                  onClose();
+                }}
+              >
+                Done
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === "manage" && (
+          <>
+            <p>
+              ✅ <strong>Telegram is connected.</strong> You can message your
+              bot to ask things, and scheduled research can push to you.
+            </p>
+            <div
+              style={{
+                border: "1px solid #333",
+                borderRadius: 8,
+                padding: 12,
+                margin: "12px 0",
+              }}
+            >
+              <div style={{ marginBottom: 8 }}>
+                <strong>Capability:</strong>{" "}
+                {scope === "read-info" ? (
+                  <span style={{ color: "#7ec77e" }}>
+                    Read &amp; info only ✓ (no commands or file changes)
+                  </span>
+                ) : scope === "broad" ? (
+                  <span style={{ color: "#e0a33a" }}>
+                    Broad — the agent can run commands / change files
+                  </span>
+                ) : scope === "custom" ? (
+                  <span style={{ color: "#bbb" }}>Custom</span>
+                ) : (
+                  <span style={{ color: "#888" }}>checking…</span>
+                )}
+              </div>
+              {scope === "broad" && (
+                <button
+                  style={btn}
+                  disabled={busy}
+                  onClick={() => void lockReadInfo()}
+                >
+                  {busy ? "Applying…" : "Lock to read/info only"}
+                </button>
+              )}
+            </div>
+            <p style={{ color: "#bbb", fontSize: 13 }}>
+              <strong>Security:</strong> only your paired account can command
+              it. Anything sensitive is gated by an approval prompt. Turn on
+              Two-Step Verification in Telegram for extra protection.
+            </p>
+            {note && <p style={{ color: "#d88" }}>{note}</p>}
+            <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+              <button style={ghost} onClick={() => setStep("pair")}>
+                Re-pair an account
+              </button>
+              <button
+                style={{ ...ghost, borderColor: "#a44", color: "#e88" }}
+                disabled={busy}
+                onClick={() => void killSwitch()}
+              >
+                Disable remote control
+              </button>
               <button
                 style={btn}
                 onClick={() => {
@@ -233,7 +351,7 @@ export function TelegramSetupWizard({
                   onClose();
                 }}
               >
-                Done
+                Close
               </button>
             </div>
           </>

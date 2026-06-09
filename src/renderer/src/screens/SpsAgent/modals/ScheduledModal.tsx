@@ -285,15 +285,13 @@ export function ScheduledModal() {
               />
               Telegram push
             </label>
-            {!tg.available && (
-              <button
-                className="cover-btn"
-                style={{ fontSize: 12 }}
-                onClick={() => setTelegramWizardOpen(true)}
-              >
-                Set up Telegram →
-              </button>
-            )}
+            <button
+              className="cover-btn"
+              style={{ fontSize: 12 }}
+              onClick={() => setTelegramWizardOpen(true)}
+            >
+              {tg.available ? "Manage Telegram" : "Set up Telegram →"}
+            </button>
           </div>
           {error && (
             <small

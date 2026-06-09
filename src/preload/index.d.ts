@@ -359,6 +359,10 @@ interface HermesAPI {
     enabled: boolean,
     profile?: string,
   ) => Promise<boolean>;
+  telegramGetScope: (
+    profile?: string,
+  ) => Promise<"read-info" | "broad" | "custom">;
+  telegramSetReadInfoScope: (profile?: string) => Promise<boolean>;
 
   // Sessions
   listSessions: (limit?: number, offset?: number) => Promise<SessionSummary[]>;

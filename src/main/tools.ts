@@ -1,8 +1,172 @@
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, copyFileSync } from "fs";
 import { join } from "path";
 import { profileHome, safeWriteFile } from "./utils";
 import { t } from "../shared/i18n";
 import { getAppLocale } from "./locale";
+
+/** The read/info-only toolset scope for the Telegram platform: research + info,
+ *  with NO machine mutation. Excludes terminal, file, computer_use,
+ *  code_execution, cronjob, messaging, obsidian, kanban, skills, todo, etc.
+ *  (Telegram's default `hermes-telegram` preset DOES include terminal + file,
+ *  which is why scoping is the security core of remote control.) */
+export const READ_INFO_TELEGRAM_TOOLSETS = [
+  "web",
+  "x_search",
+  "browser",
+  "vision",
+  "memory",
+  "session_search",
+  "clarify",
+];
+
+const MUTATING_TOOLSETS = new Set([
+  "terminal",
+  "file",
+  "computer_use",
+  "code_execution",
+  "cronjob",
+  "obsidian",
+  "kanban",
+  "delegation",
+  "moa",
+]);
+
+/** Upsert a `platform_toolsets.<platform>: [list]` block into config.yaml text,
+ *  preserving all other content/comments. Pure + testable. Handles: no
+ *  platform_toolsets section (append), block-form sub-key (replace items),
+ *  inline-form sub-key `telegram: [hermes-telegram]` (rewrite as a block), and
+ *  absent sub-key (insert). */
+export function upsertPlatformToolsets(
+  content: string,
+  platform: string,
+  toolsets: string[],
+): string {
+  const itemLines = toolsets.map((name) => `      - ${name}`);
+  const lines = content.split("\n");
+  const ptIdx = lines.findIndex((l) => /^platform_toolsets\s*:\s*$/.test(l));
+  if (ptIdx < 0) {
+    return (
+      content.replace(/\s*$/, "") +
+      `\n\nplatform_toolsets:\n  ${platform}:\n${itemLines.join("\n")}\n`
+    );
+  }
+  // Extent of the platform_toolsets block: indented/blank lines until the next
+  // top-level (column-0, non-blank) key.
+  let blockEnd = ptIdx + 1;
+  while (
+    blockEnd < lines.length &&
+    (lines[blockEnd] === "" || /^\s/.test(lines[blockEnd]))
+  ) {
+    blockEnd++;
+  }
+  const subRe = new RegExp(`^  ${platform}\\s*:`);
+  let subIdx = -1;
+  for (let i = ptIdx + 1; i < blockEnd; i++) {
+    if (subRe.test(lines[i])) {
+      subIdx = i;
+      break;
+    }
+  }
+  if (subIdx >= 0) {
+    const inline = /:\s*\S/.test(lines[subIdx]); // `telegram: [..]` on one line
+    if (inline) {
+      lines.splice(subIdx, 1, `  ${platform}:`, ...itemLines);
+    } else {
+      let e = subIdx + 1;
+      while (e < blockEnd && /^\s{4,}-\s/.test(lines[e])) e++;
+      lines.splice(subIdx + 1, e - (subIdx + 1), ...itemLines);
+    }
+    return lines.join("\n");
+  }
+  lines.splice(ptIdx + 1, 0, `  ${platform}:`, ...itemLines);
+  return lines.join("\n");
+}
+
+/** Read the configured toolset list for a platform from config.yaml text, or
+ *  null if not explicitly set (→ gateway uses the platform default). Pure. */
+export function readPlatformToolsets(
+  content: string,
+  platform: string,
+): string[] | null {
+  const lines = content.split("\n");
+  const ptIdx = lines.findIndex((l) => /^platform_toolsets\s*:\s*$/.test(l));
+  if (ptIdx < 0) return null;
+  let blockEnd = ptIdx + 1;
+  while (
+    blockEnd < lines.length &&
+    (lines[blockEnd] === "" || /^\s/.test(lines[blockEnd]))
+  ) {
+    blockEnd++;
+  }
+  const subRe = new RegExp(`^  ${platform}\\s*:\\s*(.*)$`);
+  for (let i = ptIdx + 1; i < blockEnd; i++) {
+    const m = subRe.exec(lines[i]);
+    if (!m) continue;
+    const inline = m[1].trim();
+    if (inline.startsWith("[")) {
+      return inline
+        .replace(/^\[|\]$/g, "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+    const items: string[] = [];
+    for (let j = i + 1; j < blockEnd && /^\s{4,}-\s/.test(lines[j]); j++) {
+      items.push(lines[j].replace(/^\s*-\s*/, "").trim());
+    }
+    return items;
+  }
+  return null;
+}
+
+export type TelegramScope = "read-info" | "broad" | "custom";
+
+/** Classify the current Telegram capability scope from config. "broad" = the
+ *  agent can mutate the machine (default preset or a mutating toolset present). */
+export function getTelegramScope(profile?: string): TelegramScope {
+  const configFile = join(profileHome(profile), "config.yaml");
+  if (!existsSync(configFile)) return "broad";
+  let content = "";
+  try {
+    content = readFileSync(configFile, "utf-8");
+  } catch {
+    return "broad";
+  }
+  const list = readPlatformToolsets(content, "telegram");
+  if (!list || list.length === 0) return "broad"; // default = hermes-telegram (has terminal+file)
+  // A preset like "hermes-telegram" means broad.
+  if (list.some((ts) => ts.startsWith("hermes-"))) return "broad";
+  if (list.some((ts) => MUTATING_TOOLSETS.has(ts))) return "broad";
+  const set = new Set(list);
+  const isReadInfo =
+    list.length === READ_INFO_TELEGRAM_TOOLSETS.length &&
+    READ_INFO_TELEGRAM_TOOLSETS.every((ts) => set.has(ts));
+  return isReadInfo ? "read-info" : "custom";
+}
+
+/** Apply the read/info-only scope to the Telegram platform. Backs up config.yaml
+ *  first (the change touches a load-bearing file). Returns success. */
+export function setTelegramReadInfoScope(profile?: string): boolean {
+  const configFile = join(profileHome(profile), "config.yaml");
+  if (!existsSync(configFile)) return false;
+  try {
+    const content = readFileSync(configFile, "utf-8");
+    try {
+      copyFileSync(configFile, `${configFile}.bak.telegram-scope`);
+    } catch {
+      /* best-effort backup */
+    }
+    const next = upsertPlatformToolsets(
+      content,
+      "telegram",
+      READ_INFO_TELEGRAM_TOOLSETS,
+    );
+    safeWriteFile(configFile, next);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export interface ToolsetInfo {
   key: string;

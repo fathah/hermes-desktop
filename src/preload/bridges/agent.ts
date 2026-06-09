@@ -18,6 +18,12 @@ export const agentBridge = {
     profile?: string,
   ): Promise<boolean> =>
     ipcRenderer.invoke("set-platform-enabled", platform, enabled, profile),
+  telegramGetScope: (
+    profile?: string,
+  ): Promise<"read-info" | "broad" | "custom"> =>
+    ipcRenderer.invoke("telegram-get-scope", profile),
+  telegramSetReadInfoScope: (profile?: string): Promise<boolean> =>
+    ipcRenderer.invoke("telegram-set-read-info-scope", profile),
 
   // Sessions
   listSessions: (
