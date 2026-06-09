@@ -30,7 +30,7 @@ export function RightPanel() {
 
   const openCmts = comments.filter((c) => !c.resolved).length;
   const tabs: [RightTab, string, IconName, number | null][] = [
-    ["assistant", "Assistant", "sparkle", null],
+    ["assistant", "Page assistant", "sparkle", null],
     ["outline", "Outline", "list", null],
     ["comments", "Notes", "comment", openCmts || null],
     ["info", "Info", "clock", null],

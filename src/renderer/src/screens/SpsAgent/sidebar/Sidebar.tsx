@@ -184,7 +184,7 @@ export function Sidebar() {
             style={{ paddingLeft: 24 }}
           >
             <Icon name="comment" size={17} />
-            <span className="nav-label">AI Chats</span>
+            <span className="nav-label">Chat</span>
           </button>
           <button
             type="button"
@@ -193,16 +193,17 @@ export function Sidebar() {
             style={{ paddingLeft: 24 }}
           >
             <Icon name="sparkle" size={17} />
-            <span className="nav-label">Ask</span>
+            <span className="nav-label">Search workspace</span>
           </button>
           <button
             type="button"
             className={`nav-item ${surface === "agent" ? "active" : ""}`}
             onClick={() => setSurface("agent")}
             style={{ paddingLeft: 24 }}
+            title="Advanced: tool-using agent with approvals & diffs"
           >
             <Icon name="code" size={17} />
-            <span className="nav-label">Agent Console</span>
+            <span className="nav-label">Advanced (Developer)</span>
           </button>
           <button
             type="button"
