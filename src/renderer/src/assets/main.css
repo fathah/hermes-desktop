@@ -5087,6 +5087,57 @@ body {
   color: var(--text-primary);
 }
 
+/* Tabbed sub-navigation — chunks the long Settings scroll into 5 groups. */
+.settings-subnav {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 0 12px;
+  margin-bottom: 16px;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-subnav-tab {
+  padding: 6px 14px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  font: 600 13px/1 var(--font-sans);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.settings-subnav-tab:hover {
+  background: var(--surface);
+  color: var(--text-primary);
+}
+
+.settings-subnav-tab.active {
+  background: var(--surface);
+  color: var(--text-primary);
+}
+
+/* Section fencing: hide sections whose data-section-tab doesn't match the
+   active tab. Elements without the attribute (e.g. the one-time migration
+   banner) are unaffected and always show. */
+.settings-container[data-tab="general"]
+  [data-section-tab]:not([data-section-tab="general"]),
+.settings-container[data-tab="connection"]
+  [data-section-tab]:not([data-section-tab="connection"]),
+.settings-container[data-tab="agenthealth"]
+  [data-section-tab]:not([data-section-tab="agenthealth"]),
+.settings-container[data-tab="data"]
+  [data-section-tab]:not([data-section-tab="data"]),
+.settings-container[data-tab="advanced"]
+  [data-section-tab]:not([data-section-tab="advanced"]) {
+  display: none;
+}
+
 .settings-section {
   background: var(--surface);
   border: 1px solid var(--hair);

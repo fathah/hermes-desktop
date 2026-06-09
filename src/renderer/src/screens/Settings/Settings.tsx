@@ -11,17 +11,31 @@ import {
   Upload,
   FileText,
   Send,
-  Brain,
 } from "lucide-react";
 import {
   getAnalyticsConsent,
   setAnalyticsConsent,
 } from "../../utils/analytics";
 import { ConfigHealth } from "./ConfigHealth";
-import Memory from "../Memory/Memory";
 import { HealthSurface } from "../SpsAgent/health/HealthSurface";
+import { openSettings } from "../../lib/openSettings";
 
 const TELEGRAM_COMMUNITY_URL = "https://t.me/hermes_agent_desktop";
+
+type SettingsTab =
+  | "general"
+  | "connection"
+  | "agenthealth"
+  | "data"
+  | "advanced";
+
+const SETTINGS_TABS: { id: SettingsTab; labelKey: string }[] = [
+  { id: "general", labelKey: "settings.tabGeneral" },
+  { id: "connection", labelKey: "settings.tabConnection" },
+  { id: "agenthealth", labelKey: "settings.tabAgentHealth" },
+  { id: "data", labelKey: "settings.tabData" },
+  { id: "advanced", labelKey: "settings.tabAdvanced" },
+];
 
 const LANGUAGE_NATIVE_NAMES: Record<AppLocale, string> = {
   en: "English",
@@ -66,9 +80,16 @@ function getCachedOpenClaw(): { found: boolean; path: string | null } | null {
 
 function Settings({ profile }: { profile?: string }): React.JSX.Element {
   const { t, locale, setLocale } = useI18n();
+  // Tabbed sub-navigation. Sections are fenced by data-section-tab + the
+  // container's data-tab (CSS-driven) so no section JSX/handlers move — same
+  // controls, same state, just hidden when their tab isn't active.
+  const [activeTab, setActiveTab] = useState<SettingsTab>("general");
+  const containerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    containerRef.current?.scrollTo({ top: 0 });
+  }, [activeTab]);
   const [hermesHome, setHermesHome] = useState("");
   const { theme, setTheme } = useTheme();
-  const [memoryExpanded, setMemoryExpanded] = useState(false);
   const [healthExpanded, setHealthExpanded] = useState(false);
 
   // Hermes engine info — initialize from localStorage cache for instant display
@@ -468,12 +489,29 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
   })();
 
   return (
-    <div className="settings-container">
+    <div className="settings-container" data-tab={activeTab} ref={containerRef}>
       <h1 className="settings-header">{t("settings.title")}</h1>
 
-      <ConfigHealth />
+      <div className="settings-subnav" role="tablist">
+        {SETTINGS_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            className={`settings-subnav-tab ${activeTab === tab.id ? "active" : ""}`}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            {t(tab.labelKey)}
+          </button>
+        ))}
+      </div>
 
-      <div className="settings-section">
+      <div data-section-tab="agenthealth">
+        <ConfigHealth />
+      </div>
+
+      <div className="settings-section" data-section-tab="agenthealth">
         <div className="settings-section-title">
           {t("settings.sections.hermesAgent")}
         </div>
@@ -607,7 +645,7 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
       </div>
 
       {/* Prompt Budget Visualizer Section */}
-      <div className="settings-section">
+      <div className="settings-section" data-section-tab="agenthealth">
         <div className="settings-section-title">Prompt Budget Breakdown</div>
         <div className="settings-field">
           <div className="settings-field-hint" style={{ marginBottom: 12 }}>
@@ -709,36 +747,20 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
       </div>
 
       {/* Agent Memory & Soul Section */}
-      <div className="settings-section">
-        <div className="settings-section-title">
-          <span
-            style={{
-              cursor: "pointer",
-              display: "inline-flex",
-              alignItems: "center",
-            }}
-            onClick={() => setMemoryExpanded(!memoryExpanded)}
-          >
-            <Brain size={14} style={{ marginRight: 6 }} />
-            {t("memory.title")} {memoryExpanded ? "▾" : "▸"}
-          </span>
-        </div>
-        {memoryExpanded && (
-          <div
-            className="settings-field"
-            style={{
-              borderTop: "1px solid var(--border)",
-              paddingTop: 16,
-              marginTop: 12,
-            }}
-          >
-            <Memory profile={profile} embedded={true} />
-          </div>
-        )}
+      <div className="settings-section" data-section-tab="data">
+        <div className="settings-section-title">{t("memory.title")}</div>
+        <p className="settings-field-hint">{t("settings.memoryMovedHint")}</p>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => openSettings("memory")}
+        >
+          {t("settings.openMemory")}
+        </button>
       </div>
 
       {/* Vault Health Section */}
-      <div className="settings-section">
+      <div className="settings-section" data-section-tab="data">
         <div className="settings-section-title">
           <span
             style={{
@@ -767,7 +789,7 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
       </div>
 
       {/* Security Audit Section */}
-      <div className="settings-section">
+      <div className="settings-section" data-section-tab="agenthealth">
         <div className="settings-section-title">
           Supply-Chain Security Audit
         </div>
@@ -815,7 +837,7 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
         </div>
       </div>
 
-      <div className="settings-section">
+      <div className="settings-section" data-section-tab="general">
         <div className="settings-section-title">Community</div>
         <div className="settings-field">
           <div className="settings-field-hint" style={{ marginBottom: 10 }}>
@@ -837,7 +859,7 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
         </div>
       </div>
 
-      <div className="settings-section">
+      <div className="settings-section" data-section-tab="connection">
         <div className="settings-section-title">
           {t("settings.connectionSection")}
           {connStatus && (
@@ -1129,7 +1151,7 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
         </div>
       )}
 
-      <div className="settings-section">
+      <div className="settings-section" data-section-tab="general">
         <div className="settings-section-title">
           {t("settings.sections.appearance")}
         </div>
@@ -1179,7 +1201,7 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
         </div>
       </div>
 
-      <div className="settings-section">
+      <div className="settings-section" data-section-tab="general">
         <div className="settings-section-title">
           {t("settings.sections.privacy")}
         </div>
@@ -1218,7 +1240,7 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
         </div>
       </div>
 
-      <div className="settings-section">
+      <div className="settings-section" data-section-tab="general">
         <div className="settings-section-title">Automation</div>
         <div className="settings-field">
           <label className="settings-field-label">
@@ -1303,7 +1325,7 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
         </div>
       </div>
 
-      <div className="settings-section">
+      <div className="settings-section" data-section-tab="advanced">
         <div className="settings-section-title">
           {t("settings.networkSection")}
           {networkSaved && (
@@ -1368,7 +1390,7 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
       </div>
 
       {connMode === "remote" && (
-        <div className="settings-section">
+        <div className="settings-section" data-section-tab="connection">
           <div className="settings-section-title">
             {t("settings.serverConfigTitle")}
           </div>
@@ -1379,7 +1401,7 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
         </div>
       )}
 
-      <div className="settings-section">
+      <div className="settings-section" data-section-tab="data">
         <div className="settings-section-title">
           {t("settings.dataSection")}
         </div>
@@ -1424,7 +1446,7 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
         </div>
       </div>
 
-      <div className="settings-section">
+      <div className="settings-section" data-section-tab="agenthealth">
         <div className="settings-section-title">
           <span
             style={{ cursor: "pointer" }}

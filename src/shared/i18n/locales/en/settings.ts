@@ -1,5 +1,14 @@
 export default {
   title: "Settings",
+  // Tabbed sub-navigation groups.
+  tabGeneral: "General",
+  tabConnection: "Connection",
+  tabAgentHealth: "Agent Health",
+  tabData: "Data",
+  tabAdvanced: "Advanced",
+  // Memory moved to its own nav item; Settings keeps a link.
+  openMemory: "Open Memory →",
+  memoryMovedHint: "Agent memory now has its own place in the sidebar.",
   sections: {
     hermesAgent: "Hermes Agent",
     appearance: "Appearance",
