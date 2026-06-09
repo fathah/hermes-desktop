@@ -383,6 +383,37 @@
   color: var(--tx-1);
 }
 
+/* C2: row affordances are now <button>s — neutralise UA button chrome while
+   keeping the layout/hover rules above. .nav-item-main is the click target that
+   fills a recents row alongside the sibling .nav-add button. */
+.sps-scope .nav-item-main {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.sps-scope .nav-add,
+.sps-scope .sec-add,
+.sps-scope .sec-head {
+  appearance: none;
+  -webkit-appearance: none;
+  border: none;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
 .sps-scope .sec {
   display: flex;
   align-items: center;

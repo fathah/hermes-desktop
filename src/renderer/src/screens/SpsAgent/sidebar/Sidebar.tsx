@@ -323,13 +323,18 @@ export function Sidebar() {
         </SidebarSection>
 
         <div className="sec-group">
-          <div className="sec" onClick={() => setObsidianOpen(!obsidianOpen)}>
-            <span className="sec-head">
+          <div className="sec">
+            <button
+              type="button"
+              className="sec-head"
+              onClick={() => setObsidianOpen(!obsidianOpen)}
+              aria-expanded={obsidianOpen}
+            >
               <span className={`sec-chev ${obsidianOpen ? "open" : ""}`}>
                 <Icon name="chevR" size={12} />
               </span>
               <span className="sec-label">Obsidian Vault</span>
-            </span>
+            </button>
           </div>
           {obsidianOpen && <ObsidianExplorer />}
         </div>

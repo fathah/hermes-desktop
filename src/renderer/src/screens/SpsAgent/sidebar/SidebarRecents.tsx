@@ -100,27 +100,40 @@ export function SidebarRecents() {
           <div
             key={s.id}
             className="nav-item"
-            onClick={() => renamingId !== s.id && openSession(s.id)}
             onContextMenu={(e) => openMenu(e, s.id)}
             title={label}
           >
-            <Icon name="comment" size={17} />
             {renamingId === s.id ? (
-              <InlineRename
-                initial={label}
-                onSubmit={(v) => void commitRename(s.id, v)}
-                onCancel={() => setRenamingId(null)}
-              />
+              <>
+                <Icon name="comment" size={17} />
+                <InlineRename
+                  initial={label}
+                  onSubmit={(v) => void commitRename(s.id, v)}
+                  onCancel={() => setRenamingId(null)}
+                />
+              </>
             ) : (
               <>
-                <span className="nav-label">{label}</span>
-                <span
+                <button
+                  type="button"
+                  className="nav-item-main"
+                  onClick={() => openSession(s.id)}
+                >
+                  <Icon name="comment" size={17} />
+                  <span className="nav-label">{label}</span>
+                </button>
+                <button
+                  type="button"
                   className="nav-add"
                   title="More"
-                  onClick={(e) => openMenu(e, s.id)}
+                  aria-label="More actions"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openMenu(e, s.id);
+                  }}
                 >
                   <Icon name="dots" size={14} />
-                </span>
+                </button>
               </>
             )}
           </div>

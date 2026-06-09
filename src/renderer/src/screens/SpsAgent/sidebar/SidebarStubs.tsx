@@ -17,14 +17,15 @@ function StubRow({
 }) {
   const startNewChat = useStore((s) => s.startNewChat);
   return (
-    <div
+    <button
+      type="button"
       className="nav-item"
       onClick={() => startNewChat(prompt)}
       title={label}
     >
       <Icon name={icon} size={17} />
       <span className="nav-label">{label}</span>
-    </div>
+    </button>
   );
 }
 

@@ -35,17 +35,28 @@ export function SidebarSection({
 
   return (
     <div className="sec-group">
-      <div className="sec" onClick={() => toggleSection(id)}>
-        <span className="sec-head">
+      <div className="sec">
+        <button
+          type="button"
+          className="sec-head"
+          onClick={() => toggleSection(id)}
+          aria-expanded={open}
+        >
           <span className={`sec-chev ${open ? "open" : ""}`}>
             <Icon name="chevR" size={12} />
           </span>
           <span className="sec-label">{label}</span>
-        </span>
+        </button>
         {onAdd && (
-          <span className="sec-add" title={addTitle} onClick={onAddClick}>
+          <button
+            type="button"
+            className="sec-add"
+            title={addTitle}
+            aria-label={addTitle}
+            onClick={onAddClick}
+          >
             <Icon name="plus" size={15} />
-          </span>
+          </button>
         )}
       </div>
       {open && children}
