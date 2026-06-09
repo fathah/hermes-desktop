@@ -11,7 +11,6 @@ import Skills from "../Skills/Skills";
 import Personalization from "../Personalization/Personalization";
 import Tools from "../Tools/Tools";
 import Gateway from "../Gateway/Gateway";
-import Office from "../Office/Office";
 import Models from "../Models/Models";
 import Providers from "../Providers/Providers";
 import Schedules from "../Schedules/Schedules";
@@ -30,7 +29,6 @@ import {
   Puzzle,
   Wrench,
   Signal,
-  Building,
   Layers,
   KeyRound,
   Timer,
@@ -107,7 +105,6 @@ const NAV_GROUPS: NavGroup[] = [
     headerKey: "navigation.groupWorkspace",
     items: [
       { view: "kanban", icon: KanbanIcon, labelKey: "navigation.kanban" },
-      { view: "office", icon: Building, labelKey: "navigation.office" },
       { view: "schedules", icon: Timer, labelKey: "navigation.schedules" },
     ],
   },
@@ -535,12 +532,6 @@ function Layout({
                 }}
               />
             )}
-          </div>
-        )}
-
-        {visitedViews.has("office") && (
-          <div style={paneStyle("office")}>
-            <Office profile={activeProfile} visible={view === "office"} />
           </div>
         )}
 

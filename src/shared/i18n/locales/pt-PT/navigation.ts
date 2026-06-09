@@ -2,7 +2,6 @@ export default {
   chat: "Chat",
   sessions: "Sessões",
   agents: "Perfis",
-  office: "Escritório",
   models: "Modelos",
   providers: "Fornecedores",
   skills: "Competências/Skills",

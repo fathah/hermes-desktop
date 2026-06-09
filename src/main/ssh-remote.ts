@@ -8,7 +8,6 @@ import { spawn } from "child_process";
 import { homedir } from "os";
 import { join } from "path";
 import type { SshConfig } from "./ssh-tunnel";
-import type { KanbanTask } from "./kanban";
 import { buildSshControlOptions } from "./ssh-options";
 import {
   classifySkillCliOutput,
@@ -1426,124 +1425,6 @@ export async function sshRunKanban<T = unknown>(
       error: (err as Error).message || "Remote kanban command failed",
     };
   }
-}
-
-// ── Claw3D HQ board (read-only) ───────────────────────────────────────────────
-//
-// Claw3D ("hermes-office") maintains its own headquarters task board independent
-// of `hermes kanban`. It stores tasks at
-// `<state-dir>/claw3d/task-manager/tasks.json`, where <state-dir> resolves to
-// `~/.openclaw` (new) or `~/.clawdbot` / `~/.moltbot` (legacy) — see
-// hermes-office/src/lib/clawdbot/paths.ts. We surface it as a virtual,
-// read-only second board in the desktop's Kanban tab so the Claw3D HQ cards
-// are visible alongside the agent dispatcher's own board.
-
-interface Claw3dSharedTaskRecord {
-  id: string;
-  title: string;
-  description?: string;
-  status?: string;
-  source?: string;
-  assignedAgentId?: string | null;
-  createdAt?: string;
-  updatedAt?: string;
-  channel?: string | null;
-  notes?: unknown;
-  isArchived?: boolean;
-}
-
-// Claw3D's TaskBoardStatus → desktop kanban column. Claw3D has no "triage" or
-// "ready" semantics, so `review` (awaiting attention) lands in "ready" and
-// `in_progress` maps to "running". Everything else is straight-through.
-const CLAW3D_STATUS_MAP: Record<string, KanbanTask["status"]> = {
-  todo: "todo",
-  in_progress: "running",
-  blocked: "blocked",
-  review: "ready",
-  done: "done",
-};
-
-function parseIsoToEpochSeconds(value: string | undefined): number | null {
-  if (!value) return null;
-  const ms = Date.parse(value);
-  return Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
-}
-
-function mapClaw3dTaskToKanbanTask(raw: Claw3dSharedTaskRecord): KanbanTask {
-  const status = (raw.status && CLAW3D_STATUS_MAP[raw.status]) || "todo";
-  const createdAt = parseIsoToEpochSeconds(raw.createdAt);
-  return {
-    id: raw.id,
-    title: raw.title,
-    body: raw.description?.trim() || null,
-    assignee: raw.assignedAgentId?.trim() || null,
-    status,
-    priority: 0,
-    tenant: null,
-    workspace_kind: "scratch",
-    workspace_path: null,
-    created_by: raw.source || null,
-    created_at: createdAt,
-    started_at: null,
-    completed_at:
-      status === "done" ? parseIsoToEpochSeconds(raw.updatedAt) : null,
-    result: null,
-    skills: [],
-    max_retries: null,
-  };
-}
-
-// Candidate state dirs mirror hermes-office's resolveStateDir() precedence:
-// new `.openclaw` first, then legacy `.clawdbot` / `.moltbot`.
-const CLAW3D_TASKS_PATHS = [
-  "~/.openclaw/claw3d/task-manager/tasks.json",
-  "~/.clawdbot/claw3d/task-manager/tasks.json",
-  "~/.moltbot/claw3d/task-manager/tasks.json",
-];
-
-export interface SshClaw3dHqResult {
-  success: boolean;
-  tasks?: KanbanTask[];
-  error?: string;
-  source?: string; // resolved remote path
-}
-
-export async function sshListClaw3dHqTasks(
-  config: SshConfig,
-): Promise<SshClaw3dHqResult> {
-  for (const remotePath of CLAW3D_TASKS_PATHS) {
-    let raw = "";
-    try {
-      raw = await sshReadFile(config, remotePath);
-    } catch (err) {
-      return { success: false, error: (err as Error).message };
-    }
-    if (!raw.trim()) continue;
-    try {
-      const parsed = JSON.parse(raw) as { tasks?: unknown };
-      const tasks = Array.isArray(parsed.tasks) ? parsed.tasks : [];
-      const mapped = tasks
-        .filter(
-          (t): t is Claw3dSharedTaskRecord =>
-            Boolean(t) &&
-            typeof t === "object" &&
-            typeof (t as Claw3dSharedTaskRecord).id === "string" &&
-            typeof (t as Claw3dSharedTaskRecord).title === "string",
-        )
-        .filter((t) => !t.isArchived)
-        .map(mapClaw3dTaskToKanbanTask);
-      return { success: true, tasks: mapped, source: remotePath };
-    } catch (err) {
-      return {
-        success: false,
-        error: `Failed to parse Claw3D tasks.json: ${(err as Error).message}`,
-      };
-    }
-  }
-  // No file found at any candidate path — that's fine, just means the user
-  // hasn't run Claw3D's HQ board yet. Return empty rather than erroring so
-  // the renderer can still show an empty HQ board placeholder.
-  return { success: true, tasks: [] };
 }
 
 // ── Logs ──────────────────────────────────────────────────────────────────────

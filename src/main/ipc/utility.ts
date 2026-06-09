@@ -11,23 +11,6 @@ import { extname } from "path";
 import { readMediaAsDataUrl, saveMedia, mediaFileExists } from "../media";
 import { stageAttachment, clearStagedAttachments } from "../attachment-staging";
 import {
-  getClaw3dStatus,
-  setupClaw3d,
-  getClaw3dPort,
-  setClaw3dPort,
-  getClaw3dWsUrl,
-  setClaw3dWsUrl,
-  startDevServer,
-  stopDevServer,
-  startAdapter,
-  stopAdapter,
-  getClaw3dLogs,
-  stopAll as stopClaw3d,
-  startAll as startClaw3dAll,
-  type Claw3dSetupProgress,
-} from "../claw3d";
-import { startOfficeStack } from "../office-start";
-import {
   pythonCompress,
   pythonIsPathAllowed,
   pythonEvaluateExecution,
@@ -40,13 +23,6 @@ import {
   dualHandlerTarget,
   UnsupportedConnectionModeError,
 } from "../connection-capabilities";
-import { isGatewayRunning, startGateway, setSshRemoteApiKey } from "../hermes";
-import {
-  sshGatewayStatus,
-  sshStartGateway,
-  sshReadRemoteApiKey,
-} from "../ssh-remote";
-import { startSshTunnel } from "../ssh-tunnel";
 import { isAllowedExternalUrl } from "../security";
 import { isAllowedObsidianExternalUrl } from "../obsidian";
 import { getUsageStats, readUsageRecords, sessionLedger } from "../usage-store";
@@ -249,63 +225,6 @@ export function registerUtilityIpc(
       }
     },
   );
-
-  // Claw3D
-  ipcMain.handle("claw3d-status", () => getClaw3dStatus());
-
-  ipcMain.handle("claw3d-setup", async (event) => {
-    try {
-      await setupClaw3d((progress: Claw3dSetupProgress) => {
-        if (!event.sender.isDestroyed()) {
-          event.sender.send("claw3d-setup-progress", progress);
-        }
-      });
-      return { success: true };
-    } catch (err) {
-      return { success: false, error: (err as Error).message };
-    }
-  });
-
-  ipcMain.handle("claw3d-get-port", () => getClaw3dPort());
-  ipcMain.handle("claw3d-set-port", (_event, port: number) => {
-    setClaw3dPort(port);
-    return true;
-  });
-  ipcMain.handle("claw3d-get-ws-url", () => getClaw3dWsUrl());
-  ipcMain.handle("claw3d-set-ws-url", (_event, url: string) => {
-    setClaw3dWsUrl(url);
-    return true;
-  });
-
-  ipcMain.handle("claw3d-start-all", (_event, profile?: string) =>
-    startOfficeStack(profile, {
-      getConnectionConfig,
-      isGatewayRunning,
-      startGateway,
-      sshGatewayStatus,
-      sshStartGateway,
-      startSshTunnel,
-      sshReadRemoteApiKey,
-      setSshRemoteApiKey,
-      startClaw3dAll,
-    }),
-  );
-  ipcMain.handle("claw3d-stop-all", () => {
-    stopClaw3d();
-    return true;
-  });
-  ipcMain.handle("claw3d-get-logs", () => getClaw3dLogs());
-
-  ipcMain.handle("claw3d-start-dev", () => startDevServer());
-  ipcMain.handle("claw3d-stop-dev", () => {
-    stopDevServer();
-    return true;
-  });
-  ipcMain.handle("claw3d-start-adapter", () => startAdapter());
-  ipcMain.handle("claw3d-stop-adapter", () => {
-    stopAdapter();
-    return true;
-  });
 
   // Python bridge
   ipcMain.handle(

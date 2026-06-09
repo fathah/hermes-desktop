@@ -196,9 +196,6 @@ describe("Legacy APIs preserved (backward compat)", () => {
     // Credential pool
     "getCredentialPool",
     "setCredentialPool",
-    // Claw3D
-    "claw3dStatus",
-    "claw3dSetup",
     // Cron
     "listCronJobs",
     "createCronJob",

@@ -2,7 +2,6 @@ export default {
   chat: "聊天",
   sessions: "工作階段",
   agents: "檔案",
-  office: "工作區",
   models: "模型",
   providers: "供應商",
   skills: "技能",

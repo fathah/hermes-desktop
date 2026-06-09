@@ -17,7 +17,6 @@ import {
   reclaimTask as kanbanReclaimTask,
   commentTask as kanbanCommentTask,
   dispatchOnce as kanbanDispatchOnce,
-  listClaw3dHqTasks as kanbanListClaw3dHqTasks,
   type CreateTaskInput,
 } from "../kanban";
 
@@ -117,8 +116,5 @@ export function registerKanbanIpc(): void {
     "kanban-dispatch-once",
     (_event, dryRun?: boolean, profile?: string) =>
       kanbanDispatchOnce(dryRun, profile),
-  );
-  ipcMain.handle("kanban-list-claw3d-hq-tasks", () =>
-    kanbanListClaw3dHqTasks(),
   );
 }

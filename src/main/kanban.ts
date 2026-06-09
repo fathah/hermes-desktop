@@ -8,7 +8,7 @@ import {
 } from "./installer";
 import { isRemoteOnlyMode } from "./hermes";
 import { getConnectionConfig } from "./config";
-import { sshRunKanban, sshListClaw3dHqTasks } from "./ssh-remote";
+import { sshRunKanban } from "./ssh-remote";
 import type {
   KanbanTask,
   KanbanBoard,
@@ -326,27 +326,6 @@ export async function commentTask(
   if (!body.trim()) return { success: false, error: "Empty comment" };
   const res = await runKanban(["comment", taskId, body], { profile });
   return { success: res.success, error: res.error };
-}
-
-// Read-only virtual board: Claw3D's headquarters task board, stored at
-// ~/.openclaw/claw3d/task-manager/tasks.json on the remote. The renderer
-// surfaces this as a second board in the Kanban picker alongside the real
-// hermes-agent boards. Only available in SSH tunnel mode — there is no
-// equivalent local store for the Claw3D HQ list.
-export async function listClaw3dHqTasks(): Promise<KanbanResult<KanbanTask[]>> {
-  const conn = getConnectionConfig();
-  if (conn.mode !== "ssh" || !conn.ssh) {
-    return {
-      success: false,
-      error:
-        "Claw3D HQ board is only available in SSH tunnel mode. Switch the connection mode in Settings to view it.",
-    };
-  }
-  const res = await sshListClaw3dHqTasks(conn.ssh);
-  if (!res.success) {
-    return { success: false, error: res.error };
-  }
-  return { success: true, data: res.tasks ?? [] };
 }
 
 export async function dispatchOnce(

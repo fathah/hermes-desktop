@@ -12,7 +12,6 @@ export type AdminView =
   | "chat"
   | "sessions"
   | "agents"
-  | "office"
   | "models"
   | "providers"
   | "skills"
@@ -58,7 +57,6 @@ const KNOWN_VIEWS = new Set<AdminView>([
   "chat",
   "sessions",
   "agents",
-  "office",
   "models",
   "providers",
   "skills",

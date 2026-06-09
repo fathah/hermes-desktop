@@ -2,7 +2,6 @@ export default {
   chat: "チャット",
   sessions: "セッション",
   agents: "プロファイル",
-  office: "オフィス",
   models: "モデル",
   providers: "プロバイダ",
   skills: "スキル",

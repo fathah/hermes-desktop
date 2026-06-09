@@ -20,7 +20,6 @@ import { closeAllNoteIndexes } from "./note-index";
 import { isAllowedObsidianExternalUrl } from "./obsidian";
 import { stopHealthPolling, setSshRemoteApiKey } from "./hermes";
 import { stopSshTunnel, startSshTunnel } from "./ssh-tunnel";
-import { stopAll as stopClaw3d } from "./claw3d";
 import { HERMES_HOME } from "./installer";
 import {
   isAllowedExternalUrl,
@@ -617,7 +616,6 @@ app.on("window-all-closed", () => {
     // stay online after the desktop closes). The user stops a gateway
     // explicitly via the Gateway controls.
     stopSshTunnel();
-    stopClaw3d();
     app.quit();
   }
 });
@@ -632,7 +630,6 @@ app.on("before-quit", () => {
   // Leave profile gateways running on quit (see window-all-closed) so bots
   // and other platforms stay online headless.
   stopSshTunnel();
-  stopClaw3d();
   void closeAllNoteIndexes();
   closeSharedDb();
 });
