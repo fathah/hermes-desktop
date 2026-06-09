@@ -47,6 +47,8 @@ interface ChatInputProps {
   /** Pre-send validation state. When `ok` is false, Send is disabled
    * and an inline banner explains why + how to fix it. */
   readiness?: ChatInputReadiness;
+  /** Installed skills surfaced as `/<skill-name>` entries in the slash menu. */
+  skillCommands?: SlashCommand[];
   onSubmit: (text: string, attachments: Attachment[]) => void;
   onQuickAsk: (text: string, attachments: Attachment[]) => void;
   onAbort: () => void;
@@ -61,6 +63,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       profile,
       remoteMode,
       readiness,
+      skillCommands,
       onSubmit,
       onQuickAsk,
       onAbort,
@@ -243,15 +246,12 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       active?.scrollIntoView({ block: "nearest" });
     }, [slashSelectedIndex, slashMenuOpen]);
 
-    const filteredSlashCommands = useMemo(
-      () =>
-        slashMenuOpen
-          ? SLASH_COMMANDS.filter((cmd) =>
-              cmd.name.toLowerCase().startsWith(slashFilter.toLowerCase()),
-            )
-          : [],
-      [slashMenuOpen, slashFilter],
-    );
+    const filteredSlashCommands = useMemo(() => {
+      if (!slashMenuOpen) return [];
+      const all = [...SLASH_COMMANDS, ...(skillCommands ?? [])];
+      const needle = slashFilter.toLowerCase();
+      return all.filter((cmd) => cmd.name.toLowerCase().startsWith(needle));
+    }, [slashMenuOpen, slashFilter, skillCommands]);
 
     function clearAfterSend(text: string): void {
       history.push(text);
@@ -281,8 +281,11 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
 
     function handleSlashSelect(cmd: SlashCommand): void {
       setSlashMenuOpen(false);
+      // `/skill` needs a name argument — insert the prefix and let the user type
+      // it (the per-skill `/<name>` entries below dispatch directly instead).
+      const needsArgument = cmd.name === "/skill";
       // Local / info commands dispatch immediately — let parent route through onSubmit
-      if (cmd.local || cmd.category === "info") {
+      if (!needsArgument && (cmd.local || cmd.category === "info")) {
         setInput("");
         if (inputRef.current) inputRef.current.style.height = "auto";
         onSubmit(cmd.name, []);

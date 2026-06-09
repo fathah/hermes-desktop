@@ -30,6 +30,11 @@ import {
   sshUninstallSkill,
   sshListBundledSkills,
 } from "../ssh-remote";
+import {
+  loadActiveSkill,
+  unloadActiveSkill,
+  listActiveSkills,
+} from "../active-skills";
 import { requireLocalWorkspace } from "./connection-guards";
 import { registerDualHandler } from "./utility";
 
@@ -92,6 +97,22 @@ export function registerSkillsIpc(): void {
       requireLocalWorkspace();
       return generateSkillFromRepo(repoPath, profile);
     },
+  );
+
+  // Active (loaded) skills — Claude-Code-style `/skill-name`. These augment the
+  // outgoing chat request the main process assembles, so they work in every
+  // connection mode and need no SSH variant (the state lives here, not remote).
+  ipcMain.handle(
+    "load-skill-to-chat",
+    (_event, name: string, profile?: string) => loadActiveSkill(name, profile),
+  );
+  ipcMain.handle(
+    "unload-skill-from-chat",
+    (_event, name: string | undefined, profile?: string) =>
+      unloadActiveSkill(name, profile),
+  );
+  ipcMain.handle("list-active-skills", (_event, profile?: string) =>
+    listActiveSkills(profile),
   );
 
   // Skills Registry

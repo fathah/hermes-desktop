@@ -174,6 +174,25 @@ export const agentBridge = {
   > => ipcRenderer.invoke("list-bundled-skills"),
   getSkillContent: (skillPath: string): Promise<string> =>
     ipcRenderer.invoke("get-skill-content", skillPath),
+  loadSkillToChat: (
+    name: string,
+    profile?: string,
+  ): Promise<{
+    ok: boolean;
+    name?: string;
+    path?: string;
+    alreadyLoaded?: boolean;
+    error?: string;
+  }> => ipcRenderer.invoke("load-skill-to-chat", name, profile),
+  unloadSkillFromChat: (
+    name?: string,
+    profile?: string,
+  ): Promise<{ ok: boolean; removed: string[] }> =>
+    ipcRenderer.invoke("unload-skill-from-chat", name, profile),
+  listActiveSkills: (
+    profile?: string,
+  ): Promise<Array<{ name: string; path: string }>> =>
+    ipcRenderer.invoke("list-active-skills", profile),
   installSkill: (
     identifier: string,
     profile?: string,

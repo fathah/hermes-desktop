@@ -29,6 +29,7 @@ import {
   resolveProfile,
   startHealthPolling,
 } from "./gateway-process";
+import { buildActiveSkillsSystemMessage } from "../active-skills";
 import { stripAnsi } from "../utils";
 import {
   processCustomEvent as parseCustomEvent,
@@ -333,6 +334,13 @@ export function sendMessageViaApi(
   if (groundingSystem) messages.unshift(groundingSystem);
 
   if (selfAwarenessSystem) messages.unshift(selfAwarenessSystem);
+
+  // Skills the user explicitly loaded via `/skill-name` (sticky for the
+  // session). Built here — not threaded through callers — so every send path
+  // into the API picks them up. Unshifted last → sits at the very front as
+  // authoritative guidance. Sync read of on-disk SKILL.md, so no await needed.
+  const activeSkillsSystem = buildActiveSkillsSystemMessage(profile);
+  if (activeSkillsSystem) messages.unshift(activeSkillsSystem);
 
   const body = JSON.stringify({
     model: effectiveModel || "hermes-agent",

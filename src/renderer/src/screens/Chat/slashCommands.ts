@@ -1,7 +1,7 @@
 export interface SlashCommand {
   name: string;
   description: string;
-  category: "chat" | "agent" | "tools" | "info";
+  category: "chat" | "agent" | "tools" | "info" | "skills";
   /** If true, the command is handled locally instead of sent to the backend */
   local?: boolean;
 }
@@ -117,6 +117,20 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   },
   { name: "/tools", description: "List available tools", category: "info" },
   { name: "/skills", description: "List installed skills", category: "info" },
+  // Load a skill's instructions into this conversation (Claude-Code style).
+  // The slash menu also lists each installed skill directly as `/<skill-name>`.
+  {
+    name: "/skill",
+    description: "Load a skill's instructions into this chat (/skill <name>)",
+    category: "skills",
+    local: true,
+  },
+  {
+    name: "/unload",
+    description: "Unload a loaded skill (/unload [name], or all)",
+    category: "skills",
+    local: true,
+  },
   {
     name: "/reload-skills",
     description: "Reload the skills directory without restarting",

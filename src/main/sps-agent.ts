@@ -27,6 +27,7 @@ import {
   safeWriteFileAsync,
 } from "./utils";
 import { assembleVaultContext, type VaultContextUsage } from "./sps-context";
+import { buildActiveSkillsSystemMessage } from "./active-skills";
 import { resolveSpsVaultDir } from "./sps-storage";
 import { semanticManager } from "./semantic-index";
 import {
@@ -497,11 +498,16 @@ export function buildSpsAssistantMessages(
   prompt: string,
   ctx: PageContext,
   grounding?: { role: "system"; content: string } | null,
+  activeSkills?: { role: "system"; content: string } | null,
 ): Array<{ role: string; content: string }> {
   const messages: Array<{ role: string; content: string }> = [
     { role: "system", content: SYSTEM_PROMPT },
   ];
   if (grounding) messages.push(grounding);
+  // Skills loaded via `/skill-name` in the assistant composer. Pushed AFTER the
+  // SYSTEM_PROMPT (which carries the structured-output contract) so that contract
+  // stays first — same slot the grounding message uses.
+  if (activeSkills) messages.push(activeSkills);
   const cleanNotes = (ctx.notes ?? []).map((n) => n.trim()).filter(Boolean);
   const notesSection = cleanNotes.length
     ? `\n\nYour notes on this page (private annotations you pinned — treat as authoritative intent):\n${cleanNotes
@@ -591,7 +597,12 @@ export async function spsAssistant(
       body: JSON.stringify({
         model: "hermes-agent",
         stream: false,
-        messages: buildSpsAssistantMessages(prompt, ctx, combinedGrounding),
+        messages: buildSpsAssistantMessages(
+          prompt,
+          ctx,
+          combinedGrounding,
+          buildActiveSkillsSystemMessage(profile),
+        ),
       }),
     });
     if (!res.ok) {

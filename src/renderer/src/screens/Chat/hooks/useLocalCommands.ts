@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useI18n } from "../../../components/useI18n";
 import { SLASH_COMMANDS } from "../slashCommands";
 import { operatorGuideMarkdown } from "../../../lib/operatorGuide";
+import type { UseChatSkills } from "../../../lib/useChatSkills";
 import type { UsageState } from "../types";
 
 interface UseLocalCommandsArgs {
@@ -11,6 +12,8 @@ interface UseLocalCommandsArgs {
   onNewChat?: () => void;
   onClear: () => void;
   addAgentMessage: (content: string) => void;
+  /** `/skill-name` loading — resolves slugs and injects skill instructions. */
+  skills: UseChatSkills;
 }
 
 interface UseLocalCommandsResult {
@@ -20,7 +23,7 @@ interface UseLocalCommandsResult {
   isLocal: (text: string) => boolean;
 }
 
-function isLocallyHandled(text: string): boolean {
+function isBuiltinLocal(text: string): boolean {
   if (!text.startsWith("/")) return false;
   const cmd = text.split(/\s+/)[0].toLowerCase();
   return SLASH_COMMANDS.some(
@@ -40,6 +43,7 @@ export function useLocalCommands({
   onNewChat,
   onClear,
   addAgentMessage,
+  skills,
 }: UseLocalCommandsArgs): UseLocalCommandsResult {
   const { t } = useI18n();
   const usageRef = useRef(usage);
@@ -47,9 +51,30 @@ export function useLocalCommands({
     usageRef.current = usage;
   });
 
+  // `skills.match`/`skills.run` are stable (useCallback), but the object identity
+  // changes as active/installed update; a ref keeps the latest without churning
+  // executeLocal's deps (it must stay stable across streaming re-renders).
+  const skillsRef = useRef(skills);
+  useEffect(() => {
+    skillsRef.current = skills;
+  });
+
+  const isLocal = useCallback(
+    (text: string): boolean =>
+      isBuiltinLocal(text) || skillsRef.current.match(text) !== null,
+    [],
+  );
+
   const executeLocal = useCallback(
     async (cmdText: string): Promise<boolean> => {
       const cmd = cmdText.trim().split(/\s+/)[0].toLowerCase();
+
+      // `/skill <name>`, `/unload [name]`, or a bare `/<skill-slug>`.
+      if (skillsRef.current.match(cmdText)) {
+        const msg = await skillsRef.current.run(cmdText);
+        if (msg) addAgentMessage(msg);
+        return true;
+      }
 
       switch (cmd) {
         case "/new":
@@ -180,6 +205,7 @@ export function useLocalCommands({
             agent: t("chat.categoryAgent"),
             tools: t("chat.categoryTools"),
             info: t("chat.categoryInfo"),
+            skills: "Skills",
           };
           const grouped = new Map<string, typeof SLASH_COMMANDS>();
           for (const c of SLASH_COMMANDS) {
@@ -188,7 +214,13 @@ export function useLocalCommands({
             grouped.set(c.category, arr);
           }
           let md = `**${t("chat.availableCommands")}**\n`;
-          for (const cat of ["chat", "agent", "tools", "info"] as const) {
+          for (const cat of [
+            "chat",
+            "agent",
+            "tools",
+            "info",
+            "skills",
+          ] as const) {
             const cmds = grouped.get(cat);
             if (!cmds) continue;
             md += `\n**${categoryLabels[cat]}**\n`;
@@ -205,8 +237,5 @@ export function useLocalCommands({
     [profile, t, setFastMode, onNewChat, onClear, addAgentMessage],
   );
 
-  return useMemo(
-    () => ({ executeLocal, isLocal: isLocallyHandled }),
-    [executeLocal],
-  );
+  return useMemo(() => ({ executeLocal, isLocal }), [executeLocal, isLocal]);
 }

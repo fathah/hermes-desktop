@@ -17,6 +17,9 @@ import { useChatActions } from "./hooks/useChatActions";
 import { useModelConfig } from "./hooks/useModelConfig";
 import { useFastMode } from "./hooks/useFastMode";
 import { useLocalCommands } from "./hooks/useLocalCommands";
+import { useChatSkills, slugifySkill } from "../../lib/useChatSkills";
+import { ActiveSkillChips } from "../../components/ActiveSkillChips";
+import { SLASH_COMMANDS, type SlashCommand } from "./slashCommands";
 import { useI18n } from "../../components/useI18n";
 import { buildChatTranscript } from "./transcriptUtils";
 import { ConfigHealthBanner } from "../../components/ConfigHealthBanner";
@@ -323,6 +326,27 @@ function Chat({
     setQueuedCount(0);
   }, [isLoading, hermesSessionId, sessionId, setMessages]);
 
+  const reservedSlashNames = useMemo(
+    () => SLASH_COMMANDS.map((c) => c.name),
+    [],
+  );
+  const skills = useChatSkills({ profile, reservedSlashNames });
+
+  // Each installed skill shows up in the slash menu as `/<skill-name>`; selecting
+  // it dispatches the direct form, which useLocalCommands resolves and loads.
+  const skillCommands = useMemo<SlashCommand[]>(() => {
+    const reserved = new Set(reservedSlashNames.map((n) => n.slice(1)));
+    return skills.installed
+      .map((s) => ({ slug: slugifySkill(s.name), skill: s }))
+      .filter(({ slug }) => slug && !reserved.has(slug))
+      .map(({ slug, skill }) => ({
+        name: `/${slug}`,
+        description: `Load skill — ${skill.description || skill.name}`,
+        category: "skills" as const,
+        local: true,
+      }));
+  }, [skills.installed, reservedSlashNames]);
+
   const localCommands = useLocalCommands({
     profile,
     usage,
@@ -330,6 +354,7 @@ function Chat({
     onNewChat,
     onClear: handleClear,
     addAgentMessage,
+    skills,
   });
   const effectiveContextFolder = contextFolderOverride ?? contextFolder;
 
@@ -648,6 +673,10 @@ function Chat({
         </div>
       )}
       <div className="chat-input-area">
+        <ActiveSkillChips
+          skills={skills.active}
+          onUnload={skills.unloadByName}
+        />
         <ChatInput
           ref={chatInputRef}
           isLoading={isLoading}
@@ -656,6 +685,7 @@ function Chat({
           profile={profile}
           remoteMode={remoteMode}
           readiness={readiness}
+          skillCommands={skillCommands}
           onSubmit={handleSubmitOrQueue}
           onQuickAsk={actions.handleQuickAsk}
           onAbort={actions.handleAbort}

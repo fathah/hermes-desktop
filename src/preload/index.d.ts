@@ -496,6 +496,23 @@ interface HermesAPI {
     }>
   >;
   getSkillContent: (skillPath: string) => Promise<string>;
+  loadSkillToChat: (
+    name: string,
+    profile?: string,
+  ) => Promise<{
+    ok: boolean;
+    name?: string;
+    path?: string;
+    alreadyLoaded?: boolean;
+    error?: string;
+  }>;
+  unloadSkillFromChat: (
+    name?: string,
+    profile?: string,
+  ) => Promise<{ ok: boolean; removed: string[] }>;
+  listActiveSkills: (
+    profile?: string,
+  ) => Promise<Array<{ name: string; path: string }>>;
   installSkill: (
     identifier: string,
     profile?: string,
