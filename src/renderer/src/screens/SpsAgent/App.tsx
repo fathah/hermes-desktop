@@ -31,7 +31,6 @@ import {
   INGEST_PREFS_EVENT,
 } from "./inbox/ingestPrefs";
 import { ObsidianEditor } from "./editor/ObsidianEditor";
-import { FirstRunChecklist } from "./components/FirstRunChecklist";
 
 export function App() {
   useHotkeys();
@@ -137,7 +136,6 @@ export function App() {
       <Overlays />
       <Toast />
       <OcrStatus />
-      <FirstRunChecklist />
       {/* Phase 9: command palette, templates, trash, tweaks */}
     </div>
   );
