@@ -321,14 +321,10 @@ export class NoteIndex {
 
     // Migrate existing DB if links table does not have 'type' column
     try {
-      const columns = this.db
-        .prepare("PRAGMA table_info(links)")
-        .all() as Array<{ name: string }>;
+      const columns = this.db.prepare("PRAGMA table_info(links)").all() as Array<{ name: string }>;
       const hasType = columns.some((col) => col.name === "type");
       if (columns.length > 0 && !hasType) {
-        this.db.exec(
-          "ALTER TABLE links ADD COLUMN type TEXT NOT NULL DEFAULT 'link'",
-        );
+        this.db.exec("ALTER TABLE links ADD COLUMN type TEXT NOT NULL DEFAULT 'link'");
       }
     } catch (err) {
       console.error("[NoteIndex] failed to run links table migration:", err);
@@ -377,8 +373,7 @@ export class NoteIndex {
       const insLink = this.db.prepare(
         `INSERT INTO links(source,target_norm,type) VALUES(?,?,?)`,
       );
-      for (const link of typedLinks)
-        insLink.run(relPath, link.target_norm, link.type);
+      for (const link of typedLinks) insLink.run(relPath, link.target_norm, link.type);
 
       // Tags: frontmatter `tags` (array or string) + inline `#tag`s in the body.
       this.db.prepare(`DELETE FROM tags WHERE source = ?`).run(relPath);
