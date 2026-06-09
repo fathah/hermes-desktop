@@ -8,6 +8,7 @@ import {
   Sparkles,
 } from "../../assets/icons";
 import { useI18n } from "../../components/useI18n";
+import { TelegramSetupWizard } from "../../components/TelegramSetupWizard";
 import type { AdminView } from "../../lib/openSettings";
 
 interface OnboardingProps {
@@ -36,6 +37,7 @@ function Onboarding({
   const [loading, setLoading] = useState(isLocal);
   const [hasApiKey, setHasApiKey] = useState(false);
   const [hasModel, setHasModel] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   useEffect(() => {
     if (!isLocal) return;
@@ -133,10 +135,22 @@ function Onboarding({
         </div>
       )}
 
-      <button className="btn btn-primary onboarding-cta" onClick={onFinish}>
-        {t("onboarding.enterWorkspace")}
-        <ArrowRight size={16} />
-      </button>
+      <div style={{ marginTop: 10, textAlign: "center" }}>
+        <button
+          className="btn"
+          style={{ marginRight: 10 }}
+          onClick={() => setWizardOpen(true)}
+        >
+          📱 Connect Telegram (optional)
+        </button>
+        <button className="btn btn-primary onboarding-cta" onClick={onFinish}>
+          {t("onboarding.enterWorkspace")}
+          <ArrowRight size={16} />
+        </button>
+      </div>
+      {wizardOpen && (
+        <TelegramSetupWizard onClose={() => setWizardOpen(false)} />
+      )}
     </div>
   );
 }

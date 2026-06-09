@@ -1311,6 +1311,10 @@ interface HermesAPI {
   ) => Promise<{ outcome: string; summary?: string; error?: string }>;
   srListPending: (profile?: string) => Promise<SrPendingUpdate[]>;
   srRemovePending: (id: string, profile?: string) => Promise<{ ok: boolean }>;
+  srTelegramAvailability: (profile?: string) => Promise<{
+    available: boolean;
+    targets: Array<{ id: string; name: string }>;
+  }>;
   onScheduledResearchUpdate: (
     callback: (p: {
       scheduleId: string;

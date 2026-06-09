@@ -24,6 +24,12 @@ export interface ScheduledResearchItem {
   lastRunAt: number;
   /** Hash of the last committed brief — a cheap dedupe gate. */
   lastChangeHash: string;
+  /** v2: the paired Hermes gateway cron job that runs this app-closed. Empty
+   *  when no cron is linked (then the desktop isDue fallback fires it app-open). */
+  cronJobId?: string;
+  /** v2: epoch ms of the newest cron-output brief already drained (so we don't
+   *  re-merge old deliveries). */
+  lastDrainedAt?: number;
 }
 
 /** Input shape for creating/updating a schedule (the user-controlled fields). */
@@ -98,6 +104,15 @@ export function isDue(item: ScheduledResearchItem, now: Date): boolean {
   if (!item.lastRunAt) return true;
   const last = new Date(item.lastRunAt);
   return periodKey(item.cadence, now) !== periodKey(item.cadence, last);
+}
+
+/** Build a standard 5-field cron expression for a cadence + hour (minute 0).
+ *  daily → every day; weekly → Mondays; monthly → the 1st. Pure/testable. */
+export function cronExprFor(cadence: Cadence, hour: number): string {
+  const h = Math.max(0, Math.min(23, Math.floor(hour)));
+  if (cadence === "weekly") return `0 ${h} * * 1`;
+  if (cadence === "monthly") return `0 ${h} 1 * *`;
+  return `0 ${h} * * *`;
 }
 
 /** Human label for a cadence, for the management UI. */

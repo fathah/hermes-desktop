@@ -20,6 +20,7 @@ type Phase = "idle" | "running" | "done" | "warn" | "error";
 
 export function ResearchModal() {
   const setResearchOpen = useStore((s) => s.setResearchOpen);
+  const setScheduledOpen = useStore((s) => s.setScheduledOpen);
   const importResearchWork = useStore((s) => s.importResearchWork);
   const runResearch = useStore((s) => s.runResearch);
   const flash = useStore((s) => s.flash);
@@ -100,6 +101,16 @@ export function ResearchModal() {
     } finally {
       setEnabling(false);
     }
+  };
+
+  // "Schedule this topic" → create a weekly schedule + jump to the Scheduled
+  // manager (where the user can tune cadence / Telegram / auto-apply).
+  const onScheduleThis = async () => {
+    const t = topic.trim();
+    if (!t) return;
+    await window.hermesAPI.srCreate?.({ topic: t, cadence: "weekly" });
+    setResearchOpen(false);
+    setScheduledOpen(true);
   };
 
   const doResearch = async () => {
@@ -289,6 +300,14 @@ export function ResearchModal() {
                   disabled={busy || !topic.trim() || webEnabled === false}
                 >
                   {busy ? "Researching…" : "Research"}
+                </button>
+                <button
+                  className="cover-btn"
+                  title="Keep this topic current automatically (weekly)"
+                  disabled={busy || !topic.trim()}
+                  onClick={() => void onScheduleThis()}
+                >
+                  ⏱ Schedule
                 </button>
               </div>
 

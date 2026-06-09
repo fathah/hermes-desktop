@@ -184,6 +184,8 @@ export interface UiSlice {
   researchOpen: boolean;
   /** The Scheduled Research management modal is open. */
   scheduledOpen: boolean;
+  /** The Telegram setup wizard is open. */
+  telegramWizardOpen: boolean;
   tweaksOpen: boolean;
   openTask: Task | null;
   emojiPick: XY | null;
@@ -212,6 +214,7 @@ export interface UiSlice {
   setTrashOpen: (v: boolean) => void;
   setResearchOpen: (v: boolean) => void;
   setScheduledOpen: (v: boolean) => void;
+  setTelegramWizardOpen: (v: boolean) => void;
   setTweaksOpen: (v: boolean) => void;
   setOpenTask: (t: Task | null) => void;
   setEmojiPick: (v: XY | null) => void;

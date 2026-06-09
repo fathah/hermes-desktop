@@ -21,6 +21,7 @@ type Pending = Awaited<
 
 export function ScheduledModal() {
   const setScheduledOpen = useStore((s) => s.setScheduledOpen);
+  const setTelegramWizardOpen = useStore((s) => s.setTelegramWizardOpen);
   const ingestCommitPage = useStore((s) => s.ingestCommitPage);
   const selectPage = useStore((s) => s.selectPage);
   const flash = useStore((s) => s.flash);
@@ -31,18 +32,56 @@ export function ScheduledModal() {
   const [topic, setTopic] = useState("");
   const [cadence, setCadence] = useState<Cadence>("weekly");
   const [hour, setHour] = useState(8);
+  const [wantTelegram, setWantTelegram] = useState(false);
+  const [wantAutoApply, setWantAutoApply] = useState(false);
+  const [tg, setTg] = useState<{
+    available: boolean;
+    targets: Array<{ id: string; name: string }>;
+  }>({ available: false, targets: [] });
   const [busyId, setBusyId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const topicRef = useRef<HTMLInputElement>(null);
 
+  // Silently commit pending updates whose schedule opted into autoApply (so a
+  // trusted schedule keeps its page current without a review click). Review-first
+  // schedules leave their pending for the user to Apply.
+  const autoApplyPending = async (
+    list: Pending[],
+    scheds: Schedule[],
+  ): Promise<boolean> => {
+    let did = false;
+    for (const p of list) {
+      const s = scheds.find((x) => x.id === p.scheduleId);
+      if (!s?.autoApply) continue;
+      try {
+        await commitChangeset(p.changeset, ingestCommitPage);
+        await window.hermesAPI.spsAppendWikiLog?.("research", p.summary);
+        await window.hermesAPI.srRemovePending(p.id);
+        did = true;
+      } catch {
+        /* leave it for manual review */
+      }
+    }
+    return did;
+  };
+
   const refresh = async () => {
-    const [s, p] = await Promise.all([
+    const [s, p, avail] = await Promise.all([
       window.hermesAPI.srList(),
       window.hermesAPI.srListPending(),
+      window.hermesAPI.srTelegramAvailability(),
     ]);
-    setSchedules(s || []);
-    setPending(p || []);
+    setTg(avail || { available: false, targets: [] });
+    const applied = await autoApplyPending(p || [], s || []);
+    if (applied) {
+      const p2 = await window.hermesAPI.srListPending();
+      setSchedules(s || []);
+      setPending(p2 || []);
+    } else {
+      setSchedules(s || []);
+      setPending(p || []);
+    }
   };
 
   useEffect(() => {
@@ -69,7 +108,13 @@ export function ScheduledModal() {
     setCreating(true);
     setError("");
     try {
-      const res = await window.hermesAPI.srCreate({ topic: t, cadence, hour });
+      const res = await window.hermesAPI.srCreate({
+        topic: t,
+        cadence,
+        hour,
+        telegramPush: tg.available && wantTelegram,
+        autoApply: wantAutoApply,
+      });
       if (!res.ok) {
         setError(res.error || "Couldn't create the schedule.");
         return;
@@ -202,6 +247,54 @@ export function ScheduledModal() {
               {creating ? "Adding…" : "Add"}
             </button>
           </div>
+          <div
+            style={{
+              display: "flex",
+              gap: 16,
+              marginBottom: 8,
+              fontSize: 12,
+              color: "var(--tx-3)",
+            }}
+          >
+            <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input
+                type="checkbox"
+                checked={wantAutoApply}
+                onChange={(e) => setWantAutoApply(e.target.checked)}
+              />
+              Auto-apply (skip review)
+            </label>
+            <label
+              style={{
+                display: "flex",
+                gap: 6,
+                alignItems: "center",
+                opacity: tg.available ? 1 : 0.5,
+              }}
+              title={
+                tg.available
+                  ? `Push to ${tg.targets[0]?.name ?? "Telegram"} on change`
+                  : "Set up Telegram first (Settings → Telegram)"
+              }
+            >
+              <input
+                type="checkbox"
+                checked={tg.available && wantTelegram}
+                disabled={!tg.available}
+                onChange={(e) => setWantTelegram(e.target.checked)}
+              />
+              Telegram push
+            </label>
+            {!tg.available && (
+              <button
+                className="cover-btn"
+                style={{ fontSize: 12 }}
+                onClick={() => setTelegramWizardOpen(true)}
+              >
+                Set up Telegram →
+              </button>
+            )}
+          </div>
           {error && (
             <small
               style={{
@@ -284,6 +377,11 @@ export function ScheduledModal() {
                     <div className="c-name">{s.topic}</div>
                     <small style={{ color: "var(--tx-3)", display: "block" }}>
                       {cadenceLabel(s.cadence, s.hour)} · {fmtLast(s.lastRunAt)}
+                      {s.cronJobId
+                        ? " · runs in background"
+                        : " · app-open only"}
+                      {s.autoApply ? " · auto-apply" : ""}
+                      {s.telegramPush ? " · Telegram" : ""}
                       {!s.enabled ? " · paused" : ""}
                     </small>
                   </div>

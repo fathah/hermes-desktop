@@ -22,10 +22,20 @@ import type { BrowserWindow } from "electron";
 import { getApiUrl, getRemoteAuthHeader } from "./hermes";
 import { resolveSpsVaultDir } from "./sps-storage";
 import { profileHome } from "./utils";
+import { HERMES_HOME } from "./installer";
+import { getPlatformEnabled } from "./config/platforms";
+import {
+  createCronJob,
+  removeCronJob,
+  pauseCronJob,
+  resumeCronJob,
+  listCronJobs,
+} from "./cronjobs";
 import {
   readWikiSchema,
   parseChangeset,
   buildScheduledMergeMessages,
+  buildScheduledCronPrompt,
   type IngestChangeset,
 } from "./sps-ingest";
 import { readPageMarkdownFrom } from "./sps-vault";
@@ -38,6 +48,7 @@ import {
   isDue,
   slugForTopic,
   validateScheduleInput,
+  cronExprFor,
   MAX_SCHEDULES,
   type ScheduledResearchItem,
   type ScheduleInput,
@@ -67,6 +78,98 @@ function pendingDir(profile?: string): string {
 }
 function historyFile(profile?: string): string {
   return join(srDir(profile), "scheduled-research.jsonl");
+}
+/** Where the gateway writes a cron job's delivered output (deliver:"local").
+ *  Root-level (not profile-scoped) — the cron subsystem lives at HERMES_HOME. */
+function cronOutputDir(jobId: string): string {
+  return join(HERMES_HOME, "cron", "output", jobId);
+}
+
+// ── Telegram target (for the cron `deliver` field) ───────────────────────────
+/** The configured Telegram chat id to deliver to, or null. Reads the gateway's
+ *  channel directory (root-level), falling back to TELEGRAM_HOME_CHANNEL. */
+export function getTelegramTarget(): string | null {
+  try {
+    const raw = readFileSync(
+      join(HERMES_HOME, "channel_directory.json"),
+      "utf-8",
+    );
+    const data = JSON.parse(raw) as {
+      platforms?: { telegram?: Array<{ id?: string | number }> };
+    };
+    const first = data?.platforms?.telegram?.[0]?.id;
+    if (first) return String(first);
+  } catch {
+    /* not configured */
+  }
+  const env = process.env.TELEGRAM_HOME_CHANNEL;
+  return env ? String(env) : null;
+}
+
+/** Whether Telegram push is available (bot token enabled AND ≥1 configured
+ *  target), plus the targets — drives the modal's Telegram toggle gating. */
+export function getTelegramAvailability(profile?: string): {
+  available: boolean;
+  targets: Array<{ id: string; name: string }>;
+} {
+  let enabled = false;
+  try {
+    enabled = getPlatformEnabled(profile).telegram === true;
+  } catch {
+    enabled = false;
+  }
+  const targets: Array<{ id: string; name: string }> = [];
+  try {
+    const raw = readFileSync(
+      join(HERMES_HOME, "channel_directory.json"),
+      "utf-8",
+    );
+    const data = JSON.parse(raw) as {
+      platforms?: { telegram?: Array<{ id?: string | number; name?: string }> };
+    };
+    for (const t of data?.platforms?.telegram ?? []) {
+      if (t?.id)
+        targets.push({ id: String(t.id), name: String(t.name ?? t.id) });
+    }
+  } catch {
+    /* none configured */
+  }
+  return { available: enabled && targets.length > 0, targets };
+}
+
+/** The cron `deliver` spec for a schedule: always local (so the desktop can
+ *  drain the brief); plus Telegram when the schedule opted in AND a target is
+ *  configured. Comma-separated targets are parsed by the gateway. */
+function deliverFor(item: ScheduledResearchItem): string {
+  if (item.telegramPush) {
+    const t = getTelegramTarget();
+    if (t) return `telegram:${t},local`;
+  }
+  return "local";
+}
+
+/** Create the paired gateway cron job for a schedule and return its id (or null
+ *  on failure — the desktop isDue fallback then covers it). Best-effort. */
+async function createPairedCron(
+  item: ScheduledResearchItem,
+  profile?: string,
+): Promise<string | null> {
+  try {
+    const name = `sr:${item.id}`;
+    const res = await createCronJob(
+      cronExprFor(item.cadence, item.hour),
+      buildScheduledCronPrompt(item.topic),
+      name,
+      deliverFor(item),
+      profile,
+    );
+    if (!res.success) return null;
+    const jobs = await listCronJobs(true, profile);
+    const job = [...jobs].reverse().find((j) => j.name === name);
+    return job?.id ?? null;
+  } catch {
+    return null;
+  }
 }
 
 // ── registry CRUD ────────────────────────────────────────────────────────────
@@ -102,10 +205,10 @@ function newId(): string {
   return `sr_${Date.now().toString(36)}_${_idSeq}`;
 }
 
-export function createSchedule(
+export async function createSchedule(
   input: ScheduleInput,
   profile?: string,
-): { ok: boolean; item?: ScheduledResearchItem; error?: string } {
+): Promise<{ ok: boolean; item?: ScheduledResearchItem; error?: string }> {
   const err = validateScheduleInput(input);
   if (err) return { ok: false, error: err };
   const reg = loadRegistry(profile);
@@ -131,10 +234,22 @@ export function createSchedule(
   };
   reg.schedules.push(item);
   saveRegistry(reg, profile);
+  // Pair a gateway cron job so it runs app-closed (best-effort; the desktop
+  // isDue fallback covers a schedule that fails to get a cron).
+  const cronJobId = await createPairedCron(item, profile);
+  if (cronJobId) {
+    const reg2 = loadRegistry(profile);
+    const found = reg2.schedules.find((s) => s.id === item.id);
+    if (found) {
+      found.cronJobId = cronJobId;
+      saveRegistry(reg2, profile);
+      item.cronJobId = cronJobId;
+    }
+  }
   return { ok: true, item };
 }
 
-export function updateSchedule(
+export async function updateSchedule(
   id: string,
   patch: Partial<
     Pick<
@@ -143,23 +258,56 @@ export function updateSchedule(
     >
   >,
   profile?: string,
-): { ok: boolean; error?: string } {
+): Promise<{ ok: boolean; error?: string }> {
   const reg = loadRegistry(profile);
   const item = reg.schedules.find((s) => s.id === id);
   if (!item) return { ok: false, error: "Schedule not found." };
+  const cronShapeChanged =
+    patch.cadence !== undefined ||
+    patch.hour !== undefined ||
+    patch.telegramPush !== undefined;
   if (patch.cadence !== undefined) item.cadence = patch.cadence;
   if (patch.hour !== undefined) item.hour = patch.hour;
   if (patch.enabled !== undefined) item.enabled = patch.enabled;
   if (patch.autoApply !== undefined) item.autoApply = patch.autoApply;
   if (patch.telegramPush !== undefined) item.telegramPush = patch.telegramPush;
   saveRegistry(reg, profile);
+  // Keep the paired cron job in sync.
+  try {
+    if (cronShapeChanged && item.cronJobId) {
+      await removeCronJob(item.cronJobId, profile);
+      item.cronJobId = (await createPairedCron(item, profile)) ?? undefined;
+      saveRegistry(reg, profile);
+    } else if (!item.cronJobId) {
+      // never got a cron (earlier failure) — try again now
+      item.cronJobId = (await createPairedCron(item, profile)) ?? undefined;
+      saveRegistry(reg, profile);
+    }
+    if (item.cronJobId) {
+      if (item.enabled) await resumeCronJob(item.cronJobId, profile);
+      else await pauseCronJob(item.cronJobId, profile);
+    }
+  } catch {
+    /* best-effort; desktop fallback covers it */
+  }
   return { ok: true };
 }
 
-export function deleteSchedule(id: string, profile?: string): { ok: boolean } {
+export async function deleteSchedule(
+  id: string,
+  profile?: string,
+): Promise<{ ok: boolean }> {
   const reg = loadRegistry(profile);
+  const item = reg.schedules.find((s) => s.id === id);
   reg.schedules = reg.schedules.filter((s) => s.id !== id);
   saveRegistry(reg, profile);
+  if (item?.cronJobId) {
+    try {
+      await removeCronJob(item.cronJobId, profile);
+    } catch {
+      /* best-effort */
+    }
+  }
   return { ok: true };
 }
 
@@ -284,9 +432,79 @@ function sha256(s: string): string {
   return createHash("sha256").update(s).digest("hex");
 }
 
-/** Execute one schedule: research → guard → smart-merge → pending queue. Always
- *  stamps lastRunAt (success or failure) so a transient outage doesn't hammer
- *  the gateway every tick; the user can "Run now" to retry sooner. */
+/** Smart-merge a research brief into the living page → pending queue. Shared by
+ *  the immediate "Run now" path (research turn → here) and the cron-drain path
+ *  (cron-delivered brief → here). 0 pages from the merge ⇒ no meaningful change.
+ *  Stamps lastRunAt + lastChangeHash so the desktop fallback doesn't re-fire. */
+async function mergeBriefAndQueue(
+  item: ScheduledResearchItem,
+  brief: string,
+  getWindow?: () => BrowserWindow | null,
+  profile?: string,
+): Promise<{ outcome: RunOutcome; summary: string }> {
+  const cappedBrief = capResearchBrief(brief);
+  const briefHash = sha256(cappedBrief);
+  if (item.lastChangeHash && item.lastChangeHash === briefHash) {
+    stampHash(item, briefHash, profile);
+    return { outcome: "no-change", summary: "No new findings." };
+  }
+  const vaultDir = resolveSpsVaultDir(profile);
+  const schema = await readWikiSchema(vaultDir);
+  let current: string | null = null;
+  try {
+    current = await readPageMarkdownFrom(vaultDir, item.pageId);
+  } catch {
+    current = null;
+  }
+  const dateStr = new Date().toISOString().slice(0, 10);
+  const messages = buildScheduledMergeMessages(
+    schema,
+    item.topic,
+    item.pageId,
+    current,
+    cappedBrief,
+    dateStr,
+    [],
+  );
+  const content = await gatewayChat(messages, 4096, profile);
+  const changeset = parseChangeset(extractJson(content));
+  if (!changeset || changeset.pages.length === 0) {
+    stampHash(item, briefHash, profile);
+    return { outcome: "no-change", summary: "No meaningful change." };
+  }
+  const op: "create" | "update" = current ? "update" : "create";
+  const page = { ...changeset.pages[0], pageId: item.pageId, op };
+  const merged: IngestChangeset = {
+    summary: changeset.summary || `Updated ${item.topic}`,
+    pages: [page],
+    captures: [],
+    memory: [],
+  };
+  const ts = Date.now();
+  await writePending(
+    {
+      id: `${item.id}__${ts}`,
+      scheduleId: item.id,
+      topic: item.topic,
+      pageId: item.pageId,
+      ts,
+      summary: merged.summary,
+      changeset: merged,
+    },
+    profile,
+  );
+  stampHash(item, briefHash, profile);
+  getWindow?.()?.webContents.send("scheduled-research-update", {
+    scheduleId: item.id,
+    topic: item.topic,
+    summary: merged.summary,
+  });
+  return { outcome: "changed", summary: merged.summary };
+}
+
+/** Immediate run ("Run now", app-open): research turn → merge → pending. Always
+ *  stamps lastRunAt (even on failure) so a transient outage can't hammer the
+ *  gateway every tick. */
 export async function runScheduledResearch(
   item: ScheduledResearchItem,
   getWindow?: () => BrowserWindow | null,
@@ -295,10 +513,6 @@ export async function runScheduledResearch(
   let outcome: RunOutcome = "error";
   let summary = "";
   try {
-    const vaultDir = resolveSpsVaultDir(profile);
-    const schema = await readWikiSchema(vaultDir);
-
-    // 1) research turn (web-grounded, cited brief)
     const brief = await gatewayChat(
       [{ role: "user", content: buildResearchPrompt(item.topic) }],
       3000,
@@ -309,84 +523,94 @@ export async function runScheduledResearch(
       summary = "No web sources returned.";
       return { outcome, summary };
     }
-    const cappedBrief = capResearchBrief(brief);
-
-    // 2) cheap dedupe: identical brief to the last committed one ⇒ no change
-    const briefHash = sha256(cappedBrief);
-    if (item.lastChangeHash && item.lastChangeHash === briefHash) {
-      outcome = "no-change";
-      summary = "No new findings.";
-      stampHash(item, briefHash, profile);
-      return { outcome, summary };
-    }
-
-    // 3) read the living page (null on first run)
-    let current: string | null = null;
-    try {
-      current = await readPageMarkdownFrom(vaultDir, item.pageId);
-    } catch {
-      current = null;
-    }
-
-    // 4) smart-merge — 0 pages ⇒ no meaningful change
-    const dateStr = new Date().toISOString().slice(0, 10);
-    const messages = buildScheduledMergeMessages(
-      schema,
-      item.topic,
-      item.pageId,
-      current,
-      cappedBrief,
-      dateStr,
-      [],
-    );
-    const content = await gatewayChat(messages, 4096, profile);
-    const changeset = parseChangeset(extractJson(content));
-    if (!changeset || changeset.pages.length === 0) {
-      outcome = "no-change";
-      summary = "No meaningful change.";
-      stampHash(item, briefHash, profile);
-      return { outcome, summary };
-    }
-
-    // 5) force the stable pageId + correct op; keep one page
-    const op: "create" | "update" = current ? "update" : "create";
-    const page = { ...changeset.pages[0], pageId: item.pageId, op };
-    const merged: IngestChangeset = {
-      summary: changeset.summary || `Updated ${item.topic}`,
-      pages: [page],
-      captures: [],
-      memory: [],
-    };
-
-    // 6) enqueue the proposed merge for renderer review/apply
-    const ts = Date.now();
-    const pending: PendingUpdate = {
-      id: `${item.id}__${ts}`,
-      scheduleId: item.id,
-      topic: item.topic,
-      pageId: item.pageId,
-      ts,
-      summary: merged.summary,
-      changeset: merged,
-    };
-    await writePending(pending, profile);
-    stampHash(item, briefHash, profile);
-
-    outcome = "changed";
-    summary = merged.summary;
-    getWindow?.()?.webContents.send("scheduled-research-update", {
-      scheduleId: item.id,
-      topic: item.topic,
-      summary,
-    });
+    const r = await mergeBriefAndQueue(item, brief, getWindow, profile);
+    outcome = r.outcome;
+    summary = r.summary;
     return { outcome, summary };
   } catch (err) {
     outcome = "error";
     summary = err instanceof Error ? err.message : "run failed";
-    stampRun(item.id, profile); // still stamp lastRunAt to avoid retry storms
+    stampRun(item.id, profile);
     return { outcome, summary };
   } finally {
     recordHistory(item.id, outcome, summary, profile);
+  }
+}
+
+/** Extract the agent's brief from a gateway cron-output file. The file is a
+ *  "# Cron Job …\n## Prompt …\n## Response\n<final>" doc; we want <final>, unless
+ *  it's the native [SILENT] no-change sentinel. */
+export function parseCronBrief(content: string): string | null {
+  const m = /##\s*Response\s*\n([\s\S]*)$/i.exec(content);
+  let body = (m ? m[1] : content).trim();
+  body = body.replace(/^⚠️[^\n]*\n+/, "").trim(); // drop skill-not-found notices
+  if (!body || /^\[SILENT\]/i.test(body)) return null;
+  return body;
+}
+
+/** Drain newly-delivered cron-output briefs into the merge → pending pipeline.
+ *  This is how app-CLOSED scheduled runs reach the KB: the gateway cron wrote the
+ *  brief to cron/output/<jobId>/; we merge anything newer than lastDrainedAt. */
+export async function drainCronBriefs(
+  getWindow?: () => BrowserWindow | null,
+  profile?: string,
+): Promise<void> {
+  const reg = loadRegistry(profile);
+  for (const item of reg.schedules) {
+    if (!item.cronJobId) continue;
+    const dir = cronOutputDir(item.cronJobId);
+    let names: string[];
+    try {
+      names = await fs.readdir(dir);
+    } catch {
+      continue;
+    }
+    const since = item.lastDrainedAt || 0;
+    const fresh: Array<{ name: string; mtime: number }> = [];
+    for (const name of names) {
+      if (!name.endsWith(".md")) continue;
+      try {
+        const st = await fs.stat(join(dir, name));
+        if (st.mtimeMs > since) fresh.push({ name, mtime: st.mtimeMs });
+      } catch {
+        /* skip */
+      }
+    }
+    if (!fresh.length) continue;
+    fresh.sort((a, b) => a.mtime - b.mtime);
+    for (const f of fresh) {
+      let content: string;
+      try {
+        content = await fs.readFile(join(dir, f.name), "utf-8");
+      } catch {
+        continue;
+      }
+      const brief = parseCronBrief(content);
+      if (!brief) {
+        recordHistory(item.id, "no-change", "[SILENT] cron run", profile);
+        continue;
+      }
+      try {
+        const r = await mergeBriefAndQueue(item, brief, getWindow, profile);
+        recordHistory(item.id, r.outcome, r.summary, profile);
+      } catch (err) {
+        recordHistory(
+          item.id,
+          "error",
+          err instanceof Error ? err.message : "merge failed",
+          profile,
+        );
+      }
+    }
+    // Mark drained up to the newest file we saw (re-load: mergeBriefAndQueue
+    // re-saved the registry via stampHash).
+    const newest = fresh[fresh.length - 1].mtime;
+    const reg2 = loadRegistry(profile);
+    const it2 = reg2.schedules.find((s) => s.id === item.id);
+    if (it2) {
+      it2.lastDrainedAt = newest;
+      saveRegistry(reg2, profile);
+    }
   }
 }
 
@@ -432,8 +656,14 @@ async function tick(): Promise<void> {
   if (_running) return;
   _running = true;
   try {
+    // Primary path: ingest whatever the gateway cron jobs delivered (app-closed).
+    await drainCronBriefs(_getWindow ?? undefined);
+    // Fallback only: a schedule with no paired cron job (cron-create failed) is
+    // still fired app-open by the desktop, so it never silently stalls.
     const now = new Date();
-    const due = loadRegistry().schedules.filter((s) => isDue(s, now));
+    const due = loadRegistry().schedules.filter(
+      (s) => !s.cronJobId && isDue(s, now),
+    );
     for (const s of due) {
       await runScheduledResearch(s, _getWindow ?? undefined);
     }

@@ -5,6 +5,7 @@ import {
   periodKey,
   isDue,
   cadenceLabel,
+  cronExprFor,
   type ScheduledResearchItem,
 } from "./scheduledResearch";
 import { hasUsableSources } from "./research";
@@ -106,6 +107,18 @@ describe("isDue", () => {
         new Date(2026, 5, 16, 8),
       ),
     ).toBe(true); // next Tue
+  });
+});
+
+describe("cronExprFor", () => {
+  it("maps cadence+hour to a 5-field cron expr", () => {
+    expect(cronExprFor("daily", 8)).toBe("0 8 * * *");
+    expect(cronExprFor("weekly", 9)).toBe("0 9 * * 1");
+    expect(cronExprFor("monthly", 6)).toBe("0 6 1 * *");
+  });
+  it("clamps the hour", () => {
+    expect(cronExprFor("daily", 30)).toBe("0 23 * * *");
+    expect(cronExprFor("daily", -5)).toBe("0 0 * * *");
   });
 });
 

@@ -542,6 +542,12 @@ export const spsBridge = {
     ipcRenderer.invoke("sr-list-pending", profile),
   srRemovePending: (id: string, profile?: string): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke("sr-remove-pending", id, profile),
+  srTelegramAvailability: (
+    profile?: string,
+  ): Promise<{
+    available: boolean;
+    targets: Array<{ id: string; name: string }>;
+  }> => ipcRenderer.invoke("sr-telegram-availability", profile),
   /** Fired when a "Run now" (or a scheduled tick) produces a pending update. */
   onScheduledResearchUpdate: (
     callback: (p: {

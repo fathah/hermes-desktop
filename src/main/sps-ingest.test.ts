@@ -10,6 +10,7 @@ import {
   buildFileAnswerMessages,
   buildResearchFileMessages,
   buildScheduledMergeMessages,
+  buildScheduledCronPrompt,
   buildLintMessages,
   parseLintFindings,
   readPageDigests,
@@ -182,6 +183,16 @@ describe("buildScheduledMergeMessages", () => {
     expect(msgs[2].content).toContain("[[rel]]");
     expect(msgs[3].content).toContain("old body");
     expect(msgs[3].content).toContain("<current_page>");
+  });
+});
+
+describe("buildScheduledCronPrompt", () => {
+  it("embeds the topic, forces web search, ## Sources, and the [SILENT] no-change sentinel", () => {
+    const p = buildScheduledCronPrompt("UK guarding regs");
+    expect(p).toContain("UK guarding regs");
+    expect(p).toMatch(/MUST actually search the web/i);
+    expect(p).toContain("## Sources");
+    expect(p).toContain("[SILENT]");
   });
 });
 
