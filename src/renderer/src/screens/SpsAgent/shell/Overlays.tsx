@@ -9,6 +9,7 @@ import { TaskDrawer } from "../modals/TaskDrawer";
 import { TemplatesModal } from "../modals/TemplatesModal";
 import { TrashModal } from "../modals/TrashModal";
 import { ResearchModal } from "../modals/ResearchModal";
+import { ScheduledModal } from "../modals/ScheduledModal";
 import { TweaksPanel } from "../tweaks/TweaksPanel";
 
 export function Overlays() {
@@ -19,6 +20,7 @@ export function Overlays() {
   const templatesOpen = useStore((s) => s.templatesOpen);
   const trashOpen = useStore((s) => s.trashOpen);
   const researchOpen = useStore((s) => s.researchOpen);
+  const scheduledOpen = useStore((s) => s.scheduledOpen);
   const setEmojiPick = useStore((s) => s.setEmojiPick);
   const setCoverPick = useStore((s) => s.setCoverPick);
   const setOpenTask = useStore((s) => s.setOpenTask);
@@ -39,6 +41,7 @@ export function Overlays() {
       {templatesOpen && <TemplatesModal />}
       {trashOpen && <TrashModal />}
       {researchOpen && <ResearchModal />}
+      {scheduledOpen && <ScheduledModal />}
       <TweaksPanel />
 
       {openTask && (

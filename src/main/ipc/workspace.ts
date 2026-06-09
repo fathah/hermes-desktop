@@ -6,6 +6,7 @@ import { registerSkillsIpc } from "./skills";
 import { registerSessionsIpc } from "./sessions";
 import { registerMemoryIpc } from "./memory";
 import { registerSpsIpc } from "./sps";
+import { registerScheduledResearchIpc } from "./scheduled-research";
 
 /**
  * Aggregator for the workspace-area IPC handlers. Each domain registers its
@@ -14,11 +15,11 @@ import { registerSpsIpc } from "./sps";
  * forcing edits here whenever an unrelated domain changes. `index.ts` still
  * calls only `registerWorkspaceIpc`.
  *
- * None of these handlers need the main window — the getter is accepted for
- * signature compatibility with the other register*Ipc entry points.
+ * Most of these handlers don't need the main window; scheduled-research uses it
+ * to push a "scheduled-research-update" event to the renderer on a "Run now".
  */
 export function registerWorkspaceIpc(
-  _mainWindowGetter: () => BrowserWindow | null,
+  mainWindowGetter: () => BrowserWindow | null,
 ): void {
   registerKanbanIpc();
   registerEquityIpc();
@@ -27,4 +28,5 @@ export function registerWorkspaceIpc(
   registerSessionsIpc();
   registerMemoryIpc();
   registerSpsIpc();
+  registerScheduledResearchIpc(mainWindowGetter);
 }

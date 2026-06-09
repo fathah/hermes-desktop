@@ -182,6 +182,8 @@ export interface UiSlice {
   trashOpen: boolean;
   /** The Research (OpenAlex paper search) modal is open. */
   researchOpen: boolean;
+  /** The Scheduled Research management modal is open. */
+  scheduledOpen: boolean;
   tweaksOpen: boolean;
   openTask: Task | null;
   emojiPick: XY | null;
@@ -209,6 +211,7 @@ export interface UiSlice {
   setTemplatesOpen: (v: { parent: string | null } | null) => void;
   setTrashOpen: (v: boolean) => void;
   setResearchOpen: (v: boolean) => void;
+  setScheduledOpen: (v: boolean) => void;
   setTweaksOpen: (v: boolean) => void;
   setOpenTask: (t: Task | null) => void;
   setEmojiPick: (v: XY | null) => void;

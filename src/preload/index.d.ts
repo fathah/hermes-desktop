@@ -25,6 +25,11 @@ import type { SkillEntry } from "../shared/skills";
 import type { ProfileInfo } from "../shared/profiles";
 import type { CronJob } from "../shared/cronjobs";
 import type { SessionSummary } from "../shared/sessions";
+import type {
+  ScheduledResearchItem,
+  ScheduleInput,
+} from "../shared/scheduledResearch";
+import type { SrPendingUpdate, SrPatch } from "./bridges/sps";
 import type { CredentialPoolEntry } from "../shared/credentials";
 
 interface ElectronAPI {
@@ -1287,6 +1292,32 @@ interface HermesAPI {
     maxSpendingLimit?: number;
     spendingCapAction?: string;
   }) => Promise<boolean>;
+
+  // ── Scheduled Research ──
+  srList: (profile?: string) => Promise<ScheduledResearchItem[]>;
+  srCreate: (
+    input: ScheduleInput,
+    profile?: string,
+  ) => Promise<{ ok: boolean; item?: ScheduledResearchItem; error?: string }>;
+  srUpdate: (
+    id: string,
+    patch: SrPatch,
+    profile?: string,
+  ) => Promise<{ ok: boolean; error?: string }>;
+  srDelete: (id: string, profile?: string) => Promise<{ ok: boolean }>;
+  srRunNow: (
+    id: string,
+    profile?: string,
+  ) => Promise<{ outcome: string; summary?: string; error?: string }>;
+  srListPending: (profile?: string) => Promise<SrPendingUpdate[]>;
+  srRemovePending: (id: string, profile?: string) => Promise<{ ok: boolean }>;
+  onScheduledResearchUpdate: (
+    callback: (p: {
+      scheduleId: string;
+      topic: string;
+      summary: string;
+    }) => void,
+  ) => () => void;
 }
 
 declare global {

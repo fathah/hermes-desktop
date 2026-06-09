@@ -9,6 +9,7 @@ import {
   buildIngestMessages,
   buildFileAnswerMessages,
   buildResearchFileMessages,
+  buildScheduledMergeMessages,
   buildLintMessages,
   parseLintFindings,
   readPageDigests,
@@ -146,6 +147,54 @@ describe("buildResearchFileMessages", () => {
   it("handles no related pages", () => {
     const msgs = buildResearchFileMessages("S", "topic", "body", []);
     expect(msgs[2].content).toContain("(no related pages found)");
+  });
+});
+
+describe("buildScheduledMergeMessages", () => {
+  it("first run: flags empty current page + injects topic/pageId/date", () => {
+    const msgs = buildScheduledMergeMessages(
+      "SCHEMA",
+      "UK guarding regs",
+      "uk-guarding-regs",
+      null,
+      "new findings\n## Sources\n- [a](https://a.gov)",
+      "2026-06-16",
+      [],
+    );
+    expect(msgs[0].content).toContain("## Updates");
+    expect(msgs[0].content).toContain("return ZERO pages"); // no-change contract
+    expect(msgs[0].content).toContain("EXACTLY ONE JSON object");
+    expect(msgs[3].content).toContain("uk-guarding-regs");
+    expect(msgs[3].content).toContain("2026-06-16");
+    expect(msgs[3].content).toContain("FIRST run");
+    expect(msgs[3].content).toContain("a.gov");
+  });
+  it("later run: includes the current page as untrusted reference", () => {
+    const msgs = buildScheduledMergeMessages(
+      "SCHEMA",
+      "t",
+      "t",
+      "# T\nold body\n## Updates\n- 2026-06-09: initial",
+      "new\n## Sources\n- [x](https://x.io)",
+      "2026-06-16",
+      [{ pageId: "rel", title: "Rel" }],
+    );
+    expect(msgs[2].content).toContain("[[rel]]");
+    expect(msgs[3].content).toContain("old body");
+    expect(msgs[3].content).toContain("<current_page>");
+  });
+});
+
+describe("parseChangeset (no-change signal)", () => {
+  it("treats an empty pages array as no usable changeset", () => {
+    const cs = parseChangeset({
+      summary: "no change",
+      pages: [],
+      captures: [],
+      memory: [],
+    });
+    expect(cs).not.toBeNull();
+    expect(cs?.pages).toHaveLength(0); // engine reads 0 pages as "no meaningful change"
   });
 });
 

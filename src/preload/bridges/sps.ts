@@ -5,6 +5,40 @@ import type {
   WorkSummary as ResearchWorkSummary,
   WorkDetail as ResearchWorkDetail,
 } from "../../shared/openalex/core";
+import type {
+  ScheduledResearchItem,
+  ScheduleInput,
+} from "../../shared/scheduledResearch";
+
+/** Pending scheduled-research merge, shaped for the renderer (inline changeset
+ *  shape mirrors spsFileAnswer's so preload need not import main types). */
+export interface SrPendingUpdate {
+  id: string;
+  scheduleId: string;
+  topic: string;
+  pageId: string;
+  ts: number;
+  summary: string;
+  changeset: {
+    summary: string;
+    pages: Array<{
+      op: "create" | "update";
+      pageId: string;
+      title: string;
+      markdown: string;
+    }>;
+    captures: Array<{ id: string; status: "processed" | "discarded" }>;
+    memory: string[];
+  };
+}
+
+export type SrPatch = Partial<{
+  cadence: ScheduledResearchItem["cadence"];
+  hour: number;
+  enabled: boolean;
+  autoApply: boolean;
+  telegramPush: boolean;
+}>;
 
 export const spsBridge = {
   // SPS Agent workspace
@@ -482,4 +516,46 @@ export const spsBridge = {
     spendingCapAction?: string;
   }): Promise<boolean> =>
     ipcRenderer.invoke("set-spending-cap-config", settings),
+
+  // ── Scheduled Research ──
+  srList: (profile?: string): Promise<ScheduledResearchItem[]> =>
+    ipcRenderer.invoke("sr-list", profile),
+  srCreate: (
+    input: ScheduleInput,
+    profile?: string,
+  ): Promise<{ ok: boolean; item?: ScheduledResearchItem; error?: string }> =>
+    ipcRenderer.invoke("sr-create", input, profile),
+  srUpdate: (
+    id: string,
+    patch: SrPatch,
+    profile?: string,
+  ): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke("sr-update", id, patch, profile),
+  srDelete: (id: string, profile?: string): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke("sr-delete", id, profile),
+  srRunNow: (
+    id: string,
+    profile?: string,
+  ): Promise<{ outcome: string; summary?: string; error?: string }> =>
+    ipcRenderer.invoke("sr-run-now", id, profile),
+  srListPending: (profile?: string): Promise<SrPendingUpdate[]> =>
+    ipcRenderer.invoke("sr-list-pending", profile),
+  srRemovePending: (id: string, profile?: string): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke("sr-remove-pending", id, profile),
+  /** Fired when a "Run now" (or a scheduled tick) produces a pending update. */
+  onScheduledResearchUpdate: (
+    callback: (p: {
+      scheduleId: string;
+      topic: string;
+      summary: string;
+    }) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      p: { scheduleId: string; topic: string; summary: string },
+    ): void => callback(p);
+    ipcRenderer.on("scheduled-research-update", handler);
+    return () =>
+      ipcRenderer.removeListener("scheduled-research-update", handler);
+  },
 };

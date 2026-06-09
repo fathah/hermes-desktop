@@ -31,6 +31,7 @@ import {
 import { resolveSpsVaultDir } from "./sps-storage";
 import { resolveAssetPath } from "./sps-assets";
 import { startEquityAlertWatcher } from "./equity-alerts";
+import { startScheduledResearch } from "./scheduled-research";
 import { updaterLogger } from "./updater-log";
 import { getConnectionConfig } from "./config";
 import {
@@ -216,6 +217,8 @@ function createWindow(): void {
     mainWindow!.show();
     // Watch the equity alert log → OS notification + renderer event per new line.
     void startEquityAlertWatcher(() => mainWindow);
+    // Scheduled research: catch up on launch, then tick on a timer.
+    startScheduledResearch(() => mainWindow);
   });
 
   mainWindow.webContents.on("render-process-gone", (_event, details) => {

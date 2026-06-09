@@ -70,6 +70,7 @@ export function Sidebar() {
   const openJournal = useStore((s) => s.openJournal);
   const startNewChat = useStore((s) => s.startNewChat);
   const setResearchOpen = useStore((s) => s.setResearchOpen);
+  const setScheduledOpen = useStore((s) => s.setScheduledOpen);
   const homeSurface = useStore((s) => s.t.homeSurface ?? "doc");
   // Selecting a page always returns to the document surface.
   const selectDoc = (id: string): void => {
@@ -233,6 +234,15 @@ export function Sidebar() {
           >
             <Icon name="doc" size={17} />
             <span className="nav-label">Research</span>
+          </button>
+          <button
+            type="button"
+            className="nav-item"
+            onClick={() => setScheduledOpen(true)}
+            style={{ paddingLeft: 24 }}
+          >
+            <Icon name="clock" size={17} />
+            <span className="nav-label">Scheduled</span>
           </button>
           <button
             type="button"
