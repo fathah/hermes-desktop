@@ -22,6 +22,15 @@ import type { EquityBasket, EquityAlert } from "../shared/equity";
 import type { PublicConnectionConfig } from "../shared/connection";
 import type { ChatReadiness } from "../shared/validation";
 import type { SkillEntry } from "../shared/skills";
+import type {
+  ExternalSource,
+  ExternalSourceConfig,
+  ExternalIndexStatus,
+  ExternalSearchHit,
+  ExternalConversationMeta,
+  ExternalMessage,
+  ExternalScanProgress,
+} from "../shared/external-context";
 import type { ProfileInfo } from "../shared/profiles";
 import type { CronJob } from "../shared/cronjobs";
 import type { SessionSummary } from "../shared/sessions";
@@ -1089,6 +1098,31 @@ interface HermesAPI {
   spsResearchEnsureAgentTool: (
     profile?: string,
   ) => Promise<{ registered: boolean; alreadyPresent: boolean }>;
+  externalContextGetConfig: () => Promise<ExternalSourceConfig>;
+  externalContextSetSource: (
+    source: ExternalSource,
+    enabled: boolean,
+  ) => Promise<ExternalSourceConfig>;
+  externalContextStatus: () => Promise<ExternalIndexStatus>;
+  externalContextScan: () => Promise<ExternalIndexStatus>;
+  externalContextRebuild: () => Promise<ExternalIndexStatus>;
+  externalContextSearch: (
+    query: string,
+    opts?: { source?: ExternalSource; project?: string; limit?: number },
+  ) => Promise<ExternalSearchHit[]>;
+  externalContextGetConversation: (
+    convId: string,
+    opts?: { aroundSeq?: number; limit?: number },
+  ) => Promise<{
+    meta: ExternalConversationMeta | null;
+    messages: ExternalMessage[];
+  }>;
+  externalContextListProjects: (
+    source?: ExternalSource,
+  ) => Promise<Array<{ projectPath: string; count: number }>>;
+  onExternalContextProgress: (
+    callback: (progress: ExternalScanProgress) => void,
+  ) => () => void;
   spsExportPage: (
     pageId: string,
     markdown: string,

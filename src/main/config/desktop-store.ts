@@ -3,6 +3,12 @@ import { join } from "path";
 import { HERMES_HOME } from "../installer";
 import { getActiveProfileNameSync } from "../utils";
 import { encryptSecret, decryptSecret } from "./secrets";
+import {
+  EXTERNAL_SOURCES,
+  defaultExternalSourceConfig,
+  type ExternalSource,
+  type ExternalSourceConfig,
+} from "../../shared/external-context";
 
 // `desktop.json` — app-level, desktop-owned config (connection mode, encrypted
 // remote/api-server keys, and the desktop-enforced UX toggles below).
@@ -100,4 +106,31 @@ export function setOnboardingCompleted(completed: boolean): void {
   const data = readDesktopConfig();
   data.onboardingCompleted = completed;
   writeDesktopConfig(data);
+}
+
+/** Per-source enable flags for the External Context Bridge. App-level (the
+ *  external transcript sources live on the machine, not per profile) and
+ *  default ALL OFF — indexing other AI tools' transcripts is strictly opt-in. */
+export function getExternalContextSources(): ExternalSourceConfig {
+  const stored = readDesktopConfig().externalContextSources;
+  const cfg = defaultExternalSourceConfig();
+  if (stored && typeof stored === "object") {
+    for (const source of EXTERNAL_SOURCES) {
+      if ((stored as Record<string, unknown>)[source] === true)
+        cfg[source] = true;
+    }
+  }
+  return cfg;
+}
+
+export function setExternalContextSource(
+  source: ExternalSource,
+  enabled: boolean,
+): ExternalSourceConfig {
+  const data = readDesktopConfig();
+  const cfg = getExternalContextSources();
+  cfg[source] = enabled;
+  data.externalContextSources = cfg;
+  writeDesktopConfig(data);
+  return cfg;
 }

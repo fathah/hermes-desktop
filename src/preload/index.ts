@@ -8,6 +8,7 @@ import { systemBridge } from "./bridges/system";
 import { kanbanBridge } from "./bridges/kanban";
 import { toolsmiscBridge } from "./bridges/toolsmisc";
 import { spsBridge } from "./bridges/sps";
+import { externalContextBridge } from "./bridges/external-context";
 
 const electronAPI = {
   process: {
@@ -35,6 +36,7 @@ const hermesAPI = {
   ...kanbanBridge,
   ...toolsmiscBridge,
   ...spsBridge,
+  ...externalContextBridge,
 };
 
 if (process.contextIsolated) {

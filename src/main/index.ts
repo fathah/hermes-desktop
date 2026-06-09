@@ -46,6 +46,12 @@ import { registerChatIpc, abortAllChats } from "./ipc/chat";
 import { registerNotesIpc, closeObsidianWatcher } from "./ipc/notes";
 import { registerWorkspaceIpc } from "./ipc/workspace";
 import { registerUtilityIpc } from "./ipc/utility";
+import {
+  registerExternalContextIpc,
+  scheduleExternalContextScans,
+  stopExternalContextScans,
+} from "./ipc/external-context";
+import { closeExternalContextDb } from "./external-context/index";
 import { startScheduler, stopScheduler } from "./scheduler";
 import { startControlServer, stopControlServer } from "./control-server";
 import { setMainWindowGetter } from "./self-healing";
@@ -361,6 +367,8 @@ function setupIPC(): void {
   registerNotesIpc(() => mainWindow);
   registerWorkspaceIpc(() => mainWindow);
   registerUtilityIpc(() => mainWindow);
+  registerExternalContextIpc(() => mainWindow);
+  scheduleExternalContextScans(() => mainWindow);
 }
 function buildMenu(): void {
   const isMac = process.platform === "darwin";
@@ -634,6 +642,8 @@ app.on("before-quit", () => {
   // and other platforms stay online headless.
   stopSshTunnel();
   void closeAllNoteIndexes();
+  stopExternalContextScans();
+  closeExternalContextDb();
   closeSharedDb();
 });
 
