@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { useStore } from "../store";
+import { useTheme } from "../../../components/ThemeProvider";
 import { SECTION_ORDER, type SectionId } from "../store/storeTypes";
 import { ACCENTS, type Tweaks, setSkinVars } from "../lib/theme";
 import { skinToSpsVars } from "../lib/skin";
@@ -459,15 +460,20 @@ export function TweaksPanel() {
   const setOpen = useStore((s) => s.setTweaksOpen);
   const t = useStore((s) => s.t);
   const setTweak = useStore((s) => s.setTweak);
+  const { setTheme } = useTheme();
   if (!open) return null;
+  // Toggling dark here is the reciprocal of the Settings → Appearance control:
+  // drive BOTH the SPS Tweaks flag (paints the workspace) and ThemeProvider
+  // (keeps the Settings radio + THEME_STORAGE_KEY coherent), so the two theme
+  // controls can never disagree.
+  const setDark = (v: boolean): void => {
+    setTweak("dark", v);
+    setTheme(v ? "dark" : "light");
+  };
   return (
     <Shell onClose={() => setOpen(false)}>
       <Section label="Appearance" />
-      <Toggle
-        label="Dark mode"
-        value={t.dark}
-        onChange={(v) => setTweak("dark", v)}
-      />
+      <Toggle label="Dark mode" value={t.dark} onChange={setDark} />
       {t.dark && (
         <Segmented<Tweaks["darkSkin"]>
           label="Dark palette"
