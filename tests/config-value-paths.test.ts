@@ -115,10 +115,10 @@ describe("getConfigValue — dotted paths (issue #247)", () => {
     expect(getConfigValue("agent.service_tier")).toBeNull();
   });
 
-  // Skipped: getYamlPath (introduced by #243) is currently permissive on
-  // grandchildren and flat-key column-0 enforcement.  The strictness
-  // these cases document is desired but not yet present; tracked as a
-  // follow-up against `yaml-path.ts`.
+  // Skipped: getYamlValue is currently permissive on grandchildren and
+  // flat-key column-0 enforcement.  The strictness these cases document is
+  // desired but not yet present; tracked as a follow-up against
+  // `yaml-utils.ts` (the live parser; the old `yaml-path.ts` was removed).
   it.skip("ignores grandchildren — agent.service_tier matches only direct child", async () => {
     writeFileSync(
       join(TEST_DIR, "config.yaml"),
