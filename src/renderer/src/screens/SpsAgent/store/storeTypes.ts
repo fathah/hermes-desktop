@@ -190,6 +190,9 @@ export interface UiSlice {
   focusReq: string | null;
   // AI Chats surface: the session currently shown (null = a fresh chat).
   activeChatSession: string | null;
+  // Human title of the active session (from Recents/Cockpit at selection time),
+  // shown in the chat header instead of the id suffix. null for a fresh chat.
+  activeChatSessionTitle: string | null;
   // A prompt to pre-fill into the chat on next mount (powers the "card → guided
   // agent flow" entry points: meetings, calendar, apps). Consumed once.
   pendingChatPrompt: string | null;
@@ -212,7 +215,7 @@ export interface UiSlice {
   setCoverPick: (v: XY | null) => void;
   setFocusReq: (id: string | null) => void;
   flash: (text: string, opts?: { tone?: "warn"; ms?: number }) => void;
-  setActiveChatSession: (id: string | null) => void;
+  setActiveChatSession: (id: string | null, title?: string | null) => void;
   setPendingChatPrompt: (text: string | null) => void;
   /** Open the AI Chats surface on a fresh chat, optionally pre-filled. */
   startNewChat: (prompt?: string) => void;

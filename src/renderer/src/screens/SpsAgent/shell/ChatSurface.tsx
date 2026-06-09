@@ -11,6 +11,7 @@ import { openSettings } from "../../../lib/openSettings";
 
 export function ChatSurface() {
   const activeChatSession = useStore((s) => s.activeChatSession);
+  const activeChatSessionTitle = useStore((s) => s.activeChatSessionTitle);
   const setActiveChatSession = useStore((s) => s.setActiveChatSession);
   const pendingChatPrompt = useStore((s) => s.pendingChatPrompt);
   const setPendingChatPrompt = useStore((s) => s.setPendingChatPrompt);
@@ -56,6 +57,7 @@ export function ChatSurface() {
       messages={messages}
       setMessages={setMessages}
       sessionId={activeChatSession}
+      sessionTitle={activeChatSessionTitle}
       profile="default"
       initialInput={initialInput}
       onNewChat={() => {

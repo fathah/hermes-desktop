@@ -39,8 +39,8 @@ export function SidebarRecents() {
   const labelFor = (s: SessionRow): string =>
     s.title || s.preview || "Untitled chat";
 
-  const openSession = (id: string): void => {
-    setActiveChatSession(id);
+  const openSession = (id: string, title: string): void => {
+    setActiveChatSession(id, title);
     setSurface("chats");
   };
 
@@ -117,7 +117,7 @@ export function SidebarRecents() {
                 <button
                   type="button"
                   className="nav-item-main"
-                  onClick={() => openSession(s.id)}
+                  onClick={() => openSession(s.id, label)}
                 >
                   <Icon name="comment" size={17} />
                   <span className="nav-label">{label}</span>

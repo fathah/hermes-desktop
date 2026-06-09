@@ -35,6 +35,8 @@ interface ChatProps {
   messages: ChatMessage[];
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   sessionId: string | null;
+  /** Human title of the session (preferred over the id suffix in the header). */
+  sessionTitle?: string | null;
   profile?: string;
   onSessionStarted?: () => void;
   onNewChat?: () => void;
@@ -52,6 +54,7 @@ function Chat({
   messages,
   setMessages,
   sessionId,
+  sessionTitle,
   profile,
   onSessionStarted,
   onNewChat,
@@ -565,6 +568,7 @@ function Chat({
     >
       <ChatHeader
         sessionId={sessionId}
+        sessionTitle={sessionTitle}
         usage={usage}
         fastMode={fastMode}
         hasMessages={messages.length > 0}

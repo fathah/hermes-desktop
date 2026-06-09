@@ -338,9 +338,9 @@ function RecentChats() {
       cancelled = true;
     };
   }, []);
-  const open = (id: string): void => {
+  const open = (id: string, title: string): void => {
     setSurface("chats");
-    setActiveChatSession(id);
+    setActiveChatSession(id, title);
   };
   if (!sessions.length)
     return (
@@ -355,7 +355,11 @@ function RecentChats() {
   return (
     <div className="ck-list">
       {sessions.map((sn) => (
-        <button key={sn.id} className="ck-row" onClick={() => open(sn.id)}>
+        <button
+          key={sn.id}
+          className="ck-row"
+          onClick={() => open(sn.id, sn.title || "Untitled chat")}
+        >
           <span className="ck-row-t">{sn.title || "Untitled chat"}</span>
           {sn.preview && <span className="ck-row-q">{sn.preview}</span>}
         </button>
