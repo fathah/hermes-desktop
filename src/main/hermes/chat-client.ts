@@ -15,6 +15,7 @@ import {
   getApiServerKey,
   getModelConfig,
   readEnv,
+  getConnectionConfig,
 } from "../config";
 import {
   getApiUrl,
@@ -28,12 +29,11 @@ import {
   resolveProfile,
   startHealthPolling,
 } from "./gateway-process";
-import {
-  stripAnsi,
-} from "../utils";
+import { stripAnsi } from "../utils";
 import {
   processCustomEvent as parseCustomEvent,
   processSseData,
+  type SseCallbacks,
   type ApprovalRequest,
   type CheckpointEvent,
   type DelegateProgress,
@@ -350,11 +350,8 @@ export function sendMessageViaApi(
   };
 
   if (!isRemoteMode()) {
+    // LOW-1: never log the key (even a prefix) — secrets don't belong in logs.
     const apiServerKey = getApiServerKey(profile);
-    console.log(
-      "[hermes] apiServerKey=",
-      apiServerKey ? apiServerKey.slice(0, 12) + "…" : "(none)",
-    );
     if (apiServerKey) {
       headers.Authorization = `Bearer ${apiServerKey}`;
     }
@@ -430,6 +427,16 @@ export function sendMessageViaApi(
         "No response received from the model. Check your model configuration and API key.",
       );
     });
+    // HIGH-1: the probe is a separate request and inherits none of the main
+    // request's timeout — without this it can hang forever, leaving the chat
+    // promise unresolved and the UI stuck "thinking".
+    probeReq.setTimeout(120000);
+    probeReq.on("timeout", () => {
+      probeReq.destroy();
+      finish(
+        "No response received from the model (request timed out). Check your model configuration and API key.",
+      );
+    });
     probeReq.write(probeBodyBuf);
     probeReq.end();
   }
@@ -453,6 +460,68 @@ export function sendMessageViaApi(
       const sid = res.headers["x-hermes-session-id"];
       if (sid && typeof sid === "string") sessionId = sid;
 
+      // processSseData fires onDone itself on `[DONE]`; we own the single
+      // terminal callback in finalize(), so hand it a callback set with onDone
+      // stripped — otherwise onDone fires twice (once here, once in finish()).
+      const sseCb = { ...cb, onDone: undefined };
+
+      // Single decision point for how the turn ends, shared by the `[DONE]`
+      // block and the stream-end path.
+      function finalize(): void {
+        if (finished) return;
+        if (lastError) {
+          if (hasContent) {
+            // MED-5: keep what already streamed, but surface the error as a
+            // trailing notice so an error followed by `[DONE]` (or content) is
+            // not silently swallowed.
+            cb.onChunk(`\n\n⚠️ ${lastError}`);
+            finish();
+          } else {
+            finish(lastError);
+          }
+        } else if (hasContent) {
+          finish();
+        } else {
+          probeRealError();
+        }
+      }
+
+      function handleBlock(block: string): void {
+        if (finished || !block) return;
+        if (block.startsWith("event: ")) {
+          let eventType = "";
+          let dataLine = "";
+          for (const line of block.split("\n")) {
+            if (line.startsWith("event: ")) {
+              eventType = line.slice(7).trim();
+            } else if (line.startsWith("data: ")) {
+              dataLine = line.slice(6);
+            }
+          }
+          if (eventType && dataLine) {
+            processCustomEvent(eventType, dataLine);
+          }
+          return;
+        }
+        if (block.startsWith("data: ")) {
+          const data = block.slice(6);
+          const state = { hasContent, lastError };
+          const sseRes = processSseData(
+            data,
+            sseCb as unknown as SseCallbacks,
+            state,
+            {
+              redact: redactSensitiveData,
+              model: mc.model,
+              sessionId: sessionId || _resumeSessionId || undefined,
+            },
+          );
+          hasContent = sseRes.hasContent;
+          lastError = state.lastError; // MED-5: propagate, else errors are lost across chunks
+          if (sseRes.done) finalize();
+        }
+      }
+
       let buffer = "";
       res.on("data", (chunk: Buffer) => {
         buffer += chunk.toString();
@@ -461,53 +530,18 @@ export function sendMessageViaApi(
           const block = buffer.slice(0, boundary).trim();
           buffer = buffer.slice(boundary + 2);
           boundary = buffer.indexOf("\n\n");
-
-          if (!block) continue;
-          if (block.startsWith("event: ")) {
-            let eventType = "";
-            let dataLine = "";
-            for (const line of block.split("\n")) {
-              if (line.startsWith("event: ")) {
-                eventType = line.slice(7).trim();
-              } else if (line.startsWith("data: ")) {
-                dataLine = line.slice(6);
-              }
-            }
-            if (eventType && dataLine) {
-              processCustomEvent(eventType, dataLine);
-            }
-          } else if (block.startsWith("data: ")) {
-            const data = block.slice(6);
-            const state = { hasContent, lastError };
-            const sseRes = processSseData(data, cb as any, state, {
-              redact: redactSensitiveData,
-              model: mc.model,
-              sessionId: sessionId || _resumeSessionId || undefined,
-            });
-            hasContent = sseRes.hasContent;
-            if (sseRes.done) {
-              if (sseRes.error) {
-                finish(sseRes.error);
-              } else if (!sseRes.hasContent) {
-                probeRealError();
-              } else {
-                finish();
-              }
-              return;
-            }
-          }
+          handleBlock(block);
+          if (finished) return;
         }
       });
 
       res.on("end", () => {
         if (finished) return;
-        if (hasContent) {
-          finish();
-        } else if (lastError) {
-          finish(lastError);
-        } else {
-          probeRealError();
-        }
+        // MED-6: flush a trailing block left without a closing `\n\n` (gateway
+        // crashed/disconnected mid-chunk) before deciding the outcome.
+        const tail = buffer.trim();
+        if (tail) handleBlock(tail);
+        finalize();
       });
 
       res.on("error", (err) => {
@@ -523,11 +557,16 @@ export function sendMessageViaApi(
     finish(`API request failed: ${err.message}`);
   });
   req.on("timeout", () => {
-    console.warn("[hermes] ClientRequest timeout event fired! req.timeout =", (req as any).timeout);
     req.destroy();
-    finish(
-      "API request timed out. Check the SSH tunnel and remote Hermes gateway.",
-    );
+    // LOW-3: blame the right layer for the connection mode actually in use.
+    const mode = getConnectionConfig().mode;
+    const where =
+      mode === "ssh"
+        ? "Check the SSH tunnel and the remote Hermes gateway."
+        : mode === "remote"
+          ? "Check the remote Hermes gateway and your network connection."
+          : "The local Hermes gateway may be unresponsive — check that a model is configured and the gateway is running.";
+    finish(`API request timed out. ${where}`);
   });
 
   req.write(bodyBuf);
@@ -749,7 +788,16 @@ export function sendMessageViaCli(
     }
   });
 
+  // MED-1: a spawn failure fires `error` then `close`; without a guard the CLI
+  // path calls a terminal callback twice. The API path has the same `finished`
+  // flag — mirror it here so exactly one of onDone/onError fires.
+  let finished = false;
+  let exited = false;
+
   proc.on("close", (code) => {
+    exited = true;
+    if (finished) return;
+    finished = true;
     if (code === 0 || hasOutput) {
       cb.onDone(capturedSessionId || undefined);
     } else {
@@ -762,16 +810,26 @@ export function sendMessageViaCli(
     }
   });
 
+  proc.on("exit", () => {
+    exited = true;
+  });
+
   proc.on("error", (err) => {
+    if (finished) return;
+    finished = true;
     cb.onError(err.message);
   });
 
   return {
     abort: () => {
       proc.kill("SIGTERM");
-      setTimeout(() => {
-        if (!proc.killed) proc.kill("SIGKILL");
+      // LOW-6: escalate to SIGKILL only if the process has not actually exited.
+      // `proc.killed` only reflects that a signal was *sent*, not that the
+      // process died, so a wedged process could otherwise linger.
+      const killTimer = setTimeout(() => {
+        if (!exited) proc.kill("SIGKILL");
       }, 3000);
+      if (typeof killTimer.unref === "function") killTimer.unref();
     },
   };
 }

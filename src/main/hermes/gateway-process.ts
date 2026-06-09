@@ -1,5 +1,13 @@
 import { ChildProcess, spawn } from "child_process";
-import { existsSync, readFileSync, appendFileSync, unlinkSync, mkdirSync, openSync, closeSync } from "fs";
+import {
+  existsSync,
+  readFileSync,
+  appendFileSync,
+  unlinkSync,
+  mkdirSync,
+  openSync,
+  closeSync,
+} from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import http from "http";
@@ -12,11 +20,7 @@ import {
   hermesCliArgs,
   getEnhancedPath,
 } from "../installer";
-import {
-  getConnectionConfig,
-  getApiServerKey,
-  readEnv,
-} from "../config";
+import { getConnectionConfig, getApiServerKey, readEnv } from "../config";
 import {
   pidIsAliveAs,
   profileHome,
@@ -278,10 +282,16 @@ export function startGateway(profile?: string): boolean {
   gatewayProcesses.set(key, proc);
   appStartedProfiles.add(key);
 
-  setTimeout(async () => {
-    if (profileKey(profile) === profileKey(undefined)) {
-      apiServerAvailable = await isApiServerReady(profile);
-    }
+  setTimeout(() => {
+    if (profileKey(profile) !== profileKey(undefined)) return;
+    // LOW-4: don't let a rejection here become an unhandled promise rejection.
+    isApiServerReady(profile)
+      .then((ready) => {
+        apiServerAvailable = ready;
+      })
+      .catch((err) => {
+        console.warn("[hermes] post-spawn readiness probe failed:", err);
+      });
   }, 3000);
 
   return true;
