@@ -1,5 +1,11 @@
 import { spawn, execFile, execFileSync } from "child_process";
-import { existsSync, readFileSync, readdirSync, writeFileSync, unlinkSync } from "fs";
+import {
+  existsSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+  unlinkSync,
+} from "fs";
 import { join } from "path";
 import { homedir, tmpdir } from "os";
 import { randomBytes } from "crypto";
@@ -10,11 +16,7 @@ import {
   hasOAuthCredentials,
 } from "./config";
 import { providerDoesNotNeedApiKey } from "./providers";
-import {
-  getActiveProfileNameSync,
-  profileHome,
-  stripAnsi,
-} from "./utils";
+import { getActiveProfileNameSync, profileHome, stripAnsi } from "./utils";
 import { setupAskpass } from "./askpass";
 import { precacheSudoCredentials } from "./sudoCreds";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
@@ -357,103 +359,6 @@ export function runHermesDoctor(): string {
     const stderr = (err as { stderr?: Buffer }).stderr?.toString() || "";
     return stripAnsi(stderr) || "Doctor check failed.";
   }
-}
-
-const OPENCLAW_DIR_NAMES = [".openclaw", ".clawdbot", ".moldbot"];
-
-function dirContainsAnyFile(dir: string, maxDepth = 3): boolean {
-  try {
-    const entries = readdirSync(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (entry.isFile()) return true;
-      if (entry.isDirectory() && maxDepth > 0) {
-        if (dirContainsAnyFile(join(dir, entry.name), maxDepth - 1)) {
-          return true;
-        }
-      }
-    }
-  } catch {
-    // unreadable
-  }
-  return false;
-}
-
-export function checkOpenClawExists(home: string = homedir()): {
-  found: boolean;
-  path: string | null;
-} {
-  for (const name of OPENCLAW_DIR_NAMES) {
-    const dir = join(home, name);
-    if (existsSync(dir) && dirContainsAnyFile(dir)) {
-      return { found: true, path: dir };
-    }
-  }
-  return { found: false, path: null };
-}
-
-export async function runClawMigrate(
-  onProgress: (progress: InstallProgress) => void,
-): Promise<void> {
-  if (!existsSync(HERMES_PYTHON) || !existsSync(HERMES_SCRIPT)) {
-    throw new Error("Hermes is not installed.");
-  }
-
-  const openclaw = checkOpenClawExists();
-  if (!openclaw.found) {
-    throw new Error("No OpenClaw installation found.");
-  }
-
-  let log = "";
-  function emit(text: string): void {
-    log += text;
-    onProgress({
-      step: 1,
-      totalSteps: 1,
-      title: "Migrating from OpenClaw",
-      detail: text.trim().slice(0, 120),
-      log,
-    });
-  }
-
-  emit(`Migrating from ${openclaw.path}...\n`);
-
-  return new Promise((resolve, reject) => {
-    const args = hermesCliArgs(["claw", "migrate", "--preset", "full"]);
-
-    const proc = spawn(HERMES_PYTHON, args, {
-      cwd: HERMES_REPO,
-      env: {
-        ...process.env,
-        PATH: getEnhancedPath(),
-        HOME: homedir(),
-        HERMES_HOME,
-        TERM: "dumb",
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-      ...HIDDEN_SUBPROCESS_OPTIONS,
-    });
-
-    proc.stdout?.on("data", (data: Buffer) => {
-      emit(stripAnsi(data.toString()));
-    });
-
-    proc.stderr?.on("data", (data: Buffer) => {
-      emit(stripAnsi(data.toString()));
-    });
-
-    proc.on("close", (code) => {
-      if (code === 0) {
-        emit("\nMigration complete!\n");
-        resolve();
-      } else {
-        reject(new Error(`Migration failed (exit code ${code}).`));
-      }
-    });
-
-    proc.on("error", (err) => {
-      reject(new Error(`Failed to run migration: ${err.message}`));
-    });
-  });
 }
 
 export async function runHermesUpdate(

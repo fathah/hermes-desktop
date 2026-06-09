@@ -88,13 +88,6 @@ export default {
   runDiagnosis: "Jalankan Diagnosis",
   running: "Berjalan...",
   debugDump: "Debug Dump",
-  migrationDetected: "Instalasi OpenClaw Terdeteksi",
-  migrationDesc:
-    "OpenClaw ditemukan di <code>{{path}}</code>. Anda dapat memigrasikan konfigurasi, API key, sesi, dan skill ke Hermes.",
-  migrationDismiss: "Jangan tampilkan lagi",
-  migrating: "Memigrasikan...",
-  migrateToHermes: "Migrasi ke Hermes",
-  skip: "Lewati",
   appearanceHint: "Pilih tampilan antarmuka yang Anda sukai",
   apiKeyPlaceholder: "API Key",
   labelPlaceholder: "Label ({{optional}})",

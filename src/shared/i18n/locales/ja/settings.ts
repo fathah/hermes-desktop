@@ -86,13 +86,6 @@ export default {
   runDiagnosis: "診断を実行",
   running: "実行中...",
   debugDump: "デバッグダンプ",
-  migrationDetected: "OpenClaw インストールを検出",
-  migrationDesc:
-    "<code>{{path}}</code> に OpenClaw が見つかりました。設定・API キー・セッション・スキルを Hermes に移行できます。",
-  migrationDismiss: "再表示しない",
-  migrating: "移行中...",
-  migrateToHermes: "Hermes に移行",
-  skip: "スキップ",
   appearanceHint: "好みのインターフェース外観を選択",
   apiKeyPlaceholder: "API キー",
   labelPlaceholder: "ラベル（{{optional}}）",

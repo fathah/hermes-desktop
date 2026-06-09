@@ -76,13 +76,6 @@ export default {
   runDiagnosis: "執行診斷",
   running: "執行中...",
   debugDump: "偵錯傾印",
-  migrationDetected: "偵測到 OpenClaw 安裝",
-  migrationDesc:
-    "在 <code>{{path}}</code> 發現 OpenClaw。你可以將設定、API Key、工作階段和技能遷移到 Hermes。",
-  migrationDismiss: "不再顯示",
-  migrating: "遷移中...",
-  migrateToHermes: "遷移到 Hermes",
-  skip: "跳過",
   appearanceHint: "選擇你偏好的介面外觀",
   apiKeyPlaceholder: "API Key",
   labelPlaceholder: "標籤({{optional}})",

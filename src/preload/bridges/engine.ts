@@ -93,12 +93,6 @@ export const engineBridge = {
     return () => ipcRenderer.removeListener("global-voice-trigger", handler);
   },
 
-  // OpenClaw migration
-  checkOpenClaw: (): Promise<{ found: boolean; path: string | null }> =>
-    ipcRenderer.invoke("check-openclaw"),
-  runClawMigrate: (): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke("run-claw-migrate"),
-
   // OAuth provider sign-in
   oauthLogin: (
     provider: string,

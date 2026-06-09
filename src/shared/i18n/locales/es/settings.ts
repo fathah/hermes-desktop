@@ -90,13 +90,6 @@ export default {
   runDiagnosis: "Ejecutar diagnóstico",
   running: "Ejecutando...",
   debugDump: "Volcado de depuración",
-  migrationDetected: "Se detectó una instalación de OpenClaw",
-  migrationDesc:
-    "Se encontró OpenClaw en <code>{{path}}</code>. Puedes migrar tu configuración, API keys, sesiones y habilidades a Hermes.",
-  migrationDismiss: "No volver a mostrar",
-  migrating: "Migrando...",
-  migrateToHermes: "Migrar a Hermes",
-  skip: "Omitir",
   appearanceHint: "Elige la apariencia de interfaz que prefieras",
   apiKeyPlaceholder: "API key",
   labelPlaceholder: "Etiqueta ({{optional}})",

@@ -125,10 +125,6 @@ interface HermesAPI {
   ) => Promise<{ audioUrl?: string; error?: string }>;
   onGlobalVoiceTrigger: (callback: () => void) => () => void;
 
-  // OpenClaw migration
-  checkOpenClaw: () => Promise<{ found: boolean; path: string | null }>;
-  runClawMigrate: () => Promise<{ success: boolean; error?: string }>;
-
   // OAuth provider sign-in
   oauthLogin: (
     provider: string,

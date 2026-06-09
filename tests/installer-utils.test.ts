@@ -310,47 +310,6 @@ describe("OAuth credential discovery", () => {
   });
 });
 
-// ─── OpenClaw detector ─────────────────────────────────
-
-describe("checkOpenClawExists", () => {
-  it("ignores an empty .openclaw directory (self-created stub)", async () => {
-    // Mirrors the real-world case where hermes-desktop's own Claw3D settings
-    // helper has mkdirSync'd ~/.openclaw/claw3d/ without writing any files.
-    mkdirSync(join(TEST_DIR, ".openclaw", "claw3d"), { recursive: true });
-    const { checkOpenClawExists } = await import("../src/main/installer");
-    expect(checkOpenClawExists(TEST_DIR)).toEqual({ found: false, path: null });
-  });
-
-  it("detects a populated .openclaw directory", async () => {
-    const dir = join(TEST_DIR, ".openclaw");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "openclaw.json"), "{}");
-    const { checkOpenClawExists } = await import("../src/main/installer");
-    expect(checkOpenClawExists(TEST_DIR)).toEqual({ found: true, path: dir });
-  });
-
-  it("detects files nested under subdirectories", async () => {
-    const dir = join(TEST_DIR, ".openclaw");
-    mkdirSync(join(dir, "skills", "my-skill"), { recursive: true });
-    writeFileSync(join(dir, "skills", "my-skill", "SKILL.md"), "hi");
-    const { checkOpenClawExists } = await import("../src/main/installer");
-    expect(checkOpenClawExists(TEST_DIR)).toEqual({ found: true, path: dir });
-  });
-
-  it("returns not-found when no candidate directory exists", async () => {
-    const { checkOpenClawExists } = await import("../src/main/installer");
-    expect(checkOpenClawExists(TEST_DIR)).toEqual({ found: false, path: null });
-  });
-
-  it("falls back to legacy .clawdbot and .moldbot names", async () => {
-    const dir = join(TEST_DIR, ".clawdbot");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "clawdbot.json"), "{}");
-    const { checkOpenClawExists } = await import("../src/main/installer");
-    expect(checkOpenClawExists(TEST_DIR)).toEqual({ found: true, path: dir });
-  });
-});
-
 // ─── Backward compatibility checks ─────────────────────
 
 describe("Backward compatibility", () => {

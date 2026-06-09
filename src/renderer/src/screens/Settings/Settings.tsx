@@ -70,15 +70,6 @@ function getCachedVersion(): string | null {
   }
 }
 
-function getCachedOpenClaw(): { found: boolean; path: string | null } | null {
-  try {
-    const raw = localStorage.getItem("hermes-openclaw-cache");
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
 function Settings({ profile }: { profile?: string }): React.JSX.Element {
   const { t, locale, setLocale } = useI18n();
   // Tabbed sub-navigation. Sections are fenced by data-section-tab + the
@@ -106,25 +97,6 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
   const [updateResultType, setUpdateResultType] = useState<
     "success" | "error" | null
   >(null);
-
-  // OpenClaw migration — initialize from localStorage cache
-  const cachedClaw = getCachedOpenClaw();
-  const [openclawFound, setOpenclawFound] = useState(
-    cachedClaw?.found ?? false,
-  );
-  const [openclawPath, setOpenclawPath] = useState<string | null>(
-    cachedClaw?.path ?? null,
-  );
-  const [migrationDismissed, setMigrationDismissed] = useState(
-    () => localStorage.getItem("hermes-openclaw-dismissed") === "true",
-  );
-  const [migrating, setMigrating] = useState(false);
-  const [migrationLog, setMigrationLog] = useState("");
-  const [migrationResult, setMigrationResult] = useState<string | null>(null);
-  const [migrationResultType, setMigrationResultType] = useState<
-    "success" | "error" | null
-  >(null);
-  const migrationLogRef = useRef<HTMLPreElement>(null);
 
   // Connection mode
   const [connMode, setConnMode] = useState<"local" | "remote" | "ssh">("local");
@@ -256,59 +228,12 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
       }
     });
 
-    if (localStorage.getItem("hermes-openclaw-dismissed") !== "true") {
-      window.hermesAPI.checkOpenClaw().then((claw) => {
-        setOpenclawFound(claw.found);
-        setOpenclawPath(claw.path);
-        try {
-          localStorage.setItem("hermes-openclaw-cache", JSON.stringify(claw));
-        } catch {
-          /* ignore */
-        }
-      });
-    }
-
     loadPromptSize();
   }, [profile, loadPromptSize]);
 
   useEffect(() => {
     void Promise.resolve().then(loadConfig);
   }, [loadConfig]);
-
-  async function handleMigrate(): Promise<void> {
-    setMigrating(true);
-    setMigrationLog("");
-    setMigrationResult(null);
-
-    const cleanup = window.hermesAPI.onInstallProgress((p) => {
-      setMigrationLog(p.log);
-    });
-
-    try {
-      const result = await window.hermesAPI.runClawMigrate();
-      cleanup();
-      if (result.success) {
-        setMigrationResult(t("settings.migrationComplete"));
-        setMigrationResultType("success");
-        setOpenclawFound(false);
-      } else {
-        setMigrationResult(result.error || t("settings.migrationFailed"));
-        setMigrationResultType("error");
-      }
-    } catch (err) {
-      cleanup();
-      setMigrationResult(
-        (err as Error).message || t("settings.migrationFailed"),
-      );
-      setMigrationResultType("error");
-    }
-    setMigrating(false);
-  }
-
-  function handleDismissMigration(): void {
-    localStorage.setItem("hermes-openclaw-dismissed", "true");
-    setMigrationDismissed(true);
-  }
 
   function getConnectionApiKeyForSave(): string | undefined {
     // Mask sentinel in the field means "the secret is still server-side
@@ -1096,62 +1021,6 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
           </>
         )}
       </div>
-
-      {openclawFound && !migrationDismissed && (
-        <div className="settings-migration-banner">
-          <div className="settings-migration-header">
-            <div>
-              <div className="settings-migration-title">
-                {t("settings.migrationDetected")}
-              </div>
-              <div
-                className="settings-migration-desc"
-                dangerouslySetInnerHTML={{
-                  __html: t("settings.migrationDesc", {
-                    path: openclawPath || "",
-                  }),
-                }}
-              />
-            </div>
-            <button
-              className="btn-ghost settings-migration-dismiss"
-              onClick={handleDismissMigration}
-              title={t("settings.migrationDismiss")}
-            >
-              &times;
-            </button>
-          </div>
-          {migrationLog && (
-            <pre className="settings-hermes-doctor" ref={migrationLogRef}>
-              {migrationLog}
-            </pre>
-          )}
-          {migrationResult && (
-            <div
-              className={`settings-hermes-result ${migrationResultType || "error"}`}
-            >
-              {migrationResult}
-            </div>
-          )}
-          <div className="settings-migration-actions">
-            <button
-              className="btn btn-primary "
-              onClick={handleMigrate}
-              disabled={migrating}
-            >
-              {migrating
-                ? t("settings.migrating")
-                : t("settings.migrateToHermes")}
-            </button>
-            <button
-              className="btn btn-secondary "
-              onClick={handleDismissMigration}
-            >
-              {t("settings.skip")}
-            </button>
-          </div>
-        </div>
-      )}
 
       <div className="settings-section" data-section-tab="general">
         <div className="settings-section-title">

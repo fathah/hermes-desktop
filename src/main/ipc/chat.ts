@@ -39,11 +39,6 @@ import {
   type IssueCode,
 } from "../config-health";
 import { getVoiceStatus, transcribeAudio, speakText } from "../voice";
-import {
-  checkOpenClawExists,
-  runClawMigrate,
-  type InstallProgress,
-} from "../installer";
 import type { Attachment } from "../../shared/attachments";
 
 export const activeChatAborts = new Map<string, () => void>();
@@ -286,19 +281,4 @@ export function registerChatIpc(
     (_event, text: string, voice: string | undefined, profile?: string) =>
       speakText(text, voice, profile),
   );
-
-  // OpenClaw migration
-  ipcMain.handle("check-openclaw", () => checkOpenClawExists());
-  ipcMain.handle("run-claw-migrate", async (event) => {
-    try {
-      await runClawMigrate((progress: InstallProgress) => {
-        if (!event.sender.isDestroyed()) {
-          event.sender.send("install-progress", progress);
-        }
-      });
-      return { success: true };
-    } catch (err) {
-      return { success: false, error: (err as Error).message };
-    }
-  });
 }
