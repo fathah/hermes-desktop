@@ -27,7 +27,7 @@ import {
 import { StreamRedactor } from "../redactor";
 import { recordUsage } from "../usage-store";
 import { canAutoApprove } from "../autonomy";
-import { appendAuditLog } from "../index";
+import { appendAuditLog } from "../audit-log";
 import { validateChatReadiness } from "../validation";
 import {
   runConfigHealthCheck,
