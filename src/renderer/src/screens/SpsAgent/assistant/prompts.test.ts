@@ -5,6 +5,8 @@ import {
   buildAiActionPrompt,
   buildPlanPrompt,
   buildWorkPrompt,
+  buildResearchPrompt,
+  capResearchBrief,
   serializePlanBlocks,
 } from "./prompts";
 
@@ -72,6 +74,47 @@ describe("buildWorkPrompt", () => {
     const out = buildWorkPrompt();
     expect(out).toContain("- [x]");
     expect(out).toContain("Acceptance criteria");
+  });
+});
+
+describe("buildResearchPrompt", () => {
+  it("forces a live web search and mandates a ## Sources section", () => {
+    const out = buildResearchPrompt("EU AI Act risk tiers");
+    expect(out).toContain("EU AI Act risk tiers");
+    expect(out).toMatch(/MUST perform at least one live web search/i);
+    expect(out).toMatch(/do NOT answer from prior knowledge alone/i);
+    expect(out).toContain("## Sources");
+    // plain markdown, not a {"kind":...} JSON envelope like the other builders
+    expect(out).not.toContain('{"kind"');
+  });
+});
+
+describe("capResearchBrief", () => {
+  const sources =
+    "\n## Sources\n- [A](https://a.example)\n- [B](https://b.example)";
+
+  it("returns short briefs unchanged", () => {
+    const md = "# Topic\n\nshort body" + sources;
+    expect(capResearchBrief(md, 6000)).toBe(md);
+  });
+
+  it("trims the body but preserves the full ## Sources section", () => {
+    const body = "# Topic\n\n" + "x".repeat(5000);
+    const md = body + sources;
+    const out = capResearchBrief(md, 1000);
+    expect(out.length).toBeLessThan(md.length);
+    // every source link survives — citations are load-bearing
+    expect(out).toContain("## Sources");
+    expect(out).toContain("https://a.example");
+    expect(out).toContain("https://b.example");
+    // some of the body is kept (min budget)
+    expect(out).toContain("# Topic");
+  });
+
+  it("falls back to a plain slice when there is no sources section", () => {
+    const md = "x".repeat(5000);
+    const out = capResearchBrief(md, 1000);
+    expect(out.length).toBeLessThanOrEqual(1000);
   });
 });
 

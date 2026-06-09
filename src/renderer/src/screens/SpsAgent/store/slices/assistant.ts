@@ -18,6 +18,7 @@ import {
   buildPlanPrompt,
   buildWorkPrompt,
   buildResearchPrompt,
+  capResearchBrief,
   aiActionLabel,
   serializePlanBlocks,
 } from "../../assistant/prompts";
@@ -675,7 +676,10 @@ export const createAssistantSlice: StateCreator<
       }
 
       try {
-        const res = await window.hermesAPI.spsFileResearch?.(trimmed, markdown);
+        // Cap what the file-synthesis pass has to read/reproduce so its JSON
+        // output can't be truncated — keeping the full "## Sources" section.
+        const brief = capResearchBrief(markdown);
+        const res = await window.hermesAPI.spsFileResearch?.(trimmed, brief);
         if (!res?.ok || !res.changeset) {
           return { ok: false, error: res?.error ?? "Filing is unavailable." };
         }
