@@ -10,6 +10,8 @@ import {
   type PageContext as SpsPageContext,
 } from "../sps-agent";
 import { spsGetWorkSession, spsSetWorkSession } from "../sps-work-sessions";
+import { appendWikiLog, type WikiLogOp } from "../sps-wiki-log";
+import { resolveSpsVaultDir } from "../sps-storage";
 import { runTelosAudit, runPipingPattern } from "../telos-auditor";
 import {
   oaSearchWorks,
@@ -45,6 +47,11 @@ export function registerSpsIpc(): void {
     "sps-file-answer",
     (_event, question: string, answer: string, profile?: string) =>
       spsFileAnswer(question, answer, profile),
+  );
+  ipcMain.handle(
+    "sps-wiki-log-append",
+    (_event, op: WikiLogOp, summary: string, profile?: string) =>
+      appendWikiLog(resolveSpsVaultDir(profile), op, summary),
   );
   ipcMain.handle("sps-load", (_event, profile?: string) => spsLoad(profile));
   ipcMain.handle("sps-save", (_event, ws: unknown, profile?: string) =>

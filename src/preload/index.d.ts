@@ -970,6 +970,11 @@ interface HermesAPI {
       memory: string[];
     };
   }>;
+  spsAppendWikiLog: (
+    op: "ingest" | "file-answer" | "lint",
+    summary: string,
+    profile?: string,
+  ) => Promise<void>;
   spsLoad: (profile?: string) => Promise<unknown | null>;
   spsSave: (ws: unknown, profile?: string) => Promise<boolean>;
   spsGetWorkSession: (

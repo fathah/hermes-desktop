@@ -72,6 +72,12 @@ export const spsBridge = {
       memory: string[];
     };
   }> => ipcRenderer.invoke("sps-file-answer", question, answer, profile),
+  spsAppendWikiLog: (
+    op: "ingest" | "file-answer" | "lint",
+    summary: string,
+    profile?: string,
+  ): Promise<void> =>
+    ipcRenderer.invoke("sps-wiki-log-append", op, summary, profile),
   spsLoad: (profile?: string): Promise<unknown | null> =>
     ipcRenderer.invoke("sps-load", profile),
   spsSave: (ws: unknown, profile?: string): Promise<boolean> =>

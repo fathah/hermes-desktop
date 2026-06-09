@@ -603,6 +603,11 @@ export const createAssistantSlice: StateCreator<
           res.changeset,
           get().ingestCommitPage,
         );
+        // Phase 3a: record the wiki's growth in the append-only log.md.
+        await window.hermesAPI.spsAppendWikiLog?.(
+          "file-answer",
+          res.changeset.summary,
+        );
         return { ok: true, pages, summary: res.changeset.summary };
       } catch (err) {
         return {
