@@ -26,6 +26,7 @@ import type { ProfileInfo } from "../shared/profiles";
 import type { CronJob } from "../shared/cronjobs";
 import type { Claw3dStatus } from "../shared/claw3d";
 import type { SessionSummary } from "../shared/sessions";
+import type { CredentialPoolEntry } from "../shared/credentials";
 
 interface ElectronAPI {
   process: {
@@ -47,27 +48,6 @@ interface ConfigFixLogEntry {
   profile?: string;
   valueMasked?: string;
   detail?: string;
-}
-
-/**
- * Shape of a credential-pool entry as the upstream engine expects
- * (issue #367). Old entries written by the renderer with just
- * `{key, label}` are still readable via the optional `key` field.
- * New entries written from the UI use the canonical shape.
- */
-interface CredentialPoolEntry {
-  id?: string;
-  label?: string;
-  auth_type?: "api_key" | "oauth_device_code" | string;
-  priority?: number;
-  source?: string;
-  access_token?: string;
-  refresh_token?: string;
-  api_key?: string;
-  base_url?: string;
-  request_count?: number;
-  /** Legacy field for backward compat with old auth.json shapes. */
-  key?: string;
 }
 
 interface ObsidianFileNode {

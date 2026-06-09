@@ -5,23 +5,7 @@ import BrandLogo from "../../components/common/BrandLogo";
 import { useDiscoveredModels } from "../../hooks/useDiscoveredModels";
 import OAuthLoginModal from "../../components/OAuthLoginModal";
 import { KeyRound } from "../../assets/icons";
-
-// Local mirror of the ambient `CredentialPoolEntry` from
-// src/preload/index.d.ts — the renderer's tsconfig sometimes doesn't
-// pick up the d.ts depending on where the file lives.
-interface CredentialPoolEntry {
-  id?: string;
-  label?: string;
-  auth_type?: "api_key" | "oauth_device_code" | string;
-  priority?: number;
-  source?: string;
-  access_token?: string;
-  refresh_token?: string;
-  api_key?: string;
-  base_url?: string;
-  request_count?: number;
-  key?: string;
-}
+import type { CredentialPoolEntry } from "../../../../shared/credentials";
 
 function Providers({
   profile,

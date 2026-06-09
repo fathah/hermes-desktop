@@ -12,25 +12,7 @@ import type {
   WorkSummary as ResearchWorkSummary,
   WorkDetail as ResearchWorkDetail,
 } from "../shared/openalex/core";
-
-/**
- * Mirror of the renderer-side `CredentialPoolEntry` ambient type
- * (src/preload/index.d.ts) — preload is type-checked under
- * tsconfig.node.json which doesn't include the .d.ts. See #367.
- */
-interface CredentialPoolEntry {
-  id?: string;
-  label?: string;
-  auth_type?: "api_key" | "oauth_device_code" | string;
-  priority?: number;
-  source?: string;
-  access_token?: string;
-  refresh_token?: string;
-  api_key?: string;
-  base_url?: string;
-  request_count?: number;
-  key?: string;
-}
+import type { CredentialPoolEntry } from "../shared/credentials";
 
 const electronAPI = {
   process: {
