@@ -111,6 +111,14 @@ export function getRemoteAuthHeader(): Record<string, string> {
   if (conn.mode === "remote" && conn.apiKey) {
     return { Authorization: `Bearer ${conn.apiKey}` };
   }
+  // Local (managed) gateway: when the gateway enforces an API server key, send
+  // it — mirroring the chat path (chat-client.ts). Without this, every direct
+  // gateway fetch that authenticates via this helper (SPS assistant/ingest/
+  // file-answer/file-research/lint, cronjobs, self-healing, skills) 401s against
+  // a key-protected local gateway while streaming chat works. No-op (returns {})
+  // when no key is configured, so keyless local gateways are unaffected.
+  const localKey = getApiServerKey();
+  if (localKey) return { Authorization: `Bearer ${localKey}` };
   return {};
 }
 
