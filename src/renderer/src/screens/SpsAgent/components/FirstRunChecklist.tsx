@@ -22,6 +22,9 @@ function loadDone(): Record<string, boolean> {
 export function FirstRunChecklist(): React.JSX.Element | null {
   const startNewChat = useStore((s) => s.startNewChat);
   const setTweaksOpen = useStore((s) => s.setTweaksOpen);
+  // Only show on the document/home surface — full-area surfaces (chat, ask,
+  // cockpit, …) have their own bottom controls the card would overlap.
+  const surface = useStore((s) => s.surface);
 
   const [dismissed, setDismissed] = useState(
     () => localStorage.getItem(DISMISS_KEY) === "1",
@@ -37,7 +40,7 @@ export function FirstRunChecklist(): React.JSX.Element | null {
       .catch(() => setHasApiKey(null));
   }, [dismissed]);
 
-  if (dismissed) return null;
+  if (dismissed || surface !== "doc") return null;
 
   const markDone = (id: string): void => {
     const next = { ...done, [id]: true };
