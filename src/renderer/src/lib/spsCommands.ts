@@ -10,12 +10,16 @@
 export const SPS_NEW_CHAT_EVENT = "sps:new-chat";
 export const SPS_SEARCH_EVENT = "sps:search";
 export const ADMIN_NEW_CHAT_EVENT = "hermes:admin-new-chat";
+// Recovery action from a remote-mode block: ask App (which owns the screen
+// state machine) to switch the connection back to local and re-run the check.
+export const SWITCH_TO_LOCAL_EVENT = "hermes:switch-to-local";
 
 declare global {
   interface WindowEventMap {
     [SPS_NEW_CHAT_EVENT]: CustomEvent;
     [SPS_SEARCH_EVENT]: CustomEvent;
     [ADMIN_NEW_CHAT_EVENT]: CustomEvent;
+    [SWITCH_TO_LOCAL_EVENT]: CustomEvent;
   }
 }
 
@@ -32,4 +36,9 @@ export function spsSearch(): void {
 /** Start a new chat in the admin overlay's Chat view. */
 export function adminNewChat(): void {
   window.dispatchEvent(new CustomEvent(ADMIN_NEW_CHAT_EVENT));
+}
+
+/** Ask App to switch the connection back to local mode. */
+export function switchToLocal(): void {
+  window.dispatchEvent(new CustomEvent(SWITCH_TO_LOCAL_EVENT));
 }

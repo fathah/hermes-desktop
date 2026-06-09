@@ -6,6 +6,8 @@ import Install from "./screens/Install/Install";
 import Setup from "./screens/Setup/Setup";
 import SpsAgent from "./screens/SpsAgent/SpsAgent";
 import Layout from "./screens/Layout/Layout";
+import hermeslogo from "./assets/hermes.png";
+import { useFocusTrap } from "./components/useFocusTrap";
 import { captureScreenView } from "./utils/analytics";
 import {
   OPEN_SETTINGS_EVENT,
@@ -13,7 +15,12 @@ import {
   readLastAdminView,
   type AdminView,
 } from "./lib/openSettings";
-import { spsNewChat, spsSearch, adminNewChat } from "./lib/spsCommands";
+import {
+  spsNewChat,
+  spsSearch,
+  adminNewChat,
+  SWITCH_TO_LOCAL_EVENT,
+} from "./lib/spsCommands";
 
 // "loading" is a neutral blank shown only while the async install check runs;
 // it replaces the former branded splash screen.
@@ -64,6 +71,10 @@ function App(): React.JSX.Element {
   useEffect(() => {
     adminOpenRef.current = adminOpen;
   }, [adminOpen]);
+
+  // Trap focus inside the admin overlay and restore it to the trigger on close.
+  const adminOverlayRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(adminOverlayRef, adminOpen);
 
   // Expose the platform so CSS can reserve room for the macOS traffic-light
   // buttons (hiddenInset title bar) above the sidebar header.
@@ -211,17 +222,26 @@ function App(): React.JSX.Element {
     setScreen("installing");
   }
 
-  function handleRecheck(): void {
+  const handleRecheck = useCallback((): void => {
     setInstallError(null);
     setScreen("loading");
     runInstallCheck();
-  }
+  }, [runInstallCheck]);
 
-  async function handleSwitchToLocal(): Promise<void> {
+  const handleSwitchToLocal = useCallback(async (): Promise<void> => {
     await window.hermesAPI.setConnectionConfig("local", "", "");
     setConnectionMode("local");
     handleRecheck();
-  }
+  }, [handleRecheck]);
+
+  // Recovery action from a remote-mode block (RemoteNotice button).
+  useEffect(() => {
+    if (screen !== "main") return;
+    const onSwitchLocal = (): void => void handleSwitchToLocal();
+    window.addEventListener(SWITCH_TO_LOCAL_EVENT, onSwitchLocal);
+    return () =>
+      window.removeEventListener(SWITCH_TO_LOCAL_EVENT, onSwitchLocal);
+  }, [screen, handleSwitchToLocal]);
 
   function handleVerifyReinstall(): void {
     setVerifyWarning(false);
@@ -236,7 +256,13 @@ function App(): React.JSX.Element {
   function renderScreen(): React.JSX.Element {
     switch (screen) {
       case "loading":
-        return <div className="boot-screen" />;
+        return (
+          <div className="boot-screen">
+            <img src={hermeslogo} alt="Hermes" className="boot-logo" />
+            <div className="boot-spinner" aria-hidden="true" />
+            <p className="boot-text">Checking installation…</p>
+          </div>
+        );
       case "welcome":
         return (
           <Welcome
@@ -277,7 +303,19 @@ function App(): React.JSX.Element {
                 this overlay via the `hermes:open-settings` event, so the trigger
                 stays in the layout instead of floating over the workspace. */}
             {adminOpen && (
-              <div className="sps-admin-overlay">
+              <div
+                className="sps-admin-overlay"
+                ref={adminOverlayRef}
+                role="dialog"
+                aria-modal="true"
+                aria-label="Hermes Admin"
+              >
+                <button
+                  className="sps-admin-back"
+                  onClick={() => setAdminOpen(false)}
+                >
+                  ← Back to workspace
+                </button>
                 <button
                   className="sps-admin-close"
                   onClick={() => setAdminOpen(false)}

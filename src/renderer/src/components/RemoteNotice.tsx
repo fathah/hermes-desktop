@@ -1,4 +1,5 @@
 import { Signal } from "../assets/icons";
+import { switchToLocal } from "../lib/spsCommands";
 
 function RemoteNotice({ feature }: { feature: string }): React.JSX.Element {
   return (
@@ -9,6 +10,14 @@ function RemoteNotice({ feature }: { feature: string }): React.JSX.Element {
         {feature} is not available in remote mode. This data lives on the server
         and is not accessible through the API yet.
       </p>
+      <button
+        type="button"
+        className="btn btn-secondary"
+        onClick={() => switchToLocal()}
+        style={{ marginTop: 16 }}
+      >
+        Switch to local mode
+      </button>
     </div>
   );
 }

@@ -152,6 +152,9 @@ export const ChatHeader = memo(function ChatHeader({
                 className="btn-ghost chat-ctxfolder-btn chat-ctxfolder-set"
                 onClick={onPickFolder}
                 title={t("chat.contextFolderActive", { path: contextFolder })}
+                aria-label={t("chat.contextFolderActive", {
+                  path: contextFolder,
+                })}
               >
                 <FolderOpen size={14} />
                 <span className="chat-ctxfolder-name">
@@ -162,6 +165,7 @@ export const ChatHeader = memo(function ChatHeader({
                 className="btn-ghost chat-ctxfolder-clear"
                 onClick={onClearFolder}
                 title={t("chat.removeContextFolder")}
+                aria-label={t("chat.removeContextFolder")}
               >
                 <X size={12} />
               </button>
@@ -169,6 +173,11 @@ export const ChatHeader = memo(function ChatHeader({
                 className={`btn-ghost chat-worktree-toggle ${worktreeVisible ? "chat-worktree-active" : ""}`}
                 onClick={onToggleWorktree}
                 title={
+                  worktreeVisible
+                    ? t("chat.hideWorktree")
+                    : t("chat.showWorktree")
+                }
+                aria-label={
                   worktreeVisible
                     ? t("chat.hideWorktree")
                     : t("chat.showWorktree")
@@ -182,6 +191,7 @@ export const ChatHeader = memo(function ChatHeader({
               className="btn-ghost chat-ctxfolder-btn"
               onClick={onPickFolder}
               title={t("chat.setContextFolder")}
+              aria-label={t("chat.setContextFolder")}
             >
               <FolderOpen size={14} />
             </button>
@@ -190,6 +200,7 @@ export const ChatHeader = memo(function ChatHeader({
           className={`btn-ghost chat-grounding-toggle ${grounded ? "chat-worktree-active" : ""}`}
           onClick={toggleGrounding}
           title={grounded ? t("chat.groundingOn") : t("chat.groundingOff")}
+          aria-label={grounded ? t("chat.groundingOn") : t("chat.groundingOff")}
         >
           <BookOpen size={14} />
         </button>
@@ -197,6 +208,8 @@ export const ChatHeader = memo(function ChatHeader({
           <button
             className={`btn-ghost chat-fast-btn ${fastMode ? "chat-fast-active" : ""}`}
             onClick={onToggleFast}
+            title={fastMode ? t("chat.fastModeOn") : t("chat.fastMode")}
+            aria-label={fastMode ? t("chat.fastModeOn") : t("chat.fastMode")}
           >
             <Zap size={14} />
           </button>
@@ -216,6 +229,9 @@ export const ChatHeader = memo(function ChatHeader({
             title={
               previewVisible ? t("chat.hidePreview") : t("chat.showPreview")
             }
+            aria-label={
+              previewVisible ? t("chat.hidePreview") : t("chat.showPreview")
+            }
           >
             <PanelRight size={14} />
           </button>
@@ -225,6 +241,7 @@ export const ChatHeader = memo(function ChatHeader({
             className="btn-ghost chat-clear-btn"
             onClick={onCheckpoints}
             title="Show filesystem checkpoints (/rollback)"
+            aria-label="Show filesystem checkpoints"
           >
             <History size={15} />
           </button>
@@ -234,6 +251,7 @@ export const ChatHeader = memo(function ChatHeader({
             className="btn-ghost chat-clear-btn"
             onClick={onCompress}
             title="Compress context (summarize older turns)"
+            aria-label="Compress context"
           >
             <Minimize2 size={15} />
           </button>
@@ -243,6 +261,7 @@ export const ChatHeader = memo(function ChatHeader({
             className="btn-ghost chat-clear-btn"
             onClick={onNewChat}
             title={t("chat.newChat")}
+            aria-label={t("chat.newChat")}
           >
             <Plus size={16} />
           </button>
