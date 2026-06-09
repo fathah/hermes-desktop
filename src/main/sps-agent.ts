@@ -32,11 +32,16 @@ import { semanticManager } from "./semantic-index";
 import {
   buildIngestMessages,
   buildFileAnswerMessages,
+  buildLintMessages,
   parseChangeset,
+  parseLintFindings,
+  readPageDigests,
   readUnprocessedCaptures,
   readWikiSchema,
   type IngestChangeset,
   type RelatedPage,
+  type MechanicalLint,
+  type LintFinding,
 } from "./sps-ingest";
 import { getSpsNoteIndex } from "./note-index";
 
@@ -778,6 +783,108 @@ export async function spsFileAnswer(
       captureCount: 0,
       error: err instanceof Error ? err.message : "file-answer error",
     };
+  }
+}
+
+// ───────────────────────── lint (second-brain "Lint") ─────────────────────────
+
+export interface LintResult {
+  ok: boolean;
+  error?: string;
+  findings: LintFinding[];
+  /** Proposed fixes — committed through the same path as ingest. */
+  changeset?: IngestChangeset;
+  mechanical: MechanicalLint;
+  pagesScanned: number;
+  pagesDropped: number;
+}
+
+/**
+ * Deep (LLM) lint: reads the deterministic structural report + page digests and
+ * asks the model for contradictions / stale claims / gaps / missing links, plus
+ * a reviewable changeset of fixes. READ-ONLY over the vault (propose-then-commit).
+ */
+export async function spsLintWiki(
+  profile?: string,
+  opts?: { staleDays?: number },
+): Promise<LintResult> {
+  const empty: MechanicalLint = { orphans: [], brokenLinks: [], stale: [] };
+  const fail = (error: string): LintResult => ({
+    ok: false,
+    error,
+    findings: [],
+    mechanical: empty,
+    pagesScanned: 0,
+    pagesDropped: 0,
+  });
+  try {
+    if (isRemoteMode()) return fail("Lint needs a local workspace.");
+    const vaultDir = resolveSpsVaultDir(profile);
+    const staleDays = opts?.staleDays ?? 30;
+    const staleBeforeMs = Date.now() - staleDays * 86_400_000;
+    const index = await getSpsNoteIndex(profile);
+    const raw = index.lint(staleBeforeMs);
+    const mechanical: MechanicalLint = {
+      orphans: raw.orphans,
+      brokenLinks: raw.brokenLinks.map((b) => ({
+        source: b.source,
+        target: b.target,
+      })),
+      stale: raw.stale,
+    };
+    const prioritized = [
+      ...mechanical.orphans,
+      ...mechanical.stale,
+      ...mechanical.brokenLinks.map((b) => b.source),
+    ];
+    const { digests, scanned, dropped } = await readPageDigests(
+      vaultDir,
+      prioritized,
+    );
+    if (digests.length === 0) {
+      return {
+        ok: true,
+        findings: [],
+        mechanical,
+        pagesScanned: 0,
+        pagesDropped: dropped,
+      };
+    }
+    const schema = await readWikiSchema(vaultDir);
+    const messages = buildLintMessages(schema, mechanical, digests);
+    const url = `${getApiUrl(profile)}/v1/chat/completions`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getRemoteAuthHeader() },
+      signal: AbortSignal.timeout(180000),
+      body: JSON.stringify({ model: "hermes-agent", stream: false, messages }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      return {
+        ...fail(`gateway ${res.status}: ${body.slice(0, 160)}`),
+        mechanical,
+        pagesScanned: scanned,
+        pagesDropped: dropped,
+      };
+    }
+    const data = (await res.json()) as {
+      choices?: { message?: { content?: string } }[];
+    };
+    const parsed = extractJson(data?.choices?.[0]?.message?.content ?? "");
+    const changeset = parseChangeset(parsed);
+    const findings = parseLintFindings(parsed);
+    return {
+      ok: true,
+      findings,
+      changeset:
+        changeset && changeset.pages.length > 0 ? changeset : undefined,
+      mechanical,
+      pagesScanned: scanned,
+      pagesDropped: dropped,
+    };
+  } catch (err) {
+    return fail(err instanceof Error ? err.message : "lint error");
   }
 }
 

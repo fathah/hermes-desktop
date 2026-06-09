@@ -78,6 +78,32 @@ export const spsBridge = {
     profile?: string,
   ): Promise<void> =>
     ipcRenderer.invoke("sps-wiki-log-append", op, summary, profile),
+  spsLintWiki: (
+    staleDays?: number,
+    profile?: string,
+  ): Promise<{
+    ok: boolean;
+    error?: string;
+    findings: Array<{ kind: string; page: string; note: string }>;
+    changeset?: {
+      summary: string;
+      pages: Array<{
+        op: "create" | "update";
+        pageId: string;
+        title: string;
+        markdown: string;
+      }>;
+      captures: Array<{ id: string; status: "processed" | "discarded" }>;
+      memory: string[];
+    };
+    mechanical: {
+      orphans: string[];
+      brokenLinks: Array<{ source: string; target: string }>;
+      stale: string[];
+    };
+    pagesScanned: number;
+    pagesDropped: number;
+  }> => ipcRenderer.invoke("sps-lint-wiki", staleDays, profile),
   spsLoad: (profile?: string): Promise<unknown | null> =>
     ipcRenderer.invoke("sps-load", profile),
   spsSave: (ws: unknown, profile?: string): Promise<boolean> =>

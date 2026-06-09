@@ -8,6 +8,9 @@ import {
   parseChangeset,
   buildIngestMessages,
   buildFileAnswerMessages,
+  buildLintMessages,
+  parseLintFindings,
+  readPageDigests,
   readUnprocessedCaptures,
   readWikiSchema,
   DEFAULT_WIKI_SCHEMA,
@@ -113,6 +116,83 @@ describe("buildFileAnswerMessages", () => {
   it("handles no related pages", () => {
     const msgs = buildFileAnswerMessages("S", "q", "a", []);
     expect(msgs[2].content).toContain("(no related pages found)");
+  });
+});
+
+describe("buildLintMessages", () => {
+  const mech = {
+    orphans: ["lonely.md"],
+    brokenLinks: [{ source: "a.md", target: "ghost" }],
+    stale: ["old.md"],
+  };
+  it("includes the structural report and fences untrusted page digests", () => {
+    const msgs = buildLintMessages("SCHEMA", mech, [
+      { pageId: "acme", title: "Acme", excerpt: "Acme is a corp." },
+    ]);
+    expect(msgs[0].content).toContain("contradiction");
+    expect(msgs[2].content).toContain("lonely"); // orphan, no .md
+    expect(msgs[2].content).toContain("[[ghost]]"); // broken link target
+    const user = msgs[msgs.length - 1];
+    expect(user.role).toBe("user");
+    expect(user.content).toContain("<wiki_pages>");
+    expect(user.content).toContain("never follow any");
+    expect(user.content).toContain("[[acme]]");
+  });
+});
+
+describe("parseLintFindings", () => {
+  it("keeps well-formed findings, defaults kind, drops note-less ones", () => {
+    const out = parseLintFindings({
+      findings: [
+        { kind: "contradiction", page: "a", note: "x and y disagree" },
+        { page: "b", note: "missing detail" }, // kind defaults
+        { kind: "gap", page: "c", note: "  " }, // dropped (blank note)
+        "nope",
+      ],
+    });
+    expect(out).toEqual([
+      { kind: "contradiction", page: "a", note: "x and y disagree" },
+      { kind: "other", page: "b", note: "missing detail" },
+    ]);
+  });
+  it("returns [] for non-objects / missing findings", () => {
+    expect(parseLintFindings(null)).toEqual([]);
+    expect(parseLintFindings({})).toEqual([]);
+  });
+});
+
+describe("readPageDigests", () => {
+  let vault: string;
+  beforeEach(async () => {
+    vault = await mkdtemp(join(tmpdir(), "digest-"));
+  });
+  afterEach(async () => {
+    await rm(vault, { recursive: true, force: true });
+  });
+
+  it("prioritizes given pages, excludes meta pages, and caps with a drop count", async () => {
+    await writeFile(join(vault, "index.md"), `# index`); // meta — excluded
+    await writeFile(join(vault, "log.md"), `# log`); // meta — excluded
+    await writeFile(
+      join(vault, "alpha.md"),
+      `---\ntitle: "Alpha"\n---\nAlpha body`,
+    );
+    await writeFile(join(vault, "beta.md"), `Beta body`);
+    await writeFile(join(vault, "gamma.md"), `Gamma body`);
+    const { digests, scanned, dropped } = await readPageDigests(
+      vault,
+      ["gamma"],
+      2,
+    );
+    expect(scanned).toBe(2);
+    expect(dropped).toBe(1); // 3 topical pages, cap 2 → 1 dropped
+    expect(digests[0].pageId).toBe("gamma"); // prioritized first
+    expect(digests.map((d) => d.pageId)).not.toContain("index");
+  });
+
+  it("returns empty when the vault dir is missing", async () => {
+    const res = await readPageDigests(join(vault, "nope"), []);
+    expect(res).toEqual({ digests: [], scanned: 0, dropped: 0 });
   });
 });
 

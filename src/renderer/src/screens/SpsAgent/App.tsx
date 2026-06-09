@@ -28,6 +28,7 @@ import { runAutoIngest } from "./inbox/ingestApply";
 import {
   getAutoApply,
   getIngestIntervalMin,
+  getLintIntervalMin,
   INGEST_PREFS_EVENT,
 } from "./inbox/ingestPrefs";
 import { ObsidianEditor } from "./editor/ObsidianEditor";
@@ -68,6 +69,42 @@ export function App() {
                 .getState()
                 .flash(
                   `Auto-filed ${res.pages} page${res.pages === 1 ? "" : "s"}`,
+                );
+            }
+          });
+        },
+        min * 60 * 1000,
+      );
+    };
+    configure();
+    window.addEventListener(INGEST_PREFS_EVENT, configure);
+    return () => {
+      if (timer) clearInterval(timer);
+      window.removeEventListener(INGEST_PREFS_EVENT, configure);
+    };
+  }, []);
+
+  // Scheduled in-app deep-lint: every N minutes (0 = off), run the LLM lint and
+  // NOTIFY when it finds semantic issues. Notify-only by design — a background
+  // pass never auto-edits existing pages; the user reviews fixes in Vault health.
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const configure = (): void => {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+      const min = getLintIntervalMin();
+      if (min <= 0) return;
+      timer = setInterval(
+        () => {
+          void window.hermesAPI.spsLintWiki?.(30).then((res) => {
+            if (res?.ok && res.findings.length > 0) {
+              const n = res.findings.length;
+              useStore
+                .getState()
+                .flash(
+                  `Vault lint: ${n} issue${n === 1 ? "" : "s"} found — open Vault health to review`,
                 );
             }
           });

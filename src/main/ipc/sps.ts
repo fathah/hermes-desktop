@@ -5,6 +5,7 @@ import {
   spsAssistant,
   spsIngestInbox,
   spsFileAnswer,
+  spsLintWiki,
   spsLoad,
   spsSave,
   type PageContext as SpsPageContext,
@@ -52,6 +53,11 @@ export function registerSpsIpc(): void {
     "sps-wiki-log-append",
     (_event, op: WikiLogOp, summary: string, profile?: string) =>
       appendWikiLog(resolveSpsVaultDir(profile), op, summary),
+  );
+  ipcMain.handle(
+    "sps-lint-wiki",
+    (_event, staleDays?: number, profile?: string) =>
+      spsLintWiki(profile, { staleDays }),
   );
   ipcMain.handle("sps-load", (_event, profile?: string) => spsLoad(profile));
   ipcMain.handle("sps-save", (_event, ws: unknown, profile?: string) =>

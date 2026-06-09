@@ -48,3 +48,27 @@ export function setIngestIntervalMin(min: number): void {
     /* ignore */
   }
 }
+
+// Opt-in scheduled deep-lint (Karpathy's periodic "Lint"). Notify-only: a
+// background pass NEVER auto-edits existing pages (propose-then-commit). It just
+// flashes when it finds semantic issues, nudging the user to open Vault health.
+const LINT_INTERVAL_KEY = "sps-lint-interval-min-v1";
+
+/** Auto deep-lint interval in minutes (0 = disabled). */
+export function getLintIntervalMin(): number {
+  try {
+    const raw = Number(localStorage.getItem(LINT_INTERVAL_KEY));
+    return Number.isFinite(raw) && raw > 0 ? raw : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function setLintIntervalMin(min: number): void {
+  try {
+    localStorage.setItem(LINT_INTERVAL_KEY, String(min > 0 ? min : 0));
+    window.dispatchEvent(new Event(INGEST_PREFS_EVENT));
+  } catch {
+    /* ignore */
+  }
+}

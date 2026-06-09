@@ -975,6 +975,32 @@ interface HermesAPI {
     summary: string,
     profile?: string,
   ) => Promise<void>;
+  spsLintWiki: (
+    staleDays?: number,
+    profile?: string,
+  ) => Promise<{
+    ok: boolean;
+    error?: string;
+    findings: Array<{ kind: string; page: string; note: string }>;
+    changeset?: {
+      summary: string;
+      pages: Array<{
+        op: "create" | "update";
+        pageId: string;
+        title: string;
+        markdown: string;
+      }>;
+      captures: Array<{ id: string; status: "processed" | "discarded" }>;
+      memory: string[];
+    };
+    mechanical: {
+      orphans: string[];
+      brokenLinks: Array<{ source: string; target: string }>;
+      stale: string[];
+    };
+    pagesScanned: number;
+    pagesDropped: number;
+  }>;
   spsLoad: (profile?: string) => Promise<unknown | null>;
   spsSave: (ws: unknown, profile?: string) => Promise<boolean>;
   spsGetWorkSession: (

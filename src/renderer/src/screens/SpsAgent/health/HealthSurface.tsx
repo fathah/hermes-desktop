@@ -9,6 +9,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Icon } from "../components/Icon";
 import { useStore } from "../store";
 import { pageIdFromPath } from "../lib/pageId";
+import { commitChangeset } from "../inbox/ingestApply";
+import { getLintIntervalMin, setLintIntervalMin } from "../inbox/ingestPrefs";
 
 interface HealthSurfaceProps {
   profile?: string;
@@ -21,6 +23,11 @@ interface LintReport {
   stale: string[];
 }
 
+/** The deep-lint result returned by spsLintWiki (mirrors the main LintResult). */
+type DeepLint = NonNullable<
+  Awaited<ReturnType<NonNullable<typeof window.hermesAPI.spsLintWiki>>>
+>;
+
 const STALE_DAYS = 30;
 
 export function HealthSurface({
@@ -29,9 +36,17 @@ export function HealthSurface({
 }: HealthSurfaceProps): React.JSX.Element {
   const selectPage = useStore((s) => s.selectPage);
   const setSurface = useStore((s) => s.setSurface);
+  const ingestCommitPage = useStore((s) => s.ingestCommitPage);
+  const flash = useStore((s) => s.flash);
   const [report, setReport] = useState<LintReport | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // Deep (LLM) lint: contradictions / stale claims / gaps + a proposed fix set.
+  const [deep, setDeep] = useState<DeepLint | null>(null);
+  const [deepBusy, setDeepBusy] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [applied, setApplied] = useState(false);
+  const [lintEvery, setLintEvery] = useState(() => getLintIntervalMin());
   const [showHelp, setShowHelp] = useState<boolean>(() => {
     const saved = localStorage.getItem("hermes_vault_health_help_visible");
     return saved !== "false";
@@ -61,6 +76,50 @@ export function HealthSurface({
     run();
   }, [run]);
 
+  const runDeep = useCallback(async () => {
+    setDeepBusy(true);
+    setApplied(false);
+    setError("");
+    try {
+      const res = await window.hermesAPI.spsLintWiki?.(STALE_DAYS, profile);
+      if (!res) throw new Error("Deep lint is unavailable offline.");
+      if (!res.ok) throw new Error(res.error || "Deep lint failed.");
+      setDeep(res);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDeepBusy(false);
+    }
+  }, [profile]);
+
+  const applyFixes = useCallback(async () => {
+    if (!deep?.changeset) return;
+    setApplying(true);
+    try {
+      const { pages } = await commitChangeset(
+        deep.changeset,
+        ingestCommitPage,
+        {
+          profile,
+        },
+      );
+      await window.hermesAPI.spsAppendWikiLog?.(
+        "lint",
+        deep.changeset.summary,
+        profile,
+      );
+      setApplied(true);
+      flash(`Applied ${pages} lint fix${pages === 1 ? "" : "es"}`);
+      void run(); // refresh the mechanical report after fixing
+    } catch (e) {
+      flash(e instanceof Error ? e.message : "Couldn't apply fixes", {
+        tone: "warn",
+      });
+    } finally {
+      setApplying(false);
+    }
+  }, [deep, ingestCommitPage, profile, flash, run]);
+
   const open = (relPath: string): void => {
     selectPage(pageIdFromPath(relPath));
     setSurface("doc");
@@ -73,14 +132,20 @@ export function HealthSurface({
 
   return (
     <div className={embedded ? "health-embedded" : "health-surface"}>
-      <header className="health-header" style={embedded ? { marginTop: 0, border: "none" } : undefined}>
+      <header
+        className="health-header"
+        style={embedded ? { marginTop: 0, border: "none" } : undefined}
+      >
         {!embedded && (
           <h1 className="health-title">
             <Icon name="check" size={22} />
             Vault health
           </h1>
         )}
-        <div className="health-header-actions" style={embedded ? { marginLeft: "auto" } : undefined}>
+        <div
+          className="health-header-actions"
+          style={embedded ? { marginLeft: "auto" } : undefined}
+        >
           <button
             className="health-help-btn"
             onClick={toggleHelp}
@@ -96,6 +161,35 @@ export function HealthSurface({
           >
             {busy ? "Checking…" : "Re-check"}
           </button>
+          <button
+            className="health-recheck-btn"
+            disabled={deepBusy}
+            onClick={() => void runDeep()}
+            title="Use the AI to find contradictions, stale claims, and gaps — and propose fixes you can review"
+          >
+            <Icon name="sparkle" size={14} />
+            {deepBusy ? "Analyzing…" : "Deep lint (AI)"}
+          </button>
+          <label
+            className="health-sec-hint"
+            style={{ display: "flex", alignItems: "center", gap: 4 }}
+            title="Run deep lint automatically while the app is open; it only notifies, never auto-edits."
+          >
+            Auto
+            <select
+              value={lintEvery}
+              onChange={(e) => {
+                const m = Number(e.target.value);
+                setLintIntervalMin(m);
+                setLintEvery(m);
+              }}
+            >
+              <option value={0}>Off</option>
+              <option value={60}>Hourly</option>
+              <option value={360}>Every 6h</option>
+              <option value={1440}>Daily</option>
+            </select>
+          </label>
         </div>
       </header>
 
@@ -199,6 +293,90 @@ export function HealthSurface({
             ))}
           </LintGroup>
         </>
+      )}
+
+      {deep && (
+        <section className="health-section">
+          <div className="health-sec-header">
+            <span className="health-sec-label">
+              <Icon name="sparkle" size={13} /> AI findings
+            </span>
+            <span className="health-sec-count">{deep.findings.length}</span>
+            <span className="health-sec-hint">
+              contradictions, stale claims, gaps & missing links
+            </span>
+          </div>
+
+          {deep.findings.length === 0 ? (
+            <div className="health-sec-hint">
+              No semantic issues found across {deep.pagesScanned} page
+              {deep.pagesScanned === 1 ? "" : "s"}.
+            </div>
+          ) : (
+            <ul className="health-list">
+              {deep.findings.map((f, i) => (
+                <li key={`${f.page}-${i}`} className="health-row">
+                  <span className="health-mono-text">{f.kind}</span>
+                  {f.page && (
+                    <>
+                      <span className="health-arrow">·</span>
+                      <button
+                        className="health-link"
+                        onClick={() => open(f.page)}
+                      >
+                        {pageIdFromPath(f.page)}
+                      </button>
+                    </>
+                  )}
+                  <span className="health-arrow">—</span>
+                  <span>{f.note}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {deep.changeset && deep.changeset.pages.length > 0 && (
+            <div className="health-sec-fixes" style={{ marginTop: 8 }}>
+              <div className="health-sec-hint">
+                {deep.changeset.summary} — {deep.changeset.pages.length} page
+                {deep.changeset.pages.length === 1 ? "" : "s"} would be updated:
+              </div>
+              <ul className="health-list">
+                {deep.changeset.pages.map((p) => (
+                  <li key={p.pageId} className="health-row">
+                    <button
+                      className="health-link"
+                      onClick={() => open(p.pageId)}
+                    >
+                      {p.title || p.pageId}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {applied ? (
+                <span className="applied-note">
+                  <Icon name="check" size={14} /> Fixes applied
+                </span>
+              ) : (
+                <button
+                  className="health-recheck-btn"
+                  disabled={applying}
+                  onClick={() => void applyFixes()}
+                >
+                  {applying ? "Applying…" : "Review & apply fixes"}
+                </button>
+              )}
+            </div>
+          )}
+
+          {deep.pagesDropped > 0 && (
+            <div className="health-sec-hint" style={{ marginTop: 6 }}>
+              Note: {deep.pagesDropped} page
+              {deep.pagesDropped === 1 ? " was" : "s were"} not scanned this
+              pass (coverage cap). Re-run after fixing to scan more.
+            </div>
+          )}
+        </section>
       )}
     </div>
   );
