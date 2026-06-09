@@ -40,24 +40,16 @@ import { BarChart3, UserCog, ShieldCheck } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 import { loadAndApplyActiveSkin } from "../../utils/skin";
+import {
+  OPEN_SETTINGS_EVENT,
+  writeLastAdminView,
+  type AdminView,
+} from "../../lib/openSettings";
+import { ADMIN_NEW_CHAT_EVENT } from "../../lib/spsCommands";
 
-type View =
-  | "chat"
-  | "sessions"
-  | "agents"
-  | "office"
-  | "models"
-  | "providers"
-  | "skills"
-  | "personalization"
-  | "tools"
-  | "schedules"
-  | "kanban"
-  | "insights"
-  | "capabilityReview"
-  | "gateway"
-  | "spsAgent"
-  | "settings";
+// The deep-linkable view set is owned by lib/openSettings so callers and this
+// host can't drift. Layout's nav is a subset of these.
+type View = AdminView;
 
 // `label` (literal) overrides `labelKey` (i18n) when set — used for views added
 // after the locale files were authored, to avoid touching every translation.
@@ -140,16 +132,24 @@ function Layout({
     setView(v);
   }, []);
 
-  // Bridge: SPS surfaces (which can't reach goTo directly) ask the host to open
-  // Hermes Settings — e.g. the config-health banner's "Show details" link.
+  // Remember the active tab so the overlay reopens where the user left off
+  // (App reads this via readLastAdminView when no deep-link/no-API-key applies).
   useEffect(() => {
-    const openSettings = (): void => {
+    writeLastAdminView(view);
+  }, [view]);
+
+  // Bridge: SPS surfaces (which can't reach goTo directly) ask the host to open
+  // a specific Hermes admin tab — e.g. the config-health banner's "Show details"
+  // link, or the status chip deep-linking to Providers/Gateway. A missing
+  // detail.view re-targets nothing (the overlay just opens on its current view).
+  useEffect(() => {
+    const onOpen = (e: WindowEventMap[typeof OPEN_SETTINGS_EVENT]): void => {
       setAdminOpen(true);
-      goTo("settings");
+      const target = e.detail?.view;
+      if (target) goTo(target);
     };
-    window.addEventListener("hermes:open-settings", openSettings);
-    return () =>
-      window.removeEventListener("hermes:open-settings", openSettings);
+    window.addEventListener(OPEN_SETTINGS_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_SETTINGS_EVENT, onOpen);
   }, [goTo]);
 
   // Re-check remote mode on tab switch (picks up Settings changes)
@@ -299,19 +299,15 @@ function Layout({
     goTo("chat");
   }, [goTo]);
 
-  // Listen for menu IPC events (Cmd+N, Cmd+K from app menu)
+  // Menu ⌘N / ⌘K are caught once at the App root and re-dispatched here only
+  // when this overlay is the active surface (search routes via hermes:open-settings
+  // → goTo("sessions"); new chat via this dedicated event so it also clears state).
   useEffect(() => {
-    const cleanupNewChat = window.hermesAPI.onMenuNewChat(() => {
-      handleNewChat();
-    });
-    const cleanupSearch = window.hermesAPI.onMenuSearchSessions(() => {
-      goTo("sessions");
-    });
-    return () => {
-      cleanupNewChat();
-      cleanupSearch();
-    };
-  }, [handleNewChat, goTo]);
+    const onAdminNewChat = (): void => handleNewChat();
+    window.addEventListener(ADMIN_NEW_CHAT_EVENT, onAdminNewChat);
+    return () =>
+      window.removeEventListener(ADMIN_NEW_CHAT_EVENT, onAdminNewChat);
+  }, [handleNewChat]);
 
   const handleSelectProfile = useCallback((name: string) => {
     setActiveProfile(name);

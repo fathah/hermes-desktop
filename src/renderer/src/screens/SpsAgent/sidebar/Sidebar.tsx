@@ -15,6 +15,7 @@ import { SidebarApps, SidebarMeetings, SidebarShared } from "./SidebarStubs";
 import { useVaultQuery } from "../hooks/useNoteIndex";
 import { INBOX_FOLDER } from "../inbox/capture";
 import { ObsidianExplorer } from "./ObsidianExplorer";
+import { openSettings } from "../../../lib/openSettings";
 
 interface Identity {
   workspace: string;
@@ -137,7 +138,9 @@ export function Sidebar() {
         </div>
         <div
           className={`nav-item ${
-            (homeSurface === "doc" && activeId === "home" && surface === "doc") ||
+            (homeSurface === "doc" &&
+              activeId === "home" &&
+              surface === "doc") ||
             (homeSurface !== "doc" && surface === homeSurface)
               ? "active"
               : ""
@@ -360,9 +363,7 @@ export function Sidebar() {
           className="rail-foot-gear"
           title="Settings (⌘,)"
           aria-label="Settings"
-          onClick={() =>
-            window.dispatchEvent(new CustomEvent("hermes:open-settings"))
-          }
+          onClick={() => openSettings()}
         >
           <Icon name="settings" size={16} />
         </button>

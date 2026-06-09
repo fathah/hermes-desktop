@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useStore } from "./store";
 import { useHotkeys } from "./hooks/useHotkeys";
 import { setScrollContainer } from "./lib/scroll";
+import { openSettings } from "../../lib/openSettings";
 import { Sidebar } from "./sidebar/Sidebar";
 import { Topbar } from "./shell/Topbar";
 import { DocHeader } from "./shell/DocHeader";
@@ -119,9 +120,7 @@ export function App() {
                 setAgentMessages([]);
                 setAgentSession(null);
               }}
-              onOpenDiagnose={() =>
-                window.dispatchEvent(new CustomEvent("hermes:open-settings"))
-              }
+              onOpenDiagnose={() => openSettings()}
             />
           ) : surface === "chats" ? (
             // AI Chats: recent sessions + guided new chats (shares <Chat>).

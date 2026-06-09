@@ -11,6 +11,7 @@ import type { Block, SessionRow } from "../types";
 import { OPERATOR_GUIDE } from "../../../lib/operatorGuide";
 import { pageFromMarkdown } from "../editor/pageMarkdown";
 import { blk } from "../lib/ids";
+import { openSettings } from "../../../lib/openSettings";
 
 const WIDGET_META: Record<WidgetKind, { title: string; icon: IconName }> = {
   quick: { title: "Quick actions", icon: "wand" },
@@ -419,12 +420,7 @@ function AgentStatus() {
     return (
       <div className="ck-empty">
         No agent connected.{" "}
-        <button
-          className="ck-inline-link"
-          onClick={() =>
-            window.dispatchEvent(new CustomEvent("hermes:open-settings"))
-          }
-        >
+        <button className="ck-inline-link" onClick={() => openSettings()}>
           Set one up
         </button>
         .

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { ThemeProvider } from "./components/ThemeProvider";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Welcome from "./screens/Welcome/Welcome";
@@ -7,6 +7,13 @@ import Setup from "./screens/Setup/Setup";
 import SpsAgent from "./screens/SpsAgent/SpsAgent";
 import Layout from "./screens/Layout/Layout";
 import { captureScreenView } from "./utils/analytics";
+import {
+  OPEN_SETTINGS_EVENT,
+  openSettings,
+  readLastAdminView,
+  type AdminView,
+} from "./lib/openSettings";
+import { spsNewChat, spsSearch, adminNewChat } from "./lib/spsCommands";
 
 // "loading" is a neutral blank shown only while the async install check runs;
 // it replaces the former branded splash screen.
@@ -28,7 +35,35 @@ function App(): React.JSX.Element {
   // …) open on demand as an overlay via the gear button or ⌘,. This is the
   // "settings escape hatch" so the assistant's provider/keys stay configurable.
   const [adminOpen, setAdminOpen] = useState(false);
+  // Which admin tab the overlay opens on. Defaults to the last-used tab, but a
+  // missing API key forces Providers (the #1 post-setup task), and an explicit
+  // deep-link (status chip, banners) overrides both. `null` until the first
+  // install check resolves so we don't force Providers before we know.
+  const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
+  const [adminInitialView, setAdminInitialView] =
+    useState<AdminView>("settings");
   const isMac = window.electron?.process?.platform === "darwin";
+
+  // Pick the tab the overlay should open on when no explicit target is given.
+  const defaultAdminView = useCallback(
+    (): AdminView => (hasApiKey === false ? "providers" : readLastAdminView()),
+    [hasApiKey],
+  );
+
+  const openAdmin = useCallback(
+    (view?: AdminView): void => {
+      setAdminInitialView(view ?? defaultAdminView());
+      setAdminOpen(true);
+    },
+    [defaultAdminView],
+  );
+
+  // Menu accelerators are routed by whether the overlay is open. A ref keeps the
+  // once-registered IPC listeners reading the *current* value, not a stale one.
+  const adminOpenRef = useRef(adminOpen);
+  useEffect(() => {
+    adminOpenRef.current = adminOpen;
+  }, [adminOpen]);
 
   // Expose the platform so CSS can reserve room for the macOS traffic-light
   // buttons (hiddenInset title bar) above the sidebar header.
@@ -48,17 +83,44 @@ function App(): React.JSX.Element {
     const onKey = (e: KeyboardEvent): void => {
       if ((e.metaKey || e.ctrlKey) && e.key === ",") {
         e.preventDefault();
-        setAdminOpen((open) => !open);
+        // Toggle: close if open, else open on the computed default tab.
+        setAdminOpen((open) => {
+          if (open) return false;
+          setAdminInitialView(defaultAdminView());
+          return true;
+        });
       } else if (e.key === "Escape") {
         setAdminOpen(false);
       }
     };
-    const onOpenSettings = (): void => setAdminOpen(true);
+    const onOpenSettings = (
+      e: WindowEventMap[typeof OPEN_SETTINGS_EVENT],
+    ): void => openAdmin(e.detail?.view);
     window.addEventListener("keydown", onKey);
-    window.addEventListener("hermes:open-settings", onOpenSettings);
+    window.addEventListener(OPEN_SETTINGS_EVENT, onOpenSettings);
     return () => {
       window.removeEventListener("keydown", onKey);
-      window.removeEventListener("hermes:open-settings", onOpenSettings);
+      window.removeEventListener(OPEN_SETTINGS_EVENT, onOpenSettings);
+    };
+  }, [screen, openAdmin, defaultAdminView]);
+
+  // App menu shortcuts (⌘N new chat / ⌘K search). Registered ONCE at the always-
+  // mounted root and routed to the active surface — previously these lived in
+  // Layout and went dead whenever the admin overlay was closed (the workspace's
+  // normal state). Overlay open → admin Chat/Sessions; closed → SPS workspace.
+  useEffect(() => {
+    if (screen !== "main") return;
+    const cleanupNewChat = window.hermesAPI.onMenuNewChat(() => {
+      if (adminOpenRef.current) adminNewChat();
+      else spsNewChat();
+    });
+    const cleanupSearch = window.hermesAPI.onMenuSearchSessions(() => {
+      if (adminOpenRef.current) openSettings("sessions");
+      else spsSearch();
+    });
+    return () => {
+      cleanupNewChat();
+      cleanupSearch();
     };
   }, [screen]);
 
@@ -91,6 +153,7 @@ function App(): React.JSX.Element {
         }
       } else {
         const status = await window.hermesAPI.checkInstall();
+        setHasApiKey(status.hasApiKey);
         if (!status.installed) {
           next = "welcome";
         } else if (!status.hasApiKey) {
@@ -224,7 +287,7 @@ function App(): React.JSX.Element {
                   ✕
                 </button>
                 <Layout
-                  initialView="settings"
+                  initialView={adminInitialView}
                   verifyWarning={verifyWarning}
                   onReinstall={handleVerifyReinstall}
                   onDismissVerifyWarning={handleDismissVerifyWarning}

@@ -7,6 +7,7 @@ import Chat, { type ChatMessage } from "../../Chat/Chat";
 import { dbItemsToChatMessages } from "../../Chat/sessionHistory";
 import type { DbHistoryItem } from "../../Chat/sessionHistory";
 import { useStore } from "../store";
+import { openSettings } from "../../../lib/openSettings";
 
 export function ChatSurface() {
   const activeChatSession = useStore((s) => s.activeChatSession);
@@ -61,9 +62,7 @@ export function ChatSurface() {
         setMessages([]);
         setActiveChatSession(null);
       }}
-      onOpenDiagnose={() =>
-        window.dispatchEvent(new CustomEvent("hermes:open-settings"))
-      }
+      onOpenDiagnose={() => openSettings()}
     />
   );
 }
