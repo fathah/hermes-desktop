@@ -17,9 +17,10 @@ export type RightTab = "assistant" | "outline" | "comments" | "info";
 
 // Top-level surface shown in the main area. "doc" is the page editor (default);
 // the others are full-area surfaces reached from the rail (ideas A2/A4 + the
-// Ask panel and Agent Console). "chats" is the AI Chats surface (sessions),
-// distinct from "agent" (the tool-using Agent Console) but sharing <Chat>.
-// "graph" is the local wikilink graph view (F4).
+// Ask panel). "chats" is the single, session-backed Chat surface — the former
+// ephemeral "agent" surface was merged into it (tool-use is gateway-driven, so
+// there was no functional difference, only persistence). "graph" is the local
+// wikilink graph view (F4).
 export type Surface =
   | "doc"
   | "cockpit"
@@ -27,7 +28,6 @@ export type Surface =
   | "memory"
   | "you"
   | "ask"
-  | "agent"
   | "chats"
   | "graph"
   | "equity"

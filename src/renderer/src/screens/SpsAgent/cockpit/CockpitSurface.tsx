@@ -427,7 +427,7 @@ function AgentStatus() {
       </div>
     );
   return (
-    <button className="ck-agent" onClick={() => setSurface("agent")}>
+    <button className="ck-agent" onClick={() => setSurface("chats")}>
       <span className={`ck-agent-dot ${info.running ? "on" : ""}`} />
       <span className="ck-agent-body">
         <span className="ck-agent-name">{info.name}</span>

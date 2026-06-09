@@ -1,11 +1,10 @@
 // App.tsx — composition root. Phase 3 wires the sidebar + shell + doc header.
 // The block editor (Phase 4), right panel (Phase 7), pickers/palette/modals/tweaks
 // (Phases 5/9) slot into the marked placeholders.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useStore } from "./store";
 import { useHotkeys } from "./hooks/useHotkeys";
 import { setScrollContainer } from "./lib/scroll";
-import { openSettings } from "../../lib/openSettings";
 import { Sidebar } from "./sidebar/Sidebar";
 import { Topbar } from "./shell/Topbar";
 import { DocHeader } from "./shell/DocHeader";
@@ -16,7 +15,6 @@ import { Toast } from "./components/Toast";
 import { OcrStatus } from "./components/OcrStatus";
 import Insights from "../Insights/Insights";
 import { MemoryTimeline } from "../Memory/MemoryTimeline";
-import Chat, { type ChatMessage } from "../Chat/Chat";
 import { ChatSurface } from "./shell/ChatSurface";
 import { AskPane } from "./panel/AskPane";
 import { GraphView } from "./graph/GraphView";
@@ -43,9 +41,6 @@ export function App() {
   const surface = useStore((s) => s.surface);
   const chatNonce = useStore((s) => s.chatNonce);
   const docScrollRef = useRef<HTMLDivElement>(null);
-  // Agent Console (tool-using Hermes chat) state — kept local to SPS.
-  const [agentMessages, setAgentMessages] = useState<ChatMessage[]>([]);
-  const [agentSession, setAgentSession] = useState<string | null>(null);
 
   useEffect(() => {
     setScrollContainer(docScrollRef.current);
@@ -109,22 +104,10 @@ export function App() {
                 </DocHeader>
               </div>
             </>
-          ) : surface === "agent" ? (
-            // Agent Console: the tool-using Hermes chat (diffs/approval/gauge/
-            // delegation) — distinct from the doc-editing assistant.
-            <Chat
-              messages={agentMessages}
-              setMessages={setAgentMessages}
-              sessionId={agentSession}
-              profile="default"
-              onNewChat={() => {
-                setAgentMessages([]);
-                setAgentSession(null);
-              }}
-              onOpenDiagnose={() => openSettings()}
-            />
           ) : surface === "chats" ? (
-            // AI Chats: recent sessions + guided new chats (shares <Chat>).
+            // The single Chat surface — session-backed (Recents + persistence).
+            // Tool-use/approvals/diffs are gateway-driven, so there's no separate
+            // "agent" surface; developer-only controls hide behind Developer mode.
             <ChatSurface key={`chat-${chatNonce}`} />
           ) : surface === "ask" ? (
             <AskPane />

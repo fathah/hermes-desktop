@@ -197,16 +197,6 @@ export function Sidebar() {
           </button>
           <button
             type="button"
-            className={`nav-item ${surface === "agent" ? "active" : ""}`}
-            onClick={() => setSurface("agent")}
-            style={{ paddingLeft: 24 }}
-            title="Advanced: tool-using agent with approvals & diffs"
-          >
-            <Icon name="code" size={17} />
-            <span className="nav-label">Advanced (Developer)</span>
-          </button>
-          <button
-            type="button"
             className={`nav-item ${surface === "you" ? "active" : ""}`}
             onClick={() => setSurface("you")}
             style={{ paddingLeft: 24 }}
