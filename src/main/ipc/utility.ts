@@ -36,6 +36,10 @@ import {
   pythonMemoryGraph,
 } from "../agent-core-bridge";
 import { getConnectionConfig, type SshConnectionConfig } from "../config";
+import {
+  dualHandlerTarget,
+  UnsupportedConnectionModeError,
+} from "../connection-capabilities";
 import { isGatewayRunning, startGateway, setSshRemoteApiKey } from "../hermes";
 import {
   sshGatewayStatus,
@@ -69,8 +73,18 @@ export function registerDualHandler<Args extends unknown[], RetLocal, RetSsh>(
 ): void {
   ipcMain.handle(channel, async (_event, ...args: unknown[]) => {
     const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh) {
+    const target = dualHandlerTarget(conn);
+    if (target === "ssh") {
       return sshFn(conn.ssh, ...(args as Args));
+    }
+    // Remote-URL mode has no implementation for these channels (only local and
+    // SSH do). Previously it silently fell through to localFn, returning LOCAL
+    // data while connected remotely — a latent correctness bug. Surface it.
+    if (target === "remote-unsupported") {
+      throw new UnsupportedConnectionModeError(
+        "remote",
+        `"${channel}" is not available in remote-URL connection mode (this build is local-first; SSH is the supported remote path).`,
+      );
     }
     return localFn(...(args as Args));
   });
