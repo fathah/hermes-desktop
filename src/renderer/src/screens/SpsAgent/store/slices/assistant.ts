@@ -17,6 +17,7 @@ import {
   buildAiActionPrompt,
   buildPlanPrompt,
   buildWorkPrompt,
+  buildResearchPrompt,
   aiActionLabel,
   serializePlanBlocks,
 } from "../../assistant/prompts";
@@ -613,6 +614,111 @@ export const createAssistantSlice: StateCreator<
         return {
           ok: false,
           error: err instanceof Error ? err.message : "file error",
+        };
+      }
+    },
+
+    // `Research` (research-that-compounds): research ANY topic on the live web
+    // (a headless streaming, tool-using turn — NOT a visible chat tab), then
+    // synthesize the cited brief into a durable wiki page and auto-commit it to
+    // the knowledge base. Returns an `undo` closure so the modal can offer a
+    // one-click reversal. SPS is single-profile, so profile is left undefined.
+    runResearch: async (topic, handlers) => {
+      const trimmed = topic.trim();
+      if (!trimmed) return { ok: false, error: "Enter a topic to research." };
+      const runId = uid("run");
+      let acc = "";
+      const cleanups = [
+        window.hermesAPI.onChatChunk((chunk, rid) => {
+          if (rid !== runId) return;
+          acc += chunk;
+          handlers?.onChunk?.(acc);
+        }),
+        window.hermesAPI.onChatToolProgress((tool, rid) => {
+          if (rid !== runId) return;
+          handlers?.onTool?.(tool);
+        }),
+      ];
+
+      let markdown = "";
+      try {
+        const result = await window.hermesAPI.sendMessage(
+          buildResearchPrompt(trimmed),
+          undefined, // profile
+          undefined, // resumeSessionId
+          undefined, // history
+          undefined, // attachments
+          undefined, // contextFolder
+          undefined, // groundInWorkspace
+          runId, // clientRunId
+        );
+        markdown = (result.response || acc).trim();
+      } catch (err) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : "Research failed.",
+        };
+      } finally {
+        cleanups.forEach((off) => off());
+        handlers?.onTool?.(null);
+      }
+
+      // Hallucination guard: a real web-research turn ends with a "## Sources"
+      // section listing at least one http(s) link. No sources ⇒ the agent had no
+      // live web access (or refused) — do NOT pollute the KB with unverified
+      // synthesis. The renderer surfaces this as a warning instead of committing.
+      const hasSourcesHeading = /^#{1,6}\s*sources\b/im.test(markdown);
+      const hasSourceLink = /\]\(https?:\/\//i.test(markdown);
+      if (!markdown) return { ok: false, error: "no-result" };
+      if (!hasSourcesHeading || !hasSourceLink) {
+        return { ok: false, error: "no-sources" };
+      }
+
+      try {
+        const res = await window.hermesAPI.spsFileResearch?.(trimmed, markdown);
+        if (!res?.ok || !res.changeset) {
+          return { ok: false, error: res?.error ?? "Filing is unavailable." };
+        }
+        // Snapshot affected pages BEFORE commit so undo can reverse create
+        // (→ trash) or update (→ restore prior doc + meta).
+        const snapshots = res.changeset.pages.map((p) => {
+          const existedBefore =
+            !!get().docs[p.pageId] || !!get().meta[p.pageId];
+          return {
+            pageId: p.pageId,
+            existedBefore,
+            priorBlocks: get().docs[p.pageId],
+            priorMeta: get().meta[p.pageId],
+          };
+        });
+        await commitChangeset(res.changeset, get().ingestCommitPage);
+        await window.hermesAPI.spsAppendWikiLog?.(
+          "research",
+          res.changeset.summary,
+        );
+        const firstPageId = res.changeset.pages[0]?.pageId;
+        if (firstPageId) get().selectPage(firstPageId);
+        const undo = (): void => {
+          for (const snap of snapshots) {
+            if (!snap.existedBefore) {
+              get().deletePage(snap.pageId); // created → move to trash
+            } else if (snap.priorBlocks) {
+              get().setPageDoc(snap.pageId, snap.priorBlocks); // update → restore
+              if (snap.priorMeta)
+                get().setPageMeta(snap.pageId, snap.priorMeta);
+            }
+          }
+        };
+        return {
+          ok: true,
+          summary: res.changeset.summary,
+          pageId: firstPageId,
+          undo,
+        };
+      } catch (err) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : "research-file error",
         };
       }
     },

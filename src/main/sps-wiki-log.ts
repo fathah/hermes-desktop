@@ -11,7 +11,7 @@
 import { promises as fs } from "fs";
 import { join } from "path";
 
-export type WikiLogOp = "ingest" | "file-answer" | "lint";
+export type WikiLogOp = "ingest" | "file-answer" | "lint" | "research";
 
 const META_HEADER = `---\ntitle: "Log"\n---\n# Wiki log\n\n`;
 

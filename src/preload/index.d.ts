@@ -972,8 +972,28 @@ interface HermesAPI {
       memory: string[];
     };
   }>;
+  spsFileResearch: (
+    topic: string,
+    researchedMarkdown: string,
+    profile?: string,
+  ) => Promise<{
+    ok: boolean;
+    captureCount: number;
+    error?: string;
+    changeset?: {
+      summary: string;
+      pages: Array<{
+        op: "create" | "update";
+        pageId: string;
+        title: string;
+        markdown: string;
+      }>;
+      captures: Array<{ id: string; status: "processed" | "discarded" }>;
+      memory: string[];
+    };
+  }>;
   spsAppendWikiLog: (
-    op: "ingest" | "file-answer" | "lint",
+    op: "ingest" | "file-answer" | "lint" | "research",
     summary: string,
     profile?: string,
   ) => Promise<void>;

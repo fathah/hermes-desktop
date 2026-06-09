@@ -8,6 +8,7 @@ import {
   parseChangeset,
   buildIngestMessages,
   buildFileAnswerMessages,
+  buildResearchFileMessages,
   buildLintMessages,
   parseLintFindings,
   readPageDigests,
@@ -118,6 +119,56 @@ describe("buildFileAnswerMessages", () => {
   it("handles no related pages", () => {
     const msgs = buildFileAnswerMessages("S", "q", "a", []);
     expect(msgs[2].content).toContain("(no related pages found)");
+  });
+});
+
+describe("buildResearchFileMessages", () => {
+  it("orders contract → schema → related → topic/answer, and mandates ## Sources", () => {
+    const researched =
+      "Modular monoliths trade deploy independence for simpler ops.\n\n## Sources\n- [Fowler](https://martinfowler.com/x)";
+    const msgs = buildResearchFileMessages(
+      "MY SCHEMA",
+      "monolith vs microservices for a small team",
+      researched,
+      [{ pageId: "architecture", title: "Architecture" }],
+    );
+    expect(msgs[0].role).toBe("system");
+    // The defining contract of the research file pass: preserve the citations.
+    expect(msgs[0].content).toContain("## Sources");
+    expect(msgs[0].content).toContain("PRESERVE the citations");
+    expect(msgs[0].content).toContain("EXACTLY ONE JSON object");
+    expect(msgs[1].content).toContain("MY SCHEMA");
+    expect(msgs[2].content).toContain("[[architecture]]");
+    expect(msgs[3].role).toBe("user");
+    expect(msgs[3].content).toContain("monolith vs microservices");
+    expect(msgs[3].content).toContain("martinfowler.com");
+  });
+  it("handles no related pages", () => {
+    const msgs = buildResearchFileMessages("S", "topic", "body", []);
+    expect(msgs[2].content).toContain("(no related pages found)");
+  });
+});
+
+describe("parseChangeset (research output)", () => {
+  it("accepts a research page that ends in a ## Sources section", () => {
+    const cs = parseChangeset({
+      summary: "Filed research on RRF",
+      pages: [
+        {
+          op: "create",
+          pageId: "rrf",
+          title: "Reciprocal Rank Fusion",
+          markdown:
+            "# RRF\nCombines rankings.\n\n## Sources\n- [Paper](https://example.org/rrf)",
+        },
+      ],
+      captures: [],
+      memory: [],
+    });
+    expect(cs).not.toBeNull();
+    expect(cs?.pages).toHaveLength(1);
+    expect(cs?.pages[0].markdown).toContain("## Sources");
+    expect(cs?.pages[0].markdown).toContain("https://example.org/rrf");
   });
 });
 

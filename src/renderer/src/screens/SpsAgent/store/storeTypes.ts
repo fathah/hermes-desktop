@@ -292,6 +292,24 @@ export interface AssistantSlice {
     summary?: string;
     error?: string;
   }>;
+  /** Research-that-compounds: research any topic on the live web (headless
+   *  streaming, tool-using turn) and auto-commit a cited wiki page to the KB.
+   *  `error: "no-sources"` means the agent returned no usable web sources — the
+   *  caller must NOT treat that as a successful save. On success, `undo` reverses
+   *  the commit (created pages → trash; updated pages → restored). */
+  runResearch: (
+    topic: string,
+    handlers?: {
+      onChunk?: (markdown: string) => void;
+      onTool?: (tool: string | null) => void;
+    },
+  ) => Promise<{
+    ok: boolean;
+    error?: string;
+    summary?: string;
+    pageId?: string;
+    undo?: () => void;
+  }>;
 }
 
 /** A template the user saved from one of their own pages (localStorage-backed). */

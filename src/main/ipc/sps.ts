@@ -5,6 +5,7 @@ import {
   spsAssistant,
   spsIngestInbox,
   spsFileAnswer,
+  spsFileResearch,
   spsLintWiki,
   spsLoad,
   spsSave,
@@ -49,6 +50,11 @@ export function registerSpsIpc(): void {
     "sps-file-answer",
     (_event, question: string, answer: string, profile?: string) =>
       spsFileAnswer(question, answer, profile),
+  );
+  ipcMain.handle(
+    "sps-file-research",
+    (_event, topic: string, researchedMarkdown: string, profile?: string) =>
+      spsFileResearch(topic, researchedMarkdown, profile),
   );
   ipcMain.handle(
     "sps-wiki-log-append",

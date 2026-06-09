@@ -32,6 +32,7 @@ import { semanticManager } from "./semantic-index";
 import {
   buildIngestMessages,
   buildFileAnswerMessages,
+  buildResearchFileMessages,
   buildLintMessages,
   parseChangeset,
   parseLintFindings,
@@ -782,6 +783,77 @@ export async function spsFileAnswer(
       ok: false,
       captureCount: 0,
       error: err instanceof Error ? err.message : "file-answer error",
+    };
+  }
+}
+
+/**
+ * "File this researched answer as a wiki page" — the research-that-compounds
+ * operation. Sibling of spsFileAnswer: the renderer first runs a web-research
+ * chat turn (streaming, tool-using) and passes the cited markdown here; this
+ * synthesizes it into ONE durable wiki page that PRESERVES the `## Sources`
+ * section. READ-ONLY over the vault — returns a changeset the desktop commits
+ * through the same ingest path. The renderer is responsible for refusing to
+ * commit a sourceless result (see the no-Sources guard in runResearch).
+ */
+export async function spsFileResearch(
+  topic: string,
+  researchedMarkdown: string,
+  profile?: string,
+): Promise<IngestResult> {
+  try {
+    if (isRemoteMode()) {
+      return {
+        ok: false,
+        captureCount: 0,
+        error: "Research filing needs a local workspace.",
+      };
+    }
+    if (!researchedMarkdown.trim()) {
+      return { ok: false, captureCount: 0, error: "Nothing to file." };
+    }
+    const vaultDir = resolveSpsVaultDir(profile);
+    const schema = await readWikiSchema(vaultDir);
+    const related = await relatedPagesFor(topic, profile);
+    const messages = buildResearchFileMessages(
+      schema,
+      topic,
+      researchedMarkdown,
+      related,
+    );
+    const url = `${getApiUrl(profile)}/v1/chat/completions`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getRemoteAuthHeader() },
+      signal: AbortSignal.timeout(180000),
+      body: JSON.stringify({ model: "hermes-agent", stream: false, messages }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      return {
+        ok: false,
+        captureCount: 0,
+        error: `gateway ${res.status}: ${body.slice(0, 160)}`,
+      };
+    }
+    const data = (await res.json()) as {
+      choices?: { message?: { content?: string } }[];
+    };
+    const content = data?.choices?.[0]?.message?.content ?? "";
+    const changeset = parseChangeset(extractJson(content));
+    if (!changeset || changeset.pages.length === 0) {
+      return {
+        ok: false,
+        captureCount: 0,
+        error: "The agent didn't return a usable page.",
+      };
+    }
+    return { ok: true, captureCount: 0, changeset };
+  } catch (err) {
+    return {
+      ok: false,
+      captureCount: 0,
+      error: err instanceof Error ? err.message : "file-research error",
     };
   }
 }
