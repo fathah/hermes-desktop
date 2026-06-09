@@ -132,12 +132,13 @@ export function Sidebar() {
       </div>
 
       <div className="rail-scroll scroll">
-        <div className="nav-item" onClick={openPalette}>
+        <button type="button" className="nav-item" onClick={openPalette}>
           <Icon name="search" size={17} />
           <span className="nav-label">Search</span>
           <span className="nav-kbd">⌘K</span>
-        </div>
-        <div
+        </button>
+        <button
+          type="button"
           className={`nav-item ${
             (homeSurface === "doc" &&
               activeId === "home" &&
@@ -156,56 +157,62 @@ export function Sidebar() {
         >
           <Icon name="home" size={17} />
           <span className="nav-label">Home</span>
-        </div>
-        <div
+        </button>
+        <button
+          type="button"
           className={`nav-item ${surface === "inbox" ? "active" : ""}`}
           onClick={() => setSurface("inbox")}
         >
           <Icon name="inbox" size={17} />
           <span className="nav-label">Inbox</span>
           {inboxCount > 0 && <span className="nav-kbd">{inboxCount}</span>}
-        </div>
-        <div
+        </button>
+        <button
+          type="button"
           className={`nav-item ${surface === "journal" ? "active" : ""}`}
           onClick={() => openJournal()}
         >
           <Icon name="calendar" size={17} />
           <span className="nav-label">Journal</span>
-        </div>
+        </button>
 
         <SidebarSection id="aiAssistant" label="AI Assistant">
-          <div
+          <button
+            type="button"
             className={`nav-item ${surface === "chats" ? "active" : ""}`}
             onClick={() => setSurface("chats")}
             style={{ paddingLeft: 24 }}
           >
             <Icon name="comment" size={17} />
             <span className="nav-label">AI Chats</span>
-          </div>
-          <div
+          </button>
+          <button
+            type="button"
             className={`nav-item ${surface === "ask" ? "active" : ""}`}
             onClick={() => setSurface("ask")}
             style={{ paddingLeft: 24 }}
           >
             <Icon name="sparkle" size={17} />
             <span className="nav-label">Ask</span>
-          </div>
-          <div
+          </button>
+          <button
+            type="button"
             className={`nav-item ${surface === "agent" ? "active" : ""}`}
             onClick={() => setSurface("agent")}
             style={{ paddingLeft: 24 }}
           >
             <Icon name="code" size={17} />
             <span className="nav-label">Agent Console</span>
-          </div>
-          <div
+          </button>
+          <button
+            type="button"
             className={`nav-item ${surface === "you" ? "active" : ""}`}
             onClick={() => setSurface("you")}
             style={{ paddingLeft: 24 }}
           >
             <Icon name="wand" size={17} />
             <span className="nav-label">You</span>
-          </div>
+          </button>
         </SidebarSection>
 
         <SidebarSection id="workspaceTools" label="Workspace Tools">
