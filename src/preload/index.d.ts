@@ -178,6 +178,8 @@ interface HermesAPI {
   setAutoApprove: (enabled: boolean, profile?: string) => Promise<void>;
   getCompletionSound: () => Promise<boolean>;
   setCompletionSound: (enabled: boolean) => Promise<void>;
+  getOnboardingCompleted: () => Promise<boolean>;
+  setOnboardingCompleted: (completed: boolean) => Promise<void>;
   respondApproval: (
     runId: string,
     choice: "once" | "session" | "always" | "deny",

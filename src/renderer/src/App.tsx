@@ -4,6 +4,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import Welcome from "./screens/Welcome/Welcome";
 import Install from "./screens/Install/Install";
 import Setup from "./screens/Setup/Setup";
+import Onboarding from "./screens/Onboarding/Onboarding";
 import SpsAgent from "./screens/SpsAgent/SpsAgent";
 import Layout from "./screens/Layout/Layout";
 import hermeslogo from "./assets/hermes.png";
@@ -24,7 +25,13 @@ import {
 
 // "loading" is a neutral blank shown only while the async install check runs;
 // it replaces the former branded splash screen.
-type Screen = "loading" | "welcome" | "installing" | "setup" | "main";
+type Screen =
+  | "loading"
+  | "welcome"
+  | "installing"
+  | "setup"
+  | "onboarding"
+  | "main";
 
 function App(): React.JSX.Element {
   const [screen, setScreen] = useState<Screen>("loading");
@@ -140,16 +147,24 @@ function App(): React.JSX.Element {
     let error: string | null = null;
     let isRemote = false;
 
+    // First-run gate: every path that would otherwise land in the workspace
+    // routes through onboarding once, until the "completed" flag is set. Default
+    // to completed so a read failure lands the user in the workspace rather than
+    // trapping them on onboarding.
+    let onboardingDone = true;
+    const landing = (): Screen => (onboardingDone ? "main" : "onboarding");
+
     try {
       const conn = await window.hermesAPI.getConnectionConfig();
       isRemote = conn.mode === "remote" || conn.mode === "ssh";
       setConnectionMode(conn.mode);
+      onboardingDone = await window.hermesAPI.getOnboardingCompleted();
 
       if (conn.mode === "ssh" && conn.ssh) {
-        // Start (or ensure) the SSH tunnel, then go straight to main
+        // Start (or ensure) the SSH tunnel, then go straight to the workspace
         try {
           await window.hermesAPI.startSshTunnel();
-          next = "main";
+          next = landing();
         } catch (tunnelErr) {
           error = `SSH tunnel failed to start: ${(tunnelErr as Error).message}`;
           next = "welcome";
@@ -157,7 +172,7 @@ function App(): React.JSX.Element {
       } else if (conn.mode === "remote" && conn.remoteUrl) {
         const ok = await window.hermesAPI.testRemoteConnection(conn.remoteUrl);
         if (ok) {
-          next = "main";
+          next = landing();
         } else {
           error = `Cannot reach remote Hermes at ${conn.remoteUrl}. Check the URL or switch to local mode.`;
           next = "welcome";
@@ -170,7 +185,7 @@ function App(): React.JSX.Element {
         } else if (!status.hasApiKey) {
           next = "setup";
         } else {
-          next = "main";
+          next = landing();
         }
       }
     } catch {
@@ -189,7 +204,10 @@ function App(): React.JSX.Element {
     // which don't exist on machines that only use a remote backend. Without
     // this guard the user is bounced back to Welcome with an "installBroken"
     // error immediately after a successful remote connect. (#47, #41, #30)
-    if ((next === "main" || next === "setup") && !isRemote) {
+    if (
+      (next === "main" || next === "setup" || next === "onboarding") &&
+      !isRemote
+    ) {
       window.hermesAPI.verifyInstall().then((ok) => {
         // Files exist (checkInstall passed) but the probe failed. Surface
         // a soft warning instead of bouncing to Welcome — see #130.
@@ -253,6 +271,31 @@ function App(): React.JSX.Element {
     setVerifyWarning(false);
   }
 
+  // After fresh install/setup, a first-time user routes through onboarding (which
+  // owns the post-setup config nudge that used to be a blunt "open Providers").
+  // Honour the flag in case onboarding was somehow already completed.
+  const handleSetupComplete = useCallback(async (): Promise<void> => {
+    const done = await window.hermesAPI.getOnboardingCompleted();
+    setScreen(done ? "main" : "onboarding");
+  }, []);
+
+  // Mark onboarding done and enter the workspace.
+  const finishOnboarding = useCallback(async (): Promise<void> => {
+    await window.hermesAPI.setOnboardingCompleted(true);
+    setScreen("main");
+  }, []);
+
+  // Onboarding deep-link: mark done, enter the workspace, and open the admin
+  // overlay on the requested tab (Providers / Models) so the user can fix config.
+  const configureFromOnboarding = useCallback(
+    async (view: AdminView): Promise<void> => {
+      await window.hermesAPI.setOnboardingCompleted(true);
+      setScreen("main");
+      openAdmin(view);
+    },
+    [openAdmin],
+  );
+
   function renderScreen(): React.JSX.Element {
     switch (screen) {
       case "loading":
@@ -284,15 +327,18 @@ function App(): React.JSX.Element {
       case "setup":
         return (
           <Setup
-            onComplete={() => {
-              setScreen("main");
-              // Land new users on Providers once, so the first thing after setup
-              // is the #1 task (keys/models) rather than a blank workspace.
-              openAdmin("providers");
-            }}
+            onComplete={handleSetupComplete}
             verifyWarning={verifyWarning}
             onReinstall={handleVerifyReinstall}
             onDismissVerifyWarning={handleDismissVerifyWarning}
+          />
+        );
+      case "onboarding":
+        return (
+          <Onboarding
+            connectionMode={connectionMode}
+            onFinish={finishOnboarding}
+            onConfigure={configureFromOnboarding}
           />
         );
       case "main":

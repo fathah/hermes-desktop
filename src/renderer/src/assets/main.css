@@ -913,6 +913,162 @@ body {
 }
 
 /* ========================================================================
+   ONBOARDING (first-run orientation + config nudge)
+   ======================================================================== */
+.onboarding-screen {
+  padding-top: 56px;
+  justify-content: flex-start;
+}
+
+.onboarding-title {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  margin-bottom: 8px;
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.onboarding-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 32px;
+  max-width: 520px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.onboarding-orient-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  width: 100%;
+  max-width: 620px;
+  margin-bottom: 28px;
+}
+
+.onboarding-orient-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.onboarding-orient-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-subtle);
+  color: var(--accent-text);
+  margin-bottom: 4px;
+}
+
+.onboarding-orient-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.onboarding-orient-desc {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.onboarding-kbd {
+  margin-top: auto;
+  align-self: flex-start;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-sm);
+  padding: 2px 7px;
+}
+
+.onboarding-checklist {
+  width: 100%;
+  max-width: 620px;
+  margin-bottom: 28px;
+}
+
+.onboarding-checklist-head {
+  margin-bottom: 12px;
+}
+
+.onboarding-checklist-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.onboarding-checklist-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.onboarding-check-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-bottom: 8px;
+}
+
+.onboarding-check-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.onboarding-check-item.done .onboarding-check-status {
+  background: var(--accent-subtle);
+  color: var(--accent-text);
+}
+
+.onboarding-check-label {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.onboarding-check-item.done .onboarding-check-label {
+  color: var(--text-secondary);
+}
+
+.onboarding-check-action {
+  flex-shrink: 0;
+  padding: 6px 16px;
+  font-size: 13px;
+}
+
+.onboarding-cta {
+  padding: 12px 32px;
+  font-size: 15px;
+}
+
+/* ========================================================================
    LAYOUT (Sidebar + Content)
    ======================================================================== */
 .layout {

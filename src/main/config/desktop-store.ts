@@ -87,3 +87,17 @@ export function setCompletionSound(enabled: boolean): void {
   data.completionSound = enabled;
   writeDesktopConfig(data);
 }
+
+/** Whether the first-run onboarding screen has been completed. App-level (not
+ *  per-profile): SPS Agent is single-profile, and orientation is a one-time
+ *  per-install event. Stored in desktop.json so it resets with a fresh
+ *  HERMES_HOME (a genuinely new install re-shows onboarding) — the intended
+ *  first-run semantics. Default false → a brand-new install shows onboarding. */
+export function getOnboardingCompleted(): boolean {
+  return readDesktopConfig().onboardingCompleted === true;
+}
+export function setOnboardingCompleted(completed: boolean): void {
+  const data = readDesktopConfig();
+  data.onboardingCompleted = completed;
+  writeDesktopConfig(data);
+}

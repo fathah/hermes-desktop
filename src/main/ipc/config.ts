@@ -22,6 +22,8 @@ import {
   setAutoApprove,
   getCompletionSound,
   setCompletionSound,
+  getOnboardingCompleted,
+  setOnboardingCompleted,
   readDesktopConfig,
   writeDesktopConfig,
 } from "../config";
@@ -521,6 +523,10 @@ export function registerConfigIpc(): void {
   ipcMain.handle("get-completion-sound", () => getCompletionSound());
   ipcMain.handle("set-completion-sound", (_event, enabled: boolean) =>
     setCompletionSound(enabled),
+  );
+  ipcMain.handle("get-onboarding-completed", () => getOnboardingCompleted());
+  ipcMain.handle("set-onboarding-completed", (_event, completed: boolean) =>
+    setOnboardingCompleted(completed),
   );
 
   // Scheduler Config

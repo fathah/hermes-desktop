@@ -10,6 +10,7 @@ import commonEn from "./locales/en/common";
 import navigationEn from "./locales/en/navigation";
 import welcomeEn from "./locales/en/welcome";
 import setupEn from "./locales/en/setup";
+import onboardingEn from "./locales/en/onboarding";
 import chatEn from "./locales/en/chat";
 import settingsEn from "./locales/en/settings";
 import toolsEn from "./locales/en/tools";
@@ -192,6 +193,7 @@ export const resources = {
       navigation: navigationEn,
       welcome: welcomeEn,
       setup: setupEn,
+      onboarding: onboardingEn,
       chat: chatEn,
       settings: settingsEn,
       tools: toolsEn,

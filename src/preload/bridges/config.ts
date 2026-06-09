@@ -121,6 +121,11 @@ export const configBridge = {
     ipcRenderer.invoke("get-completion-sound"),
   setCompletionSound: (enabled: boolean): Promise<void> =>
     ipcRenderer.invoke("set-completion-sound", enabled),
+  /** First-run onboarding "shown once" flag (stored in desktop.json). */
+  getOnboardingCompleted: (): Promise<boolean> =>
+    ipcRenderer.invoke("get-onboarding-completed"),
+  setOnboardingCompleted: (completed: boolean): Promise<void> =>
+    ipcRenderer.invoke("set-onboarding-completed", completed),
 
   setConnectionConfig: (
     mode: "local" | "remote" | "ssh",
