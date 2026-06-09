@@ -2970,6 +2970,67 @@ body {
   opacity: 1;
 }
 
+/* "⋯" overflow menu (ChatHeaderMenu). Global (not sps-scoped) because <Chat>
+   renders both inside and outside .sps-scope. */
+.chat-overflow-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 63;
+}
+
+.chat-overflow-menu {
+  position: fixed;
+  z-index: 64;
+  min-width: 190px;
+  padding: 4px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, rgba(127, 127, 127, 0.2));
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.chat-overflow-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 9px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-primary, inherit);
+  text-align: left;
+}
+
+.chat-overflow-item:hover {
+  background: var(--bg-primary, rgba(127, 127, 127, 0.1));
+}
+
+.chat-overflow-item.active {
+  color: var(--accent, inherit);
+}
+
+.chat-overflow-item.danger {
+  color: var(--danger, #d83c3c);
+}
+
+.chat-overflow-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-secondary, currentColor);
+}
+
+.chat-overflow-item.active .chat-overflow-icon,
+.chat-overflow-item.danger .chat-overflow-icon {
+  color: currentColor;
+}
+
 .chat-fast-wrapper {
   position: relative;
 }

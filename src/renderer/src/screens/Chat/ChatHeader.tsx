@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { ChatHeaderMenu, type OverflowItem } from "./ChatHeaderMenu";
 import type { UsageState } from "./types";
 import { contextGaugeInfo } from "./contextGauge";
 import {
@@ -134,6 +135,57 @@ export const ChatHeader = memo(function ChatHeader({
     setGroundInWorkspace(next);
   };
 
+  // Tier 3: the "⋯" overflow — secondary/rare actions. Developer-only items
+  // (worktree, checkpoints) appear only in dev mode (onCheckpoints is already
+  // undefined when dev mode is off; worktree is gated explicitly here).
+  const overflowItems: OverflowItem[] = [
+    {
+      key: "fast",
+      label: fastMode ? t("chat.fastModeOn") : t("chat.fastMode"),
+      icon: <Zap size={15} />,
+      onClick: onToggleFast,
+      active: fastMode,
+    },
+  ];
+  if (previewAvailable)
+    overflowItems.push({
+      key: "preview",
+      label: previewVisible ? t("chat.hidePreview") : t("chat.showPreview"),
+      icon: <PanelRight size={15} />,
+      onClick: onTogglePreview,
+      active: previewVisible,
+    });
+  if (onCompress && hasMessages)
+    overflowItems.push({
+      key: "compress",
+      label: "Compress context",
+      icon: <Minimize2 size={15} />,
+      onClick: onCompress,
+    });
+  if (devMode && contextFolder)
+    overflowItems.push({
+      key: "worktree",
+      label: worktreeVisible ? t("chat.hideWorktree") : t("chat.showWorktree"),
+      icon: <FolderTree size={15} />,
+      onClick: onToggleWorktree,
+      active: worktreeVisible,
+    });
+  if (onCheckpoints && hasMessages)
+    overflowItems.push({
+      key: "checkpoints",
+      label: "Checkpoints (/rollback)",
+      icon: <History size={15} />,
+      onClick: onCheckpoints,
+    });
+  if (hasMessages)
+    overflowItems.push({
+      key: "clear",
+      label: t("chat.clearChat"),
+      icon: <Trash size={15} />,
+      onClick: () => setConfirmClear(true),
+      danger: true,
+    });
+
   return (
     <div className="chat-header">
       <div className="chat-header-left">
@@ -148,6 +200,7 @@ export const ChatHeader = memo(function ChatHeader({
         )}
       </div>
       <div className="chat-header-actions">
+        {/* Tier 2 — context row: context folder + grounding (always visible). */}
         {showContextFolder &&
           (contextFolder ? (
             <div className="chat-ctxfolder">
@@ -172,24 +225,6 @@ export const ChatHeader = memo(function ChatHeader({
               >
                 <X size={12} />
               </button>
-              {devMode && (
-                <button
-                  className={`btn-ghost chat-worktree-toggle ${worktreeVisible ? "chat-worktree-active" : ""}`}
-                  onClick={onToggleWorktree}
-                  title={
-                    worktreeVisible
-                      ? t("chat.hideWorktree")
-                      : t("chat.showWorktree")
-                  }
-                  aria-label={
-                    worktreeVisible
-                      ? t("chat.hideWorktree")
-                      : t("chat.showWorktree")
-                  }
-                >
-                  <FolderTree size={14} />
-                </button>
-              )}
             </div>
           ) : (
             <button
@@ -209,58 +244,7 @@ export const ChatHeader = memo(function ChatHeader({
         >
           <BookOpen size={14} />
         </button>
-        <div className="chat-fast-wrapper">
-          <button
-            className={`btn-ghost chat-fast-btn ${fastMode ? "chat-fast-active" : ""}`}
-            onClick={onToggleFast}
-            title={fastMode ? t("chat.fastModeOn") : t("chat.fastMode")}
-            aria-label={fastMode ? t("chat.fastModeOn") : t("chat.fastMode")}
-          >
-            <Zap size={14} />
-          </button>
-          <div className="chat-fast-popover">
-            <strong>
-              {fastMode ? t("chat.fastModeOn") : t("chat.fastMode")}
-            </strong>
-            <span>
-              {fastMode ? t("chat.fastModeActive") : t("chat.fastModeInactive")}
-            </span>
-          </div>
-        </div>
-        {previewAvailable && (
-          <button
-            className={`btn-ghost chat-worktree-toggle ${previewVisible ? "chat-worktree-active" : ""}`}
-            onClick={onTogglePreview}
-            title={
-              previewVisible ? t("chat.hidePreview") : t("chat.showPreview")
-            }
-            aria-label={
-              previewVisible ? t("chat.hidePreview") : t("chat.showPreview")
-            }
-          >
-            <PanelRight size={14} />
-          </button>
-        )}
-        {onCheckpoints && hasMessages && (
-          <button
-            className="btn-ghost chat-clear-btn"
-            onClick={onCheckpoints}
-            title="Show filesystem checkpoints (/rollback)"
-            aria-label="Show filesystem checkpoints"
-          >
-            <History size={15} />
-          </button>
-        )}
-        {onCompress && hasMessages && (
-          <button
-            className="btn-ghost chat-clear-btn"
-            onClick={onCompress}
-            title="Compress context (summarize older turns)"
-            aria-label="Compress context"
-          >
-            <Minimize2 size={15} />
-          </button>
-        )}
+        {/* Tier 1 — primary: new chat (always visible). */}
         {onNewChat && (
           <button
             className="btn-ghost chat-clear-btn"
@@ -271,16 +255,8 @@ export const ChatHeader = memo(function ChatHeader({
             <Plus size={16} />
           </button>
         )}
-        {hasMessages && (
-          <button
-            className="btn-ghost chat-clear-btn"
-            onClick={() => setConfirmClear(true)}
-            title={t("chat.clearChat")}
-            aria-label={t("chat.clearChat")}
-          >
-            <Trash size={16} />
-          </button>
-        )}
+        {/* Tier 3 — overflow: fast mode, preview, compress, clear (+ dev items). */}
+        <ChatHeaderMenu items={overflowItems} />
       </div>
       <ConfirmDialog
         open={confirmClear}
