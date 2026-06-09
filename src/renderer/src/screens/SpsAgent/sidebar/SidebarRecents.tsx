@@ -4,11 +4,13 @@
 // Renders nothing extra when hermesAPI is absent (demo/standalone preview).
 import { useEffect, useState } from "react";
 import { Icon } from "../components/Icon";
+import { InlineRename } from "../components/InlineRename";
 import { useStore } from "../store";
 import type { SessionRow } from "../types";
 
 export function SidebarRecents() {
   const [sessions, setSessions] = useState<SessionRow[]>([]);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(
     null,
   );
@@ -48,16 +50,15 @@ export function SidebarRecents() {
     setMenu({ id, x: e.clientX, y: e.clientY });
   };
 
-  const renameSession = async (id: string): Promise<void> => {
+  const startRename = (id: string): void => {
     setMenu(null);
+    setRenamingId(id);
+  };
+
+  const commitRename = async (id: string, title: string): Promise<void> => {
+    setRenamingId(null);
     const api = window.hermesAPI;
     if (!api?.updateSessionTitle) return;
-    const row = sessions.find((s) => s.id === id);
-    const current = row?.title ?? row?.preview ?? "";
-    const next = prompt("Rename chat", current);
-    if (next == null) return;
-    const title = next.trim();
-    if (!title) return;
     try {
       await api.updateSessionTitle(id, title);
       setSessions((rows) =>
@@ -99,19 +100,29 @@ export function SidebarRecents() {
           <div
             key={s.id}
             className="nav-item"
-            onClick={() => openSession(s.id)}
+            onClick={() => renamingId !== s.id && openSession(s.id)}
             onContextMenu={(e) => openMenu(e, s.id)}
             title={label}
           >
             <Icon name="comment" size={17} />
-            <span className="nav-label">{label}</span>
-            <span
-              className="nav-add"
-              title="More"
-              onClick={(e) => openMenu(e, s.id)}
-            >
-              <Icon name="dots" size={14} />
-            </span>
+            {renamingId === s.id ? (
+              <InlineRename
+                initial={label}
+                onSubmit={(v) => void commitRename(s.id, v)}
+                onCancel={() => setRenamingId(null)}
+              />
+            ) : (
+              <>
+                <span className="nav-label">{label}</span>
+                <span
+                  className="nav-add"
+                  title="More"
+                  onClick={(e) => openMenu(e, s.id)}
+                >
+                  <Icon name="dots" size={14} />
+                </span>
+              </>
+            )}
           </div>
         );
       })}
@@ -125,10 +136,7 @@ export function SidebarRecents() {
             className="menu"
             style={{ left: menu.x, top: menu.y, zIndex: 64, minWidth: 180 }}
           >
-            <div
-              className="menu-mini"
-              onClick={() => void renameSession(menu.id)}
-            >
+            <div className="menu-mini" onClick={() => startRename(menu.id)}>
               <Icon name="text" size={15} /> Rename
             </div>
             <div className="menu-divider"></div>

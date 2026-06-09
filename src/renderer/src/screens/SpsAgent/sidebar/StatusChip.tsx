@@ -1,0 +1,118 @@
+// StatusChip.tsx — always-visible "which Hermes am I talking to?" indicator in
+// the rail footer: connection mode, active agent, and a health dot. Clicking
+// deep-links to the admin tab most relevant to the current state (Providers when
+// no API key, Gateway when offline, else connection Settings). Polls coarsely so
+// the dot reflects gateway up/down without hammering IPC.
+import { useEffect, useState } from "react";
+import { openSettings, type AdminView } from "../../../lib/openSettings";
+
+type Health = "ok" | "warn" | "down";
+
+interface Status {
+  label: string; // Local / Remote / SSH <host>
+  profile: string; // active agent name
+  health: Health;
+  target: AdminView; // where a click goes
+  hint: string;
+}
+
+const DOT_COLOR: Record<Health, string> = {
+  ok: "#3ba55d",
+  warn: "#e0a100",
+  down: "#d83c3c",
+};
+
+export function StatusChip(): React.JSX.Element | null {
+  const [status, setStatus] = useState<Status | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async (): Promise<void> => {
+      const api = window.hermesAPI;
+      if (!api?.getConnectionConfig) return;
+      try {
+        const [conn, gatewayUp, profiles] = await Promise.all([
+          api.getConnectionConfig(),
+          api.gatewayStatus ? api.gatewayStatus() : Promise.resolve(false),
+          api.listProfiles ? api.listProfiles() : Promise.resolve([]),
+        ]);
+        if (cancelled) return;
+        const active = profiles.find((p) => p.isActive)?.name ?? "default";
+        const label =
+          conn.mode === "local"
+            ? "Local"
+            : conn.mode === "ssh"
+              ? `SSH ${conn.ssh?.host ?? ""}`.trim()
+              : "Remote";
+
+        let health: Health = "ok";
+        let target: AdminView = "settings";
+        let hint = "Connection healthy";
+        if (!conn.hasApiKey) {
+          health = "warn";
+          target = "providers";
+          hint = "No API key — add one in Providers";
+        } else if (!gatewayUp) {
+          health = "down";
+          target = "gateway";
+          hint = "Gateway offline";
+        }
+        setStatus({ label, profile: active, health, target, hint });
+      } catch {
+        /* offline / no gateway — leave the last good value */
+      }
+    };
+    void load();
+    const timer = setInterval(() => void load(), 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, []);
+
+  if (!status) return null;
+
+  return (
+    <button
+      className="rail-status-chip"
+      title={status.hint}
+      aria-label={`Connection ${status.label}, agent ${status.profile}. ${status.hint}.`}
+      onClick={() => openSettings(status.target)}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        width: "100%",
+        padding: "4px 10px",
+        margin: 0,
+        background: "none",
+        border: "none",
+        font: "inherit",
+        fontSize: "0.72rem",
+        color: "var(--muted, #888)",
+        cursor: "pointer",
+        textAlign: "left",
+      }}
+    >
+      <span
+        aria-hidden="true"
+        style={{
+          width: 7,
+          height: 7,
+          borderRadius: "50%",
+          background: DOT_COLOR[status.health],
+          flex: "none",
+        }}
+      />
+      <span
+        style={{
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {status.label} · {status.profile}
+      </span>
+    </button>
+  );
+}

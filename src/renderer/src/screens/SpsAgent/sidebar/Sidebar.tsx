@@ -15,6 +15,7 @@ import { SidebarApps, SidebarMeetings, SidebarShared } from "./SidebarStubs";
 import { useVaultQuery } from "../hooks/useNoteIndex";
 import { INBOX_FOLDER } from "../inbox/capture";
 import { ObsidianExplorer } from "./ObsidianExplorer";
+import { StatusChip } from "./StatusChip";
 import { openSettings } from "../../../lib/openSettings";
 
 interface Identity {
@@ -344,6 +345,8 @@ export function Sidebar() {
           <Icon name="callout" size={16} />
         </button>
       </div>
+
+      <StatusChip />
 
       <div className="rail-foot">
         <span className="avatar">{identity.initial}</span>

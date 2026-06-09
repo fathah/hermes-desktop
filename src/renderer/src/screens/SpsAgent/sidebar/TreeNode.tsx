@@ -2,6 +2,7 @@
 // Ported from sidebar.jsx TreeNode.
 import { useState } from "react";
 import { Icon } from "../components/Icon";
+import { InlineRename } from "../components/InlineRename";
 import type { DropWhere } from "../lib/tree";
 import type { PageMeta, TreeNode as TreeNodeT } from "../types";
 import type { TreeDnd } from "./dnd";
@@ -33,6 +34,7 @@ export function TreeNode({
   const hasKids = node.children && node.children.length > 0;
   const [open, setOpen] = useState(depth === 0);
   const [menu, setMenu] = useState(false);
+  const [renaming, setRenaming] = useState(false);
   const isOver = dnd.over && dnd.over.id === node.id;
 
   const onDragOver = (e: React.DragEvent) => {
@@ -74,7 +76,7 @@ export function TreeNode({
         }}
         onDragOver={onDragOver}
         onDrop={onDrop}
-        onClick={() => onSelect(node.id)}
+        onClick={() => !renaming && onSelect(node.id)}
       >
         <span
           className={`tree-toggle ${hasKids ? "" : "leaf"} ${open ? "open" : ""}`}
@@ -86,27 +88,41 @@ export function TreeNode({
           <Icon name="chevR" size={13} />
         </span>
         <span className="tree-emoji">{m.icon}</span>
-        <span className="tree-label">{m.title}</span>
-        <span
-          className="tree-add"
-          title="Add sub-page"
-          onClick={(e) => {
-            e.stopPropagation();
-            onNewSubPage(node.id);
-          }}
-        >
-          <Icon name="plus" size={14} />
-        </span>
-        <span
-          className="tree-add"
-          title="More"
-          onClick={(e) => {
-            e.stopPropagation();
-            setMenu(true);
-          }}
-        >
-          <Icon name="dots" size={14} />
-        </span>
+        {renaming ? (
+          <InlineRename
+            className="tree-label"
+            initial={m.title}
+            onSubmit={(v) => {
+              setRenaming(false);
+              onRename(node.id, v);
+            }}
+            onCancel={() => setRenaming(false)}
+          />
+        ) : (
+          <>
+            <span className="tree-label">{m.title}</span>
+            <span
+              className="tree-add"
+              title="Add sub-page"
+              onClick={(e) => {
+                e.stopPropagation();
+                onNewSubPage(node.id);
+              }}
+            >
+              <Icon name="plus" size={14} />
+            </span>
+            <span
+              className="tree-add"
+              title="More"
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenu(true);
+              }}
+            >
+              <Icon name="dots" size={14} />
+            </span>
+          </>
+        )}
       </div>
       {menu && (
         <>
@@ -127,8 +143,7 @@ export function TreeNode({
               className="menu-mini"
               onClick={() => {
                 setMenu(false);
-                const tt = prompt("Rename page", m.title);
-                if (tt != null && tt.trim()) onRename(node.id, tt.trim());
+                setRenaming(true);
               }}
             >
               <Icon name="text" size={15} /> Rename

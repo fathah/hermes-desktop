@@ -1,10 +1,14 @@
 // SidebarAgents.tsx — Hermes profiles surfaced as "Agents" (each profile is a
 // separate ~/.hermes/profiles/{name} with its own gateway + session store).
-// Clicking switches the active profile; "New agent" creates one. The section's
-// "+" (in Sidebar.tsx) and this list share the same create flow.
+//
+// The SPS workspace is single-profile by design: every surface operates on the
+// "default" profile, so a silent in-rail profile *switch* here would lie (the
+// workspace wouldn't actually change agents). Instead the list is read-only —
+// it shows the active agent, and clicking opens the admin Agents screen, where
+// profile management genuinely takes effect.
 import { useCallback, useEffect, useState } from "react";
 import { Icon } from "../components/Icon";
-import { useStore } from "../store";
+import { openSettings } from "../../../lib/openSettings";
 
 interface ProfileRow {
   name: string;
@@ -14,10 +18,8 @@ interface ProfileRow {
 export function useAgents(): {
   profiles: ProfileRow[];
   refresh: () => void;
-  activate: (name: string) => void;
 } {
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
-  const flash = useStore((s) => s.flash);
 
   const refresh = useCallback(() => {
     const api = window.hermesAPI;
@@ -36,26 +38,11 @@ export function useAgents(): {
     refresh();
   }, [refresh]);
 
-  const activate = useCallback(
-    (name: string) => {
-      const api = window.hermesAPI;
-      if (!api?.setActiveProfile) return;
-      api
-        .setActiveProfile(name)
-        .then(() => {
-          flash(`Switched to ${name}`);
-          refresh();
-        })
-        .catch(() => flash("Could not switch agent"));
-    },
-    [flash, refresh],
-  );
-
-  return { profiles, refresh, activate };
+  return { profiles, refresh };
 }
 
 export function SidebarAgents() {
-  const { profiles, activate } = useAgents();
+  const { profiles } = useAgents();
 
   if (profiles.length === 0) {
     return (
@@ -72,8 +59,8 @@ export function SidebarAgents() {
         <div
           key={p.name}
           className={`nav-item ${p.isActive ? "active" : ""}`}
-          onClick={() => activate(p.name)}
-          title={p.name}
+          onClick={() => openSettings("agents")}
+          title={`Manage agents (${p.name})`}
         >
           <Icon name="sparkle" size={17} />
           <span className="nav-label">{p.name}</span>

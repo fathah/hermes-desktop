@@ -12,6 +12,7 @@ import {
   BookOpen,
 } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import type { UsageState } from "./types";
 import { contextGaugeInfo } from "./contextGauge";
 import {
@@ -123,6 +124,7 @@ export const ChatHeader = memo(function ChatHeader({
   // KB Phase 1: self-managed grounding toggle. The send path reads this from
   // localStorage at send time, so no prop threading is needed.
   const [grounded, setGrounded] = useState(getGroundInWorkspace());
+  const [confirmClear, setConfirmClear] = useState(false);
   const toggleGrounding = (): void => {
     const next = !grounded;
     setGrounded(next);
@@ -248,15 +250,26 @@ export const ChatHeader = memo(function ChatHeader({
         {hasMessages && (
           <button
             className="btn-ghost chat-clear-btn"
-            onClick={() => {
-              if (window.confirm(t("chat.clearChatConfirm"))) onClear();
-            }}
+            onClick={() => setConfirmClear(true)}
             title={t("chat.clearChat")}
+            aria-label={t("chat.clearChat")}
           >
             <Trash size={16} />
           </button>
         )}
       </div>
+      <ConfirmDialog
+        open={confirmClear}
+        title={t("chat.clearChat")}
+        body={t("chat.clearChatConfirm")}
+        confirmLabel={t("chat.clearChat")}
+        danger
+        onConfirm={() => {
+          setConfirmClear(false);
+          onClear();
+        }}
+        onCancel={() => setConfirmClear(false)}
+      />
     </div>
   );
 });
