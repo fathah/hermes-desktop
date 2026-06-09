@@ -216,46 +216,51 @@ export function Sidebar() {
         </SidebarSection>
 
         <SidebarSection id="workspaceTools" label="Workspace Tools">
-          <div
+          <button
+            type="button"
             className={`nav-item ${surface === "cockpit" ? "active" : ""}`}
             onClick={() => setSurface("cockpit")}
             style={{ paddingLeft: 24 }}
           >
             <Icon name="board" size={17} />
             <span className="nav-label">Cockpit</span>
-          </div>
-          <div
+          </button>
+          <button
+            type="button"
             className={`nav-item ${surface === "graph" ? "active" : ""}`}
             onClick={() => setSurface("graph")}
             style={{ paddingLeft: 24 }}
           >
             <Icon name="pageGraph" size={17} />
             <span className="nav-label">Graph</span>
-          </div>
-          <div
+          </button>
+          <button
+            type="button"
             className="nav-item"
             onClick={() => setResearchOpen(true)}
             style={{ paddingLeft: 24 }}
           >
             <Icon name="doc" size={17} />
             <span className="nav-label">Research</span>
-          </div>
-          <div
+          </button>
+          <button
+            type="button"
             className={`nav-item ${surface === "equity" ? "active" : ""}`}
             onClick={() => setSurface("equity")}
             style={{ paddingLeft: 24 }}
           >
             <Icon name="table" size={17} />
             <span className="nav-label">Equity</span>
-          </div>
-          <div
+          </button>
+          <button
+            type="button"
             className={`nav-item ${surface === "insights" ? "active" : ""}`}
             onClick={() => setSurface("insights")}
             style={{ paddingLeft: 24 }}
           >
             <Icon name="board" size={17} />
             <span className="nav-label">Insights</span>
-          </div>
+          </button>
         </SidebarSection>
 
         <SidebarSection id="meetings" label="Meetings">
