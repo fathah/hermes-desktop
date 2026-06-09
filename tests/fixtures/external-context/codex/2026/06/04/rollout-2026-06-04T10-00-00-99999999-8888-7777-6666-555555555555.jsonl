@@ -1,0 +1,6 @@
+{"type":"session_meta","timestamp":"2026-06-04T10:00:00.000Z","payload":{"id":"99999999-8888-7777-6666-555555555555","cwd":"/Users/test/codexproj","git":{"branch":"feature/x","commit_hash":"abc123"},"timestamp":"2026-06-04T10:00:00.000Z"}}
+{"type":"event_msg","timestamp":"2026-06-04T10:00:01.000Z","payload":{"type":"task_started","turn_id":"t1"}}
+{"type":"event_msg","timestamp":"2026-06-04T10:00:02.000Z","payload":{"type":"user_message","message":"search for the affine and appflowy repos"}}
+{"type":"response_item","timestamp":"2026-06-04T10:00:03.000Z","payload":{"type":"reasoning","encrypted_content":"opaque","summary":[]}}
+{"type":"event_msg","timestamp":"2026-06-04T10:00:10.000Z","payload":{"type":"agent_message","message":"I found both repositories and summarised their architectures."}}
+{"type":"response_item","timestamp":"2026-06-04T10:00:11.000Z","payload":{"type":"function_call","name":"shell","arguments":"{}","call_id":"c1"}}

@@ -1,0 +1,6 @@
+{"id":"12121212-3434-5656-7878-909090909090","instructions":"system instructions here","timestamp":"2025-09-04T13:00:00.000Z"}
+{"record_type":"state"}
+{"type":"message","role":"user","id":"m1","content":[{"type":"input_text","text":"old format: refactor the auth module"}]}
+{"type":"reasoning","id":"r1","summary":[],"encrypted_content":"opaque"}
+{"type":"message","role":"assistant","id":"m2","content":[{"type":"output_text","text":"Done — split auth into tokens and sessions."}]}
+{"type":"function_call","id":"f1","name":"shell","arguments":"{}","call_id":"c1"}

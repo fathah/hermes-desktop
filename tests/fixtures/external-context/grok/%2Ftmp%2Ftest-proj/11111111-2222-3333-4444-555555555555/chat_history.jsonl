@@ -1,0 +1,5 @@
+{"type":"system","content":"You are an AI coding assistant, powered by Composer."}
+{"type":"user","content":[{"type":"text","text":"steelman the external context bridge idea for Hermes"}]}
+{"type":"reasoning","content":"internal reasoning to drop"}
+{"type":"assistant","model_id":"grok-code","content":"Grounding this in what Hermes is: the bridge makes it the continuity layer."}
+{"type":"tool_result","content":"tool output to drop"}

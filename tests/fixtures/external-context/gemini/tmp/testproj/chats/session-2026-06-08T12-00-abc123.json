@@ -1,0 +1,30 @@
+{
+  "kind": "chat",
+  "sessionId": "gem-session-0001",
+  "projectHash": "b71e47fdd133d4341b82eb3b0cb7126c1f1331d7595a4d2881441615ba35467a",
+  "startTime": "2026-06-08T12:00:00.000Z",
+  "lastUpdated": "2026-06-08T12:05:00.000Z",
+  "summary": "Save to Knowledge Base via Mac helper",
+  "messages": [
+    {
+      "id": "g1",
+      "timestamp": "2026-06-08T12:00:01.000Z",
+      "type": "user",
+      "content": [
+        {
+          "text": "we need a way to save to our Knowledge Base via the Mac helper app"
+        }
+      ]
+    },
+    {
+      "id": "g2",
+      "timestamp": "2026-06-08T12:00:30.000Z",
+      "type": "gemini",
+      "content": [
+        {
+          "text": "You can add an IPC handler that writes a vault page on demand."
+        }
+      ]
+    }
+  ]
+}
