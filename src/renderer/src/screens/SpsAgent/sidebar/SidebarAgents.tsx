@@ -56,7 +56,8 @@ export function SidebarAgents() {
   return (
     <>
       {profiles.map((p) => (
-        <div
+        <button
+          type="button"
           key={p.name}
           className={`nav-item ${p.isActive ? "active" : ""}`}
           onClick={() => openSettings("agents")}
@@ -64,7 +65,7 @@ export function SidebarAgents() {
         >
           <Icon name="sparkle" size={17} />
           <span className="nav-label">{p.name}</span>
-        </div>
+        </button>
       ))}
     </>
   );

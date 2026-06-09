@@ -331,6 +331,15 @@
   font-size: 13px;
   font-weight: 450;
   white-space: nowrap;
+  /* Reset so a <button class="nav-item"> renders identically to the old div
+     (rows are now semantic buttons for keyboard/AT access). */
+  appearance: none;
+  -webkit-appearance: none;
+  border: none;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
 }
 .sps-scope .nav-item:hover {
   background: var(--row-hover);
@@ -1406,7 +1415,6 @@
   font-size: 13px;
   color: var(--tx-3);
 }
-
 
 /* agent-action button block */
 .sps-scope .b-button-wrap {
