@@ -9,6 +9,7 @@ import {
   Check,
 } from "../../assets/icons";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
+import { CuratorPanel } from "./CuratorPanel";
 import { useI18n } from "../../components/useI18n";
 import type { SkillEntry } from "../../../../shared/skills";
 
@@ -843,6 +844,8 @@ function Skills({ profile, visible = true }: SkillsProps): React.JSX.Element {
             })}
           </div>
         ))}
+
+      <CuratorPanel profile={profile} />
     </div>
   );
 }
