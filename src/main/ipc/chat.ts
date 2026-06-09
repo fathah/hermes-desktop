@@ -20,11 +20,14 @@ import {
   sshStartGateway,
   sshReadRemoteApiKey,
 } from "../ssh-remote";
+import { startSshTunnel, isSshTunnelHealthy } from "../ssh-tunnel";
 import {
-  startSshTunnel,
-  isSshTunnelHealthy,
-} from "../ssh-tunnel";
-import { StreamRedactor } from "../redactor";
+  runChatTurn,
+  type ChatTurnSink,
+  type ChatTurnEffects,
+} from "../chat-orchestrator";
+import { saveAssistantMessageMetadata } from "../messages-metadata";
+import { adoptCouncilResponse } from "../sessions";
 import { recordUsage } from "../usage-store";
 import { canAutoApprove } from "../autonomy";
 import { appendAuditLog } from "../audit-log";
@@ -36,7 +39,11 @@ import {
   type IssueCode,
 } from "../config-health";
 import { getVoiceStatus, transcribeAudio, speakText } from "../voice";
-import { checkOpenClawExists, runClawMigrate, type InstallProgress } from "../installer";
+import {
+  checkOpenClawExists,
+  runClawMigrate,
+  type InstallProgress,
+} from "../installer";
 import type { Attachment } from "../../shared/attachments";
 
 export const activeChatAborts = new Map<string, () => void>();
@@ -52,7 +59,35 @@ export function abortAllChats(): void {
   activeChatAborts.clear();
 }
 
-export function registerChatIpc(mainWindowGetter: () => BrowserWindow | null): void {
+/**
+ * Ensure the chat transport is reachable before sending: start the local
+ * gateway if needed, and in SSH mode bring up the remote gateway + tunnel and
+ * fetch the remote API key. Extracted verbatim from the send-message handler.
+ */
+async function ensureChatGatewayReady(profile?: string): Promise<void> {
+  if (!isRemoteMode() && !isGatewayRunning(profile)) {
+    startGateway(profile);
+  }
+
+  await ensureSshTunnelIfNeeded();
+  const conn = getConnectionConfig();
+  if (conn.mode === "ssh" && conn.ssh) {
+    const gatewayRunning = await sshGatewayStatus(conn.ssh);
+    const tunnelHealthy = await isSshTunnelHealthy();
+    if (!gatewayRunning || !tunnelHealthy) {
+      await sshStartGateway(conn.ssh);
+      await startSshTunnel(conn.ssh);
+    }
+    if (!getRemoteAuthHeader().Authorization) {
+      const key = await sshReadRemoteApiKey(conn.ssh);
+      setSshRemoteApiKey(key);
+    }
+  }
+}
+
+export function registerChatIpc(
+  mainWindowGetter: () => BrowserWindow | null,
+): void {
   // Pre-send chat readiness
   ipcMain.handle("validate-chat-readiness", (_event, profile?: string) => {
     return validateChatReadiness(profile);
@@ -98,43 +133,11 @@ export function registerChatIpc(mainWindowGetter: () => BrowserWindow | null): v
       clientRunId?: string,
       modelOverride?: { model?: string; provider?: string; baseUrl?: string },
     ) => {
-      if (!isRemoteMode() && !isGatewayRunning(profile)) {
-        startGateway(profile);
-      }
-
-      await ensureSshTunnelIfNeeded();
-      const conn = getConnectionConfig();
-      if (conn.mode === "ssh" && conn.ssh) {
-        const gatewayRunning = await sshGatewayStatus(conn.ssh);
-        const tunnelHealthy = await isSshTunnelHealthy();
-        if (!gatewayRunning || !tunnelHealthy) {
-          await sshStartGateway(conn.ssh);
-          await startSshTunnel(conn.ssh);
-        }
-        if (!getRemoteAuthHeader().Authorization) {
-          const key = await sshReadRemoteApiKey(conn.ssh);
-          setSshRemoteApiKey(key);
-        }
-      }
+      await ensureChatGatewayReady(profile);
 
       const sessionKey =
         resumeSessionId || clientRunId || `sender-${event.sender.id}`;
-
-      const existing = activeChatAborts.get(sessionKey);
-      if (existing) {
-        existing();
-      }
-
-      let fullResponse = "";
       const chatStartTime = Date.now();
-      let resolveChat: (v: { response: string; sessionId?: string }) => void;
-      let rejectChat: (reason?: unknown) => void;
-      const promise = new Promise<{ response: string; sessionId?: string }>(
-        (res, rej) => {
-          resolveChat = res;
-          rejectChat = rej;
-        },
-      );
 
       const secretsToRedact: string[] = [];
       const apiServerKey = getApiServerKey(profile);
@@ -148,173 +151,108 @@ export function registerChatIpc(mainWindowGetter: () => BrowserWindow | null): v
           secretsToRedact.push(match[1]);
         }
       }
-      const contentRedactor = new StreamRedactor(secretsToRedact);
-      const reasoningRedactor = new StreamRedactor(secretsToRedact);
 
-      const safeSend = (channel: string, payload: unknown): boolean => {
-        if (event.sender.isDestroyed()) return false;
-        try {
-          event.sender.send(channel, payload, clientRunId);
-          return true;
-        } catch {
-          return false;
-        }
+      const sink: ChatTurnSink = {
+        emit: (channel, payload) => {
+          if (event.sender.isDestroyed()) return false;
+          try {
+            event.sender.send(channel, payload, clientRunId);
+            return true;
+          } catch {
+            return false;
+          }
+        },
       };
 
-      const handle = await sendMessage(
-        message,
-        {
-          onChunk: (chunk) => {
-            const { chunkToEmit } = contentRedactor.process(chunk);
-            if (chunkToEmit) {
-              fullResponse += chunkToEmit;
-              if (!safeSend("chat-chunk", chunkToEmit)) {
-                const abort = activeChatAborts.get(sessionKey);
-                if (abort) abort();
-              }
-            }
-          },
-          onReasoningChunk: (chunk) => {
-            const { chunkToEmit } = reasoningRedactor.process(chunk);
-            if (chunkToEmit) {
-              if (!safeSend("chat-reasoning-chunk", chunkToEmit)) {
-                const abort = activeChatAborts.get(sessionKey);
-                if (abort) abort();
-              }
-            }
-          },
-          onDone: (sessionId) => {
-            const contentFlush = contentRedactor.flush();
-            if (contentFlush) {
-              fullResponse += contentFlush;
-              safeSend("chat-chunk", contentFlush);
-            }
-            const reasoningFlush = reasoningRedactor.flush();
-            if (reasoningFlush) {
-              safeSend("chat-reasoning-chunk", reasoningFlush);
-            }
-            activeChatAborts.delete(sessionKey);
-            safeSend("chat-done", sessionId || "");
-
-            // Save metadata for the completed assistant message
-            if (sessionId) {
-              try {
-                const { getSharedDb } = require("../db");
-                const { getModelConfig } = require("../config");
-                const db = getSharedDb(false);
-                if (db) {
-                  const mc = getModelConfig(profile);
-                  const finalModel = modelOverride?.model || mc.model;
-                  const finalProvider = modelOverride?.provider || mc.provider;
-
-                  const lastMsg = db.prepare(`
-                    SELECT id FROM messages
-                    WHERE session_id = ? AND role = 'assistant'
-                    ORDER BY timestamp DESC, id DESC
-                    LIMIT 1
-                  `).get(sessionId) as { id: number } | undefined;
-
-                  if (lastMsg) {
-                    let councilGroupId: string | null = null;
-                    if (clientRunId && clientRunId.startsWith("council-turn-")) {
-                      const parts = clientRunId.split("::");
-                      councilGroupId = parts[0];
-                    }
-
-                    db.prepare(`
-                      INSERT OR REPLACE INTO messages_metadata (message_id, model, provider, council_group_id)
-                      VALUES (?, ?, ?, ?)
-                    `).run(lastMsg.id, finalModel, finalProvider, councilGroupId);
-                  }
-                }
-              } catch (err) {
-                console.error("[chat] Failed to save message metadata to DB:", err);
-              }
-            }
-
-            if (getCompletionSound()) shell.beep();
-            resolveChat({ response: fullResponse, sessionId });
-            if (
-              mainWindowGetter() &&
-              !mainWindowGetter()!.isFocused() &&
-              Date.now() - chatStartTime > 10000
-            ) {
-              const preview = fullResponse
-                .replace(/[#*_`~\n]+/g, " ")
-                .trim()
-                .slice(0, 80);
-              new Notification({
-                title: "Hermes Agent",
-                body: preview || "Response ready",
-              }).show();
-            }
-          },
-          onError: (error) => {
-            contentRedactor.flush();
-            reasoningRedactor.flush();
-            activeChatAborts.delete(sessionKey);
-            safeSend("chat-error", error);
-            rejectChat(new Error(error));
-            if (mainWindowGetter() && !mainWindowGetter()!.isFocused()) {
-              new Notification({
-                title: "Hermes Agent — Error",
-                body: error.slice(0, 100),
-              }).show();
-            }
-          },
-          onToolProgress: (tool) => {
-            safeSend("chat-tool-progress", tool);
-          },
-          onUsage: (usage) => {
-            safeSend("chat-usage", usage);
-            recordUsage(
-              {
-                sessionId: usage.sessionId ?? resumeSessionId,
-                model: usage.model,
-                promptTokens: usage.promptTokens,
-                completionTokens: usage.completionTokens,
-                totalTokens: usage.totalTokens,
-                cost: usage.cost,
-                cacheRead: usage.cacheRead,
-                cacheWrite: usage.cacheWrite,
-              },
-              { profile },
-            );
-          },
-          onApprovalRequest: (req) => {
-            if (getAutoApprove(profile) && canAutoApprove(req)) {
-              void respondRunApproval(req.id, "once", profile);
-              appendAuditLog({
-                ts: Date.now(),
-                action: "auto-approve",
-                command: req.command,
-                runId: req.id,
-                profile: profile || "default",
-              });
-              console.log(`[autonomy] auto-approved: ${req.command ?? req.id}`);
-              safeSend("chat-approval-auto", { ...req, sessionKey });
-              return;
-            }
-            safeSend("chat-approval-request", { ...req, sessionKey });
-          },
-          onCheckpoint: (cp) => {
-            safeSend("chat-checkpoint", { ...cp, sessionKey });
-          },
-          onDelegateProgress: (p) => {
-            safeSend("chat-delegate-progress", { ...p, sessionKey });
-          },
+      const effects: ChatTurnEffects = {
+        recordUsage: (usage) => {
+          recordUsage(
+            {
+              sessionId: usage.sessionId ?? resumeSessionId,
+              model: usage.model,
+              promptTokens: usage.promptTokens,
+              completionTokens: usage.completionTokens,
+              totalTokens: usage.totalTokens,
+              cost: usage.cost,
+              cacheRead: usage.cacheRead,
+              cacheWrite: usage.cacheWrite,
+            },
+            { profile },
+          );
         },
-        profile,
-        resumeSessionId,
-        history,
-        attachments,
-        contextFolder,
-        groundInWorkspace,
-        modelOverride,
-      );
+        persistAssistantMetadata: (sessionId) => {
+          saveAssistantMessageMetadata({
+            sessionId,
+            profile,
+            modelOverride,
+            clientRunId,
+          });
+        },
+        maybeAutoApprove: (req) => {
+          if (getAutoApprove(profile) && canAutoApprove(req)) {
+            void respondRunApproval(req.id, "once", profile);
+            appendAuditLog({
+              ts: Date.now(),
+              action: "auto-approve",
+              command: req.command,
+              runId: req.id,
+              profile: profile || "default",
+            });
+            console.log(`[autonomy] auto-approved: ${req.command ?? req.id}`);
+            return true;
+          }
+          return false;
+        },
+        playCompletionSound: () => {
+          if (getCompletionSound()) shell.beep();
+        },
+        notifyComplete: (response) => {
+          if (
+            mainWindowGetter() &&
+            !mainWindowGetter()!.isFocused() &&
+            Date.now() - chatStartTime > 10000
+          ) {
+            const preview = response
+              .replace(/[#*_`~\n]+/g, " ")
+              .trim()
+              .slice(0, 80);
+            new Notification({
+              title: "Hermes Agent",
+              body: preview || "Response ready",
+            }).show();
+          }
+        },
+        notifyError: (error) => {
+          if (mainWindowGetter() && !mainWindowGetter()!.isFocused()) {
+            new Notification({
+              title: "Hermes Agent — Error",
+              body: error.slice(0, 100),
+            }).show();
+          }
+        },
+      };
 
-      activeChatAborts.set(sessionKey, handle.abort);
-      return promise;
+      return runChatTurn(
+        {
+          message,
+          profile,
+          resumeSessionId,
+          history,
+          attachments,
+          contextFolder,
+          groundInWorkspace,
+          clientRunId,
+          modelOverride,
+        },
+        {
+          transport: sendMessage,
+          sink,
+          effects,
+          abortRegistry: activeChatAborts,
+          sessionKey,
+          secretsToRedact,
+        },
+      );
     },
   );
 
@@ -330,7 +268,6 @@ export function registerChatIpc(mainWindowGetter: () => BrowserWindow | null): v
   ipcMain.handle(
     "adopt-council-response",
     (_event, messageId: number, sessionId: string, councilGroupId: string) => {
-      const { adoptCouncilResponse } = require("../sessions");
       return adoptCouncilResponse(messageId, sessionId, councilGroupId);
     },
   );
