@@ -1007,6 +1007,16 @@ body {
   transform: rotate(180deg);
 }
 
+/* Static task-group label within the Control Center nav (Conversations,
+   Agents, Connectivity, …). Quieter than the master section toggle. */
+.sidebar-nav-group-header {
+  padding: 8px 14px 4px;
+  color: var(--text-muted);
+  font: 600 10px/1 var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
 .sidebar-nav-item {
   display: flex;
   align-items: center;
@@ -4348,7 +4358,6 @@ body {
   flex-direction: column;
   gap: 8px;
 }
-
 
 /* ---- SPS admin overlay (opened via the sidebar "Settings" item / ⌘,) ---- */
 .sps-admin-overlay {
@@ -8889,7 +8898,7 @@ body {
 .prompt-budget-spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid var(--border, rgba(127,127,127,0.2));
+  border: 2px solid var(--border, rgba(127, 127, 127, 0.2));
   border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 1s linear infinite;
@@ -8905,7 +8914,7 @@ body {
 
 .prompt-budget-progress-track {
   height: 10px;
-  background: var(--bg-tertiary, rgba(127,127,127,0.1));
+  background: var(--bg-tertiary, rgba(127, 127, 127, 0.1));
   border-radius: 5px;
   overflow: hidden;
   margin-bottom: 16px;
@@ -8986,7 +8995,9 @@ body {
   flex-direction: column;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
   overflow: hidden;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .chat-council-col:hover {
@@ -9074,7 +9085,11 @@ body {
   gap: 8px;
   font-size: 12px;
   font-weight: 600;
-  background: linear-gradient(135deg, var(--accent, #a855f7), var(--accent-subtle, #d8b4fe));
+  background: linear-gradient(
+    135deg,
+    var(--accent, #a855f7),
+    var(--accent-subtle, #d8b4fe)
+  );
   color: #fff !important;
   border: none;
   padding: 8px 20px;
@@ -9175,7 +9190,7 @@ body {
   margin-left: 8px;
   margin-top: 4px;
   align-self: flex-start;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
 }
 
 .chat-model-badge-icon {
@@ -9198,5 +9213,3 @@ body {
   padding: 3px 8px;
   font-weight: 600;
 }
-
-

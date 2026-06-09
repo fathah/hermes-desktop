@@ -13,4 +13,15 @@ export default {
   kanban: "Kanban",
   gateway: "Gateway",
   settings: "Settings",
+  // Previously carried as `label` literal overrides in Layout's NAV_ITEMS.
+  insights: "Agent Insights",
+  personalization: "Personalization",
+  capabilityReview: "Capabilities",
+  // Admin overlay title + nav group headers (task-based IA).
+  controlCenterTitle: "Hermes Admin",
+  groupConversations: "Conversations",
+  groupAgents: "Agents",
+  groupConnectivity: "Connectivity",
+  groupWorkspace: "Workspace",
+  groupSystem: "System",
 } as const;

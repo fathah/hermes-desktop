@@ -18,6 +18,7 @@ import Schedules from "../Schedules/Schedules";
 import Kanban from "../Kanban/Kanban";
 import Insights from "../Insights/Insights";
 import CapabilityReview from "../CapabilityReview/CapabilityReview";
+import Memory from "../Memory/Memory";
 import RemoteNotice from "../../components/RemoteNotice";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
 import hermeslogo from "../../assets/hermes.png";
@@ -36,7 +37,7 @@ import {
   Kanban as KanbanIcon,
   Download,
 } from "../../assets/icons";
-import { BarChart3, UserCog, ShieldCheck } from "lucide-react";
+import { BarChart3, UserCog, ShieldCheck, Brain } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 import { loadAndApplyActiveSkin } from "../../utils/skin";
@@ -51,45 +52,74 @@ import { ADMIN_NEW_CHAT_EVENT } from "../../lib/spsCommands";
 // host can't drift. Layout's nav is a subset of these.
 type View = AdminView;
 
-// `label` (literal) overrides `labelKey` (i18n) when set — used for views added
-// after the locale files were authored, to avoid touching every translation.
-const NAV_ITEMS: {
+// Nav is grouped by user goal rather than a flat 14-item scan. Group headers are
+// static labels; the whole Control Center still collapses via the master toggle.
+// "insights"/"personalization"/"capabilityReview" now have real i18n keys (see
+// navigation.ts) so the old `label` literal override is gone.
+interface NavItem {
   view: View;
   icon: LucideIcon;
   labelKey: string;
-  label?: string;
-}[] = [
-  { view: "sessions", icon: Clock, labelKey: "navigation.sessions" },
-  { view: "agents", icon: Users, labelKey: "navigation.agents" },
-  { view: "office", icon: Building, labelKey: "navigation.office" },
-  { view: "kanban", icon: KanbanIcon, labelKey: "navigation.kanban" },
+}
+interface NavGroup {
+  id: string;
+  headerKey: string;
+  items: NavItem[];
+}
+
+const NAV_GROUPS: NavGroup[] = [
   {
-    view: "insights",
-    icon: BarChart3,
-    labelKey: "navigation.insights",
-    // Disambiguate from the SPS workspace's own "Insights" surface — this is the
-    // Hermes agent-level view.
-    label: "Agent Insights",
+    id: "conversations",
+    headerKey: "navigation.groupConversations",
+    items: [{ view: "sessions", icon: Clock, labelKey: "navigation.sessions" }],
   },
-  { view: "models", icon: Layers, labelKey: "navigation.models" },
-  { view: "providers", icon: KeyRound, labelKey: "navigation.providers" },
-  { view: "skills", icon: Puzzle, labelKey: "navigation.skills" },
   {
-    view: "personalization",
-    icon: UserCog,
-    labelKey: "navigation.personalization",
-    label: "Personalization",
+    id: "agents",
+    headerKey: "navigation.groupAgents",
+    items: [
+      { view: "agents", icon: Users, labelKey: "navigation.agents" },
+      {
+        view: "personalization",
+        icon: UserCog,
+        labelKey: "navigation.personalization",
+      },
+      { view: "skills", icon: Puzzle, labelKey: "navigation.skills" },
+      {
+        view: "capabilityReview",
+        icon: ShieldCheck,
+        labelKey: "navigation.capabilityReview",
+      },
+    ],
   },
-  { view: "tools", icon: Wrench, labelKey: "navigation.tools" },
   {
-    view: "capabilityReview",
-    icon: ShieldCheck,
-    labelKey: "navigation.capabilityReview",
-    label: "Capabilities",
+    id: "connectivity",
+    headerKey: "navigation.groupConnectivity",
+    items: [
+      // Providers first — the #1 post-setup task and the no-API-key deep-link target.
+      { view: "providers", icon: KeyRound, labelKey: "navigation.providers" },
+      { view: "models", icon: Layers, labelKey: "navigation.models" },
+      { view: "gateway", icon: Signal, labelKey: "navigation.gateway" },
+      { view: "tools", icon: Wrench, labelKey: "navigation.tools" },
+    ],
   },
-  { view: "schedules", icon: Timer, labelKey: "navigation.schedules" },
-  { view: "gateway", icon: Signal, labelKey: "navigation.gateway" },
-  { view: "settings", icon: SettingsIcon, labelKey: "navigation.settings" },
+  {
+    id: "workspace",
+    headerKey: "navigation.groupWorkspace",
+    items: [
+      { view: "kanban", icon: KanbanIcon, labelKey: "navigation.kanban" },
+      { view: "office", icon: Building, labelKey: "navigation.office" },
+      { view: "schedules", icon: Timer, labelKey: "navigation.schedules" },
+    ],
+  },
+  {
+    id: "system",
+    headerKey: "navigation.groupSystem",
+    items: [
+      { view: "insights", icon: BarChart3, labelKey: "navigation.insights" },
+      { view: "memory", icon: Brain, labelKey: "navigation.memory" },
+      { view: "settings", icon: SettingsIcon, labelKey: "navigation.settings" },
+    ],
+  },
 ];
 
 interface LayoutProps {
@@ -137,6 +167,25 @@ function Layout({
   useEffect(() => {
     writeLastAdminView(view);
   }, [view]);
+
+  // Roving focus: arrow keys move between nav items across group boundaries.
+  const handleNavKeys = useCallback(
+    (e: React.KeyboardEvent<HTMLElement>): void => {
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      const items = Array.from(
+        e.currentTarget.querySelectorAll<HTMLButtonElement>(
+          ".sidebar-nav-item",
+        ),
+      );
+      const idx = items.indexOf(document.activeElement as HTMLButtonElement);
+      if (idx === -1) return;
+      e.preventDefault();
+      const delta = e.key === "ArrowDown" ? 1 : -1;
+      const next = (idx + delta + items.length) % items.length;
+      items[next]?.focus();
+    },
+    [],
+  );
 
   // Bridge: SPS surfaces (which can't reach goTo directly) ask the host to open
   // a specific Hermes admin tab — e.g. the config-health banner's "Show details"
@@ -334,28 +383,41 @@ function Layout({
           <img src={hermeslogo} height={30} alt="" />
         </div>
 
-        <nav className="sidebar-nav">
+        <nav className="sidebar-nav" onKeyDown={handleNavKeys}>
           <button
             type="button"
             className="sidebar-section-toggle"
             onClick={() => setAdminOpen((open) => !open)}
+            aria-expanded={adminOpen}
           >
             <ChevronDown
               size={14}
               className={adminOpen ? "sidebar-section-open" : ""}
             />
-            Agent Control Center
+            {t("navigation.controlCenterTitle")}
           </button>
           {adminOpen &&
-            NAV_ITEMS.map(({ view: v, icon: Icon, labelKey, label }) => (
-              <button
-                key={v}
-                className={`sidebar-nav-item ${view === v ? "active" : ""}`}
-                onClick={() => goTo(v)}
+            NAV_GROUPS.map((group) => (
+              <div
+                key={group.id}
+                className="sidebar-nav-section"
+                role="group"
+                aria-label={t(group.headerKey)}
               >
-                <Icon size={16} />
-                {label ?? t(labelKey)}
-              </button>
+                <div className="sidebar-nav-group-header">
+                  {t(group.headerKey)}
+                </div>
+                {group.items.map(({ view: v, icon: Icon, labelKey }) => (
+                  <button
+                    key={v}
+                    className={`sidebar-nav-item ${view === v ? "active" : ""}`}
+                    onClick={() => goTo(v)}
+                  >
+                    <Icon size={16} />
+                    {t(labelKey)}
+                  </button>
+                ))}
+              </div>
             ))}
         </nav>
 
@@ -553,6 +615,16 @@ function Layout({
         {visitedViews.has("insights") && (
           <div style={paneStyle("insights")}>
             <Insights profile={activeProfile} visible={view === "insights"} />
+          </div>
+        )}
+
+        {visitedViews.has("memory") && (
+          <div style={paneStyle("memory")}>
+            {remoteMode ? (
+              <RemoteNotice feature="Memory" />
+            ) : (
+              <Memory profile={activeProfile} visible={view === "memory"} />
+            )}
           </div>
         )}
 
