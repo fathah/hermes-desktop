@@ -24,11 +24,25 @@ export function ApprovalQueue({
 }): React.JSX.Element | null {
   if (state.queue.length === 0) return null;
   return (
-    <div className="chat-approval-queue">
+    <div
+      className="chat-approval-queue"
+      role="region"
+      aria-label="Command approvals"
+      aria-live="assertive"
+    >
       {state.queue.map((req) => {
         const left = remainingSeconds(req.enqueuedAt, now, timeoutSeconds);
         return (
-          <div key={req.id} className="chat-approval-card">
+          <div
+            key={req.id}
+            className="chat-approval-card"
+            role="alertdialog"
+            aria-label={
+              req.command
+                ? `Approve command: ${req.command}`
+                : "Approve command"
+            }
+          >
             <div className="chat-approval-head">
               <ShieldAlert size={15} />
               <span className="chat-approval-title">Approve command?</span>

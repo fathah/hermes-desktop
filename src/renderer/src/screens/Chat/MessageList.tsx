@@ -107,7 +107,9 @@ function CouncilColumnHeader({
  */
 function isBubble(
   m: ChatMessage,
-): m is import("./types").ChatBubbleMessage | import("./types").CouncilTurnMessage {
+): m is
+  | import("./types").ChatBubbleMessage
+  | import("./types").CouncilTurnMessage {
   const k = (m as { kind?: string }).kind;
   return !k || k === "user" || k === "assistant" || k === "council_turn";
 }
@@ -130,7 +132,11 @@ export const MessageList = memo(function MessageList({
     const list: ChatMessage[] = [];
     for (const m of messages) {
       if (isBubble(m)) {
-        if (m.kind !== "council_turn" && ((m.content as string) || "").trim().length === 0) continue;
+        if (
+          m.kind !== "council_turn" &&
+          ((m.content as string) || "").trim().length === 0
+        )
+          continue;
         list.push(m);
       } else {
         const last = list[list.length - 1];
@@ -169,8 +175,11 @@ export const MessageList = memo(function MessageList({
         if (k === "tool_group") {
           const active = isLoading && i === groupedMessages.length - 1;
           return (
+            // Key on identity only — folding `active` into the key remounts the
+            // row when the stream finishes, collapsing any <details> the user
+            // expanded mid-stream. `active` is just a prop.
             <ToolGroupRow
-              key={`${msg.id}-${active}`}
+              key={msg.id}
               msg={msg as ToolGroupMessage}
               active={active}
               showAvatar={showAvatar}
@@ -220,7 +229,9 @@ export const MessageList = memo(function MessageList({
                           ) : r.content ? (
                             <AgentMarkdown>{r.content}</AgentMarkdown>
                           ) : (
-                            <div className="chat-typing-inline">Thinking...</div>
+                            <div className="chat-typing-inline">
+                              Thinking...
+                            </div>
                           )}
                         </div>
                         <div className="chat-council-col-footer">

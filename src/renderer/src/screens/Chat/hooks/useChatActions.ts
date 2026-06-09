@@ -32,7 +32,12 @@ interface UseChatActionsArgs {
   /** Called when a `/compact` turn is sent, so the host can seed a fresh
    *  session with the resulting handoff brief once the turn completes. */
   onCompactRequested?: () => void;
-  selectedModels: Array<{ provider: string; model: string; baseUrl: string; label: string }>;
+  selectedModels: Array<{
+    provider: string;
+    model: string;
+    baseUrl: string;
+    label: string;
+  }>;
 }
 
 interface UseChatActionsResult {
@@ -180,23 +185,34 @@ export function useChatActions({
           },
         ]);
 
-        await Promise.all(
-          activeModels.map((m) => {
-            const modelKey = `${m.provider}:${m.model}`;
-            const runId = `${turnId}::${modelKey}`;
-            return sendToAgent(
-              text,
-              attachments,
-              { model: m.model, provider: m.provider, baseUrl: m.baseUrl },
-              runId,
-            );
-          }),
-        );
+        try {
+          await Promise.all(
+            activeModels.map((m) => {
+              const modelKey = `${m.provider}:${m.model}`;
+              const runId = `${turnId}::${modelKey}`;
+              return sendToAgent(
+                text,
+                attachments,
+                { model: m.model, provider: m.provider, baseUrl: m.baseUrl },
+                runId,
+              );
+            }),
+          );
+        } catch {
+          // A synchronous send failure would otherwise strand isLoading=true
+          // (the per-stream onChatError IPC never fires). Reset so the input
+          // isn't frozen.
+          setIsLoading(false);
+        }
       } else {
         // Standard Single-Model Mode with override
         const primaryModel = activeModels[0];
         const override = primaryModel
-          ? { model: primaryModel.model, provider: primaryModel.provider, baseUrl: primaryModel.baseUrl }
+          ? {
+              model: primaryModel.model,
+              provider: primaryModel.provider,
+              baseUrl: primaryModel.baseUrl,
+            }
           : undefined;
         await sendToAgent(text, attachments, override);
       }
@@ -219,7 +235,11 @@ export function useChatActions({
       const activeModels = selectedModelsRef.current;
       const primaryModel = activeModels[0];
       const override = primaryModel
-        ? { model: primaryModel.model, provider: primaryModel.provider, baseUrl: primaryModel.baseUrl }
+        ? {
+            model: primaryModel.model,
+            provider: primaryModel.provider,
+            baseUrl: primaryModel.baseUrl,
+          }
         : undefined;
       await sendToAgent(`/btw ${text}`, attachments, override);
     },
