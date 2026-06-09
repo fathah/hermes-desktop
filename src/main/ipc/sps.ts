@@ -12,6 +12,7 @@ import {
 } from "../sps-agent";
 import { spsGetWorkSession, spsSetWorkSession } from "../sps-work-sessions";
 import { appendWikiLog, type WikiLogOp } from "../sps-wiki-log";
+import { ensureIndexCoverage } from "../sps-ingest";
 import { resolveSpsVaultDir } from "../sps-storage";
 import { runTelosAudit, runPipingPattern } from "../telos-auditor";
 import {
@@ -51,8 +52,13 @@ export function registerSpsIpc(): void {
   );
   ipcMain.handle(
     "sps-wiki-log-append",
-    (_event, op: WikiLogOp, summary: string, profile?: string) =>
-      appendWikiLog(resolveSpsVaultDir(profile), op, summary),
+    async (_event, op: WikiLogOp, summary: string, profile?: string) => {
+      // After any wiki change: record it in the append-only log AND refresh the
+      // LLM-Wiki catalog so index.md always covers every page.
+      const vaultDir = resolveSpsVaultDir(profile);
+      await appendWikiLog(vaultDir, op, summary);
+      await ensureIndexCoverage(vaultDir);
+    },
   );
   ipcMain.handle(
     "sps-lint-wiki",

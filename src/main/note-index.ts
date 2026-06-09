@@ -129,6 +129,11 @@ function extractInlineTags(body: string): string[] {
 const INDEX_DB_FILE = ".note-index.db";
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 
+// Wiki META pages (Karpathy LLM-Wiki): the LLM-maintained catalog, the
+// append-only evolution log, and the schema. They are intentionally link-free
+// bookkeeping artifacts, so orphan lint must skip them (relpaths, with ext).
+const WIKI_META_PAGES = new Set(["index.md", "log.md", "WIKI.md"]);
+
 export interface NoteRecord {
   path: string;
   title: string;
@@ -316,10 +321,14 @@ export class NoteIndex {
 
     // Migrate existing DB if links table does not have 'type' column
     try {
-      const columns = this.db.prepare("PRAGMA table_info(links)").all() as Array<{ name: string }>;
+      const columns = this.db
+        .prepare("PRAGMA table_info(links)")
+        .all() as Array<{ name: string }>;
       const hasType = columns.some((col) => col.name === "type");
       if (columns.length > 0 && !hasType) {
-        this.db.exec("ALTER TABLE links ADD COLUMN type TEXT NOT NULL DEFAULT 'link'");
+        this.db.exec(
+          "ALTER TABLE links ADD COLUMN type TEXT NOT NULL DEFAULT 'link'",
+        );
       }
     } catch (err) {
       console.error("[NoteIndex] failed to run links table migration:", err);
@@ -368,7 +377,8 @@ export class NoteIndex {
       const insLink = this.db.prepare(
         `INSERT INTO links(source,target_norm,type) VALUES(?,?,?)`,
       );
-      for (const link of typedLinks) insLink.run(relPath, link.target_norm, link.type);
+      for (const link of typedLinks)
+        insLink.run(relPath, link.target_norm, link.type);
 
       // Tags: frontmatter `tags` (array or string) + inline `#tag`s in the body.
       this.db.prepare(`DELETE FROM tags WHERE source = ?`).run(relPath);
@@ -641,19 +651,25 @@ export class NoteIndex {
 
   /** Root-level pages with no resolved inbound OR outbound [[wikilink]] — isolated
    *  pages. Excludes nested files (folder-DB rows, _inbox captures): those aren't
-   *  wiki pages and aren't meant to be linked. */
+   *  wiki pages and aren't meant to be linked. Also excludes the wiki META pages
+   *  (index / log / WIKI): catalog/log/schema artifacts are intentionally
+   *  link-free and would otherwise show as permanent orphan noise. */
   orphans(): string[] {
     const notes = this.db.prepare(`SELECT path FROM notes`).all() as Array<{
       path: string;
     }>;
     const connected = new Set<string>();
     for (const edge of this.links()) {
+      // Links FROM a META page (the auto-generated index links to every page)
+      // are navigational, not real connectivity — they must not mask an orphan.
+      if (WIKI_META_PAGES.has(edge.source)) continue;
       connected.add(edge.source);
       connected.add(edge.target);
     }
     const result: string[] = [];
     for (const { path } of notes) {
       if (path.includes("/")) continue; // skip rows / captures / assets
+      if (WIKI_META_PAGES.has(path)) continue; // skip index/log/WIKI
       if (!connected.has(path)) result.push(path);
     }
     return result.sort();

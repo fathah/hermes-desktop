@@ -399,3 +399,76 @@ export function parseLintFindings(raw: unknown): LintFinding[] {
   }
   return out;
 }
+
+// ── index.md: the LLM-Wiki catalog. Karpathy keeps an index the LLM reads first.
+//    We generate it MECHANICALLY after every commit so it is ALWAYS complete (the
+//    model can't list pages it never sees). Each entry is a navigational
+//    [[wikilink]] + a one-line summary; the links don't count toward orphan
+//    detection (see note-index orphans()).
+
+export interface IndexEntry {
+  pageId: string;
+  title: string;
+  summary: string;
+}
+
+/** First meaningful body line (skip headings/bullets/markup) as a one-liner. */
+function firstLineSummary(body: string, max = 120): string {
+  for (const line of body.split("\n")) {
+    const t = line.trim();
+    if (!t || t.startsWith("#")) continue;
+    const clean = t
+      .replace(/^[->*+]\s+/, "")
+      .replace(/[*_`[\]]/g, "")
+      .trim();
+    if (clean) return clean.slice(0, max);
+  }
+  return "";
+}
+
+/** Render the catalog page body. Pure/testable. Sorted by title. */
+export function buildIndexMarkdown(entries: IndexEntry[]): string {
+  const sorted = [...entries].sort((a, b) =>
+    a.title.localeCompare(b.title, undefined, { sensitivity: "base" }),
+  );
+  const lines = sorted.map(
+    (e) => `- [[${e.pageId}]]${e.summary ? ` — ${e.summary}` : ""}`,
+  );
+  const list = lines.length ? lines.join("\n") : "_No pages yet._";
+  return `# Index\n\nA catalog of every page in this wiki, kept current automatically.\n\n${list}\n`;
+}
+
+/** Regenerate `<vaultDir>/index.md` to cover every root page. Best-effort. */
+export async function ensureIndexCoverage(vaultDir: string): Promise<void> {
+  try {
+    let names: string[];
+    try {
+      names = await fs.readdir(vaultDir);
+    } catch {
+      return;
+    }
+    const rootPages = names.filter(
+      (n) => n.endsWith(".md") && !LINT_META_PAGES.has(stripMdExt(n)),
+    );
+    const entries: IndexEntry[] = [];
+    for (const name of rootPages) {
+      let raw: string;
+      try {
+        raw = await fs.readFile(join(vaultDir, name), "utf-8");
+      } catch {
+        continue;
+      }
+      const { props, body } = parseFrontmatter(raw);
+      const pageId = stripMdExt(name);
+      const title = typeof props.title === "string" ? props.title : pageId;
+      entries.push({ pageId, title, summary: firstLineSummary(body) });
+    }
+    const header = `---\ntitle: "Index"\n---\n`;
+    await fs.writeFile(
+      join(vaultDir, "index.md"),
+      `${header}${buildIndexMarkdown(entries)}`,
+    );
+  } catch {
+    /* best-effort: never block a commit */
+  }
+}

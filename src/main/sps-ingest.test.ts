@@ -1,6 +1,6 @@
 // sps-ingest.test.ts — pure ingest helpers + read-only capture/schema I/O.
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { mkdtemp, mkdir, writeFile, rm } from "fs/promises";
+import { mkdtemp, mkdir, writeFile, rm, readFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -11,6 +11,8 @@ import {
   buildLintMessages,
   parseLintFindings,
   readPageDigests,
+  buildIndexMarkdown,
+  ensureIndexCoverage,
   readUnprocessedCaptures,
   readWikiSchema,
   DEFAULT_WIKI_SCHEMA,
@@ -193,6 +195,48 @@ describe("readPageDigests", () => {
   it("returns empty when the vault dir is missing", async () => {
     const res = await readPageDigests(join(vault, "nope"), []);
     expect(res).toEqual({ digests: [], scanned: 0, dropped: 0 });
+  });
+});
+
+describe("buildIndexMarkdown", () => {
+  it("lists pages as wikilinks with summaries, sorted by title", () => {
+    const md = buildIndexMarkdown([
+      { pageId: "zeta", title: "Zeta", summary: "last" },
+      { pageId: "acme", title: "Acme", summary: "a corp" },
+      { pageId: "bare", title: "Bare", summary: "" },
+    ]);
+    const links = md.match(/- \[\[.+?\]\]/g) ?? [];
+    expect(links).toEqual(["- [[acme]]", "- [[bare]]", "- [[zeta]]"]);
+    expect(md).toContain("- [[acme]] — a corp");
+    expect(md).toContain("- [[bare]]\n"); // no summary → no em dash
+  });
+  it("renders a placeholder when empty", () => {
+    expect(buildIndexMarkdown([])).toContain("_No pages yet._");
+  });
+});
+
+describe("ensureIndexCoverage", () => {
+  let vault: string;
+  beforeEach(async () => {
+    vault = await mkdtemp(join(tmpdir(), "index-"));
+  });
+  afterEach(async () => {
+    await rm(vault, { recursive: true, force: true });
+  });
+
+  it("covers every root page (excluding meta) with a summary", async () => {
+    await writeFile(
+      join(vault, "acme.md"),
+      `---\ntitle: "Acme"\n---\n# Acme\nAcme is a security firm.`,
+    );
+    await writeFile(join(vault, "beta.md"), `Beta one-liner here.`);
+    await writeFile(join(vault, "WIKI.md"), `# schema`); // meta — excluded
+    await ensureIndexCoverage(vault);
+    const idx = await readFile(join(vault, "index.md"), "utf-8");
+    expect(idx).toContain('title: "Index"');
+    expect(idx).toContain("- [[acme]] — Acme is a security firm.");
+    expect(idx).toContain("- [[beta]] — Beta one-liner here.");
+    expect(idx).not.toContain("[[WIKI]]");
   });
 });
 

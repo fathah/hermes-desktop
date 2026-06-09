@@ -204,6 +204,18 @@ async function main(): Promise<void> {
   );
   await writeFile(join(lroot, "b.md"), `# B\nLinks back to [[a]].\n`);
   await writeFile(join(lroot, "lonely.md"), `# Lonely\nNo links here.\n`);
+  // META pages: the auto-index links EVERY page (incl. lonely); those
+  // navigational links must NOT mask a genuine orphan, and the link-free META
+  // pages (log/WIKI) must NOT themselves be reported as orphans.
+  await writeFile(
+    join(lroot, "index.md"),
+    `# Index\n- [[a]]\n- [[b]]\n- [[lonely]]\n`,
+  );
+  await writeFile(
+    join(lroot, "log.md"),
+    `# Wiki log\n## [2026-06-09] ingest | x\n`,
+  );
+  await writeFile(join(lroot, "WIKI.md"), `# Schema\nConventions.\n`);
 
   const li = await NoteIndex.open(lroot);
   eq(
@@ -211,7 +223,11 @@ async function main(): Promise<void> {
     ["a.md->ghost"],
     "unresolvedLinks flags the broken [[ghost]] link only",
   );
-  eq(li.orphans(), ["lonely.md"], "orphans flags the isolated note only");
+  eq(
+    li.orphans(),
+    ["lonely.md"],
+    "orphans: lonely stays an orphan despite the index link; index/log/WIKI excluded",
+  );
   const report = li.lint();
   eq(report.brokenLinks.length, 1, "lint() composes broken links");
   eq(report.orphans, ["lonely.md"], "lint() composes orphans");
@@ -225,14 +241,15 @@ async function main(): Promise<void> {
     join(tlroot, "employer.md"),
     `# Employer\nEmploying [[works_at::Garry Tan]].\n`,
   );
-  await writeFile(
-    join(tlroot, "garry tan.md"),
-    `# Garry Tan\nCEO.\n`,
-  );
+  await writeFile(join(tlroot, "garry tan.md"), `# Garry Tan\nCEO.\n`);
   const tli = await NoteIndex.open(tlroot);
   const tledges = tli.links();
   eq(tledges.length, 1, "finds one resolved edge");
-  eq(tledges[0].type, "works_at", "typed link has the relation type 'works_at'");
+  eq(
+    tledges[0].type,
+    "works_at",
+    "typed link has the relation type 'works_at'",
+  );
 
   const tlunresolved = tli.unresolvedLinks();
   eq(tlunresolved.length, 0, "no unresolved links yet");
@@ -244,8 +261,16 @@ async function main(): Promise<void> {
   await tli.rebuild();
   const tlunresolvedAfter = tli.unresolvedLinks();
   eq(tlunresolvedAfter.length, 1, "finds one unresolved edge");
-  eq(tlunresolvedAfter[0].target, "unknown person", "broken link target normalized name");
-  eq(tlunresolvedAfter[0].type, "advises", "broken typed link has the type 'advises'");
+  eq(
+    tlunresolvedAfter[0].target,
+    "unknown person",
+    "broken link target normalized name",
+  );
+  eq(
+    tlunresolvedAfter[0].type,
+    "advises",
+    "broken typed link has the type 'advises'",
+  );
 
   await tli.close();
   await rm(tlroot, { recursive: true, force: true });
