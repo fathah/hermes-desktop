@@ -20,6 +20,7 @@ import { useLocalCommands } from "./hooks/useLocalCommands";
 import { useI18n } from "../../components/useI18n";
 import { buildChatTranscript } from "./transcriptUtils";
 import { ConfigHealthBanner } from "../../components/ConfigHealthBanner";
+import { getDevMode, DEV_MODE_EVENT } from "../../lib/devMode";
 import type { Attachment } from "../../../../shared/attachments";
 import type { ChatMessage, UsageState } from "./types";
 
@@ -74,6 +75,14 @@ function Chat({
   const [contextFolder, setContextFolder] = useState<string | null>(null);
   // Whether the worktree panel is visible (only applies when contextFolder is set)
   const [worktreeVisible, setWorktreeVisible] = useState<boolean>(true);
+  // Developer mode (off by default) gates the niche power-user controls — the
+  // worktree panel + filesystem checkpoints. Reacts live to the Settings toggle.
+  const [devMode, setDevMode] = useState(getDevMode());
+  useEffect(() => {
+    const onChange = (): void => setDevMode(getDevMode());
+    window.addEventListener(DEV_MODE_EVENT, onChange);
+    return () => window.removeEventListener(DEV_MODE_EVENT, onChange);
+  }, []);
   // Preview pane (WS2): the most recent visual tool output (screenshot / HTML
   // doc), and whether the pane is shown. Auto-opens once per conversation the
   // first time something previewable appears; reset on session switch below.
@@ -525,7 +534,9 @@ function Chat({
   );
 
   const handleSteelmanCritique = useCallback(
-    async (responses: Array<{ model: string; provider: string; content: string }>) => {
+    async (
+      responses: Array<{ model: string; provider: string; content: string }>,
+    ) => {
       const responsesText = responses
         .map((r) => `[${r.model}]:\n${r.content}`)
         .join("\n\n---\n\n");
@@ -560,6 +571,7 @@ function Chat({
         contextFolder={effectiveContextFolder}
         showContextFolder={!remoteMode && !contextFolderOverride}
         worktreeVisible={worktreeVisible}
+        devMode={devMode}
         previewAvailable={!!previewItem}
         previewVisible={previewVisible}
         onPickFolder={handlePickFolder}
@@ -573,9 +585,13 @@ function Chat({
         onCompress={() => {
           void actions.handleSend("/compress", []);
         }}
-        onCheckpoints={() => {
-          void actions.handleSend(listCommand(), []);
-        }}
+        onCheckpoints={
+          devMode
+            ? () => {
+                void actions.handleSend(listCommand(), []);
+              }
+            : undefined
+        }
       />
 
       <ConfigHealthBanner profile={profile} onOpenDiagnose={onOpenDiagnose} />
@@ -606,7 +622,8 @@ function Chat({
           <div ref={bottomRef} />
         </div>
 
-        {effectiveContextFolder &&
+        {devMode &&
+          effectiveContextFolder &&
           worktreeVisible &&
           !contextFolderOverride && (
             <WorktreePanel folderPath={effectiveContextFolder} />

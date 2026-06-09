@@ -19,6 +19,7 @@ import {
 import { ConfigHealth } from "./ConfigHealth";
 import { HealthSurface } from "../SpsAgent/health/HealthSurface";
 import { openSettings } from "../../lib/openSettings";
+import { getDevMode, setDevMode } from "../../lib/devMode";
 
 const TELEGRAM_COMMUNITY_URL = "https://t.me/hermes_agent_desktop";
 
@@ -84,6 +85,7 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
   // container's data-tab (CSS-driven) so no section JSX/handlers move — same
   // controls, same state, just hidden when their tab isn't active.
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
+  const [devModeOn, setDevModeOn] = useState(getDevMode());
   const containerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     containerRef.current?.scrollTo({ top: 0 });
@@ -1321,6 +1323,34 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
             Seconds before an unanswered command-approval auto-denies (a safety
             default for when you operate from mobile). <strong>0 = off</strong>;
             approvals then wait indefinitely for your decision.
+          </div>
+        </div>
+      </div>
+
+      <div className="settings-section" data-section-tab="advanced">
+        <div className="settings-section-title">Developer mode</div>
+        <div className="settings-field">
+          <label className="settings-field-label">
+            Show developer controls in chat
+            <label
+              className="tools-toggle"
+              style={{ marginLeft: 12, verticalAlign: "middle" }}
+            >
+              <input
+                type="checkbox"
+                checked={devModeOn}
+                onChange={(e) => {
+                  const val = e.target.checked;
+                  setDevModeOn(val);
+                  setDevMode(val);
+                }}
+              />
+              <span className="tools-toggle-track" />
+            </label>
+          </label>
+          <div className="settings-field-hint">
+            Reveals the worktree panel and filesystem checkpoint controls in the
+            Chat header. Off by default — tool use itself is always available.
           </div>
         </div>
       </div>

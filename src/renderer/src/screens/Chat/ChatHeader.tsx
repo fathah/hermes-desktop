@@ -32,6 +32,8 @@ interface ChatHeaderProps {
   showContextFolder: boolean;
   /** Whether the worktree panel is visible (when contextFolder is set). */
   worktreeVisible: boolean;
+  /** Developer mode — gates the niche power-user controls (worktree, checkpoints). */
+  devMode: boolean;
   /** Whether there is previewable visual output to show (WS2). */
   previewAvailable: boolean;
   /** Whether the preview pane is currently shown. */
@@ -107,6 +109,7 @@ export const ChatHeader = memo(function ChatHeader({
   contextFolder,
   showContextFolder,
   worktreeVisible,
+  devMode,
   previewAvailable,
   previewVisible,
   onPickFolder,
@@ -169,22 +172,24 @@ export const ChatHeader = memo(function ChatHeader({
               >
                 <X size={12} />
               </button>
-              <button
-                className={`btn-ghost chat-worktree-toggle ${worktreeVisible ? "chat-worktree-active" : ""}`}
-                onClick={onToggleWorktree}
-                title={
-                  worktreeVisible
-                    ? t("chat.hideWorktree")
-                    : t("chat.showWorktree")
-                }
-                aria-label={
-                  worktreeVisible
-                    ? t("chat.hideWorktree")
-                    : t("chat.showWorktree")
-                }
-              >
-                <FolderTree size={14} />
-              </button>
+              {devMode && (
+                <button
+                  className={`btn-ghost chat-worktree-toggle ${worktreeVisible ? "chat-worktree-active" : ""}`}
+                  onClick={onToggleWorktree}
+                  title={
+                    worktreeVisible
+                      ? t("chat.hideWorktree")
+                      : t("chat.showWorktree")
+                  }
+                  aria-label={
+                    worktreeVisible
+                      ? t("chat.hideWorktree")
+                      : t("chat.showWorktree")
+                  }
+                >
+                  <FolderTree size={14} />
+                </button>
+              )}
             </div>
           ) : (
             <button
