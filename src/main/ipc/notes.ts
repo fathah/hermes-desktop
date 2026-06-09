@@ -43,7 +43,7 @@ import {
 } from "../sps-vault";
 import { spsBackupWorkspace } from "../sps-agent";
 import { writeAsset, assetExists, gcAssets } from "../sps-assets";
-import { getConnectionConfig } from "../config";
+import { requireLocalWorkspace } from "./connection-guards";
 import { isAllowedExternalUrl } from "../security";
 
 let obsidianWatcher: Awaited<ReturnType<typeof watchObsidian>> | null = null;
@@ -57,15 +57,6 @@ export async function closeObsidianWatcher(): Promise<void> {
       console.error("[notes] Failed to close obsidian watcher:", e);
     }
     obsidianWatcher = null;
-  }
-}
-
-function requireLocalWorkspace(): void {
-  const conn = getConnectionConfig();
-  if (conn.mode !== "local") {
-    throw new Error(
-      "Workspace files are only available in local mode in this version.",
-    );
   }
 }
 
@@ -84,7 +75,9 @@ function openExternalUrl(rawUrl: unknown): void {
   });
 }
 
-export function registerNotesIpc(mainWindowGetter: () => BrowserWindow | null): void {
+export function registerNotesIpc(
+  mainWindowGetter: () => BrowserWindow | null,
+): void {
   async function ensureObsidianWatcher(profile?: string): Promise<void> {
     const profileKey = profile || "";
     if (obsidianWatcher && obsidianWatcherProfile === profileKey) return;

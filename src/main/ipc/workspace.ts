@@ -125,7 +125,7 @@ import {
 } from "../personalization";
 import { readSoul, writeSoul, resetSoul } from "../soul";
 import { getToolsets, setToolsetEnabled } from "../tools";
-import { getConnectionConfig } from "../config";
+import { requireLocalWorkspace } from "./connection-guards";
 import {
   sshListInstalledSkills,
   sshGetSkillContent,
@@ -147,15 +147,6 @@ import {
   sshGetToolsets,
   sshSetToolsetEnabled,
 } from "../ssh-remote";
-
-function requireLocalWorkspace(): void {
-  const conn = getConnectionConfig();
-  if (conn.mode !== "local") {
-    throw new Error(
-      "Workspace files are only available in local mode in this version.",
-    );
-  }
-}
 
 import { registerDualHandler } from "./utility";
 
