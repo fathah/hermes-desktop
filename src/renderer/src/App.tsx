@@ -284,7 +284,12 @@ function App(): React.JSX.Element {
       case "setup":
         return (
           <Setup
-            onComplete={() => setScreen("main")}
+            onComplete={() => {
+              setScreen("main");
+              // Land new users on Providers once, so the first thing after setup
+              // is the #1 task (keys/models) rather than a blank workspace.
+              openAdmin("providers");
+            }}
             verifyWarning={verifyWarning}
             onReinstall={handleVerifyReinstall}
             onDismissVerifyWarning={handleDismissVerifyWarning}
