@@ -34,6 +34,7 @@ import {
   buildIngestMessages,
   buildFileAnswerMessages,
   buildResearchFileMessages,
+  buildExternalSessionFileMessages,
   buildLintMessages,
   parseChangeset,
   parseLintFindings,
@@ -877,6 +878,87 @@ export async function spsFileResearch(
       ok: false,
       captureCount: 0,
       error: err instanceof Error ? err.message : "file-research error",
+    };
+  }
+}
+
+/**
+ * "File this external AI-tool session as a wiki page" — the cross-tool
+ * continuity operation. Sibling of spsFileResearch: the caller (IPC layer)
+ * assembles the PROVENANCE line and the already-redacted transcript from the
+ * external-context index and passes them here; this synthesizes ONE durable
+ * decision brief (## Decisions / ## Constraints / ## Open questions / ##
+ * Sources). The transcript is fenced as untrusted. READ-ONLY over the vault —
+ * returns a changeset the desktop commits through the same ingest path.
+ */
+export async function spsExternalSaveToKb(
+  provenance: string,
+  transcriptMarkdown: string,
+  profile?: string,
+): Promise<IngestResult> {
+  try {
+    if (isRemoteMode()) {
+      return {
+        ok: false,
+        captureCount: 0,
+        error: "Saving an external session needs a local workspace.",
+      };
+    }
+    if (!transcriptMarkdown.trim()) {
+      return { ok: false, captureCount: 0, error: "Nothing to file." };
+    }
+    const vaultDir = resolveSpsVaultDir(profile);
+    const schema = await readWikiSchema(vaultDir);
+    const related = await relatedPagesFor(provenance, profile);
+    const messages = buildExternalSessionFileMessages(
+      schema,
+      provenance,
+      transcriptMarkdown,
+      related,
+    );
+    const url = `${getApiUrl(profile)}/v1/chat/completions`;
+    // Retry ONCE on a 5xx or parse-failure (structured-JSON output is
+    // occasionally flaky); bail immediately on a 4xx.
+    let lastError = "The agent didn't return a usable page.";
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...getRemoteAuthHeader(),
+        },
+        signal: AbortSignal.timeout(180000),
+        body: JSON.stringify({
+          model: "hermes-agent",
+          stream: false,
+          max_tokens: 4096,
+          messages,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        lastError = `gateway ${res.status}: ${body.slice(0, 160)}`;
+        if (res.status >= 400 && res.status < 500) {
+          return { ok: false, captureCount: 0, error: lastError };
+        }
+        continue; // 5xx — retry once
+      }
+      const data = (await res.json()) as {
+        choices?: { message?: { content?: string } }[];
+      };
+      const content = data?.choices?.[0]?.message?.content ?? "";
+      const changeset = parseChangeset(extractJson(content));
+      if (changeset && changeset.pages.length > 0) {
+        return { ok: true, captureCount: 0, changeset };
+      }
+      lastError = "The agent didn't return a usable page.";
+    }
+    return { ok: false, captureCount: 0, error: lastError };
+  } catch (err) {
+    return {
+      ok: false,
+      captureCount: 0,
+      error: err instanceof Error ? err.message : "external-save error",
     };
   }
 }

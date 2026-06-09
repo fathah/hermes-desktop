@@ -366,6 +366,18 @@ export interface CockpitSlice {
   resetCockpit: () => void;
 }
 
+/** Save an external (other-AI-tool) session into the KB as a decision brief.
+ *  Mirrors the runResearch tail: synthesize → commit → wiki-log → select + undo. */
+export interface ExternalContextSlice {
+  saveExternalSessionToKb: (convId: string) => Promise<{
+    ok: boolean;
+    summary?: string;
+    pageId?: string;
+    undo?: () => void;
+    error?: string;
+  }>;
+}
+
 export type Store = WorkspaceSlice &
   CommentsSlice &
   UiSlice &
@@ -374,4 +386,5 @@ export type Store = WorkspaceSlice &
   TweaksSlice &
   TemplatesSlice &
   CockpitSlice &
-  AssistantSlice;
+  AssistantSlice &
+  ExternalContextSlice;

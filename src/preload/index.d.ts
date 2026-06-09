@@ -1120,6 +1120,25 @@ interface HermesAPI {
   externalContextListProjects: (
     source?: ExternalSource,
   ) => Promise<Array<{ projectPath: string; count: number }>>;
+  externalContextSaveToKb: (
+    convId: string,
+    profile?: string,
+  ) => Promise<{
+    ok: boolean;
+    captureCount: number;
+    error?: string;
+    changeset?: {
+      summary: string;
+      pages: Array<{
+        op: "create" | "update";
+        pageId: string;
+        title: string;
+        markdown: string;
+      }>;
+      captures: Array<{ id: string; status: "processed" | "discarded" }>;
+      memory: string[];
+    };
+  }>;
   onExternalContextProgress: (
     callback: (progress: ExternalScanProgress) => void,
   ) => () => void;

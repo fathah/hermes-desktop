@@ -15,6 +15,8 @@ import type {
   ExternalScanProgress,
   ExternalSource,
 } from "../../shared/external-context";
+import { formatProvenance } from "../../shared/external-context";
+import { spsExternalSaveToKb } from "../sps-agent";
 import {
   getExternalContextSources,
   setExternalContextSource,
@@ -156,6 +158,38 @@ export function registerExternalContextIpc(
     (_e, source?: ExternalSource) =>
       getExternalContextDb().listProjects(source),
   );
+
+  ipcMain.handle(
+    "external-context-save-to-kb",
+    async (_e, convId: string, profile?: string) => {
+      const db = getExternalContextDb();
+      const meta = db.getConversationMeta(convId);
+      if (!meta) {
+        return { ok: false, captureCount: 0, error: "Session not found." };
+      }
+      const provenance = formatProvenance({
+        source: meta.source,
+        projectPath: meta.projectPath,
+        gitBranch: meta.gitBranch,
+        title: meta.title,
+        ts: meta.lastAt ?? meta.startedAt,
+      });
+      const messages = db.getConversation(convId, { limit: 1000 });
+      const transcript = capExternalTranscript(
+        messages.map((m) => `**${m.role}:** ${m.text}`).join("\n\n"),
+      );
+      return spsExternalSaveToKb(provenance, transcript, profile);
+    },
+  );
+}
+
+/** Head+tail cap so a long session can't blow the synthesis pass's context. */
+function capExternalTranscript(text: string): string {
+  const LIMIT = 24_000;
+  if (text.length <= LIMIT) return text;
+  const head = text.slice(0, 16_000);
+  const tail = text.slice(-8_000);
+  return `${head}\n\n…[transcript truncated]…\n\n${tail}`;
 }
 
 /** Schedule the app-start backfill and the periodic re-scan (idempotent). */

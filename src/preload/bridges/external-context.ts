@@ -48,6 +48,26 @@ export const externalContextBridge = {
   ): Promise<Array<{ projectPath: string; count: number }>> =>
     ipcRenderer.invoke("external-context-list-projects", source),
 
+  externalContextSaveToKb: (
+    convId: string,
+    profile?: string,
+  ): Promise<{
+    ok: boolean;
+    captureCount: number;
+    error?: string;
+    changeset?: {
+      summary: string;
+      pages: Array<{
+        op: "create" | "update";
+        pageId: string;
+        title: string;
+        markdown: string;
+      }>;
+      captures: Array<{ id: string; status: "processed" | "discarded" }>;
+      memory: string[];
+    };
+  }> => ipcRenderer.invoke("external-context-save-to-kb", convId, profile),
+
   onExternalContextProgress: (
     callback: (progress: ExternalScanProgress) => void,
   ): (() => void) => {

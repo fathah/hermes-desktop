@@ -36,6 +36,8 @@ const UNTRUSTED_BANNER =
 
 export function ExternalSessionsModal() {
   const setExternalSessionsOpen = useStore((s) => s.setExternalSessionsOpen);
+  const saveExternalSessionToKb = useStore((s) => s.saveExternalSessionToKb);
+  const flash = useStore((s) => s.flash);
   const onClose = () => setExternalSessionsOpen(false);
 
   const [view, setView] = useState<View>("search");
@@ -211,7 +213,23 @@ export function ExternalSessionsModal() {
       </div>
 
       {viewer && (
-        <ConversationViewer state={viewer} onBack={() => setViewer(null)} />
+        <ConversationViewer
+          state={viewer}
+          onBack={() => setViewer(null)}
+          onSave={async () => {
+            const res = await saveExternalSessionToKb(viewer.hit.convId);
+            if (res.ok) {
+              flash("Saved to your Knowledge Base");
+              setViewer(null);
+              onClose();
+            } else {
+              flash(res.error ?? "Couldn't save this session.", {
+                tone: "warn",
+              });
+            }
+            return res.ok;
+          }}
+        />
       )}
     </div>
   );
@@ -426,8 +444,21 @@ function SettingsView(props: {
 
 // ── conversation viewer (untrusted, escaped, read-only) ────────────────────────
 
-function ConversationViewer(props: { state: ViewerState; onBack: () => void }) {
+function ConversationViewer(props: {
+  state: ViewerState;
+  onBack: () => void;
+  onSave: () => Promise<boolean>;
+}) {
   const { hit, meta, messages, loading } = props.state;
+  const [saving, setSaving] = useState(false);
+  const save = async () => {
+    setSaving(true);
+    try {
+      await props.onSave();
+    } finally {
+      setSaving(false);
+    }
+  };
   return (
     <div
       className="modal"
@@ -459,9 +490,19 @@ function ConversationViewer(props: { state: ViewerState; onBack: () => void }) {
               projectPath: hit.projectPath,
             })}
         </h3>
-        <button className="cover-btn" onClick={props.onBack}>
-          Back
-        </button>
+        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+          <button
+            className="cover-btn"
+            onClick={() => void save()}
+            disabled={saving || loading}
+            title="Distill this session's decisions into a wiki page"
+          >
+            {saving ? "Saving…" : "Save to KB"}
+          </button>
+          <button className="cover-btn" onClick={props.onBack}>
+            Back
+          </button>
+        </div>
       </div>
       <div className="modal-body" style={{ overflow: "auto" }}>
         <div

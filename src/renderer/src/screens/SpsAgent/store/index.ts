@@ -27,6 +27,7 @@ import { createTemplatesSlice, saveUserTemplates } from "./slices/templates";
 import { createCockpitSlice, saveCockpit } from "./slices/cockpit";
 import { createAssistantSlice } from "./slices/assistant";
 import { createJournalSlice } from "./slices/journal";
+import { createExternalContextSlice } from "./slices/externalContext";
 
 export const useStore = create<Store>()(
   subscribeWithSelector((...a) => ({
@@ -39,6 +40,7 @@ export const useStore = create<Store>()(
     ...createCockpitSlice(...a),
     ...createAssistantSlice(...a),
     ...createJournalSlice(...a),
+    ...createExternalContextSlice(...a),
   })),
 );
 
