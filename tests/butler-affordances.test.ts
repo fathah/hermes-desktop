@@ -6,12 +6,14 @@ import { useStore } from "../src/renderer/src/screens/SpsAgent/store";
 const startSshTunnelMock = vi.fn().mockResolvedValue(true);
 const stopSshTunnelMock = vi.fn().mockResolvedValue(true);
 const setEnvMock = vi.fn().mockResolvedValue(true);
+const setProviderKeyMock = vi.fn().mockResolvedValue(true);
 
 Object.defineProperty(window, "hermesAPI", {
   value: {
     startSshTunnel: startSshTunnelMock,
     stopSshTunnel: stopSshTunnelMock,
     setEnv: setEnvMock,
+    setProviderKey: setProviderKeyMock,
   },
   writable: true,
 });
@@ -144,8 +146,13 @@ describe("Butler Affordances - Store Actions", () => {
 
     await useStore.getState().applyConfigAction("m1", "openai", "sk-proj-1234");
 
-    expect(setEnvMock).toHaveBeenCalledWith("OPENAI_API_KEY", "sk-proj-1234");
+    // MED-2: routes through the allowlisted provider-key IPC (provider, not env
+    // var name), and never the generic set-env.
+    expect(setProviderKeyMock).toHaveBeenCalledWith("openai", "sk-proj-1234");
+    expect(setEnvMock).not.toHaveBeenCalled();
     const msg = useStore.getState().conversations[0].messages[0];
     expect(msg.status).toBe("applied");
+    // MED-2: the raw key is scrubbed from the stored transcript after apply.
+    expect(msg.configAction?.key).toBe("••••");
   });
 });

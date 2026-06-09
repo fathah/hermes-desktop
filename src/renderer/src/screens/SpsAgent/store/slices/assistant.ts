@@ -539,20 +539,25 @@ export const createAssistantSlice: StateCreator<
 
     applyConfigAction: async (mid, provider, key) => {
       try {
-        const envKeyMap: Record<string, string> = {
-          openai: "OPENAI_API_KEY",
-          anthropic: "ANTHROPIC_API_KEY",
-          google: "GEMINI_API_KEY",
-        };
-        const envKey =
-          envKeyMap[provider.toLowerCase()] ||
-          `${provider.toUpperCase()}_API_KEY`;
-        const ok = await window.hermesAPI.setEnv(envKey, key);
+        // MED-2: route through the allowlisted provider-key IPC (validates the
+        // provider and maps to the env var server-side) instead of the generic
+        // set-env, so this path can't write arbitrary env.
+        const ok = await window.hermesAPI.setProviderKey(provider, key);
         set((s) => ({
           conversations: s.conversations.map((c) => ({
             ...c,
             messages: c.messages.map((m) =>
-              m.id === mid ? { ...m, status: ok ? "applied" : "rejected" } : m,
+              m.id === mid
+                ? {
+                    ...m,
+                    status: ok ? "applied" : "rejected",
+                    // MED-2: scrub the raw key so it never persists into the
+                    // conversation transcript / workspace.json.
+                    configAction: m.configAction
+                      ? { ...m.configAction, key: "••••" }
+                      : m.configAction,
+                  }
+                : m,
             ),
           })),
         }));

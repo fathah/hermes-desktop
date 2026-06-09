@@ -12,6 +12,13 @@ export const configBridge = {
   setEnv: (key: string, value: string, profile?: string): Promise<boolean> =>
     ipcRenderer.invoke("set-env", key, value, profile),
 
+  setProviderKey: (
+    provider: string,
+    key: string,
+    profile?: string,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("set-provider-key", provider, key, profile),
+
   validateChatReadiness: (
     profile?: string,
   ): Promise<{

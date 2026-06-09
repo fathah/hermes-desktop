@@ -2,6 +2,7 @@ import { ipcMain, clipboard, shell } from "electron";
 import {
   readEnv,
   setEnvValue,
+  resolveProviderEnvKey,
   getConfigValue,
   setConfigValue,
   getHermesHome,
@@ -121,6 +122,28 @@ export function registerConfigIpc(): void {
     },
     async (ssh, key: string, value: string, profile?: string) => {
       await sshSetEnvValue(ssh, key, value, profile);
+      return true;
+    },
+  );
+
+  // MED-2: a narrow, allowlisted choke point for the AI co-author's "config"
+  // action. The assistant path used the generic set-env (any env var); this
+  // maps a known provider to its credential var server-side via
+  // resolveProviderEnvKey and REFUSES anything else, so a model-proposed action
+  // can never set arbitrary env.
+  registerDualHandler(
+    "set-provider-key",
+    async (provider: string, key: string, profile?: string) => {
+      const envKey = resolveProviderEnvKey(provider);
+      if (!envKey) return false;
+      setEnvValue(envKey, key, profile);
+      if (isGatewayRunning(profile)) restartGateway(profile);
+      return true;
+    },
+    async (ssh, provider: string, key: string, profile?: string) => {
+      const envKey = resolveProviderEnvKey(provider);
+      if (!envKey) return false;
+      await sshSetEnvValue(ssh, envKey, key, profile);
       return true;
     },
   );

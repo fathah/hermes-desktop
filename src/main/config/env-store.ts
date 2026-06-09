@@ -88,3 +88,16 @@ export function validateEnvEntry(key: string, value: string): void {
 export function getHermesHome(profile?: string): string {
   return profilePaths(profile).home;
 }
+
+// MED-2: the only providers the AI co-author's "config" action may set keys for.
+// A strict allowlist (resolver returns null for anything else) keeps that path
+// from writing arbitrary credential env vars.
+const PROVIDER_ENV_KEYS: Record<string, string> = {
+  openai: "OPENAI_API_KEY",
+  anthropic: "ANTHROPIC_API_KEY",
+  google: "GEMINI_API_KEY",
+};
+
+export function resolveProviderEnvKey(provider: string): string | null {
+  return PROVIDER_ENV_KEYS[String(provider).trim().toLowerCase()] ?? null;
+}
