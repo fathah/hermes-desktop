@@ -48,9 +48,34 @@ function getIpcSources(): string[] {
   return sources;
 }
 
-const mainChannels = [...new Set(getIpcSources().flatMap(src => extractIpcHandleChannels(src)))];
-const preloadSrc = readFileSync(join(ROOT, "src/preload/index.ts"), "utf-8");
-const preloadChannels = extractPreloadInvokeChannels(preloadSrc);
+const mainChannels = [
+  ...new Set(getIpcSources().flatMap((src) => extractIpcHandleChannels(src))),
+];
+
+function getPreloadSources(): string[] {
+  const sources: string[] = [
+    readFileSync(join(ROOT, "src/preload/index.ts"), "utf-8"),
+  ];
+  // hermesAPI methods (and their ipcRenderer.invoke calls) live in per-domain
+  // bridge modules merged by index.ts.
+  const bridgesDir = join(ROOT, "src/preload/bridges");
+  try {
+    for (const file of readdirSync(bridgesDir)) {
+      if (file.endsWith(".ts")) {
+        sources.push(readFileSync(join(bridgesDir, file), "utf-8"));
+      }
+    }
+  } catch (err) {
+    console.warn("Failed to read src/preload/bridges directory:", err);
+  }
+  return sources;
+}
+
+const preloadChannels = [
+  ...new Set(
+    getPreloadSources().flatMap((src) => extractPreloadInvokeChannels(src)),
+  ),
+];
 
 describe("IPC Handler ↔ Preload Consistency", () => {
   it("main process registers IPC handlers", () => {

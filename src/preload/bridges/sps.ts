@@ -1,0 +1,412 @@
+import { ipcRenderer } from "electron";
+import type { SkillEntry } from "../../shared/skills";
+import type {
+  SearchOpts as ResearchSearchOpts,
+  WorkSummary as ResearchWorkSummary,
+  WorkDetail as ResearchWorkDetail,
+} from "../../shared/openalex/core";
+
+export const spsBridge = {
+  // SPS Agent workspace
+  spsUnfurl: (
+    url: string,
+  ): Promise<{
+    url: string;
+    title: string;
+    desc: string;
+    favicon?: string;
+    image?: string;
+  }> => ipcRenderer.invoke("sps-unfurl", url),
+  spsAssistant: (
+    prompt: string,
+    ctx: {
+      blocks: { type: string; text: string }[];
+      pageTitle: string;
+      notes?: string[];
+    },
+    profile?: string,
+    groundInWorkspace?: boolean,
+  ): Promise<unknown> =>
+    ipcRenderer.invoke(
+      "sps-assistant",
+      prompt,
+      ctx,
+      profile,
+      groundInWorkspace,
+    ),
+  spsIngestInbox: (
+    profile?: string,
+  ): Promise<{
+    ok: boolean;
+    captureCount: number;
+    error?: string;
+    changeset?: {
+      summary: string;
+      pages: Array<{
+        op: "create" | "update";
+        pageId: string;
+        title: string;
+        markdown: string;
+      }>;
+      captures: Array<{ id: string; status: "processed" | "discarded" }>;
+      memory: string[];
+    };
+  }> => ipcRenderer.invoke("sps-ingest-inbox", profile),
+  spsLoad: (profile?: string): Promise<unknown | null> =>
+    ipcRenderer.invoke("sps-load", profile),
+  spsSave: (ws: unknown, profile?: string): Promise<boolean> =>
+    ipcRenderer.invoke("sps-save", ws, profile),
+  spsGetWorkSession: (
+    pageId: string,
+    profile?: string,
+  ): Promise<string | null> =>
+    ipcRenderer.invoke("sps-get-work-session", pageId, profile),
+  spsSetWorkSession: (
+    pageId: string,
+    sessionId: string,
+    profile?: string,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("sps-set-work-session", pageId, sessionId, profile),
+  equityListBaskets: (profile?: string): Promise<unknown[]> =>
+    ipcRenderer.invoke("equity-list-baskets", profile),
+  equitySaveBasket: (basket: unknown, profile?: string): Promise<unknown> =>
+    ipcRenderer.invoke("equity-save-basket", basket, profile),
+  equityDeleteBasket: (basketId: string, profile?: string): Promise<boolean> =>
+    ipcRenderer.invoke("equity-delete-basket", basketId, profile),
+  equityListAlerts: (limit?: number, profile?: string): Promise<unknown[]> =>
+    ipcRenderer.invoke("equity-list-alerts", limit, profile),
+  equityMarkAlertRead: (alertId: string, profile?: string): Promise<boolean> =>
+    ipcRenderer.invoke("equity-mark-alert-read", alertId, profile),
+  onEquityAlert: (callback: (alert: unknown) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, alert: unknown): void =>
+      callback(alert);
+    ipcRenderer.on("equity-alert", handler);
+    return () => ipcRenderer.removeListener("equity-alert", handler);
+  },
+  spsResearchSearchWorks: (
+    q: string,
+    opts?: ResearchSearchOpts,
+    profile?: string,
+  ): Promise<ResearchWorkSummary[]> =>
+    ipcRenderer.invoke("sps-research-search-works", q, opts, profile),
+  spsResearchGetWork: (
+    id: string,
+    profile?: string,
+  ): Promise<ResearchWorkDetail> =>
+    ipcRenderer.invoke("sps-research-get-work", id, profile),
+  spsResearchGetConfig: (): Promise<{ mailto: string; hasApiKey: boolean }> =>
+    ipcRenderer.invoke("sps-research-get-config"),
+  spsResearchSetConfig: (
+    mailto: string,
+    apiKey?: string,
+  ): Promise<{ mailto: string; hasApiKey: boolean }> =>
+    ipcRenderer.invoke("sps-research-set-config", mailto, apiKey),
+  spsResearchEnsureAgentTool: (
+    profile?: string,
+  ): Promise<{ registered: boolean; alreadyPresent: boolean }> =>
+    ipcRenderer.invoke("sps-research-ensure-agent-tool", profile),
+  spsExportPage: (
+    pageId: string,
+    markdown: string,
+    profile?: string,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("sps-export-page", pageId, markdown, profile),
+  spsExportRow: (
+    dbFolder: string,
+    rowId: string,
+    markdown: string,
+    profile?: string,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("sps-export-row", dbFolder, rowId, markdown, profile),
+  spsReadRow: (
+    dbFolder: string,
+    rowId: string,
+    profile?: string,
+  ): Promise<string | null> =>
+    ipcRenderer.invoke("sps-read-row", dbFolder, rowId, profile),
+  spsDeleteRow: (
+    dbFolder: string,
+    rowId: string,
+    profile?: string,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("sps-delete-row", dbFolder, rowId, profile),
+  spsDeletePage: (pageId: string, profile?: string): Promise<boolean> =>
+    ipcRenderer.invoke("sps-delete-page", pageId, profile),
+  spsDeleteDbFolder: (dbFolder: string, profile?: string): Promise<boolean> =>
+    ipcRenderer.invoke("sps-delete-db-folder", dbFolder, profile),
+  spsVaultRead: (
+    profile?: string,
+  ): Promise<{ pages: Record<string, string>; manifest: string | null }> =>
+    ipcRenderer.invoke("sps-vault-read", profile),
+  spsVaultWriteManifest: (json: string, profile?: string): Promise<boolean> =>
+    ipcRenderer.invoke("sps-vault-write-manifest", json, profile),
+  spsBackupWorkspace: (profile?: string): Promise<string | null> =>
+    ipcRenderer.invoke("sps-backup-workspace", profile),
+  spsWriteExcalidraw: (
+    pageId: string,
+    assetId: string,
+    sceneJson: string,
+    svg: string,
+    profile?: string,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke(
+      "sps-write-excalidraw",
+      pageId,
+      assetId,
+      sceneJson,
+      svg,
+      profile,
+    ),
+  spsReadExcalidraw: (
+    pageId: string,
+    assetId: string,
+    profile?: string,
+  ): Promise<{ scene: string | null; svg: string | null }> =>
+    ipcRenderer.invoke("sps-read-excalidraw", pageId, assetId, profile),
+  spsAssetWrite: (
+    bytes: Uint8Array,
+    ext: string,
+    profile?: string,
+  ): Promise<string> =>
+    ipcRenderer.invoke("sps-asset-write", bytes, ext, profile),
+  spsAssetExists: (name: string, profile?: string): Promise<boolean> =>
+    ipcRenderer.invoke("sps-asset-exists", name, profile),
+  spsAssetGc: (referenced: string[], profile?: string): Promise<number> =>
+    ipcRenderer.invoke("sps-asset-gc", referenced, profile),
+  spsIndexQuery: (
+    query: {
+      scope?: string;
+      filters?: Array<{
+        prop: string;
+        op: "eq" | "neq" | "contains" | "exists";
+        value?: unknown;
+      }>;
+      sort?: { prop: string; dir: "asc" | "desc" };
+      limit?: number;
+    },
+    profile?: string,
+  ): Promise<
+    Array<{
+      path: string;
+      title: string;
+      props: Record<string, unknown>;
+      mtime: number;
+    }>
+  > => ipcRenderer.invoke("sps-index-query", query, profile),
+  spsIndexSearch: (
+    text: string,
+    limit?: number,
+    profile?: string,
+  ): Promise<Array<{ path: string; title: string; snippet: string }>> =>
+    ipcRenderer.invoke("sps-index-search", text, limit, profile),
+  spsIndexBacklinks: (path: string, profile?: string): Promise<string[]> =>
+    ipcRenderer.invoke("sps-index-backlinks", path, profile),
+  spsIndexLinks: (
+    profile?: string,
+  ): Promise<Array<{ source: string; target: string; type: string }>> =>
+    ipcRenderer.invoke("sps-index-links", profile),
+  spsIndexTags: (
+    profile?: string,
+  ): Promise<Array<{ tag: string; count: number }>> =>
+    ipcRenderer.invoke("sps-index-tags", profile),
+  spsIndexByTag: (tag: string, profile?: string): Promise<string[]> =>
+    ipcRenderer.invoke("sps-index-by-tag", tag, profile),
+  spsLintVault: (
+    staleDays?: number,
+    profile?: string,
+  ): Promise<{
+    orphans: string[];
+    brokenLinks: Array<{ source: string; target: string; type: string }>;
+    stale: string[];
+  }> => ipcRenderer.invoke("sps-lint-vault", staleDays, profile),
+  spsIndexStatus: (
+    profile?: string,
+  ): Promise<{
+    root: string;
+    notes: number;
+    links: number;
+    indexedAt: number | null;
+  }> => ipcRenderer.invoke("sps-index-status", profile),
+  spsIndexRebuild: (
+    profile?: string,
+  ): Promise<{
+    root: string;
+    notes: number;
+    links: number;
+    indexedAt: number | null;
+  }> => ipcRenderer.invoke("sps-index-rebuild", profile),
+
+  spsSemanticIndex: (profile?: string): Promise<unknown> =>
+    ipcRenderer.invoke("sps-semantic-index", profile),
+  spsSemanticSearch: (query: string, limit?: number): Promise<unknown> =>
+    ipcRenderer.invoke("sps-semantic-search", query, limit),
+  spsSemanticGraph: (): Promise<unknown> =>
+    ipcRenderer.invoke("sps-semantic-graph"),
+  spsSemanticRag: (query: string, limit?: number): Promise<unknown> =>
+    ipcRenderer.invoke("sps-semantic-rag", query, limit),
+
+  // Shared-directory Obsidian mode: where the SPS vault lives on disk.
+  spsGetVaultLocation: (
+    profile?: string,
+  ): Promise<{ dir: string; isDefault: boolean; default: string }> =>
+    ipcRenderer.invoke("sps-get-vault-location", profile),
+  spsSetVaultLocation: (
+    dir: string,
+    profile?: string,
+  ): Promise<{
+    ok: boolean;
+    error?: string;
+    location?: { dir: string; isDefault: boolean; default: string };
+    nonEmpty?: boolean;
+  }> => ipcRenderer.invoke("sps-set-vault-location", dir, profile),
+  spsResetVaultLocation: (
+    profile?: string,
+  ): Promise<{ dir: string; isDefault: boolean; default: string }> =>
+    ipcRenderer.invoke("sps-reset-vault-location", profile),
+  spsPickVaultDir: (): Promise<string | null> =>
+    ipcRenderer.invoke("sps-pick-vault-dir"),
+
+  // KB Phase 0: pick + extract a PDF for ingestion into the SPS vault.
+  spsPickPdf: (): Promise<string | null> => ipcRenderer.invoke("sps-pick-pdf"),
+  spsExtractPdf: (
+    filePath: string,
+  ): Promise<{
+    title: string;
+    markdown: string;
+    pageCount: number;
+    hasTextLayer: boolean;
+    reason?: "missing" | "unreadable";
+  }> => ipcRenderer.invoke("sps-extract-pdf", filePath),
+  spsReadFileBytes: (filePath: string): Promise<Uint8Array> =>
+    ipcRenderer.invoke("sps-read-file-bytes", filePath),
+  runTelosAudit: (
+    profile?: string,
+  ): Promise<{
+    success: boolean;
+    title?: string;
+    markdown?: string;
+    error?: string;
+  }> => ipcRenderer.invoke("sps-run-telos-audit", profile),
+  runPipingPattern: (
+    text: string,
+    pattern: string,
+    profile?: string,
+  ): Promise<{
+    success: boolean;
+    result?: string;
+    error?: string;
+  }> => ipcRenderer.invoke("sps-run-piping", text, pattern, profile),
+
+  // Python Core Bridge Integration
+  pythonCompress: (text: string, tool?: string): Promise<string> =>
+    ipcRenderer.invoke("python-compress", text, tool),
+  pythonIsPathAllowed: (
+    targetPath: string,
+    actionDir: string,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("python-is-path-allowed", targetPath, actionDir),
+  pythonEvaluateExecution: (
+    cmdArgs: string[],
+    tier: "readonly" | "supervised" | "full",
+    paths: string[],
+    actionDir: string,
+  ): Promise<{ decision: "ALLOW" | "PROMPT" | "BLOCK"; reason: string }> =>
+    ipcRenderer.invoke(
+      "python-evaluate-execution",
+      cmdArgs,
+      tier,
+      paths,
+      actionDir,
+    ),
+  pythonMemorySave: (
+    vaultDir: string,
+    pageId: string,
+    metadata: Record<string, unknown>,
+    body: string,
+  ): Promise<void> =>
+    ipcRenderer.invoke("python-memory-save", vaultDir, pageId, metadata, body),
+  pythonMemorySearch: (
+    vaultDir: string,
+    query: string,
+  ): Promise<Array<{ id: string; score: number }>> =>
+    ipcRenderer.invoke("python-memory-search", vaultDir, query),
+  pythonMemoryGraph: (
+    vaultDir: string,
+  ): Promise<{
+    outgoing: Record<string, string[]>;
+    backlinks: Record<string, string[]>;
+  }> => ipcRenderer.invoke("python-memory-graph", vaultDir),
+
+  // Autopoietic Skills Registry & Generator
+  syncSkillsRegistry: (
+    profile?: string,
+  ): Promise<{ success: boolean; count: number; error?: string }> =>
+    ipcRenderer.invoke("skills-registry-sync", profile),
+  lookupSkillRegistry: (
+    query: string,
+    profile?: string,
+  ): Promise<SkillEntry[]> =>
+    ipcRenderer.invoke("skills-registry-lookup", query, profile),
+  registerSkillRegistry: (
+    skill: Omit<SkillEntry, "id" | "created_at">,
+    profile?: string,
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("skills-registry-register", skill, profile),
+  scaffoldSkill: (
+    name: string,
+    description: string,
+    code: string,
+    deps: string[],
+    profile?: string,
+  ): Promise<{ success: boolean; path?: string; error?: string }> =>
+    ipcRenderer.invoke(
+      "skills-registry-scaffold",
+      name,
+      description,
+      code,
+      deps,
+      profile,
+    ),
+  testSkill: (
+    name: string,
+    args?: string,
+    profile?: string,
+  ): Promise<{ success: boolean; output: string }> =>
+    ipcRenderer.invoke("skills-registry-test", name, args, profile),
+
+  onSystemStabilized: (
+    callback: (info: {
+      jobId: string;
+      jobName: string;
+      explanation: string;
+      filePatched: string;
+      diff: string;
+    }) => void,
+  ): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, info: unknown): void =>
+      callback(info as Parameters<typeof callback>[0]);
+    ipcRenderer.on("system-stabilized", handler);
+    return () => ipcRenderer.removeListener("system-stabilized", handler);
+  },
+
+  getSchedulerConfig: (): Promise<{
+    enabled: boolean;
+    tickIntervalMs: number;
+  }> => ipcRenderer.invoke("get-scheduler-config"),
+
+  setSchedulerConfig: (settings: {
+    enabled?: boolean;
+    tickIntervalMs?: number;
+  }): Promise<boolean> => ipcRenderer.invoke("set-scheduler-config", settings),
+
+  getSpendingCapConfig: (): Promise<{
+    maxSpendingLimit: number;
+    spendingCapAction: string;
+  }> => ipcRenderer.invoke("get-spending-cap-config"),
+
+  setSpendingCapConfig: (settings: {
+    maxSpendingLimit?: number;
+    spendingCapAction?: string;
+  }): Promise<boolean> =>
+    ipcRenderer.invoke("set-spending-cap-config", settings),
+};

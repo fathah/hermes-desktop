@@ -1,9 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "fs";
+import { readFileSync, readdirSync } from "fs";
 import { join } from "path";
 
 const ROOT = join(__dirname, "..");
-const preloadSrc = readFileSync(join(ROOT, "src/preload/index.ts"), "utf-8");
+// The hermesAPI methods live in per-domain bridge modules (src/preload/bridges/*)
+// merged by index.ts; scan all of them so parity covers the full surface.
+const bridgesDir = join(ROOT, "src/preload/bridges");
+const bridgeSrc = readdirSync(bridgesDir)
+  .filter((f) => f.endsWith(".ts"))
+  .map((f) => readFileSync(join(bridgesDir, f), "utf-8"))
+  .join("\n");
+const preloadSrc =
+  readFileSync(join(ROOT, "src/preload/index.ts"), "utf-8") + "\n" + bridgeSrc;
 const preloadTypes = readFileSync(
   join(ROOT, "src/preload/index.d.ts"),
   "utf-8",
