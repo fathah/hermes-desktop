@@ -65,6 +65,7 @@ export function CommandPalette() {
   const resetWorkspace = useStore((s) => s.resetWorkspace);
   const startNewChat = useStore((s) => s.startNewChat);
   const setResearchOpen = useStore((s) => s.setResearchOpen);
+  const setExternalSessionsOpen = useStore((s) => s.setExternalSessionsOpen);
   const flash = useStore((s) => s.flash);
 
   const [q, setQ] = useState("");
@@ -103,6 +104,14 @@ export function CommandPalette() {
         label: "Research papers…",
         desc: "Search OpenAlex's 250M+ scholarly works and save a plain-language summary into your workspace.",
         run: () => setResearchOpen(true),
+      },
+      {
+        kind: "action",
+        id: "external-sessions",
+        icon: "search",
+        label: "External sessions…",
+        desc: "Search what you discussed in Claude Code, Codex, Gemini and Grok — local, opt-in, redacted.",
+        run: () => setExternalSessionsOpen(true),
       },
       {
         kind: "action",
@@ -222,6 +231,7 @@ export function CommandPalette() {
       resetWorkspace,
       startNewChat,
       setResearchOpen,
+      setExternalSessionsOpen,
       flash,
     ],
   );

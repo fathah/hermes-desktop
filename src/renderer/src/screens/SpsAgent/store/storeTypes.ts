@@ -186,6 +186,8 @@ export interface UiSlice {
   scheduledOpen: boolean;
   /** The Telegram setup wizard is open. */
   telegramWizardOpen: boolean;
+  /** The External Sessions (other AI tools' transcripts) modal is open. */
+  externalSessionsOpen: boolean;
   tweaksOpen: boolean;
   openTask: Task | null;
   emojiPick: XY | null;
@@ -215,6 +217,7 @@ export interface UiSlice {
   setResearchOpen: (v: boolean) => void;
   setScheduledOpen: (v: boolean) => void;
   setTelegramWizardOpen: (v: boolean) => void;
+  setExternalSessionsOpen: (v: boolean) => void;
   setTweaksOpen: (v: boolean) => void;
   setOpenTask: (t: Task | null) => void;
   setEmojiPick: (v: XY | null) => void;
