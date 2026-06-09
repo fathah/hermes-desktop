@@ -68,6 +68,11 @@ export const externalContextBridge = {
     };
   }> => ipcRenderer.invoke("external-context-save-to-kb", convId, profile),
 
+  externalContextEnsureMcp: (
+    profile?: string,
+  ): Promise<{ registered: boolean; alreadyPresent: boolean }> =>
+    ipcRenderer.invoke("external-context-ensure-mcp", profile),
+
   onExternalContextProgress: (
     callback: (progress: ExternalScanProgress) => void,
   ): (() => void) => {

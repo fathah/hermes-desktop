@@ -15,6 +15,8 @@ import { join } from "path";
 import { ExternalContextDb } from "../src/main/external-context/db";
 import { scanExternalSources } from "../src/main/external-context/index";
 import type { ExternalSource } from "../src/shared/external-context";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error("FAIL: " + msg);
@@ -315,6 +317,53 @@ async function main(): Promise<void> {
     db.totals().messages > 0,
     "rescan after rebuild repopulates from disk",
   );
+
+  console.log("\nMCP — stdio roundtrip (untrusted-fenced, read-only):");
+  const serverPath = join(
+    process.cwd(),
+    "resources",
+    "external-context-mcp.cjs",
+  );
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [serverPath],
+    env: {
+      ...(process.env as Record<string, string>),
+      ELECTRON_RUN_AS_NODE: "1",
+      HERMES_EXTERNAL_CONTEXT_DB: dbPath,
+    },
+  });
+  const client = new Client(
+    { name: "verify", version: "1.0.0" },
+    { capabilities: {} },
+  );
+  await client.connect(transport);
+  const tools = await client.listTools();
+  const toolNames = tools.tools.map((t) => t.name);
+  assert(
+    toolNames.includes("search_external_context") &&
+      toolNames.includes("read_external_conversation") &&
+      toolNames.includes("list_external_sources"),
+    "MCP server exposes all three tools",
+  );
+  const searchRes = (await client.callTool({
+    name: "search_external_context",
+    arguments: { query: "widget" },
+  })) as { content: Array<{ type: string; text: string }> };
+  const mcpText = searchRes.content.map((c) => c.text).join("\n");
+  assert(
+    mcpText.includes("UNTRUSTED"),
+    "MCP response opens with the untrusted banner",
+  );
+  assert(
+    mcpText.includes("<external_transcripts>"),
+    "MCP wraps excerpts in a fence",
+  );
+  assert(
+    !mcpText.includes("LEAKED0123456789"),
+    "MCP response never leaks the redacted key",
+  );
+  await client.close();
 
   db.close();
   rmSync(work, { recursive: true, force: true });

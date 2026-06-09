@@ -8,6 +8,11 @@ cd "$(dirname "$0")/.."
 OUT=".verify-ec.cjs"
 trap 'rm -f "$OUT"' EXIT
 
+# Build the stdio MCP server too so the roundtrip assertion has a binary to spawn.
+npx esbuild src/mcp/external-context-server.ts \
+  --bundle --platform=node --format=cjs --external:better-sqlite3 \
+  --outfile=resources/external-context-mcp.cjs
+
 npx esbuild scripts/verify-external-context.ts \
   --bundle --platform=node --format=cjs --packages=external --outfile="$OUT"
 

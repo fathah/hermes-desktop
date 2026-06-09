@@ -21,7 +21,7 @@
     "dev": "npm run build:mcp && electron-vite dev",
     "dev:fresh": "HERMES_HOME=$(mktemp -d -t hermes-fresh) electron-vite dev",
     "prebuild": "node scripts/fetch-ocr-assets.mjs",
-    "build:mcp": "esbuild src/mcp/openalex-server.ts --bundle --platform=node --format=cjs --outfile=resources/openalex-mcp.cjs",
+    "build:mcp": "esbuild src/mcp/openalex-server.ts --bundle --platform=node --format=cjs --outfile=resources/openalex-mcp.cjs && esbuild src/mcp/external-context-server.ts --bundle --platform=node --format=cjs --external:better-sqlite3 --outfile=resources/external-context-mcp.cjs",
     "build": "npm run typecheck && npm run build:mcp && electron-vite build",
     "postinstall": "electron-builder install-app-deps",
     "build:unpack": "npm run build && electron-builder --dir",

@@ -175,3 +175,16 @@ export function openAlexMcpServerPath(): string {
   }
   return join(app.getAppPath(), "resources", "openalex-mcp.cjs");
 }
+
+/** Absolute path to the bundled External Context MCP server (asar-unpacked). */
+export function externalContextMcpServerPath(): string {
+  if (app.isPackaged) {
+    return join(
+      process.resourcesPath,
+      "app.asar.unpacked",
+      "resources",
+      "external-context-mcp.cjs",
+    );
+  }
+  return join(app.getAppPath(), "resources", "external-context-mcp.cjs");
+}

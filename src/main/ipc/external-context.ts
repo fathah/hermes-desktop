@@ -17,6 +17,13 @@ import type {
 } from "../../shared/external-context";
 import { formatProvenance } from "../../shared/external-context";
 import { spsExternalSaveToKb } from "../sps-agent";
+import { existsSync } from "fs";
+import {
+  externalContextMcpServerPath,
+  hasMcpServer,
+  writeMcpServerEntry,
+} from "../installer/mcp";
+import { externalDbPath } from "../external-context/index";
 import {
   getExternalContextSources,
   setExternalContextSource,
@@ -181,6 +188,40 @@ export function registerExternalContextIpc(
       return spsExternalSaveToKb(provenance, transcript, profile);
     },
   );
+
+  ipcMain.handle("external-context-ensure-mcp", (_e, profile?: string) =>
+    ensureExternalContextMcpRegistered(profile),
+  );
+}
+
+/**
+ * Register the external-context stdio MCP server into the profile's config.yaml
+ * so the Hermes agent can search external transcripts itself (idempotent). Twin
+ * of ensureResearchMcpRegistered. The server opens the machine-global index
+ * read-only via HERMES_EXTERNAL_CONTEXT_DB.
+ */
+export function ensureExternalContextMcpRegistered(profile?: string): {
+  registered: boolean;
+  alreadyPresent: boolean;
+} {
+  const name = "external-context";
+  if (hasMcpServer(name, profile)) {
+    return { registered: true, alreadyPresent: true };
+  }
+  const serverPath = externalContextMcpServerPath();
+  if (!existsSync(serverPath)) {
+    return { registered: false, alreadyPresent: false };
+  }
+  const env: Record<string, string> = {
+    ELECTRON_RUN_AS_NODE: "1",
+    HERMES_EXTERNAL_CONTEXT_DB: externalDbPath(),
+  };
+  writeMcpServerEntry(
+    name,
+    { command: process.execPath, args: [serverPath], env, enabled: true },
+    profile,
+  );
+  return { registered: true, alreadyPresent: false };
 }
 
 /** Head+tail cap so a long session can't blow the synthesis pass's context. */

@@ -1139,6 +1139,9 @@ interface HermesAPI {
       memory: string[];
     };
   }>;
+  externalContextEnsureMcp: (
+    profile?: string,
+  ) => Promise<{ registered: boolean; alreadyPresent: boolean }>;
   onExternalContextProgress: (
     callback: (progress: ExternalScanProgress) => void,
   ) => () => void;

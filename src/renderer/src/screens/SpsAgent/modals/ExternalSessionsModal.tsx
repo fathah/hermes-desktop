@@ -147,6 +147,19 @@ export function ExternalSessionsModal() {
     if (s) setStatus(s);
   };
 
+  const [mcpState, setMcpState] = useState<"idle" | "working" | "done">("idle");
+  const exposeMcp = async () => {
+    setMcpState("working");
+    try {
+      const res = await window.hermesAPI?.externalContextEnsureMcp?.();
+      setMcpState(res?.registered ? "done" : "idle");
+      if (res?.registered)
+        flash("Hermes can now search your external sessions");
+    } catch {
+      setMcpState("idle");
+    }
+  };
+
   return (
     <div
       className="scrim"
@@ -192,6 +205,8 @@ export function ExternalSessionsModal() {
               onToggle={toggleSource}
               onScan={doScan}
               onRebuild={doRebuild}
+              onExposeMcp={exposeMcp}
+              mcpState={mcpState}
             />
           ) : (
             <SearchView
@@ -363,6 +378,8 @@ function SettingsView(props: {
   onToggle: (source: ExternalSource, enabled: boolean) => void;
   onScan: () => void;
   onRebuild: () => void;
+  onExposeMcp: () => Promise<void>;
+  mcpState: "idle" | "working" | "done";
 }) {
   const statusBySource = new Map<ExternalSource, ExternalSourceStatus>(
     (props.status?.sources ?? []).map((s) => [s.source, s]),
@@ -428,15 +445,29 @@ function SettingsView(props: {
           display: "flex",
           gap: 6,
           marginTop: 12,
-          justifyContent: "flex-end",
+          justifyContent: "space-between",
         }}
       >
-        <button className="cover-btn" onClick={() => props.onScan()}>
-          Scan now
+        <button
+          className="cover-btn"
+          onClick={() => void props.onExposeMcp()}
+          disabled={props.mcpState !== "idle"}
+          title="Let the Hermes agent search these sessions in chat (registers a local MCP tool)"
+        >
+          {props.mcpState === "done"
+            ? "✓ Exposed to agent"
+            : props.mcpState === "working"
+              ? "Exposing…"
+              : "Expose to Hermes agent"}
         </button>
-        <button className="cover-btn" onClick={() => props.onRebuild()}>
-          Rebuild index
-        </button>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button className="cover-btn" onClick={() => props.onScan()}>
+            Scan now
+          </button>
+          <button className="cover-btn" onClick={() => props.onRebuild()}>
+            Rebuild index
+          </button>
+        </div>
       </div>
     </>
   );
