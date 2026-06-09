@@ -47,11 +47,15 @@ export function AgentBody() {
   const onDismissDb = useStore((s) => s.dismissDbAction);
   const onApplySsh = useStore((s) => s.applySshAction);
   const onApplyConfig = useStore((s) => s.applyConfigAction);
+  const fileAnswerToWiki = useStore((s) => s.fileAnswerToWiki);
   const flash = useStore((s) => s.flash);
 
   const [val, setVal] = useState("");
   // Trust chips are dismissable per-message (the user can hide "used your …").
   const [dismissedChips, setDismissedChips] = useState<Set<string>>(new Set());
+  // Query-that-compounds: per-message filing state for "Save to wiki".
+  const [filing, setFiling] = useState<Set<string>>(new Set());
+  const [filed, setFiled] = useState<Set<string>>(new Set());
   const bodyRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
@@ -61,6 +65,23 @@ export function AgentBody() {
       next.add(id);
       return next;
     });
+  };
+
+  const onFileToWiki = async (id: string): Promise<void> => {
+    setFiling((prev) => new Set(prev).add(id));
+    const res = await fileAnswerToWiki(id);
+    setFiling((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    if (res.ok) {
+      setFiled((prev) => new Set(prev).add(id));
+      const n = res.pages ?? 1;
+      flash(`Filed to wiki — ${n} page${n === 1 ? "" : "s"}`);
+    } else {
+      flash(res.error ?? "Couldn't file to wiki", { tone: "warn" });
+    }
   };
 
   // Grounding toggle: the co-author reads getGroundInWorkspace() at send time
@@ -199,6 +220,32 @@ export function AgentBody() {
                     </button>
                   </div>
                 )}
+              {/* Query-that-compounds: file a grounded informational answer back
+                  as a durable wiki page (Karpathy's `outputs/` layer). Not shown
+                  for action proposals (diff/db/ssh/config). */}
+              {m.role === "bot" &&
+                m.context &&
+                !m.proposalId &&
+                !m.dbAction &&
+                !m.sshAction &&
+                !m.configAction &&
+                (filed.has(m.id) ? (
+                  <div className="applied-note">
+                    <Icon name="check" size={13} /> Filed to wiki
+                  </div>
+                ) : (
+                  <div className="ai-action" style={{ marginTop: 4 }}>
+                    <button
+                      className="sg-chip"
+                      disabled={filing.has(m.id)}
+                      title="Synthesize this answer into a durable, cross-linked wiki page"
+                      onClick={() => onFileToWiki(m.id)}
+                    >
+                      <Icon name="sparkle" size={12} />{" "}
+                      {filing.has(m.id) ? "Filing…" : "Save to wiki"}
+                    </button>
+                  </div>
+                ))}
               {m.proposalId && (
                 <div onClick={() => scrollToProposal(m.proposalId!)}>
                   {m.status === "applied" ? (

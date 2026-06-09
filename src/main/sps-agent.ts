@@ -31,11 +31,14 @@ import { resolveSpsVaultDir } from "./sps-storage";
 import { semanticManager } from "./semantic-index";
 import {
   buildIngestMessages,
+  buildFileAnswerMessages,
   parseChangeset,
   readUnprocessedCaptures,
   readWikiSchema,
   type IngestChangeset,
+  type RelatedPage,
 } from "./sps-ingest";
+import { getSpsNoteIndex } from "./note-index";
 
 // ───────────────────────── SSRF guard ─────────────────────────
 const BLOCKED_RANGES = new Set([
@@ -682,6 +685,98 @@ export async function spsIngestInbox(profile?: string): Promise<IngestResult> {
       ok: false,
       captureCount: 0,
       error: err instanceof Error ? err.message : "ingest error",
+    };
+  }
+}
+
+/** Root-level wiki pages whose title/body best match `query`, offered to the
+ *  model as cross-link candidates. Excludes rows / captures (nested paths) and
+ *  the meta pages (index/log/WIKI) — those aren't topical wiki articles. */
+async function relatedPagesFor(
+  query: string,
+  profile?: string,
+): Promise<RelatedPage[]> {
+  const META = new Set(["index", "log", "WIKI"]);
+  try {
+    const index = await getSpsNoteIndex(profile);
+    const hits = index.search(query, 6, "any");
+    const related: RelatedPage[] = [];
+    for (const hit of hits) {
+      if (hit.path.includes("/")) continue;
+      const pageId = hit.path.replace(/\.md$/, "");
+      if (META.has(pageId)) continue;
+      related.push({ pageId, title: hit.title || pageId });
+    }
+    return related;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * "File this answer as a wiki page" — the compounding-Query operation (Karpathy's
+ * `outputs/` layer). Synthesizes a useful chat answer into ONE durable wiki page.
+ * READ-ONLY over the vault: returns a changeset the desktop reviews/commits
+ * through the same path as ingest (the propose-then-commit keystone).
+ */
+export async function spsFileAnswer(
+  question: string,
+  answerMarkdown: string,
+  profile?: string,
+): Promise<IngestResult> {
+  try {
+    if (isRemoteMode()) {
+      return {
+        ok: false,
+        captureCount: 0,
+        error: "Filing needs a local workspace.",
+      };
+    }
+    if (!answerMarkdown.trim()) {
+      return { ok: false, captureCount: 0, error: "Nothing to file." };
+    }
+    const vaultDir = resolveSpsVaultDir(profile);
+    const schema = await readWikiSchema(vaultDir);
+    const related = await relatedPagesFor(question, profile);
+    const messages = buildFileAnswerMessages(
+      schema,
+      question,
+      answerMarkdown,
+      related,
+    );
+    const url = `${getApiUrl(profile)}/v1/chat/completions`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getRemoteAuthHeader() },
+      signal: AbortSignal.timeout(180000),
+      body: JSON.stringify({ model: "hermes-agent", stream: false, messages }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      return {
+        ok: false,
+        captureCount: 0,
+        error: `gateway ${res.status}: ${body.slice(0, 160)}`,
+      };
+    }
+    const data = (await res.json()) as {
+      choices?: { message?: { content?: string } }[];
+    };
+    const content = data?.choices?.[0]?.message?.content ?? "";
+    const changeset = parseChangeset(extractJson(content));
+    if (!changeset || changeset.pages.length === 0) {
+      return {
+        ok: false,
+        captureCount: 0,
+        error: "The agent didn't return a usable page.",
+      };
+    }
+    return { ok: true, captureCount: 0, changeset };
+  } catch (err) {
+    return {
+      ok: false,
+      captureCount: 0,
+      error: err instanceof Error ? err.message : "file-answer error",
     };
   }
 }

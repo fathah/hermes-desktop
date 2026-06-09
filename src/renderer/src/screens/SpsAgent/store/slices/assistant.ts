@@ -21,6 +21,7 @@ import {
   serializePlanBlocks,
 } from "../../assistant/prompts";
 import { TASKS } from "../../data/seed";
+import { commitChangeset } from "../../inbox/ingestApply";
 import type { AgentMessage } from "../../assistant/types";
 import type { Block } from "../../types";
 import type { Store, AssistantSlice, Conversation } from "../storeTypes";
@@ -572,6 +573,42 @@ export const createAssistantSlice: StateCreator<
           `Config error: ${err instanceof Error ? err.message : String(err)}`,
           { tone: "warn" },
         );
+      }
+    },
+    fileAnswerToWiki: async (messageId) => {
+      // Find the bot answer and the user question that produced it (the nearest
+      // preceding user turn). Message ids are globally unique, so search every
+      // tab. SPS is single-profile, so profile is left undefined (like runAgent).
+      let answer = "";
+      let question = "";
+      for (const c of get().conversations) {
+        const idx = c.messages.findIndex((m) => m.id === messageId);
+        if (idx < 0) continue;
+        answer = c.messages[idx].text.join("\n\n").trim();
+        for (let i = idx - 1; i >= 0; i--) {
+          if (c.messages[i].role === "user") {
+            question = c.messages[i].text.join(" ").trim();
+            break;
+          }
+        }
+        break;
+      }
+      if (!answer) return { ok: false, error: "Nothing to file." };
+      try {
+        const res = await window.hermesAPI.spsFileAnswer?.(question, answer);
+        if (!res?.ok || !res.changeset) {
+          return { ok: false, error: res?.error ?? "Filing is unavailable." };
+        }
+        const { pages } = await commitChangeset(
+          res.changeset,
+          get().ingestCommitPage,
+        );
+        return { ok: true, pages, summary: res.changeset.summary };
+      } catch (err) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : "file error",
+        };
       }
     },
   };

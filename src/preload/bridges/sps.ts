@@ -52,6 +52,26 @@ export const spsBridge = {
       memory: string[];
     };
   }> => ipcRenderer.invoke("sps-ingest-inbox", profile),
+  spsFileAnswer: (
+    question: string,
+    answer: string,
+    profile?: string,
+  ): Promise<{
+    ok: boolean;
+    captureCount: number;
+    error?: string;
+    changeset?: {
+      summary: string;
+      pages: Array<{
+        op: "create" | "update";
+        pageId: string;
+        title: string;
+        markdown: string;
+      }>;
+      captures: Array<{ id: string; status: "processed" | "discarded" }>;
+      memory: string[];
+    };
+  }> => ipcRenderer.invoke("sps-file-answer", question, answer, profile),
   spsLoad: (profile?: string): Promise<unknown | null> =>
     ipcRenderer.invoke("sps-load", profile),
   spsSave: (ws: unknown, profile?: string): Promise<boolean> =>

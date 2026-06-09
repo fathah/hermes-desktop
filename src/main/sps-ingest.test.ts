@@ -7,6 +7,7 @@ import {
   slugifyPageId,
   parseChangeset,
   buildIngestMessages,
+  buildFileAnswerMessages,
   readUnprocessedCaptures,
   readWikiSchema,
   DEFAULT_WIKI_SCHEMA,
@@ -89,6 +90,29 @@ describe("buildIngestMessages", () => {
     expect(msgs[2].role).toBe("user");
     expect(msgs[2].content).toContain("c1");
     expect(msgs[2].content).toContain("hello");
+  });
+});
+
+describe("buildFileAnswerMessages", () => {
+  it("orders contract → schema → related → q&a, and emits the changeset shape", () => {
+    const msgs = buildFileAnswerMessages(
+      "MY SCHEMA",
+      "What is reciprocal-rank fusion?",
+      "RRF combines rankings by summing 1/(k+rank).",
+      [{ pageId: "search-ranking", title: "Search Ranking" }],
+    );
+    expect(msgs[0].role).toBe("system");
+    expect(msgs[0].content).toContain("EXACTLY ONE JSON object");
+    expect(msgs[1].content).toContain("MY SCHEMA");
+    expect(msgs[2].content).toContain("[[search-ranking]]");
+    expect(msgs[2].content).toContain("Search Ranking");
+    expect(msgs[3].role).toBe("user");
+    expect(msgs[3].content).toContain("reciprocal-rank fusion");
+    expect(msgs[3].content).toContain("RRF combines rankings");
+  });
+  it("handles no related pages", () => {
+    const msgs = buildFileAnswerMessages("S", "q", "a", []);
+    expect(msgs[2].content).toContain("(no related pages found)");
   });
 });
 

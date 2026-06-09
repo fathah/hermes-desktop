@@ -284,6 +284,14 @@ export interface AssistantSlice {
   dismissDbAction: (messageId: string) => void;
   applySshAction: (messageId: string, action: "start" | "stop") => void;
   applyConfigAction: (messageId: string, provider: string, key: string) => void;
+  /** Query-that-compounds (Karpathy's `outputs/` layer): synthesize a grounded
+   *  answer into a durable wiki page and commit it through the ingest path. */
+  fileAnswerToWiki: (messageId: string) => Promise<{
+    ok: boolean;
+    pages?: number;
+    summary?: string;
+    error?: string;
+  }>;
 }
 
 /** A template the user saved from one of their own pages (localStorage-backed). */

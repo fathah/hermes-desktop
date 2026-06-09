@@ -4,6 +4,7 @@ import {
   spsUnfurl,
   spsAssistant,
   spsIngestInbox,
+  spsFileAnswer,
   spsLoad,
   spsSave,
   type PageContext as SpsPageContext,
@@ -39,6 +40,11 @@ export function registerSpsIpc(): void {
   );
   ipcMain.handle("sps-ingest-inbox", (_event, profile?: string) =>
     spsIngestInbox(profile),
+  );
+  ipcMain.handle(
+    "sps-file-answer",
+    (_event, question: string, answer: string, profile?: string) =>
+      spsFileAnswer(question, answer, profile),
   );
   ipcMain.handle("sps-load", (_event, profile?: string) => spsLoad(profile));
   ipcMain.handle("sps-save", (_event, ws: unknown, profile?: string) =>
