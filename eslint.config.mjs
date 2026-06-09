@@ -25,7 +25,6 @@ export default defineConfig(
       // with their own tooling. The integrated copy under
       // src/renderer/src/screens/SpsAgent IS linted.
       "sps-agent/**",
-      "sps-agent-prototype/**",
       // CDP E2E harness — plain Node CommonJS scripts driving the
       // dev electron via Chrome DevTools Protocol for live testing.
       // They intentionally use require() because they run as one-off
