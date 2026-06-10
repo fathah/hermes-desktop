@@ -406,6 +406,124 @@ function StorageSettings() {
   );
 }
 
+// Active skills (2.6): the enable/disable half of the old admin Skills screen,
+// pulled into the one workspace-settings surface so that screen can be retired.
+// Install / uninstall / authoring stay out of scope — this is just the "which
+// capabilities are live" audit + toggle. The skill IPC requires a local
+// workspace (throws in remote/SSH), so the section self-hides when unavailable.
+interface SkillRow {
+  name: string;
+  category: string;
+  description: string;
+  path: string;
+}
+
+function SkillToggles() {
+  const flash = useStore((s) => s.flash);
+  const [installed, setInstalled] = useState<SkillRow[]>([]);
+  const [disabled, setDisabled] = useState<SkillRow[]>([]);
+  const [state, setState] = useState<"loading" | "ready" | "unavailable">(
+    "loading",
+  );
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = useCallback(async (): Promise<void> => {
+    try {
+      const [on, off] = await Promise.all([
+        window.hermesAPI.listInstalledSkills(),
+        window.hermesAPI.listDisabledSkills(),
+      ]);
+      setInstalled(on);
+      setDisabled(off);
+      setState("ready");
+    } catch {
+      // No local skills dir (remote/SSH) — hide the section entirely.
+      setState("unavailable");
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const toggle = async (skill: SkillRow, enable: boolean): Promise<void> => {
+    setBusy(skill.path);
+    try {
+      const res = await window.hermesAPI.setSkillEnabled(skill.path, enable);
+      if (res?.success) await load();
+      else flash(res?.error || "Couldn't update that skill.");
+    } catch (e) {
+      flash((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (state === "unavailable") return null;
+
+  const rows = [
+    ...installed.map((s) => ({ skill: s, enabled: true })),
+    ...disabled.map((s) => ({ skill: s, enabled: false })),
+  ].sort((a, b) => a.skill.name.localeCompare(b.skill.name));
+
+  return (
+    <>
+      <Section label="Active skills" />
+      {state === "loading" ? (
+        <div className="twk-row">
+          <span className="twk-lbl">
+            <span>Loading…</span>
+          </span>
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="twk-row">
+          <span className="twk-lbl">
+            <span>No skills installed.</span>
+          </span>
+        </div>
+      ) : (
+        rows.map(({ skill, enabled }) => (
+          <div key={skill.path} className="twk-row twk-row-h">
+            <span
+              className="twk-lbl"
+              style={{ flex: 1 }}
+              title={skill.description}
+            >
+              <span>{skill.name}</span>
+            </span>
+            <button
+              className="twk-toggle"
+              data-on={enabled ? "1" : "0"}
+              disabled={busy === skill.path}
+              onClick={() => void toggle(skill, !enabled)}
+              aria-label={skill.name}
+            >
+              <i />
+            </button>
+          </div>
+        ))
+      )}
+    </>
+  );
+}
+
+// Capture settings — discoverable home for Phase 5.1 (Telegram quick-capture →
+// Inbox). The pipeline lands later; this is the placeholder it will fill in.
+function CaptureSettings() {
+  return (
+    <>
+      <Section label="Capture" />
+      <div className="twk-row">
+        <span className="twk-lbl">
+          <span style={{ opacity: 0.7 }}>
+            Quick-capture (Telegram → Inbox) arrives in a later release.
+          </span>
+        </span>
+      </div>
+    </>
+  );
+}
+
 function Shell({
   children,
   onClose,
@@ -438,7 +556,7 @@ function Shell({
   return (
     <div ref={ref} className="twk-panel">
       <div className="twk-hd" onMouseDown={onDragStart}>
-        <b>Tweaks</b>
+        <b>Workspace settings</b>
         <button
           className="twk-x"
           aria-label="Close tweaks"
@@ -529,6 +647,8 @@ export function TweaksPanel() {
       <SkinSelect />
       <SidebarSections />
       <StorageSettings />
+      <SkillToggles />
+      <CaptureSettings />
     </Shell>
   );
 }

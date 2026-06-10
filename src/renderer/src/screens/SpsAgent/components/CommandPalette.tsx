@@ -10,8 +10,7 @@ import { treeWalkIds } from "../lib/tree";
 import { computePathIds } from "../store/selectors";
 import { workspaceParity } from "../editor/workspaceVault";
 import { getStorageMode } from "../lib/storageMode";
-import { toggleStorageMode } from "../lib/storageActions";
-import type { PageMeta, TreeNode, Workspace } from "../types";
+import type { PageMeta, TreeNode } from "../types";
 
 interface ActionItem {
   kind: "action";
@@ -199,25 +198,15 @@ export function CommandPalette() {
         kind: "action",
         id: "storage",
         icon: "code",
-        label:
-          getStorageMode() === "blob"
-            ? "Switch to markdown storage (migrate)"
-            : "Switch to JSON storage (rollback)",
+        label: "Open workspace settings",
         desc:
           getStorageMode() === "blob"
-            ? "Make the markdown vault authoritative (backs up the JSON blob first)."
-            : "Make the JSON blob authoritative again.",
+            ? "Storage (currently JSON blob), active skills, capture, and more."
+            : "Storage (currently markdown vault), active skills, capture, and more.",
+        // The migrate/rollback control now lives inside the settings surface
+        // (Storage section) rather than firing inline from the palette.
         run: () => {
-          const s = useStore.getState();
-          const ws: Workspace = {
-            tree: s.tree,
-            meta: s.meta,
-            docs: s.docs,
-            comments: s.comments,
-            trash: s.trash,
-            page: s.page,
-          };
-          void toggleStorageMode(ws).then((res) => flash(res.message));
+          useStore.getState().setTweaksOpen(true);
         },
       },
     ],
