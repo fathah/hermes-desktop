@@ -1,7 +1,7 @@
 // Sidebar.tsx — workspace rail. Notion-3.1 grammar: an always-visible top icon
-// row, then named/toggleable/collapsible sections (Meetings/Recents/Agents/
-// Shared/Private/Apps), a persistent "New chat" launcher, and the identity foot.
-// Identity is derived from the active Hermes profile (demo fallback offline).
+// row, then named/toggleable/collapsible sections (Recents/Private), the
+// Obsidian Vault explorer, a persistent "New chat" launcher, and the identity
+// foot. Identity is derived from the active Hermes profile (demo fallback offline).
 import { useEffect, useState } from "react";
 import { Icon } from "../components/Icon";
 import { useStore } from "../store";
@@ -10,7 +10,6 @@ import type { TreeDnd } from "./dnd";
 import { TreeNode } from "./TreeNode";
 import { SidebarSection } from "./SidebarSection";
 import { SidebarRecents } from "./SidebarRecents";
-import { SidebarApps, SidebarMeetings, SidebarShared } from "./SidebarStubs";
 import { useVaultQuery } from "../hooks/useNoteIndex";
 import { INBOX_FOLDER } from "../inbox/capture";
 import { ObsidianExplorer } from "./ObsidianExplorer";
@@ -266,16 +265,8 @@ export function Sidebar() {
           </button>
         </SidebarSection>
 
-        <SidebarSection id="meetings" label="Meetings">
-          <SidebarMeetings />
-        </SidebarSection>
-
         <SidebarSection id="recents" label="Recents">
           <SidebarRecents />
-        </SidebarSection>
-
-        <SidebarSection id="shared" label="Shared">
-          <SidebarShared />
         </SidebarSection>
 
         <SidebarSection
@@ -332,10 +323,6 @@ export function Sidebar() {
           </div>
           {obsidianOpen && <ObsidianExplorer />}
         </div>
-
-        <SidebarSection id="apps" label="Apps">
-          <SidebarApps />
-        </SidebarSection>
 
         <div className="sec sec-static">
           <span className="sec-label">More</span>
