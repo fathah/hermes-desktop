@@ -7,8 +7,6 @@ import {
   inspectInstallTarget,
   validateHermesHome,
   setHermesHomeOverride,
-  getComputerUseStatus,
-  installComputerUseDriver,
   getHermesVersion,
   clearVersionCache,
   runHermesDoctor,
@@ -150,18 +148,6 @@ export function registerSystemIpc(
     } catch (err) {
       return { available: false, reason: (err as Error).message };
     }
-  });
-
-  // Computer Use
-  safeHandle("get-computer-use-status", (_event, profile?: string) =>
-    getComputerUseStatus(profile),
-  );
-  safeHandle("install-computer-use-driver", async (event, profile?: string) => {
-    return installComputerUseDriver((progress) => {
-      if (!event.sender.isDestroyed()) {
-        event.sender.send("install-progress", progress);
-      }
-    }, profile);
   });
 
   // App version

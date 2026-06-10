@@ -193,16 +193,6 @@ export const systemBridge = {
   getPromptSizeBreakdown: (profile?: string): Promise<string> =>
     ipcRenderer.invoke("get-prompt-size-breakdown", profile),
 
-  // Computer Use
-  getComputerUseStatus: (
-    profile?: string,
-  ): Promise<{ installed: boolean; output: string }> =>
-    ipcRenderer.invoke("get-computer-use-status", profile),
-  installComputerUseDriver: (
-    profile?: string,
-  ): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke("install-computer-use-driver", profile),
-
   // Git Changelog
   getGitChangelog: (): Promise<string> =>
     ipcRenderer.invoke("get-git-changelog"),

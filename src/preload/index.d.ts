@@ -815,14 +815,6 @@ interface HermesAPI {
   runSecurityAudit: (profile?: string) => Promise<string>;
   getPromptSizeBreakdown: (profile?: string) => Promise<string>;
 
-  // Computer Use
-  getComputerUseStatus: (
-    profile?: string,
-  ) => Promise<{ installed: boolean; output: string }>;
-  installComputerUseDriver: (
-    profile?: string,
-  ) => Promise<{ success: boolean; error?: string }>;
-
   // Git Changelog
   getGitChangelog: () => Promise<string>;
 

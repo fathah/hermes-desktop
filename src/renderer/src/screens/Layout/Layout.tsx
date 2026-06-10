@@ -3,7 +3,6 @@ import Chat, { ChatMessage } from "../Chat/Chat";
 import Agents from "../Agents/Agents";
 import Settings from "../Settings/Settings";
 import Skills from "../Skills/Skills";
-import Tools from "../Tools/Tools";
 import Gateway from "../Gateway/Gateway";
 import Models from "../Models/Models";
 import Providers from "../Providers/Providers";
@@ -17,7 +16,6 @@ import {
   Users,
   Settings as SettingsIcon,
   Puzzle,
-  Wrench,
   Signal,
   Layers,
   KeyRound,
@@ -69,7 +67,6 @@ const NAV_GROUPS: NavGroup[] = [
       { view: "providers", icon: KeyRound, labelKey: "navigation.providers" },
       { view: "models", icon: Layers, labelKey: "navigation.models" },
       { view: "gateway", icon: Signal, labelKey: "navigation.gateway" },
-      { view: "tools", icon: Wrench, labelKey: "navigation.tools" },
     ],
   },
   {
@@ -503,16 +500,6 @@ function Layout({
               <RemoteNotice feature="Skills" />
             ) : (
               <Skills profile={activeProfile} visible={view === "skills"} />
-            )}
-          </div>
-        )}
-
-        {visitedViews.has("tools") && (
-          <div style={paneStyle("tools")}>
-            {remoteMode ? (
-              <RemoteNotice feature="Tools" />
-            ) : (
-              <Tools profile={activeProfile} />
             )}
           </div>
         )}
