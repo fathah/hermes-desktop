@@ -8,7 +8,6 @@ import Gateway from "../Gateway/Gateway";
 import Models from "../Models/Models";
 import Providers from "../Providers/Providers";
 import Kanban from "../Kanban/Kanban";
-import Insights from "../Insights/Insights";
 import CapabilityReview from "../CapabilityReview/CapabilityReview";
 import Memory from "../Memory/Memory";
 import RemoteNotice from "../../components/RemoteNotice";
@@ -26,7 +25,7 @@ import {
   Kanban as KanbanIcon,
   Download,
 } from "../../assets/icons";
-import { BarChart3, ShieldCheck, Brain } from "lucide-react";
+import { ShieldCheck, Brain } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 import { loadAndApplyActiveSkin } from "../../utils/skin";
@@ -92,7 +91,6 @@ const NAV_GROUPS: NavGroup[] = [
     id: "system",
     headerKey: "navigation.groupSystem",
     items: [
-      { view: "insights", icon: BarChart3, labelKey: "navigation.insights" },
       { view: "memory", icon: Brain, labelKey: "navigation.memory" },
       { view: "settings", icon: SettingsIcon, labelKey: "navigation.settings" },
     ],
@@ -534,12 +532,6 @@ function Layout({
             ) : (
               <Kanban profile={activeProfile} visible={view === "kanban"} />
             )}
-          </div>
-        )}
-
-        {visitedViews.has("insights") && (
-          <div style={paneStyle("insights")}>
-            <Insights profile={activeProfile} visible={view === "insights"} />
           </div>
         )}
 
