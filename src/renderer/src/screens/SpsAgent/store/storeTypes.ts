@@ -185,6 +185,8 @@ export interface UiSlice {
   researchOpen: boolean;
   /** The Scheduled Research management modal is open. */
   scheduledOpen: boolean;
+  /** The read-only Agent tasks (Kanban oversight) modal is open. */
+  agentTasksOpen: boolean;
   /** The Telegram setup wizard is open. */
   telegramWizardOpen: boolean;
   /** The External Sessions (other AI tools' transcripts) modal is open. */
@@ -223,6 +225,7 @@ export interface UiSlice {
   setTrashOpen: (v: boolean) => void;
   setResearchOpen: (v: boolean) => void;
   setScheduledOpen: (v: boolean) => void;
+  setAgentTasksOpen: (v: boolean) => void;
   setTelegramWizardOpen: (v: boolean) => void;
   setExternalSessionsOpen: (v: boolean) => void;
   setTweaksOpen: (v: boolean) => void;

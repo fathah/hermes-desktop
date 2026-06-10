@@ -4,7 +4,6 @@ import Skills from "../Skills/Skills";
 import Gateway from "../Gateway/Gateway";
 import Models from "../Models/Models";
 import Providers from "../Providers/Providers";
-import Kanban from "../Kanban/Kanban";
 import Memory from "../Memory/Memory";
 import RemoteNotice from "../../components/RemoteNotice";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
@@ -16,7 +15,6 @@ import {
   Signal,
   Layers,
   KeyRound,
-  Kanban as KanbanIcon,
   Download,
 } from "../../assets/icons";
 import { Brain } from "lucide-react";
@@ -60,13 +58,6 @@ const NAV_GROUPS: NavGroup[] = [
       { view: "providers", icon: KeyRound, labelKey: "navigation.providers" },
       { view: "models", icon: Layers, labelKey: "navigation.models" },
       { view: "gateway", icon: Signal, labelKey: "navigation.gateway" },
-    ],
-  },
-  {
-    id: "workspace",
-    headerKey: "navigation.groupWorkspace",
-    items: [
-      { view: "kanban", icon: KanbanIcon, labelKey: "navigation.kanban" },
     ],
   },
   {
@@ -439,16 +430,6 @@ function Layout({
               <RemoteNotice feature="Skills" />
             ) : (
               <Skills profile={activeProfile} visible={view === "skills"} />
-            )}
-          </div>
-        )}
-
-        {visitedViews.has("kanban") && (
-          <div style={paneStyle("kanban")}>
-            {remoteMode ? (
-              <RemoteNotice feature="Kanban" />
-            ) : (
-              <Kanban profile={activeProfile} visible={view === "kanban"} />
             )}
           </div>
         )}

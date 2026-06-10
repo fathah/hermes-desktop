@@ -10,6 +10,7 @@ import { TemplatesModal } from "../modals/TemplatesModal";
 import { TrashModal } from "../modals/TrashModal";
 import { ResearchModal } from "../modals/ResearchModal";
 import { ScheduledModal } from "../modals/ScheduledModal";
+import { AgentTasksModal } from "../modals/AgentTasksModal";
 import { ExternalSessionsModal } from "../modals/ExternalSessionsModal";
 import { TelegramSetupWizard } from "../../../components/TelegramSetupWizard";
 import { TweaksPanel } from "../tweaks/TweaksPanel";
@@ -23,6 +24,7 @@ export function Overlays() {
   const trashOpen = useStore((s) => s.trashOpen);
   const researchOpen = useStore((s) => s.researchOpen);
   const scheduledOpen = useStore((s) => s.scheduledOpen);
+  const agentTasksOpen = useStore((s) => s.agentTasksOpen);
   const externalSessionsOpen = useStore((s) => s.externalSessionsOpen);
   const telegramWizardOpen = useStore((s) => s.telegramWizardOpen);
   const setTelegramWizardOpen = useStore((s) => s.setTelegramWizardOpen);
@@ -47,6 +49,7 @@ export function Overlays() {
       {trashOpen && <TrashModal />}
       {researchOpen && <ResearchModal />}
       {scheduledOpen && <ScheduledModal />}
+      {agentTasksOpen && <AgentTasksModal />}
       {externalSessionsOpen && <ExternalSessionsModal />}
       {telegramWizardOpen && (
         <TelegramSetupWizard onClose={() => setTelegramWizardOpen(false)} />
