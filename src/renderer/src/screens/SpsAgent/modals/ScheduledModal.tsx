@@ -133,7 +133,10 @@ export function ScheduledModal() {
       await refresh();
       if (res.outcome === "changed")
         flash("Found an update — see Pending below");
-      else if (res.outcome === "no-change") flash("No new info this run");
+      // Surface the run's own summary (e.g. a digest's "No external sessions
+      // this period") instead of the research-only generic line.
+      else if (res.outcome === "no-change")
+        flash(res.summary || "No new info this run");
       else if (res.outcome === "no-sources")
         flash("No web sources found", { tone: "warn" });
       else flash(res.error || "Run failed", { tone: "warn" });
@@ -191,7 +194,7 @@ export function ScheduledModal() {
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="modal-head">
-          <h3>⏱ Scheduled research</h3>
+          <h3>⏱ Scheduled</h3>
         </div>
         <div className="modal-body">
           {/* ── create ── */}
