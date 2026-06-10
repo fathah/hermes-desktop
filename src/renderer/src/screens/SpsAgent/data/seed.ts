@@ -49,6 +49,64 @@ export const HOME_BLOCKS: Block[] = [
   blk("p", ""),
 ];
 
+// ---- first-run guided pages (the "Home Base" first loop) ----
+// "Start here" lands first on a fresh workspace and demonstrates the three
+// things that make this more than a notes app: wikilinks (the page-link blocks
+// below populate the graph), the capture→ingest→search loop, and the assistant.
+// Stable ids ("start-here" / "inbox-explainer") so the [[wikilinks]] resolve to
+// real page files on disk in vault mode.
+export const START_HERE_BLOCKS: Block[] = [
+  blk(
+    "p",
+    "Welcome to your Home Base — one place that unifies your notes, tasks, and AI chats. Here's the quick tour.",
+  ),
+  blk(
+    "callout",
+    "Everything here is yours and lives as plain Markdown on disk. Press ⌘K to search across all of it, ⌘J to ask the assistant on any page.",
+    { emoji: "🏠" },
+  ),
+  blk("h2", "Find your way around"),
+  blk("page", "", { pageId: "home" }),
+  blk("page", "", { pageId: "inbox-explainer" }),
+  blk("h2", "Your first loop"),
+  blk("p", "Three steps turn this into a living knowledge base:"),
+  blk("todo", "Capture — drop a link, note, or idea into the Inbox", {
+    done: false,
+  }),
+  blk("todo", "Ingest — let the assistant file it into the right page", {
+    done: false,
+  }),
+  blk("todo", "Search — find it later with ⌘K (notes, tasks, and chats)", {
+    done: false,
+  }),
+  blk(
+    "p",
+    "Tip: pages link to each other — open the Graph from the sidebar to see how yours connect.",
+  ),
+];
+
+export const INBOX_EXPLAINER_BLOCKS: Block[] = [
+  blk(
+    "callout",
+    "The Inbox is where raw material lands before it's filed — your capture tray.",
+    { emoji: "📥" },
+  ),
+  blk("h2", "How it works"),
+  blk("li", "Capture: send links, snippets, or quick notes to the Inbox."),
+  blk(
+    "li",
+    "Ingest: press “Process inbox” and the assistant files each item into the right page, cited.",
+  ),
+  blk(
+    "li",
+    "Review: nothing is lost — unparseable items are kept, not dropped.",
+  ),
+  blk(
+    "p",
+    "Open the Inbox from the sidebar. Once it's empty, you're caught up.",
+  ),
+];
+
 // ---- people / status / priority reference tables ----
 // Single-user app: the only built-in person is "you". PersonKey is a free string,
 // so additional people can still be added via @mentions / assignee pickers.
@@ -219,7 +277,20 @@ export function buildInitialWorkspace(): Workspace {
   Object.keys(meta).forEach((id) => {
     if (id !== "home" && !docs[id]) docs[id] = starterDoc(meta[id].title);
   });
+
+  // First-run guided entry: a "Start here" page (wiki-linked to Home/Tasks and a
+  // nested Inbox explainer) that lands first and demonstrates the capture→ingest
+  // →search loop and the wikilink graph. Only ever surfaces on a genuinely fresh
+  // workspace — once workspace.json exists, hydrateWorkspace() replaces this.
+  const startHereId = "start-here";
+  const inboxId = "inbox-explainer";
+  meta[startHereId] = { icon: "📍", title: "Start here", cover: null };
+  meta[inboxId] = { icon: "📥", title: "How the Inbox works", cover: null };
+  docs[startHereId] = START_HERE_BLOCKS;
+  docs[inboxId] = INBOX_EXPLAINER_BLOCKS;
+  tree.unshift({ id: startHereId, children: [{ id: inboxId, children: [] }] });
+
   // Single-user workspace ships with no seed annotations — you create your own.
   const comments: Comment[] = [];
-  return { tree, meta, docs, comments, trash: [], page: "home" };
+  return { tree, meta, docs, comments, trash: [], page: startHereId };
 }

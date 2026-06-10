@@ -11,6 +11,7 @@
     "test": "vitest run",
     "verify:note-index": "bash scripts/verify-note-index.sh",
     "verify:external-context": "bash scripts/verify-external-context.sh",
+    "verify:firstrun-seed": "node scripts/verify-firstrun-seed.mjs",
     "smoke:diagrams": "node scripts/diagram-smoke.mjs",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",

@@ -12,6 +12,7 @@ import { Editor } from "./editor/Editor";
 import { RightPanel } from "./panel/RightPanel";
 import { Overlays } from "./shell/Overlays";
 import { Toast } from "./components/Toast";
+import { OnboardingChecklist } from "./components/OnboardingChecklist";
 import { SaveStatus } from "./components/SaveStatus";
 import { OcrStatus } from "./components/OcrStatus";
 import Insights from "../Insights/Insights";
@@ -135,6 +136,7 @@ export function App() {
             <>
               <Topbar />
               <div className="doc-scroll scroll" ref={docScrollRef}>
+                <OnboardingChecklist />
                 <DocHeader>
                   {/* distinct key so the editor remounts (clean refs) on page switch */}
                   <Editor key={`ed-${page}`} />
