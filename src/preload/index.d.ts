@@ -360,6 +360,12 @@ interface HermesAPI {
   startGateway: () => Promise<boolean>;
   stopGateway: () => Promise<boolean>;
   gatewayStatus: () => Promise<boolean>;
+  gatewayHealthStatus: () => Promise<
+    import("../shared/gateway").GatewayHealthStatus
+  >;
+  onGatewayHealthChanged: (
+    callback: (change: import("../shared/gateway").GatewayHealthChange) => void,
+  ) => () => void;
 
   // Platform toggles
   getPlatformEnabled: (profile?: string) => Promise<Record<string, boolean>>;

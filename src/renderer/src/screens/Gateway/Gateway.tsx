@@ -2,9 +2,11 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { GATEWAY_SECTIONS, GATEWAY_PLATFORMS } from "../../constants";
 import { useI18n } from "../../components/useI18n";
 import BrandLogo from "../../components/common/BrandLogo";
+import { useGatewayHealth } from "../../hooks/useGatewayHealth";
 
 function Gateway({ profile }: { profile?: string }): React.JSX.Element {
   const { t } = useI18n();
+  const gatewayHealth = useGatewayHealth();
   const [gatewayRunning, setGatewayRunning] = useState(false);
   const [env, setEnv] = useState<Record<string, string>>({});
   const [platformEnabled, setPlatformEnabled] = useState<
@@ -220,6 +222,19 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
               {gatewayRunning ? t("common.stop") : t("common.start")}
             </button>
           </div>
+          {gatewayHealth === "recovering" && (
+            <div className="settings-field-hint">
+              {t("gateway.healthRecovering")}
+            </div>
+          )}
+          {gatewayHealth === "down" && (
+            <div
+              className="settings-field-hint"
+              style={{ color: "var(--danger, #d33)" }}
+            >
+              {t("gateway.healthDown")}
+            </div>
+          )}
           <div className="settings-field-hint">{t("gateway.gatewayHint")}</div>
         </div>
       </div>

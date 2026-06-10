@@ -4,6 +4,7 @@ import {
   isSshTunnelHealthy,
   startSshTunnel,
 } from "./ssh-tunnel";
+import { startHealthPolling as startGatewayHealthPolling } from "./hermes/gateway-process";
 
 export {
   setSshRemoteApiKey,
@@ -47,6 +48,9 @@ export {
   apiServerAvailable,
   getApiServerAvailable,
   setApiServerAvailable,
+  setGatewayHealthBroadcaster,
+  setStreamOpenProvider,
+  getGatewayHealthStatus,
 } from "./hermes/gateway-process";
 
 // Re-exports from grounding.ts
@@ -75,6 +79,5 @@ export { extractReasoningDelta } from "./sse-parser";
 
 // Lazy init called on first sendMessage or gateway start (delegates to gateway-process.ts)
 export function ensureInitialized(): void {
-  const { startHealthPolling } = require("./hermes/gateway-process");
-  startHealthPolling();
+  startGatewayHealthPolling();
 }

@@ -30,6 +30,13 @@ import {
 } from "../utils";
 import { getProfilePort } from "../gateway-ports";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "../process-options";
+import {
+  decideSupervisorAction,
+  initialSupervisorState,
+  DEFAULT_SUPERVISOR_CONFIG,
+  type SupervisorState,
+  type GatewayHealthStatus,
+} from "./gateway-supervisor";
 
 export function resolveProfile(profile?: string): string | undefined {
   return normalizeProfileName(profile ?? getActiveProfileNameSync());
@@ -420,15 +427,102 @@ function ensureInitialized(): void {
   startHealthPolling();
 }
 
+// Phase 1.1 — permanent gateway supervisor.
+//
+// The old poll self-cancelled the moment the gateway first reported healthy, so a
+// *hang* after startup (process alive, /health unresponsive) was never re-detected.
+// This is now a permanent 30s loop (local mode only, while a gateway is started)
+// that feeds each probe into the pure decision machine in gateway-supervisor.ts and
+// auto-recovers: 3 consecutive failures -> kill + restart with exponential backoff
+// (bounded attempts) -> a persistent visible "down" state. It never restarts under
+// an open interactive stream.
+
+const SUPERVISOR_INTERVAL_MS = 30000;
+
+let _supervisorState: SupervisorState = initialSupervisorState();
+let _healthBroadcaster: ((status: GatewayHealthStatus) => void) | null = null;
+let _streamOpenProvider: () => boolean = () => false;
+
+// index.ts injects the renderer broadcaster (kept out of this module so it has no
+// Electron dependency and stays vitest-importable).
+export function setGatewayHealthBroadcaster(
+  fn: (status: GatewayHealthStatus) => void,
+): void {
+  _healthBroadcaster = fn;
+}
+
+// index.ts injects "is an interactive chat stream in-flight?" (activeChatAborts.size).
+export function setStreamOpenProvider(fn: () => boolean): void {
+  _streamOpenProvider = fn;
+}
+
+export function getGatewayHealthStatus(): GatewayHealthStatus {
+  return _supervisorState.status;
+}
+
+function isStreamOpen(): boolean {
+  try {
+    return _streamOpenProvider();
+  } catch {
+    return false;
+  }
+}
+
+function broadcastGatewayHealth(status: GatewayHealthStatus): void {
+  try {
+    _healthBroadcaster?.(status);
+  } catch (err) {
+    console.warn("[gateway] health broadcast failed:", err);
+  }
+}
+
+function scheduleSupervisedRestart(backoffMs: number): void {
+  setTimeout(() => {
+    // Re-check the guards at fire time — conditions may have changed during backoff.
+    if (isRemoteMode()) return;
+    if (isStreamOpen()) return;
+    restartGateway();
+  }, backoffMs);
+}
+
+async function runSupervisorTick(): Promise<void> {
+  // Only ever supervise a local managed gateway.
+  if (isRemoteMode()) return;
+
+  // Nothing to supervise until a gateway has been started (or is running). Reset
+  // to a clean baseline so a later start begins fresh.
+  const supervising = appStartedProfiles.size > 0 || isGatewayRunning();
+  if (!supervising) {
+    if (_supervisorState.status !== "healthy") {
+      _supervisorState = initialSupervisorState();
+    }
+    return;
+  }
+
+  const healthy = await isApiServerReady();
+  apiServerAvailable = healthy; // keep the pull-side cache permanently fresh
+  const streamOpen = isStreamOpen();
+
+  const decision = decideSupervisorAction(
+    _supervisorState,
+    { healthy, streamOpen },
+    DEFAULT_SUPERVISOR_CONFIG,
+  );
+  _supervisorState = decision.state;
+
+  if (decision.statusChanged) {
+    broadcastGatewayHealth(decision.state.status);
+  }
+  if (decision.action.type === "restart") {
+    scheduleSupervisedRestart(decision.action.backoffMs);
+  }
+}
+
 export function startHealthPolling(): void {
   if (_healthCheckInterval) return;
-  _healthCheckInterval = setInterval(async () => {
-    apiServerAvailable = await isApiServerReady();
-    if (apiServerAvailable && _healthCheckInterval) {
-      clearInterval(_healthCheckInterval);
-      _healthCheckInterval = null;
-    }
-  }, 15000);
+  _healthCheckInterval = setInterval(() => {
+    void runSupervisorTick();
+  }, SUPERVISOR_INTERVAL_MS);
 }
 
 export function stopHealthPolling(): void {

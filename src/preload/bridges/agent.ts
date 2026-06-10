@@ -2,12 +2,28 @@ import { ipcRenderer } from "electron";
 import type { Attachment } from "../../shared/attachments";
 import type { MemoryInfo } from "../../shared/memory";
 import type { MemoryTimeline } from "../../shared/memoryTimeline";
+import type {
+  GatewayHealthStatus,
+  GatewayHealthChange,
+} from "../../shared/gateway";
 
 export const agentBridge = {
   // Gateway
   startGateway: (): Promise<boolean> => ipcRenderer.invoke("start-gateway"),
   stopGateway: (): Promise<boolean> => ipcRenderer.invoke("stop-gateway"),
   gatewayStatus: (): Promise<boolean> => ipcRenderer.invoke("gateway-status"),
+  gatewayHealthStatus: (): Promise<GatewayHealthStatus> =>
+    ipcRenderer.invoke("gateway-health-status"),
+  onGatewayHealthChanged: (
+    callback: (change: GatewayHealthChange) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      payload: unknown,
+    ): void => callback(payload as GatewayHealthChange);
+    ipcRenderer.on("gateway-health-changed", handler);
+    return () => ipcRenderer.removeListener("gateway-health-changed", handler);
+  },
 
   // Platform toggles
   getPlatformEnabled: (profile?: string): Promise<Record<string, boolean>> =>

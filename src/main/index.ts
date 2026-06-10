@@ -18,7 +18,13 @@ import icon from "../../resources/icon.png?asset";
 import { closeSharedDb } from "./db";
 import { closeAllNoteIndexes } from "./note-index";
 import { isAllowedObsidianExternalUrl } from "./obsidian";
-import { stopHealthPolling, setSshRemoteApiKey } from "./hermes";
+import {
+  stopHealthPolling,
+  setSshRemoteApiKey,
+  setGatewayHealthBroadcaster,
+  setStreamOpenProvider,
+} from "./hermes";
+import { activeChatAborts } from "./ipc/chat";
 import { stopSshTunnel, startSshTunnel } from "./ssh-tunnel";
 import { HERMES_HOME } from "./installer";
 import {
@@ -592,6 +598,12 @@ app.whenReady().then(() => {
   setupIPC();
   createWindow();
   setMainWindowGetter(() => mainWindow);
+  // Phase 1.1 — let the gateway supervisor push health transitions to the renderer
+  // and know when an interactive stream is in-flight (so it never restarts mid-turn).
+  setGatewayHealthBroadcaster((status) =>
+    mainWindow?.webContents.send("gateway-health-changed", { status }),
+  );
+  setStreamOpenProvider(() => activeChatAborts.size > 0);
   setupUpdater();
 
   // Start background routines scheduler and control server
