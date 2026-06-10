@@ -432,15 +432,26 @@ function sha256(s: string): string {
   return createHash("sha256").update(s).digest("hex");
 }
 
-/** Smart-merge a research brief into the living page → pending queue. Shared by
- *  the immediate "Run now" path (research turn → here) and the cron-drain path
- *  (cron-delivered brief → here). 0 pages from the merge ⇒ no meaningful change.
- *  Stamps lastRunAt + lastChangeHash so the desktop fallback doesn't re-fire. */
+/** Build the OpenAI-style merge messages for a brief. Pluggable so research and
+ *  digest schedules share the same pending/hash/notify path below. */
+type MergeMessagesBuilder = (
+  schema: string,
+  current: string | null,
+  cappedBrief: string,
+  dateStr: string,
+) => Array<{ role: string; content: string }>;
+
+/** Smart-merge a brief into the living page → pending queue. Shared by the
+ *  research "Run now"/cron-drain paths AND the external-sessions digest run; the
+ *  only kind-specific bit is the injected `buildMessages` (defaults to research).
+ *  0 pages from the merge ⇒ no meaningful change. Stamps lastRunAt +
+ *  lastChangeHash so the desktop fallback doesn't re-fire. */
 async function mergeBriefAndQueue(
   item: ScheduledResearchItem,
   brief: string,
   getWindow?: () => BrowserWindow | null,
   profile?: string,
+  buildMessages?: MergeMessagesBuilder,
 ): Promise<{ outcome: RunOutcome; summary: string }> {
   const cappedBrief = capResearchBrief(brief);
   const briefHash = sha256(cappedBrief);
@@ -457,15 +468,11 @@ async function mergeBriefAndQueue(
     current = null;
   }
   const dateStr = new Date().toISOString().slice(0, 10);
-  const messages = buildScheduledMergeMessages(
-    schema,
-    item.topic,
-    item.pageId,
-    current,
-    cappedBrief,
-    dateStr,
-    [],
-  );
+  const build: MergeMessagesBuilder =
+    buildMessages ??
+    ((s, cur, b, d) =>
+      buildScheduledMergeMessages(s, item.topic, item.pageId, cur, b, d, []));
+  const messages = build(schema, current, cappedBrief, dateStr);
   const content = await gatewayChat(messages, 4096, profile);
   const changeset = parseChangeset(extractJson(content));
   if (!changeset || changeset.pages.length === 0) {

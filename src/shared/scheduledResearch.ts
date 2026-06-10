@@ -3,11 +3,27 @@
 // typecheck projects and under vitest. The main process owns persistence + the
 // gateway calls; this module owns the testable "is it due" + validation logic.
 
+import type { ExternalSource } from "./external-context";
+
 export type Cadence = "daily" | "weekly" | "monthly";
+
+/** What a schedule produces: a web-research page (default) or a digest of the
+ *  user's external AI-tool sessions over the period. */
+export type ScheduleKind = "research" | "digest";
+
+/** Optional scoping for a digest schedule (which external sources/project). */
+export interface DigestScope {
+  source?: ExternalSource;
+  project?: string;
+}
 
 export interface ScheduledResearchItem {
   id: string;
-  /** Free-text research topic. */
+  /** What this schedule produces. Absent ⇒ "research" (back-compat). */
+  kind?: ScheduleKind;
+  /** Digest-only: limit the summarized sessions to a source/project. */
+  scope?: DigestScope;
+  /** Free-text research topic (research kind). For a digest this is a label. */
   topic: string;
   /** Slug of the living wiki page this schedule keeps current. */
   pageId: string;
@@ -39,6 +55,8 @@ export interface ScheduleInput {
   hour?: number;
   autoApply?: boolean;
   telegramPush?: boolean;
+  kind?: ScheduleKind;
+  scope?: DigestScope;
 }
 
 export const MAX_SCHEDULES = 25;
@@ -56,10 +74,13 @@ export function slugForTopic(topic: string): string {
   return slug || "topic";
 }
 
-/** Validate user input for a schedule. Returns an error string or null. */
+/** Validate user input for a schedule. Returns an error string or null. A
+ *  digest summarizes sessions rather than a topic, so its topic is optional. */
 export function validateScheduleInput(input: ScheduleInput): string | null {
   if (!input || typeof input !== "object") return "Invalid schedule.";
-  if (!input.topic || !input.topic.trim()) return "Enter a topic to research.";
+  const isDigest = input.kind === "digest";
+  if (!isDigest && (!input.topic || !input.topic.trim()))
+    return "Enter a topic to research.";
   if (!CADENCES.includes(input.cadence)) return "Pick a valid cadence.";
   const hour = input.hour ?? 8;
   if (!Number.isInteger(hour) || hour < 0 || hour > 23)
@@ -90,6 +111,24 @@ export function periodKey(cadence: Cadence, d: Date): string {
   if (cadence === "weekly") return weekKey(d);
   if (cadence === "monthly") return monthKey(d);
   return ymd(d);
+}
+
+/**
+ * Epoch ms of the START of the current period for a cadence (local time): today
+ * 00:00 (daily), Monday 00:00 (weekly), or the 1st 00:00 (monthly). The digest
+ * run uses this as the lower bound for "sessions in this period". Pure.
+ */
+export function periodStart(cadence: Cadence, now: Date): number {
+  if (cadence === "monthly") {
+    return new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  }
+  if (cadence === "weekly") {
+    const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const dow = (monday.getDay() + 6) % 7; // 0 = Monday
+    monday.setDate(monday.getDate() - dow);
+    return monday.getTime();
+  }
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
 }
 
 /**
