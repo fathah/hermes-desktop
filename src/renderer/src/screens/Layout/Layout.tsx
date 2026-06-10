@@ -1,10 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
 import Chat, { ChatMessage } from "../Chat/Chat";
-import {
-  dbItemsToChatMessages,
-  type DbHistoryItem,
-} from "../Chat/sessionHistory";
-import Sessions from "../Sessions/Sessions";
 import Agents from "../Agents/Agents";
 import Settings from "../Settings/Settings";
 import Skills from "../Skills/Skills";
@@ -21,7 +16,6 @@ import VerifyWarningBanner from "../../components/VerifyWarningBanner";
 import hermeslogo from "../../assets/hermes.png";
 import {
   ChevronDown,
-  Clock,
   Users,
   Settings as SettingsIcon,
   Puzzle,
@@ -63,11 +57,6 @@ interface NavGroup {
 }
 
 const NAV_GROUPS: NavGroup[] = [
-  {
-    id: "conversations",
-    headerKey: "navigation.groupConversations",
-    items: [{ view: "sessions", icon: Clock, labelKey: "navigation.sessions" }],
-  },
   {
     id: "agents",
     headerKey: "navigation.groupAgents",
@@ -336,9 +325,9 @@ function Layout({
     goTo("chat");
   }, [goTo]);
 
-  // Menu ⌘N / ⌘K are caught once at the App root and re-dispatched here only
-  // when this overlay is the active surface (search routes via hermes:open-settings
-  // → goTo("sessions"); new chat via this dedicated event so it also clears state).
+  // Menu ⌘N is caught once at the App root and re-dispatched here only when this
+  // overlay is the active surface (new chat via this dedicated event so it also
+  // clears state). ⌘K search now routes to the SPS workspace, not this overlay.
   useEffect(() => {
     const onAdminNewChat = (): void => handleNewChat();
     window.addEventListener(ADMIN_NEW_CHAT_EVENT, onAdminNewChat);
@@ -351,18 +340,6 @@ function Layout({
     setMessages([]);
     setCurrentSessionId(null);
   }, []);
-
-  const handleResumeSession = useCallback(
-    async (sessionId: string) => {
-      const items = (await window.hermesAPI.getSessionMessages(
-        sessionId,
-      )) as DbHistoryItem[];
-      setMessages(dbItemsToChatMessages(items));
-      setCurrentSessionId(sessionId);
-      goTo("chat");
-    },
-    [goTo],
-  );
 
   return (
     <div className="layout">
@@ -493,21 +470,6 @@ function Layout({
             onOpenDiagnose={() => goTo("settings")}
           />
         </div>
-
-        {visitedViews.has("sessions") && (
-          <div style={paneStyle("sessions")}>
-            {remoteMode ? (
-              <RemoteNotice feature="Sessions" />
-            ) : (
-              <Sessions
-                onResumeSession={handleResumeSession}
-                onNewChat={handleNewChat}
-                currentSessionId={currentSessionId}
-                visible={view === "sessions"}
-              />
-            )}
-          </div>
-        )}
 
         {visitedViews.has("agents") && (
           <div style={paneStyle("agents")}>

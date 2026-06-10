@@ -10,7 +10,6 @@
  *  `View` type so the deep-link target and the nav union never drift. */
 export type AdminView =
   | "chat"
-  | "sessions"
   | "agents"
   | "models"
   | "providers"
@@ -53,7 +52,6 @@ export const ADMIN_LAST_VIEW_KEY = "hermes.admin.lastView";
 
 const KNOWN_VIEWS = new Set<AdminView>([
   "chat",
-  "sessions",
   "agents",
   "models",
   "providers",

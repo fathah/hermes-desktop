@@ -12,7 +12,6 @@ import { useFocusTrap } from "./components/useFocusTrap";
 import { captureScreenView } from "./utils/analytics";
 import {
   OPEN_SETTINGS_EVENT,
-  openSettings,
   readLastAdminView,
   type AdminView,
 } from "./lib/openSettings";
@@ -125,7 +124,9 @@ function App(): React.JSX.Element {
   // App menu shortcuts (⌘N new chat / ⌘K search). Registered ONCE at the always-
   // mounted root and routed to the active surface — previously these lived in
   // Layout and went dead whenever the admin overlay was closed (the workspace's
-  // normal state). Overlay open → admin Chat/Sessions; closed → SPS workspace.
+  // normal state). New chat: overlay open → admin Chat, else SPS workspace.
+  // Search now always opens the SPS workspace palette (the admin Sessions screen
+  // was consolidated into the SPS sidebar's session search).
   useEffect(() => {
     if (screen !== "main") return;
     const cleanupNewChat = window.hermesAPI.onMenuNewChat(() => {
@@ -133,8 +134,8 @@ function App(): React.JSX.Element {
       else spsNewChat();
     });
     const cleanupSearch = window.hermesAPI.onMenuSearchSessions(() => {
-      if (adminOpenRef.current) openSettings("sessions");
-      else spsSearch();
+      if (adminOpenRef.current) setAdminOpen(false);
+      spsSearch();
     });
     return () => {
       cleanupNewChat();
