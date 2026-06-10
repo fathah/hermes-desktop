@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Check, ExternalLink } from "lucide-react";
-import { useI18n } from "../../components/useI18n";
-import type { MemoryProviderInfo } from "./types";
+import { useI18n } from "../../../components/useI18n";
+import type { MemoryProviderInfo } from "./memoryProviderTypes";
 
 const PROVIDER_URLS: Record<string, string> = {
   honcho: "https://app.honcho.dev",

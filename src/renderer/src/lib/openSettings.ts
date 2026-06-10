@@ -13,7 +13,6 @@ export type AdminView =
   | "providers"
   | "gateway"
   | "spsAgent"
-  | "memory"
   | "settings";
 
 export const OPEN_SETTINGS_EVENT = "hermes:open-settings";
@@ -48,7 +47,6 @@ const KNOWN_VIEWS = new Set<AdminView>([
   "providers",
   "gateway",
   "spsAgent",
-  "memory",
   "settings",
 ]);
 

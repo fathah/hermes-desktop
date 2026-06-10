@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Refresh } from "../../assets/icons";
-import { useI18n } from "../../components/useI18n";
+import { Refresh } from "../../../assets/icons";
+import { useI18n } from "../../../components/useI18n";
 
-interface SoulProps {
+interface SoulEditorProps {
   profile?: string;
 }
 
-function Soul({ profile }: SoulProps): React.JSX.Element {
+export function SoulEditor({ profile }: SoulEditorProps): React.JSX.Element {
   const { t } = useI18n();
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(true);
@@ -122,5 +122,3 @@ function Soul({ profile }: SoulProps): React.JSX.Element {
     </div>
   );
 }
-
-export default Soul;

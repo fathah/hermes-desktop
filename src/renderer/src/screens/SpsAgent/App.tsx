@@ -15,7 +15,7 @@ import { Toast } from "./components/Toast";
 import { SaveStatus } from "./components/SaveStatus";
 import { OcrStatus } from "./components/OcrStatus";
 import Insights from "../Insights/Insights";
-import { MemoryTimeline } from "../Memory/MemoryTimeline";
+import { MemoryTimeline } from "./you/MemoryTimeline";
 import { ChatSurface } from "./shell/ChatSurface";
 import { AskPane } from "./panel/AskPane";
 import { GraphView } from "./graph/GraphView";

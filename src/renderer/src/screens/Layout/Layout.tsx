@@ -3,7 +3,6 @@ import Settings from "../Settings/Settings";
 import Gateway from "../Gateway/Gateway";
 import Models from "../Models/Models";
 import Providers from "../Providers/Providers";
-import Memory from "../Memory/Memory";
 import RemoteNotice from "../../components/RemoteNotice";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
 import hermeslogo from "../../assets/hermes.png";
@@ -15,7 +14,6 @@ import {
   KeyRound,
   Download,
 } from "../../assets/icons";
-import { Brain } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 import { loadAndApplyActiveSkin } from "../../utils/skin";
@@ -57,7 +55,6 @@ const NAV_GROUPS: NavGroup[] = [
     id: "system",
     headerKey: "navigation.groupSystem",
     items: [
-      { view: "memory", icon: Brain, labelKey: "navigation.memory" },
       { view: "settings", icon: SettingsIcon, labelKey: "navigation.settings" },
     ],
   },
@@ -413,16 +410,6 @@ function Layout({
                 profile={activeProfile}
                 visible={view === "providers"}
               />
-            )}
-          </div>
-        )}
-
-        {visitedViews.has("memory") && (
-          <div style={paneStyle("memory")}>
-            {remoteMode ? (
-              <RemoteNotice feature="Memory" />
-            ) : (
-              <Memory profile={activeProfile} visible={view === "memory"} />
             )}
           </div>
         )}

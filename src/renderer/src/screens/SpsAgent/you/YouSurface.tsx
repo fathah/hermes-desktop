@@ -15,6 +15,10 @@ import {
   type SaveResult,
 } from "../../Personalization/parts";
 import { RulesManager } from "./RulesManager";
+import { MemoryTimeline } from "./MemoryTimeline";
+import { SoulEditor } from "./SoulEditor";
+import { MemoryProviders } from "./MemoryProviders";
+import type { MemoryProviderInfo } from "./memoryProviderTypes";
 import {
   parseUserMd,
   serializeUserMd,
@@ -46,6 +50,9 @@ export function YouSurface({
   const [rulesError, setRulesError] = useState("");
   const [auditing, setAuditing] = useState(false);
   const [auditError, setAuditError] = useState("");
+  const [providers, setProviders] = useState<MemoryProviderInfo[]>([]);
+  const [memoryProvider, setMemoryProvider] = useState<string | null>(null);
+  const [providersAvailable, setProvidersAvailable] = useState(false);
 
   const selectPage = useStore((s) => s.selectPage);
   const makePage = useStore((s) => s.makePage);
@@ -82,6 +89,22 @@ export function YouSurface({
     }
   }
 
+  // The optional external memory backend is local-only; in remote/SSH mode the
+  // provider IPC throws, so we self-hide that section rather than error the page.
+  const loadProviders = useCallback(async () => {
+    try {
+      const [provs, active] = await Promise.all([
+        window.hermesAPI.discoverMemoryProviders(profile),
+        window.hermesAPI.getConfig("memory.provider", profile),
+      ]);
+      setProviders(provs);
+      setMemoryProvider(active);
+      setProvidersAvailable(true);
+    } catch {
+      setProvidersAvailable(false);
+    }
+  }, [profile]);
+
   const load = useCallback(async () => {
     const [mem, foc, hk] = await Promise.all([
       window.hermesAPI.readMemory(profile),
@@ -100,7 +123,8 @@ export function YouSurface({
     setFocus(foc);
     setHook(hk);
     setLoading(false);
-  }, [profile]);
+    void loadProviders();
+  }, [profile, loadProviders]);
 
   useEffect(() => {
     setLoading(true);
@@ -205,6 +229,32 @@ export function YouSurface({
         placeholder="Durable facts, separated by § on their own line."
         onSave={(content) => window.hermesAPI.writeMemory(content, profile)}
       />
+
+      <div className="settings-section">
+        <div className="settings-section-title">What the agent has learned</div>
+        <p className="settings-field-hint" style={{ marginBottom: 12 }}>
+          Memories the agent wrote as it learned about you, in the order it
+          learned them. Each links to the session it likely came from — reject
+          anything that doesn&apos;t belong.
+        </p>
+        <MemoryTimeline profile={profile} onRefresh={load} />
+      </div>
+
+      <div className="settings-section">
+        <SoulEditor profile={profile} />
+      </div>
+
+      {providersAvailable && providers.length > 0 && (
+        <div className="settings-section">
+          <div className="settings-section-title">Memory provider</div>
+          <MemoryProviders
+            providers={providers}
+            activeProvider={memoryProvider}
+            profile={profile}
+            onRefresh={loadProviders}
+          />
+        </div>
+      )}
 
       <div className="settings-section">
         <div className="settings-section-title">Daily context</div>

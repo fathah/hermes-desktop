@@ -19,7 +19,6 @@ import {
 import { ConfigHealth } from "./ConfigHealth";
 import CapabilitySummary from "./CapabilitySummary";
 import { HealthSurface } from "../SpsAgent/health/HealthSurface";
-import { openSettings } from "../../lib/openSettings";
 import { getDevMode, setDevMode } from "../../lib/devMode";
 
 const TELEGRAM_COMMUNITY_URL = "https://t.me/hermes_agent_desktop";
@@ -672,19 +671,6 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
             </div>
           )}
         </div>
-      </div>
-
-      {/* Agent Memory & Soul Section */}
-      <div className="settings-section" data-section-tab="data">
-        <div className="settings-section-title">{t("memory.title")}</div>
-        <p className="settings-field-hint">{t("settings.memoryMovedHint")}</p>
-        <button
-          type="button"
-          className="btn btn-secondary"
-          onClick={() => openSettings("memory")}
-        >
-          {t("settings.openMemory")}
-        </button>
       </div>
 
       {/* Vault Health Section */}

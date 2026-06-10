@@ -3,7 +3,7 @@ import { Clock, Trash2, MessageSquare } from "lucide-react";
 import type {
   MemoryTimeline as Timeline,
   TimelineEntry,
-} from "../../../../shared/memoryTimeline";
+} from "../../../../../shared/memoryTimeline";
 
 /**
  * Agent-curated memory timeline (idea A4). Lists memory entries in file order

@@ -63,11 +63,11 @@ await shot("a3-settings-connection", async () => {
   if (tabs[1]) await tabs[1].click();
 });
 
-// Memory as its own nav view.
-await shot("a4-memory-view", async () => {
+// Providers — a connectivity view (Memory moved into the SPS "You" surface).
+await shot("a4-providers-view", async () => {
   await win.evaluate(() =>
     window.dispatchEvent(
-      new CustomEvent("hermes:open-settings", { detail: { view: "memory" } }),
+      new CustomEvent("hermes:open-settings", { detail: { view: "providers" } }),
     ),
   );
 });
