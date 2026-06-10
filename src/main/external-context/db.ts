@@ -316,18 +316,37 @@ export class ExternalContextDb {
     const row = this.db
       .prepare(`SELECT * FROM conversations WHERE conv_id = ?`)
       .get(convId) as ConversationRow | undefined;
-    if (!row) return null;
-    return {
-      convId: row.conv_id,
-      source: row.source as ExternalSource,
-      conversationId: row.conversation_id,
-      projectPath: row.project_path,
-      gitBranch: row.git_branch,
-      title: row.title,
-      startedAt: row.started_at,
-      lastAt: row.last_at,
-      messageCount: row.message_count,
-    };
+    return row ? convMetaFromRow(row) : null;
+  }
+
+  /**
+   * Conversations whose most-recent activity is at/after `sinceMs`, newest
+   * first — the time-windowed query the weekly digest run is built on. Optional
+   * source/project scoping mirrors search().
+   */
+  listConversationsSince(
+    sinceMs: number,
+    opts: { source?: ExternalSource; project?: string; limit?: number } = {},
+  ): ExternalConversationMeta[] {
+    const clauses = ["last_at IS NOT NULL", "last_at >= ?"];
+    const params: unknown[] = [sinceMs];
+    if (opts.source) {
+      clauses.push("source = ?");
+      params.push(opts.source);
+    }
+    if (opts.project) {
+      clauses.push("project_path LIKE ?");
+      params.push(`%${opts.project}%`);
+    }
+    const limit = Math.max(1, Math.min(opts.limit ?? 100, 500));
+    params.push(limit);
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM conversations WHERE ${clauses.join(" AND ")}
+         ORDER BY last_at DESC LIMIT ?`,
+      )
+      .all(...params) as ConversationRow[];
+    return rows.map(convMetaFromRow);
   }
 
   /** Ordered messages for a conversation, optionally windowed around a seq. */
@@ -511,6 +530,20 @@ export class ExternalContextDb {
 
 function toExternalMessage(row: MessageRow): ExternalMessage {
   return { seq: row.seq, role: row.role, ts: row.ts, text: row.text };
+}
+
+function convMetaFromRow(row: ConversationRow): ExternalConversationMeta {
+  return {
+    convId: row.conv_id,
+    source: row.source as ExternalSource,
+    conversationId: row.conversation_id,
+    projectPath: row.project_path,
+    gitBranch: row.git_branch,
+    title: row.title,
+    startedAt: row.started_at,
+    lastAt: row.last_at,
+    messageCount: row.message_count,
+  };
 }
 
 function minNullable(a: number | null, b: number | null): number | null {

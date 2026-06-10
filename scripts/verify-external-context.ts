@@ -227,6 +227,22 @@ async function main(): Promise<void> {
   });
   assert(gemHits.length >= 1, "project-filtered search works (gemini)");
 
+  console.log("\nTime window — listConversationsSince (digest query):");
+  const allConvs = db.listConversationsSince(0);
+  assert(allConvs.length === 4, "since(0) returns all 4 conversations");
+  // Fixtures: codex last_at = 2026-06-04, gemini = 2026-06-08, claude = 2026-06-10.
+  const sinceJun9 = db.listConversationsSince(Date.UTC(2026, 5, 9));
+  assert(
+    sinceJun9.every((c) => c.source !== "codex" && c.source !== "gemini"),
+    "window since Jun 9 excludes the Jun-4 codex + Jun-8 gemini sessions",
+  );
+  assert(sinceJun9.length < allConvs.length, "the window narrows the set");
+  const codexOnly = db.listConversationsSince(0, { source: "codex" });
+  assert(
+    codexOnly.length === 1 && codexOnly[0].source === "codex",
+    "source-scoped listConversationsSince works",
+  );
+
   console.log("\nRedaction — secrets must NOT reach the index:");
   const raw = new Database(dbPath, { readonly: true });
   const msgRows = raw.prepare("SELECT text FROM messages").all() as Array<{
