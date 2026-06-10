@@ -1,25 +1,13 @@
 export default {
-  chat: "Chat",
-  sessions: "Sessions",
-  agents: "Profiles",
   models: "Models",
   providers: "Providers",
   skills: "Skills",
-  soul: "Persona",
   memory: "Memory",
-  tools: "Tools",
-  schedules: "Schedules",
-  kanban: "Kanban",
   gateway: "Gateway",
   settings: "Settings",
-  // Previously carried as `label` literal overrides in Layout's NAV_ITEMS.
-  insights: "Agent Insights",
-  capabilityReview: "Capabilities",
   // Admin overlay title + nav group headers (task-based IA).
   controlCenterTitle: "Hermes Admin",
-  groupConversations: "Conversations",
   groupAgents: "Agents",
   groupConnectivity: "Connectivity",
-  groupWorkspace: "Workspace",
   groupSystem: "System",
 } as const;

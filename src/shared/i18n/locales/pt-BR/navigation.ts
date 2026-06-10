@@ -1,15 +1,8 @@
 export default {
-  chat: "Chat",
-  sessions: "Sessões",
-  agents: "Perfis",
   models: "Modelos",
   providers: "Provedores",
   skills: "Habilidades",
-  soul: "Persona",
   memory: "Memória",
-  tools: "Ferramentas",
-  schedules: "Agendamentos",
-  kanban: "Kanban",
   gateway: "Gateway",
   settings: "Configurações",
 } as const;
