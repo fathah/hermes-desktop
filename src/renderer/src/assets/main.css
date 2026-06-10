@@ -4825,6 +4825,29 @@ body {
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
+/* Capability summary card (Settings → Agent Health) */
+.cap-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cap-summary-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+}
+.cap-summary-counts .cap-count {
+  margin-left: 0;
+}
+.cap-summary-row {
+  font-size: 12px;
+  color: var(--text-secondary, var(--text-muted));
+  line-height: 1.5;
+}
+.cap-summary-label {
+  font-weight: 600;
+  color: var(--text-muted);
+}
 .cap-list {
   margin: 0;
   padding: 0;

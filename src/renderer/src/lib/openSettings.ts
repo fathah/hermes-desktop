@@ -16,7 +16,6 @@ export type AdminView =
   | "skills"
   | "tools"
   | "kanban"
-  | "capabilityReview"
   | "gateway"
   | "spsAgent"
   | "memory"
@@ -57,7 +56,6 @@ const KNOWN_VIEWS = new Set<AdminView>([
   "skills",
   "tools",
   "kanban",
-  "capabilityReview",
   "gateway",
   "spsAgent",
   "memory",

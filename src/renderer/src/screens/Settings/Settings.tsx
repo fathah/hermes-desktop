@@ -17,6 +17,7 @@ import {
   setAnalyticsConsent,
 } from "../../utils/analytics";
 import { ConfigHealth } from "./ConfigHealth";
+import CapabilitySummary from "./CapabilitySummary";
 import { HealthSurface } from "../SpsAgent/health/HealthSurface";
 import { openSettings } from "../../lib/openSettings";
 import { getDevMode, setDevMode } from "../../lib/devMode";
@@ -763,6 +764,11 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
           )}
         </div>
       </div>
+
+      <CapabilitySummary
+        profile={profile}
+        active={activeTab === "agenthealth"}
+      />
 
       <div className="settings-section" data-section-tab="general">
         <div className="settings-section-title">Community</div>

@@ -8,7 +8,6 @@ import Gateway from "../Gateway/Gateway";
 import Models from "../Models/Models";
 import Providers from "../Providers/Providers";
 import Kanban from "../Kanban/Kanban";
-import CapabilityReview from "../CapabilityReview/CapabilityReview";
 import Memory from "../Memory/Memory";
 import RemoteNotice from "../../components/RemoteNotice";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
@@ -25,7 +24,7 @@ import {
   Kanban as KanbanIcon,
   Download,
 } from "../../assets/icons";
-import { ShieldCheck, Brain } from "lucide-react";
+import { Brain } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 import { loadAndApplyActiveSkin } from "../../utils/skin";
@@ -40,10 +39,8 @@ import { ADMIN_NEW_CHAT_EVENT } from "../../lib/spsCommands";
 // host can't drift. Layout's nav is a subset of these.
 type View = AdminView;
 
-// Nav is grouped by user goal rather than a flat 14-item scan. Group headers are
-// static labels; the whole Control Center still collapses via the master toggle.
-// "insights"/"capabilityReview" now have real i18n keys (see navigation.ts) so
-// the old `label` literal override is gone.
+// Nav is grouped by user goal rather than a flat scan. Group headers are static
+// labels; the whole Control Center still collapses via the master toggle.
 interface NavItem {
   view: View;
   icon: LucideIcon;
@@ -62,11 +59,6 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { view: "agents", icon: Users, labelKey: "navigation.agents" },
       { view: "skills", icon: Puzzle, labelKey: "navigation.skills" },
-      {
-        view: "capabilityReview",
-        icon: ShieldCheck,
-        labelKey: "navigation.capabilityReview",
-      },
     ],
   },
   {
@@ -542,15 +534,6 @@ function Layout({
             ) : (
               <Memory profile={activeProfile} visible={view === "memory"} />
             )}
-          </div>
-        )}
-
-        {visitedViews.has("capabilityReview") && (
-          <div style={paneStyle("capabilityReview")}>
-            <CapabilityReview
-              profile={activeProfile}
-              visible={view === "capabilityReview"}
-            />
           </div>
         )}
 
