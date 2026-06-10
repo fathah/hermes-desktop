@@ -343,6 +343,38 @@ export const spsBridge = {
     indexedAt: number | null;
   }> => ipcRenderer.invoke("sps-index-rebuild", profile),
 
+  // Phase 1.7 — fires after the note index is rebuilt so search/graph/backlink
+  // hooks refetch instead of showing stale data.
+  onSpsIndexRebuilt: (
+    callback: (payload: {
+      profile?: string;
+      status: {
+        root: string;
+        notes: number;
+        links: number;
+        indexedAt: number | null;
+      };
+    }) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      payload: unknown,
+    ): void =>
+      callback(
+        payload as {
+          profile?: string;
+          status: {
+            root: string;
+            notes: number;
+            links: number;
+            indexedAt: number | null;
+          };
+        },
+      );
+    ipcRenderer.on("sps-index-rebuilt", handler);
+    return () => ipcRenderer.removeListener("sps-index-rebuilt", handler);
+  },
+
   spsSemanticIndex: (profile?: string): Promise<unknown> =>
     ipcRenderer.invoke("sps-semantic-index", profile),
   spsSemanticSearch: (query: string, limit?: number): Promise<unknown> =>

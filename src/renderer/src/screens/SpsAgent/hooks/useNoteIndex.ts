@@ -6,6 +6,22 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 const MD_SUFFIX = /\.md$/;
 
+/** Phase 1.7 — a counter that bumps whenever the main process rebuilds the note
+ *  index. Including it in a data hook's effect deps makes that hook refetch on
+ *  rebuild, so search / graph / backlinks stop showing stale results. */
+function useIndexRebuildVersion(): number {
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    const api = window.hermesAPI;
+    if (!api?.onSpsIndexRebuilt) return;
+    const unsubscribe = api.onSpsIndexRebuilt(() => {
+      setVersion((v) => v + 1);
+    });
+    return unsubscribe;
+  }, []);
+  return version;
+}
+
 export interface VaultRow {
   path: string;
   title: string;
@@ -26,6 +42,7 @@ export function useVaultQuery(
   sort?: { prop: string; dir: "asc" | "desc" },
 ): { rows: VaultRow[]; refetch: () => void } {
   const [rows, setRows] = useState<VaultRow[]>([]);
+  const rebuildVersion = useIndexRebuildVersion();
   // Serialize the query so the effect only re-runs on a real change.
   const key = JSON.stringify({ scope, filters, sort });
   const refetch = useCallback(() => {
@@ -43,13 +60,14 @@ export function useVaultQuery(
   }, [key]);
   useEffect(() => {
     refetch();
-  }, [refetch]);
+  }, [refetch, rebuildVersion]);
   return { rows, refetch };
 }
 
 /** Page ids that [[wikilink]] to the given page (derived from the vault graph). */
 export function useVaultBacklinks(pageId: string | null): string[] {
   const [backlinks, setBacklinks] = useState<string[]>([]);
+  const rebuildVersion = useIndexRebuildVersion();
   useEffect(() => {
     let cancelled = false;
     setBacklinks([]);
@@ -67,7 +85,7 @@ export function useVaultBacklinks(pageId: string | null): string[] {
     return () => {
       cancelled = true;
     };
-  }, [pageId]);
+  }, [pageId, rebuildVersion]);
   return backlinks;
 }
 
@@ -81,6 +99,7 @@ export interface VaultEdge {
  *  view (F4). Best-effort: empty when the gateway/index is unavailable. */
 export function useVaultGraph(): { edges: VaultEdge[]; refetch: () => void } {
   const [edges, setEdges] = useState<VaultEdge[]>([]);
+  const rebuildVersion = useIndexRebuildVersion();
   const refetch = useCallback(() => {
     const api = window.hermesAPI;
     if (!api?.spsIndexLinks) return;
@@ -99,7 +118,7 @@ export function useVaultGraph(): { edges: VaultEdge[]; refetch: () => void } {
   }, []);
   useEffect(() => {
     refetch();
-  }, [refetch]);
+  }, [refetch, rebuildVersion]);
   return { edges, refetch };
 }
 
@@ -113,6 +132,7 @@ export interface VaultHit {
 export function useVaultSearch(query: string): VaultHit[] {
   const [hits, setHits] = useState<VaultHit[]>([]);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rebuildVersion = useIndexRebuildVersion();
   useEffect(() => {
     const q = query.trim();
     if (!q) {
@@ -139,6 +159,6 @@ export function useVaultSearch(query: string): VaultHit[] {
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [query]);
+  }, [query, rebuildVersion]);
   return hits;
 }

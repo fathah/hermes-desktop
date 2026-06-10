@@ -1254,6 +1254,17 @@ interface HermesAPI {
     links: number;
     indexedAt: number | null;
   }>;
+  onSpsIndexRebuilt: (
+    callback: (payload: {
+      profile?: string;
+      status: {
+        root: string;
+        notes: number;
+        links: number;
+        indexedAt: number | null;
+      };
+    }) => void,
+  ) => () => void;
   spsSemanticIndex: (profile?: string) => Promise<unknown>;
   spsSemanticSearch: (query: string, limit?: number) => Promise<unknown>;
   spsSemanticGraph: () => Promise<unknown>;

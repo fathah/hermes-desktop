@@ -153,7 +153,14 @@ export function registerNotesIpc(
 
   ipcMain.handle("sps-index-rebuild", async (_event, profile?: string) => {
     requireLocalWorkspace();
-    return (await getSpsNoteIndex(profile)).rebuild();
+    const status = await (await getSpsNoteIndex(profile)).rebuild();
+    // Phase 1.7 — tell the renderer the index changed so search/graph/backlink
+    // hooks refetch instead of showing stale results until the next manual action.
+    mainWindowGetter()?.webContents.send("sps-index-rebuilt", {
+      profile,
+      status,
+    });
+    return status;
   });
 
   // Vault location settings
