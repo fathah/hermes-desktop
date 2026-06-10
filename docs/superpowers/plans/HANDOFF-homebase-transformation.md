@@ -1,6 +1,6 @@
 # Handoff — "The Home Base" transformation
 
-**As of 2026-06-11. `origin/main` @ `0f20d86e`. Tree clean.**
+**As of 2026-06-11. `origin/main` @ `84dcb389`. Tree clean.**
 
 This is the in-repo durable pointer. The **living tracker** is the auto-memory file
 `homebase-transformation.md` (auto-loads each session via its MEMORY.md index line) and is
@@ -13,8 +13,9 @@ authoritative if the two ever drift. The **canonical plan** is
 - **Phase 1 (Stability) — COMPLETE.** 1.1 gateway supervision, 1.2 scheduler locks,
   1.3 IPC error envelope (`2c5fd7fe`), 1.4 SSH key cache, 1.5 workspace write-safety
   (`08ec21f5`), 1.6 logging, 1.7 note-index event — all merged.
-- **Phase 2 (Consolidation) — 4/9.** Owner decision (2026-06-10): **port + delete in
-  one pass** (the one-week Developer-mode trial gate was waived). Done:
+- **Phase 2 (Consolidation) — 5/9.** Owner decision (2026-06-10): **port + delete in
+  one pass** (the one-week Developer-mode trial gate was waived). Owner decision (2026-06-11):
+  **do 2.6 before 2.5** to unblock the deferred deletions. Done:
   - **2.1** delete admin Personalization — SPS You was already a strict superset
     (`dcced1da`).
   - **2.2** port cron oversight into SPS Scheduled modal, delete admin Schedules
@@ -72,12 +73,41 @@ Reality-check closed/reshaped several plan premises:
 (6 tabs). The plan's "exactly 4 tabs" target (Providers/Models/Gateway/Settings) is reached once
 Skills (2.6) and Memory (Memory→You) land.
 
-## Next step: P2.5 (remove SPS sidebar stubs, S) → then 2.6
+## P2.6 (done, core) + Skills closed
 
-`sidebar/SidebarStubs.tsx` + the Meetings/Shared/Apps sections in `Sidebar.tsx` are dead stubs —
-delete them; smoke green. Note: 2.4 already removed the sidebar "Agents" section. **2.6** ("One
-Workspace Settings surface") is the lever that unblocks the deferred Skills + Memory deletions —
-consider doing 2.6 next instead, then closing out Skills/Memory/Soul.
+`tweaks/TweaksPanel.tsx` is now THE workspace-settings surface (header "Workspace settings"):
+
+- `5912d5bf` — added **Active skills** toggles (`SkillToggles`, the deletion unblocker; self-hides
+  in remote/SSH) + a **Capture** placeholder (Phase 5.1); repointed the command-palette `storage`
+  command to OPEN this surface instead of firing migrate inline. +2 vitest cases.
+- `84dcb389` — **deleted `screens/Skills/`** (screen + CuratorPanel + test) + Layout wiring + the
+  `skills` AdminView; `verify-admin-overlay.mjs` a5 repointed `skills`→`gateway`. All skills IPC kept.
+
+**Reality-check / DEFERRED inside 2.6** (do NOT treat as missing-by-mistake):
+
+- The 2.6 plan's "replace raw-JSON curator editing with form fields" premise is **STALE** —
+  `InboxSurface` already uses proper form fields persisted to `curator-settings.md`. Nothing to do;
+  "no raw-JSON" is already satisfied. Curator _consolidation_ into TweaksPanel skipped (low value).
+- **1.7 vault-mirror failure COUNT still not built** — needs a counter in the load-bearing vault
+  write path (`sps-vault.ts`/`ipc/notes.ts` `sps-export-page`) + a `spsGetMirrorFailCount` IPC
+  (or bundle into the `sps-index-rebuilt` payload). Held out to avoid touching the storage substrate
+  in a UI commit. The Storage section already shows mode/parity/migrate/backup/vault.
+
+## Next step: Memory→You port (the LAST P2.4 deferral) → then 2.5/2.7/2.8/2.9
+
+Deleting `screens/Memory/` + `screens/Soul/` is the only thing between us and the 4-tab admin target
+(currently 5: Providers/Models/Gateway/**Memory**/Settings). **Reality-check first** — YouSurface
+(`SpsAgent/you/YouSurface.tsx`) already uses `readMemory`/`writeUserProfile`, and `MemoryTimeline` is
+already SPS-imported, so this may be closer to parity than it looks. Memory's tabs to account for:
+entries (add/update/remove via `addMemoryEntry`/`updateMemoryEntry`/`removeMemoryEntry`), timeline
+(`MemoryTimeline` — already SPS), providers (`memory.provider` config + `discoverMemoryProviders` +
+`setEnv`), profile (`writeUserProfile` — You has it), and **soul** (the embedded `Soul/Soul.tsx` tab —
+`readSoul`/`writeSoul`/`resetSoul`; `readSoul` also used by Chat `useLocalCommands`). Port the missing
+read/manage bits into You, then delete both screens + the `memory` AdminView + `Settings.tsx:683`
+`openSettings("memory")` deep-link. Keep `ipc/memory.ts` + `readSoul`. Then the smaller items:
+**2.5** sidebar stubs (S — `SidebarStubs.tsx` + Meetings/Shared/Apps in `Sidebar.tsx`; the Agents
+section already went), **2.7** modal chrome SpsModal (M), **2.8** first-run seed (M), **2.9**
+discoverability (S).
 
 ## Established Phase-2 port+delete pattern (reuse for 2.4+)
 
