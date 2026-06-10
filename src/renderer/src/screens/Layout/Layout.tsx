@@ -12,7 +12,6 @@ import Tools from "../Tools/Tools";
 import Gateway from "../Gateway/Gateway";
 import Models from "../Models/Models";
 import Providers from "../Providers/Providers";
-import Schedules from "../Schedules/Schedules";
 import Kanban from "../Kanban/Kanban";
 import Insights from "../Insights/Insights";
 import CapabilityReview from "../CapabilityReview/CapabilityReview";
@@ -30,7 +29,6 @@ import {
   Signal,
   Layers,
   KeyRound,
-  Timer,
   Kanban as KanbanIcon,
   Download,
 } from "../../assets/icons";
@@ -99,7 +97,6 @@ const NAV_GROUPS: NavGroup[] = [
     headerKey: "navigation.groupWorkspace",
     items: [
       { view: "kanban", icon: KanbanIcon, labelKey: "navigation.kanban" },
-      { view: "schedules", icon: Timer, labelKey: "navigation.schedules" },
     ],
   },
   {
@@ -565,12 +562,6 @@ function Layout({
             ) : (
               <Tools profile={activeProfile} />
             )}
-          </div>
-        )}
-
-        {visitedViews.has("schedules") && (
-          <div style={paneStyle("schedules")}>
-            <Schedules profile={activeProfile} />
           </div>
         )}
 

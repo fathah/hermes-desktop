@@ -13,11 +13,13 @@ import {
   cadenceLabel,
   type Cadence,
 } from "../../../../../shared/scheduledResearch";
+import type { CronJob } from "../../../../../shared/cronjobs";
 
 type Schedule = Awaited<ReturnType<typeof window.hermesAPI.srList>>[number];
 type Pending = Awaited<
   ReturnType<typeof window.hermesAPI.srListPending>
 >[number];
+type SkipInfo = { skipCount: number; lastSkipAt: number; lastReason: string };
 
 export function ScheduledModal() {
   const setScheduledOpen = useStore((s) => s.setScheduledOpen);
@@ -29,6 +31,11 @@ export function ScheduledModal() {
 
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [pending, setPending] = useState<Pending[]>([]);
+  // Agent-created cron jobs (ported from the deleted admin Schedules screen) —
+  // oversight only: see every background job + stop/run it. Creation of new raw
+  // cron jobs stays with the agent/CLI; research/digest scheduling is above.
+  const [cronJobs, setCronJobs] = useState<CronJob[]>([]);
+  const [skips, setSkips] = useState<Record<string, SkipInfo>>({});
   const [topic, setTopic] = useState("");
   const [cadence, setCadence] = useState<Cadence>("weekly");
   const [hour, setHour] = useState(8);
@@ -67,12 +74,18 @@ export function ScheduledModal() {
   };
 
   const refresh = async () => {
-    const [s, p, avail] = await Promise.all([
+    const [s, p, avail, cron, sk] = await Promise.all([
       window.hermesAPI.srList(),
       window.hermesAPI.srListPending(),
       window.hermesAPI.srTelegramAvailability(),
+      window.hermesAPI.listCronJobs(true).catch(() => [] as CronJob[]),
+      window.hermesAPI
+        .getSchedulerSkips()
+        .catch(() => ({}) as Record<string, SkipInfo>),
     ]);
     setTg(avail || { available: false, targets: [] });
+    setCronJobs(cron || []);
+    setSkips(sk || {});
     const applied = await autoApplyPending(p || [], s || []);
     if (applied) {
       const p2 = await window.hermesAPI.srListPending();
@@ -184,6 +197,51 @@ export function ScheduledModal() {
     if (days <= 0) return "today";
     if (days === 1) return "yesterday";
     return `${days}d ago`;
+  };
+
+  // ── agent cron-job oversight ──
+  const onCronToggle = async (job: CronJob) => {
+    setBusyId(job.id);
+    try {
+      if (job.state === "paused") await window.hermesAPI.resumeCronJob(job.id);
+      else await window.hermesAPI.pauseCronJob(job.id);
+      await refresh();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const onCronTrigger = async (job: CronJob) => {
+    setBusyId(job.id);
+    try {
+      await window.hermesAPI.triggerCronJob(job.id);
+      await refresh();
+      flash(`Triggered "${job.name}"`);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const onCronDelete = async (job: CronJob) => {
+    setBusyId(job.id);
+    try {
+      await window.hermesAPI.removeCronJob(job.id);
+      await refresh();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const fmtCronTime = (iso: string | null): string => {
+    if (!iso) return "--";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   };
 
   return (
@@ -432,6 +490,98 @@ export function ScheduledModal() {
               ))}
             </div>
           </div>
+
+          {/* ── agent tasks (cron) — oversight of background jobs ── */}
+          {cronJobs.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <div className="c-name" style={{ marginBottom: 6 }}>
+                Agent tasks ({cronJobs.length})
+              </div>
+              <div className="scroll" style={{ maxHeight: "30vh" }}>
+                {cronJobs.map((job) => {
+                  const skip = skips[job.id];
+                  return (
+                    <div
+                      key={job.id}
+                      className="lst-row"
+                      style={{
+                        alignItems: "flex-start",
+                        gap: 8,
+                        height: "auto",
+                        padding: "8px 6px",
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div
+                          className="c-name"
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                          }}
+                        >
+                          {job.name}
+                          {job.state === "paused" && (
+                            <span
+                              className="pal-chip"
+                              style={{ pointerEvents: "none" }}
+                            >
+                              Paused
+                            </span>
+                          )}
+                        </div>
+                        <small
+                          style={{ color: "var(--tx-3)", display: "block" }}
+                        >
+                          {job.schedule} · next {fmtCronTime(job.next_run_at)} ·
+                          last {fmtCronTime(job.last_run_at)}
+                          {job.last_status &&
+                            job.last_status !== "ok" &&
+                            ` · ${job.last_status}`}
+                        </small>
+                        {skip && skip.skipCount > 0 && (
+                          <small
+                            style={{
+                              color: "var(--rd, #d66)",
+                              display: "block",
+                            }}
+                          >
+                            ⚠ skipped {skip.skipCount}×
+                            {skip.lastReason ? ` · ${skip.lastReason}` : ""}
+                          </small>
+                        )}
+                      </div>
+                      {job.state !== "completed" && (
+                        <button
+                          className="cover-btn"
+                          disabled={busyId === job.id}
+                          onClick={() => void onCronToggle(job)}
+                        >
+                          {job.state === "paused" ? "Resume" : "Pause"}
+                        </button>
+                      )}
+                      {job.state === "active" && (
+                        <button
+                          className="cover-btn"
+                          disabled={busyId === job.id}
+                          onClick={() => void onCronTrigger(job)}
+                        >
+                          Run now
+                        </button>
+                      )}
+                      <button
+                        className="cover-btn"
+                        disabled={busyId === job.id}
+                        onClick={() => void onCronDelete(job)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
