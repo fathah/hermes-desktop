@@ -1,6 +1,7 @@
-// verify-admin-overlay.mjs — one-off visual check for the Tranche B IA work:
+// verify-admin-overlay.mjs — one-off visual check for the admin-overlay IA:
 // opens the Hermes admin overlay and screenshots the grouped nav + Settings tabs
-// + the Skills screen (where Curator now lives). Build first.
+// + the connectivity views. Build first. (Skills moved to the SPS Workspace
+// Settings surface in P2.6; the admin overlay is now connectivity + system only.)
 import { _electron as electron } from "playwright";
 import { mkdtempSync, mkdirSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
@@ -71,11 +72,11 @@ await shot("a4-memory-view", async () => {
   );
 });
 
-// Skills screen — Curator dashboard now lives here.
-await shot("a5-skills-curator", async () => {
+// Gateway — a connectivity view (admin overlay is connectivity + system only now).
+await shot("a5-gateway-view", async () => {
   await win.evaluate(() =>
     window.dispatchEvent(
-      new CustomEvent("hermes:open-settings", { detail: { view: "skills" } }),
+      new CustomEvent("hermes:open-settings", { detail: { view: "gateway" } }),
     ),
   );
 });

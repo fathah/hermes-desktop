@@ -1,6 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
 import Settings from "../Settings/Settings";
-import Skills from "../Skills/Skills";
 import Gateway from "../Gateway/Gateway";
 import Models from "../Models/Models";
 import Providers from "../Providers/Providers";
@@ -11,7 +10,6 @@ import hermeslogo from "../../assets/hermes.png";
 import {
   ChevronDown,
   Settings as SettingsIcon,
-  Puzzle,
   Signal,
   Layers,
   KeyRound,
@@ -45,11 +43,6 @@ interface NavGroup {
 }
 
 const NAV_GROUPS: NavGroup[] = [
-  {
-    id: "agents",
-    headerKey: "navigation.groupAgents",
-    items: [{ view: "skills", icon: Puzzle, labelKey: "navigation.skills" }],
-  },
   {
     id: "connectivity",
     headerKey: "navigation.groupConnectivity",
@@ -420,16 +413,6 @@ function Layout({
                 profile={activeProfile}
                 visible={view === "providers"}
               />
-            )}
-          </div>
-        )}
-
-        {visitedViews.has("skills") && (
-          <div style={paneStyle("skills")}>
-            {remoteMode ? (
-              <RemoteNotice feature="Skills" />
-            ) : (
-              <Skills profile={activeProfile} visible={view === "skills"} />
             )}
           </div>
         )}

@@ -11,7 +11,6 @@
 export type AdminView =
   | "models"
   | "providers"
-  | "skills"
   | "gateway"
   | "spsAgent"
   | "memory"
@@ -47,7 +46,6 @@ export const ADMIN_LAST_VIEW_KEY = "hermes.admin.lastView";
 const KNOWN_VIEWS = new Set<AdminView>([
   "models",
   "providers",
-  "skills",
   "gateway",
   "spsAgent",
   "memory",
