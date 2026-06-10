@@ -99,4 +99,15 @@ pure attribute swaps on the scope element. The standalone `sps-agent/` (runnable
 - `obsidian-bridge/` — a separate Obsidian plugin (localhost bridge so Hermes can call Obsidian).
 - `scripts/` — `repro-*.js` / `verify-*.js` / `probe-*.js` are Playwright/node repro harnesses for
   specific issues (named by bug); `sps-smoke.mjs` is the UI smoke; `scope-sps-css.mjs` rescopes SPS CSS.
+- **External Context Bridge** (`src/main/external-context/`, `src/mcp/external-context-server.ts`) — a
+  local-first, opt-in, **redacted** index of OTHER AI tools' transcripts (Claude Code / Codex / Gemini
+  / Grok) so Hermes is the cross-tool continuity layer. Source roots are env-overridable
+  (`HERMES_EC_{CLAUDE,CODEX,GEMINI,GROK}_ROOT`) for the verify/smoke harnesses. Two load-bearing,
+  structurally-enforced invariants: (1) **index-time redaction** — `applyFragments` in `db.ts` is the
+  single writer and redacts every message before INSERT (verify asserts a seeded key never reaches
+  `messages`/`messages_fts`); (2) **untrusted fencing** — every UI/Save-to-KB/MCP surface wraps
+  excerpts in an untrusted banner + fence and never auto-injects them into a chat turn. The index DB is
+  machine-global + rebuildable (`HERMES_HOME/external-context.db`). Harnesses:
+  `npm run verify:external-context` (index + redaction + MCP roundtrip, under Electron's node) and
+  `node scripts/external-context-smoke.mjs` (Playwright UI; build first).
 - `docs/superpowers/plans/` and `docs/superpowers/specs/` — design plans/specs for in-flight work.

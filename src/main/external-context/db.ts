@@ -169,7 +169,7 @@ export class ExternalContextDb {
 
       if (conv) {
         convId = convKey(file.source, conv.conversationId);
-        this.mergeConversation(convId, file.source, conv);
+        this.mergeConversation(convId, file.source, conv, knownSecrets);
         if (replace) {
           this.db.prepare(`DELETE FROM messages WHERE conv_id = ?`).run(convId);
           this.db
@@ -227,11 +227,15 @@ export class ExternalContextDb {
     tx();
   }
 
-  /** Merge conversation metadata: widen the time span, keep first-known fields. */
+  /** Merge conversation metadata: widen the time span, keep first-known fields.
+   *  The title is DERIVED from the first user message (before redaction), so it
+   *  is redacted HERE too — otherwise a secret in the opening message would leak
+   *  through the title into search hits, the viewer header, and Save-to-KB. */
   private mergeConversation(
     convId: string,
     source: ExternalSource,
     conv: ParseResult["conversation"] & object,
+    knownSecrets: readonly string[],
   ): void {
     const existing = this.db
       .prepare(`SELECT * FROM conversations WHERE conv_id = ?`)
@@ -241,7 +245,8 @@ export class ExternalContextDb {
     const lastAt = maxNullable(existing?.last_at ?? null, conv.lastAt);
     const projectPath = conv.projectPath ?? existing?.project_path ?? null;
     const gitBranch = conv.gitBranch ?? existing?.git_branch ?? null;
-    const title = conv.title ?? existing?.title ?? null;
+    const rawTitle = conv.title ?? existing?.title ?? null;
+    const title = rawTitle ? redactExternalText(rawTitle, knownSecrets) : null;
 
     this.db
       .prepare(

@@ -262,6 +262,16 @@ async function main(): Promise<void> {
     db.search("LEAKED0123456789").length === 0,
     "FTS cannot retrieve the leaked key",
   );
+  // The conversation TITLE is derived from the first (secret-bearing) message —
+  // it must be redacted too, or it would leak via search hits / viewer / KB.
+  const titleRows = raw
+    .prepare("SELECT title FROM conversations WHERE title IS NOT NULL")
+    .all() as Array<{ title: string }>;
+  const allTitles = titleRows.map((r) => r.title).join("\n");
+  assert(
+    !allTitles.includes("sk-ant-api03"),
+    "derived titles never leak the sk-ant key",
+  );
   raw.close();
 
   console.log("\nIncremental — append indexes only the delta:");

@@ -55,3 +55,7 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
+
+# transient verify-script bundles (esbuild output, removed by trap)
+.verify-ni.cjs
+.verify-ec.cjs
