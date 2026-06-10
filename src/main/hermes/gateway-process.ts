@@ -37,6 +37,7 @@ import {
   type SupervisorState,
   type GatewayHealthStatus,
 } from "./gateway-supervisor";
+import { log, rotateGatewayStderrIfLarge } from "../log";
 
 export function resolveProfile(profile?: string): string | undefined {
   return normalizeProfileName(profile ?? getActiveProfileNameSync());
@@ -255,6 +256,8 @@ export function startGateway(profile?: string): boolean {
     // ignore
   }
   const logPath = join(logDir, "gateway-stderr.log");
+  // Phase 1.6 — keep the gateway stderr log from ballooning across many restarts.
+  rotateGatewayStderrIfLarge(logPath);
   let stderrFd: number;
   try {
     stderrFd = openSync(logPath, "a");
@@ -520,9 +523,20 @@ async function runSupervisorTick(): Promise<void> {
   _supervisorState = decision.state;
 
   if (decision.statusChanged) {
+    log.info("gateway-supervisor", {
+      msg: "health changed",
+      status: decision.state.status,
+      consecutiveFailures: decision.state.consecutiveFailures,
+      restartAttempts: decision.state.restartAttempts,
+    });
     broadcastGatewayHealth(decision.state.status);
   }
   if (decision.action.type === "restart") {
+    log.warn("gateway-supervisor", {
+      msg: "scheduling auto-restart",
+      backoffMs: decision.action.backoffMs,
+      attempt: decision.state.restartAttempts,
+    });
     scheduleSupervisedRestart(decision.action.backoffMs);
   }
 }

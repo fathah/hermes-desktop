@@ -17,6 +17,7 @@ import {
   serializeLockRecord,
   type LockRecord,
 } from "./scheduler-lock";
+import { log } from "./log";
 import { getActiveProfileNameSync, profileHome } from "./utils";
 import { listCronJobs } from "./cronjobs";
 import { triggerSelfHealing } from "./self-healing";
@@ -302,10 +303,13 @@ export async function runJobHeadless(
     return false;
   }
   if (decision.type === "steal") {
-    console.warn(
-      `[SCHEDULER] Stealing ${decision.reason} lock for job "${jobName}" ` +
-        `(${jobId}, prev pid ${existingLock?.pid}).`,
-    );
+    log.warn("scheduler", {
+      msg: "stealing lock",
+      reason: decision.reason,
+      jobId,
+      jobName,
+      prevPid: existingLock?.pid,
+    });
   }
 
   try {
@@ -368,9 +372,12 @@ export async function runJobHeadless(
       // lock until the next acquisition's stale-steal — this bounds the damage and
       // frees the OS process. Cleared the moment the child exits normally.
       const reapTimer = setTimeout(() => {
-        console.error(
-          `[SCHEDULER] Job "${jobName}" (${jobId}) exceeded ${JOB_TIMEOUT_MS}ms — reaping.`,
-        );
+        log.warn("scheduler", {
+          msg: "reaping wedged job",
+          jobId,
+          jobName,
+          timeoutMs: JOB_TIMEOUT_MS,
+        });
         try {
           proc.kill("SIGKILL");
         } catch {
