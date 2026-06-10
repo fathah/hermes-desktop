@@ -372,12 +372,31 @@ export function ScheduledModal() {
                   }}
                 >
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div className="c-name">{s.topic}</div>
+                    <div
+                      className="c-name"
+                      style={{ display: "flex", alignItems: "center", gap: 6 }}
+                    >
+                      {s.kind === "digest" && (
+                        <span
+                          className="pal-chip on"
+                          style={{ pointerEvents: "none" }}
+                        >
+                          Digest
+                        </span>
+                      )}
+                      {s.kind === "digest"
+                        ? s.scope?.source
+                          ? `External sessions · ${s.scope.source}`
+                          : "External sessions"
+                        : s.topic}
+                    </div>
                     <small style={{ color: "var(--tx-3)", display: "block" }}>
                       {cadenceLabel(s.cadence, s.hour)} · {fmtLast(s.lastRunAt)}
-                      {s.cronJobId
-                        ? " · runs in background"
-                        : " · app-open only"}
+                      {s.kind === "digest"
+                        ? " · app-open only"
+                        : s.cronJobId
+                          ? " · runs in background"
+                          : " · app-open only"}
                       {s.autoApply ? " · auto-apply" : ""}
                       {s.telegramPush ? " · Telegram" : ""}
                       {!s.enabled ? " · paused" : ""}

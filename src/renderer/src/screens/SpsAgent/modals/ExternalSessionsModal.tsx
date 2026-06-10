@@ -36,9 +36,20 @@ const UNTRUSTED_BANNER =
 
 export function ExternalSessionsModal() {
   const setExternalSessionsOpen = useStore((s) => s.setExternalSessionsOpen);
+  const setScheduledOpen = useStore((s) => s.setScheduledOpen);
   const saveExternalSessionToKb = useStore((s) => s.saveExternalSessionToKb);
   const flash = useStore((s) => s.flash);
   const onClose = () => setExternalSessionsOpen(false);
+
+  const createDigest = async () => {
+    await window.hermesAPI?.srCreate?.({
+      kind: "digest",
+      topic: "External sessions digest",
+      cadence: "weekly",
+    });
+    setExternalSessionsOpen(false);
+    setScheduledOpen(true);
+  };
 
   const [view, setView] = useState<View>("search");
   const [config, setConfig] = useState<ExternalSourceConfig | null>(null);
@@ -211,6 +222,7 @@ export function ExternalSessionsModal() {
               onScan={doScan}
               onRebuild={doRebuild}
               onSetMaxAge={doSetMaxAge}
+              onCreateDigest={createDigest}
               onExposeMcp={exposeMcp}
               mcpState={mcpState}
             />
@@ -385,6 +397,7 @@ function SettingsView(props: {
   onScan: () => void;
   onRebuild: () => void;
   onSetMaxAge: (days: number | null) => void;
+  onCreateDigest: () => Promise<void>;
   onExposeMcp: () => Promise<void>;
   mcpState: "idle" | "working" | "done";
 }) {
@@ -436,6 +449,28 @@ function SettingsView(props: {
             </div>
           );
         })}
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10,
+          marginTop: 14,
+          paddingTop: 12,
+          borderTop: "1px solid var(--bd)",
+        }}
+      >
+        <small style={{ color: "var(--tx-3)" }}>
+          Keep a living weekly digest of these sessions in your KB
+        </small>
+        <button
+          className="cover-btn"
+          onClick={() => void props.onCreateDigest()}
+        >
+          + Weekly digest
+        </button>
       </div>
 
       <div
