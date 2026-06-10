@@ -8,6 +8,7 @@ import { startHealthPolling as startGatewayHealthPolling } from "./hermes/gatewa
 
 export {
   setSshRemoteApiKey,
+  clearSshRemoteApiKey,
   getRemoteAuthHeader,
   resolveRemoteApiKey,
 } from "./hermes/gateway-process";

@@ -36,6 +36,7 @@ import {
   stopGateway,
   testRemoteConnection,
   setSshRemoteApiKey,
+  clearSshRemoteApiKey,
   notifyProfileSwitched,
   respondRunApproval,
   getGatewayHealthStatus,
@@ -261,6 +262,11 @@ export function registerConfigIpc(): void {
       apiKey?: string,
     ) => {
       const existing = getConnectionConfig();
+      // Phase 1.4 — a mode change invalidates the cached SSH-remote key so it is
+      // never reused against a different connection.
+      if (existing.mode !== mode) {
+        clearSshRemoteApiKey();
+      }
       setConnectionConfig({
         ...existing,
         mode,
@@ -288,6 +294,9 @@ export function registerConfigIpc(): void {
       localPort: number,
     ) => {
       const current = getConnectionConfig();
+      // Phase 1.4 — a new SSH target makes any cached key (fetched for the old
+      // host) invalid; drop it so it is never sent to the new host.
+      clearSshRemoteApiKey();
       setConnectionConfig({
         ...current,
         mode: "ssh",
@@ -338,6 +347,8 @@ export function registerConfigIpc(): void {
 
   ipcMain.handle("stop-ssh-tunnel", () => {
     stopSshTunnel();
+    // Phase 1.4 — tearing down the tunnel invalidates the cached remote key.
+    clearSshRemoteApiKey();
     return true;
   });
 

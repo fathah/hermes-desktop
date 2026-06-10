@@ -108,6 +108,15 @@ export function setSshRemoteApiKey(key: string): void {
   _sshRemoteApiKey = key;
 }
 
+// Phase 1.4 — drop the cached SSH-remote API key (and invalidate the readiness
+// cache) on any connection-mode change or tunnel teardown. Without this, a key
+// fetched for one SSH host lingers in memory indefinitely and would be sent to a
+// different host after the user switches connections.
+export function clearSshRemoteApiKey(): void {
+  _sshRemoteApiKey = "";
+  apiServerAvailable = null;
+}
+
 export function getRemoteAuthHeader(): Record<string, string> {
   const conn = getConnectionConfig();
   if (conn.mode === "ssh") {
