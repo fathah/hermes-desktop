@@ -70,8 +70,10 @@ export function registerSpsIpc(): void {
     spsLintWiki(profile, { staleDays }),
   );
   safeHandle("sps-load", (_event, profile?: string) => spsLoad(profile));
-  safeHandle("sps-save", (_event, ws: unknown, profile?: string) =>
-    spsSave(ws, profile),
+  safeHandle(
+    "sps-save",
+    (_event, ws: unknown, profile?: string, baseRev?: number) =>
+      spsSave(ws, profile, baseRev),
   );
   safeHandle("sps-run-telos-audit", (_event, profile?: string) =>
     runTelosAudit(profile),

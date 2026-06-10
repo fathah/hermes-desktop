@@ -98,7 +98,10 @@ useStore.subscribe(
         // blob is intentionally left untouched as the rollback safety net.
         void saveVaultPage(ws, s.page);
       } else {
-        saveWorkspace(ws); // blob authoritative
+        // blob authoritative — surface save failures + oversize advisory
+        void saveWorkspace(ws).then((res) =>
+          useStore.getState().reportSaveResult(res),
+        );
         mirrorPage(s.page, s.meta[s.page] ?? {}, s.docs[s.page] ?? []); // mirror
       }
     }, 350);

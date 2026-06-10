@@ -3,6 +3,7 @@ import type { Attachment } from "../shared/attachments";
 import type { UsageAggregate, RunLedgerEntry } from "../shared/usage";
 import type { MemoryTimeline } from "../shared/memoryTimeline";
 import type { MemoryInfo } from "../shared/memory";
+import type { SpsSaveResult } from "../shared/sps-types";
 import type { SearchSummary } from "../shared/searchSummary";
 import type { LoadedSkin } from "../shared/skins";
 import type {
@@ -1065,7 +1066,11 @@ interface HermesAPI {
     pagesDropped: number;
   }>;
   spsLoad: (profile?: string) => Promise<unknown | null>;
-  spsSave: (ws: unknown, profile?: string) => Promise<boolean>;
+  spsSave: (
+    ws: unknown,
+    profile?: string,
+    baseRev?: number,
+  ) => Promise<SpsSaveResult>;
   spsGetWorkSession: (
     pageId: string,
     profile?: string,

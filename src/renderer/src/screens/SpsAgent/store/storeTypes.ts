@@ -10,6 +10,7 @@ import type {
   Task,
   TreeNode,
   TrashEntry,
+  SpsSaveResult,
 } from "../types";
 import type { WorkDetail } from "../../../../../shared/openalex/core";
 
@@ -193,6 +194,12 @@ export interface UiSlice {
   emojiPick: XY | null;
   coverPick: XY | null;
   toast: { text: string; tone?: "warn" } | null;
+  /** Persistent workspace-save failure message (Phase 1.5). Non-null ⇒ the
+   *  latest save did not reach disk; the shell shows a standing warning until a
+   *  later save succeeds. Distinct from the transient `toast`. */
+  saveError: string | null;
+  /** One-shot guard so the >25 MB "consider vault migration" hint fires once. */
+  oversizeAdvised: boolean;
   focusReq: string | null;
   // AI Chats surface: the session currently shown (null = a fresh chat).
   activeChatSession: string | null;
@@ -224,6 +231,10 @@ export interface UiSlice {
   setCoverPick: (v: XY | null) => void;
   setFocusReq: (id: string | null) => void;
   flash: (text: string, opts?: { tone?: "warn"; ms?: number }) => void;
+  /** Reconcile a workspace-save outcome: clear/raise the persistent saveError,
+   *  flash a transient toast on a failure→ok transition, and fire the one-time
+   *  oversize advisory. */
+  reportSaveResult: (result: SpsSaveResult) => void;
   setActiveChatSession: (id: string | null, title?: string | null) => void;
   setPendingChatPrompt: (text: string | null) => void;
   /** Open the AI Chats surface on a fresh chat, optionally pre-filled. */

@@ -2,6 +2,7 @@
 // Ported from the UI useState calls in app.jsx.
 import type { StateCreator } from "zustand";
 import type { Store, UiSlice, RightTab } from "../storeTypes";
+import type { SpsSaveResult } from "../../types";
 import { loadTweaks } from "./tweaks";
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
@@ -30,7 +31,10 @@ function saveRightTab(t: RightTab): void {
   }
 }
 
-export const createUiSlice: StateCreator<Store, [], [], UiSlice> = (set) => ({
+export const createUiSlice: StateCreator<Store, [], [], UiSlice> = (
+  set,
+  get,
+) => ({
   panelOpen: true,
   rightTab: loadRightTab(),
   surface: loadTweaks().homeSurface ?? "doc",
@@ -46,6 +50,8 @@ export const createUiSlice: StateCreator<Store, [], [], UiSlice> = (set) => ({
   emojiPick: null,
   coverPick: null,
   toast: null,
+  saveError: null,
+  oversizeAdvised: false,
   focusReq: null,
   activeChatSession: null,
   activeChatSessionTitle: null,
@@ -99,5 +105,32 @@ export const createUiSlice: StateCreator<Store, [], [], UiSlice> = (set) => ({
     set({ toast: { text, ...(opts?.tone ? { tone: opts.tone } : {}) } });
     if (toastTimer) clearTimeout(toastTimer);
     toastTimer = setTimeout(() => set({ toast: null }), opts?.ms ?? 2200);
+  },
+
+  reportSaveResult: (result: SpsSaveResult) => {
+    const prev = get();
+    if (!result.ok) {
+      // Raise the persistent indicator; flash once on the ok→failed transition
+      // so a streak of failed autosaves doesn't spam the toast.
+      if (!prev.saveError) {
+        get().flash(
+          "Workspace save failed — your latest changes are not on disk.",
+          { tone: "warn", ms: 6000 },
+        );
+      }
+      set({ saveError: result.error ?? "Save failed" });
+      return;
+    }
+    if (prev.saveError) {
+      set({ saveError: null });
+      get().flash("Workspace saved.", { ms: 1500 });
+    }
+    if (result.oversize && !prev.oversizeAdvised) {
+      set({ oversizeAdvised: true });
+      get().flash(
+        "Workspace is over 25 MB — consider migrating to vault storage in Settings.",
+        { tone: "warn", ms: 6000 },
+      );
+    }
   },
 });

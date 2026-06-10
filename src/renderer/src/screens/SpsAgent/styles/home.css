@@ -2358,6 +2358,17 @@
     transform: translateX(-50%);
   }
 }
+/* Persistent save-failure badge (Phase 1.5): pinned bottom-left so it never
+   overlaps the transient bottom-center toast, and stays until a save succeeds. */
+.sps-scope .save-status-badge {
+  left: 18px;
+  bottom: 18px;
+  transform: none;
+  background: #fbeae0;
+  color: #8a4b1d;
+  border: 1px solid #e7b48c;
+  font-weight: 600;
+}
 .sps-scope .toast .undo {
   color: var(--accent);
   cursor: pointer;

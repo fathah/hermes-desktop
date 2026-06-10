@@ -12,6 +12,7 @@ import { Editor } from "./editor/Editor";
 import { RightPanel } from "./panel/RightPanel";
 import { Overlays } from "./shell/Overlays";
 import { Toast } from "./components/Toast";
+import { SaveStatus } from "./components/SaveStatus";
 import { OcrStatus } from "./components/OcrStatus";
 import Insights from "../Insights/Insights";
 import { MemoryTimeline } from "../Memory/MemoryTimeline";
@@ -172,6 +173,7 @@ export function App() {
 
       <Overlays />
       <Toast />
+      <SaveStatus />
       <OcrStatus />
       {/* Phase 9: command palette, templates, trash, tweaks */}
     </div>

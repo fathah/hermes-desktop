@@ -207,6 +207,22 @@ export interface Workspace {
   page: string;
 }
 
+/** Result of a workspace save (Phase 1.5 write-safety). `ok:false` means the
+ *  blob did NOT reach disk — the renderer surfaces a persistent warning. `rev`
+ *  is the on-disk revision after the save (unchanged on failure); the renderer
+ *  echoes it back as the base of its next save so the main-process write queue
+ *  can detect a stale base and reload-merge instead of blind-overwriting.
+ *  `merged` flags that a stale base was reconciled; `oversize` flags the blob
+ *  crossed the vault-migration advisory threshold. */
+export interface SpsSaveResult {
+  ok: boolean;
+  error?: string;
+  bytes?: number;
+  rev: number;
+  merged: boolean;
+  oversize?: boolean;
+}
+
 // ---- static reference data shapes ----
 export interface Person {
   name: string;

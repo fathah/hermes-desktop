@@ -9,6 +9,7 @@ import type {
   ScheduledResearchItem,
   ScheduleInput,
 } from "../../shared/scheduledResearch";
+import type { SpsSaveResult } from "../../shared/sps-types";
 
 /** Pending scheduled-research merge, shaped for the renderer (inline changeset
  *  shape mirrors spsFileAnswer's so preload need not import main types). */
@@ -161,8 +162,12 @@ export const spsBridge = {
   }> => ipcRenderer.invoke("sps-lint-wiki", staleDays, profile),
   spsLoad: (profile?: string): Promise<unknown | null> =>
     ipcRenderer.invoke("sps-load", profile),
-  spsSave: (ws: unknown, profile?: string): Promise<boolean> =>
-    ipcRenderer.invoke("sps-save", ws, profile),
+  spsSave: (
+    ws: unknown,
+    profile?: string,
+    baseRev?: number,
+  ): Promise<SpsSaveResult> =>
+    ipcRenderer.invoke("sps-save", ws, profile, baseRev),
   spsGetWorkSession: (
     pageId: string,
     profile?: string,

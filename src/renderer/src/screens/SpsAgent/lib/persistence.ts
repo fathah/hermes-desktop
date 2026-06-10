@@ -6,7 +6,13 @@
 // files so the substrate + note-index materialize. The JSON blob above stays the
 // authoritative store — mirroring is best-effort and never read back as truth.
 import { pageToMarkdown } from "../editor/pageMarkdown";
-import type { Block, PageMeta, Workspace } from "../types";
+import type { Block, PageMeta, Workspace, SpsSaveResult } from "../types";
+
+// The base revision our in-memory workspace was derived from. Echoed back on
+// every save so the main-process write queue can detect a stale base (a
+// concurrent writer advanced the on-disk revision) and reload-merge instead of
+// blind-overwriting. Updated from each successful save's result.
+let baseRev: number | undefined;
 
 /** Best-effort: mirror one page's blocks to its markdown file. */
 export function mirrorPage(
@@ -33,21 +39,37 @@ export function mirrorAllPages(ws: Workspace): void {
 export async function loadWorkspace(): Promise<Workspace | null> {
   try {
     const data = await window.hermesAPI.spsLoad();
+    if (data && typeof data === "object") {
+      const rev = (data as { __rev?: unknown }).__rev;
+      baseRev = typeof rev === "number" ? rev : undefined;
+    }
     return (data as Workspace | null) ?? null;
   } catch {
     return null;
   }
 }
 
-export function saveWorkspace(ws: Workspace): void {
+/** Persist the workspace blob, returning the save outcome so callers can
+ *  surface a persistent warning on failure. Tracks the on-disk revision across
+ *  saves to drive the main-process stale-base reload-merge. */
+export async function saveWorkspace(ws: Workspace): Promise<SpsSaveResult> {
   try {
-    void window.hermesAPI.spsSave(ws);
-  } catch {
-    /* main unavailable — fail silent */
+    const result = await window.hermesAPI.spsSave(ws, undefined, baseRev);
+    if (result.ok) baseRev = result.rev;
+    return result;
+  } catch (err) {
+    // main unavailable — report as a failed save, don't throw into the subscriber
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "save unavailable",
+      rev: baseRev ?? 0,
+      merged: false,
+    };
   }
 }
 
 export function clearWorkspace(): void {
+  baseRev = undefined;
   try {
     void window.hermesAPI.spsSave(null);
   } catch {

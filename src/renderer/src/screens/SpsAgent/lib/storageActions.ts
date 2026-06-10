@@ -63,7 +63,7 @@ export async function toggleStorageMode(
       message: `Migrated to markdown storage${res.backup ? " · blob backed up" : ""}`,
     };
   }
-  saveWorkspace(ws); // persist current state to the blob before it's authoritative
+  void saveWorkspace(ws); // persist current state to the blob before it's authoritative
   setStorageMode("blob");
   return { ok: true, mode: "blob", message: "Switched to JSON storage" };
 }

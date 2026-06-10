@@ -11,6 +11,14 @@
 //   • sps:load / sps:save — durable workspace persistence under the profile home.
 import { promises as fs } from "fs";
 import { join } from "path";
+import {
+  WorkspaceWriteQueue,
+  selectBackupsToPrune,
+  OVERSIZE_ADVISORY_BYTES,
+  type RevisionedWorkspace,
+  type WorkspaceQueueIO,
+} from "./sps-write-queue";
+import type { Workspace, SpsSaveResult } from "../shared/sps-types";
 import dns from "node:dns";
 import net from "node:net";
 import { Agent, fetch as undiciFetch } from "undici";
@@ -1074,6 +1082,10 @@ function workspacePath(profile?: string): string {
   );
 }
 
+function workspaceDir(profile?: string): string {
+  return join(profileHome(profile || getActiveProfileNameSync()), "sps-agent");
+}
+
 export async function spsLoad(profile?: string): Promise<unknown | null> {
   try {
     const raw = await fs.readFile(workspacePath(profile), "utf-8");
@@ -1083,17 +1095,94 @@ export async function spsLoad(profile?: string): Promise<unknown | null> {
   }
 }
 
-export async function spsSave(ws: unknown, profile?: string): Promise<boolean> {
-  try {
-    const p = workspacePath(profile);
-    await safeWriteFileAsync(p, JSON.stringify(ws));
-    return true;
-  } catch {
-    return false;
-  }
+// ── Workspace write-safety (Phase 1.5) ──
+// One serialized write queue per profile guards workspace.json against the
+// whole-blob last-write-wins hazard: overlapping saves can't interleave their
+// read-modify-write, and a save derived from a stale revision is reload-merged
+// rather than blindly overwriting a concurrent writer's pages.
+const writeQueues = new Map<string, WorkspaceWriteQueue>();
+
+function listBackups(profile?: string): Promise<string[]> {
+  const dir = workspaceDir(profile);
+  return fs
+    .readdir(dir)
+    .then((names) =>
+      names
+        .filter((name) => name.startsWith("workspace.json.bak-"))
+        .map((name) => join(dir, name)),
+    )
+    .catch(() => []);
 }
 
-/** Copy the JSON blob to a timestamped backup before a vault migration (S6). */
+function makeQueueIo(profile?: string): WorkspaceQueueIO {
+  const p = workspacePath(profile);
+  return {
+    async read() {
+      const data = await spsLoad(profile);
+      return (data as RevisionedWorkspace | null) ?? null;
+    },
+    async write(blob) {
+      const json = JSON.stringify(blob);
+      await safeWriteFileAsync(p, json);
+      return Buffer.byteLength(json);
+    },
+    async backup() {
+      await spsBackupWorkspace(profile);
+    },
+    async prune(keep) {
+      const existing = await listBackups(profile);
+      const stale = selectBackupsToPrune(existing, keep);
+      await Promise.all(stale.map((path) => fs.unlink(path).catch(() => {})));
+    },
+    now() {
+      return Date.now();
+    },
+  };
+}
+
+function queueFor(profile?: string): WorkspaceWriteQueue {
+  const key = profile || getActiveProfileNameSync();
+  let queue = writeQueues.get(key);
+  if (!queue) {
+    queue = new WorkspaceWriteQueue(makeQueueIo(profile));
+    writeQueues.set(key, queue);
+  }
+  return queue;
+}
+
+export async function spsSave(
+  ws: unknown,
+  profile?: string,
+  baseRev?: number,
+): Promise<SpsSaveResult> {
+  // The reset path (clearWorkspace sends null): bypass the queue/merge — there
+  // is nothing to protect — and drop the cached queue so the next save starts
+  // its revision tracking fresh from disk.
+  if (ws === null || typeof ws !== "object") {
+    writeQueues.delete(profile || getActiveProfileNameSync());
+    try {
+      await safeWriteFileAsync(workspacePath(profile), JSON.stringify(ws));
+      return { ok: true, rev: 0, merged: false };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+        rev: 0,
+        merged: false,
+      };
+    }
+  }
+
+  const outcome = await queueFor(profile).enqueue(ws as Workspace, baseRev);
+  const oversize =
+    typeof outcome.bytes === "number" &&
+    outcome.bytes > OVERSIZE_ADVISORY_BYTES;
+  return { ...outcome, oversize };
+}
+
+/** Copy the JSON blob to a timestamped backup (used before a vault migration,
+ *  and by the write queue's rolling-backup policy — first save per session and
+ *  every Nth save thereafter, pruned to a small rolling window). */
 export async function spsBackupWorkspace(
   profile?: string,
 ): Promise<string | null> {
