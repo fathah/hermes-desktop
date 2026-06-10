@@ -27,11 +27,11 @@ export class ForceSimulation {
   height: number;
 
   // Physics constants
-  charge = -280;      // coulomb repulsion force
+  charge = -280; // coulomb repulsion force
   linkStrength = 0.05; // spring stiffness
   linkRestLength = 90; // ideal spring distance
-  gravity = 0.015;     // gravity center-pull stiffness
-  damping = 0.85;      // velocity friction damping
+  gravity = 0.015; // gravity center-pull stiffness
+  damping = 0.85; // velocity friction damping
 
   constructor(nodes: SimNode[], edges: SimEdge[], width = 640, height = 640) {
     this.width = width;
@@ -88,7 +88,7 @@ export class ForceSimulation {
       for (let j = i + 1; j < n; j++) {
         const v = nodes[j];
         let dx = v.x - u.x;
-        let dy = v.y - u.y;
+        const dy = v.y - u.y;
         if (dx === 0) dx = 0.1; // avoid division by zero
         const distSq = dx * dx + dy * dy;
         const dist = Math.sqrt(distSq) || 0.1;
@@ -121,7 +121,7 @@ export class ForceSimulation {
       if (!u || !v) continue;
 
       let dx = v.x - u.x;
-      let dy = v.y - u.y;
+      const dy = v.y - u.y;
       if (dx === 0) dx = 0.1;
       const dist = Math.sqrt(dx * dx + dy * dy) || 0.1;
 

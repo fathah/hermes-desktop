@@ -1,6 +1,16 @@
+// Several callbacks below read non-reactive refs/helpers, so the React Compiler
+// can't preserve their hand-written dependency arrays. Correcting the deps would
+// change when each callback is recreated — a behavioural change we won't make in
+// this admin Chat screen, which is slated for removal. Keep the manual deps.
+/* eslint-disable react-hooks/preserve-manual-memoization */
 import { useCallback, useEffect, useRef } from "react";
 import type { ChatInputHandle } from "../ChatInput";
-import type { Attachment, ChatMessage, ChatBubbleMessage } from "../types";
+import type {
+  Attachment,
+  ChatMessage,
+  ChatBubbleMessage,
+  CouncilTurnMessage,
+} from "../types";
 import { getGroundInWorkspace } from "../../../lib/grounding";
 import { buildHandoffPrompt } from "../handoff";
 
@@ -163,17 +173,20 @@ export function useChatActions({
       if (activeModels.length > 1) {
         // Council Mode: Query multiple models in parallel
         const turnId = `council-turn-${Date.now()}`;
-        const responses = activeModels.reduce((acc, m) => {
-          const modelKey = `${m.provider}:${m.model}`;
-          acc[modelKey] = {
-            modelLabel: m.label,
-            provider: m.provider,
-            model: m.model,
-            content: "",
-            isLoading: true,
-          };
-          return acc;
-        }, {} as any);
+        const responses = activeModels.reduce(
+          (acc, m) => {
+            const modelKey = `${m.provider}:${m.model}`;
+            acc[modelKey] = {
+              modelLabel: m.label,
+              provider: m.provider,
+              model: m.model,
+              content: "",
+              isLoading: true,
+            };
+            return acc;
+          },
+          {} as CouncilTurnMessage["responses"],
+        );
 
         setMessages((prev) => [
           ...prev,

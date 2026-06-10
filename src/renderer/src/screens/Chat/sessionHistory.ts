@@ -1,5 +1,9 @@
 import type { Attachment } from "../../../../shared/attachments";
-import type { ChatMessage, ChatBubbleMessage } from "./types";
+import type {
+  ChatMessage,
+  ChatBubbleMessage,
+  CouncilTurnMessage,
+} from "./types";
 
 /**
  * Shape of one row from the main process's `getSessionMessages` IPC.
@@ -38,22 +42,25 @@ export interface DbHistoryItem {
  */
 export function groupCouncilTurns(messages: ChatMessage[]): ChatMessage[] {
   const grouped: ChatMessage[] = [];
-  let currentCouncilTurn: any = null;
+  let currentCouncilTurn: CouncilTurnMessage | null = null;
 
   for (const msg of messages) {
     if (
       msg.role === "agent" &&
       !("kind" in msg) &&
-      (msg as any).councilGroupId
+      (msg as ChatBubbleMessage).councilGroupId
     ) {
-      const gId = (msg as any).councilGroupId;
-      const modelKey = `${(msg as any).provider || "unknown"}:${(msg as any).model || "unknown"}`;
+      const gId = (msg as ChatBubbleMessage).councilGroupId;
+      const modelKey = `${(msg as ChatBubbleMessage).provider || "unknown"}:${(msg as ChatBubbleMessage).model || "unknown"}`;
 
-      if (currentCouncilTurn && currentCouncilTurn.id === `council-turn-${gId}`) {
+      if (
+        currentCouncilTurn &&
+        currentCouncilTurn.id === `council-turn-${gId}`
+      ) {
         currentCouncilTurn.responses[modelKey] = {
-          modelLabel: (msg as any).model || "Unknown Model",
-          provider: (msg as any).provider || "unknown",
-          model: (msg as any).model || "unknown",
+          modelLabel: (msg as ChatBubbleMessage).model || "Unknown Model",
+          provider: (msg as ChatBubbleMessage).provider || "unknown",
+          model: (msg as ChatBubbleMessage).model || "unknown",
           content: msg.content || "",
           isLoading: false,
         };
@@ -67,9 +74,9 @@ export function groupCouncilTurns(messages: ChatMessage[]): ChatMessage[] {
           role: "agent",
           responses: {
             [modelKey]: {
-              modelLabel: (msg as any).model || "Unknown Model",
-              provider: (msg as any).provider || "unknown",
-              model: (msg as any).model || "unknown",
+              modelLabel: (msg as ChatBubbleMessage).model || "Unknown Model",
+              provider: (msg as ChatBubbleMessage).provider || "unknown",
+              model: (msg as ChatBubbleMessage).model || "unknown",
               content: msg.content || "",
               isLoading: false,
             },

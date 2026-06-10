@@ -31,14 +31,14 @@ export function GraphView() {
 
   const nodeIds = useMemo(
     () => Array.from(new Set(tree.flatMap((n) => treeWalkIds(n)))),
-    [tree]
+    [tree],
   );
 
   // Re-sync simulation graph when nodes/edges change
   const { simNodes, simEdges } = useMemo(() => {
     const present = new Set(nodeIds);
     const liveEdges = edges.filter(
-      (e) => present.has(e.source) && present.has(e.target)
+      (e) => present.has(e.source) && present.has(e.target),
     );
 
     // Calculate node degree (number of connected edges)
@@ -81,7 +81,12 @@ export function GraphView() {
 
     // Instantiation or sync of simulation
     if (!simRef.current) {
-      simRef.current = new ForceSimulation(simNodes, simEdges, canvas.width, canvas.height);
+      simRef.current = new ForceSimulation(
+        simNodes,
+        simEdges,
+        canvas.width,
+        canvas.height,
+      );
     } else {
       simRef.current.setGraph(simNodes, simEdges);
     }
@@ -100,7 +105,8 @@ export function GraphView() {
       const txNormal = styles.getPropertyValue("--tx-1") || "#333333";
       const txMuted = styles.getPropertyValue("--tx-3") || "#888888";
       const accent = styles.getPropertyValue("--accent") || "#0066cc";
-      const accentSoft = styles.getPropertyValue("--accent-soft") || "rgba(0, 102, 204, 0.15)";
+      const accentSoft =
+        styles.getPropertyValue("--accent-soft") || "rgba(0, 102, 204, 0.15)";
       const border = styles.getPropertyValue("--hair-strong") || "#e5e5e5";
 
       // Clear canvas
@@ -172,7 +178,7 @@ export function GraphView() {
         // Node circle
         ctx.beginPath();
         ctx.arc(node.x, node.y, node.r + (isHovered ? 2 : 0), 0, Math.PI * 2);
-        
+
         ctx.fillStyle = isActive ? accent : accentSoft;
         ctx.fill();
 
@@ -224,7 +230,13 @@ export function GraphView() {
     const rawX = ((e.clientX - rect.left) / rect.width) * canvas.width;
     const rawY = ((e.clientY - rect.top) / rect.height) * canvas.height;
 
-    mouseRef.current = { x: rawX, y: rawY, rawX: e.clientX, rawY: e.clientY, down: true };
+    mouseRef.current = {
+      x: rawX,
+      y: rawY,
+      rawX: e.clientX,
+      rawY: e.clientY,
+      down: true,
+    };
 
     const world = screenToWorld(rawX, rawY);
 
@@ -242,7 +254,13 @@ export function GraphView() {
 
     if (hitNode) {
       dragNodeRef.current = hitNode;
+      // SimNode objects are ref-held mutable physics state — ForceSimulation
+      // mutates x/y/vx/vy in place every frame. Pinning the dragged node (fx/fy)
+      // is intentional imperative mutation, not React-managed state, so the
+      // compiler's immutability rule does not apply here.
+      /* eslint-disable-next-line react-hooks/immutability */
       hitNode.fx = hitNode.x;
+      // eslint-disable-next-line react-hooks/immutability
       hitNode.fy = hitNode.y;
     }
   };
@@ -283,17 +301,26 @@ export function GraphView() {
       }
     }
 
-    mouseRef.current = { x: rawX, y: rawY, rawX: e.clientX, rawY: e.clientY, down: mouse.down };
+    mouseRef.current = {
+      x: rawX,
+      y: rawY,
+      rawX: e.clientX,
+      rawY: e.clientY,
+      down: mouse.down,
+    };
   };
 
   const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (dragNodeRef.current) {
       dragNodeRef.current.fx = null;
       dragNodeRef.current.fy = null;
-      
+
       // If drag distance is small, count as a click and open the note
       const mouse = mouseRef.current;
-      const dist = Math.sqrt(Math.pow(e.clientX - mouse.rawX, 2) + Math.pow(e.clientY - mouse.rawY, 2));
+      const dist = Math.sqrt(
+        Math.pow(e.clientX - mouse.rawX, 2) +
+          Math.pow(e.clientY - mouse.rawY, 2),
+      );
       if (dist < 4) {
         openNote(dragNodeRef.current.id);
       }
@@ -353,8 +380,8 @@ export function GraphView() {
         <Icon name="pageGraph" size={16} />
         <span>Graph</span>
         <span style={{ color: "var(--tx-3)", fontWeight: 400, fontSize: 12 }}>
-          {simNodes.length} page{simNodes.length === 1 ? "" : "s"} · {simEdges.length}{" "}
-          link{simEdges.length === 1 ? "" : "s"}
+          {simNodes.length} page{simNodes.length === 1 ? "" : "s"} ·{" "}
+          {simEdges.length} link{simEdges.length === 1 ? "" : "s"}
         </span>
         <button
           onClick={() => {

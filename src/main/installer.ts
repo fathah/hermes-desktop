@@ -597,7 +597,7 @@ export async function runInstall(
     emit("✓ Administrator access granted\n");
   }
 
-  let askpass: any = null;
+  let askpass: Awaited<ReturnType<typeof setupAskpass>> | null = null;
   try {
     askpass = await setupAskpass(parentWindow ?? null);
   } catch (err) {

@@ -171,7 +171,7 @@ export function useChatIPC({
               const anyLoading = updated.some(
                 (m) =>
                   m.kind === "council_turn" &&
-                  Object.values(m.responses).some((r: any) => r.isLoading),
+                  Object.values(m.responses).some((r) => r.isLoading),
               );
               if (!anyLoading) {
                 setIsLoading(false);
@@ -235,7 +235,7 @@ export function useChatIPC({
             const anyLoading = updated.some(
               (m) =>
                 m.kind === "council_turn" &&
-                Object.values(m.responses).some((r: any) => r.isLoading),
+                Object.values(m.responses).some((r) => r.isLoading),
             );
             if (!anyLoading) {
               setIsLoading(false);

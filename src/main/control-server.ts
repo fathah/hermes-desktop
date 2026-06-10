@@ -236,12 +236,12 @@ function listenOnPort(port: number, maxAttempts = 10): Promise<number> {
       return;
     }
 
-    const cleanup = () => {
+    const cleanup = (): void => {
       serverInstance?.removeListener("listening", onListening);
       serverInstance?.removeListener("error", onError);
     };
 
-    const onListening = () => {
+    const onListening = (): void => {
       cleanup();
       currentPort = port;
       console.log(
@@ -262,7 +262,7 @@ function listenOnPort(port: number, maxAttempts = 10): Promise<number> {
       resolve(port);
     };
 
-    const onError = (err: { code?: string }) => {
+    const onError = (err: { code?: string }): void => {
       cleanup();
       if (err.code === "EADDRINUSE" && maxAttempts > 0) {
         console.warn(

@@ -12,9 +12,11 @@ export function ObsidianEditor() {
 
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<"clean" | "saving" | "synced">("clean");
+  const [syncStatus, setSyncStatus] = useState<"clean" | "saving" | "synced">(
+    "clean",
+  );
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  
+
   // Track standard profile key
   const profile = "default";
 
@@ -29,7 +31,9 @@ export function ObsidianEditor() {
         const data = await window.hermesAPI.readObsidianFile(path, profile);
         setContent(data);
       } catch (err) {
-        flash((err as Error).message || "Failed to read Obsidian note", { tone: "warn" });
+        flash((err as Error).message || "Failed to read Obsidian note", {
+          tone: "warn",
+        });
       } finally {
         setLoading(false);
       }
@@ -53,7 +57,7 @@ export function ObsidianEditor() {
         await window.hermesAPI.writeObsidianFile(path, val, profile);
         setSyncStatus("synced");
         setTimeout(() => setSyncStatus("clean"), 1500);
-      } catch (err) {
+      } catch {
         flash("Failed to save Obsidian note", { tone: "warn" });
         setSyncStatus("clean");
       }
@@ -96,8 +100,10 @@ export function ObsidianEditor() {
     try {
       await window.hermesAPI.openObsidianNote(path, profile);
       flash("Opening note in Obsidian app...");
-    } catch (err) {
-      flash("Obsidian is not running or bridge is disconnected", { tone: "warn" });
+    } catch {
+      flash("Obsidian is not running or bridge is disconnected", {
+        tone: "warn",
+      });
     }
   };
 
@@ -160,7 +166,11 @@ export function ObsidianEditor() {
             fontSize: 12,
           }}
         >
-          <Icon name="chevR" size={13} style={{ transform: "rotate(180deg)" }} />
+          <Icon
+            name="chevR"
+            size={13}
+            style={{ transform: "rotate(180deg)" }}
+          />
           Back
         </button>
 
@@ -201,7 +211,11 @@ export function ObsidianEditor() {
               }}
             />
           )}
-          {syncStatus === "saving" ? "Saving..." : syncStatus === "synced" ? "Saved" : "Synced"}
+          {syncStatus === "saving"
+            ? "Saving..."
+            : syncStatus === "synced"
+              ? "Saved"
+              : "Synced"}
         </span>
 
         <button
@@ -226,7 +240,14 @@ export function ObsidianEditor() {
       </div>
 
       {/* Editor Content Area */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", position: "relative" }}>
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          position: "relative",
+        }}
+      >
         <textarea
           value={content}
           onChange={(e) => handleContentChange(e.target.value)}

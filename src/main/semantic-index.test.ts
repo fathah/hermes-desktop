@@ -11,7 +11,7 @@ vi.mock("electron", () => ({
 
 vi.mock("readline", () => {
   const fns = {
-    createInterface: (options: any) => options.input,
+    createInterface: (options: { input: unknown }) => options.input,
   };
   return {
     ...fns,
@@ -19,9 +19,9 @@ vi.mock("readline", () => {
   };
 });
 
-vi.mock("fs", () => {
-  const actual = require("node:fs");
-  const existsSync = (path: string) => {
+vi.mock("fs", async () => {
+  const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
+  const existsSync = (path: string): boolean => {
     if (typeof path === "string" && path.includes("/mock/")) return true;
     return actual.existsSync(path);
   };
@@ -42,14 +42,17 @@ const { mockSpawn } = vi.hoisted(() => {
   };
 });
 
-vi.mock("child_process", () => {
-  const actual = require("node:child_process");
+vi.mock("child_process", async () => {
+  const actual =
+    await vi.importActual<typeof import("node:child_process")>(
+      "node:child_process",
+    );
   return {
     ...actual,
-    spawn: (...args: any[]) => mockSpawn(...args),
+    spawn: (...args: unknown[]) => mockSpawn(...args),
     default: {
       ...actual,
-      spawn: (...args: any[]) => mockSpawn(...args),
+      spawn: (...args: unknown[]) => mockSpawn(...args),
     },
   };
 });
@@ -63,7 +66,11 @@ vi.mock("./installer/paths", () => ({
 import { semanticManager } from "./semantic-index";
 
 describe("SemanticGraphManager", () => {
-  let mockProc: any;
+  let mockProc: EventEmitter & {
+    stdin?: unknown;
+    stdout?: unknown;
+    kill?: () => void;
+  };
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -71,20 +78,25 @@ describe("SemanticGraphManager", () => {
     mockSpawn.mockReset();
 
     // Create a mock child process with stdin/stdout streams
-    const stdoutEmitter = new EventEmitter() as any;
+    const stdoutEmitter = new EventEmitter() as EventEmitter & {
+      resume?: unknown;
+      pause?: unknown;
+    };
     stdoutEmitter.resume = vi.fn();
     stdoutEmitter.pause = vi.fn();
     const stdinMock = {
-      write: vi.fn((data: string, _encoding: string, cb: any) => {
+      write: vi.fn((data: string, _encoding: string, cb?: () => void) => {
         // Parse the message sent to stdin
         const req = JSON.parse(data.trim());
         // Simulate python process reply on stdout after a brief delay
         process.nextTick(() => {
-          let result: any = { ok: true };
+          let result: Record<string, unknown> = { ok: true };
           if (req.cmd === "search") {
             result = { results: [{ path: "test.md", score: 0.9 }] };
           } else if (req.cmd === "rag") {
-            result = { context: [{ path: "test.md", title: "Test", content: "hello" }] };
+            result = {
+              context: [{ path: "test.md", title: "Test", content: "hello" }],
+            };
           } else if (req.cmd === "graph") {
             result = { nodes: [], edges: [] };
           }
@@ -113,9 +125,13 @@ describe("SemanticGraphManager", () => {
 
   it("spawns the subprocess on the first command and manages its lifecycle", async () => {
     const searchPromise = semanticManager.search("query", 3);
-    
+
     expect(mockSpawn).toHaveBeenCalledTimes(1);
-    expect(mockSpawn).toHaveBeenCalledWith("/mock/bin/python", ["/mock/scripts/semantic_engine.py"], expect.any(Object));
+    expect(mockSpawn).toHaveBeenCalledWith(
+      "/mock/bin/python",
+      ["/mock/scripts/semantic_engine.py"],
+      expect.any(Object),
+    );
 
     const res = await searchPromise;
     expect(res.results).toHaveLength(1);
@@ -135,7 +151,9 @@ describe("SemanticGraphManager", () => {
   });
 
   it("coalesces successive index commands via the debounced triggerIndex", async () => {
-    const indexSpy = vi.spyOn(semanticManager, "index").mockResolvedValue({ ok: true });
+    const indexSpy = vi
+      .spyOn(semanticManager, "index")
+      .mockResolvedValue({ ok: true });
 
     semanticManager.triggerIndex("/vault/path/a");
     semanticManager.triggerIndex("/vault/path/b");

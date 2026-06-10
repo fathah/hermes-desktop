@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync, existsSync } from "fs";
+import { mkdtempSync, writeFileSync, rmSync, existsSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { execFileSync } from "child_process";
 
-
 const HERMES_PYTHON = "/Users/amar/.hermes/hermes-agent/venv/bin/python";
-const SEMANTIC_SEARCH_SCRIPT = "/Users/amar/.hermes/skills/search/vault-semantic-search/semantic_search.py";
+const SEMANTIC_SEARCH_SCRIPT =
+  "/Users/amar/.hermes/skills/search/vault-semantic-search/semantic_search.py";
 
 describe("Vault Semantic Search Tool", () => {
   let tempVaultDir: string;
@@ -18,7 +18,9 @@ describe("Vault Semantic Search Tool", () => {
     // Set up temp directories
     const runId = Math.random().toString(36).substring(7);
     tempVaultDir = mkdtempSync(join(tmpdir(), `hermes-vault-test-${runId}-`));
-    tempEmbeddingsDir = mkdtempSync(join(tmpdir(), `hermes-embeddings-test-${runId}-`));
+    tempEmbeddingsDir = mkdtempSync(
+      join(tmpdir(), `hermes-embeddings-test-${runId}-`),
+    );
     tempConfigPath = join(tempEmbeddingsDir, "config.yaml");
     tempEnvPath = join(tempEmbeddingsDir, "temp.env");
 
@@ -31,7 +33,7 @@ describe("Vault Semantic Search Tool", () => {
       `---
 title: Annual Leave Policy
 ---
-Employees are entitled to 25 days of annual paid time off (PTO) per year. Vacation requests must be submitted at least two weeks in advance.`
+Employees are entitled to 25 days of annual paid time off (PTO) per year. Vacation requests must be submitted at least two weeks in advance.`,
     );
 
     writeFileSync(
@@ -39,7 +41,7 @@ Employees are entitled to 25 days of annual paid time off (PTO) per year. Vacati
       `---
 title: SSH Key Management
 ---
-Generate a secure SSH key pair using ed25519. Ensure the private key has a passphrase and is kept in a secure vault.`
+Generate a secure SSH key pair using ed25519. Ensure the private key has a passphrase and is kept in a secure vault.`,
     );
 
     writeFileSync(
@@ -47,7 +49,7 @@ Generate a secure SSH key pair using ed25519. Ensure the private key has a passp
       `---
 title: European Geopolitics
 ---
-The security treaty signed in Geneva aims to stabilize trade and immigration policies across central European countries.`
+The security treaty signed in Geneva aims to stabilize trade and immigration policies across central European countries.`,
     );
   });
 
@@ -66,7 +68,7 @@ The security treaty signed in Geneva aims to stabilize trade and immigration pol
     writeFileSync(
       tempConfigPath,
       `vault_path: "${tempVaultDir}"
-api: "http://127.0.0.1:9999"`
+api: "http://127.0.0.1:9999"`,
     );
 
     const env = {
@@ -79,7 +81,11 @@ api: "http://127.0.0.1:9999"`
     };
 
     // Run semantic search script for "annual off-work guidelines"
-    const stdoutRaw = execFileSync(HERMES_PYTHON, [SEMANTIC_SEARCH_SCRIPT, "annual off-work guidelines", "3"], { env });
+    const stdoutRaw = execFileSync(
+      HERMES_PYTHON,
+      [SEMANTIC_SEARCH_SCRIPT, "annual off-work guidelines", "3"],
+      { env },
+    );
     const results = JSON.parse(stdoutRaw.toString().trim());
 
     expect(results).toBeDefined();
@@ -97,7 +103,7 @@ api: "http://127.0.0.1:9999"`
     writeFileSync(
       tempConfigPath,
       `vault_path: "${tempVaultDir}"
-api: "http://127.0.0.1:9999"`
+api: "http://127.0.0.1:9999"`,
     );
 
     const env = {
@@ -110,7 +116,9 @@ api: "http://127.0.0.1:9999"`
     };
 
     // First run to build initial index
-    execFileSync(HERMES_PYTHON, [SEMANTIC_SEARCH_SCRIPT, "some query", "1"], { env });
+    execFileSync(HERMES_PYTHON, [SEMANTIC_SEARCH_SCRIPT, "some query", "1"], {
+      env,
+    });
 
     // Verify metadata db exists and contains cached paths
     const dbPath = join(tempEmbeddingsDir, "metadata.db");
@@ -119,7 +127,7 @@ api: "http://127.0.0.1:9999"`
     // Query SQLite metadata db using python to avoid node-sqlite3 dependency
     const dbStdout = execFileSync(HERMES_PYTHON, [
       "-c",
-      `import sqlite3, json; conn = sqlite3.connect("${dbPath.replace(/\\/g, "/")}"); c = conn.cursor(); c.execute("SELECT path FROM notes_meta"); print(json.dumps([r[0] for r in c.fetchall()]))`
+      `import sqlite3, json; conn = sqlite3.connect("${dbPath.replace(/\\/g, "/")}"); c = conn.cursor(); c.execute("SELECT path FROM notes_meta"); print(json.dumps([r[0] for r in c.fetchall()]))`,
     ]);
     const paths = JSON.parse(dbStdout.toString().trim());
     expect(paths).toContain("annual-leave.md");
@@ -133,15 +141,19 @@ api: "http://127.0.0.1:9999"`
       `---
 title: SSH Key Management
 ---
-Generate a secure SSH key pair using ed25519. Ensure the private key has a passphrase. Follow annual security guidelines for compliance.`
+Generate a secure SSH key pair using ed25519. Ensure the private key has a passphrase. Follow annual security guidelines for compliance.`,
     );
 
     // Run query for "annual guidelines" which overlaps with modified ssh-keys.md
-    const stdoutRaw = execFileSync(HERMES_PYTHON, [SEMANTIC_SEARCH_SCRIPT, "annual guidelines", "3"], { env });
+    const stdoutRaw = execFileSync(
+      HERMES_PYTHON,
+      [SEMANTIC_SEARCH_SCRIPT, "annual guidelines", "3"],
+      { env },
+    );
     const results = JSON.parse(stdoutRaw.toString().trim());
 
     // Both annual-leave.md and ssh-keys.md should match
-    const matchedTitles = results.map((r: any) => r.title);
+    const matchedTitles = results.map((r: { title: string }) => r.title);
     expect(matchedTitles).toContain("annual-leave");
     expect(matchedTitles).toContain("ssh-keys");
   });
@@ -154,24 +166,29 @@ Generate a secure SSH key pair using ed25519. Ensure the private key has a passp
       if (response.ok) {
         const body = await response.json();
         // nomic-embed-text or supergemma must be pulled
-        const models = body.models?.map((m: any) => m.name) || [];
-        ollamaAlive = models.includes("nomic-embed-text:latest") || 
-                      models.includes("nomic-embed-text") ||
-                      models.includes("hf.co/Jiunsong/supergemma4-26b-uncensored-gguf-v2:Q4_K_M");
+        const models = body.models?.map((m: { name: string }) => m.name) || [];
+        ollamaAlive =
+          models.includes("nomic-embed-text:latest") ||
+          models.includes("nomic-embed-text") ||
+          models.includes(
+            "hf.co/Jiunsong/supergemma4-26b-uncensored-gguf-v2:Q4_K_M",
+          );
       }
     } catch {
       ollamaAlive = false;
     }
 
     if (!ollamaAlive) {
-      console.log("Skipping live Ollama test: Ollama service or required models not available.");
+      console.log(
+        "Skipping live Ollama test: Ollama service or required models not available.",
+      );
       return;
     }
 
     writeFileSync(
       tempConfigPath,
       `vault_path: "${tempVaultDir}"
-api: "http://127.0.0.1:11434"`
+api: "http://127.0.0.1:11434"`,
     );
 
     const env = {
@@ -183,7 +200,11 @@ api: "http://127.0.0.1:11434"`
     };
 
     // Test semantic matching for "vacation days" -> should match annual-leave.md (which contains only "paid time off")
-    const stdoutRaw = execFileSync(HERMES_PYTHON, [SEMANTIC_SEARCH_SCRIPT, "vacation days", "1"], { env });
+    const stdoutRaw = execFileSync(
+      HERMES_PYTHON,
+      [SEMANTIC_SEARCH_SCRIPT, "vacation days", "1"],
+      { env },
+    );
     const results = JSON.parse(stdoutRaw.toString().trim());
 
     expect(results.length).toBeGreaterThan(0);

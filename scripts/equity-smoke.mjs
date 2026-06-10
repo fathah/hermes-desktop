@@ -197,7 +197,7 @@ await shot("03-equity-report", async () => {
   await app.evaluate(({ ipcMain }, stubs) => {
     console.log("STUBBING send-message AND sps-read-row");
     ipcMain.removeHandler("send-message");
-    ipcMain.handle("send-message", async (event, prompt, profile) => {
+    ipcMain.handle("send-message", async (event, prompt) => {
       console.log("MOCK send-message called with prompt:", prompt.slice(0, 100));
       return { response: stubs.REPORT_MD };
     });

@@ -153,7 +153,7 @@ async function expandQueryVariants(
       setTimeout(() => resolve({ content: "" }), QUERY_EXPANSION_TIMEOUT_MS),
     );
     // Lazy load chatCompletionOnce to resolve circular dependency
-    const { chatCompletionOnce } = require("./chat-client");
+    const { chatCompletionOnce } = await import("./chat-client");
     const res = await Promise.race([
       chatCompletionOnce([{ role: "user", content: prompt }], profile),
       timeout,

@@ -210,7 +210,7 @@ describe("CLI fallback session id propagation", () => {
         text: async () => "",
         json: async () => ({}),
       } as Response;
-    }) as any;
+    }) as unknown as typeof globalThis.fetch;
   });
 
   afterEach(() => {

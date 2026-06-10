@@ -11,6 +11,7 @@ import type {
   ReasoningMessage,
   ToolCallMessage,
   ToolResultMessage,
+  CouncilTurnMessage,
 } from "./types";
 
 interface MessageListProps {
@@ -188,16 +189,16 @@ export const MessageList = memo(function MessageList({
         }
 
         if (k === "council_turn") {
-          const councilMsg = msg as any;
+          const councilMsg = msg as CouncilTurnMessage;
           const responses = Object.entries(councilMsg.responses);
-          const isAnyLoading = responses.some(([_, r]: any) => r.isLoading);
+          const isAnyLoading = responses.some(([, r]) => r.isLoading);
 
           return (
             <div key={msg.id} className="chat-message chat-message-agent">
               {showAvatar ? <HermesAvatar /> : <AvatarSpacer />}
               <div style={{ width: "100%" }}>
                 <div className="chat-council-turn">
-                  {responses.map(([key, r]: any) => {
+                  {responses.map(([key, r]) => {
                     const statusText = r.isLoading ? "Streaming..." : "Done";
                     return (
                       <div key={key} className="chat-council-col">
@@ -263,7 +264,7 @@ export const MessageList = memo(function MessageList({
                     <button
                       className="chat-council-synthesize-btn"
                       onClick={() => {
-                        const allResponses = responses.map(([_, r]: any) => ({
+                        const allResponses = responses.map(([, r]) => ({
                           model: r.model,
                           provider: r.provider,
                           content: r.content,

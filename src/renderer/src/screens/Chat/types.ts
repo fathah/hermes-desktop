@@ -72,6 +72,7 @@ export interface CouncilTurnMessage {
       isLoading: boolean;
       reasoning?: string;
       error?: string;
+      messageId?: string | number;
     };
   };
 }

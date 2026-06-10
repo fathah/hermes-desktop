@@ -9,12 +9,27 @@ import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 
 interface RequestPayload {
   cmd: string;
-  args?: Record<string, any>;
+  args?: Record<string, unknown>;
+}
+
+// Response shapes from semantic_engine.py (see the helper's command handlers).
+export interface SemanticSearchResult {
+  results: Array<{ path: string; score: number }>;
+}
+export interface SemanticRagResult {
+  context: Array<{ path: string; title: string; content: string }>;
+}
+export interface SemanticGraphResult {
+  nodes: unknown[];
+  edges: unknown[];
+}
+export interface SemanticIndexResult {
+  ok: boolean;
 }
 
 interface PendingRequest {
-  resolve: (value: any) => void;
-  reject: (reason: any) => void;
+  resolve: (value: unknown) => void;
+  reject: (reason?: unknown) => void;
 }
 
 class SemanticGraphManager {
@@ -34,7 +49,9 @@ class SemanticGraphManager {
     }
 
     if (!existsSync(HERMES_PYTHON)) {
-      console.error(`[SemanticIndex] Python executable missing at: ${HERMES_PYTHON}`);
+      console.error(
+        `[SemanticIndex] Python executable missing at: ${HERMES_PYTHON}`,
+      );
       return;
     }
 
@@ -99,15 +116,22 @@ class SemanticGraphManager {
     }
   }
 
-  private sendCommand<T = any>(payload: RequestPayload): Promise<T> {
+  private sendCommand<T = unknown>(payload: RequestPayload): Promise<T> {
     this.start();
     if (!this.proc || !this.proc.stdin || this.proc.killed) {
-      return Promise.reject(new Error("Semantic helper process is not running"));
+      return Promise.reject(
+        new Error("Semantic helper process is not running"),
+      );
     }
 
     return new Promise<T>((resolve, reject) => {
       const id = ++this.reqIdCounter;
-      this.pendingRequests.set(id, { resolve, reject });
+      // The manager erases T per-request (responses are dynamic JSON), so bridge
+      // the typed Promise resolver to the unknown-typed pending slot.
+      this.pendingRequests.set(id, {
+        resolve: resolve as (value: unknown) => void,
+        reject,
+      });
 
       const line = JSON.stringify({ id, ...payload }) + "\n";
       this.proc!.stdin!.write(line, "utf-8", (err) => {
@@ -119,8 +143,11 @@ class SemanticGraphManager {
     });
   }
 
-  async index(vaultPath: string): Promise<any> {
-    return this.sendCommand({ cmd: "index", args: { vault_path: vaultPath } });
+  async index(vaultPath: string): Promise<SemanticIndexResult> {
+    return this.sendCommand<SemanticIndexResult>({
+      cmd: "index",
+      args: { vault_path: vaultPath },
+    });
   }
 
   triggerIndex(vaultPath: string): void {
@@ -139,16 +166,22 @@ class SemanticGraphManager {
     }, 1500);
   }
 
-  async search(query: string, limit = 5): Promise<any> {
-    return this.sendCommand({ cmd: "search", args: { query, limit } });
+  async search(query: string, limit = 5): Promise<SemanticSearchResult> {
+    return this.sendCommand<SemanticSearchResult>({
+      cmd: "search",
+      args: { query, limit },
+    });
   }
 
-  async graph(): Promise<any> {
-    return this.sendCommand({ cmd: "graph" });
+  async graph(): Promise<SemanticGraphResult> {
+    return this.sendCommand<SemanticGraphResult>({ cmd: "graph" });
   }
 
-  async rag(query: string, limit = 3): Promise<any> {
-    return this.sendCommand({ cmd: "rag", args: { query, limit } });
+  async rag(query: string, limit = 3): Promise<SemanticRagResult> {
+    return this.sendCommand<SemanticRagResult>({
+      cmd: "rag",
+      args: { query, limit },
+    });
   }
 }
 

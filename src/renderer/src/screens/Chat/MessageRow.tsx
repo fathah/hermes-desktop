@@ -1,5 +1,12 @@
 import { memo, useMemo, useState } from "react";
-import { Volume2, Square as StopIcon, Sparkles, Brain, Cpu, Bot } from "lucide-react";
+import {
+  Volume2,
+  Square as StopIcon,
+  Sparkles,
+  Brain,
+  Cpu,
+  Bot,
+} from "lucide-react";
 import icon from "../../assets/icon.png";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
 import { AttachmentChip } from "../../components/AttachmentChip";
@@ -8,7 +15,13 @@ import { useI18n } from "../../components/useI18n";
 import { parseMediaTokens } from "./mediaUtils";
 import type { Attachment, ChatBubbleMessage, ChatMessage } from "./types";
 
-function ModelBadge({ model, provider }: { model?: string; provider?: string }): React.JSX.Element | null {
+function ModelBadge({
+  model,
+  provider,
+}: {
+  model?: string;
+  provider?: string;
+}): React.JSX.Element | null {
   if (!model) return null;
   const p = (provider || "").toLowerCase() || (model || "").toLowerCase();
 
@@ -161,7 +174,12 @@ export const MessageRow = memo(function MessageRow({
         <HermesAvatar />
       )}
       <div className={`chat-bubble chat-bubble-${msg.role}`}>
-        {msg.role === "agent" && <ModelBadge model={(msg as any).model} provider={(msg as any).provider} />}
+        {msg.role === "agent" && (
+          <ModelBadge
+            model={(msg as ChatBubbleMessage).model}
+            provider={(msg as ChatBubbleMessage).provider}
+          />
+        )}
         {hasAttachments && (
           <div className="chat-message-attachments">
             {msg.attachments!.map((att) => (
