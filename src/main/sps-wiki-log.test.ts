@@ -21,6 +21,12 @@ describe("formatWikiLogLine", () => {
       "## [2026-01-02] file-answer | (no summary)",
     );
   });
+  it("renders the digest op", () => {
+    const d = new Date("2026-06-15T00:00:00Z");
+    expect(
+      formatWikiLogLine("digest", "Weekly external-sessions digest", d),
+    ).toBe("## [2026-06-15] digest | Weekly external-sessions digest");
+  });
 });
 
 describe("appendWikiLog", () => {

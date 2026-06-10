@@ -159,7 +159,11 @@ export function ScheduledModal() {
     setBusyId(p.id);
     try {
       await commitChangeset(p.changeset, ingestCommitPage);
-      await window.hermesAPI.spsAppendWikiLog?.("research", p.summary);
+      // Log the wiki evolution under the originating schedule's kind so a digest
+      // commit isn't mislabelled "research".
+      const sched = schedules.find((s) => s.id === p.scheduleId);
+      const op = sched?.kind === "digest" ? "digest" : "research";
+      await window.hermesAPI.spsAppendWikiLog?.(op, p.summary);
       await window.hermesAPI.srRemovePending(p.id);
       await refresh();
       selectPage(p.pageId);

@@ -1028,7 +1028,7 @@ interface HermesAPI {
     };
   }>;
   spsAppendWikiLog: (
-    op: "ingest" | "file-answer" | "lint" | "research",
+    op: "ingest" | "file-answer" | "lint" | "research" | "digest",
     summary: string,
     profile?: string,
   ) => Promise<void>;

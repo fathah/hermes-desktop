@@ -1,17 +1,22 @@
 // sps-wiki-log.ts — append-only wiki-evolution log (Karpathy's `log.md`).
 //
-// Records each change to the wiki — ingest / file-answer / lint — as a parseable,
-// chronological line so the wiki's growth is auditable and the agent can read its
-// own history. Distinct from audit-log.ts (which records APP actions): this logs
-// WIKI evolution and lives inside the vault as a normal markdown page so it is
-// indexed and queryable.
+// Records each change to the wiki — ingest / file-answer / lint / research /
+// digest — as a parseable, chronological line so the wiki's growth is auditable
+// and the agent can read its own history. Distinct from audit-log.ts (which
+// records APP actions): this logs WIKI evolution and lives inside the vault as a
+// normal markdown page so it is indexed and queryable.
 //
 // log.md is a META page — excluded from orphan lint (see note-index orphans()).
 // Best-effort throughout: a failed log write must never block a commit.
 import { promises as fs } from "fs";
 import { join } from "path";
 
-export type WikiLogOp = "ingest" | "file-answer" | "lint" | "research";
+export type WikiLogOp =
+  | "ingest"
+  | "file-answer"
+  | "lint"
+  | "research"
+  | "digest";
 
 const META_HEADER = `---\ntitle: "Log"\n---\n# Wiki log\n\n`;
 
