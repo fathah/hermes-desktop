@@ -8,7 +8,6 @@ import Sessions from "../Sessions/Sessions";
 import Agents from "../Agents/Agents";
 import Settings from "../Settings/Settings";
 import Skills from "../Skills/Skills";
-import Personalization from "../Personalization/Personalization";
 import Tools from "../Tools/Tools";
 import Gateway from "../Gateway/Gateway";
 import Models from "../Models/Models";
@@ -35,7 +34,7 @@ import {
   Kanban as KanbanIcon,
   Download,
 } from "../../assets/icons";
-import { BarChart3, UserCog, ShieldCheck, Brain } from "lucide-react";
+import { BarChart3, ShieldCheck, Brain } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 import { loadAndApplyActiveSkin } from "../../utils/skin";
@@ -52,8 +51,8 @@ type View = AdminView;
 
 // Nav is grouped by user goal rather than a flat 14-item scan. Group headers are
 // static labels; the whole Control Center still collapses via the master toggle.
-// "insights"/"personalization"/"capabilityReview" now have real i18n keys (see
-// navigation.ts) so the old `label` literal override is gone.
+// "insights"/"capabilityReview" now have real i18n keys (see navigation.ts) so
+// the old `label` literal override is gone.
 interface NavItem {
   view: View;
   icon: LucideIcon;
@@ -76,11 +75,6 @@ const NAV_GROUPS: NavGroup[] = [
     headerKey: "navigation.groupAgents",
     items: [
       { view: "agents", icon: Users, labelKey: "navigation.agents" },
-      {
-        view: "personalization",
-        icon: UserCog,
-        labelKey: "navigation.personalization",
-      },
       { view: "skills", icon: Puzzle, labelKey: "navigation.skills" },
       {
         view: "capabilityReview",
@@ -560,19 +554,6 @@ function Layout({
               <RemoteNotice feature="Skills" />
             ) : (
               <Skills profile={activeProfile} visible={view === "skills"} />
-            )}
-          </div>
-        )}
-
-        {visitedViews.has("personalization") && (
-          <div style={paneStyle("personalization")}>
-            {remoteMode ? (
-              <RemoteNotice feature="Personalization" />
-            ) : (
-              <Personalization
-                profile={activeProfile}
-                visible={view === "personalization"}
-              />
             )}
           </div>
         )}
