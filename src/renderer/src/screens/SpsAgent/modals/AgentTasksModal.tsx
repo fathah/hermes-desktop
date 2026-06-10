@@ -8,6 +8,7 @@
 // existing read IPC only: kanbanListBoards + kanbanListTasks.
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useStore } from "../store";
+import { SpsModal } from "./SpsModal";
 import type { KanbanTask, KanbanBoard } from "../../../../../shared/kanban";
 
 // Column order mirrors the old board; labels are the status keys themselves
@@ -82,16 +83,6 @@ export function AgentTasksModal() {
     void load();
   }, [load]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-    // onClose is stable enough; intentionally run once.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const currentBoard = useMemo(
     () => boards.find((b) => b.is_current) ?? boards[0] ?? null,
     [boards],
@@ -109,173 +100,166 @@ export function AgentTasksModal() {
   }, [tasks]);
 
   return (
-    <div
-      className="scrim"
-      onMouseDown={onClose}
-      style={{ alignItems: "flex-start" }}
+    <SpsModal
+      title="📋 Agent tasks"
+      onClose={onClose}
+      width={720}
+      maxWidth="94vw"
+      headerActions={
+        <button
+          type="button"
+          className="cover-btn"
+          onClick={() => void load()}
+          disabled={loading}
+          title="Refresh"
+          aria-label="Refresh"
+        >
+          ↻
+        </button>
+      }
     >
-      <div
-        className="modal"
-        style={{ width: 720, maxWidth: "94vw" }}
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <div className="modal-head">
-          <h3>📋 Agent tasks</h3>
-          <button
-            type="button"
-            className="cover-btn"
-            onClick={() => void load()}
-            disabled={loading}
-            title="Refresh"
-            aria-label="Refresh"
-            style={{ marginLeft: "auto" }}
-          >
-            ↻
-          </button>
+      <div className="modal-body">
+        <div
+          className="c-name"
+          style={{ marginBottom: 8, color: "var(--tx-3)" }}
+        >
+          {currentBoard
+            ? `${currentBoard.name} · ${currentBoard.total} task${
+                currentBoard.total === 1 ? "" : "s"
+              }`
+            : "Agent-managed board (read-only)"}
         </div>
-        <div className="modal-body">
-          <div
-            className="c-name"
-            style={{ marginBottom: 8, color: "var(--tx-3)" }}
-          >
-            {currentBoard
-              ? `${currentBoard.name} · ${currentBoard.total} task${
-                  currentBoard.total === 1 ? "" : "s"
-                }`
-              : "Agent-managed board (read-only)"}
-          </div>
 
-          {remoteUnsupported ? (
-            <div className="c-name" style={{ color: "var(--tx-3)" }}>
-              The task board isn&apos;t available over a plain remote HTTP
-              connection. Switch to a local or SSH connection to view it.
-            </div>
-          ) : error ? (
-            <div className="c-name" style={{ color: "var(--danger, #c00)" }}>
-              {error}
-            </div>
-          ) : loading && tasks.length === 0 ? (
-            <div className="c-name" style={{ color: "var(--tx-3)" }}>
-              Loading…
-            </div>
-          ) : tasks.length === 0 ? (
-            <div className="c-name" style={{ color: "var(--tx-3)" }}>
-              No tasks on this board yet. The agent adds tasks here as it works.
-            </div>
-          ) : (
-            <div
-              className="scroll"
-              style={{ maxHeight: "62vh", display: "flex", gap: 8 }}
-            >
-              {COLUMNS.map((col) => {
-                const colTasks = byColumn[col.key] ?? [];
-                return (
+        {remoteUnsupported ? (
+          <div className="c-name" style={{ color: "var(--tx-3)" }}>
+            The task board isn&apos;t available over a plain remote HTTP
+            connection. Switch to a local or SSH connection to view it.
+          </div>
+        ) : error ? (
+          <div className="c-name" style={{ color: "var(--danger, #c00)" }}>
+            {error}
+          </div>
+        ) : loading && tasks.length === 0 ? (
+          <div className="c-name" style={{ color: "var(--tx-3)" }}>
+            Loading…
+          </div>
+        ) : tasks.length === 0 ? (
+          <div className="c-name" style={{ color: "var(--tx-3)" }}>
+            No tasks on this board yet. The agent adds tasks here as it works.
+          </div>
+        ) : (
+          <div
+            className="scroll"
+            style={{ maxHeight: "62vh", display: "flex", gap: 8 }}
+          >
+            {COLUMNS.map((col) => {
+              const colTasks = byColumn[col.key] ?? [];
+              return (
+                <div
+                  key={col.key}
+                  style={{ flex: 1, minWidth: 0 }}
+                  aria-label={col.label}
+                >
                   <div
-                    key={col.key}
-                    style={{ flex: 1, minWidth: 0 }}
-                    aria-label={col.label}
+                    className="c-name"
+                    style={{
+                      marginBottom: 6,
+                      textTransform: "uppercase",
+                      fontSize: 11,
+                      letterSpacing: 0.4,
+                      color: "var(--tx-3)",
+                    }}
                   >
-                    <div
-                      className="c-name"
-                      style={{
-                        marginBottom: 6,
-                        textTransform: "uppercase",
-                        fontSize: 11,
-                        letterSpacing: 0.4,
-                        color: "var(--tx-3)",
-                      }}
-                    >
-                      {col.label} ({colTasks.length})
-                    </div>
-                    {colTasks.map((task) => {
-                      const pr = priorityLabel(task.priority);
-                      const age = ageLabel(task.created_at);
-                      const isOpen = expanded === task.id;
-                      return (
-                        <button
-                          type="button"
-                          key={task.id}
-                          className="lst-row"
-                          onClick={() => setExpanded(isOpen ? null : task.id)}
+                    {col.label} ({colTasks.length})
+                  </div>
+                  {colTasks.map((task) => {
+                    const pr = priorityLabel(task.priority);
+                    const age = ageLabel(task.created_at);
+                    const isOpen = expanded === task.id;
+                    return (
+                      <button
+                        type="button"
+                        key={task.id}
+                        className="lst-row"
+                        onClick={() => setExpanded(isOpen ? null : task.id)}
+                        style={{
+                          width: "100%",
+                          textAlign: "left",
+                          marginBottom: 6,
+                          display: "block",
+                        }}
+                        title={task.body || task.title}
+                      >
+                        <div
                           style={{
-                            width: "100%",
-                            textAlign: "left",
-                            marginBottom: 6,
-                            display: "block",
+                            display: "flex",
+                            gap: 6,
+                            alignItems: "center",
                           }}
-                          title={task.body || task.title}
                         >
-                          <div
+                          {pr && (
+                            <span
+                              className="c-tag"
+                              style={{ flex: "0 0 auto" }}
+                            >
+                              {pr}
+                            </span>
+                          )}
+                          <span
                             style={{
-                              display: "flex",
-                              gap: 6,
-                              alignItems: "center",
+                              flex: 1,
+                              minWidth: 0,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: isOpen ? "normal" : "nowrap",
                             }}
                           >
-                            {pr && (
-                              <span
-                                className="c-tag"
-                                style={{ flex: "0 0 auto" }}
-                              >
-                                {pr}
-                              </span>
-                            )}
+                            {task.title}
+                          </span>
+                          {age && (
                             <span
                               style={{
-                                flex: 1,
-                                minWidth: 0,
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: isOpen ? "normal" : "nowrap",
-                              }}
-                            >
-                              {task.title}
-                            </span>
-                            {age && (
-                              <span
-                                style={{
-                                  flex: "0 0 auto",
-                                  color: "var(--tx-3)",
-                                  fontSize: 11,
-                                }}
-                              >
-                                {age}
-                              </span>
-                            )}
-                          </div>
-                          {isOpen && task.body && (
-                            <div
-                              style={{
-                                marginTop: 6,
-                                fontSize: 12,
-                                color: "var(--tx-2)",
-                                whiteSpace: "pre-wrap",
-                              }}
-                            >
-                              {task.body}
-                            </div>
-                          )}
-                          {isOpen && task.assignee && (
-                            <div
-                              style={{
-                                marginTop: 4,
-                                fontSize: 11,
+                                flex: "0 0 auto",
                                 color: "var(--tx-3)",
+                                fontSize: 11,
                               }}
                             >
-                              @{task.assignee}
-                            </div>
+                              {age}
+                            </span>
                           )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+                        </div>
+                        {isOpen && task.body && (
+                          <div
+                            style={{
+                              marginTop: 6,
+                              fontSize: 12,
+                              color: "var(--tx-2)",
+                              whiteSpace: "pre-wrap",
+                            }}
+                          >
+                            {task.body}
+                          </div>
+                        )}
+                        {isOpen && task.assignee && (
+                          <div
+                            style={{
+                              marginTop: 4,
+                              fontSize: 11,
+                              color: "var(--tx-3)",
+                            }}
+                          >
+                            @{task.assignee}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
-    </div>
+    </SpsModal>
   );
 }

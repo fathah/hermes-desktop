@@ -13,6 +13,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "../store";
 import { Icon } from "../components/Icon";
+import { SpsModal } from "./SpsModal";
 import { research, type WorkSummary } from "../research";
 
 type Mode = "research" | "papers";
@@ -79,17 +80,6 @@ export function ResearchModal() {
       setHasApiKey(!!cfg.hasApiKey);
     });
   }, []);
-
-  // Global Escape closes the modal regardless of focus, unless a research run is
-  // in flight (don't yank the modal out from under a streaming run).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && phase !== "running") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase]);
 
   const enableWeb = async () => {
     setEnabling(true);
@@ -210,358 +200,335 @@ export function ResearchModal() {
   const busy = phase === "running";
 
   return (
-    <div
-      className="scrim"
-      onMouseDown={() => phase !== "running" && onClose()}
-      style={{ alignItems: "flex-start" }}
-    >
-      <div
-        className="modal"
-        style={{ width: 640, maxWidth: "92vw" }}
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <div
-          className="modal-head"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <h3>🔬 Research</h3>
-          <div style={{ display: "flex", gap: 6 }}>
-            <button
-              className={`pal-chip${mode === "research" ? " on" : ""}`}
-              onClick={() => setMode("research")}
-              disabled={busy}
-            >
-              Any topic
-            </button>
-            <button
-              className={`pal-chip${mode === "papers" ? " on" : ""}`}
-              onClick={() => setMode("papers")}
-              disabled={busy}
-            >
-              Academic papers
-            </button>
-          </div>
+    <SpsModal
+      title="🔬 Research"
+      onClose={onClose}
+      width={640}
+      closeGuard={() => phase !== "running"}
+      headerActions={
+        <div style={{ display: "flex", gap: 6 }}>
+          <button
+            className={`pal-chip${mode === "research" ? " on" : ""}`}
+            onClick={() => setMode("research")}
+            disabled={busy}
+          >
+            Any topic
+          </button>
+          <button
+            className={`pal-chip${mode === "papers" ? " on" : ""}`}
+            onClick={() => setMode("papers")}
+            disabled={busy}
+          >
+            Academic papers
+          </button>
         </div>
-
-        <div className="modal-body">
-          {mode === "research" ? (
-            <>
-              {webEnabled === false && (
-                <div
-                  style={{
-                    marginBottom: 12,
-                    padding: 12,
-                    border: "1px solid var(--bd)",
-                    borderRadius: 8,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 10,
-                  }}
-                >
-                  <small style={{ color: "var(--tx-3)" }}>
-                    Web research is off. Enable the agent&apos;s web tools to
-                    research live topics.
-                  </small>
-                  <button
-                    className="cover-btn"
-                    onClick={() => void enableWeb()}
-                    disabled={enabling}
-                    style={{ flexShrink: 0 }}
-                  >
-                    {enabling ? "Enabling…" : "Enable web research"}
-                  </button>
-                </div>
-              )}
-
-              <div className="pal-input" style={{ marginBottom: 12 }}>
-                <Icon
-                  name="search"
-                  size={18}
-                  style={{ color: "var(--tx-3)" }}
-                />
-                <input
-                  ref={topicRef}
-                  value={topic}
-                  onChange={(e) => setTopic(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") void doResearch();
-                  }}
-                  placeholder="Research any topic — a market, a regulation, a vendor, “how do I…”"
-                  disabled={busy}
-                />
-                <button
-                  className="cover-btn"
-                  onClick={() => void doResearch()}
-                  disabled={busy || !topic.trim() || webEnabled === false}
-                >
-                  {busy ? "Researching…" : "Research"}
-                </button>
-                <button
-                  className="cover-btn"
-                  title="Keep this topic current automatically (weekly)"
-                  disabled={busy || !topic.trim()}
-                  onClick={() => void onScheduleThis()}
-                >
-                  ⏱ Schedule
-                </button>
-              </div>
-
-              {phase === "idle" && (
-                <div className="cmts-empty" style={{ padding: "20px 0" }}>
-                  Hermes researches the topic on the live web, then saves a
-                  synthesized, cited page into your Knowledge Base — with one
-                  click to undo.
-                </div>
-              )}
-
-              {(busy || (phase !== "idle" && !!progress)) && (
-                <>
-                  {busy && (
-                    <small
-                      style={{
-                        color: "var(--tx-3)",
-                        display: "block",
-                        marginBottom: 6,
-                      }}
-                    >
-                      {toolNote
-                        ? `Researching · ${toolNote}…`
-                        : "Researching the web…"}
-                    </small>
-                  )}
-                  {!!progress && (
-                    <div
-                      className="scroll"
-                      style={{
-                        maxHeight: "40vh",
-                        whiteSpace: "pre-wrap",
-                        fontSize: 13,
-                        lineHeight: 1.5,
-                        color: "var(--tx-2)",
-                        border: "1px solid var(--bd)",
-                        borderRadius: 8,
-                        padding: 12,
-                      }}
-                    >
-                      {progress}
-                    </div>
-                  )}
-                </>
-              )}
-
-              {phase === "done" && (
-                <div
-                  style={{
-                    marginTop: 12,
-                    padding: 12,
-                    border: "1px solid var(--bd)",
-                    borderRadius: 8,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 10,
-                  }}
-                >
-                  <div style={{ minWidth: 0 }}>
-                    <div className="c-name">✓ Saved to your Knowledge Base</div>
-                    {resultSummary && (
-                      <small style={{ color: "var(--tx-3)", display: "block" }}>
-                        {resultSummary}
-                      </small>
-                    )}
-                  </div>
-                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                    <button className="cover-btn" onClick={() => undo()}>
-                      Undo
-                    </button>
-                    <button className="cover-btn" onClick={onClose}>
-                      Open
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {(phase === "warn" || phase === "error") && (
-                <div
-                  style={{
-                    marginTop: 12,
-                    padding: 12,
-                    border: "1px solid var(--bd)",
-                    borderRadius: 8,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 10,
-                  }}
-                >
-                  <small style={{ color: "var(--tx-3)" }}>{resultMsg}</small>
-                  <button
-                    className="cover-btn"
-                    onClick={resetResearch}
-                    style={{ flexShrink: 0 }}
-                  >
-                    Try again
-                  </button>
-                </div>
-              )}
-            </>
-          ) : (
-            <>
+      }
+    >
+      <div className="modal-body">
+        {mode === "research" ? (
+          <>
+            {webEnabled === false && (
               <div
                 style={{
+                  marginBottom: 12,
+                  padding: 12,
+                  border: "1px solid var(--bd)",
+                  borderRadius: 8,
                   display: "flex",
-                  justifyContent: "flex-end",
-                  marginBottom: 8,
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 10,
                 }}
               >
+                <small style={{ color: "var(--tx-3)" }}>
+                  Web research is off. Enable the agent&apos;s web tools to
+                  research live topics.
+                </small>
                 <button
                   className="cover-btn"
-                  onClick={() => setSettingsOpen((v) => !v)}
-                  title="Polite pool email & API key"
+                  onClick={() => void enableWeb()}
+                  disabled={enabling}
+                  style={{ flexShrink: 0 }}
                 >
-                  ⚙ Settings
+                  {enabling ? "Enabling…" : "Enable web research"}
                 </button>
               </div>
+            )}
 
-              {settingsOpen && (
-                <div
-                  style={{
-                    marginBottom: 12,
-                    padding: 12,
-                    border: "1px solid var(--bd)",
-                    borderRadius: 8,
-                    display: "grid",
-                    gap: 10,
-                  }}
-                >
-                  <label style={{ fontSize: 12, color: "var(--tx-3)" }}>
-                    Contact email — opts into OpenAlex&apos;s faster “polite
-                    pool”
-                    <div className="pal-input" style={{ marginTop: 4 }}>
-                      <input
-                        type="email"
-                        value={mailto}
-                        onChange={(e) => setMailto(e.target.value)}
-                        placeholder="you@example.com"
-                      />
-                    </div>
-                  </label>
-                  <label style={{ fontSize: 12, color: "var(--tx-3)" }}>
-                    API key (optional) — raises the free daily allowance
-                    <div className="pal-input" style={{ marginTop: 4 }}>
-                      <input
-                        type="password"
-                        value={apiKeyInput}
-                        onChange={(e) => setApiKeyInput(e.target.value)}
-                        placeholder={
-                          hasApiKey
-                            ? "•••••••• set — leave blank to keep"
-                            : "OpenAlex API key"
-                        }
-                      />
-                    </div>
-                  </label>
-                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                    <button
-                      className="cover-btn"
-                      onClick={() => void saveConfig()}
-                      disabled={savingCfg}
-                    >
-                      {savingCfg ? "Saving…" : "Save"}
-                    </button>
-                  </div>
-                  <small style={{ color: "var(--tx-4)", fontSize: 11 }}>
-                    Stored locally on this machine. Both are optional — search
-                    works without them.
-                  </small>
-                </div>
-              )}
+            <div className="pal-input" style={{ marginBottom: 12 }}>
+              <Icon name="search" size={18} style={{ color: "var(--tx-3)" }} />
+              <input
+                ref={topicRef}
+                value={topic}
+                onChange={(e) => setTopic(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void doResearch();
+                }}
+                placeholder="Research any topic — a market, a regulation, a vendor, “how do I…”"
+                disabled={busy}
+              />
+              <button
+                className="cover-btn"
+                onClick={() => void doResearch()}
+                disabled={busy || !topic.trim() || webEnabled === false}
+              >
+                {busy ? "Researching…" : "Research"}
+              </button>
+              <button
+                className="cover-btn"
+                title="Keep this topic current automatically (weekly)"
+                disabled={busy || !topic.trim()}
+                onClick={() => void onScheduleThis()}
+              >
+                ⏱ Schedule
+              </button>
+            </div>
 
-              <div className="pal-input" style={{ marginBottom: 12 }}>
-                <Icon
-                  name="search"
-                  size={18}
-                  style={{ color: "var(--tx-3)" }}
-                />
-                <input
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") void runSearch();
-                  }}
-                  placeholder="Search OpenAlex — topic, title, author…"
-                />
-                <button
-                  className="cover-btn"
-                  onClick={() => void runSearch()}
-                  disabled={loading || !q.trim()}
-                >
-                  {loading ? "Searching…" : "Search"}
-                </button>
+            {phase === "idle" && (
+              <div className="cmts-empty" style={{ padding: "20px 0" }}>
+                Hermes researches the topic on the live web, then saves a
+                synthesized, cited page into your Knowledge Base — with one
+                click to undo.
               </div>
+            )}
 
-              {!searched && (
-                <div className="cmts-empty" style={{ padding: "20px 0" }}>
-                  Search the open catalog of 250M+ scholarly works. Pick a paper
-                  and Hermes saves a plain-language summary into your workspace.
-                </div>
-              )}
-              {searched && !loading && results.length === 0 && (
-                <div className="cmts-empty" style={{ padding: "20px 0" }}>
-                  No papers found for “{q}”.
-                </div>
-              )}
-
-              <div className="scroll" style={{ maxHeight: "52vh" }}>
-                {results.map((w) => (
-                  <div
-                    key={w.id}
-                    className="lst-row"
+            {(busy || (phase !== "idle" && !!progress)) && (
+              <>
+                {busy && (
+                  <small
                     style={{
-                      borderRadius: 6,
-                      alignItems: "flex-start",
-                      gap: 10,
-                      height: "auto",
-                      minHeight: "var(--row-h, 32px)",
-                      padding: "8px 6px",
+                      color: "var(--tx-3)",
+                      display: "block",
+                      marginBottom: 6,
                     }}
                   >
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div className="c-name" style={{ whiteSpace: "normal" }}>
-                        {w.title}
-                      </div>
-                      <small style={{ color: "var(--tx-3)", display: "block" }}>
-                        {formatByline(w)}
-                      </small>
-                    </div>
-                    {w.isOA && (
-                      <span
-                        className="pal-chip on"
-                        style={{ pointerEvents: "none" }}
-                      >
-                        OA
-                      </span>
-                    )}
-                    <button
-                      className="cover-btn"
-                      onClick={() => void savePaper(w)}
-                      disabled={savingId !== null}
-                    >
-                      {savingId === w.id ? "Saving…" : "Save"}
-                    </button>
+                    {toolNote
+                      ? `Researching · ${toolNote}…`
+                      : "Researching the web…"}
+                  </small>
+                )}
+                {!!progress && (
+                  <div
+                    className="scroll"
+                    style={{
+                      maxHeight: "40vh",
+                      whiteSpace: "pre-wrap",
+                      fontSize: 13,
+                      lineHeight: 1.5,
+                      color: "var(--tx-2)",
+                      border: "1px solid var(--bd)",
+                      borderRadius: 8,
+                      padding: 12,
+                    }}
+                  >
+                    {progress}
                   </div>
-                ))}
+                )}
+              </>
+            )}
+
+            {phase === "done" && (
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: 12,
+                  border: "1px solid var(--bd)",
+                  borderRadius: 8,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 10,
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div className="c-name">✓ Saved to your Knowledge Base</div>
+                  {resultSummary && (
+                    <small style={{ color: "var(--tx-3)", display: "block" }}>
+                      {resultSummary}
+                    </small>
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                  <button className="cover-btn" onClick={() => undo()}>
+                    Undo
+                  </button>
+                  <button className="cover-btn" onClick={onClose}>
+                    Open
+                  </button>
+                </div>
               </div>
-            </>
-          )}
-        </div>
+            )}
+
+            {(phase === "warn" || phase === "error") && (
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: 12,
+                  border: "1px solid var(--bd)",
+                  borderRadius: 8,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 10,
+                }}
+              >
+                <small style={{ color: "var(--tx-3)" }}>{resultMsg}</small>
+                <button
+                  className="cover-btn"
+                  onClick={resetResearch}
+                  style={{ flexShrink: 0 }}
+                >
+                  Try again
+                </button>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                marginBottom: 8,
+              }}
+            >
+              <button
+                className="cover-btn"
+                onClick={() => setSettingsOpen((v) => !v)}
+                title="Polite pool email & API key"
+              >
+                ⚙ Settings
+              </button>
+            </div>
+
+            {settingsOpen && (
+              <div
+                style={{
+                  marginBottom: 12,
+                  padding: 12,
+                  border: "1px solid var(--bd)",
+                  borderRadius: 8,
+                  display: "grid",
+                  gap: 10,
+                }}
+              >
+                <label style={{ fontSize: 12, color: "var(--tx-3)" }}>
+                  Contact email — opts into OpenAlex&apos;s faster “polite pool”
+                  <div className="pal-input" style={{ marginTop: 4 }}>
+                    <input
+                      type="email"
+                      value={mailto}
+                      onChange={(e) => setMailto(e.target.value)}
+                      placeholder="you@example.com"
+                    />
+                  </div>
+                </label>
+                <label style={{ fontSize: 12, color: "var(--tx-3)" }}>
+                  API key (optional) — raises the free daily allowance
+                  <div className="pal-input" style={{ marginTop: 4 }}>
+                    <input
+                      type="password"
+                      value={apiKeyInput}
+                      onChange={(e) => setApiKeyInput(e.target.value)}
+                      placeholder={
+                        hasApiKey
+                          ? "•••••••• set — leave blank to keep"
+                          : "OpenAlex API key"
+                      }
+                    />
+                  </div>
+                </label>
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <button
+                    className="cover-btn"
+                    onClick={() => void saveConfig()}
+                    disabled={savingCfg}
+                  >
+                    {savingCfg ? "Saving…" : "Save"}
+                  </button>
+                </div>
+                <small style={{ color: "var(--tx-4)", fontSize: 11 }}>
+                  Stored locally on this machine. Both are optional — search
+                  works without them.
+                </small>
+              </div>
+            )}
+
+            <div className="pal-input" style={{ marginBottom: 12 }}>
+              <Icon name="search" size={18} style={{ color: "var(--tx-3)" }} />
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void runSearch();
+                }}
+                placeholder="Search OpenAlex — topic, title, author…"
+              />
+              <button
+                className="cover-btn"
+                onClick={() => void runSearch()}
+                disabled={loading || !q.trim()}
+              >
+                {loading ? "Searching…" : "Search"}
+              </button>
+            </div>
+
+            {!searched && (
+              <div className="cmts-empty" style={{ padding: "20px 0" }}>
+                Search the open catalog of 250M+ scholarly works. Pick a paper
+                and Hermes saves a plain-language summary into your workspace.
+              </div>
+            )}
+            {searched && !loading && results.length === 0 && (
+              <div className="cmts-empty" style={{ padding: "20px 0" }}>
+                No papers found for “{q}”.
+              </div>
+            )}
+
+            <div className="scroll" style={{ maxHeight: "52vh" }}>
+              {results.map((w) => (
+                <div
+                  key={w.id}
+                  className="lst-row"
+                  style={{
+                    borderRadius: 6,
+                    alignItems: "flex-start",
+                    gap: 10,
+                    height: "auto",
+                    minHeight: "var(--row-h, 32px)",
+                    padding: "8px 6px",
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="c-name" style={{ whiteSpace: "normal" }}>
+                      {w.title}
+                    </div>
+                    <small style={{ color: "var(--tx-3)", display: "block" }}>
+                      {formatByline(w)}
+                    </small>
+                  </div>
+                  {w.isOA && (
+                    <span
+                      className="pal-chip on"
+                      style={{ pointerEvents: "none" }}
+                    >
+                      OA
+                    </span>
+                  )}
+                  <button
+                    className="cover-btn"
+                    onClick={() => void savePaper(w)}
+                    disabled={savingId !== null}
+                  >
+                    {savingId === w.id ? "Saving…" : "Save"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
-    </div>
+    </SpsModal>
   );
 }
 

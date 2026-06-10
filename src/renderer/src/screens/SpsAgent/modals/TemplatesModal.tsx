@@ -2,6 +2,7 @@
 import { blk, uid } from "../lib/ids";
 import { useStore } from "../store";
 import { Icon } from "../components/Icon";
+import { SpsModal } from "./SpsModal";
 import type { Block } from "../types";
 
 interface Template {
@@ -203,94 +204,85 @@ export function TemplatesModal() {
   const parent = templatesOpen?.parent ?? null;
 
   return (
-    <div
-      className="scrim"
-      onMouseDown={onClose}
-      style={{ alignItems: "flex-start" }}
-    >
-      <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
-        <div className="modal-head">
-          <h3>New page</h3>
-        </div>
-        {/* Scrollable so the full template grid — incl. the last card,
-            Import PDF — stays reachable when the modal exceeds the window. */}
-        <div
-          className="modal-body"
-          style={{ maxHeight: "70vh", overflowY: "auto" }}
-        >
-          {userTemplates.length > 0 && (
-            <>
-              <div className="type-section-label" style={{ marginBottom: 8 }}>
-                Your templates
-              </div>
-              <div className="tpl-grid" style={{ marginBottom: 18 }}>
-                {userTemplates.map((tp) => (
-                  <div
-                    key={tp.id}
-                    className="tpl-card tpl-card-user"
-                    onClick={() =>
-                      createFromTemplate(
-                        // Mint fresh block ids per instantiation so two pages
-                        // made from one template never share block identity.
-                        tp.blocks.map((b) => ({ ...b, id: uid() })),
-                        { emoji: tp.emoji, name: tp.name },
-                        parent,
-                      )
-                    }
+    <SpsModal title="New page" onClose={onClose}>
+      {/* Scrollable so the full template grid — incl. the last card,
+          Import PDF — stays reachable when the modal exceeds the window. */}
+      <div
+        className="modal-body"
+        style={{ maxHeight: "70vh", overflowY: "auto" }}
+      >
+        {userTemplates.length > 0 && (
+          <>
+            <div className="type-section-label" style={{ marginBottom: 8 }}>
+              Your templates
+            </div>
+            <div className="tpl-grid" style={{ marginBottom: 18 }}>
+              {userTemplates.map((tp) => (
+                <div
+                  key={tp.id}
+                  className="tpl-card tpl-card-user"
+                  onClick={() =>
+                    createFromTemplate(
+                      // Mint fresh block ids per instantiation so two pages
+                      // made from one template never share block identity.
+                      tp.blocks.map((b) => ({ ...b, id: uid() })),
+                      { emoji: tp.emoji, name: tp.name },
+                      parent,
+                    )
+                  }
+                >
+                  <button
+                    className="tpl-del"
+                    title="Delete template"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeUserTemplate(tp.id);
+                    }}
                   >
-                    <button
-                      className="tpl-del"
-                      title="Delete template"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeUserTemplate(tp.id);
-                      }}
-                    >
-                      <Icon name="trash" size={13} />
-                    </button>
-                    <div className="tpl-emoji">{tp.emoji}</div>
-                    <div className="tpl-name">{tp.name}</div>
-                    <div className="tpl-desc">{tp.desc}</div>
-                  </div>
-                ))}
-              </div>
-              <div className="type-section-label" style={{ marginBottom: 8 }}>
-                Start from a template
-              </div>
-            </>
-          )}
-          <div className="tpl-grid">
-            {TEMPLATES.map((tp) => (
-              <div
-                key={tp.id}
-                className="tpl-card"
-                onClick={() =>
-                  createFromTemplate(
-                    tp.blocks(),
-                    { emoji: tp.emoji, name: tp.name },
-                    parent,
-                  )
-                }
-              >
-                <div className="tpl-emoji">{tp.emoji}</div>
-                <div className="tpl-name">{tp.name}</div>
-                <div className="tpl-desc">{tp.desc}</div>
-              </div>
-            ))}
+                    <Icon name="trash" size={13} />
+                  </button>
+                  <div className="tpl-emoji">{tp.emoji}</div>
+                  <div className="tpl-name">{tp.name}</div>
+                  <div className="tpl-desc">{tp.desc}</div>
+                </div>
+              ))}
+            </div>
+            <div className="type-section-label" style={{ marginBottom: 8 }}>
+              Start from a template
+            </div>
+          </>
+        )}
+        <div className="tpl-grid">
+          {TEMPLATES.map((tp) => (
             <div
-              key="import-pdf"
+              key={tp.id}
               className="tpl-card"
-              onClick={() => void importPdf()}
+              onClick={() =>
+                createFromTemplate(
+                  tp.blocks(),
+                  { emoji: tp.emoji, name: tp.name },
+                  parent,
+                )
+              }
             >
-              <div className="tpl-emoji">📄</div>
-              <div className="tpl-name">Import PDF</div>
-              <div className="tpl-desc">
-                Add a document to your knowledgebase (text PDFs).
-              </div>
+              <div className="tpl-emoji">{tp.emoji}</div>
+              <div className="tpl-name">{tp.name}</div>
+              <div className="tpl-desc">{tp.desc}</div>
+            </div>
+          ))}
+          <div
+            key="import-pdf"
+            className="tpl-card"
+            onClick={() => void importPdf()}
+          >
+            <div className="tpl-emoji">📄</div>
+            <div className="tpl-name">Import PDF</div>
+            <div className="tpl-desc">
+              Add a document to your knowledgebase (text PDFs).
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </SpsModal>
   );
 }
