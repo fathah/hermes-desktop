@@ -87,6 +87,7 @@ import { registerDualHandler } from "./utility";
 import {
   getSchedulerConfig,
   setSchedulerConfig,
+  getSchedulerSkips,
   SchedulerConfig,
 } from "../scheduler";
 import {
@@ -559,6 +560,9 @@ export function registerConfigIpc(): void {
       return true;
     },
   );
+  // Phase 1.2 — per-job skip telemetry (locked/timeout-reaped). Surfaced in the
+  // Scheduled modal in Phase 2.2 so a job the scheduler keeps skipping is visible.
+  ipcMain.handle("get-scheduler-skips", () => getSchedulerSkips());
 
   // Spending Cap Config
   ipcMain.handle("get-spending-cap-config", () => getSpendingCapConfig());

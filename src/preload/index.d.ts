@@ -1369,6 +1369,12 @@ interface HermesAPI {
     enabled?: boolean;
     tickIntervalMs?: number;
   }) => Promise<boolean>;
+  getSchedulerSkips: () => Promise<
+    Record<
+      string,
+      { skipCount: number; lastSkipAt: number; lastReason: string }
+    >
+  >;
 
   getSpendingCapConfig: () => Promise<{
     maxSpendingLimit: number;

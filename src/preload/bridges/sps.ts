@@ -506,6 +506,13 @@ export const spsBridge = {
     tickIntervalMs?: number;
   }): Promise<boolean> => ipcRenderer.invoke("set-scheduler-config", settings),
 
+  getSchedulerSkips: (): Promise<
+    Record<
+      string,
+      { skipCount: number; lastSkipAt: number; lastReason: string }
+    >
+  > => ipcRenderer.invoke("get-scheduler-skips"),
+
   getSpendingCapConfig: (): Promise<{
     maxSpendingLimit: number;
     spendingCapAction: string;

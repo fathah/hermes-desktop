@@ -4,12 +4,19 @@ import {
   mkdirSync,
   createWriteStream,
   writeFileSync,
+  readFileSync,
   unlinkSync,
 } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import { desktopCapturer, app, powerMonitor } from "electron";
 import { HERMES_HOME, HERMES_PYTHON, hermesCliArgs } from "./installer";
+import {
+  decideLockAcquisition,
+  parseLockRecord,
+  serializeLockRecord,
+  type LockRecord,
+} from "./scheduler-lock";
 import { getActiveProfileNameSync, profileHome } from "./utils";
 import { listCronJobs } from "./cronjobs";
 import { triggerSelfHealing } from "./self-healing";
@@ -56,6 +63,91 @@ export async function captureScreenshot(
 
 let schedulerInterval: ReturnType<typeof setInterval> | null = null;
 const activeRuns = new Map<string, boolean>();
+
+// Phase 1.2 — self-healing routine locks.
+//
+// A run that overshoots this is presumed wedged: its lock becomes stealable and a
+// reap timer kills the child and releases the lock so the job can run again.
+const JOB_TIMEOUT_MS = 15 * 60 * 1000;
+
+function lockDir(): string {
+  return join(HERMES_HOME, "locks");
+}
+
+function lockPathFor(jobId: string): string {
+  return join(lockDir(), `${jobId}.lock`);
+}
+
+// `process.kill(pid, 0)` sends no signal but performs the permission/existence
+// check: ESRCH => the process is gone; EPERM => alive but not ours (still alive).
+function isPidAlive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+function readExistingLock(lockFile: string): LockRecord | null {
+  if (!existsSync(lockFile)) return null;
+  try {
+    return parseLockRecord(readFileSync(lockFile, "utf-8"));
+  } catch {
+    return null;
+  }
+}
+
+// Persisted skip telemetry so a job that the scheduler keeps skipping is visible
+// rather than silently dead. Exposed via IPC (get-scheduler-skips); the Scheduled
+// modal surfaces it in Phase 2.2.
+export interface JobSkipInfo {
+  skipCount: number;
+  lastSkipAt: number;
+  lastReason: string;
+}
+
+function skipsPath(): string {
+  return join(HERMES_HOME, "scheduler-skips.json");
+}
+
+export function getSchedulerSkips(): Record<string, JobSkipInfo> {
+  try {
+    const raw = readFileSync(skipsPath(), "utf-8");
+    const parsed = JSON.parse(raw) as Record<string, JobSkipInfo>;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function recordSkip(jobId: string, reason: string): void {
+  try {
+    const all = getSchedulerSkips();
+    const prev = all[jobId];
+    all[jobId] = {
+      skipCount: (prev?.skipCount ?? 0) + 1,
+      lastSkipAt: Date.now(),
+      lastReason: reason,
+    };
+    writeFileSync(skipsPath(), JSON.stringify(all, null, 2), "utf-8");
+  } catch (err) {
+    console.error("[SCHEDULER] Failed to persist skip telemetry:", err);
+  }
+}
+
+function clearSkip(jobId: string): void {
+  try {
+    const all = getSchedulerSkips();
+    if (all[jobId]) {
+      delete all[jobId];
+      writeFileSync(skipsPath(), JSON.stringify(all, null, 2), "utf-8");
+    }
+  } catch {
+    // best-effort
+  }
+}
 
 export interface SchedulerConfig {
   enabled: boolean;
@@ -114,7 +206,9 @@ export async function tickScheduler(profile?: string): Promise<void> {
     const currentHour = now.getHours();
     if (currentHour >= 3 && last3AmRunDate !== todayStr) {
       last3AmRunDate = todayStr;
-      console.log(`[SCHEDULER] Triggering 3:00 AM local time Dream Cycle (Date: ${todayStr})`);
+      console.log(
+        `[SCHEDULER] Triggering 3:00 AM local time Dream Cycle (Date: ${todayStr})`,
+      );
       void runDreamCycle(activeProfile);
     }
   } catch (err) {
@@ -123,12 +217,20 @@ export async function tickScheduler(profile?: string): Promise<void> {
 
   // Check 15 minutes of idle time Dream Cycle trigger
   try {
-    if (typeof app !== "undefined" && app.isReady() && typeof powerMonitor !== "undefined" && powerMonitor && typeof powerMonitor.getSystemIdleTime === "function") {
+    if (
+      typeof app !== "undefined" &&
+      app.isReady() &&
+      typeof powerMonitor !== "undefined" &&
+      powerMonitor &&
+      typeof powerMonitor.getSystemIdleTime === "function"
+    ) {
       const idleTime = powerMonitor.getSystemIdleTime();
       const isIdleNow = idleTime >= 900; // 15 minutes
       if (isIdleNow && !wasIdle) {
         wasIdle = true;
-        console.log(`[SCHEDULER] System idle for 15 minutes (idle time: ${idleTime}s). Triggering Dream Cycle.`);
+        console.log(
+          `[SCHEDULER] System idle for 15 minutes (idle time: ${idleTime}s). Triggering Dream Cycle.`,
+        );
         void runDreamCycle(activeProfile);
       } else if (!isIdleNow) {
         wasIdle = false;
@@ -183,19 +285,40 @@ export async function runJobHeadless(
     return false;
   }
 
-  const lockFile = join("/tmp", `hermes-routine-${jobId}.lock`);
-  if (existsSync(lockFile)) {
+  const lockFile = lockPathFor(jobId);
+  const existingLock = readExistingLock(lockFile);
+  const decision = decideLockAcquisition(
+    existingLock,
+    Date.now(),
+    JOB_TIMEOUT_MS,
+    isPidAlive,
+  );
+  if (decision.type === "blocked") {
+    recordSkip(jobId, "locked");
     console.warn(
-      `[SCHEDULER] Job "${jobName}" (${jobId}) is locked by another runner. Skipping.`,
+      `[SCHEDULER] Job "${jobName}" (${jobId}) is locked by a live runner ` +
+        `(pid ${existingLock?.pid}). Skipping.`,
     );
     return false;
   }
+  if (decision.type === "steal") {
+    console.warn(
+      `[SCHEDULER] Stealing ${decision.reason} lock for job "${jobName}" ` +
+        `(${jobId}, prev pid ${existingLock?.pid}).`,
+    );
+  }
 
   try {
-    writeFileSync(lockFile, String(process.pid), "utf-8");
+    mkdirSync(lockDir(), { recursive: true });
+    const record: LockRecord = { pid: process.pid, startedAt: Date.now() };
+    writeFileSync(lockFile, serializeLockRecord(record), "utf-8");
   } catch (err) {
     console.error(`[SCHEDULER] Failed to create lockfile ${lockFile}:`, err);
   }
+
+  // A clean acquisition means this job is healthy again — clear any stale skip
+  // telemetry so the "keeps getting skipped" warning resolves on its own.
+  clearSkip(jobId);
 
   activeRuns.set(jobId, true);
   const startTime = Date.now();
@@ -240,7 +363,40 @@ export async function runJobHeadless(
         logStream.write(chunk);
       });
 
+      // Reap a wedged run: if the child never exits within the timeout, kill it,
+      // release the lock and resolve false. Without this a hung run would hold its
+      // lock until the next acquisition's stale-steal — this bounds the damage and
+      // frees the OS process. Cleared the moment the child exits normally.
+      const reapTimer = setTimeout(() => {
+        console.error(
+          `[SCHEDULER] Job "${jobName}" (${jobId}) exceeded ${JOB_TIMEOUT_MS}ms — reaping.`,
+        );
+        try {
+          proc.kill("SIGKILL");
+        } catch {
+          // already gone
+        }
+        try {
+          logStream.write(
+            `\n=== REAPED: exceeded ${JOB_TIMEOUT_MS}ms timeout ===\n`,
+          );
+          logStream.end();
+        } catch {
+          // ignore
+        }
+        activeRuns.delete(jobId);
+        try {
+          if (existsSync(lockFile)) unlinkSync(lockFile);
+        } catch {
+          // ignore
+        }
+        recordSkip(jobId, "timeout-reaped");
+        resolve(false);
+      }, JOB_TIMEOUT_MS);
+      reapTimer.unref?.();
+
       proc.on("close", async (code) => {
+        clearTimeout(reapTimer);
         const duration = Date.now() - startTime;
         logStream.write(
           `\n=== END ROUTINE RUN: Exit Code ${code} (Duration: ${duration}ms) ===\n`,
@@ -281,6 +437,7 @@ export async function runJobHeadless(
       });
 
       proc.on("error", async (err) => {
+        clearTimeout(reapTimer);
         logStream.write(`\nProcess spawn error: ${err.message}\n`);
         logStream.end();
         activeRuns.delete(jobId);
