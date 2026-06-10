@@ -21,6 +21,10 @@ import {
   type ExternalSourceConfig,
   type ExternalSourceStatus,
 } from "../../../../../shared/external-context";
+import {
+  CADENCES,
+  type Cadence,
+} from "../../../../../shared/scheduledResearch";
 
 type View = "search" | "settings";
 
@@ -41,12 +45,23 @@ export function ExternalSessionsModal() {
   const flash = useStore((s) => s.flash);
   const onClose = () => setExternalSessionsOpen(false);
 
-  const createDigest = async () => {
-    await window.hermesAPI?.srCreate?.({
+  const createDigest = async (cadence: Cadence, source?: ExternalSource) => {
+    const label = source ? EXTERNAL_SOURCE_LABELS[source] : null;
+    // The topic encodes the scope so distinct-scope digests get distinct pages
+    // (createSchedule rejects a duplicate pageId).
+    const topic = label
+      ? `External sessions digest — ${label}`
+      : "External sessions digest";
+    const res = await window.hermesAPI?.srCreate?.({
       kind: "digest",
-      topic: "External sessions digest",
-      cadence: "weekly",
+      topic,
+      cadence,
+      scope: source ? { source } : undefined,
     });
+    if (res && !res.ok) {
+      flash(res.error ?? "Couldn't create the digest", { tone: "warn" });
+      return;
+    }
     setExternalSessionsOpen(false);
     setScheduledOpen(true);
   };
@@ -397,11 +412,13 @@ function SettingsView(props: {
   onScan: () => void;
   onRebuild: () => void;
   onSetMaxAge: (days: number | null) => void;
-  onCreateDigest: () => Promise<void>;
+  onCreateDigest: (cadence: Cadence, source?: ExternalSource) => Promise<void>;
   onExposeMcp: () => Promise<void>;
   mcpState: "idle" | "working" | "done";
 }) {
   const maxAgeDays = props.status?.maxAgeDays ?? null;
+  const [digestCadence, setDigestCadence] = useState<Cadence>("weekly");
+  const [digestSource, setDigestSource] = useState<ExternalSource | "">("");
   const statusBySource = new Map<ExternalSource, ExternalSourceStatus>(
     (props.status?.sources ?? []).map((s) => [s.source, s]),
   );
@@ -463,14 +480,48 @@ function SettingsView(props: {
         }}
       >
         <small style={{ color: "var(--tx-3)" }}>
-          Keep a living weekly digest of these sessions in your KB
+          Keep a living digest of these sessions in your KB
         </small>
-        <button
-          className="cover-btn"
-          onClick={() => void props.onCreateDigest()}
-        >
-          + Weekly digest
-        </button>
+        <div style={{ display: "flex", gap: 6 }}>
+          <select
+            className="cover-btn"
+            value={digestCadence}
+            onChange={(e) => setDigestCadence(e.target.value as Cadence)}
+            title="How often to refresh the digest"
+          >
+            {CADENCES.map((c) => (
+              <option key={c} value={c}>
+                {c[0].toUpperCase() + c.slice(1)}
+              </option>
+            ))}
+          </select>
+          <select
+            className="cover-btn"
+            value={digestSource}
+            onChange={(e) =>
+              setDigestSource(e.target.value as ExternalSource | "")
+            }
+            title="Limit the digest to one tool (optional)"
+          >
+            <option value="">All tools</option>
+            {EXTERNAL_SOURCES.map((s) => (
+              <option key={s} value={s}>
+                {EXTERNAL_SOURCE_LABELS[s]}
+              </option>
+            ))}
+          </select>
+          <button
+            className="cover-btn"
+            onClick={() =>
+              void props.onCreateDigest(
+                digestCadence,
+                digestSource || undefined,
+              )
+            }
+          >
+            + Digest
+          </button>
+        </div>
       </div>
 
       <div

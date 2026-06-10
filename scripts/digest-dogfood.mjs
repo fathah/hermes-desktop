@@ -194,6 +194,20 @@ await shot("01-enable-source", async () => {
   await win.waitForTimeout(500);
   await win.keyboard.press("Enter");
   await win.waitForSelector(".modal", { timeout: 8000 });
+  // Ensure we're on the Sources view (the modal opens on search then flips to
+  // settings async — click the chip so we don't race that flip), then wait for
+  // the Claude Code row to render before toggling it on.
+  await win
+    .locator(".modal .pal-chip", { hasText: "Sources" })
+    .first()
+    .click({ timeout: 8000 });
+  await win.waitForFunction(
+    () =>
+      [...document.querySelectorAll(".lst-row")].some((r) =>
+        /Claude Code/.test(r.textContent || ""),
+      ),
+    { timeout: 8000 },
+  );
   await win.evaluate(() => {
     const row = [...document.querySelectorAll(".lst-row")].find((r) =>
       /Claude Code/.test(r.textContent || ""),
@@ -202,13 +216,28 @@ await shot("01-enable-source", async () => {
       ?.querySelector("button")
       ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
-  await win.waitForTimeout(1500);
+  // Wait until the backfill has actually indexed the seeded session (the Claude
+  // Code row shows a non-zero session count) so the digest isn't run on an empty
+  // index. For the empty-period case (AGE_DAYS>7) the session is still indexed —
+  // it's only excluded by the digest's weekly WINDOW, so this wait still holds.
+  await win
+    .waitForFunction(
+      () => {
+        const row = [...document.querySelectorAll(".lst-row")].find((r) =>
+          /Claude Code/.test(r.textContent || ""),
+        );
+        return /[1-9]\d* session/.test(row?.textContent || "");
+      },
+      { timeout: 8000 },
+    )
+    .catch(() => {});
+  await win.waitForTimeout(500);
 });
 
-// 2 — "+ Weekly digest" → creates the digest schedule + opens the Scheduled modal.
+// 2 — "+ Digest" (default weekly / all tools) → creates the schedule + opens Scheduled.
 await shot("02-scheduled-modal", async () => {
   await win
-    .locator(".modal .cover-btn", { hasText: "Weekly digest" })
+    .locator(".modal .cover-btn", { hasText: "+ Digest" })
     .first()
     .click({ timeout: 8000 });
   await win.waitForTimeout(1200);
@@ -228,7 +257,20 @@ await shot("03-run-now", async () => {
     );
     runBtn?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
-  await win.waitForTimeout(2500);
+  // Capture the transient run-outcome toast (poll briefly).
+  let toast = "";
+  for (let i = 0; i < 30; i++) {
+    toast = await win
+      .evaluate(() => {
+        const el = document.querySelector(".toast, [class*='toast']");
+        return (el && el.textContent) || "";
+      })
+      .catch(() => "");
+    if (toast) break;
+    await win.waitForTimeout(100);
+  }
+  console.log("RUN_TOAST:", JSON.stringify(toast));
+  await win.waitForTimeout(1800);
 });
 
 // 4 — Apply the pending update (happy path) → page created.
