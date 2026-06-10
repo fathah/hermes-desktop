@@ -31,7 +31,14 @@ export type FileAction =
 export function decideFileAction(
   file: DiscoveredFile,
   record: FileRecord | undefined,
+  olderThanMs?: number,
 ): FileAction {
+  // Recency filter: skip files whose last-modified is older than the cutoff
+  // (the "only index sessions newer than N days" knob). mtime is a good-enough
+  // proxy for session recency for append-only logs and whole-file chats alike.
+  if (olderThanMs && Date.now() - file.mtimeMs > olderThanMs) {
+    return { kind: "skip" };
+  }
   if (!record) {
     return { kind: "parse", fromOffset: 0, reparse: false };
   }

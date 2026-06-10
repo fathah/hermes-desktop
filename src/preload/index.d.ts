@@ -1106,6 +1106,9 @@ interface HermesAPI {
   externalContextStatus: () => Promise<ExternalIndexStatus>;
   externalContextScan: () => Promise<ExternalIndexStatus>;
   externalContextRebuild: () => Promise<ExternalIndexStatus>;
+  externalContextSetMaxAge: (
+    days: number | null,
+  ) => Promise<ExternalIndexStatus>;
   externalContextSearch: (
     query: string,
     opts?: { source?: ExternalSource; project?: string; limit?: number },

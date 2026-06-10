@@ -27,6 +27,8 @@ import { externalDbPath } from "../external-context/index";
 import {
   getExternalContextSources,
   setExternalContextSource,
+  getExternalContextMaxAgeDays,
+  setExternalContextMaxAgeDays,
 } from "../config/desktop-store";
 import { getApiServerKey } from "../config/api-server-key";
 import { readEnv } from "../config/env-store";
@@ -73,6 +75,8 @@ function gatherKnownSecrets(): string[] {
   return secrets;
 }
 
+const MS_PER_DAY = 86_400_000;
+
 function buildStatus(): ExternalIndexStatus {
   const db = getExternalContextDb();
   const enabled = getExternalContextSources();
@@ -84,23 +88,33 @@ function buildStatus(): ExternalIndexStatus {
     totalMessages: totals.messages,
     lastScanAt: lastScanAt,
     scanning: isScanning(),
+    maxAgeDays: getExternalContextMaxAgeDays(),
   };
 }
 
 let lastScanAt: number | null = null;
 
-/** Run a scan over the currently-enabled sources, forwarding progress. */
+/** Run a scan over the currently-enabled sources, forwarding progress. The
+ *  date-filter (if set) caps backfill to sessions newer than N days. */
 async function runScan(getWindow: () => BrowserWindow | null): Promise<number> {
   const db = getExternalContextDb();
   const enabled = getExternalContextSources();
   const secrets = gatherKnownSecrets();
+  const maxAgeDays = getExternalContextMaxAgeDays();
+  const olderThanMs = maxAgeDays ? maxAgeDays * MS_PER_DAY : undefined;
   const onProgress = (progress: ExternalScanProgress): void => {
     const win = getWindow();
     if (win && !win.isDestroyed()) {
       win.webContents.send("external-context-progress", progress);
     }
   };
-  const indexed = await scanExternalSources(db, enabled, secrets, onProgress);
+  const indexed = await scanExternalSources(
+    db,
+    enabled,
+    secrets,
+    onProgress,
+    olderThanMs,
+  );
   lastScanAt = Date.now();
   return indexed;
 }
@@ -139,6 +153,18 @@ export function registerExternalContextIpc(
     await runScan(getWindow);
     return buildStatus();
   });
+
+  ipcMain.handle(
+    "external-context-set-max-age",
+    async (_e, days: number | null) => {
+      setExternalContextMaxAgeDays(days);
+      // Rebuild so a tightened window also DROPS now-excluded sessions (a scan
+      // alone only adds). Loosening then re-adds them on the same pass.
+      getExternalContextDb().rebuild();
+      await runScan(getWindow);
+      return buildStatus();
+    },
+  );
 
   ipcMain.handle(
     "external-context-search",

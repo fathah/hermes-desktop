@@ -29,6 +29,11 @@ export const externalContextBridge = {
   externalContextRebuild: (): Promise<ExternalIndexStatus> =>
     ipcRenderer.invoke("external-context-rebuild"),
 
+  externalContextSetMaxAge: (
+    days: number | null,
+  ): Promise<ExternalIndexStatus> =>
+    ipcRenderer.invoke("external-context-set-max-age", days),
+
   externalContextSearch: (
     query: string,
     opts?: { source?: ExternalSource; project?: string; limit?: number },

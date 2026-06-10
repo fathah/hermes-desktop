@@ -85,6 +85,8 @@ export interface ExternalIndexStatus {
   totalMessages: number;
   lastScanAt: number | null;
   scanning: boolean;
+  /** Recency cap in days (only index sessions newer than this); null = all. */
+  maxAgeDays: number | null;
 }
 
 /** Streaming progress event during a scan/backfill. */

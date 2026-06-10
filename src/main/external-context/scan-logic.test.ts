@@ -73,3 +73,33 @@ describe("decideFileAction", () => {
     expect(action).toEqual({ kind: "skip" });
   });
 });
+
+describe("decideFileAction — date filter (olderThanMs)", () => {
+  const DAY = 86_400_000;
+
+  it("skips a file older than the cutoff (even a brand-new one)", () => {
+    const tenDaysAgo = Date.now() - 10 * DAY;
+    const action = decideFileAction(
+      file({ mtimeMs: tenDaysAgo, size: 100 }),
+      undefined,
+      7 * DAY,
+    );
+    expect(action).toEqual({ kind: "skip" });
+  });
+
+  it("indexes a file within the cutoff window normally", () => {
+    const oneDayAgo = Date.now() - 1 * DAY;
+    const action = decideFileAction(
+      file({ mtimeMs: oneDayAgo, size: 100 }),
+      undefined,
+      7 * DAY,
+    );
+    expect(action).toEqual({ kind: "parse", fromOffset: 0, reparse: false });
+  });
+
+  it("ignores the cutoff when olderThanMs is undefined", () => {
+    const ancient = Date.now() - 999 * DAY;
+    const action = decideFileAction(file({ mtimeMs: ancient }), undefined);
+    expect(action).toEqual({ kind: "parse", fromOffset: 0, reparse: false });
+  });
+});

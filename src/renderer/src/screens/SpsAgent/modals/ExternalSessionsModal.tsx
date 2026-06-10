@@ -147,6 +147,11 @@ export function ExternalSessionsModal() {
     if (s) setStatus(s);
   };
 
+  const doSetMaxAge = async (days: number | null) => {
+    const s = await window.hermesAPI?.externalContextSetMaxAge?.(days);
+    if (s) setStatus(s);
+  };
+
   const [mcpState, setMcpState] = useState<"idle" | "working" | "done">("idle");
   const exposeMcp = async () => {
     setMcpState("working");
@@ -205,6 +210,7 @@ export function ExternalSessionsModal() {
               onToggle={toggleSource}
               onScan={doScan}
               onRebuild={doRebuild}
+              onSetMaxAge={doSetMaxAge}
               onExposeMcp={exposeMcp}
               mcpState={mcpState}
             />
@@ -378,9 +384,11 @@ function SettingsView(props: {
   onToggle: (source: ExternalSource, enabled: boolean) => void;
   onScan: () => void;
   onRebuild: () => void;
+  onSetMaxAge: (days: number | null) => void;
   onExposeMcp: () => Promise<void>;
   mcpState: "idle" | "working" | "done";
 }) {
+  const maxAgeDays = props.status?.maxAgeDays ?? null;
   const statusBySource = new Map<ExternalSource, ExternalSourceStatus>(
     (props.status?.sources ?? []).map((s) => [s.source, s]),
   );
@@ -428,6 +436,34 @@ function SettingsView(props: {
             </div>
           );
         })}
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10,
+          marginTop: 12,
+        }}
+      >
+        <small style={{ color: "var(--tx-3)" }}>
+          Only index sessions newer than
+        </small>
+        <select
+          className="cover-btn"
+          value={maxAgeDays === null ? "0" : String(maxAgeDays)}
+          onChange={(e) => {
+            const n = Number(e.target.value);
+            props.onSetMaxAge(n > 0 ? n : null);
+          }}
+        >
+          <option value="0">All time</option>
+          <option value="365">1 year</option>
+          <option value="90">90 days</option>
+          <option value="30">30 days</option>
+          <option value="7">7 days</option>
+        </select>
       </div>
 
       {props.progress && (

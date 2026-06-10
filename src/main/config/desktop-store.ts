@@ -134,3 +134,20 @@ export function setExternalContextSource(
   writeDesktopConfig(data);
   return cfg;
 }
+
+/** Recency cap for external-context indexing: only sessions modified within the
+ *  last N days are indexed. `null` = no cap (index everything). App-level. */
+export function getExternalContextMaxAgeDays(): number | null {
+  const raw = readDesktopConfig().externalContextMaxAgeDays;
+  return typeof raw === "number" && raw > 0 ? raw : null;
+}
+
+export function setExternalContextMaxAgeDays(days: number | null): void {
+  const data = readDesktopConfig();
+  if (days && days > 0) {
+    data.externalContextMaxAgeDays = days;
+  } else {
+    delete data.externalContextMaxAgeDays;
+  }
+  writeDesktopConfig(data);
+}

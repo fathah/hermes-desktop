@@ -79,6 +79,7 @@ export async function scanExternalSources(
   enabled: Record<ExternalSource, boolean>,
   knownSecrets: readonly string[],
   onProgress?: ProgressFn,
+  olderThanMs?: number,
 ): Promise<number> {
   if (scanning) return 0;
   scanning = true;
@@ -116,7 +117,11 @@ export async function scanExternalSources(
       let filesProcessed = 0;
 
       for (const file of files) {
-        const action = decideFileAction(file, records.get(file.absPath));
+        const action = decideFileAction(
+          file,
+          records.get(file.absPath),
+          olderThanMs,
+        );
         if (action.kind === "parse") {
           try {
             const result = await adapter.parseSlice(file, action.fromOffset);
