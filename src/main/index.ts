@@ -61,13 +61,34 @@ import { closeExternalContextDb } from "./external-context/index";
 import { startScheduler, stopScheduler } from "./scheduler";
 import { startControlServer, stopControlServer } from "./control-server";
 import { setMainWindowGetter } from "./self-healing";
+import { log } from "./log";
+import { redactExternalText } from "./external-context/redact";
 
+// Last-resort loggers: anything that escapes a handler or a stray promise lands
+// here as a structured, redacted line in desktop.log instead of vanishing into a
+// dev-only console.error. Secrets can ride in either the message or the stack.
 process.on("uncaughtException", (err) => {
-  console.error("[MAIN UNCAUGHT]", err);
+  const message = redactExternalText(
+    err instanceof Error ? err.message : String(err),
+  );
+  const stack = err instanceof Error ? err.stack : undefined;
+  log.error("main", {
+    kind: "uncaughtException",
+    message,
+    stack: typeof stack === "string" ? redactExternalText(stack) : undefined,
+  });
 });
 
 process.on("unhandledRejection", (reason) => {
-  console.error("[MAIN UNHANDLED REJECTION]", reason);
+  const message = redactExternalText(
+    reason instanceof Error ? reason.message : String(reason),
+  );
+  const stack = reason instanceof Error ? reason.stack : undefined;
+  log.error("main", {
+    kind: "unhandledRejection",
+    message,
+    stack: typeof stack === "string" ? redactExternalText(stack) : undefined,
+  });
 });
 
 let mainWindow: BrowserWindow | null = null;

@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { safeHandle } from "./safe-handle";
 import {
   listBoards as kanbanListBoards,
   currentBoard as kanbanCurrentBoard,
@@ -21,20 +21,18 @@ import {
 } from "../kanban";
 
 export function registerKanbanIpc(): void {
-  ipcMain.handle(
+  safeHandle(
     "kanban-list-boards",
     (_event, includeArchived?: boolean, profile?: string) =>
       kanbanListBoards(includeArchived, profile),
   );
-  ipcMain.handle("kanban-current-board", (_event, profile?: string) =>
+  safeHandle("kanban-current-board", (_event, profile?: string) =>
     kanbanCurrentBoard(profile),
   );
-  ipcMain.handle(
-    "kanban-switch-board",
-    (_event, slug: string, profile?: string) =>
-      kanbanSwitchBoard(slug, profile),
+  safeHandle("kanban-switch-board", (_event, slug: string, profile?: string) =>
+    kanbanSwitchBoard(slug, profile),
   );
-  ipcMain.handle(
+  safeHandle(
     "kanban-create-board",
     (
       _event,
@@ -44,12 +42,12 @@ export function registerKanbanIpc(): void {
       profile?: string,
     ) => kanbanCreateBoard(slug, name, switchAfter, profile),
   );
-  ipcMain.handle(
+  safeHandle(
     "kanban-remove-board",
     (_event, slug: string, hardDelete?: boolean, profile?: string) =>
       kanbanRemoveBoard(slug, hardDelete, profile),
   );
-  ipcMain.handle(
+  safeHandle(
     "kanban-list-tasks",
     (
       _event,
@@ -62,57 +60,55 @@ export function registerKanbanIpc(): void {
       },
     ) => kanbanListTasks(filters || {}),
   );
-  ipcMain.handle(
-    "kanban-get-task",
-    (_event, taskId: string, profile?: string) =>
-      kanbanGetTask(taskId, profile),
+  safeHandle("kanban-get-task", (_event, taskId: string, profile?: string) =>
+    kanbanGetTask(taskId, profile),
   );
-  ipcMain.handle(
+  safeHandle(
     "kanban-create-task",
     (_event, input: CreateTaskInput, profile?: string) =>
       kanbanCreateTask(input, profile),
   );
-  ipcMain.handle(
+  safeHandle(
     "kanban-assign-task",
     (_event, taskId: string, assignee: string | null, profile?: string) =>
       kanbanAssignTask(taskId, assignee, profile),
   );
-  ipcMain.handle(
+  safeHandle(
     "kanban-complete-task",
     (_event, taskId: string, result?: string, profile?: string) =>
       kanbanCompleteTask(taskId, result, profile),
   );
-  ipcMain.handle(
+  safeHandle(
     "kanban-block-task",
     (_event, taskId: string, reason?: string, profile?: string) =>
       kanbanBlockTask(taskId, reason, profile),
   );
-  ipcMain.handle(
+  safeHandle(
     "kanban-unblock-task",
     (_event, taskId: string, profile?: string) =>
       kanbanUnblockTask(taskId, profile),
   );
-  ipcMain.handle(
+  safeHandle(
     "kanban-archive-task",
     (_event, taskId: string, profile?: string) =>
       kanbanArchiveTask(taskId, profile),
   );
-  ipcMain.handle(
+  safeHandle(
     "kanban-specify-task",
     (_event, taskId: string, profile?: string) =>
       kanbanSpecifyTask(taskId, profile),
   );
-  ipcMain.handle(
+  safeHandle(
     "kanban-reclaim-task",
     (_event, taskId: string, reason?: string, profile?: string) =>
       kanbanReclaimTask(taskId, reason, profile),
   );
-  ipcMain.handle(
+  safeHandle(
     "kanban-comment-task",
     (_event, taskId: string, body: string, profile?: string) =>
       kanbanCommentTask(taskId, body, profile),
   );
-  ipcMain.handle(
+  safeHandle(
     "kanban-dispatch-once",
     (_event, dryRun?: boolean, profile?: string) =>
       kanbanDispatchOnce(dryRun, profile),

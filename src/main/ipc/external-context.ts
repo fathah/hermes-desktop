@@ -9,7 +9,8 @@
  *
  * Save-to-KB (commit 6) and MCP registration (commit 7) add their handlers here.
  */
-import { ipcMain, type BrowserWindow } from "electron";
+import { type BrowserWindow } from "electron";
+import { safeHandle } from "./safe-handle";
 import type {
   ExternalIndexStatus,
   ExternalScanProgress,
@@ -122,11 +123,9 @@ async function runScan(getWindow: () => BrowserWindow | null): Promise<number> {
 export function registerExternalContextIpc(
   getWindow: () => BrowserWindow | null,
 ): void {
-  ipcMain.handle("external-context-get-config", () =>
-    getExternalContextSources(),
-  );
+  safeHandle("external-context-get-config", () => getExternalContextSources());
 
-  ipcMain.handle(
+  safeHandle(
     "external-context-set-source",
     async (_e, source: ExternalSource, enabled: boolean) => {
       const cfg = setExternalContextSource(source, enabled);
@@ -141,20 +140,20 @@ export function registerExternalContextIpc(
     },
   );
 
-  ipcMain.handle("external-context-status", () => buildStatus());
+  safeHandle("external-context-status", () => buildStatus());
 
-  ipcMain.handle("external-context-scan", async () => {
+  safeHandle("external-context-scan", async () => {
     await runScan(getWindow);
     return buildStatus();
   });
 
-  ipcMain.handle("external-context-rebuild", async () => {
+  safeHandle("external-context-rebuild", async () => {
     getExternalContextDb().rebuild();
     await runScan(getWindow);
     return buildStatus();
   });
 
-  ipcMain.handle(
+  safeHandle(
     "external-context-set-max-age",
     async (_e, days: number | null) => {
       setExternalContextMaxAgeDays(days);
@@ -166,7 +165,7 @@ export function registerExternalContextIpc(
     },
   );
 
-  ipcMain.handle(
+  safeHandle(
     "external-context-search",
     (
       _e,
@@ -175,7 +174,7 @@ export function registerExternalContextIpc(
     ) => getExternalContextDb().search(query, opts ?? {}),
   );
 
-  ipcMain.handle(
+  safeHandle(
     "external-context-get-conversation",
     (_e, convId: string, opts?: { aroundSeq?: number; limit?: number }) => {
       const db = getExternalContextDb();
@@ -186,13 +185,11 @@ export function registerExternalContextIpc(
     },
   );
 
-  ipcMain.handle(
-    "external-context-list-projects",
-    (_e, source?: ExternalSource) =>
-      getExternalContextDb().listProjects(source),
+  safeHandle("external-context-list-projects", (_e, source?: ExternalSource) =>
+    getExternalContextDb().listProjects(source),
   );
 
-  ipcMain.handle(
+  safeHandle(
     "external-context-save-to-kb",
     async (_e, convId: string, profile?: string) => {
       const db = getExternalContextDb();
@@ -215,7 +212,7 @@ export function registerExternalContextIpc(
     },
   );
 
-  ipcMain.handle("external-context-ensure-mcp", (_e, profile?: string) =>
+  safeHandle("external-context-ensure-mcp", (_e, profile?: string) =>
     ensureExternalContextMcpRegistered(profile),
   );
 }

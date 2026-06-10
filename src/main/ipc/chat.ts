@@ -1,4 +1,5 @@
-import { ipcMain, BrowserWindow, shell, Notification } from "electron";
+import { BrowserWindow, shell, Notification } from "electron";
+import { safeHandle } from "./safe-handle";
 import {
   isRemoteMode,
   isGatewayRunning,
@@ -84,20 +85,20 @@ export function registerChatIpc(
   mainWindowGetter: () => BrowserWindow | null,
 ): void {
   // Pre-send chat readiness
-  ipcMain.handle("validate-chat-readiness", (_event, profile?: string) => {
+  safeHandle("validate-chat-readiness", (_event, profile?: string) => {
     return validateChatReadiness(profile);
   });
 
   // Config-health audit
-  ipcMain.handle("get-config-health", (_event, profile?: string) => {
+  safeHandle("get-config-health", (_event, profile?: string) => {
     return runConfigHealthCheck(profile);
   });
 
-  ipcMain.handle("rerun-config-health", (_event, profile?: string) => {
+  safeHandle("rerun-config-health", (_event, profile?: string) => {
     return runConfigHealthCheck(profile);
   });
 
-  ipcMain.handle(
+  safeHandle(
     "autofix-config-issue",
     (
       _event,
@@ -109,12 +110,12 @@ export function registerChatIpc(
     },
   );
 
-  ipcMain.handle("get-config-fix-log", (_event, maxEntries?: number) => {
+  safeHandle("get-config-fix-log", (_event, maxEntries?: number) => {
     return readConfigFixLog(maxEntries);
   });
 
   // Chat sending and abortion
-  ipcMain.handle(
+  safeHandle(
     "send-message",
     async (
       event,
@@ -251,7 +252,7 @@ export function registerChatIpc(
     },
   );
 
-  ipcMain.handle("abort-chat", (event, sessionId?: string) => {
+  safeHandle("abort-chat", (event, sessionId?: string) => {
     const sessionKey = sessionId || `sender-${event.sender.id}`;
     const abort = activeChatAborts.get(sessionKey);
     if (abort) {
@@ -260,7 +261,7 @@ export function registerChatIpc(
     }
   });
 
-  ipcMain.handle(
+  safeHandle(
     "adopt-council-response",
     (_event, messageId: number, sessionId: string, councilGroupId: string) => {
       return adoptCouncilResponse(messageId, sessionId, councilGroupId);
@@ -268,15 +269,15 @@ export function registerChatIpc(
   );
 
   // Voice I/O (WS4)
-  ipcMain.handle("get-voice-status", (_event, profile?: string) =>
+  safeHandle("get-voice-status", (_event, profile?: string) =>
     getVoiceStatus(profile),
   );
-  ipcMain.handle(
+  safeHandle(
     "transcribe-audio",
     (_event, audio: ArrayBuffer, mime: string, profile?: string) =>
       transcribeAudio(audio, mime, profile),
   );
-  ipcMain.handle(
+  safeHandle(
     "speak-text",
     (_event, text: string, voice: string | undefined, profile?: string) =>
       speakText(text, voice, profile),

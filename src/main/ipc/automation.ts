@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { safeHandle } from "./safe-handle";
 import {
   listCronJobs,
   createCronJob,
@@ -32,12 +32,12 @@ import {
 // desktop-managed background concern rather than a user-facing workspace area.
 export function registerAutomationIpc(): void {
   // Cron Jobs
-  ipcMain.handle(
+  safeHandle(
     "list-cron-jobs",
     (_event, includeDisabled?: boolean, profile?: string) =>
       listCronJobs(includeDisabled, profile),
   );
-  ipcMain.handle(
+  safeHandle(
     "create-cron-job",
     (
       _event,
@@ -53,70 +53,69 @@ export function registerAutomationIpc(): void {
       },
     ) => createCronJob(schedule, prompt, name, deliver, profile, opts),
   );
-  ipcMain.handle("remove-cron-job", (_event, jobId: string, profile?: string) =>
+  safeHandle("remove-cron-job", (_event, jobId: string, profile?: string) =>
     removeCronJob(jobId, profile),
   );
-  ipcMain.handle("pause-cron-job", (_event, jobId: string, profile?: string) =>
+  safeHandle("pause-cron-job", (_event, jobId: string, profile?: string) =>
     pauseCronJob(jobId, profile),
   );
-  ipcMain.handle("resume-cron-job", (_event, jobId: string, profile?: string) =>
+  safeHandle("resume-cron-job", (_event, jobId: string, profile?: string) =>
     resumeCronJob(jobId, profile),
   );
-  ipcMain.handle(
-    "trigger-cron-job",
-    (_event, jobId: string, profile?: string) => triggerCronJob(jobId, profile),
+  safeHandle("trigger-cron-job", (_event, jobId: string, profile?: string) =>
+    triggerCronJob(jobId, profile),
   );
 
   // Curator
-  ipcMain.handle("get-curator-status", (_event, profile?: string) =>
+  safeHandle("get-curator-status", (_event, profile?: string) =>
     getCuratorStatus(profile),
   );
-  ipcMain.handle("run-curator-now", (_event, profile?: string) =>
+  safeHandle("run-curator-now", (_event, profile?: string) =>
     runCuratorNow(profile),
   );
-  ipcMain.handle("pause-curator", (_event, profile?: string) =>
+  safeHandle("pause-curator", (_event, profile?: string) =>
     pauseCurator(profile),
   );
-  ipcMain.handle("resume-curator", (_event, profile?: string) =>
+  safeHandle("resume-curator", (_event, profile?: string) =>
     resumeCurator(profile),
   );
-  ipcMain.handle("list-archived-skills", (_event, profile?: string) =>
+  safeHandle("list-archived-skills", (_event, profile?: string) =>
     listArchivedSkills(profile),
   );
-  ipcMain.handle(
+  safeHandle(
     "restore-archived-skill",
     (_event, name: string, profile?: string) =>
       restoreArchivedSkill(name, profile),
   );
-  ipcMain.handle("pin-skill", (_event, name: string, profile?: string) =>
+  safeHandle("pin-skill", (_event, name: string, profile?: string) =>
     pinSkill(name, profile),
   );
-  ipcMain.handle("unpin-skill", (_event, name: string, profile?: string) =>
+  safeHandle("unpin-skill", (_event, name: string, profile?: string) =>
     unpinSkill(name, profile),
   );
 
   // Checkpoints
-  ipcMain.handle("get-checkpoints-status", (_event, profile?: string) =>
+  safeHandle("get-checkpoints-status", (_event, profile?: string) =>
     getCheckpointsStatus(profile),
   );
-  ipcMain.handle("prune-checkpoints", (_event, profile?: string) =>
+  safeHandle("prune-checkpoints", (_event, profile?: string) =>
     pruneCheckpoints(profile),
   );
-  ipcMain.handle("clear-checkpoints", (_event, profile?: string) =>
+  safeHandle("clear-checkpoints", (_event, profile?: string) =>
     clearCheckpoints(profile),
   );
 
   // Pairings
-  ipcMain.handle("list-pairings", (_event, profile?: string) =>
+  safeHandle("list-pairings", (_event, profile?: string) =>
     listPairings(profile),
   );
-  ipcMain.handle("approve-pairing", (_event, code: string, profile?: string) =>
+  safeHandle("approve-pairing", (_event, code: string, profile?: string) =>
     approvePairing(code, profile),
   );
-  ipcMain.handle("revoke-pairing", (_event, userId: string, profile?: string) =>
+  safeHandle("revoke-pairing", (_event, userId: string, profile?: string) =>
     revokePairing(userId, profile),
   );
-  ipcMain.handle("clear-pending-pairings", (_event, profile?: string) =>
+  safeHandle("clear-pending-pairings", (_event, profile?: string) =>
     clearPendingPairings(profile),
   );
 }

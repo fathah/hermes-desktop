@@ -6,6 +6,7 @@ import {
   dialog,
   Menu,
 } from "electron";
+import { safeHandle } from "./safe-handle";
 import { readdir, readFile } from "fs/promises";
 import { extname } from "path";
 import { readMediaAsDataUrl, saveMedia, mediaFileExists } from "../media";
@@ -47,7 +48,7 @@ export function registerDualHandler<Args extends unknown[], RetLocal, RetSsh>(
   localFn: (...args: Args) => Promise<RetLocal> | RetLocal,
   sshFn: (ssh: SshConnectionConfig, ...args: Args) => Promise<RetSsh> | RetSsh,
 ): void {
-  ipcMain.handle(channel, async (_event, ...args: unknown[]) => {
+  safeHandle(channel, async (_event, ...args: unknown[]) => {
     const conn = getConnectionConfig();
     const target = dualHandlerTarget(conn);
     if (target === "ssh") {
@@ -70,23 +71,23 @@ export function registerUtilityIpc(
   _mainWindowGetter: () => BrowserWindow | null,
 ): void {
   // Shell
-  ipcMain.handle("open-external", (_event, url: string) => {
+  safeHandle("open-external", (_event, url: string) => {
     openExternalUrl(url);
   });
 
   // Clipboard
-  ipcMain.handle("copy-to-clipboard", (_event, text: string) => {
+  safeHandle("copy-to-clipboard", (_event, text: string) => {
     clipboard.writeText(typeof text === "string" ? text : "");
   });
 
   // Media
-  ipcMain.handle("read-media-file", (_event, filePath: string) =>
+  safeHandle("read-media-file", (_event, filePath: string) =>
     readMediaAsDataUrl(filePath),
   );
-  ipcMain.handle("save-media-file", (event, src: string, name: string) =>
+  safeHandle("save-media-file", (event, src: string, name: string) =>
     saveMedia(src, name, BrowserWindow.fromWebContents(event.sender)),
   );
-  ipcMain.handle("media-file-exists", (_event, filePath: string) =>
+  safeHandle("media-file-exists", (_event, filePath: string) =>
     mediaFileExists(filePath),
   );
 
@@ -128,18 +129,18 @@ export function registerUtilityIpc(
   );
 
   // Attachment Staging
-  ipcMain.handle(
+  safeHandle(
     "stage-attachment",
     (_event, sessionId: string, filename: string, base64Bytes: string) => {
       return stageAttachment(sessionId, filename, base64Bytes);
     },
   );
-  ipcMain.handle("clear-staged-attachments", (_event, sessionId: string) => {
+  safeHandle("clear-staged-attachments", (_event, sessionId: string) => {
     clearStagedAttachments(sessionId);
   });
 
   // File system navigation
-  ipcMain.handle("select-folder", async (event) => {
+  safeHandle("select-folder", async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     const result = win
       ? await dialog.showOpenDialog(win, { properties: ["openDirectory"] })
@@ -148,7 +149,7 @@ export function registerUtilityIpc(
     return result.filePaths[0];
   });
 
-  ipcMain.handle(
+  safeHandle(
     "read-directory",
     async (
       _event,
@@ -166,7 +167,7 @@ export function registerUtilityIpc(
     },
   );
 
-  ipcMain.handle(
+  safeHandle(
     "read-file",
     async (
       _event,
@@ -187,7 +188,7 @@ export function registerUtilityIpc(
     },
   );
 
-  ipcMain.handle("open-file-in-editor", async (_event, filePath: string) => {
+  safeHandle("open-file-in-editor", async (_event, filePath: string) => {
     try {
       await shell.openPath(filePath);
       return true;
@@ -196,7 +197,7 @@ export function registerUtilityIpc(
     }
   });
 
-  ipcMain.handle(
+  safeHandle(
     "read-image-file",
     async (_event, filePath: string): Promise<string | null> => {
       try {
@@ -227,21 +228,18 @@ export function registerUtilityIpc(
   );
 
   // Python bridge
-  ipcMain.handle(
-    "python-compress",
-    async (_event, text: string, tool?: string) => {
-      return pythonCompress(text, tool);
-    },
-  );
+  safeHandle("python-compress", async (_event, text: string, tool?: string) => {
+    return pythonCompress(text, tool);
+  });
 
-  ipcMain.handle(
+  safeHandle(
     "python-is-path-allowed",
     async (_event, targetPath: string, actionDir: string) => {
       return pythonIsPathAllowed(targetPath, actionDir);
     },
   );
 
-  ipcMain.handle(
+  safeHandle(
     "python-evaluate-execution",
     async (
       _event,
@@ -254,7 +252,7 @@ export function registerUtilityIpc(
     },
   );
 
-  ipcMain.handle(
+  safeHandle(
     "python-memory-save",
     async (
       _event,
@@ -267,23 +265,23 @@ export function registerUtilityIpc(
     },
   );
 
-  ipcMain.handle(
+  safeHandle(
     "python-memory-search",
     async (_event, vaultDir: string, query: string) => {
       return pythonMemorySearch(vaultDir, query);
     },
   );
 
-  ipcMain.handle("python-memory-graph", async (_event, vaultDir: string) => {
+  safeHandle("python-memory-graph", async (_event, vaultDir: string) => {
     return pythonMemoryGraph(vaultDir);
   });
 
   // Usage stats & cost
-  ipcMain.handle("get-usage-stats", (_event, profile?: string) =>
+  safeHandle("get-usage-stats", (_event, profile?: string) =>
     getUsageStats({ profile }),
   );
 
-  ipcMain.handle("get-run-ledger", (_event, profile?: string) => {
+  safeHandle("get-run-ledger", (_event, profile?: string) => {
     const rows = sessionLedger(readUsageRecords({ profile }));
     const titles = new Map<string, string | null>();
     try {
@@ -294,22 +292,18 @@ export function registerUtilityIpc(
     return rows.map((r) => ({ ...r, title: titles.get(r.sessionId) ?? null }));
   });
 
-  ipcMain.handle(
-    "summarize-search",
-    (_event, query: string, profile?: string) =>
-      summarizeSearch(query, profile),
+  safeHandle("summarize-search", (_event, query: string, profile?: string) =>
+    summarizeSearch(query, profile),
   );
 
   // Skins
-  ipcMain.handle("list-skins", (_event, profile?: string) =>
-    listSkins(profile),
-  );
+  safeHandle("list-skins", (_event, profile?: string) => listSkins(profile));
 
   // Security audit & prompt size breakdown
-  ipcMain.handle("run-security-audit", (_event, profile?: string) =>
+  safeHandle("run-security-audit", (_event, profile?: string) =>
     runSecurityAudit(profile),
   );
-  ipcMain.handle("get-prompt-size-breakdown", (_event, profile?: string) =>
+  safeHandle("get-prompt-size-breakdown", (_event, profile?: string) =>
     getPromptSizeBreakdown(profile),
   );
 }

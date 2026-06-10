@@ -1,4 +1,5 @@
-import { ipcMain, BrowserWindow, dialog, shell } from "electron";
+import { BrowserWindow, dialog, shell } from "electron";
+import { safeHandle } from "./safe-handle";
 import { readFile } from "fs/promises";
 import {
   getSpsNoteIndex,
@@ -92,7 +93,7 @@ export function registerNotesIpc(
   }
 
   // SPS Vault note index
-  ipcMain.handle(
+  safeHandle(
     "sps-index-query",
     async (_event, query: NoteQuery, profile?: string) => {
       requireLocalWorkspace();
@@ -100,7 +101,7 @@ export function registerNotesIpc(
     },
   );
 
-  ipcMain.handle(
+  safeHandle(
     "sps-index-search",
     async (_event, text: string, limit?: number, profile?: string) => {
       requireLocalWorkspace();
@@ -108,7 +109,7 @@ export function registerNotesIpc(
     },
   );
 
-  ipcMain.handle(
+  safeHandle(
     "sps-index-backlinks",
     async (_event, path: string, profile?: string) => {
       requireLocalWorkspace();
@@ -116,17 +117,17 @@ export function registerNotesIpc(
     },
   );
 
-  ipcMain.handle("sps-index-links", async (_event, profile?: string) => {
+  safeHandle("sps-index-links", async (_event, profile?: string) => {
     requireLocalWorkspace();
     return (await getSpsNoteIndex(profile)).links();
   });
 
-  ipcMain.handle("sps-index-tags", async (_event, profile?: string) => {
+  safeHandle("sps-index-tags", async (_event, profile?: string) => {
     requireLocalWorkspace();
     return (await getSpsNoteIndex(profile)).allTags();
   });
 
-  ipcMain.handle(
+  safeHandle(
     "sps-lint-vault",
     async (_event, staleDays?: number, profile?: string) => {
       requireLocalWorkspace();
@@ -138,7 +139,7 @@ export function registerNotesIpc(
     },
   );
 
-  ipcMain.handle(
+  safeHandle(
     "sps-index-by-tag",
     async (_event, tag: string, profile?: string) => {
       requireLocalWorkspace();
@@ -146,12 +147,12 @@ export function registerNotesIpc(
     },
   );
 
-  ipcMain.handle("sps-index-status", async (_event, profile?: string) => {
+  safeHandle("sps-index-status", async (_event, profile?: string) => {
     requireLocalWorkspace();
     return (await getSpsNoteIndex(profile)).status();
   });
 
-  ipcMain.handle("sps-index-rebuild", async (_event, profile?: string) => {
+  safeHandle("sps-index-rebuild", async (_event, profile?: string) => {
     requireLocalWorkspace();
     const status = await (await getSpsNoteIndex(profile)).rebuild();
     // Phase 1.7 — tell the renderer the index changed so search/graph/backlink
@@ -164,12 +165,12 @@ export function registerNotesIpc(
   });
 
   // Vault location settings
-  ipcMain.handle("sps-get-vault-location", (_event, profile?: string) => {
+  safeHandle("sps-get-vault-location", (_event, profile?: string) => {
     requireLocalWorkspace();
     return getVaultLocation(profile);
   });
 
-  ipcMain.handle(
+  safeHandle(
     "sps-set-vault-location",
     async (_event, dir: string, profile?: string) => {
       requireLocalWorkspace();
@@ -179,17 +180,14 @@ export function registerNotesIpc(
     },
   );
 
-  ipcMain.handle(
-    "sps-reset-vault-location",
-    async (_event, profile?: string) => {
-      requireLocalWorkspace();
-      const location = resetVaultLocation(profile);
-      await closeAllNoteIndexes();
-      return location;
-    },
-  );
+  safeHandle("sps-reset-vault-location", async (_event, profile?: string) => {
+    requireLocalWorkspace();
+    const location = resetVaultLocation(profile);
+    await closeAllNoteIndexes();
+    return location;
+  });
 
-  ipcMain.handle("sps-pick-vault-dir", async () => {
+  safeHandle("sps-pick-vault-dir", async () => {
     requireLocalWorkspace();
     const res = await dialog.showOpenDialog({
       title: "Choose a folder for the SPS vault",
@@ -200,7 +198,7 @@ export function registerNotesIpc(
   });
 
   // PDF import / text extraction
-  ipcMain.handle("sps-pick-pdf", async (event) => {
+  safeHandle("sps-pick-pdf", async (event) => {
     requireLocalWorkspace();
     const win = BrowserWindow.fromWebContents(event.sender);
     const opts: Electron.OpenDialogOptions = {
@@ -214,24 +212,24 @@ export function registerNotesIpc(
     return result.filePaths[0];
   });
 
-  ipcMain.handle("sps-extract-pdf", async (_event, filePath: string) => {
+  safeHandle("sps-extract-pdf", async (_event, filePath: string) => {
     requireLocalWorkspace();
     return extractPdfToMarkdown(filePath);
   });
 
-  ipcMain.handle("sps-read-file-bytes", async (_event, filePath: string) => {
+  safeHandle("sps-read-file-bytes", async (_event, filePath: string) => {
     requireLocalWorkspace();
     const buffer = await readFile(filePath);
     return new Uint8Array(buffer);
   });
 
   // Obsidian
-  ipcMain.handle("get-obsidian-config", async (_event, profile?: string) => {
+  safeHandle("get-obsidian-config", async (_event, profile?: string) => {
     requireLocalWorkspace();
     return getObsidianConfig(profile);
   });
 
-  ipcMain.handle(
+  safeHandle(
     "set-obsidian-config",
     async (_event, input: ObsidianConfigInput, profile?: string) => {
       requireLocalWorkspace();
@@ -247,13 +245,13 @@ export function registerNotesIpc(
     },
   );
 
-  ipcMain.handle("get-obsidian-tree", async (_event, profile?: string) => {
+  safeHandle("get-obsidian-tree", async (_event, profile?: string) => {
     requireLocalWorkspace();
     await ensureObsidianWatcher(profile);
     return getObsidianTree(profile);
   });
 
-  ipcMain.handle(
+  safeHandle(
     "read-obsidian-file",
     async (_event, path: string, profile?: string) => {
       requireLocalWorkspace();
@@ -262,7 +260,7 @@ export function registerNotesIpc(
     },
   );
 
-  ipcMain.handle(
+  safeHandle(
     "write-obsidian-file",
     async (_event, path: string, content: string, profile?: string) => {
       requireLocalWorkspace();
@@ -271,7 +269,7 @@ export function registerNotesIpc(
     },
   );
 
-  ipcMain.handle(
+  safeHandle(
     "append-obsidian-file",
     async (_event, path: string, content: string, profile?: string) => {
       requireLocalWorkspace();
@@ -280,7 +278,7 @@ export function registerNotesIpc(
     },
   );
 
-  ipcMain.handle(
+  safeHandle(
     "search-obsidian",
     async (_event, query: string, limit?: number, profile?: string) => {
       requireLocalWorkspace();
@@ -288,7 +286,7 @@ export function registerNotesIpc(
     },
   );
 
-  ipcMain.handle(
+  safeHandle(
     "open-obsidian-note",
     async (_event, path: string, profile?: string) => {
       requireLocalWorkspace();
@@ -305,7 +303,7 @@ export function registerNotesIpc(
     },
   );
 
-  ipcMain.handle(
+  safeHandle(
     "call-obsidian-function",
     async (
       _event,
@@ -319,7 +317,7 @@ export function registerNotesIpc(
   );
 
   // Markdown pages export
-  ipcMain.handle(
+  safeHandle(
     "sps-export-page",
     (_event, pageId: string, markdown: string, profile?: string) => {
       const dir = spsVaultDirFor(profile);
@@ -327,7 +325,7 @@ export function registerNotesIpc(
     },
   );
 
-  ipcMain.handle(
+  safeHandle(
     "sps-export-row",
     (
       _event,
@@ -340,14 +338,14 @@ export function registerNotesIpc(
       return exportRowMarkdownTo(dir, dbFolder, rowId, markdown);
     },
   );
-  ipcMain.handle(
+  safeHandle(
     "sps-read-row",
     (_event, dbFolder: string, rowId: string, profile?: string) => {
       const dir = spsVaultDirFor(profile);
       return readRowMarkdownFrom(dir, dbFolder, rowId);
     },
   );
-  ipcMain.handle(
+  safeHandle(
     "sps-delete-row",
     (_event, dbFolder: string, rowId: string, profile?: string) => {
       const dir = spsVaultDirFor(profile);
@@ -355,15 +353,12 @@ export function registerNotesIpc(
     },
   );
 
-  ipcMain.handle(
-    "sps-delete-page",
-    (_event, pageId: string, profile?: string) => {
-      const dir = spsVaultDirFor(profile);
-      return deletePageIn(dir, pageId);
-    },
-  );
+  safeHandle("sps-delete-page", (_event, pageId: string, profile?: string) => {
+    const dir = spsVaultDirFor(profile);
+    return deletePageIn(dir, pageId);
+  });
 
-  ipcMain.handle(
+  safeHandle(
     "sps-delete-db-folder",
     (_event, dbFolder: string, profile?: string) => {
       const dir = spsVaultDirFor(profile);
@@ -373,7 +368,7 @@ export function registerNotesIpc(
 
   // Vault-as-authoritative-store manifest and backup
   const spsVaultDir = (profile?: string): string => spsVaultDirFor(profile);
-  ipcMain.handle("sps-vault-read", async (_event, profile?: string) => {
+  safeHandle("sps-vault-read", async (_event, profile?: string) => {
     const dir = spsVaultDir(profile);
     const [pages, manifest] = await Promise.all([
       readVaultPages(dir),
@@ -381,17 +376,17 @@ export function registerNotesIpc(
     ]);
     return { pages, manifest };
   });
-  ipcMain.handle(
+  safeHandle(
     "sps-vault-write-manifest",
     (_event, json: string, profile?: string) =>
       writeVaultManifest(spsVaultDir(profile), json),
   );
-  ipcMain.handle("sps-backup-workspace", (_event, profile?: string) =>
+  safeHandle("sps-backup-workspace", (_event, profile?: string) =>
     spsBackupWorkspace(profile),
   );
 
   // Excalidraw
-  ipcMain.handle(
+  safeHandle(
     "sps-write-excalidraw",
     async (
       _event,
@@ -417,7 +412,7 @@ export function registerNotesIpc(
       return okScene && okSvg;
     },
   );
-  ipcMain.handle(
+  safeHandle(
     "sps-read-excalidraw",
     async (_event, pageId: string, assetId: string, profile?: string) => {
       const dir = spsVaultDir(profile);
@@ -430,28 +425,26 @@ export function registerNotesIpc(
   );
 
   // Assets Write / GC
-  ipcMain.handle(
+  safeHandle(
     "sps-asset-write",
     (_event, bytes: Uint8Array, ext: string, profile?: string) =>
       writeAsset(spsVaultDirFor(profile), Buffer.from(bytes), ext),
   );
-  ipcMain.handle("sps-asset-exists", (_event, name: string, profile?: string) =>
+  safeHandle("sps-asset-exists", (_event, name: string, profile?: string) =>
     assetExists(spsVaultDirFor(profile), name),
   );
-  ipcMain.handle(
-    "sps-asset-gc",
-    (_event, referenced: string[], profile?: string) =>
-      gcAssets(spsVaultDirFor(profile), referenced),
+  safeHandle("sps-asset-gc", (_event, referenced: string[], profile?: string) =>
+    gcAssets(spsVaultDirFor(profile), referenced),
   );
 
   // Semantic Graph / txtai Integration
-  ipcMain.handle("sps-semantic-index", async (_event, profile?: string) => {
+  safeHandle("sps-semantic-index", async (_event, profile?: string) => {
     requireLocalWorkspace();
     const vaultPath = spsVaultDirFor(profile);
     return semanticManager.index(vaultPath);
   });
 
-  ipcMain.handle(
+  safeHandle(
     "sps-semantic-search",
     async (_event, query: string, limit?: number) => {
       requireLocalWorkspace();
@@ -459,12 +452,12 @@ export function registerNotesIpc(
     },
   );
 
-  ipcMain.handle("sps-semantic-graph", async () => {
+  safeHandle("sps-semantic-graph", async () => {
     requireLocalWorkspace();
     return semanticManager.graph();
   });
 
-  ipcMain.handle(
+  safeHandle(
     "sps-semantic-rag",
     async (_event, query: string, limit?: number) => {
       requireLocalWorkspace();

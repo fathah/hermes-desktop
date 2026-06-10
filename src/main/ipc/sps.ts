@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { safeHandle } from "./safe-handle";
 import { existsSync } from "fs";
 import {
   spsUnfurl,
@@ -32,8 +32,8 @@ import {
 
 export function registerSpsIpc(): void {
   // SPS Agent workspace (unfurl / assistant / persistence)
-  ipcMain.handle("sps-unfurl", (_event, url: string) => spsUnfurl(url));
-  ipcMain.handle(
+  safeHandle("sps-unfurl", (_event, url: string) => spsUnfurl(url));
+  safeHandle(
     "sps-assistant",
     (
       _event,
@@ -43,20 +43,20 @@ export function registerSpsIpc(): void {
       groundInWorkspace?: boolean,
     ) => spsAssistant(prompt, ctx, profile, groundInWorkspace),
   );
-  ipcMain.handle("sps-ingest-inbox", (_event, profile?: string) =>
+  safeHandle("sps-ingest-inbox", (_event, profile?: string) =>
     spsIngestInbox(profile),
   );
-  ipcMain.handle(
+  safeHandle(
     "sps-file-answer",
     (_event, question: string, answer: string, profile?: string) =>
       spsFileAnswer(question, answer, profile),
   );
-  ipcMain.handle(
+  safeHandle(
     "sps-file-research",
     (_event, topic: string, researchedMarkdown: string, profile?: string) =>
       spsFileResearch(topic, researchedMarkdown, profile),
   );
-  ipcMain.handle(
+  safeHandle(
     "sps-wiki-log-append",
     async (_event, op: WikiLogOp, summary: string, profile?: string) => {
       // After any wiki change: record it in the append-only log AND refresh the
@@ -66,55 +66,52 @@ export function registerSpsIpc(): void {
       await ensureIndexCoverage(vaultDir);
     },
   );
-  ipcMain.handle(
-    "sps-lint-wiki",
-    (_event, staleDays?: number, profile?: string) =>
-      spsLintWiki(profile, { staleDays }),
+  safeHandle("sps-lint-wiki", (_event, staleDays?: number, profile?: string) =>
+    spsLintWiki(profile, { staleDays }),
   );
-  ipcMain.handle("sps-load", (_event, profile?: string) => spsLoad(profile));
-  ipcMain.handle("sps-save", (_event, ws: unknown, profile?: string) =>
+  safeHandle("sps-load", (_event, profile?: string) => spsLoad(profile));
+  safeHandle("sps-save", (_event, ws: unknown, profile?: string) =>
     spsSave(ws, profile),
   );
-  ipcMain.handle("sps-run-telos-audit", (_event, profile?: string) =>
+  safeHandle("sps-run-telos-audit", (_event, profile?: string) =>
     runTelosAudit(profile),
   );
-  ipcMain.handle(
+  safeHandle(
     "sps-run-piping",
     (_event, text: string, pattern: string, profile?: string) =>
       runPipingPattern(text, pattern, profile),
   );
 
   // Resumable /work session map
-  ipcMain.handle(
+  safeHandle(
     "sps-get-work-session",
     (_event, pageId: string, profile?: string) =>
       spsGetWorkSession(pageId, profile),
   );
-  ipcMain.handle(
+  safeHandle(
     "sps-set-work-session",
     (_event, pageId: string, sessionId: string, profile?: string) =>
       spsSetWorkSession(pageId, sessionId, profile),
   );
 
   // Research (OpenAlex)
-  ipcMain.handle(
+  safeHandle(
     "sps-research-search-works",
     (_event, q: string, opts?: SearchOpts, profile?: string) =>
       oaSearchWorks(q, opts ?? {}, profile),
   );
-  ipcMain.handle(
-    "sps-research-get-work",
-    (_event, id: string, profile?: string) => oaGetWork(id, profile),
+  safeHandle("sps-research-get-work", (_event, id: string, profile?: string) =>
+    oaGetWork(id, profile),
   );
-  ipcMain.handle("sps-research-get-config", () => getPublicResearchConfig());
-  ipcMain.handle(
+  safeHandle("sps-research-get-config", () => getPublicResearchConfig());
+  safeHandle(
     "sps-research-set-config",
     (_event, mailto: string, apiKey?: string) => {
       setResearchConfig(mailto, apiKey);
       return getPublicResearchConfig();
     },
   );
-  ipcMain.handle("sps-research-ensure-agent-tool", (_event, profile?: string) =>
+  safeHandle("sps-research-ensure-agent-tool", (_event, profile?: string) =>
     ensureResearchMcpRegistered(profile),
   );
 }

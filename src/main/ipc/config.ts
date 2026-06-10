@@ -1,4 +1,5 @@
-import { ipcMain, clipboard, shell } from "electron";
+import { clipboard, shell } from "electron";
+import { safeHandle } from "./safe-handle";
 import {
   readEnv,
   setEnvValue,
@@ -219,41 +220,38 @@ export function registerConfigIpc(): void {
   );
 
   // API Server Key Status
-  ipcMain.handle("get-api-server-key-status", (_event, profile?: string) => {
+  safeHandle("get-api-server-key-status", (_event, profile?: string) => {
     const key = getApiServerKey(profile);
     return { hasKey: key.length > 0 };
   });
 
-  ipcMain.handle(
-    "generate-api-server-key",
-    async (_event, profile?: string) => {
-      const { randomUUID } = await import("crypto");
-      const key = `desk-${randomUUID()}`;
+  safeHandle("generate-api-server-key", async (_event, profile?: string) => {
+    const { randomUUID } = await import("crypto");
+    const key = `desk-${randomUUID()}`;
 
-      const data = readDesktopConfig();
-      data.apiServerKey = key;
-      writeDesktopConfig(data);
+    const data = readDesktopConfig();
+    data.apiServerKey = key;
+    writeDesktopConfig(data);
 
-      setEnvValue("API_SERVER_KEY", "", profile);
-      if (profile && profile !== "default") {
-        setEnvValue("API_SERVER_KEY", "");
-      }
+    setEnvValue("API_SERVER_KEY", "", profile);
+    if (profile && profile !== "default") {
+      setEnvValue("API_SERVER_KEY", "");
+    }
 
-      if (isGatewayRunning(profile)) {
-        stopGateway(profile, true);
-        await new Promise<void>((r) => setTimeout(r, 800));
-        startGateway(profile);
-      }
-      return { key };
-    },
-  );
+    if (isGatewayRunning(profile)) {
+      stopGateway(profile, true);
+      await new Promise<void>((r) => setTimeout(r, 800));
+      startGateway(profile);
+    }
+    return { key };
+  });
 
   // Connection modes
-  ipcMain.handle("is-remote-mode", () => isRemoteMode());
-  ipcMain.handle("is-remote-only-mode", () => isRemoteOnlyMode());
-  ipcMain.handle("get-connection-config", () => getPublicConnectionConfig());
+  safeHandle("is-remote-mode", () => isRemoteMode());
+  safeHandle("is-remote-only-mode", () => isRemoteOnlyMode());
+  safeHandle("get-connection-config", () => getPublicConnectionConfig());
 
-  ipcMain.handle(
+  safeHandle(
     "set-connection-config",
     (
       _event,
@@ -282,7 +280,7 @@ export function registerConfigIpc(): void {
     },
   );
 
-  ipcMain.handle(
+  safeHandle(
     "set-ssh-config",
     (
       _event,
@@ -306,12 +304,11 @@ export function registerConfigIpc(): void {
     },
   );
 
-  ipcMain.handle(
-    "test-remote-connection",
-    (_event, url: string, apiKey?: string) => testRemoteConnection(url, apiKey),
+  safeHandle("test-remote-connection", (_event, url: string, apiKey?: string) =>
+    testRemoteConnection(url, apiKey),
   );
 
-  ipcMain.handle(
+  safeHandle(
     "test-ssh-connection",
     (
       _event,
@@ -331,7 +328,7 @@ export function registerConfigIpc(): void {
       }),
   );
 
-  ipcMain.handle("start-ssh-tunnel", async () => {
+  safeHandle("start-ssh-tunnel", async () => {
     const conn = getConnectionConfig();
     if (conn.mode !== "ssh") return false;
     if (conn.ssh && !(await sshGatewayStatus(conn.ssh))) {
@@ -345,20 +342,20 @@ export function registerConfigIpc(): void {
     return true;
   });
 
-  ipcMain.handle("stop-ssh-tunnel", () => {
+  safeHandle("stop-ssh-tunnel", () => {
     stopSshTunnel();
     // Phase 1.4 — tearing down the tunnel invalidates the cached remote key.
     clearSshRemoteApiKey();
     return true;
   });
 
-  ipcMain.handle("is-ssh-tunnel-active", () => isSshTunnelActive());
+  safeHandle("is-ssh-tunnel-active", () => isSshTunnelActive());
 
   // Profiles
   registerDualHandler("list-profiles", listProfiles, sshListProfiles);
   registerDualHandler("create-profile", createProfile, sshCreateProfile);
   registerDualHandler("delete-profile", deleteProfile, sshDeleteProfile);
-  ipcMain.handle("set-active-profile", (_event, name: string) => {
+  safeHandle("set-active-profile", (_event, name: string) => {
     if (getConnectionConfig().mode !== "ssh") {
       setActiveProfile(name);
       notifyProfileSwitched();
@@ -370,10 +367,10 @@ export function registerConfigIpc(): void {
   });
 
   // Credential Pool
-  ipcMain.handle("get-credential-pool", (_event, profile?: string) =>
+  safeHandle("get-credential-pool", (_event, profile?: string) =>
     getCredentialPool(profile),
   );
-  ipcMain.handle(
+  safeHandle(
     "set-credential-pool",
     (
       _event,
@@ -385,7 +382,7 @@ export function registerConfigIpc(): void {
       return true;
     },
   );
-  ipcMain.handle(
+  safeHandle(
     "add-credential-pool-entry",
     (
       _event,
@@ -415,7 +412,7 @@ export function registerConfigIpc(): void {
   );
 
   // OAuth Sign-In
-  ipcMain.handle("oauth-login", (event, provider: string, profile?: string) => {
+  safeHandle("oauth-login", (event, provider: string, profile?: string) => {
     const promptState = { buffer: "", handled: false };
     return runHermesAuthLogin(
       provider,
@@ -441,7 +438,7 @@ export function registerConfigIpc(): void {
       profile,
     );
   });
-  ipcMain.handle("oauth-login-cancel", () => cancelHermesAuthLogin());
+  safeHandle("oauth-login-cancel", () => cancelHermesAuthLogin());
 
   // Gateway
   registerDualHandler(
@@ -510,17 +507,17 @@ export function registerConfigIpc(): void {
   );
 
   // Telegram remote-control capability scope (read/info-only is the safe default).
-  ipcMain.handle("telegram-get-scope", (_e, profile?: string) =>
+  safeHandle("telegram-get-scope", (_e, profile?: string) =>
     getTelegramScope(profile),
   );
-  ipcMain.handle("telegram-set-read-info-scope", (_e, profile?: string) => {
+  safeHandle("telegram-set-read-info-scope", (_e, profile?: string) => {
     const ok = setTelegramReadInfoScope(profile);
     if (ok && isGatewayRunning(profile)) restartGateway(profile);
     return ok;
   });
 
   // Model discovery
-  ipcMain.handle(
+  safeHandle(
     "discover-provider-models",
     (
       _event,
@@ -534,7 +531,7 @@ export function registerConfigIpc(): void {
   );
 
   // Command-approval reply
-  ipcMain.handle(
+  safeHandle(
     "respond-approval",
     (
       _event,
@@ -545,26 +542,24 @@ export function registerConfigIpc(): void {
   );
 
   // Desktop automation prefs
-  ipcMain.handle("get-auto-approve", (_event, profile?: string) =>
+  safeHandle("get-auto-approve", (_event, profile?: string) =>
     getAutoApprove(profile),
   );
-  ipcMain.handle(
-    "set-auto-approve",
-    (_event, enabled: boolean, profile?: string) =>
-      setAutoApprove(enabled, profile),
+  safeHandle("set-auto-approve", (_event, enabled: boolean, profile?: string) =>
+    setAutoApprove(enabled, profile),
   );
-  ipcMain.handle("get-completion-sound", () => getCompletionSound());
-  ipcMain.handle("set-completion-sound", (_event, enabled: boolean) =>
+  safeHandle("get-completion-sound", () => getCompletionSound());
+  safeHandle("set-completion-sound", (_event, enabled: boolean) =>
     setCompletionSound(enabled),
   );
-  ipcMain.handle("get-onboarding-completed", () => getOnboardingCompleted());
-  ipcMain.handle("set-onboarding-completed", (_event, completed: boolean) =>
+  safeHandle("get-onboarding-completed", () => getOnboardingCompleted());
+  safeHandle("set-onboarding-completed", (_event, completed: boolean) =>
     setOnboardingCompleted(completed),
   );
 
   // Scheduler Config
-  ipcMain.handle("get-scheduler-config", () => getSchedulerConfig());
-  ipcMain.handle(
+  safeHandle("get-scheduler-config", () => getSchedulerConfig());
+  safeHandle(
     "set-scheduler-config",
     (_event, settings: Partial<SchedulerConfig>) => {
       setSchedulerConfig(settings);
@@ -573,11 +568,11 @@ export function registerConfigIpc(): void {
   );
   // Phase 1.2 — per-job skip telemetry (locked/timeout-reaped). Surfaced in the
   // Scheduled modal in Phase 2.2 so a job the scheduler keeps skipping is visible.
-  ipcMain.handle("get-scheduler-skips", () => getSchedulerSkips());
+  safeHandle("get-scheduler-skips", () => getSchedulerSkips());
 
   // Spending Cap Config
-  ipcMain.handle("get-spending-cap-config", () => getSpendingCapConfig());
-  ipcMain.handle(
+  safeHandle("get-spending-cap-config", () => getSpendingCapConfig());
+  safeHandle(
     "set-spending-cap-config",
     (_event, settings: Partial<SpendingCapConfig>) => {
       setSpendingCapConfig(settings);

@@ -1,4 +1,5 @@
-import { ipcMain, type BrowserWindow } from "electron";
+import { type BrowserWindow } from "electron";
+import { safeHandle } from "./safe-handle";
 import {
   listSchedules,
   createSchedule,
@@ -16,28 +17,26 @@ type SchedulePatch = Parameters<typeof updateSchedule>[1];
 export function registerScheduledResearchIpc(
   getWindow: () => BrowserWindow | null,
 ): void {
-  ipcMain.handle("sr-list", (_e, profile?: string) => listSchedules(profile));
-  ipcMain.handle("sr-create", (_e, input: ScheduleInput, profile?: string) =>
+  safeHandle("sr-list", (_e, profile?: string) => listSchedules(profile));
+  safeHandle("sr-create", (_e, input: ScheduleInput, profile?: string) =>
     createSchedule(input, profile),
   );
-  ipcMain.handle(
+  safeHandle(
     "sr-update",
     (_e, id: string, patch: SchedulePatch, profile?: string) =>
       updateSchedule(id, patch, profile),
   );
-  ipcMain.handle("sr-delete", (_e, id: string, profile?: string) =>
+  safeHandle("sr-delete", (_e, id: string, profile?: string) =>
     deleteSchedule(id, profile),
   );
-  ipcMain.handle("sr-run-now", (_e, id: string, profile?: string) =>
+  safeHandle("sr-run-now", (_e, id: string, profile?: string) =>
     triggerScheduleNow(id, getWindow, profile),
   );
-  ipcMain.handle("sr-list-pending", (_e, profile?: string) =>
-    listPending(profile),
-  );
-  ipcMain.handle("sr-remove-pending", (_e, id: string, profile?: string) =>
+  safeHandle("sr-list-pending", (_e, profile?: string) => listPending(profile));
+  safeHandle("sr-remove-pending", (_e, id: string, profile?: string) =>
     removePending(id, profile),
   );
-  ipcMain.handle("sr-telegram-availability", (_e, profile?: string) =>
+  safeHandle("sr-telegram-availability", (_e, profile?: string) =>
     getTelegramAvailability(profile),
   );
 }

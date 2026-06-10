@@ -1,4 +1,5 @@
-import { app, ipcMain, BrowserWindow } from "electron";
+import { app, BrowserWindow } from "electron";
+import { safeHandle } from "./safe-handle";
 import {
   checkInstallStatus,
   verifyInstall,
@@ -61,13 +62,13 @@ export function registerSystemIpc(
   mainWindowGetter: () => BrowserWindow | null,
 ): void {
   // Installation
-  ipcMain.handle("check-install", () => {
+  safeHandle("check-install", () => {
     return checkInstallStatus();
   });
 
-  ipcMain.handle("verify-install", () => verifyInstall());
+  safeHandle("verify-install", () => verifyInstall());
 
-  ipcMain.handle("start-install", async (event) => {
+  safeHandle("start-install", async (event) => {
     try {
       await runInstall((progress: InstallProgress) => {
         if (!event.sender.isDestroyed()) {
@@ -81,16 +82,16 @@ export function registerSystemIpc(
   });
 
   // Pre-install inspection + "use an existing installation" (issue #272).
-  ipcMain.handle("inspect-install-target", () => inspectInstallTarget());
-  ipcMain.handle("validate-hermes-home", (_event, dir: string) =>
+  safeHandle("inspect-install-target", () => inspectInstallTarget());
+  safeHandle("validate-hermes-home", (_event, dir: string) =>
     validateHermesHome(dir),
   );
-  ipcMain.handle("adopt-hermes-home", (_event, dir: string) => {
+  safeHandle("adopt-hermes-home", (_event, dir: string) => {
     if (!validateHermesHome(dir)) return false;
     setHermesHomeOverride(dir);
     return true;
   });
-  ipcMain.handle("quit-app", () => app.quit());
+  safeHandle("quit-app", () => app.quit());
 
   // Hermes engine info
   registerDualHandler(
@@ -108,7 +109,7 @@ export function registerSystemIpc(
   );
   registerDualHandler("run-hermes-doctor", runHermesDoctor, sshRunDoctor);
 
-  ipcMain.handle("run-hermes-update", async (event) => {
+  safeHandle("run-hermes-update", async (event) => {
     try {
       const conn = getConnectionConfig();
       if (conn.mode === "ssh" && conn.ssh) {
@@ -142,7 +143,7 @@ export function registerSystemIpc(
     }
   });
 
-  ipcMain.handle("check-hermes-update", async () => {
+  safeHandle("check-hermes-update", async () => {
     if (isRemoteMode()) return { available: false, reason: "remote-mode" };
     try {
       return await checkHermesUpdate();
@@ -152,37 +153,32 @@ export function registerSystemIpc(
   });
 
   // Computer Use
-  ipcMain.handle("get-computer-use-status", (_event, profile?: string) =>
+  safeHandle("get-computer-use-status", (_event, profile?: string) =>
     getComputerUseStatus(profile),
   );
-  ipcMain.handle(
-    "install-computer-use-driver",
-    async (event, profile?: string) => {
-      return installComputerUseDriver((progress) => {
-        if (!event.sender.isDestroyed()) {
-          event.sender.send("install-progress", progress);
-        }
-      }, profile);
-    },
-  );
+  safeHandle("install-computer-use-driver", async (event, profile?: string) => {
+    return installComputerUseDriver((progress) => {
+      if (!event.sender.isDestroyed()) {
+        event.sender.send("install-progress", progress);
+      }
+    }, profile);
+  });
 
   // App version
-  ipcMain.handle("get-app-version", () => app.getVersion());
+  safeHandle("get-app-version", () => app.getVersion());
 
   // Locale
-  ipcMain.handle("get-locale", () => getAppLocale());
-  ipcMain.handle("set-locale", (_event, locale: AppLocale) =>
-    setAppLocale(locale),
-  );
+  safeHandle("get-locale", () => getAppLocale());
+  safeHandle("set-locale", (_event, locale: AppLocale) => setAppLocale(locale));
 
   // Git Changelog
-  ipcMain.handle("get-git-changelog", (_event) => getChangelog());
+  safeHandle("get-git-changelog", (_event) => getChangelog());
 
   // Backup / Import
-  ipcMain.handle("run-hermes-backup", (_event, profile?: string) =>
+  safeHandle("run-hermes-backup", (_event, profile?: string) =>
     runHermesBackup(profile),
   );
-  ipcMain.handle(
+  safeHandle(
     "run-hermes-import",
     (_event, archivePath: string, profile?: string) =>
       runHermesImport(archivePath, profile),
@@ -192,7 +188,7 @@ export function registerSystemIpc(
   registerDualHandler("run-hermes-dump", runHermesDump, sshRunDump);
 
   // MCP servers
-  ipcMain.handle("list-mcp-servers", (_event, profile?: string) =>
+  safeHandle("list-mcp-servers", (_event, profile?: string) =>
     listMcpServers(profile),
   );
 
@@ -209,13 +205,13 @@ export function registerSystemIpc(
   // Auto-updater handlers
   const isPortableBuild = !!process.env.PORTABLE_EXECUTABLE_DIR;
   if (!app.isPackaged || isPortableBuild || !autoUpdater) {
-    ipcMain.handle("check-for-updates", async () => null);
-    ipcMain.handle("download-update", () => true);
-    ipcMain.handle("install-update", () => {});
+    safeHandle("check-for-updates", async () => null);
+    safeHandle("download-update", () => true);
+    safeHandle("install-update", () => {});
     return;
   }
 
-  ipcMain.handle("check-for-updates", async () => {
+  safeHandle("check-for-updates", async () => {
     try {
       const result = await autoUpdater.checkForUpdates();
       return result?.updateInfo?.version || null;
@@ -224,7 +220,7 @@ export function registerSystemIpc(
     }
   });
 
-  ipcMain.handle("download-update", async () => {
+  safeHandle("download-update", async () => {
     try {
       await autoUpdater.downloadUpdate();
       return true;
@@ -235,7 +231,7 @@ export function registerSystemIpc(
     }
   });
 
-  ipcMain.handle("install-update", () => {
+  safeHandle("install-update", () => {
     autoUpdater.logger?.info(
       "Restart requested by user — calling quitAndInstall(isSilent=false, isForceRunAfter=true)",
     );

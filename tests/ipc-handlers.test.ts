@@ -9,7 +9,8 @@ const ROOT = join(__dirname, "..");
  */
 function extractIpcHandleChannels(src: string): string[] {
   const channels: string[] = [];
-  const re = /(?:ipcMain\.handle|registerDualHandler)\(\s*["']([^"']+)["']/g;
+  const re =
+    /(?:ipcMain\.handle|safeHandle|registerDualHandler)\(\s*["']([^"']+)["']/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(src)) !== null) {
     channels.push(m[1]);

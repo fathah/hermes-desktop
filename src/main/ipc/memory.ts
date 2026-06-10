@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { safeHandle } from "./safe-handle";
 import {
   readMemory,
   addMemoryEntry,
@@ -36,7 +36,7 @@ import { registerDualHandler } from "./utility";
 export function registerMemoryIpc(): void {
   // Memory
   registerDualHandler("read-memory", readMemory, sshReadMemory);
-  ipcMain.handle("get-memory-timeline", (_event, profile?: string) =>
+  safeHandle("get-memory-timeline", (_event, profile?: string) =>
     getMemoryTimeline(profile),
   );
   registerDualHandler("add-memory-entry", addMemoryEntry, sshAddMemoryEntry);

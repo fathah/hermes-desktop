@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { safeHandle } from "./safe-handle";
 import {
   listSessions,
   getSessionMessages,
@@ -26,7 +26,7 @@ export function registerSessionsIpc(): void {
     getSessionMessages,
     sshGetSessionMessages,
   );
-  ipcMain.handle("delete-session", (_event, sessionId: string) => {
+  safeHandle("delete-session", (_event, sessionId: string) => {
     return deleteSession(sessionId);
   });
   registerDualHandler("search-sessions", searchSessions, sshSearchSessions);
@@ -49,7 +49,7 @@ export function registerSessionsIpc(): void {
     },
     async (ssh) => sshListCachedSessions(ssh, 50),
   );
-  ipcMain.handle(
+  safeHandle(
     "update-session-title",
     (_event, sessionId: string, title: string) =>
       updateSessionTitle(sessionId, title),

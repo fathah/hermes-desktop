@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { safeHandle } from "./safe-handle";
 import {
   listInstalledSkills,
   listBundledSkills,
@@ -54,44 +54,44 @@ export function registerSkillsIpc(): void {
   registerDualHandler("install-skill", installSkill, sshInstallSkill);
   registerDualHandler("uninstall-skill", uninstallSkill, sshUninstallSkill);
 
-  ipcMain.handle("search-skills", (_event, query: string) => {
+  safeHandle("search-skills", (_event, query: string) => {
     requireLocalWorkspace();
     return searchSkills(query);
   });
-  ipcMain.handle("create-skill", (_event, input: CreateSkillInput) => {
+  safeHandle("create-skill", (_event, input: CreateSkillInput) => {
     requireLocalWorkspace();
     return createSkill(input);
   });
-  ipcMain.handle(
+  safeHandle(
     "write-skill-content",
     (_event, skillPath: string, content: string, profile?: string) => {
       requireLocalWorkspace();
       return writeSkillContent(skillPath, content, profile);
     },
   );
-  ipcMain.handle("list-disabled-skills", (_event, profile?: string) => {
+  safeHandle("list-disabled-skills", (_event, profile?: string) => {
     requireLocalWorkspace();
     return listDisabledSkills(profile);
   });
-  ipcMain.handle(
+  safeHandle(
     "set-skill-enabled",
     (_event, skillPath: string, enabled: boolean, profile?: string) => {
       requireLocalWorkspace();
       return setSkillEnabled(skillPath, enabled, profile);
     },
   );
-  ipcMain.handle("discover-local-skills", (_event, profile?: string) => {
+  safeHandle("discover-local-skills", (_event, profile?: string) => {
     requireLocalWorkspace();
     return discoverLocalSkills(profile);
   });
-  ipcMain.handle(
+  safeHandle(
     "import-local-skill",
     (_event, sourcePath: string, category?: string, profile?: string) => {
       requireLocalWorkspace();
       return importLocalSkill(sourcePath, category, profile);
     },
   );
-  ipcMain.handle(
+  safeHandle(
     "generate-skill-from-repo",
     (_event, repoPath: string, profile?: string) => {
       requireLocalWorkspace();
@@ -102,30 +102,29 @@ export function registerSkillsIpc(): void {
   // Active (loaded) skills — Claude-Code-style `/skill-name`. These augment the
   // outgoing chat request the main process assembles, so they work in every
   // connection mode and need no SSH variant (the state lives here, not remote).
-  ipcMain.handle(
-    "load-skill-to-chat",
-    (_event, name: string, profile?: string) => loadActiveSkill(name, profile),
+  safeHandle("load-skill-to-chat", (_event, name: string, profile?: string) =>
+    loadActiveSkill(name, profile),
   );
-  ipcMain.handle(
+  safeHandle(
     "unload-skill-from-chat",
     (_event, name: string | undefined, profile?: string) =>
       unloadActiveSkill(name, profile),
   );
-  ipcMain.handle("list-active-skills", (_event, profile?: string) =>
+  safeHandle("list-active-skills", (_event, profile?: string) =>
     listActiveSkills(profile),
   );
 
   // Skills Registry
-  ipcMain.handle("skills-registry-sync", async (_event, profile?: string) => {
+  safeHandle("skills-registry-sync", async (_event, profile?: string) => {
     return syncDiskSkillsToDb(profile);
   });
-  ipcMain.handle(
+  safeHandle(
     "skills-registry-lookup",
     async (_event, query: string, profile?: string) => {
       return lookupLocalSkill(query, profile);
     },
   );
-  ipcMain.handle(
+  safeHandle(
     "skills-registry-register",
     async (
       _event,
@@ -135,7 +134,7 @@ export function registerSkillsIpc(): void {
       return registerLocalSkill(skill, profile);
     },
   );
-  ipcMain.handle(
+  safeHandle(
     "skills-registry-scaffold",
     async (
       _event,
@@ -148,7 +147,7 @@ export function registerSkillsIpc(): void {
       return scaffoldNewSkill(name, description, code, deps, profile);
     },
   );
-  ipcMain.handle(
+  safeHandle(
     "skills-registry-test",
     async (_event, name: string, args?: string, profile?: string) => {
       return testSkillRun(name, args, profile);
