@@ -36,8 +36,11 @@ import {
   parseChangeset,
   buildScheduledMergeMessages,
   buildScheduledCronPrompt,
+  buildExternalDigestMergeMessages,
   type IngestChangeset,
 } from "./sps-ingest";
+import { getExternalContextDb } from "./external-context";
+import { formatProvenance } from "../shared/external-context";
 import { readPageMarkdownFrom } from "./sps-vault";
 import {
   buildResearchPrompt,
@@ -49,6 +52,7 @@ import {
   slugForTopic,
   validateScheduleInput,
   cronExprFor,
+  periodStart,
   MAX_SCHEDULES,
   type ScheduledResearchItem,
   type ScheduleInput,
@@ -215,13 +219,19 @@ export async function createSchedule(
   if (reg.schedules.length >= MAX_SCHEDULES) {
     return { ok: false, error: `At most ${MAX_SCHEDULES} schedules.` };
   }
-  const pageId = slugForTopic(input.topic);
+  const isDigest = input.kind === "digest";
+  const topic = isDigest
+    ? input.topic.trim() || "External sessions digest"
+    : input.topic.trim();
+  const pageId = slugForTopic(topic);
   if (reg.schedules.some((s) => s.pageId === pageId)) {
     return { ok: false, error: "A schedule for that topic already exists." };
   }
   const item: ScheduledResearchItem = {
     id: newId(),
-    topic: input.topic.trim(),
+    kind: isDigest ? "digest" : "research",
+    scope: isDigest ? input.scope : undefined,
+    topic,
     pageId,
     cadence: input.cadence,
     hour: input.hour ?? 8,
@@ -234,16 +244,19 @@ export async function createSchedule(
   };
   reg.schedules.push(item);
   saveRegistry(reg, profile);
-  // Pair a gateway cron job so it runs app-closed (best-effort; the desktop
-  // isDue fallback covers a schedule that fails to get a cron).
-  const cronJobId = await createPairedCron(item, profile);
-  if (cronJobId) {
-    const reg2 = loadRegistry(profile);
-    const found = reg2.schedules.find((s) => s.id === item.id);
-    if (found) {
-      found.cronJobId = cronJobId;
-      saveRegistry(reg2, profile);
-      item.cronJobId = cronJobId;
+  // Research schedules pair a gateway cron so they run app-closed (best-effort;
+  // the desktop isDue fallback covers a missing cron). Digests are LOCAL data,
+  // so they run desktop-side via the isDue fallback only — no paired cron.
+  if (!isDigest) {
+    const cronJobId = await createPairedCron(item, profile);
+    if (cronJobId) {
+      const reg2 = loadRegistry(profile);
+      const found = reg2.schedules.find((s) => s.id === item.id);
+      if (found) {
+        found.cronJobId = cronJobId;
+        saveRegistry(reg2, profile);
+        item.cronJobId = cronJobId;
+      }
     }
   }
   return { ok: true, item };
@@ -544,6 +557,89 @@ export async function runScheduledResearch(
   }
 }
 
+/** Per-message excerpt cap inside an assembled digest source (the whole thing is
+ *  capped again by mergeBriefAndQueue → capResearchBrief). */
+const DIGEST_MSG_CHARS = 300;
+
+/** Immediate/scheduled digest run (app-open): query the period's external
+ *  sessions from the redacted index, assemble a provenance-labelled source, and
+ *  smart-merge it into the living digest page → pending. Mirrors
+ *  runScheduledResearch but the "brief" is local session data, not web research. */
+export async function runDigest(
+  item: ScheduledResearchItem,
+  getWindow?: () => BrowserWindow | null,
+  profile?: string,
+): Promise<{ outcome: RunOutcome; summary?: string }> {
+  let outcome: RunOutcome = "error";
+  let summary = "";
+  try {
+    const db = getExternalContextDb();
+    const windowStart = periodStart(item.cadence, new Date());
+    const convs = db.listConversationsSince(windowStart, {
+      ...(item.scope ?? {}),
+      limit: 40,
+    });
+    if (convs.length === 0) {
+      outcome = "no-change";
+      summary = "No external sessions this period.";
+      stampRun(item.id, profile);
+      return { outcome, summary };
+    }
+    const digestSource = convs
+      .map((c) => {
+        const prov = formatProvenance({
+          source: c.source,
+          projectPath: c.projectPath,
+          gitBranch: c.gitBranch,
+          title: c.title,
+          ts: c.lastAt ?? c.startedAt,
+        });
+        const body = db
+          .getConversation(c.convId, { limit: 8 })
+          .map((m) => `${m.role}: ${m.text.slice(0, DIGEST_MSG_CHARS)}`)
+          .join("\n");
+        return `### ${prov}\n${body}`;
+      })
+      .join("\n\n");
+    const r = await mergeBriefAndQueue(
+      item,
+      digestSource,
+      getWindow,
+      profile,
+      (schema, current, brief, dateStr) =>
+        buildExternalDigestMergeMessages(
+          schema,
+          item.pageId,
+          current,
+          brief,
+          dateStr,
+          [],
+        ),
+    );
+    outcome = r.outcome;
+    summary = r.summary;
+    return { outcome, summary };
+  } catch (err) {
+    outcome = "error";
+    summary = err instanceof Error ? err.message : "digest failed";
+    stampRun(item.id, profile);
+    return { outcome, summary };
+  } finally {
+    recordHistory(item.id, outcome, summary, profile);
+  }
+}
+
+/** Dispatch a due/triggered schedule to the right run by kind. */
+export async function runSchedule(
+  item: ScheduledResearchItem,
+  getWindow?: () => BrowserWindow | null,
+  profile?: string,
+): Promise<{ outcome: RunOutcome; summary?: string }> {
+  return item.kind === "digest"
+    ? runDigest(item, getWindow, profile)
+    : runScheduledResearch(item, getWindow, profile);
+}
+
 /** Extract the agent's brief from a gateway cron-output file. The file is a
  *  "# Cron Job …\n## Prompt …\n## Response\n<final>" doc; we want <final>, unless
  *  it's the native [SILENT] no-change sentinel. */
@@ -651,7 +747,7 @@ export async function triggerScheduleNow(
 ): Promise<{ outcome: RunOutcome; summary?: string; error?: string }> {
   const item = loadRegistry(profile).schedules.find((s) => s.id === id);
   if (!item) return { outcome: "error", error: "Schedule not found." };
-  return runScheduledResearch(item, getWindow, profile);
+  return runSchedule(item, getWindow, profile);
 }
 
 // ── scheduler loop ───────────────────────────────────────────────────────────
@@ -672,7 +768,7 @@ async function tick(): Promise<void> {
       (s) => !s.cronJobId && isDue(s, now),
     );
     for (const s of due) {
-      await runScheduledResearch(s, _getWindow ?? undefined);
+      await runSchedule(s, _getWindow ?? undefined);
     }
   } catch {
     /* never let a tick throw kill the loop */

@@ -3,6 +3,7 @@ import {
   slugForTopic,
   validateScheduleInput,
   periodKey,
+  periodStart,
   isDue,
   cadenceLabel,
   cronExprFor,
@@ -48,6 +49,23 @@ describe("periodKey", () => {
     expect(periodKey("daily", a)).not.toBe(periodKey("daily", b));
     expect(periodKey("weekly", a)).toBe(periodKey("weekly", b));
     expect(periodKey("monthly", a)).toBe(periodKey("monthly", b));
+  });
+});
+
+describe("periodStart", () => {
+  it("returns the start of the current period (local midnight boundaries)", () => {
+    const wed = new Date(2026, 5, 10, 14, 30); // Wed 2026-06-10 14:30
+    expect(periodStart("daily", wed)).toBe(new Date(2026, 5, 10).getTime());
+    // Monday of that week is 2026-06-08.
+    expect(periodStart("weekly", wed)).toBe(new Date(2026, 5, 8).getTime());
+    expect(periodStart("monthly", wed)).toBe(new Date(2026, 5, 1).getTime());
+  });
+
+  it("the period start is never after now", () => {
+    const now = new Date(2026, 0, 1, 0, 0); // Thu 2026-01-01 midnight
+    for (const c of ["daily", "weekly", "monthly"] as const) {
+      expect(periodStart(c, now)).toBeLessThanOrEqual(now.getTime());
+    }
   });
 });
 
