@@ -1,6 +1,4 @@
 import { useState, useCallback, useEffect } from "react";
-import Chat, { ChatMessage } from "../Chat/Chat";
-import Agents from "../Agents/Agents";
 import Settings from "../Settings/Settings";
 import Skills from "../Skills/Skills";
 import Gateway from "../Gateway/Gateway";
@@ -13,7 +11,6 @@ import VerifyWarningBanner from "../../components/VerifyWarningBanner";
 import hermeslogo from "../../assets/hermes.png";
 import {
   ChevronDown,
-  Users,
   Settings as SettingsIcon,
   Puzzle,
   Signal,
@@ -31,7 +28,6 @@ import {
   writeLastAdminView,
   type AdminView,
 } from "../../lib/openSettings";
-import { ADMIN_NEW_CHAT_EVENT } from "../../lib/spsCommands";
 
 // The deep-linkable view set is owned by lib/openSettings so callers and this
 // host can't drift. Layout's nav is a subset of these.
@@ -54,10 +50,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     id: "agents",
     headerKey: "navigation.groupAgents",
-    items: [
-      { view: "agents", icon: Users, labelKey: "navigation.agents" },
-      { view: "skills", icon: Puzzle, labelKey: "navigation.skills" },
-    ],
+    items: [{ view: "skills", icon: Puzzle, labelKey: "navigation.skills" }],
   },
   {
     id: "connectivity",
@@ -102,8 +95,6 @@ function Layout({
 }: LayoutProps = {}): React.JSX.Element {
   const { t } = useI18n();
   const [view, setView] = useState<View>(initialView ?? "settings");
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [activeProfile, setActiveProfile] = useState("default");
   // Tabs lazy-mount on first visit, then stay mounted (display:none toggle).
   // Keeps IPC refetch / DOM rebuild off the tab-switch hot path.
@@ -304,30 +295,6 @@ function Layout({
     }
   }
 
-  const handleNewChat = useCallback(() => {
-    // Abort any in-flight chat before clearing
-    window.hermesAPI.abortChat();
-    setMessages([]);
-    setCurrentSessionId(null);
-    goTo("chat");
-  }, [goTo]);
-
-  // Menu ⌘N is caught once at the App root and re-dispatched here only when this
-  // overlay is the active surface (new chat via this dedicated event so it also
-  // clears state). ⌘K search now routes to the SPS workspace, not this overlay.
-  useEffect(() => {
-    const onAdminNewChat = (): void => handleNewChat();
-    window.addEventListener(ADMIN_NEW_CHAT_EVENT, onAdminNewChat);
-    return () =>
-      window.removeEventListener(ADMIN_NEW_CHAT_EVENT, onAdminNewChat);
-  }, [handleNewChat]);
-
-  const handleSelectProfile = useCallback((name: string) => {
-    setActiveProfile(name);
-    setMessages([]);
-    setCurrentSessionId(null);
-  }, []);
-
   return (
     <div className="layout">
       <aside className="sidebar">
@@ -447,34 +414,6 @@ function Layout({
             onDismiss={onDismissVerifyWarning}
           />
         )}
-        <div style={paneStyle("chat")}>
-          <Chat
-            messages={messages}
-            setMessages={setMessages}
-            sessionId={currentSessionId}
-            profile={activeProfile}
-            onNewChat={handleNewChat}
-            onOpenDiagnose={() => goTo("settings")}
-          />
-        </div>
-
-        {visitedViews.has("agents") && (
-          <div style={paneStyle("agents")}>
-            {remoteMode ? (
-              <RemoteNotice feature="Profiles" />
-            ) : (
-              <Agents
-                activeProfile={activeProfile}
-                onSelectProfile={handleSelectProfile}
-                onChatWith={(name: string) => {
-                  handleSelectProfile(name);
-                  goTo("chat");
-                }}
-              />
-            )}
-          </div>
-        )}
-
         {visitedViews.has("models") && (
           <div style={paneStyle("models")}>
             <Models visible={view === "models"} />

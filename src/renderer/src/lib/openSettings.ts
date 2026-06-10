@@ -9,8 +9,6 @@
 /** Every view the admin overlay (Layout) can show. Layout imports this as its
  *  `View` type so the deep-link target and the nav union never drift. */
 export type AdminView =
-  | "chat"
-  | "agents"
   | "models"
   | "providers"
   | "skills"
@@ -48,8 +46,6 @@ export function openSettings(view?: AdminView): void {
 export const ADMIN_LAST_VIEW_KEY = "hermes.admin.lastView";
 
 const KNOWN_VIEWS = new Set<AdminView>([
-  "chat",
-  "agents",
   "models",
   "providers",
   "skills",

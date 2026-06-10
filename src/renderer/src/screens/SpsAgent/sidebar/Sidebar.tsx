@@ -10,7 +10,6 @@ import type { TreeDnd } from "./dnd";
 import { TreeNode } from "./TreeNode";
 import { SidebarSection } from "./SidebarSection";
 import { SidebarRecents } from "./SidebarRecents";
-import { SidebarAgents } from "./SidebarAgents";
 import { SidebarApps, SidebarMeetings, SidebarShared } from "./SidebarStubs";
 import { useVaultQuery } from "../hooks/useNoteIndex";
 import { INBOX_FOLDER } from "../inbox/capture";
@@ -102,13 +101,6 @@ export function Sidebar() {
 
   const openPalette = (): void => setPaletteOpen(true);
   const newPage = (): void => setTemplatesOpen({ parent: null });
-  // Agents are Hermes profiles; profile creation lives in the admin panel (⌘,).
-  // Start a guided chat that walks the user through setting one up.
-  const newAgent = (): void =>
-    startNewChat(
-      "Help me set up a new agent (Hermes profile): pick a name, model, and the tools it should have.",
-    );
-
   return (
     <nav className="rail">
       <div className="rail-top">
@@ -270,15 +262,6 @@ export function Sidebar() {
 
         <SidebarSection id="recents" label="Recents">
           <SidebarRecents />
-        </SidebarSection>
-
-        <SidebarSection
-          id="agents"
-          label="Agents"
-          onAdd={newAgent}
-          addTitle="New agent"
-        >
-          <SidebarAgents />
         </SidebarSection>
 
         <SidebarSection id="shared" label="Shared">

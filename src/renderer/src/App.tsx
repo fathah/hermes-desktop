@@ -18,7 +18,6 @@ import {
 import {
   spsNewChat,
   spsSearch,
-  adminNewChat,
   SWITCH_TO_LOCAL_EVENT,
 } from "./lib/spsCommands";
 
@@ -124,14 +123,13 @@ function App(): React.JSX.Element {
   // App menu shortcuts (⌘N new chat / ⌘K search). Registered ONCE at the always-
   // mounted root and routed to the active surface — previously these lived in
   // Layout and went dead whenever the admin overlay was closed (the workspace's
-  // normal state). New chat: overlay open → admin Chat, else SPS workspace.
-  // Search now always opens the SPS workspace palette (the admin Sessions screen
-  // was consolidated into the SPS sidebar's session search).
+  // normal state). The admin overlay no longer hosts a chat surface (the Agents
+  // screen + its Chat pane were consolidated away), so ⌘N always starts a new
+  // chat in the SPS workspace. Search likewise always opens the SPS palette.
   useEffect(() => {
     if (screen !== "main") return;
     const cleanupNewChat = window.hermesAPI.onMenuNewChat(() => {
-      if (adminOpenRef.current) adminNewChat();
-      else spsNewChat();
+      spsNewChat();
     });
     const cleanupSearch = window.hermesAPI.onMenuSearchSessions(() => {
       if (adminOpenRef.current) setAdminOpen(false);
