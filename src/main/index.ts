@@ -150,6 +150,7 @@ import {
   getApiServerKeyStatus,
   invalidateSecretsCache,
   type ConnectionConfig,
+  secretsProviderStatus,
 } from "./config";
 import {
   getAuxiliaryConfig,
@@ -1094,6 +1095,12 @@ function setupIPC(): void {
   // immediately instead of waiting out the cache TTL.
   ipcMain.handle("invalidate-secrets-cache", () => {
     invalidateSecretsCache();
+  });
+
+  // Active secret provider + the NAMES of keys it resolves (never values) —
+  // powers the Settings "Security Providers" section's status + Test button.
+  ipcMain.handle("secrets-provider-status", (_event, profile?: string) => {
+    return secretsProviderStatus(profile);
   });
 
   ipcMain.handle(

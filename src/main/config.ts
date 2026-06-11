@@ -22,6 +22,7 @@ import {
   getSecretsProvider,
   providerListSafe,
   invalidateProviderListCache,
+  resolvedSecrets,
 } from "./secrets";
 import { canonicalProviderBaseUrl } from "./provider-registry";
 import {
@@ -198,6 +199,48 @@ export function invalidateSecretsCache(): void {
   // on the next provider read (S1: that cache is the helper-spawn rate floor,
   // explicit invalidation is the one sanctioned way to bust it early).
   invalidateProviderListCache();
+}
+
+/**
+ * Provider-status snapshot for the Settings UI's "Security Providers" section.
+ * Returns the active provider plus the NAMES of the keys it resolves — never
+ * the values. Used by the renderer's "Test" button so a user can confirm a
+ * vault helper actually resolves keys before relying on it, without any secret
+ * ever crossing the IPC boundary.
+ *
+ * Resolution goes through resolvedSecrets() (which itself routes through the
+ * spawn-rate-floored providerListSafe), so calling this repeatedly can't flood
+ * the main process with helper spawns.
+ */
+export function secretsProviderStatus(profile?: string): {
+  provider: string;
+  keys: string[];
+  count: number;
+} {
+  const selector = String(getConfigValue("secrets.provider", profile) ?? "")
+    .trim()
+    .toLowerCase();
+  // Back-compat: a bare bitwarden.enabled (no provider key) means bitwarden.
+  let provider = selector;
+  if (!provider) {
+    const bwEnabled = getConfigValue("secrets.bitwarden.enabled", profile);
+    provider = bwEnabled ? "bitwarden" : "env";
+  }
+
+  // env reads .env / shell directly — nothing the provider layer "resolves".
+  if (provider === "env") {
+    return { provider, keys: [], count: 0 };
+  }
+
+  let keys: string[] = [];
+  try {
+    // resolvedSecrets() = provider list (vault) overlaid with process.env.
+    // We expose only the KEY NAMES; values never leave the main process.
+    keys = Object.keys(resolvedSecrets(profile)).sort();
+  } catch {
+    keys = [];
+  }
+  return { provider, keys, count: keys.length };
 }
 
 export function readEnv(profile?: string): Record<string, string> {

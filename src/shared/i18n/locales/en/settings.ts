@@ -184,4 +184,36 @@ export default {
   apiGenerated: "API key generated — gateway restarting…",
   refreshFromVault: "Refresh from vault",
   refreshingFromVault: "Refreshing…",
+
+  // Security Providers section (secrets.provider: env / command / bitwarden)
+  secrets_sectionTitle: "Security Providers",
+  secrets_sectionHint:
+    "Choose where Hermes resolves API keys from. Process env and .env always win over a provider — a provider only fills keys that aren't already set.",
+  secrets_active: "Active",
+  secrets_useProvider: "Use this",
+  secrets_activating: "Switching…",
+  secrets_envActiveNote:
+    "Reads keys from .env and the shell — no setup needed.",
+  secrets_providerEnvTitle: "Environment (.env)",
+  secrets_providerEnvDesc:
+    "The default. Keys come from ~/.hermes/.env and the shell environment.",
+  secrets_providerCommandTitle: "Command helper",
+  secrets_providerCommandDesc:
+    "Run a helper that prints the secret(s) — keepassxc-cli, pass, secret-tool, or a script that dumps a tmpfs env file. POSIX only.",
+  secrets_providerBitwardenTitle: "Bitwarden",
+  secrets_providerBitwardenDesc:
+    "Pull secrets from Bitwarden Secrets Manager (cloud). Configured from the CLI.",
+  secrets_helperCommandLabel: "Helper command",
+  secrets_helperCommandHint:
+    "The requested key is passed in $HERMES_SECRET_KEY (never interpolated into the command). Print the bare secret, or a KEY=VALUE dotenv blob.",
+  secrets_bitwardenCliHint:
+    "Set up Bitwarden from the terminal: hermes secrets bitwarden setup",
+  secrets_testButton: "Test",
+  secrets_testing: "Testing…",
+  secrets_testResolved: "Resolved {{count}} key(s):",
+  secrets_testValuesHidden: "Values are never displayed — only key names.",
+  secrets_testEmpty:
+    "No keys resolved. If this is a bare-value helper it still resolves single keys on demand; otherwise check the command.",
+  secrets_testFailed:
+    "The provider could not be tested. Check the helper command.",
 } as const;

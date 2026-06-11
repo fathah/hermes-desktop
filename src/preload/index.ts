@@ -406,6 +406,11 @@ const hermesAPI = {
   invalidateSecretsCache: (): Promise<void> =>
     ipcRenderer.invoke("invalidate-secrets-cache"),
 
+  secretsProviderStatus: (
+    profile?: string,
+  ): Promise<{ provider: string; keys: string[]; count: number }> =>
+    ipcRenderer.invoke("secrets-provider-status", profile),
+
   copyToClipboard: (text: string): Promise<void> =>
     ipcRenderer.invoke("copy-to-clipboard", text),
 
