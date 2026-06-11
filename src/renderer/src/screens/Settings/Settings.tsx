@@ -172,6 +172,7 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
   const connLoaded = useRef(false);
   const [apiServerKeyMissing, setApiServerKeyMissing] = useState(false);
   const [generatingKey, setGeneratingKey] = useState(false);
+  const [refreshingVault, setRefreshingVault] = useState(false);
 
   // SSH connection state
   const [sshHost, setSshHost] = useState("");
@@ -296,11 +297,13 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
     void Promise.resolve().then(loadConfig);
   }, [loadConfig]);
 
+  // 10s polling so vault rotations refresh the warning UI without requiring
+  // navigation. Mirrors Gateway.tsx so both screens have the same cadence.
   useEffect(() => {
-    const unsubscribe = window.hermesAPI.onConnectionConfigChanged(() => {
+    const interval = setInterval(() => {
       void loadConfig();
-    });
-    return unsubscribe;
+    }, 10000);
+    return () => clearInterval(interval);
   }, [loadConfig]);
 
   const saveHttpProxy = useCallback(async (): Promise<void> => {
@@ -328,6 +331,18 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
       void saveHttpProxy();
     };
   }, [saveHttpProxy]);
+
+  async function refreshFromVault(): Promise<void> {
+    setRefreshingVault(true);
+    try {
+      await window.hermesAPI.invalidateSecretsCache();
+      await loadConfig();
+    } catch {
+      // fail silently — the 10s poll will catch up
+    } finally {
+      setRefreshingVault(false);
+    }
+  }
 
   async function handleMigrate(): Promise<void> {
     setMigrating(true);
@@ -927,6 +942,15 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
               {generatingKey
                 ? t("settings.generating")
                 : t("settings.generateKey")}
+            </button>
+            <button
+              className="btn btn-secondary"
+              disabled={refreshingVault}
+              onClick={() => void refreshFromVault()}
+            >
+              {refreshingVault
+                ? t("settings.refreshingFromVault")
+                : t("settings.refreshFromVault")}
             </button>
           </div>
         ) : (

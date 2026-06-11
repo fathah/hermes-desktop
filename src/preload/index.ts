@@ -403,6 +403,9 @@ const hermesAPI = {
   generateApiServerKey: (profile?: string): Promise<{ key: string }> =>
     ipcRenderer.invoke("generate-api-server-key", profile),
 
+  invalidateSecretsCache: (): Promise<void> =>
+    ipcRenderer.invoke("invalidate-secrets-cache"),
+
   copyToClipboard: (text: string): Promise<void> =>
     ipcRenderer.invoke("copy-to-clipboard", text),
 
