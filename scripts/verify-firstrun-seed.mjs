@@ -110,6 +110,32 @@ await check("checklist dismiss hides it", async () => {
   return (await win.locator(".ob-checklist").count()) === 0;
 });
 
+// Discoverability (P2.9): the ⌘K palette now surfaces Ask / Vault health / Telos.
+// Vault health had NO UI entry point before — this command is its only door.
+// Open the palette via the sidebar Search button (deterministic in a probe).
+await check("palette exposes Vault health + Ask + Telos", async () => {
+  await win.locator(".nav-item", { hasText: "Search" }).first().click();
+  await win.waitForSelector(".palette", { timeout: 8000 });
+  const labels = await win.locator(".pal-item .label").allInnerTexts();
+  const blob = labels.join(" | ");
+  return (
+    blob.includes("Vault health") &&
+    blob.includes("Ask your workspace") &&
+    blob.includes("Telos alignment audit")
+  );
+});
+
+await check("Vault health command opens the health surface", async () => {
+  // Filter to the single command, then Enter.
+  await win.locator(".pal-input input").fill("Vault health");
+  await win.waitForTimeout(300);
+  await win.keyboard.press("Enter");
+  await win.waitForTimeout(600);
+  return (await win.locator("body").innerText())
+    .toLowerCase()
+    .includes("vault health");
+});
+
 console.log(`FAILURES=${failures}`);
 console.log("VERIFY_DONE");
 await app.close();

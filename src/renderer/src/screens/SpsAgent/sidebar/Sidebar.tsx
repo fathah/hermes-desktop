@@ -183,6 +183,7 @@ export function Sidebar() {
             type="button"
             className={`nav-item ${surface === "ask" ? "active" : ""}`}
             onClick={() => setSurface("ask")}
+            title="Ask a question across your pages and past conversations"
             style={{ paddingLeft: 24 }}
           >
             <Icon name="sparkle" size={17} />
@@ -192,6 +193,7 @@ export function Sidebar() {
             type="button"
             className={`nav-item ${surface === "you" ? "active" : ""}`}
             onClick={() => setSurface("you")}
+            title="Personalize the agent and run a Telos alignment audit"
             style={{ paddingLeft: 24 }}
           >
             <Icon name="wand" size={17} />

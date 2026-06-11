@@ -65,6 +65,7 @@ export function CommandPalette() {
   const startNewChat = useStore((s) => s.startNewChat);
   const setResearchOpen = useStore((s) => s.setResearchOpen);
   const setExternalSessionsOpen = useStore((s) => s.setExternalSessionsOpen);
+  const setSurface = useStore((s) => s.setSurface);
   const flash = useStore((s) => s.flash);
 
   const [q, setQ] = useState("");
@@ -111,6 +112,30 @@ export function CommandPalette() {
         label: "External sessions…",
         desc: "Search what you discussed in Claude Code, Codex, Gemini and Grok — local, opt-in, redacted.",
         run: () => setExternalSessionsOpen(true),
+      },
+      {
+        kind: "action",
+        id: "ask",
+        icon: "sparkle",
+        label: "Ask your workspace",
+        desc: "Ask a question across your pages and past conversations.",
+        run: () => setSurface("ask"),
+      },
+      {
+        kind: "action",
+        id: "health",
+        icon: "info",
+        label: "Vault health",
+        desc: "Review semantic-lint issues across your vault — orphans, broken links, and structure.",
+        run: () => setSurface("health"),
+      },
+      {
+        kind: "action",
+        id: "telos",
+        icon: "flag",
+        label: "Telos alignment audit",
+        desc: "Audit recent work against your objectives in TELOS.md and generate a roadmap (opens You).",
+        run: () => setSurface("you"),
       },
       {
         kind: "action",
@@ -221,6 +246,7 @@ export function CommandPalette() {
       startNewChat,
       setResearchOpen,
       setExternalSessionsOpen,
+      setSurface,
       flash,
     ],
   );
