@@ -4,6 +4,10 @@ import type { UsageAggregate, RunLedgerEntry } from "../shared/usage";
 import type { MemoryTimeline } from "../shared/memoryTimeline";
 import type { MemoryInfo } from "../shared/memory";
 import type { SpsSaveResult } from "../shared/sps-types";
+import type {
+  FederatedHit,
+  FederatedSearchOpts,
+} from "../shared/federated-search";
 import type { SearchSummary } from "../shared/searchSummary";
 import type { LoadedSkin } from "../shared/skins";
 import type {
@@ -1231,6 +1235,11 @@ interface HermesAPI {
     profile?: string,
   ) => Promise<Array<{ path: string; title: string; snippet: string }>>;
   spsIndexBacklinks: (path: string, profile?: string) => Promise<string[]>;
+  federatedSearch: (
+    query: string,
+    opts?: FederatedSearchOpts,
+    profile?: string,
+  ) => Promise<FederatedHit[]>;
   spsIndexLinks: (
     profile?: string,
   ) => Promise<Array<{ source: string; target: string; type: string }>>;

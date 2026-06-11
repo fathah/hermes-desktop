@@ -10,6 +10,10 @@ import type {
   ScheduleInput,
 } from "../../shared/scheduledResearch";
 import type { SpsSaveResult } from "../../shared/sps-types";
+import type {
+  FederatedHit,
+  FederatedSearchOpts,
+} from "../../shared/federated-search";
 
 /** Pending scheduled-research merge, shaped for the renderer (inline changeset
  *  shape mirrors spsFileAnswer's so preload need not import main types). */
@@ -313,6 +317,13 @@ export const spsBridge = {
     ipcRenderer.invoke("sps-index-search", text, limit, profile),
   spsIndexBacklinks: (path: string, profile?: string): Promise<string[]> =>
     ipcRenderer.invoke("sps-index-backlinks", path, profile),
+  // Federated search: one query merged across notes + transcripts + sessions.
+  federatedSearch: (
+    query: string,
+    opts?: FederatedSearchOpts,
+    profile?: string,
+  ): Promise<FederatedHit[]> =>
+    ipcRenderer.invoke("federated-search", query, opts, profile),
   spsIndexLinks: (
     profile?: string,
   ): Promise<Array<{ source: string; target: string; type: string }>> =>

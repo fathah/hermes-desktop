@@ -52,6 +52,7 @@ import { registerChatIpc, abortAllChats } from "./ipc/chat";
 import { registerNotesIpc, closeObsidianWatcher } from "./ipc/notes";
 import { registerWorkspaceIpc } from "./ipc/workspace";
 import { registerUtilityIpc } from "./ipc/utility";
+import { registerFederatedSearchIpc } from "./ipc/federated-search";
 import {
   registerExternalContextIpc,
   scheduleExternalContextScans,
@@ -395,6 +396,7 @@ function setupIPC(): void {
   registerWorkspaceIpc(() => mainWindow);
   registerUtilityIpc(() => mainWindow);
   registerExternalContextIpc(() => mainWindow);
+  registerFederatedSearchIpc();
   scheduleExternalContextScans(() => mainWindow);
 }
 function buildMenu(): void {
