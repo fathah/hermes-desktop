@@ -17,23 +17,40 @@ import {
   readFileSync,
   statSync,
 } from "node:fs";
+import { homedir } from "node:os";
 import { extname, join } from "node:path";
 import type { ExternalImportSource } from "../../shared/external-context";
 
 /** Length of the content-hash prefix used in import filenames (sha256 hex). */
 const HASH_PREFIX_LEN = 16;
 
-/** Base directory that holds every source's import staging folder. */
-export function importRootBase(hermesHome: string): string {
+/**
+ * Base directory that holds every source's import staging folder.
+ *
+ * Resolution order (env-first, mirroring the adapters' `HERMES_EC_*_ROOT`):
+ *  1. `HERMES_EC_IMPORT_ROOT` — set by the main process from the authoritative
+ *     `getHermesHome()` (honours the userData override) and by tests/smoke.
+ *  2. `<hermesHome>/external-imports` when the caller passes an explicit home
+ *     (the IPC layer, which can resolve it electron-side).
+ *  3. `~/.hermes/external-imports` — last-resort default for the rare case
+ *     where neither is available (matches the non-Windows default home).
+ *
+ * Pure adapters call this arg-free (path 1 or 3); the IPC layer passes the
+ * resolved home (path 1 or 2). The main process sets the env so both agree.
+ */
+export function importRootBase(hermesHome?: string): string {
   const override = process.env.HERMES_EC_IMPORT_ROOT;
   if (override && override.length > 0) return override;
-  return join(hermesHome, "external-imports");
+  if (hermesHome && hermesHome.length > 0) {
+    return join(hermesHome, "external-imports");
+  }
+  return join(homedir(), ".hermes", "external-imports");
 }
 
 /** The staging directory for one import source's copied export artifacts. */
 export function importRootFor(
   source: ExternalImportSource,
-  hermesHome: string,
+  hermesHome?: string,
 ): string {
   return join(importRootBase(hermesHome), source);
 }
@@ -64,7 +81,7 @@ export interface ImportCopyResult {
 export function copyExportToImportRoot(
   source: ExternalImportSource,
   srcPath: string,
-  hermesHome: string,
+  hermesHome?: string,
 ): ImportCopyResult {
   if (!existsSync(srcPath) || !statSync(srcPath).isFile()) {
     throw new Error(`import source is not a readable file: ${srcPath}`);

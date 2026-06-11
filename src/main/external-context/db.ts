@@ -32,7 +32,11 @@ import type {
 } from "../../shared/external-context";
 import { EXTERNAL_SOURCES } from "../../shared/external-context";
 import { redactExternalText } from "./redact";
-import type { DiscoveredFile, ParseResult } from "./adapters/types";
+import type {
+  DiscoveredFile,
+  ParsedConversation,
+  ParseResult,
+} from "./adapters/types";
 import type { FileRecord } from "./scan-logic";
 
 const SCHEMA_VERSION = 1;
@@ -164,18 +168,28 @@ export class ExternalContextDb {
     replace: boolean,
   ): void {
     const tx = this.db.transaction(() => {
-      const conv = result.conversation;
-      let convId: string | null = null;
+      // Multi-conversation export files (ChatGPT/Claude.ai/Takeout) carry an
+      // array; single-conversation sources carry one. Normalise to a list so
+      // the merge + replace-clear runs once per conversation in the slice.
+      const convs: ParsedConversation[] =
+        result.conversations ??
+        (result.conversation ? [result.conversation] : []);
+      const seededConvIds: string[] = [];
 
-      if (conv) {
-        convId = convKey(file.source, conv.conversationId);
-        this.mergeConversation(convId, file.source, conv, knownSecrets);
+      const delMsgForConv = this.db.prepare(
+        `DELETE FROM messages WHERE conv_id = ?`,
+      );
+      const delFtsForConv = this.db.prepare(
+        `DELETE FROM messages_fts WHERE conv_id = ?`,
+      );
+      for (const conv of convs) {
+        const cid = convKey(file.source, conv.conversationId);
+        this.mergeConversation(cid, file.source, conv, knownSecrets);
         if (replace) {
-          this.db.prepare(`DELETE FROM messages WHERE conv_id = ?`).run(convId);
-          this.db
-            .prepare(`DELETE FROM messages_fts WHERE conv_id = ?`)
-            .run(convId);
+          delMsgForConv.run(cid);
+          delFtsForConv.run(cid);
         }
+        seededConvIds.push(cid);
       }
 
       const insMsg = this.db.prepare(
@@ -204,7 +218,7 @@ export class ExternalContextDb {
            (SELECT COUNT(*) FROM messages WHERE messages.conv_id = conversations.conv_id)
          WHERE conv_id = ?`,
       );
-      if (convId) touched.add(convId);
+      for (const cid of seededConvIds) touched.add(cid);
       for (const cid of touched) recount.run(cid);
 
       // Advance the file cursor.

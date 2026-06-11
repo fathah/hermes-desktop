@@ -71,6 +71,21 @@ export function isScanning(): boolean {
   return scanning;
 }
 
+/**
+ * Bridge the authoritative (electron-resolved) Hermes home into the env the
+ * PURE import adapters read, so a scan looks in the SAME directory the import
+ * IPC copies exports to — even when the user set a custom HERMES_HOME. Idempotent
+ * and only sets the var when unset (tests/smoke pin it themselves).
+ */
+export function ensureImportRootEnv(): void {
+  if (!process.env.HERMES_EC_IMPORT_ROOT) {
+    process.env.HERMES_EC_IMPORT_ROOT = join(
+      getHermesHome(),
+      "external-imports",
+    );
+  }
+}
+
 const yieldToLoop = (): Promise<void> =>
   new Promise((resolve) => setImmediate(resolve));
 
@@ -88,6 +103,7 @@ export async function scanExternalSources(
 ): Promise<number> {
   if (scanning) return 0;
   scanning = true;
+  ensureImportRootEnv();
   let messagesIndexed = 0;
   try {
     onProgress?.({

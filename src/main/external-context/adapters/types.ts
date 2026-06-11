@@ -47,7 +47,16 @@ export interface ParsedMessage {
 
 /** What one parseSlice call produces. */
 export interface ParseResult {
+  /** Single-conversation sources (one file ≈ one conversation). */
   conversation: ParsedConversation | null;
+  /**
+   * Multi-conversation sources — one EXPORT file holds many conversations
+   * (ChatGPT/Claude.ai/Gemini Takeout). When present this takes precedence over
+   * `conversation`: the db merges metadata for EACH entry and, on a `replace`
+   * pass, clears each one's messages before re-inserting. `messages` still
+   * carries every conversation's rows, keyed by their own `conversationId`.
+   */
+  conversations?: ParsedConversation[];
   messages: ParsedMessage[];
   /** Total bytes scanned (== file size); the db advances the cursor to here. */
   bytesConsumed: number;
