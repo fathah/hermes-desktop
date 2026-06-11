@@ -27,7 +27,7 @@ export default {
     "Powiedz Hermesowi o sobie — imię, rola, preferencje, styl komunikacji.",
   providersHint:
     "Wtykowe dostawcy pamięci dają Hermesowi zaawansowaną pamięć długoterminową. Wbudowana pamięć (powyżej) zawsze działa razem z wybranym dostawcą.",
-  providersHintActive: "Aktywny: <strong>{{provider}}</strong>",
+  providersHintActive: "Aktywny: {{provider}}",
   providersHintInactive:
     "Brak aktywnego zewnętrznego dostawcy — używana tylko wbudowana pamięć.",
   enterEnvKey: "Wpisz {{key}}",

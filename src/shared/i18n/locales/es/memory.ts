@@ -29,7 +29,7 @@ export default {
     "Cuéntale a Hermes sobre ti: nombre, rol, preferencias y estilo de comunicación.",
   providersHint:
     "Los proveedores de memoria conectables ofrecen a Hermes memoria avanzada a largo plazo. La memoria integrada (arriba) siempre está activa junto con el proveedor seleccionado.",
-  providersHintActive: "Activo: <strong>{{provider}}</strong>",
+  providersHintActive: "Activo: {{provider}}",
   providersHintInactive:
     "No hay ningún proveedor externo activo — usando solo la memoria integrada.",
   enterEnvKey: "Introduce {{key}}",

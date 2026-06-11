@@ -24,7 +24,7 @@ export default {
   userProfileHint: "告訴 Hermes 關於你的資訊，姓名、角色、偏好、溝通風格。",
   providersHint:
     "可插拔的記憶供應商為 Hermes 提供進階長期記憶。內建記憶（上方）始終與所選供應商一起啟用。",
-  providersHintActive: "目前啟用： <strong>{{provider}}</strong>",
+  providersHintActive: "目前啟用： {{provider}}",
   providersHintInactive: "沒有外部供應商啟用，僅使用內建記憶。",
   enterEnvKey: "輸入 {{key}}",
   chars: "{{count}} 字元",

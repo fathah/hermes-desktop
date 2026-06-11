@@ -57,13 +57,13 @@ export function MemoryProviders({
       <div className="memory-providers-hint">
         {t("memory.providersHint")}
         {currentProvider ? (
-          <span
-            dangerouslySetInnerHTML={{
-              __html: t("memory.providersHintActive", {
-                provider: currentProvider,
-              }),
-            }}
-          />
+          // Plain text child (React-escaped). i18n runs with escapeValue:false,
+          // so the interpolated provider must NOT reach an HTML sink — never
+          // dangerouslySetInnerHTML here.
+          <span>
+            {" "}
+            {t("memory.providersHintActive", { provider: currentProvider })}
+          </span>
         ) : (
           <span> {t("memory.providersHintInactive")}</span>
         )}

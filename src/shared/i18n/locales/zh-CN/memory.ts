@@ -24,7 +24,7 @@ export default {
   userProfileHint: "告诉 Hermes 关于你的信息 — 姓名、角色、偏好、沟通风格。",
   providersHint:
     "可插拔的记忆提供商为 Hermes 提供高级长期记忆。内置记忆(上方)始终与所选提供商一起激活。",
-  providersHintActive: "当前激活: <strong>{{provider}}</strong>",
+  providersHintActive: "当前激活: {{provider}}",
   providersHintInactive: "没有外部提供商激活 — 仅使用内置记忆。",
   enterEnvKey: "输入 {{key}}",
   chars: "{{count}} 字符",

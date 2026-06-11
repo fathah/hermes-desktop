@@ -28,7 +28,7 @@ export default {
     "Fale ao Hermes sobre si — nome, cargo, preferências, estilo de comunicação.",
   providersHint:
     "Fornecedores de memória modular dão ao Hermes uma memória de longo prazo avançada. A memória integrada (acima) está sempre activa em conjunto com o fornecedor seleccionado.",
-  providersHintActive: "Activo: <strong>{{provider}}</strong>",
+  providersHintActive: "Activo: {{provider}}",
   providersHintInactive:
     "Nenhum fornecedor externo activo — a usar apenas a integrada.",
   enterEnvKey: "Introduza {{key}}",

@@ -28,7 +28,7 @@ export default {
     "Tell Hermes about yourself — name, role, preferences, communication style.",
   providersHint:
     "Pluggable memory providers give Hermes advanced long-term memory. Built-in memory (above) is always active alongside the selected provider.",
-  providersHintActive: "Active: <strong>{{provider}}</strong>",
+  providersHintActive: "Active: {{provider}}",
   providersHintInactive: "No external provider active — using built-in only.",
   enterEnvKey: "Enter {{key}}",
   chars: "{{count}} chars",

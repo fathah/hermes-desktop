@@ -30,7 +30,7 @@ export default {
     "Beri tahu Hermes tentang diri Anda - nama, peran, preferensi, dan gaya komunikasi.",
   providersHint:
     "Provider memori pluggable memberi Hermes memori jangka panjang yang lebih canggih. Memori bawaan (di atas) selalu aktif bersama provider yang dipilih.",
-  providersHintActive: "Aktif: <strong>{{provider}}</strong>",
+  providersHintActive: "Aktif: {{provider}}",
   providersHintInactive:
     "Tidak ada provider eksternal aktif - hanya memakai memori bawaan.",
   enterEnvKey: "Masukkan {{key}}",

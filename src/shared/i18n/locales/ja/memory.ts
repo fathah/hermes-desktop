@@ -28,7 +28,7 @@ export default {
     "あなた自身について Hermes に教えてください — 名前、役割、好み、コミュニケーションスタイルなど。",
   providersHint:
     "プラガブルなメモリプロバイダは Hermes に高度な長期記憶を与えます。組み込みメモリ（上）は選択したプロバイダと並行して常時動作します。",
-  providersHintActive: "稼働中：<strong>{{provider}}</strong>",
+  providersHintActive: "稼働中：{{provider}}",
   providersHintInactive: "外部プロバイダ未使用 — 組み込みのみ利用中。",
   enterEnvKey: "{{key}} を入力",
   chars: "{{count}} 文字",
