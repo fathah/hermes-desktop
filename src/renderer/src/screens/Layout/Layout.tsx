@@ -18,24 +18,18 @@ import Models from "../Models/Models";
 import Providers from "../Providers/Providers";
 import Schedules from "../Schedules/Schedules";
 import Kanban from "../Kanban/Kanban";
+import Inbox from "../Inbox/Inbox";
 import RemoteNotice from "../../components/RemoteNotice";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
 import hermeslogo from "../../assets/hermes-one.svg";
 import {
   ChatBubble,
-  Clock,
   Compass,
   Settings as SettingsIcon,
-  Brain,
-  Wrench,
-  Signal,
-  Building,
-  Layers,
-  KeyRound,
   Timer,
-  Kanban as KanbanIcon,
   Download,
 } from "../../assets/icons";
+import { Mail } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 
@@ -52,25 +46,19 @@ type View =
   | "tools"
   | "schedules"
   | "kanban"
+  | "inbox"
   | "gateway"
   | "settings";
 
+// Phase 1 IA alignment — narrowed to the 5 primary surfaces that match
+// official Hermes Desktop routes (chat, discover/skills, messaging/inbox,
+// cron/schedules, settings). All other screens remain mounted on demand
+// but no longer compete for first-run attention in the sidebar.
 const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string }[] = [
   { view: "chat", icon: ChatBubble, labelKey: "navigation.chat" },
-  { view: "sessions", icon: Clock, labelKey: "navigation.sessions" },
   { view: "discover", icon: Compass, labelKey: "navigation.discover" },
-  // "agents" (Profiles) is reached from the sidebar-footer ProfileSwitcher's
-  // "Manage profiles" action rather than a top-level nav item.
-  { view: "office", icon: Building, labelKey: "navigation.office" },
-  { view: "kanban", icon: KanbanIcon, labelKey: "navigation.kanban" },
-  { view: "models", icon: Layers, labelKey: "navigation.models" },
-  { view: "providers", icon: KeyRound, labelKey: "navigation.providers" },
-  // "skills" lives under the Discover tab (installed + community), so it's no
-  // longer a top-level nav item.
-  { view: "memory", icon: Brain, labelKey: "navigation.memory" },
-  { view: "tools", icon: Wrench, labelKey: "navigation.tools" },
+  { view: "inbox", icon: Mail, labelKey: "navigation.inbox" },
   { view: "schedules", icon: Timer, labelKey: "navigation.schedules" },
-  { view: "gateway", icon: Signal, labelKey: "navigation.gateway" },
   { view: "settings", icon: SettingsIcon, labelKey: "navigation.settings" },
 ];
 
@@ -286,6 +274,8 @@ function Layout({
               )}
             </button>
           )}
+          {/* Phase 6B: Fleet summary */}
+          <FleetSummary onOpenFleet={() => goTo("agents")} />
           <ProfileSwitcher
             activeProfile={activeProfile}
             onSwitch={handleSelectProfile}
@@ -425,6 +415,12 @@ function Layout({
           </div>
         )}
 
+        {visitedViews.has("inbox") && (
+          <div style={paneStyle("inbox")}>
+            <Inbox profile={activeProfile} visible={view === "inbox"} />
+          </div>
+        )}
+
         {visitedViews.has("gateway") && (
           <div style={paneStyle("gateway")}>
             {remoteMode ? (
@@ -441,6 +437,24 @@ function Layout({
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+// ── Phase 6B: Fleet Summary for sidebar-footer ──────────────────────
+import { useFleetSnapshot } from "../../hooks/useFleetSnapshot";
+
+function FleetSummary({ onOpenFleet }: { onOpenFleet: () => void }): React.JSX.Element | null {
+  const { snapshot } = useFleetSnapshot();
+  if (!snapshot) return null;
+  const s = snapshot.summary;
+  return (
+    <div className="fleet-summary" onClick={onOpenFleet} title="Open Agent Fleet">
+      <span style={{color: "#22c55e"}}>●</span> {s.online}{" "}
+      <span style={{color: "#9ca3af"}}>◉</span> {s.idle}{" "}
+      {s.working > 0 && <><span>⚡</span> {s.working}{" "}</>}
+      {s.error > 0 && <><span style={{color: "#ef4444"}}>✕</span> {s.error}{" "}</>}
+      <span>{s.total} agents</span>
     </div>
   );
 }

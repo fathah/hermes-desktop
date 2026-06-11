@@ -799,6 +799,14 @@ interface HermesAPI {
     body: string,
     profile?: string,
   ) => Promise<{ success: boolean; error?: string }>;
+  triggerReview: (
+    taskId: string,
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string; stdout?: string }>;
+  triggerQA: (
+    taskId: string,
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string; stdout?: string }>;
   kanbanDispatchOnce: (
     dryRun?: boolean,
     profile?: string,
@@ -864,6 +872,9 @@ interface HermesAPI {
     logFile?: string,
     lines?: number,
   ) => Promise<{ content: string; path: string }>;
+
+  // Phase 6B: Agent Fleet Snapshot
+  readFleetSnapshot: () => Promise<{ ok: boolean; snapshot?: unknown; error?: string }>;
 }
 
 declare global {

@@ -958,6 +958,10 @@ const hermesAPI = {
     ipcRenderer.invoke("kanban-reclaim-task", taskId, reason, profile),
   kanbanCommentTask: (taskId: string, body: string, profile?: string) =>
     ipcRenderer.invoke("kanban-comment-task", taskId, body, profile),
+  triggerReview: (taskId: string, profile?: string) =>
+    ipcRenderer.invoke("kanban-trigger-review", taskId, profile),
+  triggerQA: (taskId: string, profile?: string) =>
+    ipcRenderer.invoke("kanban-trigger-qa", taskId, profile),
   kanbanDispatchOnce: (dryRun?: boolean, profile?: string) =>
     ipcRenderer.invoke("kanban-dispatch-once", dryRun, profile),
   kanbanListClaw3dHqTasks: () =>
@@ -1022,6 +1026,10 @@ const hermesAPI = {
     lines?: number,
   ): Promise<{ content: string; path: string }> =>
     ipcRenderer.invoke("read-logs", logFile, lines),
+
+  // Phase 6B — Agent Fleet Snapshot
+  readFleetSnapshot: (): Promise<{ ok: boolean; snapshot?: unknown; error?: string }> =>
+    ipcRenderer.invoke("read-fleet-snapshot"),
 };
 
 if (process.contextIsolated) {

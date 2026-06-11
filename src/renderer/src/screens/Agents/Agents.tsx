@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from "react";
 import { Plus, Trash, ChatBubble } from "../../assets/icons";
 import HermesLogo from "../../components/common/HermesLogo";
 import { useI18n } from "../../components/useI18n";
+import FleetTab from "./FleetTab";
+import { useFleetSnapshot } from "../../hooks/useFleetSnapshot";
 
 interface ProfileInfo {
   name: string;
@@ -49,6 +51,10 @@ function Agents({
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+
+  // ── Phase 6B: Fleet tab (uses shared singleton hook) ────────────────
+  const [activeTab, setActiveTab] = useState<"current" | "fleet">("current");
+  const { snapshot: fleetSnapshot, loading: fleetLoading, error: fleetError, stale: fleetStale, refresh: fleetRefresh } = useFleetSnapshot();
 
   const loadProfiles = useCallback(async (): Promise<void> => {
     const list = await window.hermesAPI.listProfiles();
@@ -116,6 +122,28 @@ function Agents({
 
   return (
     <div className="agents-container">
+      {/* ── Phase 6B: Tab bar ── */}
+      <div className="agents-tabs">
+        <button
+          className={`agents-tab ${activeTab === "current" ? "active" : ""}`}
+          onClick={() => setActiveTab("current")}
+        >Current Run</button>
+        <button
+          className={`agents-tab ${activeTab === "fleet" ? "active" : ""}`}
+          onClick={() => setActiveTab("fleet")}
+        >All Agents ({fleetSnapshot?.summary.total ?? "—"})</button>
+      </div>
+
+      {activeTab === "fleet" ? (
+        <FleetTab
+          snapshot={fleetSnapshot}
+          loading={fleetLoading}
+          error={fleetError}
+          stale={fleetStale}
+          onRefresh={fleetRefresh}
+        />
+      ) : (
+        <>
       <div className="agents-header">
         <div>
           <h2 className="agents-title">{t("agents.title")}</h2>
@@ -273,6 +301,8 @@ function Agents({
           </div>
         ))}
       </div>
+    </>
+      )}
     </div>
   );
 }

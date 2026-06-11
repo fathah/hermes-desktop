@@ -10,7 +10,7 @@ import {
   session,
 } from "electron";
 import { join, extname } from "path";
-import { readdir, readFile } from "fs/promises";
+import { readdir, readFile, stat, realpath } from "fs/promises";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import type { AppUpdater } from "electron-updater";
 import icon from "../../resources/icon.png?asset";
@@ -179,6 +179,8 @@ import {
   specifyTask as kanbanSpecifyTask,
   reclaimTask as kanbanReclaimTask,
   commentTask as kanbanCommentTask,
+  triggerReviewTask as kanbanTriggerReviewTask,
+  triggerQATask as kanbanTriggerQATask,
   dispatchOnce as kanbanDispatchOnce,
   listClaw3dHqTasks as kanbanListClaw3dHqTasks,
   CreateTaskInput,
@@ -1657,6 +1659,16 @@ function setupIPC(): void {
       kanbanCommentTask(taskId, body, profile),
   );
   ipcMain.handle(
+    "kanban-trigger-review",
+    (_event, taskId: string, profile?: string) =>
+      kanbanTriggerReviewTask(taskId, profile),
+  );
+  ipcMain.handle(
+    "kanban-trigger-qa",
+    (_event, taskId: string, profile?: string) =>
+      kanbanTriggerQATask(taskId, profile),
+  );
+  ipcMain.handle(
     "kanban-dispatch-once",
     (_event, dryRun?: boolean, profile?: string) =>
       kanbanDispatchOnce(dryRun, profile),
@@ -1910,6 +1922,34 @@ function setupUpdater(): void {
       "Restart requested by user — calling quitAndInstall(isSilent=false, isForceRunAfter=true)",
     );
     autoUpdater.quitAndInstall(false, true);
+  });
+
+  // ── Phase 6B: Agent Fleet Snapshot ──────────────────────────────────
+  const MAX_FLEET_SNAPSHOT_BYTES = 1_048_576; // 1 MB
+  ipcMain.handle("read-fleet-snapshot", async () => {
+    const hermesHome = getHermesHome();
+    const snapshotPath = join(hermesHome, "projections", "fleet", "snapshot.json");
+    try {
+      // Reject symlinks: realpath must stay within hermesHome
+      const resolved = await realpath(snapshotPath);
+      if (!resolved.startsWith(hermesHome)) {
+        return { ok: false, error: "snapshot path escapes hermes home" };
+      }
+      const info = await stat(snapshotPath);
+      if (info.size > MAX_FLEET_SNAPSHOT_BYTES) {
+        return { ok: false, error: "snapshot file too large" };
+      }
+      const raw = await readFile(snapshotPath, "utf-8");
+      const data = JSON.parse(raw);
+      if (!data || typeof data !== "object" || data.schema_version !== "fleet_v1") {
+        return { ok: false, error: "unsupported schema_version" };
+      }
+      return { ok: true, snapshot: data };
+    } catch (err: unknown) {
+      const code = (err as NodeJS.ErrnoException)?.code;
+      if (code === "ENOENT") return { ok: false, error: "snapshot not found" };
+      return { ok: false, error: "snapshot read failed" };
+    }
   });
 
   setTimeout(() => {
