@@ -145,6 +145,9 @@ export interface NoteSearchHit {
   path: string;
   title: string;
   snippet: string;
+  /** File mtime (epoch ms) of the matched note — joined from `notes`, for a
+   *  recency boost in federated ranking. Optional: legacy callers ignore it. */
+  mtime?: number;
 }
 
 export interface NoteIndexStatus {
@@ -321,10 +324,14 @@ export class NoteIndex {
 
     // Migrate existing DB if links table does not have 'type' column
     try {
-      const columns = this.db.prepare("PRAGMA table_info(links)").all() as Array<{ name: string }>;
+      const columns = this.db
+        .prepare("PRAGMA table_info(links)")
+        .all() as Array<{ name: string }>;
       const hasType = columns.some((col) => col.name === "type");
       if (columns.length > 0 && !hasType) {
-        this.db.exec("ALTER TABLE links ADD COLUMN type TEXT NOT NULL DEFAULT 'link'");
+        this.db.exec(
+          "ALTER TABLE links ADD COLUMN type TEXT NOT NULL DEFAULT 'link'",
+        );
       }
     } catch (err) {
       console.error("[NoteIndex] failed to run links table migration:", err);
@@ -373,7 +380,8 @@ export class NoteIndex {
       const insLink = this.db.prepare(
         `INSERT INTO links(source,target_norm,type) VALUES(?,?,?)`,
       );
-      for (const link of typedLinks) insLink.run(relPath, link.target_norm, link.type);
+      for (const link of typedLinks)
+        insLink.run(relPath, link.target_norm, link.type);
 
       // Tags: frontmatter `tags` (array or string) + inline `#tag`s in the body.
       this.db.prepare(`DELETE FROM tags WHERE source = ?`).run(relPath);
@@ -561,9 +569,11 @@ export class NoteIndex {
     try {
       const rows = this.db
         .prepare(
-          `SELECT path, title,
-                  snippet(notes_fts, 2, '⟦', '⟧', '…', 12) AS snippet
+          `SELECT notes_fts.path AS path, notes_fts.title AS title,
+                  snippet(notes_fts, 2, '⟦', '⟧', '…', 12) AS snippet,
+                  n.mtime AS mtime
            FROM notes_fts
+           JOIN notes n ON n.path = notes_fts.path
            WHERE notes_fts MATCH ?
            ORDER BY rank
            LIMIT ?`,
