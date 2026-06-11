@@ -10,6 +10,7 @@ import type {
 } from "../shared/federated-search";
 import type { SearchSummary } from "../shared/searchSummary";
 import type { LoadedSkin } from "../shared/skins";
+import type { TelegramStatus } from "../shared/telegram-status";
 import type {
   SearchOpts as ResearchSearchOpts,
   WorkSummary as ResearchWorkSummary,
@@ -385,6 +386,7 @@ interface HermesAPI {
     profile?: string,
   ) => Promise<"read-info" | "broad" | "custom">;
   telegramSetReadInfoScope: (profile?: string) => Promise<boolean>;
+  telegramCheckStatus: (profile?: string) => Promise<TelegramStatus>;
 
   // Sessions
   listSessions: (limit?: number, offset?: number) => Promise<SessionSummary[]>;

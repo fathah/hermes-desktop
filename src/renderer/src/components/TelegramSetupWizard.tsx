@@ -7,6 +7,7 @@
 // allowlist exactly you) → done. The allowlist (only your Telegram id) + pairing
 // approval are the load-bearing security controls.
 import { useEffect, useState } from "react";
+import type { TelegramStatus } from "../../../shared/telegram-status";
 
 const box: React.CSSProperties = {
   position: "fixed",
@@ -58,6 +59,32 @@ const input: React.CSSProperties = {
 type Step = "intro" | "token" | "pair" | "done" | "manage";
 type Scope = "read-info" | "broad" | "custom" | "?";
 
+/** Map the live Telegram status to a short label + colour for the status pill. */
+function statusDisplay(s: TelegramStatus | null): {
+  text: string;
+  color: string;
+} {
+  if (!s) return { text: "Checking…", color: "#888" };
+  switch (s.state) {
+    case "active":
+      return {
+        text: `Online — @${s.botUsername} is connected`,
+        color: "#7ec77e",
+      };
+    case "gateway-stopped":
+      return {
+        text: `Token OK (@${s.botUsername}) — gateway stopped, bot offline`,
+        color: "#e0a33a",
+      };
+    case "invalid-token":
+      return { text: "Bot token rejected by Telegram", color: "#e88" };
+    case "unreachable":
+      return { text: "Couldn’t reach Telegram to verify", color: "#e0a33a" };
+    case "not-configured":
+      return { text: "Not configured", color: "#888" };
+  }
+}
+
 export function TelegramSetupWizard({
   onClose,
   onDone,
@@ -67,10 +94,17 @@ export function TelegramSetupWizard({
 }): React.JSX.Element {
   const [step, setStep] = useState<Step>("intro");
   const [token, setToken] = useState("");
+  const [allowedUsers, setAllowedUsers] = useState("");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
   const [scope, setScope] = useState<Scope>("?");
+  const [status, setStatus] = useState<TelegramStatus | null>(null);
+  const [statusBusy, setStatusBusy] = useState(false);
+  const [accounts, setAccounts] = useState<Array<{ id: string; name: string }>>(
+    [],
+  );
+  const [revoking, setRevoking] = useState<string | null>(null);
 
   const loadScope = async (): Promise<void> => {
     try {
@@ -81,13 +115,52 @@ export function TelegramSetupWizard({
     }
   };
 
+  const loadStatus = async (): Promise<void> => {
+    setStatusBusy(true);
+    try {
+      const s = await window.hermesAPI.telegramCheckStatus?.();
+      setStatus(s ?? null);
+    } catch {
+      setStatus(null);
+    } finally {
+      setStatusBusy(false);
+    }
+  };
+
+  // Connected accounts come from the gateway's channel directory (the chats the
+  // bot has talked to) — the actionable set for "remove access".
+  const loadAccounts = async (): Promise<void> => {
+    try {
+      const avail = await window.hermesAPI.srTelegramAvailability?.();
+      setAccounts(avail?.targets ?? []);
+    } catch {
+      setAccounts([]);
+    }
+  };
+
+  const revokeAccount = async (id: string): Promise<void> => {
+    setRevoking(id);
+    setNote("");
+    try {
+      const res = await window.hermesAPI.revokePairing(id, undefined);
+      if (!res.success) {
+        setNote(res.output || "Couldn't remove that account.");
+      }
+      await loadAccounts();
+    } catch (e) {
+      setNote("Error: " + (e as Error).message);
+    } finally {
+      setRevoking(null);
+    }
+  };
+
   // If Telegram is already connected, open straight to the manage/status view.
   useEffect(() => {
     void (async () => {
       try {
         const platforms = await window.hermesAPI.getPlatformEnabled();
         if (platforms?.telegram) {
-          await loadScope();
+          await Promise.all([loadScope(), loadStatus(), loadAccounts()]);
           setStep("manage");
         }
       } catch {
@@ -95,6 +168,15 @@ export function TelegramSetupWizard({
       }
     })();
   }, []);
+
+  // Refresh the live status + connected accounts whenever the manage view opens
+  // (e.g. arriving from the "done" step after a fresh pairing).
+  useEffect(() => {
+    if (step !== "manage") return;
+    void loadScope();
+    void loadStatus();
+    void loadAccounts();
+  }, [step]);
 
   const lockReadInfo = async (): Promise<void> => {
     setBusy(true);
@@ -125,6 +207,16 @@ export function TelegramSetupWizard({
     setNote("Saving token and restarting the gateway…");
     try {
       await window.hermesAPI.setEnv("TELEGRAM_BOT_TOKEN", t, undefined);
+      // Optional allowlist: who (besides the paired account) may command the
+      // bot. Empty leaves it unset — the pairing approval is still the gate.
+      const allow = allowedUsers.trim();
+      if (allow) {
+        await window.hermesAPI.setEnv(
+          "TELEGRAM_ALLOWED_USERS",
+          allow,
+          undefined,
+        );
+      }
       await window.hermesAPI.setPlatformEnabled("telegram", true, undefined);
       // Security default: scope the Telegram agent to read/info-only (no
       // terminal/file/computer-use). This also restarts the gateway so the token
@@ -212,6 +304,21 @@ export function TelegramSetupWizard({
               onChange={(e) => setToken(e.target.value)}
               placeholder="123456789:ABCdef…"
             />
+            <p style={{ marginTop: 14, marginBottom: 0 }}>
+              <strong>Allowed accounts</strong>{" "}
+              <span style={{ color: "#888" }}>(optional)</span>
+            </p>
+            <p style={{ color: "#bbb", marginTop: 4, fontSize: 13 }}>
+              Telegram user IDs or @usernames allowed to command the bot, comma
+              separated. Leave blank — you&apos;ll still approve your own
+              account next.
+            </p>
+            <input
+              style={input}
+              value={allowedUsers}
+              onChange={(e) => setAllowedUsers(e.target.value)}
+              placeholder="123456789, @you"
+            />
             {note && <p style={{ color: "#d88", marginTop: 8 }}>{note}</p>}
             <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
               <button
@@ -295,6 +402,38 @@ export function TelegramSetupWizard({
             </p>
             <div
               style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                border: "1px solid #333",
+                borderRadius: 8,
+                padding: "10px 12px",
+                margin: "12px 0",
+              }}
+            >
+              <span
+                aria-hidden
+                style={{
+                  width: 9,
+                  height: 9,
+                  borderRadius: "50%",
+                  background: statusDisplay(status).color,
+                  flexShrink: 0,
+                }}
+              />
+              <span style={{ color: statusDisplay(status).color, flex: 1 }}>
+                {statusBusy ? "Checking…" : statusDisplay(status).text}
+              </span>
+              <button
+                style={{ ...ghost, padding: "4px 10px" }}
+                disabled={statusBusy}
+                onClick={() => void loadStatus()}
+              >
+                Recheck
+              </button>
+            </div>
+            <div
+              style={{
                 border: "1px solid #333",
                 borderRadius: 8,
                 padding: 12,
@@ -325,6 +464,51 @@ export function TelegramSetupWizard({
                 >
                   {busy ? "Applying…" : "Lock to read/info only"}
                 </button>
+              )}
+            </div>
+            <div
+              style={{
+                border: "1px solid #333",
+                borderRadius: 8,
+                padding: 12,
+                margin: "12px 0",
+              }}
+            >
+              <div style={{ marginBottom: 8 }}>
+                <strong>Connected accounts</strong>
+              </div>
+              {accounts.length === 0 ? (
+                <p style={{ color: "#888", margin: 0, fontSize: 13 }}>
+                  No accounts have connected yet. Message your bot to pair.
+                </p>
+              ) : (
+                accounts.map((a) => (
+                  <div
+                    key={a.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      padding: "6px 0",
+                    }}
+                  >
+                    <span style={{ flex: 1 }}>
+                      {a.name} <span style={{ color: "#888" }}>({a.id})</span>
+                    </span>
+                    <button
+                      style={{
+                        ...ghost,
+                        padding: "4px 10px",
+                        borderColor: "#a44",
+                        color: "#e88",
+                      }}
+                      disabled={revoking === a.id}
+                      onClick={() => void revokeAccount(a.id)}
+                    >
+                      {revoking === a.id ? "Removing…" : "Remove access"}
+                    </button>
+                  </div>
+                ))
               )}
             </div>
             <p style={{ color: "#bbb", fontSize: 13 }}>
