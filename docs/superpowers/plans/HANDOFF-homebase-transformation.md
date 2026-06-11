@@ -1,6 +1,6 @@
 # Handoff — "The Home Base" transformation
 
-**As of 2026-06-11. `origin/main` @ `84dcb389`. Tree clean.**
+**As of 2026-06-11. `origin/main` @ `20011102`. Tree clean.**
 
 This is the in-repo durable pointer. The **living tracker** is the auto-memory file
 `homebase-transformation.md` (auto-loads each session via its MEMORY.md index line) and is
@@ -10,117 +10,73 @@ authoritative if the two ever drift. The **canonical plan** is
 ## Status
 
 - **Phase 0** — done.
-- **Phase 1 (Stability) — COMPLETE.** 1.1 gateway supervision, 1.2 scheduler locks,
-  1.3 IPC error envelope (`2c5fd7fe`), 1.4 SSH key cache, 1.5 workspace write-safety
-  (`08ec21f5`), 1.6 logging, 1.7 note-index event — all merged.
-- **Phase 2 (Consolidation) — 5/9.** Owner decision (2026-06-10): **port + delete in
-  one pass** (the one-week Developer-mode trial gate was waived). Owner decision (2026-06-11):
-  **do 2.6 before 2.5** to unblock the deferred deletions. Done:
-  - **2.1** delete admin Personalization — SPS You was already a strict superset
-    (`dcced1da`).
-  - **2.2** port cron oversight into SPS Scheduled modal, delete admin Schedules
-    (`a4b39223`).
-  - **2.3** port full-history session **search** into SPS `SidebarRecents`, delete admin
-    Sessions screen (`fb408a8c`).
+- **Phase 1 (Stability) — COMPLETE.** 1.1 gateway supervision, 1.2 scheduler locks, 1.3 IPC error
+  envelope, 1.4 SSH key cache, 1.5 workspace write-safety, 1.6 logging, 1.7 note-index event.
+- **Phase 2 (Consolidation) — COMPLETE (9/9).** Owner decision (2026-06-10): **port + delete in one
+  pass** (one-week Developer-mode trial gate waived). Owner decision (2026-06-11): **do 2.6 before
+  2.5** to unblock the deferred deletions. **The SPS workspace is now the app; the admin overlay is a
+  thin 4-tab connectivity+settings surface (Providers / Models / Gateway / Settings).**
+  - **2.1** delete admin Personalization — SPS You was already a strict superset (`dcced1da`).
+  - **2.2** port cron oversight into SPS Scheduled modal, delete admin Schedules (`a4b39223`).
+  - **2.3** port full-history session **search** into SPS `SidebarRecents`, delete admin Sessions
+    (`fb408a8c`).
   - **2.4** delete Kanban + Agents + Tools + CapabilityReview + Insights (6 commits,
-    `9eff1acd`→`0f20d86e`). **Skills / Memory / Soul deletions DEFERRED** (reality-check —
-    see below). Per-screen outcome:
-    - **Insights** (`9eff1acd`) — INVERTED premise: the component is the live SPS `insights`
-      surface (`SpsAgent/App.tsx`), the Chat.tsx pattern. Removed the duplicate admin nav
-      entry only; component + `getUsageStats`/`getRunLedger` IPC kept.
-    - **CapabilityReview** (`07292867`) — deleted; security summary ported to a new
-      `Settings/CapabilitySummary.tsx` card under Settings → Agent Health (same 3 read IPC).
-    - **Tools** (`a8aa8457`) — deleted; `getComputerUseStatus`/`installComputerUseDriver`
-      removed end-to-end (preload + d.ts + both main handlers — strict main↔preload parity
-      forces all-or-nothing); `computer-use.ts` impl kept. `getToolsets`/`listMcpServers`
-      stay (ResearchModal + CapabilitySummary use them).
-    - **Agents** (`b7c4d620`) — deleted with the **admin chat-pane**; ⌘N now always
-      `spsNewChat` (`adminNewChat` + `ADMIN_NEW_CHAT_EVENT` dropped). Removed the SPS sidebar
-      "Agents" section (its only action was `openSettings("agents")`). Profile IPC
-      (create/delete/setActive) KEPT — backs `tests/profiles.test.ts` security guards + an
-      explicit preload-surface assertion; now renderer-orphaned like the sessions IPC.
-    - **Kanban** (`1e4eb6e8`) — screen deleted; replaced by read-only
-      `SpsAgent/modals/AgentTasksModal.tsx` (Workspace Tools → "Agent tasks"), using
-      `kanbanListBoards`/`kanbanListTasks`. ALL kanban IPC kept (write methods now orphaned).
-    - **i18n prune** (`0f20d86e`) — deleted `tools`/`kanban`/`agents`/`schedules` namespaces
-      (32 locale files + 37 imports/registrations) + dead `navigation.*` keys.
+    `9eff1acd`→`0f20d86e`). Insights/Chat were INVERTED premises (the component IS the live SPS
+    surface). CapabilityReview → a Settings card; Tools' computer-use IPC removed end-to-end.
+  - **2.6 (core)** `tweaks/TweaksPanel.tsx` became "Workspace settings" (active-skills toggles +
+    capture placeholder) (`5912d5bf`); **Skills** screen deleted (`84dcb389`).
+  - **Memory→You** (`f65244ae`) — folded admin Memory + its embedded Soul tab into SPS You
+    (MemoryTimeline / SoulEditor / MemoryProviders relocated to `you/`), deleted both screens + the
+    `memory` AdminView. **Reached the 4-tab target.** Deliberate delta: structured memory-entry CRUD
+    not ported (durable-facts textarea + timeline reject already cover it).
+  - **2.5** delete SPS sidebar stubs — Meetings/Shared/Apps (`b4567b69`).
+  - **2.7** extract one `SpsModal` chrome shell, convert 5 modals (`397e7ae1`). Excluded
+    ExternalSessionsModal (nested viewer in one scrim) + TaskDrawer (drawer) as structurally divergent.
+  - **2.8** first-run guided seed — "Start here" page wiki-linked to Home + a nested Inbox explainer,
+    plus a dismissible 3-step checklist (`OnboardingChecklist`) (`dfd78c24`). New
+    `npm run verify:firstrun-seed` probe (drives the real `buildInitialWorkspace` path).
+  - **2.9** discoverability — ⌘K commands for **Ask / Vault health / Telos** (Vault health had NO UI
+    entry point before — was unreachable) + sidebar tooltips (`20011102`).
 - **Phases 3–5** — not started (external imports → federated search → live capture/streaming).
 
-## What 2.4 corrected + DEFERRED (read before 2.5/2.6)
+## Still owed (deferred, not lost)
 
-Reality-check closed/reshaped several plan premises:
+- **1.7 vault-mirror failure COUNT** — needs a counter in the load-bearing vault write path
+  (`sps-vault.ts` / `ipc/notes.ts` `sps-export-page`) + a `spsGetMirrorFailCount` IPC, surfaced in
+  the TweaksPanel Storage section. Held out of every UI commit to avoid touching the storage substrate.
 
-1. **Insights is not deletable** — it's the live SPS `insights` surface (`SpsAgent/App.tsx`
-   `surface === "insights"`, routed from the sidebar). Same inversion as Chat.tsx in 2.3. Only the
-   duplicate admin nav entry was removed; the component stays.
-2. **`sessions` i18n namespace was NOT orphaned** (the 2.3 handoff said it was) — `src/main/session-cache.ts`
-   calls `t("sessions.newConversation")`. It was KEPT; the i18n prune corrected this.
+## Next: Phase 3 — external conversation imports (the unifier's intake)
 
-**Three deletions were DEFERRED — they are genuinely blocked on later items, not skipped:**
+Adapters reuse the existing scan pipeline and are **parallel-safe** (disjoint files). All writes go
+through `applyFragments` (index-time redaction invariant). Import flow copies the export payload to a
+content-hash path (idempotent re-import); large-file parsing runs in a worker_thread.
 
-- **Skills → 2.6.** Active-skills toggles must move into "Workspace Settings", which **2.6** builds
-  and which doesn't exist yet. Deleting `screens/Skills/` first strands the capability. Hold until 2.6
-  (or pull 2.6 forward). `ipc/skills.ts` + the screen stay until then.
-- **Memory → a Memory→You port (fold into 2.6, or its own item before deleting).** `screens/Memory/`
-  has tabs (entries/timeline/providers/profile/soul) not yet all present in `SpsAgent/you/YouSurface.tsx`.
-  `MemoryTimeline` is already imported by SPS; a full port of the remaining tabs is required first.
-- **Soul → coupled to Memory.** `screens/Soul/Soul.tsx` has **no standalone admin nav entry** — it's
-  rendered only as a tab inside `screens/Memory/Memory.tsx`, and `readSoul` is used by Chat's
-  `useLocalCommands`. It can't be deleted while Memory exists and embeds it; it rides with the
-  Memory→You port. Its i18n namespace was KEPT for the same reason.
+- **3.1** source-type plumbing — extend `ExternalSource` in `src/shared/external-context.ts` (~line 11)
+  with `chatgpt | claude-ai | grok-export | gemini-takeout`; default-OFF; `importRootFor(source)` +
+  copy-with-hash util. (`verify:external-context` stays green.)
+- **3.2** ChatGPT adapter — `conversations.json` node-graph: walk from `current_node` via `parent`.
+- **3.3** Claude.ai (linear `chat_messages`) + Grok export adapters.
+- **3.4** Gemini Takeout — `MyActivity.json`, group by >30 min gap.
+- **3.5** Perplexity DESCOPED — no official export; paste-capture only (Phase 5).
+- **3.6** import IPC + drop-zone UI — `external-context-import-file` handler (ZIP via adm-zip →
+  worker_thread parse) + an Import tab in `ExternalSessionsModal`.
 
-**Current admin overlay tab set** (after 2.4): Skills, Providers, Models, Gateway, Memory, Settings
-(6 tabs). The plan's "exactly 4 tabs" target (Providers/Models/Gateway/Settings) is reached once
-Skills (2.6) and Memory (Memory→You) land.
+**Phase 3 gate:** standard + `verify:external-context` (extended) + `external-context-smoke`.
 
-## P2.6 (done, core) + Skills closed
+## Established Phase-2 port+delete pattern (reuse where it applies)
 
-`tweaks/TweaksPanel.tsx` is now THE workspace-settings surface (header "Workspace settings"):
-
-- `5912d5bf` — added **Active skills** toggles (`SkillToggles`, the deletion unblocker; self-hides
-  in remote/SSH) + a **Capture** placeholder (Phase 5.1); repointed the command-palette `storage`
-  command to OPEN this surface instead of firing migrate inline. +2 vitest cases.
-- `84dcb389` — **deleted `screens/Skills/`** (screen + CuratorPanel + test) + Layout wiring + the
-  `skills` AdminView; `verify-admin-overlay.mjs` a5 repointed `skills`→`gateway`. All skills IPC kept.
-
-**Reality-check / DEFERRED inside 2.6** (do NOT treat as missing-by-mistake):
-
-- The 2.6 plan's "replace raw-JSON curator editing with form fields" premise is **STALE** —
-  `InboxSurface` already uses proper form fields persisted to `curator-settings.md`. Nothing to do;
-  "no raw-JSON" is already satisfied. Curator _consolidation_ into TweaksPanel skipped (low value).
-- **1.7 vault-mirror failure COUNT still not built** — needs a counter in the load-bearing vault
-  write path (`sps-vault.ts`/`ipc/notes.ts` `sps-export-page`) + a `spsGetMirrorFailCount` IPC
-  (or bundle into the `sps-index-rebuilt` payload). Held out to avoid touching the storage substrate
-  in a UI commit. The Storage section already shows mode/parity/migrate/backup/vault.
-
-## Next step: Memory→You port (the LAST P2.4 deferral) → then 2.5/2.7/2.8/2.9
-
-Deleting `screens/Memory/` + `screens/Soul/` is the only thing between us and the 4-tab admin target
-(currently 5: Providers/Models/Gateway/**Memory**/Settings). **Reality-check first** — YouSurface
-(`SpsAgent/you/YouSurface.tsx`) already uses `readMemory`/`writeUserProfile`, and `MemoryTimeline` is
-already SPS-imported, so this may be closer to parity than it looks. Memory's tabs to account for:
-entries (add/update/remove via `addMemoryEntry`/`updateMemoryEntry`/`removeMemoryEntry`), timeline
-(`MemoryTimeline` — already SPS), providers (`memory.provider` config + `discoverMemoryProviders` +
-`setEnv`), profile (`writeUserProfile` — You has it), and **soul** (the embedded `Soul/Soul.tsx` tab —
-`readSoul`/`writeSoul`/`resetSoul`; `readSoul` also used by Chat `useLocalCommands`). Port the missing
-read/manage bits into You, then delete both screens + the `memory` AdminView + `Settings.tsx:683`
-`openSettings("memory")` deep-link. Keep `ipc/memory.ts` + `readSoul`. Then the smaller items:
-**2.5** sidebar stubs (S — `SidebarStubs.tsx` + Meetings/Shared/Apps in `Sidebar.tsx`; the Agents
-section already went), **2.7** modal chrome SpsModal (M), **2.8** first-run seed (M), **2.9**
-discoverability (S).
-
-## Established Phase-2 port+delete pattern (reuse for 2.4+)
-
-1. Reality-check the item's premise vs current `main` first — the SPS replacement is often already
-   parity (2.1) or a small port (2.2/2.3). Close stale/inverted items.
-2. Inventory which IPC the deleted screen uses + whether the SPS replacement or another consumer
-   still needs it → **keep all such IPC + main modules** (IPC outlives UI by a release).
-3. Delete ONLY: the renderer screen + Layout (`import`/nav-item/icon/render-pane) +
-   `lib/openSettings.ts` `AdminView` union + `KNOWN_VIEWS`.
+1. **Reality-check the premise vs current `main` first** — the SPS replacement is often already
+   parity, the "blank" thing already seeded, or the "missing" surface actually unreachable. Several
+   plan premises were stale/inverted; close them, don't build them.
+2. Inventory which IPC the deleted screen uses + whether the SPS replacement / another consumer still
+   needs it → **keep all such IPC + main modules** (IPC outlives UI; `tests/ipc-handlers.test.ts`
+   enforces STRICT two-way main↔preload parity, so IPC removal is all-or-nothing).
+3. Delete ONLY: renderer screen + Layout (`import`/nav-item/icon/render-pane) + `lib/openSettings.ts`
+   `AdminView` union + `KNOWN_VIEWS`.
 4. Grep the view-name / channel to zero.
-5. Gate: `npm run typecheck` (×2) → `npx eslint <touched>` → `npx vitest run` (includes
-   the `tests/ipc-handlers.test.ts` SOURCE-SCANNER parity) → `npm run verify:note-index` →
-   `npm run build` → `node scripts/sps-smoke.mjs` + `node scripts/verify-admin-overlay.mjs`.
+5. Gate: `npm run typecheck` (×2) → `npx eslint <touched>` → `npx vitest run` → `npm run
+verify:note-index` → `npm run build` → `node scripts/sps-smoke.mjs` + `node
+scripts/verify-admin-overlay.mjs` (+ `verify:firstrun-seed` for onboarding/discoverability).
 
 ## Integration mechanic
 
@@ -130,33 +86,26 @@ Reuse the worktree `.claude/worktrees/p1.1-gateway-supervision` serially. Per it
 
 ## Known flakes (confirmed pre-existing vs baseline — NOT regressions)
 
-- `verify-admin-overlay`: `a1-admin-open` / `a2-settings-tab` time out
-  (`GROUPS=0 SUBNAV_TABS=0`) — cold Electron-start visibility race; a3/a4/a5 pass.
-- `sps-smoke`: `02b-research` / `02c-research-nudge` / `03-graph` fail on fresh seed
-  (Research/Graph are nested `.nav-item`s in a collapsed nav group); 01-home/02-palette pass.
-- `verify:note-index` prints a `SemanticIndex … helper process is not running` stderr line
-  (`semantic_engine.py` absent in the harness) — checks still pass.
+- `verify-admin-overlay`: `a1-admin-open` / `a2-settings-tab` time out (`GROUPS=0`) — cold-start
+  visibility race; a3/a4/a5 pass. (a4 was repointed `memory`→`providers` when Memory was deleted.)
+- `sps-smoke`: `02b-research` / `02c-research-nudge` / `03-graph` fail on fresh seed (nested `.nav-item`s
+  in a collapsed nav group); 01-home / 02-palette pass.
+- `verify:note-index` prints a `SemanticIndex … helper process is not running` stderr line — checks
+  still pass.
 
 ## Gotchas worth keeping
 
-- Handler type for any IPC wrapper = `Parameters<typeof ipcMain.handle>[1]` (true drop-in,
-  no `any`). The canonical free-text scrubber is `external-context/redact.ts`
-  `redactExternalText` — NOT a `redactText` in `redactor.ts` (that's `StreamRedactor` only).
-- Renderer component tests under **fake timers**: don't use RTL `waitFor` (its polling uses the
-  faked timers → 15s hang). Flush the mount promise with `await act(async () => {})`, fire debounced
-  timers with `await act(async () => { vi.advanceTimersByTime(n) })`, then assert with `getByText`
-  directly (see `screens/SpsAgent/sidebar/SidebarRecents.test.tsx`). Mock the SPS store at the
-  selector level (`useStore((s) => s.x)`) via `vi.hoisted` to avoid the store import chain.
-- `styles/home.css` is already-scoped output (`.sps-scope .x`) — add pre-scoped rules, do NOT
+- **The Electron UI probes (`sps-smoke`, `verify-admin-overlay`, `verify-firstrun-seed`) drive the
+  BUILT app (`out/`) — `npm run build` BEFORE running them** or they test stale code (a stale build
+  once gave a false-positive in the first-run probe).
+- `tests/ipc-handlers.test.ts` is a STATIC SOURCE-SCANNER enforcing two-way main↔preload parity;
+  `tests/preload-api-surface.test.ts` has explicit per-method assertions (a "keep" signal).
+- SPS `Icon` names are a closed union (`components/iconPaths.ts`) — typecheck catches a bad name; no
+  `refresh`/`reload`/`sync` icon.
+- `styles/home.css` is already-scoped output — append **pre-scoped** rules (`.sps-scope .x`); do NOT
   re-run `scope-sps-css.mjs` (double-prefix risk).
-- Layout's `.schedules-modal` CSS class is reused by the What's-New modal — CSS lives in
-  `main.css` and stays.
+- Renderer component tests under fake timers: don't use RTL `waitFor`; flush with
+  `await act(async () => {})`. Mock the SPS store at the selector level via `vi.hoisted`.
 - `lib/openSettings.ts` + i18n locale files trip the Read-after-format guard — Read before each Edit.
-- **`tests/ipc-handlers.test.ts` enforces STRICT two-way main↔preload parity** ("every main handler
-  has a matching preload invoke" AND vice-versa). So removing an orphaned IPC is all-or-nothing:
-  you cannot keep the main handler while deleting the preload bridge (or vice-versa). Either delete
-  both (computer-use in 2.4) or keep both (profiles/kanban in 2.4). `tests/preload-api-surface.test.ts`
-  additionally has **explicit** assertions for some methods (e.g. `createProfile`/`deleteProfile`/
-  `setActiveProfile`) — those signal "keep".
-- SPS `Icon` names are a closed union from `SpsAgent/components/iconPaths.ts` — there is **no**
-  `refresh`/`reload`/`sync` icon (typecheck catches a bad name). Use a `↻` glyph or an existing name.
+- Orphaned-but-harmless i18n keys left after deletions: `navigation.memory`,
+  `settings.memoryMovedHint`, `settings.openMemory`, plus the `schedules` namespace.
