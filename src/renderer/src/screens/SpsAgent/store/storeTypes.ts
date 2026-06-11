@@ -13,8 +13,20 @@ import type {
   SpsSaveResult,
 } from "../types";
 import type { WorkDetail } from "../../../../../shared/openalex/core";
+import type { ExternalSource } from "../../../../../shared/external-context";
 
 export type RightTab = "assistant" | "outline" | "comments" | "info";
+
+/** A transcript hit to auto-open in the External Sessions viewer (federated
+ *  search routing). Carries just enough to reconstruct the viewer call + banner. */
+export interface ExternalConversationTarget {
+  convId: string;
+  seq: number;
+  source: ExternalSource;
+  title: string | null;
+  projectPath: string | null;
+  gitBranch: string | null;
+}
 
 // Top-level surface shown in the main area. "doc" is the page editor (default);
 // the others are full-area surfaces reached from the rail (ideas A2/A4 + the
@@ -191,6 +203,9 @@ export interface UiSlice {
   telegramWizardOpen: boolean;
   /** The External Sessions (other AI tools' transcripts) modal is open. */
   externalSessionsOpen: boolean;
+  /** When set, the External Sessions modal auto-opens this conversation's viewer
+   *  on mount (federated-search transcript routing). Cleared once consumed. */
+  externalSessionsTarget: ExternalConversationTarget | null;
   tweaksOpen: boolean;
   openTask: Task | null;
   emojiPick: XY | null;
@@ -228,6 +243,10 @@ export interface UiSlice {
   setAgentTasksOpen: (v: boolean) => void;
   setTelegramWizardOpen: (v: boolean) => void;
   setExternalSessionsOpen: (v: boolean) => void;
+  /** Open the External Sessions modal focused on a specific transcript. */
+  openExternalConversation: (target: ExternalConversationTarget) => void;
+  /** Clear the auto-open target after the modal has consumed it. */
+  clearExternalSessionsTarget: () => void;
   setTweaksOpen: (v: boolean) => void;
   setOpenTask: (t: Task | null) => void;
   setEmojiPick: (v: XY | null) => void;

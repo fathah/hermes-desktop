@@ -1,31 +1,57 @@
 // AskPane.tsx — the Personal-Agent "Ask" surface (Phase 3 / Notion's personal
-// agent pattern). A conversational ask that searches across SPS pages AND past
-// Hermes conversations, returning a cited answer. Distinct from the right-panel
+// agent pattern). One query that reaches ALL the user's knowledge at once: a
+// best-effort LLM "Answer" (over past Hermes conversations) PLUS a ranked,
+// clickable FEDERATED result list across vault notes, imported external
+// transcripts, and Hermes sessions (P4). Distinct from the right-panel
 // doc-editing Assistant: this one is for "find/ask across my workspace".
 import { useState } from "react";
 import { useStore } from "../store";
 import { Icon } from "../components/Icon";
-import { searchWorkspacePages, type PageHit } from "../lib/ask";
 import type { SearchSummary } from "../../../../../shared/searchSummary";
+import type { FederatedHit } from "../../../../../shared/federated-search";
+import { EXTERNAL_SOURCE_LABELS } from "../../../../../shared/external-context";
+
+/** Vault page id from a note-index relative path (`projects/foo.md` → `foo`). */
+function noteIdFromPath(path: string): string {
+  const last = path.split("/").pop() ?? path;
+  return last.replace(/\.md$/, "");
+}
+
+function kindLabel(hit: FederatedHit): string {
+  if (hit.kind === "note") return "Note";
+  if (hit.kind === "session") return "Session";
+  return EXTERNAL_SOURCE_LABELS[hit.source];
+}
 
 export function AskPane() {
-  const docs = useStore((s) => s.docs);
-  const meta = useStore((s) => s.meta);
   const selectPage = useStore((s) => s.selectPage);
   const setSurface = useStore((s) => s.setSurface);
+  const setActiveChatSession = useStore((s) => s.setActiveChatSession);
+  const openExternalConversation = useStore((s) => s.openExternalConversation);
 
   const [query, setQuery] = useState("");
   const [asked, setAsked] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [searching, setSearching] = useState(false);
   const [summary, setSummary] = useState<SearchSummary | null>(null);
-  const [pageHits, setPageHits] = useState<PageHit[]>([]);
+  const [hits, setHits] = useState<FederatedHit[]>([]);
 
   const run = async (): Promise<void> => {
     const q = query.trim();
     if (!q) return;
     setAsked(q);
-    setPageHits(searchWorkspacePages(q, docs, meta));
     setSummary(null);
+    setHits([]);
+
+    // Federated search is fully local — it must render even if the gateway (and
+    // thus the LLM "Answer") is unreachable. Fire both independently.
+    setSearching(true);
+    void window.hermesAPI
+      .federatedSearch(q)
+      .then(setHits)
+      .catch(() => setHits([]))
+      .finally(() => setSearching(false));
+
     setLoading(true);
     try {
       setSummary(await window.hermesAPI.summarizeSearch(q));
@@ -40,9 +66,31 @@ export function AskPane() {
     }
   };
 
-  const openPage = (pageId: string): void => {
-    selectPage(pageId);
-    setSurface("doc");
+  const openHit = (hit: FederatedHit): void => {
+    if (hit.kind === "note") {
+      selectPage(noteIdFromPath(hit.ref.path));
+      setSurface("doc");
+      return;
+    }
+    if (hit.kind === "session") {
+      setActiveChatSession(hit.ref.sessionId, hit.title);
+      setSurface("chats");
+      return;
+    }
+    openExternalConversation({
+      convId: hit.ref.convId,
+      seq: hit.ref.seq,
+      source: hit.source,
+      title: hit.title,
+      projectPath: hit.ref.projectPath,
+      gitBranch: hit.ref.gitBranch,
+    });
+  };
+
+  const hitKey = (hit: FederatedHit): string => {
+    if (hit.kind === "note") return `note:${hit.ref.path}`;
+    if (hit.kind === "session") return `session:${hit.ref.sessionId}`;
+    return `transcript:${hit.ref.convId}:${hit.ref.seq}`;
   };
 
   return (
@@ -60,24 +108,22 @@ export function AskPane() {
       >
         <input
           className="ask-input"
-          placeholder="Ask across your pages and past conversations…"
+          placeholder="Search pages, transcripts, and past conversations…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
         <button
           className="ask-send"
           type="submit"
-          disabled={loading || !query.trim()}
+          disabled={loading || searching || !query.trim()}
         >
-          {loading ? "…" : "Ask"}
+          {loading || searching ? "…" : "Ask"}
         </button>
       </form>
 
       {asked && (
         <div className="ask-results">
-          {loading && (
-            <div className="ask-muted">Searching your workspace…</div>
-          )}
+          {loading && <div className="ask-muted">Asking the assistant…</div>}
 
           {summary?.error && <div className="ask-error">{summary.error}</div>}
 
@@ -96,25 +142,28 @@ export function AskPane() {
             </div>
           )}
 
-          {summary && !summary.summary && !summary.error && !loading && (
-            <div className="ask-muted">No matching past conversations.</div>
-          )}
-
-          {pageHits.length > 0 && (
-            <div className="ask-pages">
-              <div className="ask-sec">From your pages</div>
-              {pageHits.map((h) => (
-                <button
-                  key={h.pageId}
-                  className="ask-page"
-                  onClick={() => openPage(h.pageId)}
-                >
-                  <span className="ask-page-title">{h.title}</span>
-                  <span className="ask-page-snippet">{h.snippet}</span>
-                </button>
-              ))}
-            </div>
-          )}
+          <div className="ask-pages">
+            <div className="ask-sec">Across everything</div>
+            {searching && <div className="ask-muted">Searching…</div>}
+            {!searching && hits.length === 0 && (
+              <div className="ask-muted">No matches found.</div>
+            )}
+            {hits.map((hit) => (
+              <button
+                key={hitKey(hit)}
+                className="ask-page"
+                onClick={() => openHit(hit)}
+              >
+                <span className="ask-hit-head">
+                  <span className={`ask-chip ask-chip-${hit.kind}`}>
+                    {kindLabel(hit)}
+                  </span>
+                  <span className="ask-page-title">{hit.title}</span>
+                </span>
+                <span className="ask-page-snippet">{hit.snippet}</span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>

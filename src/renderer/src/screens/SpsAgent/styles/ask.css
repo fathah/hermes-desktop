@@ -133,3 +133,38 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Federated-result rows (P4): a type chip + title on one line, snippet below. */
+.sps-scope .ask-hit-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.sps-scope .ask-hit-head .ask-page-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sps-scope .ask-chip {
+  flex: 0 0 auto;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--surface-2, rgba(127, 127, 127, 0.14));
+  color: var(--tx-3);
+}
+.sps-scope .ask-chip-note {
+  color: var(--accent);
+}
+.sps-scope .ask-chip-session {
+  color: var(--tx-2);
+}
+/* Transcripts are UNTRUSTED external content — warn-tinted so the chip itself
+ *  signals provenance before the user clicks into the fenced viewer. */
+.sps-scope .ask-chip-transcript {
+  color: var(--warn, #b8860b);
+}

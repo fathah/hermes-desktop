@@ -43,6 +43,10 @@ const UNTRUSTED_BANNER =
 
 export function ExternalSessionsModal() {
   const setExternalSessionsOpen = useStore((s) => s.setExternalSessionsOpen);
+  const externalSessionsTarget = useStore((s) => s.externalSessionsTarget);
+  const clearExternalSessionsTarget = useStore(
+    (s) => s.clearExternalSessionsTarget,
+  );
   const setScheduledOpen = useStore((s) => s.setScheduledOpen);
   const saveExternalSessionToKb = useStore((s) => s.saveExternalSessionToKb);
   const flash = useStore((s) => s.flash);
@@ -197,6 +201,32 @@ export function ExternalSessionsModal() {
       setViewer({ hit, meta: null, messages: [], loading: false });
     }
   };
+
+  // Federated-search routing: when opened with a target conversation, jump
+  // straight into its (untrusted, fenced) viewer, then clear the one-shot target.
+  useEffect(() => {
+    if (!externalSessionsTarget) return;
+    const t = externalSessionsTarget;
+    const conversationId = t.convId.startsWith(`${t.source}:`)
+      ? t.convId.slice(t.source.length + 1)
+      : t.convId;
+    const hit: ExternalSearchHit = {
+      convId: t.convId,
+      source: t.source,
+      conversationId,
+      seq: t.seq,
+      role: "",
+      ts: null,
+      snippet: "",
+      projectPath: t.projectPath,
+      gitBranch: t.gitBranch,
+      title: t.title,
+    };
+    setView("search");
+    void openViewer(hit);
+    clearExternalSessionsTarget();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalSessionsTarget]);
 
   const toggleSource = async (source: ExternalSource, enabled: boolean) => {
     const cfg = await window.hermesAPI?.externalContextSetSource?.(
