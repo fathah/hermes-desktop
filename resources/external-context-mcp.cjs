@@ -26611,11 +26611,31 @@ var StdioServerTransport = class {
 };
 
 // src/shared/external-context.ts
+var EXTERNAL_SCAN_SOURCES = [
+  "claude-code",
+  "codex",
+  "gemini",
+  "grok"
+];
+var EXTERNAL_IMPORT_SOURCES = [
+  "chatgpt",
+  "claude-ai",
+  "grok-export",
+  "gemini-takeout"
+];
+var EXTERNAL_SOURCES = [
+  ...EXTERNAL_SCAN_SOURCES,
+  ...EXTERNAL_IMPORT_SOURCES
+];
 var EXTERNAL_SOURCE_LABELS = {
   "claude-code": "Claude Code",
   codex: "Codex",
   gemini: "Gemini",
-  grok: "Grok"
+  grok: "Grok",
+  chatgpt: "ChatGPT",
+  "claude-ai": "Claude.ai",
+  "grok-export": "Grok (export)",
+  "gemini-takeout": "Gemini (Takeout)"
 };
 function formatDay(ts) {
   if (typeof ts !== "number" || !Number.isFinite(ts)) return null;

@@ -11,6 +11,7 @@ import { useStore } from "../store";
 import { Icon } from "../components/Icon";
 import {
   EXTERNAL_SOURCES,
+  EXTERNAL_SCAN_SOURCES,
   EXTERNAL_SOURCE_LABELS,
   formatProvenance,
   type ExternalIndexStatus,
@@ -430,7 +431,9 @@ function SettingsView(props: {
       </div>
 
       <div className="scroll" style={{ maxHeight: "46vh" }}>
-        {EXTERNAL_SOURCES.map((source) => {
+        {/* Live-scan sources only — import sources (ChatGPT/Claude.ai/…) get
+            their own Import flow (3.6), not a live on/off toggle. */}
+        {EXTERNAL_SCAN_SOURCES.map((source) => {
           const enabled = props.config?.[source] ?? false;
           const st = statusBySource.get(source);
           const available = st?.available ?? false;

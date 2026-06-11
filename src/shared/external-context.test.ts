@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   EXTERNAL_SOURCES,
+  EXTERNAL_SCAN_SOURCES,
+  EXTERNAL_IMPORT_SOURCES,
+  EXTERNAL_SOURCE_LABELS,
   defaultExternalSourceConfig,
   formatProvenance,
 } from "./external-context";
@@ -10,6 +13,36 @@ describe("defaultExternalSourceConfig", () => {
     const cfg = defaultExternalSourceConfig();
     for (const source of EXTERNAL_SOURCES) {
       expect(cfg[source]).toBe(false);
+    }
+  });
+});
+
+describe("source taxonomy", () => {
+  it("EXTERNAL_SOURCES = scan sources then import sources, no overlap", () => {
+    expect(EXTERNAL_SOURCES).toEqual([
+      ...EXTERNAL_SCAN_SOURCES,
+      ...EXTERNAL_IMPORT_SOURCES,
+    ]);
+    const overlap = EXTERNAL_SCAN_SOURCES.filter((s) =>
+      (EXTERNAL_IMPORT_SOURCES as readonly string[]).includes(s),
+    );
+    expect(overlap).toEqual([]);
+  });
+
+  it("includes the four import sources with distinct labels", () => {
+    expect([...EXTERNAL_IMPORT_SOURCES]).toEqual([
+      "chatgpt",
+      "claude-ai",
+      "grok-export",
+      "gemini-takeout",
+    ]);
+    expect(EXTERNAL_SOURCE_LABELS["gemini-takeout"]).toBe("Gemini (Takeout)");
+    expect(EXTERNAL_SOURCE_LABELS["grok-export"]).toBe("Grok (export)");
+  });
+
+  it("every source has a non-empty human label", () => {
+    for (const source of EXTERNAL_SOURCES) {
+      expect(EXTERNAL_SOURCE_LABELS[source].length).toBeGreaterThan(0);
     }
   });
 });

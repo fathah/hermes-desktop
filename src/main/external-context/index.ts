@@ -13,6 +13,7 @@ import type {
   ExternalScanProgress,
   ExternalSource,
 } from "../../shared/external-context";
+import { EXTERNAL_SOURCES } from "../../shared/external-context";
 import { ExternalContextDb } from "./db";
 import { ALL_ADAPTERS } from "./adapters";
 import { decideFileAction } from "./scan-logic";
@@ -50,9 +51,13 @@ export function closeExternalContextDb(): void {
   }
 }
 
-/** Availability of each source's root directory on this machine. */
+/** Availability of each source's root directory on this machine. Import sources
+ *  with no adapter yet report false (their data arrives via the Import flow). */
 export function sourceAvailability(): Record<ExternalSource, boolean> {
   const out = {} as Record<ExternalSource, boolean>;
+  for (const source of EXTERNAL_SOURCES) {
+    out[source] = false;
+  }
   for (const adapter of ALL_ADAPTERS) {
     out[adapter.source] = adapter.available();
   }

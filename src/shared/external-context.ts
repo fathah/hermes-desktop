@@ -7,15 +7,51 @@
  * main process and the renderer (no Node/Electron/sqlite imports).
  */
 
-/** The external AI tools whose local transcripts we can parse. */
-export type ExternalSource = "claude-code" | "codex" | "gemini" | "grok";
+/**
+ * Sources discovered by a LIVE scan of a tool's local working directory
+ * (append-only JSONL or whole-file rewrites). Each has a registered
+ * {@link SourceAdapter} keyed by this subtype, so the registry stays exhaustive.
+ */
+export type ExternalScanSource = "claude-code" | "codex" | "gemini" | "grok";
 
-/** Stable ordered list — used for iteration and default-OFF config seeding. */
-export const EXTERNAL_SOURCES: readonly ExternalSource[] = [
+/**
+ * Sources ingested from a user-supplied EXPORT artifact (ZIP/JSON the user
+ * downloads from the tool's web UI), copied to a content-hash import root and
+ * then run through the same scan pipeline. `grok-export`/`gemini-takeout` are
+ * named distinctly from the live `grok`/`gemini` scan sources they parallel.
+ */
+export type ExternalImportSource =
+  | "chatgpt"
+  | "claude-ai"
+  | "grok-export"
+  | "gemini-takeout";
+
+/** The external AI tools whose transcripts we can index (scan + import). */
+export type ExternalSource = ExternalScanSource | ExternalImportSource;
+
+/** Live-scan sources, in stable order (the settings toggle list). */
+export const EXTERNAL_SCAN_SOURCES: readonly ExternalScanSource[] = [
   "claude-code",
   "codex",
   "gemini",
   "grok",
+] as const;
+
+/** Import-only sources, in stable order (the Import tab in 3.6). */
+export const EXTERNAL_IMPORT_SOURCES: readonly ExternalImportSource[] = [
+  "chatgpt",
+  "claude-ai",
+  "grok-export",
+  "gemini-takeout",
+] as const;
+
+/**
+ * Every source, in stable order — used for config seeding, db rollups, and
+ * search/digest filters. Scan sources first, then import sources.
+ */
+export const EXTERNAL_SOURCES: readonly ExternalSource[] = [
+  ...EXTERNAL_SCAN_SOURCES,
+  ...EXTERNAL_IMPORT_SOURCES,
 ] as const;
 
 /** Human-facing labels for each source (UI + provenance lines). */
@@ -24,6 +60,10 @@ export const EXTERNAL_SOURCE_LABELS: Record<ExternalSource, string> = {
   codex: "Codex",
   gemini: "Gemini",
   grok: "Grok",
+  chatgpt: "ChatGPT",
+  "claude-ai": "Claude.ai",
+  "grok-export": "Grok (export)",
+  "gemini-takeout": "Gemini (Takeout)",
 };
 
 /**
@@ -109,6 +149,10 @@ export function defaultExternalSourceConfig(): ExternalSourceConfig {
     codex: false,
     gemini: false,
     grok: false,
+    chatgpt: false,
+    "claude-ai": false,
+    "grok-export": false,
+    "gemini-takeout": false,
   };
 }
 

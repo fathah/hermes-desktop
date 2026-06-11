@@ -42,6 +42,13 @@ const ALL_ON: Record<ExternalSource, boolean> = {
   codex: true,
   gemini: true,
   grok: true,
+  // Import sources have no live adapter/fixtures here — enabling them is a
+  // no-op (scan skips sources without a registered adapter), but the literal
+  // must stay exhaustive over ExternalSource.
+  chatgpt: true,
+  "claude-ai": true,
+  "grok-export": true,
+  "gemini-takeout": true,
 };
 
 function seedClaude(
