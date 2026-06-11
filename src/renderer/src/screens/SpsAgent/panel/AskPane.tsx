@@ -4,7 +4,7 @@
 // clickable FEDERATED result list across vault notes, imported external
 // transcripts, and Hermes sessions (P4). Distinct from the right-panel
 // doc-editing Assistant: this one is for "find/ask across my workspace".
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useStore } from "../store";
 import { Icon } from "../components/Icon";
 import type { SearchSummary } from "../../../../../shared/searchSummary";
@@ -34,13 +34,19 @@ export function AskPane() {
   const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
   const [summary, setSummary] = useState<SearchSummary | null>(null);
+  const [streamingAnswer, setStreamingAnswer] = useState("");
   const [hits, setHits] = useState<FederatedHit[]>([]);
+
+  // Unsubscribe for the in-flight answer stream — cleared when a new ask starts
+  // so a rapid re-ask never double-renders into the previous answer.
+  const unsubscribeRef = useRef<(() => void) | null>(null);
 
   const run = async (): Promise<void> => {
     const q = query.trim();
     if (!q) return;
     setAsked(q);
     setSummary(null);
+    setStreamingAnswer("");
     setHits([]);
 
     // Federated search is fully local — it must render even if the gateway (and
@@ -52,9 +58,23 @@ export function AskPane() {
       .catch(() => setHits([]))
       .finally(() => setSearching(false));
 
+    // Stream the LLM answer token-by-token so it fills in live instead of
+    // appearing all at once. runId tags each chunk so stale chunks (from a
+    // previous still-open request) are ignored.
+    const runId =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : String(Date.now());
+    unsubscribeRef.current?.();
+    unsubscribeRef.current =
+      window.hermesAPI.onAskAnswerChunk?.((payload) => {
+        if (payload.runId !== runId) return;
+        setStreamingAnswer((prev) => prev + payload.text);
+      }) ?? null;
+
     setLoading(true);
     try {
-      setSummary(await window.hermesAPI.summarizeSearch(q));
+      setSummary(await window.hermesAPI.summarizeSearchStream(q, runId));
     } catch {
       setSummary({
         summary: "",
@@ -63,6 +83,8 @@ export function AskPane() {
       });
     } finally {
       setLoading(false);
+      unsubscribeRef.current?.();
+      unsubscribeRef.current = null;
     }
   };
 
@@ -92,6 +114,11 @@ export function AskPane() {
     if (hit.kind === "session") return `session:${hit.ref.sessionId}`;
     return `transcript:${hit.ref.convId}:${hit.ref.seq}`;
   };
+
+  // While streaming, `summary` is still null but `streamingAnswer` grows; once
+  // the call resolves, `summary.summary` holds the full (identical) text plus
+  // the cited sources.
+  const answerText = summary?.summary || streamingAnswer;
 
   return (
     <div className="ask-pane">
@@ -123,14 +150,16 @@ export function AskPane() {
 
       {asked && (
         <div className="ask-results">
-          {loading && <div className="ask-muted">Asking the assistant…</div>}
+          {loading && !answerText && (
+            <div className="ask-muted">Asking the assistant…</div>
+          )}
 
           {summary?.error && <div className="ask-error">{summary.error}</div>}
 
-          {summary?.summary && (
+          {answerText && (
             <div className="ask-answer">
-              <p className="ask-answer-text">{summary.summary}</p>
-              {summary.sources.length > 0 && (
+              <p className="ask-answer-text">{answerText}</p>
+              {summary && summary.sources.length > 0 && (
                 <div className="ask-sources">
                   {summary.sources.map((s, i) => (
                     <span key={`${s.sessionId}-${i}`} className="ask-source">

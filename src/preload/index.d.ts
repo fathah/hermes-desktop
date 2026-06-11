@@ -195,6 +195,14 @@ interface HermesAPI {
   getUsageStats: (profile?: string) => Promise<UsageAggregate>;
   getRunLedger: (profile?: string) => Promise<RunLedgerEntry[]>;
   summarizeSearch: (query: string, profile?: string) => Promise<SearchSummary>;
+  summarizeSearchStream: (
+    query: string,
+    runId: string,
+    profile?: string,
+  ) => Promise<SearchSummary>;
+  onAskAnswerChunk: (
+    callback: (payload: { runId: string; text: string }) => void,
+  ) => () => void;
   listSkins: (profile?: string) => Promise<LoadedSkin[]>;
   getAutoApprove: (profile?: string) => Promise<boolean>;
   setAutoApprove: (enabled: boolean, profile?: string) => Promise<void>;

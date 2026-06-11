@@ -99,6 +99,27 @@ export const configBridge = {
   summarizeSearch: (query: string, profile?: string): Promise<SearchSummary> =>
     ipcRenderer.invoke("summarize-search", query, profile),
 
+  /** Streaming variant of summarizeSearch: tokens arrive via onAskAnswerChunk
+   *  (tagged with runId); the promise resolves with the full summary + sources. */
+  summarizeSearchStream: (
+    query: string,
+    runId: string,
+    profile?: string,
+  ): Promise<SearchSummary> =>
+    ipcRenderer.invoke("summarize-search-stream", query, runId, profile),
+
+  /** Subscribe to streamed Ask-pane answer tokens. Returns an unsubscribe fn. */
+  onAskAnswerChunk: (
+    callback: (payload: { runId: string; text: string }) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      payload: { runId: string; text: string },
+    ): void => callback(payload);
+    ipcRenderer.on("ask-answer-chunk", handler);
+    return () => ipcRenderer.removeListener("ask-answer-chunk", handler);
+  },
+
   /** List validated skins (+ CSS-var maps) for a profile (idea A6). */
   listSkins: (profile?: string): Promise<LoadedSkin[]> =>
     ipcRenderer.invoke("list-skins", profile),

@@ -66,6 +66,7 @@ export {
 // Re-exports from chat-client.ts
 export {
   chatCompletionOnce,
+  chatCompletionStream,
   respondRunApproval,
   buildUserContent,
   contextFolderSystemMessage,

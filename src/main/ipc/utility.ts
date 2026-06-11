@@ -28,7 +28,7 @@ import { isAllowedExternalUrl } from "../security";
 import { isAllowedObsidianExternalUrl } from "../obsidian";
 import { getUsageStats, readUsageRecords, sessionLedger } from "../usage-store";
 import { listSessions } from "../sessions";
-import { summarizeSearch } from "../session-summary";
+import { summarizeSearch, summarizeSearchStream } from "../session-summary";
 import { listSkins } from "../skins";
 import { runSecurityAudit, getPromptSizeBreakdown } from "../installer";
 
@@ -294,6 +294,18 @@ export function registerUtilityIpc(
 
   safeHandle("summarize-search", (_event, query: string, profile?: string) =>
     summarizeSearch(query, profile),
+  );
+  // Streaming variant: relays each token to the renderer on `ask-answer-chunk`
+  // (tagged with runId so a rapid re-ask ignores stale chunks) and resolves
+  // with the full summary + cited sources at the end.
+  safeHandle(
+    "summarize-search-stream",
+    (event, query: string, runId: string, profile?: string) =>
+      summarizeSearchStream(
+        query,
+        (text) => event.sender.send("ask-answer-chunk", { runId, text }),
+        profile,
+      ),
   );
 
   // Skins
