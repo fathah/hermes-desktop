@@ -312,6 +312,35 @@ function seedGrokExport(importRoot: string): void {
   writeFileSync(join(dir, "f00dbabe.jsonl"), lines.join("\n") + "\n");
 }
 
+/** Seed a Gemini Takeout MyActivity.json: two prompts within a session and one
+ *  after a > 30-min gap (→ two pseudo-conversations), with a secret in a title. */
+function seedGeminiTakeout(importRoot: string): void {
+  const dir = join(importRoot, "gemini-takeout");
+  mkdirSync(dir, { recursive: true });
+  const base = Date.UTC(2026, 4, 1, 10, 0, 0);
+  const records = [
+    {
+      header: "Gemini Apps",
+      title: "Prompted geminitakeoutreply please",
+      time: new Date(base).toISOString(),
+      products: ["Gemini Apps"],
+    },
+    {
+      header: "Gemini Apps",
+      title: `leaking ${SK_ANT} and ${KNOWN_SECRET}`,
+      time: new Date(base + 10 * 60 * 1000).toISOString(),
+      products: ["Gemini Apps"],
+    },
+    {
+      header: "Gemini Apps",
+      title: "a prompt after a long break",
+      time: new Date(base + 2 * 60 * 60 * 1000).toISOString(),
+      products: ["Gemini Apps"],
+    },
+  ];
+  writeFileSync(join(dir, "9988aabb.json"), JSON.stringify(records));
+}
+
 async function main(): Promise<void> {
   const work = mkdtempSync(join(tmpdir(), "ec-verify-"));
   const claudeRoot = join(work, "claude");
@@ -487,14 +516,15 @@ async function main(): Promise<void> {
   );
 
   console.log(
-    "\nImport — export adapters (ChatGPT / Claude.ai / Grok) + redaction:",
+    "\nImport — export adapters (ChatGPT / Claude.ai / Grok / Gemini Takeout):",
   );
   seedChatGpt(importRoot);
   seedClaudeAi(importRoot);
   seedGrokExport(importRoot);
+  seedGeminiTakeout(importRoot);
   const importIndexed = await scanExternalSources(db, ALL_ON, [KNOWN_SECRET]);
   assert(
-    importIndexed >= 8,
+    importIndexed >= 11,
     `import sources indexed messages (got ${importIndexed})`,
   );
 
@@ -535,7 +565,18 @@ async function main(): Promise<void> {
     "grok-export session is indexed + searchable",
   );
 
-  // Idempotent re-scan across all three import sources.
+  // Gemini Takeout — MyActivity.json grouped into pseudo-conversations.
+  const takeoutStats = db.sourceStats()["gemini-takeout"];
+  assert(
+    takeoutStats.conversations === 2,
+    `gemini-takeout: 2 pseudo-conversations from the >30min gap (got ${takeoutStats.conversations})`,
+  );
+  assert(
+    db.search("geminitakeoutreply", { source: "gemini-takeout" }).length >= 1,
+    "gemini-takeout activity is indexed + searchable",
+  );
+
+  // Idempotent re-scan across all four import sources.
   const reIndexed = await scanExternalSources(db, ALL_ON, [KNOWN_SECRET]);
   assert(
     reIndexed === 0,
@@ -554,7 +595,7 @@ async function main(): Promise<void> {
       .prepare(
         `SELECT m.text AS text FROM messages m
            JOIN conversations c ON c.conv_id = m.conv_id
-         WHERE c.source IN ('chatgpt','claude-ai','grok-export')`,
+         WHERE c.source IN ('chatgpt','claude-ai','grok-export','gemini-takeout')`,
       )
       .all() as Array<{ text: string }>
   )

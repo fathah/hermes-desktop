@@ -8,6 +8,7 @@ import { claudeAiAdapter } from "./claude-ai";
 import { claudeCodeAdapter } from "./claude-code";
 import { codexAdapter } from "./codex";
 import { geminiAdapter } from "./gemini";
+import { geminiTakeoutAdapter } from "./gemini-takeout";
 import { grokAdapter } from "./grok";
 import { grokExportAdapter } from "./grok-export";
 import type { SourceAdapter } from "./types";
@@ -34,6 +35,7 @@ export const IMPORT_ADAPTERS: Partial<
   chatgpt: chatgptAdapter,
   "claude-ai": claudeAiAdapter,
   "grok-export": grokExportAdapter,
+  "gemini-takeout": geminiTakeoutAdapter,
 };
 
 export const ALL_ADAPTERS: SourceAdapter[] = [
