@@ -24,7 +24,8 @@ export type ExternalImportSource =
   | "chatgpt"
   | "claude-ai"
   | "grok-export"
-  | "gemini-takeout";
+  | "gemini-takeout"
+  | "paste";
 
 /** The external AI tools whose transcripts we can index (scan + import). */
 export type ExternalSource = ExternalScanSource | ExternalImportSource;
@@ -37,12 +38,13 @@ export const EXTERNAL_SCAN_SOURCES: readonly ExternalScanSource[] = [
   "grok",
 ] as const;
 
-/** Import-only sources, in stable order (the Import tab in 3.6). */
+/** Import-only sources, in stable order (the Import tab in 3.6; `paste` in 5.1). */
 export const EXTERNAL_IMPORT_SOURCES: readonly ExternalImportSource[] = [
   "chatgpt",
   "claude-ai",
   "grok-export",
   "gemini-takeout",
+  "paste",
 ] as const;
 
 /**
@@ -64,6 +66,7 @@ export const EXTERNAL_SOURCE_LABELS: Record<ExternalSource, string> = {
   "claude-ai": "Claude.ai",
   "grok-export": "Grok (export)",
   "gemini-takeout": "Gemini (Takeout)",
+  paste: "Pasted",
 };
 
 /**
@@ -167,6 +170,7 @@ export function defaultExternalSourceConfig(): ExternalSourceConfig {
     "claude-ai": false,
     "grok-export": false,
     "gemini-takeout": false,
+    paste: false,
   };
 }
 

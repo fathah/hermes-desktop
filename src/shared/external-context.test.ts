@@ -29,15 +29,17 @@ describe("source taxonomy", () => {
     expect(overlap).toEqual([]);
   });
 
-  it("includes the four import sources with distinct labels", () => {
+  it("includes the import sources with distinct labels (incl. paste)", () => {
     expect([...EXTERNAL_IMPORT_SOURCES]).toEqual([
       "chatgpt",
       "claude-ai",
       "grok-export",
       "gemini-takeout",
+      "paste",
     ]);
     expect(EXTERNAL_SOURCE_LABELS["gemini-takeout"]).toBe("Gemini (Takeout)");
     expect(EXTERNAL_SOURCE_LABELS["grok-export"]).toBe("Grok (export)");
+    expect(EXTERNAL_SOURCE_LABELS.paste).toBe("Pasted");
   });
 
   it("every source has a non-empty human label", () => {

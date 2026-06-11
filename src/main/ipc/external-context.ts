@@ -23,11 +23,12 @@ import {
   formatProvenance,
 } from "../../shared/external-context";
 import { spsExternalSaveToKb } from "../sps-agent";
-import { existsSync, mkdtempSync, rmSync } from "fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join as joinPath } from "path";
 import { extractImportPayload } from "../external-context/import-extract";
 import { copyExportToImportRoot } from "../external-context/import-roots";
+import { parsePastedConversation } from "../external-context/paste-parse";
 import {
   externalContextMcpServerPath,
   hasMcpServer,
@@ -227,6 +228,76 @@ export function registerExternalContextIpc(
         return {
           status: buildStatus(),
           source,
+          reused: staged.reused,
+          conversations: stats.conversations,
+          messages: stats.messages,
+        } satisfies ExternalImportResult;
+      } finally {
+        rmSync(tmp, { recursive: true, force: true });
+      }
+    },
+  );
+
+  // Capture a PASTED conversation (tools with no export — Perplexity et al.).
+  // Heuristically parse the raw text, then stage it as a `{ origin, text }`
+  // envelope and run it through the SAME import pipeline (content-hash staging →
+  // scan → index-time redaction in applyFragments). Pre-parse first so an
+  // unrecognised paste returns a clean zero-result without staging anything.
+  safeHandle(
+    "external-context-import-paste",
+    async (_e, text: string, origin: string) => {
+      if (typeof text !== "string" || text.trim().length === 0) {
+        throw new Error("paste text is required");
+      }
+      const cleanOrigin =
+        typeof origin === "string" ? origin.trim().slice(0, 40) : "";
+      ensureImportRootEnv();
+      const win = getWindow();
+      const emit = (
+        phase: ExternalScanProgress["phase"],
+        message?: string,
+      ): void => {
+        if (win && !win.isDestroyed()) {
+          win.webContents.send("external-context-progress", {
+            source: "paste",
+            phase,
+            filesProcessed: 0,
+            filesTotal: 1,
+            messagesIndexed: 0,
+            message,
+          } satisfies ExternalScanProgress);
+        }
+      };
+
+      // Validate + count before touching disk; refuse to stage an empty parse.
+      const preview = parsePastedConversation(text, { origin: cleanOrigin });
+      if (preview.messages.length === 0) {
+        return {
+          status: buildStatus(),
+          source: "paste",
+          reused: false,
+          conversations: 0,
+          messages: 0,
+        } satisfies ExternalImportResult;
+      }
+
+      emit("start", "Capturing…");
+      const tmp = mkdtempSync(joinPath(tmpdir(), "ec-paste-"));
+      try {
+        const envelopePath = joinPath(tmp, "paste.json");
+        writeFileSync(
+          envelopePath,
+          JSON.stringify({ origin: cleanOrigin, text }),
+        );
+        const staged = copyExportToImportRoot("paste", envelopePath);
+        setExternalContextSource("paste", true);
+        emit("scanning", "Indexing…");
+        await runScan(getWindow);
+        const stats = getExternalContextDb().sourceStats().paste;
+        emit("done");
+        return {
+          status: buildStatus(),
+          source: "paste",
           reused: staged.reused,
           conversations: stats.conversations,
           messages: stats.messages,

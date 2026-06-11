@@ -26621,7 +26621,8 @@ var EXTERNAL_IMPORT_SOURCES = [
   "chatgpt",
   "claude-ai",
   "grok-export",
-  "gemini-takeout"
+  "gemini-takeout",
+  "paste"
 ];
 var EXTERNAL_SOURCES = [
   ...EXTERNAL_SCAN_SOURCES,
@@ -26635,7 +26636,8 @@ var EXTERNAL_SOURCE_LABELS = {
   chatgpt: "ChatGPT",
   "claude-ai": "Claude.ai",
   "grok-export": "Grok (export)",
-  "gemini-takeout": "Gemini (Takeout)"
+  "gemini-takeout": "Gemini (Takeout)",
+  paste: "Pasted"
 };
 function formatDay(ts) {
   if (typeof ts !== "number" || !Number.isFinite(ts)) return null;

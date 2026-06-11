@@ -49,6 +49,7 @@ const ALL_ON: Record<ExternalSource, boolean> = {
   "claude-ai": true,
   "grok-export": true,
   "gemini-takeout": true,
+  paste: true,
 };
 
 function seedClaude(
@@ -341,6 +342,25 @@ function seedGeminiTakeout(importRoot: string): void {
   writeFileSync(join(dir, "9988aabb.json"), JSON.stringify(records));
 }
 
+/** Seed a PASTED capture (P5.1): a `{ origin, text }` envelope with a secret in
+ *  the user turn, staged under the paste import root. The heuristic parser turns
+ *  it into one conversation (user + assistant), so the index-time redaction that
+ *  rides through applyFragments must scrub it exactly like every other source. */
+function seedPaste(importRoot: string): void {
+  const dir = join(importRoot, "paste");
+  mkdirSync(dir, { recursive: true });
+  const text = [
+    "You said:",
+    `capture this paste key ${SK_ANT} and token ${KNOWN_SECRET}`,
+    "Perplexity",
+    "pastedreply acknowledged",
+  ].join("\n");
+  writeFileSync(
+    join(dir, "cafef00d.json"),
+    JSON.stringify({ origin: "Perplexity", text }),
+  );
+}
+
 async function main(): Promise<void> {
   const work = mkdtempSync(join(tmpdir(), "ec-verify-"));
   const claudeRoot = join(work, "claude");
@@ -522,9 +542,10 @@ async function main(): Promise<void> {
   seedClaudeAi(importRoot);
   seedGrokExport(importRoot);
   seedGeminiTakeout(importRoot);
+  seedPaste(importRoot);
   const importIndexed = await scanExternalSources(db, ALL_ON, [KNOWN_SECRET]);
   assert(
-    importIndexed >= 11,
+    importIndexed >= 13,
     `import sources indexed messages (got ${importIndexed})`,
   );
 
@@ -576,7 +597,18 @@ async function main(): Promise<void> {
     "gemini-takeout activity is indexed + searchable",
   );
 
-  // Idempotent re-scan across all four import sources.
+  // Paste — a `{ origin, text }` envelope run through the heuristic parser.
+  const pasteStats = db.sourceStats().paste;
+  assert(
+    pasteStats.conversations === 1 && pasteStats.messages === 2,
+    `paste: 1 conversation / 2 messages from one envelope (got ${pasteStats.conversations}/${pasteStats.messages})`,
+  );
+  assert(
+    db.search("pastedreply", { source: "paste" }).length >= 1,
+    "pasted capture is indexed + searchable",
+  );
+
+  // Idempotent re-scan across all import sources.
   const reIndexed = await scanExternalSources(db, ALL_ON, [KNOWN_SECRET]);
   assert(
     reIndexed === 0,
@@ -595,7 +627,7 @@ async function main(): Promise<void> {
       .prepare(
         `SELECT m.text AS text FROM messages m
            JOIN conversations c ON c.conv_id = m.conv_id
-         WHERE c.source IN ('chatgpt','claude-ai','grok-export','gemini-takeout')`,
+         WHERE c.source IN ('chatgpt','claude-ai','grok-export','gemini-takeout','paste')`,
       )
       .all() as Array<{ text: string }>
   )

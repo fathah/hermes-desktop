@@ -11,6 +11,7 @@ import { geminiAdapter } from "./gemini";
 import { geminiTakeoutAdapter } from "./gemini-takeout";
 import { grokAdapter } from "./grok";
 import { grokExportAdapter } from "./grok-export";
+import { pasteAdapter } from "./paste";
 import type { SourceAdapter } from "./types";
 
 /**
@@ -36,6 +37,7 @@ export const IMPORT_ADAPTERS: Partial<
   "claude-ai": claudeAiAdapter,
   "grok-export": grokExportAdapter,
   "gemini-takeout": geminiTakeoutAdapter,
+  paste: pasteAdapter,
 };
 
 export const ALL_ADAPTERS: SourceAdapter[] = [

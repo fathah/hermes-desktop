@@ -40,6 +40,12 @@ export const externalContextBridge = {
   ): Promise<ExternalImportResult> =>
     ipcRenderer.invoke("external-context-import-file", source, filePath),
 
+  externalContextImportPaste: (
+    text: string,
+    origin: string,
+  ): Promise<ExternalImportResult> =>
+    ipcRenderer.invoke("external-context-import-paste", text, origin),
+
   externalContextSetMaxAge: (
     days: number | null,
   ): Promise<ExternalIndexStatus> =>

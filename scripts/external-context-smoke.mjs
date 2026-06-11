@@ -329,6 +329,84 @@ if (importLeak) {
 }
 console.log("IMPORT_SEARCH ok (hit rendered, no secret leak)");
 
+// ── Paste-capture (P5.1): capture a conversation PASTED from a no-export tool
+//    (e.g. Perplexity) via the REAL IPC. It flows through the SAME applyFragments
+//    path, so index-time redaction + fencing must hold exactly as for imports. ──
+const pasteText = [
+  "You",
+  "pastedsmoketoken plan the rollout with secret " + SK_ANT,
+  "Perplexity",
+  "Here is the pasted answer about the rollout.",
+].join("\n");
+const paste = await win.evaluate(
+  (t) => window.hermesAPI.externalContextImportPaste(t, "Perplexity"),
+  pasteText,
+);
+console.log(
+  "PASTE_RESULT:",
+  JSON.stringify({
+    conversations: paste?.conversations,
+    messages: paste?.messages,
+    reused: paste?.reused,
+  }),
+);
+if (!paste || paste.conversations < 1) {
+  console.log("PASTE_FAIL: no conversations indexed");
+  await app.close();
+  process.exit(4);
+}
+// Idempotency: re-capturing identical text+origin must not change the counts.
+const paste2 = await win.evaluate(
+  (t) => window.hermesAPI.externalContextImportPaste(t, "Perplexity"),
+  pasteText,
+);
+if (
+  paste2.conversations !== paste.conversations ||
+  paste2.messages !== paste.messages
+) {
+  console.log(
+    "PASTE_FAIL: not idempotent",
+    `${paste.conversations}/${paste.messages}`,
+    "→",
+    `${paste2.conversations}/${paste2.messages}`,
+  );
+  await app.close();
+  process.exit(4);
+}
+console.log("PASTE_IDEMPOTENT ok");
+
+// 07 — the pasted, redacted content is searchable through the UI, no secret leak.
+await shot("07-paste-search", async () => {
+  await win
+    .locator(".modal .pal-chip", { hasText: "Search" })
+    .first()
+    .click({ timeout: 8000 });
+  await win.waitForTimeout(300);
+  const input = win.locator(".modal .pal-input input").first();
+  await input.fill("pastedsmoketoken");
+  await input.press("Enter");
+  await win.waitForTimeout(1200);
+});
+const pasteHits = await win.evaluate(
+  () => document.querySelectorAll(".modal .scroll .lst-row").length,
+);
+const pasteLeak = await win.evaluate(
+  () =>
+    document.querySelector(".modal")?.textContent?.includes("sk-ant-api03") ??
+    false,
+);
+if (pasteHits < 1) {
+  console.log("PASTE_FAIL: pasted content not searchable in the UI");
+  await app.close();
+  process.exit(4);
+}
+if (pasteLeak) {
+  console.log("PASTE_FAIL: secret leaked into the paste search UI");
+  await app.close();
+  process.exit(4);
+}
+console.log("PASTE_SEARCH ok (hit rendered, no secret leak)");
+
 console.log("SHOTS_OK:", shots.length, "—", shots.join(", "));
 await app.close();
 console.log("SMOKE_DONE");

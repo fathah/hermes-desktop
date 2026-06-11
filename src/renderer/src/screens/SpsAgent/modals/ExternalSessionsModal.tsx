@@ -130,6 +130,43 @@ export function ExternalSessionsModal() {
     await importFile(source, filePath);
   };
 
+  const importPaste = async (text: string, origin: string) => {
+    setImporting("paste");
+    setImportNote(null);
+    try {
+      const res = await window.hermesAPI?.externalContextImportPaste?.(
+        text,
+        origin,
+      );
+      if (!res) {
+        setImportNote("Capture failed — the paste couldn't be read.");
+        return;
+      }
+      setStatus(res.status);
+      // The capture enables the `paste` source; refresh config so it reflects that.
+      const cfg = await window.hermesAPI?.externalContextGetConfig?.();
+      if (cfg) setConfig(cfg);
+      if (res.conversations === 0 && res.messages === 0) {
+        setImportNote(
+          "Couldn't recognize a conversation in that text. Add role labels (e.g. “You” / “ChatGPT”) or paste alternating question / answer paragraphs.",
+        );
+        return;
+      }
+      setImportNote(
+        res.reused
+          ? `Already captured — Pasted: ${res.conversations} conversations indexed.`
+          : `Captured: ${res.conversations} conversations · ${res.messages} messages.`,
+      );
+      flash("Captured paste");
+    } catch (err) {
+      setImportNote(
+        err instanceof Error ? err.message : "Capture failed unexpectedly.",
+      );
+    } finally {
+      setImporting(null);
+    }
+  };
+
   const refreshStatus = async () => {
     const s = await window.hermesAPI?.externalContextStatus?.();
     if (s) setStatus(s);
@@ -315,6 +352,7 @@ export function ExternalSessionsModal() {
               note={importNote}
               onPick={pickAndImport}
               onDropFile={importFile}
+              onPasteCapture={importPaste}
             />
           ) : view === "settings" ? (
             <SettingsView
@@ -502,12 +540,107 @@ const IMPORT_INSTRUCTIONS: Record<ExternalImportSource, string> = {
     "Grok → copy a session, or drop a chat_history.jsonl session file.",
   "gemini-takeout":
     "Google Takeout → My Activity → Gemini Apps (JSON). Drop the .zip (or MyActivity.json).",
+  paste:
+    "For tools with no export (e.g. Perplexity): copy the conversation and paste it below.",
 };
+
+/** Origin options for a pasted capture (provenance + idempotency key). */
+const PASTE_ORIGINS = [
+  "Perplexity",
+  "ChatGPT",
+  "Claude",
+  "Gemini",
+  "Grok",
+  "Other",
+] as const;
 
 /** Pull a dropped file's absolute path (Electron exposes it on the File). */
 function droppedPath(file: File): string | null {
   const p = (file as File & { path?: string }).path;
   return typeof p === "string" && p.length > 0 ? p : null;
+}
+
+/** Paste-capture block (P5.1) — a conversation pasted from a no-export tool. */
+function PasteCaptureBlock(props: {
+  busy: boolean;
+  onCapture: (text: string, origin: string) => void;
+}) {
+  const [text, setText] = useState("");
+  const [origin, setOrigin] = useState<string>(PASTE_ORIGINS[0]);
+  const canCapture = text.trim().length > 0 && !props.busy;
+  return (
+    <div
+      className="lst-row"
+      style={{
+        borderRadius: 8,
+        alignItems: "flex-start",
+        gap: 10,
+        height: "auto",
+        padding: "12px 10px",
+        border: "1px dashed var(--bd)",
+        marginBottom: 8,
+        flexDirection: "column",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          width: "100%",
+          gap: 10,
+        }}
+      >
+        <div className="c-name">{EXTERNAL_SOURCE_LABELS.paste}</div>
+        <select
+          value={origin}
+          disabled={props.busy}
+          onChange={(e) => setOrigin(e.target.value)}
+          style={{
+            fontSize: 12,
+            padding: "4px 6px",
+            borderRadius: 6,
+            border: "1px solid var(--bd)",
+            background: "transparent",
+            color: "inherit",
+          }}
+        >
+          {PASTE_ORIGINS.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+      </div>
+      <small style={{ color: "var(--tx-3)" }}>
+        {IMPORT_INSTRUCTIONS.paste}
+      </small>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="Paste a conversation here…"
+        rows={5}
+        style={{
+          width: "100%",
+          resize: "vertical",
+          fontFamily: "inherit",
+          fontSize: 13,
+          padding: 8,
+          borderRadius: 6,
+          border: "1px solid var(--bd)",
+          background: "transparent",
+          color: "inherit",
+        }}
+      />
+      <button
+        className="cover-btn"
+        disabled={!canCapture}
+        onClick={() => props.onCapture(text, origin)}
+      >
+        {props.busy ? "Capturing…" : "Capture paste"}
+      </button>
+    </div>
+  );
 }
 
 function ImportView(props: {
@@ -516,10 +649,13 @@ function ImportView(props: {
   note: string | null;
   onPick: (source: ExternalImportSource) => void;
   onDropFile: (source: ExternalImportSource, filePath: string) => void;
+  onPasteCapture: (text: string, origin: string) => void;
 }) {
   const statusBySource = new Map<ExternalSource, ExternalSourceStatus>(
     (props.status?.sources ?? []).map((s) => [s.source, s]),
   );
+  // `paste` is captured via the textarea block below, not a file drop-zone.
+  const fileSources = EXTERNAL_IMPORT_SOURCES.filter((s) => s !== "paste");
   return (
     <>
       <div className="cmts-empty" style={{ padding: "8px 0 14px" }}>
@@ -527,7 +663,11 @@ function ImportView(props: {
         copied locally and redacted at index time — nothing leaves this machine.
       </div>
       <div className="scroll" style={{ maxHeight: "52vh" }}>
-        {EXTERNAL_IMPORT_SOURCES.map((source) => {
+        <PasteCaptureBlock
+          busy={props.importing === "paste"}
+          onCapture={props.onPasteCapture}
+        />
+        {fileSources.map((source) => {
           const busy = props.importing === source;
           const st = statusBySource.get(source);
           return (

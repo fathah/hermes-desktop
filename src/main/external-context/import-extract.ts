@@ -23,6 +23,9 @@ const PAYLOAD_PATTERN: Record<ExternalImportSource, RegExp> = {
   "claude-ai": /(^|\/)conversations\.json$/i,
   "gemini-takeout": /(^|\/)MyActivity\.json$/i,
   "grok-export": /\.jsonl?$/i,
+  // `paste` is staged as a bare `{ origin, text }` envelope (never a ZIP); the
+  // paste IPC skips extraction, so this pattern is only here for exhaustiveness.
+  paste: /\.json$/i,
 };
 
 /** Any conversation-shaped entry, used as a fallback when the named one is absent. */

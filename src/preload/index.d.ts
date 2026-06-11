@@ -1120,6 +1120,10 @@ interface HermesAPI {
     source: ExternalImportSource,
     filePath: string,
   ) => Promise<ExternalImportResult>;
+  externalContextImportPaste: (
+    text: string,
+    origin: string,
+  ) => Promise<ExternalImportResult>;
   externalContextSetMaxAge: (
     days: number | null,
   ) => Promise<ExternalIndexStatus>;
