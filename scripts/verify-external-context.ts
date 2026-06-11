@@ -263,6 +263,55 @@ function seedChatGpt(importRoot: string): string {
   return file;
 }
 
+/** Seed a Claude.ai export (linear chat_messages) with a secret in the opening
+ *  human message, into the import root. */
+function seedClaudeAi(importRoot: string): void {
+  const dir = join(importRoot, "claude-ai");
+  mkdirSync(dir, { recursive: true });
+  const conv = {
+    uuid: "c-claudeai-1",
+    name: "Imported Claude.ai chat",
+    created_at: "2026-02-01T00:00:00.000000Z",
+    updated_at: "2026-02-01T00:05:00.000000Z",
+    chat_messages: [
+      {
+        sender: "human",
+        created_at: "2026-02-01T00:00:00.000000Z",
+        content: [
+          {
+            type: "text",
+            text: `store this key ${SK_ANT} and ${KNOWN_SECRET}`,
+          },
+        ],
+      },
+      {
+        sender: "assistant",
+        created_at: "2026-02-01T00:00:03.000000Z",
+        content: [{ type: "text", text: "claudeaireply acknowledged" }],
+      },
+    ],
+  };
+  writeFileSync(join(dir, "1a2b3c4d.json"), JSON.stringify([conv]));
+}
+
+/** Seed a Grok session export (`{type, content}` JSONL) with a secret in the
+ *  user turn, into the import root. */
+function seedGrokExport(importRoot: string): void {
+  const dir = join(importRoot, "grok-export");
+  mkdirSync(dir, { recursive: true });
+  const lines = [
+    JSON.stringify({ type: "system", content: "be terse" }),
+    JSON.stringify({
+      type: "user",
+      content: [
+        { type: "text", text: `my secret ${KNOWN_SECRET} and ${SK_ANT}` },
+      ],
+    }),
+    JSON.stringify({ type: "assistant", content: "grokexportreply noted." }),
+  ];
+  writeFileSync(join(dir, "f00dbabe.jsonl"), lines.join("\n") + "\n");
+}
+
 async function main(): Promise<void> {
   const work = mkdtempSync(join(tmpdir(), "ec-verify-"));
   const claudeRoot = join(work, "claude");
@@ -438,22 +487,22 @@ async function main(): Promise<void> {
   );
 
   console.log(
-    "\nImport — ChatGPT export adapter (multi-conversation + redaction):",
+    "\nImport — export adapters (ChatGPT / Claude.ai / Grok) + redaction:",
   );
   seedChatGpt(importRoot);
-  const chatIndexed = await scanExternalSources(db, ALL_ON, [KNOWN_SECRET]);
+  seedClaudeAi(importRoot);
+  seedGrokExport(importRoot);
+  const importIndexed = await scanExternalSources(db, ALL_ON, [KNOWN_SECRET]);
   assert(
-    chatIndexed >= 4,
-    `chatgpt import indexed messages (got ${chatIndexed})`,
+    importIndexed >= 8,
+    `import sources indexed messages (got ${importIndexed})`,
   );
+
+  // ChatGPT — multi-conversation node-graph + canonical branch.
   const chatStats = db.sourceStats().chatgpt;
   assert(
     chatStats.conversations === 2,
     `chatgpt: 2 conversations from one export (got ${chatStats.conversations})`,
-  );
-  assert(
-    chatStats.messages >= 4,
-    `chatgpt: messages across both conversations (got ${chatStats.messages})`,
   );
   assert(
     db.search("chosenreply", { source: "chatgpt" }).length >= 1,
@@ -463,6 +512,30 @@ async function main(): Promise<void> {
     db.search("abandonedreply", { source: "chatgpt" }).length === 0,
     "chatgpt abandoned branch is NOT indexed",
   );
+
+  // Claude.ai — linear chat_messages.
+  const claudeAiStats = db.sourceStats()["claude-ai"];
+  assert(
+    claudeAiStats.conversations === 1 && claudeAiStats.messages === 2,
+    `claude-ai: 1 conversation / 2 messages (got ${claudeAiStats.conversations}/${claudeAiStats.messages})`,
+  );
+  assert(
+    db.search("claudeaireply", { source: "claude-ai" }).length >= 1,
+    "claude-ai linear transcript is indexed + searchable",
+  );
+
+  // Grok export — uploaded `{type, content}` session JSONL.
+  const grokExportStats = db.sourceStats()["grok-export"];
+  assert(
+    grokExportStats.conversations === 1,
+    `grok-export: 1 conversation from one session file (got ${grokExportStats.conversations})`,
+  );
+  assert(
+    db.search("grokexportreply", { source: "grok-export" }).length >= 1,
+    "grok-export session is indexed + searchable",
+  );
+
+  // Idempotent re-scan across all three import sources.
   const reIndexed = await scanExternalSources(db, ALL_ON, [KNOWN_SECRET]);
   assert(
     reIndexed === 0,
@@ -470,32 +543,35 @@ async function main(): Promise<void> {
   );
   assert(
     db.sourceStats().chatgpt.conversations === 2,
-    "chatgpt conversation count is stable after an idempotent re-scan",
+    "import conversation counts are stable after an idempotent re-scan",
   );
-  const rawChat = new Database(dbPath, { readonly: true });
-  const chatMsgText = (
-    rawChat
+
+  // Redaction holds for EVERY imported source (the seeded key/secret bearing
+  // messages must be redacted at index time, same as the live sources).
+  const rawImport = new Database(dbPath, { readonly: true });
+  const importMsgText = (
+    rawImport
       .prepare(
         `SELECT m.text AS text FROM messages m
            JOIN conversations c ON c.conv_id = m.conv_id
-         WHERE c.source = 'chatgpt'`,
+         WHERE c.source IN ('chatgpt','claude-ai','grok-export')`,
       )
       .all() as Array<{ text: string }>
   )
     .map((r) => r.text)
     .join("\n");
-  rawChat.close();
+  rawImport.close();
   assert(
-    !chatMsgText.includes(SK_ANT) && !chatMsgText.includes("sk-ant-api03"),
-    "chatgpt import: seeded sk-ant key never reaches messages",
+    !importMsgText.includes(SK_ANT) && !importMsgText.includes("sk-ant-api03"),
+    "imports: seeded sk-ant key never reaches messages",
   );
   assert(
-    !chatMsgText.includes(KNOWN_SECRET),
-    "chatgpt import: known secret never reaches messages",
+    !importMsgText.includes(KNOWN_SECRET),
+    "imports: known secret never reaches messages",
   );
   assert(
-    chatMsgText.includes("[REDACTED]"),
-    "chatgpt import: the secret-bearing message was redacted at index time",
+    importMsgText.includes("[REDACTED]"),
+    "imports: secret-bearing messages were redacted at index time",
   );
 
   console.log("\nMCP — stdio roundtrip (untrusted-fenced, read-only):");

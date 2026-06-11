@@ -4,10 +4,12 @@ import type {
   ExternalScanSource,
 } from "../../../shared/external-context";
 import { chatgptAdapter } from "./chatgpt";
+import { claudeAiAdapter } from "./claude-ai";
 import { claudeCodeAdapter } from "./claude-code";
 import { codexAdapter } from "./codex";
 import { geminiAdapter } from "./gemini";
 import { grokAdapter } from "./grok";
+import { grokExportAdapter } from "./grok-export";
 import type { SourceAdapter } from "./types";
 
 /**
@@ -30,6 +32,8 @@ export const IMPORT_ADAPTERS: Partial<
   Record<ExternalImportSource, SourceAdapter>
 > = {
   chatgpt: chatgptAdapter,
+  "claude-ai": claudeAiAdapter,
+  "grok-export": grokExportAdapter,
 };
 
 export const ALL_ADAPTERS: SourceAdapter[] = [
