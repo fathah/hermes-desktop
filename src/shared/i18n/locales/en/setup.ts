@@ -48,4 +48,26 @@ export default {
   localLlm: "Local LLM",
   modelBaseUrlPlaceholder: "http://localhost:1234/v1",
   modelNamePlaceholder: "e.g. llama-3.1-8b",
+
+  // Secrets onboarding step (stage 2 of setup)
+  back: "Back",
+  finish: "Finish setup",
+  secretsStepTitle: "Where should your keys live?",
+  secretsStepSubtitle:
+    "Hermes can read API keys from a vault instead of a plaintext file. You can change this anytime in Settings → Security Providers.",
+  secrets_envTitle: "Plain file (.env)",
+  secrets_envTag: "Recommended to start",
+  secrets_commandTitle: "Vault command",
+  secrets_commandTag: "Offline / KeePassXC, pass…",
+  secrets_bitwardenTitle: "Bitwarden",
+  secrets_bitwardenTag: "Cloud secrets manager",
+  secretsCommandLabel: "Helper command",
+  secretsCommandSetupHint:
+    "You'll need a vault first. For KeePassXC: install keepassxc (provides keepassxc-cli), then create a vault — `keepassxc-cli db-create ~/secrets/h.kdbx --set-password` — and add an entry per key (entry title = the key name, e.g. OPENROUTER_API_KEY). The helper below reads from it. Keep the vault unlocked when Hermes starts. Full guide: hermes secrets — `configuring-secret-providers` skill.",
+  secretsCommandHint:
+    "Runs a helper that prints the secret; the key name arrives in $HERMES_SECRET_KEY. You can fill this in later in Settings if you leave it blank.",
+  secretsBitwardenHint:
+    "Finish Bitwarden setup from the terminal after this: hermes secrets bitwarden setup",
+  secretsKeyStillSavedHint:
+    "The key you just entered is saved either way — this only changes where Hermes looks for keys going forward.",
 } as const;
