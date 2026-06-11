@@ -1273,6 +1273,11 @@ interface HermesAPI {
   spsSemanticSearch: (query: string, limit?: number) => Promise<unknown>;
   spsSemanticGraph: () => Promise<unknown>;
   spsSemanticRag: (query: string, limit?: number) => Promise<unknown>;
+  spsGetMirrorFailCount: () => Promise<{
+    count: number;
+    lastError?: string;
+    lastAt?: number;
+  }>;
   spsGetVaultLocation: (
     profile?: string,
   ) => Promise<{ dir: string; isDefault: boolean; default: string }>;

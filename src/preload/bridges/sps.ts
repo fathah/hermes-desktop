@@ -389,6 +389,14 @@ export const spsBridge = {
   spsSemanticRag: (query: string, limit?: number): Promise<unknown> =>
     ipcRenderer.invoke("sps-semantic-rag", query, limit),
 
+  // Count of vault-mirror writes that have silently failed (markdown drifting from
+  // the authoritative blob), with the last error + timestamp.
+  spsGetMirrorFailCount: (): Promise<{
+    count: number;
+    lastError?: string;
+    lastAt?: number;
+  }> => ipcRenderer.invoke("sps-get-mirror-fail-count"),
+
   // Shared-directory Obsidian mode: where the SPS vault lives on disk.
   spsGetVaultLocation: (
     profile?: string,

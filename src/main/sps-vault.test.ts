@@ -47,6 +47,70 @@ describe("page id validation", () => {
   });
 });
 
+describe("mirror-write onError sink", () => {
+  // A vault dir whose parent path is a FILE forces a real ENOTDIR on write.
+  let blockedDir: string;
+  beforeEach(async () => {
+    const filePath = join(dir, "blocker");
+    await writeFile(filePath, "x");
+    blockedDir = join(filePath, "nested-vault");
+  });
+
+  it("invokes onError with the fs error when a page write fails", async () => {
+    const errors: unknown[] = [];
+    const ok = await exportPageMarkdownTo(blockedDir, "home", "# hi", (e) =>
+      errors.push(e),
+    );
+    expect(ok).toBe(false);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toBeInstanceOf(Error);
+  });
+
+  it("invokes onError when a row write fails", async () => {
+    const errors: unknown[] = [];
+    const ok = await exportRowMarkdownTo(
+      blockedDir,
+      "tasks",
+      "row1",
+      "# row",
+      (e) => errors.push(e),
+    );
+    expect(ok).toBe(false);
+    expect(errors).toHaveLength(1);
+  });
+
+  it("invokes onError when an asset write fails", async () => {
+    const errors: unknown[] = [];
+    const ok = await writeAssetTo(
+      blockedDir,
+      "home",
+      "a.excalidraw",
+      "{}",
+      (e) => errors.push(e),
+    );
+    expect(ok).toBe(false);
+    expect(errors).toHaveLength(1);
+  });
+
+  it("invokes onError when a manifest write fails", async () => {
+    const errors: unknown[] = [];
+    const ok = await writeVaultManifest(blockedDir, "{}", (e) =>
+      errors.push(e),
+    );
+    expect(ok).toBe(false);
+    expect(errors).toHaveLength(1);
+  });
+
+  it("does NOT invoke onError for a rejected id (a guard, not a write failure)", async () => {
+    const errors: unknown[] = [];
+    const ok = await exportPageMarkdownTo(dir, "../escape", "x", (e) =>
+      errors.push(e),
+    );
+    expect(ok).toBe(false);
+    expect(errors).toHaveLength(0);
+  });
+});
+
 describe("sidecar assets (writeAssetTo / readAssetFrom)", () => {
   it("round-trips a scene + preview under assets/<pageId>/", async () => {
     expect(await writeAssetTo(dir, "home", "ex1.excalidraw", "{json}")).toBe(

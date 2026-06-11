@@ -21,6 +21,13 @@ export function isValidPageId(pageId: string): boolean {
   return PAGE_ID_RE.test(pageId);
 }
 
+/**
+ * Optional callback invoked when a mirror WRITE fails for a real fs reason (not a
+ * rejected id). Lets the electron-side caller record the divergence without this
+ * module importing HERMES_HOME / Electron — keeping it pure and unit-testable.
+ */
+export type MirrorWriteErrorSink = (error: unknown) => void;
+
 /** A database folder and a row id are each a single id-safe path segment. */
 function isValidSegment(seg: string): boolean {
   return PAGE_ID_RE.test(seg);
@@ -40,12 +47,14 @@ export async function exportPageMarkdownTo(
   dir: string,
   pageId: string,
   markdown: string,
+  onError?: MirrorWriteErrorSink,
 ): Promise<boolean> {
   if (!isValidPageId(pageId)) return false;
   try {
     await safeWriteFileAsync(join(dir, pageFilename(pageId)), markdown);
     return true;
-  } catch {
+  } catch (err) {
+    onError?.(err);
     return false;
   }
 }
@@ -86,6 +95,7 @@ export async function exportRowMarkdownTo(
   dbFolder: string,
   rowId: string,
   markdown: string,
+  onError?: MirrorWriteErrorSink,
 ): Promise<boolean> {
   if (!isValidSegment(dbFolder) || !isValidSegment(rowId)) return false;
   if (isReservedFolder(dbFolder)) return false;
@@ -95,7 +105,8 @@ export async function exportRowMarkdownTo(
       markdown,
     );
     return true;
-  } catch {
+  } catch (err) {
+    onError?.(err);
     return false;
   }
 }
@@ -188,6 +199,7 @@ export async function writeAssetTo(
   pageId: string,
   filename: string,
   data: string,
+  onError?: MirrorWriteErrorSink,
 ): Promise<boolean> {
   if (!isValidPageId(pageId) || !isValidAssetFile(filename)) return false;
   try {
@@ -196,7 +208,8 @@ export async function writeAssetTo(
       data,
     );
     return true;
-  } catch {
+  } catch (err) {
+    onError?.(err);
     return false;
   }
 }
@@ -261,11 +274,13 @@ export async function readVaultManifest(
 export async function writeVaultManifest(
   vaultDir: string,
   json: string,
+  onError?: MirrorWriteErrorSink,
 ): Promise<boolean> {
   try {
     await safeWriteFileAsync(join(vaultDir, MANIFEST_FILE), json);
     return true;
-  } catch {
+  } catch (err) {
+    onError?.(err);
     return false;
   }
 }

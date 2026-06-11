@@ -46,6 +46,18 @@ import { spsBackupWorkspace } from "../sps-agent";
 import { writeAsset, assetExists, gcAssets } from "../sps-assets";
 import { requireLocalWorkspace } from "./connection-guards";
 import { isAllowedExternalUrl } from "../security";
+import { HERMES_HOME } from "../installer/paths";
+import {
+  recordMirrorFailure,
+  readMirrorFailRecord,
+} from "../mirror-fail-counter";
+
+// Record one failed vault-mirror write so the silent divergence surfaces in
+// Workspace settings. Machine-global (HERMES_HOME) — an operator signal, not
+// per-profile accounting. Injected as the onError sink into the sps-vault writes.
+function noteMirrorFailure(error: unknown): void {
+  recordMirrorFailure(HERMES_HOME, error, Date.now());
+}
 
 let obsidianWatcher: Awaited<ReturnType<typeof watchObsidian>> | null = null;
 let obsidianWatcherProfile = "";
@@ -321,7 +333,7 @@ export function registerNotesIpc(
     "sps-export-page",
     (_event, pageId: string, markdown: string, profile?: string) => {
       const dir = spsVaultDirFor(profile);
-      return exportPageMarkdownTo(dir, pageId, markdown);
+      return exportPageMarkdownTo(dir, pageId, markdown, noteMirrorFailure);
     },
   );
 
@@ -335,7 +347,13 @@ export function registerNotesIpc(
       profile?: string,
     ) => {
       const dir = spsVaultDirFor(profile);
-      return exportRowMarkdownTo(dir, dbFolder, rowId, markdown);
+      return exportRowMarkdownTo(
+        dir,
+        dbFolder,
+        rowId,
+        markdown,
+        noteMirrorFailure,
+      );
     },
   );
   safeHandle(
@@ -379,10 +397,16 @@ export function registerNotesIpc(
   safeHandle(
     "sps-vault-write-manifest",
     (_event, json: string, profile?: string) =>
-      writeVaultManifest(spsVaultDir(profile), json),
+      writeVaultManifest(spsVaultDir(profile), json, noteMirrorFailure),
   );
   safeHandle("sps-backup-workspace", (_event, profile?: string) =>
     spsBackupWorkspace(profile),
+  );
+
+  // How many vault-mirror writes have silently failed (markdown drifting from the
+  // authoritative blob). Read-only observability for the Workspace settings panel.
+  safeHandle("sps-get-mirror-fail-count", () =>
+    readMirrorFailRecord(HERMES_HOME),
   );
 
   // Excalidraw
@@ -402,12 +426,14 @@ export function registerNotesIpc(
         pageId,
         `${assetId}.excalidraw`,
         sceneJson,
+        noteMirrorFailure,
       );
       const okSvg = await writeAssetTo(
         dir,
         pageId,
         `${assetId}.excalidraw.svg`,
         svg,
+        noteMirrorFailure,
       );
       return okScene && okSvg;
     },

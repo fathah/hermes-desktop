@@ -255,11 +255,20 @@ function StorageSettings() {
     isDefault: boolean;
     default: string;
   } | null>(null);
+  const [mirrorFail, setMirrorFail] = useState<{
+    count: number;
+    lastError?: string;
+    lastAt?: number;
+  } | null>(null);
 
   useEffect(() => {
     window.hermesAPI
       .spsGetVaultLocation?.()
       .then(setVault)
+      .catch(() => {});
+    window.hermesAPI
+      .spsGetMirrorFailCount?.()
+      .then(setMirrorFail)
       .catch(() => {});
   }, []);
 
@@ -339,6 +348,25 @@ function StorageSettings() {
         </span>
         <span>{parityText}</span>
       </div>
+      {mirrorFail && mirrorFail.count > 0 && (
+        <div className="twk-row">
+          <span className="twk-lbl">
+            <span>⚠ Mirror failures</span>
+          </span>
+          <span
+            style={{
+              fontSize: 10.5,
+              opacity: 0.85,
+              color: "var(--color-danger, #d9534f)",
+              wordBreak: "break-word",
+            }}
+          >
+            {mirrorFail.count} vault-mirror write
+            {mirrorFail.count === 1 ? "" : "s"} failed
+            {mirrorFail.lastError ? ` — last: ${mirrorFail.lastError}` : ""}
+          </span>
+        </div>
+      )}
       <button
         className="twk-field"
         style={{ cursor: busy ? "default" : "pointer" }}
