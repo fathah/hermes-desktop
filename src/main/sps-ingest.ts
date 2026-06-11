@@ -311,10 +311,9 @@ export function buildResearchFileMessages(
 // ── Scheduled research v2: the prompt a GATEWAY CRON job runs (app-closed). It
 //    produces a cited research brief as its FINAL response; the gateway delivers
 //    that output to `cron/output/<jobId>/<ts>.md` (deterministic — no agent file
-//    tool) and, if a Telegram target is set, to Telegram. The cron runtime wraps
-//    this with its own delivery/[SILENT] framing; we reinforce it: report only
-//    when something is genuinely new/noteworthy (gates the Telegram push), else
-//    [SILENT]. The desktop drains the output file and does the AUTHORITATIVE
+//    tool). The cron runtime wraps this with its own delivery/[SILENT] framing;
+//    we reinforce it: report only when something is genuinely new/noteworthy,
+//    else [SILENT]. The desktop drains the output file and does the AUTHORITATIVE
 //    smart-merge (so the KB updates only on real change, independent of [SILENT]).
 export function buildScheduledCronPrompt(topic: string): string {
   return [

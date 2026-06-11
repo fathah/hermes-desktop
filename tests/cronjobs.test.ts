@@ -44,7 +44,7 @@ describe("createCronJob", () => {
       "7 17 * * *",
       "Create a daily brief with local news, weather, and quotes.",
       "Daily brief",
-      "telegram",
+      "local",
     );
 
     expect(execFileSpy).toHaveBeenCalledTimes(1);
@@ -58,7 +58,7 @@ describe("createCronJob", () => {
       "--name",
       "Daily brief",
       "--deliver",
-      "telegram",
+      "local",
     ]);
     expect(execFileSpy.mock.calls[0][1]).not.toContain("--");
   });

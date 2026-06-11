@@ -781,7 +781,7 @@ export { checkSiblingHermesHomeDrift, fixSiblingHermesHomeDrift };
  * still reference the legacy name in their top-level `toolsets:` block.
  * The current engine's validator no longer recognises `"hermes"` and
  * prints `Warning: Unknown toolsets: hermes` on every agent invocation
- * (issues #353, fresh #385/Telegram reports).
+ * (issues #353, fresh #385 reports).
  *
  * The fix is a one-line YAML rewrite: `- hermes` → `- hermes-cli`. The
  * agent still functions today — it's a cosmetic warning — but it
@@ -826,7 +826,7 @@ function checkLegacyToolsetName(profile?: string): ConfigHealthIssue[] {
  * `toolsets:` header. Tolerates quoted forms (`- "hermes"`, `- 'hermes'`)
  * and trailing comments.
  *
- * Does NOT match `hermes-cli` / `hermes-telegram` / `hermes-discord` /
+ * Does NOT match `hermes-cli` / `hermes-discord` /
  * etc. — those are the current canonical names and must not be touched.
  */
 function findLegacyToolsetEntry(content: string): boolean {

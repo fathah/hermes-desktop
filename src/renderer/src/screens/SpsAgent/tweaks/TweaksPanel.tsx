@@ -535,23 +535,6 @@ function SkillToggles() {
   );
 }
 
-// Capture settings — discoverable home for Phase 5.1 (Telegram quick-capture →
-// Inbox). The pipeline lands later; this is the placeholder it will fill in.
-function CaptureSettings() {
-  return (
-    <>
-      <Section label="Capture" />
-      <div className="twk-row">
-        <span className="twk-lbl">
-          <span style={{ opacity: 0.7 }}>
-            Quick-capture (Telegram → Inbox) arrives in a later release.
-          </span>
-        </span>
-      </div>
-    </>
-  );
-}
-
 function Shell({
   children,
   onClose,
@@ -676,7 +659,6 @@ export function TweaksPanel() {
       <SidebarSections />
       <StorageSettings />
       <SkillToggles />
-      <CaptureSettings />
     </Shell>
   );
 }

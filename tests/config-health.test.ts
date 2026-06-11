@@ -331,12 +331,12 @@ describe("checkLegacyToolsetName", () => {
     expect(checkLegacyToolsetName()).toEqual([]);
   });
 
-  it("emits no issue when only platform-suffixed names are present (`hermes-telegram` etc.)", async () => {
+  it("emits no issue when only platform-suffixed names are present (`hermes-discord` etc.)", async () => {
     writeConfig(
       [
         "toolsets:",
         "- hermes-cli",
-        "- hermes-telegram",
+        "- hermes-discord",
         "- hermes-discord",
         "",
       ].join("\n"),

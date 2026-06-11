@@ -612,18 +612,6 @@ export const GATEWAY_SECTIONS: SectionDef[] = [
     title: "constants.gatewayMessagingPlatforms",
     items: [
       {
-        key: "TELEGRAM_BOT_TOKEN",
-        label: "constants.telegramBotToken",
-        type: "password",
-        hint: "constants.telegramBotHint",
-      },
-      {
-        key: "TELEGRAM_ALLOWED_USERS",
-        label: "constants.telegramAllowedUsers",
-        type: "text",
-        hint: "constants.telegramUsersHint",
-      },
-      {
         key: "DISCORD_BOT_TOKEN",
         label: "constants.discordBotToken",
         type: "password",
@@ -833,12 +821,6 @@ export interface PlatformDef {
 }
 
 export const GATEWAY_PLATFORMS: PlatformDef[] = [
-  {
-    key: "telegram",
-    label: "constants.platformTelegram",
-    description: "constants.platformTelegramDesc",
-    fields: ["TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_USERS"],
-  },
   {
     key: "discord",
     label: "constants.platformDiscord",

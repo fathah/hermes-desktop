@@ -110,10 +110,6 @@ export default {
   // Gateway section titles
   gatewayMessagingPlatforms: "Platform Pesan",
   // Gateway field labels
-  telegramBotToken: "Telegram Bot Token",
-  telegramBotHint: "Dapatkan dari @BotFather di Telegram",
-  telegramAllowedUsers: "Pengguna Telegram yang Diizinkan",
-  telegramUsersHint: "ID pengguna Telegram dipisahkan koma",
   discordBotToken: "Discord Bot Token",
   discordBotHint: "Dari Discord Developer Portal",
   discordAllowedChannels: "Channel Discord yang Diizinkan",
@@ -181,8 +177,6 @@ export default {
   haToken: "Home Assistant Token",
   haTokenHint: "Long-lived access token",
   // Gateway platform labels & descriptions
-  platformTelegram: "Telegram",
-  platformTelegramDesc: "Hubungkan ke Telegram via Bot API",
   platformDiscord: "Discord",
   platformDiscordDesc: "Hubungkan ke Discord via bot token",
   platformSlack: "Slack",

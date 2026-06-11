@@ -1455,7 +1455,6 @@ export async function sshReadLogs(
 // ── Platform toggles (Gateway page) ──────────────────────────────────────────
 
 const SSH_SUPPORTED_PLATFORMS = [
-  "telegram",
   "discord",
   "slack",
   "whatsapp",

@@ -16,12 +16,7 @@ import {
 } from "../editor/rowMarkdown";
 import { uid } from "../lib/ids";
 
-export type CaptureSource =
-  | "quick-note"
-  | "web"
-  | "telegram"
-  | "voice"
-  | "screenshot";
+export type CaptureSource = "quick-note" | "web" | "voice" | "screenshot";
 
 export type CaptureStatus =
   | "unprocessed"

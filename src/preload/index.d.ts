@@ -10,7 +10,6 @@ import type {
 } from "../shared/federated-search";
 import type { SearchSummary } from "../shared/searchSummary";
 import type { LoadedSkin } from "../shared/skins";
-import type { TelegramStatus } from "../shared/telegram-status";
 import type {
   SearchOpts as ResearchSearchOpts,
   WorkSummary as ResearchWorkSummary,
@@ -390,11 +389,6 @@ interface HermesAPI {
     enabled: boolean,
     profile?: string,
   ) => Promise<boolean>;
-  telegramGetScope: (
-    profile?: string,
-  ) => Promise<"read-info" | "broad" | "custom">;
-  telegramSetReadInfoScope: (profile?: string) => Promise<boolean>;
-  telegramCheckStatus: (profile?: string) => Promise<TelegramStatus>;
 
   // Sessions
   listSessions: (limit?: number, offset?: number) => Promise<SessionSummary[]>;
@@ -1446,10 +1440,6 @@ interface HermesAPI {
   ) => Promise<{ outcome: string; summary?: string; error?: string }>;
   srListPending: (profile?: string) => Promise<SrPendingUpdate[]>;
   srRemovePending: (id: string, profile?: string) => Promise<{ ok: boolean }>;
-  srTelegramAvailability: (profile?: string) => Promise<{
-    available: boolean;
-    targets: Array<{ id: string; name: string }>;
-  }>;
   onScheduledResearchUpdate: (
     callback: (p: {
       scheduleId: string;

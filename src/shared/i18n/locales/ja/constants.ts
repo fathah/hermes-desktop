@@ -110,10 +110,6 @@ export default {
   // Gateway section titles
   gatewayMessagingPlatforms: "メッセージングプラットフォーム",
   // Gateway field labels
-  telegramBotToken: "Telegram Bot トークン",
-  telegramBotHint: "Telegram の @BotFather から取得",
-  telegramAllowedUsers: "Telegram 許可ユーザー",
-  telegramUsersHint: "カンマ区切りの Telegram ユーザー ID",
   discordBotToken: "Discord Bot トークン",
   discordBotHint: "Discord Developer Portal から取得",
   discordAllowedChannels: "Discord 許可チャンネル",
@@ -181,8 +177,6 @@ export default {
   haToken: "Home Assistant トークン",
   haTokenHint: "長期アクセストークン",
   // Gateway platform labels & descriptions
-  platformTelegram: "Telegram",
-  platformTelegramDesc: "Bot API 経由で Telegram に接続",
   platformDiscord: "Discord",
   platformDiscordDesc: "Bot トークン経由で Discord に接続",
   platformSlack: "Slack",

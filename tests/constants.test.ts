@@ -88,13 +88,12 @@ describe("PROVIDERS", () => {
 // ─── GATEWAY_PLATFORMS ──────────────────────────────────
 
 describe("GATEWAY_PLATFORMS", () => {
-  it("has 16 platforms (matching v0.9.0 release)", () => {
-    expect(GATEWAY_PLATFORMS.length).toBe(16);
+  it("has 15 platforms", () => {
+    expect(GATEWAY_PLATFORMS.length).toBe(15);
   });
 
   it("includes all core platforms", () => {
     const keys = GATEWAY_PLATFORMS.map((p) => p.key);
-    expect(keys).toContain("telegram");
     expect(keys).toContain("discord");
     expect(keys).toContain("slack");
     expect(keys).toContain("whatsapp");

@@ -6,7 +6,6 @@ import type {
   GatewayHealthStatus,
   GatewayHealthChange,
 } from "../../shared/gateway";
-import type { TelegramStatus } from "../../shared/telegram-status";
 
 export const agentBridge = {
   // Gateway
@@ -35,14 +34,6 @@ export const agentBridge = {
     profile?: string,
   ): Promise<boolean> =>
     ipcRenderer.invoke("set-platform-enabled", platform, enabled, profile),
-  telegramGetScope: (
-    profile?: string,
-  ): Promise<"read-info" | "broad" | "custom"> =>
-    ipcRenderer.invoke("telegram-get-scope", profile),
-  telegramSetReadInfoScope: (profile?: string): Promise<boolean> =>
-    ipcRenderer.invoke("telegram-set-read-info-scope", profile),
-  telegramCheckStatus: (profile?: string): Promise<TelegramStatus> =>
-    ipcRenderer.invoke("telegram-check-status", profile),
 
   // Sessions
   listSessions: (

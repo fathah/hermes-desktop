@@ -24,7 +24,6 @@ type SkipInfo = { skipCount: number; lastSkipAt: number; lastReason: string };
 
 export function ScheduledModal() {
   const setScheduledOpen = useStore((s) => s.setScheduledOpen);
-  const setTelegramWizardOpen = useStore((s) => s.setTelegramWizardOpen);
   const ingestCommitPage = useStore((s) => s.ingestCommitPage);
   const selectPage = useStore((s) => s.selectPage);
   const flash = useStore((s) => s.flash);
@@ -40,12 +39,7 @@ export function ScheduledModal() {
   const [topic, setTopic] = useState("");
   const [cadence, setCadence] = useState<Cadence>("weekly");
   const [hour, setHour] = useState(8);
-  const [wantTelegram, setWantTelegram] = useState(false);
   const [wantAutoApply, setWantAutoApply] = useState(false);
-  const [tg, setTg] = useState<{
-    available: boolean;
-    targets: Array<{ id: string; name: string }>;
-  }>({ available: false, targets: [] });
   const [busyId, setBusyId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
@@ -75,16 +69,14 @@ export function ScheduledModal() {
   };
 
   const refresh = async () => {
-    const [s, p, avail, cron, sk] = await Promise.all([
+    const [s, p, cron, sk] = await Promise.all([
       window.hermesAPI.srList(),
       window.hermesAPI.srListPending(),
-      window.hermesAPI.srTelegramAvailability(),
       window.hermesAPI.listCronJobs(true).catch(() => [] as CronJob[]),
       window.hermesAPI
         .getSchedulerSkips()
         .catch(() => ({}) as Record<string, SkipInfo>),
     ]);
-    setTg(avail || { available: false, targets: [] });
     setCronJobs(cron || []);
     setSkips(sk || {});
     const applied = await autoApplyPending(p || [], s || []);
@@ -121,7 +113,6 @@ export function ScheduledModal() {
         topic: t,
         cadence,
         hour,
-        telegramPush: tg.available && wantTelegram,
         autoApply: wantAutoApply,
       });
       if (!res.ok) {
@@ -313,34 +304,6 @@ export function ScheduledModal() {
             />
             Auto-apply (skip review)
           </label>
-          <label
-            style={{
-              display: "flex",
-              gap: 6,
-              alignItems: "center",
-              opacity: tg.available ? 1 : 0.5,
-            }}
-            title={
-              tg.available
-                ? `Push to ${tg.targets[0]?.name ?? "Telegram"} on change`
-                : "Set up Telegram first (Settings → Telegram)"
-            }
-          >
-            <input
-              type="checkbox"
-              checked={tg.available && wantTelegram}
-              disabled={!tg.available}
-              onChange={(e) => setWantTelegram(e.target.checked)}
-            />
-            Telegram push
-          </label>
-          <button
-            className="cover-btn"
-            style={{ fontSize: 12 }}
-            onClick={() => setTelegramWizardOpen(true)}
-          >
-            {tg.available ? "Manage Telegram" : "Set up Telegram →"}
-          </button>
         </div>
         {error && (
           <small
@@ -447,7 +410,6 @@ export function ScheduledModal() {
                         ? " · runs in background"
                         : " · app-open only"}
                     {s.autoApply ? " · auto-apply" : ""}
-                    {s.telegramPush ? " · Telegram" : ""}
                     {!s.enabled ? " · paused" : ""}
                   </small>
                 </div>

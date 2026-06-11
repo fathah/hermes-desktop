@@ -26,7 +26,6 @@ interface PlatformRule {
 const TRUTHY_VALUES = new Set(["true", "1", "yes", "on"]);
 
 const PLATFORM_RULES: Record<string, PlatformRule> = {
-  telegram: { envCheck: (e) => !!e.TELEGRAM_BOT_TOKEN?.trim() },
   discord: { envCheck: (e) => !!e.DISCORD_BOT_TOKEN?.trim() },
   slack: { envCheck: (e) => !!e.SLACK_BOT_TOKEN?.trim() },
   whatsapp: {
@@ -52,7 +51,7 @@ const SUPPORTED_PLATFORMS = Object.keys(PLATFORM_RULES);
 /**
  * Match a top-level YAML block's `enabled: <bool>` field, e.g.:
  *
- *     telegram:
+ *     discord:
  *       reactions: false
  *       enabled: false      ← captured
  *       allowed_chats: ''

@@ -97,83 +97,6 @@ import {
   setSpendingCapConfig,
   SpendingCapConfig,
 } from "../spending-limits";
-import { getTelegramScope, setTelegramReadInfoScope } from "../tools";
-import {
-  deriveTelegramStatus,
-  type GetMeResult,
-  type TelegramStatus,
-} from "../../shared/telegram-status";
-
-/** Probe the Telegram Bot API to confirm a token is accepted and learn the
- *  bot's @username. Fixed host (api.telegram.org), so no SSRF surface. The
- *  token rides in the URL path, so we NEVER surface the raw error/URL — only
- *  generic messages — to keep the token out of logs and the renderer. */
-async function probeTelegramGetMe(token: string): Promise<GetMeResult> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8000);
-  try {
-    const res = await fetch(
-      `https://api.telegram.org/bot${encodeURIComponent(token)}/getMe`,
-      { method: "GET", signal: controller.signal },
-    );
-    if (res.status === 401 || res.status === 404) {
-      return {
-        ok: false,
-        kind: "invalid-token",
-        message: "Telegram rejected the bot token.",
-      };
-    }
-    if (!res.ok) {
-      return {
-        ok: false,
-        kind: "unreachable",
-        message: `Telegram API returned ${res.status}.`,
-      };
-    }
-    const data = (await res.json()) as {
-      ok?: boolean;
-      result?: { username?: string };
-    };
-    const username = data?.result?.username;
-    if (!data?.ok || !username) {
-      return {
-        ok: false,
-        kind: "invalid-token",
-        message: "Telegram did not return a bot identity.",
-      };
-    }
-    return { ok: true, username };
-  } catch (err) {
-    const aborted = (err as Error)?.name === "AbortError";
-    return {
-      ok: false,
-      kind: "unreachable",
-      message: aborted
-        ? "Timed out reaching Telegram."
-        : "Could not reach Telegram.",
-    };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-/** Compose the live signals into a single honest Telegram connection status. */
-async function telegramCheckStatus(profile?: string): Promise<TelegramStatus> {
-  const token = (readEnv(profile).TELEGRAM_BOT_TOKEN || "").trim();
-  if (!token) {
-    return deriveTelegramStatus({
-      tokenPresent: false,
-      gatewayRunning: false,
-      getMe: null,
-    });
-  }
-  const getMe = await probeTelegramGetMe(token);
-  return deriveTelegramStatus({
-    tokenPresent: true,
-    gatewayRunning: isGatewayRunning(profile),
-    getMe,
-  });
-}
 
 function openExternalUrl(rawUrl: unknown): void {
   if (!isAllowedExternalUrl(rawUrl) && !isAllowedObsidianExternalUrl(rawUrl)) {
@@ -580,20 +503,6 @@ export function registerConfigIpc(): void {
       await sshSetPlatformEnabled(ssh, platform, enabled, profile);
       return true;
     },
-  );
-
-  // Telegram remote-control capability scope (read/info-only is the safe default).
-  safeHandle("telegram-get-scope", (_e, profile?: string) =>
-    getTelegramScope(profile),
-  );
-  safeHandle("telegram-set-read-info-scope", (_e, profile?: string) => {
-    const ok = setTelegramReadInfoScope(profile);
-    if (ok && isGatewayRunning(profile)) restartGateway(profile);
-    return ok;
-  });
-  // Live connection status: token validity (getMe) + gateway-running state.
-  safeHandle("telegram-check-status", (_e, profile?: string) =>
-    telegramCheckStatus(profile),
   );
 
   // Model discovery

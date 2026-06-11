@@ -94,7 +94,7 @@ export function ResearchModal() {
   };
 
   // "Schedule this topic" → create a weekly schedule + jump to the Scheduled
-  // manager (where the user can tune cadence / Telegram / auto-apply).
+  // manager (where the user can tune cadence / auto-apply).
   const onScheduleThis = async () => {
     const t = topic.trim();
     if (!t) return;

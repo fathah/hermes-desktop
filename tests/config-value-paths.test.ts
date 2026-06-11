@@ -167,7 +167,7 @@ describe("getConfigValue — flat keys pinned to top level", () => {
     writeFileSync(
       join(TEST_DIR, "config.yaml"),
       [
-        "telegram:",
+        "discord:",
         "  service_tier: 'oops-not-agent'",
         "agent:",
         "  service_tier: fast",
@@ -178,7 +178,7 @@ describe("getConfigValue — flat keys pinned to top level", () => {
     const { getConfigValue } = await importConfigWithHome(TEST_DIR);
     expect(getConfigValue("service_tier")).toBeNull();
     expect(getConfigValue("agent.service_tier")).toBe("fast");
-    expect(getConfigValue("telegram.service_tier")).toBe("oops-not-agent");
+    expect(getConfigValue("discord.service_tier")).toBe("oops-not-agent");
   });
 });
 
@@ -207,12 +207,12 @@ describe("setConfigValue — dotted paths", () => {
   });
 
   it("does not write a sibling block's same-named key", async () => {
-    // Old setConfigValue would have replaced telegram.service_tier
+    // Old setConfigValue would have replaced discord.service_tier
     // (the first match anywhere) when asked to set agent.service_tier.
     writeFileSync(
       join(TEST_DIR, "config.yaml"),
       [
-        "telegram:",
+        "discord:",
         "  service_tier: 'leave-me-alone'",
         "agent:",
         "  service_tier: fast",

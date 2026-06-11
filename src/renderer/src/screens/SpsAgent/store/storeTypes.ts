@@ -199,8 +199,6 @@ export interface UiSlice {
   scheduledOpen: boolean;
   /** The read-only Agent tasks (Kanban oversight) modal is open. */
   agentTasksOpen: boolean;
-  /** The Telegram setup wizard is open. */
-  telegramWizardOpen: boolean;
   /** The External Sessions (other AI tools' transcripts) modal is open. */
   externalSessionsOpen: boolean;
   /** When set, the External Sessions modal auto-opens this conversation's viewer
@@ -241,7 +239,6 @@ export interface UiSlice {
   setResearchOpen: (v: boolean) => void;
   setScheduledOpen: (v: boolean) => void;
   setAgentTasksOpen: (v: boolean) => void;
-  setTelegramWizardOpen: (v: boolean) => void;
   setExternalSessionsOpen: (v: boolean) => void;
   /** Open the External Sessions modal focused on a specific transcript. */
   openExternalConversation: (target: ExternalConversationTarget) => void;

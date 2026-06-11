@@ -109,10 +109,6 @@ export default {
   // Gateway section titles
   gatewayMessagingPlatforms: "訊息平台",
   // Gateway field labels
-  telegramBotToken: "Telegram Bot Token",
-  telegramBotHint: "從 Telegram 上的 @BotFather 取得",
-  telegramAllowedUsers: "Telegram 允許的使用者",
-  telegramUsersHint: "逗號分隔的 Telegram 使用者 ID",
   discordBotToken: "Discord Bot Token",
   discordBotHint: "從 Discord Developer Portal 取得",
   discordAllowedChannels: "Discord 允許的頻道",
@@ -180,8 +176,6 @@ export default {
   haToken: "Home Assistant Token",
   haTokenHint: "長期有效的存取 token",
   // Gateway platform labels & descriptions
-  platformTelegram: "Telegram",
-  platformTelegramDesc: "透過 Bot API 連線 Telegram",
   platformDiscord: "Discord",
   platformDiscordDesc: "透過 bot token 連線 Discord",
   platformSlack: "Slack",

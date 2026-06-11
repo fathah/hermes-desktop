@@ -44,7 +44,6 @@ export const createUiSlice: StateCreator<Store, [], [], UiSlice> = (
   researchOpen: false,
   scheduledOpen: false,
   agentTasksOpen: false,
-  telegramWizardOpen: false,
   externalSessionsOpen: false,
   externalSessionsTarget: null,
   tweaksOpen: false,
@@ -79,7 +78,6 @@ export const createUiSlice: StateCreator<Store, [], [], UiSlice> = (
   setResearchOpen: (v) => set({ researchOpen: v }),
   setScheduledOpen: (v) => set({ scheduledOpen: v }),
   setAgentTasksOpen: (v) => set({ agentTasksOpen: v }),
-  setTelegramWizardOpen: (v) => set({ telegramWizardOpen: v }),
   setExternalSessionsOpen: (v) => set({ externalSessionsOpen: v }),
   openExternalConversation: (target) =>
     set({ externalSessionsTarget: target, externalSessionsOpen: true }),

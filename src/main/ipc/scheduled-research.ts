@@ -8,7 +8,6 @@ import {
   listPending,
   removePending,
   triggerScheduleNow,
-  getTelegramAvailability,
 } from "../scheduled-research";
 import type { ScheduleInput } from "../../shared/scheduledResearch";
 
@@ -35,8 +34,5 @@ export function registerScheduledResearchIpc(
   safeHandle("sr-list-pending", (_e, profile?: string) => listPending(profile));
   safeHandle("sr-remove-pending", (_e, id: string, profile?: string) =>
     removePending(id, profile),
-  );
-  safeHandle("sr-telegram-availability", (_e, profile?: string) =>
-    getTelegramAvailability(profile),
   );
 }

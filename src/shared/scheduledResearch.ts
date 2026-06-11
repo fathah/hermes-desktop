@@ -32,8 +32,6 @@ export interface ScheduledResearchItem {
   hour: number;
   /** MVP default false: the merge waits in the pending queue for review. */
   autoApply: boolean;
-  /** v2: push a one-liner to Telegram when changed (gated on a channel). */
-  telegramPush: boolean;
   enabled: boolean;
   createdAt: number;
   /** Epoch ms of the last completed run (0 = never run). */
@@ -54,7 +52,6 @@ export interface ScheduleInput {
   cadence: Cadence;
   hour?: number;
   autoApply?: boolean;
-  telegramPush?: boolean;
   kind?: ScheduleKind;
   scope?: DigestScope;
 }

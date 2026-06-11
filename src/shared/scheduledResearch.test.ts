@@ -79,7 +79,6 @@ function item(
     cadence: "daily",
     hour: 8,
     autoApply: false,
-    telegramPush: false,
     enabled: true,
     createdAt: 0,
     lastRunAt: 0,

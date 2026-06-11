@@ -110,10 +110,6 @@ export default {
   // Gateway section titles
   gatewayMessagingPlatforms: "Plataformas de Mensagens",
   // Gateway field labels
-  telegramBotToken: "Token do Bot do Telegram",
-  telegramBotHint: "Obtenha com o @BotFather no Telegram",
-  telegramAllowedUsers: "Utilizadores Permitidos no Telegram",
-  telegramUsersHint: "IDs de utilizador do Telegram separados por vírgula",
   discordBotToken: "Token do Bot do Discord",
   discordBotHint: "Do Portal de Programadores do Discord",
   discordAllowedChannels: "Canais Permitidos no Discord",
@@ -182,8 +178,6 @@ export default {
   haToken: "Token do Home Assistant",
   haTokenHint: "Token de acesso de longa duração",
   // Gateway platform labels & descriptions
-  platformTelegram: "Telegram",
-  platformTelegramDesc: "Ligar ao Telegram via Bot API",
   platformDiscord: "Discord",
   platformDiscordDesc: "Ligar ao Discord via token de bot",
   platformSlack: "Slack",

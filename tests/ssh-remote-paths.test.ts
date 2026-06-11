@@ -131,7 +131,7 @@ describe("getYamlValue with flat keys pinned to top level", () => {
     const content = [
       "agent:",
       "  service_tier: fast",
-      "telegram:",
+      "discord:",
       "  service_tier: 'oops'",
       "",
     ].join("\n");

@@ -19,7 +19,6 @@ import opencodeLogo from "../../assets/logos/opencode.svg";
 import perplexityLogo from "../../assets/logos/perplexity-color.svg";
 import togetherLogo from "../../assets/logos/together-color.svg";
 import deepseekLogo from "../../assets/logos/deepseek-color.svg";
-import telegramLogo from "../../assets/logos/telegram.svg";
 import discordLogo from "../../assets/logos/discord.svg";
 import whatsappLogo from "../../assets/logos/whatsapp-icon.svg";
 import mattermostLogo from "../../assets/logos/mattermost-dark.svg";
@@ -57,7 +56,6 @@ type BrandKey =
   | "perplexity"
   | "together"
   | "deepseek"
-  | "telegram"
   | "discord"
   | "whatsapp"
   | "mattermost"
@@ -96,7 +94,6 @@ const LOGOS: Record<Exclude<BrandKey, "unknown">, string> = {
   perplexity: perplexityLogo,
   together: togetherLogo,
   deepseek: deepseekLogo,
-  telegram: telegramLogo,
   discord: discordLogo,
   whatsapp: whatsappLogo,
   mattermost: mattermostLogo,
@@ -136,7 +133,6 @@ function detectBrand(provider?: string, modelId?: string): BrandKey {
   if (/perplexity/.test(haystack)) return "perplexity";
   if (/together/.test(haystack)) return "together";
   if (/deepseek/.test(haystack)) return "deepseek";
-  if (/telegram/.test(haystack)) return "telegram";
   if (/discord/.test(haystack)) return "discord";
   if (/whatsapp/.test(haystack)) return "whatsapp";
   if (/mattermost/.test(haystack)) return "mattermost";

@@ -23,7 +23,6 @@ import { getApiUrl, getRemoteAuthHeader } from "./hermes";
 import { resolveSpsVaultDir } from "./sps-storage";
 import { profileHome } from "./utils";
 import { HERMES_HOME } from "./installer";
-import { getPlatformEnabled } from "./config/platforms";
 import {
   createCronJob,
   removeCronJob,
@@ -89,69 +88,6 @@ function cronOutputDir(jobId: string): string {
   return join(HERMES_HOME, "cron", "output", jobId);
 }
 
-// ── Telegram target (for the cron `deliver` field) ───────────────────────────
-/** The configured Telegram chat id to deliver to, or null. Reads the gateway's
- *  channel directory (root-level), falling back to TELEGRAM_HOME_CHANNEL. */
-export function getTelegramTarget(): string | null {
-  try {
-    const raw = readFileSync(
-      join(HERMES_HOME, "channel_directory.json"),
-      "utf-8",
-    );
-    const data = JSON.parse(raw) as {
-      platforms?: { telegram?: Array<{ id?: string | number }> };
-    };
-    const first = data?.platforms?.telegram?.[0]?.id;
-    if (first) return String(first);
-  } catch {
-    /* not configured */
-  }
-  const env = process.env.TELEGRAM_HOME_CHANNEL;
-  return env ? String(env) : null;
-}
-
-/** Whether Telegram push is available (bot token enabled AND ≥1 configured
- *  target), plus the targets — drives the modal's Telegram toggle gating. */
-export function getTelegramAvailability(profile?: string): {
-  available: boolean;
-  targets: Array<{ id: string; name: string }>;
-} {
-  let enabled = false;
-  try {
-    enabled = getPlatformEnabled(profile).telegram === true;
-  } catch {
-    enabled = false;
-  }
-  const targets: Array<{ id: string; name: string }> = [];
-  try {
-    const raw = readFileSync(
-      join(HERMES_HOME, "channel_directory.json"),
-      "utf-8",
-    );
-    const data = JSON.parse(raw) as {
-      platforms?: { telegram?: Array<{ id?: string | number; name?: string }> };
-    };
-    for (const t of data?.platforms?.telegram ?? []) {
-      if (t?.id)
-        targets.push({ id: String(t.id), name: String(t.name ?? t.id) });
-    }
-  } catch {
-    /* none configured */
-  }
-  return { available: enabled && targets.length > 0, targets };
-}
-
-/** The cron `deliver` spec for a schedule: always local (so the desktop can
- *  drain the brief); plus Telegram when the schedule opted in AND a target is
- *  configured. Comma-separated targets are parsed by the gateway. */
-function deliverFor(item: ScheduledResearchItem): string {
-  if (item.telegramPush) {
-    const t = getTelegramTarget();
-    if (t) return `telegram:${t},local`;
-  }
-  return "local";
-}
-
 /** Create the paired gateway cron job for a schedule and return its id (or null
  *  on failure — the desktop isDue fallback then covers it). Best-effort. */
 async function createPairedCron(
@@ -164,7 +100,7 @@ async function createPairedCron(
       cronExprFor(item.cadence, item.hour),
       buildScheduledCronPrompt(item.topic),
       name,
-      deliverFor(item),
+      "local",
       profile,
     );
     if (!res.success) return null;
@@ -236,7 +172,6 @@ export async function createSchedule(
     cadence: input.cadence,
     hour: input.hour ?? 8,
     autoApply: input.autoApply ?? false,
-    telegramPush: input.telegramPush ?? false,
     enabled: true,
     createdAt: Date.now(),
     lastRunAt: 0,
@@ -265,10 +200,7 @@ export async function createSchedule(
 export async function updateSchedule(
   id: string,
   patch: Partial<
-    Pick<
-      ScheduledResearchItem,
-      "cadence" | "hour" | "enabled" | "autoApply" | "telegramPush"
-    >
+    Pick<ScheduledResearchItem, "cadence" | "hour" | "enabled" | "autoApply">
   >,
   profile?: string,
 ): Promise<{ ok: boolean; error?: string }> {
@@ -276,14 +208,11 @@ export async function updateSchedule(
   const item = reg.schedules.find((s) => s.id === id);
   if (!item) return { ok: false, error: "Schedule not found." };
   const cronShapeChanged =
-    patch.cadence !== undefined ||
-    patch.hour !== undefined ||
-    patch.telegramPush !== undefined;
+    patch.cadence !== undefined || patch.hour !== undefined;
   if (patch.cadence !== undefined) item.cadence = patch.cadence;
   if (patch.hour !== undefined) item.hour = patch.hour;
   if (patch.enabled !== undefined) item.enabled = patch.enabled;
   if (patch.autoApply !== undefined) item.autoApply = patch.autoApply;
-  if (patch.telegramPush !== undefined) item.telegramPush = patch.telegramPush;
   saveRegistry(reg, profile);
   // Keep the paired cron job in sync.
   try {

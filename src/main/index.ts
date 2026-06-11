@@ -658,7 +658,7 @@ app.whenReady().then(() => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     // Intentionally do NOT stop the gateway on exit: profile gateways are
-    // detached and meant to keep running headless (e.g. Telegram/Discord bots
+    // detached and meant to keep running headless (e.g. Discord bots
     // stay online after the desktop closes). The user stops a gateway
     // explicitly via the Gateway controls.
     stopSshTunnel();
