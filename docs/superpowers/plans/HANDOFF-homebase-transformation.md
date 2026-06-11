@@ -1,6 +1,6 @@
 # Handoff — "The Home Base" transformation
 
-**As of 2026-06-11. `origin/main` @ `20011102`. Tree clean.**
+**As of 2026-06-11. `origin/main` @ `c426f3a0`. Tree clean. Phases 1+2+3 COMPLETE.**
 
 This is the in-repo durable pointer. The **living tracker** is the auto-memory file
 `homebase-transformation.md` (auto-loads each session via its MEMORY.md index line) and is
@@ -37,31 +37,49 @@ authoritative if the two ever drift. The **canonical plan** is
     `npm run verify:firstrun-seed` probe (drives the real `buildInitialWorkspace` path).
   - **2.9** discoverability — ⌘K commands for **Ask / Vault health / Telos** (Vault health had NO UI
     entry point before — was unreachable) + sidebar tooltips (`20011102`).
-- **Phases 3–5** — not started (external imports → federated search → live capture/streaming).
+- **Phase 3 (External imports) — COMPLETE.** 5 commits, each full-gate-green + ff-merged. Exports from
+  the other major AI chat tools import via a drop-zone → extract → content-hash stage → standard scan →
+  index-time redaction → searchable + fenced, idempotent.
+  - **3.1** source-type plumbing (`3bbe0f48`) — union SPLIT (not flat extension): `ExternalScanSource`
+    (claude-code|codex|gemini|grok) | `ExternalImportSource` (chatgpt|claude-ai|grok-export|
+    gemini-takeout). Keeps `ADAPTERS: Record<ExternalScanSource>` exhaustive; new
+    `IMPORT_ADAPTERS: Partial<Record<ExternalImportSource>>` fills incrementally (so 3.1 shipped before
+    any import adapter existed). NEW `import-roots.ts` (pure): `importRootFor` + content-hash copy.
+  - **3.2** ChatGPT (`adb855e5`) — `parseChatGptExport` walks the `mapping` node-graph from
+    `current_node` up `parent` for the CANONICAL branch (drops abandoned regenerates + system/tool).
+    ADDITIVE multi-conversation contract: `ParseResult.conversations?[]` + `applyFragments` loops it
+    (single writer + redaction unchanged; 4 live adapters untouched). `ensureImportRootEnv()` bridges
+    `getHermesHome()` → `HERMES_EC_IMPORT_ROOT` (a pure adapter can't resolve the electron-only userData
+    home-override).
+  - **3.3** Claude.ai + Grok-export (`80261b8c`) — claude-ai = linear `chat_messages`. grok-export
+    REALITY-CHECK: no x.ai web-export exists, so grounded on the live `{type,content}` session JSONL,
+    uploaded; tolerant, extend when a real export surfaces.
+  - **3.4** Gemini Takeout (`1eed9db1`) — `MyActivity.json` is an activity LOG (no responses) →
+    pseudo-conversations split on a >30 min gap (`SESSION_GAP_MS`), "Prompted " verb stripped.
+  - **3.5** Perplexity — **DESCOPED (no-go):** no official export; paste-capture is Phase 5. Built nothing.
+  - **3.6** import IPC + drop-zone UI (`c426f3a0`) — NEW `import-extract.ts` (adm-zip; PK-magic sniff;
+    unpack `conversations.json`/`MyActivity.json` with any-`.json` fallback). `external-context-pick-file`
+    - `external-context-import-file` ({source, filePath}) → extract → copy → enable → `runScan` → totals.
+      NEW "Import" view/chip in `ExternalSessionsModal` (per-source drop-zone + picker + instructions).
+      WORKER_THREAD REALITY-CHECK (premise inverted): renderer can't freeze (async IPC); main-thread parse
+      matches the live `gemini` source — worker offload DEFERRED for pathological exports. Dep: `adm-zip`.
+
+**Phase 3 gate (met):** standard + `verify:external-context` (extended — all 4 import sources + redaction
+
+- idempotency) + `external-context-smoke` (real ChatGPT `.zip` end-to-end, idempotent, no DOM leak, 6/6).
 
 ## Still owed (deferred, not lost)
 
 - **1.7 vault-mirror failure COUNT** — needs a counter in the load-bearing vault write path
   (`sps-vault.ts` / `ipc/notes.ts` `sps-export-page`) + a `spsGetMirrorFailCount` IPC, surfaced in
   the TweaksPanel Storage section. Held out of every UI commit to avoid touching the storage substrate.
+  Pick up as its own small commit.
 
-## Next: Phase 3 — external conversation imports (the unifier's intake)
+## Next: Phase 4 (federated search) → Phase 5 (live capture/streaming)
 
-Adapters reuse the existing scan pipeline and are **parallel-safe** (disjoint files). All writes go
-through `applyFragments` (index-time redaction invariant). Import flow copies the export payload to a
-content-hash path (idempotent re-import); large-file parsing runs in a worker_thread.
-
-- **3.1** source-type plumbing — extend `ExternalSource` in `src/shared/external-context.ts` (~line 11)
-  with `chatgpt | claude-ai | grok-export | gemini-takeout`; default-OFF; `importRootFor(source)` +
-  copy-with-hash util. (`verify:external-context` stays green.)
-- **3.2** ChatGPT adapter — `conversations.json` node-graph: walk from `current_node` via `parent`.
-- **3.3** Claude.ai (linear `chat_messages`) + Grok export adapters.
-- **3.4** Gemini Takeout — `MyActivity.json`, group by >30 min gap.
-- **3.5** Perplexity DESCOPED — no official export; paste-capture only (Phase 5).
-- **3.6** import IPC + drop-zone UI — `external-context-import-file` handler (ZIP via adm-zip →
-  worker_thread parse) + an Import tab in `ExternalSessionsModal`.
-
-**Phase 3 gate:** standard + `verify:external-context` (extended) + `external-context-smoke`.
+- **Phase 4** — unify the SPS vault + external-context index + KB into one search surface.
+- **Phase 5** — live capture / streaming (Telegram gateway + streaming). 5.2/5.3 droppable.
+- (Plus the owed 1.7 vault-mirror count above.)
 
 ## Established Phase-2 port+delete pattern (reuse where it applies)
 
