@@ -9,9 +9,22 @@
 // Usage:  npm run build && node scripts/external-context-smoke.mjs
 //         SMOKE_OUT=/path node scripts/external-context-smoke.mjs
 import { _electron as electron } from "playwright";
+import AdmZip from "adm-zip";
 import { mkdtempSync, mkdirSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+
+// A fake sk-ant key, chunked so it never trips secret scanners in this repo.
+const SK_ANT = [
+  "sk-ant-a",
+  "pi03-LEA",
+  "KED01234",
+  "56789LEA",
+  "KED01234",
+  "56789LEA",
+  "KED01-se",
+  "cretx",
+].join("");
 
 const OUT = process.env.SMOKE_OUT || join(tmpdir(), "ec-smoke");
 mkdirSync(OUT, { recursive: true });
@@ -73,19 +86,7 @@ const lines = [
     timestamp: "2026-06-10T09:00:01.000Z",
     message: {
       role: "user",
-      content:
-        "design the widget pipeline using " +
-        [
-          "sk-ant-a",
-          "pi03-LEA",
-          "KED01234",
-          "56789LEA",
-          "KED01234",
-          "56789LEA",
-          "KED01-se",
-          "cretx",
-        ].join("") +
-        "",
+      content: "design the widget pipeline using " + SK_ANT,
     },
   }),
   JSON.stringify({
@@ -101,6 +102,50 @@ const lines = [
   }),
 ];
 writeFileSync(join(claudeProj, `${sid}.jsonl`), lines.join("\n") + "\n");
+
+// ── ChatGPT export ZIP fixture (for the Import flow). A branched conversation
+//    with a planted secret in the first user turn and a distinctive search
+//    token, packed as conversations.json inside a real .zip. The import root is
+//    HERMES_HOME/external-imports (hermetic — getHermesHome() === HOME). ───────
+const chatgptZip = join(HOME, "chatgpt-export.zip");
+const chatgptExport = JSON.stringify([
+  {
+    title: "Imported smoke chat",
+    create_time: 1700000000,
+    update_time: 1700000100,
+    conversation_id: "smoke-conv-1",
+    current_node: "a1",
+    mapping: {
+      root: { id: "root", message: null, parent: null, children: ["u1"] },
+      u1: {
+        id: "u1",
+        message: {
+          author: { role: "user" },
+          create_time: 1700000001,
+          content: {
+            content_type: "text",
+            parts: ["importedsmoketoken with secret " + SK_ANT],
+          },
+        },
+        parent: "root",
+        children: ["a1"],
+      },
+      a1: {
+        id: "a1",
+        message: {
+          author: { role: "assistant" },
+          create_time: 1700000002,
+          content: { content_type: "text", parts: ["assistant smoke reply"] },
+        },
+        parent: "u1",
+        children: [],
+      },
+    },
+  },
+]);
+const zip = new AdmZip();
+zip.addFile("conversations.json", Buffer.from(chatgptExport));
+zip.writeZip(chatgptZip);
 
 console.log("HERMES_HOME=", HOME);
 console.log("SMOKE_OUT=", OUT);
@@ -187,6 +232,102 @@ await shot("04-viewer", async () => {
   await win.locator(".modal .scroll .lst-row").first().click({ timeout: 8000 });
   await win.waitForTimeout(800);
 });
+
+// Ensure the External Sessions modal is open (shot 04 leaves a viewer open;
+// Esc drops back to it, but if the modal closed entirely, reopen via palette).
+async function ensureModalOpen() {
+  await win.keyboard.press("Escape");
+  await win.waitForTimeout(300);
+  const open = await win.evaluate(() => !!document.querySelector(".modal"));
+  if (open) return;
+  await win.locator(".nav-item", { hasText: "Search" }).first().click();
+  await win.waitForTimeout(500);
+  await win.keyboard.type("external sessions");
+  await win.waitForTimeout(600);
+  await win.keyboard.press("Enter");
+  await win.waitForSelector(".modal", { timeout: 8000 });
+}
+
+// 05 — Import tab: render the per-source drop-zones.
+await shot("05-import", async () => {
+  await ensureModalOpen();
+  await win
+    .locator(".modal .pal-chip", { hasText: "Import" })
+    .first()
+    .click({ timeout: 8000 });
+  await win.waitForTimeout(500);
+});
+
+// Drive the import through the REAL IPC (the native file picker can't be
+// automated). This exercises extract → content-hash copy → scan → redaction.
+const imp = await win.evaluate(
+  (p) => window.hermesAPI.externalContextImportFile("chatgpt", p),
+  chatgptZip,
+);
+console.log(
+  "IMPORT_RESULT:",
+  JSON.stringify({
+    conversations: imp?.conversations,
+    messages: imp?.messages,
+    reused: imp?.reused,
+  }),
+);
+if (!imp || imp.conversations < 1) {
+  console.log("IMPORT_FAIL: no conversations indexed");
+  await app.close();
+  process.exit(3);
+}
+// Idempotency: the same ZIP a second time must not change the row counts.
+const imp2 = await win.evaluate(
+  (p) => window.hermesAPI.externalContextImportFile("chatgpt", p),
+  chatgptZip,
+);
+if (
+  imp2.conversations !== imp.conversations ||
+  imp2.messages !== imp.messages
+) {
+  console.log(
+    "IMPORT_FAIL: not idempotent",
+    `${imp.conversations}/${imp.messages}`,
+    "→",
+    `${imp2.conversations}/${imp2.messages}`,
+  );
+  await app.close();
+  process.exit(3);
+}
+console.log("IMPORT_IDEMPOTENT ok");
+
+// 06 — the imported, redacted content is searchable through the UI.
+await shot("06-import-search", async () => {
+  await win
+    .locator(".modal .pal-chip", { hasText: "Search" })
+    .first()
+    .click({ timeout: 8000 });
+  await win.waitForTimeout(300);
+  const input = win.locator(".modal .pal-input input").first();
+  await input.fill("importedsmoketoken");
+  await input.press("Enter");
+  await win.waitForTimeout(1200);
+});
+const importHits = await win.evaluate(
+  () => document.querySelectorAll(".modal .scroll .lst-row").length,
+);
+const importLeak = await win.evaluate(
+  () =>
+    document.querySelector(".modal")?.textContent?.includes("sk-ant-api03") ??
+    false,
+);
+if (importHits < 1) {
+  console.log("IMPORT_FAIL: imported content not searchable in the UI");
+  await app.close();
+  process.exit(3);
+}
+if (importLeak) {
+  console.log("IMPORT_FAIL: secret leaked into the import search UI");
+  await app.close();
+  process.exit(3);
+}
+console.log("IMPORT_SEARCH ok (hit rendered, no secret leak)");
 
 console.log("SHOTS_OK:", shots.length, "—", shots.join(", "));
 await app.close();

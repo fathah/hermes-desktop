@@ -1,6 +1,8 @@
 import { ipcRenderer } from "electron";
 import type {
   ExternalConversationMeta,
+  ExternalImportResult,
+  ExternalImportSource,
   ExternalIndexStatus,
   ExternalMessage,
   ExternalScanProgress,
@@ -28,6 +30,15 @@ export const externalContextBridge = {
 
   externalContextRebuild: (): Promise<ExternalIndexStatus> =>
     ipcRenderer.invoke("external-context-rebuild"),
+
+  externalContextPickFile: (): Promise<string | null> =>
+    ipcRenderer.invoke("external-context-pick-file"),
+
+  externalContextImportFile: (
+    source: ExternalImportSource,
+    filePath: string,
+  ): Promise<ExternalImportResult> =>
+    ipcRenderer.invoke("external-context-import-file", source, filePath),
 
   externalContextSetMaxAge: (
     days: number | null,

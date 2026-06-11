@@ -139,6 +139,20 @@ export interface ExternalScanProgress {
   message?: string;
 }
 
+/** Outcome of importing one export artifact (drop-zone / file picker → index). */
+export interface ExternalImportResult {
+  /** Fresh whole-index status after the import scan. */
+  status: ExternalIndexStatus;
+  /** Which import source the artifact was filed under. */
+  source: ExternalImportSource;
+  /** True when identical bytes were already staged (idempotent no-op re-import). */
+  reused: boolean;
+  /** The source's total indexed conversations after this import. */
+  conversations: number;
+  /** The source's total indexed messages after this import. */
+  messages: number;
+}
+
 /** Per-source enabled flags (default all OFF). */
 export type ExternalSourceConfig = Record<ExternalSource, boolean>;
 

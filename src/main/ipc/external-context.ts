@@ -9,16 +9,25 @@
  *
  * Save-to-KB (commit 6) and MCP registration (commit 7) add their handlers here.
  */
-import { type BrowserWindow } from "electron";
+import { BrowserWindow, dialog } from "electron";
 import { safeHandle } from "./safe-handle";
 import type {
+  ExternalImportResult,
+  ExternalImportSource,
   ExternalIndexStatus,
   ExternalScanProgress,
   ExternalSource,
 } from "../../shared/external-context";
-import { formatProvenance } from "../../shared/external-context";
+import {
+  EXTERNAL_IMPORT_SOURCES,
+  formatProvenance,
+} from "../../shared/external-context";
 import { spsExternalSaveToKb } from "../sps-agent";
-import { existsSync } from "fs";
+import { existsSync, mkdtempSync, rmSync } from "fs";
+import { tmpdir } from "os";
+import { join as joinPath } from "path";
+import { extractImportPayload } from "../external-context/import-extract";
+import { copyExportToImportRoot } from "../external-context/import-roots";
 import {
   externalContextMcpServerPath,
   hasMcpServer,
@@ -35,6 +44,7 @@ import { getApiServerKey } from "../config/api-server-key";
 import { readEnv } from "../config/env-store";
 import { getRemoteAuthHeader } from "../hermes/gateway-process";
 import {
+  ensureImportRootEnv,
   getExternalContextDb,
   isScanning,
   scanExternalSources,
@@ -152,6 +162,80 @@ export function registerExternalContextIpc(
     await runScan(getWindow);
     return buildStatus();
   });
+
+  // Native file picker for the Import drop-zone (zip / json / jsonl).
+  safeHandle("external-context-pick-file", async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const opts: Electron.OpenDialogOptions = {
+      properties: ["openFile"],
+      filters: [
+        { name: "Conversation export", extensions: ["zip", "json", "jsonl"] },
+        { name: "All files", extensions: ["*"] },
+      ],
+    };
+    const result = win
+      ? await dialog.showOpenDialog(win, opts)
+      : await dialog.showOpenDialog(opts);
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+  });
+
+  // Import a user-supplied export artifact: extract (if a ZIP) → content-hash
+  // copy into the source's import root → enable the source → scan (redaction +
+  // idempotency via the standard pipeline) → return the source's totals. The
+  // CPU-bound parse runs on the main thread (matching the live `gemini`
+  // whole-file source); the renderer stays responsive because IPC is async. A
+  // worker_thread offload for pathologically-large exports is deferred hardening.
+  safeHandle(
+    "external-context-import-file",
+    async (_e, source: ExternalImportSource, filePath: string) => {
+      if (!(EXTERNAL_IMPORT_SOURCES as readonly string[]).includes(source)) {
+        throw new Error(`not an import source: ${String(source)}`);
+      }
+      if (typeof filePath !== "string" || filePath.length === 0) {
+        throw new Error("an import file path is required");
+      }
+      ensureImportRootEnv();
+      const win = getWindow();
+      const emit = (
+        phase: ExternalScanProgress["phase"],
+        message?: string,
+      ): void => {
+        if (win && !win.isDestroyed()) {
+          win.webContents.send("external-context-progress", {
+            source,
+            phase,
+            filesProcessed: 0,
+            filesTotal: 1,
+            messagesIndexed: 0,
+            message,
+          } satisfies ExternalScanProgress);
+        }
+      };
+
+      emit("start", "Reading export…");
+      const tmp = mkdtempSync(joinPath(tmpdir(), "ec-import-"));
+      try {
+        const { payloadPath } = extractImportPayload(source, filePath, tmp);
+        const staged = copyExportToImportRoot(source, payloadPath);
+        // Enable so the source participates in scans + search + digests.
+        setExternalContextSource(source, true);
+        emit("scanning", "Indexing…");
+        await runScan(getWindow);
+        const stats = getExternalContextDb().sourceStats()[source];
+        emit("done");
+        return {
+          status: buildStatus(),
+          source,
+          reused: staged.reused,
+          conversations: stats.conversations,
+          messages: stats.messages,
+        } satisfies ExternalImportResult;
+      } finally {
+        rmSync(tmp, { recursive: true, force: true });
+      }
+    },
+  );
 
   safeHandle(
     "external-context-set-max-age",

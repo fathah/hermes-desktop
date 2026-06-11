@@ -25,6 +25,8 @@ import type { ChatReadiness } from "../shared/validation";
 import type { SkillEntry } from "../shared/skills";
 import type {
   ExternalSource,
+  ExternalImportSource,
+  ExternalImportResult,
   ExternalSourceConfig,
   ExternalIndexStatus,
   ExternalSearchHit,
@@ -1109,6 +1111,11 @@ interface HermesAPI {
   externalContextStatus: () => Promise<ExternalIndexStatus>;
   externalContextScan: () => Promise<ExternalIndexStatus>;
   externalContextRebuild: () => Promise<ExternalIndexStatus>;
+  externalContextPickFile: () => Promise<string | null>;
+  externalContextImportFile: (
+    source: ExternalImportSource,
+    filePath: string,
+  ) => Promise<ExternalImportResult>;
   externalContextSetMaxAge: (
     days: number | null,
   ) => Promise<ExternalIndexStatus>;

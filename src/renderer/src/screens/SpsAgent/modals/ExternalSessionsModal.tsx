@@ -12,10 +12,12 @@ import { Icon } from "../components/Icon";
 import {
   EXTERNAL_SOURCES,
   EXTERNAL_SCAN_SOURCES,
+  EXTERNAL_IMPORT_SOURCES,
   EXTERNAL_SOURCE_LABELS,
   formatProvenance,
   type ExternalIndexStatus,
   type ExternalMessage,
+  type ExternalImportSource,
   type ExternalScanProgress,
   type ExternalSearchHit,
   type ExternalSource,
@@ -27,7 +29,7 @@ import {
   type Cadence,
 } from "../../../../../shared/scheduledResearch";
 
-type View = "search" | "settings";
+type View = "search" | "settings" | "import";
 
 interface ViewerState {
   hit: ExternalSearchHit;
@@ -82,6 +84,47 @@ export function ExternalSessionsModal() {
   const [viewer, setViewer] = useState<ViewerState | null>(null);
   const queryRef = useRef<HTMLInputElement>(null);
   const reqSeq = useRef(0);
+
+  const [importing, setImporting] = useState<ExternalImportSource | null>(null);
+  const [importNote, setImportNote] = useState<string | null>(null);
+
+  const importFile = async (source: ExternalImportSource, filePath: string) => {
+    setImporting(source);
+    setImportNote(null);
+    try {
+      const res = await window.hermesAPI?.externalContextImportFile?.(
+        source,
+        filePath,
+      );
+      if (!res) {
+        setImportNote("Import failed — the file couldn't be read.");
+        return;
+      }
+      setStatus(res.status);
+      // The import enables the source; refresh config so it reflects that.
+      const cfg = await window.hermesAPI?.externalContextGetConfig?.();
+      if (cfg) setConfig(cfg);
+      const label = EXTERNAL_SOURCE_LABELS[source];
+      setImportNote(
+        res.reused
+          ? `Already imported — ${label}: ${res.conversations} conversations indexed.`
+          : `Imported ${label}: ${res.conversations} conversations · ${res.messages} messages.`,
+      );
+      flash(`Imported ${label}`);
+    } catch (err) {
+      setImportNote(
+        err instanceof Error ? err.message : "Import failed unexpectedly.",
+      );
+    } finally {
+      setImporting(null);
+    }
+  };
+
+  const pickAndImport = async (source: ExternalImportSource) => {
+    const filePath = await window.hermesAPI?.externalContextPickFile?.();
+    if (!filePath) return;
+    await importFile(source, filePath);
+  };
 
   const refreshStatus = async () => {
     const s = await window.hermesAPI?.externalContextStatus?.();
@@ -220,6 +263,12 @@ export function ExternalSessionsModal() {
               Search
             </button>
             <button
+              className={`pal-chip${view === "import" ? " on" : ""}`}
+              onClick={() => setView("import")}
+            >
+              Import
+            </button>
+            <button
               className={`pal-chip${view === "settings" ? " on" : ""}`}
               onClick={() => setView("settings")}
             >
@@ -229,7 +278,15 @@ export function ExternalSessionsModal() {
         </div>
 
         <div className="modal-body">
-          {view === "settings" ? (
+          {view === "import" ? (
+            <ImportView
+              status={status}
+              importing={importing}
+              note={importNote}
+              onPick={pickAndImport}
+              onDropFile={importFile}
+            />
+          ) : view === "settings" ? (
             <SettingsView
               config={config}
               status={status}
@@ -399,6 +456,112 @@ function SearchView(props: {
           </button>
         ))}
       </div>
+    </>
+  );
+}
+
+// ── import view (drop-zone for downloaded exports) ─────────────────────────────
+
+/** How to obtain each source's export, shown next to its drop-zone. */
+const IMPORT_INSTRUCTIONS: Record<ExternalImportSource, string> = {
+  chatgpt:
+    "ChatGPT → Settings → Data controls → Export data. Drop the .zip (or conversations.json).",
+  "claude-ai":
+    "Claude.ai → Settings → Privacy → Export data. Drop the .zip (or conversations.json).",
+  "grok-export":
+    "Grok → copy a session, or drop a chat_history.jsonl session file.",
+  "gemini-takeout":
+    "Google Takeout → My Activity → Gemini Apps (JSON). Drop the .zip (or MyActivity.json).",
+};
+
+/** Pull a dropped file's absolute path (Electron exposes it on the File). */
+function droppedPath(file: File): string | null {
+  const p = (file as File & { path?: string }).path;
+  return typeof p === "string" && p.length > 0 ? p : null;
+}
+
+function ImportView(props: {
+  status: ExternalIndexStatus | null;
+  importing: ExternalImportSource | null;
+  note: string | null;
+  onPick: (source: ExternalImportSource) => void;
+  onDropFile: (source: ExternalImportSource, filePath: string) => void;
+}) {
+  const statusBySource = new Map<ExternalSource, ExternalSourceStatus>(
+    (props.status?.sources ?? []).map((s) => [s.source, s]),
+  );
+  return (
+    <>
+      <div className="cmts-empty" style={{ padding: "8px 0 14px" }}>
+        Import conversations you’ve downloaded from other AI tools. Files are
+        copied locally and redacted at index time — nothing leaves this machine.
+      </div>
+      <div className="scroll" style={{ maxHeight: "52vh" }}>
+        {EXTERNAL_IMPORT_SOURCES.map((source) => {
+          const busy = props.importing === source;
+          const st = statusBySource.get(source);
+          return (
+            <div
+              key={source}
+              className="lst-row"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const file = e.dataTransfer.files[0];
+                const path = file ? droppedPath(file) : null;
+                if (path) props.onDropFile(source, path);
+                else props.onPick(source);
+              }}
+              style={{
+                borderRadius: 8,
+                alignItems: "flex-start",
+                gap: 10,
+                height: "auto",
+                padding: "12px 10px",
+                border: "1px dashed var(--bd)",
+                marginBottom: 8,
+                flexDirection: "column",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  width: "100%",
+                  gap: 10,
+                }}
+              >
+                <div className="c-name">{EXTERNAL_SOURCE_LABELS[source]}</div>
+                <button
+                  className="cover-btn"
+                  disabled={busy}
+                  onClick={() => props.onPick(source)}
+                >
+                  {busy ? "Importing…" : "Choose file…"}
+                </button>
+              </div>
+              <small style={{ color: "var(--tx-3)" }}>
+                {IMPORT_INSTRUCTIONS[source]}
+              </small>
+              {st && st.conversations > 0 && (
+                <small style={{ color: "var(--tx-3)" }}>
+                  {st.conversations} conversations · {st.messages} messages
+                  indexed
+                </small>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {props.note && (
+        <div
+          className="cmts-empty"
+          style={{ padding: "10px 0 0", color: "var(--tx-2)" }}
+        >
+          {props.note}
+        </div>
+      )}
     </>
   );
 }
