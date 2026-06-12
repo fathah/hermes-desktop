@@ -61,6 +61,7 @@ export {
   writeMcpServerEntry,
   hasMcpServer,
   openAlexMcpServerPath,
+  notebookLmMcpCommand,
 } from "./installer/mcp";
 
 // Re-exports of Backup & Import

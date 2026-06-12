@@ -173,3 +173,5 @@ export {
   capResearchBrief,
   hasUsableSources,
 } from "../../../../../shared/research";
+export { buildSourceStudyPrompt } from "../../../../../shared/sourceStudy";
+export type { SourceStudyPromptOptions } from "../../../../../shared/sourceStudy";

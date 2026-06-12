@@ -3,6 +3,7 @@ import { existsSync } from "fs";
 import {
   spsUnfurl,
   spsAssistant,
+  spsSourceStudy,
   spsIngestInbox,
   spsFileAnswer,
   spsFileResearch,
@@ -26,6 +27,7 @@ import {
 import type { SearchOpts } from "../../shared/openalex/core";
 import {
   hasMcpServer,
+  notebookLmMcpCommand,
   openAlexMcpServerPath,
   writeMcpServerEntry,
 } from "../installer";
@@ -42,6 +44,11 @@ export function registerSpsIpc(): void {
       profile?: string,
       groundInWorkspace?: boolean,
     ) => spsAssistant(prompt, ctx, profile, groundInWorkspace),
+  );
+  safeHandle(
+    "sps-source-study",
+    (_event, focus: string, corpusDescription?: string, profile?: string) =>
+      spsSourceStudy(focus, corpusDescription, profile),
   );
   safeHandle("sps-ingest-inbox", (_event, profile?: string) =>
     spsIngestInbox(profile),
@@ -116,6 +123,9 @@ export function registerSpsIpc(): void {
   safeHandle("sps-research-ensure-agent-tool", (_event, profile?: string) =>
     ensureResearchMcpRegistered(profile),
   );
+  safeHandle("sps-notebooklm-ensure-mcp", (_event, profile?: string) =>
+    ensureNotebookLmMcpRegistered(profile),
+  );
 }
 
 function ensureResearchMcpRegistered(profile?: string): {
@@ -137,6 +147,26 @@ function ensureResearchMcpRegistered(profile?: string): {
   writeMcpServerEntry(
     name,
     { command: process.execPath, args: [serverPath], env, enabled: true },
+    profile,
+  );
+  return { registered: true, alreadyPresent: false };
+}
+
+function ensureNotebookLmMcpRegistered(profile?: string): {
+  registered: boolean;
+  alreadyPresent: boolean;
+} {
+  const name = "notebooklm-mcp";
+  if (hasMcpServer(name, profile)) {
+    return { registered: true, alreadyPresent: true };
+  }
+  const command = notebookLmMcpCommand();
+  if (command !== "notebooklm-mcp" && !existsSync(command)) {
+    return { registered: false, alreadyPresent: false };
+  }
+  writeMcpServerEntry(
+    name,
+    { command, args: [], env: {}, enabled: true },
     profile,
   );
   return { registered: true, alreadyPresent: false };

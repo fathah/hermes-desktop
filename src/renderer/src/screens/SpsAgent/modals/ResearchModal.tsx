@@ -16,14 +16,16 @@ import { Icon } from "../components/Icon";
 import { SpsModal } from "./SpsModal";
 import { research, type WorkSummary } from "../research";
 
-type Mode = "research" | "papers";
+type Mode = "research" | "papers" | "study";
 type Phase = "idle" | "running" | "done" | "warn" | "error";
+type NotebookState = "idle" | "working" | "done" | "failed";
 
 export function ResearchModal() {
   const setResearchOpen = useStore((s) => s.setResearchOpen);
   const setScheduledOpen = useStore((s) => s.setScheduledOpen);
   const importResearchWork = useStore((s) => s.importResearchWork);
   const runResearch = useStore((s) => s.runResearch);
+  const saveStudyToWiki = useStore((s) => s.saveStudyToWiki);
   const flash = useStore((s) => s.flash);
   const onClose = () => setResearchOpen(false);
 
@@ -57,6 +59,17 @@ export function ResearchModal() {
   const [savingCfg, setSavingCfg] = useState(false);
   // Guards against an earlier slow search overwriting a later one.
   const reqSeq = useRef(0);
+
+  // ── source-study mode (corpus grounded in Wiki and optional NotebookLM MCP) ──
+  const [studyFocus, setStudyFocus] = useState("");
+  const [studyCorpus, setStudyCorpus] = useState("");
+  const [studyBusy, setStudyBusy] = useState(false);
+  const [studySaving, setStudySaving] = useState(false);
+  const [studyResult, setStudyResult] = useState("");
+  const [studySaveMsg, setStudySaveMsg] = useState("");
+  const [notebookState, setNotebookState] =
+    useState<NotebookState>("idle");
+  const studyUndoRef = useRef<null | (() => void)>(null);
 
   useEffect(() => {
     topicRef.current?.focus();
@@ -197,14 +210,73 @@ export function ResearchModal() {
     }
   };
 
-  const busy = phase === "running";
+  const enableNotebookLm = async () => {
+    setNotebookState("working");
+    try {
+      const res = await window.hermesAPI?.spsNotebookLmEnsureMcp?.();
+      setNotebookState(res?.registered ? "done" : "failed");
+    } catch {
+      setNotebookState("failed");
+    }
+  };
+
+  const runSourceStudy = async () => {
+    const focus = studyFocus.trim();
+    if (!focus || studyBusy) return;
+    setStudyBusy(true);
+    setStudyResult("");
+    setStudySaveMsg("");
+    studyUndoRef.current = null;
+    try {
+      const res = await window.hermesAPI?.spsSourceStudy?.(
+        focus,
+        studyCorpus.trim() || undefined,
+      );
+      const reply = extractChatReply(res);
+      setStudyResult(reply || "No study result returned.");
+    } catch (err) {
+      setStudyResult(
+        err instanceof Error ? err.message : "Source study failed.",
+      );
+    } finally {
+      setStudyBusy(false);
+    }
+  };
+
+  const saveStudy = async () => {
+    if (!studyResult.trim() || studySaving) return;
+    setStudySaving(true);
+    setStudySaveMsg("");
+    try {
+      const res = await saveStudyToWiki(studyFocus.trim(), studyResult);
+      if (res.ok) {
+        studyUndoRef.current = res.undo ?? null;
+        setStudySaveMsg(res.summary || "Saved to your Knowledge Base.");
+        flash("Saved study to your Knowledge Base");
+      } else {
+        setStudySaveMsg(res.error || "Filing unavailable.");
+      }
+    } finally {
+      setStudySaving(false);
+    }
+  };
+
+  const undoStudySave = () => {
+    studyUndoRef.current?.();
+    studyUndoRef.current = null;
+    setStudySaveMsg("");
+    flash("Removed from Knowledge Base");
+  };
+
+  const busy = phase === "running" || studyBusy || studySaving;
+  const researchBusy = phase === "running";
 
   return (
     <SpsModal
       title="🔬 Research"
       onClose={onClose}
       width={640}
-      closeGuard={() => phase !== "running"}
+      closeGuard={() => !busy}
       headerActions={
         <div style={{ display: "flex", gap: 6 }}>
           <button
@@ -220,6 +292,13 @@ export function ResearchModal() {
             disabled={busy}
           >
             Academic papers
+          </button>
+          <button
+            className={`pal-chip${mode === "study" ? " on" : ""}`}
+            onClick={() => setMode("study")}
+            disabled={busy}
+          >
+            Study sources
           </button>
         </div>
       }
@@ -265,19 +344,19 @@ export function ResearchModal() {
                   if (e.key === "Enter") void doResearch();
                 }}
                 placeholder="Research any topic — a market, a regulation, a vendor, “how do I…”"
-                disabled={busy}
+                disabled={researchBusy}
               />
               <button
                 className="cover-btn"
                 onClick={() => void doResearch()}
-                disabled={busy || !topic.trim() || webEnabled === false}
+                disabled={researchBusy || !topic.trim() || webEnabled === false}
               >
-                {busy ? "Researching…" : "Research"}
+                {researchBusy ? "Researching…" : "Research"}
               </button>
               <button
                 className="cover-btn"
                 title="Keep this topic current automatically (weekly)"
-                disabled={busy || !topic.trim()}
+                disabled={researchBusy || !topic.trim()}
                 onClick={() => void onScheduleThis()}
               >
                 ⏱ Schedule
@@ -292,9 +371,9 @@ export function ResearchModal() {
               </div>
             )}
 
-            {(busy || (phase !== "idle" && !!progress)) && (
+            {(researchBusy || (phase !== "idle" && !!progress)) && (
               <>
-                {busy && (
+                {researchBusy && (
                   <small
                     style={{
                       color: "var(--tx-3)",
@@ -381,6 +460,159 @@ export function ResearchModal() {
                   Try again
                 </button>
               </div>
+            )}
+          </>
+        ) : mode === "study" ? (
+          <>
+            <div
+              style={{
+                marginBottom: 12,
+                padding: 12,
+                border: "1px solid var(--bd)",
+                borderRadius: 8,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 10,
+              }}
+            >
+              <small style={{ color: "var(--tx-3)" }}>
+                NotebookLM is optional. Enabling it registers the local MCP
+                server for My Assistant; Google auth stays outside this app.
+              </small>
+              <button
+                className="cover-btn"
+                onClick={() => void enableNotebookLm()}
+                disabled={notebookState === "working"}
+                style={{ flexShrink: 0 }}
+              >
+                {notebookState === "working"
+                  ? "Enabling..."
+                  : notebookState === "done"
+                    ? "NotebookLM enabled"
+                    : "Enable NotebookLM"}
+              </button>
+            </div>
+
+            {notebookState === "failed" && (
+              <div
+                style={{
+                  marginBottom: 12,
+                  padding: 12,
+                  border: "1px solid var(--bd)",
+                  borderRadius: 8,
+                }}
+              >
+                <small style={{ color: "var(--tx-3)" }}>
+                  NotebookLM MCP command not found. Install it or run nlm login,
+                  then try again. If auth expired, run nlm login and retry.
+                </small>
+              </div>
+            )}
+
+            <div className="pal-input" style={{ marginBottom: 12 }}>
+              <Icon name="search" size={18} style={{ color: "var(--tx-3)" }} />
+              <input
+                value={studyFocus}
+                onChange={(e) => setStudyFocus(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void runSourceStudy();
+                }}
+                placeholder="Question or learning goal..."
+                disabled={studyBusy}
+              />
+              <button
+                className="cover-btn"
+                onClick={() => void runSourceStudy()}
+                disabled={studyBusy || !studyFocus.trim()}
+              >
+                {studyBusy ? "Studying..." : "Study"}
+              </button>
+            </div>
+
+            <label
+              style={{
+                display: "grid",
+                gap: 6,
+                marginBottom: 12,
+                fontSize: 12,
+                color: "var(--tx-3)",
+              }}
+            >
+              Corpus description
+              <textarea
+                value={studyCorpus}
+                onChange={(e) => setStudyCorpus(e.target.value)}
+                placeholder="Optional: name the PDFs, videos, articles, wiki pages, or NotebookLM notebooks to study."
+                disabled={studyBusy}
+                rows={3}
+                style={{
+                  width: "100%",
+                  resize: "vertical",
+                  border: "1px solid var(--bd)",
+                  borderRadius: 8,
+                  padding: 10,
+                  color: "var(--tx)",
+                  background: "var(--bg)",
+                  font: "inherit",
+                  lineHeight: 1.4,
+                }}
+              />
+            </label>
+
+            {!studyResult && !studyBusy && (
+              <div className="cmts-empty" style={{ padding: "20px 0" }}>
+                Study connected sources as a corpus: central argument, mental
+                models, disagreements, weak evidence, checks for understanding,
+                and a wiki-ready capture.
+              </div>
+            )}
+
+            {!!studyResult && (
+              <>
+                <div
+                  className="scroll"
+                  style={{
+                    maxHeight: "42vh",
+                    whiteSpace: "pre-wrap",
+                    fontSize: 13,
+                    lineHeight: 1.5,
+                    color: "var(--tx-2)",
+                    border: "1px solid var(--bd)",
+                    borderRadius: 8,
+                    padding: 12,
+                  }}
+                >
+                  {studyResult}
+                </div>
+                <div
+                  style={{
+                    marginTop: 12,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 10,
+                  }}
+                >
+                  <small style={{ color: "var(--tx-3)" }}>
+                    {studySaveMsg}
+                  </small>
+                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                    {studyUndoRef.current && (
+                      <button className="cover-btn" onClick={undoStudySave}>
+                        Undo
+                      </button>
+                    )}
+                    <button
+                      className="cover-btn"
+                      onClick={() => void saveStudy()}
+                      disabled={studySaving}
+                    >
+                      {studySaving ? "Saving..." : "Save to wiki"}
+                    </button>
+                  </div>
+                </div>
+              </>
             )}
           </>
         ) : (
@@ -531,6 +763,13 @@ export function ResearchModal() {
       </div>
     </SpsModal>
   );
+}
+
+function extractChatReply(res: unknown): string {
+  if (!res || typeof res !== "object") return "";
+  const reply = (res as { reply?: unknown }).reply;
+  if (!Array.isArray(reply)) return "";
+  return reply.map((x) => String(x)).join("\n\n");
 }
 
 /** "Authors (3 + et al.) · Year · Venue · N citations" */

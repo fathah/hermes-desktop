@@ -72,6 +72,12 @@ export const spsBridge = {
       profile,
       groundInWorkspace,
     ),
+  spsSourceStudy: (
+    focus: string,
+    corpusDescription?: string,
+    profile?: string,
+  ): Promise<unknown> =>
+    ipcRenderer.invoke("sps-source-study", focus, corpusDescription, profile),
   spsIngestInbox: (
     profile?: string,
   ): Promise<{
@@ -131,6 +137,10 @@ export const spsBridge = {
     };
   }> =>
     ipcRenderer.invoke("sps-file-research", topic, researchedMarkdown, profile),
+  spsNotebookLmEnsureMcp: (
+    profile?: string,
+  ): Promise<{ registered: boolean; alreadyPresent: boolean }> =>
+    ipcRenderer.invoke("sps-notebooklm-ensure-mcp", profile),
   spsAppendWikiLog: (
     op: "ingest" | "file-answer" | "lint" | "research" | "digest",
     summary: string,

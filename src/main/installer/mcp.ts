@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
+import { homedir } from "os";
 import { app } from "electron";
 import { escapeRegex, profileHome } from "../utils";
 
@@ -174,6 +175,13 @@ export function openAlexMcpServerPath(): string {
     );
   }
   return join(app.getAppPath(), "resources", "openalex-mcp.cjs");
+}
+
+/** User-installed NotebookLM MCP command. Auth stays with the user's nlm setup. */
+export function notebookLmMcpCommand(): string {
+  const userBin = join(homedir(), ".local", "bin", "notebooklm-mcp");
+  if (existsSync(userBin)) return userBin;
+  return "notebooklm-mcp";
 }
 
 /** Absolute path to the bundled External Context MCP server (asar-unpacked). */

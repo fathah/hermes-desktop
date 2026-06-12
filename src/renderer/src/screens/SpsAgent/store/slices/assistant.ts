@@ -726,5 +726,56 @@ export const createAssistantSlice: StateCreator<
         };
       }
     },
+    saveStudyToWiki: async (focus, answer) => {
+      const question = focus.trim();
+      const markdown = answer.trim();
+      if (!markdown) return { ok: false, error: "Nothing to file." };
+
+      try {
+        const res = await window.hermesAPI.spsFileAnswer?.(question, markdown);
+        if (!res?.ok || !res.changeset) {
+          return { ok: false, error: res?.error ?? "Filing is unavailable." };
+        }
+        const snapshots = res.changeset.pages.map((p) => {
+          const existedBefore =
+            !!get().docs[p.pageId] || !!get().meta[p.pageId];
+          return {
+            pageId: p.pageId,
+            existedBefore,
+            priorBlocks: get().docs[p.pageId],
+            priorMeta: get().meta[p.pageId],
+          };
+        });
+        await commitChangeset(res.changeset, get().ingestCommitPage);
+        await window.hermesAPI.spsAppendWikiLog?.(
+          "file-answer",
+          res.changeset.summary,
+        );
+        const firstPageId = res.changeset.pages[0]?.pageId;
+        if (firstPageId) get().selectPage(firstPageId);
+        const undo = (): void => {
+          for (const snap of snapshots) {
+            if (!snap.existedBefore) {
+              get().deletePage(snap.pageId);
+            } else if (snap.priorBlocks) {
+              get().setPageDoc(snap.pageId, snap.priorBlocks);
+              if (snap.priorMeta)
+                get().setPageMeta(snap.pageId, snap.priorMeta);
+            }
+          }
+        };
+        return {
+          ok: true,
+          summary: res.changeset.summary,
+          pageId: firstPageId,
+          undo,
+        };
+      } catch (err) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : "file error",
+        };
+      }
+    },
   };
 };

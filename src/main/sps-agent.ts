@@ -19,6 +19,7 @@ import {
   type WorkspaceQueueIO,
 } from "./sps-write-queue";
 import type { Workspace, SpsSaveResult } from "../shared/sps-types";
+import { buildSourceStudyPrompt } from "../shared/sourceStudy";
 import dns from "node:dns";
 import net from "node:net";
 import { Agent, fetch as undiciFetch } from "undici";
@@ -637,6 +638,28 @@ export async function spsAssistant(
       ],
     };
   }
+}
+
+export async function spsSourceStudy(
+  focus: string,
+  corpusDescription?: string,
+  profile?: string,
+): Promise<AssistantResult> {
+  const options = corpusDescription ? { corpusDescription } : undefined;
+  const prompt = [
+    buildSourceStudyPrompt(focus, options),
+    'Inside SPS Agent, return this as {"kind":"chat"} only. Do not edit the page, create tasks, or produce any other action type.',
+  ].join("\n\n");
+  return spsAssistant(
+    prompt,
+    {
+      pageTitle: "Source Study",
+      blocks: [],
+      notes: [],
+    },
+    profile,
+    true,
+  );
 }
 
 // ───────────────────────── ingest (second-brain loop) ─────────────────────────

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  notebookLmMcpCommand,
   renderMcpServerEntry,
   upsertMcpServerInYaml,
   type McpServerEntry,
@@ -26,6 +27,17 @@ describe("renderMcpServerEntry", () => {
     expect(out).toContain('      ELECTRON_RUN_AS_NODE: "1"');
     expect(out).toContain('      HERMES_OPENALEX_MAILTO: "a@b.com"');
     expect(out).toContain("    enabled: true");
+  });
+});
+
+describe("notebookLmMcpCommand", () => {
+  it("returns the user command path or PATH fallback without auth material", () => {
+    const command = notebookLmMcpCommand();
+
+    expect(command).toMatch(/notebooklm-mcp$/);
+    expect(command).not.toContain(".claude");
+    expect(command).not.toContain("cookie");
+    expect(command).not.toContain("token");
   });
 });
 

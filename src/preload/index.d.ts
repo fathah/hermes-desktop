@@ -1006,6 +1006,11 @@ interface HermesAPI {
     profile?: string,
     groundInWorkspace?: boolean,
   ) => Promise<unknown>;
+  spsSourceStudy: (
+    focus: string,
+    corpusDescription?: string,
+    profile?: string,
+  ) => Promise<unknown>;
   spsIngestInbox: (profile?: string) => Promise<{
     ok: boolean;
     captureCount: number;
@@ -1062,6 +1067,9 @@ interface HermesAPI {
       memory: string[];
     };
   }>;
+  spsNotebookLmEnsureMcp: (
+    profile?: string,
+  ) => Promise<{ registered: boolean; alreadyPresent: boolean }>;
   spsAppendWikiLog: (
     op: "ingest" | "file-answer" | "lint" | "research" | "digest",
     summary: string,

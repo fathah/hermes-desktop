@@ -350,6 +350,16 @@ export interface AssistantSlice {
     pageId?: string;
     undo?: () => void;
   }>;
+  saveStudyToWiki: (
+    focus: string,
+    answer: string,
+  ) => Promise<{
+    ok: boolean;
+    error?: string;
+    summary?: string;
+    pageId?: string;
+    undo?: () => void;
+  }>;
 }
 
 /** A template the user saved from one of their own pages (localStorage-backed). */
