@@ -42,6 +42,14 @@ const DEFAULT_MODELS: DefaultModel[] = [
     baseUrl: "",
   },
 
+  // ── EvoLink (OpenAI-compatible gateway) ────────────────────────────
+  {
+    name: "EvoLink GPT-5.5",
+    provider: "custom",
+    model: "gpt-5.5",
+    baseUrl: "https://direct.evolink.ai/v1",
+  },
+
   // ── Ollama Cloud ─────────────────────────────────────────────────
   {
     name: "glm-5.1",

@@ -19,6 +19,7 @@ describe("expectedEnvKeyForModel — provider-name lookup", () => {
     ["openai", "OPENAI_API_KEY"],
     ["ollama-cloud", "OLLAMA_API_KEY"],
     ["aimlapi", "AIMLAPI_API_KEY"],
+    ["evolink", "EVOLINK_API_KEY"],
     ["google", "GOOGLE_API_KEY"],
     ["xai", "XAI_API_KEY"],
     ["deepseek", "DEEPSEEK_API_KEY"], // the specific provider from issue #236
@@ -65,6 +66,9 @@ describe("expectedEnvKeyForModel — URL fallback for custom/auto providers", ()
     expect(expectedEnvKeyForModel("custom", "https://api.aimlapi.com/v1")).toBe(
       "AIMLAPI_API_KEY",
     );
+    expect(
+      expectedEnvKeyForModel("custom", "https://direct.evolink.ai/v1"),
+    ).toBe("EVOLINK_API_KEY");
     expect(
       expectedEnvKeyForModel("custom", "https://api.xiaomimimo.com/v1"),
     ).toBe("XIAOMI_API_KEY");

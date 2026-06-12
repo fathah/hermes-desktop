@@ -563,6 +563,7 @@ const DRIFT_FIELDS: ReadonlyArray<{
     label: "ANTHROPIC_API_KEY (.env)",
   },
   { source: "env", field: "OPENAI_API_KEY", label: "OPENAI_API_KEY (.env)" },
+  { source: "env", field: "EVOLINK_API_KEY", label: "EVOLINK_API_KEY (.env)" },
   {
     source: "env",
     field: "DEEPSEEK_API_KEY",
