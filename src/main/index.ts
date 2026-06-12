@@ -60,6 +60,10 @@ import {
 } from "./ipc/external-context";
 import { closeExternalContextDb } from "./external-context/index";
 import { startScheduler, stopScheduler } from "./scheduler";
+import {
+  startCapabilityRiskScheduler,
+  stopCapabilityRiskScheduler,
+} from "./capability-risk";
 import { startControlServer, stopControlServer } from "./control-server";
 import { setMainWindowGetter } from "./self-healing";
 import { log } from "./log";
@@ -631,6 +635,7 @@ app.whenReady().then(() => {
 
   // Start background routines scheduler and control server
   startScheduler();
+  startCapabilityRiskScheduler();
   startControlServer().catch((err) => {
     console.error("[CONTROL SERVER] Failed to auto-start:", err);
   });
@@ -669,6 +674,7 @@ app.on("window-all-closed", () => {
 app.on("before-quit", () => {
   globalShortcut.unregisterAll();
   stopScheduler();
+  stopCapabilityRiskScheduler();
   stopControlServer();
   stopHealthPolling();
   abortAllChats();

@@ -53,6 +53,7 @@ import type {
 } from "../shared/scheduledResearch";
 import type { SrPendingUpdate, SrPatch } from "./bridges/sps";
 import type { CredentialPoolEntry } from "../shared/credentials";
+import type { CapabilityRiskSummary } from "../shared/capability-risk";
 
 interface ElectronAPI {
   process: {
@@ -981,6 +982,16 @@ interface HermesAPI {
   ) => Promise<
     Array<{ name: string; type: string; enabled: boolean; detail: string }>
   >;
+  getCapabilityRiskSummary: (
+    profile?: string,
+  ) => Promise<CapabilityRiskSummary>;
+  checkCapabilityRisksNow: (
+    profile?: string,
+  ) => Promise<CapabilityRiskSummary>;
+  reviewCapabilityRisk: (
+    id: string,
+    profile?: string,
+  ) => Promise<CapabilityRiskSummary>;
 
   // Log viewer
   readLogs: (

@@ -56,6 +56,7 @@ import {
 export type { McpServerEntry } from "./installer/mcp";
 export {
   listMcpServers,
+  listMcpServerEntries,
   renderMcpServerEntry,
   upsertMcpServerInYaml,
   writeMcpServerEntry,

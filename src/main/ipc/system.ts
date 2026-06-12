@@ -42,6 +42,7 @@ import { startSshTunnel } from "../ssh-tunnel";
 import { getAppLocale, setAppLocale } from "../locale";
 import type { AppLocale } from "../../shared/i18n/types";
 import type { AppUpdater } from "electron-updater";
+import { registerCapabilityRiskIpc } from "./capability-risk";
 
 // Dynamic import or check for updates depending on packaging
 import { registerDualHandler } from "./utility";
@@ -177,6 +178,7 @@ export function registerSystemIpc(
   safeHandle("list-mcp-servers", (_event, profile?: string) =>
     listMcpServers(profile),
   );
+  registerCapabilityRiskIpc();
 
   // Memory providers
   registerDualHandler(

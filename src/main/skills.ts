@@ -22,6 +22,7 @@ import {
 import { isValidNamedProfileName, profileHome } from "./utils";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 import { getApiUrl, getRemoteAuthHeader } from "./hermes";
+import { recordSkillCapability } from "./capability-risk-store";
 
 export interface InstalledSkill {
   name: string;
@@ -509,6 +510,10 @@ export function createSkill(
   try {
     mkdirSync(dir, { recursive: true });
     writeFileSync(skillFile, content, "utf-8");
+    recordSkillCapability(
+      { name, category, path: dir, enabled: true },
+      input.profile,
+    );
     return { success: true, path: dir };
   } catch (e) {
     return { success: false, error: (e as Error).message };
@@ -533,6 +538,16 @@ export function writeSkillContent(
     return { success: false, error: "Skill not found." };
   try {
     writeFileSync(skillFile, content, "utf-8");
+    const meta = parseSkillFrontmatter(content.slice(0, 4000));
+    recordSkillCapability(
+      {
+        name: meta.name || dir.split(/[\\/]+/).pop() || "skill",
+        category: dir.split(/[\\/]+/).slice(-2, -1)[0] || "custom",
+        path: dir,
+        enabled: true,
+      },
+      profile,
+    );
     return { success: true };
   } catch (e) {
     return { success: false, error: (e as Error).message };
@@ -571,6 +586,21 @@ export function setSkillEnabled(
   try {
     mkdirSync(dirname(dest), { recursive: true });
     renameSync(src, dest);
+    if (enabled) {
+      const skillFile = join(dest, "SKILL.md");
+      const meta = parseSkillFrontmatter(
+        readFileSync(skillFile, "utf-8").slice(0, 4000),
+      );
+      recordSkillCapability(
+        {
+          name: meta.name || dest.split(/[\\/]+/).pop() || "skill",
+          category: rel.split(/[\\/]+/)[0] || "local",
+          path: dest,
+          enabled: true,
+        },
+        profile,
+      );
+    }
     return { success: true };
   } catch (e) {
     return { success: false, error: (e as Error).message };
@@ -690,6 +720,19 @@ export function importLocalSkill(
   try {
     mkdirSync(dirname(dest), { recursive: true });
     cpSync(src, dest, { recursive: true });
+    const meta = parseSkillFrontmatter(
+      readFileSync(join(dest, "SKILL.md"), "utf-8").slice(0, 4000),
+    );
+    recordSkillCapability(
+      {
+        name: meta.name || folder,
+        category: cat,
+        path: dest,
+        enabled: true,
+        source: { localPath: src },
+      },
+      profile,
+    );
     return { success: true };
   } catch (e) {
     return { success: false, error: (e as Error).message };

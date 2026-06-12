@@ -1,4 +1,5 @@
 import { ipcRenderer } from "electron";
+import type { CapabilityRiskSummary } from "../../shared/capability-risk";
 
 export const toolsmiscBridge = {
   // Shell
@@ -39,6 +40,19 @@ export const toolsmiscBridge = {
   ): Promise<
     Array<{ name: string; type: string; enabled: boolean; detail: string }>
   > => ipcRenderer.invoke("list-mcp-servers", profile),
+  getCapabilityRiskSummary: (
+    profile?: string,
+  ): Promise<CapabilityRiskSummary> =>
+    ipcRenderer.invoke("capability-risk-summary", profile),
+  checkCapabilityRisksNow: (
+    profile?: string,
+  ): Promise<CapabilityRiskSummary> =>
+    ipcRenderer.invoke("capability-risk-check-now", profile),
+  reviewCapabilityRisk: (
+    id: string,
+    profile?: string,
+  ): Promise<CapabilityRiskSummary> =>
+    ipcRenderer.invoke("capability-risk-review", id, profile),
 
   // Log viewer
   readLogs: (
