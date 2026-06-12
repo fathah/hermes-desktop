@@ -295,8 +295,7 @@ export function ExternalSessionsModal() {
     try {
       const res = await window.hermesAPI?.externalContextEnsureMcp?.();
       setMcpState(res?.registered ? "done" : "idle");
-      if (res?.registered)
-        flash("Hermes can now search your external sessions");
+      if (res?.registered) flash("SPS can now search your external sessions");
     } catch {
       setMcpState("idle");
     }
@@ -910,13 +909,13 @@ function SettingsView(props: {
           className="cover-btn"
           onClick={() => void props.onExposeMcp()}
           disabled={props.mcpState !== "idle"}
-          title="Let the Hermes agent search these sessions in chat (registers a local MCP tool)"
+          title="Let My Assistant search these sessions in chat (registers a local MCP tool)"
         >
           {props.mcpState === "done"
-            ? "✓ Exposed to agent"
+            ? "✓ Exposed to My Assistant"
             : props.mcpState === "working"
               ? "Exposing…"
-              : "Expose to Hermes agent"}
+              : "Expose to My Assistant"}
         </button>
         <div style={{ display: "flex", gap: 6 }}>
           <button className="cover-btn" onClick={() => props.onScan()}>

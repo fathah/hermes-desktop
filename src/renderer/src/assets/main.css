@@ -4825,7 +4825,7 @@ body {
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
-/* Capability summary card (Settings → Agent Health) */
+/* Capability summary card (Settings -> Application Health) */
 .cap-summary {
   display: flex;
   flex-direction: column;

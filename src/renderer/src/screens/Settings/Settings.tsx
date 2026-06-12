@@ -576,7 +576,7 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
         <div className="settings-section-title">Prompt Budget Breakdown</div>
         <div className="settings-field">
           <div className="settings-field-hint" style={{ marginBottom: 12 }}>
-            This visualizer shows the token usage budget for the active agent
+            This visualizer shows the token usage budget for My Assistant&apos;s
             profile context window. If the prompt exceeds the model&apos;s
             budget, some memory or history may be truncated.
           </div>
@@ -819,7 +819,7 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
             {connMode === "local"
               ? t("settings.modeLocalHint")
               : connMode === "ssh"
-                ? "Tunnel to a remote Hermes over SSH — no exposed ports or API keys needed."
+                ? "Tunnel to a remote SPS service over SSH — no exposed ports or API keys needed."
                 : t("settings.modeRemoteHint")}
           </div>
         </div>
@@ -830,9 +830,10 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
               Session history disabled — <code>API_SERVER_KEY</code> not set
             </div>
             <div className="settings-api-key-banner-desc">
-              Without an API server key the gateway cannot authenticate session
-              continuation requests. Messages will still send, but conversation
-              history won&apos;t be preserved across restarts.
+              Without an API server key the connection service cannot
+              authenticate session continuation requests. Messages will still
+              send, but conversation history won&apos;t be preserved across
+              restarts.
             </div>
             <button
               className="btn btn-primary"
@@ -842,7 +843,9 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
                 await window.hermesAPI.generateApiServerKey(profile);
                 setApiServerKeyMissing(false);
                 setGeneratingKey(false);
-                setConnStatus("API key generated — gateway restarting…");
+                setConnStatus(
+                  "API key generated — connection service restarting…",
+                );
                 setTimeout(() => setConnStatus(null), 4000);
               }}
             >
@@ -856,8 +859,8 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
             </div>
             <div className="settings-api-key-banner-desc">
               {connMode === "ssh"
-                ? "SSH mode: add API_SERVER_KEY=<your-key> to ~/.hermes/profiles/<profile>/.env on the remote host, then restart the gateway there."
-                : "Remote mode: add API_SERVER_KEY=<your-key> to the .env on your remote Hermes server, then restart the gateway."}
+                ? "SSH mode: add API_SERVER_KEY=<your-key> to ~/.hermes/profiles/<profile>/.env on the remote host, then restart the connection service there."
+                : "Remote mode: add API_SERVER_KEY=<your-key> to the .env on your remote SPS service, then restart the connection service."}
             </div>
           </div>
         )}
@@ -1152,7 +1155,7 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
             </label>
           </label>
           <div className="settings-field-hint">
-            Play a system chime when an agent run finishes — the cue for which
+            Play a system chime when My Assistant finishes — the cue for which
             of several parallel runs just landed.
           </div>
         </div>

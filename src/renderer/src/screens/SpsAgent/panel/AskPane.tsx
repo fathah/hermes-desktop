@@ -79,7 +79,7 @@ export function AskPane() {
       setSummary({
         summary: "",
         sources: [],
-        error: "Couldn't reach the assistant.",
+        error: "Couldn't reach My Assistant.",
       });
     } finally {
       setLoading(false);
@@ -151,7 +151,7 @@ export function AskPane() {
       {asked && (
         <div className="ask-results">
           {loading && !answerText && (
-            <div className="ask-muted">Asking the assistant…</div>
+            <div className="ask-muted">Asking My Assistant…</div>
           )}
 
           {summary?.error && <div className="ask-error">{summary.error}</div>}

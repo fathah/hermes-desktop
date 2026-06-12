@@ -15,7 +15,6 @@ import {
   type SaveResult,
 } from "../../Personalization/parts";
 import { RulesManager } from "./RulesManager";
-import { MemoryTimeline } from "./MemoryTimeline";
 import { SoulEditor } from "./SoulEditor";
 import { MemoryProviders } from "./MemoryProviders";
 import type { MemoryProviderInfo } from "./memoryProviderTypes";
@@ -190,9 +189,9 @@ export function YouSurface({
             You
           </h1>
           <p className="memory-subtitle">
-            Teach the agent how you think — what it knows, how it responds, and
-            the standing rules it follows. Everything here is yours to edit or
-            turn off.
+            Teach My Assistant how you think — what it knows, how it responds,
+            and the standing rules it follows. Everything here is yours to edit
+            or turn off.
           </p>
         </div>
       </div>
@@ -206,7 +205,7 @@ export function YouSurface({
 
       <EditorSection
         title="About you & response style"
-        hint="Who you are and how you want the agent to talk to you. Read every turn. (Shares the 2200-char budget with your rules.)"
+        hint="Who you are and how you want My Assistant to talk to you. Read every turn. (Shares the 2200-char budget with your rules.)"
         value={prose}
         charLimit={userCharLimit}
         placeholder="e.g. Defensive equity investor. Be blunt, lead with the answer, flag tail risks."
@@ -222,8 +221,8 @@ export function YouSurface({
       />
 
       <EditorSection
-        title="What the agent remembers (durable facts)"
-        hint="Long-term facts the agent should keep in mind (entries separated by a line containing only §)."
+        title="What My Assistant remembers (durable facts)"
+        hint="Long-term facts My Assistant should keep in mind (entries separated by a line containing only §)."
         value={memory.content}
         charLimit={memory.charLimit}
         placeholder="Durable facts, separated by § on their own line."
@@ -231,13 +230,20 @@ export function YouSurface({
       />
 
       <div className="settings-section">
-        <div className="settings-section-title">What the agent has learned</div>
+        <div className="settings-section-title">
+          What My Assistant has learned
+        </div>
         <p className="settings-field-hint" style={{ marginBottom: 12 }}>
-          Memories the agent wrote as it learned about you, in the order it
-          learned them. Each links to the session it likely came from — reject
-          anything that doesn&apos;t belong.
+          Review pending memories, learned facts, skills, and curator actions in
+          Learn This.
         </p>
-        <MemoryTimeline profile={profile} onRefresh={load} />
+        <button
+          className="btn btn-secondary btn-sm"
+          type="button"
+          onClick={() => setSurface("learning")}
+        >
+          Open Learn This
+        </button>
       </div>
 
       <div className="settings-section">
@@ -281,7 +287,8 @@ export function YouSurface({
             </div>
           )}
           <div className="settings-field-hint" style={{ marginTop: 4 }}>
-            Takes effect on the next gateway restart (relaunch the app).
+            Takes effect on the next connection-service restart (relaunch the
+            app).
           </div>
         </div>
       </div>

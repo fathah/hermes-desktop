@@ -28,6 +28,13 @@ vi.mock("./skills", () => ({
   getSkillContent: (p: string) => contentByPath[p] ?? "",
 }));
 
+const recordSkillLoaded = vi.fn();
+const recordSkillInjected = vi.fn();
+vi.mock("./skill-usage", () => ({
+  recordSkillLoaded: (...args: unknown[]) => recordSkillLoaded(...args),
+  recordSkillInjected: (...args: unknown[]) => recordSkillInjected(...args),
+}));
+
 vi.mock("./hermes/gateway-process", () => ({
   // Single deterministic profile key for the tests.
   profileKey: () => "default",
@@ -44,6 +51,8 @@ import {
 
 beforeEach(() => {
   __resetActiveSkillsForTests();
+  recordSkillLoaded.mockClear();
+  recordSkillInjected.mockClear();
   vi.restoreAllMocks();
 });
 
@@ -62,6 +71,10 @@ describe("loadActiveSkill", () => {
     expect(res.name).toBe("code-review");
     expect(res.path).toBe("/skills/dev/code-review");
     expect(res.alreadyLoaded).toBe(false);
+    expect(recordSkillLoaded).toHaveBeenCalledWith(
+      { name: "code-review", path: "/skills/dev/code-review" },
+      undefined,
+    );
   });
 
   it("resolves by slug (case/space-insensitive)", () => {
@@ -132,12 +145,20 @@ describe("buildActiveSkillsSystemMessage", () => {
     expect(msg!.content).toContain("Be adversarial.");
     expect(msg!.content).toContain("## Skill: Deep Research");
     expect(msg!.content).toContain("Fan out and verify.");
+    expect(recordSkillInjected).toHaveBeenCalledWith(
+      [
+        { name: "code-review", path: "/skills/dev/code-review" },
+        { name: "Deep Research", path: "/skills/research/deep-research" },
+      ],
+      undefined,
+    );
   });
 
   it("skips skills whose content is unreadable (moved/deleted)", () => {
     contentByPath["/skills/dev/code-review"] = ""; // simulate missing file
     loadActiveSkill("code-review");
     expect(buildActiveSkillsSystemMessage()).toBeNull();
+    expect(recordSkillInjected).not.toHaveBeenCalled();
     contentByPath["/skills/dev/code-review"] = "# Code Review\nBe adversarial.";
   });
 

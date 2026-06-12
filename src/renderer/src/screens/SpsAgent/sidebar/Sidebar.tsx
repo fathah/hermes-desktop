@@ -23,7 +23,7 @@ interface Identity {
 }
 
 const DEMO_IDENTITY: Identity = {
-  workspace: "SPS Agent",
+  workspace: "SPS",
   user: "You",
   initial: "S",
 };
@@ -169,7 +169,7 @@ export function Sidebar() {
           <span className="nav-label">Journal</span>
         </button>
 
-        <SidebarSection id="aiAssistant" label="AI Assistant">
+        <SidebarSection id="aiAssistant" label="My Assistant">
           <button
             type="button"
             className={`nav-item ${surface === "chats" ? "active" : ""}`}
@@ -193,11 +193,21 @@ export function Sidebar() {
             type="button"
             className={`nav-item ${surface === "you" ? "active" : ""}`}
             onClick={() => setSurface("you")}
-            title="Personalize the agent and run a Telos alignment audit"
+            title="Personalize My Assistant and run a Telos alignment audit"
             style={{ paddingLeft: 24 }}
           >
             <Icon name="wand" size={17} />
             <span className="nav-label">You</span>
+          </button>
+          <button
+            type="button"
+            className={`nav-item ${surface === "learning" ? "active" : ""}`}
+            onClick={() => setSurface("learning")}
+            title="Review memories, skills, and curator actions"
+            style={{ paddingLeft: 24 }}
+          >
+            <Icon name="sparkle" size={17} />
+            <span className="nav-label">Learn This</span>
           </button>
         </SidebarSection>
 
@@ -245,7 +255,7 @@ export function Sidebar() {
             style={{ paddingLeft: 24 }}
           >
             <Icon name="board" size={17} />
-            <span className="nav-label">Agent tasks</span>
+            <span className="nav-label">Assistant tasks</span>
           </button>
           <button
             type="button"
@@ -352,7 +362,7 @@ export function Sidebar() {
         <span className="avatar">{identity.initial}</span>
         <span className="rail-foot-name">
           {identity.user}
-          <small>Hermes Agent</small>
+          <small>SPS</small>
         </span>
         <button
           className="rail-foot-gear"

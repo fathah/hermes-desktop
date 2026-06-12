@@ -86,7 +86,7 @@ export function CommandPalette() {
         icon: "sparkle",
         label: "Start new chat",
         hint: "⌘O",
-        desc: "Open a fresh AI chat with the Hermes agent.",
+        desc: "Open a fresh chat with My Assistant.",
         run: () => startNewChat(),
       },
       {
@@ -141,9 +141,9 @@ export function CommandPalette() {
         kind: "action",
         id: "assistant",
         icon: "sparkle",
-        label: "Open assistant",
+        label: "Open My Assistant",
         hint: "⌘J",
-        desc: "Open the page assistant panel.",
+        desc: "Open the page My Assistant panel.",
         run: () => openPanelTab("assistant"),
       },
       {
@@ -292,8 +292,8 @@ export function CommandPalette() {
           kind: "action" as const,
           id: "askbutler",
           icon: "sparkle" as const,
-          label: `Ask Butler: “${q}”`,
-          desc: "Send this query to your AI assistant to execute matching actions.",
+          label: `Ask My Assistant: “${q}”`,
+          desc: "Send this query to My Assistant to execute matching actions.",
           run: () => {
             openPanelTab("assistant");
             useStore.getState().runAgent(q);
@@ -307,7 +307,7 @@ export function CommandPalette() {
     { label: "Jump to", items: fPages as Item[] },
     { label: "In pages", items: content as Item[] },
     ...(butlerAct.length
-      ? [{ label: "AI Assistant", items: butlerAct as Item[] }]
+      ? [{ label: "My Assistant", items: butlerAct as Item[] }]
       : []),
   ].filter((g) => g.items.length);
   const flat = grouped.flatMap((g) => g.items);

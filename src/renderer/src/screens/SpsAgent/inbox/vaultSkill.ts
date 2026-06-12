@@ -9,13 +9,13 @@
 export const VAULT_SKILL_NAME = "sps-vault-markdown";
 export const VAULT_SKILL_CATEGORY = "second-brain";
 export const VAULT_SKILL_DESCRIPTION =
-  "Operate the SPS Agent / Obsidian vault precisely — Obsidian-flavored " +
+  "Operate the SPS / Obsidian vault precisely — Obsidian-flavored " +
   "markdown, wikilinks, callouts, tags, frontmatter, folder-backed databases, " +
   "and the _inbox capture folder. Use when reading or writing vault notes.";
 
 export const VAULT_SKILL_BODY = `# SPS vault markdown
 
-Operate the SPS Agent vault (a first-class Obsidian vault). Every note is a
+Operate the SPS vault (a first-class Obsidian vault). Every note is a
 plain Markdown file; the markdown on disk is the single source of truth.
 
 ## Layout
@@ -71,7 +71,7 @@ export async function installVaultSkill(
     profile,
   });
   if (res.success) {
-    return { ok: true, message: "Installed the vault skill for the agent." };
+    return { ok: true, message: "Installed the vault skill for My Assistant." };
   }
   // createSkill refuses if it already exists — treat that as success-ish.
   if (res.error && /already exists/i.test(res.error)) {

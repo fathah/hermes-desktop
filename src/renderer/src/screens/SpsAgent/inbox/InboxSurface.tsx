@@ -143,7 +143,7 @@ export function InboxSurface({
         flashcard_path: flashcardPath,
         audio_path: audioPath,
       };
-      const markdown = `# Newsroom Curator Settings\n\nThis file is managed by the SPS Agent dashboard. It controls the local \`newsroom-curator\` skill execution parameters.\n\n\`\`\`json\n${JSON.stringify(configObj, null, 2)}\n\`\`\`\n`;
+      const markdown = `# Newsroom Curator Settings\n\nThis file is managed by SPS. It controls the local \`newsroom-curator\` skill execution parameters.\n\n\`\`\`json\n${JSON.stringify(configObj, null, 2)}\n\`\`\`\n`;
       await window.hermesAPI.writeObsidianFile("curator-settings.md", markdown, profile);
       setSettingsSaved(true);
       setTimeout(() => setSettingsSaved(false), 3000);
@@ -268,7 +268,7 @@ export function InboxSurface({
       }
       const cs = res.changeset;
       if (cs.pages.length === 0 && cs.captures.length === 0) {
-        setError("The agent found nothing to file from these captures.");
+        setError("My Assistant found nothing to file from these captures.");
         return;
       }
       // Auto-apply: commit immediately (full audit/undo still apply); otherwise
@@ -366,7 +366,7 @@ export function InboxSurface({
           Inbox
         </h1>
         <p className="inbox-subtitle">
-          Capture rough thoughts and links. The agent turns these raw sources
+          Capture rough thoughts and links. My Assistant turns these raw sources
           into linked wiki pages — they stay untouched until then.
         </p>
       </header>
@@ -477,7 +477,7 @@ export function InboxSurface({
               className="btn btn-primary btn-sm"
               disabled={ingesting || visible.length === 0}
               onClick={() => void processInbox()}
-              title="Run the agent to turn these captures into wiki pages"
+              title="Ask My Assistant to turn these captures into wiki pages"
             >
               {ingesting ? "Processing…" : "Process inbox"}
             </button>
@@ -542,7 +542,7 @@ export function InboxSurface({
                 Proposed changes
               </div>
               <div className="inbox-proposal-summary">
-                {changeset.summary || "Review the agent's proposed wiki pages."}
+                {changeset.summary || "Review My Assistant's proposed wiki pages."}
               </div>
               {changeset.pages.length === 0 ? (
                 <div style={{ color: "var(--ink-3)", fontSize: 13 }}>
@@ -873,7 +873,7 @@ export function InboxSurface({
           Edit wiki schema
         </button>
         <button onClick={() => void installSkill()} className="inbox-footer-btn">
-          Install agent vault skill
+          Install assistant vault skill
         </button>
       </div>
     </div>
@@ -939,5 +939,4 @@ function PillEditor({
     </div>
   );
 }
-
 

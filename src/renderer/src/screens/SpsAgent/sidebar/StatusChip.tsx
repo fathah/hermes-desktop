@@ -55,7 +55,7 @@ export function StatusChip(): React.JSX.Element | null {
         } else if (!gatewayUp) {
           health = "down";
           target = "gateway";
-          hint = "Gateway offline";
+          hint = "Connections offline";
         }
         setStatus({ label, profile: active, health, target, hint });
       } catch {
@@ -76,7 +76,7 @@ export function StatusChip(): React.JSX.Element | null {
     <button
       className="rail-status-chip"
       title={status.hint}
-      aria-label={`Connection ${status.label}, agent ${status.profile}. ${status.hint}.`}
+      aria-label={`Connection ${status.label}, profile ${status.profile}. ${status.hint}.`}
       onClick={() => openSettings(status.target)}
       style={{
         display: "flex",

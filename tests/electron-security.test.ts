@@ -14,6 +14,10 @@ const ROOT = join(__dirname, "..");
 const mainSrc = readFileSync(join(ROOT, "src/main/index.ts"), "utf-8");
 const preloadSrc = readFileSync(join(ROOT, "src/preload/index.ts"), "utf-8");
 const installerSrc = readFileSync(join(ROOT, "src/main/installer.ts"), "utf-8");
+const rendererHtml = readFileSync(
+  join(ROOT, "src/renderer/index.html"),
+  "utf-8",
+);
 
 describe("Electron main process hardening", () => {
   it("keeps the main renderer isolated from Node privileges", () => {
@@ -56,6 +60,13 @@ describe("Electron main process hardening", () => {
       'execFileSync(HERMES_PYTHON, hermesCliArgs(["doctor"])',
     );
     expect(installerSrc).not.toContain("execSync(`");
+  });
+
+  it("allows bundled renderer fonts without broadening script policy", () => {
+    expect(rendererHtml).toContain("font-src 'self' data:");
+    expect(rendererHtml).toContain(
+      "script-src 'self' 'wasm-unsafe-eval' blob:",
+    );
   });
 
   it("keeps the Linux sudo precache install flow wired in", () => {

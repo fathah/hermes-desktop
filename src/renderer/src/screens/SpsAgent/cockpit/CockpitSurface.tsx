@@ -18,10 +18,10 @@ const WIDGET_META: Record<WidgetKind, { title: string; icon: IconName }> = {
   glance: { title: "At a glance", icon: "board" },
   notes: { title: "Pinned notes", icon: "comment" },
   pages: { title: "Jump to a page", icon: "doc" },
-  ask: { title: "Ask your assistant", icon: "sparkle" },
+  ask: { title: "Ask My Assistant", icon: "sparkle" },
   recentChats: { title: "Recent chats", icon: "comment" },
   today: { title: "Today", icon: "calendar" },
-  agent: { title: "Agent status", icon: "code" },
+  agent: { title: "Assistant status", icon: "code" },
   guide: { title: "Operator guide", icon: "checkbox" },
   pulse: { title: "Pulse Dashboard", icon: "sparkle" },
   piping: { title: "Piping Console", icon: "wand" },
@@ -300,7 +300,7 @@ function AskWidget() {
     <div className="ck-ask">
       <textarea
         rows={2}
-        placeholder="Ask your assistant anything…"
+        placeholder="Ask My Assistant anything…"
         value={q}
         onChange={(e) => setQ(e.target.value)}
         onKeyDown={(e) => {
@@ -423,7 +423,7 @@ function AgentStatus() {
   if (!info)
     return (
       <div className="ck-empty">
-        No agent connected.{" "}
+        No assistant connected.{" "}
         <button className="ck-inline-link" onClick={() => openSettings()}>
           Set one up
         </button>
@@ -521,7 +521,7 @@ function PulseWidget() {
       {
         id: "b5",
         type: "todo",
-        text: "Verify local Hermes models are running at peak throughput.",
+        text: "Verify local SPS models are running at peak throughput.",
         done: false,
       },
       { id: "b6", type: "h2", text: "KPIs" },

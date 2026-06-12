@@ -1,6 +1,6 @@
 export default {
   title: "Skills",
-  subtitle: "Extend your agent with reusable skills and workflows",
+  subtitle: "Extend My Assistant with reusable skills and workflows",
   refresh: "Refresh",
   installedTab: "Installed",
   browseTab: "Browse",
@@ -10,7 +10,7 @@ export default {
   noMatchingInstalled: "No matching skills found",
   noInstalled: "No skills installed yet",
   noInstalledHint:
-    "Browse available skills and install them to extend your agent",
+    "Browse available skills and install them to extend My Assistant",
   noMatchingHint: "Try a different search term",
   noBrowseResults: "No skills found",
   noBrowseResultsHint: "Try a different search term or category filter",
@@ -38,7 +38,7 @@ export default {
   namePlaceholder: "Skill name",
   descPlaceholder: "One-line description",
   categoryPlaceholder: "Category (default: custom)",
-  bodyPlaceholder: "What does this skill do? When should the agent use it?",
+  bodyPlaceholder: "What does this skill do? When should My Assistant use it?",
   createTitle: "New skill",
   noLocal: "No local skills found",
   noLocalHint:

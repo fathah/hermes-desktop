@@ -128,7 +128,7 @@ export const SLASH_ITEMS: SlashItem[] = [
   {
     type: "button",
     icon: "sparkle",
-    label: "Agent button",
+    label: "Assistant button",
     desc: "A button that runs the co-author",
   },
 ];

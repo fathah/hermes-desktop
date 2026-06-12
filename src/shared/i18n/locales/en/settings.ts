@@ -3,14 +3,15 @@ export default {
   // Tabbed sub-navigation groups.
   tabGeneral: "General",
   tabConnection: "Connection",
-  tabAgentHealth: "Agent Health",
+  tabAgentHealth: "Application Health",
   tabData: "Data",
   tabAdvanced: "Advanced",
   // Memory moved to its own nav item; Settings keeps a link.
   openMemory: "Open Memory →",
-  memoryMovedHint: "Agent memory now has its own place in the sidebar.",
+  memoryMovedHint:
+    "My Assistant's memory now has its own place in the sidebar.",
   sections: {
-    hermesAgent: "Hermes Agent",
+    hermesAgent: "SPS",
     appearance: "Appearance",
     privacy: "Privacy",
     credentialPool: "Credential Pool",
@@ -33,7 +34,7 @@ export default {
   },
   analytics: {
     label: "Send anonymous usage analytics",
-    hint: "Helps improve Hermes Desktop by sending anonymous, aggregated usage data to the project's PostHog instance. You can turn this off at any time.",
+    hint: "Helps improve SPS by sending anonymous, aggregated usage data to the project's PostHog instance. You can turn this off at any time.",
     disclosure: {
       uuid: "A random per-install identifier stored only on this device (no name, email, or account info).",
       platform: "Your operating system, Electron version, and Node.js version.",
@@ -47,7 +48,7 @@ export default {
   },
   notDetected: "Not detected",
   updatedSuccessfully: "Updated successfully!",
-  updateSuccess: "Hermes updated successfully.",
+  updateSuccess: "SPS updated successfully.",
   updateFailed: "Update failed.",
   version: "v{{version}}",
   proxyPlaceholder: "e.g. socks5://127.0.0.1:1080 or http://proxy:8080",
@@ -74,14 +75,14 @@ export default {
     "Couldn't reach the provider's model list — you can still type a model name",
   customBaseUrlHint: "OpenAI-compatible API endpoint",
   poolHint:
-    "Add multiple API Keys for the same provider for automatic rotation and load balancing. Hermes will cycle through them.",
+    "Add multiple API Keys for the same provider for automatic rotation and load balancing. SPS will cycle through them.",
   add: "Add",
   remove: "Remove",
   keyLabel: "Key",
   empty: "(empty)",
   dataSection: "Data",
   dataHint:
-    "Export or import your Hermes configuration, sessions, skills, and memory.",
+    "Export or import your SPS configuration, sessions, skills, and memory.",
   backingUp: "Backing up...",
   exportBackup: "Export Backup",
   importing: "Importing...",
@@ -102,11 +103,11 @@ export default {
   connectionSection: "Connection",
   modeLocal: "Local",
   modeRemote: "Remote",
-  modeLocalHint: "Using Hermes installed on this device",
-  modeRemoteHint: "Connect to a Hermes API server on your network or cloud",
+  modeLocalHint: "Using SPS on this device",
+  modeRemoteHint: "Connect to an SPS service on your network or cloud",
   remoteUrl: "Remote URL",
   remoteUrlHint:
-    "The Hermes API server URL (must expose /health and /v1/chat/completions)",
+    "The SPS service URL (must expose /health and /v1/chat/completions)",
   remoteApiKey: "API Key",
   remoteApiKeyHint:
     "Matches API_SERVER_KEY on the remote host. Leave empty if the server accepts unauthenticated requests.",
@@ -115,7 +116,7 @@ export default {
   save: "Save",
   serverConfigTitle: "Server Configuration",
   serverConfigHint:
-    "You&apos;re connected to a remote Hermes server. Model selection, provider API keys, and credentials are managed on the server&apos;s <code>~/.hermes/.env</code> and <code>config.yaml</code>. Edit them on the host (e.g. <code>docker exec -it hermes vi /opt/data/.env</code>) and restart the container.",
+    "You&apos;re connected to a remote SPS service. Model selection, provider API keys, and credentials are managed on the server&apos;s <code>~/.hermes/.env</code> and <code>config.yaml</code>. Edit them on the host (e.g. <code>docker exec -it hermes vi /opt/data/.env</code>) and restart the container.",
   connectionMode: "Mode",
   switchedToLocal: "Switched to local mode",
 } as const;

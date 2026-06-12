@@ -35,6 +35,7 @@ import {
   unloadActiveSkill,
   listActiveSkills,
 } from "../active-skills";
+import { listSkillUsage } from "../skill-usage";
 import { requireLocalWorkspace } from "./connection-guards";
 import { registerDualHandler } from "./utility";
 
@@ -112,6 +113,9 @@ export function registerSkillsIpc(): void {
   );
   safeHandle("list-active-skills", (_event, profile?: string) =>
     listActiveSkills(profile),
+  );
+  safeHandle("list-skill-usage", (_event, profile?: string) =>
+    listSkillUsage(profile),
   );
 
   // Skills Registry

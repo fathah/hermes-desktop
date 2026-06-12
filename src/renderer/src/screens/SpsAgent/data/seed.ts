@@ -21,11 +21,11 @@ import type {
 export const HOME_BLOCKS: Block[] = [
   blk(
     "p",
-    "Your workspace and agent cockpit. Capture notes, run the task board, and let your assistant draft, summarize, and act on what's here.",
+    "Your SPS workspace. Capture notes, run the task board, and let My Assistant draft, summarize, and act on what's here.",
   ),
   blk(
     "callout",
-    "Tip: press / for blocks, ⌘K to search, and ⌘J to open the assistant on any page.",
+    "Tip: press / for blocks, ⌘K to search, and ⌘J to open My Assistant on any page.",
     { emoji: "✨" },
   ),
   blk("h2", "This week"),
@@ -62,7 +62,7 @@ export const START_HERE_BLOCKS: Block[] = [
   ),
   blk(
     "callout",
-    "Everything here is yours and lives as plain Markdown on disk. Press ⌘K to search across all of it, ⌘J to ask the assistant on any page.",
+    "Everything here is yours and lives as plain Markdown on disk. Press ⌘K to search across all of it, ⌘J to ask My Assistant on any page.",
     { emoji: "🏠" },
   ),
   blk("h2", "Find your way around"),
@@ -73,7 +73,7 @@ export const START_HERE_BLOCKS: Block[] = [
   blk("todo", "Capture — drop a link, note, or idea into the Inbox", {
     done: false,
   }),
-  blk("todo", "Ingest — let the assistant file it into the right page", {
+  blk("todo", "Ingest — let My Assistant file it into the right page", {
     done: false,
   }),
   blk("todo", "Search — find it later with ⌘K (notes, tasks, and chats)", {
@@ -95,7 +95,7 @@ export const INBOX_EXPLAINER_BLOCKS: Block[] = [
   blk("li", "Capture: send links, snippets, or quick notes to the Inbox."),
   blk(
     "li",
-    "Ingest: press “Process inbox” and the assistant files each item into the right page, cited.",
+    "Ingest: press “Process inbox” and My Assistant files each item into the right page, cited.",
   ),
   blk(
     "li",
@@ -178,7 +178,7 @@ export const TASKS: Task[] = [
   },
   {
     id: "t7",
-    title: "Connect an agent profile",
+    title: "Connect an assistant profile",
     status: "done",
     prio: "high",
     who: "you",

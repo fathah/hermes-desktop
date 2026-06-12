@@ -9,6 +9,14 @@ import {
 } from "../memory";
 import { getMemoryTimeline } from "../memory-timeline";
 import {
+  acceptLearningProposal,
+  createLearningProposal,
+  dismissLearningProposal,
+  listLearningProposals,
+  rollbackLearningProposal,
+} from "../learning-proposals";
+import type { CreateLearningProposalInput } from "../../shared/learning";
+import {
   readFocus,
   writeFocus,
   getDailyContextHookStatus,
@@ -38,6 +46,29 @@ export function registerMemoryIpc(): void {
   registerDualHandler("read-memory", readMemory, sshReadMemory);
   safeHandle("get-memory-timeline", (_event, profile?: string) =>
     getMemoryTimeline(profile),
+  );
+  safeHandle("list-learning-proposals", (_event, profile?: string) =>
+    listLearningProposals(profile),
+  );
+  safeHandle(
+    "create-learning-proposal",
+    (_event, input: CreateLearningProposalInput, profile?: string) =>
+      createLearningProposal(input, profile),
+  );
+  safeHandle(
+    "accept-learning-proposal",
+    (_event, id: string, profile?: string) =>
+      acceptLearningProposal(id, profile),
+  );
+  safeHandle(
+    "dismiss-learning-proposal",
+    (_event, id: string, profile?: string) =>
+      dismissLearningProposal(id, profile),
+  );
+  safeHandle(
+    "rollback-learning-proposal",
+    (_event, id: string, profile?: string) =>
+      rollbackLearningProposal(id, profile),
   );
   registerDualHandler("add-memory-entry", addMemoryEntry, sshAddMemoryEntry);
   registerDualHandler(

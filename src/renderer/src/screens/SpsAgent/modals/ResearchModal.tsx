@@ -124,8 +124,8 @@ export function ResearchModal() {
     } else if (res.error === "no-sources" || res.error === "no-result") {
       setPhase("warn");
       setResultMsg(
-        "The agent couldn't gather web sources for this topic, so nothing was saved. " +
-          "Check that a web-search-capable provider is configured for the gateway, then try again.",
+        "My Assistant couldn't gather web sources for this topic, so nothing was saved. " +
+          "Check that a web-search-capable provider is configured for Connections, then try again.",
       );
     } else {
       setPhase("error");
@@ -241,7 +241,7 @@ export function ResearchModal() {
                 }}
               >
                 <small style={{ color: "var(--tx-3)" }}>
-                  Web research is off. Enable the agent&apos;s web tools to
+                  Web research is off. Enable My Assistant&apos;s web tools to
                   research live topics.
                 </small>
                 <button
@@ -286,7 +286,7 @@ export function ResearchModal() {
 
             {phase === "idle" && (
               <div className="cmts-empty" style={{ padding: "20px 0" }}>
-                Hermes researches the topic on the live web, then saves a
+                My Assistant researches the topic on the live web, then saves a
                 synthesized, cited page into your Knowledge Base — with one
                 click to undo.
               </div>
@@ -476,7 +476,8 @@ export function ResearchModal() {
             {!searched && (
               <div className="cmts-empty" style={{ padding: "20px 0" }}>
                 Search the open catalog of 250M+ scholarly works. Pick a paper
-                and Hermes saves a plain-language summary into your workspace.
+                and My Assistant saves a plain-language summary into your
+                workspace.
               </div>
             )}
             {searched && !loading && results.length === 0 && (

@@ -344,7 +344,7 @@ function App(): React.JSX.Element {
         // SPS Agent IS the desktop application — it replaces the former Hermes
         // Agent Desktop UI (Layout). Onboarding (install/setup) still runs first
         // because the SPS assistant talks to the Hermes gateway it configures.
-        // The gear / ⌘, opens the Hermes admin screens (Providers, Gateway,
+        // The gear / ⌘, opens the SPS control screens (Providers, Connections,
         // Models, Settings, …) as an overlay so config stays reachable.
         return (
           <>
@@ -358,7 +358,7 @@ function App(): React.JSX.Element {
                 ref={adminOverlayRef}
                 role="dialog"
                 aria-modal="true"
-                aria-label="Hermes Admin"
+                aria-label="SPS Control Center"
               >
                 <button
                   className="sps-admin-back"

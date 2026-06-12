@@ -13,21 +13,66 @@
 // workspace (blob + vault) that exercises wikilinks and a folder-backed query
 // database.
 import { _electron as electron } from "playwright";
-import { mkdtempSync, mkdirSync, writeFileSync } from "fs";
+import {
+  chmodSync,
+  mkdtempSync,
+  mkdirSync,
+  readdirSync,
+  unlinkSync,
+  writeFileSync,
+} from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
 const OUT = process.env.SMOKE_OUT || join(tmpdir(), "sps-smoke");
 mkdirSync(OUT, { recursive: true });
+for (const name of readdirSync(OUT)) {
+  if (name.endsWith(".png")) unlinkSync(join(OUT, name));
+}
 
 const HOME = mkdtempSync(join(tmpdir(), "hermes-smoke-"));
 
 // ── install markers: file existence is enough to pass checkInstallStatus, so
 //    App.tsx routes straight to the main (SPS) screen. ───────────────────────
 mkdirSync(join(HOME, "hermes-agent", "venv", "bin"), { recursive: true });
-writeFileSync(join(HOME, "hermes-agent", "venv", "bin", "python"), "");
+const pythonShim = join(HOME, "hermes-agent", "venv", "bin", "python");
+writeFileSync(
+  pythonShim,
+  `#!/usr/bin/env node
+const readline = require("node:readline");
+const rl = readline.createInterface({ input: process.stdin });
+
+function resultFor(cmd) {
+  if (cmd === "index") return { ok: true, engine: "smoke-shim", notes: 0 };
+  if (cmd === "search") return { results: [] };
+  if (cmd === "graph") return { nodes: [], edges: [] };
+  if (cmd === "rag") return { context: [] };
+  if (cmd === "status") return { ok: true, txtai_installed: false };
+  return { error: "Unknown command: " + cmd };
+}
+
+rl.on("line", (line) => {
+  try {
+    const req = JSON.parse(line);
+    const result = resultFor(req.cmd);
+    console.log(JSON.stringify({ id: req.id, result }));
+  } catch (err) {
+    console.log(JSON.stringify({ id: 0, error: String(err && err.message ? err.message : err) }));
+  }
+});
+`,
+);
+chmodSync(pythonShim, 0o755);
 writeFileSync(join(HOME, "hermes-agent", "hermes"), "");
 writeFileSync(join(HOME, ".env"), "ANTHROPIC_API_KEY=sk-ant-test-0000000000\n");
+writeFileSync(
+  join(HOME, "desktop.json"),
+  JSON.stringify(
+    { onboardingCompleted: true, schedulerEnabled: false },
+    null,
+    2,
+  ),
+);
 writeFileSync(
   join(HOME, "config.yaml"),
   "model:\n  provider: anthropic\n  model: claude-3-5-sonnet\n",
@@ -116,7 +161,24 @@ setTimeout(() => {
 }, 120000).unref();
 
 const MOD = process.platform === "darwin" ? "Meta" : "Control";
+const expectedShots = [
+  "01-home",
+  "02-palette",
+  "02a-learn-this",
+  "02b-research",
+  "02c-research-nudge",
+  "03-graph",
+  "04-tweaks",
+  "05-tweaks-section-toggled",
+  "06-querydb",
+  "07-querydb-addrow",
+  "08-backlinks",
+  "09-getstarted",
+  "10-journal",
+  "11-journal-entry",
+];
 const shots = [];
+const shotFailures = [];
 
 const app = await electron.launch({
   // Isolate Electron's userData (alongside the temp HERMES_HOME) so the smoke
@@ -143,7 +205,9 @@ async function shot(name, fn) {
     shots.push(name);
     console.log("SHOT ok:", name);
   } catch (e) {
-    console.log("SHOT FAIL:", name, "—", e.message);
+    const message = e instanceof Error ? e.message : String(e);
+    shotFailures.push({ name, message });
+    console.log("SHOT FAIL:", name, "-", message);
   }
 }
 
@@ -155,6 +219,12 @@ await shot("02-palette", async () => {
   await win.keyboard.press(`${MOD}+K`);
 });
 await win.keyboard.press("Escape").catch(() => {});
+
+// 02a — Learn This: first-class learning surface under My Assistant.
+await shot("02a-learn-this", async () => {
+  await win.locator(".nav-item", { hasText: "Learn This" }).first().click();
+  await win.getByRole("button", { name: "Skills" }).click();
+});
 
 // 02b — Research (OpenAlex) modal, opened from the first-class sidebar rail item.
 // Offline-safe: we screenshot the modal's initial state (no network dependency).
@@ -260,4 +330,13 @@ await shot("11-journal-entry", async () => {
 
 console.log("SHOTS_OK:", shots.length, "—", shots.join(", "));
 await app.close();
+const missingShots = expectedShots.filter((name) => !shots.includes(name));
+if (shotFailures.length || missingShots.length) {
+  for (const failure of shotFailures) {
+    console.log(`SHOT_FAILURE: ${failure.name}: ${failure.message}`);
+  }
+  if (missingShots.length) console.log("SHOTS_MISSING:", missingShots.join(", "));
+  console.log("SMOKE_FAILED");
+  process.exit(1);
+}
 console.log("SMOKE_DONE");

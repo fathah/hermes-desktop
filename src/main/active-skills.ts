@@ -15,6 +15,7 @@
  */
 import { listInstalledSkills, getSkillContent } from "./skills";
 import { profileKey } from "./hermes/gateway-process";
+import { recordSkillInjected, recordSkillLoaded } from "./skill-usage";
 
 /** Combined active-skill content above this many chars triggers a warning. */
 const SOFT_CAP_CHARS = 12_000;
@@ -88,6 +89,8 @@ export function loadActiveSkill(
   const map = activeMap(profile, true)!;
   const alreadyLoaded = map.has(match.path);
   map.set(match.path, match.name);
+  if (!alreadyLoaded)
+    recordSkillLoaded({ name: match.name, path: match.path }, profile);
   return { ok: true, name: match.name, path: match.path, alreadyLoaded };
 }
 
@@ -161,10 +164,12 @@ function buildActiveSkillsSystemMessageInner(
   if (active.length === 0) return null;
 
   const sections: string[] = [];
+  const injected: ActiveSkill[] = [];
   for (const skill of active) {
     const body = getSkillContent(skill.path).trim();
     if (!body) continue;
     sections.push(`## Skill: ${skill.name}\n\n${body}`);
+    injected.push(skill);
   }
   if (sections.length === 0) return null;
 
@@ -181,6 +186,7 @@ function buildActiveSkillsSystemMessageInner(
     );
   }
 
+  recordSkillInjected(injected, profile);
   return { role: "system", content };
 }
 

@@ -40,6 +40,7 @@ export type Surface =
   | "insights"
   | "memory"
   | "you"
+  | "learning"
   | "ask"
   | "chats"
   | "graph"

@@ -318,7 +318,7 @@ const ALLOWED_BLOCK_TYPES = new Set([
   "divider",
 ]);
 
-const SYSTEM_PROMPT = `You are the SPS Agent workspace assistant inside a Notion-style document.
+const SYSTEM_PROMPT = `You are My Assistant inside the SPS workspace, a Notion-style document.
 You can answer questions, rewrite text as a tracked change, append blocks, or act on the task board.
 Respond with EXACTLY ONE JSON object (no prose, no markdown fence) matching one of:
 {"kind":"chat","reply":["..."]}
@@ -633,7 +633,7 @@ export async function spsAssistant(
     return {
       kind: "chat",
       reply: [
-        `I couldn't reach the assistant: ${err instanceof Error ? err.message : "error"}. Make sure the Hermes gateway is running and a model is configured.`,
+        `I couldn't reach My Assistant: ${err instanceof Error ? err.message : "error"}. Make sure the SPS connection service is running and a model is configured.`,
       ],
     };
   }
@@ -702,7 +702,7 @@ export async function spsIngestInbox(profile?: string): Promise<IngestResult> {
       return {
         ok: false,
         captureCount: captures.length,
-        error: "The agent didn't return a usable changeset.",
+        error: "My Assistant didn't return a usable changeset.",
       };
     }
     return { ok: true, captureCount: captures.length, changeset };
@@ -794,7 +794,7 @@ export async function spsFileAnswer(
       return {
         ok: false,
         captureCount: 0,
-        error: "The agent didn't return a usable page.",
+        error: "My Assistant didn't return a usable page.",
       };
     }
     return { ok: true, captureCount: 0, changeset };
@@ -846,7 +846,7 @@ export async function spsFileResearch(
     // string (which parses to no usable page). Retry ONCE on a 5xx or a
     // parse-failure — structured-JSON output is occasionally flaky — but bail
     // immediately on a 4xx (auth/client errors won't improve on retry).
-    let lastError = "The agent didn't return a usable page.";
+    let lastError = "My Assistant didn't return a usable page.";
     for (let attempt = 1; attempt <= 2; attempt++) {
       const res = await fetch(url, {
         method: "POST",
@@ -878,7 +878,7 @@ export async function spsFileResearch(
       if (changeset && changeset.pages.length > 0) {
         return { ok: true, captureCount: 0, changeset };
       }
-      lastError = "The agent didn't return a usable page.";
+      lastError = "My Assistant didn't return a usable page.";
     }
     return { ok: false, captureCount: 0, error: lastError };
   } catch (err) {
@@ -927,7 +927,7 @@ export async function spsExternalSaveToKb(
     const url = `${getApiUrl(profile)}/v1/chat/completions`;
     // Retry ONCE on a 5xx or parse-failure (structured-JSON output is
     // occasionally flaky); bail immediately on a 4xx.
-    let lastError = "The agent didn't return a usable page.";
+    let lastError = "My Assistant didn't return a usable page.";
     for (let attempt = 1; attempt <= 2; attempt++) {
       const res = await fetch(url, {
         method: "POST",
@@ -959,7 +959,7 @@ export async function spsExternalSaveToKb(
       if (changeset && changeset.pages.length > 0) {
         return { ok: true, captureCount: 0, changeset };
       }
-      lastError = "The agent didn't return a usable page.";
+      lastError = "My Assistant didn't return a usable page.";
     }
     return { ok: false, captureCount: 0, error: lastError };
   } catch (err) {

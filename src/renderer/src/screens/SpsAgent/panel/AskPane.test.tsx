@@ -110,7 +110,7 @@ describe("AskPane streaming", () => {
       stream: Promise.resolve({
         summary: "",
         sources: [],
-        error: "Couldn’t reach the assistant.",
+        error: "Couldn’t reach My Assistant.",
       }),
     });
     render(<AskPane />);
@@ -118,7 +118,7 @@ describe("AskPane streaming", () => {
       await ask("anything");
     });
     expect(
-      await screen.findByText(/Couldn’t reach the assistant\./),
+      await screen.findByText(/Couldn’t reach My Assistant\./),
     ).toBeTruthy();
   });
 });

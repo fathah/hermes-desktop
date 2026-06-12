@@ -25,8 +25,8 @@ export function CommentsPane({
           <Icon name="comment" size={22} style={{ color: "var(--tx-4)" }} />
           <div style={{ marginTop: 8 }}>No notes yet.</div>
           <div style={{ fontSize: 12, marginTop: 4 }}>
-            Select text and click the note icon to pin a private note. Your
-            assistant can read these.
+            Select text and click the note icon to pin a private note. My
+            Assistant can read these.
           </div>
         </div>
       </div>

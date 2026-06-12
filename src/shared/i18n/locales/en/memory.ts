@@ -1,12 +1,12 @@
 export default {
   title: "Memory",
   subtitle:
-    "What Hermes remembers about you and your environment across sessions.",
+    "What My Assistant remembers about you and your environment across sessions.",
   sessions: "Sessions",
   messages: "Messages",
   memories: "Memories",
   providersTitle: "Providers",
-  agentMemory: "Agent Memory",
+  agentMemory: "Assistant Memory",
   userProfile: "User Profile",
   entries: "{{count}} entries",
   addMemory: "Add Memory",
@@ -20,14 +20,14 @@ export default {
   noProvidersFound: "No memory providers found in this installation.",
   openProviderWebsite: "Open provider website",
   noMemoriesYet:
-    "No memories yet. Hermes will save important facts as you chat.",
+    "No memories yet. My Assistant will save important facts as you chat.",
   noMemoryEntries: "No memory entries yet.",
   noToolsetsFound: "No toolsets found.",
   addManuallyHint: "You can also add memories manually using the button above.",
   userProfileHint:
-    "Tell Hermes about yourself — name, role, preferences, communication style.",
+    "Tell My Assistant about yourself — name, role, preferences, communication style.",
   providersHint:
-    "Pluggable memory providers give Hermes advanced long-term memory. Built-in memory (above) is always active alongside the selected provider.",
+    "Pluggable memory providers give My Assistant advanced long-term memory. Built-in memory (above) is always active alongside the selected provider.",
   providersHintActive: "Active: {{provider}}",
   providersHintInactive: "No external provider active — using built-in only.",
   enterEnvKey: "Enter {{key}}",

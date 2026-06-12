@@ -600,7 +600,7 @@ export function AgentBody() {
           <textarea
             ref={taRef}
             rows={1}
-            placeholder="Ask, rewrite, or act on the board…  (try /skill)"
+            placeholder="Ask My Assistant, rewrite, or act on the board…  (try /skill)"
             value={val}
             onChange={grow}
             onKeyDown={(e) => {

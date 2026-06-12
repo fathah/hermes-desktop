@@ -23,6 +23,7 @@ import { GraphView } from "./graph/GraphView";
 import { EquityResearch } from "./equity/EquityResearch";
 import { JournalSurface } from "./journal/JournalSurface";
 import { YouSurface } from "./you/YouSurface";
+import { LearningSurface } from "./learning/LearningSurface";
 import { CockpitSurface } from "./cockpit/CockpitSurface";
 import { InboxSurface } from "./inbox/InboxSurface";
 import { HealthSurface } from "./health/HealthSurface";
@@ -160,6 +161,7 @@ export function App() {
                 <MemoryTimeline profile="default" onRefresh={() => {}} />
               )}
               {surface === "you" && <YouSurface profile="default" />}
+              {surface === "learning" && <LearningSurface profile="default" />}
               {surface === "inbox" && <InboxSurface profile="default" />}
               {surface === "health" && <HealthSurface profile="default" />}
               {surface === "graph" && <GraphView />}

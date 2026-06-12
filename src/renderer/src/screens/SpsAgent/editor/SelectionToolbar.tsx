@@ -240,8 +240,8 @@ export function SelectionToolbar({ onComment, onAsk, onAiAction }: Props) {
           <Icon name="chevD" size={11} />
         </button>
         <span className="st-sep"></span>
-        <button className="st-btn" onClick={doAsk} title="Ask the assistant">
-          <Icon name="sparkle" size={15} /> Ask AI
+        <button className="st-btn" onClick={doAsk} title="Ask My Assistant">
+          <Icon name="sparkle" size={15} /> Ask
         </button>
         <button
           className="st-btn"

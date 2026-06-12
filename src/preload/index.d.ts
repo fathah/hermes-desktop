@@ -3,6 +3,12 @@ import type { Attachment } from "../shared/attachments";
 import type { UsageAggregate, RunLedgerEntry } from "../shared/usage";
 import type { MemoryTimeline } from "../shared/memoryTimeline";
 import type { MemoryInfo } from "../shared/memory";
+import type {
+  CreateLearningProposalInput,
+  LearningProposal,
+  LearningProposalResult,
+  SkillUsageEntry,
+} from "../shared/learning";
 import type { SpsSaveResult } from "../shared/sps-types";
 import type {
   FederatedHit,
@@ -453,6 +459,23 @@ interface HermesAPI {
   // Memory
   readMemory: (profile?: string) => Promise<MemoryInfo>;
   getMemoryTimeline: (profile?: string) => Promise<MemoryTimeline>;
+  listLearningProposals: (profile?: string) => Promise<LearningProposal[]>;
+  createLearningProposal: (
+    input: CreateLearningProposalInput,
+    profile?: string,
+  ) => Promise<LearningProposalResult>;
+  acceptLearningProposal: (
+    id: string,
+    profile?: string,
+  ) => Promise<LearningProposalResult>;
+  dismissLearningProposal: (
+    id: string,
+    profile?: string,
+  ) => Promise<LearningProposalResult>;
+  rollbackLearningProposal: (
+    id: string,
+    profile?: string,
+  ) => Promise<LearningProposalResult>;
 
   addMemoryEntry: (
     content: string,
@@ -539,6 +562,9 @@ interface HermesAPI {
   listActiveSkills: (
     profile?: string,
   ) => Promise<Array<{ name: string; path: string }>>;
+  listSkillUsage: (
+    profile?: string,
+  ) => Promise<Record<string, SkillUsageEntry>>;
   installSkill: (
     identifier: string,
     profile?: string,

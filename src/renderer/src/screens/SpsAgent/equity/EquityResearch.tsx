@@ -115,7 +115,7 @@ export function EquityResearch(): React.JSX.Element {
         return;
       }
       setNotice(
-        `${run.ticker}: the run finished but produced no saved report. Check the Agent Console, or try again.`,
+        `${run.ticker}: the run finished but produced no saved report. Check My Assistant's console, or try again.`,
       );
     })();
   }, [mode, run.status, run.ticker, run.report, run.transcript]);

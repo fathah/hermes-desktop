@@ -101,7 +101,7 @@ export function AgentTasksModal() {
 
   return (
     <SpsModal
-      title="📋 Agent tasks"
+      title="Assistant tasks"
       onClose={onClose}
       width={720}
       maxWidth="94vw"
@@ -127,7 +127,7 @@ export function AgentTasksModal() {
             ? `${currentBoard.name} · ${currentBoard.total} task${
                 currentBoard.total === 1 ? "" : "s"
               }`
-            : "Agent-managed board (read-only)"}
+            : "My Assistant's board (read-only)"}
         </div>
 
         {remoteUnsupported ? (
@@ -145,7 +145,8 @@ export function AgentTasksModal() {
           </div>
         ) : tasks.length === 0 ? (
           <div className="c-name" style={{ color: "var(--tx-3)" }}>
-            No tasks on this board yet. The agent adds tasks here as it works.
+            No tasks on this board yet. My Assistant adds tasks here as it
+            works.
           </div>
         ) : (
           <div

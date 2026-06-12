@@ -53,7 +53,7 @@ export function MemoryTimeline({
   if (entries.length === 0) {
     return (
       <div className="memory-timeline-empty">
-        No memory entries yet. The agent writes here as it learns about you.
+        No memory entries yet. My Assistant writes here as it learns about you.
       </div>
     );
   }

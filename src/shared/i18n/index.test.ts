@@ -3,11 +3,17 @@ import { t } from "./index";
 
 describe("shared i18n", () => {
   it("returns English text by default", () => {
-    expect(t("welcome.title")).toBe("Welcome to Hermes");
+    expect(t("welcome.title")).toBe("Welcome to SPS");
   });
 
   it("falls back to the key when an English key is missing", () => {
     expect(t("common.missingKey")).toBe("common.missingKey");
+  });
+
+  it("uses SPS-first English labels for employee-facing surfaces", () => {
+    expect(t("common.appName")).toBe("SPS");
+    expect(t("navigation.controlCenterTitle")).toBe("SPS Control Center");
+    expect(t("settings.tabAgentHealth")).toBe("Application Health");
   });
 
   it("returns zh-CN text when available", () => {

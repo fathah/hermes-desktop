@@ -10,14 +10,54 @@
 //
 // Prereqs:  npm run build   (this drives out/main, like sps-smoke.mjs)
 // Usage:    node scripts/sps-research-smoke.mjs
+//           HERMES_LIVE_SMOKE=1 node scripts/sps-research-smoke.mjs
 //           SMOKE_TOPIC="your topic" node scripts/sps-research-smoke.mjs
 //
-// Exit: 0 = saved (then Undone), 1 = ran but did not save (see PHASE/DETAIL),
-//       2 = watchdog timeout, 3 = could not open the Research modal.
-import { _electron as electron } from "playwright";
-import { mkdtempSync } from "fs";
-import { tmpdir } from "os";
+// Exit: 0 = skipped unless HERMES_LIVE_SMOKE=1, or saved (then Undone);
+//       1 = missing credentials, or ran but did not save (see PHASE/DETAIL);
+//       2 = watchdog timeout; 3 = could not open the Research modal.
+import { existsSync, mkdtempSync, readFileSync } from "fs";
+import { homedir, tmpdir } from "os";
 import { join } from "path";
+
+const LIVE_KEY_NAMES = [
+  "ANTHROPIC_API_KEY",
+  "OPENAI_API_KEY",
+  "OPENROUTER_API_KEY",
+];
+
+function hasUsableKeyValue(value) {
+  const trimmed = value.trim().replace(/^['"]|['"]$/g, "");
+  return !!trimmed && trimmed !== "sk-ant-test-0000000000";
+}
+
+function envFileHasLiveKey(path) {
+  if (!existsSync(path)) return false;
+  const lines = readFileSync(path, "utf-8").split(/\r?\n/);
+  return lines.some((line) => {
+    const match = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/);
+    if (!match || !LIVE_KEY_NAMES.includes(match[1])) return false;
+    return hasUsableKeyValue(match[2]);
+  });
+}
+
+if (process.env.HERMES_LIVE_SMOKE !== "1") {
+  console.log("LIVE_SMOKE_SKIPPED: set HERMES_LIVE_SMOKE=1 to run");
+  process.exit(0);
+}
+
+const hasLiveKey =
+  LIVE_KEY_NAMES.some((name) => hasUsableKeyValue(process.env[name] || "")) ||
+  envFileHasLiveKey(join(homedir(), ".hermes", ".env"));
+
+if (!hasLiveKey) {
+  console.log(
+    "LIVE_SMOKE_MISSING_CREDENTIALS: configure a live provider key before running",
+  );
+  process.exit(1);
+}
+
+const { _electron: electron } = await import("playwright");
 
 const OUT =
   process.env.SMOKE_OUT || mkdtempSync(join(tmpdir(), "sps-research-smoke-"));

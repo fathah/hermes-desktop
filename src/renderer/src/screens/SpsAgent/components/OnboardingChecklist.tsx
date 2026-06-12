@@ -43,7 +43,7 @@ export function OnboardingChecklist(): React.JSX.Element | null {
     {
       n: 2,
       title: "Ingest",
-      desc: "Let the assistant file it into the right page.",
+      desc: "Let My Assistant file it into the right page.",
       cta: "Process Inbox",
       onClick: () => setSurface("inbox"),
     },

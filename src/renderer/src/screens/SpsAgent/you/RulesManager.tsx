@@ -50,8 +50,8 @@ export function RulesManager({
       <div className="settings-section-title">How I like things</div>
       <div className="settings-field">
         <div className="settings-field-hint" style={{ marginBottom: 10 }}>
-          Standing instructions the agent follows in every chat. Toggle one off
-          to pause it without losing it.
+          Standing instructions My Assistant follows in every chat. Toggle one
+          off to pause it without losing it.
         </div>
 
         {rules.length === 0 ? (

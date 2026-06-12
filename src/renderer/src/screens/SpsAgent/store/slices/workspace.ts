@@ -410,7 +410,7 @@ export const createWorkspaceSlice: StateCreator<
       [
         blk(
           "p",
-          "Your second brain — interlinked pages the agent maintains from the captures you process in the Inbox.",
+          "Your second brain — interlinked pages My Assistant maintains from the captures you process in the Inbox.",
         ),
       ],
       null,

@@ -211,7 +211,7 @@ export function HealthSurface({
           <p className="health-help-intro">
             A healthy knowledge vault has clear connections between ideas.
             Fixing issues on this page directly improves the accuracy of search
-            results, semantic links, and your AI Agent&apos;s memory (RAG).
+            results, semantic links, and My Assistant&apos;s memory (RAG).
           </p>
           <div className="health-help-grid">
             <div className="health-help-item">

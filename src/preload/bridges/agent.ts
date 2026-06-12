@@ -3,6 +3,12 @@ import type { Attachment } from "../../shared/attachments";
 import type { MemoryInfo } from "../../shared/memory";
 import type { MemoryTimeline } from "../../shared/memoryTimeline";
 import type {
+  CreateLearningProposalInput,
+  LearningProposal,
+  LearningProposalResult,
+  SkillUsageEntry,
+} from "../../shared/learning";
+import type {
   GatewayHealthStatus,
   GatewayHealthChange,
 } from "../../shared/gateway";
@@ -101,6 +107,29 @@ export const agentBridge = {
   /** Memory entries enriched with originating-session provenance (idea A4). */
   getMemoryTimeline: (profile?: string): Promise<MemoryTimeline> =>
     ipcRenderer.invoke("get-memory-timeline", profile),
+
+  listLearningProposals: (profile?: string): Promise<LearningProposal[]> =>
+    ipcRenderer.invoke("list-learning-proposals", profile),
+  createLearningProposal: (
+    input: CreateLearningProposalInput,
+    profile?: string,
+  ): Promise<LearningProposalResult> =>
+    ipcRenderer.invoke("create-learning-proposal", input, profile),
+  acceptLearningProposal: (
+    id: string,
+    profile?: string,
+  ): Promise<LearningProposalResult> =>
+    ipcRenderer.invoke("accept-learning-proposal", id, profile),
+  dismissLearningProposal: (
+    id: string,
+    profile?: string,
+  ): Promise<LearningProposalResult> =>
+    ipcRenderer.invoke("dismiss-learning-proposal", id, profile),
+  rollbackLearningProposal: (
+    id: string,
+    profile?: string,
+  ): Promise<LearningProposalResult> =>
+    ipcRenderer.invoke("rollback-learning-proposal", id, profile),
 
   addMemoryEntry: (
     content: string,
@@ -203,6 +232,10 @@ export const agentBridge = {
     profile?: string,
   ): Promise<Array<{ name: string; path: string }>> =>
     ipcRenderer.invoke("list-active-skills", profile),
+  listSkillUsage: (
+    profile?: string,
+  ): Promise<Record<string, SkillUsageEntry>> =>
+    ipcRenderer.invoke("list-skill-usage", profile),
   installSkill: (
     identifier: string,
     profile?: string,

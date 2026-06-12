@@ -438,7 +438,7 @@ export function ScheduledModal() {
         {cronJobs.length > 0 && (
           <div style={{ marginTop: 12 }}>
             <div className="c-name" style={{ marginBottom: 6 }}>
-              Agent tasks ({cronJobs.length})
+              Scheduled work ({cronJobs.length})
             </div>
             <div className="scroll" style={{ maxHeight: "30vh" }}>
               {cronJobs.map((job) => {

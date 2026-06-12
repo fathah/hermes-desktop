@@ -28,7 +28,11 @@ export function GetStarted() {
   };
 
   const chips: Chip[] = [
-    { icon: "sparkle", label: "Ask AI", run: () => setSurface("ask") },
+    {
+      icon: "sparkle",
+      label: "Ask My Assistant",
+      run: () => setSurface("ask"),
+    },
     {
       icon: "calendar",
       label: "AI Meeting Notes",
