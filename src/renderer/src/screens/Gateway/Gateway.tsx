@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { GATEWAY_SECTIONS, GATEWAY_PLATFORMS } from "../../constants";
 import { useI18n } from "../../components/useI18n";
-import BrandLogo from "../../components/common/BrandLogo";
 import { useGatewayHealth } from "../../hooks/useGatewayHealth";
+import PlatformCard from "./components/PlatformCard";
+import WhatsAppCloudSetup from "./components/WhatsAppCloudSetup";
 
 function Gateway({ profile }: { profile?: string }): React.JSX.Element {
   const { t } = useI18n();
@@ -242,77 +243,29 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
       <div className="settings-section">
         <div className="settings-section-title">{t("gateway.platforms")}</div>
         {GATEWAY_PLATFORMS.map((platform) => (
-          <div key={platform.key} className="settings-platform-card">
-            <div className="settings-platform-header">
-              <div className="settings-platform-left">
-                <BrandLogo provider={platform.key} size={28} />
-                <div className="settings-platform-info">
-                  <span className="settings-platform-label">
-                    {t(platform.label)}
-                  </span>
-                  <span className="settings-platform-desc">
-                    {t(platform.description)}
-                  </span>
-                </div>
-              </div>
-              <label className="tools-toggle">
-                <input
-                  type="checkbox"
-                  checked={!!platformEnabled[platform.key]}
-                  onChange={() => togglePlatform(platform.key)}
-                />
-                <span className="tools-toggle-track" />
-              </label>
-            </div>
-            {platformEnabled[platform.key] && (
-              <div className="settings-platform-fields">
-                {platform.fields.map((fieldKey) => {
-                  const field = fieldDefs.get(fieldKey);
-                  if (!field) return null;
-                  return (
-                    <div key={field.key} className="settings-field">
-                      <label className="settings-field-label">
-                        {t(field.label)}
-                        {savedKey === field.key && (
-                          <span className="settings-saved">
-                            {t("common.saved")}
-                          </span>
-                        )}
-                      </label>
-                      <div className="settings-input-row">
-                        <input
-                          className="input"
-                          type={
-                            field.type === "password" &&
-                            !visibleKeys.has(field.key)
-                              ? "password"
-                              : "text"
-                          }
-                          value={env[field.key] || ""}
-                          onChange={(e) =>
-                            handleChange(field.key, e.target.value)
-                          }
-                          onBlur={() => handleBlur(field.key)}
-                          placeholder={t(field.label)}
-                        />
-                        {field.type === "password" && (
-                          <button
-                            className="btn-ghost settings-toggle-btn"
-                            onClick={() => toggleVisibility(field.key)}
-                          >
-                            {visibleKeys.has(field.key)
-                              ? t("common.hide")
-                              : t("common.show")}
-                          </button>
-                        )}
-                      </div>
-                      <div className="settings-field-hint">{t(field.hint)}</div>
-                    </div>
-                  );
-                })}
-              </div>
+          <PlatformCard
+            key={platform.key}
+            platform={platform}
+            enabled={!!platformEnabled[platform.key]}
+            fields={fieldDefs}
+            env={env}
+            savedKey={savedKey}
+            visibleKeys={visibleKeys}
+            t={t}
+            onToggle={togglePlatform}
+            onChange={handleChange}
+            onBlur={handleBlur}
+            onToggleVisibility={toggleVisibility}
+          >
+            {platform.key === "whatsapp_cloud" && (
+              <WhatsAppCloudSetup
+                profile={profile}
+                env={env}
+                savedKey={savedKey}
+                gatewayRunning={gatewayRunning}
+              />
             )}
-          </div>
+          </PlatformCard>
         ))}
       </div>
 

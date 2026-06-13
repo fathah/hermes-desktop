@@ -1458,6 +1458,7 @@ const SSH_SUPPORTED_PLATFORMS = [
   "discord",
   "slack",
   "whatsapp",
+  "whatsapp_cloud",
   "signal",
   "matrix",
   "mattermost",

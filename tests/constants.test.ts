@@ -8,6 +8,7 @@ import {
   LOCAL_PRESETS,
   THEME_OPTIONS,
 } from "../src/renderer/src/constants";
+import { WHATSAPP_CLOUD_FIELD_KEYS } from "../src/shared/whatsappCloud";
 
 // ─── PROVIDERS ──────────────────────────────────────────
 
@@ -88,8 +89,8 @@ describe("PROVIDERS", () => {
 // ─── GATEWAY_PLATFORMS ──────────────────────────────────
 
 describe("GATEWAY_PLATFORMS", () => {
-  it("has 15 platforms", () => {
-    expect(GATEWAY_PLATFORMS.length).toBe(15);
+  it("has 16 platforms", () => {
+    expect(GATEWAY_PLATFORMS.length).toBe(16);
   });
 
   it("includes all core platforms", () => {
@@ -97,6 +98,7 @@ describe("GATEWAY_PLATFORMS", () => {
     expect(keys).toContain("discord");
     expect(keys).toContain("slack");
     expect(keys).toContain("whatsapp");
+    expect(keys).toContain("whatsapp_cloud");
     expect(keys).toContain("signal");
     expect(keys).toContain("matrix");
     expect(keys).toContain("email");
@@ -138,6 +140,11 @@ describe("GATEWAY_PLATFORMS", () => {
         expect(allSectionKeys.has(field)).toBe(true);
       }
     }
+  });
+
+  it("has all WhatsApp Cloud fields", () => {
+    const platform = GATEWAY_PLATFORMS.find((p) => p.key === "whatsapp_cloud");
+    expect(platform?.fields).toEqual([...WHATSAPP_CLOUD_FIELD_KEYS]);
   });
 });
 

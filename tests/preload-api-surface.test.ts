@@ -161,6 +161,7 @@ describe("Legacy APIs preserved (backward compat)", () => {
     "gatewayStatus",
     "getPlatformEnabled",
     "setPlatformEnabled",
+    "getWhatsAppCloudStatus",
     // Sessions
     "listSessions",
     "getSessionMessages",

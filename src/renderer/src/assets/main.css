@@ -5923,6 +5923,109 @@ body {
   margin-bottom: 0;
 }
 
+.whatsapp-cloud-setup {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.whatsapp-cloud-header,
+.whatsapp-cloud-status-row,
+.whatsapp-cloud-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.whatsapp-cloud-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.whatsapp-cloud-grid,
+.whatsapp-cloud-command-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.whatsapp-cloud-command-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.whatsapp-cloud-command-card code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.whatsapp-cloud-command-card .whatsapp-cloud-mini-title {
+  grid-column: 1 / -1;
+}
+
+.whatsapp-cloud-mini-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.whatsapp-cloud-warning,
+.whatsapp-cloud-warning-list {
+  border: 1px solid var(--warning-border, #f9a825);
+  background: var(--warning-bg, #fff8e1);
+  color: var(--warning, #9a6700);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.whatsapp-cloud-checklist {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.whatsapp-cloud-checklist div {
+  padding-left: 18px;
+  position: relative;
+}
+
+.whatsapp-cloud-checklist div::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 7px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+@media (max-width: 640px) {
+  .whatsapp-cloud-header,
+  .whatsapp-cloud-status-row,
+  .whatsapp-cloud-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
 /* Theme select in settings */
 .settings-theme-options {
   display: flex;

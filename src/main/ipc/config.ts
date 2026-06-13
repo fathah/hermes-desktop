@@ -97,6 +97,7 @@ import {
   setSpendingCapConfig,
   SpendingCapConfig,
 } from "../spending-limits";
+import { getWhatsAppCloudStatus } from "../whatsapp-cloud-status";
 
 function openExternalUrl(rawUrl: unknown): void {
   if (!isAllowedExternalUrl(rawUrl) && !isAllowedObsidianExternalUrl(rawUrl)) {
@@ -503,6 +504,9 @@ export function registerConfigIpc(): void {
       await sshSetPlatformEnabled(ssh, platform, enabled, profile);
       return true;
     },
+  );
+  safeHandle("get-whatsapp-cloud-status", (_event, profile?: string) =>
+    getWhatsAppCloudStatus(profile),
   );
 
   // Model discovery

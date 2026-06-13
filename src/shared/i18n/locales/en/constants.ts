@@ -124,10 +124,44 @@ export default {
   slackBotHint: "xoxb-... token from Slack app settings",
   slackAppToken: "Slack App Token",
   slackAppHint: "xapp-... token for Socket Mode",
-  whatsappApiUrl: "WhatsApp API URL",
-  whatsappUrlHint: "WhatsApp Business API or whatsapp-web.js URL",
-  whatsappApiToken: "WhatsApp API Token",
-  whatsappTokenHint: "Auth token for WhatsApp API",
+  whatsappApiUrl: "Baileys Bridge URL",
+  whatsappUrlHint: "Local bridge or whatsapp-web.js endpoint for a personal number",
+  whatsappApiToken: "Baileys Bridge Token",
+  whatsappTokenHint: "Auth token for the personal WhatsApp bridge",
+  whatsappCloudPhoneNumberId: "Phone Number ID",
+  whatsappCloudPhoneNumberIdHint:
+    "Meta's 15-17 digit Phone Number ID, not the phone number itself",
+  whatsappCloudAccessToken: "Access Token",
+  whatsappCloudAccessTokenHint:
+    "Meta Cloud API token; production should use a System User token",
+  whatsappCloudAppSecret: "App Secret",
+  whatsappCloudAppSecretHint:
+    "Required for secure inbound webhook signature verification",
+  whatsappCloudVerifyToken: "Verify Token",
+  whatsappCloudVerifyTokenHint:
+    "Shared token Meta uses during webhook verification",
+  whatsappCloudAllowFrom: "Allowed Senders",
+  whatsappCloudAllowFromHint:
+    "Comma-separated wa_ids allowed to message the bot; use digits only",
+  whatsappCloudDmPolicy: "DM Policy",
+  whatsappCloudDmPolicyHint:
+    "Use allowlist to require Allowed Senders; leave open for default gateway behavior",
+  whatsappCloudAppId: "App ID",
+  whatsappCloudAppIdHint: "Optional Meta app ID for diagnostics and analytics",
+  whatsappCloudWabaId: "WABA ID",
+  whatsappCloudWabaIdHint: "Optional WhatsApp Business Account ID",
+  whatsappCloudWebhookPort: "Webhook Port",
+  whatsappCloudWebhookPortHint:
+    "Local webhook port forwarded by your tunnel; defaults to 8090",
+  whatsappCloudWebhookPath: "Webhook Path",
+  whatsappCloudWebhookPathHint:
+    "Path Meta calls on your public URL; defaults to /whatsapp/webhook",
+  whatsappCloudApiVersion: "Graph API Version",
+  whatsappCloudApiVersionHint:
+    "Optional Meta Graph API version override, such as v20.0",
+  whatsappCloudHomeChannel: "Home Channel",
+  whatsappCloudHomeChannelHint:
+    "Optional wa_id used as the default destination for scheduled jobs",
   signalPhoneNumber: "Signal Phone Number",
   signalPhoneHint: "Phone number registered with signal-cli",
   matrixHomeserver: "Matrix Homeserver",
@@ -187,8 +221,10 @@ export default {
   platformDiscordDesc: "Connect to Discord via bot token",
   platformSlack: "Slack",
   platformSlackDesc: "Connect to Slack workspace",
-  platformWhatsapp: "WhatsApp",
-  platformWhatsappDesc: "Connect via WhatsApp Business API",
+  platformWhatsapp: "WhatsApp (personal)",
+  platformWhatsappDesc: "Pair a personal number through the Baileys bridge",
+  platformWhatsappCloud: "WhatsApp Cloud",
+  platformWhatsappCloudDesc: "Official Meta Business Cloud API",
   platformSignal: "Signal",
   platformSignalDesc: "Connect via signal-cli",
   platformMatrix: "Matrix",

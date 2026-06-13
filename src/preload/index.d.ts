@@ -54,6 +54,7 @@ import type {
 import type { SrPendingUpdate, SrPatch } from "./bridges/sps";
 import type { CredentialPoolEntry } from "../shared/credentials";
 import type { CapabilityRiskSummary } from "../shared/capability-risk";
+import type { WhatsAppCloudStatus } from "../shared/whatsappCloud";
 
 interface ElectronAPI {
   process: {
@@ -396,6 +397,9 @@ interface HermesAPI {
     enabled: boolean,
     profile?: string,
   ) => Promise<boolean>;
+  getWhatsAppCloudStatus: (
+    profile?: string,
+  ) => Promise<WhatsAppCloudStatus>;
 
   // Sessions
   listSessions: (limit?: number, offset?: number) => Promise<SessionSummary[]>;

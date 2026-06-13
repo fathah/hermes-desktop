@@ -1,3 +1,5 @@
+import { WHATSAPP_CLOUD_FIELD_KEYS } from "../../shared/whatsappCloud";
+
 // ── Shared Types ────────────────────────────────────────
 
 export interface FieldDef {
@@ -648,6 +650,78 @@ export const GATEWAY_SECTIONS: SectionDef[] = [
         hint: "constants.whatsappTokenHint",
       },
       {
+        key: "WHATSAPP_CLOUD_PHONE_NUMBER_ID",
+        label: "constants.whatsappCloudPhoneNumberId",
+        type: "text",
+        hint: "constants.whatsappCloudPhoneNumberIdHint",
+      },
+      {
+        key: "WHATSAPP_CLOUD_ACCESS_TOKEN",
+        label: "constants.whatsappCloudAccessToken",
+        type: "password",
+        hint: "constants.whatsappCloudAccessTokenHint",
+      },
+      {
+        key: "WHATSAPP_CLOUD_APP_SECRET",
+        label: "constants.whatsappCloudAppSecret",
+        type: "password",
+        hint: "constants.whatsappCloudAppSecretHint",
+      },
+      {
+        key: "WHATSAPP_CLOUD_VERIFY_TOKEN",
+        label: "constants.whatsappCloudVerifyToken",
+        type: "password",
+        hint: "constants.whatsappCloudVerifyTokenHint",
+      },
+      {
+        key: "WHATSAPP_CLOUD_ALLOW_FROM",
+        label: "constants.whatsappCloudAllowFrom",
+        type: "text",
+        hint: "constants.whatsappCloudAllowFromHint",
+      },
+      {
+        key: "WHATSAPP_CLOUD_DM_POLICY",
+        label: "constants.whatsappCloudDmPolicy",
+        type: "text",
+        hint: "constants.whatsappCloudDmPolicyHint",
+      },
+      {
+        key: "WHATSAPP_CLOUD_APP_ID",
+        label: "constants.whatsappCloudAppId",
+        type: "text",
+        hint: "constants.whatsappCloudAppIdHint",
+      },
+      {
+        key: "WHATSAPP_CLOUD_WABA_ID",
+        label: "constants.whatsappCloudWabaId",
+        type: "text",
+        hint: "constants.whatsappCloudWabaIdHint",
+      },
+      {
+        key: "WHATSAPP_CLOUD_WEBHOOK_PORT",
+        label: "constants.whatsappCloudWebhookPort",
+        type: "text",
+        hint: "constants.whatsappCloudWebhookPortHint",
+      },
+      {
+        key: "WHATSAPP_CLOUD_WEBHOOK_PATH",
+        label: "constants.whatsappCloudWebhookPath",
+        type: "text",
+        hint: "constants.whatsappCloudWebhookPathHint",
+      },
+      {
+        key: "WHATSAPP_CLOUD_API_VERSION",
+        label: "constants.whatsappCloudApiVersion",
+        type: "text",
+        hint: "constants.whatsappCloudApiVersionHint",
+      },
+      {
+        key: "WHATSAPP_CLOUD_HOME_CHANNEL",
+        label: "constants.whatsappCloudHomeChannel",
+        type: "text",
+        hint: "constants.whatsappCloudHomeChannelHint",
+      },
+      {
         key: "SIGNAL_PHONE_NUMBER",
         label: "constants.signalPhoneNumber",
         type: "text",
@@ -838,6 +912,12 @@ export const GATEWAY_PLATFORMS: PlatformDef[] = [
     label: "constants.platformWhatsapp",
     description: "constants.platformWhatsappDesc",
     fields: ["WHATSAPP_API_URL", "WHATSAPP_API_TOKEN"],
+  },
+  {
+    key: "whatsapp_cloud",
+    label: "constants.platformWhatsappCloud",
+    description: "constants.platformWhatsappCloudDesc",
+    fields: [...WHATSAPP_CLOUD_FIELD_KEYS],
   },
   {
     key: "signal",

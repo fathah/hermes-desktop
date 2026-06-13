@@ -32,6 +32,11 @@ const PLATFORM_RULES: Record<string, PlatformRule> = {
     envCheck: (e) =>
       TRUTHY_VALUES.has((e.WHATSAPP_ENABLED || "").trim().toLowerCase()),
   },
+  whatsapp_cloud: {
+    envCheck: (e) =>
+      !!e.WHATSAPP_CLOUD_PHONE_NUMBER_ID?.trim() &&
+      !!e.WHATSAPP_CLOUD_ACCESS_TOKEN?.trim(),
+  },
   signal: {
     envCheck: (e) => !!e.SIGNAL_HTTP_URL?.trim() && !!e.SIGNAL_ACCOUNT?.trim(),
   },
