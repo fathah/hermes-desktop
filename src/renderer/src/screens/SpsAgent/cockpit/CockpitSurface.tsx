@@ -177,7 +177,7 @@ function Widget({ kind }: { kind: WidgetKind }) {
   }
 }
 
-function QuickActions() {
+export function QuickActions() {
   const startNewChat = useStore((s) => s.startNewChat);
   const setTemplatesOpen = useStore((s) => s.setTemplatesOpen);
   const setSurface = useStore((s) => s.setSurface);
@@ -204,7 +204,7 @@ function QuickActions() {
   );
 }
 
-function Glance() {
+export function Glance() {
   const meta = useStore((s) => s.meta);
   const comments = useStore((s) => s.comments);
   const userTemplates = useStore((s) => s.userTemplates);
@@ -225,7 +225,7 @@ function Glance() {
   );
 }
 
-function PinnedNotes() {
+export function PinnedNotes() {
   const comments = useStore((s) => s.comments);
   const selectPage = useStore((s) => s.selectPage);
   const setSurface = useStore((s) => s.setSurface);
@@ -395,7 +395,7 @@ interface AgentInfo {
   running: boolean;
 }
 
-function AgentStatus() {
+export function AgentStatus() {
   const setSurface = useStore((s) => s.setSurface);
   const [info, setInfo] = useState<AgentInfo | null>(null);
   useEffect(() => {

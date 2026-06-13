@@ -97,9 +97,22 @@ vi.mock("../src/main/config", () => ({
   writeDesktopConfig: (c: unknown) => mockWriteDesktopConfig(c),
 }));
 
-vi.mock("../src/main/utils", () => ({
-  getActiveProfileNameSync: () => "test-profile",
-  profileHome: (p: string) => `/tmp/hermes-test-home/.hermes/${p}`,
+vi.mock("../src/main/utils", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/main/utils")>();
+  return {
+    ...actual,
+    getActiveProfileNameSync: () => "test-profile",
+    profileHome: (p: string) => `/tmp/hermes-test-home/.hermes/${p}`,
+  };
+});
+
+vi.mock("../src/main/learning-proposals", () => ({
+  createLearningProposal: vi.fn(),
+}));
+
+vi.mock("../src/main/skills", () => ({
+  listInstalledSkills: vi.fn(() => []),
+  getSkillContent: vi.fn(() => ""),
 }));
 
 vi.mock("../src/main/cronjobs", () => ({

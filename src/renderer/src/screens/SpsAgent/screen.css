@@ -539,3 +539,66 @@
   border-bottom: 1px solid var(--hairline);
 }
 
+/* ==========================================================================
+   Wing Layout Styling for Simplified Sidebar
+   ========================================================================== */
+.sps-scope .wing-group {
+  margin-top: 14px;
+  border-top: 1px solid var(--hairline);
+  padding-top: 10px;
+}
+
+.sps-scope .wing-header {
+  padding: 4px 10px;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  user-select: none;
+}
+
+.sps-scope .wing-title {
+  font-size: var(--fs-12, 12px);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-2);
+  opacity: 0.75;
+}
+
+.sps-scope .ingest-tray {
+  display: flex;
+  gap: 6px;
+  padding: 4px 10px;
+  margin-bottom: 6px;
+}
+
+.sps-scope .ingest-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--surface-sunk, rgba(127, 127, 127, 0.05));
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  font-size: var(--fs-11, 11px);
+  font-family: inherit;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: all var(--dur-1) var(--ease-out);
+}
+
+.sps-scope .ingest-btn:hover {
+  background: var(--row-hover, rgba(127, 127, 127, 0.1));
+  border-color: var(--hairline-strong);
+  color: var(--ink-1);
+}
+
+.sps-scope .ingest-btn.active {
+  background: var(--sukhi-gold-light, rgba(230, 180, 50, 0.1));
+  border-color: var(--sukhi-gold-deep);
+  color: var(--ink-1);
+}
+
+

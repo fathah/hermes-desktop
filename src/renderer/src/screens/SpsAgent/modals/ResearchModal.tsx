@@ -33,6 +33,7 @@ export function ResearchModal() {
 
   // ── general topic research ──
   const [topic, setTopic] = useState("");
+  const [sourceFilter, setSourceFilter] = useState<"all" | "google" | "social" | "substack">("all");
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState(""); // streamed markdown preview
   const [toolNote, setToolNote] = useState<string | null>(null);
@@ -125,7 +126,17 @@ export function ResearchModal() {
     setResultMsg("");
     setResultSummary("");
     undoRef.current = null;
-    const res = await runResearch(t, {
+
+    let finalQuery = t;
+    if (sourceFilter === "social") {
+      finalQuery = `Focusing on discussions on Reddit, Twitter, and Facebook, research: ${t}`;
+    } else if (sourceFilter === "substack") {
+      finalQuery = `Focusing on Substack, newsletters, and blogs, research: ${t}`;
+    } else if (sourceFilter === "google") {
+      finalQuery = `Using Google search engine, research: ${t}`;
+    }
+
+    const res = await runResearch(finalQuery, {
       onChunk: (md) => setProgress(md),
       onTool: (tool) => setToolNote(tool),
     });
@@ -273,7 +284,7 @@ export function ResearchModal() {
 
   return (
     <SpsModal
-      title="🔬 Research"
+      title="🔬 My Research"
       onClose={onClose}
       width={640}
       closeGuard={() => !busy}
@@ -343,7 +354,7 @@ export function ResearchModal() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter") void doResearch();
                 }}
-                placeholder="Research any topic — a market, a regulation, a vendor, “how do I…”"
+                placeholder="Research any topic — markets, legal, code, Google, socials..."
                 disabled={researchBusy}
               />
               <button
@@ -360,6 +371,45 @@ export function ResearchModal() {
                 onClick={() => void onScheduleThis()}
               >
                 ⏱ Schedule
+              </button>
+            </div>
+
+            {/* Target search filter toggles */}
+            <div style={{ display: "flex", gap: 6, marginBottom: 16, alignItems: "center" }}>
+              <span style={{ fontSize: 11, color: "var(--tx-3)", textTransform: "uppercase", letterSpacing: "0.05em", marginRight: 4 }}>
+                Target Source:
+              </span>
+              <button
+                type="button"
+                className={`pal-chip${sourceFilter === "all" ? " on" : ""}`}
+                onClick={() => setSourceFilter("all")}
+                disabled={researchBusy}
+              >
+                All Web
+              </button>
+              <button
+                type="button"
+                className={`pal-chip${sourceFilter === "google" ? " on" : ""}`}
+                onClick={() => setSourceFilter("google")}
+                disabled={researchBusy}
+              >
+                Google
+              </button>
+              <button
+                type="button"
+                className={`pal-chip${sourceFilter === "social" ? " on" : ""}`}
+                onClick={() => setSourceFilter("social")}
+                disabled={researchBusy}
+              >
+                Socials & Reddit
+              </button>
+              <button
+                type="button"
+                className={`pal-chip${sourceFilter === "substack" ? " on" : ""}`}
+                onClick={() => setSourceFilter("substack")}
+                disabled={researchBusy}
+              >
+                Substack & Blogs
               </button>
             </div>
 

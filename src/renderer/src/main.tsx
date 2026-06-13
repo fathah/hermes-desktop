@@ -16,16 +16,20 @@ import "./assets/main.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
+import { QuickCapture } from "./screens/SpsAgent/capture/QuickCapture";
 import { I18nProvider } from "./components/I18nProvider";
 import { initAnalytics } from "./utils/analytics";
 
 // Initialize analytics (privacy-first, only if user consented and key is configured)
 initAnalytics();
 
+const params = new URLSearchParams(window.location.search);
+const isCaptureWindow = params.get("window") === "capture";
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <I18nProvider>
-      <App />
+      {isCaptureWindow ? <QuickCapture /> : <App />}
     </I18nProvider>
   </StrictMode>,
 );

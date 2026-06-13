@@ -333,8 +333,8 @@
   white-space: nowrap;
   /* Reset so a <button class="nav-item"> renders identically to the old div
      (rows are now semantic buttons for keyboard/AT access). */
-  appearance: none;
   -webkit-appearance: none;
+  appearance: none;
   border: none;
   background: transparent;
   width: 100%;
@@ -394,8 +394,8 @@
   min-width: 0;
   padding: 0;
   margin: 0;
-  appearance: none;
   -webkit-appearance: none;
+  appearance: none;
   border: none;
   background: transparent;
   color: inherit;
@@ -406,8 +406,8 @@
 .sps-scope .nav-add,
 .sps-scope .sec-add,
 .sps-scope .sec-head {
-  appearance: none;
   -webkit-appearance: none;
+  appearance: none;
   border: none;
   background: transparent;
   font: inherit;
@@ -1450,6 +1450,19 @@
 /* agent-action button block */
 .sps-scope .b-button-wrap {
   margin: 8px 0;
+  border-radius: 6px;
+  padding: 4px;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+.sps-scope .b-button-wrap.success {
+  border: 1px solid #10b981;
+}
+.sps-scope .b-button-wrap.error {
+  border: 1px solid #ef4444;
+}
+.sps-scope .b-button-wrap.running {
+  border: 1px dashed #6366f1;
 }
 .sps-scope .b-button-row {
   display: flex;
@@ -1512,6 +1525,52 @@
   background: var(--card, transparent);
   color: inherit;
   resize: vertical;
+}
+.sps-scope .b-button-edit-label {
+  flex: 1;
+}
+.sps-scope .b-log-toggle {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+.sps-scope .b-feedback-log {
+  margin-top: 8px;
+  padding: 8px;
+  background-color: #1e1e1e;
+  font-family: monospace;
+  font-size: 11px;
+  border-radius: 4px;
+  max-height: 120px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+.sps-scope .b-feedback-log.success {
+  color: #a7f3d0;
+}
+.sps-scope .b-feedback-log.error {
+  color: #fca5a5;
+}
+.sps-scope .b-edit-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.sps-scope .b-edit-label-text {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.sps-scope .b-button-edit-select {
+  padding: 4px;
+  border-radius: 4px;
+  background-color: var(--bg-editor);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.sps-scope .b-button-edit-prompt.monospace {
+  font-family: monospace;
+}
+.sps-scope .b-button-edit-done {
+  align-self: flex-end;
 }
 
 /* proposed (agent co-author) */
@@ -1844,8 +1903,6 @@
 }
 
 /* list view */
-.sps-scope .lst {
-}
 .sps-scope .lst-row {
   display: flex;
   align-items: center;
@@ -2682,6 +2739,7 @@
   margin-bottom: 16px;
   display: -webkit-box;
   -webkit-line-clamp: 3;
+  line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }

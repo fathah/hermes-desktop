@@ -22,6 +22,7 @@ import { AskPane } from "./panel/AskPane";
 import { GraphView } from "./graph/GraphView";
 import { EquityResearch } from "./equity/EquityResearch";
 import { JournalSurface } from "./journal/JournalSurface";
+import { MyWorkSurface } from "./journal/MyWorkSurface";
 import { YouSurface } from "./you/YouSurface";
 import { LearningSurface } from "./learning/LearningSurface";
 import { CockpitSurface } from "./cockpit/CockpitSurface";
@@ -151,6 +152,8 @@ export function App() {
             <ChatSurface key={`chat-${chatNonce}`} />
           ) : surface === "ask" ? (
             <AskPane />
+          ) : surface === "work" ? (
+            <MyWorkSurface />
           ) : surface === "journal" ? (
             <JournalSurface />
           ) : (

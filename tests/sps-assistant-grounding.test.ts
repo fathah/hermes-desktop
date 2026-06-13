@@ -7,10 +7,14 @@ vi.mock("../src/main/hermes", () => ({
   isRemoteMode: () => false,
   buildRetrievalSystemMessage: vi.fn(),
 }));
-vi.mock("../src/main/utils", () => ({
-  profileHome: () => "/tmp/profile",
-  getActiveProfileNameSync: () => "default",
-}));
+vi.mock("../src/main/utils", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/main/utils")>();
+  return {
+    ...actual,
+    profileHome: () => "/tmp/profile",
+    getActiveProfileNameSync: () => "default",
+  };
+});
 
 import {
   buildSpsAssistantMessages,

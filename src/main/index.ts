@@ -7,10 +7,12 @@ import {
   screen,
   shell,
   globalShortcut,
+  Tray,
+  ipcMain,
 } from "electron";
 import { join } from "path";
 import { pathToFileURL } from "url";
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from "fs";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import type { AppUpdater } from "electron-updater";
 import icon from "../../resources/icon.png?asset";
@@ -26,7 +28,7 @@ import {
 } from "./hermes";
 import { activeChatAborts } from "./ipc/chat";
 import { stopSshTunnel, startSshTunnel } from "./ssh-tunnel";
-import { HERMES_HOME } from "./installer";
+import { HERMES_HOME, ensureDesktopMcpRegistered } from "./installer";
 import {
   isAllowedExternalUrl,
   isAllowedAppNavigationUrl,
@@ -35,7 +37,7 @@ import {
   hardenAttachedWebContents,
 } from "./security";
 import { resolveSpsVaultDir } from "./sps-storage";
-import { resolveAssetPath } from "./sps-assets";
+import { resolveAssetPath, writeAsset } from "./sps-assets";
 import { startEquityAlertWatcher } from "./equity-alerts";
 import { startScheduledResearch } from "./scheduled-research";
 import { updaterLogger } from "./updater-log";
@@ -97,6 +99,75 @@ process.on("unhandledRejection", (reason) => {
 });
 
 let mainWindow: BrowserWindow | null = null;
+let captureWindow: BrowserWindow | null = null;
+let tray: Tray | null = null;
+
+function createCaptureWindow(): void {
+  if (captureWindow && !captureWindow.isDestroyed()) {
+    captureWindow.focus();
+    return;
+  }
+
+  const rendererHtmlPath = join(__dirname, "../renderer/index.html");
+  captureWindow = new BrowserWindow({
+    width: 600,
+    height: 350,
+    show: false,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    alwaysOnTop: true,
+    webPreferences: {
+      preload: join(__dirname, "../preload/index.js"),
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+      webSecurity: true,
+    },
+  });
+
+  const devUrl = is.dev ? process.env["ELECTRON_RENDERER_URL"] : undefined;
+  if (devUrl) {
+    captureWindow.loadURL(`${devUrl}?window=capture`);
+  } else {
+    captureWindow.loadURL(`${pathToFileURL(rendererHtmlPath).toString()}?window=capture`);
+  }
+
+  captureWindow.on("blur", () => {
+    captureWindow?.hide();
+  });
+
+  captureWindow.on("closed", () => {
+    captureWindow = null;
+  });
+}
+
+function toggleCaptureWindow(): void {
+  if (!captureWindow || captureWindow.isDestroyed()) {
+    createCaptureWindow();
+  }
+  if (captureWindow) {
+    if (captureWindow.isVisible()) {
+      captureWindow.hide();
+    } else {
+      captureWindow.show();
+      captureWindow.focus();
+    }
+  }
+}
+
+function createTray(): void {
+  if (tray) return;
+  try {
+    tray = new Tray(icon);
+    tray.setToolTip("Hermes Quick Capture");
+    tray.on("click", () => {
+      toggleCaptureWindow();
+    });
+  } catch (err) {
+    console.error("[TRAY] Failed to create tray icon:", err);
+  }
+}
 
 function openExternalUrl(rawUrl: unknown): void {
   if (!isAllowedExternalUrl(rawUrl) && !isAllowedObsidianExternalUrl(rawUrl)) {
@@ -402,6 +473,43 @@ function setupIPC(): void {
   registerExternalContextIpc(() => mainWindow);
   registerFederatedSearchIpc();
   scheduleExternalContextScans(() => mainWindow);
+
+  ipcMain.handle("sps-trigger-screencapture", async (_event, profile?: string) => {
+    if (captureWindow && !captureWindow.isDestroyed()) {
+      captureWindow.hide();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    const tempPath = join(require("os").tmpdir(), `hermes-capture-${Date.now()}.png`);
+    try {
+      const { exec } = require("child_process");
+      const { promisify } = require("util");
+      const execAsync = promisify(exec);
+      await execAsync(`screencapture -i "${tempPath}"`);
+      if (existsSync(tempPath)) {
+        const buffer = readFileSync(tempPath);
+        try {
+          unlinkSync(tempPath);
+        } catch (err) {
+          console.error("[QuickCapture] Failed to delete temp file:", err);
+        }
+        const dir = spsVaultDirFor(profile);
+        const name = await writeAsset(dir, buffer, "png");
+        if (captureWindow && !captureWindow.isDestroyed()) {
+          captureWindow.show();
+          captureWindow.focus();
+        }
+        return name;
+      }
+    } catch (err) {
+      console.error("[QuickCapture] screencapture failed or canceled", err);
+    }
+    if (captureWindow && !captureWindow.isDestroyed()) {
+      captureWindow.show();
+      captureWindow.focus();
+    }
+    return null;
+  });
 }
 function buildMenu(): void {
   const isMac = process.platform === "darwin";
@@ -597,6 +705,10 @@ app.whenReady().then(() => {
     }
   });
 
+  globalShortcut.register("Alt+Space", () => {
+    toggleCaptureWindow();
+  });
+
   app.on("web-contents-created", (_event, contents) => {
     if (contents.getType() === "webview") {
       hardenAttachedWebContents(contents);
@@ -624,6 +736,8 @@ app.whenReady().then(() => {
   buildMenu();
   setupIPC();
   createWindow();
+  createTray();
+  ensureDesktopMcpRegistered();
   setMainWindowGetter(() => mainWindow);
   // Phase 1.1 — let the gateway supervisor push health transitions to the renderer
   // and know when an interactive stream is in-flight (so it never restarts mid-turn).

@@ -23,6 +23,9 @@ import { listCronJobs } from "./cronjobs";
 import { triggerSelfHealing } from "./self-healing";
 import { readDesktopConfig, writeDesktopConfig } from "./config";
 import { runDreamCycle } from "./dream-cycle";
+import { getApiUrl, getRemoteAuthHeader } from "./hermes";
+import { createLearningProposal } from "./learning-proposals";
+import { listInstalledSkills, getSkillContent } from "./skills";
 
 export async function captureScreenshot(
   jobId: string,
@@ -272,6 +275,94 @@ export async function tickScheduler(profile?: string): Promise<void> {
   }
 }
 
+async function triageFailedJob(
+  jobId: string,
+  jobName: string,
+  logFilePath: string,
+  profile: string,
+  errorInfo: string,
+): Promise<void> {
+  try {
+    const jobs = await listCronJobs(true, profile);
+    const job = jobs.find((j) => j.id === jobId);
+    if (!job) return;
+
+    let skillsContext = "";
+    if (job.skills && job.skills.length > 0) {
+      try {
+        const installed = listInstalledSkills(profile);
+        for (const skillName of job.skills) {
+          const s = installed.find((x) => x.name.toLowerCase() === skillName.toLowerCase());
+          if (s) {
+            const content = getSkillContent(s.path);
+            skillsContext += `\n--- Skill: ${s.name} ---\n${content}\n`;
+          }
+        }
+      } catch (skillErr) {
+        console.error("[SCHEDULER Triage] Error loading skills:", skillErr);
+      }
+    }
+
+    let logContent = "";
+    try {
+      if (existsSync(logFilePath)) {
+        logContent = readFileSync(logFilePath, "utf-8");
+      }
+    } catch (logReadErr) {
+      console.error("[SCHEDULER Triage] Error reading log file:", logReadErr);
+    }
+
+    const failureTriageSystemPrompt = `You are a site reliability and technical debugging assistant. A scheduled background routine/job in the Hermes workspace has failed.
+You are given:
+1. The job's metadata (name, prompt, script).
+2. The associated skill content/code (if any).
+3. The execution log output (stdout/stderr).
+
+Analyze the logs and context to understand what caused the failure. Then, formulate a technical explanation of the failure formatted as a remedial study card (a Q&A flashcard or concept summary) suitable for the developer to study.
+The remediation card body should explain:
+- What failed (error message, command, or script step).
+- Why it failed (the root cause, e.g., missing file, bad URL, API error, syntax issue).
+- How to fix it (the concrete remediation step).
+
+Your output must be a single, concise explanation representing the study card body. Keep it clear, professional, and educational. Use markdown formatting. Do not include any HTML, JSON, or formatting wrappers, just return the plain markdown content of the card.`;
+
+    const url = `${getApiUrl(profile)}/v1/chat/completions`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getRemoteAuthHeader() },
+      signal: AbortSignal.timeout(60000),
+      body: JSON.stringify({
+        model: "hermes-agent",
+        stream: false,
+        messages: [
+          { role: "system", content: failureTriageSystemPrompt },
+          {
+            role: "user",
+            content: `Job Name: ${jobName}\nJob ID: ${jobId}\nJob Prompt: ${job.prompt || "N/A"}\nScript: ${job.script || "N/A"}\nAssociated Skills:\n${skillsContext || "None"}\nFailure Context: ${errorInfo}\n\nExecution Logs (Last 8000 characters):\n${logContent.slice(-8000)}`,
+          },
+        ],
+      }),
+    });
+
+    if (res.ok) {
+      const data = (await res.json()) as {
+        choices?: { message?: { content?: string } }[];
+      };
+      const cardBody = data?.choices?.[0]?.message?.content?.trim() || "";
+      if (cardBody) {
+        createLearningProposal({
+          kind: "memory",
+          body: cardBody,
+          reason: `Routine "${jobName}" execution failure (${errorInfo})`,
+          source: { type: "repo", title: `Cron Failure: ${jobName}` },
+        }, profile);
+      }
+    }
+  } catch (err) {
+    console.error("[SCHEDULER Triage] Failure triage background task failed:", err);
+  }
+}
+
 /**
  * Headlessly run a specific cron job by ID.
  * Streams output to ~/.hermes/logs/routines/routine-<id>-<timestamp>.log
@@ -436,6 +527,7 @@ export async function runJobHeadless(
               captureErr,
             );
           }
+          void triageFailedJob(jobId, jobName, logFilePath, profile, `Exit Code ${code}`);
           void triggerSelfHealing(jobId, jobName, logFilePath, profile);
           resolve(false);
         } else {
@@ -464,6 +556,7 @@ export async function runJobHeadless(
         } catch (captureErr) {
           console.error("[SCHEDULER] Error capturing screenshot:", captureErr);
         }
+        void triageFailedJob(jobId, jobName, logFilePath, profile, `Spawn Error: ${err.message}`);
         void triggerSelfHealing(jobId, jobName, logFilePath, profile);
         resolve(false);
       });

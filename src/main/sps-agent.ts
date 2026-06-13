@@ -56,6 +56,7 @@ import {
   type LintFinding,
 } from "./sps-ingest";
 import { getSpsNoteIndex } from "./note-index";
+import { createLearningProposal } from "./learning-proposals";
 
 // ───────────────────────── SSRF guard ─────────────────────────
 const BLOCKED_RANGES = new Set([
@@ -728,6 +729,66 @@ export async function spsIngestInbox(profile?: string): Promise<IngestResult> {
         error: "My Assistant didn't return a usable changeset.",
       };
     }
+
+    // Ingestion Concept Audit (Component 6)
+    if (changeset.pages && changeset.pages.length > 0) {
+      Promise.resolve().then(async () => {
+        try {
+          const auditUrl = `${getApiUrl(profile)}/v1/chat/completions`;
+          const conceptAuditSystemPrompt = `You are a technical pedagogy expert. You scan the provided document content for any unfamiliar technical terms, key concepts, or specialized jargon that the user might need to study or memorize.
+For each concept, formulate a clean, stand-alone flashcard or summary memory fact (in the format of Q&A or a concise fact, e.g. "Concept: definition") suitable for the user's study deck/memory.
+Return your findings as a JSON array of objects. Each object must have:
+- "concept": the name of the concept
+- "body": the remedial flashcard text (clear, concise Q&A or fact explaining the concept)
+- "reason": a short explanation of why this concept was selected
+
+Return ONLY a JSON array, with no other prose or markdown formatting (no code fences). If no unfamiliar technical terms or concepts are found, return an empty array [].`;
+
+          await Promise.all(
+            changeset.pages.map(async (page) => {
+              try {
+                const auditRes = await fetch(auditUrl, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", ...getRemoteAuthHeader() },
+                  signal: AbortSignal.timeout(60000),
+                  body: JSON.stringify({
+                    model: "hermes-agent",
+                    stream: false,
+                    messages: [
+                      { role: "system", content: conceptAuditSystemPrompt },
+                      { role: "user", content: `Page Title: ${page.title}\n\nPage Content:\n${page.markdown}` }
+                    ]
+                  }),
+                });
+                if (!auditRes.ok) return;
+                const auditData = (await auditRes.json()) as {
+                  choices?: { message?: { content?: string } }[];
+                };
+                const auditContent = auditData?.choices?.[0]?.message?.content ?? "";
+                const parsedConcepts = extractJson(auditContent);
+                if (Array.isArray(parsedConcepts)) {
+                  for (const item of parsedConcepts) {
+                    if (item && typeof item === "object" && typeof item.body === "string") {
+                      createLearningProposal({
+                        kind: "memory",
+                        body: item.body.trim(),
+                        reason: typeof item.reason === "string" ? item.reason.trim() : `Found concept "${item.concept || ''}" in ingested note.`,
+                        source: { type: "inbox", title: page.title }
+                      }, profile);
+                    }
+                  }
+                }
+              } catch (e) {
+                console.error(`[Ingest Concept Audit] Failed for page ${page.title}:`, e);
+              }
+            })
+          );
+        } catch (e) {
+          console.error("[Ingest Concept Audit] Background task failed:", e);
+        }
+      });
+    }
+
     return { ok: true, captureCount: captures.length, changeset };
   } catch (err) {
     return {

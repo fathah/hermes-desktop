@@ -1312,6 +1312,7 @@ interface HermesAPI {
     brokenLinks: Array<{ source: string; target: string; type: string }>;
     stale: string[];
   }>;
+  spsTriggerScreencapture: (profile?: string) => Promise<string | null>;
   spsIndexStatus: (profile?: string) => Promise<{
     root: string;
     notes: number;

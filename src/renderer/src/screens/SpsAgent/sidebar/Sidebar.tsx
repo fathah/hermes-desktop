@@ -65,7 +65,6 @@ export function Sidebar() {
   const surface = useStore((s) => s.surface);
   const setSurface = useStore((s) => s.setSurface);
   const selectPage = useStore((s) => s.selectPage);
-  const openJournal = useStore((s) => s.openJournal);
   const startNewChat = useStore((s) => s.startNewChat);
   const setResearchOpen = useStore((s) => s.setResearchOpen);
   const setScheduledOpen = useStore((s) => s.setScheduledOpen);
@@ -85,6 +84,7 @@ export function Sidebar() {
   const setTrashOpen = useStore((s) => s.setTrashOpen);
   const setTweaksOpen = useStore((s) => s.setTweaksOpen);
   const setTweak = useStore((s) => s.setTweak);
+  const importPdf = useStore((s) => s.importPdf);
 
   const [drag, setDrag] = useState<string | null>(null);
   const [over, setOver] = useState<{ id: string; where: DropWhere } | null>(
@@ -130,213 +130,226 @@ export function Sidebar() {
           <span className="nav-label">Search</span>
           <span className="nav-kbd">⌘K</span>
         </button>
-        <button
-          type="button"
-          className={`nav-item ${
-            (homeSurface === "doc" &&
-              activeId === "home" &&
-              surface === "doc") ||
-            (homeSurface !== "doc" && surface === homeSurface)
-              ? "active"
-              : ""
-          }`}
-          onClick={() => {
-            if (homeSurface === "doc") {
-              selectDoc("home");
-            } else {
-              setSurface(homeSurface);
-            }
-          }}
-        >
-          <Icon name="home" size={17} />
-          <span className="nav-label">Home</span>
-        </button>
-        <button
-          type="button"
-          className={`nav-item ${surface === "inbox" ? "active" : ""}`}
-          onClick={() => setSurface("inbox")}
-        >
-          <Icon name="inbox" size={17} />
-          <span className="nav-label">Inbox</span>
-          {inboxCount > 0 && <span className="nav-kbd">{inboxCount}</span>}
-        </button>
-        <button
-          type="button"
-          className={`nav-item ${surface === "journal" ? "active" : ""}`}
-          onClick={() => openJournal()}
-        >
-          <Icon name="calendar" size={17} />
-          <span className="nav-label">Journal</span>
-        </button>
 
-        <SidebarSection id="aiAssistant" label="My Assistant">
+        {/* ==================== WING 1: MY LIBRARY ==================== */}
+        <div className="wing-group">
+          <div className="wing-header">
+            <span className="wing-title">📖 My Library</span>
+          </div>
+
           <button
             type="button"
-            className={`nav-item ${surface === "chats" ? "active" : ""}`}
-            onClick={() => setSurface("chats")}
-            style={{ paddingLeft: 24 }}
+            className={`nav-item ${
+              (homeSurface === "doc" && activeId === "home" && surface === "doc")
+                ? "active"
+                : ""
+            }`}
+            onClick={() => selectDoc("home")}
           >
-            <Icon name="comment" size={17} />
-            <span className="nav-label">Chat</span>
+            <Icon name="home" size={17} />
+            <span className="nav-label">Wiki Home</span>
           </button>
-          <button
-            type="button"
-            className={`nav-item ${surface === "ask" ? "active" : ""}`}
-            onClick={() => setSurface("ask")}
-            title="Ask a question across your pages and past conversations"
-            style={{ paddingLeft: 24 }}
-          >
-            <Icon name="sparkle" size={17} />
-            <span className="nav-label">Search workspace</span>
-          </button>
-          <button
-            type="button"
-            className={`nav-item ${surface === "you" ? "active" : ""}`}
-            onClick={() => setSurface("you")}
-            title="Personalize My Assistant and run a Telos alignment audit"
-            style={{ paddingLeft: 24 }}
-          >
-            <Icon name="wand" size={17} />
-            <span className="nav-label">You</span>
-          </button>
+
           <button
             type="button"
             className={`nav-item ${surface === "learning" ? "active" : ""}`}
             onClick={() => setSurface("learning")}
-            title="Review memories, skills, and curator actions"
-            style={{ paddingLeft: 24 }}
           >
             <Icon name="sparkle" size={17} />
-            <span className="nav-label">Learn This</span>
+            <span className="nav-label">Teach Me</span>
           </button>
-        </SidebarSection>
 
-        <SidebarSection id="workspaceTools" label="Workspace Tools">
-          <button
-            type="button"
-            className={`nav-item ${surface === "cockpit" ? "active" : ""}`}
-            onClick={() => setSurface("cockpit")}
-            style={{ paddingLeft: 24 }}
-          >
-            <Icon name="board" size={17} />
-            <span className="nav-label">Cockpit</span>
-          </button>
           <button
             type="button"
             className={`nav-item ${surface === "graph" ? "active" : ""}`}
             onClick={() => setSurface("graph")}
-            style={{ paddingLeft: 24 }}
           >
             <Icon name="pageGraph" size={17} />
-            <span className="nav-label">Graph</span>
+            <span className="nav-label">Graph View</span>
           </button>
+
+          {/* Quick Ingest Tray */}
+          <div className="ingest-tray">
+            <button
+              type="button"
+              className="ingest-btn"
+              title="Import PDF"
+              onClick={async () => {
+                try {
+                  await importPdf();
+                } catch (err) {
+                  console.error(err);
+                }
+              }}
+            >
+              <Icon name="doc" size={13} />
+              <span>PDF</span>
+            </button>
+            <button
+              type="button"
+              className={`ingest-btn ${surface === "inbox" ? "active" : ""}`}
+              title="Inbox / Captures"
+              onClick={() => setSurface("inbox")}
+            >
+              <Icon name="inbox" size={13} />
+              <span>Inbox {inboxCount > 0 ? `(${inboxCount})` : ""}</span>
+            </button>
+          </div>
+
+          {/* Collapsible Sub-sections inside Library */}
+          <SidebarSection id="recents" label="Recents">
+            <SidebarRecents />
+          </SidebarSection>
+
+          <SidebarSection
+            id="private"
+            label="Notes"
+            onAdd={newPage}
+            addTitle="New page"
+          >
+            {tree
+              .filter((n) => !meta[n.id]?.journal)
+              .map((n) => (
+                <TreeNode
+                  key={n.id}
+                  node={n}
+                  depth={0}
+                  meta={meta}
+                  activeId={activeId}
+                  onSelect={selectDoc}
+                  onNewSubPage={newSubPage}
+                  onRename={renamePage}
+                  onDelete={deletePage}
+                  dnd={dnd}
+                />
+              ))}
+            {tree.length === 0 && (
+              <div
+                className="tree-row"
+                style={{ color: "var(--tx-4)", cursor: "default" }}
+              >
+                <span className="tree-toggle leaf"></span>No pages
+              </div>
+            )}
+            <div className="nav-item" onClick={newPage} style={{ paddingLeft: 12 }}>
+              <Icon name="plus" size={14} />
+              <span className="nav-label">Add page</span>
+            </div>
+          </SidebarSection>
+
+          <div className="sec-group" style={{ marginTop: 4 }}>
+            <div className="sec">
+              <button
+                type="button"
+                className="sec-head"
+                onClick={() => setObsidianOpen(!obsidianOpen)}
+                aria-expanded={obsidianOpen}
+              >
+                <span className={`sec-chev ${obsidianOpen ? "open" : ""}`}>
+                  <Icon name="chevR" size={12} />
+                </span>
+                <span className="sec-label">Obsidian Vault</span>
+              </button>
+            </div>
+            {obsidianOpen && <ObsidianExplorer />}
+          </div>
+        </div>
+
+        {/* ==================== WING 2: MY WORK ==================== */}
+        <div className="wing-group">
+          <div className="wing-header">
+            <span className="wing-title">🛠️ My Work</span>
+          </div>
+
           <button
             type="button"
-            className="nav-item"
-            onClick={() => setResearchOpen(true)}
-            style={{ paddingLeft: 24 }}
+            className={`nav-item ${surface === "work" ? "active" : ""}`}
+            onClick={() => setSurface("work")}
           >
-            <Icon name="doc" size={17} />
-            <span className="nav-label">Research</span>
+            <Icon name="board" size={17} />
+            <span className="nav-label">My Work</span>
           </button>
+
           <button
             type="button"
             className="nav-item"
             onClick={() => setScheduledOpen(true)}
-            style={{ paddingLeft: 24 }}
           >
             <Icon name="clock" size={17} />
-            <span className="nav-label">Scheduled</span>
+            <span className="nav-label">Automations</span>
           </button>
+
           <button
             type="button"
             className="nav-item"
             onClick={() => setAgentTasksOpen(true)}
-            style={{ paddingLeft: 24 }}
           >
             <Icon name="board" size={17} />
-            <span className="nav-label">Assistant tasks</span>
+            <span className="nav-label">Active Tasks</span>
           </button>
+        </div>
+
+        {/* ==================== WING 3: MY ADVISOR ==================== */}
+        <div className="wing-group">
+          <div className="wing-header">
+            <span className="wing-title">🎓 My Advisor</span>
+          </div>
+
+          <button
+            type="button"
+            className={`nav-item ${surface === "chats" ? "active" : ""}`}
+            onClick={() => setSurface("chats")}
+          >
+            <Icon name="comment" size={17} />
+            <span className="nav-label">Converse</span>
+          </button>
+
+          <button
+            type="button"
+            className={`nav-item ${surface === "you" ? "active" : ""}`}
+            onClick={() => setSurface("you")}
+            title="Personalize alignment settings"
+          >
+            <Icon name="wand" size={17} />
+            <span className="nav-label">My Alignment</span>
+          </button>
+        </div>
+
+        {/* ==================== WING 4: MY RESEARCH ==================== */}
+        <div className="wing-group">
+          <div className="wing-header">
+            <span className="wing-title">🔭 My Research</span>
+          </div>
+
+          <button
+            type="button"
+            className="nav-item"
+            onClick={() => setResearchOpen(true)}
+          >
+            <Icon name="doc" size={17} />
+            <span className="nav-label">Deep Research</span>
+          </button>
+
           <button
             type="button"
             className={`nav-item ${surface === "equity" ? "active" : ""}`}
             onClick={() => setSurface("equity")}
-            style={{ paddingLeft: 24 }}
           >
             <Icon name="table" size={17} />
-            <span className="nav-label">Equity</span>
+            <span className="nav-label">Equity Research</span>
           </button>
+
           <button
             type="button"
             className={`nav-item ${surface === "insights" ? "active" : ""}`}
             onClick={() => setSurface("insights")}
-            style={{ paddingLeft: 24 }}
           >
             <Icon name="board" size={17} />
             <span className="nav-label">Insights</span>
           </button>
-        </SidebarSection>
-
-        <SidebarSection id="recents" label="Recents">
-          <SidebarRecents />
-        </SidebarSection>
-
-        <SidebarSection
-          id="private"
-          label="Private"
-          onAdd={newPage}
-          addTitle="New page"
-        >
-          {/* Journal entries are pages too, but they live behind the calendar
-              surface — keep them out of the Private tree to avoid clutter. */}
-          {tree
-            .filter((n) => !meta[n.id]?.journal)
-            .map((n) => (
-              <TreeNode
-                key={n.id}
-                node={n}
-                depth={0}
-                meta={meta}
-                activeId={activeId}
-                onSelect={selectDoc}
-                onNewSubPage={newSubPage}
-                onRename={renamePage}
-                onDelete={deletePage}
-                dnd={dnd}
-              />
-            ))}
-          {tree.length === 0 && (
-            <div
-              className="tree-row"
-              style={{ color: "var(--tx-4)", cursor: "default" }}
-            >
-              <span className="tree-toggle leaf"></span>No pages
-            </div>
-          )}
-          <div className="nav-item" onClick={newPage}>
-            <Icon name="plus" size={17} />
-            <span className="nav-label">Add new</span>
-          </div>
-        </SidebarSection>
-
-        <div className="sec-group">
-          <div className="sec">
-            <button
-              type="button"
-              className="sec-head"
-              onClick={() => setObsidianOpen(!obsidianOpen)}
-              aria-expanded={obsidianOpen}
-            >
-              <span className={`sec-chev ${obsidianOpen ? "open" : ""}`}>
-                <Icon name="chevR" size={12} />
-              </span>
-              <span className="sec-label">Obsidian Vault</span>
-            </button>
-          </div>
-          {obsidianOpen && <ObsidianExplorer />}
         </div>
 
-        <div className="sec sec-static">
+        <div className="sec sec-static" style={{ marginTop: 12 }}>
           <span className="sec-label">More</span>
         </div>
         <div className="nav-item" onClick={() => setTrashOpen(true)}>

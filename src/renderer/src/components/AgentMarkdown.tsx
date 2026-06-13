@@ -5,6 +5,18 @@ import { Copy } from "lucide-react";
 import { useI18n } from "./useI18n";
 import { MediaImage, DownloadChip } from "./MediaImage";
 import { describeImageSrc } from "../screens/Chat/mediaUtils";
+import { useStore } from "../screens/SpsAgent/store";
+
+function preprocessWikilinks(text: string): string {
+  if (typeof text !== "string") return text;
+  // Match [[pageId]] or [[pageId|display text]] or [[pageId#section]]
+  return text.replace(/\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/g, (_, pageId, displayText) => {
+    const title = displayText ? displayText.trim() : pageId.trim();
+    const cleanPageId = pageId.trim();
+    return `[${title}](sps-page://${cleanPageId})`;
+  });
+}
+
 
 // Lazy-load the heavy syntax highlighter — only imported when a code block renders
 let _highlighterMod: typeof import("react-syntax-highlighter") | null = null;
@@ -141,6 +153,12 @@ const AgentMarkdown = memo(function AgentMarkdown({
             onClick={(e) => {
               e.preventDefault();
               if (!href) return;
+              if (href.startsWith("sps-page://")) {
+                const pageId = href.slice("sps-page://".length);
+                useStore.getState().selectPage(pageId);
+                useStore.getState().setSurface("doc");
+                return;
+              }
               try {
                 const url = new URL(href, "https://placeholder.invalid");
                 if (!["http:", "https:", "mailto:"].includes(url.protocol)) {
@@ -183,7 +201,7 @@ const AgentMarkdown = memo(function AgentMarkdown({
         },
       }}
     >
-      {children}
+      {preprocessWikilinks(children)}
     </Markdown>
   );
 });

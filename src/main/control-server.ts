@@ -18,6 +18,7 @@ import {
 import { isGatewayRunning, sendMessage } from "./hermes";
 import { runJobHeadless, tickScheduler } from "./scheduler";
 import { exec } from "child_process";
+import { createCronJob } from "./cronjobs";
 
 let serverInstance: ReturnType<typeof createServer> | null = null;
 let currentPort = 8645;
@@ -173,6 +174,48 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
       } catch {
         res.writeHead(400, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Invalid JSON body." }));
+      }
+    });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/cron/create") {
+    let body = "";
+    req.on("data", (chunk) => {
+      body += chunk.toString();
+    });
+
+    req.on("end", async () => {
+      try {
+        const payload = JSON.parse(body);
+        const { schedule, prompt, name, deliver, opts } = payload;
+        if (!schedule) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(
+            JSON.stringify({ error: "Missing required field: 'schedule'." }),
+          );
+          return;
+        }
+
+        const profile = getActiveProfileNameSync();
+        const result = await createCronJob(
+          schedule,
+          prompt,
+          name,
+          deliver,
+          profile,
+          opts,
+        );
+
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(result));
+      } catch (err) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error: err instanceof Error ? err.message : "Invalid JSON body.",
+          }),
+        );
       }
     });
     return;

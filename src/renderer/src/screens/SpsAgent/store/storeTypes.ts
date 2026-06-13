@@ -48,7 +48,8 @@ export type Surface =
   | "inbox"
   | "health"
   | "journal"
-  | "obsidian-note";
+  | "obsidian-note"
+  | "work";
 
 // Named, toggleable sidebar sections (Notion 3.1 grammar). Order here is the
 // render order in the rail.

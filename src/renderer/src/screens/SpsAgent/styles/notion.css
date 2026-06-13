@@ -1407,3 +1407,69 @@
 .sps-scope .modal-body {
   padding: 14px 16px 18px;
 }
+
+/* ---------- My Work Unified layout ---------- */
+.sps-scope .work-unified-container {
+  display: flex;
+  gap: 24px;
+  max-width: 1300px;
+  margin: 0 auto;
+  padding: 24px;
+  align-items: flex-start;
+}
+
+.sps-scope .work-unified-left {
+  flex: 7;
+  min-width: 0;
+}
+
+.sps-scope .work-unified-right {
+  flex: 3;
+  min-width: 320px;
+  max-width: 400px;
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.sps-scope[data-theme="dark"] .work-unified-right {
+  box-shadow: none;
+}
+
+.sps-scope .work-right-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--tx-2);
+  margin-bottom: 2px;
+  border-bottom: 1px solid var(--hair-soft);
+  padding-bottom: 6px;
+}
+
+.sps-scope .work-widget-card {
+  background: var(--canvas);
+  border: 1px solid var(--hair-soft);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.sps-scope .work-widget-card .ck-stats,
+.sps-scope .work-widget-card .ck-quick,
+.sps-scope .work-widget-card .ck-list,
+.sps-scope .work-widget-card .ck-agent {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+

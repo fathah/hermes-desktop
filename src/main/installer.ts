@@ -64,6 +64,7 @@ export {
   hasMcpServer,
   openAlexMcpServerPath,
   notebookLmMcpCommand,
+  ensureDesktopMcpRegistered,
 } from "./installer/mcp";
 
 // Re-exports of Backup & Import

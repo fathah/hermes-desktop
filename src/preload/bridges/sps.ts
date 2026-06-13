@@ -641,4 +641,6 @@ export const spsBridge = {
     return () =>
       ipcRenderer.removeListener("scheduled-research-update", handler);
   },
+  spsTriggerScreencapture: (profile?: string): Promise<string | null> =>
+    ipcRenderer.invoke("sps-trigger-screencapture", profile),
 };

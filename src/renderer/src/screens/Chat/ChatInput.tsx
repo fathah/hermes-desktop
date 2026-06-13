@@ -7,7 +7,7 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
-import { Send, Square as Stop, Slash, Paperclip, Mic } from "lucide-react";
+import { Send, Square as Stop, Slash, Paperclip, Mic, Globe } from "lucide-react";
 import { isImeComposing } from "./keyboard";
 import { useVoiceInput } from "./hooks/useVoiceInput";
 import { useI18n } from "../../components/useI18n";
@@ -77,6 +77,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
     const [attachments, setAttachments] = useState<Attachment[]>([]);
     const [attachmentError, setAttachmentError] = useState<string | null>(null);
+    const [searchMode, setSearchMode] = useState(false);
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const slashMenuRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -268,7 +269,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       setSlashMenuOpen(false);
       const sendAttachments = attachments;
       clearAfterSend(text);
-      onSubmit(text, sendAttachments);
+      const finalMsg = searchMode && !text.startsWith("/") ? `/web ${text}` : text;
+      onSubmit(finalMsg, sendAttachments);
     }
 
     function handleQuickAsk(): void {
@@ -276,7 +278,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       if (!text) return;
       const sendAttachments = attachments;
       clearAfterSend(text);
-      onQuickAsk(text, sendAttachments);
+      const finalMsg = searchMode && !text.startsWith("/") ? `/web ${text}` : text;
+      onQuickAsk(finalMsg, sendAttachments);
     }
 
     function handleSlashSelect(cmd: SlashCommand): void {
@@ -529,6 +532,17 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               {voice.recording ? <Stop size={16} /> : <Mic size={16} />}
             </button>
           )}
+          <button
+            className={`chat-attach-btn ${searchMode ? "chat-search-active" : ""}`}
+            style={searchMode ? { color: "var(--sukhi-gold-deep, #e6b432)" } : {}}
+            onClick={() => setSearchMode((prev) => !prev)}
+            disabled={isLoading}
+            title="Search Web & Socials (Google, Reddit, Substack, Twitter)"
+            aria-label="Search Web & Socials"
+            type="button"
+          >
+            <Globe size={16} />
+          </button>
           <textarea
             ref={inputRef}
             className="chat-input"

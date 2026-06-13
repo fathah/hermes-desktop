@@ -300,3 +300,42 @@ export function externalContextMcpServerPath(): string {
   }
   return join(app.getAppPath(), "resources", "external-context-mcp.cjs");
 }
+
+/** Absolute path to the bundled Desktop MCP server (asar-unpacked). */
+export function desktopMcpServerPath(): string {
+  if (app.isPackaged) {
+    return join(
+      process.resourcesPath,
+      "app.asar.unpacked",
+      "resources",
+      "desktop-mcp.cjs",
+    );
+  }
+  return join(app.getAppPath(), "resources", "desktop-mcp.cjs");
+}
+
+/** Ensure the Desktop MCP server is registered for the profile. */
+export function ensureDesktopMcpRegistered(profile?: string): {
+  registered: boolean;
+  alreadyPresent: boolean;
+} {
+  const name = "desktop";
+  if (hasMcpServer(name, profile)) {
+    return { registered: true, alreadyPresent: true };
+  }
+  const serverPath = desktopMcpServerPath();
+  if (!existsSync(serverPath)) {
+    return { registered: false, alreadyPresent: false };
+  }
+  writeMcpServerEntry(
+    name,
+    {
+      command: process.execPath,
+      args: [serverPath],
+      env: { ELECTRON_RUN_AS_NODE: "1" },
+      enabled: true,
+    },
+    profile,
+  );
+  return { registered: true, alreadyPresent: false };
+}
