@@ -132,7 +132,7 @@ export function App() {
     >
       <Sidebar />
 
-      <div style={{ display: "flex", minWidth: 0 }}>
+      <div className="sps-main-layout">
         <main className="main">
           {surface === "doc" ? (
             <>

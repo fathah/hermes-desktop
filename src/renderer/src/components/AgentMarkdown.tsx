@@ -88,17 +88,7 @@ function CodeBlock({
   }
 
   const fallbackPre = (
-    <pre
-      style={{
-        margin: 0,
-        borderRadius: 0,
-        fontSize: "13px",
-        padding: "12px",
-        background: "transparent",
-        color: "#abb2bf",
-        overflow: "auto",
-      }}
-    >
+    <pre className="agent-markdown-fallback-pre">
       {code}
     </pre>
   );

@@ -601,4 +601,10 @@
   color: var(--ink-1);
 }
 
+.sps-scope .sps-main-layout {
+  display: flex;
+  min-width: 0;
+  flex-grow: 1;
+}
+
 

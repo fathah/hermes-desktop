@@ -6675,6 +6675,7 @@ body {
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
 }
 
@@ -6882,6 +6883,7 @@ body {
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
 }
 
@@ -7390,6 +7392,7 @@ body {
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
 }
 
@@ -9495,5 +9498,15 @@ body {
 .qc-save-btn:not(:disabled) {
   background: var(--accent, #f2b705);
   color: #1a1810;
+}
+
+.agent-markdown-fallback-pre {
+  margin: 0;
+  border-radius: 0;
+  font-size: 13px;
+  padding: 12px;
+  background: transparent;
+  color: #abb2bf;
+  overflow: auto;
 }
 

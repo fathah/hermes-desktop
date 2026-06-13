@@ -2,7 +2,7 @@
 // row, then named/toggleable/collapsible sections (Recents/Private), the
 // Obsidian Vault explorer, a persistent "New chat" launcher, and the identity
 // foot. Identity is derived from the active Hermes profile (demo fallback offline).
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Icon } from "../components/Icon";
 import { useStore } from "../store";
 import type { DropWhere } from "../lib/tree";
@@ -93,6 +93,13 @@ export function Sidebar() {
   const [obsidianOpen, setObsidianOpen] = useState(true);
   const dnd: TreeDnd = { drag, setDrag, over, setOver, onMove: movePage };
   const identity = useIdentity();
+  const obsidianBtnRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (obsidianBtnRef.current) {
+      obsidianBtnRef.current.setAttribute("aria-expanded", String(obsidianOpen));
+    }
+  }, [obsidianOpen]);
   // Live count of unprocessed captures for the Inbox badge.
   const { rows: inboxRows } = useVaultQuery(INBOX_FOLDER, [
     { prop: "status", op: "eq", value: "unprocessed" },
@@ -240,10 +247,10 @@ export function Sidebar() {
           <div className="sec-group" style={{ marginTop: 4 }}>
             <div className="sec">
               <button
+                ref={obsidianBtnRef}
                 type="button"
                 className="sec-head"
                 onClick={() => setObsidianOpen(!obsidianOpen)}
-                aria-expanded={obsidianOpen ? "true" : "false"}
               >
                 <span className={`sec-chev ${obsidianOpen ? "open" : ""}`}>
                   <Icon name="chevR" size={12} />

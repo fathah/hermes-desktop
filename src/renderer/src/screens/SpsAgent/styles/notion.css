@@ -198,10 +198,7 @@
 .sps-scope .st-btn i {
   font-style: italic;
 }
-.sps-scope .st-btn s {
-}
-.sps-scope .st-btn u {
-}
+
 .sps-scope .st-sep {
   width: 1px;
   height: 18px;
@@ -582,6 +579,7 @@
   margin-bottom: 8px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
