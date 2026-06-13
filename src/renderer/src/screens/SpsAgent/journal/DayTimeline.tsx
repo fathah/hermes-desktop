@@ -207,93 +207,35 @@ export function DayTimeline({ date, byDate, onNewEntry }: Props) {
                   className="jr-entry-body"
                   onClick={() => setExpandedTaskId(isExpanded ? null : t.id)}
                 >
-                  <div
-                    className="jr-entry-title"
-                    style={{ display: "flex", gap: 8, alignItems: "center" }}
-                  >
+                  <div className="jr-entry-title jr-entry-title-row">
                     <span
-                      className="jr-task-badge"
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        width: 18,
-                        height: 18,
-                        borderRadius: "50%",
-                        background: isDone ? "var(--accent)" : "transparent",
-                        border: "1.5px solid var(--hair-strong)",
-                        color: isDone ? "#fff" : "transparent",
-                        fontSize: 10,
-                        fontWeight: "bold",
-                      }}
+                      className={`jr-task-badge ${isDone ? "is-done" : ""}`}
                     >
                       ✓
                     </span>
                     <span
-                      style={{
-                        textDecoration: isDone ? "line-through" : "none",
-                        color: isDone ? "var(--tx-3)" : "var(--tx-1)",
-                      }}
+                      className={`jr-task-title ${isDone ? "is-done" : ""}`}
                     >
                       {t.title}
                     </span>
                     {pr && (
                       <span
-                        className="work-priority-badge"
-                        style={{
-                          fontSize: 10,
-                          padding: "2px 6px",
-                          borderRadius: 4,
-                          background:
-                            pr === "P0"
-                              ? "rgba(229, 72, 77, 0.1)"
-                              : "var(--hair-soft)",
-                          color: pr === "P0" ? "#e5484d" : "var(--tx-2)",
-                          fontWeight: "600",
-                        }}
+                        className={`work-priority-badge jr-work-priority-badge ${pr === "P0" ? "p0" : ""}`}
                       >
                         {pr}
                       </span>
                     )}
                     <span
-                      className="work-status-badge"
-                      style={{
-                        fontSize: 10,
-                        padding: "2px 6px",
-                        borderRadius: 4,
-                        background: isDone
-                          ? "rgba(76, 175, 80, 0.1)"
-                          : t.status === "blocked"
-                            ? "rgba(229, 72, 77, 0.1)"
-                            : "var(--hair-soft)",
-                        color: isDone
-                          ? "#4caf50"
-                          : t.status === "blocked"
-                            ? "#e5484d"
-                            : "var(--tx-3)",
-                        textTransform: "uppercase",
-                        letterSpacing: 0.2,
-                      }}
+                      className={`work-status-badge jr-work-status-badge ${isDone ? "is-done" : t.status === "blocked" ? "blocked" : ""}`}
                     >
                       {t.status}
                     </span>
                   </div>
                   {isExpanded && (
-                    <div
-                      style={{
-                        marginTop: 8,
-                        fontSize: 12,
-                        color: "var(--tx-2)",
-                        paddingLeft: 26,
-                      }}
-                    >
-                      {t.body && (
-                        <p style={{ whiteSpace: "pre-wrap", margin: "0 0 6px 0" }}>
-                          {t.body}
-                        </p>
-                      )}
+                    <div className="jr-task-details">
+                      {t.body && <p className="jr-task-body-text">{t.body}</p>}
                       {t.assignee && (
-                        <p style={{ margin: "4px 0 0 0", color: "var(--tx-3)" }}>
+                        <p className="jr-task-assignee-text">
                           Assigned: @{t.assignee}
                         </p>
                       )}
@@ -322,4 +264,3 @@ export function DayTimeline({ date, byDate, onNewEntry }: Props) {
     </div>
   );
 }
-

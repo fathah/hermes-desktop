@@ -1,0 +1,1002 @@
+/* health-rss.css — CSS variables and styling for Personal Health & RSS Curation Engine */
+
+.sps-scope .health-dashboard,
+.sps-scope .rss-dashboard {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100%;
+  color: var(--color-tx-1, #e2e8f0);
+  background: var(--color-bg-0, #0b0f19);
+  font-family: "Outfit", "Inter", sans-serif;
+  overflow: hidden;
+}
+
+/* Glassmorphism Panel styles */
+.sps-scope .glass-panel {
+  background: rgba(255, 255, 255, 0.03);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2);
+}
+
+.sps-scope .health-header,
+.sps-scope .rss-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.01);
+}
+
+.sps-scope .health-title,
+.sps-scope .rss-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+}
+
+.sps-scope .tabs-bar {
+  display: flex;
+  gap: 8px;
+  padding: 8px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sps-scope .tab-btn {
+  padding: 8px 16px;
+  background: transparent;
+  border: none;
+  color: var(--color-tx-3, #94a3b8);
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sps-scope .tab-btn:hover {
+  color: var(--color-tx-1, #f8fafc);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.sps-scope .tab-btn.active {
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.sps-scope .dashboard-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+/* Apple Journal Style Timeline */
+.sps-scope .journal-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.sps-scope .timeline-card {
+  padding: 20px;
+  position: relative;
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.sps-scope .timeline-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.sps-scope .card-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--color-tx-3, #94a3b8);
+  margin-bottom: 12px;
+}
+
+.sps-scope .mood-badge {
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 20px;
+  font-size: 11px;
+}
+
+.sps-scope .card-text {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--color-tx-2, #cbd5e1);
+}
+
+.sps-scope .media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.sps-scope .media-item-box {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sps-scope .media-img {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+}
+
+.sps-scope .media-overlay-info {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 8px;
+  font-size: 11px;
+}
+
+/* Quick Log Box */
+.sps-scope .quick-log-box {
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.sps-scope .log-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.sps-scope .log-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sps-scope .log-input-group label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-tx-3, #94a3b8);
+}
+
+.sps-scope .log-input-group input,
+.sps-scope .log-input-group select {
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 13px;
+}
+
+.sps-scope .log-submit-btn {
+  align-self: flex-end;
+  padding: 10px 20px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sps-scope .log-submit-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Peptide math visualization */
+.sps-scope .peptide-reconstitution-box {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.sps-scope .syringe-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sps-scope .syringe-svg {
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.3));
+}
+
+.sps-scope .half-life-chart-container {
+  height: 250px;
+  margin-top: 20px;
+}
+
+/* Medical Vault styles */
+.sps-scope .medical-vault-layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 24px;
+  height: calc(100vh - 140px);
+}
+
+.sps-scope .doc-list-sidebar {
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  padding-right: 16px;
+  overflow-y: auto;
+}
+
+.sps-scope .doc-card-item {
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sps-scope .doc-card-item:hover,
+.sps-scope .doc-card-item.active {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.sps-scope .biomarker-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  margin-right: 6px;
+  margin-bottom: 6px;
+}
+
+.sps-scope .biomarker-tag.out-of-range {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #f87171;
+}
+
+.sps-scope .biomarker-tag.normal-range {
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #4ade80;
+}
+
+/* RSS Three-Pane Dashboard Layout */
+.sps-scope .rss-three-pane {
+  display: grid;
+  grid-template-columns: 240px 360px 1fr;
+  flex: 1;
+  overflow: hidden;
+}
+
+.sps-scope .rss-feed-tree {
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.01);
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.sps-scope .rss-article-list {
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  overflow-y: auto;
+  background: rgba(255, 255, 255, 0.005);
+}
+
+.sps-scope .rss-article-reader {
+  overflow-y: auto;
+  padding: 32px;
+  background: var(--color-bg-1, #0f172a);
+}
+
+.sps-scope .feed-tree-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--color-tx-2, #cbd5e1);
+  cursor: pointer;
+  margin-bottom: 4px;
+  transition: background 0.15s ease;
+}
+
+.sps-scope .feed-tree-item:hover,
+.sps-scope .feed-tree-item.active {
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+}
+
+.sps-scope .unread-badge {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.sps-scope .article-card {
+  padding: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.sps-scope .article-card:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.sps-scope .article-card.active {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.sps-scope .article-card.unread {
+  border-left: 3px solid #60a5fa;
+}
+
+.sps-scope .article-card-title {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  margin-bottom: 6px;
+  color: #f1f5f9;
+}
+
+.sps-scope .relevance-score-badge {
+  display: inline-flex;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  background: rgba(96, 165, 250, 0.15);
+  border: 1px solid rgba(96, 165, 250, 0.3);
+  color: #93c5fd;
+}
+
+.sps-scope .reader-meta-bar {
+  margin-bottom: 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 16px;
+}
+
+.sps-scope .reader-title {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.3;
+  margin-bottom: 12px;
+  color: #fff;
+}
+
+.sps-scope .reader-body {
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--color-tx-2, #cbd5e1);
+}
+.sps-scope .reader-body[data-font-size="12"] {
+  font-size: 12px;
+}
+.sps-scope .reader-body[data-font-size="13"] {
+  font-size: 13px;
+}
+.sps-scope .reader-body[data-font-size="14"] {
+  font-size: 14px;
+}
+.sps-scope .reader-body[data-font-size="15"] {
+  font-size: 15px;
+}
+.sps-scope .reader-body[data-font-size="16"] {
+  font-size: 16px;
+}
+.sps-scope .reader-body[data-font-size="17"] {
+  font-size: 17px;
+}
+.sps-scope .reader-body[data-font-size="18"] {
+  font-size: 18px;
+}
+.sps-scope .reader-body[data-font-size="19"] {
+  font-size: 19px;
+}
+.sps-scope .reader-body[data-font-size="20"] {
+  font-size: 20px;
+}
+.sps-scope .reader-body[data-font-size="21"] {
+  font-size: 21px;
+}
+.sps-scope .reader-body[data-font-size="22"] {
+  font-size: 22px;
+}
+.sps-scope .reader-body[data-font-size="23"] {
+  font-size: 23px;
+}
+.sps-scope .reader-body[data-font-size="24"] {
+  font-size: 24px;
+}
+
+.sps-scope .reader-body p {
+  margin-bottom: 16px;
+}
+
+.sps-scope .reader-body blockquote {
+  border-left: 4px solid rgba(255, 255, 255, 0.15);
+  padding-left: 16px;
+  margin: 16px 0;
+  color: var(--color-tx-3, #94a3b8);
+}
+
+/* Refactored styles from PersonalHealthDashboard.tsx & RssReaderDashboard.tsx */
+.sps-scope .emoji-large {
+  font-size: 24px;
+}
+.sps-scope .flex-row-gap-12 {
+  display: flex;
+  gap: 12px;
+}
+.sps-scope .flex-row-gap-10 {
+  display: flex;
+  gap: 10px;
+}
+.sps-scope .flex-col-gap-24 {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.sps-scope .flex-col-gap-16 {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.sps-scope .flex-row-center-align {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.sps-scope .flex-row-space-between {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.sps-scope .refresh-btn-style {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+.sps-scope .refresh-icon-style {
+  margin-right: 6px;
+}
+.sps-scope .tab-icon-style {
+  margin-right: 6px;
+}
+.sps-scope .reflection-banner {
+  padding: 16px;
+  border-left: 4px solid #60a5fa;
+  margin-bottom: 20px;
+}
+.sps-scope .reflection-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #60a5fa;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+.sps-scope .reflection-text {
+  margin: 8px 0 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #cbd5e1;
+}
+.sps-scope .heading-quick-log {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.sps-scope .journal-reflection-panel {
+  padding: 20px;
+  margin-bottom: 24px;
+}
+.sps-scope .journal-reflection-heading {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+.sps-scope .journal-textarea {
+  width: 100%;
+  height: 80px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 12px;
+  color: #fff;
+  font-size: 14px;
+  resize: none;
+  outline: none;
+}
+.sps-scope .journal-actions-row {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 12px;
+  align-items: center;
+}
+.sps-scope .record-audio-btn {
+  padding: 6px 12px;
+  font-size: 13px;
+  background: rgba(255, 255, 255, 0.05);
+}
+.sps-scope .record-audio-btn.recording {
+  background: rgba(239, 68, 68, 0.2);
+}
+.sps-scope .snap-food-btn {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+.sps-scope .save-journal-entry-btn {
+  background: #3b82f6;
+}
+.sps-scope .mood-label {
+  font-size: 12px;
+  color: #94a3b8;
+}
+.sps-scope .timeline-heading {
+  margin: 20px 0 10px 0;
+  font-size: 16px;
+}
+.sps-scope .timeline-delete-btn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: transparent;
+  border: none;
+  color: #f87171;
+  cursor: pointer;
+}
+.sps-scope .voice-transcription-row {
+  margin-top: 8px;
+  font-size: 13px;
+  font-style: italic;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sps-scope .media-item-placeholder {
+  background: #1e293b;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-items: center;
+  justify-content: center;
+}
+.sps-scope .media-emoji {
+  font-size: 32px;
+}
+.sps-scope .media-overlay-title {
+  font-weight: 600;
+  color: #fff;
+}
+.sps-scope .media-overlay-subtitle {
+  color: #94a3b8;
+  font-size: 10px;
+}
+.sps-scope .tag-container {
+  display: flex;
+  gap: 6px;
+  margin-top: 12px;
+}
+.sps-scope .timeline-tag {
+  font-size: 10px;
+  padding: 2px 6px;
+  background: rgba(96, 165, 250, 0.1);
+  color: #93c5fd;
+  border-radius: 4px;
+}
+.sps-scope .peptide-reconstitution-panel {
+  padding: 24px;
+}
+.sps-scope .peptide-reconstitution-heading {
+  margin: 0 0 16px 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+.sps-scope .syringe-plunger-result {
+  margin-top: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+}
+.sps-scope .syringe-plunger-label {
+  font-size: 13px;
+  color: #94a3b8;
+}
+.sps-scope .syringe-plunger-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #34d399;
+  margin-top: 4px;
+}
+.sps-scope .syringe-plunger-formula {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 4px;
+}
+.sps-scope .syringe-label-title {
+  margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.sps-scope .syringe-label-bottom {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #94a3b8;
+}
+.sps-scope .syringe-label-highlight {
+  color: #34d399;
+  font-weight: 600;
+}
+.sps-scope .regimen-scheduler-panel {
+  padding: 24px;
+}
+.sps-scope .regimen-scheduler-heading {
+  margin: 0 0 16px 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+.sps-scope .create-protocol-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.sps-scope .protocol-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.sps-scope .protocol-card {
+  padding: 16px;
+  position: relative;
+}
+.sps-scope .protocol-delete-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: transparent;
+  border: none;
+  color: #f87171;
+  cursor: pointer;
+}
+.sps-scope .protocol-name {
+  margin: 0 0 8px 0;
+  color: #3b82f6;
+}
+.sps-scope .protocol-info-list {
+  font-size: 12px;
+  color: #94a3b8;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sps-scope .protocol-info-value {
+  color: #fff;
+}
+.sps-scope .protocol-card-footer {
+  margin-top: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.sps-scope .protocol-admin-count {
+  font-size: 11px;
+  color: #64748b;
+}
+.sps-scope .protocol-record-btn {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+.sps-scope .scan-pdf-btn {
+  width: 100%;
+  margin-bottom: 16px;
+}
+.sps-scope .doc-list-heading {
+  margin: 0 0 10px 0;
+  font-size: 14px;
+  color: #94a3b8;
+  text-transform: uppercase;
+}
+.sps-scope .doc-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.sps-scope .doc-card-title-text {
+  font-weight: 600;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  width: 220px;
+}
+.sps-scope .doc-card-delete-btn {
+  background: transparent;
+  border: none;
+  color: #f87171;
+  cursor: pointer;
+}
+.sps-scope .doc-card-date {
+  font-size: 11px;
+  color: #64748b;
+}
+.sps-scope .doc-card-biomarkers {
+  margin-top: 8px;
+}
+.sps-scope .biomarker-trends-panel {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.sps-scope .trends-heading {
+  margin: 0;
+  font-size: 16px;
+}
+.sps-scope .trend-tab-label {
+  font-size: 12px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+.sps-scope .trends-chart-container {
+  width: 100%;
+  height: 260px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 8px;
+  padding: 16px;
+  position: relative;
+}
+.sps-scope .trends-chart-title {
+  position: absolute;
+  top: 12px;
+  left: 16px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+.sps-scope .trends-chart-empty {
+  display: flex;
+  height: 100%;
+  justify-items: center;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+}
+.sps-scope .news-list-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+.sps-scope .news-main-heading {
+  margin: 0;
+  font-size: 16px;
+}
+.sps-scope .news-intro-text {
+  margin: 0;
+  font-size: 13px;
+  color: #94a3b8;
+}
+.sps-scope .news-condition-tag {
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  margin-right: 6px;
+}
+.sps-scope .digest-card {
+  padding: 18px;
+  border-left: 4px solid #60a5fa;
+}
+.sps-scope .digest-card-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.sps-scope .digest-card-feed-title {
+  font-size: 11px;
+  color: #64748b;
+}
+.sps-scope .digest-card-title {
+  margin: 0 0 8px 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.sps-scope .digest-card-excerpt {
+  margin: 0;
+  font-size: 13px;
+  color: #cbd5e1;
+  line-height: 1.5;
+}
+.sps-scope .digest-card-footer {
+  margin-top: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.sps-scope .digest-card-date {
+  font-size: 11px;
+  color: #64748b;
+}
+.sps-scope .digest-card-link {
+  font-size: 12px;
+  color: #60a5fa;
+  text-decoration: none;
+}
+.sps-scope .digest-empty-text {
+  text-align: center;
+  padding: 40px;
+  color: #64748b;
+}
+
+/* RSS reader additions */
+.sps-scope .add-feed-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+.sps-scope .add-feed-modal-panel {
+  width: 400px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.sps-scope .add-feed-modal-title {
+  margin: 0;
+  font-size: 16px;
+}
+.sps-scope .rss-search-container {
+  padding: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.sps-scope .rss-search-input {
+  width: 100%;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 13px;
+  outline: none;
+}
+.sps-scope .feed-tree-heading-1 {
+  margin: 0 0 10px 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #64748b;
+  font-weight: 600;
+}
+.sps-scope .feed-tree-heading-2 {
+  margin: 24px 0 10px 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #64748b;
+  font-weight: 600;
+}
+.sps-scope .feed-tree-folder-title {
+  font-size: 12px;
+  fontweight: 600;
+  color: #94a3b8;
+  padding: 4px 8px;
+}
+.sps-scope .feed-tree-item-title {
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  width: 140px;
+}
+.sps-scope .feed-tree-item-delete-btn {
+  background: transparent;
+  border: none;
+  color: #f87171;
+  cursor: pointer;
+  padding: 0;
+}
+.sps-scope .article-card-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: #64748b;
+}
+.sps-scope .article-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+}
+.sps-scope .star-indicator {
+  color: #fbbf24;
+}
+.sps-scope .rss-empty-text {
+  text-align: center;
+  padding: 40px;
+  color: #64748b;
+}
+.sps-scope .reader-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.sps-scope .reader-buttons-group {
+  display: flex;
+  gap: 8px;
+}
+.sps-scope .reader-publish-info {
+  font-size: 13px;
+  color: #94a3b8;
+}
+.sps-scope .reader-empty-placeholder {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  justify-items: center;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+}
+.sps-scope .reader-empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.sps-scope .flex-row-gap-12-center {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.sps-scope .feed-folder-container {
+  margin-bottom: 12px;
+}
+.sps-scope .feed-tree-item-layout {
+  padding-left: 20px;
+  display: flex;
+  justify-content: space-between;
+}
+.sps-scope .ingest-rss-btn {
+  background: #10b981;
+}
+.sps-scope .modal-footer-row {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 12px;
+}

@@ -94,10 +94,19 @@ export function ObsidianExplorer() {
             <span className={`tree-toggle ${isExpanded ? "open" : ""}`}>
               <Icon name="chevR" size={13} />
             </span>
-            <span style={{ marginRight: 6, opacity: 0.7, display: "flex", alignItems: "center" }}>
+            <span
+              style={{
+                marginRight: 6,
+                opacity: 0.7,
+                display: "flex",
+                alignItems: "center",
+              }}
+            >
               <Icon name="board" size={14} />
             </span>
-            <span className="tree-label" style={{ fontWeight: 500 }}>{node.name}</span>
+            <span className="tree-label" style={{ fontWeight: 500 }}>
+              {node.name}
+            </span>
           </div>
           {isExpanded && node.children && (
             <div className="tree-children">
@@ -115,7 +124,14 @@ export function ObsidianExplorer() {
         style={{ paddingLeft: depth * 12 + 19 }}
         onClick={() => selectFile(node.path)}
       >
-        <span style={{ marginRight: 6, opacity: 0.6, display: "flex", alignItems: "center" }}>
+        <span
+          style={{
+            marginRight: 6,
+            opacity: 0.6,
+            display: "flex",
+            alignItems: "center",
+          }}
+        >
           <Icon name="doc" size={14} />
         </span>
         <span className="tree-label">{node.name.replace(/\.md$/i, "")}</span>
@@ -133,7 +149,14 @@ export function ObsidianExplorer() {
 
   if (!enabled) {
     return (
-      <div style={{ padding: "8px 16px", color: "var(--tx-4)", fontSize: 11.5, lineHeight: 1.4 }}>
+      <div
+        style={{
+          padding: "8px 16px",
+          color: "var(--tx-4)",
+          fontSize: 11.5,
+          lineHeight: 1.4,
+        }}
+      >
         Obsidian vault path is not configured.
         <div style={{ marginTop: 6 }}>
           Set it in <b>Tweaks Panel → Storage</b>.
@@ -144,7 +167,9 @@ export function ObsidianExplorer() {
 
   if (error) {
     return (
-      <div style={{ padding: "8px 16px", color: "var(--error)", fontSize: 11.5 }}>
+      <div
+        style={{ padding: "8px 16px", color: "var(--error)", fontSize: 11.5 }}
+      >
         Error: {error}
       </div>
     );
@@ -182,7 +207,9 @@ export function ObsidianExplorer() {
         </button>
       </div>
       {tree.length === 0 ? (
-        <div style={{ padding: "8px 16px", color: "var(--tx-4)", fontSize: 11.5 }}>
+        <div
+          style={{ padding: "8px 16px", color: "var(--tx-4)", fontSize: 11.5 }}
+        >
           Empty vault.
         </div>
       ) : (

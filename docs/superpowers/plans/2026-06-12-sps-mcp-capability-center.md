@@ -241,6 +241,7 @@ export const SPS_MCP_CATALOG: Record<
 ## Task 1: Main Capability Parser Tests
 
 **Files:**
+
 - Create: `tests/mcp-capabilities.test.ts`
 - Create later: `src/shared/mcp-capabilities.ts`
 - Create later: `src/shared/mcp-catalog.ts`
@@ -252,7 +253,13 @@ Create `tests/mcp-capabilities.test.ts`:
 
 ```ts
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "fs";
 import { mkdirSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -376,7 +383,9 @@ describe("mcp capabilities", () => {
     enabled: true
 `);
 
-    const unknown = listMcpCapabilities(PROFILE).find((c) => c.name === "unknown");
+    const unknown = listMcpCapabilities(PROFILE).find(
+      (c) => c.name === "unknown",
+    );
     expect(unknown).toMatchObject({
       name: "unknown",
       displayName: "unknown",
@@ -390,7 +399,9 @@ describe("mcp capabilities", () => {
 
   it("includes curated entries even when not installed", () => {
     writeConfig("model:\n  default: test\n");
-    const openalex = listMcpCapabilities(PROFILE).find((c) => c.name === "openalex");
+    const openalex = listMcpCapabilities(PROFILE).find(
+      (c) => c.name === "openalex",
+    );
     expect(openalex).toMatchObject({
       installed: false,
       enabled: false,
@@ -444,7 +455,9 @@ describe("mcp capability updates", () => {
   });
 
   it("does not create a config file when updating a missing server", () => {
-    expect(setMcpToolPolicy({ name: "missing", include: [] }, PROFILE)).toBe(false);
+    expect(setMcpToolPolicy({ name: "missing", include: [] }, PROFILE)).toBe(
+      false,
+    );
     expect(existsSync(configPath())).toBe(false);
   });
 });
@@ -463,6 +476,7 @@ Expected: FAIL because `src/main/mcp-capabilities.ts` does not exist.
 ## Task 2: Shared Types And Curated Catalog
 
 **Files:**
+
 - Create: `src/shared/mcp-capabilities.ts`
 - Create: `src/shared/mcp-catalog.ts`
 - Test: `tests/mcp-capabilities.test.ts`
@@ -488,6 +502,7 @@ Expected: still FAIL because main helpers are not implemented yet.
 ## Task 3: Main MCP Capability Helpers
 
 **Files:**
+
 - Create: `src/main/mcp-capabilities.ts`
 - Modify later: `src/main/installer/mcp.ts`
 - Test: `tests/mcp-capabilities.test.ts`
@@ -514,7 +529,10 @@ function configPath(profile?: string): string {
   return join(profileHome(profile), "config.yaml");
 }
 
-function readConfig(profile?: string): { doc: Document.Parsed; exists: boolean } {
+function readConfig(profile?: string): {
+  doc: Document.Parsed;
+  exists: boolean;
+} {
   const p = configPath(profile);
   if (!existsSync(p)) return { doc: parseDocument(""), exists: false };
   return { doc: parseDocument(readFileSync(p, "utf-8")), exists: true };
@@ -548,7 +566,10 @@ function mapToPolicy(raw: unknown): McpToolPolicy {
   return policy;
 }
 
-function riskUnion(a: McpCapabilityRisk[], b: McpCapabilityRisk[]): McpCapabilityRisk[] {
+function riskUnion(
+  a: McpCapabilityRisk[],
+  b: McpCapabilityRisk[],
+): McpCapabilityRisk[] {
   return [...new Set([...a, ...b])];
 }
 
@@ -577,7 +598,9 @@ function seqFromStrings(values: string[]): YAMLSeq {
   return seq;
 }
 
-export function listMcpCapabilityConfigs(profile?: string): McpCapabilityConfig[] {
+export function listMcpCapabilityConfigs(
+  profile?: string,
+): McpCapabilityConfig[] {
   const { doc } = readConfig(profile);
   const servers = getServerMap(doc);
   if (!servers) return [];
@@ -590,9 +613,10 @@ export function listMcpCapabilityConfigs(profile?: string): McpCapabilityConfig[
     const raw = item.value.toJSON() as Record<string, unknown>;
     const url = scalarString(raw.url);
     const command = scalarString(raw.command);
-    const env = raw.env && typeof raw.env === "object" && !Array.isArray(raw.env)
-      ? (raw.env as Record<string, unknown>)
-      : {};
+    const env =
+      raw.env && typeof raw.env === "object" && !Array.isArray(raw.env)
+        ? (raw.env as Record<string, unknown>)
+        : {};
     out.push({
       name,
       type: url ? "http" : "stdio",
@@ -608,7 +632,12 @@ export function listMcpCapabilityConfigs(profile?: string): McpCapabilityConfig[
 export function listMcpCapabilities(profile?: string): McpCapability[] {
   const installed = listMcpCapabilityConfigs(profile);
   const byName = new Map(installed.map((cfg) => [cfg.name, cfg]));
-  const names = [...new Set([...Object.keys(SPS_MCP_CATALOG), ...installed.map((i) => i.name)])];
+  const names = [
+    ...new Set([
+      ...Object.keys(SPS_MCP_CATALOG),
+      ...installed.map((i) => i.name),
+    ]),
+  ];
 
   return names.map((name) => {
     const cfg = byName.get(name);
@@ -704,6 +733,7 @@ Expected: PASS. If TypeScript complains about `Document.Parsed`, replace it with
 ## Task 4: Preserve Old MCP Inventory API
 
 **Files:**
+
 - Modify: `src/main/installer/mcp.ts`
 - Test: `tests/installer-utils.test.ts`, `tests/openalex-mcp-config.test.ts`, `tests/mcp-capabilities.test.ts`
 
@@ -745,6 +775,7 @@ Expected: PASS. If `tests/installer-utils.test.ts` contains a local simulated pa
 ## Task 5: IPC And Preload APIs
 
 **Files:**
+
 - Modify: `src/main/ipc/system.ts`
 - Modify: `src/preload/bridges/toolsmisc.ts`
 - Modify: `src/preload/index.d.ts`
@@ -824,15 +855,10 @@ Add:
 
 ```ts
 listMcpCapabilities: (profile?: string) => Promise<McpCapability[]>;
-setMcpServerEnabled: (
-  name: string,
-  enabled: boolean,
-  profile?: string,
-) => Promise<boolean>;
-setMcpToolPolicy: (
-  input: SetMcpToolPolicyInput,
-  profile?: string,
-) => Promise<boolean>;
+setMcpServerEnabled: (name: string, enabled: boolean, profile?: string) =>
+  Promise<boolean>;
+setMcpToolPolicy: (input: SetMcpToolPolicyInput, profile?: string) =>
+  Promise<boolean>;
 ```
 
 - [ ] **Step 4: Update preload API surface test**
@@ -862,6 +888,7 @@ Expected: PASS.
 ## Task 6: Capabilities Surface Shell
 
 **Files:**
+
 - Create: `src/renderer/src/screens/SpsAgent/capabilities/CapabilitiesSurface.tsx`
 - Modify: `src/renderer/src/screens/SpsAgent/store/storeTypes.ts`
 - Modify: `src/renderer/src/screens/SpsAgent/App.tsx`
@@ -912,7 +939,9 @@ export function CapabilitiesSurface() {
       setError("");
       setItems(await window.hermesAPI.listMcpCapabilities());
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load capabilities.");
+      setError(
+        err instanceof Error ? err.message : "Could not load capabilities.",
+      );
     }
   }
 
@@ -936,7 +965,10 @@ export function CapabilitiesSurface() {
     }
   }
 
-  async function toggleTool(cap: McpCapability, toolName: string): Promise<void> {
+  async function toggleTool(
+    cap: McpCapability,
+    toolName: string,
+  ): Promise<void> {
     const current =
       cap.policy.include ??
       cap.tools.filter((tool) => tool.defaultEnabled).map((tool) => tool.name);
@@ -977,15 +1009,16 @@ export function CapabilitiesSurface() {
       <div className="surface-head">
         <div>
           <h1>Capabilities</h1>
-          <p>
-            Grant, limit, or revoke what My Assistant can access and use.
-          </p>
+          <p>Grant, limit, or revoke what My Assistant can access and use.</p>
         </div>
         <div className="cap-count">{activeCount} active</div>
       </div>
 
       {error && (
-        <div className="settings-field-hint" style={{ color: "var(--danger, #c00)" }}>
+        <div
+          className="settings-field-hint"
+          style={{ color: "var(--danger, #c00)" }}
+        >
           {error}
         </div>
       )}
@@ -994,7 +1027,9 @@ export function CapabilitiesSurface() {
         {items.map((cap) => {
           const selectedTools =
             cap.policy.include ??
-            cap.tools.filter((tool) => tool.defaultEnabled).map((tool) => tool.name);
+            cap.tools
+              .filter((tool) => tool.defaultEnabled)
+              .map((tool) => tool.name);
           return (
             <article key={cap.name} className="capability-card">
               <header className="capability-card-head">
@@ -1042,7 +1077,8 @@ export function CapabilitiesSurface() {
 
               {cap.trust === "unreviewed" && (
                 <div className="settings-field-hint">
-                  This was configured outside SPS. Review its command, URL, and credentials before enabling it.
+                  This was configured outside SPS. Review its command, URL, and
+                  credentials before enabling it.
                 </div>
               )}
 
@@ -1087,7 +1123,9 @@ import { CapabilitiesSurface } from "./capabilities/CapabilitiesSurface";
 Add:
 
 ```tsx
-{surface === "capabilities" && <CapabilitiesSurface />}
+{
+  surface === "capabilities" && <CapabilitiesSurface />;
+}
 ```
 
 - [ ] **Step 4: Add sidebar item**
@@ -1129,6 +1167,7 @@ Expected: PASS.
 ## Task 7: Capabilities Surface Tests
 
 **Files:**
+
 - Create: `src/renderer/src/screens/SpsAgent/capabilities/CapabilitiesSurface.test.tsx`
 - Modify: `src/renderer/src/screens/SpsAgent/capabilities/CapabilitiesSurface.tsx`
 
@@ -1257,6 +1296,7 @@ Expected: PASS. If the third test receives `prompts: undefined` or `resources: u
 ## Task 8: Install Buttons For Curated App-Owned MCPs
 
 **Files:**
+
 - Modify: `src/renderer/src/screens/SpsAgent/capabilities/CapabilitiesSurface.tsx`
 - Modify: `src/renderer/src/screens/SpsAgent/capabilities/CapabilitiesSurface.test.tsx`
 - Verify existing preload methods:
@@ -1278,7 +1318,9 @@ it("installs a curated capability through its existing ensure action", async () 
   ]);
 
   render(<CapabilitiesSurface />);
-  fireEvent.click(await screen.findByRole("button", { name: /Add capability/ }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: /Add capability/ }),
+  );
 
   await waitFor(() => {
     expect(window.hermesAPI.spsResearchEnsureAgentTool).toHaveBeenCalled();
@@ -1309,6 +1351,7 @@ If the existing method names differ, update `CapabilitiesSurface.tsx` to use the
 ## Task 9: Utility Wrapper Controls
 
 **Files:**
+
 - Modify: `src/renderer/src/screens/SpsAgent/capabilities/CapabilitiesSurface.tsx`
 - Modify: `src/renderer/src/screens/SpsAgent/capabilities/CapabilitiesSurface.test.tsx`
 
@@ -1358,7 +1401,9 @@ Inside installed capability card, under tool rows, add:
     />
     <span>
       <strong>Prompt utilities</strong>
-      <small>Let My Assistant list or load prompts exposed by this capability.</small>
+      <small>
+        Let My Assistant list or load prompts exposed by this capability.
+      </small>
     </span>
   </label>
   <label className="capability-tool-row">
@@ -1373,7 +1418,9 @@ Inside installed capability card, under tool rows, add:
     />
     <span>
       <strong>Resource utilities</strong>
-      <small>Let My Assistant list or read resources exposed by this capability.</small>
+      <small>
+        Let My Assistant list or read resources exposed by this capability.
+      </small>
     </span>
   </label>
 </div>
@@ -1420,6 +1467,7 @@ Expected: PASS.
 ## Task 10: Settings Summary Link
 
 **Files:**
+
 - Modify: `src/renderer/src/screens/Settings/CapabilitySummary.tsx`
 
 - [ ] **Step 1: Update copy**
@@ -1455,7 +1503,9 @@ interface McpServer {
 Render active MCP names with display name if present:
 
 ```tsx
-{activeMcp.map((m) => `${m.displayName || m.name} (${m.type})`).join(", ")}
+{
+  activeMcp.map((m) => `${m.displayName || m.name} (${m.type})`).join(", ");
+}
 ```
 
 - [ ] **Step 3: Validate**
@@ -1472,6 +1522,7 @@ Expected: PASS.
 ## Task 11: Styling
 
 **Files:**
+
 - Modify the smallest existing SPS stylesheet that owns surface/card styles. Inspect before editing.
 
 - [ ] **Step 1: Locate stylesheet**
@@ -1666,4 +1717,3 @@ After the control plane is stable, add a true curated marketplace:
 - Spec coverage: curated marketplace direction is represented through curated cards and a follow-on manifest slice; strict scoping is covered through per-server enable and per-tool allowlists; trust warnings and risk labels are present; credential secrecy is protected by env-key-only display.
 - Placeholder scan: every v1 task has concrete files, code snippets, and validation commands. The follow-on slice is explicitly separated from v1 and is not required for acceptance.
 - Type consistency: `McpCapability`, `McpCapabilityConfig`, `McpToolPolicy`, and `SetMcpToolPolicyInput` are used consistently across shared, main, preload, and renderer tasks.
-

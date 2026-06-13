@@ -397,9 +397,7 @@ interface HermesAPI {
     enabled: boolean,
     profile?: string,
   ) => Promise<boolean>;
-  getWhatsAppCloudStatus: (
-    profile?: string,
-  ) => Promise<WhatsAppCloudStatus>;
+  getWhatsAppCloudStatus: (profile?: string) => Promise<WhatsAppCloudStatus>;
 
   // Sessions
   listSessions: (limit?: number, offset?: number) => Promise<SessionSummary[]>;
@@ -989,9 +987,7 @@ interface HermesAPI {
   getCapabilityRiskSummary: (
     profile?: string,
   ) => Promise<CapabilityRiskSummary>;
-  checkCapabilityRisksNow: (
-    profile?: string,
-  ) => Promise<CapabilityRiskSummary>;
+  checkCapabilityRisksNow: (profile?: string) => Promise<CapabilityRiskSummary>;
   reviewCapabilityRisk: (
     id: string,
     profile?: string,
@@ -1313,6 +1309,69 @@ interface HermesAPI {
     stale: string[];
   }>;
   spsTriggerScreencapture: (profile?: string) => Promise<string | null>;
+
+  // Health APIs
+  spsHealthGetProfile: (profile?: string) => Promise<any>;
+  spsHealthSaveProfile: (
+    profileData: any,
+    profile?: string,
+  ) => Promise<boolean>;
+  spsHealthAddJournalEntry: (entry: any, profile?: string) => Promise<string>;
+  spsHealthGetJournalEntries: (profile?: string) => Promise<any[]>;
+  spsHealthDeleteJournalEntry: (
+    entryId: string,
+    profile?: string,
+  ) => Promise<boolean>;
+  spsHealthAddBiometricLog: (log: any, profile?: string) => Promise<string>;
+  spsHealthGetBiometricLogs: (profile?: string) => Promise<any[]>;
+  spsHealthSaveMedicationProtocol: (
+    protocol: any,
+    profile?: string,
+  ) => Promise<string>;
+  spsHealthGetMedicationProtocols: (profile?: string) => Promise<any[]>;
+  spsHealthDeleteMedicationProtocol: (
+    protocolId: string,
+    profile?: string,
+  ) => Promise<boolean>;
+  spsHealthAddMedicationLog: (log: any, profile?: string) => Promise<string>;
+  spsHealthGetMedicationLogs: (profile?: string) => Promise<any[]>;
+  spsHealthGetMedicalDocs: (profile?: string) => Promise<any[]>;
+  spsHealthAddMedicalDoc: (doc: any, profile?: string) => Promise<string>;
+  spsHealthDeleteMedicalDoc: (
+    docId: string,
+    profile?: string,
+  ) => Promise<boolean>;
+
+  // RSS APIs
+  spsRssGetFeeds: (profile?: string) => Promise<any[]>;
+  spsRssAddFeed: (feedData: any, profile?: string) => Promise<string>;
+  spsRssDeleteFeed: (feedId: string, profile?: string) => Promise<boolean>;
+  spsRssGetArticles: (
+    query?: {
+      feedId?: string;
+      readStatus?: number;
+      starStatus?: number;
+      search?: string;
+      limit?: number;
+      offset?: number;
+    },
+    profile?: string,
+  ) => Promise<any[]>;
+  spsRssMarkArticleRead: (
+    articleId: string,
+    readStatus: number,
+    profile?: string,
+  ) => Promise<boolean>;
+  spsRssToggleArticleStar: (
+    articleId: string,
+    starStatus: number,
+    profile?: string,
+  ) => Promise<boolean>;
+  spsRssSyncFeeds: (
+    profile?: string,
+  ) => Promise<{ success: boolean; count: number }>;
+  spsRssGetClinicalDigest: (profile?: string) => Promise<any[]>;
+
   spsIndexStatus: (profile?: string) => Promise<{
     root: string;
     notes: number;

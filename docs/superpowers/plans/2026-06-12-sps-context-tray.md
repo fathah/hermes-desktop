@@ -28,6 +28,7 @@ V1 should not build native WhatsApp, Telegram, Gmail, Photos, or OS screenshot i
 ## File Structure
 
 Create:
+
 - `src/shared/sps-context-items.ts` — shared chip types, token estimator, caps.
 - `src/main/sps-context-items.ts` — expands explicit chips into bounded prompt text.
 - `src/renderer/src/screens/SpsAgent/context/ContextTray.tsx` — chip tray, preview drawer, add menu, budget meter.
@@ -37,6 +38,7 @@ Create:
 - `tests/sps-context-items.test.ts`
 
 Modify:
+
 - `src/main/sps-agent.ts` — extend `PageContext`, include explicit context in `buildSpsAssistantMessages`.
 - `src/main/ipc/sps.ts` — accept the widened context shape without adding a new IPC channel.
 - `src/preload/index.d.ts` and `src/preload/bridges/sps.ts` — add the shared type to `spsAssistant`.
@@ -52,6 +54,7 @@ Modify:
 ## Task 1: Shared Context Model And Budget Math
 
 **Files:**
+
 - Create: `src/shared/sps-context-items.ts`
 - Test: `tests/sps-context-items.test.ts`
 
@@ -75,8 +78,19 @@ describe("SPS context items", () => {
 
   it("sums explicit chip estimates into a budget", () => {
     const items: SpsContextItem[] = [
-      { id: "a", kind: "current-page", label: "Current page", tokenEstimate: 100 },
-      { id: "b", kind: "url", label: "URL", tokenEstimate: 50, url: "https://example.com" },
+      {
+        id: "a",
+        kind: "current-page",
+        label: "Current page",
+        tokenEstimate: 100,
+      },
+      {
+        id: "b",
+        kind: "url",
+        label: "URL",
+        tokenEstimate: 50,
+        url: "https://example.com",
+      },
     ];
     expect(contextBudgetInfo(items, "gpt-4o").usedTokens).toBe(150);
     expect(contextBudgetInfo(items, "gpt-4o").level).toBe("ok");
@@ -132,7 +146,11 @@ export interface SpsContextItemBase {
 
 export type SpsContextItem =
   | (SpsContextItemBase & { kind: "current-page"; pageId?: string })
-  | (SpsContextItemBase & { kind: "selected-blocks"; pageId: string; blockIds: string[] })
+  | (SpsContextItemBase & {
+      kind: "selected-blocks";
+      pageId: string;
+      blockIds: string[];
+    })
   | (SpsContextItemBase & { kind: "page"; pageId: string })
   | (SpsContextItemBase & { kind: "vault-folder"; path: string })
   | (SpsContextItemBase & { kind: "external-session"; convId: string })
@@ -188,7 +206,11 @@ export function contextBudgetInfo(
 export function normalizeContextItem<T extends SpsContextItem>(item: T): T {
   const label = item.label.trim() || item.kind;
   const preview = item.preview?.trim();
-  const next = { ...item, label, tokenEstimate: Math.max(0, item.tokenEstimate || 0) };
+  const next = {
+    ...item,
+    label,
+    tokenEstimate: Math.max(0, item.tokenEstimate || 0),
+  };
   if (preview) return { ...next, preview } as T;
   delete (next as { preview?: string }).preview;
   return next as T;
@@ -208,6 +230,7 @@ Expected: PASS.
 ## Task 2: Main-Process Explicit Context Formatter
 
 **Files:**
+
 - Create: `src/main/sps-context-items.ts`
 - Modify: `src/main/sps-agent.ts`
 - Test: `tests/sps-context-items.test.ts`
@@ -232,7 +255,7 @@ describe("formatExplicitContextItems", () => {
       },
     ]);
     expect(text).toContain("Explicit context selected by the user");
-    expect(text).toContain("<context_item kind=\"url\" label=\"Example\">");
+    expect(text).toContain('<context_item kind="url" label="Example">');
     expect(text).toContain("Important source text");
   });
 
@@ -342,7 +365,12 @@ When building combined grounding in `spsAssistant`, include explicit context:
 ```ts
 const explicitContextText = formatExplicitContextItems(ctx.contextItems);
 const combinedGrounding = buildGroundingMessage(
-  [grounding?.content, vaultContext.text, graphRagContextText, explicitContextText],
+  [
+    grounding?.content,
+    vaultContext.text,
+    graphRagContextText,
+    explicitContextText,
+  ],
   graphRagCiteInstruction || undefined,
 );
 ```
@@ -371,6 +399,7 @@ Expected: PASS.
 ## Task 3: Preload And Type Contract
 
 **Files:**
+
 - Modify: `src/preload/index.d.ts`
 - Modify: `src/preload/bridges/sps.ts`
 - Modify: `src/main/ipc/sps.ts`
@@ -434,6 +463,7 @@ Expected: PASS. No new channel is required; this is a widened payload shape.
 ## Task 4: Store Slice For Context Tray
 
 **Files:**
+
 - Modify: `src/renderer/src/screens/SpsAgent/store/storeTypes.ts`
 - Modify: current SPS store slice composition files
 - Test: `src/renderer/src/screens/SpsAgent/store/contextTray.test.ts`
@@ -536,6 +566,7 @@ Expected: PASS.
 ## Task 5: Context Selection Helpers
 
 **Files:**
+
 - Create: `src/renderer/src/screens/SpsAgent/context/contextSelection.ts`
 - Test: `src/renderer/src/screens/SpsAgent/context/contextSelection.test.ts`
 
@@ -543,7 +574,10 @@ Expected: PASS.
 
 ```ts
 import { describe, expect, it } from "vitest";
-import { blocksToContextPreview, currentPageContextItem } from "./contextSelection";
+import {
+  blocksToContextPreview,
+  currentPageContextItem,
+} from "./contextSelection";
 
 describe("contextSelection", () => {
   it("formats selected blocks into readable preview text", () => {
@@ -650,6 +684,7 @@ Expected: PASS.
 ## Task 6: Context Tray UI
 
 **Files:**
+
 - Create: `src/renderer/src/screens/SpsAgent/context/ContextTray.tsx`
 - Test: `src/renderer/src/screens/SpsAgent/context/ContextTray.test.tsx`
 - Modify: `src/renderer/src/screens/SpsAgent/assistant/AgentBody.tsx`
@@ -700,10 +735,17 @@ describe("ContextTray", () => {
 import { useState } from "react";
 import { Icon } from "../components/Icon";
 import { useStore } from "../store";
-import { contextBudgetInfo, type SpsContextItem } from "../../../../../shared/sps-context-items";
+import {
+  contextBudgetInfo,
+  type SpsContextItem,
+} from "../../../../../shared/sps-context-items";
 import { currentPageContextItem } from "./contextSelection";
 
-export function ContextTray({ model }: { model?: string | null }): React.JSX.Element {
+export function ContextTray({
+  model,
+}: {
+  model?: string | null;
+}): React.JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false);
   const items = useStore((s) => s.contextItems);
   const addContextItem = useStore((s) => s.addContextItem);
@@ -715,7 +757,11 @@ export function ContextTray({ model }: { model?: string | null }): React.JSX.Ele
 
   function addCurrentPage(): void {
     addContextItem(
-      currentPageContextItem(page, meta[page]?.title || "Untitled", docs[page] || []),
+      currentPageContextItem(
+        page,
+        meta[page]?.title || "Untitled",
+        docs[page] || [],
+      ),
     );
     setMenuOpen(false);
   }
@@ -727,10 +773,16 @@ export function ContextTray({ model }: { model?: string | null }): React.JSX.Ele
       </div>
       <div className="sps-context-chip-row">
         {items.map((item: SpsContextItem) => (
-          <button key={item.id} className="ctx-chip" title={item.preview || item.label}>
+          <button
+            key={item.id}
+            className="ctx-chip"
+            title={item.preview || item.label}
+          >
             <Icon name="doc" size={11} />
             <span>{item.label}</span>
-            <span className="ctx-chip-muted">{item.tokenEstimate.toLocaleString()}</span>
+            <span className="ctx-chip-muted">
+              {item.tokenEstimate.toLocaleString()}
+            </span>
             <span
               role="button"
               tabIndex={0}
@@ -741,20 +793,27 @@ export function ContextTray({ model }: { model?: string | null }): React.JSX.Ele
                 removeContextItem(item.id);
               }}
               onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") removeContextItem(item.id);
+                if (e.key === "Enter" || e.key === " ")
+                  removeContextItem(item.id);
               }}
             >
               <Icon name="x" size={11} />
             </span>
           </button>
         ))}
-        <button type="button" className="sg-chip" onClick={() => setMenuOpen((v) => !v)}>
+        <button
+          type="button"
+          className="sg-chip"
+          onClick={() => setMenuOpen((v) => !v)}
+        >
           <Icon name="plus" size={12} /> Add context
         </button>
       </div>
       {menuOpen && (
         <div className="sps-context-menu">
-          <button type="button" onClick={addCurrentPage}>Current page</button>
+          <button type="button" onClick={addCurrentPage}>
+            Current page
+          </button>
         </div>
       )}
     </div>
@@ -792,6 +851,7 @@ Expected: PASS.
 ## Task 7: Send Explicit Context Through SPS Assistant
 
 **Files:**
+
 - Modify: `src/renderer/src/screens/SpsAgent/store/slices/assistant.ts`
 - Modify: `src/renderer/src/screens/SpsAgent/assistant/providers/BridgeAssistant.ts`
 - Test: existing/new provider tests
@@ -802,7 +862,9 @@ Create or extend a provider test with:
 
 ```ts
 it("passes explicit context items to spsAssistant", async () => {
-  const spsAssistant = vi.fn().mockResolvedValue({ kind: "chat", reply: ["ok"] });
+  const spsAssistant = vi
+    .fn()
+    .mockResolvedValue({ kind: "chat", reply: ["ok"] });
   Object.defineProperty(window, "hermesAPI", {
     configurable: true,
     value: { spsAssistant },
@@ -836,7 +898,7 @@ const contextItems = s.contextItems;
 Then call:
 
 ```ts
-respond(prompt, { blocks, pageTitle, notes, contextItems })
+respond(prompt, { blocks, pageTitle, notes, contextItems });
 ```
 
 In `BridgeAssistant`, include:
@@ -868,6 +930,7 @@ Expected: PASS.
 ## Task 8: Add URL, External Session, File/Image, Graph Buttons
 
 **Files:**
+
 - Modify: `ContextTray.tsx`
 - Modify: `contextSelection.ts`
 - Tests: `ContextTray.test.tsx`, `contextSelection.test.ts`
@@ -877,13 +940,14 @@ Expected: PASS.
 Add tests for:
 
 ```ts
-urlContextItem("https://example.com", "Example title", "Example description")
-externalSessionContextItem("codex:abc", "Codex session", "snippet")
-workspaceGraphContextItem("3 pages, 4 links")
-fileContextItem({ name: "a.txt", mime: "text/plain", size: 12, text: "hello" })
+urlContextItem("https://example.com", "Example title", "Example description");
+externalSessionContextItem("codex:abc", "Codex session", "snippet");
+workspaceGraphContextItem("3 pages, 4 links");
+fileContextItem({ name: "a.txt", mime: "text/plain", size: 12, text: "hello" });
 ```
 
 Expected labels:
+
 - `URL: Example title`
 - `External session: Codex session`
 - `Workspace graph`
@@ -896,6 +960,7 @@ Each constructor should call `normalizeContextItem` and `estimateContextTokens` 
 - [ ] **Step 3: Wire tray buttons**
 
 Add menu actions:
+
 - `URL` prompts for a URL using a small inline input. V1 stores the URL and optional preview text; do not fetch network content in this task.
 - `External session` opens the existing External Sessions modal only if already available; v1 can add a paste-by-`convId` field in the tray to avoid coupling the modal.
 - `Workspace graph` summarizes current store tree/meta links with page count and link count.
@@ -914,6 +979,7 @@ Expected: PASS.
 ## Task 9: Visual Styling And Accessibility
 
 **Files:**
+
 - Modify: existing SPS CSS file that owns assistant/panel styles.
 - Test: `ContextTray.test.tsx`
 
@@ -985,6 +1051,7 @@ node scripts/sps-smoke.mjs
 ```
 
 Expected:
+
 - Vitest passes.
 - Typecheck passes.
 - Changed-file ESLint passes.

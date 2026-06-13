@@ -1,6 +1,6 @@
 # Hermes Pragmatic Ontology Specification
 
-This document specifies a **Pragmatic Ontology** for the Hermes ecosystem, covering both the **Hermes CLI (`~/.hermes/`)** and the **Hermes Desktop (SPS Agent)**. 
+This document specifies a **Pragmatic Ontology** for the Hermes ecosystem, covering both the **Hermes CLI (`~/.hermes/`)** and the **Hermes Desktop (SPS Agent)**.
 
 Rather than adopting heavy Semantic Web standards (like RDF/OWL), this specification establishes a lightweight, developer-friendly schema-based knowledge model using **JSON Schema** for CLI assets, **Markdown Frontmatter** for the desktop workspace, and **SQL Table Extensions** for the local SQLite index.
 
@@ -8,7 +8,7 @@ Rather than adopting heavy Semantic Web standards (like RDF/OWL), this specifica
 
 ## 1. Conceptual Architecture (Pedagogy)
 
-The Hermes Ontology organizes the system into a **Property Graph** consisting of **Entities (Nodes)**, **Attributes (Properties)**, and **Relations (Edges)**. 
+The Hermes Ontology organizes the system into a **Property Graph** consisting of **Entities (Nodes)**, **Attributes (Properties)**, and **Relations (Edges)**.
 
 ```mermaid
 classDiagram
@@ -35,7 +35,7 @@ classDiagram
         +string due_date
         +string assignee
     }
-    
+
     Note <|-- Task : Inheritance
     Profile "1" --> "*" Skill : owns
     Skill "1" --> "*" Note : reads/writes
@@ -44,6 +44,7 @@ classDiagram
 ```
 
 ### Core Entities
+
 1. **Profile**: A user context containing configurations, active models, and credentials.
 2. **Skill**: An executable action (CLI tool or Python subprocess) that performs a specific utility.
 3. **Note (Page)**: A raw file in the markdown database.
@@ -56,6 +57,7 @@ classDiagram
 To enable the agent to dynamically discover, validate, and chain skills, every skill directory in `~/.hermes/skills/<category>/<skill_name>/` should declare a `manifest.json` file.
 
 ### A. JSON Schema for Skill Manifests
+
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -78,7 +80,14 @@ To enable the agent to dynamically discover, validate, and chain skills, every s
     },
     "category": {
       "type": "string",
-      "enum": ["communication", "productivity", "system", "development", "multimedia", "custom"],
+      "enum": [
+        "communication",
+        "productivity",
+        "system",
+        "development",
+        "multimedia",
+        "custom"
+      ],
       "description": "High-level classification group."
     },
     "credentials": {
@@ -121,7 +130,9 @@ To enable the agent to dynamically discover, validate, and chain skills, every s
 ```
 
 ### B. Concrete Example: Gmail Skill Manifest
+
 Located at `~/.hermes/skills/communication/gmail/manifest.json`:
+
 ```json
 {
   "name": "gmail-send-email",
@@ -162,7 +173,8 @@ Located at `~/.hermes/skills/communication/gmail/manifest.json`:
 SPS Agent stores documents as Markdown files. We extend the frontmatter schema to classify the page type and specify typed relationships to other pages.
 
 ### A. Core Page Types (`type` field)
-- `concept`: A mental model, definition, or educational topic (e.g., *Tritone Substitution*).
+
+- `concept`: A mental model, definition, or educational topic (e.g., _Tritone Substitution_).
 - `task`: An actionable item containing workflow metadata.
 - `project`: A collection of related tasks and reference materials.
 - `decision`: An architectural or project design decision block.
@@ -171,7 +183,9 @@ SPS Agent stores documents as Markdown files. We extend the frontmatter schema t
 ### B. Document Schema Examples
 
 #### Example 1: A Project Page (`project`)
+
 Saved in `vault/hermes-desktop-release.md`:
+
 ```markdown
 ---
 title: "Hermes Desktop v1.0 Release"
@@ -194,7 +208,9 @@ We are tracking the integration of the pragmatic ontology for the v1.0 release.
 ```
 
 #### Example 2: A Task Page (`task`)
+
 Saved in `vault/tasks/implement-manifest-loader.md`:
+
 ```markdown
 ---
 title: "Implement CLI Skill Manifest Loader"
@@ -218,6 +234,7 @@ We need to add a parser to `src/main/skills.ts` that reads `manifest.json` files
 ## 4. SQLite Database Index Extensions
 
 The note index (`.note-index.db`) manages links, files, and FTS search. Currently, the `links` table is simple:
+
 ```sql
 CREATE TABLE IF NOT EXISTS links (
   source TEXT NOT NULL,
@@ -257,7 +274,9 @@ interface SemanticRelation {
   target: string;
 }
 
-function extractSemanticRelations(props: Record<string, unknown>): SemanticRelation[] {
+function extractSemanticRelations(
+  props: Record<string, unknown>,
+): SemanticRelation[] {
   const relations: SemanticRelation[] = [];
   if (Array.isArray(props.relations)) {
     for (const rel of props.relations) {
@@ -269,7 +288,7 @@ function extractSemanticRelations(props: Record<string, unknown>): SemanticRelat
       ) {
         relations.push({
           type: rel.type.trim().toLowerCase(),
-          target: rel.target.trim()
+          target: rel.target.trim(),
         });
       }
     }
@@ -299,15 +318,17 @@ function extractSemanticRelations(props: Record<string, unknown>): SemanticRelat
 Using this ontology, the AI agent can parse natural language queries into semantic database lookups.
 
 ### Query
+
 > "Show me all high-priority project releases that are blocked by another document."
 
 ### AI Resolution Path
+
 1. **Identify Node Constraints**: Look for files in `.note-index.db` where `type = 'project'` and `json_extract(props, '$.priority') = 'high'`.
 2. **Follow Edge Traversal**: Query `semantic_relations` where `relation_type = 'blocked_by'`.
 3. **Assemble Results**: Join results to yield the project name, the task name, and the specific blocking page.
 
 ```sql
-SELECT 
+SELECT
   n1.title AS project_title,
   n2.title AS blocked_by_title
 FROM notes n1

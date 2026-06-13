@@ -15,7 +15,9 @@ const mixedDynamicStaticImportModules = [
 const isKnownMixedImportWarning = (log: RollupLog): boolean =>
   log.message.includes("is dynamically imported by") &&
   log.message.includes("but also statically imported by") &&
-  log.message.includes("dynamic import will not move module into another chunk") &&
+  log.message.includes(
+    "dynamic import will not move module into another chunk",
+  ) &&
   mixedDynamicStaticImportModules.some((modulePath) =>
     log.message.includes(modulePath),
   );

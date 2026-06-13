@@ -70,13 +70,21 @@ export class ShellHookManager {
     }
   }
 
-  public static isAllowlisted(event: string, command: string, profile?: string): boolean {
+  public static isAllowlisted(
+    event: string,
+    command: string,
+    profile?: string,
+  ): boolean {
     const key = `${event}::${command}`;
     const allowlist = this.getAllowlist(profile);
     return !!allowlist[key];
   }
 
-  public static addToAllowlist(event: string, command: string, profile?: string): void {
+  public static addToAllowlist(
+    event: string,
+    command: string,
+    profile?: string,
+  ): void {
     const key = `${event}::${command}`;
     const allowlist = this.getAllowlist(profile);
     allowlist[key] = {
@@ -85,7 +93,10 @@ export class ShellHookManager {
       approved_at: new Date().toISOString(),
     };
     try {
-      safeWriteFile(this.getAllowlistPath(profile), JSON.stringify(allowlist, null, 2));
+      safeWriteFile(
+        this.getAllowlistPath(profile),
+        JSON.stringify(allowlist, null, 2),
+      );
     } catch (err) {
       console.error(`[ShellHookManager] Failed to write allowlist:`, err);
     }
@@ -98,7 +109,11 @@ export class ShellHookManager {
     event: string,
     payload: any,
     profile?: string,
-  ): Promise<{ action: "allow" | "block"; message?: string; context?: string }> {
+  ): Promise<{
+    action: "allow" | "block";
+    message?: string;
+    context?: string;
+  }> {
     const hooks = this.getConfiguredHooks(profile);
     const matchedHooks = hooks.filter((h) => {
       if (h.event !== event) return false;
@@ -110,7 +125,9 @@ export class ShellHookManager {
 
     for (const hook of matchedHooks) {
       const command = hook.command;
-      const isAllowed = this.isAllowlisted(event, command, profile) || this.isAutoAcceptEnabled(profile);
+      const isAllowed =
+        this.isAllowlisted(event, command, profile) ||
+        this.isAutoAcceptEnabled(profile);
 
       if (!isAllowed) {
         return {
@@ -120,12 +137,19 @@ export class ShellHookManager {
       }
 
       // Auto-record to allowlist if accepted via environment/settings and not already listed
-      if (this.isAutoAcceptEnabled(profile) && !this.isAllowlisted(event, command, profile)) {
+      if (
+        this.isAutoAcceptEnabled(profile) &&
+        !this.isAllowlisted(event, command, profile)
+      ) {
         this.addToAllowlist(event, command, profile);
       }
 
       try {
-        const result = await this.executeSubprocessHook(command, event, payload);
+        const result = await this.executeSubprocessHook(
+          command,
+          event,
+          payload,
+        );
         if (result.action === "block") {
           return result;
         }
@@ -133,7 +157,10 @@ export class ShellHookManager {
           return result; // return context injection
         }
       } catch (err) {
-        console.warn(`[ShellHookManager] Hook execution failed for ${command}:`, err);
+        console.warn(
+          `[ShellHookManager] Hook execution failed for ${command}:`,
+          err,
+        );
         // Fail-open: don't block agent execution if hook script crashes
       }
     }
@@ -145,7 +172,11 @@ export class ShellHookManager {
     command: string,
     event: string,
     payload: any,
-  ): Promise<{ action: "allow" | "block"; message?: string; context?: string }> {
+  ): Promise<{
+    action: "allow" | "block";
+    message?: string;
+    context?: string;
+  }> {
     return new Promise((resolve, reject) => {
       // shlex-like splitting logic or standard exec shell option.
       // We spawn with standard node shell configuration for compatibility
@@ -182,7 +213,11 @@ export class ShellHookManager {
       proc.on("close", (code) => {
         clearTimeout(timeout);
         if (code !== 0) {
-          reject(new Error(`Hook script exited with code ${code}. Stderr: ${stderr}`));
+          reject(
+            new Error(
+              `Hook script exited with code ${code}. Stderr: ${stderr}`,
+            ),
+          );
           return;
         }
 

@@ -5,6 +5,5 @@ export default {
   status: "Status",
   running: "Berjalan",
   stopped: "Berhenti",
-  gatewayHint:
-    "Menghubungkan Hermes ke Discord, Slack, dan platform lainnya",
+  gatewayHint: "Menghubungkan Hermes ke Discord, Slack, dan platform lainnya",
 } as const;

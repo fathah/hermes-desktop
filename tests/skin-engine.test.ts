@@ -48,7 +48,6 @@ describe("validateSkin", () => {
     expect(res.skin?.fonts).toBeUndefined();
     expect(res.errors.length).toBeGreaterThan(0);
   });
-
 });
 
 describe("skinToCssVars", () => {

@@ -197,6 +197,7 @@ export interface KanbanCreateTaskInput {
 ## Task 1: Active Work Sidecar Tests
 
 **Files:**
+
 - Create: `tests/active-work-runs.test.ts`
 - Create later: `src/shared/active-work.ts`
 - Create later: `src/main/active-work-runs.ts`
@@ -294,7 +295,13 @@ describe("active work runs sidecar", () => {
   });
 
   it("treats corrupt JSON as empty instead of crashing", async () => {
-    const p = join(home, "profiles", PROFILE, "sps-agent", "active-work-runs.json");
+    const p = join(
+      home,
+      "profiles",
+      PROFILE,
+      "sps-agent",
+      "active-work-runs.json",
+    );
     writeFileSync(p, "{not json", "utf-8");
     expect(await listActiveWorkRuns(PROFILE)).toEqual([]);
   });
@@ -323,6 +330,7 @@ Expected: FAIL because `src/main/active-work-runs.ts` does not exist.
 ## Task 2: Active Work Shared Types And Store
 
 **Files:**
+
 - Create: `src/shared/active-work.ts`
 - Create: `src/main/active-work-runs.ts`
 - Test: `tests/active-work-runs.test.ts`
@@ -440,13 +448,17 @@ export async function updateActiveWorkRun(
   const next: ActiveWorkRun = {
     ...current,
     ...patch,
-    lastTool: patch.lastTool === null ? undefined : patch.lastTool ?? current.lastTool,
+    lastTool:
+      patch.lastTool === null
+        ? undefined
+        : (patch.lastTool ?? current.lastTool),
     blockerReason:
       patch.blockerReason === null
         ? undefined
-        : patch.blockerReason ?? current.blockerReason,
-    summary: patch.summary === null ? undefined : patch.summary ?? current.summary,
-    error: patch.error === null ? undefined : patch.error ?? current.error,
+        : (patch.blockerReason ?? current.blockerReason),
+    summary:
+      patch.summary === null ? undefined : (patch.summary ?? current.summary),
+    error: patch.error === null ? undefined : (patch.error ?? current.error),
     updatedAt: Date.now(),
   };
   runs[idx] = next;
@@ -468,6 +480,7 @@ Expected: PASS.
 ## Task 3: Active Work IPC And Preload
 
 **Files:**
+
 - Modify: `src/main/ipc/sps.ts`
 - Modify: `src/preload/bridges/sps.ts`
 - Modify: `src/preload/bridges/config.ts`
@@ -581,14 +594,10 @@ Add:
 
 ```ts
 spsListActiveWorkRuns: (profile?: string) => Promise<ActiveWorkRun[]>;
-spsGetActiveWorkRun: (
-  runId: string,
-  profile?: string,
-) => Promise<ActiveWorkRun | null>;
-spsCreateActiveWorkRun: (
-  input: ActiveWorkCreateInput,
-  profile?: string,
-) => Promise<ActiveWorkRun>;
+spsGetActiveWorkRun: (runId: string, profile?: string) =>
+  Promise<ActiveWorkRun | null>;
+spsCreateActiveWorkRun: (input: ActiveWorkCreateInput, profile?: string) =>
+  Promise<ActiveWorkRun>;
 spsUpdateActiveWorkRun: (
   runId: string,
   patch: ActiveWorkPatch,
@@ -610,6 +619,7 @@ Expected: PASS.
 ## Task 4: Kanban Goal-Mode Create Flags
 
 **Files:**
+
 - Modify: `src/shared/kanban.ts`
 - Modify: `src/main/kanban.ts`
 - Modify: `src/preload/bridges/kanban.ts`
@@ -656,6 +666,7 @@ Expected: PASS.
 ## Task 5: Add Active Work Surface Shell
 
 **Files:**
+
 - Create: `src/renderer/src/screens/SpsAgent/activeWork/ActiveWorkSurface.tsx`
 - Modify: `src/renderer/src/screens/SpsAgent/store/storeTypes.ts`
 - Modify: `src/renderer/src/screens/SpsAgent/App.tsx`
@@ -719,7 +730,9 @@ export function ActiveWorkSurface() {
       setTasks(tasksRes.success ? tasksRes.data || [] : []);
       setError(boardsRes.error || tasksRes.error || "");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load active work.");
+      setError(
+        err instanceof Error ? err.message : "Could not load active work.",
+      );
     } finally {
       setLoading(false);
     }
@@ -779,21 +792,34 @@ export function ActiveWorkSurface() {
           <h1>Active Work</h1>
           <p>Goals, running work, and My Assistant's task board.</p>
         </div>
-        <button className="cover-btn" onClick={() => void refresh()} disabled={loading}>
+        <button
+          className="cover-btn"
+          onClick={() => void refresh()}
+          disabled={loading}
+        >
           <Icon name="refresh" size={15} /> Refresh
         </button>
       </div>
 
-      {error && <div className="c-name" style={{ color: "var(--danger, #c00)" }}>{error}</div>}
+      {error && (
+        <div className="c-name" style={{ color: "var(--danger, #c00)" }}>
+          {error}
+        </div>
+      )}
 
       <section className="active-work-section">
         <h2>Active Runs</h2>
         {runs.length === 0 ? (
-          <div className="ck-empty">No active work yet. Run a plan with /work or start a goal.</div>
+          <div className="ck-empty">
+            No active work yet. Run a plan with /work or start a goal.
+          </div>
         ) : (
           <div className="active-work-run-list">
             {runs.map((run) => (
-              <article key={run.id} className={`active-work-run is-${run.status}`}>
+              <article
+                key={run.id}
+                className={`active-work-run is-${run.status}`}
+              >
                 <div className="active-work-run-main">
                   <strong>{run.title}</strong>
                   <span>{run.goal}</span>
@@ -804,12 +830,18 @@ export function ActiveWorkSurface() {
                 </div>
                 <div className="active-work-run-actions">
                   {run.pageId && (
-                    <button className="cover-btn" onClick={() => void resumeRun(run)}>
+                    <button
+                      className="cover-btn"
+                      onClick={() => void resumeRun(run)}
+                    >
                       Resume
                     </button>
                   )}
                   {run.status === "running" && (
-                    <button className="cover-btn" onClick={() => void stopRun(run)}>
+                    <button
+                      className="cover-btn"
+                      onClick={() => void stopRun(run)}
+                    >
                       Stop
                     </button>
                   )}
@@ -835,7 +867,9 @@ export function ActiveWorkSurface() {
                   onClick={() => setSelectedTask(task.id)}
                 >
                   <strong>{task.title}</strong>
-                  <small>{task.assignee ? `@${task.assignee}` : "unassigned"}</small>
+                  <small>
+                    {task.assignee ? `@${task.assignee}` : "unassigned"}
+                  </small>
                 </button>
               ))}
             </div>
@@ -850,7 +884,14 @@ export function ActiveWorkSurface() {
           <div className="active-work-meta">
             <span>Status: {taskDetail.task.status}</span>
             <span>Runs: {taskDetail.runs.length}</span>
-            <span>Last heartbeat: {timeAgo(taskDetail.runs[0]?.last_heartbeat_at ? taskDetail.runs[0].last_heartbeat_at * 1000 : null)}</span>
+            <span>
+              Last heartbeat:{" "}
+              {timeAgo(
+                taskDetail.runs[0]?.last_heartbeat_at
+                  ? taskDetail.runs[0].last_heartbeat_at * 1000
+                  : null,
+              )}
+            </span>
           </div>
           {taskDetail.latest_summary && <p>{taskDetail.latest_summary}</p>}
           {taskDetail.comments.length > 0 && (
@@ -878,7 +919,9 @@ If `Icon` has no `"refresh"` icon, use the existing `"return"` or `"clock"` icon
 In `src/renderer/src/screens/SpsAgent/App.tsx`, import `ActiveWorkSurface` and add:
 
 ```tsx
-{surface === "activeWork" && <ActiveWorkSurface />}
+{
+  surface === "activeWork" && <ActiveWorkSurface />;
+}
 ```
 
 - [ ] **Step 4: Add sidebar nav**
@@ -920,6 +963,7 @@ Expected: PASS.
 ## Task 6: Track SPS `/work` Runs
 
 **Files:**
+
 - Modify: `src/renderer/src/screens/SpsAgent/store/slices/assistant.ts`
 - Test: add focused tests only if an assistant slice test already exists. If none exists, cover through `ActiveWorkSurface.test.tsx` with mocked APIs.
 
@@ -928,7 +972,9 @@ Expected: PASS.
 Add helper near `serializePlanBlocks` usage in `assistant.ts`:
 
 ```ts
-function activeCriteriaFromBlocks(blocks: Block[]): Array<{ text: string; done: boolean }> {
+function activeCriteriaFromBlocks(
+  blocks: Block[],
+): Array<{ text: string; done: boolean }> {
   return blocks
     .filter((b) => b.type === "todo" && b.text.trim())
     .map((b) => ({ text: b.text.trim(), done: Boolean(b.done) }));
@@ -1045,6 +1091,7 @@ Expected: PASS.
 ## Task 7: Start Goal Flow
 
 **Files:**
+
 - Modify: `src/renderer/src/screens/SpsAgent/activeWork/ActiveWorkSurface.tsx`
 - Test: `src/renderer/src/screens/SpsAgent/activeWork/ActiveWorkSurface.test.tsx`
 
@@ -1224,6 +1271,7 @@ Expected: PASS.
 ## Task 8: Rich Task Detail Panel
 
 **Files:**
+
 - Modify: `src/renderer/src/screens/SpsAgent/activeWork/ActiveWorkSurface.tsx`
 - Test: `src/renderer/src/screens/SpsAgent/activeWork/ActiveWorkSurface.test.tsx`
 
@@ -1277,22 +1325,32 @@ it("loads task detail with runs and comments when a task is selected", async () 
         skills: [],
         max_retries: null,
       },
-      comments: [{ id: 1, task_id: "t_1", author: "me", body: "Use v2 schema", created_at: 3 }],
+      comments: [
+        {
+          id: 1,
+          task_id: "t_1",
+          author: "me",
+          body: "Use v2 schema",
+          created_at: 3,
+        },
+      ],
       events: [],
       parents: [],
       children: [],
-      runs: [{
-        id: 7,
-        task_id: "t_1",
-        profile: "worker",
-        status: "running",
-        outcome: null,
-        summary: null,
-        error: null,
-        started_at: 10,
-        ended_at: null,
-        last_heartbeat_at: 20,
-      }],
+      runs: [
+        {
+          id: 7,
+          task_id: "t_1",
+          profile: "worker",
+          status: "running",
+          outcome: null,
+          summary: null,
+          error: null,
+          started_at: 10,
+          ended_at: null,
+          last_heartbeat_at: 20,
+        },
+      ],
       latest_summary: "Still investigating",
     },
   });
@@ -1310,33 +1368,40 @@ it("loads task detail with runs and comments when a task is selected", async () 
 In the selected-task panel, render:
 
 ```tsx
-{taskDetail.runs.length > 0 && (
-  <div>
-    <h3>Runs</h3>
-    {taskDetail.runs.map((run) => (
-      <div key={run.id} className="lst-row">
-        <strong>{run.profile || "worker"}</strong>
-        <span>{run.status || run.outcome || "unknown"}</span>
-        <small>
-          Last heartbeat {timeAgo(run.last_heartbeat_at ? run.last_heartbeat_at * 1000 : null)}
-        </small>
-        {run.error && <span>{run.error}</span>}
-        {run.summary && <span>{run.summary}</span>}
-      </div>
-    ))}
-  </div>
-)}
-{taskDetail.events.length > 0 && (
-  <div>
-    <h3>Events</h3>
-    {taskDetail.events.slice(0, 10).map((event) => (
-      <div key={event.id} className="lst-row">
-        <strong>{event.kind}</strong>
-        <code>{JSON.stringify(event.payload || {})}</code>
-      </div>
-    ))}
-  </div>
-)}
+{
+  taskDetail.runs.length > 0 && (
+    <div>
+      <h3>Runs</h3>
+      {taskDetail.runs.map((run) => (
+        <div key={run.id} className="lst-row">
+          <strong>{run.profile || "worker"}</strong>
+          <span>{run.status || run.outcome || "unknown"}</span>
+          <small>
+            Last heartbeat{" "}
+            {timeAgo(
+              run.last_heartbeat_at ? run.last_heartbeat_at * 1000 : null,
+            )}
+          </small>
+          {run.error && <span>{run.error}</span>}
+          {run.summary && <span>{run.summary}</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+{
+  taskDetail.events.length > 0 && (
+    <div>
+      <h3>Events</h3>
+      {taskDetail.events.slice(0, 10).map((event) => (
+        <div key={event.id} className="lst-row">
+          <strong>{event.kind}</strong>
+          <code>{JSON.stringify(event.payload || {})}</code>
+        </div>
+      ))}
+    </div>
+  );
+}
 ```
 
 - [ ] **Step 3: Run renderer tests**
@@ -1352,6 +1417,7 @@ Expected: PASS.
 ## Task 9: Replace Or De-emphasize Old Assistant Tasks Modal
 
 **Files:**
+
 - Modify: `src/renderer/src/screens/SpsAgent/sidebar/Sidebar.tsx`
 - Modify: `src/renderer/src/screens/SpsAgent/modals/AgentTasksModal.tsx`
 - Modify: `src/renderer/src/screens/SpsAgent/shell/Overlays.tsx` only if removing the modal state.
@@ -1393,6 +1459,7 @@ Expected: PASS.
 ## Task 10: Styling
 
 **Files:**
+
 - Modify the smallest existing SPS stylesheet that already owns surface/card styles. Likely `src/renderer/src/screens/SpsAgent/styles/*.css`; inspect imports before editing.
 
 - [ ] **Step 1: Locate active surface CSS patterns**
@@ -1573,4 +1640,3 @@ Expected: PASS or a clear unrelated existing smoke failure. Verify manually that
 - Spec coverage: goal visibility is covered by Active Work records and Start Goal; task board by existing Kanban list/detail; heartbeat by `KanbanRun.last_heartbeat_at` and SPS `lastHeartbeatAt`; blocked state by Kanban status plus event payload display; artifacts by active-work artifacts; resume/stop by existing `runWork` and scoped `abortChat`.
 - Placeholder scan: no implementation step depends on an undefined future backend. Known optional upstream surfaces such as run logs and terminate endpoints are explicitly out of scope for v1.
 - Type consistency: `ActiveWorkRun`, `ActiveWorkCreateInput`, and `ActiveWorkPatch` names are used consistently across shared, main, preload, and renderer steps.
-

@@ -103,7 +103,7 @@ the command palette and the **Storage** section of the Tweaks panel:
 
 **Parity (`workspaceParity`)** round‑trips a live workspace through the vault and
 reports `ok` = content + metadata + structure all survive. It also reports
-`blockAnchorsOk` (F2): every comment anchored to a *real* source block keeps its
+`blockAnchorsOk` (F2): every comment anchored to a _real_ source block keeps its
 id through the round‑trip. Dangling anchors (a `blockId` with no matching block)
 are pre‑existing breakage and don't gate cutover.
 
@@ -111,8 +111,8 @@ are pre‑existing breakage and don't gate cutover.
 
 `deletePage` moves a page to **trash** (restorable, including across reload — its
 `vault/<pageId>.md` is intentionally retained, and `_manifest.json` scoping stops
-it resurrecting). When pages leave the workspace entirely (e.g. *Reset workspace
-to sample*), `resetWorkspace` removes their now‑orphaned vault files via
+it resurrecting). When pages leave the workspace entirely (e.g. _Reset workspace
+to sample_), `resetWorkspace` removes their now‑orphaned vault files via
 `spsDeletePage` / `sps-vault.ts:deletePageIn` (id‑validated, traversal‑safe,
 best‑effort).
 

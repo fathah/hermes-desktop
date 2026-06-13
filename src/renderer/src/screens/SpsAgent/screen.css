@@ -318,8 +318,14 @@
 }
 
 @keyframes healthFadeIn {
-  from { opacity: 0; transform: translateY(-5px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .sps-scope .health-help-card-header {
@@ -652,7 +658,7 @@
   border: 1px solid var(--hair-strong);
   border-radius: 8px;
   padding: 12px;
-  box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
   z-index: 100;
   font-size: 12px;
   color: var(--tx-1);
@@ -682,6 +688,36 @@
 .sps-scope .doc-cover .cover-fill {
   background: var(--cover-bg, var(--sunk));
 }
+.sps-scope .cover-fill[data-cover-bg="var(--accent)"] {
+  background: var(--accent);
+}
+.sps-scope .cover-fill[data-cover-bg="#1B4F8A"] {
+  background: #1b4f8a;
+}
+.sps-scope .cover-fill[data-cover-bg="#A1202C"] {
+  background: #a1202c;
+}
+.sps-scope .cover-fill[data-cover-bg="#1F6B3A"] {
+  background: #1f6b3a;
+}
+.sps-scope .cover-fill[data-cover-bg="#44484F"] {
+  background: #44484f;
+}
+.sps-scope .cover-fill[data-cover-bg="#C9C1AE"] {
+  background: #c9c1ae;
+}
+.sps-scope .cover-fill[data-cover-bg="#5A3A8A"] {
+  background: #5a3a8a;
+}
+.sps-scope .cover-fill[data-cover-bg="#161511"] {
+  background: #161511;
+}
+.sps-scope .cover-fill[data-cover-bg="#ff0000"] {
+  background: #ff0000;
+}
+.sps-scope .cover-fill[data-cover-bg="image"] {
+  background: var(--sunk);
+}
 
 .sps-scope .doc-title-row {
   position: relative;
@@ -693,5 +729,3 @@
 .sps-scope .doc-title {
   flex: 1;
 }
-
-

@@ -158,11 +158,19 @@ const app = await electron.launch({
     ELECTRON_DISABLE_SECURITY_WARNINGS: "1",
   },
 });
-app.process().stdout.on('data', (data) => console.log('MAIN STDOUT:', data.toString().trim()));
-app.process().stderr.on('data', (data) => console.log('MAIN STDERR:', data.toString().trim()));
+app
+  .process()
+  .stdout.on("data", (data) =>
+    console.log("MAIN STDOUT:", data.toString().trim()),
+  );
+app
+  .process()
+  .stderr.on("data", (data) =>
+    console.log("MAIN STDERR:", data.toString().trim()),
+  );
 
 const win = await app.firstWindow();
-win.on('console', msg => console.log('BROWSER CONSOLE:', msg.text()));
+win.on("console", (msg) => console.log("BROWSER CONSOLE:", msg.text()));
 await win.waitForLoadState("domcontentloaded");
 await win.waitForSelector(".app", { timeout: 30000 });
 await win.waitForTimeout(1800);
@@ -194,32 +202,38 @@ await shot("02-equity-launcher", async () => {
 // 03 — push a fixture report through the real chat IPC; renders full report+charts
 await shot("03-equity-report", async () => {
   // Stub the main process IPC send-message and sps-read-row handlers to return the report
-  await app.evaluate(({ ipcMain }, stubs) => {
-    console.log("STUBBING send-message AND sps-read-row");
-    ipcMain.removeHandler("send-message");
-    ipcMain.handle("send-message", async (event, prompt) => {
-      console.log("MOCK send-message called with prompt:", prompt.slice(0, 100));
-      return { response: stubs.REPORT_MD };
-    });
-    ipcMain.removeHandler("sps-read-row");
-    ipcMain.handle("sps-read-row", async (event, dbFolder, rowId) => {
-      console.log("MOCK sps-read-row called:", dbFolder, rowId);
-      if (dbFolder === "equity-research" && rowId === "ntpc") {
-        console.log("MOCK sps-read-row matches ntpc! Returning ROW_MD.");
-        return stubs.ROW_MD;
-      }
-      return null;
-    });
-  }, { REPORT_MD, ROW_MD });
+  await app.evaluate(
+    ({ ipcMain }, stubs) => {
+      console.log("STUBBING send-message AND sps-read-row");
+      ipcMain.removeHandler("send-message");
+      ipcMain.handle("send-message", async (event, prompt) => {
+        console.log(
+          "MOCK send-message called with prompt:",
+          prompt.slice(0, 100),
+        );
+        return { response: stubs.REPORT_MD };
+      });
+      ipcMain.removeHandler("sps-read-row");
+      ipcMain.handle("sps-read-row", async (event, dbFolder, rowId) => {
+        console.log("MOCK sps-read-row called:", dbFolder, rowId);
+        if (dbFolder === "equity-research" && rowId === "ntpc") {
+          console.log("MOCK sps-read-row matches ntpc! Returning ROW_MD.");
+          return stubs.ROW_MD;
+        }
+        return null;
+      });
+    },
+    { REPORT_MD, ROW_MD },
+  );
 
   // Click the run button to trigger the run flow
   console.log("Clicking Run research...");
   await win.evaluate(() => {
-    const buttons = [...document.querySelectorAll(".eq-run-btn")].map(b => ({
+    const buttons = [...document.querySelectorAll(".eq-run-btn")].map((b) => ({
       text: (b.textContent || "").trim(),
       outerHTML: b.outerHTML,
       visible: b.offsetWidth > 0 && b.offsetHeight > 0,
-      disabled: b.disabled
+      disabled: b.disabled,
     }));
     console.log("ALL FOUND RUN BUTTONS:", JSON.stringify(buttons));
 
@@ -240,8 +254,12 @@ await shot("03-equity-report", async () => {
     await win.waitForSelector(".eq-report", { timeout: 12000 });
     await win.waitForSelector(".eq-radar svg", { timeout: 12000 });
   } catch (e) {
-    const surfaceText = await win.evaluate(() => document.querySelector(".eq-surface")?.innerText || "not found");
-    const html = await win.evaluate(() => document.querySelector(".eq-surface")?.innerHTML || "not found");
+    const surfaceText = await win.evaluate(
+      () => document.querySelector(".eq-surface")?.innerText || "not found",
+    );
+    const html = await win.evaluate(
+      () => document.querySelector(".eq-surface")?.innerHTML || "not found",
+    );
     console.log("TIMEOUT ON SELECTOR! SURFACE_TEXT=", surfaceText);
     console.log("TIMEOUT ON SELECTOR! HTML=", html.slice(0, 1000));
     throw e;

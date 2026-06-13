@@ -29,7 +29,9 @@ function statusFromFindings(
   current: CapabilityUpdateStatus,
   findings: CapabilityRiskFinding[],
 ): CapabilityUpdateStatus {
-  if (findings.some((f) => f.severity === "critical" || f.severity === "high")) {
+  if (
+    findings.some((f) => f.severity === "critical" || f.severity === "high")
+  ) {
     return "rescanBlocked";
   }
   if (findings.some((f) => f.severity === "medium" || f.severity === "low")) {

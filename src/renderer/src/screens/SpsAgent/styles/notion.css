@@ -1472,3 +1472,77 @@
   box-shadow: none;
 }
 
+/* Refactored styles from DayTimeline.tsx */
+.sps-scope .jr-entry-title-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.sps-scope .jr-task-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1.5px solid var(--hair-strong);
+  color: transparent;
+  font-size: 10px;
+  font-weight: bold;
+}
+.sps-scope .jr-task-badge.is-done {
+  background: var(--accent);
+  color: #fff;
+}
+.sps-scope .jr-task-title {
+  text-decoration: none;
+  color: var(--tx-1);
+}
+.sps-scope .jr-task-title.is-done {
+  text-decoration: line-through;
+  color: var(--tx-3);
+}
+.sps-scope .jr-work-priority-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--hair-soft);
+  color: var(--tx-2);
+  font-weight: 600;
+}
+.sps-scope .jr-work-priority-badge.p0 {
+  background: rgba(229, 72, 77, 0.1);
+  color: #e5484d;
+}
+.sps-scope .jr-work-status-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--hair-soft);
+  color: var(--tx-3);
+  text-transform: uppercase;
+  letter-spacing: 0.2px;
+}
+.sps-scope .jr-work-status-badge.is-done {
+  background: rgba(76, 175, 80, 0.1);
+  color: #4caf50;
+}
+.sps-scope .jr-work-status-badge.blocked {
+  background: rgba(229, 72, 77, 0.1);
+  color: #e5484d;
+}
+.sps-scope .jr-task-details {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--tx-2);
+  padding-left: 26px;
+}
+.sps-scope .jr-task-body-text {
+  white-space: pre-wrap;
+  margin: 0 0 6px 0;
+}
+.sps-scope .jr-task-assignee-text {
+  margin: 4px 0 0 0;
+  color: var(--tx-3);
+}

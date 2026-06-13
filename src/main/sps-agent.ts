@@ -749,39 +749,59 @@ Return ONLY a JSON array, with no other prose or markdown formatting (no code fe
               try {
                 const auditRes = await fetch(auditUrl, {
                   method: "POST",
-                  headers: { "Content-Type": "application/json", ...getRemoteAuthHeader() },
+                  headers: {
+                    "Content-Type": "application/json",
+                    ...getRemoteAuthHeader(),
+                  },
                   signal: AbortSignal.timeout(60000),
                   body: JSON.stringify({
                     model: "hermes-agent",
                     stream: false,
                     messages: [
                       { role: "system", content: conceptAuditSystemPrompt },
-                      { role: "user", content: `Page Title: ${page.title}\n\nPage Content:\n${page.markdown}` }
-                    ]
+                      {
+                        role: "user",
+                        content: `Page Title: ${page.title}\n\nPage Content:\n${page.markdown}`,
+                      },
+                    ],
                   }),
                 });
                 if (!auditRes.ok) return;
                 const auditData = (await auditRes.json()) as {
                   choices?: { message?: { content?: string } }[];
                 };
-                const auditContent = auditData?.choices?.[0]?.message?.content ?? "";
+                const auditContent =
+                  auditData?.choices?.[0]?.message?.content ?? "";
                 const parsedConcepts = extractJson(auditContent);
                 if (Array.isArray(parsedConcepts)) {
                   for (const item of parsedConcepts) {
-                    if (item && typeof item === "object" && typeof item.body === "string") {
-                      createLearningProposal({
-                        kind: "memory",
-                        body: item.body.trim(),
-                        reason: typeof item.reason === "string" ? item.reason.trim() : `Found concept "${item.concept || ''}" in ingested note.`,
-                        source: { type: "inbox", title: page.title }
-                      }, profile);
+                    if (
+                      item &&
+                      typeof item === "object" &&
+                      typeof item.body === "string"
+                    ) {
+                      createLearningProposal(
+                        {
+                          kind: "memory",
+                          body: item.body.trim(),
+                          reason:
+                            typeof item.reason === "string"
+                              ? item.reason.trim()
+                              : `Found concept "${item.concept || ""}" in ingested note.`,
+                          source: { type: "inbox", title: page.title },
+                        },
+                        profile,
+                      );
                     }
                   }
                 }
               } catch (e) {
-                console.error(`[Ingest Concept Audit] Failed for page ${page.title}:`, e);
+                console.error(
+                  `[Ingest Concept Audit] Failed for page ${page.title}:`,
+                  e,
+                );
               }
-            })
+            }),
           );
         } catch (e) {
           console.error("[Ingest Concept Audit] Background task failed:", e);

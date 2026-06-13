@@ -52,10 +52,14 @@ export class CredentialPoolManager {
     profile?: string,
   ): void {
     const cleanProvider = provider.trim().toLowerCase();
-    const entries = (getCredentialPool(profile)[cleanProvider] || []) as ExtendedCredentialEntry[];
+    const entries = (getCredentialPool(profile)[cleanProvider] ||
+      []) as ExtendedCredentialEntry[];
 
     const matched = entries.find(
-      (e) => e.access_token === apiKey || e.api_key === apiKey || e.refresh_token === apiKey,
+      (e) =>
+        e.access_token === apiKey ||
+        e.api_key === apiKey ||
+        e.refresh_token === apiKey,
     );
 
     if (matched) {
@@ -70,7 +74,8 @@ export class CredentialPoolManager {
    */
   public static rotateKey(provider: string, profile?: string): string | null {
     const cleanProvider = provider.trim().toLowerCase();
-    const entries = (getCredentialPool(profile)[cleanProvider] || []) as ExtendedCredentialEntry[];
+    const entries = (getCredentialPool(profile)[cleanProvider] ||
+      []) as ExtendedCredentialEntry[];
 
     if (entries.length === 0) return null;
 
@@ -100,7 +105,9 @@ export class CredentialPoolManager {
     }
 
     // Sort by priority ascending (priority 0 > priority 1 > priority 2)
-    const sorted = available.sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0));
+    const sorted = available.sort(
+      (a, b) => (a.priority ?? 0) - (b.priority ?? 0),
+    );
     const selected = sorted[0];
     const token = selected.access_token ?? selected.api_key ?? "";
 
@@ -118,12 +125,19 @@ export class CredentialPoolManager {
   /**
    * Helper to write the active key to environmental variables and profiles.
    */
-  private static updateActiveKey(provider: string, key: string, profile?: string): void {
+  private static updateActiveKey(
+    provider: string,
+    key: string,
+    profile?: string,
+  ): void {
     const envKey = this.getEnvKeyForProvider(provider);
     try {
       setEnvValue(envKey, key, profile);
     } catch (err) {
-      console.error(`[CredentialPoolManager] Failed to write rotated env key:`, err);
+      console.error(
+        `[CredentialPoolManager] Failed to write rotated env key:`,
+        err,
+      );
     }
   }
 }

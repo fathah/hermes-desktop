@@ -483,7 +483,11 @@ export function getSessionMessages(sessionId: string): HistoryItem[] {
 
   let hasMeta = false;
   try {
-    const tableCheck = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='messages_metadata'").get();
+    const tableCheck = db
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='messages_metadata'",
+      )
+      .get();
     if (tableCheck) hasMeta = true;
   } catch {
     hasMeta = false;

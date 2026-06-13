@@ -87,7 +87,10 @@ export function LearningSurface({
     void loadCurator();
   }, [loadProposals, loadSkills, loadCurator]);
 
-  async function run<T>(label: string, fn: () => Promise<T>): Promise<T | null> {
+  async function run<T>(
+    label: string,
+    fn: () => Promise<T>,
+  ): Promise<T | null> {
     setBusy(label);
     setNotice("");
     try {
@@ -178,7 +181,8 @@ export function LearningSurface({
     const content = await run("view-skill", () =>
       window.hermesAPI.getSkillContent(skill.path),
     );
-    if (typeof content === "string") setSelectedSkill({ name: skill.name, content });
+    if (typeof content === "string")
+      setSelectedSkill({ name: skill.name, content });
   }
 
   async function toggleSkill(skill: SkillRow, enabled: boolean): Promise<void> {
@@ -191,7 +195,11 @@ export function LearningSurface({
 
   async function importSkill(skill: LocalSkill): Promise<void> {
     const res = await run("import-skill", () =>
-      window.hermesAPI.importLocalSkill(skill.sourcePath, skill.category, profile),
+      window.hermesAPI.importLocalSkill(
+        skill.sourcePath,
+        skill.category,
+        profile,
+      ),
     );
     if (res?.success) await loadSkills();
     else if (res) setNotice(res.error || "Could not import skill.");
@@ -228,7 +236,11 @@ export function LearningSurface({
             className={`settings-subnav-tab ${tab === id ? "active" : ""}`}
             onClick={() => setTab(id)}
           >
-            {id === "memories" ? "Memories" : id === "skills" ? "Skills" : "Curator"}
+            {id === "memories"
+              ? "Memories"
+              : id === "skills"
+                ? "Skills"
+                : "Curator"}
           </button>
         ))}
       </div>
@@ -381,10 +393,16 @@ function MemoriesTab({
                     </small>
                   )}
                 </span>
-                <button className="btn btn-primary btn-sm" onClick={() => accept(p.id)}>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() => accept(p.id)}
+                >
                   Accept
                 </button>
-                <button className="btn btn-secondary btn-sm" onClick={() => dismiss(p.id)}>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => dismiss(p.id)}
+                >
                   Dismiss
                 </button>
               </div>
@@ -441,10 +459,16 @@ function SkillsTab(props: {
                     {p.draft.description}
                   </small>
                 </span>
-                <button className="btn btn-primary btn-sm" onClick={() => props.accept(p.id)}>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() => props.accept(p.id)}
+                >
                   Accept
                 </button>
-                <button className="btn btn-secondary btn-sm" onClick={() => props.dismiss(p.id)}>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => props.dismiss(p.id)}
+                >
                   Dismiss
                 </button>
               </div>
@@ -466,7 +490,10 @@ function SkillsTab(props: {
                   {usageSummary(usage)}
                 </small>
               </span>
-              <button className="btn btn-secondary btn-sm" onClick={() => props.viewSkill(skill)}>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => props.viewSkill(skill)}
+              >
                 View
               </button>
               <button
@@ -523,7 +550,10 @@ function SkillsTab(props: {
           value={props.repoPath}
           onChange={(e) => props.setRepoPath(e.target.value)}
         />
-        <button className="btn btn-primary btn-sm" onClick={props.generateDraft}>
+        <button
+          className="btn btn-primary btn-sm"
+          onClick={props.generateDraft}
+        >
           Generate draft
         </button>
       </section>
@@ -534,7 +564,10 @@ function SkillsTab(props: {
           {props.localSkills.map((skill) => (
             <div key={skill.sourcePath} className="memory-entry-card">
               <span className="memory-entry-content">{skill.name}</span>
-              <button className="btn btn-secondary btn-sm" onClick={() => props.importSkill(skill)}>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => props.importSkill(skill)}
+              >
                 Import
               </button>
             </div>
@@ -596,13 +629,22 @@ function CuratorTab({
           archived.map((name) => (
             <div key={name} className="memory-entry-card">
               <span className="memory-entry-content">{name}</span>
-              <button className="btn btn-secondary btn-sm" onClick={() => restore(name)}>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => restore(name)}
+              >
                 Restore {name}
               </button>
-              <button className="btn btn-secondary btn-sm" onClick={() => pin(name)}>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => pin(name)}
+              >
                 Pin
               </button>
-              <button className="btn btn-secondary btn-sm" onClick={() => unpin(name)}>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => unpin(name)}
+              >
                 Unpin
               </button>
             </div>
@@ -620,13 +662,25 @@ function CuratorTab({
           onChange={(e) => setManualSkill(e.target.value)}
         />
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button className="btn btn-secondary btn-sm" disabled={!clean} onClick={() => restore(clean)}>
+          <button
+            className="btn btn-secondary btn-sm"
+            disabled={!clean}
+            onClick={() => restore(clean)}
+          >
             Restore
           </button>
-          <button className="btn btn-secondary btn-sm" disabled={!clean} onClick={() => pin(clean)}>
+          <button
+            className="btn btn-secondary btn-sm"
+            disabled={!clean}
+            onClick={() => pin(clean)}
+          >
             Pin
           </button>
-          <button className="btn btn-secondary btn-sm" disabled={!clean} onClick={() => unpin(clean)}>
+          <button
+            className="btn btn-secondary btn-sm"
+            disabled={!clean}
+            onClick={() => unpin(clean)}
+          >
             Unpin
           </button>
         </div>

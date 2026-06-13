@@ -10,7 +10,11 @@ import YAML from "yaml";
 /**
  * Summarizes a note's raw markdown text using the local LLM.
  */
-async function generateSummary(title: string, content: string, profile?: string): Promise<string> {
+async function generateSummary(
+  title: string,
+  content: string,
+  profile?: string,
+): Promise<string> {
   const prompt = `You are a knowledge gardening assistant for an agent's memory system.
 Please provide a 1-sentence summary of the following note content.
 Do not include any introductory phrases like "Here is a summary". Just output the clean summary string.
@@ -19,7 +23,10 @@ Note Title: ${title}
 Note Content:
 ${content}`;
 
-  const res = await chatCompletionOnce([{ role: "user", content: prompt }], profile);
+  const res = await chatCompletionOnce(
+    [{ role: "user", content: prompt }],
+    profile,
+  );
   if (res.error) {
     throw new Error(`Failed to generate summary: ${res.error}`);
   }
@@ -32,14 +39,20 @@ ${content}`;
 export async function runDreamCycle(profile?: string): Promise<void> {
   const activeProfile = profile ?? getActiveProfileNameSync();
   const vaultDir = resolveSpsVaultDir(activeProfile);
-  console.log(`[DREAM_CYCLE] Starting Dream Cycle in vault: ${vaultDir} (Profile: ${activeProfile})`);
+  console.log(
+    `[DREAM_CYCLE] Starting Dream Cycle in vault: ${vaultDir} (Profile: ${activeProfile})`,
+  );
 
   try {
     const noteIndex = await getSpsNoteIndex(activeProfile);
     const notes = noteIndex.query({});
 
     // 1. Process and summarize notes
-    const summarizedNotes: Array<{ title: string; summary: string; path: string }> = [];
+    const summarizedNotes: Array<{
+      title: string;
+      summary: string;
+      path: string;
+    }> = [];
 
     for (const note of notes) {
       const absPath = join(vaultDir, note.path);
@@ -61,7 +74,9 @@ export async function runDreamCycle(profile?: string): Promise<void> {
           const yamlStr = YAML.stringify(props).trim();
           const updatedContent = `---\n${yamlStr}\n---\n${body.startsWith("\n") ? body : "\n" + body}`;
           await writeFile(absPath, updatedContent, "utf8");
-          console.log(`[DREAM_CYCLE] Saved summary to frontmatter of: ${note.path}`);
+          console.log(
+            `[DREAM_CYCLE] Saved summary to frontmatter of: ${note.path}`,
+          );
         } catch (err) {
           console.error(`[DREAM_CYCLE] Failed to summarize ${note.path}:`, err);
         }
@@ -78,7 +93,9 @@ export async function runDreamCycle(profile?: string): Promise<void> {
 
     // 2. Fetch Gaps & Orphans
     const lintReport = noteIndex.lint();
-    const missing = lintReport.brokenLinks.map((b) => `${b.source} -> [[${b.target}]] (${b.type})`).join("\n");
+    const missing = lintReport.brokenLinks
+      .map((b) => `${b.source} -> [[${b.target}]] (${b.type})`)
+      .join("\n");
     const orphans = lintReport.orphans.join("\n");
 
     const noteSummariesText = summarizedNotes
@@ -108,7 +125,10 @@ Generate a beautiful Markdown report containing:
 
 Do not include any extra text outside the Markdown content.`;
 
-    const res = await chatCompletionOnce([{ role: "user", content: reportPrompt }], activeProfile);
+    const res = await chatCompletionOnce(
+      [{ role: "user", content: reportPrompt }],
+      activeProfile,
+    );
     if (res.error) {
       throw new Error(`Failed to compile report: ${res.error}`);
     }
@@ -122,7 +142,6 @@ Do not include any extra text outside the Markdown content.`;
 
     // Trigger index rebuild to pick up the new Dream Report note
     await noteIndex.rebuild();
-
   } catch (err) {
     console.error("[DREAM_CYCLE] Error in dream cycle run:", err);
   }

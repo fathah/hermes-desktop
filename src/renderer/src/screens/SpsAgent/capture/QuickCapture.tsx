@@ -51,7 +51,9 @@ export function QuickCapture() {
       setRecording(false);
     } else {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+        });
         streamRef.current = stream;
         const recorder = new MediaRecorder(stream);
         const chunks: Blob[] = [];
@@ -91,7 +93,11 @@ export function QuickCapture() {
         body: text,
         capturedAt: Date.now(),
       });
-      const ok = await window.hermesAPI.spsExportRow("_inbox", capture.id, capture.markdown);
+      const ok = await window.hermesAPI.spsExportRow(
+        "_inbox",
+        capture.id,
+        capture.markdown,
+      );
       if (ok) {
         // Close window to hide Quick Capture
         window.close();
@@ -144,13 +150,19 @@ export function QuickCapture() {
             <button
               onClick={handleVoiceToggle}
               className={`qc-btn ${recording ? "qc-btn-voice-recording" : ""}`}
-              title={recording ? "Stop voice recording" : "Start voice recording"}
-              aria-label={recording ? "Stop voice recording" : "Start voice recording"}
+              title={
+                recording ? "Stop voice recording" : "Start voice recording"
+              }
+              aria-label={
+                recording ? "Stop voice recording" : "Start voice recording"
+              }
             >
               <span
                 className={`qc-recording-dot ${recording ? "qc-recording-dot-active" : ""}`}
               />
-              <span>{recording ? `Recording ${formatTime(recordTime)}` : "Voice"}</span>
+              <span>
+                {recording ? `Recording ${formatTime(recordTime)}` : "Voice"}
+              </span>
             </button>
           </div>
 

@@ -55,10 +55,20 @@ beforeEach(() => {
   api.rollbackLearningProposal.mockResolvedValue({ ok: true });
   api.createLearningProposal.mockResolvedValue({ ok: true });
   api.listInstalledSkills.mockResolvedValue([
-    { name: "Daily Brief", category: "custom", description: "Brief", path: "/s/daily" },
+    {
+      name: "Daily Brief",
+      category: "custom",
+      description: "Brief",
+      path: "/s/daily",
+    },
   ]);
   api.listDisabledSkills.mockResolvedValue([
-    { name: "Old Skill", category: "custom", description: "Old", path: "/s/old" },
+    {
+      name: "Old Skill",
+      category: "custom",
+      description: "Old",
+      path: "/s/old",
+    },
   ]);
   api.setSkillEnabled.mockResolvedValue({ success: true });
   api.getSkillContent.mockResolvedValue("# Daily Brief\n\nDo the brief.");
@@ -85,7 +95,10 @@ beforeEach(() => {
   });
   api.getCuratorStatus.mockResolvedValue("Curator is running");
   api.listArchivedSkills.mockResolvedValue("old-skill\nunused-skill");
-  api.restoreArchivedSkill.mockResolvedValue({ success: true, output: "restored" });
+  api.restoreArchivedSkill.mockResolvedValue({
+    success: true,
+    output: "restored",
+  });
   api.pinSkill.mockResolvedValue({ success: true, output: "pinned" });
   api.unpinSkill.mockResolvedValue({ success: true, output: "unpinned" });
   api.runCuratorNow.mockResolvedValue({ success: true, output: "ran" });
@@ -105,7 +118,9 @@ describe("LearningSurface", () => {
     expect(screen.getByText("Memories")).toBeInTheDocument();
     expect(screen.getByText("Skills")).toBeInTheDocument();
     expect(screen.getByText("Curator")).toBeInTheDocument();
-    expect(await screen.findByText("Prefers terse answers.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Prefers terse answers."),
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByText("Accept"));
     await waitFor(() =>

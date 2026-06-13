@@ -1,4 +1,10 @@
-import { existsSync, readFileSync, writeFileSync, unlinkSync, readdirSync } from "fs";
+import {
+  existsSync,
+  readFileSync,
+  writeFileSync,
+  unlinkSync,
+  readdirSync,
+} from "fs";
 import { join, resolve, delimiter } from "path";
 import { homedir } from "os";
 import { app } from "electron";
@@ -104,7 +110,10 @@ export const HERMES_ENV_FILE = join(HERMES_HOME, ".env");
 export const HERMES_CONFIG_FILE = join(HERMES_HOME, "config.yaml");
 export const HERMES_AUTH_FILE = join(HERMES_HOME, "auth.json");
 
-export function installBinariesFor(home: string): { python: string; script: string } {
+export function installBinariesFor(home: string): {
+  python: string;
+  script: string;
+} {
   const repo = join(home, "hermes-agent");
   const venv = join(repo, "venv");
   return IS_WINDOWS

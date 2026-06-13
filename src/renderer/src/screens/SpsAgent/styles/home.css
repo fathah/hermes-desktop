@@ -2920,3 +2920,242 @@
 .sps-scope .ob-step-cta {
   flex: 0 0 auto;
 }
+
+/* Refactored styles from CockpitSurface.tsx & ResearchModal.tsx */
+.sps-scope .ck-pos-relative {
+  position: relative;
+}
+.sps-scope .ck-menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 63;
+}
+.sps-scope .ck-add-menu {
+  right: 0;
+  top: 36px;
+  z-index: 64;
+  min-width: 200px;
+}
+.sps-scope .ck-flex-row-gap-8 {
+  display: flex;
+  gap: 8px;
+}
+.sps-scope .ck-flex-row-gap-8-center {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.sps-scope .ck-divider {
+  border-bottom: 1px solid var(--border-color);
+  margin: 12px 0;
+}
+.sps-scope .ck-margin-top-12 {
+  margin-top: 12px;
+}
+.sps-scope .ck-margin-top-8 {
+  margin-top: 8px;
+}
+.sps-scope .ck-pulse-ul-styled {
+  margin-top: 6px;
+  padding-left: 16px;
+  list-style-type: disc;
+}
+.sps-scope .ck-pulse-li-styled {
+  margin-bottom: 4px;
+}
+.sps-scope .ck-piping-textarea {
+  width: 100%;
+  resize: vertical;
+  padding: 8px;
+  border-radius: 4px;
+  background: var(--bg-3);
+  border: 1px solid var(--border-color);
+  color: var(--tx-1);
+  font-family: inherit;
+}
+.sps-scope .ck-piping-controls-layout {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0;
+  align-items: center;
+}
+.sps-scope .ck-piping-select {
+  flex-grow: 1;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: var(--bg-3);
+  border: 1px solid var(--border-color);
+  color: var(--tx-1);
+}
+.sps-scope .ck-piping-btn-primary {
+  min-width: 80px;
+}
+.sps-scope .ck-error-margin {
+  margin: 8px 0;
+}
+.sps-scope .ck-piping-result-layout {
+  margin-top: 12px;
+  border-top: 1px solid var(--border-color);
+  padding-top: 12px;
+}
+.sps-scope .ck-piping-result-box {
+  max-height: 180px;
+  overflow-y: auto;
+  background: var(--bg-2);
+  padding: 10px;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  font-size: 0.9em;
+  color: var(--tx-2);
+}
+
+/* ResearchModal refactored styles */
+.sps-scope .res-header-actions {
+  display: flex;
+  gap: 6px;
+}
+.sps-scope .res-web-alert-box {
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid var(--bd);
+  borderradius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.sps-scope .res-flex-shrink-0 {
+  flex-shrink: 0;
+}
+.sps-scope .res-margin-bottom-12 {
+  margin-bottom: 12px;
+}
+.sps-scope .res-margin-bottom-16 {
+  margin-bottom: 16px;
+}
+.sps-scope .res-social-source-title {
+  font-size: 11px;
+  color: var(--tx-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-right: 4px;
+}
+.sps-scope .res-idle-message {
+  padding: 20px 0;
+}
+.sps-scope .res-status-label {
+  color: var(--tx-3);
+  display: block;
+  margin-bottom: 6px;
+}
+.sps-scope .res-progress-box {
+  max-height: 40vh;
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--tx-2);
+  border: 1px solid var(--bd);
+  border-radius: 8px;
+  padding: 12px;
+}
+.sps-scope .res-save-card {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--bd);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.sps-scope .res-study-result-box {
+  max-height: 42vh;
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--tx-2);
+  border: 1px solid var(--bd);
+  border-radius: 8px;
+  padding: 12px;
+}
+.sps-scope .res-paper-row {
+  border-radius: 6px;
+  align-items: flex-start;
+  gap: 10px;
+  height: auto;
+  min-height: var(--row-h, 32px);
+  padding: 8px 6px;
+}
+.sps-scope .res-oa-chip {
+  pointer-events: none;
+}
+.sps-scope .res-paper-list-box {
+  max-height: 52vh;
+}
+.sps-scope .ck-play-icon {
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.sps-scope .res-filter-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+  align-items: center;
+}
+.sps-scope .res-min-width-0 {
+  min-width: 0;
+}
+.sps-scope .res-small-label {
+  color: var(--tx-3);
+  display: block;
+}
+.sps-scope .res-corpus-label {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: var(--tx-3);
+}
+.sps-scope .res-study-textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--bd);
+  border-radius: 8px;
+  padding: 10px;
+  color: var(--tx);
+  background: var(--bg);
+  font: inherit;
+  line-height: 1.4;
+}
+.sps-scope .res-settings-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+.sps-scope .res-settings-panel {
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid var(--bd);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+}
+.sps-scope .res-settings-label {
+  font-size: 12px;
+  color: var(--tx-3);
+}
+.sps-scope .res-margin-top-4 {
+  margin-top: 4px;
+}
+.sps-scope .res-settings-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+.sps-scope .res-paper-info-container {
+  flex: 1;
+  min-width: 0;
+}
+.sps-scope .res-white-space-normal {
+  white-space: normal;
+}

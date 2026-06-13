@@ -93,9 +93,7 @@ export function buildWhatsAppCloudStatus(
     inboundMissing,
     healthReachable,
     health,
-    webhookPort: parseWhatsAppCloudWebhookPort(
-      env.WHATSAPP_CLOUD_WEBHOOK_PORT,
-    ),
+    webhookPort: parseWhatsAppCloudWebhookPort(env.WHATSAPP_CLOUD_WEBHOOK_PORT),
     webhookPath: normalizeWhatsAppCloudWebhookPath(
       env.WHATSAPP_CLOUD_WEBHOOK_PATH,
     ),

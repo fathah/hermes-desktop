@@ -292,7 +292,9 @@ async function triageFailedJob(
       try {
         const installed = listInstalledSkills(profile);
         for (const skillName of job.skills) {
-          const s = installed.find((x) => x.name.toLowerCase() === skillName.toLowerCase());
+          const s = installed.find(
+            (x) => x.name.toLowerCase() === skillName.toLowerCase(),
+          );
           if (s) {
             const content = getSkillContent(s.path);
             skillsContext += `\n--- Skill: ${s.name} ---\n${content}\n`;
@@ -350,16 +352,22 @@ Your output must be a single, concise explanation representing the study card bo
       };
       const cardBody = data?.choices?.[0]?.message?.content?.trim() || "";
       if (cardBody) {
-        createLearningProposal({
-          kind: "memory",
-          body: cardBody,
-          reason: `Routine "${jobName}" execution failure (${errorInfo})`,
-          source: { type: "repo", title: `Cron Failure: ${jobName}` },
-        }, profile);
+        createLearningProposal(
+          {
+            kind: "memory",
+            body: cardBody,
+            reason: `Routine "${jobName}" execution failure (${errorInfo})`,
+            source: { type: "repo", title: `Cron Failure: ${jobName}` },
+          },
+          profile,
+        );
       }
     }
   } catch (err) {
-    console.error("[SCHEDULER Triage] Failure triage background task failed:", err);
+    console.error(
+      "[SCHEDULER Triage] Failure triage background task failed:",
+      err,
+    );
   }
 }
 
@@ -527,7 +535,13 @@ export async function runJobHeadless(
               captureErr,
             );
           }
-          void triageFailedJob(jobId, jobName, logFilePath, profile, `Exit Code ${code}`);
+          void triageFailedJob(
+            jobId,
+            jobName,
+            logFilePath,
+            profile,
+            `Exit Code ${code}`,
+          );
           void triggerSelfHealing(jobId, jobName, logFilePath, profile);
           resolve(false);
         } else {
@@ -556,7 +570,13 @@ export async function runJobHeadless(
         } catch (captureErr) {
           console.error("[SCHEDULER] Error capturing screenshot:", captureErr);
         }
-        void triageFailedJob(jobId, jobName, logFilePath, profile, `Spawn Error: ${err.message}`);
+        void triageFailedJob(
+          jobId,
+          jobName,
+          logFilePath,
+          profile,
+          `Spawn Error: ${err.message}`,
+        );
         void triggerSelfHealing(jobId, jobName, logFilePath, profile);
         resolve(false);
       });

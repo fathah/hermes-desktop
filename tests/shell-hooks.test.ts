@@ -96,12 +96,20 @@ hooks:
     process.env.HERMES_ACCEPT_HOOKS = "true";
 
     // Matching tool: terminal
-    const res1 = await ShellHookManager.runHook("pre_tool_call", { tool_name: "terminal" }, "default");
+    const res1 = await ShellHookManager.runHook(
+      "pre_tool_call",
+      { tool_name: "terminal" },
+      "default",
+    );
     expect(res1.action).toBe("allow");
     expect(res1.context).toBe("matched context");
 
     // Non-matching tool: file
-    const res2 = await ShellHookManager.runHook("pre_tool_call", { tool_name: "file" }, "default");
+    const res2 = await ShellHookManager.runHook(
+      "pre_tool_call",
+      { tool_name: "file" },
+      "default",
+    );
     expect(res2.action).toBe("allow");
     expect(res2.context).toBeUndefined();
   });

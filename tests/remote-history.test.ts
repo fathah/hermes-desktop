@@ -3,7 +3,10 @@ import { readFileSync } from "fs";
 import { join } from "path";
 
 const ROOT = join(__dirname, "..");
-const hermesSrc = readFileSync(join(ROOT, "src/main/hermes/chat-client.ts"), "utf-8");
+const hermesSrc = readFileSync(
+  join(ROOT, "src/main/hermes/chat-client.ts"),
+  "utf-8",
+);
 
 /**
  * Test that sendMessage passes history parameter in remote mode.

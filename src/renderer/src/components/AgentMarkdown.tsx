@@ -10,13 +10,15 @@ import { useStore } from "../screens/SpsAgent/store";
 function preprocessWikilinks(text: string): string {
   if (typeof text !== "string") return text;
   // Match [[pageId]] or [[pageId|display text]] or [[pageId#section]]
-  return text.replace(/\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/g, (_, pageId, displayText) => {
-    const title = displayText ? displayText.trim() : pageId.trim();
-    const cleanPageId = pageId.trim();
-    return `[${title}](sps-page://${cleanPageId})`;
-  });
+  return text.replace(
+    /\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/g,
+    (_, pageId, displayText) => {
+      const title = displayText ? displayText.trim() : pageId.trim();
+      const cleanPageId = pageId.trim();
+      return `[${title}](sps-page://${cleanPageId})`;
+    },
+  );
 }
-
 
 // Lazy-load the heavy syntax highlighter — only imported when a code block renders
 let _highlighterMod: typeof import("react-syntax-highlighter") | null = null;
@@ -87,11 +89,7 @@ function CodeBlock({
     setTimeout(() => setCopied(false), 2000);
   }
 
-  const fallbackPre = (
-    <pre className="agent-markdown-fallback-pre">
-      {code}
-    </pre>
-  );
+  const fallbackPre = <pre className="agent-markdown-fallback-pre">{code}</pre>;
 
   return (
     <div className="chat-code-block">

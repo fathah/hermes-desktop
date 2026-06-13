@@ -153,10 +153,18 @@ function loadRegistry(profile?: string): CapabilityRiskRegistry {
   } catch {
     // Missing or invalid registry starts fresh.
   }
-  return { schemaVersion: SCHEMA_VERSION, updatedAt: 0, reports: [], scanners: [] };
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    updatedAt: 0,
+    reports: [],
+    scanners: [],
+  };
 }
 
-function saveRegistry(registry: CapabilityRiskRegistry, profile?: string): void {
+function saveRegistry(
+  registry: CapabilityRiskRegistry,
+  profile?: string,
+): void {
   const path = riskPath(profile);
   mkdirSync(dirname(path), { recursive: true });
   registry.updatedAt = Date.now();
@@ -210,10 +218,14 @@ function sourceFromLocalPath(path?: string): CapabilitySourceInfo {
   if (!path || !existsSync(path)) return {};
   const source: CapabilitySourceInfo = { localPath: path };
   try {
-    const gitRoot = execFileSync("git", ["-C", path, "rev-parse", "--show-toplevel"], {
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
+    const gitRoot = execFileSync(
+      "git",
+      ["-C", path, "rev-parse", "--show-toplevel"],
+      {
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "ignore"],
+      },
+    ).trim();
     const gitHead = execFileSync("git", ["-C", path, "rev-parse", "HEAD"], {
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "ignore"],
@@ -293,7 +305,9 @@ function skillFindings(path: string): CapabilityRiskFinding[] {
       "The skill contains language that tries to override higher-priority instructions.",
     );
   }
-  if (/(api[_-]?key|secret|token|password|\.env|process\.env)/i.test(combined)) {
+  if (
+    /(api[_-]?key|secret|token|password|\.env|process\.env)/i.test(combined)
+  ) {
     addFinding(
       findings,
       "skill.secret.access",
@@ -302,7 +316,9 @@ function skillFindings(path: string): CapabilityRiskFinding[] {
       "The skill references secrets, environment variables, or credential-like names.",
     );
   }
-  if (/(curl|wget|fetch|http[s]?:\/\/|webhook|sendgrid|postmark)/i.test(combined)) {
+  if (
+    /(curl|wget|fetch|http[s]?:\/\/|webhook|sendgrid|postmark)/i.test(combined)
+  ) {
     addFinding(
       findings,
       "skill.network.egress",
@@ -311,7 +327,11 @@ function skillFindings(path: string): CapabilityRiskFinding[] {
       "The skill references outbound network calls or third-party endpoints.",
     );
   }
-  if (/(rm\s+-rf|sudo\s+|chmod\s+777|child_process|subprocess|exec\(|spawn\()/i.test(combined)) {
+  if (
+    /(rm\s+-rf|sudo\s+|chmod\s+777|child_process|subprocess|exec\(|spawn\()/i.test(
+      combined,
+    )
+  ) {
     addFinding(
       findings,
       "skill.dangerous.execution",
@@ -320,7 +340,9 @@ function skillFindings(path: string): CapabilityRiskFinding[] {
       "The skill references privileged or destructive command execution patterns.",
     );
   }
-  if (/(exfiltrate|upload.*conversation|send.*context|steal|bcc)/i.test(combined)) {
+  if (
+    /(exfiltrate|upload.*conversation|send.*context|steal|bcc)/i.test(combined)
+  ) {
     addFinding(
       findings,
       "skill.exfiltration.intent",
@@ -377,7 +399,9 @@ function mcpFindings(snapshot: McpCapabilitySnapshot): CapabilityRiskFinding[] {
     );
   }
   const envKeys = Object.keys(snapshot.entry.env || {});
-  if (envKeys.some((k) => /(token|secret|password|api[_-]?key|cookie)/i.test(k))) {
+  if (
+    envKeys.some((k) => /(token|secret|password|api[_-]?key|cookie)/i.test(k))
+  ) {
     addFinding(
       findings,
       "mcp.secret.env",
@@ -408,7 +432,11 @@ function packageSpecFor(command: string, args: string[]): string | undefined {
 
 function localPathFromMcp(entry: McpServerEntry): string | undefined {
   for (const value of [entry.command, ...entry.args]) {
-    if (typeof value === "string" && value.startsWith("/") && existsSync(value)) {
+    if (
+      typeof value === "string" &&
+      value.startsWith("/") &&
+      existsSync(value)
+    ) {
       return value;
     }
   }
@@ -426,7 +454,9 @@ export function buildSkillRiskReport(
   const installedFingerprint = fingerprintSkill(snapshot.path);
   const latestFingerprint = sourceFingerprint(snapshot.source);
   const findings = skillFindings(
-    latestFingerprint && latestFingerprint !== installedFingerprint && snapshot.source?.localPath
+    latestFingerprint &&
+      latestFingerprint !== installedFingerprint &&
+      snapshot.source?.localPath
       ? snapshot.source.localPath
       : snapshot.path,
   );
@@ -468,7 +498,8 @@ export function buildMcpRiskReport(
     packageSpec: packageSpecFor(snapshot.entry.command, snapshot.entry.args),
     ...(snapshot.source || {}),
   };
-  if (source.localPath) Object.assign(source, sourceFromLocalPath(source.localPath));
+  if (source.localPath)
+    Object.assign(source, sourceFromLocalPath(source.localPath));
   const installedFingerprint = fingerprintMcp(snapshot.name, snapshot.entry);
   const latestFingerprint = sourceFingerprint(source);
   const findings = mcpFindings(snapshot);
@@ -542,7 +573,8 @@ export function admitMcpCapability(
     },
     previous,
   );
-  const allowed = initial.reviewState === "reviewed" && initial.status !== "blocked";
+  const allowed =
+    initial.reviewState === "reviewed" && initial.status !== "blocked";
   const effective = { ...requested, enabled: requested.enabled && allowed };
   const report = { ...initial, enabled: effective.enabled };
   const reports = registry.reports.filter((r) => r.id !== report.id);
@@ -556,7 +588,9 @@ export function recordSkillCapability(
   profile?: string,
 ): void {
   const registry = loadRegistry(profile);
-  const previous = registry.reports.find((r) => r.id === `skill:${snapshot.path}`);
+  const previous = registry.reports.find(
+    (r) => r.id === `skill:${snapshot.path}`,
+  );
   const report = buildSkillRiskReport(snapshot, previous);
   const reports = registry.reports.filter((r) => r.id !== report.id);
   reports.push(report);

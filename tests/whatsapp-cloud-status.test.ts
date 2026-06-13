@@ -82,7 +82,10 @@ describe("WhatsApp Cloud status", () => {
       "WHATSAPP_CLOUD_ACCESS_TOKEN",
       "EAA_TEST_TOKEN_SHOULD_NOT_LEAK_TO_RENDERER",
     );
-    setEnvValue("WHATSAPP_CLOUD_APP_SECRET", "abcdefabcdefabcdefabcdefabcdefab");
+    setEnvValue(
+      "WHATSAPP_CLOUD_APP_SECRET",
+      "abcdefabcdefabcdefabcdefabcdefab",
+    );
     setEnvValue("WHATSAPP_CLOUD_VERIFY_TOKEN", "verify-token-1234567890");
     setEnvValue("WHATSAPP_CLOUD_WEBHOOK_PORT", "8091");
     setEnvValue("WHATSAPP_CLOUD_WEBHOOK_PATH", "whatsapp/webhook");

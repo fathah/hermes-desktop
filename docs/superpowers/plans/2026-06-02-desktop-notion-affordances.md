@@ -51,6 +51,7 @@
 ## Task 1: Strengthen Workspace Metadata Into A Page Graph
 
 **Files:**
+
 - Create: `src/main/workspace-page-graph.ts`
 - Modify: `src/main/workspace.ts`
 - Modify: `src/main/index.ts`
@@ -144,6 +145,7 @@ git commit -m "feat: add workspace page graph"
 ## Task 2: Build Real Sidebar And Page Management Affordances
 
 **Files:**
+
 - Modify: `src/renderer/src/screens/Workspace/WorkspaceTree.tsx`
 - Modify: `src/renderer/src/screens/Workspace/Workspace.tsx`
 - Modify: `src/renderer/src/screens/Workspace/WorkspaceHeader.tsx`
@@ -216,6 +218,7 @@ git commit -m "feat: improve workspace page management"
 ## Task 3: Replace Static Markdown Snippets With Block Controls
 
 **Files:**
+
 - Modify: `src/renderer/src/screens/Workspace/WorkspaceEditor.tsx`
 - Create: `src/renderer/src/screens/Workspace/blockExtensions.ts`
 - Create: `src/renderer/src/screens/Workspace/BlockCommandMenu.tsx`
@@ -298,6 +301,7 @@ git commit -m "feat: add workspace block controls"
 ## Task 4: Add Templates, Buttons, And Local Agent Workflow Blocks
 
 **Files:**
+
 - Create: `src/main/workspace-templates.ts`
 - Modify: `src/main/index.ts`
 - Modify: `src/preload/index.ts`
@@ -378,6 +382,7 @@ git commit -m "feat: add workspace templates and buttons"
 ## Task 5: Upgrade Database Model And View Settings
 
 **Files:**
+
 - Create: `src/main/workspace-database.ts`
 - Modify: `src/renderer/src/screens/Workspace/database.ts`
 - Modify: `src/renderer/src/screens/Workspace/DatabaseBlock.tsx`
@@ -447,6 +452,7 @@ git commit -m "feat: upgrade workspace database model"
 ## Task 6: Build True Database Views And Row Pages
 
 **Files:**
+
 - Modify: `src/renderer/src/screens/Workspace/DatabaseBlock.tsx`
 - Create: `src/renderer/src/screens/Workspace/DatabaseRowPeek.tsx`
 - Create: `src/renderer/src/screens/Workspace/databaseViews.tsx`
@@ -496,6 +502,7 @@ git commit -m "feat: add rich database views"
 ## Task 7: Add Synced Blocks, Backlinks, Comments, And Reminders
 
 **Files:**
+
 - Create: `src/main/workspace-synced-blocks.ts`
 - Modify: `src/main/workspace-page-graph.ts`
 - Modify: `src/renderer/src/screens/Workspace/blockExtensions.ts`
@@ -557,6 +564,7 @@ git commit -m "feat: add synced blocks and comments"
 ## Task 8: Upgrade Search, Command Palette, Tabs, And Quick Actions
 
 **Files:**
+
 - Modify: `src/main/workspace.ts`
 - Create: `src/main/workspace-search.ts`
 - Modify: `src/renderer/src/screens/Workspace/CommandPalette.tsx`
@@ -625,6 +633,7 @@ git commit -m "feat: improve workspace search and commands"
 ## Task 9: Implement Agent Suggested Edits And Activity Provenance
 
 **Files:**
+
 - Create: `src/main/workspace-proposals.ts`
 - Modify: `src/main/workspace.ts`
 - Modify: `src/main/index.ts`
@@ -705,6 +714,7 @@ git commit -m "feat: add agent suggested edits"
 ## Task 10: Improve History, Offline Status, Recovery, Export
 
 **Files:**
+
 - Create: `src/main/workspace-history.ts`
 - Modify: `src/main/workspace.ts`
 - Modify: `src/renderer/src/screens/Workspace/WorkspaceHeader.tsx`
@@ -725,7 +735,12 @@ export interface WorkspaceHistoryEntry {
   pageId: string;
   path: string;
   createdAt: number;
-  reason: "user-save" | "page-operation" | "database-edit" | "agent-proposal" | "restore";
+  reason:
+    | "user-save"
+    | "page-operation"
+    | "database-edit"
+    | "agent-proposal"
+    | "restore";
   content: string;
   summary: Array<{ kind: "added" | "removed" | "changed"; text: string }>;
 }
@@ -785,6 +800,7 @@ git commit -m "feat: add workspace history and recovery"
 ## Task 11: Visual Polish, Accessibility, And Desktop Smoke
 
 **Files:**
+
 - Modify: `src/renderer/src/screens/Workspace/Workspace.css` or the existing workspace stylesheet
 - Modify: relevant Workspace components
 - Test: renderer accessibility tests if present

@@ -222,7 +222,10 @@ export function registerSpsIpc(): void {
           req.end();
         });
       } else {
-        return { success: false, error: `Unsupported action type: ${action.type}` };
+        return {
+          success: false,
+          error: `Unsupported action type: ${action.type}`,
+        };
       }
     },
   );

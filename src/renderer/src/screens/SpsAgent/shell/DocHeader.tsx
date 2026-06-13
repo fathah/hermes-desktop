@@ -23,9 +23,7 @@ function HealthBadge({ errors }: { errors: HealthErrors }) {
     list.push("Orphan page: this page has no inbound/outbound links.");
   }
   if (errors.isStale) {
-    list.push(
-      "Stale page: this page has not been edited for over 30 days.",
-    );
+    list.push("Stale page: this page has not been edited for over 30 days.");
   }
   errors.brokenLinks.forEach((target) => {
     list.push(`Broken link: points to non-existent page [[${target}]].`);
@@ -45,9 +43,7 @@ function HealthBadge({ errors }: { errors: HealthErrors }) {
 
       {open && (
         <div className="doc-health-popover">
-          <div className="doc-health-popover-title">
-            Vault Health Issues
-          </div>
+          <div className="doc-health-popover-title">Vault Health Issues</div>
           {list.map((msg, i) => (
             <div key={i} className="doc-health-issue-row">
               <span className="doc-health-issue-bullet">•</span>
@@ -133,11 +129,7 @@ export function DocHeader({ children }: { children?: ReactNode }) {
     <>
       {pmeta.cover && (
         <div className="doc-cover">
-          {pmeta.cover === "image" ? (
-            <div className="cover-fill" />
-          ) : (
-            <div className="cover-fill" style={{ "--cover-bg": pmeta.cover } as any} />
-          )}
+          <div className="cover-fill" data-cover-bg={pmeta.cover} />
           <div className="cover-tools">
             <button
               className="cover-btn"
@@ -204,4 +196,3 @@ export function DocHeader({ children }: { children?: ReactNode }) {
     </>
   );
 }
-

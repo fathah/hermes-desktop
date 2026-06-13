@@ -28,8 +28,6 @@ const isCaptureWindow = params.get("window") === "capture";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <I18nProvider>
-      {isCaptureWindow ? <QuickCapture /> : <App />}
-    </I18nProvider>
+    <I18nProvider>{isCaptureWindow ? <QuickCapture /> : <App />}</I18nProvider>
   </StrictMode>,
 );

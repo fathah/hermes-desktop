@@ -21,7 +21,11 @@ writeFileSync(
 
 const app = await electron.launch({
   args: [".", `--user-data-dir=${join(HOME, "electron-userdata")}`],
-  env: { ...process.env, HERMES_HOME: HOME, ELECTRON_DISABLE_SECURITY_WARNINGS: "1" },
+  env: {
+    ...process.env,
+    HERMES_HOME: HOME,
+    ELECTRON_DISABLE_SECURITY_WARNINGS: "1",
+  },
 });
 const win = await app.firstWindow();
 await win.waitForLoadState("domcontentloaded");
@@ -67,7 +71,9 @@ await shot("a3-settings-connection", async () => {
 await shot("a4-providers-view", async () => {
   await win.evaluate(() =>
     window.dispatchEvent(
-      new CustomEvent("hermes:open-settings", { detail: { view: "providers" } }),
+      new CustomEvent("hermes:open-settings", {
+        detail: { view: "providers" },
+      }),
     ),
   );
 });
@@ -86,7 +92,10 @@ const groupCount = await win.$$eval(
   ".sidebar-nav-group-header",
   (els) => els.length,
 );
-const subnavCount = await win.$$eval(".settings-subnav-tab", (els) => els.length);
+const subnavCount = await win.$$eval(
+  ".settings-subnav-tab",
+  (els) => els.length,
+);
 console.log(`GROUPS=${groupCount} SUBNAV_TABS=${subnavCount}`);
 console.log(`SHOTS_OK: ${shots.length} — ${shots.join(", ")}`);
 console.log("VERIFY_DONE");

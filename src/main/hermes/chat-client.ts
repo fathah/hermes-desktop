@@ -460,7 +460,10 @@ export function sendMessageViaApi(
   const activeSkillsSystem = buildActiveSkillsSystemMessage(profile);
   if (activeSkillsSystem) messages.unshift(activeSkillsSystem);
 
-  async function executeRequest(retryBudget: number, customBudgetChars?: number) {
+  async function executeRequest(
+    retryBudget: number,
+    customBudgetChars?: number,
+  ) {
     if (finished || controller.signal.aborted) return;
 
     // 1. Gating / Context Injection Hook (The Security Guard)
@@ -492,7 +495,9 @@ export function sendMessageViaApi(
     }
 
     // 2. Smart Memory Shrinking (Context Compressor)
-    const compressor = new ContextCompressor({ budgetChars: customBudgetChars });
+    const compressor = new ContextCompressor({
+      budgetChars: customBudgetChars,
+    });
     const compressedMessages = compressor.compress(messages);
 
     const body = JSON.stringify({
@@ -578,20 +583,32 @@ export function sendMessageViaApi(
               const parsed = JSON.parse(raw);
               const content = parsed.choices?.[0]?.message?.content || "";
               const errMsg = parsed.error?.message || "";
-              handleRequestError(content || errMsg || "No response received from model", res.statusCode);
+              handleRequestError(
+                content || errMsg || "No response received from model",
+                res.statusCode,
+              );
             } catch {
-              handleRequestError("No response received from the model. Check configuration.", res.statusCode);
+              handleRequestError(
+                "No response received from the model. Check configuration.",
+                res.statusCode,
+              );
             }
           });
         },
       );
       probeReq.on("error", () => {
-        handleRequestError("No response received from the model. Check configuration.", 500);
+        handleRequestError(
+          "No response received from the model. Check configuration.",
+          500,
+        );
       });
       probeReq.setTimeout(120000);
       probeReq.on("timeout", () => {
         probeReq.destroy();
-        handleRequestError("No response received from the model (request timed out). Check configuration.", 408);
+        handleRequestError(
+          "No response received from the model (request timed out). Check configuration.",
+          408,
+        );
       });
       probeReq.write(probeBodyBuf);
       probeReq.end();
@@ -611,8 +628,9 @@ export function sendMessageViaApi(
         if (classification.shouldRotateCredential) {
           const provider = mc.provider || "openai";
           const envKey = CredentialPoolManager.getEnvKeyForProvider(provider);
-          const currentKey = readEnv(profile)[envKey] || process.env[envKey] || "";
-          
+          const currentKey =
+            readEnv(profile)[envKey] || process.env[envKey] || "";
+
           if (currentKey) {
             CredentialPoolManager.markKeyCooldown(
               provider,
@@ -623,7 +641,9 @@ export function sendMessageViaApi(
           }
           const nextKey = CredentialPoolManager.rotateKey(provider, profile);
           if (nextKey) {
-            console.log("[hermes] Credential rotated successfully. Retrying request.");
+            console.log(
+              "[hermes] Credential rotated successfully. Retrying request.",
+            );
             executeRequest(retryBudget - 1, customBudgetChars);
             return;
           }
@@ -1049,7 +1069,9 @@ export async function sendMessage(
   startHealthPolling();
 
   const groundingSystem = groundInWorkspace
-    ? await buildRetrievalSystemMessage(message, profile, { isRemote: isRemoteMode() })
+    ? await buildRetrievalSystemMessage(message, profile, {
+        isRemote: isRemoteMode(),
+      })
     : null;
 
   const selfAwarenessSystem = await buildSelfAwarenessSystemMessage(profile);

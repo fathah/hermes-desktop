@@ -18,7 +18,11 @@ export class ContextCompressor {
   private keepChars: number;
   private budgetChars: number;
 
-  constructor(options?: { pruneLimit?: number; keepChars?: number; budgetChars?: number }) {
+  constructor(options?: {
+    pruneLimit?: number;
+    keepChars?: number;
+    budgetChars?: number;
+  }) {
     this.pruneLimit = options?.pruneLimit ?? 8000;
     this.keepChars = options?.keepChars ?? 2000;
     this.budgetChars = options?.budgetChars ?? 40000; // ~10k tokens
@@ -33,7 +37,10 @@ export class ContextCompressor {
     // Step 1: Prune individual oversized tool outputs or text segments
     let processed = messages.map((msg) => {
       // We prune tool outputs, assistant messages containing tool responses, or general system/user files
-      const shouldPrune = msg.role === "tool" || msg.role === "assistant" || msg.role === "system";
+      const shouldPrune =
+        msg.role === "tool" ||
+        msg.role === "assistant" ||
+        msg.role === "system";
       if (shouldPrune) {
         return {
           ...msg,
@@ -105,7 +112,10 @@ export class ContextCompressor {
    * Compresses older messages if the total token budget is exceeded.
    */
   private enforceBudget(messages: ChatMessage[]): ChatMessage[] {
-    let totalLength = messages.reduce((sum, m) => sum + this.getContentLength(m.content), 0);
+    let totalLength = messages.reduce(
+      (sum, m) => sum + this.getContentLength(m.content),
+      0,
+    );
 
     if (totalLength <= this.budgetChars) {
       return messages;

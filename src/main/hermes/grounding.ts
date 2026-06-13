@@ -1,6 +1,10 @@
 import { join, basename, extname } from "path";
 import { readFile } from "fs/promises";
-import { getSpsNoteIndex, parseFrontmatter, type NoteSearchHit } from "../note-index";
+import {
+  getSpsNoteIndex,
+  parseFrontmatter,
+  type NoteSearchHit,
+} from "../note-index";
 import { semanticManager } from "../semantic-index";
 
 function getNoteTitle(raw: string, relPath: string): string {

@@ -80,7 +80,10 @@ export class ErrorDoctor {
   /**
    * Classifies any API error message / status code into a Structured recovery response.
    */
-  public static classify(errorMsg: string, statusCode?: number): ClassifiedError {
+  public static classify(
+    errorMsg: string,
+    statusCode?: number,
+  ): ClassifiedError {
     const msg = errorMsg || "";
 
     // 1. Check HTTP status code

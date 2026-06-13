@@ -26,7 +26,9 @@ describe("ErrorDoctor", () => {
   });
 
   it("classifies based on error message substrings", () => {
-    const r1 = ErrorDoctor.classify("your credit balance is insufficient to complete the request");
+    const r1 = ErrorDoctor.classify(
+      "your credit balance is insufficient to complete the request",
+    );
     expect(r1.reason).toBe(FailoverReason.BILLING);
     expect(r1.shouldRotateCredential).toBe(true);
 
@@ -37,11 +39,15 @@ describe("ErrorDoctor", () => {
     const r3 = ErrorDoctor.classify("invalid_api_key provided");
     expect(r3.reason).toBe(FailoverReason.AUTH);
 
-    const r4 = ErrorDoctor.classify("maximum context length exceeded: 200000 > 128000");
+    const r4 = ErrorDoctor.classify(
+      "maximum context length exceeded: 200000 > 128000",
+    );
     expect(r4.reason).toBe(FailoverReason.CONTEXT_OVERFLOW);
     expect(r4.shouldCompress).toBe(true);
 
-    const r5 = ErrorDoctor.classify("upstream server overloaded or temporarily busy");
+    const r5 = ErrorDoctor.classify(
+      "upstream server overloaded or temporarily busy",
+    );
     expect(r5.reason).toBe(FailoverReason.OVERLOADED);
 
     const r6 = ErrorDoctor.classify("connection timed out during handoff");

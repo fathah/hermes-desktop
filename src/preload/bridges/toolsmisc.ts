@@ -44,9 +44,7 @@ export const toolsmiscBridge = {
     profile?: string,
   ): Promise<CapabilityRiskSummary> =>
     ipcRenderer.invoke("capability-risk-summary", profile),
-  checkCapabilityRisksNow: (
-    profile?: string,
-  ): Promise<CapabilityRiskSummary> =>
+  checkCapabilityRisksNow: (profile?: string): Promise<CapabilityRiskSummary> =>
     ipcRenderer.invoke("capability-risk-check-now", profile),
   reviewCapabilityRisk: (
     id: string,

@@ -52,7 +52,7 @@ export function CockpitSurface() {
           </div>
         </div>
         <div className="ck-head-actions">
-          <div style={{ position: "relative" }}>
+          <div className="ck-pos-relative">
             <button
               className="ck-btn"
               onClick={() => setAddOpen((v) => !v)}
@@ -63,13 +63,10 @@ export function CockpitSurface() {
             {addOpen && available.length > 0 && (
               <>
                 <div
-                  style={{ position: "fixed", inset: 0, zIndex: 63 }}
+                  className="ck-menu-overlay"
                   onMouseDown={() => setAddOpen(false)}
                 />
-                <div
-                  className="menu"
-                  style={{ right: 0, top: 36, zIndex: 64, minWidth: 200 }}
-                >
+                <div className="menu ck-add-menu">
                   {available.map((k) => (
                     <div
                       key={k}
@@ -644,7 +641,7 @@ function PulseWidget() {
       <div className="ck-pulse-section">
         <div className="ck-pulse-title-row">
           <span className="ck-pulse-sect-title">Daily Focus</span>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div className="ck-flex-row-gap-8-center">
             {!editingFocus && (
               <button
                 className="ck-pulse-link-btn"
@@ -652,11 +649,7 @@ function PulseWidget() {
                 disabled={briefingLoading}
                 title="Listen to today's focus briefing"
               >
-                <Icon
-                  name="play"
-                  size={12}
-                  style={{ marginRight: 4, verticalAlign: "middle" }}
-                />
+                <Icon name="play" size={12} className="ck-play-icon" />
                 {briefingLoading ? "Generating..." : "Listen"}
               </button>
             )}
@@ -668,7 +661,7 @@ function PulseWidget() {
                 Edit
               </button>
             ) : (
-              <div style={{ display: "flex", gap: 8 }}>
+              <div className="ck-flex-row-gap-8">
                 <button className="ck-pulse-link-btn" onClick={saveFocus}>
                   Save
                 </button>
@@ -700,12 +693,7 @@ function PulseWidget() {
         )}
       </div>
 
-      <div
-        style={{
-          borderBottom: "1px solid var(--border-color)",
-          margin: "12px 0",
-        }}
-      />
+      <div className="ck-divider" />
 
       {/* Telos Alignment Section */}
       <div className="ck-pulse-section">
@@ -728,22 +716,11 @@ function PulseWidget() {
             </p>
 
             {telosData.goals.length > 0 && (
-              <div style={{ marginTop: 12 }}>
+              <div className="ck-margin-top-12">
                 <span className="ck-pulse-sect-title">Key Goals</span>
-                <ul
-                  className="ck-pulse-list"
-                  style={{
-                    marginTop: 6,
-                    paddingLeft: 16,
-                    listStyleType: "disc",
-                  }}
-                >
+                <ul className="ck-pulse-list ck-pulse-ul-styled">
                   {telosData.goals.slice(0, 3).map((goal, idx) => (
-                    <li
-                      key={idx}
-                      className="ck-pulse-item"
-                      style={{ marginBottom: 4 }}
-                    >
+                    <li key={idx} className="ck-pulse-item ck-pulse-li-styled">
                       {goal}
                     </li>
                   ))}
@@ -758,9 +735,8 @@ function PulseWidget() {
               your mission, goals, and KPIs.
             </p>
             <button
-              className="ck-btn"
+              className="ck-btn ck-margin-top-8"
               onClick={createTelosPage}
-              style={{ marginTop: 8 }}
             >
               <Icon name="plus" size={14} /> Initialize TELOS.md
             </button>
@@ -859,41 +835,17 @@ function PipingWidget() {
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
           rows={3}
-          style={{
-            width: "100%",
-            resize: "vertical",
-            padding: 8,
-            borderRadius: 4,
-            background: "var(--bg-3)",
-            border: "1px solid var(--border-color)",
-            color: "var(--tx-1)",
-            fontFamily: "inherit",
-          }}
+          className="ck-piping-textarea"
+          title="Paste text to pipe"
         />
       </div>
-      <div
-        className="ck-piping-controls"
-        style={{
-          display: "flex",
-          gap: 8,
-          margin: "8px 0",
-          alignItems: "center",
-        }}
-      >
+      <div className="ck-piping-controls-layout">
         <select
           value={pattern}
           onChange={(e) => setPattern(e.target.value)}
-          className="ck-select"
+          className="ck-select ck-piping-select"
           title="Select pattern"
           aria-label="Select pattern"
-          style={{
-            flexGrow: 1,
-            padding: "4px 8px",
-            borderRadius: 4,
-            background: "var(--bg-3)",
-            border: "1px solid var(--border-color)",
-            color: "var(--tx-1)",
-          }}
         >
           {PATTERNS.map((p) => (
             <option key={p.value} value={p.value}>
@@ -902,45 +854,24 @@ function PipingWidget() {
           ))}
         </select>
         <button
-          className="btn btn-primary btn-sm"
+          className="btn btn-primary btn-sm ck-piping-btn-primary"
           onClick={handlePipe}
           disabled={loading || !inputText.trim()}
-          style={{ minWidth: 80 }}
         >
           {loading ? "Piping..." : "Pipe Text"}
         </button>
       </div>
 
       {errorMsg && (
-        <div className="memory-error" style={{ margin: "8px 0" }}>
-          {errorMsg}
-        </div>
+        <div className="memory-error ck-error-margin">{errorMsg}</div>
       )}
 
       {outputResult && (
-        <div
-          className="ck-piping-result"
-          style={{
-            marginTop: 12,
-            borderTop: "1px solid var(--border-color)",
-            paddingTop: 12,
-          }}
-        >
-          <div
-            style={{
-              maxHeight: 180,
-              overflowY: "auto",
-              background: "var(--bg-2)",
-              padding: 10,
-              borderRadius: 4,
-              whiteSpace: "pre-wrap",
-              fontSize: "0.9em",
-              color: "var(--tx-2)",
-            }}
-          >
+        <div className="ck-piping-result-layout">
+          <div className="ck-piping-result-box" title="Piped Output Result">
             {outputResult}
           </div>
-          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+          <div className="ck-flex-row-gap-8 ck-margin-top-8">
             <button className="btn btn-secondary btn-sm" onClick={handleCopy}>
               Copy
             </button>

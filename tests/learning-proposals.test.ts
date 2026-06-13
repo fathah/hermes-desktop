@@ -14,9 +14,10 @@ const { TEST_HOME } = vi.hoisted(() => {
 });
 
 vi.mock("../src/main/utils", async () => {
-  const actual = await vi.importActual<typeof import("../src/main/utils")>(
-    "../src/main/utils",
-  );
+  const actual =
+    await vi.importActual<typeof import("../src/main/utils")>(
+      "../src/main/utils",
+    );
   return {
     ...actual,
     profileHome: () => TEST_HOME,

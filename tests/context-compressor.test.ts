@@ -1,9 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { ContextCompressor, ChatMessage } from "../src/main/hermes/context-compressor";
+import {
+  ContextCompressor,
+  ChatMessage,
+} from "../src/main/hermes/context-compressor";
 
 describe("ContextCompressor", () => {
   it("leaves content untouched if below the limit", () => {
-    const compressor = new ContextCompressor({ pruneLimit: 100, keepChars: 20 });
+    const compressor = new ContextCompressor({
+      pruneLimit: 100,
+      keepChars: 20,
+    });
     const messages: ChatMessage[] = [
       { role: "user", content: "Hello" },
       { role: "tool", content: "Short tool output" },
@@ -57,7 +63,7 @@ describe("ContextCompressor", () => {
     ];
 
     const result = compressor.compress(messages);
-    
+
     // system msg must be preserved
     expect(result[0].content).toBe("system_msg_here");
 

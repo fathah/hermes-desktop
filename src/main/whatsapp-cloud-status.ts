@@ -36,9 +36,7 @@ export async function getWhatsAppCloudStatus(
   profile?: string,
 ): Promise<WhatsAppCloudStatus> {
   const env = readEnv(profile);
-  const port = parseWhatsAppCloudWebhookPort(
-    env.WHATSAPP_CLOUD_WEBHOOK_PORT,
-  );
+  const port = parseWhatsAppCloudWebhookPort(env.WHATSAPP_CLOUD_WEBHOOK_PORT);
   const ctrl = new AbortController();
   const timeout = setTimeout(() => ctrl.abort(), 1500);
 

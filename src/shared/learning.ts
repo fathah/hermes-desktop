@@ -39,9 +39,7 @@ export interface SkillLearningProposal {
   appliedRef?: { type: "skill"; path: string };
 }
 
-export type LearningProposal =
-  | MemoryLearningProposal
-  | SkillLearningProposal;
+export type LearningProposal = MemoryLearningProposal | SkillLearningProposal;
 
 export type CreateLearningProposalInput =
   | {

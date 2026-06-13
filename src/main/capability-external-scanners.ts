@@ -127,10 +127,7 @@ function findingFromText(
   };
 }
 
-function parseFindings(
-  id: ScannerId,
-  output: string,
-): CapabilityRiskFinding[] {
+function parseFindings(id: ScannerId, output: string): CapabilityRiskFinding[] {
   const text = output.slice(0, MAX_OUTPUT_BYTES);
   try {
     const parsed = JSON.parse(text) as {
@@ -202,9 +199,7 @@ function runScanner(
   });
 }
 
-export async function runExternalScanners(
-  target: ScannerTarget,
-): Promise<{
+export async function runExternalScanners(target: ScannerTarget): Promise<{
   statuses: CapabilityScannerStatus[];
   findings: CapabilityRiskFinding[];
 }> {

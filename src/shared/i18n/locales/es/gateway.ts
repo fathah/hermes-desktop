@@ -5,6 +5,5 @@ export default {
   status: "Estado",
   running: "En ejecución",
   stopped: "Detenido",
-  gatewayHint:
-    "Conecta Hermes con Discord, Slack y otras plataformas",
+  gatewayHint: "Conecta Hermes con Discord, Slack y otras plataformas",
 } as const;

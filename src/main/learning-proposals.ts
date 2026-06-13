@@ -36,7 +36,10 @@ function readStore(profile?: string): LearningProposal[] {
 }
 
 function writeStore(proposals: LearningProposal[], profile?: string): void {
-  safeWriteFile(proposalsPath(profile), `${JSON.stringify(proposals, null, 2)}\n`);
+  safeWriteFile(
+    proposalsPath(profile),
+    `${JSON.stringify(proposals, null, 2)}\n`,
+  );
 }
 
 function isLearningProposal(value: unknown): value is LearningProposal {
@@ -190,7 +193,11 @@ export function rollbackLearningProposal(
     if (!disabled.success) return { ok: false, error: disabled.error };
   }
 
-  const next = { ...proposal, status: "rolled_back" as const, updatedAt: now() };
+  const next = {
+    ...proposal,
+    status: "rolled_back" as const,
+    updatedAt: now(),
+  };
   writeStore(replaceProposal(proposals, next), profile);
   return { ok: true, proposal: next };
 }

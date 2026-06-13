@@ -335,7 +335,8 @@ if (shotFailures.length || missingShots.length) {
   for (const failure of shotFailures) {
     console.log(`SHOT_FAILURE: ${failure.name}: ${failure.message}`);
   }
-  if (missingShots.length) console.log("SHOTS_MISSING:", missingShots.join(", "));
+  if (missingShots.length)
+    console.log("SHOTS_MISSING:", missingShots.join(", "));
   console.log("SMOKE_FAILED");
   process.exit(1);
 }

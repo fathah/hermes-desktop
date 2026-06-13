@@ -36,6 +36,8 @@ import {
   INGEST_PREFS_EVENT,
 } from "./inbox/ingestPrefs";
 import { ObsidianEditor } from "./editor/ObsidianEditor";
+import { PersonalHealthDashboard } from "./health/PersonalHealthDashboard";
+import { RssReaderDashboard } from "./research/RssReaderDashboard";
 
 export function App() {
   useHotkeys();
@@ -156,6 +158,10 @@ export function App() {
             <MyWorkSurface />
           ) : surface === "journal" ? (
             <JournalSurface />
+          ) : surface === "personal-health" ? (
+            <PersonalHealthDashboard />
+          ) : surface === "rss-reader" ? (
+            <RssReaderDashboard />
           ) : (
             <div className="doc-scroll scroll">
               {surface === "cockpit" && <CockpitSurface />}

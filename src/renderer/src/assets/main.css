@@ -9473,8 +9473,13 @@ body {
 }
 
 @keyframes vrPulse {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .qc-save-btn {
@@ -9509,4 +9514,3 @@ body {
   color: #abb2bf;
   overflow: auto;
 }
-

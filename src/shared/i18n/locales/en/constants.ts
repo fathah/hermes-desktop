@@ -125,7 +125,8 @@ export default {
   slackAppToken: "Slack App Token",
   slackAppHint: "xapp-... token for Socket Mode",
   whatsappApiUrl: "Baileys Bridge URL",
-  whatsappUrlHint: "Local bridge or whatsapp-web.js endpoint for a personal number",
+  whatsappUrlHint:
+    "Local bridge or whatsapp-web.js endpoint for a personal number",
   whatsappApiToken: "Baileys Bridge Token",
   whatsappTokenHint: "Auth token for the personal WhatsApp bridge",
   whatsappCloudPhoneNumberId: "Phone Number ID",

@@ -1,6 +1,11 @@
 export type CapabilityKind = "skill" | "mcp";
 
-export type CapabilityRiskSeverity = "info" | "low" | "medium" | "high" | "critical";
+export type CapabilityRiskSeverity =
+  | "info"
+  | "low"
+  | "medium"
+  | "high"
+  | "critical";
 
 export type CapabilityRiskStatus = "safe" | "warning" | "blocked" | "unknown";
 
@@ -124,9 +129,12 @@ export function capabilityRiskStats(
     blocked: reports.filter((r) => r.status === "blocked").length,
     unreviewed: reports.filter((r) => r.reviewState !== "reviewed").length,
     updates: reports.filter((r) =>
-      ["updateAvailable", "rescanPassed", "rescanWarn", "rescanBlocked"].includes(
-        r.updateStatus,
-      ),
+      [
+        "updateAvailable",
+        "rescanPassed",
+        "rescanWarn",
+        "rescanBlocked",
+      ].includes(r.updateStatus),
     ).length,
     failed: reports.filter((r) => r.updateStatus === "checkFailed").length,
   };

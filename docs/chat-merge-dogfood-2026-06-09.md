@@ -36,6 +36,7 @@ see Coverage gaps.
 ## Issues
 
 ### 1. First-run checklist overlaps the chat input — Medium
+
 - **What:** The "Get started · 0/5" onboarding card (from D7) is fixed at
   bottom-left and overlaps the bottom of the Chat surface — it sits over the
   left portion of the chat input row / "Choose a model in Models →" banner.
@@ -48,6 +49,7 @@ see Coverage gaps.
 - **Severity:** Medium.
 
 ### 2. Chat header shows the session-id suffix, not the human title — Low (pre-existing)
+
 - **What:** With the "Dogfood test chat" session open, the header reads
   "Session food-1" (last 6 chars of `sess-dogfood-1`) while Recents shows the real
   title "Dogfood test chat".
@@ -60,6 +62,7 @@ see Coverage gaps.
 - **Severity:** Low.
 
 ### 3. OpenClaw migration banner shows on every Settings tab — Low / Nice-to-have (pre-existing)
+
 - **What:** The "OpenClaw Installation Detected" banner renders on the Advanced tab
   (and every other tab) because it is intentionally not section-gated.
 - **Repro:** Settings → any tab → banner present.
@@ -74,7 +77,7 @@ see Coverage gaps.
   all need a running Hermes gateway, which the seeded harness does not start.
 - **Worktree control** — gating it ON was verified for Checkpoints; the worktree
   toggle additionally requires a bound context folder, which needs the native folder
-  picker (not drivable headless). The gating *logic* is shared with Checkpoints
+  picker (not drivable headless). The gating _logic_ is shared with Checkpoints
   (verified), but the worktree control itself was not visually exercised.
 
 ## Summary

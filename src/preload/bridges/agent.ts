@@ -41,9 +41,7 @@ export const agentBridge = {
     profile?: string,
   ): Promise<boolean> =>
     ipcRenderer.invoke("set-platform-enabled", platform, enabled, profile),
-  getWhatsAppCloudStatus: (
-    profile?: string,
-  ): Promise<WhatsAppCloudStatus> =>
+  getWhatsAppCloudStatus: (profile?: string): Promise<WhatsAppCloudStatus> =>
     ipcRenderer.invoke("get-whatsapp-cloud-status", profile),
 
   // Sessions

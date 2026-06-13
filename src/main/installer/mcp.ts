@@ -70,9 +70,7 @@ export function listMcpServers(
   }
 }
 
-export function listMcpServerEntries(
-  profile?: string,
-): Array<{
+export function listMcpServerEntries(profile?: string): Array<{
   name: string;
   type: "stdio" | "http";
   enabled: boolean;
@@ -117,7 +115,9 @@ export function listMcpServerEntries(
       const urlValue = scalar("url");
       const enabledMatch = serverBlock.match(/enabled:\s*(true|false)/i);
       const argsMatch = serverBlock.match(/args:\s*\n((?:[ \t]{6}- .+\n?)*)/);
-      const envMatch = serverBlock.match(/env:\s*\n((?:[ \t]{6}\w[\w-]*: .+\n?)*)/);
+      const envMatch = serverBlock.match(
+        /env:\s*\n((?:[ \t]{6}\w[\w-]*: .+\n?)*)/,
+      );
       const args =
         argsMatch?.[1]
           .split("\n")
@@ -254,7 +254,9 @@ export function setMcpServerEnabled(
   if (!current) return false;
   const entry = { ...current.entry, enabled };
   const configPath = join(profileHome(profile), "config.yaml");
-  const content = existsSync(configPath) ? readFileSync(configPath, "utf-8") : "";
+  const content = existsSync(configPath)
+    ? readFileSync(configPath, "utf-8")
+    : "";
   writeFileSync(
     configPath,
     upsertMcpServerInYaml(content, name, renderMcpServerEntry(name, entry)),

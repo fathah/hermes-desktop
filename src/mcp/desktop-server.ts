@@ -19,11 +19,15 @@ function getControlServerConfig(): { port: number; token: string } {
     const port = config.controlServerPort;
     const token = config.controlServerToken;
     if (!port || !token) {
-      throw new Error("Missing controlServerPort or controlServerToken in desktop.json");
+      throw new Error(
+        "Missing controlServerPort or controlServerToken in desktop.json",
+      );
     }
     return { port: Number(port), token: String(token) };
   } catch (err) {
-    throw new Error(`Failed to parse Hermes config: ${err instanceof Error ? err.message : String(err)}`);
+    throw new Error(
+      `Failed to parse Hermes config: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 }
 
@@ -43,19 +47,23 @@ const TOOLS = [
       properties: {
         schedule: {
           type: "string",
-          description: "Cron schedule expression (e.g. '0 9 * * 1' for every Monday at 9 AM) or interval.",
+          description:
+            "Cron schedule expression (e.g. '0 9 * * 1' for every Monday at 9 AM) or interval.",
         },
         prompt: {
           type: "string",
-          description: "The prompt or message for the LLM advisor to run when the schedule triggers.",
+          description:
+            "The prompt or message for the LLM advisor to run when the schedule triggers.",
         },
         name: {
           type: "string",
-          description: "Human-readable name for the cron job (e.g. 'Audit weekly ticker XYZ').",
+          description:
+            "Human-readable name for the cron job (e.g. 'Audit weekly ticker XYZ').",
         },
         deliver: {
           type: "string",
-          description: "Target location/channel to deliver results (e.g. a specific note page ID, or 'chat').",
+          description:
+            "Target location/channel to deliver results (e.g. a specific note page ID, or 'chat').",
         },
       },
       required: ["schedule", "prompt", "name"],
@@ -78,7 +86,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           schedule: a.schedule,
@@ -90,7 +98,9 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
 
       if (!response.ok) {
         const errText = await response.text();
-        throw new Error(`Control server returned status ${response.status}: ${errText}`);
+        throw new Error(
+          `Control server returned status ${response.status}: ${errText}`,
+        );
       }
 
       const payload = await response.json();

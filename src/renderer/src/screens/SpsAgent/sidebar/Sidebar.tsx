@@ -97,7 +97,10 @@ export function Sidebar() {
 
   useEffect(() => {
     if (obsidianBtnRef.current) {
-      obsidianBtnRef.current.setAttribute("aria-expanded", String(obsidianOpen));
+      obsidianBtnRef.current.setAttribute(
+        "aria-expanded",
+        String(obsidianOpen),
+      );
     }
   }, [obsidianOpen]);
   // Live count of unprocessed captures for the Inbox badge.
@@ -147,7 +150,7 @@ export function Sidebar() {
           <button
             type="button"
             className={`nav-item ${
-              (homeSurface === "doc" && activeId === "home" && surface === "doc")
+              homeSurface === "doc" && activeId === "home" && surface === "doc"
                 ? "active"
                 : ""
             }`}
@@ -231,9 +234,7 @@ export function Sidebar() {
                 />
               ))}
             {tree.length === 0 && (
-              <div
-                className="tree-row color-tx-4-cursor-default"
-              >
+              <div className="tree-row color-tx-4-cursor-default">
                 <span className="tree-toggle leaf"></span>No pages
               </div>
             )}
@@ -321,6 +322,22 @@ export function Sidebar() {
           </button>
         </div>
 
+        {/* ==================== WING 3.5: MY HEALTH ==================== */}
+        <div className="wing-group">
+          <div className="wing-header">
+            <span className="wing-title">❤️ My Health</span>
+          </div>
+
+          <button
+            type="button"
+            className={`nav-item ${surface === "personal-health" ? "active" : ""}`}
+            onClick={() => setSurface("personal-health")}
+          >
+            <Icon name="heart" size={17} />
+            <span className="nav-label">Health & Ledger</span>
+          </button>
+        </div>
+
         {/* ==================== WING 4: MY RESEARCH ==================== */}
         <div className="wing-group">
           <div className="wing-header">
@@ -352,6 +369,15 @@ export function Sidebar() {
           >
             <Icon name="board" size={17} />
             <span className="nav-label">Insights</span>
+          </button>
+
+          <button
+            type="button"
+            className={`nav-item ${surface === "rss-reader" ? "active" : ""}`}
+            onClick={() => setSurface("rss-reader")}
+          >
+            <Icon name="doc" size={17} />
+            <span className="nav-label">RSS Reader</span>
           </button>
         </div>
 

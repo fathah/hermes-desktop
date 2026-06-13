@@ -175,6 +175,7 @@ Extend `Block` in `src/shared/sps-types.ts`:
 ## Task 1: Voice Capture Sidecar Tests
 
 **Files:**
+
 - Create: `tests/voice-captures.test.ts`
 - Create later: `src/shared/voice-captures.ts`
 - Create later: `src/main/voice-captures.ts`
@@ -279,12 +280,16 @@ describe("voice captures sidecar", () => {
   });
 
   it("returns false/null for missing captures", async () => {
-    expect(await updateVoiceCapture("missing", { status: "dismissed" }, PROFILE)).toBeNull();
+    expect(
+      await updateVoiceCapture("missing", { status: "dismissed" }, PROFILE),
+    ).toBeNull();
     expect(await deleteVoiceCapture("missing", PROFILE)).toBe(false);
   });
 
   it("treats corrupt JSON as empty", async () => {
-    mkdirSync(join(home, "profiles", PROFILE, "sps-agent"), { recursive: true });
+    mkdirSync(join(home, "profiles", PROFILE, "sps-agent"), {
+      recursive: true,
+    });
     writeFileSync(sidecarPath(), "{broken", "utf-8");
     expect(await listVoiceCaptures(PROFILE)).toEqual([]);
   });
@@ -304,6 +309,7 @@ Expected: FAIL because `src/main/voice-captures.ts` does not exist.
 ## Task 2: Shared Types And Main Sidecar
 
 **Files:**
+
 - Create: `src/shared/voice-captures.ts`
 - Create: `src/main/voice-captures.ts`
 - Test: `tests/voice-captures.test.ts`
@@ -400,7 +406,7 @@ export async function updateVoiceCapture(
   const next: VoiceCapture = {
     ...current,
     ...patch,
-    error: patch.error === null ? undefined : patch.error ?? current.error,
+    error: patch.error === null ? undefined : (patch.error ?? current.error),
     updatedAt: Date.now(),
   };
   captures[idx] = next;
@@ -433,6 +439,7 @@ Expected: PASS.
 ## Task 3: IPC And Preload
 
 **Files:**
+
 - Modify: `src/main/ipc/sps.ts`
 - Modify: `src/preload/bridges/sps.ts`
 - Modify: `src/preload/index.d.ts`
@@ -471,8 +478,9 @@ safeHandle(
   (_event, id: string, patch: VoiceCapturePatch, profile?: string) =>
     updateVoiceCapture(id, patch, profile),
 );
-safeHandle("sps-voice-captures-delete", (_event, id: string, profile?: string) =>
-  deleteVoiceCapture(id, profile),
+safeHandle(
+  "sps-voice-captures-delete",
+  (_event, id: string, profile?: string) => deleteVoiceCapture(id, profile),
 );
 ```
 
@@ -524,10 +532,8 @@ Add methods:
 
 ```ts
 spsListVoiceCaptures: (profile?: string) => Promise<VoiceCapture[]>;
-spsCreateVoiceCapture: (
-  input: VoiceCaptureCreateInput,
-  profile?: string,
-) => Promise<VoiceCapture>;
+spsCreateVoiceCapture: (input: VoiceCaptureCreateInput, profile?: string) =>
+  Promise<VoiceCapture>;
 spsUpdateVoiceCapture: (
   id: string,
   patch: VoiceCapturePatch,
@@ -567,6 +573,7 @@ Expected: PASS.
 ## Task 4: Audio Block Transcript Metadata
 
 **Files:**
+
 - Modify: `src/shared/sps-types.ts`
 - Modify: `src/renderer/src/screens/SpsAgent/editor/AudioBlock.tsx`
 - Modify: `src/renderer/src/screens/SpsAgent/editor/blockMarkdown.test.ts`
@@ -600,12 +607,14 @@ Because audio already rides tier-2 metadata, this should pass without serializer
 In `AudioBlock.tsx`, under the `<audio>` element, add:
 
 ```tsx
-{block.transcript ? (
-  <div className="audio-transcript">
-    <div className="audio-transcript-label">Transcript</div>
-    <div>{block.transcript}</div>
-  </div>
-) : null}
+{
+  block.transcript ? (
+    <div className="audio-transcript">
+      <div className="audio-transcript-label">Transcript</div>
+      <div>{block.transcript}</div>
+    </div>
+  ) : null;
+}
 ```
 
 - [ ] **Step 4: Validate**
@@ -622,6 +631,7 @@ Expected: PASS.
 ## Task 5: Reusable Voice Capture Button
 
 **Files:**
+
 - Create: `src/renderer/src/screens/SpsAgent/voice/VoiceCaptureButton.tsx`
 - Test through `VoiceSurface.test.tsx` in Task 7.
 
@@ -777,6 +787,7 @@ Expected: PASS after preload APIs from Task 3 exist.
 ## Task 6: Voice Surface Shell
 
 **Files:**
+
 - Create: `src/renderer/src/screens/SpsAgent/voice/VoiceSurface.tsx`
 - Modify: `src/renderer/src/screens/SpsAgent/store/storeTypes.ts`
 - Modify: `src/renderer/src/screens/SpsAgent/App.tsx`
@@ -827,7 +838,9 @@ export function VoiceSurface() {
       setHasKey(voiceStatus.hasKey);
       setCaptures(rows);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load voice captures.");
+      setError(
+        err instanceof Error ? err.message : "Could not load voice captures.",
+      );
     }
   }
 
@@ -835,7 +848,10 @@ export function VoiceSurface() {
     void refresh();
   }, []);
 
-  async function updateTranscript(id: string, transcript: string): Promise<void> {
+  async function updateTranscript(
+    id: string,
+    transcript: string,
+  ): Promise<void> {
     await window.hermesAPI.spsUpdateVoiceCapture(id, { transcript });
     setCaptures((rows) =>
       rows.map((row) => (row.id === id ? { ...row, transcript } : row)),
@@ -912,17 +928,23 @@ export function VoiceSurface() {
       <div className="surface-head">
         <div>
           <h1>Voice</h1>
-          <p>Capture thoughts, review transcripts, and decide what they become.</p>
+          <p>
+            Capture thoughts, review transcripts, and decide what they become.
+          </p>
         </div>
       </div>
 
       {!hasKey && (
         <div className="settings-field-hint">
-          Voice transcription is not configured. Add VOICE_TOOLS_OPENAI_KEY to use transcription.
+          Voice transcription is not configured. Add VOICE_TOOLS_OPENAI_KEY to
+          use transcription.
         </div>
       )}
       {error && (
-        <div className="settings-field-hint" style={{ color: "var(--danger, #c00)" }}>
+        <div
+          className="settings-field-hint"
+          style={{ color: "var(--danger, #c00)" }}
+        >
           {error}
         </div>
       )}
@@ -943,15 +965,24 @@ export function VoiceSurface() {
           <div className="ck-empty">No voice captures yet.</div>
         ) : (
           captures.map((capture) => (
-            <article key={capture.id} className={`voice-capture-card is-${capture.status}`}>
+            <article
+              key={capture.id}
+              className={`voice-capture-card is-${capture.status}`}
+            >
               <header>
                 <strong>{capture.source.pageTitle || "Voice capture"}</strong>
                 <span>{capture.status}</span>
               </header>
-              <audio src={assetUrl(capture.assetPath)} controls preload="metadata" />
+              <audio
+                src={assetUrl(capture.assetPath)}
+                controls
+                preload="metadata"
+              />
               <div className="voice-capture-meta">
                 <span>{capture.mime}</span>
-                {capture.duration ? <span>{mmss(capture.duration)}</span> : null}
+                {capture.duration ? (
+                  <span>{mmss(capture.duration)}</span>
+                ) : null}
               </div>
               {capture.error && (
                 <div className="settings-field-hint">{capture.error}</div>
@@ -963,24 +994,40 @@ export function VoiceSurface() {
                   const value = e.target.value;
                   setCaptures((rows) =>
                     rows.map((row) =>
-                      row.id === capture.id ? { ...row, transcript: value } : row,
+                      row.id === capture.id
+                        ? { ...row, transcript: value }
+                        : row,
                     ),
                   );
                 }}
-                onBlur={(e) => void updateTranscript(capture.id, e.target.value)}
+                onBlur={(e) =>
+                  void updateTranscript(capture.id, e.target.value)
+                }
                 placeholder="Transcript will appear here..."
               />
               <footer className="voice-capture-actions">
-                <button className="cover-btn" onClick={() => void addToPage(capture)}>
+                <button
+                  className="cover-btn"
+                  onClick={() => void addToPage(capture)}
+                >
                   <Icon name="doc" size={14} /> Add to page
                 </button>
-                <button className="cover-btn" onClick={() => void askAssistant(capture)}>
+                <button
+                  className="cover-btn"
+                  onClick={() => void askAssistant(capture)}
+                >
                   <Icon name="sparkle" size={14} /> Ask My Assistant
                 </button>
-                <button className="cover-btn" onClick={() => void createTask(capture)}>
+                <button
+                  className="cover-btn"
+                  onClick={() => void createTask(capture)}
+                >
                   <Icon name="checkbox" size={14} /> Create task
                 </button>
-                <button className="cover-btn" onClick={() => void discard(capture)}>
+                <button
+                  className="cover-btn"
+                  onClick={() => void discard(capture)}
+                >
                   Discard
                 </button>
               </footer>
@@ -1002,7 +1049,9 @@ import { VoiceSurface } from "./voice/VoiceSurface";
 ```
 
 ```tsx
-{surface === "voice" && <VoiceSurface />}
+{
+  surface === "voice" && <VoiceSurface />;
+}
 ```
 
 - [ ] **Step 4: Add sidebar item**
@@ -1044,6 +1093,7 @@ Expected: PASS.
 ## Task 7: Voice Surface Renderer Tests
 
 **Files:**
+
 - Create: `src/renderer/src/screens/SpsAgent/voice/VoiceSurface.test.tsx`
 - Modify: `src/renderer/src/screens/SpsAgent/voice/VoiceSurface.tsx` if tests expose issues.
 
@@ -1092,7 +1142,9 @@ beforeEach(() => {
 describe("VoiceSurface", () => {
   it("renders voice captures with transcript", async () => {
     render(<VoiceSurface />);
-    expect(await screen.findByText("Follow up on payroll.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Follow up on payroll."),
+    ).toBeInTheDocument();
     expect(screen.getByText("pending")).toBeInTheDocument();
   });
 
@@ -1102,8 +1154,16 @@ describe("VoiceSurface", () => {
 
     await waitFor(() => {
       const blocks = useStore.getState().docs.home;
-      expect(blocks.some((b) => b.type === "audio" && b.transcript === "Follow up on payroll.")).toBe(true);
-      expect(blocks.some((b) => b.type === "p" && b.text === "Follow up on payroll.")).toBe(true);
+      expect(
+        blocks.some(
+          (b) => b.type === "audio" && b.transcript === "Follow up on payroll.",
+        ),
+      ).toBe(true);
+      expect(
+        blocks.some(
+          (b) => b.type === "p" && b.text === "Follow up on payroll.",
+        ),
+      ).toBe(true);
       expect(window.hermesAPI.spsUpdateVoiceCapture).toHaveBeenCalledWith(
         "voice-1",
         { status: "added_to_page" },
@@ -1117,7 +1177,11 @@ describe("VoiceSurface", () => {
 
     await waitFor(() => {
       const blocks = useStore.getState().docs.home;
-      expect(blocks.some((b) => b.type === "todo" && b.text === "Follow up on payroll.")).toBe(true);
+      expect(
+        blocks.some(
+          (b) => b.type === "todo" && b.text === "Follow up on payroll.",
+        ),
+      ).toBe(true);
     });
   });
 });
@@ -1138,6 +1202,7 @@ Expected: PASS.
 ## Task 8: Global Voice Trigger Opens Voice Surface
 
 **Files:**
+
 - Modify: `src/renderer/src/screens/SpsAgent/App.tsx` or the nearest SPS shell component that registers app-level listeners.
 - Test if existing shell tests cover global triggers; otherwise validate manually through smoke.
 
@@ -1181,6 +1246,7 @@ Expected: PASS.
 ## Task 9: Voice In Capability Summary
 
 **Files:**
+
 - Modify: `src/renderer/src/screens/Settings/CapabilitySummary.tsx`
 
 - [ ] **Step 1: Load voice status**
@@ -1188,7 +1254,9 @@ Expected: PASS.
 In `CapabilitySummary`, add:
 
 ```ts
-voice: { hasKey: boolean };
+voice: {
+  hasKey: boolean;
+}
 ```
 
 to `CapabilitySnapshot`.
@@ -1197,12 +1265,13 @@ Change loading to include:
 
 ```ts
 const loadVoice = window.hermesAPI.getVoiceStatus(profile);
-Promise.all([loadSkills, loadTools, loadMcp, loadVoice])
-  .then(([skills, tools, mcp, voice]) => {
+Promise.all([loadSkills, loadTools, loadMcp, loadVoice]).then(
+  ([skills, tools, mcp, voice]) => {
     if (cancelled) return;
     setData({ skillCount: skills.length, tools, mcp, voice });
     setLoaded(true);
-  })
+  },
+);
 ```
 
 - [ ] **Step 2: Render voice capability**
@@ -1218,12 +1287,14 @@ Add a count chip:
 Add a row when configured:
 
 ```tsx
-{data.voice.hasKey && (
-  <div className="cap-summary-row">
-    <span className="cap-summary-label">Voice:</span>{" "}
-    Press-to-talk transcription and read-aloud are enabled for this profile.
-  </div>
-)}
+{
+  data.voice.hasKey && (
+    <div className="cap-summary-row">
+      <span className="cap-summary-label">Voice:</span> Press-to-talk
+      transcription and read-aloud are enabled for this profile.
+    </div>
+  );
+}
 ```
 
 - [ ] **Step 3: Validate**
@@ -1240,6 +1311,7 @@ Expected: PASS.
 ## Task 10: Styling
 
 **Files:**
+
 - Modify the smallest SPS stylesheet that owns `.vr-btn`, `.audio-transcript`, or surface cards.
 
 - [ ] **Step 1: Locate styles**
@@ -1422,4 +1494,3 @@ Expected: PASS. Manually verify **Voice** appears under **My Assistant**, render
 - Spec coverage: voice becomes a dedicated surface, has capture/review/action lifecycle, remains consent-based, connects to pages/tasks/assistant, and exposes capability status.
 - Placeholder scan: v1 tasks contain concrete files, code snippets, tests, and validation commands. Follow-on work is explicitly out of v1.
 - Type consistency: `VoiceCapture`, `VoiceCaptureCreateInput`, `VoiceCapturePatch`, `transcript`, and `transcriptStatus` are used consistently across shared, main, preload, and renderer tasks.
-

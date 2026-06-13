@@ -114,18 +114,20 @@ desktop owns (so the UI can list/edit schedules without parsing prompts).
 
 ```jsonc
 {
-  "schedules": [{
-    "id": "sr_uk-guarding",
-    "topic": "UK SIA guarding-licence changes",
-    "pageId": "uk-guarding-regs",        // the living Wiki page (slug)
-    "cadence": "0 8 * * 1",              // cron expr (Mon 08:00)
-    "cronJobId": "<hermes cron job id>",  // link to the gateway cron job
-    "autoApply": false,                   // default: review in Inbox
-    "telegramPush": true,                 // gated on a configured channel
-    "lastRunAt": 1718000000000,
-    "lastChangeHash": "sha256:…",         // content hash for change detection
-    "enabled": true
-  }]
+  "schedules": [
+    {
+      "id": "sr_uk-guarding",
+      "topic": "UK SIA guarding-licence changes",
+      "pageId": "uk-guarding-regs", // the living Wiki page (slug)
+      "cadence": "0 8 * * 1", // cron expr (Mon 08:00)
+      "cronJobId": "<hermes cron job id>", // link to the gateway cron job
+      "autoApply": false, // default: review in Inbox
+      "telegramPush": true, // gated on a configured channel
+      "lastRunAt": 1718000000000,
+      "lastChangeHash": "sha256:…", // content hash for change detection
+      "enabled": true,
+    },
+  ],
 }
 ```
 
@@ -140,23 +142,24 @@ target the smart-merge instead of guessing.
 
 ## 6. Reusable building blocks (cite, don't rebuild)
 
-| Need | Reuse |
-|------|-------|
-| Schedule firing, server-side | `src/main/cronjobs.ts`, `src/main/ipc/automation.ts` (`create/pause/resume/remove/trigger-cron-job`), `src/main/cron-quality.ts` |
-| Research turn (forced web search, cite, cap) | `buildResearchPrompt` + `capResearchBrief` (`assistant/prompts.ts`); the agent's `web`/`x_search` tools |
+| Need                                           | Reuse                                                                                                                                     |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Schedule firing, server-side                   | `src/main/cronjobs.ts`, `src/main/ipc/automation.ts` (`create/pause/resume/remove/trigger-cron-job`), `src/main/cron-quality.ts`          |
+| Research turn (forced web search, cite, cap)   | `buildResearchPrompt` + `capResearchBrief` (`assistant/prompts.ts`); the agent's `web`/`x_search` tools                                   |
 | Synthesize → changeset (preserve `## Sources`) | `RESEARCH_FILE_SYSTEM_PROMPT` + `buildResearchFileMessages` + `spsFileResearch` (`sps-ingest.ts`, `sps-agent.ts`) with `max_tokens`+retry |
-| Intake without renderer | `vault/_inbox/` captures, `readUnprocessedCaptures`, `INBOX_FOLDER` (`sps-ingest.ts`) |
-| Smart-merge commit (`op:"update"`) | `commitChangeset` (`inbox/ingestApply.ts`) → `ingestCommitPage` (`workspace.ts`) → `spsAppendWikiLog` + `ensureIndexCoverage` |
-| Inbox digest UI | `InboxSurface.tsx` (already a review queue) |
-| Notification → renderer/OS | equity-alerts pattern (`src/main/equity-alerts.ts`: jsonl watch + `webContents.send` + `Notification`) |
-| Telegram push | Hermes `messaging` toolset + the configured channel (`~/.hermes/channel_directory.json`) — the agent sends it in-prompt |
-| Gateway auth for any direct fetch | `getRemoteAuthHeader()` (now sends the local API key — `3d12b9c`) |
+| Intake without renderer                        | `vault/_inbox/` captures, `readUnprocessedCaptures`, `INBOX_FOLDER` (`sps-ingest.ts`)                                                     |
+| Smart-merge commit (`op:"update"`)             | `commitChangeset` (`inbox/ingestApply.ts`) → `ingestCommitPage` (`workspace.ts`) → `spsAppendWikiLog` + `ensureIndexCoverage`             |
+| Inbox digest UI                                | `InboxSurface.tsx` (already a review queue)                                                                                               |
+| Notification → renderer/OS                     | equity-alerts pattern (`src/main/equity-alerts.ts`: jsonl watch + `webContents.send` + `Notification`)                                    |
+| Telegram push                                  | Hermes `messaging` toolset + the configured channel (`~/.hermes/channel_directory.json`) — the agent sends it in-prompt                   |
+| Gateway auth for any direct fetch              | `getRemoteAuthHeader()` (now sends the local API key — `3d12b9c`)                                                                         |
 
 ## 7. Smart-merge mechanics
 
 The `_inbox` capture is tagged `op:"update"` + `pageId`. At apply time,
 `commitChangeset` already supports create/update; the update path rewrites the
 living page body and the ingest synthesis is instructed to:
+
 - keep one current synthesis at the top,
 - preserve/refresh the `## Sources` section,
 - append a single dated bullet to a `## Updates` section (the changelog),
@@ -168,6 +171,7 @@ machine-readable `research` op as it already does.
 ## 8. Change detection ("only on meaningful change")
 
 Two layers, cheap-first:
+
 1. **Heuristic gate (desktop/agent):** hash the normalized new synthesis; if it
    equals `lastChangeHash`, declare no-change and stop.
 2. **Semantic gate (agent):** the cron prompt instructs the agent to read the
@@ -194,7 +198,7 @@ new `lastChangeHash`.
   with that topic + the just-created `pageId`.
 - **Management surface:** a "Scheduled" list (new small surface or a tab in the
   existing Insights/Health area): rows of `{topic, cadence, last run outcome,
-  toggles}` with add / edit / pause / run-now / delete. "Run now" maps to
+toggles}` with add / edit / pause / run-now / delete. "Run now" maps to
   `trigger-cron-job`.
 - **Cadence picker:** presets (daily / weekdays / weekly / monthly) → cron expr;
   advanced = raw cron.
@@ -209,7 +213,7 @@ new `lastChangeHash`.
 - **Cost/runaway guard:** cap concurrent schedules (e.g. ≤ 25), enforce a minimum
   cadence (≥ hourly), and a per-schedule run lock so an overrunning run can't
   stack. Surface estimated token cost when creating a schedule.
-- **Telegram exfiltration:** only send the one-line summary to a *user-configured*
+- **Telegram exfiltration:** only send the one-line summary to a _user-configured_
   channel; never auto-create channels; gate strictly on the toggle.
 - **SSRF / fetch:** unchanged — all web access is via the gateway toolset; no new
   outbound fetch surface in the desktop.
@@ -228,6 +232,7 @@ new `lastChangeHash`.
 ## 13. Phasing
 
 **MVP (must-have)**
+
 - [ ] Schedule registry + create/edit/pause/delete (desktop) wired to a gateway
       cron job per schedule.
 - [ ] Cron prompt template: research → read existing page → semantic change gate
@@ -238,12 +243,14 @@ new `lastChangeHash`.
 - [ ] Run history jsonl + a minimal "Scheduled" list UI with run-now.
 
 **v2 (should-have)**
+
 - [ ] `autoApply` toggle (skip Inbox review for trusted schedules).
 - [ ] Telegram push (gated on channel + toggle).
 - [ ] "Schedule this weekly" entry point from the Research modal.
 - [ ] Coalesce missed runs; cost estimate on create.
 
 **Later (won't-have now)**
+
 - [ ] `vault`-authoritative mode so the KB updates with the app fully closed.
 - [ ] Multi-topic "briefing" schedules that compose several topics into one digest
       page.

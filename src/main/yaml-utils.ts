@@ -4,7 +4,10 @@ import { parseDocument, isScalar, isCollection, Scalar } from "yaml";
  * Get a value from a YAML string at the specified dotted path.
  * Returns the string representation of the scalar, or empty collection syntax ("{}" / "[]"), or null if missing.
  */
-export function getYamlValue(content: string, dottedPath: string): string | null {
+export function getYamlValue(
+  content: string,
+  dottedPath: string,
+): string | null {
   const path = dottedPath.split(".").filter(Boolean);
   if (path.length === 0) return null;
 
@@ -24,7 +27,8 @@ export function getYamlValue(content: string, dottedPath: string): string | null
     if (isCollection(node)) {
       const json = node.toJSON();
       if (Array.isArray(json) && json.length === 0) return "[]";
-      if (json && typeof json === "object" && Object.keys(json).length === 0) return "{}";
+      if (json && typeof json === "object" && Object.keys(json).length === 0)
+        return "{}";
       return JSON.stringify(json);
     }
 
@@ -44,14 +48,14 @@ export function setYamlValue(
   content: string,
   dottedPath: string,
   value: string,
-  options?: { upsert?: boolean }
+  options?: { upsert?: boolean },
 ): string {
   const path = dottedPath.split(".").filter(Boolean);
   if (path.length === 0) return content;
 
   try {
     const doc = parseDocument(content);
-    
+
     const upsert = options?.upsert ?? true;
 
     // Strict dotted path checking for missing parent blocks (no-op guard)
@@ -115,4 +119,3 @@ export function deleteYamlValue(content: string, dottedPath: string): string {
     return content;
   }
 }
-

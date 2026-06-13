@@ -33,7 +33,9 @@ export function ResearchModal() {
 
   // ── general topic research ──
   const [topic, setTopic] = useState("");
-  const [sourceFilter, setSourceFilter] = useState<"all" | "google" | "social" | "substack">("all");
+  const [sourceFilter, setSourceFilter] = useState<
+    "all" | "google" | "social" | "substack"
+  >("all");
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState(""); // streamed markdown preview
   const [toolNote, setToolNote] = useState<string | null>(null);
@@ -68,8 +70,7 @@ export function ResearchModal() {
   const [studySaving, setStudySaving] = useState(false);
   const [studyResult, setStudyResult] = useState("");
   const [studySaveMsg, setStudySaveMsg] = useState("");
-  const [notebookState, setNotebookState] =
-    useState<NotebookState>("idle");
+  const [notebookState, setNotebookState] = useState<NotebookState>("idle");
   const studyUndoRef = useRef<null | (() => void)>(null);
 
   useEffect(() => {
@@ -289,7 +290,7 @@ export function ResearchModal() {
       width={640}
       closeGuard={() => !busy}
       headerActions={
-        <div style={{ display: "flex", gap: 6 }}>
+        <div className="res-header-actions">
           <button
             className={`pal-chip${mode === "research" ? " on" : ""}`}
             onClick={() => setMode("research")}
@@ -318,35 +319,23 @@ export function ResearchModal() {
         {mode === "research" ? (
           <>
             {webEnabled === false && (
-              <div
-                style={{
-                  marginBottom: 12,
-                  padding: 12,
-                  border: "1px solid var(--bd)",
-                  borderRadius: 8,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 10,
-                }}
-              >
-                <small style={{ color: "var(--tx-3)" }}>
+              <div className="res-web-alert-box">
+                <small className="res-small-label">
                   Web research is off. Enable My Assistant&apos;s web tools to
                   research live topics.
                 </small>
                 <button
-                  className="cover-btn"
+                  className="cover-btn res-flex-shrink-0"
                   onClick={() => void enableWeb()}
                   disabled={enabling}
-                  style={{ flexShrink: 0 }}
                 >
                   {enabling ? "Enabling…" : "Enable web research"}
                 </button>
               </div>
             )}
 
-            <div className="pal-input" style={{ marginBottom: 12 }}>
-              <Icon name="search" size={18} style={{ color: "var(--tx-3)" }} />
+            <div className="pal-input res-margin-bottom-12">
+              <Icon name="search" size={18} className="res-small-label" />
               <input
                 ref={topicRef}
                 value={topic}
@@ -375,10 +364,8 @@ export function ResearchModal() {
             </div>
 
             {/* Target search filter toggles */}
-            <div style={{ display: "flex", gap: 6, marginBottom: 16, alignItems: "center" }}>
-              <span style={{ fontSize: 11, color: "var(--tx-3)", textTransform: "uppercase", letterSpacing: "0.05em", marginRight: 4 }}>
-                Target Source:
-              </span>
+            <div className="res-filter-row">
+              <span className="res-social-source-title">Target Source:</span>
               <button
                 type="button"
                 className={`pal-chip${sourceFilter === "all" ? " on" : ""}`}
@@ -414,7 +401,7 @@ export function ResearchModal() {
             </div>
 
             {phase === "idle" && (
-              <div className="cmts-empty" style={{ padding: "20px 0" }}>
+              <div className="cmts-empty res-idle-message">
                 My Assistant researches the topic on the live web, then saves a
                 synthesized, cited page into your Knowledge Base — with one
                 click to undo.
@@ -424,60 +411,27 @@ export function ResearchModal() {
             {(researchBusy || (phase !== "idle" && !!progress)) && (
               <>
                 {researchBusy && (
-                  <small
-                    style={{
-                      color: "var(--tx-3)",
-                      display: "block",
-                      marginBottom: 6,
-                    }}
-                  >
+                  <small className="res-status-label">
                     {toolNote
                       ? `Researching · ${toolNote}…`
                       : "Researching the web…"}
                   </small>
                 )}
                 {!!progress && (
-                  <div
-                    className="scroll"
-                    style={{
-                      maxHeight: "40vh",
-                      whiteSpace: "pre-wrap",
-                      fontSize: 13,
-                      lineHeight: 1.5,
-                      color: "var(--tx-2)",
-                      border: "1px solid var(--bd)",
-                      borderRadius: 8,
-                      padding: 12,
-                    }}
-                  >
-                    {progress}
-                  </div>
+                  <div className="scroll res-progress-box">{progress}</div>
                 )}
               </>
             )}
 
             {phase === "done" && (
-              <div
-                style={{
-                  marginTop: 12,
-                  padding: 12,
-                  border: "1px solid var(--bd)",
-                  borderRadius: 8,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 10,
-                }}
-              >
-                <div style={{ minWidth: 0 }}>
+              <div className="res-save-card">
+                <div className="res-min-width-0">
                   <div className="c-name">✓ Saved to your Knowledge Base</div>
                   {resultSummary && (
-                    <small style={{ color: "var(--tx-3)", display: "block" }}>
-                      {resultSummary}
-                    </small>
+                    <small className="res-small-label">{resultSummary}</small>
                   )}
                 </div>
-                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                <div className="res-header-actions res-flex-shrink-0">
                   <button className="cover-btn" onClick={() => undo()}>
                     Undo
                   </button>
@@ -489,23 +443,11 @@ export function ResearchModal() {
             )}
 
             {(phase === "warn" || phase === "error") && (
-              <div
-                style={{
-                  marginTop: 12,
-                  padding: 12,
-                  border: "1px solid var(--bd)",
-                  borderRadius: 8,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 10,
-                }}
-              >
-                <small style={{ color: "var(--tx-3)" }}>{resultMsg}</small>
+              <div className="res-save-card">
+                <small className="res-small-label">{resultMsg}</small>
                 <button
-                  className="cover-btn"
+                  className="cover-btn res-flex-shrink-0"
                   onClick={resetResearch}
-                  style={{ flexShrink: 0 }}
                 >
                   Try again
                 </button>
@@ -514,27 +456,15 @@ export function ResearchModal() {
           </>
         ) : mode === "study" ? (
           <>
-            <div
-              style={{
-                marginBottom: 12,
-                padding: 12,
-                border: "1px solid var(--bd)",
-                borderRadius: 8,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 10,
-              }}
-            >
-              <small style={{ color: "var(--tx-3)" }}>
+            <div className="res-web-alert-box">
+              <small className="res-small-label">
                 NotebookLM is optional. Enabling it registers the local MCP
                 server for My Assistant; Google auth stays outside this app.
               </small>
               <button
-                className="cover-btn"
+                className="cover-btn res-flex-shrink-0"
                 onClick={() => void enableNotebookLm()}
                 disabled={notebookState === "working"}
-                style={{ flexShrink: 0 }}
               >
                 {notebookState === "working"
                   ? "Enabling..."
@@ -545,23 +475,16 @@ export function ResearchModal() {
             </div>
 
             {notebookState === "failed" && (
-              <div
-                style={{
-                  marginBottom: 12,
-                  padding: 12,
-                  border: "1px solid var(--bd)",
-                  borderRadius: 8,
-                }}
-              >
-                <small style={{ color: "var(--tx-3)" }}>
+              <div className="res-web-alert-box">
+                <small className="res-small-label">
                   NotebookLM MCP command not found. Install it or run nlm login,
                   then try again. If auth expired, run nlm login and retry.
                 </small>
               </div>
             )}
 
-            <div className="pal-input" style={{ marginBottom: 12 }}>
-              <Icon name="search" size={18} style={{ color: "var(--tx-3)" }} />
+            <div className="pal-input res-margin-bottom-12">
+              <Icon name="search" size={18} className="res-small-label" />
               <input
                 value={studyFocus}
                 onChange={(e) => setStudyFocus(e.target.value)}
@@ -580,15 +503,7 @@ export function ResearchModal() {
               </button>
             </div>
 
-            <label
-              style={{
-                display: "grid",
-                gap: 6,
-                marginBottom: 12,
-                fontSize: 12,
-                color: "var(--tx-3)",
-              }}
-            >
+            <label className="res-corpus-label">
               Corpus description
               <textarea
                 value={studyCorpus}
@@ -596,22 +511,13 @@ export function ResearchModal() {
                 placeholder="Optional: name the PDFs, videos, articles, wiki pages, or NotebookLM notebooks to study."
                 disabled={studyBusy}
                 rows={3}
-                style={{
-                  width: "100%",
-                  resize: "vertical",
-                  border: "1px solid var(--bd)",
-                  borderRadius: 8,
-                  padding: 10,
-                  color: "var(--tx)",
-                  background: "var(--bg)",
-                  font: "inherit",
-                  lineHeight: 1.4,
-                }}
+                className="res-study-textarea"
+                title="Corpus description"
               />
             </label>
 
             {!studyResult && !studyBusy && (
-              <div className="cmts-empty" style={{ padding: "20px 0" }}>
+              <div className="cmts-empty res-idle-message">
                 Study connected sources as a corpus: central argument, mental
                 models, disagreements, weak evidence, checks for understanding,
                 and a wiki-ready capture.
@@ -620,34 +526,10 @@ export function ResearchModal() {
 
             {!!studyResult && (
               <>
-                <div
-                  className="scroll"
-                  style={{
-                    maxHeight: "42vh",
-                    whiteSpace: "pre-wrap",
-                    fontSize: 13,
-                    lineHeight: 1.5,
-                    color: "var(--tx-2)",
-                    border: "1px solid var(--bd)",
-                    borderRadius: 8,
-                    padding: 12,
-                  }}
-                >
-                  {studyResult}
-                </div>
-                <div
-                  style={{
-                    marginTop: 12,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 10,
-                  }}
-                >
-                  <small style={{ color: "var(--tx-3)" }}>
-                    {studySaveMsg}
-                  </small>
-                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                <div className="scroll res-study-result-box">{studyResult}</div>
+                <div className="res-save-card">
+                  <small className="res-small-label">{studySaveMsg}</small>
+                  <div className="res-header-actions res-flex-shrink-0">
                     {studyUndoRef.current && (
                       <button className="cover-btn" onClick={undoStudySave}>
                         Undo
@@ -667,13 +549,7 @@ export function ResearchModal() {
           </>
         ) : (
           <>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                marginBottom: 8,
-              }}
-            >
+            <div className="res-settings-row">
               <button
                 className="cover-btn"
                 onClick={() => setSettingsOpen((v) => !v)}
@@ -684,30 +560,22 @@ export function ResearchModal() {
             </div>
 
             {settingsOpen && (
-              <div
-                style={{
-                  marginBottom: 12,
-                  padding: 12,
-                  border: "1px solid var(--bd)",
-                  borderRadius: 8,
-                  display: "grid",
-                  gap: 10,
-                }}
-              >
-                <label style={{ fontSize: 12, color: "var(--tx-3)" }}>
+              <div className="res-settings-panel">
+                <label className="res-settings-label">
                   Contact email — opts into OpenAlex&apos;s faster “polite pool”
-                  <div className="pal-input" style={{ marginTop: 4 }}>
+                  <div className="pal-input res-margin-top-4">
                     <input
                       type="email"
                       value={mailto}
                       onChange={(e) => setMailto(e.target.value)}
                       placeholder="you@example.com"
+                      title="Contact email"
                     />
                   </div>
                 </label>
-                <label style={{ fontSize: 12, color: "var(--tx-3)" }}>
+                <label className="res-settings-label">
                   API key (optional) — raises the free daily allowance
-                  <div className="pal-input" style={{ marginTop: 4 }}>
+                  <div className="pal-input res-margin-top-4">
                     <input
                       type="password"
                       value={apiKeyInput}
@@ -717,10 +585,11 @@ export function ResearchModal() {
                           ? "•••••••• set — leave blank to keep"
                           : "OpenAlex API key"
                       }
+                      title="API Key"
                     />
                   </div>
                 </label>
-                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <div className="res-settings-footer">
                   <button
                     className="cover-btn"
                     onClick={() => void saveConfig()}
@@ -729,15 +598,15 @@ export function ResearchModal() {
                     {savingCfg ? "Saving…" : "Save"}
                   </button>
                 </div>
-                <small style={{ color: "var(--tx-4)", fontSize: 11 }}>
+                <small className="res-small-label">
                   Stored locally on this machine. Both are optional — search
                   works without them.
                 </small>
               </div>
             )}
 
-            <div className="pal-input" style={{ marginBottom: 12 }}>
-              <Icon name="search" size={18} style={{ color: "var(--tx-3)" }} />
+            <div className="pal-input res-margin-bottom-12">
+              <Icon name="search" size={18} className="res-small-label" />
               <input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
@@ -745,6 +614,7 @@ export function ResearchModal() {
                   if (e.key === "Enter") void runSearch();
                 }}
                 placeholder="Search OpenAlex — topic, title, author…"
+                title="Search term"
               />
               <button
                 className="cover-btn"
@@ -756,47 +626,29 @@ export function ResearchModal() {
             </div>
 
             {!searched && (
-              <div className="cmts-empty" style={{ padding: "20px 0" }}>
+              <div className="cmts-empty res-idle-message">
                 Search the open catalog of 250M+ scholarly works. Pick a paper
                 and My Assistant saves a plain-language summary into your
                 workspace.
               </div>
             )}
             {searched && !loading && results.length === 0 && (
-              <div className="cmts-empty" style={{ padding: "20px 0" }}>
+              <div className="cmts-empty res-idle-message">
                 No papers found for “{q}”.
               </div>
             )}
 
-            <div className="scroll" style={{ maxHeight: "52vh" }}>
+            <div className="scroll res-paper-list-box">
               {results.map((w) => (
-                <div
-                  key={w.id}
-                  className="lst-row"
-                  style={{
-                    borderRadius: 6,
-                    alignItems: "flex-start",
-                    gap: 10,
-                    height: "auto",
-                    minHeight: "var(--row-h, 32px)",
-                    padding: "8px 6px",
-                  }}
-                >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div className="c-name" style={{ whiteSpace: "normal" }}>
+                <div key={w.id} className="lst-row res-paper-row">
+                  <div className="res-paper-info-container">
+                    <div className="c-name res-white-space-normal">
                       {w.title}
                     </div>
-                    <small style={{ color: "var(--tx-3)", display: "block" }}>
-                      {formatByline(w)}
-                    </small>
+                    <small className="res-small-label">{formatByline(w)}</small>
                   </div>
                   {w.isOA && (
-                    <span
-                      className="pal-chip on"
-                      style={{ pointerEvents: "none" }}
-                    >
-                      OA
-                    </span>
+                    <span className="pal-chip on res-oa-chip">OA</span>
                   )}
                   <button
                     className="cover-btn"

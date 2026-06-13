@@ -35,14 +35,16 @@ function shapeChecks(env: Record<string, string>): ShapeCheck[] {
     checks.push({
       key: "phone-number-id",
       ok: /^\d{15,17}$/.test(phoneNumberId),
-      message: "Phone Number ID should be 15-17 digits from Meta, not the phone number.",
+      message:
+        "Phone Number ID should be 15-17 digits from Meta, not the phone number.",
     });
   }
   if (accessToken) {
     checks.push({
       key: "access-token",
       ok: accessToken.startsWith("EAA") && accessToken.length >= 80,
-      message: "Access token usually starts with EAA and is much longer than a password.",
+      message:
+        "Access token usually starts with EAA and is much longer than a password.",
     });
   }
   if (appSecret) {
@@ -65,7 +67,8 @@ function shapeChecks(env: Record<string, string>): ShapeCheck[] {
       ok: allowFrom
         .split(",")
         .every((value) => /^\d{8,20}$/.test(value.trim())),
-      message: "Allowed Senders should be comma-separated wa_ids with digits only.",
+      message:
+        "Allowed Senders should be comma-separated wa_ids with digits only.",
     });
   }
   if (dmPolicy) {
@@ -189,24 +192,24 @@ function WhatsAppCloudSetup({
       {status &&
         (status.requiredMissing.length > 0 ||
           status.inboundMissing.length > 0) && (
-        <div className="whatsapp-cloud-grid">
-          <div>
-            <div className="whatsapp-cloud-mini-title">Gateway required</div>
-            <div className="settings-field-hint">
-              {status.requiredMissing.length
-                ? status.requiredMissing.join(", ")
-                : "Phone Number ID and Access Token are saved."}
+          <div className="whatsapp-cloud-grid">
+            <div>
+              <div className="whatsapp-cloud-mini-title">Gateway required</div>
+              <div className="settings-field-hint">
+                {status.requiredMissing.length
+                  ? status.requiredMissing.join(", ")
+                  : "Phone Number ID and Access Token are saved."}
+              </div>
+            </div>
+            <div>
+              <div className="whatsapp-cloud-mini-title">Inbound required</div>
+              <div className="settings-field-hint">
+                {status.inboundMissing.length
+                  ? status.inboundMissing.join(", ")
+                  : "App Secret and Verify Token are saved."}
+              </div>
             </div>
           </div>
-          <div>
-            <div className="whatsapp-cloud-mini-title">Inbound required</div>
-            <div className="settings-field-hint">
-              {status.inboundMissing.length
-                ? status.inboundMissing.join(", ")
-                : "App Secret and Verify Token are saved."}
-            </div>
-          </div>
-        </div>
         )}
 
       {failedChecks.length > 0 && (
@@ -219,7 +222,9 @@ function WhatsAppCloudSetup({
 
       <div className="whatsapp-cloud-command-grid">
         <div className="whatsapp-cloud-command-card">
-          <div className="whatsapp-cloud-mini-title">Cloudflare quick tunnel</div>
+          <div className="whatsapp-cloud-mini-title">
+            Cloudflare quick tunnel
+          </div>
           <code>{cloudflaredCommand}</code>
           <button
             className="btn btn-secondary btn-sm"
@@ -285,7 +290,9 @@ function WhatsAppCloudSetup({
         <button
           className="btn btn-secondary btn-sm"
           type="button"
-          onClick={() => window.hermesAPI.openExternal(HERMES_WHATSAPP_CLOUD_DOCS)}
+          onClick={() =>
+            window.hermesAPI.openExternal(HERMES_WHATSAPP_CLOUD_DOCS)
+          }
         >
           Open guide
         </button>

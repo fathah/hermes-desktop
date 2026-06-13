@@ -11,8 +11,18 @@ interface ModelPickerProps {
   displayModel: string;
   onOpen: () => void;
   onSelectModel: (provider: string, model: string, baseUrl: string) => void;
-  selectedModels: Array<{ provider: string; model: string; baseUrl: string; label: string }>;
-  onToggleCouncilModel: (provider: string, model: string, baseUrl: string, label: string) => void;
+  selectedModels: Array<{
+    provider: string;
+    model: string;
+    baseUrl: string;
+    label: string;
+  }>;
+  onToggleCouncilModel: (
+    provider: string,
+    model: string,
+    baseUrl: string,
+    label: string,
+  ) => void;
 }
 
 export const ModelPicker = memo(function ModelPicker({

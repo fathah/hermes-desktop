@@ -15,9 +15,7 @@ describe("getYamlValue against remote-shaped config.yaml (originally findYamlPat
 
     expect(getYamlValue(content, "model.default")).toBe("nemotron-120b");
     expect(getYamlValue(content, "model.provider")).toBe("nvidia");
-    expect(getYamlValue(content, "model.base_url")).toBe(
-      "https://example/v1",
-    );
+    expect(getYamlValue(content, "model.base_url")).toBe("https://example/v1");
   });
 
   it("does NOT match personalities.default when asked for model.default (#240)", () => {
@@ -73,9 +71,7 @@ describe("getYamlValue against remote-shaped config.yaml (originally findYamlPat
     ].join("\n");
 
     expect(getYamlValue(content, "model.default")).toBe("real-model");
-    expect(getYamlValue(content, "model.fallback.default")).toBe(
-      "decoy",
-    );
+    expect(getYamlValue(content, "model.fallback.default")).toBe("decoy");
   });
 
   it("doesn't cross block boundaries mid-walk", () => {
@@ -99,12 +95,8 @@ describe("getYamlValue against remote-shaped config.yaml (originally findYamlPat
     ].join("\n");
 
     expect(getYamlValue(content, "model.default")).toBe("bare-value");
-    expect(getYamlValue(content, "model.provider")).toBe(
-      "single-quoted",
-    );
-    expect(getYamlValue(content, "model.base_url")).toBe(
-      "double-quoted",
-    );
+    expect(getYamlValue(content, "model.provider")).toBe("single-quoted");
+    expect(getYamlValue(content, "model.base_url")).toBe("double-quoted");
   });
 });
 
@@ -117,9 +109,7 @@ describe("getYamlValue with flat keys pinned to top level", () => {
       "",
     ].join("\n");
 
-    expect(getYamlValue(content, "timezone")).toBe(
-      "America/New_York",
-    );
+    expect(getYamlValue(content, "timezone")).toBe("America/New_York");
   });
 
   it("does NOT match an indented occurrence", () => {

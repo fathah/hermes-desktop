@@ -92,7 +92,10 @@ function CapabilitySummary({
   }
 
   async function markReviewed(report: CapabilityRiskReport): Promise<void> {
-    const risk = await window.hermesAPI.reviewCapabilityRisk(report.id, profile);
+    const risk = await window.hermesAPI.reviewCapabilityRisk(
+      report.id,
+      profile,
+    );
     setData((current) => (current ? { ...current, risk } : current));
   }
 
@@ -122,7 +125,8 @@ function CapabilitySummary({
               </span>
               {data.risk && (
                 <span className="cap-count">
-                  {data.risk.stats.blocked} blocked / {data.risk.stats.warning} warn
+                  {data.risk.stats.blocked} blocked / {data.risk.stats.warning}{" "}
+                  warn
                 </span>
               )}
             </div>
@@ -136,7 +140,10 @@ function CapabilitySummary({
                 {checking ? "Checking..." : "Check now"}
               </button>
               {data.risk && (
-                <span className="settings-field-hint" style={{ marginLeft: 10 }}>
+                <span
+                  className="settings-field-hint"
+                  style={{ marginLeft: 10 }}
+                >
                   Last checked{" "}
                   {data.risk.checkedAt
                     ? new Date(data.risk.checkedAt).toLocaleString()
@@ -166,7 +173,10 @@ function CapabilitySummary({
               <div className="cap-summary-row">
                 <span className="cap-summary-label">Review needed:</span>{" "}
                 {notableRisks.map((report) => (
-                  <span key={report.id} style={{ display: "block", marginTop: 6 }}>
+                  <span
+                    key={report.id}
+                    style={{ display: "block", marginTop: 6 }}
+                  >
                     {report.name} ({report.kind}) - {report.status} -{" "}
                     {report.updateStatus}
                     {report.findings[0] ? ` - ${report.findings[0].title}` : ""}
@@ -184,7 +194,9 @@ function CapabilitySummary({
                       disabled={report.status === "blocked"}
                       onClick={() => void markReviewed(report)}
                     >
-                      {report.status === "blocked" ? "Blocked" : "Mark reviewed"}
+                      {report.status === "blocked"
+                        ? "Blocked"
+                        : "Mark reviewed"}
                     </button>
                   </span>
                 ))}

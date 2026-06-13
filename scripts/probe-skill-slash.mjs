@@ -107,13 +107,25 @@ const ipc = await win.evaluate(async () => {
   };
 });
 
-check("skill discovered by listInstalledSkills", ipc.installedNames.includes("Demo Skill"));
+check(
+  "skill discovered by listInstalledSkills",
+  ipc.installedNames.includes("Demo Skill"),
+);
 check("active set starts empty", ipc.before.length === 0);
-check("loadSkillToChat resolves ok", ipc.load.ok === true && ipc.load.name === "Demo Skill");
+check(
+  "loadSkillToChat resolves ok",
+  ipc.load.ok === true && ipc.load.name === "Demo Skill",
+);
 check("active set has the skill after load", ipc.afterLoad.length === 1);
-check("slug form resolves to the same skill (alreadyLoaded)", ipc.dup.ok === true && ipc.dup.alreadyLoaded === true);
+check(
+  "slug form resolves to the same skill (alreadyLoaded)",
+  ipc.dup.ok === true && ipc.dup.alreadyLoaded === true,
+);
 check("no duplicate entry from a second load", ipc.afterDup.length === 1);
-check("unload removes the skill", ipc.unload.ok === true && ipc.unload.removed.includes("Demo Skill"));
+check(
+  "unload removes the skill",
+  ipc.unload.ok === true && ipc.unload.removed.includes("Demo Skill"),
+);
 check("active set empty after unload", ipc.afterUnload.length === 0);
 
 // ── (b) SPS composer slash menu (best-effort UI check) ──────────────────────
@@ -141,9 +153,15 @@ try {
   await win.waitForSelector("[role='listbox']", { timeout: 5000 });
   const menuText = await win.locator("[role='listbox']").innerText();
   check("slash menu shows /skill", menuText.includes("/skill"));
-  check("slash menu lists the installed skill", menuText.toLowerCase().includes("demo skill"));
+  check(
+    "slash menu lists the installed skill",
+    menuText.toLowerCase().includes("demo skill"),
+  );
 } catch (e) {
-  console.log("UI-CHECK SKIPPED (assistant composer not reachable):", e.message);
+  console.log(
+    "UI-CHECK SKIPPED (assistant composer not reachable):",
+    e.message,
+  );
 }
 
 await app.close();

@@ -157,7 +157,10 @@ describe("capability risk scanner", () => {
   it("marks changed imported skill sources for rescan", () => {
     mkdirSync(join(skillDir, "nested"), { recursive: true });
     writeFileSync(join(skillDir, "SKILL.md"), "# Helper\n\nSafe instructions.");
-    writeFileSync(join(sourceDir, "SKILL.md"), "# Helper\n\nSafe instructions.");
+    writeFileSync(
+      join(sourceDir, "SKILL.md"),
+      "# Helper\n\nSafe instructions.",
+    );
 
     const first = buildSkillRiskReport({
       name: "Helper",
@@ -197,9 +200,9 @@ describe("capability risk scanner", () => {
       path: skillDir,
     });
 
-    expect(result.statuses.find((s) => s.id === "skillspector")?.configured).toBe(
-      true,
-    );
+    expect(
+      result.statuses.find((s) => s.id === "skillspector")?.configured,
+    ).toBe(true);
     expect(result.findings[0]).toMatchObject({
       source: "skillspector",
       severity: "critical",
@@ -207,13 +210,11 @@ describe("capability risk scanner", () => {
   });
 
   it("marks package-backed capabilities when a newer registry version exists", async () => {
-    const fetchSpy = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ "dist-tags": { latest: "2.0.0" } }), {
-          status: 200,
-        }),
-      );
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ "dist-tags": { latest: "2.0.0" } }), {
+        status: 200,
+      }),
+    );
     const report = buildMcpRiskReport({
       name: "pkg",
       type: "stdio",

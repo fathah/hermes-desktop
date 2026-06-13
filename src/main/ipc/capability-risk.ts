@@ -12,8 +12,7 @@ export function registerCapabilityRiskIpc(): void {
   safeHandle("capability-risk-check-now", (_event, profile?: string) =>
     checkCapabilityRisks(profile),
   );
-  safeHandle(
-    "capability-risk-review",
-    (_event, id: string, profile?: string) => reviewCapabilityRisk(id, profile),
+  safeHandle("capability-risk-review", (_event, id: string, profile?: string) =>
+    reviewCapabilityRisk(id, profile),
   );
 }

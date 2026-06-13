@@ -8,9 +8,7 @@ const TEST_DIR = join(
   `hermes-test-cred-manager-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
 );
 
-async function freshConfig(
-  home: string,
-): Promise<{
+async function freshConfig(home: string): Promise<{
   addCredentialPoolEntry: any;
   getCredentialPool: any;
   readEnv: any;
@@ -32,7 +30,10 @@ describe("CredentialPoolManager", () => {
   beforeEach(() => {
     mkdirSync(TEST_DIR, { recursive: true });
     // Write a base config.yaml so profilePaths doesn't throw
-    writeFileSync(join(TEST_DIR, "config.yaml"), "platform_toolsets:\n  cli: []\n");
+    writeFileSync(
+      join(TEST_DIR, "config.yaml"),
+      "platform_toolsets:\n  cli: []\n",
+    );
   });
 
   afterEach(() => {
@@ -42,7 +43,8 @@ describe("CredentialPoolManager", () => {
   });
 
   it("selects next key based on priority and updates env", async () => {
-    const { addCredentialPoolEntry, CredentialPoolManager, readEnv } = await freshConfig(TEST_DIR);
+    const { addCredentialPoolEntry, CredentialPoolManager, readEnv } =
+      await freshConfig(TEST_DIR);
 
     addCredentialPoolEntry("openai", "key-first", "First", "default");
     addCredentialPoolEntry("openai", "key-second", "Second", "default");
@@ -57,13 +59,19 @@ describe("CredentialPoolManager", () => {
   });
 
   it("gating on cooldown filters out keys", async () => {
-    const { addCredentialPoolEntry, CredentialPoolManager, readEnv } = await freshConfig(TEST_DIR);
+    const { addCredentialPoolEntry, CredentialPoolManager, readEnv } =
+      await freshConfig(TEST_DIR);
 
     addCredentialPoolEntry("openai", "key-first", "First", "default");
     addCredentialPoolEntry("openai", "key-second", "Second", "default");
 
     // Mark the first key on cooldown for 5 mins
-    CredentialPoolManager.markKeyCooldown("openai", "key-first", 300000, "default");
+    CredentialPoolManager.markKeyCooldown(
+      "openai",
+      "key-first",
+      300000,
+      "default",
+    );
 
     const selected = CredentialPoolManager.rotateKey("openai", "default");
     expect(selected).toBe("key-second");
@@ -73,14 +81,25 @@ describe("CredentialPoolManager", () => {
   });
 
   it("falls back to clearing cooldown on oldest key if all keys are on cooldown", async () => {
-    const { addCredentialPoolEntry, CredentialPoolManager } = await freshConfig(TEST_DIR);
+    const { addCredentialPoolEntry, CredentialPoolManager } =
+      await freshConfig(TEST_DIR);
 
     addCredentialPoolEntry("openai", "key-first", "First", "default");
     addCredentialPoolEntry("openai", "key-second", "Second", "default");
 
     // Both on cooldown (different times)
-    CredentialPoolManager.markKeyCooldown("openai", "key-first", 50000, "default");
-    CredentialPoolManager.markKeyCooldown("openai", "key-second", 100000, "default");
+    CredentialPoolManager.markKeyCooldown(
+      "openai",
+      "key-first",
+      50000,
+      "default",
+    );
+    CredentialPoolManager.markKeyCooldown(
+      "openai",
+      "key-second",
+      100000,
+      "default",
+    );
 
     // Should clear and select key-first since its cooldown is older/earlier
     const selected = CredentialPoolManager.rotateKey("openai", "default");

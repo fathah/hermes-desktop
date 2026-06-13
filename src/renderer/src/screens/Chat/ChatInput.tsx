@@ -7,7 +7,14 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
-import { Send, Square as Stop, Slash, Paperclip, Mic, Globe } from "lucide-react";
+import {
+  Send,
+  Square as Stop,
+  Slash,
+  Paperclip,
+  Mic,
+  Globe,
+} from "lucide-react";
 import { isImeComposing } from "./keyboard";
 import { useVoiceInput } from "./hooks/useVoiceInput";
 import { useI18n } from "../../components/useI18n";
@@ -269,7 +276,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       setSlashMenuOpen(false);
       const sendAttachments = attachments;
       clearAfterSend(text);
-      const finalMsg = searchMode && !text.startsWith("/") ? `/web ${text}` : text;
+      const finalMsg =
+        searchMode && !text.startsWith("/") ? `/web ${text}` : text;
       onSubmit(finalMsg, sendAttachments);
     }
 
@@ -278,7 +286,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       if (!text) return;
       const sendAttachments = attachments;
       clearAfterSend(text);
-      const finalMsg = searchMode && !text.startsWith("/") ? `/web ${text}` : text;
+      const finalMsg =
+        searchMode && !text.startsWith("/") ? `/web ${text}` : text;
       onQuickAsk(finalMsg, sendAttachments);
     }
 
@@ -535,7 +544,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               {voice.recording ? <Stop size={16} /> : <Mic size={16} />}
             </button>
           )}
-           <button
+          <button
             className={`chat-attach-btn ${searchMode ? "chat-search-active chat-search-active-color" : ""}`}
             onClick={() => setSearchMode((prev) => !prev)}
             disabled={isLoading}

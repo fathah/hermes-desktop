@@ -49,7 +49,9 @@ function parseSkillFrontmatter(content: string): {
   return result;
 }
 
-function collectInstalledSkillSnapshots(profile?: string): SkillCapabilitySnapshot[] {
+function collectInstalledSkillSnapshots(
+  profile?: string,
+): SkillCapabilitySnapshot[] {
   const root = join(profileHome(profile), "skills");
   if (!existsSync(root)) return [];
   const snapshots: SkillCapabilitySnapshot[] = [];
@@ -64,7 +66,8 @@ function collectInstalledSkillSnapshots(profile?: string): SkillCapabilitySnapsh
       const skillPath = join(categoryPath, folder);
       const skillFile = join(skillPath, "SKILL.md");
       try {
-        if (!statSync(skillPath).isDirectory() || !existsSync(skillFile)) continue;
+        if (!statSync(skillPath).isDirectory() || !existsSync(skillFile))
+          continue;
         const meta = parseSkillFrontmatter(
           readFileSync(skillFile, "utf-8").slice(0, 4000),
         );
@@ -80,7 +83,8 @@ function collectInstalledSkillSnapshots(profile?: string): SkillCapabilitySnapsh
     }
   }
   return snapshots.sort(
-    (a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name),
+    (a, b) =>
+      a.category.localeCompare(b.category) || a.name.localeCompare(b.name),
   );
 }
 
@@ -134,7 +138,9 @@ export async function checkCapabilityRisks(
         {
           kind: "mcp",
           name: mcp.name,
-          path: mcp.entry.command.startsWith("/") ? mcp.entry.command : undefined,
+          path: mcp.entry.command.startsWith("/")
+            ? mcp.entry.command
+            : undefined,
           packageSpec:
             mcp.entry.command === "npx" ||
             mcp.entry.command === "uvx" ||
@@ -178,7 +184,8 @@ async function finalizeReport(
     ...target,
     packageSpec: target.packageSpec || withUpstream.source.packageSpec,
   });
-  for (const status of scanned.statuses) scannerStatusById.set(status.id, status);
+  for (const status of scanned.statuses)
+    scannerStatusById.set(status.id, status);
   if (scanned.findings.length === 0) return withUpstream;
   const findings = [...withUpstream.findings, ...scanned.findings];
   const status = highestRiskStatus(findings);
@@ -211,7 +218,9 @@ export function reviewCapabilityRisk(
           reviewState: "reviewed" as const,
           lastReviewedAt: now,
           updateStatus:
-            report.updateStatus === "rescanPassed" ? "current" : report.updateStatus,
+            report.updateStatus === "rescanPassed"
+              ? "current"
+              : report.updateStatus,
         }
       : report,
   );

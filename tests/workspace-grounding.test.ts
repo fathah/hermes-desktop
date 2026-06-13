@@ -49,7 +49,9 @@ vi.mock("../src/main/process-options", () => ({
 const search = vi.fn();
 const status = vi.fn();
 vi.mock("../src/main/note-index", async () => {
-  const actual = await vi.importActual<typeof import("../src/main/note-index")>("../src/main/note-index");
+  const actual = await vi.importActual<typeof import("../src/main/note-index")>(
+    "../src/main/note-index",
+  );
   return {
     ...actual,
     getSpsNoteIndex: () => Promise.resolve({ search, status }),
@@ -236,12 +238,16 @@ describe("buildRetrievalSystemMessage (IO)", () => {
     search.mockReturnValueOnce([
       { path: "handbook.md", title: "Handbook", snippet: "…" },
     ]);
-    const msg = await buildRetrievalSystemMessage("rest period", undefined, { isRemote: true });
+    const msg = await buildRetrievalSystemMessage("rest period", undefined, {
+      isRemote: true,
+    });
     expect(msg?.role).toBe("system");
     expect(msg?.content).toContain("Handbook · handbook.md");
     // Should NOT contain the absolute local path reference
     expect(msg?.content).not.toContain(join(root, "handbook.md"));
     // Should contain remote-specific instructions
-    expect(msg?.content).toContain("These files exist on the user's local desktop and cannot be read directly via local file tools");
+    expect(msg?.content).toContain(
+      "These files exist on the user's local desktop and cannot be read directly via local file tools",
+    );
   });
 });

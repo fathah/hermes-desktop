@@ -12,7 +12,13 @@ import {
 } from "electron";
 import { join } from "path";
 import { pathToFileURL } from "url";
-import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from "fs";
+import {
+  existsSync,
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  unlinkSync,
+} from "fs";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import type { AppUpdater } from "electron-updater";
 import icon from "../../resources/icon.png?asset";
@@ -60,6 +66,7 @@ import {
   scheduleExternalContextScans,
   stopExternalContextScans,
 } from "./ipc/external-context";
+import { registerHealthRssIpc } from "./ipc/health-rss";
 import { closeExternalContextDb } from "./external-context/index";
 import { startScheduler, stopScheduler } from "./scheduler";
 import {
@@ -130,7 +137,9 @@ function createCaptureWindow(): void {
   if (devUrl) {
     captureWindow.loadURL(`${devUrl}?window=capture`);
   } else {
-    captureWindow.loadURL(`${pathToFileURL(rendererHtmlPath).toString()}?window=capture`);
+    captureWindow.loadURL(
+      `${pathToFileURL(rendererHtmlPath).toString()}?window=capture`,
+    );
   }
 
   captureWindow.on("blur", () => {
@@ -473,43 +482,50 @@ function setupIPC(): void {
   registerExternalContextIpc(() => mainWindow);
   registerFederatedSearchIpc();
   scheduleExternalContextScans(() => mainWindow);
+  registerHealthRssIpc();
 
-  ipcMain.handle("sps-trigger-screencapture", async (_event, profile?: string) => {
-    if (captureWindow && !captureWindow.isDestroyed()) {
-      captureWindow.hide();
-    }
-    await new Promise((resolve) => setTimeout(resolve, 150));
-
-    const tempPath = join(require("os").tmpdir(), `hermes-capture-${Date.now()}.png`);
-    try {
-      const { exec } = require("child_process");
-      const { promisify } = require("util");
-      const execAsync = promisify(exec);
-      await execAsync(`screencapture -i "${tempPath}"`);
-      if (existsSync(tempPath)) {
-        const buffer = readFileSync(tempPath);
-        try {
-          unlinkSync(tempPath);
-        } catch (err) {
-          console.error("[QuickCapture] Failed to delete temp file:", err);
-        }
-        const dir = spsVaultDirFor(profile);
-        const name = await writeAsset(dir, buffer, "png");
-        if (captureWindow && !captureWindow.isDestroyed()) {
-          captureWindow.show();
-          captureWindow.focus();
-        }
-        return name;
+  ipcMain.handle(
+    "sps-trigger-screencapture",
+    async (_event, profile?: string) => {
+      if (captureWindow && !captureWindow.isDestroyed()) {
+        captureWindow.hide();
       }
-    } catch (err) {
-      console.error("[QuickCapture] screencapture failed or canceled", err);
-    }
-    if (captureWindow && !captureWindow.isDestroyed()) {
-      captureWindow.show();
-      captureWindow.focus();
-    }
-    return null;
-  });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      const tempPath = join(
+        require("os").tmpdir(),
+        `hermes-capture-${Date.now()}.png`,
+      );
+      try {
+        const { exec } = require("child_process");
+        const { promisify } = require("util");
+        const execAsync = promisify(exec);
+        await execAsync(`screencapture -i "${tempPath}"`);
+        if (existsSync(tempPath)) {
+          const buffer = readFileSync(tempPath);
+          try {
+            unlinkSync(tempPath);
+          } catch (err) {
+            console.error("[QuickCapture] Failed to delete temp file:", err);
+          }
+          const dir = spsVaultDirFor(profile);
+          const name = await writeAsset(dir, buffer, "png");
+          if (captureWindow && !captureWindow.isDestroyed()) {
+            captureWindow.show();
+            captureWindow.focus();
+          }
+          return name;
+        }
+      } catch (err) {
+        console.error("[QuickCapture] screencapture failed or canceled", err);
+      }
+      if (captureWindow && !captureWindow.isDestroyed()) {
+        captureWindow.show();
+        captureWindow.focus();
+      }
+      return null;
+    },
+  );
 }
 function buildMenu(): void {
   const isMac = process.platform === "darwin";

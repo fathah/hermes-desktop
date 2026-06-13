@@ -96,7 +96,9 @@ export function InboxSurface({
   const [topics, setTopics] = useState<string[]>([]);
   const [ignoredTopics, setIgnoredTopics] = useState<string[]>([]);
   const [digestPath, setDigestPath] = useState("daily-digests");
-  const [flashcardPath, setFlashcardPath] = useState("flashcards/daily_news_flashcards.md");
+  const [flashcardPath, setFlashcardPath] = useState(
+    "flashcards/daily_news_flashcards.md",
+  );
   const [audioPath, setAudioPath] = useState("audio");
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsError, setSettingsError] = useState("");
@@ -106,23 +108,34 @@ export function InboxSurface({
   useEffect(() => {
     async function loadSettings() {
       try {
-        const content = await window.hermesAPI.readObsidianFile("curator-settings.md", profile);
+        const content = await window.hermesAPI.readObsidianFile(
+          "curator-settings.md",
+          profile,
+        );
         if (content) {
           const match = /```json\s*([\s\S]*?)\s*```/.exec(content);
           if (match) {
             const parsed = JSON.parse(match[1]);
-            if (typeof parsed.threshold === "number") setThreshold(parsed.threshold);
+            if (typeof parsed.threshold === "number")
+              setThreshold(parsed.threshold);
             if (typeof parsed.model === "string") setModel(parsed.model);
             if (typeof parsed.voice === "string") setVoice(parsed.voice);
             if (Array.isArray(parsed.topics)) setTopics(parsed.topics);
-            if (Array.isArray(parsed.ignored_topics)) setIgnoredTopics(parsed.ignored_topics);
-            if (typeof parsed.digest_path === "string") setDigestPath(parsed.digest_path);
-            if (typeof parsed.flashcard_path === "string") setFlashcardPath(parsed.flashcard_path);
-            if (typeof parsed.audio_path === "string") setAudioPath(parsed.audio_path);
+            if (Array.isArray(parsed.ignored_topics))
+              setIgnoredTopics(parsed.ignored_topics);
+            if (typeof parsed.digest_path === "string")
+              setDigestPath(parsed.digest_path);
+            if (typeof parsed.flashcard_path === "string")
+              setFlashcardPath(parsed.flashcard_path);
+            if (typeof parsed.audio_path === "string")
+              setAudioPath(parsed.audio_path);
           }
         }
       } catch (e) {
-        console.warn("Could not load curator settings (file may not exist yet):", e);
+        console.warn(
+          "Could not load curator settings (file may not exist yet):",
+          e,
+        );
       }
     }
     loadSettings();
@@ -144,7 +157,11 @@ export function InboxSurface({
         audio_path: audioPath,
       };
       const markdown = `# Newsroom Curator Settings\n\nThis file is managed by SPS. It controls the local \`newsroom-curator\` skill execution parameters.\n\n\`\`\`json\n${JSON.stringify(configObj, null, 2)}\n\`\`\`\n`;
-      await window.hermesAPI.writeObsidianFile("curator-settings.md", markdown, profile);
+      await window.hermesAPI.writeObsidianFile(
+        "curator-settings.md",
+        markdown,
+        profile,
+      );
       setSettingsSaved(true);
       setTimeout(() => setSettingsSaved(false), 3000);
     } catch (e) {
@@ -277,7 +294,11 @@ export function InboxSurface({
         const { pages, memory } = await commitChangeset(cs, ingestCommitPage, {
           profile,
         });
-        await window.hermesAPI.spsAppendWikiLog?.("ingest", cs.summary, profile);
+        await window.hermesAPI.spsAppendWikiLog?.(
+          "ingest",
+          cs.summary,
+          profile,
+        );
         flash(
           `Filed ${pages} page${pages === 1 ? "" : "s"}` +
             (memory ? ` · ${memory} memory` : ""),
@@ -423,7 +444,8 @@ export function InboxSurface({
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 onKeyDown={(e) => {
-                  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") captureNote();
+                  if ((e.metaKey || e.ctrlKey) && e.key === "Enter")
+                    captureNote();
                 }}
                 rows={4}
                 style={{ resize: "vertical" }}
@@ -440,11 +462,7 @@ export function InboxSurface({
               />
             )}
 
-            {error && (
-              <div className="inbox-error">
-                {error}
-              </div>
-            )}
+            {error && <div className="inbox-error">{error}</div>}
 
             <div className="inbox-btn-group">
               <button
@@ -469,9 +487,7 @@ export function InboxSurface({
             }}
           >
             <span>Unprocessed</span>
-            <span className="inbox-badge">
-              {visible.length}
-            </span>
+            <span className="inbox-badge">{visible.length}</span>
             <span style={{ flex: 1 }} />
             <button
               className="btn btn-primary btn-sm"
@@ -521,7 +537,12 @@ export function InboxSurface({
                   setIngestIntervalMin(m);
                   setIntervalMin(m);
                 }}
-                style={{ padding: "2px 6px", borderRadius: 4, margin: 0, width: "auto" }}
+                style={{
+                  padding: "2px 6px",
+                  borderRadius: 4,
+                  margin: 0,
+                  width: "auto",
+                }}
               >
                 <option value={0}>Off</option>
                 <option value={15}>15 min</option>
@@ -538,11 +559,10 @@ export function InboxSurface({
 
           {changeset && (
             <section className="inbox-proposal-section">
-              <div className="inbox-proposal-title">
-                Proposed changes
-              </div>
+              <div className="inbox-proposal-title">Proposed changes</div>
               <div className="inbox-proposal-summary">
-                {changeset.summary || "Review My Assistant's proposed wiki pages."}
+                {changeset.summary ||
+                  "Review My Assistant's proposed wiki pages."}
               </div>
               {changeset.pages.length === 0 ? (
                 <div style={{ color: "var(--ink-3)", fontSize: 13 }}>
@@ -566,9 +586,7 @@ export function InboxSurface({
                             marginBottom: 6,
                           }}
                         >
-                          <span className="inbox-card-badge">
-                            {p.op}
-                          </span>
+                          <span className="inbox-card-badge">{p.op}</span>
                           <strong>{p.title}</strong>
                           <span
                             style={{
@@ -728,23 +746,43 @@ export function InboxSurface({
           <div className="type-h3 inbox-settings-title">
             News Curator Preferences
           </div>
-          
+
           {settingsError && (
-            <div style={{ color: "var(--danger-fg)", fontSize: 13, marginBottom: 8 }}>
+            <div
+              style={{
+                color: "var(--danger-fg)",
+                fontSize: 13,
+                marginBottom: 8,
+              }}
+            >
               {settingsError}
             </div>
           )}
 
           {settingsSaved && (
-            <div style={{ color: "var(--ok-fg)", background: "var(--ok-bg)", border: "1px solid var(--ok-border)", padding: "6px 10px", borderRadius: 4, fontSize: 13, marginBottom: 8 }}>
+            <div
+              style={{
+                color: "var(--ok-fg)",
+                background: "var(--ok-bg)",
+                border: "1px solid var(--ok-border)",
+                padding: "6px 10px",
+                borderRadius: 4,
+                fontSize: 13,
+                marginBottom: 8,
+              }}
+            >
               Settings saved successfully!
             </div>
           )}
 
           <div className="settings-field">
-            <label className="settings-field-label">Similarity Threshold ({threshold.toFixed(2)})</label>
+            <label className="settings-field-label">
+              Similarity Threshold ({threshold.toFixed(2)})
+            </label>
             <div className="settings-field-hint" style={{ marginBottom: 6 }}>
-              Controls how similar articles must be to group into the same cluster. Higher threshold yields tighter groups with fewer, more distinct articles.
+              Controls how similar articles must be to group into the same
+              cluster. Higher threshold yields tighter groups with fewer, more
+              distinct articles.
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <input
@@ -763,7 +801,11 @@ export function InboxSurface({
                 step="0.05"
                 className="inbox-input"
                 value={threshold}
-                onChange={(e) => setThreshold(Math.max(0.1, Math.min(1.0, Number(e.target.value))))}
+                onChange={(e) =>
+                  setThreshold(
+                    Math.max(0.1, Math.min(1.0, Number(e.target.value))),
+                  )
+                }
                 style={{ width: 70, margin: 0 }}
               />
             </div>
@@ -802,25 +844,39 @@ export function InboxSurface({
           <div className="settings-field">
             <label className="settings-field-label">TTS Auditory Voice</label>
             <div className="settings-field-hint" style={{ marginBottom: 6 }}>
-              Voice utilized by edge-tts for compiling the 2-minute Pimsleur audio drills.
+              Voice utilized by edge-tts for compiling the 2-minute Pimsleur
+              audio drills.
             </div>
             <select
               className="inbox-select"
               value={voice}
               onChange={(e) => setVoice(e.target.value)}
             >
-              <option value="en-US-AriaNeural">en-US-AriaNeural (US, Female)</option>
-              <option value="en-US-GuyNeural">en-US-GuyNeural (US, Male)</option>
-              <option value="en-GB-SoniaNeural">en-GB-SoniaNeural (UK, Female)</option>
-              <option value="en-GB-RyanNeural">en-GB-RyanNeural (UK, Male)</option>
-              <option value="en-AU-NatashaNeural">en-AU-NatashaNeural (AU, Female)</option>
+              <option value="en-US-AriaNeural">
+                en-US-AriaNeural (US, Female)
+              </option>
+              <option value="en-US-GuyNeural">
+                en-US-GuyNeural (US, Male)
+              </option>
+              <option value="en-GB-SoniaNeural">
+                en-GB-SoniaNeural (UK, Female)
+              </option>
+              <option value="en-GB-RyanNeural">
+                en-GB-RyanNeural (UK, Male)
+              </option>
+              <option value="en-AU-NatashaNeural">
+                en-AU-NatashaNeural (AU, Female)
+              </option>
             </select>
           </div>
 
           <div className="settings-field">
-            <label className="settings-field-label">Daily Digest Subfolder</label>
+            <label className="settings-field-label">
+              Daily Digest Subfolder
+            </label>
             <div className="settings-field-hint" style={{ marginBottom: 6 }}>
-              Folder inside your vault where daily briefs land (e.g. daily-digests).
+              Folder inside your vault where daily briefs land (e.g.
+              daily-digests).
             </div>
             <input
               type="text"
@@ -831,9 +887,12 @@ export function InboxSurface({
           </div>
 
           <div className="settings-field">
-            <label className="settings-field-label">Flashcard Output File</label>
+            <label className="settings-field-label">
+              Flashcard Output File
+            </label>
             <div className="settings-field-hint" style={{ marginBottom: 6 }}>
-              Path to the markdown file where cloze-deletion flashcards are appended.
+              Path to the markdown file where cloze-deletion flashcards are
+              appended.
             </div>
             <input
               type="text"
@@ -844,7 +903,9 @@ export function InboxSurface({
           </div>
 
           <div className="settings-field">
-            <label className="settings-field-label">Audio Loops Subfolder</label>
+            <label className="settings-field-label">
+              Audio Loops Subfolder
+            </label>
             <div className="settings-field-hint" style={{ marginBottom: 6 }}>
               Folder where Pimsleur Q&A scripts and MP3 loops are written.
             </div>
@@ -856,7 +917,10 @@ export function InboxSurface({
             />
           </div>
 
-          <div className="inbox-btn-group" style={{ borderTop: "1px solid var(--hairline)", paddingTop: 16 }}>
+          <div
+            className="inbox-btn-group"
+            style={{ borderTop: "1px solid var(--hairline)", paddingTop: 16 }}
+          >
             <button
               className="btn btn-primary"
               disabled={savingSettings}
@@ -872,7 +936,10 @@ export function InboxSurface({
         <button onClick={editWikiSchema} className="inbox-footer-btn">
           Edit wiki schema
         </button>
-        <button onClick={() => void installSkill()} className="inbox-footer-btn">
+        <button
+          onClick={() => void installSkill()}
+          className="inbox-footer-btn"
+        >
           Install assistant vault skill
         </button>
       </div>
@@ -913,7 +980,11 @@ function PillEditor({
   return (
     <div className="settings-field">
       <label className="settings-field-label">{label}</label>
-      {hint && <div className="settings-field-hint" style={{ marginBottom: 6 }}>{hint}</div>}
+      {hint && (
+        <div className="settings-field-hint" style={{ marginBottom: 6 }}>
+          {hint}
+        </div>
+      )}
       <div className="inbox-pill-input-container">
         {tags.map((tag, i) => (
           <span key={i} className="inbox-pill">
@@ -939,4 +1010,3 @@ function PillEditor({
     </div>
   );
 }
-
