@@ -32,71 +32,25 @@ function HealthBadge({ errors }: { errors: HealthErrors }) {
   });
 
   return (
-    <div
-      className="doc-health-badge-container"
-      style={{ position: "relative" }}
-    >
+    <div className="doc-health-badge-container">
       <button
         type="button"
         className="doc-health-badge"
         onClick={() => setOpen(!open)}
         onMouseEnter={() => setOpen(true)}
         onMouseLeave={() => setOpen(false)}
-        style={{
-          background: "rgba(229, 72, 77, 0.15)",
-          color: "#e5484d",
-          border: "1px solid rgba(229, 72, 77, 0.3)",
-          borderRadius: "12px",
-          padding: "4px 8px",
-          fontSize: "12px",
-          fontWeight: "600",
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          gap: 4,
-        }}
       >
-        <span style={{ fontSize: "14px" }}>⚠️</span> Warning
+        <span>⚠️</span> Warning
       </button>
 
       {open && (
-        <div
-          className="doc-health-popover"
-          style={{
-            position: "absolute",
-            top: "calc(100% + 8px)",
-            right: 0,
-            width: "280px",
-            background: "var(--surface)",
-            border: "1px solid var(--hair-strong)",
-            borderRadius: "8px",
-            padding: "12px",
-            boxShadow: "0 6px 20px rgba(0,0,0,0.15)",
-            zIndex: 100,
-            fontSize: "12px",
-            color: "var(--tx-1)",
-            lineHeight: "1.4",
-            display: "flex",
-            flexDirection: "column",
-            gap: 6,
-          }}
-        >
-          <div
-            style={{
-              fontWeight: "600",
-              borderBottom: "1px solid var(--hair-soft)",
-              paddingBottom: "6px",
-              marginBottom: "4px",
-            }}
-          >
+        <div className="doc-health-popover">
+          <div className="doc-health-popover-title">
             Vault Health Issues
           </div>
           {list.map((msg, i) => (
-            <div
-              key={i}
-              style={{ display: "flex", gap: 6, alignItems: "flex-start" }}
-            >
-              <span style={{ color: "#e5484d" }}>•</span>
+            <div key={i} className="doc-health-issue-row">
+              <span className="doc-health-issue-bullet">•</span>
               <span>{msg}</span>
             </div>
           ))}
@@ -180,12 +134,9 @@ export function DocHeader({ children }: { children?: ReactNode }) {
       {pmeta.cover && (
         <div className="doc-cover">
           {pmeta.cover === "image" ? (
-            <div
-              className="cover-fill"
-              style={{ background: "var(--sunk)" }}
-            />
+            <div className="cover-fill" />
           ) : (
-            <div className="cover-fill" style={{ background: pmeta.cover }} />
+            <div className="cover-fill" style={{ "--cover-bg": pmeta.cover } as any} />
           )}
           <div className="cover-tools">
             <button
@@ -210,14 +161,7 @@ export function DocHeader({ children }: { children?: ReactNode }) {
       )}
       <div className={`doc ${pmeta.cover ? "has-cover" : ""}`}>
         <div className="doc-head-inner">
-          <div
-            style={{
-              position: "relative",
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-            }}
-          >
+          <div className="doc-title-row">
             <div
               className="doc-title"
               contentEditable
@@ -227,7 +171,6 @@ export function DocHeader({ children }: { children?: ReactNode }) {
                 setPMeta({ title: e.currentTarget.textContent || "" })
               }
               key={page}
-              style={{ flex: 1 }}
             >
               {pmeta.title}
             </div>

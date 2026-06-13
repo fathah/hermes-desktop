@@ -232,19 +232,18 @@ export function Sidebar() {
               ))}
             {tree.length === 0 && (
               <div
-                className="tree-row"
-                style={{ color: "var(--tx-4)", cursor: "default" }}
+                className="tree-row color-tx-4-cursor-default"
               >
                 <span className="tree-toggle leaf"></span>No pages
               </div>
             )}
-            <div className="nav-item" onClick={newPage} style={{ paddingLeft: 12 }}>
+            <div className="nav-item pl-12" onClick={newPage}>
               <Icon name="plus" size={14} />
               <span className="nav-label">Add page</span>
             </div>
           </SidebarSection>
 
-          <div className="sec-group" style={{ marginTop: 4 }}>
+          <div className="sec-group mt-4">
             <div className="sec">
               <button
                 ref={obsidianBtnRef}
@@ -356,7 +355,7 @@ export function Sidebar() {
           </button>
         </div>
 
-        <div className="sec sec-static" style={{ marginTop: 12 }}>
+        <div className="sec sec-static mt-12">
           <span className="sec-label">More</span>
         </div>
         <div className="nav-item" onClick={() => setTrashOpen(true)}>
