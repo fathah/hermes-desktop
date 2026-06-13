@@ -48,8 +48,19 @@ vi.mock("../src/main/process-options", () => ({
 
 const search = vi.fn();
 const status = vi.fn();
-vi.mock("../src/main/note-index", () => ({
-  getSpsNoteIndex: () => Promise.resolve({ search, status }),
+vi.mock("../src/main/note-index", async () => {
+  const actual = await vi.importActual<typeof import("../src/main/note-index")>("../src/main/note-index");
+  return {
+    ...actual,
+    getSpsNoteIndex: () => Promise.resolve({ search, status }),
+  };
+});
+
+const semanticSearch = vi.fn().mockResolvedValue({ results: [] });
+vi.mock("../src/main/semantic-index", () => ({
+  semanticManager: {
+    search: (...args: any[]) => semanticSearch(...args),
+  },
 }));
 
 import {
@@ -206,5 +217,31 @@ describe("buildRetrievalSystemMessage (IO)", () => {
     expect(
       await buildRetrievalSystemMessage("missing handbook policy"),
     ).toBeNull();
+  });
+
+  it("incorporates semantic search hits into hybrid grounding", async () => {
+    // FTS5 returns nothing, semantic search returns handbook.md
+    search.mockReturnValueOnce([]);
+    semanticSearch.mockResolvedValueOnce({
+      results: [{ path: "handbook.md", score: 0.9 }],
+    });
+
+    const msg = await buildRetrievalSystemMessage("rest period");
+    expect(msg?.role).toBe("system");
+    expect(msg?.content).toContain("Handbook · handbook.md");
+    expect(msg?.content).toContain("Rest periods are 20 minutes per shift.");
+  });
+
+  it("formats remote grounding system messages without local paths or read tool instructions", async () => {
+    search.mockReturnValueOnce([
+      { path: "handbook.md", title: "Handbook", snippet: "…" },
+    ]);
+    const msg = await buildRetrievalSystemMessage("rest period", undefined, { isRemote: true });
+    expect(msg?.role).toBe("system");
+    expect(msg?.content).toContain("Handbook · handbook.md");
+    // Should NOT contain the absolute local path reference
+    expect(msg?.content).not.toContain(join(root, "handbook.md"));
+    // Should contain remote-specific instructions
+    expect(msg?.content).toContain("These files exist on the user's local desktop and cannot be read directly via local file tools");
   });
 });

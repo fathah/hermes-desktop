@@ -409,6 +409,17 @@ export const spsBridge = {
   spsSemanticRag: (query: string, limit?: number): Promise<unknown> =>
     ipcRenderer.invoke("sps-semantic-rag", query, limit),
 
+  spsTriggerAction: (
+    action: {
+      type: "shell" | "api";
+      command?: string;
+      url?: string;
+      headers?: string;
+    },
+    profile?: string,
+  ): Promise<{ success: boolean; output?: string; error?: string }> =>
+    ipcRenderer.invoke("sps-trigger-action", action, profile),
+
   // Count of vault-mirror writes that have silently failed (markdown drifting from
   // the authoritative blob), with the last error + timestamp.
   spsGetMirrorFailCount: (): Promise<{

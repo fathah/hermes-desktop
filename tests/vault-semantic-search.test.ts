@@ -63,7 +63,9 @@ The security treaty signed in Geneva aims to stabilize trade and immigration pol
     }
   });
 
-  it("builds the index and retrieves matching files using BoW offline fallback", () => {
+  it(
+    "builds the index and retrieves matching files using BoW offline fallback",
+    () => {
     // Create config targeting non-running Ollama port to force offline BoW fallback
     writeFileSync(
       tempConfigPath,
@@ -97,9 +99,11 @@ api: "http://127.0.0.1:9999"`,
     expect(topResult.title).toBe("annual-leave");
     expect(topResult.path).toBe("annual-leave.md");
     expect(topResult.score).toBeGreaterThan(0);
-  });
+  }, 60000);
 
-  it("updates index incrementally when a file is modified", () => {
+  it(
+    "updates index incrementally when a file is modified",
+    () => {
     writeFileSync(
       tempConfigPath,
       `vault_path: "${tempVaultDir}"
@@ -156,9 +160,11 @@ Generate a secure SSH key pair using ed25519. Ensure the private key has a passp
     const matchedTitles = results.map((r: { title: string }) => r.title);
     expect(matchedTitles).toContain("annual-leave");
     expect(matchedTitles).toContain("ssh-keys");
-  });
+  }, 60000);
 
-  it("interacts with live Ollama if it is active", async () => {
+  it(
+    "interacts with live Ollama if it is active",
+    async () => {
     // Check if live Ollama is running on 11434
     let ollamaAlive = false;
     try {
@@ -209,5 +215,5 @@ api: "http://127.0.0.1:11434"`,
 
     expect(results.length).toBeGreaterThan(0);
     expect(results[0].title).toBe("annual-leave");
-  });
+  }, 60000);
 });

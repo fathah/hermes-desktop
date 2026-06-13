@@ -1339,6 +1339,15 @@ interface HermesAPI {
   spsSemanticSearch: (query: string, limit?: number) => Promise<unknown>;
   spsSemanticGraph: () => Promise<unknown>;
   spsSemanticRag: (query: string, limit?: number) => Promise<unknown>;
+  spsTriggerAction: (
+    action: {
+      type: "shell" | "api";
+      command?: string;
+      url?: string;
+      headers?: string;
+    },
+    profile?: string,
+  ) => Promise<{ success: boolean; output?: string; error?: string }>;
   spsGetMirrorFailCount: () => Promise<{
     count: number;
     lastError?: string;

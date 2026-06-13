@@ -17,6 +17,10 @@ import {
   readEnv,
   getConnectionConfig,
 } from "../config";
+import { ContextCompressor } from "./context-compressor";
+import { CredentialPoolManager } from "../config/credential-pool-manager";
+import { ErrorDoctor } from "./error-doctor";
+import { ShellHookManager } from "../security/shell-hooks";
 import {
   getApiUrl,
   getRemoteAuthHeader,
@@ -428,6 +432,11 @@ export function sendMessageViaApi(
   const mc = getModelConfig(profile);
   const effectiveModel = modelOverride?.model || mc.model;
   const controller = new AbortController();
+  let activeRequest: any = null;
+  let finished = false;
+  let hasContent = false;
+  let lastError = "";
+  let sessionId = _resumeSessionId || "";
 
   const messages: Array<{ role: string; content: ChatContent }> = [];
   if (history && history.length > 0) {
@@ -448,254 +457,325 @@ export function sendMessageViaApi(
 
   if (selfAwarenessSystem) messages.unshift(selfAwarenessSystem);
 
-  // Skills the user explicitly loaded via `/skill-name` (sticky for the
-  // session). Built here — not threaded through callers — so every send path
-  // into the API picks them up. Unshifted last → sits at the very front as
-  // authoritative guidance. Sync read of on-disk SKILL.md, so no await needed.
   const activeSkillsSystem = buildActiveSkillsSystemMessage(profile);
   if (activeSkillsSystem) messages.unshift(activeSkillsSystem);
 
-  const body = JSON.stringify({
-    model: effectiveModel || "hermes-agent",
-    messages,
-    stream: true,
-    ...(_resumeSessionId ? { session_id: _resumeSessionId } : {}),
-  });
+  async function executeRequest(retryBudget: number, customBudgetChars?: number) {
+    if (finished || controller.signal.aborted) return;
 
-  const bodyBuf = Buffer.from(body, "utf-8");
+    // 1. Gating / Context Injection Hook (The Security Guard)
+    try {
+      const hookRes = await ShellHookManager.runHook(
+        "pre_llm_call",
+        {
+          message,
+          profile,
+          model: effectiveModel || "hermes-agent",
+        },
+        profile,
+      );
 
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    "Content-Length": String(bodyBuf.length),
-    ...getRemoteAuthHeader(),
-  };
+      if (hookRes.action === "block") {
+        finished = true;
+        cb.onError(hookRes.message || "Execution blocked by shell hook.");
+        return;
+      }
 
-  if (!isRemoteMode()) {
-    // LOW-1: never log the key (even a prefix) — secrets don't belong in logs.
-    const apiServerKey = getApiServerKey(profile);
-    if (apiServerKey) {
-      headers.Authorization = `Bearer ${apiServerKey}`;
-    }
-  }
-
-  const hasAuth = "Authorization" in headers;
-  let sessionId =
-    _resumeSessionId || (hasAuth ? `desk-${Date.now()}-${randomUUID()}` : "");
-  if (sessionId) {
-    headers["X-Hermes-Session-Id"] = sessionId;
-  }
-  let hasContent = false;
-  let finished = false;
-  let lastError = "";
-
-  function finish(error?: string): void {
-    if (finished) return;
-    finished = true;
-    console.log(
-      "[hermes] finish called:",
-      error ? `error=${error}` : "done",
-      "sessionId=",
-      sessionId,
-    );
-    if (error) {
-      cb.onError(error);
-    } else {
-      cb.onDone(sessionId || undefined);
-    }
-  }
-
-  function probeRealError(): void {
-    const probeBody = JSON.stringify({
-      model: effectiveModel || "hermes-agent",
-      messages: [{ role: "user", content: userContent }],
-      stream: false,
-    });
-    const probeBodyBuf = Buffer.from(probeBody, "utf-8");
-    const probeHeaders = {
-      ...headers,
-      "Content-Length": String(probeBodyBuf.length),
-    };
-    const probeUrl = `${getApiUrl(profile)}/v1/chat/completions`;
-    const probeMod = probeUrl.startsWith("https") ? https : http;
-    const probeReq = probeMod.request(
-      probeUrl,
-      { method: "POST", headers: probeHeaders },
-      (res) => {
-        let raw = "";
-        res.on("data", (d) => {
-          raw += d.toString();
+      if (hookRes.context) {
+        messages.unshift({
+          role: "system",
+          content: hookRes.context,
         });
-        res.on("end", () => {
-          try {
-            const parsed = JSON.parse(raw);
-            const content = parsed.choices?.[0]?.message?.content || "";
-            const errMsg = parsed.error?.message || "";
-            finish(
-              content ||
-                errMsg ||
-                "No response received from the model. Check your model configuration and API key.",
-            );
-          } catch {
-            finish(
-              "No response received from the model. Check your model configuration and API key.",
+      }
+    } catch (err) {
+      console.warn("[hermes] Pre-LLM hook failed:", err);
+    }
+
+    // 2. Smart Memory Shrinking (Context Compressor)
+    const compressor = new ContextCompressor({ budgetChars: customBudgetChars });
+    const compressedMessages = compressor.compress(messages);
+
+    const body = JSON.stringify({
+      model: effectiveModel || "hermes-agent",
+      messages: compressedMessages,
+      stream: true,
+      ...(_resumeSessionId ? { session_id: _resumeSessionId } : {}),
+    });
+
+    const bodyBuf = Buffer.from(body, "utf-8");
+
+    // Dynamic headers compilation for credential pool rotation read-back
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "Content-Length": String(bodyBuf.length),
+      ...getRemoteAuthHeader(),
+    };
+
+    if (!isRemoteMode()) {
+      const apiServerKey = getApiServerKey(profile);
+      if (apiServerKey) {
+        headers.Authorization = `Bearer ${apiServerKey}`;
+      }
+    }
+
+    // Direct auth injection for remote endpoints during rotative fallback
+    if (isRemoteMode()) {
+      const provider = mc.provider || "openai";
+      const envKey = CredentialPoolManager.getEnvKeyForProvider(provider);
+      const activeKey = readEnv(profile)[envKey] || process.env[envKey] || "";
+      if (activeKey) {
+        headers.Authorization = `Bearer ${activeKey}`;
+      }
+    }
+
+    const hasAuth = "Authorization" in headers;
+    if (!sessionId && hasAuth) {
+      sessionId = `desk-${Date.now()}-${randomUUID()}`;
+    }
+    if (sessionId) {
+      headers["X-Hermes-Session-Id"] = sessionId;
+    }
+
+    function finish(error?: string): void {
+      if (finished) return;
+      finished = true;
+      console.log(
+        "[hermes] finish called:",
+        error ? `error=${error}` : "done",
+        "sessionId=",
+        sessionId,
+      );
+      if (error) {
+        cb.onError(error);
+      } else {
+        cb.onDone(sessionId || undefined);
+      }
+    }
+
+    function probeRealError(): void {
+      const probeBody = JSON.stringify({
+        model: effectiveModel || "hermes-agent",
+        messages: [{ role: "user", content: userContent }],
+        stream: false,
+      });
+      const probeBodyBuf = Buffer.from(probeBody, "utf-8");
+      const probeHeaders = {
+        ...headers,
+        "Content-Length": String(probeBodyBuf.length),
+      };
+      const probeUrl = `${getApiUrl(profile)}/v1/chat/completions`;
+      const probeMod = probeUrl.startsWith("https") ? https : http;
+      const probeReq = probeMod.request(
+        probeUrl,
+        { method: "POST", headers: probeHeaders },
+        (res) => {
+          let raw = "";
+          res.on("data", (d) => {
+            raw += d.toString();
+          });
+          res.on("end", () => {
+            try {
+              const parsed = JSON.parse(raw);
+              const content = parsed.choices?.[0]?.message?.content || "";
+              const errMsg = parsed.error?.message || "";
+              handleRequestError(content || errMsg || "No response received from model", res.statusCode);
+            } catch {
+              handleRequestError("No response received from the model. Check configuration.", res.statusCode);
+            }
+          });
+        },
+      );
+      probeReq.on("error", () => {
+        handleRequestError("No response received from the model. Check configuration.", 500);
+      });
+      probeReq.setTimeout(120000);
+      probeReq.on("timeout", () => {
+        probeReq.destroy();
+        handleRequestError("No response received from the model (request timed out). Check configuration.", 408);
+      });
+      probeReq.write(probeBodyBuf);
+      probeReq.end();
+    }
+
+    function handleRequestError(errorText: string, statusCode?: number): void {
+      const classification = ErrorDoctor.classify(errorText, statusCode);
+      console.log("[hermes] Error Doctor classification:", classification);
+
+      if (classification.retryable && retryBudget > 0 && !hasContent) {
+        if (classification.shouldCompress) {
+          console.log("[hermes] Memory overflow detected. Compacting budget.");
+          executeRequest(retryBudget - 1, 20000);
+          return;
+        }
+
+        if (classification.shouldRotateCredential) {
+          const provider = mc.provider || "openai";
+          const envKey = CredentialPoolManager.getEnvKeyForProvider(provider);
+          const currentKey = readEnv(profile)[envKey] || process.env[envKey] || "";
+          
+          if (currentKey) {
+            CredentialPoolManager.markKeyCooldown(
+              provider,
+              currentKey,
+              classification.cooldownMs || 60000,
+              profile,
             );
           }
+          const nextKey = CredentialPoolManager.rotateKey(provider, profile);
+          if (nextKey) {
+            console.log("[hermes] Credential rotated successfully. Retrying request.");
+            executeRequest(retryBudget - 1, customBudgetChars);
+            return;
+          }
+        }
+
+        const delay = classification.cooldownMs || 2000;
+        console.log(`[hermes] Retrying request after delay of ${delay}ms...`);
+        setTimeout(() => {
+          executeRequest(retryBudget - 1, customBudgetChars);
+        }, delay);
+        return;
+      }
+
+      finish(errorText);
+    }
+
+    function processCustomEvent(eventType: string, data: string): void {
+      parseCustomEvent(eventType, data, cb);
+    }
+
+    const url = `${getApiUrl(profile)}/v1/chat/completions`;
+    const requester = url.startsWith("https") ? https : http;
+
+    const sseCb = { ...cb, onDone: undefined };
+
+    function finalize(): void {
+      if (finished) return;
+      if (lastError) {
+        if (hasContent) {
+          cb.onChunk(`\n\n⚠️ ${lastError}`);
+          finish();
+        } else {
+          handleRequestError(lastError);
+        }
+      } else if (hasContent) {
+        finish();
+      } else {
+        probeRealError();
+      }
+    }
+
+    function handleBlock(block: string): void {
+      if (finished || !block) return;
+      if (block.startsWith("event: ")) {
+        let eventType = "";
+        let dataLine = "";
+        for (const line of block.split("\n")) {
+          if (line.startsWith("event: ")) {
+            eventType = line.slice(7).trim();
+          } else if (line.startsWith("data: ")) {
+            dataLine = line.slice(6);
+          }
+        }
+        if (eventType && dataLine) {
+          processCustomEvent(eventType, dataLine);
+        }
+        return;
+      }
+      if (block.startsWith("data: ")) {
+        const data = block.slice(6);
+        const state = { hasContent, lastError };
+        const sseRes = processSseData(
+          data,
+          sseCb as unknown as SseCallbacks,
+          state,
+          {
+            redact: redactSensitiveData,
+            model: mc.model,
+            sessionId: sessionId || _resumeSessionId || undefined,
+          },
+        );
+        hasContent = sseRes.hasContent;
+        lastError = state.lastError;
+        if (sseRes.done) finalize();
+      }
+    }
+
+    const req = requester.request(
+      url,
+      {
+        method: "POST",
+        headers,
+        signal: controller.signal,
+        timeout: 120000,
+      },
+      (res) => {
+        const sid = res.headers["x-hermes-session-id"];
+        if (sid && typeof sid === "string") sessionId = sid;
+
+        let buffer = "";
+        res.on("data", (chunk: Buffer) => {
+          buffer += chunk.toString();
+          let boundary = buffer.indexOf("\n\n");
+          while (boundary !== -1) {
+            const block = buffer.slice(0, boundary).trim();
+            buffer = buffer.slice(boundary + 2);
+            boundary = buffer.indexOf("\n\n");
+            handleBlock(block);
+            if (finished) return;
+          }
+        });
+
+        res.on("end", () => {
+          if (finished) return;
+          const tail = buffer.trim();
+          if (tail) handleBlock(tail);
+          finalize();
+        });
+
+        res.on("error", (err) => {
+          if (err.message === "aborted" || err.name === "AbortError") return;
+          handleRequestError(`Stream error: ${err.message}`, res.statusCode);
         });
       },
     );
-    probeReq.on("error", () => {
-      finish(
-        "No response received from the model. Check your model configuration and API key.",
-      );
+
+    activeRequest = req;
+
+    req.setTimeout(120000);
+
+    req.on("error", (err) => {
+      if (err.name === "AbortError") return;
+      handleRequestError(`API request failed: ${err.message}`);
     });
-    // HIGH-1: the probe is a separate request and inherits none of the main
-    // request's timeout — without this it can hang forever, leaving the chat
-    // promise unresolved and the UI stuck "thinking".
-    probeReq.setTimeout(120000);
-    probeReq.on("timeout", () => {
-      probeReq.destroy();
-      finish(
-        "No response received from the model (request timed out). Check your model configuration and API key.",
-      );
+
+    req.on("timeout", () => {
+      req.destroy();
+      const mode = getConnectionConfig().mode;
+      const where =
+        mode === "ssh"
+          ? "Check the SSH tunnel and the remote Hermes gateway."
+          : mode === "remote"
+            ? "Check the remote Hermes gateway and your network connection."
+            : "The local Hermes gateway may be unresponsive — check that a model is configured and the gateway is running.";
+      handleRequestError(`API request timed out. ${where}`, 408);
     });
-    probeReq.write(probeBodyBuf);
-    probeReq.end();
+
+    req.write(bodyBuf);
+    req.end();
   }
 
-  function processCustomEvent(eventType: string, data: string): void {
-    parseCustomEvent(eventType, data, cb);
-  }
-
-  const url = `${getApiUrl(profile)}/v1/chat/completions`;
-  const requester = url.startsWith("https") ? https : http;
-
-  const req = requester.request(
-    url,
-    {
-      method: "POST",
-      headers,
-      signal: controller.signal,
-      timeout: 120000,
-    },
-    (res) => {
-      const sid = res.headers["x-hermes-session-id"];
-      if (sid && typeof sid === "string") sessionId = sid;
-
-      // processSseData fires onDone itself on `[DONE]`; we own the single
-      // terminal callback in finalize(), so hand it a callback set with onDone
-      // stripped — otherwise onDone fires twice (once here, once in finish()).
-      const sseCb = { ...cb, onDone: undefined };
-
-      // Single decision point for how the turn ends, shared by the `[DONE]`
-      // block and the stream-end path.
-      function finalize(): void {
-        if (finished) return;
-        if (lastError) {
-          if (hasContent) {
-            // MED-5: keep what already streamed, but surface the error as a
-            // trailing notice so an error followed by `[DONE]` (or content) is
-            // not silently swallowed.
-            cb.onChunk(`\n\n⚠️ ${lastError}`);
-            finish();
-          } else {
-            finish(lastError);
-          }
-        } else if (hasContent) {
-          finish();
-        } else {
-          probeRealError();
-        }
-      }
-
-      function handleBlock(block: string): void {
-        if (finished || !block) return;
-        if (block.startsWith("event: ")) {
-          let eventType = "";
-          let dataLine = "";
-          for (const line of block.split("\n")) {
-            if (line.startsWith("event: ")) {
-              eventType = line.slice(7).trim();
-            } else if (line.startsWith("data: ")) {
-              dataLine = line.slice(6);
-            }
-          }
-          if (eventType && dataLine) {
-            processCustomEvent(eventType, dataLine);
-          }
-          return;
-        }
-        if (block.startsWith("data: ")) {
-          const data = block.slice(6);
-          const state = { hasContent, lastError };
-          const sseRes = processSseData(
-            data,
-            sseCb as unknown as SseCallbacks,
-            state,
-            {
-              redact: redactSensitiveData,
-              model: mc.model,
-              sessionId: sessionId || _resumeSessionId || undefined,
-            },
-          );
-          hasContent = sseRes.hasContent;
-          lastError = state.lastError; // MED-5: propagate, else errors are lost across chunks
-          if (sseRes.done) finalize();
-        }
-      }
-
-      let buffer = "";
-      res.on("data", (chunk: Buffer) => {
-        buffer += chunk.toString();
-        let boundary = buffer.indexOf("\n\n");
-        while (boundary !== -1) {
-          const block = buffer.slice(0, boundary).trim();
-          buffer = buffer.slice(boundary + 2);
-          boundary = buffer.indexOf("\n\n");
-          handleBlock(block);
-          if (finished) return;
-        }
-      });
-
-      res.on("end", () => {
-        if (finished) return;
-        // MED-6: flush a trailing block left without a closing `\n\n` (gateway
-        // crashed/disconnected mid-chunk) before deciding the outcome.
-        const tail = buffer.trim();
-        if (tail) handleBlock(tail);
-        finalize();
-      });
-
-      res.on("error", (err) => {
-        if (err.message === "aborted" || err.name === "AbortError") return;
-        finish(`Stream error: ${err.message}`);
-      });
-    },
-  );
-  req.setTimeout(120000);
-
-  req.on("error", (err) => {
-    if (err.name === "AbortError") return;
-    finish(`API request failed: ${err.message}`);
-  });
-  req.on("timeout", () => {
-    req.destroy();
-    // LOW-3: blame the right layer for the connection mode actually in use.
-    const mode = getConnectionConfig().mode;
-    const where =
-      mode === "ssh"
-        ? "Check the SSH tunnel and the remote Hermes gateway."
-        : mode === "remote"
-          ? "Check the remote Hermes gateway and your network connection."
-          : "The local Hermes gateway may be unresponsive — check that a model is configured and the gateway is running.";
-    finish(`API request timed out. ${where}`);
-  });
-
-  req.write(bodyBuf);
-  req.end();
+  // Start executing request with 3 retries allowed
+  executeRequest(3);
 
   return {
     abort: () => {
       controller.abort();
+      if (activeRequest) {
+        try {
+          activeRequest.destroy();
+        } catch {}
+      }
     },
   };
 }
@@ -968,10 +1048,9 @@ export async function sendMessage(
 ): Promise<ChatHandle> {
   startHealthPolling();
 
-  const groundingSystem =
-    groundInWorkspace && !isRemoteMode()
-      ? await buildRetrievalSystemMessage(message, profile)
-      : null;
+  const groundingSystem = groundInWorkspace
+    ? await buildRetrievalSystemMessage(message, profile, { isRemote: isRemoteMode() })
+    : null;
 
   const selfAwarenessSystem = await buildSelfAwarenessSystemMessage(profile);
 

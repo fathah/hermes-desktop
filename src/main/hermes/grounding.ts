@@ -1,6 +1,20 @@
-import { join } from "path";
+import { join, basename, extname } from "path";
 import { readFile } from "fs/promises";
-import { getSpsNoteIndex, type NoteSearchHit } from "../note-index";
+import { getSpsNoteIndex, parseFrontmatter, type NoteSearchHit } from "../note-index";
+import { semanticManager } from "../semantic-index";
+
+function getNoteTitle(raw: string, relPath: string): string {
+  const { props, body } = parseFrontmatter(raw);
+  if (props && typeof props.title === "string" && props.title.trim()) {
+    return props.title.trim();
+  }
+  for (const line of body.split("\n")) {
+    const m = /^#{1,6}\s+(.+?)\s*$/.exec(line);
+    if (m) return m[1].trim();
+    if (line.trim()) break;
+  }
+  return basename(relPath, extname(relPath));
+}
 
 const GROUNDING_HITS = 5;
 const GROUNDING_EXCERPT_CHARS = 1500;
@@ -94,19 +108,23 @@ function excerptForGrounding(markdown: string): string {
 
 export function formatRetrievalSystemMessage(
   sources: GroundingSource[],
+  isRemote = false,
 ): { role: "system"; content: string } | null {
   if (sources.length === 0) return null;
   const blocks = sources.map(
     (s) =>
-      `[${s.title} · ${s.relPath}] (full file: ${s.absPath})\n${s.excerpt}`,
+      `[${s.title} · ${s.relPath}]${isRemote ? "" : ` (full file: ${s.absPath})`}\n${s.excerpt}`,
   );
+
+  const readInstruction = isRemote
+    ? `These files exist on the user's local desktop and cannot be read directly via local file tools. You must rely solely on the provided excerpts. Cite the source path using Obsidian wikilinks like [[Page Title]].`
+    : `Cite the source path using Obsidian wikilinks like [[Page Title]] or markdown links pointing to their file:/// absolute path. If an excerpt is insufficient, read the full file at its absolute path with the file tool.`;
+
   return {
     role: "system",
     content:
       `The following excerpts are from the user's workspace and are the ` +
-      `most relevant to their message. Ground your answer in them and cite ` +
-      `the source path using Obsidian wikilinks like [[Page Title]] or markdown links pointing to their file:/// absolute path. If an excerpt is insufficient, read the ` +
-      `full file at its absolute path with the file tool. If none are ` +
+      `most relevant to their message. Ground your answer in them. ${readInstruction} If none are ` +
       `relevant, say so and answer normally.\n\n${blocks.join("\n\n")}`,
   };
 }
@@ -168,7 +186,7 @@ async function expandQueryVariants(
 export async function buildRetrievalSystemMessage(
   message: string,
   profile?: string,
-  opts: { expandQuery?: boolean } = {},
+  opts: { expandQuery?: boolean; isRemote?: boolean } = {},
 ): Promise<{ role: "system"; content: string } | null> {
   try {
     const terms = groundingTerms(message);
@@ -184,6 +202,22 @@ export async function buildRetrievalSystemMessage(
     }
 
     const perQuery = queries.map((q) => index.search(q, GROUNDING_HITS, "any"));
+
+    // Integrate local semantic vector search results
+    try {
+      const semRes = await semanticManager.search(message, GROUNDING_HITS);
+      if (semRes && semRes.results && semRes.results.length > 0) {
+        const semHits: NoteSearchHit[] = semRes.results.map((r) => ({
+          path: r.path,
+          title: "",
+          snippet: "",
+        }));
+        perQuery.push(semHits);
+      }
+    } catch (err) {
+      console.error("[Grounding] Local semantic search failed:", err);
+    }
+
     const hitByPath = new Map<string, NoteSearchHit>();
     for (const list of perQuery) {
       for (const hit of list) {
@@ -202,8 +236,9 @@ export async function buildRetrievalSystemMessage(
       const absPath = join(root, path);
       try {
         const raw = await readFile(absPath, "utf-8");
+        const title = hit.title || getNoteTitle(raw, path);
         sources.push({
-          title: hit.title || path,
+          title,
           relPath: path,
           absPath,
           excerpt: excerptForGrounding(raw),
@@ -212,8 +247,9 @@ export async function buildRetrievalSystemMessage(
         /* skip an unreadable hit */
       }
     }
-    return formatRetrievalSystemMessage(sources);
-  } catch {
+    return formatRetrievalSystemMessage(sources, opts.isRemote);
+  } catch (err) {
+    console.error("ERROR IN buildRetrievalSystemMessage:", err);
     return null;
   }
 }

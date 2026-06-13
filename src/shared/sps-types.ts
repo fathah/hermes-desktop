@@ -121,6 +121,10 @@ export interface Block {
   // button: the prompt this agent-action button sends to the co-author on click
   // (`text` holds the visible label, `emoji` the icon).
   agentPrompt?: string;
+  buttonType?: "prompt" | "shell" | "api";
+  buttonCommand?: string;
+  buttonUrl?: string;
+  buttonHeaders?: string;
   // columns: a list of blocks for each side-by-side column (2–3 columns). Each
   // column is its own mini block-list (todos, headings, lists, …).
   columns?: Block[][];
