@@ -243,7 +243,7 @@ export function Sidebar() {
                 type="button"
                 className="sec-head"
                 onClick={() => setObsidianOpen(!obsidianOpen)}
-                aria-expanded={obsidianOpen}
+                aria-expanded={obsidianOpen ? "true" : "false"}
               >
                 <span className={`sec-chev ${obsidianOpen ? "open" : ""}`}>
                   <Icon name="chevR" size={12} />

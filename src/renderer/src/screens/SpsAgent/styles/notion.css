@@ -30,6 +30,7 @@
   color: inherit;
   border-radius: 3px;
   padding: 0 2px;
+  -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
 }
 .sps-scope mark.hl-yellow {

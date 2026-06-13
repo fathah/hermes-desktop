@@ -884,6 +884,8 @@ function PipingWidget() {
           value={pattern}
           onChange={(e) => setPattern(e.target.value)}
           className="ck-select"
+          title="Select pattern"
+          aria-label="Select pattern"
           style={{
             flexGrow: 1,
             padding: "4px 8px",

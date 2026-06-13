@@ -9341,3 +9341,159 @@ body {
   padding: 3px 8px;
   font-weight: 600;
 }
+
+/* Chat Input file input & active search classes */
+.chat-file-input-hidden {
+  display: none;
+}
+
+.chat-search-active-color {
+  color: var(--sukhi-gold-deep, #e6b432);
+}
+
+/* Quick Capture styling */
+.qc-overlay {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  font-family: var(--font-sans, -apple-system, sans-serif);
+}
+
+.qc-panel {
+  width: 580px;
+  height: 330px;
+  background: rgba(25, 25, 27, 0.82);
+  backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  color: #fff;
+}
+
+.qc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+.qc-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--sukhi-gold, #f2b705);
+}
+
+.qc-close-btn {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.qc-close-btn:hover {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.qc-textarea {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 12px;
+  color: #fff;
+  font-size: 14px;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+  font-family: inherit;
+}
+
+.qc-actions-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.qc-left-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.qc-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #fff;
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.qc-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.qc-btn-voice-recording {
+  background: rgba(229, 72, 77, 0.2);
+  border: 1px solid rgba(229, 72, 77, 0.4);
+  color: #e5484d;
+}
+
+.qc-btn-voice-recording:hover {
+  background: rgba(229, 72, 77, 0.3);
+}
+
+.qc-recording-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.4);
+  display: inline-block;
+}
+
+.qc-recording-dot-active {
+  background: #e5484d;
+  animation: vrPulse 1s ease-in-out infinite;
+}
+
+@keyframes vrPulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+.qc-save-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.qc-save-btn:disabled {
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.25);
+  cursor: default;
+}
+
+.qc-save-btn:not(:disabled) {
+  background: var(--accent, #f2b705);
+  color: #1a1810;
+}
+

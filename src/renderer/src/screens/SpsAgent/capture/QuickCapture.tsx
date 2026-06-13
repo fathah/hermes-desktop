@@ -102,55 +102,16 @@ export function QuickCapture() {
   };
 
   return (
-    <div
-      style={{
-        width: "100vw",
-        height: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "transparent",
-        fontFamily: "var(--font-sans, -apple-system, sans-serif)",
-      }}
-    >
-      <div
-        style={{
-          width: "580px",
-          height: "330px",
-          background: "rgba(25, 25, 27, 0.82)",
-          backdropFilter: "blur(18px)",
-          border: "1px solid rgba(255, 255, 255, 0.08)",
-          borderRadius: "14px",
-          boxShadow: "0 10px 30px rgba(0, 0, 0, 0.4)",
-          padding: "20px",
-          display: "flex",
-          flexDirection: "column",
-          gap: 16,
-          color: "#fff",
-        }}
-      >
+    <div className="qc-overlay">
+      <div className="qc-panel">
         {/* Title/Header drag region */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            userSelect: "none",
-            WebkitAppRegion: "drag",
-          } as any}
-        >
-          <span style={{ fontSize: "14px", fontWeight: "600", color: "var(--sukhi-gold, #f2b705)" }}>
-            ⚡ QUICK CAPTURE
-          </span>
+        <div className="qc-header">
+          <span className="qc-title">⚡ QUICK CAPTURE</span>
           <button
             onClick={() => window.close()}
-            style={{
-              background: "none",
-              border: "none",
-              color: "rgba(255,255,255,0.4)",
-              cursor: "pointer",
-              WebkitAppRegion: "no-drag",
-            } as any}
+            className="qc-close-btn"
+            title="Close"
+            aria-label="Close"
           >
             <Icon name="x" size={16} />
           </button>
@@ -162,42 +123,18 @@ export function QuickCapture() {
           value={body}
           onChange={(e) => setBody(e.target.value)}
           placeholder="Capture your thought, screen snippet, or voice memo..."
-          style={{
-            flex: 1,
-            background: "rgba(0,0,0,0.18)",
-            border: "1px solid rgba(255, 255, 255, 0.05)",
-            borderRadius: "8px",
-            padding: "12px",
-            color: "#fff",
-            fontSize: "14px",
-            lineHeight: "1.5",
-            resize: "none",
-            outline: "none",
-            fontFamily: "inherit",
-          }}
+          className="qc-textarea"
         />
 
         {/* Actions Bar */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ display: "flex", gap: 10 }}>
+        <div className="qc-actions-bar">
+          <div className="qc-left-buttons">
             {/* Snippet button */}
             <button
               onClick={handleSnippet}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                background: "rgba(255, 255, 255, 0.06)",
-                border: "1px solid rgba(255, 255, 255, 0.1)",
-                borderRadius: "8px",
-                color: "#fff",
-                padding: "8px 12px",
-                fontSize: "13px",
-                cursor: "pointer",
-                transition: "background 0.2s",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255, 255, 255, 0.12)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(255, 255, 255, 0.06)")}
+              className="qc-btn"
+              title="Capture screen snippet"
+              aria-label="Capture screen snippet"
             >
               <Icon name="callout" size={14} />
               <span>Snippet</span>
@@ -206,35 +143,12 @@ export function QuickCapture() {
             {/* Voice button */}
             <button
               onClick={handleVoiceToggle}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                background: recording ? "rgba(229, 72, 77, 0.2)" : "rgba(255, 255, 255, 0.06)",
-                border: recording ? "1px solid rgba(229, 72, 77, 0.4)" : "1px solid rgba(255, 255, 255, 0.1)",
-                borderRadius: "8px",
-                color: recording ? "#e5484d" : "#fff",
-                padding: "8px 12px",
-                fontSize: "13px",
-                cursor: "pointer",
-                transition: "background 0.2s",
-              }}
-              onMouseEnter={(e) => {
-                if (!recording) e.currentTarget.style.background = "rgba(255, 255, 255, 0.12)";
-              }}
-              onMouseLeave={(e) => {
-                if (!recording) e.currentTarget.style.background = "rgba(255, 255, 255, 0.06)";
-              }}
+              className={`qc-btn ${recording ? "qc-btn-voice-recording" : ""}`}
+              title={recording ? "Stop voice recording" : "Start voice recording"}
+              aria-label={recording ? "Stop voice recording" : "Start voice recording"}
             >
               <span
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: "50%",
-                  background: recording ? "#e5484d" : "rgba(255,255,255,0.4)",
-                  display: "inline-block",
-                  animation: recording ? "vrPulse 1s ease-in-out infinite" : "none",
-                }}
+                className={`qc-recording-dot ${recording ? "qc-recording-dot-active" : ""}`}
               />
               <span>{recording ? `Recording ${formatTime(recordTime)}` : "Voice"}</span>
             </button>
@@ -244,19 +158,9 @@ export function QuickCapture() {
           <button
             onClick={handleSave}
             disabled={!body.trim()}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              background: body.trim() ? "var(--accent, #f2b705)" : "rgba(255, 255, 255, 0.03)",
-              border: "none",
-              borderRadius: "8px",
-              color: body.trim() ? "#1a1810" : "rgba(255,255,255,0.25)",
-              padding: "8px 16px",
-              fontSize: "13px",
-              fontWeight: "600",
-              cursor: body.trim() ? "pointer" : "default",
-            }}
+            className="qc-save-btn"
+            title="Save note to inbox"
+            aria-label="Save note to inbox"
           >
             Save to Inbox
           </button>

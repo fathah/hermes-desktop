@@ -497,8 +497,11 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             ref={fileInputRef}
             type="file"
             multiple
-            style={{ display: "none" }}
+            className="chat-file-input-hidden"
             onChange={handleFileInputChange}
+            title="Upload Files"
+            placeholder="Upload Files"
+            aria-label="Upload Files"
           />
           <button
             className="chat-attach-btn"
@@ -532,9 +535,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               {voice.recording ? <Stop size={16} /> : <Mic size={16} />}
             </button>
           )}
-          <button
-            className={`chat-attach-btn ${searchMode ? "chat-search-active" : ""}`}
-            style={searchMode ? { color: "var(--sukhi-gold-deep, #e6b432)" } : {}}
+           <button
+            className={`chat-attach-btn ${searchMode ? "chat-search-active chat-search-active-color" : ""}`}
             onClick={() => setSearchMode((prev) => !prev)}
             disabled={isLoading}
             title="Search Web & Socials (Google, Reddit, Substack, Twitter)"
