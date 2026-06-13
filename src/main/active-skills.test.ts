@@ -22,6 +22,13 @@ const contentByPath: Record<string, string> = {
   "/skills/research/deep-research": "# Deep Research\nFan out and verify.",
   "/skills/dev/code-review": "# Code Review\nBe adversarial.",
 };
+let riskReports = installed.map((skill) => ({
+  id: `skill:${skill.path}`,
+  kind: "skill",
+  name: skill.name,
+  status: "safe",
+  reviewState: "reviewed",
+}));
 
 vi.mock("./skills", () => ({
   listInstalledSkills: () => installed,
@@ -40,6 +47,10 @@ vi.mock("./hermes/gateway-process", () => ({
   profileKey: () => "default",
 }));
 
+vi.mock("./capability-risk-store", () => ({
+  readCapabilityRiskRegistry: () => ({ reports: riskReports }),
+}));
+
 import {
   slugifySkill,
   loadActiveSkill,
@@ -51,6 +62,13 @@ import {
 
 beforeEach(() => {
   __resetActiveSkillsForTests();
+  riskReports = installed.map((skill) => ({
+    id: `skill:${skill.path}`,
+    kind: "skill",
+    name: skill.name,
+    status: "safe",
+    reviewState: "reviewed",
+  }));
   recordSkillLoaded.mockClear();
   recordSkillInjected.mockClear();
   vi.restoreAllMocks();
@@ -99,6 +117,13 @@ describe("loadActiveSkill", () => {
 
   it("fails on empty input", () => {
     expect(loadActiveSkill("").ok).toBe(false);
+  });
+
+  it("requires Application Health review before loading", () => {
+    riskReports = [];
+    const res = loadActiveSkill("code-review");
+    expect(res.ok).toBe(false);
+    expect(res.error).toContain("safety check");
   });
 });
 

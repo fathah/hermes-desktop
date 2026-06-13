@@ -21,6 +21,7 @@ import {
   type CapabilityRiskSummary,
   type CapabilityRiskStatus,
   type CapabilityReviewState,
+  type CapabilityScannerStatus,
   type CapabilitySourceInfo,
   type CapabilityUpdateStatus,
 } from "../shared/capability-risk";
@@ -131,7 +132,6 @@ export function fingerprintMcp(name: string, entry: McpServerEntry): string {
       command: entry.command,
       args: entry.args,
       envKeys: envKeySummary(entry.env),
-      enabled: entry.enabled,
     }),
   );
 }
@@ -153,7 +153,7 @@ function loadRegistry(profile?: string): CapabilityRiskRegistry {
   } catch {
     // Missing or invalid registry starts fresh.
   }
-  return { schemaVersion: SCHEMA_VERSION, updatedAt: 0, reports: [] };
+  return { schemaVersion: SCHEMA_VERSION, updatedAt: 0, reports: [], scanners: [] };
 }
 
 function saveRegistry(registry: CapabilityRiskRegistry, profile?: string): void {
@@ -174,6 +174,7 @@ export function readCapabilityRiskRegistry(
 export function writeCapabilityRiskReports(
   reports: CapabilityRiskReport[],
   profile?: string,
+  scanners: CapabilityScannerStatus[] = [],
 ): CapabilityRiskRegistry {
   const registry: CapabilityRiskRegistry = {
     schemaVersion: SCHEMA_VERSION,
@@ -181,6 +182,7 @@ export function writeCapabilityRiskReports(
     reports: reports.sort(
       (a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name),
     ),
+    scanners,
   };
   saveRegistry(registry, profile);
   return registry;
@@ -189,8 +191,9 @@ export function writeCapabilityRiskReports(
 export function buildCapabilityRiskSummary(
   reports: CapabilityRiskReport[],
   checkedAt = Date.now(),
+  scanners: CapabilityScannerStatus[] = [],
 ): CapabilityRiskSummary {
-  return { checkedAt, reports, stats: capabilityRiskStats(reports) };
+  return { checkedAt, reports, scanners, stats: capabilityRiskStats(reports) };
 }
 
 function addFinding(
@@ -398,7 +401,9 @@ function mcpFindings(snapshot: McpCapabilitySnapshot): CapabilityRiskFinding[] {
 
 function packageSpecFor(command: string, args: string[]): string | undefined {
   if (!/\b(npx|uvx|pipx)\b/i.test(command)) return undefined;
-  return args.find((arg) => !arg.startsWith("-"));
+  const spec = args.find((arg) => !arg.startsWith("-"));
+  if (!spec) return undefined;
+  return /\b(uvx|pipx)\b/i.test(command) ? `pypi:${spec}` : spec;
 }
 
 function localPathFromMcp(entry: McpServerEntry): string | undefined {
@@ -500,7 +505,7 @@ export function recordMcpCapability(
   name: string,
   entry: McpServerEntry,
   profile?: string,
-): void {
+): CapabilityRiskReport {
   const registry = loadRegistry(profile);
   const previous = registry.reports.find((r) => r.id === `mcp:${name}`);
   const report = buildMcpRiskReport(
@@ -515,7 +520,35 @@ export function recordMcpCapability(
   );
   const reports = registry.reports.filter((r) => r.id !== report.id);
   reports.push(report);
-  writeCapabilityRiskReports(reports, profile);
+  writeCapabilityRiskReports(reports, profile, registry.scanners || []);
+  return report;
+}
+
+export function admitMcpCapability(
+  name: string,
+  entry: McpServerEntry,
+  profile?: string,
+): McpServerEntry {
+  const registry = loadRegistry(profile);
+  const previous = registry.reports.find((r) => r.id === `mcp:${name}`);
+  const requested = { ...entry, enabled: entry.enabled };
+  const initial = buildMcpRiskReport(
+    {
+      name,
+      entry: requested,
+      type: "stdio",
+      detail: requested.command,
+      enabled: requested.enabled,
+    },
+    previous,
+  );
+  const allowed = initial.reviewState === "reviewed" && initial.status !== "blocked";
+  const effective = { ...requested, enabled: requested.enabled && allowed };
+  const report = { ...initial, enabled: effective.enabled };
+  const reports = registry.reports.filter((r) => r.id !== report.id);
+  reports.push(report);
+  writeCapabilityRiskReports(reports, profile, registry.scanners || []);
+  return effective;
 }
 
 export function recordSkillCapability(
@@ -527,5 +560,5 @@ export function recordSkillCapability(
   const report = buildSkillRiskReport(snapshot, previous);
   const reports = registry.reports.filter((r) => r.id !== report.id);
   reports.push(report);
-  writeCapabilityRiskReports(reports, profile);
+  writeCapabilityRiskReports(reports, profile, registry.scanners || []);
 }

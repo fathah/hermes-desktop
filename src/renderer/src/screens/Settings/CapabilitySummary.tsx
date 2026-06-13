@@ -36,9 +36,11 @@ interface CapabilitySnapshot {
 function CapabilitySummary({
   profile,
   active,
+  sectionTab = "agenthealth",
 }: {
   profile?: string;
   active: boolean;
+  sectionTab?: string;
 }): React.JSX.Element | null {
   const [data, setData] = useState<CapabilitySnapshot | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -74,6 +76,9 @@ function CapabilitySummary({
       r.reviewState !== "reviewed" ||
       r.updateStatus !== "current",
   );
+  const scannerText = data?.risk?.scanners
+    .map((s) => `${s.label}: ${s.configured ? "configured" : "not configured"}`)
+    .join(", ");
 
   async function checkNow(): Promise<void> {
     setChecking(true);
@@ -92,7 +97,7 @@ function CapabilitySummary({
   }
 
   return (
-    <div className="settings-section" data-section-tab="agenthealth">
+    <div className="settings-section" data-section-tab={sectionTab}>
       <div className="settings-section-title">Capabilities</div>
       <div className="settings-field">
         <div className="settings-field-hint" style={{ marginBottom: 12 }}>
@@ -151,21 +156,35 @@ function CapabilitySummary({
                 {activeMcp.map((m) => `${m.name} (${m.type})`).join(", ")}
               </div>
             )}
+            {scannerText && (
+              <div className="cap-summary-row">
+                <span className="cap-summary-label">Scanner adapters:</span>{" "}
+                {scannerText}
+              </div>
+            )}
             {notableRisks.length > 0 && (
               <div className="cap-summary-row">
                 <span className="cap-summary-label">Review needed:</span>{" "}
-                {notableRisks.slice(0, 4).map((report) => (
+                {notableRisks.map((report) => (
                   <span key={report.id} style={{ display: "block", marginTop: 6 }}>
                     {report.name} ({report.kind}) - {report.status} -{" "}
                     {report.updateStatus}
                     {report.findings[0] ? ` - ${report.findings[0].title}` : ""}
+                    {report.source.packageLatest
+                      ? ` - latest ${report.source.packageLatest}`
+                      : ""}
+                    {report.source.gitRemoteHead &&
+                    report.source.gitRemoteHead !== report.source.gitHead
+                      ? " - upstream changed"
+                      : ""}
                     <button
                       type="button"
                       className="btn btn-secondary btn-sm"
                       style={{ marginLeft: 8 }}
+                      disabled={report.status === "blocked"}
                       onClick={() => void markReviewed(report)}
                     >
-                      Mark reviewed
+                      {report.status === "blocked" ? "Blocked" : "Mark reviewed"}
                     </button>
                   </span>
                 ))}

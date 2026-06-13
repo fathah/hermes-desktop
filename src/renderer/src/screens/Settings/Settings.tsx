@@ -1017,6 +1017,12 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
         )}
       </div>
 
+      <CapabilitySummary
+        profile={profile}
+        active={activeTab === "connection"}
+        sectionTab="connection"
+      />
+
       <div className="settings-section" data-section-tab="general">
         <div className="settings-section-title">
           {t("settings.sections.appearance")}

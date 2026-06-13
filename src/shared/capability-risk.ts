@@ -20,15 +20,27 @@ export interface CapabilityRiskFinding {
   severity: CapabilityRiskSeverity;
   title: string;
   detail: string;
-  source: "deterministic" | "cisco-mcp-scanner" | "snyk-agent-scan" | "skillspector";
+  source:
+    | "deterministic"
+    | "upstream"
+    | "cisco-mcp-scanner"
+    | "snyk-agent-scan"
+    | "skillspector"
+    | "tencent-ai-infra-guard"
+    | "pipelock";
 }
 
 export interface CapabilitySourceInfo {
   localPath?: string;
   gitRoot?: string;
   gitHead?: string;
+  gitRemoteHead?: string;
   packageSpec?: string;
+  packageCurrent?: string;
+  packageLatest?: string;
+  packageRegistry?: "npm" | "pypi";
   remoteUrl?: string;
+  updateError?: string;
 }
 
 export interface CapabilityRiskReport {
@@ -49,15 +61,30 @@ export interface CapabilityRiskReport {
   scanner: "deterministic-v1";
 }
 
+export interface CapabilityScannerStatus {
+  id:
+    | "cisco-mcp-scanner"
+    | "snyk-agent-scan"
+    | "skillspector"
+    | "tencent-ai-infra-guard"
+    | "pipelock";
+  label: string;
+  configured: boolean;
+  lastRunAt?: number;
+  lastError?: string;
+}
+
 export interface CapabilityRiskRegistry {
   schemaVersion: 1;
   updatedAt: number;
   reports: CapabilityRiskReport[];
+  scanners?: CapabilityScannerStatus[];
 }
 
 export interface CapabilityRiskSummary {
   checkedAt: number;
   reports: CapabilityRiskReport[];
+  scanners: CapabilityScannerStatus[];
   stats: {
     total: number;
     safe: number;

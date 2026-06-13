@@ -3,7 +3,7 @@ import { join } from "path";
 import { homedir } from "os";
 import { app } from "electron";
 import { escapeRegex, profileHome } from "../utils";
-import { recordMcpCapability } from "../capability-risk-store";
+import { admitMcpCapability } from "../capability-risk-store";
 
 export interface McpServerEntry {
   command: string;
@@ -238,11 +238,29 @@ export function writeMcpServerEntry(
   const content = existsSync(configPath)
     ? readFileSync(configPath, "utf-8")
     : "";
-  const rendered = renderMcpServerEntry(name, entry);
+  const admitted = admitMcpCapability(name, entry, profile);
+  const rendered = renderMcpServerEntry(name, admitted);
   writeFileSync(configPath, upsertMcpServerInYaml(content, name, rendered), {
     encoding: "utf-8",
   });
-  recordMcpCapability(name, entry, profile);
+}
+
+export function setMcpServerEnabled(
+  name: string,
+  enabled: boolean,
+  profile?: string,
+): boolean {
+  const current = listMcpServerEntries(profile).find((s) => s.name === name);
+  if (!current) return false;
+  const entry = { ...current.entry, enabled };
+  const configPath = join(profileHome(profile), "config.yaml");
+  const content = existsSync(configPath) ? readFileSync(configPath, "utf-8") : "";
+  writeFileSync(
+    configPath,
+    upsertMcpServerInYaml(content, name, renderMcpServerEntry(name, entry)),
+    { encoding: "utf-8" },
+  );
+  return true;
 }
 
 /** True iff an mcp_servers entry with this name already exists for the profile. */

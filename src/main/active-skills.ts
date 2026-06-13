@@ -16,6 +16,7 @@
 import { listInstalledSkills, getSkillContent } from "./skills";
 import { profileKey } from "./hermes/gateway-process";
 import { recordSkillInjected, recordSkillLoaded } from "./skill-usage";
+import { readCapabilityRiskRegistry } from "./capability-risk-store";
 
 /** Combined active-skill content above this many chars triggers a warning. */
 const SOFT_CAP_CHARS = 12_000;
@@ -85,6 +86,8 @@ export function loadActiveSkill(
   if (!match) {
     return { ok: false, error: `No installed skill matches "${query}".` };
   }
+  const gate = skillGateDecision(match.path, profile);
+  if (!gate.allowed) return { ok: false, error: gate.reason };
 
   const map = activeMap(profile, true)!;
   const alreadyLoaded = map.has(match.path);
@@ -166,6 +169,7 @@ function buildActiveSkillsSystemMessageInner(
   const sections: string[] = [];
   const injected: ActiveSkill[] = [];
   for (const skill of active) {
+    if (!skillGateDecision(skill.path, profile).allowed) continue;
     const body = getSkillContent(skill.path).trim();
     if (!body) continue;
     sections.push(`## Skill: ${skill.name}\n\n${body}`);
@@ -188,6 +192,34 @@ function buildActiveSkillsSystemMessageInner(
 
   recordSkillInjected(injected, profile);
   return { role: "system", content };
+}
+
+function skillGateDecision(
+  path: string,
+  profile?: string,
+): { allowed: boolean; reason?: string } {
+  const report = readCapabilityRiskRegistry(profile).reports.find(
+    (r) => r.id === `skill:${path}`,
+  );
+  if (!report) {
+    return {
+      allowed: false,
+      reason: "Skill needs a capability safety check before it can be loaded.",
+    };
+  }
+  if (report.status === "blocked") {
+    return {
+      allowed: false,
+      reason: "Skill is blocked by the capability safety check.",
+    };
+  }
+  if (report.reviewState !== "reviewed") {
+    return {
+      allowed: false,
+      reason: "Skill must be reviewed in Application Health before use.",
+    };
+  }
+  return { allowed: true };
 }
 
 /** Test-only: drop all loaded skills across every profile. */

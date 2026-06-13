@@ -60,6 +60,7 @@ export {
   renderMcpServerEntry,
   upsertMcpServerInYaml,
   writeMcpServerEntry,
+  setMcpServerEnabled,
   hasMcpServer,
   openAlexMcpServerPath,
   notebookLmMcpCommand,

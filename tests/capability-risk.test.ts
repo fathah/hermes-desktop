@@ -20,11 +20,15 @@ vi.mock("../src/main/utils", () => ({
 }));
 
 import {
+  admitMcpCapability,
   buildMcpRiskReport,
   buildSkillRiskReport,
   fingerprintMcp,
+  readCapabilityRiskRegistry,
 } from "../src/main/capability-risk-store";
 import { listMcpServerEntries } from "../src/main/installer/mcp";
+import { runExternalScanners } from "../src/main/capability-external-scanners";
+import { enrichReportWithUpstream } from "../src/main/capability-updates";
 
 let skillDir = "";
 let sourceDir = "";
@@ -36,6 +40,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  delete process.env.HERMES_CAP_SCAN_SKILLSPECTOR_CMD;
+  delete process.env.HERMES_CAP_SCAN_SKILLSPECTOR_ARGS;
   rmSync(skillDir, { recursive: true, force: true });
   rmSync(sourceDir, { recursive: true, force: true });
   rmSync(TEST_HOME, { recursive: true, force: true });
@@ -81,6 +87,34 @@ describe("capability risk scanner", () => {
 
     expect(fingerprintMcp("mail", base)).toBe(
       fingerprintMcp("mail", changedSecret),
+    );
+  });
+
+  it("disables new MCP entries until the exact report is reviewed", () => {
+    const admitted = admitMcpCapability("github", {
+      command: "npx",
+      args: ["-y", "@modelcontextprotocol/server-github@1.0.0"],
+      env: {},
+      enabled: true,
+    });
+
+    const [report] = readCapabilityRiskRegistry().reports;
+
+    expect(admitted.enabled).toBe(false);
+    expect(report.reviewState).toBe("unreviewed");
+    expect(report.status).toBe("warning");
+  });
+
+  it("keeps reviewed MCP fingerprints stable when enabled changes", () => {
+    const entry = {
+      command: "node",
+      args: ["/tmp/server.js"],
+      env: {},
+      enabled: false,
+    };
+
+    expect(fingerprintMcp("local", entry)).toBe(
+      fingerprintMcp("local", { ...entry, enabled: true }),
     );
   });
 
@@ -150,5 +184,54 @@ describe("capability risk scanner", () => {
 
     expect(second.updateStatus).toBe("rescanWarn");
     expect(second.reviewState).toBe("needsReview");
+  });
+
+  it("folds explicitly configured external scanner output into findings", async () => {
+    process.env.HERMES_CAP_SCAN_SKILLSPECTOR_CMD = "/bin/echo";
+    process.env.HERMES_CAP_SCAN_SKILLSPECTOR_ARGS =
+      "critical skill scanner issue";
+
+    const result = await runExternalScanners({
+      kind: "skill",
+      name: "Helper",
+      path: skillDir,
+    });
+
+    expect(result.statuses.find((s) => s.id === "skillspector")?.configured).toBe(
+      true,
+    );
+    expect(result.findings[0]).toMatchObject({
+      source: "skillspector",
+      severity: "critical",
+    });
+  });
+
+  it("marks package-backed capabilities when a newer registry version exists", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ "dist-tags": { latest: "2.0.0" } }), {
+          status: 200,
+        }),
+      );
+    const report = buildMcpRiskReport({
+      name: "pkg",
+      type: "stdio",
+      detail: "npx",
+      enabled: true,
+      entry: {
+        command: "npx",
+        args: ["example-mcp@1.0.0"],
+        env: {},
+        enabled: true,
+      },
+    });
+
+    const enriched = await enrichReportWithUpstream(report);
+
+    expect(enriched.updateStatus).toBe("rescanWarn");
+    expect(enriched.reviewState).toBe("needsReview");
+    expect(enriched.source.packageLatest).toBe("2.0.0");
+    fetchSpy.mockRestore();
   });
 });
