@@ -6,7 +6,7 @@ vi.mock("../config", () => ({
   getConfigValue: vi.fn(),
 }));
 import { getConfigValue } from "../config";
-import { CommandSecretsProvider, helperExecOptions } from "./commandProvider";
+import { CommandSecretsProvider, runHelper } from "./commandProvider";
 
 const mockedGetConfigValue = vi.mocked(getConfigValue);
 
@@ -58,16 +58,18 @@ describe("CommandSecretsProvider stdio hygiene (F6)", () => {
     expect(capturedStderr()).not.toContain("STDERR_SECRET_MARKER");
   });
 
-  it("pins stdio to ignore/pipe/pipe in the shared spawn options", () => {
-    // The fd-level guarantee can't be observed from inside the process (an
-    // inherited stderr bypasses any JS spy), so it is pinned at the options
-    // layer: dropping the stdio entry reverts to execFileSync's default,
-    // which inherits the parent's stderr.
-    const options = helperExecOptions("SOME_KEY");
-    expect(options.stdio).toEqual(["ignore", "pipe", "pipe"]);
-    // The key still rides along as data via the env, never the shell string.
-    expect((options.env as Record<string, string>).HERMES_SECRET_KEY).toBe(
+  it("runHelper passes the key as env DATA and returns stdout, not stderr", () => {
+    // The fd-level stdio guarantee can't be observed from inside the process
+    // (an inherited stderr bypasses any JS spy), so it is pinned behaviorally:
+    // a helper that echoes its HERMES_SECRET_KEY to STDOUT proves the key rode
+    // along as env data (never the shell string), and a marker written to
+    // STDERR must NOT surface in the parent's captured stderr.
+    const r = runHelper(
+      'printf "STDERR_SECRET_MARKER" >&2; printf "key=%s" "$HERMES_SECRET_KEY"',
       "SOME_KEY",
     );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.stdout).toBe("key=SOME_KEY");
+    expect(capturedStderr()).not.toContain("STDERR_SECRET_MARKER");
   });
 });

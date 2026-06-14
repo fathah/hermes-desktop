@@ -1,9 +1,12 @@
 import {
-  execFileSync,
-  type ExecFileSyncOptionsWithStringEncoding,
+  spawnSync,
+  type SpawnSyncOptionsWithStringEncoding,
 } from "child_process";
 import type { SecretsProvider } from "./provider";
 import { getConfigValue } from "../config";
+
+/** True on Windows, where the POSIX `/bin/sh` helper transport is unavailable. */
+const IS_WINDOWS = process.platform === "win32";
 
 /**
  * Hard cap so a hung helper can never wedge a turn. Kept deliberately TIGHT (3s)
@@ -144,32 +147,107 @@ export function parseSecretOutput(
  *     times for one message.
  *   - PLATFORM: resolution runs the helper via `/bin/sh -c`, so the `command`
  *     provider is POSIX-only (Linux/macOS). On Windows there is no `/bin/sh`;
- *     the helper would fail to spawn and every key degrades to null (logged).
- *     This is acceptable because the feature targets the vault/tmpfs workflow on
- *     Linux; Windows users stay on the default `env` provider. A future change
- *     could detect the platform and use `cmd /c`/PowerShell, but that is out of
- *     scope for this opt-in provider.
+ *     rather than let every key degrade to a silent null (a confusing dead-end
+ *     where a configured provider resolves nothing), `runHelper` SHORT-CIRCUITS
+ *     on win32 and `commandProviderUnsupportedReason()` lets the UI surface an
+ *     actionable message + steer the user to the `env` provider. A future change
+ *     could use `cmd /c`/PowerShell, but that is out of scope for this opt-in
+ *     provider.
+ *   - ORPHAN REAP: the helper is spawned in its OWN process group (`detached`),
+ *     and on timeout the WHOLE group is SIGKILLed. A bare `execFileSync` timeout
+ *     SIGTERMs only the direct `/bin/sh`, leaving any grandchild it backgrounded
+ *     (a forked `gpg-agent`, a `keepassxc-cli` subprocess, a `( … ) & wait`
+ *     pipeline) orphaned. Without the group kill, a helper that blocks on a
+ *     locked vault leaks a process on every timeout. See runHelper().
  */
+
 /**
- * Spawn options shared by get() and list() — exported so the F6 regression
- * test can pin the stdio contract at the options layer (an inherited stderr
- * bypasses any in-process JS spy, so it can't be observed behaviorally).
+ * Why the `command` provider can't run here, or null if it can. Exposed so the
+ * onboarding / Settings UI can disable the provider with an actionable reason
+ * instead of letting the user configure a helper that silently resolves nothing.
  */
-export function helperExecOptions(
-  secretKey: string,
-): ExecFileSyncOptionsWithStringEncoding {
-  return {
+export function commandProviderUnsupportedReason(): string | null {
+  if (IS_WINDOWS) {
+    return (
+      "The command secrets provider runs a POSIX shell helper (/bin/sh) and is " +
+      "not supported on Windows. Use the default env provider, or keep your " +
+      "secrets in the .env file."
+    );
+  }
+  return null;
+}
+
+/**
+ * Result of running the user's helper: the raw stdout (string) on success, or a
+ * structured failure with the reason (never the secret, never the helper's
+ * stderr/command string — those can carry secret material).
+ */
+type HelperResult =
+  | { ok: true; stdout: string }
+  | { ok: false; code: string; signal: string };
+
+/**
+ * Run the configured helper for one key (or "" for list()) and return its
+ * stdout, with the full security + robustness envelope:
+ *   - win32 short-circuit (see commandProviderUnsupportedReason).
+ *   - key passed as DATA via HERMES_SECRET_KEY env, never interpolated.
+ *   - own process group (`detached`) + group SIGKILL on return, so a timed-out
+ *     helper's backgrounded grandchildren are reaped, not orphaned.
+ *   - hard timeout (COMMAND_TIMEOUT_MS) + output cap (MAX_OUTPUT_BYTES).
+ *   - stderr piped + discarded (F6: never stream helper diagnostics, which can
+ *     carry secret material, into the Electron main process stderr).
+ *   - structured-only failure (code/signal), never err.message.
+ */
+export function runHelper(command: string, secretKey: string): HelperResult {
+  if (IS_WINDOWS) {
+    // No /bin/sh on Windows — short-circuit so we never spawn a doomed child
+    // and never present a configured-but-silently-broken provider.
+    return { ok: false, code: "EUNSUPPORTED_PLATFORM", signal: "none" };
+  }
+
+  const opts: SpawnSyncOptionsWithStringEncoding = {
     // Key passed as DATA via env — never interpolated into the command.
     env: { ...process.env, HERMES_SECRET_KEY: secretKey },
     timeout: COMMAND_TIMEOUT_MS,
     maxBuffer: MAX_OUTPUT_BYTES,
     encoding: "utf-8",
-    // F6: execFileSync's default stdio inherits stderr, streaming the helper's
-    // diagnostics (which can carry secret material) straight into the Electron
-    // main process's stderr. Pipe it instead and discard.
+    // F6: pipe + discard stderr so helper diagnostics (which can carry secret
+    // material) never stream into the Electron main process's stderr.
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
+    // ORPHAN REAP: own process group so a timeout can kill the whole tree.
+    // `detached` is supported by spawnSync at runtime but omitted from the
+    // sync-options type, so it's set via the cast below.
+    killSignal: "SIGKILL",
   };
+  // `detached` makes the child a process-group leader (pgid === child pid) so
+  // the post-run `process.kill(-pid)` reaps grandchildren. Set via cast because
+  // SpawnSyncOptionsWithStringEncoding omits it (present on the async type).
+  (opts as { detached?: boolean }).detached = true;
+
+  const r = spawnSync("/bin/sh", ["-c", command], opts);
+
+  // Reap the ENTIRE process group. spawnSync only signals the direct child;
+  // `detached` made the child a group leader (pgid === child pid), so killing
+  // `-pid` reaps any grandchildren it backgrounded. Killing timestamps/pids
+  // leaks nothing; a missing group (already exited) throws ESRCH — ignore it.
+  if (typeof r.pid === "number" && r.pid > 0) {
+    try {
+      process.kill(-r.pid, "SIGKILL");
+    } catch {
+      /* group already gone — nothing to reap */
+    }
+  }
+
+  if (r.error || r.signal || (typeof r.status === "number" && r.status !== 0)) {
+    const e = r.error as NodeJS.ErrnoException | undefined;
+    return {
+      ok: false,
+      code: String(e?.code ?? r.status ?? "?"),
+      signal: r.signal ?? "none",
+    };
+  }
+  return { ok: true, stdout: r.stdout ?? "" };
 }
 
 export class CommandSecretsProvider implements SecretsProvider {
@@ -183,28 +261,17 @@ export class CommandSecretsProvider implements SecretsProvider {
   get(key: string, profile?: string): string | null {
     const command = this.command(profile);
     if (!command) return null;
-    try {
-      const stdout = execFileSync(
-        "/bin/sh",
-        ["-c", command],
-        helperExecOptions(key),
-      );
-      return parseSecretOutput(stdout, key);
-    } catch (err) {
-      // Non-zero exit, timeout, spawn failure — degrade to "no value". Log
-      // ONLY structured fields (errno / exit status / signal), never
-      // err.message: for execFileSync a non-zero exit embeds the full command
-      // string and the helper's entire stderr in the message, either of which
-      // can carry secret material.
-      const e = err as NodeJS.ErrnoException & {
-        status?: number;
-        signal?: string;
-      };
+    const r = runHelper(command, key);
+    if (!r.ok) {
+      // Win32 / non-zero exit / timeout / spawn failure — degrade to "no value".
+      // Structured fields only (code/signal), never the command string or the
+      // helper's stderr (either can carry secret material).
       console.warn(
-        `[secrets:command] get(${key}) failed; resolving null: code=${e.code ?? e.status ?? "?"} signal=${e.signal ?? "none"}`,
+        `[secrets:command] get(${key}) failed; resolving null: code=${r.code} signal=${r.signal}`,
       );
       return null;
     }
+    return parseSecretOutput(r.stdout, key);
   }
 
   /**
@@ -216,40 +283,32 @@ export class CommandSecretsProvider implements SecretsProvider {
   list(profile?: string): Record<string, string> {
     const command = this.command(profile);
     if (!command) return {};
-    try {
-      const stdout = execFileSync(
-        "/bin/sh",
-        ["-c", command],
-        helperExecOptions(""),
-      );
-      const out: Record<string, string> = {};
-      const ENV_LINE = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/;
-      for (const raw of stdout.replace(/\r\n/g, "\n").split("\n")) {
-        const line = raw.trim();
-        if (!line || line.startsWith("#")) continue;
-        const m = line.match(ENV_LINE);
-        if (!m) continue;
-        const value = unquoteDotenvValue(m[2]);
-        // Whitespace-only entries (e.g. a quoted `K="  "` placeholder) are
-        // "no value" — get()/parseSecretOutput already resolves them to null,
-        // so list() must omit them too or the two disagree on whether a key
-        // is configured (a quoted-blank vault entry would otherwise show as a
-        // set key here but resolve empty on read).
-        if (value.trim() === "") continue;
-        out[m[1]] = value;
-      }
-      return out;
-    } catch (err) {
-      // Same rule as get(): structured fields only, never err.message (it
-      // embeds the command string and the helper's stderr).
-      const e = err as NodeJS.ErrnoException & {
-        status?: number;
-        signal?: string;
-      };
+    const r = runHelper(command, "");
+    if (!r.ok) {
+      // Same rule as get(): structured fields only, never the command string
+      // or the helper's stderr (either can carry secret material).
       console.warn(
-        `[secrets:command] list() failed; resolving {}: code=${e.code ?? e.status ?? "?"} signal=${e.signal ?? "none"}`,
+        `[secrets:command] list() failed; resolving {}: code=${r.code} signal=${r.signal}`,
       );
       return {};
     }
+    const stdout = r.stdout;
+    const out: Record<string, string> = {};
+    const ENV_LINE = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/;
+    for (const raw of stdout.replace(/\r\n/g, "\n").split("\n")) {
+      const line = raw.trim();
+      if (!line || line.startsWith("#")) continue;
+      const m = line.match(ENV_LINE);
+      if (!m) continue;
+      const value = unquoteDotenvValue(m[2]);
+      // Whitespace-only entries (e.g. a quoted `K="  "` placeholder) are
+      // "no value" — get()/parseSecretOutput already resolves them to null,
+      // so list() must omit them too or the two disagree on whether a key
+      // is configured (a quoted-blank vault entry would otherwise show as a
+      // set key here but resolve empty on read).
+      if (value.trim() === "") continue;
+      out[m[1]] = value;
+    }
+    return out;
   }
 }
