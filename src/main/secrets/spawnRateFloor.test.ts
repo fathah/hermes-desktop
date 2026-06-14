@@ -15,6 +15,10 @@ vi.mock("../config", () => ({
 }));
 
 let listCalls = 0;
+// Controls which keys the mocked vault currently exposes, so a test can
+// simulate a HARD DELETION (key removed from the vault) for the AIR-006
+// deletion-visibility-window test. Default: the single VAULT_KEY.
+let vaultHasKey = true;
 vi.mock("./commandProvider", () => ({
   CommandSecretsProvider: class {
     readonly id = "command";
@@ -23,7 +27,7 @@ vi.mock("./commandProvider", () => ({
     }
     list(): Record<string, string> {
       listCalls++;
-      return { VAULT_KEY: `v${listCalls}` };
+      return vaultHasKey ? { VAULT_KEY: `v${listCalls}` } : {};
     }
   },
 }));
@@ -48,6 +52,7 @@ describe("S1: providerListSafe helper-spawn rate floor", () => {
     vi.useFakeTimers();
     epoch += 10_000_000;
     vi.setSystemTime(epoch);
+    vaultHasKey = true; // reset deletion-simulation state between tests
     mockedGetConfigValue.mockImplementation((key: string) =>
       key === "secrets.provider" ? "command" : null,
     );
@@ -105,5 +110,91 @@ describe("S1: providerListSafe helper-spawn rate floor", () => {
     resolvedSecrets();
     resolvedSecrets();
     expect(listCalls - before).toBe(1);
+  });
+
+  // ── AIR-005: exact boundary operators on the list() TTL + spawn floor ──
+  // index.ts uses TWO comparisons with DIFFERENT operators on the same
+  // thresholds, and the get() floor uses a THIRD. Pin each so a refactor that
+  // flips an operator reds a test:
+  //   fresh        = now - ts <= LIST_CACHE_TTL_MS      (<=, inclusive at 5000)
+  //   spawnAllowed = now - ts >= MIN_SPAWN_INTERVAL_MS  (>=, inclusive at 1000)
+  // Catalog: ai-reviewer-findings-catalog.md AIR-005.
+  it("AIR-005: list() TTL is inclusive — still fresh at EXACTLY 5000ms (`<=`)", () => {
+    const before = listCalls;
+    providerListSafe(); // spawn 1, ts = t0
+    vi.advanceTimersByTime(5_000); // now - ts == 5000; 5000 <= 5000 -> fresh
+    providerListSafe(); // served from cache, no spawn
+    expect(listCalls - before).toBe(1);
+  });
+
+  it("AIR-005: list() re-spawns one tick past TTL — at 5001ms (boundary is 5000 inclusive)", () => {
+    const before = listCalls;
+    providerListSafe(); // spawn 1, ts = t0
+    vi.advanceTimersByTime(5_001); // now - ts == 5001; not fresh AND spawnAllowed -> spawn
+    providerListSafe(); // spawn 2
+    expect(listCalls - before).toBe(2);
+  });
+
+  it("AIR-005: invalidate + read at EXACTLY 1000ms re-spawns — spawnAllowed `>=` is inclusive", () => {
+    const before = listCalls;
+    providerListSafe(); // spawn 1, ts = t0
+    invalidateProviderListCache(); // marks stale, does NOT reset ts
+    vi.advanceTimersByTime(1_000); // now - ts == 1000; 1000 >= 1000 -> spawnAllowed
+    providerListSafe(); // stale + spawnAllowed -> spawn 2 (re-resolve)
+    expect(listCalls - before).toBe(2);
+  });
+
+  it("AIR-005: invalidate + read at 999ms serves stale — one tick INSIDE the floor", () => {
+    const before = listCalls;
+    const primed = providerListSafe(); // spawn 1, ts = t0
+    invalidateProviderListCache();
+    vi.advanceTimersByTime(999); // now - ts == 999; 999 >= 1000 is FALSE -> refuse spawn
+    const served = providerListSafe(); // stale + !spawnAllowed -> serve stale, no spawn
+    expect(listCalls - before).toBe(1);
+    // Same stale object served (anti-spam: stale beats wedged).
+    expect(served.VAULT_KEY).toBe(primed.VAULT_KEY);
+  });
+
+  // ── AIR-006: deletion-visibility window after an explicit "Refresh" ────
+  // invalidateProviderListCache() sets stale=true but does NOT reset `ts`, and
+  // providerListSafe() serves cached data while !spawnAllowed. So a key that is
+  // HARD-DELETED from the vault stays visible to a freshly-spawned gateway for
+  // up to MIN_SPAWN_INTERVAL_MS after a "Refresh from vault". This is a
+  // DELIBERATE "stale beats wedged" tradeoff (documented in-code) — these tests
+  // pin the window to exactly MIN_SPAWN_INTERVAL_MS so a regression widening it
+  // reds. Catalog: ai-reviewer-findings-catalog.md AIR-006.
+  it("AIR-006: a hard-deleted key stays visible INSIDE the floor after refresh", () => {
+    const primed = providerListSafe(); // spawn 1: VAULT_KEY present
+    expect(primed.VAULT_KEY).toBeDefined();
+    // Operator deletes the key from the vault and hits "Refresh from vault".
+    vaultHasKey = false;
+    invalidateProviderListCache(); // stale=true, ts unchanged
+    vi.advanceTimersByTime(999); // inside MIN_SPAWN_INTERVAL_MS -> refuse re-spawn
+    const served = providerListSafe(); // serves STALE data — deleted key still shows
+    expect(served.VAULT_KEY).toBeDefined(); // documents the visibility window
+  });
+
+  it("AIR-006: the deleted key is gone once the floor elapses (window closes at 1000ms)", () => {
+    providerListSafe(); // spawn 1: VAULT_KEY present
+    vaultHasKey = false;
+    invalidateProviderListCache();
+    vi.advanceTimersByTime(1_000); // floor elapsed -> spawnAllowed -> re-resolve
+    const refreshed = providerListSafe(); // spawn 2: vault now empty
+    expect(refreshed.VAULT_KEY).toBeUndefined(); // deletion now visible
+  });
+
+  it("AIR-006: rotation (not deletion) has no data-loss window — value just refreshes", () => {
+    // Distinct from deletion: a ROTATED key is present in both old and new
+    // vault states, so the only effect of the window is briefly serving the
+    // OLD value, never a missing key. Prove the key never disappears.
+    const before = providerListSafe(); // spawn 1: v_old
+    invalidateProviderListCache(); // rotation: vaultHasKey stays true
+    vi.advanceTimersByTime(999);
+    const during = providerListSafe(); // inside floor: still the old value
+    expect(during.VAULT_KEY).toBe(before.VAULT_KEY);
+    vi.advanceTimersByTime(2); // cross the 1000ms floor (999 + 2 = 1001)
+    const after = providerListSafe(); // re-resolved: new value, key still present
+    expect(after.VAULT_KEY).toBeDefined();
+    expect(after.VAULT_KEY).not.toBe(before.VAULT_KEY);
   });
 });
