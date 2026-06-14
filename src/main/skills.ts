@@ -9,6 +9,7 @@ import {
   writeFileSync,
   renameSync,
   cpSync,
+  rmSync,
 } from "fs";
 import { dirname, extname, isAbsolute, join, relative, resolve } from "path";
 import { homedir } from "os";
@@ -22,7 +23,8 @@ import {
 import { isValidNamedProfileName, profileHome } from "./utils";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 import { getApiUrl, getRemoteAuthHeader } from "./hermes";
-import { recordSkillCapability } from "./capability-risk-store";
+import { recordSkillCapability, removeSkillCapability } from "./capability-risk-store";
+import { getSharedDb } from "./db";
 
 export interface InstalledSkill {
   name: string;
@@ -92,7 +94,42 @@ function collectSkillsFromRoot(root: string): InstalledSkill[] {
         if (!statSync(entryPath).isDirectory()) continue;
 
         const skillFile = join(entryPath, "SKILL.md");
-        if (!existsSync(skillFile)) continue;
+        if (!existsSync(skillFile)) {
+          // Check for a nested "skills" folder structure: e.g., category/skills/subEntry/SKILL.md
+          if (entry === "skills") {
+            try {
+              const subEntries = readdirSync(entryPath);
+              for (const subEntry of subEntries) {
+                const subEntryPath = join(entryPath, subEntry);
+                if (!statSync(subEntryPath).isDirectory()) continue;
+
+                const subSkillFile = join(subEntryPath, "SKILL.md");
+                if (!existsSync(subSkillFile)) continue;
+
+                try {
+                  const content = readFileSync(subSkillFile, "utf-8").slice(0, 4000);
+                  const meta = parseSkillFrontmatter(content);
+                  skills.push({
+                    name: meta.name || subEntry,
+                    category,
+                    description: meta.description || "",
+                    path: subEntryPath,
+                  });
+                } catch {
+                  skills.push({
+                    name: subEntry,
+                    category,
+                    description: "",
+                    path: subEntryPath,
+                  });
+                }
+              }
+            } catch {
+              // ignore
+            }
+          }
+          continue;
+        }
 
         try {
           const content = readFileSync(skillFile, "utf-8").slice(0, 4000);
@@ -399,6 +436,51 @@ export function installSkill(
 }
 
 export function uninstallSkill(name: string, profile?: string): SkillCliResult {
+  // 1. Locate the skill folder in installed or disabled roots.
+  const installed = listInstalledSkills(profile);
+  const disabled = listDisabledSkills(profile);
+  const targetSkill = [...installed, ...disabled].find(
+    (s) =>
+      s.name.toLowerCase() === name.toLowerCase() ||
+      s.path.split(/[\\/]+/).pop()?.toLowerCase() === name.toLowerCase() ||
+      slugify(s.name) === slugify(name),
+  );
+
+  let localDeleted = false;
+  if (targetSkill && isWritableSkillTarget(targetSkill.path, profile)) {
+    try {
+      rmSync(targetSkill.path, { recursive: true, force: true });
+      localDeleted = true;
+    } catch (e) {
+      console.error("[skills] Failed to delete local skill directory:", e);
+    }
+  }
+
+  // 2. Remove capability record
+  if (targetSkill) {
+    try {
+      removeSkillCapability(targetSkill.path, profile);
+    } catch (e) {
+      console.error("[skills] Failed to remove skill capability:", e);
+    }
+  }
+
+  // 3. Remove database entry from SQLite
+  try {
+    const db = getSharedDb(false);
+    if (db) {
+      db.prepare("DELETE FROM skills_registry WHERE name = ? OR name = ?").run(
+        name,
+        targetSkill?.name ?? name,
+      );
+    }
+  } catch (e) {
+    console.error("[skills] Failed to remove skill database entry:", e);
+  }
+
+  // 4. Run CLI uninstall
+  let cliSuccess = false;
+  let cliError = "";
   try {
     const args = hermesCliArgs(["skills", "uninstall", name]);
     if (profile && profile !== "default") {
@@ -419,15 +501,23 @@ export function uninstallSkill(name: string, profile?: string): SkillCliResult {
     });
     // Same exit-0-on-failure shape as install (#310) — classify the
     // captured output before claiming success.
-    return classifySkillCliOutput(stdout?.toString() ?? "");
+    const cliRes = classifySkillCliOutput(stdout?.toString() ?? "");
+    cliSuccess = cliRes.success;
+    if (!cliRes.success) {
+      cliError = cliRes.error || "";
+    }
   } catch (err) {
     const e = err as { stdout?: Buffer; stderr?: Buffer; message?: string };
-    const msg = (e.stderr?.toString() || e.message || "").trim();
-    return {
-      success: false,
-      error: msg || e.stdout?.toString()?.trim() || "Uninstall failed.",
-    };
+    cliError = (e.stderr?.toString() || e.message || "").trim();
   }
+
+  if (localDeleted || cliSuccess) {
+    return { success: true };
+  }
+  return {
+    success: false,
+    error: cliError || "Uninstall failed.",
+  };
 }
 
 // ─────────────────────── local authoring / management ───────────────────────

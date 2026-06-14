@@ -29,10 +29,12 @@ export function TasksDB({ block, update, onOpenTask }: Props) {
   const fStatus: StatusKey[] = block.filter || [];
   const sort = block.sort || "manual";
   const cols: DbCol[] = block.cols || [];
+  const kanbanPreset = block.kanbanPreset || "standard";
   const [fOpen, setFOpen] = useState<FsState>(null);
   const [prop, setProp] = useState<PropState | null>(null);
   const [drag, setDrag] = useState<string | null>(null);
   const [dropCol, setDropCol] = useState<StatusKey | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const setRows = (fn: (rs: Task[]) => Task[]) => update({ rows: fn(rows) });
   const setField = (id: string, field: keyof Task, val: string) =>
@@ -46,28 +48,71 @@ export function TasksDB({ block, update, onOpenTask }: Props) {
       ),
     );
   const cycle = (id: string) => {
-    const order: StatusKey[] = ["todo", "doing", "review", "done"];
+    const order: StatusKey[] =
+      kanbanPreset === "personal"
+        ? ["inbox", "this_week", "doing", "blocked", "done"]
+        : ["todo", "doing", "review", "done"];
     setRows((rs) =>
       rs.map((r) =>
         r.id === id
-          ? { ...r, status: order[(order.indexOf(r.status) + 1) % 4] }
+          ? { ...r, status: order[(order.indexOf(r.status) + 1) % order.length] }
           : r,
       ),
     );
   };
-  const addRow = () =>
+  const addRow = (template?: "quick" | "project" | "routine") => {
+    const defaultStatus: StatusKey = kanbanPreset === "personal" ? "inbox" : "todo";
+    let templateProps: Partial<Task> = {};
+    if (template === "quick") {
+      templateProps = {
+        title: "New Quick Win",
+        prio: "low",
+        custom: { label: "Quick Win" }
+      };
+    } else if (template === "project") {
+      templateProps = {
+        title: "New Project",
+        prio: "high",
+        custom: { label: "Project" },
+        desc: "Definition of Done:\n",
+        checklist: [
+          { id: uid("item"), text: "Prerequisite: What do I need to buy/find?", checked: false },
+          { id: uid("item"), text: "Action Step: First micro-task (15 min)", checked: false }
+        ]
+      };
+    } else if (template === "routine") {
+      templateProps = {
+        title: "New Routine",
+        prio: "med",
+        custom: { label: "Routine" },
+        desc: "Links/Resources:\n",
+        checklist: [
+          { id: uid("item"), text: "SOP Step 1: Start process", checked: false },
+          { id: uid("item"), text: "SOP Step 2: Complete routine", checked: false }
+        ]
+      };
+    } else {
+      templateProps = {
+        title: "New task",
+        prio: "med",
+      };
+    }
+
     setRows((rs) => [
       ...rs,
       {
         id: uid("t"),
-        title: "New task",
-        status: "todo",
-        prio: "med",
-        who: "maya",
-        due: "Jun 9",
-        est: "1d",
-      },
+        status: defaultStatus,
+        who: "you",
+        due: "",
+        est: "",
+        ...templateProps,
+      } as Task,
     ]);
+  };
+  const weeklyReset = () => {
+    setRows((rs) => rs.filter((r) => r.status !== "done"));
+  };
   const addCol = () =>
     update({ cols: [...cols, { id: uid("col"), name: "Notes" }] });
 
@@ -106,6 +151,24 @@ export function TasksDB({ block, update, onOpenTask }: Props) {
         ))}
         <div className="db-spacer"></div>
         <div
+          className="db-tool"
+          onClick={() =>
+            update({
+              kanbanPreset: kanbanPreset === "standard" ? "personal" : "standard",
+            })
+          }
+          title="Toggle Layout Preset"
+        >
+          <Icon name="board" size={14} /> Preset: {kanbanPreset === "personal" ? "Personal" : "Standard"}
+        </div>
+        <div
+          className="db-tool"
+          onClick={weeklyReset}
+          title="Archive/Delete Done tasks"
+        >
+          <Icon name="x" size={14} /> Weekly Reset
+        </div>
+        <div
           className={`db-tool ${fStatus.length ? "on" : ""}`}
           onClick={(e) =>
             setFOpen(
@@ -138,6 +201,33 @@ export function TasksDB({ block, update, onOpenTask }: Props) {
         >
           <Icon name="sort" size={14} /> Sort
         </div>
+        <div className="db-new-btn-group">
+          <button className="db-tool db-new-btn-main" onClick={() => addRow()}>
+            <Icon name="plus" size={14} /> Add Task
+          </button>
+          <button
+            className="db-tool db-new-btn-arrow"
+            onClick={() => setMenuOpen(!menuOpen)}
+          >
+            ▾
+          </button>
+          {menuOpen && (
+            <div className="db-template-menu" onMouseLeave={() => setMenuOpen(false)}>
+              <div className="db-template-item" onClick={() => { addRow(); setMenuOpen(false); }}>
+                📄 Blank Task
+              </div>
+              <div className="db-template-item" onClick={() => { addRow("quick"); setMenuOpen(false); }}>
+                ⚡ Quick Win
+              </div>
+              <div className="db-template-item" onClick={() => { addRow("project"); setMenuOpen(false); }}>
+                🏗️ Deep Work / Project
+              </div>
+              <div className="db-template-item" onClick={() => { addRow("routine"); setMenuOpen(false); }}>
+                🔁 Routine / Habit
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {view === "table" && (
@@ -147,7 +237,7 @@ export function TasksDB({ block, update, onOpenTask }: Props) {
           onOpenTask={onOpenTask}
           openProp={openProp}
           setCustom={setCustom}
-          addRow={addRow}
+          addRow={() => addRow()}
           addCol={addCol}
         />
       )}
@@ -160,7 +250,8 @@ export function TasksDB({ block, update, onOpenTask }: Props) {
           dropCol={dropCol}
           setDropCol={setDropCol}
           setStatus={(id, s) => setField(id, "status", s)}
-          addRow={addRow}
+          addRow={() => addRow()}
+          kanbanPreset={kanbanPreset}
         />
       )}
       {view === "list" && (
@@ -200,14 +291,9 @@ export function TasksDB({ block, update, onOpenTask }: Props) {
           {fStatus.length > 0 && (
             <div className="fs-row">
               <button
-                style={{
-                  color: "var(--accent-text)",
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  fontSize: 12,
-                }}
+                className="db-clear-filter"
                 onClick={() => update({ filter: [] })}
+                title="Clear filter"
               >
                 Clear filter
               </button>

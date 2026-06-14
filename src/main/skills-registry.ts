@@ -165,7 +165,65 @@ export async function syncDiskSkillsToDb(
           if (!statSync(entryPath).isDirectory()) continue;
 
           const skillFile = join(entryPath, "SKILL.md");
-          if (!existsSync(skillFile)) continue;
+          if (!existsSync(skillFile)) {
+            // Check for a nested "skills" folder structure: e.g., category/skills/subEntry/SKILL.md
+            if (entry === "skills") {
+              try {
+                const subEntries = readdirSync(entryPath);
+                for (const subEntry of subEntries) {
+                  const subEntryPath = join(entryPath, subEntry);
+                  if (!statSync(subEntryPath).isDirectory()) continue;
+
+                  const subSkillFile = join(subEntryPath, "SKILL.md");
+                  if (!existsSync(subSkillFile)) continue;
+
+                  try {
+                    const content = readFileSync(subSkillFile, "utf-8").slice(0, 4000);
+                    const meta = parseSkillFrontmatter(content);
+                    const name = meta.name || subEntry;
+
+                    let entrypoint = "";
+                    if (existsSync(join(subEntryPath, "main.py"))) {
+                      entrypoint = join(subEntryPath, "main.py");
+                    } else if (existsSync(join(subEntryPath, "main.js"))) {
+                      entrypoint = join(subEntryPath, "main.js");
+                    }
+
+                    let dependencies = "";
+                    const reqFile = join(subEntryPath, "requirements.txt");
+                    if (existsSync(reqFile)) {
+                      dependencies = JSON.stringify(
+                        readFileSync(reqFile, "utf-8")
+                          .split("\n")
+                          .map((l) => l.trim())
+                          .filter((l) => l && !l.startsWith("#")),
+                      );
+                    }
+
+                    foundSkills.push({
+                      name,
+                      description: meta.description || "",
+                      keywords: meta.keywords || category,
+                      status: "active",
+                      entrypoint,
+                      dependencies,
+                    });
+                  } catch (subE) {
+                    console.error(
+                      `[skills-registry] Failed to read sub-skill folder: ${subEntryPath}`,
+                      subE,
+                    );
+                  }
+                }
+              } catch (e) {
+                console.error(
+                  `[skills-registry] Failed to scan sub-skills directory: ${entryPath}`,
+                  e,
+                );
+              }
+            }
+            continue;
+          }
 
           try {
             const content = readFileSync(skillFile, "utf-8").slice(0, 4000);

@@ -448,6 +448,16 @@ export const spsBridge = {
     ipcRenderer.invoke("sps-reset-vault-location", profile),
   spsPickVaultDir: (): Promise<string | null> =>
     ipcRenderer.invoke("sps-pick-vault-dir"),
+  spsImportOkfBundle: (
+    bundleDir: string,
+    profile?: string,
+  ): Promise<{ success: boolean; pages: any[]; error?: string }> =>
+    ipcRenderer.invoke("sps-import-okf-bundle", bundleDir, profile),
+  spsExportOkfBundle: (
+    targetDir: string,
+    profile?: string,
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("sps-export-okf-bundle", targetDir, profile),
 
   // KB Phase 0: pick + extract a PDF for ingestion into the SPS vault.
   spsPickPdf: (): Promise<string | null> => ipcRenderer.invoke("sps-pick-pdf"),

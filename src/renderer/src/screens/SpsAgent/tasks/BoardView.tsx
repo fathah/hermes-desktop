@@ -13,9 +13,8 @@ interface Props {
   setDropCol: (c: StatusKey | null) => void;
   setStatus: (id: string, s: StatusKey) => void;
   addRow: () => void;
+  kanbanPreset?: "standard" | "personal";
 }
-
-const COLS: StatusKey[] = ["todo", "doing", "review", "done"];
 
 export function BoardView({
   tasks,
@@ -26,14 +25,28 @@ export function BoardView({
   setDropCol,
   setStatus,
   addRow,
+  kanbanPreset = "standard",
 }: Props) {
+  const cols: StatusKey[] =
+    kanbanPreset === "personal"
+      ? ["inbox", "this_week", "doing", "blocked", "done"]
+      : ["todo", "doing", "review", "done"];
+
+  const getWipLimit = (c: StatusKey): number | null => {
+    if (kanbanPreset === "personal" && c === "doing") return 3;
+    return null;
+  };
+
   return (
     <div className="board scroll">
-      {COLS.map((c) => {
+      {cols.map((c) => {
         const items = tasks.filter((t) => t.status === c);
+        const limit = getWipLimit(c);
+        const limitExceeded = limit !== null && items.length > limit;
+
         return (
           <div
-            className={`board-col ${dropCol === c ? "drop-target" : ""}`}
+            className={`board-col ${dropCol === c ? "drop-target" : ""} ${limitExceeded ? "wip-exceeded" : ""}`}
             key={c}
             onDragOver={(e) => {
               e.preventDefault();
@@ -47,10 +60,18 @@ export function BoardView({
           >
             <div className="board-col-head">
               <span
-                className="dot"
-                style={{ background: STATUS[c].dot }}
+                className={`dot ${STATUS[c]?.cls || ""}`}
               ></span>
-              {STATUS[c].label} <span className="count">{items.length}</span>
+              {STATUS[c]?.label || c}{" "}
+              <span className="count">
+                {items.length}
+                {limit !== null && ` / ${limit}`}
+              </span>
+              {limitExceeded && (
+                <span className="wip-warning">
+                  🚨 OVER WIP LIMIT
+                </span>
+              )}
             </div>
             {items.map((t) => (
               <div
@@ -64,13 +85,29 @@ export function BoardView({
                 }}
                 onClick={() => onOpenTask(t)}
               >
+                {t.custom?.label && (
+                  <div className="card-label-container">
+                    <span
+                      className={`card-label-tag ${
+                        t.custom.label === "Quick Win"
+                          ? "tag-quick-win"
+                          : t.custom.label === "Project"
+                            ? "tag-project"
+                            : t.custom.label === "Routine"
+                              ? "tag-routine"
+                              : ""
+                      }`}
+                    >
+                      {t.custom.label}
+                    </span>
+                  </div>
+                )}
                 <div className="card-title">{t.title}</div>
                 <div className="card-foot">
                   <PrioChip p={t.prio} />
-                  <span style={{ flex: 1 }}></span>
+                  <span className="flex-grow"></span>
                   <span
-                    className="num"
-                    style={{ fontSize: 12, color: "var(--tx-3)" }}
+                    className="num card-due"
                   >
                     {t.due}
                   </span>

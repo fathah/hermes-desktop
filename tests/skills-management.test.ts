@@ -262,3 +262,23 @@ describe("generateSkillFromRepo", () => {
     rmSync(repo, { recursive: true, force: true });
   });
 });
+
+describe("nested skills scanning", () => {
+  it("discovers skills nested inside <root>/<category>/skills/<entry>/SKILL.md", () => {
+    const category = "pm-skills";
+    const entry = "deliver-prd";
+    const nestedDir = join(skillsDir, category, "skills", entry);
+    mkdirSync(nestedDir, { recursive: true });
+    writeFileSync(
+      join(nestedDir, "SKILL.md"),
+      `---\nname: deliver-prd\ndescription: Create a PRD\n---\n\nbody contents`,
+    );
+
+    const list = listInstalledSkills();
+    expect(list.map((s) => s.name)).toContain("deliver-prd");
+    const found = list.find((s) => s.name === "deliver-prd");
+    expect(found).toBeDefined();
+    expect(found?.category).toBe(category);
+    expect(found?.path).toBe(nestedDir);
+  });
+});

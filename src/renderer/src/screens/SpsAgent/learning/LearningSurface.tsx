@@ -193,6 +193,21 @@ export function LearningSurface({
     else if (res) setNotice(res.error || "Could not update skill.");
   }
 
+  async function uninstallSkill(skill: SkillRow): Promise<void> {
+    const identifier = skill.path.split(/[\\/]+/).pop() || skill.name;
+    const res = await run("uninstall-skill", () =>
+      window.hermesAPI.uninstallSkill(identifier, profile),
+    );
+    if (res?.success) {
+      if (selectedSkill?.name === skill.name) {
+        setSelectedSkill(null);
+      }
+      await loadSkills();
+    } else if (res) {
+      setNotice(res.error || "Could not uninstall skill.");
+    }
+  }
+
   async function importSkill(skill: LocalSkill): Promise<void> {
     const res = await run("import-skill", () =>
       window.hermesAPI.importLocalSkill(
@@ -218,7 +233,7 @@ export function LearningSurface({
     <div className="settings-container">
       <header className="memory-header">
         <div>
-          <h1 className="settings-header" style={{ marginBottom: 4 }}>
+          <h1 className="settings-header learning-surface-header-title">
             Learn This
           </h1>
           <p className="memory-subtitle">
@@ -228,7 +243,7 @@ export function LearningSurface({
         </div>
       </header>
 
-      <div className="settings-subnav" style={{ marginBottom: 16 }}>
+      <div className="settings-subnav">
         {(["memories", "skills", "curator"] as const).map((id) => (
           <button
             key={id}
@@ -246,9 +261,7 @@ export function LearningSurface({
       </div>
 
       {notice && (
-        <div className="memory-error" style={{ marginBottom: 12 }}>
-          {notice}
-        </div>
+        <div className="memory-error learning-surface-notice">{notice}</div>
       )}
 
       {tab === "memories" && (
@@ -287,6 +300,7 @@ export function LearningSurface({
           createSkill={createSkill}
           generateDraft={generateDraft}
           importSkill={importSkill}
+          uninstallSkill={uninstallSkill}
           busy={busy}
         />
       )}
@@ -358,7 +372,7 @@ function MemoriesTab({
     <>
       <section className="settings-section">
         <div className="settings-section-title">Pending memories</div>
-        <div className="settings-field-hint" style={{ marginBottom: 10 }}>
+        <div className="settings-field-hint learning-surface-hint">
           Review facts before they become durable memory.
         </div>
         <textarea
@@ -378,17 +392,17 @@ function MemoriesTab({
           </button>
         </div>
         {pending.length === 0 ? (
-          <div className="memory-empty" style={{ marginTop: 10 }}>
+          <div className="memory-empty learning-surface-empty-mt">
             No pending memories.
           </div>
         ) : (
-          <div className="you-rules-list" style={{ marginTop: 10 }}>
+          <div className="you-rules-list learning-surface-list-mt">
             {pending.map((p) => (
               <div key={p.id} className="memory-entry-card">
                 <span className="memory-entry-content">
                   {p.kind === "memory" ? p.body : ""}
                   {p.kind === "memory" && p.reason && (
-                    <small style={{ display: "block", opacity: 0.7 }}>
+                    <small className="learning-surface-small-block">
                       {p.reason}
                     </small>
                   )}
@@ -438,6 +452,7 @@ function SkillsTab(props: {
   dismiss: (id: string) => void;
   viewSkill: (skill: SkillRow) => void;
   toggleSkill: (skill: SkillRow, enabled: boolean) => void;
+  uninstallSkill: (skill: SkillRow) => void;
   createSkill: () => void;
   generateDraft: () => void;
   importSkill: (skill: LocalSkill) => void;
@@ -455,7 +470,7 @@ function SkillsTab(props: {
               <div key={p.id} className="memory-entry-card">
                 <span className="memory-entry-content">
                   <strong>{p.draft.name}</strong>
-                  <small style={{ display: "block", opacity: 0.7 }}>
+                  <small className="learning-surface-small-block">
                     {p.draft.description}
                   </small>
                 </span>
@@ -486,7 +501,7 @@ function SkillsTab(props: {
             <div key={skill.path} className="memory-entry-card">
               <span className="memory-entry-content">
                 <strong>{skill.name}</strong>
-                <small style={{ display: "block", opacity: 0.7 }}>
+                <small className="learning-surface-small-block">
                   {usageSummary(usage)}
                 </small>
               </span>
@@ -502,11 +517,25 @@ function SkillsTab(props: {
               >
                 {enabled ? "Disable" : "Enable"}
               </button>
+              <button
+                className="btn btn-danger btn-sm"
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `Are you sure you want to uninstall and permanently delete "${skill.name}"?`,
+                    )
+                  ) {
+                    props.uninstallSkill(skill);
+                  }
+                }}
+              >
+                Uninstall
+              </button>
             </div>
           );
         })}
         {props.selectedSkill && (
-          <pre className="config-health-output" style={{ marginTop: 10 }}>
+          <pre className="config-health-output learning-surface-pre-mt">
             {props.selectedSkill.content}
           </pre>
         )}
@@ -607,7 +636,7 @@ function CuratorTab({
     <>
       <section className="settings-section">
         <div className="settings-section-title">Curator status</div>
-        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+        <div className="curator-tab-actions-bar">
           <button className="btn btn-secondary btn-sm" onClick={runNow}>
             Run now
           </button>
@@ -661,7 +690,7 @@ function CuratorTab({
           value={manualSkill}
           onChange={(e) => setManualSkill(e.target.value)}
         />
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div className="curator-tab-manual-actions">
           <button
             className="btn btn-secondary btn-sm"
             disabled={!clean}

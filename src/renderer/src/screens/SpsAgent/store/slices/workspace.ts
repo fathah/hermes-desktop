@@ -27,7 +27,7 @@ import {
   getOcrTime,
   isScheduledNow,
 } from "../../lib/ocrSchedule";
-import type { Block } from "../../types";
+import type { Block, Task } from "../../types";
 import type { Store, WorkspaceSlice } from "../storeTypes";
 import type { WorkDetail } from "../../../../../../shared/openalex/core";
 
@@ -623,4 +623,37 @@ export const createWorkspaceSlice: StateCreator<
     }
     get().flash("Workspace reset to sample");
   },
+
+  updateTask: (id: string, patch: Partial<Task>) =>
+    set((s) => {
+      const cur = s.docs[s.page] || [];
+      const next = cur.map((block) => {
+        if (block.type === "database") {
+          const rows = block.rows || [];
+          const nextRows = rows.map((r) => {
+            if (r.id === id) {
+              return { ...r, ...patch };
+            }
+            return r;
+          });
+          return { ...block, rows: nextRows };
+        }
+        return block;
+      });
+      return { docs: { ...s.docs, [s.page]: next } };
+    }),
+
+  deleteDoneTasks: () =>
+    set((s) => {
+      const cur = s.docs[s.page] || [];
+      const next = cur.map((block) => {
+        if (block.type === "database") {
+          const rows = block.rows || [];
+          const nextRows = rows.filter((r) => r.status !== "done");
+          return { ...block, rows: nextRows };
+        }
+        return block;
+      });
+      return { docs: { ...s.docs, [s.page]: next } };
+    }),
 });

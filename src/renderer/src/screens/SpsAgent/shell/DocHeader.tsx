@@ -8,6 +8,7 @@ import { GetStarted } from "../components/GetStarted";
 import { useStore } from "../store";
 import { treeFind } from "../lib/tree";
 import { selectCurrentBlocks, selectPmeta } from "../store/selectors";
+import { prettyDate } from "../lib/journalDates";
 
 interface HealthErrors {
   isOrphan: boolean;
@@ -55,6 +56,17 @@ function HealthBadge({ errors }: { errors: HealthErrors }) {
     </div>
   );
 }
+
+const MOOD_LABELS: Record<string, string> = {
+  "😄": "Happy",
+  "🙂": "Good",
+  "😐": "Neutral",
+  "😔": "Sad",
+  "😣": "Stressed",
+  "😡": "Angry",
+  "🥱": "Tired",
+  "❤️": "Loved",
+};
 
 export function DocHeader({ children }: { children?: ReactNode }) {
   const page = useStore((s) => s.page);
@@ -168,12 +180,37 @@ export function DocHeader({ children }: { children?: ReactNode }) {
             </div>
             {lintErrors && <HealthBadge errors={lintErrors} />}
           </div>
-          <div className="doc-meta">
-            <span>
-              Edited <b>just now</b>
-            </span>
-            <span>Saved locally</span>
-          </div>
+          {pmeta.journal ? (
+            <div className="jr-entry-header">
+              <div className="jr-meta-badge date-time">
+                <Icon name="calendar" size={13} />
+                <span>{pmeta.date ? prettyDate(pmeta.date) : "No date"}</span>
+                {pmeta.time && <span className="jr-meta-time">at {pmeta.time}</span>}
+              </div>
+              {pmeta.mood && (
+                <div className="jr-meta-badge mood">
+                  <span className="mood-emoji">{pmeta.mood}</span>
+                  <span className="mood-label">{MOOD_LABELS[pmeta.mood] || "Reflective"}</span>
+                </div>
+              )}
+              {pmeta.tags && pmeta.tags.length > 0 && (
+                <div className="jr-meta-tags">
+                  {pmeta.tags.map((tag) => (
+                    <span key={tag} className="jr-meta-tag">
+                      #{tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="doc-meta">
+              <span>
+                Edited <b>just now</b>
+              </span>
+              <span>Saved locally</span>
+            </div>
+          )}
           {showGetStarted && <GetStarted />}
           {showResearchNudge && (
             <div className="gs-row">

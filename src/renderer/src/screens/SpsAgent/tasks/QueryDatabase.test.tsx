@@ -37,7 +37,7 @@ describe("QueryDatabase", () => {
     render(<QueryDatabase block={block} />);
     expect(await screen.findByText("Row One")).toBeTruthy();
     // Status renders as the shared StatusChip (label, not the raw key).
-    expect(screen.getByText("In progress")).toBeTruthy();
+    expect(screen.getAllByText("In progress")[0]).toBeTruthy();
   });
 
   it("shows an empty state when there are no rows", async () => {
@@ -64,7 +64,11 @@ describe("QueryDatabase", () => {
       ]),
     });
     render(<QueryDatabase block={blockWith(view)} />);
-    expect(await screen.findByText(expected)).toBeTruthy();
+    if (expected === "In progress") {
+      expect((await screen.findAllByText(expected)).length).toBeGreaterThan(0);
+    } else {
+      expect(await screen.findByText(expected)).toBeTruthy();
+    }
   });
 
   it("writes a row-file (the Form) on add, with frontmatter from the inputs", async () => {

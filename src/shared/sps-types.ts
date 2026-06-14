@@ -47,9 +47,15 @@ export type BlockType =
   | "columns";
 
 export type DbView = "board" | "table" | "list" | "gallery" | "calendar";
-export type StatusKey = "todo" | "doing" | "review" | "done";
+export type StatusKey = "todo" | "doing" | "review" | "done" | "inbox" | "this_week" | "blocked";
 export type PrioKey = "high" | "med" | "low";
 export type PersonKey = string; // 'maya' | 'theo' | 'priya' | 'sam' (+ user-added)
+
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  checked: boolean;
+}
 
 /** A tracked-change proposal applied to a single block (AI "diff"). */
 export interface BlockDiff {
@@ -76,6 +82,8 @@ export interface Task {
   est: string;
   custom?: Record<string, string>;
   isc?: string[];
+  desc?: string;
+  checklist?: ChecklistItem[];
 }
 
 /** One editor block. Most fields are block-type specific and optional. */
@@ -99,6 +107,7 @@ export interface Block {
   filter?: StatusKey[];
   sort?: string;
   cols?: DbCol[];
+  kanbanPreset?: "standard" | "personal";
   // S4: a folder-backed "query database". When set, the block renders rows from
   // markdown row-files under <vault>/<source>/ (via the note index) instead of
   // the embedded `rows`. Absent ⇒ classic embedded database (unchanged).

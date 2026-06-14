@@ -596,3 +596,13 @@ export function recordSkillCapability(
   reports.push(report);
   writeCapabilityRiskReports(reports, profile, registry.scanners || []);
 }
+
+export function removeSkillCapability(
+  skillPath: string,
+  profile?: string,
+): void {
+  const registry = loadRegistry(profile);
+  const reports = registry.reports.filter((r) => r.id !== `skill:${skillPath}`);
+  writeCapabilityRiskReports(reports, profile, registry.scanners || []);
+}
+

@@ -8,7 +8,7 @@ import {
   unlinkSync,
 } from "fs";
 import { homedir } from "os";
-import { join } from "path";
+import { join, basename } from "path";
 import { getActiveProfileNameSync } from "./utils";
 import {
   readDesktopConfig,
@@ -19,6 +19,7 @@ import { isGatewayRunning, sendMessage } from "./hermes";
 import { runJobHeadless, tickScheduler } from "./scheduler";
 import { exec } from "child_process";
 import { createCronJob } from "./cronjobs";
+import { getSpsNoteIndex } from "./note-index";
 
 let serverInstance: ReturnType<typeof createServer> | null = null;
 let currentPort = 8645;
@@ -43,10 +44,111 @@ function ensureAuthToken(): string {
   return authToken;
 }
 
+function getICalDates(dueStr: string): { start: string; end: string } | null {
+  const match = dueStr.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    const [_, y, m, d] = match;
+    const year = parseInt(y);
+    const month = parseInt(m) - 1;
+    const day = parseInt(d);
+    const startD = new Date(Date.UTC(year, month, day));
+    const endD = new Date(Date.UTC(year, month, day + 1));
+    const fmt = (date: Date) => {
+      const ys = String(date.getUTCFullYear());
+      const ms = String(date.getUTCMonth() + 1).padStart(2, "0");
+      const ds = String(date.getUTCDate()).padStart(2, "0");
+      return `${ys}${ms}${ds}`;
+    };
+    return { start: fmt(startD), end: fmt(endD) };
+  }
+  
+  const parsed = new Date(dueStr);
+  if (!isNaN(parsed.getTime())) {
+    const startD = new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate()));
+    const endD = new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate() + 1));
+    const fmt = (date: Date) => {
+      const ys = String(date.getUTCFullYear());
+      const ms = String(date.getUTCMonth() + 1).padStart(2, "0");
+      const ds = String(date.getUTCDate()).padStart(2, "0");
+      return `${ys}${ms}${ds}`;
+    };
+    return { start: fmt(startD), end: fmt(endD) };
+  }
+  return null;
+}
+
 /**
  * Handle incoming HTTP requests securely.
  */
 function handleRequest(req: IncomingMessage, res: ServerResponse): void {
+  const url = new URL(
+    req.url || "",
+    `http://${req.headers.host || "127.0.0.1"}`,
+  );
+
+  // iCal calendar feed synchronization route
+  if (req.method === "GET" && url.pathname === "/calendar.ics") {
+    const token = url.searchParams.get("token") || "";
+    if (token !== authToken) {
+      res.writeHead(401, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Unauthorized. Token mismatch or missing." }));
+      return;
+    }
+
+    const profile = getActiveProfileNameSync();
+    getSpsNoteIndex(profile).then((index) => {
+      const notes = index.query({
+        filters: [{ prop: "due", op: "exists" }]
+      });
+
+      const ical = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Hermes//SPS Task Sync//EN",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH"
+      ];
+
+      for (const note of notes) {
+        const dueStr = String(note.props.due || "");
+        const dates = getICalDates(dueStr);
+        if (!dates) continue;
+
+        const uid = `${note.path.replace(/\//g, "-")}@hermes`;
+        const title = String(note.props.title || note.title || basename(note.path, ".md"));
+        const status = String(note.props.status || "todo");
+        const prio = String(note.props.prio || "med");
+        const assignee = String(note.props.who || note.props.assignee || "you");
+        const desc = `Status: ${status}\\nPriority: ${prio}\\nAssignee: ${assignee}`;
+        const nowStr = new Date().toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+
+        ical.push(
+          "BEGIN:VEVENT",
+          `UID:${uid}`,
+          `DTSTAMP:${nowStr}`,
+          `DTSTART;VALUE=DATE:${dates.start}`,
+          `DTEND;VALUE=DATE:${dates.end}`,
+          `SUMMARY:${title}`,
+          `DESCRIPTION:${desc}`,
+          "STATUS:CONFIRMED",
+          "END:VEVENT"
+        );
+      }
+
+      ical.push("END:VCALENDAR");
+
+      res.writeHead(200, {
+        "Content-Type": "text/calendar; charset=utf-8",
+        "Content-Disposition": "attachment; filename=calendar.ics"
+      });
+      res.end(ical.join("\r\n"));
+    }).catch((err) => {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: `Internal server error: ${err.message}` }));
+    });
+    return;
+  }
+
   // Enforce security checks: check Authorization header
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -66,10 +168,6 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
     return;
   }
 
-  const url = new URL(
-    req.url || "",
-    `http://${req.headers.host || "127.0.0.1"}`,
-  );
 
   if (req.method === "GET" && url.pathname === "/state") {
     const profile = getActiveProfileNameSync();

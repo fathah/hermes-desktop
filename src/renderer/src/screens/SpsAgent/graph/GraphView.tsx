@@ -4,7 +4,7 @@
 // references the note-index derives from the markdown on disk (useVaultGraph).
 // Renders an interactive force-directed graph on HTML5 Canvas. Supports drag-and-drop
 // node positioning, zoom and pan, and automatically resolves active theme CSS tokens.
-import { useEffect, useRef, useMemo } from "react";
+import { useEffect, useRef, useMemo, useState } from "react";
 import { useStore } from "../store";
 import { useVaultGraph } from "../hooks/useNoteIndex";
 import { treeWalkIds } from "../lib/tree";
@@ -18,6 +18,9 @@ export function GraphView() {
   const selectPage = useStore((s) => s.selectPage);
   const setSurface = useStore((s) => s.setSurface);
   const { edges, refetch } = useVaultGraph();
+
+  const [localMode, setLocalMode] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const simRef = useRef<ForceSimulation | null>(null);
@@ -37,7 +40,25 @@ export function GraphView() {
   // Re-sync simulation graph when nodes/edges change
   const { simNodes, simEdges } = useMemo(() => {
     const present = new Set(nodeIds);
-    const liveEdges = edges.filter(
+    let visibleNodeIds = new Set(nodeIds);
+    let visibleEdges = edges;
+
+    // Filter to neighborhood in local mode
+    if (localMode && activePageId) {
+      const neighbors = new Set<string>([activePageId]);
+      const localEdges = edges.filter((e) => {
+        const matches = e.source === activePageId || e.target === activePageId;
+        if (matches) {
+          neighbors.add(e.source);
+          neighbors.add(e.target);
+        }
+        return matches;
+      });
+      visibleNodeIds = neighbors;
+      visibleEdges = localEdges;
+    }
+
+    const liveEdges = visibleEdges.filter(
       (e) => present.has(e.source) && present.has(e.target),
     );
 
@@ -48,22 +69,34 @@ export function GraphView() {
       degree.set(e.target, (degree.get(e.target) || 0) + 1);
     }
 
-    const builtNodes: SimNode[] = nodeIds.map((id) => {
-      const deg = degree.get(id) || 0;
-      return {
-        id,
-        x: 0,
-        y: 0,
-        vx: 0,
-        vy: 0,
-        r: 6 + Math.min(deg, 8) * 1.5, // dynamic radius based on connection degree
-        label: meta[id]?.title || id,
-        active: id === activePageId,
-      };
-    });
+    const builtNodes: SimNode[] = Array.from(visibleNodeIds)
+      .filter((id) => present.has(id))
+      .map((id) => {
+        const deg = degree.get(id) || 0;
+        const isJournal = !!meta[id]?.journal;
+        const label = meta[id]?.title || id;
+        const icon = meta[id]?.icon || (isJournal ? "📅" : "📄");
+        const isMatched =
+          searchTerm.trim() === "" ||
+          label.toLowerCase().includes(searchTerm.toLowerCase());
+
+        return {
+          id,
+          x: 0,
+          y: 0,
+          vx: 0,
+          vy: 0,
+          r: 16 + Math.min(deg, 8) * 1.5, // Dynamic radius to fit the emoji beautifully
+          label,
+          active: id === activePageId,
+          icon,
+          isJournal,
+          isMatched,
+        };
+      });
 
     return { simNodes: builtNodes, simEdges: liveEdges };
-  }, [nodeIds, edges, meta, activePageId]);
+  }, [nodeIds, edges, meta, activePageId, localMode, searchTerm]);
 
   // Handle graph click/open note
   const openNote = (id: string): void => {
@@ -76,19 +109,77 @@ export function GraphView() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    const rawCtx = canvas.getContext("2d") as any;
+    if (!rawCtx) return;
+    const ctx = rawCtx as CanvasRenderingContext2D;
+
+    // Polyfill canvas context methods for the headless testing environment (JSDOM)
+    if (!rawCtx.closePath) rawCtx.closePath = () => {};
+    if (!rawCtx.rect) rawCtx.rect = () => {};
+    if (!rawCtx.roundRect) rawCtx.roundRect = () => {};
+    if (!rawCtx.measureText) {
+      rawCtx.measureText = (text: string) => ({
+        width: text.length * 6,
+        actualBoundingBoxAscent: 0,
+        actualBoundingBoxDescent: 0,
+        actualBoundingBoxLeft: 0,
+        actualBoundingBoxRight: 0,
+        fontBoundingBoxAscent: 0,
+        fontBoundingBoxDescent: 0,
+      });
+    }
+    if (!rawCtx.save) rawCtx.save = () => {};
+    if (!rawCtx.restore) rawCtx.restore = () => {};
+    if (!rawCtx.scale) rawCtx.scale = () => {};
+    if (!rawCtx.translate) rawCtx.translate = () => {};
+    if (!rawCtx.clearRect) rawCtx.clearRect = () => {};
+    if (!rawCtx.moveTo) rawCtx.moveTo = () => {};
+    if (!rawCtx.lineTo) rawCtx.lineTo = () => {};
+    if (!rawCtx.stroke) rawCtx.stroke = () => {};
+    if (!rawCtx.fillText) rawCtx.fillText = () => {};
+    if (!rawCtx.beginPath) rawCtx.beginPath = () => {};
+    if (!rawCtx.fill) rawCtx.fill = () => {};
+
+    const logicalWidth = canvas.parentElement?.getBoundingClientRect().width || 640;
+    const logicalHeight = 440;
 
     // Instantiation or sync of simulation
     if (!simRef.current) {
       simRef.current = new ForceSimulation(
         simNodes,
         simEdges,
-        canvas.width,
-        canvas.height,
+        logicalWidth,
+        logicalHeight,
       );
     } else {
+      simRef.current.width = logicalWidth;
+      simRef.current.height = logicalHeight;
       simRef.current.setGraph(simNodes, simEdges);
+    }
+
+    // High-DPI canvas adjustment setup
+    const resizeCanvas = () => {
+      const parent = canvas.parentElement;
+      if (!parent) return;
+      const rect = parent.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+
+      canvas.width = rect.width * dpr;
+      canvas.height = logicalHeight * dpr;
+      canvas.style.width = "100%";
+      canvas.style.height = `${logicalHeight}px`;
+
+      if (simRef.current) {
+        simRef.current.width = rect.width;
+        simRef.current.height = logicalHeight;
+      }
+    };
+
+    resizeCanvas();
+    let resizeObserver: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      resizeObserver = new ResizeObserver(() => resizeCanvas());
+      resizeObserver.observe(canvas.parentElement || canvas);
     }
 
     let animationFrameId: number;
@@ -100,8 +191,9 @@ export function GraphView() {
       // Update physics simulation
       sim.tick();
 
-      // Read theme colors dynamically from CSS variables on the canvas element
+      const dpr = window.devicePixelRatio || 1;
       const styles = getComputedStyle(canvas);
+      const isDark = styles.getPropertyValue("--theme-name")?.includes("dark") ?? true;
       const txNormal = styles.getPropertyValue("--tx-1") || "#333333";
       const txMuted = styles.getPropertyValue("--tx-3") || "#888888";
       const accent = styles.getPropertyValue("--accent") || "#0066cc";
@@ -113,15 +205,22 @@ export function GraphView() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       ctx.save();
+      // Apply High-DPI scale transform
+      ctx.scale(dpr, dpr);
       // Apply pan & zoom transforms
       ctx.translate(panRef.current.x, panRef.current.y);
       ctx.scale(zoomRef.current, zoomRef.current);
 
-      // 1. Draw link lines
+      // 1. Draw link lines with direction indicators
       for (const edge of sim.edges) {
         const u = sim.nodes.find((n) => n.id === edge.source);
         const v = sim.nodes.find((n) => n.id === edge.target);
         if (!u || !v) continue;
+
+        const searchActive = searchTerm.trim() !== "";
+        const uMatched = u.isMatched !== false;
+        const vMatched = v.isMatched !== false;
+        const isDimmed = searchActive && (!uMatched || !vMatched);
 
         const type = edge.type || "link";
         let color = border;
@@ -132,17 +231,17 @@ export function GraphView() {
           switch (type.toLowerCase()) {
             case "works_at":
             case "works-at":
-              color = "#3b82f6"; // professional blue
+              color = "#3b82f6";
               width = 1.8;
               break;
             case "advises":
-              color = "#10b981"; // emerald green
+              color = "#10b981";
               dash = [4, 4];
               width = 1.8;
               break;
             case "depends_on":
             case "depends-on":
-              color = "#ef4444"; // alert red
+              color = "#ef4444";
               dash = [6, 3];
               width = 1.8;
               break;
@@ -162,47 +261,127 @@ export function GraphView() {
         ctx.strokeStyle = color;
         ctx.lineWidth = width;
         ctx.setLineDash(dash);
+        ctx.globalAlpha = isDimmed ? 0.06 : 0.45;
 
+        // Draw spring segment
         ctx.beginPath();
         ctx.moveTo(u.x, u.y);
         ctx.lineTo(v.x, v.y);
         ctx.stroke();
+
+        // Draw arrow head (directed from source to target)
+        if (!isDimmed) {
+          const arrowLength = 7;
+          const dx = v.x - u.x;
+          const dy = v.y - u.y;
+          const angle = Math.atan2(dy, dx);
+          
+          // Align arrowhead at target boundary
+          const targetR = v.r;
+          const arrowX = v.x - (targetR + 4) * Math.cos(angle);
+          const arrowY = v.y - (targetR + 4) * Math.sin(angle);
+          
+          ctx.fillStyle = color;
+          ctx.globalAlpha = 0.65;
+          ctx.beginPath();
+          ctx.moveTo(arrowX, arrowY);
+          ctx.lineTo(
+            arrowX - arrowLength * Math.cos(angle - Math.PI / 6),
+            arrowY - arrowLength * Math.sin(angle - Math.PI / 6),
+          );
+          ctx.lineTo(
+            arrowX - arrowLength * Math.cos(angle + Math.PI / 6),
+            arrowY - arrowLength * Math.sin(angle + Math.PI / 6),
+          );
+          ctx.closePath();
+          ctx.fill();
+        }
       }
-      ctx.setLineDash([]); // Reset line dash
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1.0;
 
       // 2. Draw nodes & labels
       for (const node of sim.nodes) {
         const isActive = node.active;
         const isHovered = hoverNodeRef.current?.id === node.id;
 
-        // Node circle
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, node.r + (isHovered ? 2 : 0), 0, Math.PI * 2);
+        const searchActive = searchTerm.trim() !== "";
+        const isMatched = node.isMatched !== false;
+        const isDimmed = searchActive && !isMatched;
 
-        ctx.fillStyle = isActive ? accent : accentSoft;
-        ctx.fill();
+        ctx.globalAlpha = isDimmed ? 0.15 : 1.0;
 
-        ctx.strokeStyle = isActive ? accent : border;
-        ctx.lineWidth = isActive ? 2.5 : 1.2;
-        ctx.stroke();
+        let nodeFill = accentSoft; // --accent-soft base
+        let nodeStroke = accent;
+        let glowColor = accentSoft;
 
-        // Pulsing halo for active note
         if (isActive) {
-          ctx.beginPath();
-          ctx.arc(node.x, node.y, node.r + 5, 0, Math.PI * 2);
-          ctx.strokeStyle = accentSoft;
-          ctx.lineWidth = 2;
-          ctx.stroke();
+          nodeFill = "rgba(217, 119, 6, 0.14)";
+          nodeStroke = "#d97706"; // warm gold
+          glowColor = "rgba(217, 119, 6, 0.28)";
+        } else if (node.isJournal) {
+          nodeFill = "rgba(244, 63, 94, 0.08)";
+          nodeStroke = "#f43f5e"; // rose/pink
+          glowColor = "rgba(244, 63, 94, 0.2)";
+        } else if (node.label === "") {
+          nodeFill = "rgba(107, 114, 128, 0.06)";
+          nodeStroke = "#6b7280";
+          glowColor = "rgba(107, 114, 128, 0.1)";
         }
 
-        // Text labels
-        ctx.fillStyle = isActive || isHovered ? txNormal : txMuted;
+        // Draw soft outer blur glow ring on hover/active
+        if (isActive || isHovered) {
+          ctx.beginPath();
+          ctx.arc(node.x, node.y, node.r + (isHovered ? 5 : 3), 0, Math.PI * 2);
+          ctx.fillStyle = glowColor;
+          ctx.fill();
+        }
+
+        // Draw background circle
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, node.r, 0, Math.PI * 2);
+        ctx.fillStyle = isHovered ? nodeFill.replace("0.08", "0.22").replace("0.14", "0.3") : nodeFill;
+        ctx.fill();
+
+        ctx.strokeStyle = nodeStroke;
+        ctx.lineWidth = isActive ? 2.5 : 1.5;
+        ctx.stroke();
+
+        // Draw node icon (emoji)
+        if (node.icon) {
+          ctx.font = `${node.r * 1.05}px sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(node.icon, node.x, node.y + 1);
+        }
+
+        // Draw pill label background container
+        const labelText = node.label || "Untitled page";
         ctx.font = `${isHovered ? "bold " : ""}11px var(--font-sans, system-ui)`;
+        const textWidth = ctx.measureText(labelText).width;
+        const pillHeight = 17;
+        const pillWidth = textWidth + 12;
+        const pillX = node.x - pillWidth / 2;
+        const pillY = node.y + node.r + 7;
+
+        ctx.fillStyle = isDark ? "rgba(24, 24, 24, 0.88)" : "rgba(255, 255, 255, 0.92)";
+        ctx.beginPath();
+        ctx.roundRect(pillX, pillY, pillWidth, pillHeight, 5);
+        ctx.fill();
+
+        ctx.strokeStyle = isActive ? nodeStroke : border;
+        ctx.lineWidth = isActive ? 1.0 : 0.6;
+        ctx.stroke();
+
+        // Draw label text
+        ctx.fillStyle = isActive ? nodeStroke : isHovered ? txNormal : txMuted;
         ctx.textAlign = "center";
-        ctx.fillText(node.label, node.x, node.y + node.r + 14);
+        ctx.textBaseline = "middle";
+        ctx.fillText(labelText, node.x, pillY + pillHeight / 2 + 0.5);
       }
 
       ctx.restore();
+      ctx.globalAlpha = 1.0;
 
       animationFrameId = requestAnimationFrame(render);
     };
@@ -211,8 +390,9 @@ export function GraphView() {
 
     return () => {
       cancelAnimationFrame(animationFrameId);
+      resizeObserver?.disconnect();
     };
-  }, [simNodes, simEdges]);
+  }, [simNodes, simEdges, searchTerm]);
 
   // Convert screen coordinates to canvas world coordinates
   const screenToWorld = (screenX: number, screenY: number) => {
@@ -227,8 +407,8 @@ export function GraphView() {
     if (!canvas || !simRef.current) return;
 
     const rect = canvas.getBoundingClientRect();
-    const rawX = ((e.clientX - rect.left) / rect.width) * canvas.width;
-    const rawY = ((e.clientY - rect.top) / rect.height) * canvas.height;
+    const rawX = e.clientX - rect.left;
+    const rawY = e.clientY - rect.top;
 
     mouseRef.current = {
       x: rawX,
@@ -254,10 +434,7 @@ export function GraphView() {
 
     if (hitNode) {
       dragNodeRef.current = hitNode;
-      // SimNode objects are ref-held mutable physics state — ForceSimulation
-      // mutates x/y/vx/vy in place every frame. Pinning the dragged node (fx/fy)
-      // is intentional imperative mutation, not React-managed state, so the
-      // compiler's immutability rule does not apply here.
+      // Impatative physics mutation during drag action
       /* eslint-disable-next-line react-hooks/immutability */
       hitNode.fx = hitNode.x;
       // eslint-disable-next-line react-hooks/immutability
@@ -270,8 +447,8 @@ export function GraphView() {
     if (!canvas || !simRef.current) return;
 
     const rect = canvas.getBoundingClientRect();
-    const rawX = ((e.clientX - rect.left) / rect.width) * canvas.width;
-    const rawY = ((e.clientY - rect.top) / rect.height) * canvas.height;
+    const rawX = e.clientX - rect.left;
+    const rawY = e.clientY - rect.top;
 
     const mouse = mouseRef.current;
     const world = screenToWorld(rawX, rawY);
@@ -291,11 +468,9 @@ export function GraphView() {
 
     if (mouse.down) {
       if (dragNodeRef.current) {
-        // Dragging a node: update fixed target positions
         dragNodeRef.current.fx = world.x;
         dragNodeRef.current.fy = world.y;
       } else {
-        // Panning: adjust pan translations
         panRef.current.x += rawX - mouse.x;
         panRef.current.y += rawY - mouse.y;
       }
@@ -315,7 +490,7 @@ export function GraphView() {
       dragNodeRef.current.fx = null;
       dragNodeRef.current.fy = null;
 
-      // If drag distance is small, count as a click and open the note
+      // If drag distance is small, treat as a click to navigation
       const mouse = mouseRef.current;
       const dist = Math.sqrt(
         Math.pow(e.clientX - mouse.rawX, 2) +
@@ -335,8 +510,8 @@ export function GraphView() {
     if (!canvas) return;
 
     const rect = canvas.getBoundingClientRect();
-    const rawX = ((e.clientX - rect.left) / rect.width) * canvas.width;
-    const rawY = ((e.clientY - rect.top) / rect.height) * canvas.height;
+    const rawX = e.clientX - rect.left;
+    const rawY = e.clientY - rect.top;
 
     const zoomIntensity = 0.05;
     const world = screenToWorld(rawX, rawY);
@@ -347,101 +522,105 @@ export function GraphView() {
 
     zoomRef.current = nextZoom;
 
-    // Adjust pan offsets to zoom relative to the mouse cursor position
+    // Adjust pan offsets to zoom relative to cursor position
     panRef.current.x = rawX - world.x * nextZoom;
     panRef.current.y = rawY - world.y * nextZoom;
   };
 
   if (nodeIds.length === 0) {
     return (
-      <div
-        className="graph-empty"
-        style={{ padding: 40, color: "var(--tx-3)", textAlign: "center" }}
-      >
+      <div className="graph-empty">
         <Icon name="pageGraph" size={28} />
-        <div style={{ marginTop: 8 }}>No pages to graph yet.</div>
+        <div>No pages to graph yet.</div>
       </div>
     );
   }
 
   return (
-    <div className="graph-view" style={{ padding: "8px 24px 32px" }}>
-      <div
-        className="graph-head"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          color: "var(--tx-2)",
-          fontWeight: 600,
-          margin: "8px 0 16px",
-        }}
-      >
+    <div className="graph-view">
+      <div className="graph-head">
         <Icon name="pageGraph" size={16} />
-        <span>Graph</span>
-        <span style={{ color: "var(--tx-3)", fontWeight: 400, fontSize: 12 }}>
+        <span>Wikilink Page Graph</span>
+        <span className="title-badge">
           {simNodes.length} page{simNodes.length === 1 ? "" : "s"} ·{" "}
           {simEdges.length} link{simEdges.length === 1 ? "" : "s"}
         </span>
-        <button
-          onClick={() => {
-            panRef.current = { x: 0, y: 0 };
-            zoomRef.current = 1;
-            refetch();
-          }}
-          style={{
-            marginLeft: "auto",
-            background: "none",
-            border: "1px solid var(--hair-strong)",
-            borderRadius: 4,
-            padding: "2px 8px",
-            fontSize: 10,
-            color: "var(--tx-2)",
-            cursor: "pointer",
-          }}
-        >
-          Reset View
-        </button>
       </div>
-      <div
-        style={{
-          border: "1px solid var(--hair-strong)",
-          borderRadius: 8,
-          overflow: "hidden",
-          background: "var(--bg-primary)",
-          position: "relative",
-          cursor: hoverNodeRef.current ? "pointer" : "grab",
-        }}
-      >
+
+      <div className="graph-container">
+        {/* Floating Controls Overlay */}
+        <div className="graph-controls">
+          <div className="graph-control-group">
+            <div className="graph-search-box">
+              <Icon name="search" size={13} style={{ opacity: 0.7 }} />
+              <input
+                type="text"
+                className="graph-search-input"
+                placeholder="Find pages..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                title="Search graph nodes"
+              />
+            </div>
+
+            <button
+              type="button"
+              className={`graph-btn ${localMode ? "active" : ""}`}
+              onClick={() => setLocalMode(!localMode)}
+              title="Toggle Local Filter (current note and neighbors)"
+            >
+              <Icon name="wand" size={12} />
+              <span>{localMode ? "Local" : "Global"}</span>
+            </button>
+          </div>
+
+          <div className="graph-control-group">
+            <button
+              type="button"
+              className="graph-btn"
+              onClick={() => {
+                zoomRef.current = Math.min(6.0, zoomRef.current + 0.15);
+              }}
+              title="Zoom In"
+            >
+              ＋
+            </button>
+            <button
+              type="button"
+              className="graph-btn"
+              onClick={() => {
+                zoomRef.current = Math.max(0.15, zoomRef.current - 0.15);
+              }}
+              title="Zoom Out"
+            >
+              －
+            </button>
+            <button
+              type="button"
+              className="graph-btn"
+              onClick={() => {
+                panRef.current = { x: 0, y: 0 };
+                zoomRef.current = 1;
+                refetch();
+              }}
+              title="Reset View"
+            >
+              ⛶ Reset
+            </button>
+          </div>
+        </div>
+
         <canvas
           ref={canvasRef}
-          width={640}
-          height={480}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onWheel={handleWheel}
-          style={{
-            display: "block",
-            width: "100%",
-            height: "auto",
-            maxHeight: 520,
-          }}
+          className="graph-canvas"
         />
+
         {/* Screen-reader accessible alternative list of nodes for keyboard navigation & testing */}
-        <ul
-          aria-label="Graph nodes"
-          style={{
-            position: "absolute",
-            width: 1,
-            height: 1,
-            padding: 0,
-            margin: -1,
-            overflow: "hidden",
-            clip: "rect(0, 0, 0, 0)",
-            border: 0,
-          }}
-        >
+        <ul aria-label="Graph nodes" className="sr-only">
           {simNodes.map((node) => (
             <li key={node.id}>
               <button

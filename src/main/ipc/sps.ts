@@ -19,6 +19,7 @@ import { spsGetWorkSession, spsSetWorkSession } from "../sps-work-sessions";
 import { appendWikiLog, type WikiLogOp } from "../sps-wiki-log";
 import { ensureIndexCoverage } from "../sps-ingest";
 import { resolveSpsVaultDir } from "../sps-storage";
+import { spsImportOkfBundle, spsExportOkfBundle } from "../sps-okf";
 import { runTelosAudit, runPipingPattern } from "../telos-auditor";
 import {
   oaSearchWorks,
@@ -84,6 +85,18 @@ export function registerSpsIpc(): void {
     "sps-save",
     (_event, ws: unknown, profile?: string, baseRev?: number) =>
       spsSave(ws, profile, baseRev),
+  );
+  safeHandle(
+    "sps-import-okf-bundle",
+    (_event, bundleDir: string, profile?: string) =>
+      spsImportOkfBundle(bundleDir, profile),
+  );
+  safeHandle(
+    "sps-export-okf-bundle",
+    (_event, targetDir: string, profile?: string) => {
+      const vaultDir = resolveSpsVaultDir(profile);
+      return spsExportOkfBundle(vaultDir, targetDir);
+    },
   );
   safeHandle("sps-run-telos-audit", (_event, profile?: string) =>
     runTelosAudit(profile),

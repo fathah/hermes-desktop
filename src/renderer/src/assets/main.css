@@ -9514,3 +9514,38 @@ body {
   color: #abb2bf;
   overflow: auto;
 }
+
+/* ---- Learning surface styling fixes (no-inline-styles) ---- */
+.learning-surface-header-title {
+  margin-bottom: 4px;
+}
+.learning-surface-notice {
+  margin-bottom: 12px;
+}
+.learning-surface-hint {
+  margin-bottom: 10px;
+}
+.learning-surface-empty-mt {
+  margin-top: 10px;
+}
+.learning-surface-list-mt {
+  margin-top: 10px;
+}
+.learning-surface-small-block {
+  display: block;
+  opacity: 0.7;
+}
+.learning-surface-pre-mt {
+  margin-top: 10px;
+}
+.curator-tab-actions-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.curator-tab-manual-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+

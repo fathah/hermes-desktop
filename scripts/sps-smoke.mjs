@@ -84,6 +84,10 @@ const sps = join(HOME, "sps-agent");
 const vault = join(sps, "vault");
 mkdirSync(join(vault, "projects"), { recursive: true });
 
+const now = new Date();
+const pad = (n) => (n < 10 ? `0${n}` : n);
+const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+
 const workspace = {
   tree: [
     { id: "home", children: [] },
@@ -92,6 +96,7 @@ const workspace = {
     { id: "blank", children: [] },
     // An empty "Research" folder ⇒ DocHeader shows the "No papers yet" nudge.
     { id: "research", children: [] },
+    { id: "journal_dummy", children: [] },
   ],
   meta: {
     home: { icon: "🏠", title: "Home", cover: null },
@@ -100,6 +105,16 @@ const workspace = {
     // Empty title + no content ⇒ the DocHeader shows the "Get started" launcher.
     blank: { icon: "📄", title: "", cover: null },
     research: { icon: "📚", title: "Research", cover: null },
+    journal_dummy: {
+      icon: "📔",
+      title: "Reflections on the AI Mentor Integration",
+      cover: null,
+      journal: true,
+      date: today,
+      time: "10:30",
+      mood: "😄",
+      tags: ["ai", "mentor"]
+    },
   },
   docs: {
     home: [
@@ -128,6 +143,12 @@ const workspace = {
         type: "p",
         text: "Scholarly papers you saved from OpenAlex live here.",
       },
+    ],
+    journal_dummy: [
+      { id: "j_h1", type: "h1", text: "Reflections on the AI Mentor Integration" },
+      { id: "j_p1", type: "p", text: "Today we integrated the AI Mentor. The lessons are extremely well-structured and the system is starting to feel incredibly rich and cohesive. The mental models in the Latticework have seeded perfectly." },
+      { id: "j_img", type: "image", text: "", src: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='800' height='400' viewBox='0 0 800 400'><rect width='100%' height='100%' fill='%231f2937'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='%236366f1' font-size='24' font-family='sans-serif'>Visual Memory Palace: major-system-01</text></svg>", caption: "Visual Memory Palace mock representation" },
+      { id: "j_bm", type: "bookmark", text: "", bm: { url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", title: "Louis Armstrong - St. James Infirmary (Audio)", desc: "A classic rendition of St. James Infirmary, which is track #1 in our Standard 21 jazz education curriculum." } }
     ],
   },
   comments: [],
@@ -176,6 +197,7 @@ const expectedShots = [
   "09-getstarted",
   "10-journal",
   "11-journal-entry",
+  "11b-journal-entry-scrolled",
 ];
 const shots = [];
 const shotFailures = [];
@@ -222,7 +244,7 @@ await win.keyboard.press("Escape").catch(() => {});
 
 // 02a — Learn This: first-class learning surface under My Assistant.
 await shot("02a-learn-this", async () => {
-  await win.locator(".nav-item", { hasText: "Learn This" }).first().click();
+  await win.locator(".nav-item", { hasText: "Teach Me" }).first().click();
   await win.getByRole("button", { name: "Skills" }).click();
 });
 
@@ -321,11 +343,18 @@ await shot("10-journal", async () => {
   await win.waitForSelector(".jr .cal-grid", { timeout: 8000 });
 });
 
-// 11 — create a journal entry (drops into the block editor). Proves the
-// journal→page→editor path and that the new 'journal' surface is wired.
+// 11 — open the seeded journal entry with image and bookmark embeds.
 await shot("11-journal-entry", async () => {
-  await win.locator(".jr-btn.primary").first().click();
+  await win.getByText("Reflections on the AI Mentor Integration", { exact: false }).first().click();
   await win.waitForSelector(".doc-scroll", { timeout: 8000 });
+});
+
+// 11b — scroll down to see the image and link/youtube bookmark cards.
+await shot("11b-journal-entry-scrolled", async () => {
+  await win.evaluate(() => {
+    const el = document.querySelector(".doc-scroll");
+    if (el) el.scrollTop = 450;
+  });
 });
 
 console.log("SHOTS_OK:", shots.length, "—", shots.join(", "));

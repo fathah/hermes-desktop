@@ -65,6 +65,7 @@ export function Sidebar() {
   const surface = useStore((s) => s.surface);
   const setSurface = useStore((s) => s.setSurface);
   const selectPage = useStore((s) => s.selectPage);
+  const openJournal = useStore((s) => s.openJournal);
   const startNewChat = useStore((s) => s.startNewChat);
   const setResearchOpen = useStore((s) => s.setResearchOpen);
   const setScheduledOpen = useStore((s) => s.setScheduledOpen);
@@ -335,6 +336,15 @@ export function Sidebar() {
           >
             <Icon name="heart" size={17} />
             <span className="nav-label">Health & Ledger</span>
+          </button>
+
+          <button
+            type="button"
+            className={`nav-item ${surface === "journal" ? "active" : ""}`}
+            onClick={() => openJournal()}
+          >
+            <Icon name="calendar" size={17} />
+            <span className="nav-label">Journal</span>
           </button>
         </div>
 

@@ -12,6 +12,9 @@ export interface SimNode {
   active?: boolean;
   fx?: number | null; // fixed position override (when dragging)
   fy?: number | null;
+  icon?: string;
+  isJournal?: boolean;
+  isMatched?: boolean;
 }
 
 export interface SimEdge {
@@ -27,10 +30,10 @@ export class ForceSimulation {
   height: number;
 
   // Physics constants
-  charge = -280; // coulomb repulsion force
+  charge = -350; // coulomb repulsion force
   linkStrength = 0.05; // spring stiffness
-  linkRestLength = 90; // ideal spring distance
-  gravity = 0.015; // gravity center-pull stiffness
+  linkRestLength = 100; // ideal spring distance
+  gravity = 0.018; // gravity center-pull stiffness
   damping = 0.85; // velocity friction damping
 
   constructor(nodes: SimNode[], edges: SimEdge[], width = 640, height = 640) {
@@ -136,6 +139,32 @@ export class ForceSimulation {
       if (v.fx === null) {
         v.vx -= fx;
         v.vy -= fy;
+      }
+    }
+
+    // 2.5. Collision resolution to prevent overlaps
+    for (let i = 0; i < n; i++) {
+      const u = nodes[i];
+      for (let j = i + 1; j < n; j++) {
+        const v = nodes[j];
+        let dx = v.x - u.x;
+        let dy = v.y - u.y;
+        if (dx === 0) dx = 0.1;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 0.1;
+        const minDist = u.r + v.r + 28; // radii + safety spacing margin
+        if (dist < minDist) {
+          const overlap = minDist - dist;
+          const forceX = (dx / dist) * overlap * 0.22;
+          const forceY = (dy / dist) * overlap * 0.22;
+          if (u.fx === null) {
+            u.vx -= forceX;
+            u.vy -= forceY;
+          }
+          if (v.fx === null) {
+            v.vx += forceX;
+            v.vy += forceY;
+          }
+        }
       }
     }
 

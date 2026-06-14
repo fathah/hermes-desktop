@@ -178,6 +178,8 @@ export interface WorkspaceSlice {
   setPMeta: (patch: Partial<PageMeta>) => void;
   setPageMeta: (id: string, patch: Partial<PageMeta>) => void;
   resetWorkspace: () => void;
+  updateTask: (id: string, patch: Partial<Task>) => void;
+  deleteDoneTasks: () => void;
 }
 
 export interface CommentsSlice {

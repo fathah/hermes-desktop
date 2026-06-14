@@ -126,6 +126,126 @@ export function App() {
     };
   }, []);
 
+  // Task automation scheduler (Step 4)
+  useEffect(() => {
+    const key = "sps_task_automations";
+    if (!localStorage.getItem(key)) {
+      const defaultRules = [
+        {
+          id: "rule-minute-check",
+          title: "⚡ Quick Checkin",
+          interval: "minute",
+          template: "quick",
+          lastTriggered: 0
+        },
+        {
+          id: "rule-daily-standup",
+          title: "🔁 Daily Standup SOP",
+          interval: "daily",
+          template: "routine",
+          lastTriggered: 0
+        },
+        {
+          id: "rule-weekly-review",
+          title: "🏗️ Weekly Review & Planning",
+          interval: "weekly",
+          template: "project",
+          lastTriggered: 0
+        }
+      ];
+      localStorage.setItem(key, JSON.stringify(defaultRules));
+    }
+
+    const timer = setInterval(() => {
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return;
+        const rules = JSON.parse(raw);
+        let updated = false;
+        const now = Date.now();
+
+        const triggerRule = (rule: any) => {
+          const setBlocks = useStore.getState().setBlocks;
+          const flash = useStore.getState().flash;
+          const uid = () => Math.random().toString(36).substring(2, 9);
+          
+          setBlocks((blocks) => {
+            let hasDb = false;
+            const nextBlocks = blocks.map((block) => {
+              if (block.type === "database") {
+                hasDb = true;
+                const rows = block.rows || [];
+                const newTask = {
+                  id: `t-${uid()}`,
+                  title: rule.title,
+                  status: "inbox" as const,
+                  prio: "med" as const,
+                  who: "you",
+                  due: "",
+                  est: "",
+                  custom: { label: rule.template === "quick" ? "Quick Win" : rule.template === "project" ? "Project" : "Routine" },
+                  ...(rule.template === "project" ? {
+                    desc: "Definition of Done:\n",
+                    checklist: [
+                      { id: `item-${uid()}`, text: "Prerequisite: What do I need to buy/find?", checked: false },
+                      { id: `item-${uid()}`, text: "Action Step: First micro-task (15 min)", checked: false }
+                    ]
+                  } : rule.template === "routine" ? {
+                    desc: "Links/Resources:\n",
+                    checklist: [
+                      { id: `item-${uid()}`, text: "SOP Step 1: Start process", checked: false },
+                      { id: `item-${uid()}`, text: "SOP Step 2: Complete routine", checked: false }
+                    ]
+                  } : {})
+                };
+                return {
+                  ...block,
+                  rows: [...rows, newTask]
+                };
+              }
+              return block;
+            });
+            if (hasDb) {
+              flash(`Automation triggered: "${rule.title}" added to inbox`);
+            }
+            return nextBlocks;
+          });
+        };
+
+        const nextRules = rules.map((rule: any) => {
+          let shouldTrigger = false;
+          const last = rule.lastTriggered || 0;
+          const diffMs = now - last;
+
+          if (rule.interval === "minute" && diffMs >= 60 * 1000) {
+            shouldTrigger = true;
+          } else if (rule.interval === "hourly" && diffMs >= 60 * 60 * 1000) {
+            shouldTrigger = true;
+          } else if (rule.interval === "daily" && diffMs >= 24 * 60 * 60 * 1000) {
+            shouldTrigger = true;
+          } else if (rule.interval === "weekly" && diffMs >= 7 * 24 * 60 * 60 * 1000) {
+            shouldTrigger = true;
+          }
+
+          if (shouldTrigger) {
+            triggerRule(rule);
+            updated = true;
+            return { ...rule, lastTriggered: now };
+          }
+          return rule;
+        });
+
+        if (updated) {
+          localStorage.setItem(key, JSON.stringify(nextRules));
+        }
+      } catch (err) {
+        console.error("Task automation runner error:", err);
+      }
+    }, 60000);
+
+    return () => clearInterval(timer);
+  }, []);
+
   return (
     <div
       className="app"

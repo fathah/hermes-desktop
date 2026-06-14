@@ -1429,6 +1429,14 @@ interface HermesAPI {
     profile?: string,
   ) => Promise<{ dir: string; isDefault: boolean; default: string }>;
   spsPickVaultDir: () => Promise<string | null>;
+  spsImportOkfBundle: (
+    bundleDir: string,
+    profile?: string,
+  ) => Promise<{ success: boolean; pages: any[]; error?: string }>;
+  spsExportOkfBundle: (
+    targetDir: string,
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
   spsPickPdf: () => Promise<string | null>;
   spsExtractPdf: (filePath: string) => Promise<{
     title: string;

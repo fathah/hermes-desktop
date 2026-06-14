@@ -16,6 +16,7 @@ import { skinToSpsVars } from "../lib/skin";
 import { getActiveSkinId, setActiveSkinId } from "../../../utils/skin";
 import { getStorageMode, type StorageMode } from "../lib/storageMode";
 import { toggleStorageMode, getLastBackup } from "../lib/storageActions";
+import { commitChangeset } from "../inbox/ingestApply";
 import { workspaceParity, type ParityReport } from "../editor/workspaceVault";
 import type { Workspace } from "../types";
 import type { LoadedSkin } from "../../../../../shared/skins";
@@ -65,7 +66,7 @@ function Toggle({
 }) {
   return (
     <div className="twk-row twk-row-h">
-      <span className="twk-lbl" style={{ flex: 1 }}>
+      <span className="twk-lbl twk-flex-1">
         <span>{label}</span>
       </span>
       <button
@@ -102,7 +103,7 @@ function ColorChips({
             key={c}
             className="twk-chip"
             data-on={value === c ? "1" : "0"}
-            style={{ background: c }}
+            data-accent={c}
             onClick={() => onChange(c)}
             aria-label={c}
           />
@@ -130,14 +131,8 @@ function Segmented<T extends string>({
       <span className="twk-lbl">
         <span>{label}</span>
       </span>
-      <div className="twk-seg">
-        <div
-          className="twk-seg-thumb"
-          style={{
-            left: `calc(${(i / n) * 100}% + 2px)`,
-            width: `calc(${100 / n}% - 4px)`,
-          }}
-        />
+      <div className="twk-seg" data-n={n} data-i={i}>
+        <div className="twk-seg-thumb" />
         {options.map((o) => (
           <button key={o} onClick={() => onChange(o)}>
             {o}
@@ -163,12 +158,13 @@ function Select<T extends string>({
 }) {
   return (
     <div className="twk-row twk-row-h">
-      <span className="twk-lbl" style={{ flex: 1 }}>
+      <span className="twk-lbl twk-flex-1">
         <span>{label}</span>
       </span>
       <select
-        className="twk-field"
-        style={{ width: 120 }}
+        className="twk-field twk-w-120"
+        title={label}
+        aria-label={label}
         value={value}
         onChange={(e) => onChange(e.target.value as T)}
       >
@@ -223,8 +219,9 @@ function SkinSelect() {
           <span>Skin</span>
         </span>
         <select
-          className="twk-field"
-          style={{ width: 120 }}
+          className="twk-field twk-w-120"
+          title="Skin"
+          aria-label="Skin"
           value={active}
           onChange={(e) => onChange(e.target.value)}
         >
@@ -246,6 +243,7 @@ function SkinSelect() {
 function StorageSettings() {
   const tree = useStore((s) => s.tree);
   const flash = useStore((s) => s.flash);
+  const ingestCommitPage = useStore((s) => s.ingestCommitPage);
   const [mode, setMode] = useState<StorageMode>(() => getStorageMode());
   const [parity, setParity] = useState<ParityReport | null>(null);
   const [backup, setBackup] = useState<string | null>(() => getLastBackup());
@@ -296,6 +294,67 @@ function StorageSettings() {
     }
   };
 
+  const getDirBasename = (dir: string) => {
+    const parts = dir.replace(/\\/g, "/").split("/");
+    return parts[parts.length - 1] || dir;
+  };
+
+  const importOkf = async (): Promise<void> => {
+    const dir = await window.hermesAPI.selectFolder?.();
+    if (!dir) return;
+    setBusy(true);
+    try {
+      const res = await window.hermesAPI.spsImportOkfBundle?.(dir);
+      if (res?.success && res.pages) {
+        const commitRes = await commitChangeset(
+          {
+            summary: `Imported OKF bundle from ${getDirBasename(dir)}`,
+            pages: res.pages,
+            captures: [],
+            memory: [],
+          },
+          ingestCommitPage,
+        );
+        flash(
+          `Successfully imported ${commitRes.pages} pages from OKF bundle.`,
+        );
+        refreshParity();
+      } else {
+        flash(res?.error || "Failed to import OKF bundle.", { tone: "warn" });
+      }
+    } catch (err) {
+      flash(
+        `Import error: ${err instanceof Error ? err.message : String(err)}`,
+        { tone: "warn" },
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const exportOkf = async (): Promise<void> => {
+    const dir = await window.hermesAPI.selectFolder?.();
+    if (!dir) return;
+    setBusy(true);
+    try {
+      const res = await window.hermesAPI.spsExportOkfBundle?.(dir);
+      if (res?.success) {
+        flash(
+          `Workspace exported as OKF bundle to ${getDirBasename(dir)} successfully.`,
+        );
+      } else {
+        flash(res?.error || "Failed to export OKF bundle.", { tone: "warn" });
+      }
+    } catch (err) {
+      flash(
+        `Export error: ${err instanceof Error ? err.message : String(err)}`,
+        { tone: "warn" },
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const snapshot = (): Workspace => {
     const s = useStore.getState();
     return {
@@ -337,13 +396,13 @@ function StorageSettings() {
     <>
       <Section label="Storage" />
       <div className="twk-row twk-row-h">
-        <span className="twk-lbl" style={{ flex: 1 }}>
+        <span className="twk-lbl twk-flex-1">
           <span>Mode</span>
         </span>
         <span>{mode === "vault" ? "Markdown vault" : "JSON blob"}</span>
       </div>
       <div className="twk-row twk-row-h">
-        <span className="twk-lbl" style={{ flex: 1 }}>
+        <span className="twk-lbl twk-flex-1">
           <span>Parity</span>
         </span>
         <span>{parityText}</span>
@@ -353,14 +412,7 @@ function StorageSettings() {
           <span className="twk-lbl">
             <span>⚠ Mirror failures</span>
           </span>
-          <span
-            style={{
-              fontSize: 10.5,
-              opacity: 0.85,
-              color: "var(--color-danger, #d9534f)",
-              wordBreak: "break-word",
-            }}
-          >
+          <span className="twk-mirror-fail">
             {mirrorFail.count} vault-mirror write
             {mirrorFail.count === 1 ? "" : "s"} failed
             {mirrorFail.lastError ? ` — last: ${mirrorFail.lastError}` : ""}
@@ -369,7 +421,6 @@ function StorageSettings() {
       )}
       <button
         className="twk-field"
-        style={{ cursor: busy ? "default" : "pointer" }}
         disabled={busy}
         onClick={() => void onToggle()}
       >
@@ -382,16 +433,7 @@ function StorageSettings() {
           <span className="twk-lbl">
             <span>Last backup</span>
           </span>
-          <span
-            style={{
-              fontSize: 10.5,
-              opacity: 0.7,
-              wordBreak: "break-all",
-              fontFamily: "var(--font-mono)",
-            }}
-          >
-            {backup}
-          </span>
+          <span className="twk-path">{backup}</span>
         </div>
       )}
       {vault && (
@@ -400,34 +442,28 @@ function StorageSettings() {
             <span className="twk-lbl">
               <span>Vault location</span>
             </span>
-            <span
-              style={{
-                fontSize: 10.5,
-                opacity: 0.7,
-                wordBreak: "break-all",
-                fontFamily: "var(--font-mono)",
-              }}
-            >
+            <span className="twk-path">
               {vault.dir}
               {vault.isDefault ? "  (default)" : ""}
             </span>
           </div>
-          <button
-            className="twk-field"
-            style={{ cursor: "pointer" }}
-            onClick={() => void chooseVault()}
-          >
+          <button className="twk-field" onClick={() => void chooseVault()}>
             Point at an Obsidian vault folder…
           </button>
           {!vault.isDefault && (
-            <button
-              className="twk-field"
-              style={{ cursor: "pointer" }}
-              onClick={() => void resetVault()}
-            >
+            <button className="twk-field" onClick={() => void resetVault()}>
               Reset to default location
             </button>
           )}
+          <button
+            className="twk-field twk-mt-8"
+            onClick={() => void importOkf()}
+          >
+            Import OKF Bundle…
+          </button>
+          <button className="twk-field" onClick={() => void exportOkf()}>
+            Export OKF Bundle…
+          </button>
         </>
       )}
     </>

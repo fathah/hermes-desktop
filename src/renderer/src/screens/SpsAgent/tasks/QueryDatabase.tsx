@@ -21,8 +21,9 @@ import { ListView } from "./ListView";
 import { TableView } from "./TableView";
 import { PropMenu, type PropState } from "./PropMenu";
 import { VIEWS } from "./taskUtils";
+import { useStore } from "../store";
+import { STATUS } from "../data/seed";
 
-const STATUSES: StatusKey[] = ["todo", "doing", "review", "done"];
 // Let the chokidar-backed index pick up the new/removed file before refetching.
 const INDEX_LAG_MS = 200;
 
@@ -37,15 +38,24 @@ export function QueryDatabase({ block, update }: Props) {
   const source = block.source || "";
   const view: DbView = block.view || "table";
   const cols: DbCol[] = block.cols || [];
+  const kanbanPreset = block.kanbanPreset || "standard";
   const { rows, refetch } = useVaultQuery(source);
   const [title, setTitle] = useState("");
   const [status, setStatus] = useState<StatusKey>("todo");
   const [prop, setProp] = useState<PropState | null>(null);
   const [drag, setDrag] = useState<string | null>(null);
   const [dropCol, setDropCol] = useState<StatusKey | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const setOpenTask = useStore((s) => s.setOpenTask);
 
   const tasks: Task[] = rows.map(vaultRowToTask);
   const rowByPath = new Map(rows.map((r) => [r.path, r] as const));
+
+  const statuses: StatusKey[] =
+    kanbanPreset === "personal"
+      ? ["inbox", "this_week", "doing", "blocked", "done"]
+      : ["todo", "doing", "review", "done"];
 
   // Write-back: merge a property patch into the row's existing frontmatter and
   // re-serialize the row file. Title is always written so the index keeps it,
@@ -68,20 +78,47 @@ export function QueryDatabase({ block, update }: Props) {
     const task = tasks.find((t) => t.id === id);
     if (!task) return;
     const next =
-      STATUSES[(STATUSES.indexOf(task.status) + 1) % STATUSES.length];
+      statuses[(statuses.indexOf(task.status) + 1) % statuses.length];
     void writeRow(id, { status: next });
   };
 
-  const createRow = async (props: RowProps): Promise<void> => {
+  const createRow = async (props: RowProps, body = ""): Promise<void> => {
     const api = window.hermesAPI;
     if (!source || !api?.spsExportRow) return;
-    const markdown = rowToMarkdown(props);
+    const markdown = rowToMarkdown(props, body);
     await api.spsExportRow(source, uid("row"), markdown);
     setTimeout(refetch, INDEX_LAG_MS);
   };
 
-  const addRow = (): void =>
-    void createRow({ title: "New row", status: "todo" });
+  const addRow = (template?: "quick" | "project" | "routine"): void => {
+    const defaultStatus: StatusKey = kanbanPreset === "personal" ? "inbox" : "todo";
+    const props: RowProps = {
+      status: defaultStatus,
+      prio: "med",
+      who: "you",
+      due: "",
+      est: ""
+    };
+    let body = "";
+    if (template === "quick") {
+      props.title = "New Quick Win";
+      props.prio = "low";
+      props.label = "Quick Win";
+    } else if (template === "project") {
+      props.title = "New Project";
+      props.prio = "high";
+      props.label = "Project";
+      body = "Definition of Done:\n\n- [ ] Prerequisite: What do I need to buy/find?\n- [ ] Action Step: First micro-task (15 min)";
+    } else if (template === "routine") {
+      props.title = "New Routine";
+      props.prio = "med";
+      props.label = "Routine";
+      body = "Links/Resources:\n\n- [ ] SOP Step 1: Start process\n- [ ] SOP Step 2: Complete routine";
+    } else {
+      props.title = "New row";
+    }
+    void createRow(props, body);
+  };
 
   const addFromForm = async (): Promise<void> => {
     const trimmed = title.trim();
@@ -98,6 +135,17 @@ export function QueryDatabase({ block, update }: Props) {
     setTimeout(refetch, INDEX_LAG_MS);
   };
 
+  const weeklyReset = async (): Promise<void> => {
+    const api = window.hermesAPI;
+    if (!api?.spsDeleteRow || !source) return;
+    const doneTasks = tasks.filter((t) => t.status === "done");
+    for (const t of doneTasks) {
+      const rowId = pageIdFromPath(t.id);
+      if (rowId) await api.spsDeleteRow(source, rowId);
+    }
+    setTimeout(refetch, INDEX_LAG_MS);
+  };
+
   const addCol = (): void =>
     update?.({ cols: [...cols, { id: uid("col"), name: "Notes" }] });
 
@@ -109,10 +157,6 @@ export function QueryDatabase({ block, update }: Props) {
     const r = e.currentTarget.getBoundingClientRect();
     setProp({ rowId, field, x: r.left, y: r.bottom + 4 });
   };
-
-  // Query-database rows are not pages, so there is no task-detail surface to
-  // open; clicking a card/title is a no-op (edits happen inline / via the form).
-  const noop = (): void => {};
 
   return (
     <div className="qdb" contentEditable={false}>
@@ -126,16 +170,62 @@ export function QueryDatabase({ block, update }: Props) {
             <Icon name={icon} size={15} /> {label}
           </div>
         ))}
+        <div className="db-spacer"></div>
+        <div
+          className="db-tool"
+          onClick={() =>
+            update?.({
+              kanbanPreset: kanbanPreset === "standard" ? "personal" : "standard",
+            })
+          }
+          title="Toggle Layout Preset"
+        >
+          <Icon name="board" size={14} /> Preset: {kanbanPreset === "personal" ? "Personal" : "Standard"}
+        </div>
+        <div
+          className="db-tool"
+          onClick={() => void weeklyReset()}
+          title="Archive/Delete Done tasks"
+        >
+          <Icon name="x" size={14} /> Weekly Reset
+        </div>
+        <div className="db-new-btn-group">
+          <button className="db-tool db-new-btn-main" onClick={() => addRow()}>
+            <Icon name="plus" size={14} /> Add Row
+          </button>
+          <button
+            className="db-tool db-new-btn-arrow"
+            onClick={() => setMenuOpen(!menuOpen)}
+          >
+            ▾
+          </button>
+          {menuOpen && (
+            <div className="db-template-menu" onMouseLeave={() => setMenuOpen(false)}>
+              <div className="db-template-item" onClick={() => { addRow(); setMenuOpen(false); }}>
+                📄 Blank Row
+              </div>
+              <div className="db-template-item" onClick={() => { addRow("quick"); setMenuOpen(false); }}>
+                ⚡ Quick Win
+              </div>
+              <div className="db-template-item" onClick={() => { addRow("project"); setMenuOpen(false); }}>
+                🏗️ Deep Work / Project
+              </div>
+              <div className="db-template-item" onClick={() => { addRow("routine"); setMenuOpen(false); }}>
+                🔁 Routine / Habit
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {view === "table" && (
         <TableView
           tasks={tasks}
           cols={cols}
-          onOpenTask={noop}
+          onOpenTask={setOpenTask}
           openProp={openProp}
           setCustom={setCustom}
-          addRow={addRow}
+          addRow={() => addRow()}
           addCol={addCol}
           onDelete={(id) => void deleteRow(id)}
         />
@@ -143,20 +233,21 @@ export function QueryDatabase({ block, update }: Props) {
       {view === "board" && (
         <BoardView
           tasks={tasks}
-          onOpenTask={noop}
+          onOpenTask={setOpenTask}
           drag={drag}
           setDrag={setDrag}
           dropCol={dropCol}
           setDropCol={setDropCol}
           setStatus={(id, s) => setField(id, "status", s)}
-          addRow={addRow}
+          addRow={() => addRow()}
+          kanbanPreset={kanbanPreset}
         />
       )}
       {view === "list" && (
-        <ListView tasks={tasks} onOpenTask={noop} cycle={cycleStatus} />
+        <ListView tasks={tasks} onOpenTask={setOpenTask} cycle={cycleStatus} />
       )}
-      {view === "gallery" && <GalleryView tasks={tasks} onOpenTask={noop} />}
-      {view === "calendar" && <CalendarView tasks={tasks} onOpenTask={noop} />}
+      {view === "gallery" && <GalleryView tasks={tasks} onOpenTask={setOpenTask} />}
+      {view === "calendar" && <CalendarView tasks={tasks} onOpenTask={setOpenTask} />}
 
       {rows.length === 0 && <div className="qdb-empty">No rows yet</div>}
 
@@ -169,15 +260,17 @@ export function QueryDatabase({ block, update }: Props) {
           onKeyDown={(e) => {
             if (e.key === "Enter") void addFromForm();
           }}
+          title="New row title"
         />
         <select
           className="qdb-select"
           value={status}
           onChange={(e) => setStatus(e.target.value as StatusKey)}
+          title="Status"
         >
-          {STATUSES.map((s) => (
+          {statuses.map((s) => (
             <option key={s} value={s}>
-              {s}
+              {STATUS[s]?.label || s}
             </option>
           ))}
         </select>

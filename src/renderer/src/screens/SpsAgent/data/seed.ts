@@ -119,6 +119,9 @@ export const STATUS: Record<StatusKey, StatusDef> = {
   doing: { label: "In progress", cls: "s-doing", dot: "#C79400" },
   review: { label: "In review", cls: "s-review", dot: "#1B4F8A" },
   done: { label: "Done", cls: "s-done", dot: "#1F6B3A" },
+  inbox: { label: "Brain Dump", cls: "s-inbox", dot: "#8a8d93" },
+  this_week: { label: "This Week", cls: "s-this-week", dot: "#3A86C8" },
+  blocked: { label: "Waiting / Blocked", cls: "s-blocked", dot: "#E05A47" },
 };
 
 export const PRIO: Record<PrioKey, PrioDef> = {
