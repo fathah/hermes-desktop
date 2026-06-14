@@ -22,6 +22,7 @@ export default {
     together: "Together AI",
     fireworks: "Fireworks",
     cerebras: "Cerebras",
+    atlascloud: "AtlasCloud",
     mistral: "Mistral",
   },
   serverPreset: "תבנית שרת",

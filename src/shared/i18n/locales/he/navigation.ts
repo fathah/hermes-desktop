@@ -16,4 +16,6 @@ export default {
   settings: "הגדרות",
   collapseSidebar: "כווץ סרגל צד",
   expandSidebar: "הרחב סרגל צד",
+  showRecentSessions: "הצג סשנים אחרונים",
+  hideRecentSessions: "הסתר סשנים אחרונים",
 } as const;

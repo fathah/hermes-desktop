@@ -1,5 +1,5 @@
 export default {
-  appName: "Hermes Agent",
+  appName: "Hermes One",
   continue: "המשך",
   cancel: "ביטול",
   retry: "נסה שוב",
@@ -7,6 +7,8 @@ export default {
   loadingShort: "טוען",
   saved: "נשמר",
   save: "שמירה",
+  done: "סיום",
+  edit: "עריכה",
   search: "חיפוש",
   searchPlaceholder: "חיפוש...",
   show: "הצג",

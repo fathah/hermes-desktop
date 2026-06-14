@@ -24,4 +24,18 @@ export default {
   manageProfiles: "ניהול פרופילים",
   switchProfile: "החלפת פרופיל",
   defaultTag: "ברירת מחדל",
+  editAppearance: "עריכת פרופיל",
+  editAppearanceFor: "עריכת {{name}}",
+  color: "צבע",
+  dangerZone: "אזור מסוכן",
+  deleteProfile: "מחיקת פרופיל",
+  deleteProfileInfo:
+    "מחיקת פרופיל זה מסירה לצמיתות את ההגדרות, הזיכרון, סשני הצ'אט, המיומנויות ומפתחות ה-API שלו. לא ניתן לבטל פעולה זו.",
+  deleteProfileConfirm:
+    "למחוק פרופיל זה לצמיתות? לא ניתן לבטל פעולה זו.",
+  edit: "עריכה",
+  uploadImage: "העלאת תמונה",
+  removeImage: "הסרת תמונה",
+  uploadImageFailed: "לא ניתן היה להגדיר את תמונת הפרופיל",
+  appearanceFailed: "לא ניתן היה לעדכן את מראה הפרופיל",
 } as const;

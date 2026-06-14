@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { t, getLocaleDirection } from "./index";
+import { t, getLocaleDirection, resources } from "./index";
+
+function flattenKeys(obj: Record<string, unknown>, prefix = ""): string[] {
+  return Object.entries(obj).flatMap(([key, value]) => {
+    const path = prefix ? `${prefix}.${key}` : key;
+    return value && typeof value === "object"
+      ? flattenKeys(value as Record<string, unknown>, path)
+      : [path];
+  });
+}
 
 describe("shared i18n", () => {
   it("returns English text by default", () => {
@@ -37,6 +46,16 @@ describe("shared i18n", () => {
   it("reports he as a right-to-left locale", () => {
     expect(getLocaleDirection("he")).toBe("rtl");
     expect(getLocaleDirection("en")).toBe("ltr");
+  });
+
+  it("keeps the he locale at full key parity with en", () => {
+    const enKeys = flattenKeys(
+      resources.en.translation as Record<string, unknown>,
+    );
+    const heKeys = new Set(
+      flattenKeys(resources.he.translation as Record<string, unknown>),
+    );
+    expect(enKeys.filter((key) => !heKeys.has(key))).toEqual([]);
   });
 
   it("falls back to en when zh-CN key is missing", () => {
