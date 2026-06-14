@@ -238,7 +238,9 @@ await shot("01-home");
 
 // 02 — ⌘K command palette (two-pane preview).
 await shot("02-palette", async () => {
-  await win.keyboard.press(`${MOD}+K`);
+  await win.evaluate(() => {
+    window.dispatchEvent(new CustomEvent("sps:search"));
+  });
 });
 await win.keyboard.press("Escape").catch(() => {});
 
