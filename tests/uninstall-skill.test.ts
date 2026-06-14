@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
-const mockRmSync = vi.fn();
-const mockExistsSync = vi.fn(() => true);
+const mockRmSync = vi.fn((_path: string, _options?: unknown) => {});
+const mockExistsSync = vi.fn((_p: string) => true);
 
 vi.mock("fs", () => {
   const fns = {
@@ -32,8 +32,9 @@ vi.mock("fs", () => {
   return { ...fns, default: fns };
 });
 
-const mockExecFileSync = vi.fn(() =>
-  Buffer.from("Resolving...\nUninstalled.\n"),
+const mockExecFileSync = vi.fn(
+  (_file: string, _args?: string[], _options?: unknown) =>
+    Buffer.from("Resolving...\nUninstalled.\n"),
 );
 
 vi.mock("child_process", () => {
@@ -44,7 +45,9 @@ vi.mock("child_process", () => {
   return { ...fns, default: fns };
 });
 
-const mockRemoveSkillCapability = vi.fn();
+const mockRemoveSkillCapability = vi.fn(
+  (_path: string, _profile?: string) => {},
+);
 
 vi.mock("../src/main/capability-risk-store", () => ({
   removeSkillCapability: (path: string, profile?: string) =>
