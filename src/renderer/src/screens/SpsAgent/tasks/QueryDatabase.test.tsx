@@ -148,6 +148,7 @@ describe("QueryDatabase", () => {
     const update = vi.fn();
     stubApi({ spsIndexQuery: vi.fn().mockResolvedValue([]) });
     render(<QueryDatabase block={block} update={update} />);
+    fireEvent.click(await screen.findByTitle("Switch Database View"));
     fireEvent.click(await screen.findByText("Board"));
     expect(update).toHaveBeenCalledWith({ view: "board" });
   });

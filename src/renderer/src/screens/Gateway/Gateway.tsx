@@ -15,6 +15,7 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
   >({});
   const [savedKey, setSavedKey] = useState<string | null>(null);
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set());
+  const [keychainKeys, setKeychainKeys] = useState<Set<string>>(new Set());
   const gatewayStatusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -45,6 +46,8 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
   const loadConfig = useCallback(async (): Promise<void> => {
     const envData = await window.hermesAPI.getEnv(profile);
     setEnv(envData);
+    const keys = await window.hermesAPI.getKeychainKeys(profile);
+    setKeychainKeys(new Set(keys));
     const gwStatus = await window.hermesAPI.gatewayStatus();
     setGatewayRunning(gwStatus);
     const platforms = await window.hermesAPI.getPlatformEnabled(profile);
@@ -170,6 +173,8 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
     const value = env[key] || "";
     await window.hermesAPI.setEnv(key, value, profile);
     setSavedKey(key);
+    const keys = await window.hermesAPI.getKeychainKeys(profile);
+    setKeychainKeys(new Set(keys));
     setTimeout(() => setSavedKey(null), 2000);
   }
 
@@ -229,10 +234,7 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
             </div>
           )}
           {gatewayHealth === "down" && (
-            <div
-              className="settings-field-hint"
-              style={{ color: "var(--danger, #d33)" }}
-            >
+            <div className="settings-field-hint settings-field-error">
               {t("gateway.healthDown")}
             </div>
           )}
@@ -251,6 +253,7 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
             env={env}
             savedKey={savedKey}
             visibleKeys={visibleKeys}
+            keychainKeys={keychainKeys}
             t={t}
             onToggle={togglePlatform}
             onChange={handleChange}
@@ -279,6 +282,23 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
                 {savedKey === field.key && (
                   <span className="settings-saved">{t("common.saved")}</span>
                 )}
+                {field.type === "password" &&
+                  env[field.key] &&
+                  (keychainKeys.has(field.key) ? (
+                    <span
+                      className="settings-secured-badge"
+                      title="Stored securely in your operating system's native keychain (macOS Keychain, Windows Credential Manager, or GNOME Keyring)"
+                    >
+                      🔒 Secured in OS Keychain
+                    </span>
+                  ) : (
+                    <span
+                      className="settings-warning-badge"
+                      title="Saved as plain text in your profile's .env file. Enter your system password if prompted to store it in the Keychain."
+                    >
+                      ⚠️ Saved as plain text (.env)
+                    </span>
+                  ))}
               </label>
               <div className="settings-input-row">
                 <input
@@ -316,88 +336,43 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
           Gateway Access Control & Pairing
         </div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-            gap: "24px",
-            marginBottom: pairingOutput ? 16 : 0,
-          }}
-        >
+        <div className={`gateway-pairing-grid ${pairingOutput ? "mb-16" : ""}`}>
           {/* Active / Pending Pairings list */}
-          <div
-            style={{ display: "flex", flexDirection: "column", gap: "10px" }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <span className="settings-field-label" style={{ margin: 0 }}>
+          <div className="gateway-flex-col-10">
+            <div className="gateway-flex-between">
+              <span className="settings-field-label no-margin">
                 Paired Devices & Requests
               </span>
               <button
-                className="btn btn-secondary btn-sm"
+                className="btn btn-secondary btn-sm gateway-btn-small"
                 onClick={loadPairings}
                 disabled={pairingsLoading}
-                style={{ padding: "2px 8px", fontSize: 11 }}
               >
                 Refresh List
               </button>
             </div>
             {pairingsLoading ? (
-              <div
-                className="settings-loading"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  padding: "12px 0",
-                }}
-              >
-                <div
-                  className="loading-spinner"
-                  style={{
-                    width: 14,
-                    height: 14,
-                    border: "2px solid rgba(127,127,127,0.2)",
-                    borderTopColor: "var(--accent)",
-                    borderRadius: "50%",
-                    animation: "spin 1s linear infinite",
-                  }}
-                />
+              <div className="settings-loading gateway-loading">
+                <div className="loading-spinner gateway-spinner" />
                 <span className="settings-field-hint">Loading pairings...</span>
               </div>
             ) : (
-              <pre
-                className="settings-hermes-doctor"
-                style={{
-                  maxHeight: 200,
-                  overflowY: "auto",
-                  fontSize: 11,
-                  margin: 0,
-                }}
-              >
+              <pre className="settings-hermes-doctor gateway-pre-pairings">
                 {pairingsList || "No pairings or requests found."}
               </pre>
             )}
             <button
-              className="btn btn-secondary btn-sm"
+              className="btn btn-secondary btn-sm align-start"
               onClick={handleClearPendingPairings}
               disabled={pairingActioning}
-              style={{ alignSelf: "flex-start" }}
             >
               Clear All Pending Requests
             </button>
           </div>
 
           {/* Action inputs */}
-          <div
-            style={{ display: "flex", flexDirection: "column", gap: "16px" }}
-          >
-            <div className="settings-field" style={{ margin: 0 }}>
+          <div className="gateway-flex-col-16">
+            <div className="settings-field no-margin">
               <label className="settings-field-label">
                 Approve Pairing Code
               </label>
@@ -424,7 +399,7 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
               </div>
             </div>
 
-            <div className="settings-field" style={{ margin: 0 }}>
+            <div className="settings-field no-margin">
               <label className="settings-field-label">
                 Revoke Client/User ID
               </label>
@@ -452,17 +427,9 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
         </div>
 
         {pairingOutput && (
-          <div style={{ marginTop: 16 }}>
+          <div className="mt-16">
             <div className="settings-field-label">Action Log</div>
-            <pre
-              className="settings-hermes-doctor"
-              style={{
-                maxHeight: 150,
-                overflowY: "auto",
-                fontSize: 11,
-                margin: 0,
-              }}
-            >
+            <pre className="settings-hermes-doctor gateway-pre-log">
               {pairingOutput}
             </pre>
           </div>

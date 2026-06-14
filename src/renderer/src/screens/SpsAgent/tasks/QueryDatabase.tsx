@@ -46,6 +46,8 @@ export function QueryDatabase({ block, update }: Props) {
   const [drag, setDrag] = useState<string | null>(null);
   const [dropCol, setDropCol] = useState<StatusKey | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [viewMenuOpen, setViewMenuOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
 
   const setOpenTask = useStore((s) => s.setOpenTask);
 
@@ -161,33 +163,75 @@ export function QueryDatabase({ block, update }: Props) {
   return (
     <div className="qdb" contentEditable={false}>
       <div className="db-head">
-        {VIEWS.map(([v, label, icon]) => (
-          <div
-            key={v}
-            className={`db-tab ${view === v ? "active" : ""}`}
-            onClick={() => update?.({ view: v })}
+        {/* View Switcher Dropdown */}
+        <div className="db-view-dropdown-container">
+          <button
+            type="button"
+            className="db-tool db-view-dropdown-btn"
+            onClick={() => setViewMenuOpen(!viewMenuOpen)}
+            title="Switch Database View"
           >
-            <Icon name={icon} size={15} /> {label}
-          </div>
-        ))}
-        <div className="db-spacer"></div>
-        <div
-          className="db-tool"
-          onClick={() =>
-            update?.({
-              kanbanPreset: kanbanPreset === "standard" ? "personal" : "standard",
-            })
-          }
-          title="Toggle Layout Preset"
-        >
-          <Icon name="board" size={14} /> Preset: {kanbanPreset === "personal" ? "Personal" : "Standard"}
+            <Icon name={VIEWS.find(([v]) => v === view)?.[2] || VIEWS[0][2]} size={15} />
+            <span>{VIEWS.find(([v]) => v === view)?.[1] || VIEWS[0][1]} View</span>
+            <span className="db-view-chevron">▾</span>
+          </button>
+          {viewMenuOpen && (
+            <div className="db-template-menu left-align" onMouseLeave={() => setViewMenuOpen(false)}>
+              {VIEWS.map(([v, label, icon]) => (
+                <div
+                  key={v}
+                  className={`db-template-item ${view === v ? "active" : ""}`}
+                  onClick={() => {
+                    update?.({ view: v });
+                    setViewMenuOpen(false);
+                  }}
+                >
+                  <Icon name={icon} size={15} />
+                  <span>{label}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-        <div
-          className="db-tool"
-          onClick={() => void weeklyReset()}
-          title="Archive/Delete Done tasks"
-        >
-          <Icon name="x" size={14} /> Weekly Reset
+
+        <div className="db-spacer"></div>
+
+        {/* More Options Dropdown */}
+        <div className="db-more-dropdown-container">
+          <button
+            type="button"
+            className="db-tool"
+            onClick={() => setMoreMenuOpen(!moreMenuOpen)}
+            title="More Options"
+          >
+            <Icon name="dots" size={15} />
+          </button>
+          {moreMenuOpen && (
+            <div className="db-template-menu right-align" onMouseLeave={() => setMoreMenuOpen(false)}>
+              <div
+                className="db-template-item"
+                onClick={() => {
+                  update?.({
+                    kanbanPreset: kanbanPreset === "standard" ? "personal" : "standard",
+                  });
+                  setMoreMenuOpen(false);
+                }}
+              >
+                <Icon name="board" size={14} />
+                <span>Layout: {kanbanPreset === "personal" ? "Personal" : "Standard"}</span>
+              </div>
+              <div
+                className="db-template-item"
+                onClick={() => {
+                  void weeklyReset();
+                  setMoreMenuOpen(false);
+                }}
+              >
+                <Icon name="x" size={14} />
+                <span>Weekly Reset</span>
+              </div>
+            </div>
+          )}
         </div>
         <div className="db-new-btn-group">
           <button className="db-tool db-new-btn-main" onClick={() => addRow()}>

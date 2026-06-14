@@ -5,6 +5,8 @@
 // and stays gone. Renders nothing once dismissed.
 import { useState } from "react";
 import { useStore } from "../store";
+import { Icon } from "./Icon";
+import type { IconName } from "./iconPaths";
 
 const DISMISS_KEY = "hermes_sps_onboarding_checklist_dismissed";
 
@@ -36,6 +38,7 @@ export function OnboardingChecklist(): React.JSX.Element | null {
     {
       n: 1,
       title: "Capture",
+      icon: "inbox" as IconName,
       desc: "Drop a note, link, or idea into your Inbox.",
       cta: "Open Inbox",
       onClick: () => setSurface("inbox"),
@@ -43,6 +46,7 @@ export function OnboardingChecklist(): React.JSX.Element | null {
     {
       n: 2,
       title: "Ingest",
+      icon: "sparkle" as IconName,
       desc: "Let My Assistant file it into the right page.",
       cta: "Process Inbox",
       onClick: () => setSurface("inbox"),
@@ -50,6 +54,7 @@ export function OnboardingChecklist(): React.JSX.Element | null {
     {
       n: 3,
       title: "Search",
+      icon: "search" as IconName,
       desc: "Find anything later — notes, tasks, and chats together.",
       cta: "Search (⌘K)",
       onClick: () => setPaletteOpen(true),
@@ -67,21 +72,29 @@ export function OnboardingChecklist(): React.JSX.Element | null {
           aria-label="Dismiss getting started"
           title="Dismiss"
         >
-          ×
+          <Icon name="x" size={14} />
         </button>
       </div>
       <div className="ob-checklist-steps">
         {steps.map((s) => (
-          <div key={s.n} className="ob-step">
-            <span className="ob-step-num">{s.n}</span>
+          <div key={s.n} className="ob-step-card" onClick={s.onClick}>
+            <div className="ob-step-header">
+              <span className="ob-step-badge">Step {s.n}</span>
+              <div className="ob-step-icon-wrap">
+                <Icon name={s.icon} size={16} />
+              </div>
+            </div>
             <div className="ob-step-body">
               <div className="ob-step-title">{s.title}</div>
               <div className="ob-step-desc">{s.desc}</div>
             </div>
             <button
               type="button"
-              className="cover-btn ob-step-cta"
-              onClick={s.onClick}
+              className="ob-step-action"
+              onClick={(e) => {
+                e.stopPropagation();
+                s.onClick();
+              }}
             >
               {s.cta}
             </button>

@@ -166,6 +166,7 @@ interface HermesAPI {
 
   // Configuration (profile-aware)
   getEnv: (profile?: string) => Promise<Record<string, string>>;
+  getKeychainKeys: (profile?: string) => Promise<string[]>;
   setEnv: (key: string, value: string, profile?: string) => Promise<boolean>;
   setProviderKey: (
     provider: string,

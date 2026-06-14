@@ -132,7 +132,15 @@ const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 // Wiki META pages (Karpathy LLM-Wiki): the LLM-maintained catalog, the
 // append-only evolution log, and the schema. They are intentionally link-free
 // bookkeeping artifacts, so orphan lint must skip them (relpaths, with ext).
-const WIKI_META_PAGES = new Set(["index.md", "log.md", "WIKI.md"]);
+const WIKI_META_PAGES = new Set([
+  "index.md",
+  "log.md",
+  "WIKI.md",
+  "home.md",
+  "Home.md",
+  "home",
+  "Home"
+]);
 
 export interface NoteRecord {
   path: string;

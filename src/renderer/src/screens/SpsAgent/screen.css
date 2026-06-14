@@ -571,41 +571,6 @@
   opacity: 0.75;
 }
 
-.sps-scope .ingest-tray {
-  display: flex;
-  gap: 6px;
-  padding: 4px 10px;
-  margin-bottom: 6px;
-}
-
-.sps-scope .ingest-btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 6px 8px;
-  background: var(--surface-sunk, rgba(127, 127, 127, 0.05));
-  border: 1px solid var(--hairline);
-  border-radius: 6px;
-  font-size: var(--fs-11, 11px);
-  font-family: inherit;
-  color: var(--ink-2);
-  cursor: pointer;
-  transition: all var(--dur-1) var(--ease-out);
-}
-
-.sps-scope .ingest-btn:hover {
-  background: var(--row-hover, rgba(127, 127, 127, 0.1));
-  border-color: var(--hairline-strong);
-  color: var(--ink-1);
-}
-
-.sps-scope .ingest-btn.active {
-  background: var(--sukhi-gold-light, rgba(230, 180, 50, 0.1));
-  border-color: var(--sukhi-gold-deep);
-  color: var(--ink-1);
-}
 
 .sps-scope .sps-main-layout {
   display: flex;
@@ -729,3 +694,33 @@
 .sps-scope .doc-title {
   flex: 1;
 }
+
+/* Inbox Surface Refactoring classes */
+.sps-scope .inbox-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+
+.sps-scope .inbox-no-changes-notice {
+  color: var(--ink-3);
+  font-size: 13px;
+}
+
+.sps-scope .inbox-source-capitalize {
+  text-transform: capitalize;
+}
+
+.sps-scope .inbox-card-action-btn {
+  padding: 4px !important;
+}
+
+.sps-scope .inbox-settings-error-text {
+  color: var(--danger-fg);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+

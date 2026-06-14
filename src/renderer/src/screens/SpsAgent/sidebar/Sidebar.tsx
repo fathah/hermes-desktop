@@ -41,11 +41,13 @@ function useIdentity(): Identity {
         const active = rows.find((r) => r.isActive) ?? rows[0];
         if (!active || cancelled) return;
         const name = active.name;
-        const pretty = name.charAt(0).toUpperCase() + name.slice(1);
+        const pretty = name === "default" ? "SPS Agent" : name.charAt(0).toUpperCase() + name.slice(1);
+        const user = name === "default" ? "Default" : pretty;
+        const initial = name === "default" ? "S" : pretty.charAt(0) || "H";
         setIdentity({
           workspace: pretty,
-          user: pretty,
-          initial: pretty.charAt(0) || "H",
+          user: user,
+          initial: initial,
         });
       })
       .catch(() => {
@@ -179,13 +181,25 @@ export function Sidebar() {
             <span className="nav-label">Graph View</span>
           </button>
 
-          {/* Quick Ingest Tray */}
-          <div className="ingest-tray">
+          {/* Inbox Navigation Row with hover-only PDF import trigger */}
+          <div className={`nav-item ${surface === "inbox" ? "active" : ""}`}>
             <button
               type="button"
-              className="ingest-btn"
+              className="nav-item-main"
+              onClick={() => setSurface("inbox")}
+            >
+              <Icon name="inbox" size={17} />
+              <span className="nav-label">
+                Inbox {inboxCount > 0 ? `(${inboxCount})` : ""}
+              </span>
+            </button>
+            <button
+              type="button"
+              className="nav-add"
               title="Import PDF"
-              onClick={async () => {
+              aria-label="Import PDF"
+              onClick={async (e) => {
+                e.stopPropagation();
                 try {
                   await importPdf();
                 } catch (err) {
@@ -193,19 +207,10 @@ export function Sidebar() {
                 }
               }}
             >
-              <Icon name="doc" size={13} />
-              <span>PDF</span>
-            </button>
-            <button
-              type="button"
-              className={`ingest-btn ${surface === "inbox" ? "active" : ""}`}
-              title="Inbox / Captures"
-              onClick={() => setSurface("inbox")}
-            >
-              <Icon name="inbox" size={13} />
-              <span>Inbox {inboxCount > 0 ? `(${inboxCount})` : ""}</span>
+              <Icon name="plus" size={14} />
             </button>
           </div>
+
 
           {/* Collapsible Sub-sections inside Library */}
           <SidebarSection id="recents" label="Recents">

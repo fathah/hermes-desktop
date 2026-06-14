@@ -9,6 +9,9 @@ export const configBridge = {
   getEnv: (profile?: string): Promise<Record<string, string>> =>
     ipcRenderer.invoke("get-env", profile),
 
+  getKeychainKeys: (profile?: string): Promise<string[]> =>
+    ipcRenderer.invoke("get-keychain-keys", profile),
+
   setEnv: (key: string, value: string, profile?: string): Promise<boolean> =>
     ipcRenderer.invoke("set-env", key, value, profile),
 

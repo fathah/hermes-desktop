@@ -9,6 +9,7 @@ type PlatformCardProps = {
   env: Record<string, string>;
   savedKey: string | null;
   visibleKeys: Set<string>;
+  keychainKeys: Set<string>;
   t: (key: string) => string;
   onToggle: (platform: string) => void;
   onChange: (key: string, value: string) => void;
@@ -24,6 +25,7 @@ function PlatformCard({
   env,
   savedKey,
   visibleKeys,
+  keychainKeys,
   t,
   onToggle,
   onChange,
@@ -48,6 +50,7 @@ function PlatformCard({
             type="checkbox"
             checked={enabled}
             onChange={() => onToggle(platform.key)}
+            title={t(platform.label)}
           />
           <span className="tools-toggle-track" />
         </label>
@@ -65,6 +68,23 @@ function PlatformCard({
                   {savedKey === field.key && (
                     <span className="settings-saved">{t("common.saved")}</span>
                   )}
+                  {field.type === "password" &&
+                    env[field.key] &&
+                    (keychainKeys.has(field.key) ? (
+                      <span
+                        className="settings-secured-badge"
+                        title="Stored securely in your operating system's native keychain (macOS Keychain, Windows Credential Manager, or GNOME Keyring)"
+                      >
+                        🔒 Secured in OS Keychain
+                      </span>
+                    ) : (
+                      <span
+                        className="settings-warning-badge"
+                        title="Saved as plain text in your profile's .env file. Enter your system password if prompted to store it in the Keychain."
+                      >
+                        ⚠️ Saved as plain text (.env)
+                      </span>
+                    ))}
                 </label>
                 <div className="settings-input-row">
                   <input

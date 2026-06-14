@@ -37,7 +37,7 @@ interface InboxSurfaceProps {
   profile?: string;
 }
 
-type Mode = "note" | "web";
+type Mode = "note" | "web" | "pdf";
 type Tab = "inbox" | "settings";
 
 interface ProposedPage {
@@ -82,6 +82,7 @@ export function InboxSurface({
   // Ingest review queue.
   const ingestCommitPage = useStore((s) => s.ingestCommitPage);
   const flash = useStore((s) => s.flash);
+  const importPdf = useStore((s) => s.importPdf);
   const [ingesting, setIngesting] = useState(false);
   const [changeset, setChangeset] = useState<Changeset | null>(null);
   const [skip, setSkip] = useState<Set<string>>(new Set());
@@ -381,7 +382,7 @@ export function InboxSurface({
 
   return (
     <div className="inbox-surface">
-      <header style={{ marginBottom: 8 }}>
+      <header className="inbox-header-mb">
         <h1 className="inbox-title">
           <Icon name="inbox" size={22} />
           Inbox
@@ -411,35 +412,42 @@ export function InboxSurface({
       {activeTab === "inbox" ? (
         <>
           <section className="inbox-section">
-            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+            <div className="inbox-flex-row-gap8-mb10">
               <button
-                className={`nav-item ${mode === "note" ? "active" : ""}`}
-                style={{ flex: "0 0 auto" }}
+                className={`nav-item inbox-flex-no-shrink ${mode === "note" ? "active" : ""}`}
                 onClick={() => setMode("note")}
               >
                 <Icon name="callout" size={15} />
                 <span className="nav-label">Quick note</span>
               </button>
               <button
-                className={`nav-item ${mode === "web" ? "active" : ""}`}
-                style={{ flex: "0 0 auto" }}
+                className={`nav-item inbox-flex-no-shrink ${mode === "web" ? "active" : ""}`}
                 onClick={() => setMode("web")}
               >
                 <Icon name="doc" size={15} />
                 <span className="nav-label">Web clip</span>
               </button>
+              <button
+                className={`nav-item inbox-flex-no-shrink ${mode === "pdf" ? "active" : ""}`}
+                onClick={() => setMode("pdf")}
+              >
+                <Icon name="file" size={15} />
+                <span className="nav-label">Import PDF</span>
+              </button>
             </div>
 
-            <input
-              className="inbox-input"
-              placeholder="Title (optional)"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
+            {mode !== "pdf" && (
+              <input
+                className="inbox-input"
+                placeholder="Title (optional)"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+            )}
 
             {mode === "note" ? (
               <textarea
-                className="inbox-textarea"
+                className="inbox-textarea inbox-textarea-resize"
                 placeholder="What's on your mind?  (⌘↵ to capture)"
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
@@ -448,9 +456,8 @@ export function InboxSurface({
                     captureNote();
                 }}
                 rows={4}
-                style={{ resize: "vertical" }}
               />
-            ) : (
+            ) : mode === "web" ? (
               <input
                 className="inbox-input"
                 placeholder="https://…  (↵ to clip)"
@@ -460,35 +467,47 @@ export function InboxSurface({
                   if (e.key === "Enter") captureWeb();
                 }}
               />
+            ) : (
+              <div className="inbox-pdf-dropzone">
+                <Icon name="doc" size={32} className="inbox-pdf-icon" />
+                <div className="inbox-pdf-desc">
+                  Import a local PDF to extract and ingest it as a wiki source page.
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={async () => {
+                    try {
+                      await importPdf();
+                    } catch (err) {
+                      console.error(err);
+                    }
+                  }}
+                >
+                  Choose PDF file
+                </button>
+              </div>
             )}
 
             {error && <div className="inbox-error">{error}</div>}
 
-            <div className="inbox-btn-group">
-              <button
-                className="btn btn-primary"
-                disabled={busy || !canCapture}
-                onClick={mode === "note" ? captureNote : captureWeb}
-              >
-                {busy ? "Capturing…" : "Capture"}
-              </button>
-            </div>
+            {mode !== "pdf" && (
+              <div className="inbox-btn-group">
+                <button
+                  className="btn btn-primary"
+                  disabled={busy || !canCapture}
+                  onClick={mode === "note" ? captureNote : captureWeb}
+                >
+                  {busy ? "Capturing…" : "Capture"}
+                </button>
+              </div>
+            )}
           </section>
 
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              marginBottom: 10,
-              color: "var(--ink-2)",
-              fontSize: 13,
-              fontWeight: 600,
-            }}
-          >
+          <div className="inbox-flex-align-center-gap8-mb10-bold">
             <span>Unprocessed</span>
             <span className="inbox-badge">{visible.length}</span>
-            <span style={{ flex: 1 }} />
+            <span className="flex-grow" />
             <button
               className="btn btn-primary btn-sm"
               disabled={ingesting || visible.length === 0}
@@ -499,24 +518,8 @@ export function InboxSurface({
             </button>
           </div>
 
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 16,
-              marginBottom: 16,
-              color: "var(--ink-3)",
-              fontSize: 12.5,
-            }}
-          >
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                cursor: "pointer",
-              }}
-            >
+          <div className="inbox-controls-row">
+            <label className="inbox-flex-align-center-gap6-pointer">
               <input
                 type="checkbox"
                 checked={autoApply}
@@ -527,21 +530,15 @@ export function InboxSurface({
               />
               Auto-apply (skip review)
             </label>
-            <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <label className="inbox-flex-align-center-gap6">
               Auto-process every
               <select
-                className="inbox-select"
+                className="inbox-select inbox-select-schedule"
                 value={intervalMin}
                 onChange={(e) => {
                   const m = Number(e.target.value);
                   setIngestIntervalMin(m);
                   setIntervalMin(m);
-                }}
-                style={{
-                  padding: "2px 6px",
-                  borderRadius: 4,
-                  margin: 0,
-                  width: "auto",
                 }}
               >
                 <option value={0}>Off</option>
@@ -551,7 +548,7 @@ export function InboxSurface({
               </select>
             </label>
             {intervalMin > 0 && !autoApply && (
-              <span style={{ color: "var(--ink-4)" }}>
+              <span className="inbox-schedule-hint">
                 enable auto-apply for scheduled runs to land
               </span>
             )}
@@ -565,7 +562,7 @@ export function InboxSurface({
                   "Review My Assistant's proposed wiki pages."}
               </div>
               {changeset.pages.length === 0 ? (
-                <div style={{ color: "var(--ink-3)", fontSize: 13 }}>
+                <div className="inbox-no-changes-notice">
                   No new pages — the captures will just be marked processed.
                 </div>
               ) : (
@@ -575,48 +572,24 @@ export function InboxSurface({
                     return (
                       <li
                         key={p.pageId}
-                        className="inbox-proposed-page"
-                        style={{ opacity: skipped ? 0.5 : 1 }}
+                        className={`inbox-proposed-page ${skipped ? "skipped" : ""}`}
                       >
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 8,
-                            marginBottom: 6,
-                          }}
-                        >
+                        <div className="inbox-flex-align-center-gap8-mb6">
                           <span className="inbox-card-badge">{p.op}</span>
                           <strong>{p.title}</strong>
-                          <span
-                            style={{
-                              fontSize: 11,
-                              color: "var(--ink-3)",
-                              fontFamily: "var(--font-mono)",
-                            }}
-                          >
+                          <span className="inbox-pageid-monospace">
                             [[{p.pageId}]]
                           </span>
-                          <span style={{ flex: 1 }} />
+                          <span className="flex-grow" />
                           <button
                             className="btn btn-ghost btn-sm"
                             onClick={() => toggleSkip(p.pageId)}
-                            style={{ padding: "2px 6px" }}
+                            title={skipped ? "Include this page" : "Skip this page"}
                           >
                             {skipped ? "Include" : "Skip"}
                           </button>
                         </div>
-                        <pre
-                          style={{
-                            margin: 0,
-                            whiteSpace: "pre-wrap",
-                            wordBreak: "break-word",
-                            fontSize: 12,
-                            color: "var(--ink-2)",
-                            maxHeight: 140,
-                            overflow: "auto",
-                          }}
-                        >
+                        <pre className="inbox-proposed-markdown-preview">
                           {p.markdown.slice(0, 600)}
                           {p.markdown.length > 600 ? "…" : ""}
                         </pre>
@@ -626,51 +599,29 @@ export function InboxSurface({
                 </ul>
               )}
               {changeset.memory.length > 0 && (
-                <div style={{ marginTop: 14 }}>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: "var(--ink-2)",
-                      marginBottom: 6,
-                    }}
-                  >
+                <div className="inbox-proposed-memories">
+                  <div className="inbox-proposed-memories-title">
                     Remember about you
                   </div>
-                  <ul
-                    style={{
-                      listStyle: "none",
-                      margin: 0,
-                      padding: 0,
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 6,
-                    }}
-                  >
+                  <ul className="inbox-proposed-memories-list">
                     {changeset.memory.map((fact, i) => {
-                      const skipped = skipMem.has(i);
-                      return (
-                        <li
-                          key={i}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 8,
-                            fontSize: 13,
-                            opacity: skipped ? 0.5 : 1,
-                          }}
-                        >
-                          <Icon name="wand" size={13} />
-                          <span style={{ flex: 1 }}>{fact}</span>
-                          <button
-                            className="btn btn-ghost btn-sm"
-                            onClick={() => toggleSkipMem(i)}
-                            style={{ padding: "2px 6px" }}
-                          >
-                            {skipped ? "Include" : "Skip"}
-                          </button>
-                        </li>
-                      );
+                       const skipped = skipMem.has(i);
+                       return (
+                         <li
+                           key={i}
+                           className={`inbox-proposed-memory-item ${skipped ? "skipped" : ""}`}
+                         >
+                           <Icon name="wand" size={13} />
+                           <span className="flex-grow">{fact}</span>
+                           <button
+                             className="btn btn-ghost btn-sm"
+                             onClick={() => toggleSkipMem(i)}
+                             title={skipped ? "Remember this fact" : "Skip this fact"}
+                           >
+                             {skipped ? "Include" : "Skip"}
+                           </button>
+                         </li>
+                       );
                     })}
                   </ul>
                 </div>
@@ -694,13 +645,7 @@ export function InboxSurface({
           )}
 
           {visible.length === 0 ? (
-            <div
-              style={{
-                color: "var(--ink-3)",
-                padding: "24px 0",
-                textAlign: "center",
-              }}
-            >
+            <div className="inbox-empty-notice">
               Nothing waiting. Captures you add land here.
             </div>
           ) : (
@@ -712,7 +657,7 @@ export function InboxSurface({
                       {String(row.props.title ?? "Untitled capture")}
                     </div>
                     <div className="inbox-card-meta">
-                      <span style={{ textTransform: "capitalize" }}>
+                      <span className="inbox-source-capitalize">
                         {String(row.props.source ?? "note")}
                       </span>
                       <span>·</span>
@@ -721,17 +666,15 @@ export function InboxSurface({
                   </div>
                   <button
                     title="Mark processed"
-                    className="btn btn-ghost btn-sm"
+                    className="btn btn-ghost btn-sm inbox-card-action-btn"
                     onClick={() => setStatus(row, "processed")}
-                    style={{ padding: 4 }}
                   >
                     <Icon name="check" size={15} />
                   </button>
                   <button
                     title="Discard"
-                    className="btn btn-ghost btn-sm"
+                    className="btn btn-ghost btn-sm inbox-card-action-btn"
                     onClick={() => setStatus(row, "discarded")}
-                    style={{ padding: 4 }}
                   >
                     <Icon name="trash" size={15} />
                   </button>
@@ -748,29 +691,13 @@ export function InboxSurface({
           </div>
 
           {settingsError && (
-            <div
-              style={{
-                color: "var(--danger-fg)",
-                fontSize: 13,
-                marginBottom: 8,
-              }}
-            >
+            <div className="inbox-settings-error-text">
               {settingsError}
             </div>
           )}
 
           {settingsSaved && (
-            <div
-              style={{
-                color: "var(--ok-fg)",
-                background: "var(--ok-bg)",
-                border: "1px solid var(--ok-border)",
-                padding: "6px 10px",
-                borderRadius: 4,
-                fontSize: 13,
-                marginBottom: 8,
-              }}
-            >
+            <div className="inbox-curation-saved-outcome">
               Settings saved successfully!
             </div>
           )}
@@ -779,12 +706,12 @@ export function InboxSurface({
             <label className="settings-field-label">
               Similarity Threshold ({threshold.toFixed(2)})
             </label>
-            <div className="settings-field-hint" style={{ marginBottom: 6 }}>
+            <div className="settings-field-hint inbox-settings-field-hint-mb6">
               Controls how similar articles must be to group into the same
               cluster. Higher threshold yields tighter groups with fewer, more
               distinct articles.
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div className="inbox-flex-align-center-gap12">
               <input
                 type="range"
                 min="0.10"
@@ -792,21 +719,22 @@ export function InboxSurface({
                 step="0.05"
                 value={threshold}
                 onChange={(e) => setThreshold(Number(e.target.value))}
-                style={{ flex: 1 }}
+                className="flex-grow"
+                title="Similarity Threshold Range"
               />
               <input
                 type="number"
                 min="0.10"
                 max="1.00"
                 step="0.05"
-                className="inbox-input"
+                className="inbox-input inbox-width-70-margin0"
                 value={threshold}
                 onChange={(e) =>
                   setThreshold(
                     Math.max(0.1, Math.min(1.0, Number(e.target.value))),
                   )
                 }
-                style={{ width: 70, margin: 0 }}
+                title="Similarity Threshold Value"
               />
             </div>
           </div>
@@ -829,7 +757,7 @@ export function InboxSurface({
 
           <div className="settings-field">
             <label className="settings-field-label">Synthesis LLM Model</label>
-            <div className="settings-field-hint" style={{ marginBottom: 6 }}>
+            <div className="settings-field-hint inbox-settings-field-hint-mb6">
               Model used to summarize clustered articles and write daily briefs.
             </div>
             <input
@@ -843,7 +771,7 @@ export function InboxSurface({
 
           <div className="settings-field">
             <label className="settings-field-label">TTS Auditory Voice</label>
-            <div className="settings-field-hint" style={{ marginBottom: 6 }}>
+            <div className="settings-field-hint inbox-settings-field-hint-mb6">
               Voice utilized by edge-tts for compiling the 2-minute Pimsleur
               audio drills.
             </div>
@@ -851,6 +779,7 @@ export function InboxSurface({
               className="inbox-select"
               value={voice}
               onChange={(e) => setVoice(e.target.value)}
+              title="TTS Auditory Voice Selection"
             >
               <option value="en-US-AriaNeural">
                 en-US-AriaNeural (US, Female)
@@ -874,7 +803,7 @@ export function InboxSurface({
             <label className="settings-field-label">
               Daily Digest Subfolder
             </label>
-            <div className="settings-field-hint" style={{ marginBottom: 6 }}>
+            <div className="settings-field-hint inbox-settings-field-hint-mb6">
               Folder inside your vault where daily briefs land (e.g.
               daily-digests).
             </div>
@@ -883,6 +812,7 @@ export function InboxSurface({
               className="inbox-input"
               value={digestPath}
               onChange={(e) => setDigestPath(e.target.value)}
+              title="Daily Digest Subfolder Path"
             />
           </div>
 
@@ -890,7 +820,7 @@ export function InboxSurface({
             <label className="settings-field-label">
               Flashcard Output File
             </label>
-            <div className="settings-field-hint" style={{ marginBottom: 6 }}>
+            <div className="settings-field-hint inbox-settings-field-hint-mb6">
               Path to the markdown file where cloze-deletion flashcards are
               appended.
             </div>
@@ -899,6 +829,7 @@ export function InboxSurface({
               className="inbox-input"
               value={flashcardPath}
               onChange={(e) => setFlashcardPath(e.target.value)}
+              title="Flashcard Output File Path"
             />
           </div>
 
@@ -906,7 +837,7 @@ export function InboxSurface({
             <label className="settings-field-label">
               Audio Loops Subfolder
             </label>
-            <div className="settings-field-hint" style={{ marginBottom: 6 }}>
+            <div className="settings-field-hint inbox-settings-field-hint-mb6">
               Folder where Pimsleur Q&A scripts and MP3 loops are written.
             </div>
             <input
@@ -914,12 +845,12 @@ export function InboxSurface({
               className="inbox-input"
               value={audioPath}
               onChange={(e) => setAudioPath(e.target.value)}
+              title="Audio Loops Subfolder Path"
             />
           </div>
 
           <div
-            className="inbox-btn-group"
-            style={{ borderTop: "1px solid var(--hairline)", paddingTop: 16 }}
+            className="inbox-btn-group inbox-settings-actions-btn-group"
           >
             <button
               className="btn btn-primary"
@@ -981,7 +912,7 @@ function PillEditor({
     <div className="settings-field">
       <label className="settings-field-label">{label}</label>
       {hint && (
-        <div className="settings-field-hint" style={{ marginBottom: 6 }}>
+        <div className="settings-field-hint inbox-settings-field-hint-mb6">
           {hint}
         </div>
       )}

@@ -1,8 +1,38 @@
 import { readFileSync, existsSync } from "fs";
+import { execFileSync } from "child_process";
+import { homedir } from "os";
 import { escapeRegex, profilePaths, safeWriteFile } from "../utils";
 import { getCached, setCache, invalidateCache } from "./cache";
+import {
+  HERMES_PYTHON,
+  HERMES_REPO,
+  HERMES_HOME,
+  hermesCliArgs,
+  getEnhancedPath,
+} from "../installer";
+import { HIDDEN_SUBPROCESS_OPTIONS } from "../process-options";
 
 const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+const SENSITIVE_ENV_KEYS = new Set([
+  "DISCORD_BOT_TOKEN",
+  "SLACK_BOT_TOKEN",
+  "SLACK_APP_TOKEN",
+  "WHATSAPP_API_TOKEN",
+  "WHATSAPP_CLOUD_ACCESS_TOKEN",
+  "WHATSAPP_CLOUD_APP_SECRET",
+  "WHATSAPP_CLOUD_VERIFY_TOKEN",
+  "MATRIX_ACCESS_TOKEN",
+  "MATTERMOST_TOKEN",
+  "EMAIL_PASSWORD",
+  "TWILIO_AUTH_TOKEN",
+  "BLUEBUBBLES_PASSWORD",
+  "DINGTALK_APP_SECRET",
+  "FEISHU_APP_SECRET",
+  "WECOM_SECRET",
+  "WEBHOOK_SECRET",
+  "HASS_TOKEN"
+]);
 
 export function readEnv(profile?: string): Record<string, string> {
   const cacheKey = `env:${profile || "default"}`;
@@ -30,6 +60,29 @@ export function readEnv(profile?: string): Record<string, string> {
       value = value.slice(1, -1);
     }
 
+    if (value === "__keychain__") {
+      try {
+        const activeProfile = profile || "default";
+        const args = hermesCliArgs(["config", "get-secret", activeProfile, key]);
+        const output = execFileSync(HERMES_PYTHON, args, {
+          cwd: HERMES_REPO,
+          env: {
+            ...process.env,
+            PATH: getEnhancedPath(),
+            HOME: homedir(),
+            HERMES_HOME,
+          },
+          stdio: "pipe",
+          timeout: 10000,
+          ...HIDDEN_SUBPROCESS_OPTIONS,
+        });
+        value = output.toString().trim();
+      } catch (err) {
+        console.error(`[Keychain] Failed to retrieve ${key} from OS Keychain:`, err);
+        value = "";
+      }
+    }
+
     result[key] = value;
   }
 
@@ -48,8 +101,31 @@ export function setEnvValue(
   invalidateCache(`env:${profile || "default"}`);
   if (key === "API_SERVER_KEY") invalidateCache("apiServerKey:");
 
+  let finalValue = value;
+  if (SENSITIVE_ENV_KEYS.has(key)) {
+    try {
+      const activeProfile = profile || "default";
+      const args = hermesCliArgs(["config", "set-secret", activeProfile, key, value]);
+      execFileSync(HERMES_PYTHON, args, {
+        cwd: HERMES_REPO,
+        env: {
+          ...process.env,
+          PATH: getEnhancedPath(),
+          HOME: homedir(),
+          HERMES_HOME,
+        },
+        stdio: "ignore",
+        timeout: 10000,
+        ...HIDDEN_SUBPROCESS_OPTIONS,
+      });
+      finalValue = "__keychain__";
+    } catch (err) {
+      console.error(`[Keychain] Failed to store ${key} in OS Keychain:`, err);
+    }
+  }
+
   if (!existsSync(envFile)) {
-    safeWriteFile(envFile, `${key}=${value}\n`);
+    safeWriteFile(envFile, `${key}=${finalValue}\n`);
     return;
   }
 
@@ -60,14 +136,14 @@ export function setEnvValue(
   for (let i = 0; i < lines.length; i++) {
     const trimmed = lines[i].trim();
     if (trimmed.match(new RegExp(`^#?\\s*${escapeRegex(key)}\\s*=`))) {
-      lines[i] = `${key}=${value}`;
+      lines[i] = `${key}=${finalValue}`;
       found = true;
       break;
     }
   }
 
   if (!found) {
-    lines.push(`${key}=${value}`);
+    lines.push(`${key}=${finalValue}`);
   }
 
   safeWriteFile(envFile, lines.join("\n"));
@@ -87,6 +163,41 @@ export function validateEnvEntry(key: string, value: string): void {
 
 export function getHermesHome(profile?: string): string {
   return profilePaths(profile).home;
+}
+
+export function getKeychainKeys(profile?: string): string[] {
+  const { envFile } = profilePaths(profile);
+  if (!existsSync(envFile)) return [];
+
+  try {
+    const content = readFileSync(envFile, "utf-8");
+    const keychainKeys: string[] = [];
+
+    for (const line of content.split("\n")) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith("#") || !trimmed.includes("=")) continue;
+
+      const eqIndex = trimmed.indexOf("=");
+      const key = trimmed.substring(0, eqIndex).trim();
+      let value = trimmed.substring(eqIndex + 1).trim();
+
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+
+      if (value === "__keychain__") {
+        keychainKeys.push(key);
+      }
+    }
+
+    return keychainKeys;
+  } catch (err) {
+    console.error(`[Keychain] Failed to read ${envFile} to resolve keychain keys:`, err);
+    return [];
+  }
 }
 
 // MED-2: the only providers the AI co-author's "config" action may set keys for.

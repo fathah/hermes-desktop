@@ -5625,6 +5625,34 @@ body {
   animation: fadeInOut 2s ease forwards;
 }
 
+.settings-secured-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--success, #10b981);
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 8px;
+}
+
+.settings-warning-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--warning, #f59e0b);
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 8px;
+}
+
 @keyframes fadeInOut {
   0% {
     opacity: 0;
@@ -9548,4 +9576,276 @@ body {
   gap: 8px;
   flex-wrap: wrap;
 }
+
+/* ---- Gateway styling fixes (no-inline-styles) ---- */
+.settings-field-hint.settings-field-error {
+  color: var(--danger, #d33);
+}
+.gateway-pairing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 24px;
+}
+.gateway-pairing-grid.mb-16 {
+  margin-bottom: 16px;
+}
+.gateway-flex-col-10 {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.gateway-flex-between {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.settings-field-label.no-margin {
+  margin: 0;
+}
+.gateway-btn-small {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+.settings-loading.gateway-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0;
+}
+.gateway-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(127,127,127,0.2);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+.gateway-pre-pairings {
+  max-height: 200px;
+  overflow-y: auto;
+  font-size: 11px;
+  margin: 0;
+}
+.align-start {
+  align-self: flex-start;
+}
+.gateway-flex-col-16 {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.settings-field.no-margin {
+  margin: 0;
+}
+.mt-16 {
+  margin-top: 16px;
+}
+.gateway-pre-log {
+  max-height: 150px;
+  overflow-y: auto;
+  font-size: 11px;
+  margin: 0;
+}
+
+/* ---- InboxSurface styling fixes (no-inline-styles) ---- */
+.inbox-header-mb {
+  margin-bottom: 8px;
+}
+.inbox-flex-row-gap8-mb10 {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.inbox-flex-no-shrink {
+  flex: 0 0 auto;
+}
+.inbox-textarea-resize {
+  resize: vertical;
+}
+.inbox-flex-align-center-gap8-mb10-bold {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 600;
+}
+.inbox-pdf-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  border: 1px dashed var(--hair);
+  border-radius: 8px;
+  background: var(--surface-sunk, rgba(127, 127, 127, 0.02));
+  text-align: center;
+  gap: 12px;
+}
+.inbox-pdf-icon {
+  color: var(--tx-3);
+}
+.inbox-pdf-desc {
+  font-size: 13.5px;
+  color: var(--tx-2);
+}
+.inbox-flex-align-center-gap16-mb16-fs12 {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+.inbox-flex-align-center-gap6-pointer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.inbox-flex-align-center-gap6 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.inbox-select-schedule {
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin: 0;
+  width: auto;
+}
+.inbox-schedule-hint {
+  color: var(--ink-4);
+}
+.inbox-no-pages-hint {
+  color: var(--ink-3);
+  font-size: 13px;
+}
+.inbox-flex-align-center-gap8-mb6 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.inbox-pageid-monospace {
+  font-size: 11px;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+}
+.inbox-proposed-page-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.inbox-proposed-actions-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.inbox-proposed-review-card {
+  padding: 10px 12px;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  margin-bottom: 8px;
+}
+.inbox-proposed-preview {
+  margin: 8px 0 0;
+  padding: 8px;
+  background: var(--canvas);
+  border-radius: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.inbox-curation-settings-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.inbox-curation-settings-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.inbox-curation-saved-outcome {
+  color: var(--ok-fg);
+  background: var(--ok-bg);
+  border: 1px solid var(--ok-border);
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+.inbox-curation-error-outcome {
+  color: var(--danger-fg);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+.inbox-settings-field-hint-mb6 {
+  margin-bottom: 6px;
+}
+.inbox-flex-align-center-gap12 {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.inbox-width-70-margin0 {
+  width: 70px;
+  margin: 0;
+}
+.inbox-settings-actions-btn-group {
+  border-top: 1px solid var(--hairline);
+  padding-top: 16px;
+}
+.inbox-proposed-markdown-preview {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  color: var(--ink-2);
+  max-height: 140px;
+  overflow: auto;
+}
+.inbox-proposed-memories-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+  margin-bottom: 6px;
+}
+.inbox-proposed-memories-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.inbox-proposed-memory-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.inbox-proposed-memory-item.skipped {
+  opacity: 0.5;
+}
+.inbox-empty-notice {
+  color: var(--ink-3);
+  padding: 24px 0;
+  text-align: center;
+}
+.inbox-proposed-page.skipped {
+  opacity: 0.5;
+}
+
+
 

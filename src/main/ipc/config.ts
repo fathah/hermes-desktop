@@ -2,6 +2,7 @@ import { clipboard, shell } from "electron";
 import { safeHandle } from "./safe-handle";
 import {
   readEnv,
+  getKeychainKeys,
   setEnvValue,
   resolveProviderEnvKey,
   getConfigValue,
@@ -113,6 +114,11 @@ function openExternalUrl(rawUrl: unknown): void {
 export function registerConfigIpc(): void {
   // Env
   registerDualHandler("get-env", readEnv, sshReadEnv);
+  registerDualHandler(
+    "get-keychain-keys",
+    (profile?: string) => getKeychainKeys(profile),
+    async (_ssh, _profile?: string) => []
+  );
 
   registerDualHandler(
     "set-env",

@@ -17,6 +17,8 @@ export function Topbar() {
   const setTemplatesOpen = useStore((s) => s.setTemplatesOpen);
   const setCoverPick = useStore((s) => s.setCoverPick);
 
+  const setPaletteOpen = useStore((s) => s.setPaletteOpen);
+
   return (
     <div className="topbar">
       {sidebar === "hidden" && (
@@ -29,6 +31,16 @@ export function Topbar() {
         </button>
       )}
       <Breadcrumbs />
+      <button
+        type="button"
+        className="tb-search-btn"
+        onClick={() => setPaletteOpen(true)}
+        title="Search notes, tasks, and chats (⌘K)"
+      >
+        <Icon name="search" size={13} />
+        <span className="tb-search-label">Search...</span>
+        <kbd className="tb-search-kbd">⌘K</kbd>
+      </button>
       <PageMenu
         onTemplate={() => setTemplatesOpen({ parent: page })}
         onDelete={() => deletePage(page)}
