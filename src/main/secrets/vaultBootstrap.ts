@@ -137,7 +137,11 @@ function tryExecAsync(
 /** Is a binary on PATH? Uses `command -v` via /bin/sh (POSIX). */
 function hasBinary(name: string): boolean {
   if (process.platform === "win32") return false; // POSIX-only feature for now
-  const r = tryExec("/bin/sh", ["-c", `command -v ${name}`]);
+  // shellQuote the name even though all current callers pass hardcoded literals:
+  // the value is interpolated into a /bin/sh -c string, so quoting closes the
+  // injection surface for any future caller that passes dynamic input
+  // (Greptile P2 / security on PR #673).
+  const r = tryExec("/bin/sh", ["-c", `command -v ${shellQuote(name)}`]);
   return r != null && r !== "";
 }
 
@@ -170,8 +174,11 @@ export function resolveKeepassxcCli(): string | null {
 export function keepassxcIsSnap(cli: string): boolean {
   if (process.platform === "win32") return false;
   // `command -v` gives the PATH entry; readlink -f gives the real target.
-  const real = tryExec("/bin/sh", ["-c", `readlink -f "$(command -v ${cli})"`]);
-  const where = tryExec("/bin/sh", ["-c", `command -v ${cli}`]);
+  // shellQuote the cli name to close the /bin/sh -c injection surface for any
+  // future dynamic caller (Greptile P2 / security on PR #673).
+  const q = shellQuote(cli);
+  const real = tryExec("/bin/sh", ["-c", `readlink -f "$(command -v ${q})"`]);
+  const where = tryExec("/bin/sh", ["-c", `command -v ${q}`]);
   return (
     (real != null && real.includes("/snap")) ||
     (where != null && where.includes("/snap"))
@@ -252,6 +259,12 @@ export function detectExistingVault(): DetectResult {
   }
 
   // 2. a vault file on disk — legacy convention first, then app default.
+  // Resolve the snap-aware CLI name ONCE so the suggested read command works on
+  // snap-only systems (binary is `keepassxc.cli`, not `keepassxc-cli`). Mirrors
+  // createVault, which already uses the resolved name. Fall back to the apt name
+  // for display when no CLI is installed yet (the user still needs to install
+  // one; the suggestion names the conventional binary). Greptile P1 on PR #673.
+  const detectCli = resolveKeepassxcCli() ?? "keepassxc-cli";
   for (const cand of [legacyVaultPaths(), defaultVaultPaths()]) {
     if (existsSync(cand.vaultPath)) {
       const keyPath = existsSync(cand.keyPath) ? cand.keyPath : undefined;
@@ -262,7 +275,7 @@ export function detectExistingVault(): DetectResult {
         keyPath,
         // A keepassxc read command parameterized by the resolved paths.
         suggestedCommand: keyPath
-          ? `keepassxc-cli show -q -s -a Password --no-password -k ${shellQuote(keyPath)} ${shellQuote(cand.vaultPath)} "$HERMES_SECRET_KEY"`
+          ? `${detectCli} show -q -s -a Password --no-password -k ${shellQuote(keyPath)} ${shellQuote(cand.vaultPath)} "$HERMES_SECRET_KEY"`
           : undefined,
       };
     }
