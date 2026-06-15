@@ -223,16 +223,23 @@ describe("A5: bootstrap API never throws on any environment (contract invariant)
     if (!t.keepassxc) expect(t.keepassxcHint).toMatch(/install/i);
   });
 
-  it("createVault degrades to {ok:false} (never throws) for a non-writable target dir", () => {
+  it("createVault degrades to {ok:false} (never throws) for a non-writable target dir", async () => {
     // Point at a path under a file (not a dir) so mkdir/create cannot succeed —
     // the function must catch and return a coarse error, not propagate.
+    // createVault is async (AIR-016: db-create runs off the main thread); assert
+    // it RESOLVES (does not reject) to the coarse failure.
     const fileNotDir = join(scratch, "iam-a-file");
     writeFileSync(fileNotDir, "x");
     const vaultPath = join(fileNotDir, "nested", "secrets.kdbx");
-    let result: ReturnType<typeof createVault> | undefined;
-    expect(() => {
-      result = createVault({ vaultPath, keyPath: join(fileNotDir, "n.key") });
-    }).not.toThrow();
+    let result: Awaited<ReturnType<typeof createVault>> | undefined;
+    await expect(
+      (async () => {
+        result = await createVault({
+          vaultPath,
+          keyPath: join(fileNotDir, "n.key"),
+        });
+      })(),
+    ).resolves.toBeUndefined();
     expect(result!.ok).toBe(false);
     expect(typeof result!.error).toBe("string");
   });

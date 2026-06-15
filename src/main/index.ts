@@ -1167,7 +1167,9 @@ function setupIPC(): void {
     "vault-create",
     async (_event, opts?: { vaultPath?: string; keyPath?: string }) => {
       const { createVault } = await import("./secrets/vaultBootstrap");
-      return createVault(opts);
+      // AIR-016: createVault is async (db-create can block seconds); await it so
+      // the main thread stays free while the vault is created.
+      return await createVault(opts);
     },
   );
 

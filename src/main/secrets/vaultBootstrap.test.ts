@@ -334,12 +334,12 @@ describe("createVault — fail-safe branch ordering (family 8: state/ordering)",
   // depends only on whether keepassxc-cli is actually installed here.
   const cliPresent = resolveKeepassxcCli() !== null;
 
-  it("never clobbers an existing vault and never leaves a half-created artifact", () => {
+  it("never clobbers an existing vault and never leaves a half-created artifact", async () => {
     const vaultPath = join(scratch, "existing.kdbx");
     const keyPath = join(scratch, "k.key");
     writeFileSync(vaultPath, "pretend-this-is-a-real-kdbx");
     const before = readFileSync(vaultPath, "utf-8");
-    const r = createVault({ vaultPath, keyPath });
+    const r = await createVault({ vaultPath, keyPath });
     // Whatever the host: the call FAILS (vault exists OR no CLI), and crucially
     // the pre-existing vault is byte-for-byte untouched and no key was minted.
     expect(r.ok).toBe(false);
@@ -350,7 +350,7 @@ describe("createVault — fail-safe branch ordering (family 8: state/ordering)",
     expect(existsSync(keyPath)).toBe(false);
   });
 
-  it("on a host WITHOUT keepassxc-cli, fails closed with no fs side-effect", () => {
+  it("on a host WITHOUT keepassxc-cli, fails closed with no fs side-effect", async () => {
     if (cliPresent) {
       // Can't force CLI-absent via spy (same-module binding); skip honestly
       // rather than assert a path this host can't reach.
@@ -358,7 +358,7 @@ describe("createVault — fail-safe branch ordering (family 8: state/ordering)",
     }
     const vaultPath = join(scratch, "should-not-be-created.kdbx");
     const keyPath = join(scratch, "x.key");
-    const r = createVault({ vaultPath, keyPath });
+    const r = await createVault({ vaultPath, keyPath });
     expect(r.ok).toBe(false);
     expect(r.error).toBe("keepassxc-cli-not-installed");
     expect(existsSync(vaultPath)).toBe(false);

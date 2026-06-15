@@ -290,10 +290,10 @@ function shellQuote(s: string): string {
  *
  * Never logs the key-file contents. Never throws — returns { ok:false, error }.
  */
-export function createVault(opts?: {
+export async function createVault(opts?: {
   vaultPath?: string;
   keyPath?: string;
-}): CreateVaultResult {
+}): Promise<CreateVaultResult> {
   const cli = resolveKeepassxcCli();
   if (!cli) {
     return { ok: false, error: "keepassxc-cli-not-installed" };
@@ -321,7 +321,10 @@ export function createVault(opts?: {
     //    db-create fail with "Loading the key file failed".) So we must NOT
     //    pre-write the key; we let the CLI own its creation, then lock it down.
     //    `cli` is the resolved name (keepassxc-cli OR snap's keepassxc.cli).
-    const created = tryExec(cli, [
+    //    AIR-016: db-create can take seconds (snap-confined CLI, slow disk) — run
+    //    it ASYNC so the Electron main thread is not frozen during creation; the
+    //    IPC handler awaits. Same class as the TPM-seal wedge.
+    const created = await tryExecAsync(cli, [
       "db-create",
       "-q",
       "--set-key-file",
