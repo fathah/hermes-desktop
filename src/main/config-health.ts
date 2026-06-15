@@ -20,6 +20,7 @@ import {
   appendConfigFixLog,
   customEndpointKeyResolvable,
   getConfigValue,
+  getConnectionConfig,
   getModelConfig,
   hasOAuthCredentials,
   maskKey,
@@ -167,7 +168,31 @@ export function autoFixIssue(
  * warning would push the user to write the key back into .env, which
  * defeats the point of vault-only mode.
  */
+/**
+ * Local key-presence checks (API_SERVER_KEY, active-model key) are only
+ * meaningful when this desktop is the thing that talks to the model — i.e.
+ * local connection mode. In remote/SSH mode the keys live on the *remote*
+ * hermes-agent gateway; the desktop only needs its connection credential
+ * (remoteApiKey / SSH creds) to reach it, which the connection screen
+ * validates separately. Auditing the local .env / provider for model keys in
+ * those modes produces false EMPTY_API_SERVER_KEY / MODEL_KEY_MISSING warnings
+ * for every remote/vault-only user. checkInstallStatus() already short-circuits
+ * on remote mode; the key-presence checks must mirror that.
+ */
+function keysAreRemoteResponsibility(): boolean {
+  try {
+    const conn = getConnectionConfig();
+    if (conn.mode === "remote" && conn.remoteUrl) return true;
+    if (conn.mode === "ssh") return true;
+  } catch {
+    // Fall through — if we can't read connection config, audit locally.
+  }
+  return false;
+}
+
 function checkApiServerKeyPlacement(profile?: string): ConfigHealthIssue[] {
+  // Remote/SSH: the gateway owns API_SERVER_KEY, not this desktop. Skip.
+  if (keysAreRemoteResponsibility()) return [];
   const issues: ConfigHealthIssue[] = [];
   const { envFile, configFile } = profilePaths(profile);
 
@@ -257,6 +282,37 @@ function checkApiServerKeyPlacement(profile?: string): ConfigHealthIssue[] {
 }
 
 /**
+ * Accepted-alias map for provider key NAMES. A vault/gateway may store a
+ * provider credential under a name that differs from the desktop's canonical
+ * `<VENDOR>_API_KEY`. Anthropic is the load-bearing case: the gateway and many
+ * vault setups use `ANTHROPIC_TOKEN`, while the desktop's url-key-map expects
+ * `ANTHROPIC_API_KEY`. Both authenticate against Anthropic, so detection must
+ * treat them as equivalent — otherwise a vault-only user with `ANTHROPIC_TOKEN`
+ * sees a false "ANTHROPIC_API_KEY is not set" warning even though the gateway
+ * authenticates fine. Add other vendor aliases here as they come up.
+ */
+const KEY_ALIASES: Record<string, string[]> = {
+  ANTHROPIC_API_KEY: ["ANTHROPIC_TOKEN"],
+};
+
+/**
+ * Is `expectedKey` (or any accepted alias of it) present and non-empty in the
+ * resolved secret map? This is the alias-aware replacement for a bare
+ * `(resolved[expectedKey] ?? "").trim()` lookup, so the install gate recognizes
+ * a vault credential stored under an alternate-but-equivalent name.
+ */
+function resolvedHasKey(
+  resolved: Record<string, string>,
+  expectedKey: string,
+): boolean {
+  if ((resolved[expectedKey] ?? "").trim()) return true;
+  for (const alias of KEY_ALIASES[expectedKey] ?? []) {
+    if ((resolved[alias] ?? "").trim()) return true;
+  }
+  return false;
+}
+
+/**
  * Active model is configured but its expected provider key isn't in
  * .env. This is the *most likely* cause of chat 401s — the user has
  * picked a model in the GUI but their key isn't where the gateway
@@ -268,6 +324,8 @@ function checkApiServerKeyPlacement(profile?: string): ConfigHealthIssue[] {
  * authoritative "is the key configured?" view.
  */
 function checkActiveModelKeyPresence(profile?: string): ConfigHealthIssue[] {
+  // Remote/SSH: the model key lives on the remote gateway, not this desktop. Skip.
+  if (keysAreRemoteResponsibility()) return [];
   const mc = getModelConfig(profile);
   if (!mc.provider || mc.provider === "auto") return [];
   if (!mc.model) return [];
@@ -284,9 +342,10 @@ function checkActiveModelKeyPresence(profile?: string): ConfigHealthIssue[] {
   // Vault check: a `command` provider (or env-injecting vault) with this
   // key configured satisfies the requirement — don't warn. This is the
   // fix for the false "NANO_GPT_API_KEY is not set in .env" warning that
-  // a vault-only user would otherwise see on every chat start.
+  // a vault-only user would otherwise see on every chat start. Alias-aware:
+  // a vault that stores ANTHROPIC_TOKEN satisfies an ANTHROPIC_API_KEY check.
   const resolved = resolvedSecretMap(profile);
-  if ((resolved[expectedKey] ?? "").trim()) return [];
+  if (resolvedHasKey(resolved, expectedKey)) return [];
 
   // OpenAI-compatible / custom endpoints resolve their key from a fallback
   // chain (URL key → CUSTOM_PROVIDER_<name>_KEY → CUSTOM_API_KEY →

@@ -10,14 +10,9 @@ import {
   safeWriteFile,
 } from "./utils";
 import { getYamlPath } from "./yaml-path";
-// NOTE: ./secrets imports back into this module (getConfigValue / readEnv), so
-// this is a static import that closes a cycle (config -> secrets ->
-// commandProvider -> config). It is safe ONLY because BOTH sides defer all work
-// to call time: config.ts calls the three fns below inside function bodies, and
-// secrets/index.ts constructs its providers LAZILY (no `new` at module-init).
-// If you make secrets/index.ts construct a provider at module scope again, this
-// static import will throw "X is not a constructor" on load-order-dependent
-// paths. Keep provider construction lazy there, or make this import lazy here.
+// NOTE: ./secrets imports back into this module (getConfigValue / readEnv).
+// The cycle is safe because both sides only call each other's functions at
+// call time, never during module initialization.
 import {
   getSecretsProvider,
   providerListSafe,
@@ -241,6 +236,71 @@ export function secretsProviderStatus(profile?: string): {
     keys = [];
   }
   return { provider, keys, count: keys.length };
+}
+
+/**
+ * Write-capability probe for the Settings UI. Returns whether the vault can be
+ * EDITED / DELETED from the UI right now. Both are true ONLY when:
+ *   - the active provider is `command`, AND
+ *   - the respective write/delete helper is configured, AND
+ *   - the provider currently RESOLVES at least one key (proves the vault is
+ *     unlocked — you cannot safely write to a locked/empty vault).
+ * This is the gate behind the operator's "edit/delete only when unlocked" rule.
+ * No secret value ever crosses this boundary — it returns booleans only.
+ */
+/**
+ * Pure decision for the vault write/delete gate — extracted so the
+ * fail-open-on-lock invariant (H1) is unit-testable without the config/secrets
+ * module coupling. canWrite/canDelete are true ONLY when the provider is
+ * `command`, the vault currently resolves ≥1 key (providerKeyCount > 0, i.e.
+ * unlocked), AND the respective helper is configured.
+ */
+export function decideCanWrite(input: {
+  selector: string;
+  providerKeyCount: number;
+  hasWriteHelper: boolean;
+  hasDeleteHelper: boolean;
+}): { canWrite: boolean; canDelete: boolean } {
+  const unlockedCommand =
+    input.selector === "command" && input.providerKeyCount > 0;
+  return {
+    canWrite: unlockedCommand && input.hasWriteHelper,
+    canDelete: unlockedCommand && input.hasDeleteHelper,
+  };
+}
+
+export function secretsProviderCanWrite(profile?: string): {
+  canWrite: boolean;
+  canDelete: boolean;
+} {
+  const selector = String(getConfigValue("secrets.provider", profile) ?? "")
+    .trim()
+    .toLowerCase();
+  if (selector !== "command") {
+    return { canWrite: false, canDelete: false };
+  }
+  // "Unlocked" gate: count ONLY the keys the PROVIDER resolves, NOT the
+  // env-merged view. secretsProviderStatus()/resolvedSecrets() overlay all of
+  // process.env (PATH, HOME, …), so their count is never 0 in the Electron main
+  // process — using it would make the gate vacuous (fail-open) on a vault WRITE
+  // path. providerListSafe() is the raw vault list: empty when the vault is
+  // locked or has no entries.
+  let providerKeyCount = 0;
+  try {
+    providerKeyCount = Object.keys(providerListSafe(profile)).length;
+  } catch {
+    providerKeyCount = 0;
+  }
+  // Lazy require breaks the config -> secrets import cycle.
+  type WriteMod = typeof import("./secrets/commandProviderWrite");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const w = require("./secrets/commandProviderWrite") as WriteMod;
+  return decideCanWrite({
+    selector,
+    providerKeyCount,
+    hasWriteHelper: w.hasWriteHelper(profile),
+    hasDeleteHelper: w.hasDeleteHelper(profile),
+  });
 }
 
 export function readEnv(profile?: string): Record<string, string> {

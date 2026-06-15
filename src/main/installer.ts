@@ -15,6 +15,7 @@ import {
   getConnectionConfig,
   getModelConfig,
   hasOAuthCredentials,
+  getConfigValue,
 } from "./config";
 import { providerDoesNotNeedApiKey } from "./providers";
 import { getActiveProfileNameSync, profileHome, stripAnsi } from "./utils";
@@ -507,6 +508,44 @@ export function checkInstallStatus(): InstallStatus {
       hasApiKey = envHasUsableValue(content, expectedKey);
     } catch {
       /* ignore read errors */
+    }
+  }
+
+  // SECRETS-PROVIDER AWARENESS: a vault-backed user keeps no key in .env —
+  // the real value is resolved at runtime by the configured secrets provider
+  // (command/bitwarden), often under a gateway-token name (e.g. ANTHROPIC_TOKEN)
+  // that differs from the install-gate's expected .env name (ANTHROPIC_API_KEY).
+  // If a non-`env` provider is configured, ask it whether it can resolve a
+  // usable key before falsely forcing the user back through setup. Lazy require
+  // breaks the config -> secrets -> installer import cycle. Never throws.
+  if (!hasApiKey) {
+    try {
+      const provider = (getConfigValue("secrets.provider", activeProfile) || "")
+        .trim()
+        .toLowerCase();
+      if (provider && provider !== "env") {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports -- intentional lazy require to break the config<->secrets import cycle.
+        const { resolvedSecrets } =
+          require("./secrets") as typeof import("./secrets");
+        const resolved = resolvedSecrets(activeProfile);
+        const expectedKey = mc
+          ? expectedEnvKeyForModel(mc.provider, mc.baseUrl)
+          : null;
+        const usable = (v: unknown): boolean =>
+          typeof v === "string" && v.trim() !== "";
+        if (expectedKey && usable(resolved[expectedKey])) {
+          hasApiKey = true;
+        } else {
+          // The gateway token name may differ from the .env key name (the
+          // masking layer's Bearer variant). Accept any resolved provider-shaped
+          // credential (*_API_KEY / *_TOKEN) so a vault user isn't blocked.
+          hasApiKey = Object.entries(resolved).some(
+            ([k, v]) => /(_API_KEY|_TOKEN)$/.test(k) && usable(v),
+          );
+        }
+      }
+    } catch {
+      /* provider not resolvable — leave hasApiKey as-is */
     }
   }
 

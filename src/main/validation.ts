@@ -21,6 +21,7 @@ import {
   hasOAuthCredentials,
   readEnv,
   customEndpointKeyResolvable,
+  getConnectionConfig,
 } from "./config";
 import { expectedEnvKeyForModel } from "./installer";
 import { isLocalBaseUrl } from "../shared/url-key-map";
@@ -83,6 +84,18 @@ const NO_KEY_PROVIDERS = new Set(["auto"]);
  */
 export function validateChatReadiness(profile?: string): ChatReadiness {
   try {
+    // Remote / SSH connection mode: the model API key lives on the *remote*
+    // hermes-agent gateway, not in this desktop's local .env. The desktop only
+    // needs its connection credential (remoteApiKey / SSH creds) to reach that
+    // gateway — which getConnectionConfig() already validates elsewhere. A
+    // local key-presence check here produces a false MISSING_API_KEY block for
+    // every vault-only / remote user (issue: vault-only remote users blocked
+    // from Send). checkInstallStatus() established this precedent — mirror it.
+    // Fail open: defer key validation to the remote gateway's own auth path.
+    const conn = getConnectionConfig();
+    if (conn.mode === "remote" && conn.remoteUrl) return OK;
+    if (conn.mode === "ssh") return OK;
+
     const mc = getModelConfig(profile);
     const provider = (mc.provider || "").trim().toLowerCase();
     const model = (mc.model || "").trim();

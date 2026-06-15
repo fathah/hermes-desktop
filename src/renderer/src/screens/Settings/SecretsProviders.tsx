@@ -1,5 +1,13 @@
 import { useEffect, useState } from "react";
-import { Check, KeyRound, Terminal, Cloud } from "lucide-react";
+import {
+  Check,
+  KeyRound,
+  Terminal,
+  Cloud,
+  Pencil,
+  Trash2,
+  Plus,
+} from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 
 type ProviderId = "env" | "command" | "bitwarden";
@@ -58,6 +66,20 @@ export function SecretsProviders({
     count: number;
   } | null>(null);
   const [testError, setTestError] = useState<string | null>(null);
+  // Stage 4: vault edit/delete. Capability is gated by the main process —
+  // true only when a write/delete helper is configured AND the vault currently
+  // resolves keys (unlocked). The UI mirrors that gate; the main process
+  // re-checks it on every write/delete so a renderer can't bypass it.
+  const [canWrite, setCanWrite] = useState(false);
+  const [canDelete, setCanDelete] = useState(false);
+  const [writeCommand, setWriteCommand] = useState("");
+  const [deleteCommand, setDeleteCommand] = useState("");
+  const [writeSaved, setWriteSaved] = useState(false);
+  // Inline editor: which key is being edited/added, and its pending value.
+  const [editKey, setEditKey] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [mutating, setMutating] = useState(false);
+  const [mutateError, setMutateError] = useState<string | null>(null);
 
   async function load(): Promise<void> {
     const sel = (
@@ -80,6 +102,26 @@ export function SecretsProviders({
     const cmd =
       (await window.hermesAPI.getConfig("secrets.command", profile)) ?? "";
     setCommand(cmd);
+    setWriteCommand(
+      (await window.hermesAPI.getConfig("secrets.command_write", profile)) ??
+        "",
+    );
+    setDeleteCommand(
+      (await window.hermesAPI.getConfig("secrets.command_delete", profile)) ??
+        "",
+    );
+    await refreshCanWrite();
+  }
+
+  async function refreshCanWrite(): Promise<void> {
+    try {
+      const cap = await window.hermesAPI.secretsProviderCanWrite(profile);
+      setCanWrite(cap.canWrite);
+      setCanDelete(cap.canDelete);
+    } catch {
+      setCanWrite(false);
+      setCanDelete(false);
+    }
   }
 
   useEffect(() => {
@@ -111,6 +153,76 @@ export function SecretsProviders({
     await window.hermesAPI.invalidateSecretsCache();
     setCommandSaved(true);
     setTimeout(() => setCommandSaved(false), 2000);
+  }
+
+  async function saveWriteHelpers(): Promise<void> {
+    await window.hermesAPI.setConfig(
+      "secrets.command_write",
+      writeCommand.trim(),
+      profile,
+    );
+    await window.hermesAPI.setConfig(
+      "secrets.command_delete",
+      deleteCommand.trim(),
+      profile,
+    );
+    await refreshCanWrite();
+    setWriteSaved(true);
+    setTimeout(() => setWriteSaved(false), 2000);
+  }
+
+  // Begin editing/adding a key. value starts empty (we never read it back).
+  function beginEdit(key: string): void {
+    setEditKey(key);
+    setEditValue("");
+    setMutateError(null);
+  }
+
+  async function commitEdit(): Promise<void> {
+    if (editKey === null) return;
+    const key = editKey.trim();
+    if (!key || !editValue) {
+      setMutateError(t("settings.secrets_mutateMissing"));
+      return;
+    }
+    setMutating(true);
+    setMutateError(null);
+    try {
+      const r = await window.hermesAPI.secretsProviderWrite(
+        key,
+        editValue,
+        profile,
+      );
+      if (!r.ok) {
+        setMutateError(t("settings.secrets_writeFailed"));
+        return;
+      }
+      // Clear the typed value from memory immediately after the write.
+      setEditValue("");
+      setEditKey(null);
+      await refreshCanWrite();
+      await runTest(); // refresh the resolved-key list
+    } finally {
+      setMutating(false);
+    }
+  }
+
+  async function doDelete(key: string): Promise<void> {
+    // Confirm-before-delete: destructive vault mutation.
+    if (!window.confirm(t("settings.secrets_deleteConfirm", { key }))) return;
+    setMutating(true);
+    setMutateError(null);
+    try {
+      const r = await window.hermesAPI.secretsProviderDelete(key, profile);
+      if (!r.ok) {
+        setMutateError(t("settings.secrets_deleteFailed"));
+        return;
+      }
+      await refreshCanWrite();
+      await runTest();
+    } finally {
+      setMutating(false);
+    }
   }
 
   async function runTest(): Promise<void> {
@@ -199,6 +311,47 @@ export function SecretsProviders({
                     {t("settings.secrets_helperCommandHint")}
                   </div>
                 </div>
+
+                {/* Stage 4: optional write/delete helpers (opt-in). When set
+                    AND the vault is unlocked, the resolved-keys list below
+                    gains Edit/Delete actions. */}
+                <div className="memory-provider-field">
+                  <label className="memory-provider-field-label">
+                    {t("settings.secrets_writeHelperLabel")}
+                    {writeSaved && (
+                      <span
+                        style={{
+                          color: "var(--success)",
+                          fontSize: 10,
+                          marginLeft: 6,
+                        }}
+                      >
+                        {t("common.saved")}
+                      </span>
+                    )}
+                  </label>
+                  <input
+                    className="input"
+                    type="text"
+                    value={writeCommand}
+                    onChange={(e) => setWriteCommand(e.target.value)}
+                    onBlur={() => void saveWriteHelpers()}
+                    placeholder='keepassxc-cli add -p ~/v.kdbx "$HERMES_SECRET_KEY"'
+                    style={{ fontSize: 12 }}
+                  />
+                  <input
+                    className="input"
+                    type="text"
+                    value={deleteCommand}
+                    onChange={(e) => setDeleteCommand(e.target.value)}
+                    onBlur={() => void saveWriteHelpers()}
+                    placeholder='keepassxc-cli rm ~/v.kdbx "$HERMES_SECRET_KEY"'
+                    style={{ fontSize: 12, marginTop: 6 }}
+                  />
+                  <div className="settings-field-hint">
+                    {t("settings.secrets_writeHelperHint")}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -272,12 +425,108 @@ export function SecretsProviders({
                   <span
                     key={k}
                     className="memory-provider-badge"
-                    style={{ fontFamily: "monospace" }}
+                    style={{
+                      fontFamily: "monospace",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                    }}
                   >
                     {k}
+                    {canWrite && (
+                      <button
+                        className="icon-btn"
+                        title={t("settings.secrets_editKey")}
+                        onClick={() => beginEdit(k)}
+                        disabled={mutating}
+                        style={{ padding: 0, lineHeight: 1 }}
+                      >
+                        <Pencil size={11} />
+                      </button>
+                    )}
+                    {canDelete && (
+                      <button
+                        className="icon-btn"
+                        title={t("settings.secrets_deleteKey")}
+                        onClick={() => void doDelete(k)}
+                        disabled={mutating}
+                        style={{ padding: 0, lineHeight: 1 }}
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    )}
                   </span>
                 ))}
               </div>
+
+              {canWrite && editKey === null && (
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => beginEdit("")}
+                  disabled={mutating}
+                  style={{ marginTop: 8 }}
+                >
+                  <Plus size={12} /> {t("settings.secrets_addKey")}
+                </button>
+              )}
+
+              {/* Inline editor for add (empty key) / edit (preset key). The
+                  value field starts empty and is cleared right after write —
+                  a value is never read back from the vault into the UI. */}
+              {canWrite && editKey !== null && (
+                <div className="settings-field" style={{ marginTop: 8 }}>
+                  <input
+                    className="input"
+                    type="text"
+                    placeholder={t("settings.secrets_keyNamePlaceholder")}
+                    value={editKey}
+                    onChange={(e) => setEditKey(e.target.value)}
+                    disabled={mutating}
+                    style={{ fontFamily: "monospace", fontSize: 12 }}
+                  />
+                  <input
+                    className="input"
+                    type="password"
+                    placeholder={t("settings.secrets_keyValuePlaceholder")}
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    disabled={mutating}
+                    autoFocus
+                    style={{ marginTop: 6, fontSize: 12 }}
+                  />
+                  <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={() => void commitEdit()}
+                      disabled={mutating}
+                    >
+                      {mutating
+                        ? t("settings.secrets_saving")
+                        : t("settings.secrets_saveKey")}
+                    </button>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => {
+                        setEditKey(null);
+                        setEditValue("");
+                        setMutateError(null);
+                      }}
+                      disabled={mutating}
+                    >
+                      {t("common.cancel")}
+                    </button>
+                  </div>
+                  {mutateError && (
+                    <div
+                      className="settings-field-hint"
+                      style={{ color: "var(--warning)", marginTop: 6 }}
+                    >
+                      {mutateError}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div
                 className="settings-field-hint"
                 style={{ marginTop: 6, opacity: 0.7 }}

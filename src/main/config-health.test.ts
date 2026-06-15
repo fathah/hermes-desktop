@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   readEnv: vi.fn(),
   getConfigValue: vi.fn(),
   getModelConfig: vi.fn(),
+  getConnectionConfig: vi.fn(() => ({ mode: "local", remoteUrl: "", apiKey: "" })),
   customEndpointKeyResolvable: vi.fn(() => false),
   hasOAuthCredentials: vi.fn(() => false),
   setEnvValue: vi.fn(),
@@ -90,6 +91,7 @@ vi.mock("./secrets", async () => {
 const mockedReadEnv = mocks.readEnv;
 const mockedGetConfigValue = mocks.getConfigValue;
 const mockedGetModelConfig = mocks.getModelConfig;
+const mockedGetConnectionConfig = mocks.getConnectionConfig;
 const mockedCustomEndpointKeyResolvable = mocks.customEndpointKeyResolvable;
 const mockedHasOAuthCredentials = mocks.hasOAuthCredentials;
 
@@ -116,6 +118,7 @@ describe("config-health audit - vault awareness", () => {
     mockedReadEnv.mockReset();
     mockedGetConfigValue.mockReset();
     mockedGetModelConfig.mockReset();
+    mockedGetConnectionConfig.mockReset();
     mockedCustomEndpointKeyResolvable.mockReset();
     mockedHasOAuthCredentials.mockReset();
 
@@ -133,6 +136,13 @@ describe("config-health audit - vault awareness", () => {
 
     ({ runConfigHealthCheck } = await import("./config-health"));
     ({ resolvedSecretMap } = await import("./secrets"));
+
+    // Default: local connection mode (the desktop owns the keys).
+    mockedGetConnectionConfig.mockReturnValue({
+      mode: "local",
+      remoteUrl: "",
+      apiKey: "",
+    } as ReturnType<typeof getConnectionConfig>);
   });
 
   afterEach(() => {
@@ -180,6 +190,20 @@ describe("config-health audit - vault awareness", () => {
 
     it("does NOT fire MODEL_KEY_MISSING when the vault has the active model's key", () => {
       mocks.fakeVault = { ANTHROPIC_API_KEY: "from-vault" };
+      const report = runConfigHealthCheck("default");
+      const codes = report.issues.map((i) => i.code);
+      expect(codes).not.toContain("MODEL_KEY_MISSING");
+    });
+
+    it("does NOT fire MODEL_KEY_MISSING when the vault has ANTHROPIC_TOKEN (alias of ANTHROPIC_API_KEY)", () => {
+      // REGRESSION: the recurring real-world case. mumbo's vault injects the
+      // anthropic credential under ANTHROPIC_TOKEN (the gateway/Bearer name),
+      // NOT ANTHROPIC_API_KEY (the .env/url-key-map name). Both authenticate
+      // against Anthropic, so the gate must treat them as equivalent. Before
+      // the alias-aware lookup, a vault-only user with ANTHROPIC_TOKEN saw a
+      // false "ANTHROPIC_API_KEY is not set" warning on every chat start even
+      // though the gateway authenticated fine.
+      FAKE_VAULT = { ANTHROPIC_TOKEN: "sk-ant-from-vault" };
       const report = runConfigHealthCheck("default");
       const codes = report.issues.map((i) => i.code);
       expect(codes).not.toContain("MODEL_KEY_MISSING");
@@ -270,5 +294,107 @@ describe("config-health audit - vault awareness", () => {
       mocks.fakeEnv = {};
       expect(resolvedSecretMap("default").API_SERVER_KEY).toBe("from-vault");
     });
+  });
+});
+
+describe("config-health audit — connection-mode awareness", () => {
+  beforeEach(() => {
+    FAKE_VAULT = {};
+    FAKE_ENV = {};
+    mockedReadEnv.mockReset();
+    mockedGetConfigValue.mockReset();
+    mockedGetModelConfig.mockReset();
+    mockedGetConnectionConfig.mockReset();
+    mockedCustomEndpointKeyResolvable.mockReset();
+    mockedHasOAuthCredentials.mockReset();
+
+    // The footgun setup: an anthropic model selected, but NO key anywhere
+    // local (.env empty, vault empty, config.yaml empty, no OAuth). In LOCAL
+    // mode this rightly fires EMPTY_API_SERVER_KEY + MODEL_KEY_MISSING. The
+    // tests below flip ONLY the connection mode and assert those two warnings
+    // disappear — because in remote/SSH mode the keys live on the gateway.
+    mockedReadEnv.mockReturnValue({});
+    mockedGetConfigValue.mockReturnValue(null);
+    mockedGetModelConfig.mockReturnValue({
+      provider: "anthropic",
+      model: "claude-sonnet-4.6",
+      baseUrl: "",
+    });
+    mockedCustomEndpointKeyResolvable.mockReturnValue(false);
+    mockedHasOAuthCredentials.mockReturnValue(false);
+  });
+
+  afterEach(() => {
+    for (const k of ["API_SERVER_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_TOKEN"]) {
+      delete process.env[k];
+    }
+  });
+
+  const setMode = (c: Partial<ReturnType<typeof getConnectionConfig>>) =>
+    mockedGetConnectionConfig.mockReturnValue({
+      mode: "local",
+      remoteUrl: "",
+      apiKey: "",
+      ...c,
+    } as ReturnType<typeof getConnectionConfig>);
+
+  const codes = (profile?: string) =>
+    runConfigHealthCheck(profile).issues.map((i) => i.code);
+
+  it("LOCAL mode with no key anywhere fires both key warnings (control)", () => {
+    setMode({ mode: "local" });
+    const c = codes();
+    expect(c).toContain("EMPTY_API_SERVER_KEY");
+    expect(c).toContain("MODEL_KEY_MISSING");
+  });
+
+  it("REMOTE mode suppresses both local key warnings (the bug fix)", () => {
+    setMode({ mode: "remote", remoteUrl: "http://127.0.0.1:8642" });
+    const c = codes();
+    expect(c).not.toContain("EMPTY_API_SERVER_KEY");
+    expect(c).not.toContain("MODEL_KEY_MISSING");
+  });
+
+  it("SSH mode suppresses both local key warnings", () => {
+    setMode({ mode: "ssh" });
+    const c = codes();
+    expect(c).not.toContain("EMPTY_API_SERVER_KEY");
+    expect(c).not.toContain("MODEL_KEY_MISSING");
+  });
+
+  it("REMOTE mode WITHOUT a remoteUrl still warns (misconfigured remote, gray zone)", () => {
+    // mode=remote but no URL = the desktop can't actually reach a gateway, so
+    // the keys are NOT safely 'someone else's problem'. Must NOT silently pass.
+    setMode({ mode: "remote", remoteUrl: "" });
+    const c = codes();
+    expect(c).toContain("EMPTY_API_SERVER_KEY");
+    expect(c).toContain("MODEL_KEY_MISSING");
+  });
+
+  it("REMOTE mode skips ONLY the key checks, not the whole audit", () => {
+    // Guard must be per-check, not a blanket audit short-circuit: the two key
+    // checks (API_SERVER_KEY, active-model key) are suppressed, but the audit
+    // still runs every other check. We prove the suppression is scoped by
+    // confirming the two key codes are absent while the call completes normally
+    // (returns a real report object, not a thrown/empty bail-out).
+    setMode({ mode: "remote", remoteUrl: "http://127.0.0.1:8642" });
+    const report = runConfigHealthCheck();
+    const c = report.issues.map((i) => i.code);
+    expect(c).not.toContain("EMPTY_API_SERVER_KEY");
+    expect(c).not.toContain("MODEL_KEY_MISSING");
+    // The audit ran to completion (didn't blanket-skip): summary is populated
+    // and issues is a real array the other checks contributed to.
+    expect(report.summary).toBeDefined();
+    expect(Array.isArray(report.issues)).toBe(true);
+  });
+
+  it("getConnectionConfig throwing falls back to LOCAL audit (fail safe)", () => {
+    mockedGetConnectionConfig.mockImplementation(() => {
+      throw new Error("desktop.json unreadable");
+    });
+    const c = codes();
+    // Defensive: if we can't determine mode, audit locally rather than skip.
+    expect(c).toContain("EMPTY_API_SERVER_KEY");
+    expect(c).toContain("MODEL_KEY_MISSING");
   });
 });

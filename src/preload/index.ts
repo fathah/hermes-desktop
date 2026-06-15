@@ -411,6 +411,57 @@ const hermesAPI = {
   ): Promise<{ provider: string; keys: string[]; count: number }> =>
     ipcRenderer.invoke("secrets-provider-status", profile),
 
+  secretsProviderCanWrite: (
+    profile?: string,
+  ): Promise<{ canWrite: boolean; canDelete: boolean }> =>
+    ipcRenderer.invoke("secrets-provider-can-write", profile),
+
+  secretsProviderWrite: (
+    key: string,
+    value: string,
+    profile?: string,
+  ): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke("secrets-provider-write", key, value, profile),
+
+  secretsProviderDelete: (
+    key: string,
+    profile?: string,
+  ): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke("secrets-provider-delete", key, profile),
+
+  // ── Vault bootstrap (first-run onboarding) ────────────────────────────────
+  vaultDetectExisting: (): Promise<{
+    found: boolean;
+    kind: "tmpfs-env" | "vault-file" | "none";
+    path?: string;
+    keyPath?: string;
+    keys?: string[];
+    suggestedCommand?: string;
+  }> => ipcRenderer.invoke("vault-detect-existing"),
+
+  vaultToolAvailability: (): Promise<{
+    keepassxc: boolean;
+    tpm: boolean;
+    keepassxcHint?: string;
+    tpmHint?: string;
+  }> => ipcRenderer.invoke("vault-tool-availability"),
+
+  vaultCreate: (opts?: {
+    vaultPath?: string;
+    keyPath?: string;
+  }): Promise<{
+    ok: boolean;
+    vaultPath?: string;
+    keyPath?: string;
+    suggestedCommand?: string;
+    error?: string;
+  }> => ipcRenderer.invoke("vault-create", opts),
+
+  vaultSealTpm: (
+    keyPath: string,
+  ): Promise<{ ok: boolean; sealed: boolean; error?: string }> =>
+    ipcRenderer.invoke("vault-seal-tpm", keyPath),
+
   copyToClipboard: (text: string): Promise<void> =>
     ipcRenderer.invoke("copy-to-clipboard", text),
 

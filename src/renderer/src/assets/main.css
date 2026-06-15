@@ -1241,6 +1241,136 @@ body {
   font-size: 15px;
 }
 
+/* ── First-run vault onboarding (secrets stage) ─────────────────────────── */
+.setup-vault {
+  margin-top: 12px;
+}
+
+.setup-vault-card {
+  background: var(--bg-secondary);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+
+.setup-vault-detected {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+}
+
+.setup-vault-install-hint {
+  border-color: var(--border-bright);
+}
+
+.setup-vault-detected-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.setup-vault-detected-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.setup-vault-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.setup-vault-badge-ok {
+  background: var(--accent);
+  color: var(--bg-primary);
+}
+
+.setup-vault-badge-warn {
+  background: var(--warning, #d98e00);
+  color: var(--bg-primary);
+}
+
+.setup-vault-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.setup-vault-chip {
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+}
+
+.setup-vault-create .btn {
+  margin-top: 10px;
+}
+
+.setup-vault-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 8px 0;
+}
+
+.setup-vault-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: setup-vault-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes setup-vault-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.setup-vault-tpm-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.setup-vault-tpm-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.setup-vault-tpm-fallback {
+  color: var(--text-secondary);
+}
+
+/* Vault-covered hint variant used in the model step. */
+.setup-vault-covered {
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
 /* ========================================================================
    LAYOUT (Sidebar + Content)
    ======================================================================== */
@@ -3436,8 +3566,8 @@ body {
 }
 
 .chat-queue-single {
-  flex: 1;
-  min-width: 0;
+  display: inline-block;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3478,41 +3608,14 @@ body {
 }
 
 .chat-queue-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   max-width: 100%;
   padding: 3px 8px;
   border-radius: var(--radius-sm, 6px);
   background: var(--bg-tertiary, rgba(255, 255, 255, 0.04));
   color: var(--text-secondary);
-}
-
-.chat-queue-item-text {
-  flex: 1;
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.chat-queue-remove {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2px;
-  margin-left: auto;
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  border-radius: var(--radius-sm, 6px);
-}
-
-.chat-queue-remove:hover {
-  color: var(--text-primary);
-  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
 }
 
 /* Input area */
@@ -4957,7 +5060,6 @@ body {
   flex-shrink: 0;
 }
 
-.chat-model-search-input,
 .chat-model-custom-input {
   box-sizing: border-box;
 }
@@ -5017,30 +5119,19 @@ body {
   padding: 4px 8px 6px;
 }
 
-.chat-model-search-input,
 .chat-model-custom-input {
   width: 100%;
   padding: 5px 8px;
   font-size: 12px;
   border: 1px solid var(--border);
   border-radius: 4px;
+  background: var(--bg-tertiary);
   color: var(--text-primary);
 }
 
-.chat-model-search-input:focus,
 .chat-model-custom-input:focus {
   outline: none;
   border-color: var(--border-focus);
-}
-
-.chat-model-custom-input {
-  background: var(--bg-tertiary);
-}
-
-.chat-model-search-input {
-  position: sticky;
-  top: 0;
-  background: var(--bg-secondary);
 }
 
 /* ========================================================================
