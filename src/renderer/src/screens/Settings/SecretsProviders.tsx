@@ -433,6 +433,19 @@ export function SecretsProviders({
                     }}
                   >
                     {k}
+                    <span
+                      style={{
+                        fontFamily: "var(--font-sans, sans-serif)",
+                        fontSize: 10,
+                        fontWeight: 500,
+                        textTransform: "uppercase",
+                        letterSpacing: 0.3,
+                        color: "var(--success)",
+                        opacity: 0.85,
+                      }}
+                    >
+                      · {t("settings.secrets_vaultProvided")}
+                    </span>
                     {canWrite && (
                       <button
                         className="icon-btn"

@@ -212,6 +212,7 @@ export default {
   secrets_testing: "Testing…",
   secrets_testResolved: "Resolved {{count}} key(s):",
   secrets_testValuesHidden: "Values are never displayed — only key names.",
+  secrets_vaultProvided: "Vault Provided",
   secrets_testEmpty:
     "No keys resolved. If this is a bare-value helper it still resolves single keys on demand; otherwise check the command.",
   secrets_testFailed:

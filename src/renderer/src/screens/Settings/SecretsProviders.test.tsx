@@ -133,6 +133,17 @@ describe("SecretsProviders", () => {
       expect(
         screen.getByText("settings.secrets_testValuesHidden"),
       ).toBeInTheDocument();
+      // …and EACH resolved key is labelled "Vault Provided" (one per key), so
+      // the user can see the value is supplied by the vault, not typed/.env.
+      // The label's own span holds a "· " separator node + the i18n key, so the
+      // span's direct text is "· settings.secrets_vaultProvided". Match the LEAF
+      // span (not its ancestors) to get an exact per-key count of 2.
+      const vaultLabels = screen.getAllByText(
+        (content, el) =>
+          el?.tagName === "SPAN" &&
+          content.includes("settings.secrets_vaultProvided"),
+      );
+      expect(vaultLabels).toHaveLength(2);
     });
     // The IPC the component used returns NO values — assert the shape it relied
     // on carries only names (defense against a future regression that adds them).
