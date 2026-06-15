@@ -8,7 +8,8 @@ export interface SourceStudyPromptOptions {
 const DEFAULT_FOCUS = "the provided source corpus";
 const DEFAULT_CORPUS =
   "Use the connected Knowledge Wiki, uploaded sources, transcripts, " +
-  "articles, PDFs, notes, or NotebookLM notebook sources available in this run.";
+  "articles, PDFs, notes, or NotebookLM notebook sources available in this run. " +
+  "When NotebookLM MCP tools are available, use them to query notebook sources directly.";
 
 export function buildSourceStudyPrompt(
   focus: string,

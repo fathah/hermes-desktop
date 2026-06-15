@@ -62,8 +62,12 @@ export {
   writeMcpServerEntry,
   setMcpServerEnabled,
   hasMcpServer,
+  commandExists,
+  notebookLmCliCommand,
   openAlexMcpServerPath,
+  notebookLmMcpEntry,
   notebookLmMcpCommand,
+  readClaudeCodeNotebookLmMcpEntry,
   ensureDesktopMcpRegistered,
 } from "./installer/mcp";
 

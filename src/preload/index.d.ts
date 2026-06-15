@@ -70,7 +70,11 @@ import type {
   ScheduledResearchItem,
   ScheduleInput,
 } from "../shared/scheduledResearch";
-import type { SrPendingUpdate, SrPatch } from "./bridges/sps";
+import type {
+  NotebookLmMcpStatus,
+  SrPendingUpdate,
+  SrPatch,
+} from "./bridges/sps";
 import type { CredentialPoolEntry } from "../shared/credentials";
 import type { CapabilityRiskSummary } from "../shared/capability-risk";
 import type { ResearchReachStatus } from "../shared/research-reach";
@@ -1248,7 +1252,8 @@ interface HermesAPI {
   }>;
   spsNotebookLmEnsureMcp: (
     profile?: string,
-  ) => Promise<{ registered: boolean; alreadyPresent: boolean }>;
+  ) => Promise<NotebookLmMcpStatus>;
+  spsNotebookLmStatus: (profile?: string) => Promise<NotebookLmMcpStatus>;
   spsAppendWikiLog: (
     op: "ingest" | "file-answer" | "lint" | "research" | "digest",
     summary: string,

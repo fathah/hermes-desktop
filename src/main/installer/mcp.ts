@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
+import { execFileSync } from "child_process";
 import { app } from "electron";
 import { escapeRegex, profileHome } from "../utils";
 import { admitMcpCapability } from "../capability-risk-store";
@@ -10,6 +11,13 @@ export interface McpServerEntry {
   args: string[];
   env: Record<string, string>;
   enabled: boolean;
+}
+
+export interface NotebookLmMcpEntry {
+  command: string;
+  args: string[];
+  source: "env" | "user-bin" | "path" | "claude-code";
+  commandFound: boolean;
 }
 
 export function listMcpServers(
@@ -285,9 +293,99 @@ export function openAlexMcpServerPath(): string {
 
 /** User-installed NotebookLM MCP command. Auth stays with the user's nlm setup. */
 export function notebookLmMcpCommand(): string {
-  const userBin = join(homedir(), ".local", "bin", "notebooklm-mcp");
+  return notebookLmMcpEntry().command;
+}
+
+export function readClaudeCodeNotebookLmMcpEntry(
+  configPath = join(homedir(), ".claude.json"),
+): { command: string; args: string[] } | null {
+  try {
+    if (!existsSync(configPath)) return null;
+    const raw = JSON.parse(readFileSync(configPath, "utf-8")) as {
+      mcpServers?: Record<
+        string,
+        { command?: unknown; args?: unknown; env?: unknown }
+      >;
+    };
+    const server = raw.mcpServers?.["notebooklm-mcp"];
+    if (!server || typeof server.command !== "string") return null;
+    const command = server.command.trim();
+    if (!command) return null;
+    const args = Array.isArray(server.args)
+      ? server.args.filter((arg): arg is string => typeof arg === "string")
+      : [];
+    return { command, args };
+  } catch {
+    return null;
+  }
+}
+
+export function commandExists(command: string): boolean {
+  if (!command.trim()) return false;
+  if (command.includes("/") || command.includes("\\")) {
+    return existsSync(command);
+  }
+  try {
+    const resolver = process.platform === "win32" ? "where" : "which";
+    execFileSync(resolver, [command], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function notebookLmCliCommand(): string | null {
+  const userBin = join(homedir(), ".local", "bin", "nlm");
   if (existsSync(userBin)) return userBin;
-  return "notebooklm-mcp";
+  return commandExists("nlm") ? "nlm" : null;
+}
+
+/** User-installed NotebookLM MCP entry. Claude Code config is read-only fallback. */
+export function notebookLmMcpEntry(): NotebookLmMcpEntry {
+  const envCommand = process.env.HERMES_NOTEBOOKLM_MCP_COMMAND?.trim();
+  if (envCommand) {
+    return {
+      command: envCommand,
+      args: [],
+      source: "env",
+      commandFound: commandExists(envCommand),
+    };
+  }
+
+  const userBin = join(homedir(), ".local", "bin", "notebooklm-mcp");
+  if (existsSync(userBin)) {
+    return {
+      command: userBin,
+      args: [],
+      source: "user-bin",
+      commandFound: true,
+    };
+  }
+
+  if (commandExists("notebooklm-mcp")) {
+    return {
+      command: "notebooklm-mcp",
+      args: [],
+      source: "path",
+      commandFound: true,
+    };
+  }
+
+  const claudeEntry = readClaudeCodeNotebookLmMcpEntry();
+  if (claudeEntry && commandExists(claudeEntry.command)) {
+    return {
+      ...claudeEntry,
+      source: "claude-code",
+      commandFound: true,
+    };
+  }
+
+  return {
+    command: envCommand || "notebooklm-mcp",
+    args: [],
+    source: envCommand ? "env" : "path",
+    commandFound: false,
+  };
 }
 
 /** Absolute path to the bundled External Context MCP server (asar-unpacked). */

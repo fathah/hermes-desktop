@@ -18,7 +18,19 @@ import { research, type WorkSummary } from "../research";
 
 type Mode = "research" | "papers" | "study";
 type Phase = "idle" | "running" | "done" | "warn" | "error";
-type NotebookState = "idle" | "working" | "done" | "failed";
+type NotebookState = "idle" | "checking" | "working" | "done" | "failed";
+
+interface NotebookLmMcpStatus {
+  registered: boolean;
+  alreadyPresent: boolean;
+  commandFound: boolean;
+  command: string;
+  args: string[];
+  source: "env" | "user-bin" | "path" | "claude-code" | "existing";
+  nlmCommand: string | null;
+  restarted: boolean;
+  message: string;
+}
 
 export function ResearchModal() {
   const setResearchOpen = useStore((s) => s.setResearchOpen);
@@ -72,6 +84,8 @@ export function ResearchModal() {
   const [studyResult, setStudyResult] = useState("");
   const [studySaveMsg, setStudySaveMsg] = useState("");
   const [notebookState, setNotebookState] = useState<NotebookState>("idle");
+  const [notebookStatus, setNotebookStatus] =
+    useState<NotebookLmMcpStatus | null>(null);
   const studyUndoRef = useRef<null | (() => void)>(null);
 
   useEffect(() => {
@@ -108,6 +122,14 @@ export function ResearchModal() {
       setMailto(cfg.mailto || "");
       setHasApiKey(!!cfg.hasApiKey);
     });
+    setNotebookState("checking");
+    void window.hermesAPI
+      ?.spsNotebookLmStatus?.()
+      .then((status) => {
+        setNotebookStatus(status ?? null);
+        setNotebookState(status?.registered ? "done" : "idle");
+      })
+      .catch(() => setNotebookState("idle"));
   }, []);
 
   const enableWeb = async () => {
@@ -240,6 +262,7 @@ export function ResearchModal() {
     setNotebookState("working");
     try {
       const res = await window.hermesAPI?.spsNotebookLmEnsureMcp?.();
+      setNotebookStatus(res ?? null);
       setNotebookState(res?.registered ? "done" : "failed");
     } catch {
       setNotebookState("failed");
@@ -296,6 +319,20 @@ export function ResearchModal() {
 
   const busy = phase === "running" || studyBusy || studySaving;
   const researchBusy = phase === "running";
+  const notebookBusy =
+    notebookState === "checking" || notebookState === "working";
+  const notebookCanEnable =
+    !notebookBusy && notebookStatus?.commandFound !== false;
+  const notebookReady =
+    notebookStatus?.registered === true && notebookStatus.commandFound;
+  const notebookDetail =
+    notebookStatus?.message ||
+    (notebookState === "checking"
+      ? "Checking NotebookLM MCP setup."
+      : "NotebookLM can connect through the local MCP server.");
+  const notebookRecovery = notebookStatus?.commandFound
+    ? `If Google auth has expired, run ${notebookStatus.nlmCommand || "nlm"} login and try again.`
+    : "Install notebooklm-mcp-cli, make notebooklm-mcp available on PATH, or ask IT to set HERMES_NOTEBOOKLM_MCP_COMMAND.";
 
   return (
     <SpsModal
@@ -476,28 +513,36 @@ export function ResearchModal() {
           <>
             <div className="res-web-alert-box">
               <small className="res-small-label">
-                NotebookLM is optional. Enabling it registers the local MCP
-                server for My Assistant; Google auth stays outside this app.
+                {notebookDetail} Source: {notebookSourceLabel(notebookStatus)}.
+                Google auth stays outside this app.
+                {notebookStatus?.restarted
+                  ? " My Assistant was restarted so the tool can load."
+                  : ""}
               </small>
               <button
                 className="cover-btn res-flex-shrink-0"
                 onClick={() => void enableNotebookLm()}
-                disabled={notebookState === "working"}
+                disabled={
+                  notebookState === "working" ||
+                  notebookState === "checking" ||
+                  !notebookCanEnable ||
+                  notebookReady
+                }
               >
-                {notebookState === "working"
+                {notebookState === "checking"
+                  ? "Checking..."
+                  : notebookState === "working"
                   ? "Enabling..."
-                  : notebookState === "done"
+                  : notebookReady
                     ? "NotebookLM enabled"
                     : "Enable NotebookLM"}
               </button>
             </div>
 
-            {notebookState === "failed" && (
+            {(notebookState === "failed" ||
+              notebookStatus?.commandFound === false) && (
               <div className="res-web-alert-box">
-                <small className="res-small-label">
-                  NotebookLM MCP command not found. Install it or run nlm login,
-                  then try again. If auth expired, run nlm login and retry.
-                </small>
+                <small className="res-small-label">{notebookRecovery}</small>
               </div>
             )}
 
@@ -690,6 +735,15 @@ function extractChatReply(res: unknown): string {
   const reply = (res as { reply?: unknown }).reply;
   if (!Array.isArray(reply)) return "";
   return reply.map((x) => String(x)).join("\n\n");
+}
+
+function notebookSourceLabel(status: NotebookLmMcpStatus | null): string {
+  if (!status) return "Checking local NotebookLM MCP setup";
+  if (status.source === "env") return "Managed app configuration";
+  if (status.source === "claude-code") return "Claude Code MCP config";
+  if (status.source === "user-bin") return "~/.local/bin";
+  if (status.source === "existing") return "Hermes profile config";
+  return "PATH";
 }
 
 /** "Authors (3 + et al.) · Year · Venue · N citations" */

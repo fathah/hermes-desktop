@@ -63,6 +63,18 @@ export type SrPatch = Partial<{
   autoApply: boolean;
 }>;
 
+export interface NotebookLmMcpStatus {
+  registered: boolean;
+  alreadyPresent: boolean;
+  commandFound: boolean;
+  command: string;
+  args: string[];
+  source: "env" | "user-bin" | "path" | "claude-code" | "existing";
+  nlmCommand: string | null;
+  restarted: boolean;
+  message: string;
+}
+
 export const spsBridge = {
   // SPS Agent workspace
   spsUnfurl: (
@@ -165,8 +177,10 @@ export const spsBridge = {
     ipcRenderer.invoke("sps-file-research", topic, researchedMarkdown, profile),
   spsNotebookLmEnsureMcp: (
     profile?: string,
-  ): Promise<{ registered: boolean; alreadyPresent: boolean }> =>
+  ): Promise<NotebookLmMcpStatus> =>
     ipcRenderer.invoke("sps-notebooklm-ensure-mcp", profile),
+  spsNotebookLmStatus: (profile?: string): Promise<NotebookLmMcpStatus> =>
+    ipcRenderer.invoke("sps-notebooklm-status", profile),
   spsAppendWikiLog: (
     op: "ingest" | "file-answer" | "lint" | "research" | "digest",
     summary: string,
