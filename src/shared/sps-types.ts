@@ -114,6 +114,156 @@ export interface SpsImportResult {
   error?: string;
 }
 
+export type VaultProposalStatus = "pending" | "committed" | "dismissed";
+export type VaultOperationStatus = "pending" | "committed" | "skipped";
+
+export interface VaultDiff {
+  path: string;
+  before?: string;
+  after?: string;
+}
+
+interface VaultOperationBase {
+  id: string;
+  operationStatus?: VaultOperationStatus;
+  diff?: VaultDiff;
+}
+
+export interface VaultUpsertPageOperation extends VaultOperationBase {
+  kind: "upsert-page";
+  pageId: string;
+  title: string;
+  markdown: string;
+}
+
+export interface VaultUpdateFrontmatterOperation extends VaultOperationBase {
+  kind: "update-frontmatter";
+  pageId: string;
+  patch: Record<string, SpsPropertyValue | undefined>;
+}
+
+export interface VaultReplaceWikilinkOperation extends VaultOperationBase {
+  kind: "replace-wikilink";
+  pageId: string;
+  from: string;
+  to: string;
+}
+
+export interface VaultMarkDuplicateMergedOperation extends VaultOperationBase {
+  kind: "mark-duplicate-merged";
+  duplicatePageId: string;
+  canonicalPageId: string;
+}
+
+export interface VaultCreateBasePageOperation extends VaultOperationBase {
+  kind: "create-base-page";
+  pageId: string;
+  title: string;
+  markdown: string;
+  base: SpsBaseViewConfig;
+}
+
+export interface VaultMarkCaptureOperation extends VaultOperationBase {
+  kind: "mark-capture";
+  captureId: string;
+  status: "processed" | "discarded";
+}
+
+export interface VaultAddMemoryOperation extends VaultOperationBase {
+  kind: "add-memory";
+  body: string;
+}
+
+export type VaultOperation =
+  | VaultUpsertPageOperation
+  | VaultUpdateFrontmatterOperation
+  | VaultReplaceWikilinkOperation
+  | VaultMarkDuplicateMergedOperation
+  | VaultCreateBasePageOperation
+  | VaultMarkCaptureOperation
+  | VaultAddMemoryOperation;
+
+export interface VaultProposalInput {
+  source: "inbox" | "health" | "base" | "obsidian" | "context-pack" | "manual";
+  title: string;
+  summary: string;
+  operations: VaultOperation[];
+}
+
+export interface VaultProposal extends VaultProposalInput {
+  id: string;
+  status: VaultProposalStatus;
+  createdAt: number;
+  updatedAt: number;
+  operations: VaultOperation[];
+}
+
+export interface VaultHealthNoteSnapshot {
+  path: string;
+  title: string;
+  props: Record<string, unknown>;
+  body: string;
+  mtime: number;
+}
+
+export interface VaultHealthReport {
+  orphans: string[];
+  brokenLinks: Array<{ source: string; target: string; type?: string }>;
+  stale: string[];
+  duplicateTitles: Array<{ title: string; paths: string[] }>;
+  duplicateAliases: Array<{ alias: string; paths: string[] }>;
+  missingSchemaFields: Array<{
+    path: string;
+    schema: string;
+    missing: string[];
+  }>;
+  staleCaptures: Array<{ path: string; title: string; ageDays: number }>;
+  unprocessedPdfs: Array<{ path: string; title: string }>;
+  weaklyConnected: Array<{ path: string; degree: number }>;
+}
+
+export interface SpsContextPackInput {
+  pageId: string;
+  depth?: number;
+  includeBacklinks?: boolean;
+  includeTasks?: boolean;
+  includeSources?: boolean;
+  maxBytes?: number;
+  save?: boolean;
+}
+
+export interface SpsContextPackResult {
+  markdown: string;
+  includedPaths: string[];
+  truncated: boolean;
+  savedPath?: string;
+}
+
+export type SpsBaseWorkbenchRecipeId =
+  | "research"
+  | "projects"
+  | "decisions"
+  | "people"
+  | "meetings"
+  | "tasks"
+  | "sources";
+
+export interface SpsBaseProposalInput {
+  recipe: SpsBaseWorkbenchRecipeId;
+  folder: string;
+  pageId?: string;
+}
+
+export type SpsCaptureKind =
+  | "note"
+  | "source"
+  | "project"
+  | "person"
+  | "decision"
+  | "meeting"
+  | "task"
+  | "journal";
+
 export interface SpsCaptureInput {
   source: "quick-note" | "web" | "voice" | "screenshot";
   body: string;
@@ -124,6 +274,10 @@ export interface SpsCaptureInput {
   capturedAt: number;
   selection?: string;
   highlights?: string[];
+  captureKind?: SpsCaptureKind;
+  schema?: SpsPageSchemaKey;
+  links?: string[];
+  provenance?: string;
 }
 
 export interface ChecklistItem {

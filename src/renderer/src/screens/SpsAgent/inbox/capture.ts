@@ -44,6 +44,10 @@ export interface CaptureInput {
   highlights?: string[];
   /** Epoch ms. Passed in so this stays pure (Date.now is the caller's job). */
   capturedAt: number;
+  captureKind?: "note" | "source" | "project" | "person" | "decision" | "meeting" | "task" | "journal";
+  schema?: string;
+  links?: string[];
+  provenance?: string;
 }
 
 export interface Capture {
@@ -77,6 +81,11 @@ export function buildCapture(input: CaptureInput, id = uid("cap")): Capture {
   if (input.selection?.trim()) props.selection = input.selection.trim();
   const highlights = input.highlights?.map((h) => h.trim()).filter(Boolean);
   if (highlights?.length) props.highlights = highlights;
+  if (input.captureKind) props.captureKind = input.captureKind;
+  if (input.schema) props.schema = input.schema;
+  const links = input.links?.map((link) => link.trim()).filter(Boolean);
+  if (links?.length) props.links = links;
+  if (input.provenance?.trim()) props.provenance = input.provenance.trim();
   const markdown = rowToMarkdown(props, input.body.trim());
   return { id, markdown };
 }

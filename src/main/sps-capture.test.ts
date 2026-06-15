@@ -38,6 +38,25 @@ describe("buildSpsCaptureMarkdown", () => {
     expect(markdown).toContain('highlights: ["first","second"]');
     expect(markdown.endsWith("Captured body")).toBe(true);
   });
+
+  it("serializes Obsidian-aware capture classification metadata", () => {
+    const markdown = buildSpsCaptureMarkdown({
+      source: "quick-note",
+      captureKind: "decision",
+      schema: "decision",
+      links: ["Project-Atlas", "Person-Maya"],
+      provenance: "Captured from Obsidian active note",
+      body: "We will use the review queue.",
+      capturedAt: 1_700_000_000_000,
+    });
+
+    expect(markdown).toContain('captureKind: "decision"');
+    expect(markdown).toContain('schema: "decision"');
+    expect(markdown).toContain('links: ["Project-Atlas","Person-Maya"]');
+    expect(markdown).toContain(
+      'provenance: "Captured from Obsidian active note"',
+    );
+  });
 });
 
 describe("writeSpsCapture", () => {

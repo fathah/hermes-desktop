@@ -275,10 +275,13 @@ async function main(): Promise<void> {
   await tli.close();
   await rm(tlroot, { recursive: true, force: true });
 
+  closeAllNoteIndexes();
   console.log("\nALL NOTE-INDEX CHECKS PASSED");
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+void main()
+  .then(() => process.exit(0))
+  .catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });

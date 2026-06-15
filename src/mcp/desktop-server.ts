@@ -69,6 +69,30 @@ const TOOLS = [
       required: ["schedule", "prompt", "name"],
     },
   },
+  {
+    name: "build_context_pack",
+    description:
+      "Build a deterministic Markdown context pack from the local SPS/Obsidian vault for another AI agent. " +
+      "Includes the selected note, backlinks, linked sources, related tasks, unresolved questions, and provenance.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pageId: {
+          type: "string",
+          description: "SPS page id or Markdown path to package.",
+        },
+        maxBytes: {
+          type: "number",
+          description: "Maximum UTF-8 bytes in the returned pack.",
+        },
+        save: {
+          type: "boolean",
+          description: "When true, also save the pack under vault/_context-packs/.",
+        },
+      },
+      required: ["pageId"],
+    },
+  },
 ];
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -106,6 +130,40 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       const payload = await response.json();
       return {
         content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
+      };
+    } else if (name === "build_context_pack") {
+      const { port, token } = getControlServerConfig();
+      const response = await fetch(`http://127.0.0.1:${port}/sps/context-pack`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          pageId: a.pageId,
+          maxBytes: a.maxBytes,
+          save: a.save,
+        }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(
+          `Control server returned status ${response.status}: ${errText}`,
+        );
+      }
+
+      const payload = await response.json();
+      return {
+        content: [
+          {
+            type: "text",
+            text:
+              typeof payload.markdown === "string"
+                ? payload.markdown
+                : JSON.stringify(payload, null, 2),
+          },
+        ],
       };
     } else {
       throw new Error(`unknown tool: ${name}`);

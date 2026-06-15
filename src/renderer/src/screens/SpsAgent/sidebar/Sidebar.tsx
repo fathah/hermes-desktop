@@ -278,8 +278,16 @@ export function Sidebar() {
                 <div className="nav-item pl-12" onClick={newPage}>
                   <Icon name="plus" size={14} />
                   <span className="nav-label">Add page</span>
-                </div>
-              </SidebarSection>
+              </div>
+              <button
+                className={`nav-item ${surface === "review" ? "active" : ""}`}
+                onClick={() => setSurface("review")}
+                title="AI Review Queue"
+              >
+                <Icon name="check" size={17} />
+                <span className="nav-label">Review Queue</span>
+              </button>
+            </SidebarSection>
 
               <div className="sec-group mt-4">
                 <div className="sec">

@@ -11,16 +11,11 @@ import { useStore } from "../store";
 import { pageIdFromPath } from "../lib/pageId";
 import { commitChangeset } from "../inbox/ingestApply";
 import { getLintIntervalMin, setLintIntervalMin } from "../inbox/ingestPrefs";
+import type { VaultHealthReport } from "../../../../../shared/sps-types";
 
 interface HealthSurfaceProps {
   profile?: string;
   embedded?: boolean;
-}
-
-interface LintReport {
-  orphans: string[];
-  brokenLinks: Array<{ source: string; target: string }>;
-  stale: string[];
 }
 
 /** The deep-lint result returned by spsLintWiki (mirrors the main LintResult). */
@@ -38,7 +33,7 @@ export function HealthSurface({
   const setSurface = useStore((s) => s.setSurface);
   const ingestCommitPage = useStore((s) => s.ingestCommitPage);
   const flash = useStore((s) => s.flash);
-  const [report, setReport] = useState<LintReport | null>(null);
+  const [report, setReport] = useState<VaultHealthReport | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   // Deep (LLM) lint: contradictions / stale claims / gaps + a proposed fix set.
@@ -62,8 +57,8 @@ export function HealthSurface({
     setBusy(true);
     setError("");
     try {
-      const res = await window.hermesAPI.spsLintVault?.(STALE_DAYS, profile);
-      if (!res) throw new Error("Lint is unavailable offline.");
+      const res = await window.hermesAPI.spsHealthReport?.(STALE_DAYS, profile);
+      if (!res) throw new Error("Vault health is unavailable offline.");
       setReport(res);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -85,12 +80,31 @@ export function HealthSurface({
       if (!res) throw new Error("Deep lint is unavailable offline.");
       if (!res.ok) throw new Error(res.error || "Deep lint failed.");
       setDeep(res);
+      if (res.changeset?.pages.length) {
+        await window.hermesAPI.spsCreateVaultProposal?.(
+          {
+            source: "health",
+            title: "Vault health fixes",
+            summary: res.changeset.summary,
+            operations: res.changeset.pages.map((page) => ({
+              id: `lint-${page.pageId}`,
+              kind: "upsert-page" as const,
+              pageId: page.pageId,
+              title: page.title,
+              markdown: page.markdown,
+            })),
+          },
+          profile,
+        );
+        flash("Queued vault health fixes for review");
+        setSurface("review");
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setDeepBusy(false);
     }
-  }, [profile]);
+  }, [profile, flash, setSurface]);
 
   const applyFixes = useCallback(async () => {
     if (!deep?.changeset) return;
@@ -128,7 +142,13 @@ export function HealthSurface({
   const total =
     (report?.orphans.length ?? 0) +
     (report?.brokenLinks.length ?? 0) +
-    (report?.stale.length ?? 0);
+    (report?.stale.length ?? 0) +
+    (report?.duplicateTitles.length ?? 0) +
+    (report?.duplicateAliases.length ?? 0) +
+    (report?.missingSchemaFields.length ?? 0) +
+    (report?.staleCaptures.length ?? 0) +
+    (report?.unprocessedPdfs.length ?? 0) +
+    (report?.weaklyConnected.length ?? 0);
 
   return (
     <div className={embedded ? "health-embedded" : "health-surface"}>
@@ -243,7 +263,7 @@ export function HealthSurface({
 
       {report && total === 0 && !error && (
         <div className="health-empty">
-          Everything looks healthy — no orphans, broken links, or stale pages.
+          Everything looks healthy — no structural vault issues found.
         </div>
       )}
 
@@ -289,6 +309,96 @@ export function HealthSurface({
                 <button className="health-link" onClick={() => open(p)}>
                   {pageIdFromPath(p)}
                 </button>
+              </li>
+            ))}
+          </LintGroup>
+
+          <LintGroup
+            label="Duplicate titles"
+            hint="Multiple notes with the same title"
+            count={report.duplicateTitles.length}
+          >
+            {report.duplicateTitles.map((d) => (
+              <li key={d.title} className="health-row">
+                <span className="health-mono-text">{d.title}</span>
+                <span className="health-arrow">·</span>
+                <span>{d.paths.map(pageIdFromPath).join(", ")}</span>
+              </li>
+            ))}
+          </LintGroup>
+
+          <LintGroup
+            label="Duplicate aliases"
+            hint="Aliases shared by more than one note"
+            count={report.duplicateAliases.length}
+          >
+            {report.duplicateAliases.map((d) => (
+              <li key={d.alias} className="health-row">
+                <span className="health-mono-text">{d.alias}</span>
+                <span className="health-arrow">·</span>
+                <span>{d.paths.map(pageIdFromPath).join(", ")}</span>
+              </li>
+            ))}
+          </LintGroup>
+
+          <LintGroup
+            label="Missing schema fields"
+            hint="Typed notes missing required properties"
+            count={report.missingSchemaFields.length}
+          >
+            {report.missingSchemaFields.map((row) => (
+              <li key={`${row.path}-${row.missing.join(",")}`} className="health-row">
+                <button className="health-link" onClick={() => open(row.path)}>
+                  {pageIdFromPath(row.path)}
+                </button>
+                <span className="health-arrow">·</span>
+                <span>{row.schema}: {row.missing.join(", ")}</span>
+              </li>
+            ))}
+          </LintGroup>
+
+          <LintGroup
+            label="Stale inbox captures"
+            hint="Raw captures still waiting to become durable notes"
+            count={report.staleCaptures.length}
+          >
+            {report.staleCaptures.map((row) => (
+              <li key={row.path} className="health-row">
+                <button className="health-link" onClick={() => open(row.path)}>
+                  {row.title || pageIdFromPath(row.path)}
+                </button>
+                <span className="health-arrow">·</span>
+                <span>{row.ageDays}d old</span>
+              </li>
+            ))}
+          </LintGroup>
+
+          <LintGroup
+            label="Unprocessed PDFs"
+            hint="PDF source notes that have not been processed"
+            count={report.unprocessedPdfs.length}
+          >
+            {report.unprocessedPdfs.map((row) => (
+              <li key={row.path} className="health-row">
+                <button className="health-link" onClick={() => open(row.path)}>
+                  {row.title || pageIdFromPath(row.path)}
+                </button>
+              </li>
+            ))}
+          </LintGroup>
+
+          <LintGroup
+            label="Weakly connected"
+            hint="Notes with very few graph connections"
+            count={report.weaklyConnected.length}
+          >
+            {report.weaklyConnected.map((row) => (
+              <li key={row.path} className="health-row">
+                <button className="health-link" onClick={() => open(row.path)}>
+                  {pageIdFromPath(row.path)}
+                </button>
+                <span className="health-arrow">·</span>
+                <span>degree {row.degree}</span>
               </li>
             ))}
           </LintGroup>

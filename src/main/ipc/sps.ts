@@ -57,9 +57,21 @@ import type {
 } from "../../shared/active-work";
 import type {
   SpsCaptureInput,
+  SpsContextPackInput,
   SpsImportPlan,
   SpsImportSource,
+  VaultProposalInput,
+  SpsBaseProposalInput,
 } from "../../shared/sps-types";
+import {
+  createVaultProposal,
+  dismissVaultProposal,
+  listVaultProposals,
+  markVaultProposalCommitted,
+} from "../vault-review-queue";
+import { buildVaultHealthReport } from "../vault-health";
+import { buildContextPack } from "../context-packs";
+import { createBaseProposalInput } from "../base-workbenches";
 
 const importPlans = new Map<string, SpsImportPlan>();
 
@@ -121,6 +133,39 @@ export function registerSpsIpc(): void {
   );
   safeHandle("sps-lint-wiki", (_event, staleDays?: number, profile?: string) =>
     spsLintWiki(profile, { staleDays }),
+  );
+  safeHandle(
+    "sps-health-report",
+    (_event, staleDays?: number, profile?: string) =>
+      buildVaultHealthReport(profile, staleDays ?? 30),
+  );
+  safeHandle(
+    "sps-create-vault-proposal",
+    (_event, input: VaultProposalInput, profile?: string) =>
+      createVaultProposal(input, profile),
+  );
+  safeHandle("sps-list-vault-proposals", (_event, profile?: string) =>
+    listVaultProposals(profile),
+  );
+  safeHandle(
+    "sps-commit-vault-proposal",
+    (_event, id: string, operationIds?: string[], profile?: string) =>
+      markVaultProposalCommitted(id, operationIds, profile),
+  );
+  safeHandle(
+    "sps-dismiss-vault-proposal",
+    (_event, id: string, profile?: string) =>
+      dismissVaultProposal(id, profile),
+  );
+  safeHandle(
+    "sps-build-context-pack",
+    (_event, input: SpsContextPackInput, profile?: string) =>
+      buildContextPack(input, profile),
+  );
+  safeHandle(
+    "sps-create-base-proposal",
+    (_event, input: SpsBaseProposalInput, profile?: string) =>
+      createVaultProposal(createBaseProposalInput(input), profile),
   );
   safeHandle("sps-load", (_event, profile?: string) => spsLoad(profile));
   safeHandle(

@@ -21,6 +21,11 @@ import {
   type CaptureStatus,
 } from "./capture";
 import { commitChangeset } from "./ingestApply";
+import type { VaultProposalInput } from "../../../../../shared/sps-types";
+import type {
+  SpsCaptureKind,
+  SpsPageSchemaKey,
+} from "../../../../../shared/sps-types";
 import {
   getAutoApply,
   setAutoApply,
@@ -40,6 +45,23 @@ interface InboxSurfaceProps {
 type Mode = "note" | "web" | "pdf";
 type Tab = "inbox" | "settings";
 
+const CAPTURE_KINDS: SpsCaptureKind[] = [
+  "note",
+  "source",
+  "project",
+  "person",
+  "decision",
+  "meeting",
+  "task",
+  "journal",
+];
+
+function schemaForCaptureKind(
+  kind: SpsCaptureKind,
+): SpsPageSchemaKey | undefined {
+  return kind === "note" ? undefined : kind;
+}
+
 interface ProposedPage {
   op: "create" | "update";
   pageId: string;
@@ -51,6 +73,38 @@ interface Changeset {
   pages: ProposedPage[];
   captures: Array<{ id: string; status: "processed" | "discarded" }>;
   memory: string[];
+}
+
+function changesetToProposal(
+  changeset: Changeset,
+  source: VaultProposalInput["source"],
+  title: string,
+): VaultProposalInput {
+  return {
+    source,
+    title,
+    summary: changeset.summary,
+    operations: [
+      ...changeset.pages.map((page) => ({
+        id: `page-${page.pageId}`,
+        kind: "upsert-page" as const,
+        pageId: page.pageId,
+        title: page.title,
+        markdown: page.markdown,
+      })),
+      ...changeset.captures.map((capture) => ({
+        id: `capture-${capture.id}`,
+        kind: "mark-capture" as const,
+        captureId: capture.id,
+        status: capture.status,
+      })),
+      ...changeset.memory.map((body, index) => ({
+        id: `memory-${index}`,
+        kind: "add-memory" as const,
+        body,
+      })),
+    ],
+  };
 }
 
 function timeLabel(capturedAt: unknown): string {
@@ -76,12 +130,15 @@ export function InboxSurface({
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [url, setUrl] = useState("");
+  const [noteKind, setNoteKind] = useState<SpsCaptureKind>("note");
+  const [webKind, setWebKind] = useState<SpsCaptureKind>("source");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   // Ingest review queue.
   const ingestCommitPage = useStore((s) => s.ingestCommitPage);
   const flash = useStore((s) => s.flash);
+  const setSurface = useStore((s) => s.setSurface);
   const importPdf = useStore((s) => s.importPdf);
   const [ingesting, setIngesting] = useState(false);
   const [changeset, setChangeset] = useState<Changeset | null>(null);
@@ -203,6 +260,9 @@ export function InboxSurface({
         title,
         via: "user",
         capturedAt: Date.now(),
+        captureKind: noteKind,
+        schema: schemaForCaptureKind(noteKind),
+        provenance: "SPS inbox",
       });
       await writeCapture(markdown, id);
       setTitle("");
@@ -213,7 +273,7 @@ export function InboxSurface({
     } finally {
       setBusy(false);
     }
-  }, [body, title, writeCapture, reconcile]);
+  }, [body, title, noteKind, writeCapture, reconcile]);
 
   const captureWeb = useCallback(async () => {
     const target = url.trim();
@@ -231,6 +291,10 @@ export function InboxSurface({
         url: meta.url || target,
         via: "user",
         capturedAt: Date.now(),
+        captureKind: webKind,
+        schema: schemaForCaptureKind(webKind),
+        links: meta.url ? [meta.url] : [target],
+        provenance: "SPS web clip",
       });
       await writeCapture(markdown, id);
       setTitle("");
@@ -245,7 +309,7 @@ export function InboxSurface({
     } finally {
       setBusy(false);
     }
-  }, [url, title, writeCapture, reconcile]);
+  }, [url, title, webKind, writeCapture, reconcile]);
 
   const setStatus = useCallback(
     async (row: VaultRow, status: CaptureStatus) => {
@@ -306,16 +370,19 @@ export function InboxSurface({
         );
         reconcile();
       } else {
-        setChangeset(cs);
-        setSkip(new Set());
-        setSkipMem(new Set());
+        await window.hermesAPI.spsCreateVaultProposal?.(
+          changesetToProposal(cs, "inbox", "Process inbox"),
+          profile,
+        );
+        flash("Queued inbox changes for review");
+        setSurface("review");
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setIngesting(false);
     }
-  }, [profile, autoApply, ingestCommitPage, flash, reconcile]);
+  }, [profile, autoApply, ingestCommitPage, flash, reconcile, setSurface]);
 
   const applyChangeset = useCallback(async (): Promise<void> => {
     if (!changeset) return;
@@ -443,6 +510,27 @@ export function InboxSurface({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
               />
+            )}
+
+            {mode !== "pdf" && (
+              <label className="inbox-flex-align-center-gap6">
+                Type
+                <select
+                  className="inbox-select"
+                  value={mode === "note" ? noteKind : webKind}
+                  onChange={(e) => {
+                    const next = e.target.value as SpsCaptureKind;
+                    if (mode === "note") setNoteKind(next);
+                    else setWebKind(next);
+                  }}
+                >
+                  {CAPTURE_KINDS.map((kind) => (
+                    <option key={kind} value={kind}>
+                      {kind}
+                    </option>
+                  ))}
+                </select>
+              </label>
             )}
 
             {mode === "note" ? (

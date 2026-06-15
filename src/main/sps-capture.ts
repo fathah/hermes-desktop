@@ -24,6 +24,11 @@ export function buildSpsCaptureMarkdown(input: SpsCaptureInput): string {
   if (input.selection?.trim()) props.selection = input.selection.trim();
   const highlights = input.highlights?.map((h) => h.trim()).filter(Boolean);
   if (highlights?.length) props.highlights = highlights;
+  if (input.captureKind) props.captureKind = input.captureKind;
+  if (input.schema) props.schema = input.schema;
+  const links = input.links?.map((link) => link.trim()).filter(Boolean);
+  if (links?.length) props.links = links;
+  if (input.provenance?.trim()) props.provenance = input.provenance.trim();
   return rowToMarkdown(props, body);
 }
 

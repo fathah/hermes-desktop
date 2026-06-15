@@ -29,6 +29,7 @@ import { ActiveWorkSurface } from "./activeWork/ActiveWorkSurface";
 import { CockpitSurface } from "./cockpit/CockpitSurface";
 import { InboxSurface } from "./inbox/InboxSurface";
 import { HealthSurface } from "./health/HealthSurface";
+import { ReviewQueueSurface } from "./review/ReviewQueueSurface";
 import { runAutoIngest } from "./inbox/ingestApply";
 import {
   getAutoApply,
@@ -320,6 +321,7 @@ export function App() {
               {surface === "learning" && <LearningSurface profile="default" />}
               {surface === "activeWork" && <ActiveWorkSurface />}
               {surface === "inbox" && <InboxSurface profile="default" />}
+              {surface === "review" && <ReviewQueueSurface profile="default" />}
               {surface === "health" && <HealthSurface profile="default" />}
               {surface === "graph" && <GraphView />}
               {surface === "equity" && <EquityResearch />}

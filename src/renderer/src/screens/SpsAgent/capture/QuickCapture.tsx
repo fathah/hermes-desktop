@@ -1,9 +1,31 @@
 import { useState, useEffect, useRef } from "react";
 import { buildCapture } from "../inbox/capture";
 import { Icon } from "../components/Icon";
+import type {
+  SpsCaptureKind,
+  SpsPageSchemaKey,
+} from "../../../../../shared/sps-types";
+
+const CAPTURE_KINDS: SpsCaptureKind[] = [
+  "note",
+  "source",
+  "project",
+  "person",
+  "decision",
+  "meeting",
+  "task",
+  "journal",
+];
+
+function schemaForCaptureKind(
+  kind: SpsCaptureKind,
+): SpsPageSchemaKey | undefined {
+  return kind === "note" ? undefined : kind;
+}
 
 export function QuickCapture() {
   const [body, setBody] = useState("");
+  const [captureKind, setCaptureKind] = useState<SpsCaptureKind>("note");
   const [recording, setRecording] = useState(false);
   const [recordTime, setRecordTime] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -92,6 +114,9 @@ export function QuickCapture() {
         source: "quick-note",
         body: text,
         capturedAt: Date.now(),
+        captureKind,
+        schema: schemaForCaptureKind(captureKind),
+        provenance: "SPS quick capture",
       });
       const ok = await window.hermesAPI.spsExportRow(
         "_inbox",
@@ -135,6 +160,20 @@ export function QuickCapture() {
         {/* Actions Bar */}
         <div className="qc-actions-bar">
           <div className="qc-left-buttons">
+            <select
+              className="qc-btn"
+              value={captureKind}
+              onChange={(e) => setCaptureKind(e.target.value as SpsCaptureKind)}
+              title="Capture type"
+              aria-label="Capture type"
+            >
+              {CAPTURE_KINDS.map((kind) => (
+                <option key={kind} value={kind}>
+                  {kind}
+                </option>
+              ))}
+            </select>
+
             {/* Snippet button */}
             <button
               onClick={handleSnippet}

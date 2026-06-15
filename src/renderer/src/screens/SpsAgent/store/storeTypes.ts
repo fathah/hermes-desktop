@@ -49,6 +49,7 @@ export type Surface =
   | "graph"
   | "equity"
   | "inbox"
+  | "review"
   | "health"
   | "journal"
   | "obsidian-note"

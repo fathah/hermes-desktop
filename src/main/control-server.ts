@@ -27,6 +27,7 @@ import {
   exportRowMarkdownTo,
   readPageMarkdownFrom,
 } from "./sps-vault";
+import { buildContextPack } from "./context-packs";
 
 let serverInstance: ReturnType<typeof createServer> | null = null;
 let currentPort = 8645;
@@ -256,6 +257,33 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
           : writeJson(res, 200, { page, markdown }),
       )
       .catch((err) => writeJson(res, 500, { error: String(err.message || err) }));
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/sps/context-pack") {
+    void readJsonRequest(req)
+      .then((payload) => {
+        const pageId = typeof payload.pageId === "string" ? payload.pageId : "";
+        if (!pageId) {
+          writeJson(res, 400, { error: "Missing required field: pageId." });
+          return;
+        }
+        const profile = getActiveProfileNameSync();
+        return buildContextPack(
+          {
+            pageId,
+            depth: typeof payload.depth === "number" ? payload.depth : undefined,
+            includeBacklinks: payload.includeBacklinks !== false,
+            includeTasks: payload.includeTasks !== false,
+            includeSources: payload.includeSources !== false,
+            maxBytes:
+              typeof payload.maxBytes === "number" ? payload.maxBytes : undefined,
+            save: payload.save === true,
+          },
+          profile,
+        ).then((result) => writeJson(res, 200, result));
+      })
+      .catch((err) => writeJson(res, 400, { error: String(err.message || err) }));
     return;
   }
 

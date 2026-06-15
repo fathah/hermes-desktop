@@ -2,13 +2,14 @@
 // two-column layout with a right-side preview pane, and "Start new chat" / "New
 // page" results. Reuses the existing search over actions / pages / in-page
 // content; all chrome is the existing .palette / .pal-* design language.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./Icon";
 import type { IconName } from "./iconPaths";
 import { useStore } from "../store";
 import { treeWalkIds } from "../lib/tree";
 import { computePathIds } from "../store/selectors";
 import { workspaceParity } from "../editor/workspaceVault";
+import { pageToMarkdown } from "../editor/pageMarkdown";
 import { getStorageMode } from "../lib/storageMode";
 import type { PageMeta, TreeNode } from "../types";
 
@@ -56,6 +57,7 @@ export function CommandPalette() {
   const tree = useStore((s) => s.tree);
   const meta = useStore((s) => s.meta);
   const docs = useStore((s) => s.docs);
+  const page = useStore((s) => s.page);
   const openPanelTab = useStore((s) => s.openPanelTab);
   const setTweak = useStore((s) => s.setTweak);
   const t = useStore((s) => s.t);
@@ -77,6 +79,63 @@ export function CommandPalette() {
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  const processActiveObsidianNote = useCallback(async (): Promise<void> => {
+    try {
+      const active = await window.hermesAPI.callObsidianFunction?.(
+        "active-note",
+        {},
+      );
+      const path =
+        typeof active === "string"
+          ? active
+          : active && typeof active === "object" && "path" in active
+            ? String((active as { path?: unknown }).path ?? "")
+            : "";
+      if (!path) throw new Error("No active Obsidian note was reported.");
+      const markdown = await window.hermesAPI.readObsidianFile?.(path);
+      if (!markdown) throw new Error(`Could not read ${path}.`);
+      const pageId = path.replace(/\.md$/i, "").replace(/[^A-Za-z0-9_-]+/g, "-");
+      await window.hermesAPI.spsCreateVaultProposal?.({
+        source: "obsidian",
+        title: `Process ${path}`,
+        summary: `Import and process ${path} into the SPS wiki structure.`,
+        operations: [
+          {
+            id: `obsidian-${pageId}`,
+            kind: "upsert-page",
+            pageId,
+            title: meta[pageId]?.title || pageId,
+            markdown,
+          },
+        ],
+      });
+      flash("Queued Obsidian note for review");
+      setSurface("review");
+    } catch (e) {
+      flash(e instanceof Error ? e.message : String(e), { tone: "warn" });
+    }
+  }, [flash, meta, setSurface]);
+
+  const importObsidianFolder = useCallback(async (): Promise<void> => {
+    try {
+      const folder = await window.hermesAPI.selectFolder?.();
+      if (!folder) return;
+      const plan = await window.hermesAPI.spsCreateImportPlan?.({
+        source: { kind: "markdown-folder", path: folder },
+      });
+      if (!plan) throw new Error("Could not create an import plan.");
+      const result = await window.hermesAPI.spsApplyImportPlan?.(plan.id);
+      if (!result?.success) {
+        throw new Error(result?.error || "Import failed.");
+      }
+      flash(
+        `Imported ${result.pagesCreated} note${result.pagesCreated === 1 ? "" : "s"} · ${result.conflicts} conflicts · ${result.skipped} skipped`,
+      );
+    } catch (e) {
+      flash(e instanceof Error ? e.message : String(e), { tone: "warn" });
+    }
+  }, [flash]);
 
   const actions: ActionItem[] = useMemo(
     () => [
@@ -128,6 +187,102 @@ export function CommandPalette() {
         label: "Vault health",
         desc: "Review semantic-lint issues across your vault — orphans, broken links, and structure.",
         run: () => setSurface("health"),
+      },
+      {
+        kind: "action",
+        id: "review-queue",
+        icon: "check",
+        label: "Open AI Review Queue",
+        desc: "Review and approve proposed vault changes before they land.",
+        run: () => setSurface("review"),
+      },
+      {
+        kind: "action",
+        id: "obsidian-open-current",
+        icon: "doc",
+        label: "Open current page in Obsidian",
+        desc: "Ask the Obsidian bridge to open the current markdown note.",
+        run: () => {
+          void window.hermesAPI.openObsidianNote?.(`${page}.md`).then((ok) => {
+            flash(ok ? "Opened in Obsidian" : "Obsidian bridge is unavailable");
+          });
+        },
+      },
+      {
+        kind: "action",
+        id: "vault-sync-current",
+        icon: "code",
+        label: "Sync current page to vault",
+        desc: "Force-write the current SPS page through the markdown vault path.",
+        run: () => {
+          const markdown = pageToMarkdown(meta[page] ?? {}, docs[page] ?? []);
+          void window.hermesAPI.spsExportPage?.(page, markdown).then((ok) => {
+            flash(ok ? "Synced current page to vault" : "Vault sync unavailable");
+          });
+        },
+      },
+      {
+        kind: "action",
+        id: "obsidian-active-to-review",
+        icon: "sparkle",
+        label: "Process selected Obsidian note",
+        desc: "Read Obsidian's active note and queue it for SPS wiki review.",
+        run: () => {
+          void processActiveObsidianNote();
+        },
+      },
+      {
+        kind: "action",
+        id: "obsidian-import-folder",
+        icon: "file",
+        label: "Import from Obsidian folder",
+        desc: "Choose a markdown folder and import its notes into the SPS vault.",
+        run: () => {
+          void importObsidianFolder();
+        },
+      },
+      {
+        kind: "action",
+        id: "context-pack-current",
+        icon: "list",
+        label: "Save context pack for current page",
+        desc: "Package this note, backlinks, sources, tasks, and provenance as markdown.",
+        run: () => {
+          void window.hermesAPI
+            .spsBuildContextPack?.({
+              pageId: page,
+              depth: 1,
+              includeBacklinks: true,
+              includeSources: true,
+              includeTasks: true,
+              save: true,
+            })
+            .then((result) => {
+              flash(
+                result?.savedPath
+                  ? `Saved context pack: ${result.savedPath}`
+                  : "Built context pack",
+              );
+            });
+        },
+      },
+      {
+        kind: "action",
+        id: "base-current-folder",
+        icon: "table",
+        label: "Create Base from current folder",
+        desc: "Queue a projects Base proposal scoped to the current folder.",
+        run: () => {
+          const crumbIds = computePathIds(tree, page);
+          const folderId = crumbIds.length > 1 ? crumbIds[crumbIds.length - 2] : page;
+          const folder = meta[folderId]?.title || folderId || "Projects";
+          void window.hermesAPI
+            .spsCreateBaseProposal?.({ recipe: "projects", folder })
+            .then((proposal) => {
+              flash(`Queued ${proposal.title} Base for review`);
+              setSurface("review");
+            });
+        },
       },
       {
         kind: "action",
@@ -248,6 +403,12 @@ export function CommandPalette() {
       setExternalSessionsOpen,
       setSurface,
       flash,
+      page,
+      meta,
+      docs,
+      tree,
+      processActiveObsidianNote,
+      importObsidianFolder,
     ],
   );
 
