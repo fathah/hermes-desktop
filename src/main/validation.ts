@@ -26,6 +26,17 @@ import {
 import { expectedEnvKeyForModel } from "./installer";
 import { isLocalBaseUrl } from "../shared/url-key-map";
 
+// Credential NAME-ALIAS map — kept in LOCK-STEP with config-health.ts KEY_ALIASES
+// and Setup.tsx MODEL_KEY_ALIASES. A vault/.env may store the Anthropic
+// credential under the gateway Bearer name (ANTHROPIC_TOKEN) or the Claude Code
+// OAuth-path token name (CLAUDE_CODE_OAUTH_TOKEN) instead of the url-key-map's
+// canonical ANTHROPIC_API_KEY. The gateway's anthropic provider plugin reads all
+// three (env_vars), so any one present means the credential IS available — the
+// pre-send gate must NOT block Send just because the canonical name is empty.
+const KEY_ALIASES: Record<string, string[]> = {
+  ANTHROPIC_API_KEY: ["ANTHROPIC_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"],
+};
+
 export type ChatReadinessCode =
   | "NO_ACTIVE_MODEL"
   | "NO_PROVIDER"
@@ -155,6 +166,18 @@ export function validateChatReadiness(profile?: string): ChatReadiness {
     // resolves the credential from a properly-shaped auth.json entry.
     // If we have that evidence, allow Send.
     if (hasOAuthCredentials(provider, profile)) return OK;
+
+    // Credential NAME-ALIAS: the canonical expectedKey is empty, but the gateway
+    // also accepts equivalent names (ANTHROPIC_TOKEN / CLAUDE_CODE_OAUTH_TOKEN for
+    // ANTHROPIC_API_KEY). If any accepted alias is populated in .env/tmpfs, the
+    // credential IS available — do NOT block Send. This mirrors the install gate,
+    // the config-health warning, and the Setup detection. Without this, a vault
+    // user whose Anthropic credential is the OAuth token gets a false
+    // "Missing ANTHROPIC_API_KEY" pre-send block even though the gateway
+    // authenticates fine via the Bearer path.
+    for (const alias of KEY_ALIASES[expectedKey] ?? []) {
+      if ((env[alias] ?? "").trim()) return OK;
+    }
 
     return {
       ok: false,
