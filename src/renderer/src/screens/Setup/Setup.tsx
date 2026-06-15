@@ -41,6 +41,11 @@ function Setup({
   const [vaultKeys, setVaultKeys] = useState<string[]>([]);
   const [testingVault, setTestingVault] = useState(false);
   const [vaultTested, setVaultTested] = useState(false);
+  // When the vault ALREADY provides the model credential, the user can still
+  // choose to type their own key instead (override). This toggles which input
+  // the model step shows: "vault" = use the vault credential (no field),
+  // "manual" = enter an API key. Defaults to "vault" when the vault covers it.
+  const [keyMode, setKeyMode] = useState<"vault" | "manual">("vault");
 
   // ── Vault-onboarding (first-run) state ────────────────────────────────────
   // Probe lifecycle for the "command/keepassxc" provider. `detectStatus`
@@ -291,20 +296,49 @@ function Setup({
   // Does the chosen security provider already resolve THIS model provider's key?
   // If so, the model step skips the key field and Continue is allowed with no
   // typed key. Local/custom providers that don't need a key are also satisfied.
+  //
+  // Credential NAME-ALIAS awareness (mirrors main-process config-health.ts
+  // KEY_ALIASES): a vault often stores the Anthropic credential under a name that
+  // differs from the url-key-map's expected ANTHROPIC_API_KEY — e.g. the gateway
+  // Bearer name ANTHROPIC_TOKEN, or the Claude Code OAuth-path token
+  // CLAUDE_CODE_OAUTH_TOKEN. All authenticate to Anthropic, so a vault holding
+  // any of them already provides the model key — the Setup step must NOT then
+  // force the user to type an API key. Keep this list in lock-step with
+  // config-health.ts KEY_ALIASES.
+  const MODEL_KEY_ALIASES: Record<string, string[]> = {
+    ANTHROPIC_API_KEY: ["ANTHROPIC_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"],
+  };
+
   function vaultHasModelKey(): boolean {
     if (secretsChoice === "env") return false;
     const wanted = isLocal
       ? resolveCustomEnvKey(baseUrl.trim())
       : provider.envKey;
     if (!wanted) return false;
-    return vaultKeys.includes(wanted);
+    if (vaultKeys.includes(wanted)) return true;
+    // alias-aware: a vault credential under an equivalent name also satisfies it
+    for (const alias of MODEL_KEY_ALIASES[wanted] ?? []) {
+      if (vaultKeys.includes(alias)) return true;
+    }
+    return false;
+  }
+
+  // The model step shows the vault-covered path when the vault provides the key
+  // AND the user hasn't chosen to enter their own key instead. When the vault
+  // covers it, BOTH options are offered via a toggle (keyMode). When it doesn't,
+  // there's nothing to toggle — the key field is the only path.
+  function showingVaultCredential(): boolean {
+    return vaultHasModelKey() && keyMode === "vault";
   }
 
   async function handleFinish(): Promise<void> {
     // The model step requires EITHER a typed key, OR the vault already resolving
-    // it, OR a provider that needs no key.
-    const keyCoveredByVault = vaultHasModelKey();
-    if (provider.needsKey && !apiKey.trim() && !keyCoveredByVault) {
+    // it (and the user keeping the vault option), OR a provider that needs no key.
+    // If the user explicitly chose to enter their own key (keyMode === "manual")
+    // even though the vault could cover it, a typed key IS required — they opted
+    // out of the vault credential.
+    const usingVault = showingVaultCredential();
+    if (provider.needsKey && !apiKey.trim() && !usingVault) {
       setError(t("setup.missingApiKey"));
       return;
     }
@@ -790,7 +824,48 @@ function Setup({
                   {t("setup.customServerHint")}
                 </div>
 
-                {vaultHasModelKey() ? (
+                {vaultHasModelKey() && (
+                  <div
+                    className="setup-key-mode-toggle"
+                    role="radiogroup"
+                    aria-label={t("setup.keySourceLabel")}
+                    style={{ display: "flex", gap: 8, marginTop: 16 }}
+                  >
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={keyMode === "vault"}
+                      className={
+                        keyMode === "vault"
+                          ? "btn btn-secondary btn-sm setup-key-mode-active"
+                          : "btn btn-ghost btn-sm"
+                      }
+                      onClick={() => {
+                        setKeyMode("vault");
+                        setError("");
+                      }}
+                    >
+                      {t("setup.keyUseVault")}
+                    </button>
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={keyMode === "manual"}
+                      className={
+                        keyMode === "manual"
+                          ? "btn btn-secondary btn-sm setup-key-mode-active"
+                          : "btn btn-ghost btn-sm"
+                      }
+                      onClick={() => {
+                        setKeyMode("manual");
+                        setError("");
+                      }}
+                    >
+                      {t("setup.keyEnterManual")}
+                    </button>
+                  </div>
+                )}
+                {showingVaultCredential() ? (
                   <div
                     className="setup-field-hint setup-vault-covered"
                     style={{ marginTop: 16 }}
@@ -851,49 +926,94 @@ function Setup({
                 </div>
               </>
             ) : provider.needsKey ? (
-              vaultHasModelKey() ? (
-                <div className="setup-field-hint setup-vault-covered">
-                  {t("setup.keyFromVault", {
-                    provider: t(provider.name),
-                    key: provider.envKey,
-                  })}
-                </div>
-              ) : (
-                <>
-                  <label className="setup-label">
-                    {t("setup.apiKeyLabel", { provider: t(provider.name) })}
-                  </label>
-                  <div className="setup-input-group">
-                    <input
-                      className="input"
-                      type={showKey ? "text" : "password"}
-                      placeholder={provider.placeholder}
-                      value={apiKey}
-                      onChange={(e) => {
-                        setApiKey(e.target.value);
+              <>
+                {vaultHasModelKey() && (
+                  <div
+                    className="setup-key-mode-toggle"
+                    role="radiogroup"
+                    aria-label={t("setup.keySourceLabel")}
+                    style={{ display: "flex", gap: 8, marginBottom: 12 }}
+                  >
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={keyMode === "vault"}
+                      className={
+                        keyMode === "vault"
+                          ? "btn btn-secondary btn-sm setup-key-mode-active"
+                          : "btn btn-ghost btn-sm"
+                      }
+                      onClick={() => {
+                        setKeyMode("vault");
                         setError("");
                       }}
-                      onKeyDown={(e) => e.key === "Enter" && handleFinish()}
-                      autoFocus
-                    />
-                    <button
-                      className="setup-toggle-visibility"
-                      onClick={() => setShowKey(!showKey)}
-                      type="button"
                     >
-                      {showKey ? t("common.hide") : t("common.show")}
+                      {t("setup.keyUseVault")}
+                    </button>
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={keyMode === "manual"}
+                      className={
+                        keyMode === "manual"
+                          ? "btn btn-secondary btn-sm setup-key-mode-active"
+                          : "btn btn-ghost btn-sm"
+                      }
+                      onClick={() => {
+                        setKeyMode("manual");
+                        setError("");
+                      }}
+                    >
+                      {t("setup.keyEnterManual")}
                     </button>
                   </div>
+                )}
+                {showingVaultCredential() ? (
+                  <div className="setup-field-hint setup-vault-covered">
+                    {t("setup.keyFromVault", {
+                      provider: t(provider.name),
+                      key: provider.envKey,
+                    })}
+                  </div>
+                ) : (
+                  <>
+                    <label className="setup-label">
+                      {t("setup.apiKeyLabel", { provider: t(provider.name) })}
+                    </label>
+                    <div className="setup-input-group">
+                      <input
+                        className="input"
+                        type={showKey ? "text" : "password"}
+                        placeholder={provider.placeholder}
+                        value={apiKey}
+                        onChange={(e) => {
+                          setApiKey(e.target.value);
+                          setError("");
+                        }}
+                        onKeyDown={(e) => e.key === "Enter" && handleFinish()}
+                        autoFocus
+                      />
+                      <button
+                        className="setup-toggle-visibility"
+                        onClick={() => setShowKey(!showKey)}
+                        type="button"
+                      >
+                        {showKey ? t("common.hide") : t("common.show")}
+                      </button>
+                    </div>
 
-                  <button
-                    className="setup-link"
-                    onClick={() => window.hermesAPI.openExternal(provider.url)}
-                  >
-                    {t("setup.noKeyHint")}
-                    <ExternalLink size={12} />
-                  </button>
-                </>
-              )
+                    <button
+                      className="setup-link"
+                      onClick={() =>
+                        window.hermesAPI.openExternal(provider.url)
+                      }
+                    >
+                      {t("setup.noKeyHint")}
+                      <ExternalLink size={12} />
+                    </button>
+                  </>
+                )}
+              </>
             ) : (
               <>
                 <div className="setup-field-hint">

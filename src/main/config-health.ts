@@ -290,9 +290,16 @@ function checkApiServerKeyPlacement(profile?: string): ConfigHealthIssue[] {
  * treat them as equivalent — otherwise a vault-only user with `ANTHROPIC_TOKEN`
  * sees a false "ANTHROPIC_API_KEY is not set" warning even though the gateway
  * authenticates fine. Add other vendor aliases here as they come up.
+ *
+ * CLAUDE_CODE_OAUTH_TOKEN is the OAuth-token name used by the Claude Code auth
+ * path / masking-layer patch (a vault stores the OAuth token under this name).
+ * It authenticates to Anthropic exactly like an API key, so detection MUST count
+ * it as satisfying ANTHROPIC_API_KEY — otherwise a vault-only user whose
+ * Anthropic credential is the OAuth token is falsely told to enter an API key on
+ * onboarding even though the credential is already vault-provided.
  */
 const KEY_ALIASES: Record<string, string[]> = {
-  ANTHROPIC_API_KEY: ["ANTHROPIC_TOKEN"],
+  ANTHROPIC_API_KEY: ["ANTHROPIC_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"],
 };
 
 /**

@@ -147,6 +147,66 @@ describe("Setup — security-provider-first flow", () => {
     expect(api.setConfig).toHaveBeenCalledWith("secrets.provider", "command");
   });
 
+  it("AIR-018: vault holding CLAUDE_CODE_OAUTH_TOKEN satisfies Anthropic via alias, and the toggle offers BOTH options", async () => {
+    const onComplete = vi.fn();
+    // The vault resolves the OAuth-path token name, NOT ANTHROPIC_API_KEY. The
+    // alias map must still recognize it as covering the Anthropic provider key.
+    const api = mockAPI({
+      secretsProviderStatus: vi.fn().mockResolvedValue({
+        provider: "command",
+        keys: ["CLAUDE_CODE_OAUTH_TOKEN"],
+        count: 1,
+      }),
+    });
+    install(api);
+    render(<Setup onComplete={onComplete} />);
+    // Secrets step: pick command, test the vault, continue to the model step.
+    await act(async () => {
+      fireEvent.click(screen.getByText("setup.secrets_commandTitle"));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("setup.secretsTestVault"));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("setup.continue"));
+    });
+    // Choose the Anthropic provider (default is openrouter).
+    await act(async () => {
+      fireEvent.click(screen.getByText("constants.anthropicName"));
+    });
+
+    // Alias detection: ANTHROPIC_API_KEY is satisfied by CLAUDE_CODE_OAUTH_TOKEN,
+    // so the key field is GONE and the vault-covered message shows by default.
+    expect(screen.queryByPlaceholderText("sk-ant-...")).toBeNull();
+    expect(
+      screen.getByText((t) => t.startsWith("setup.keyFromVault")),
+    ).toBeInTheDocument();
+
+    // BOTH options offered: the toggle exposes a manual-entry choice.
+    const manualToggle = screen.getByText("setup.keyEnterManual");
+    expect(manualToggle).toBeInTheDocument();
+    expect(screen.getByText("setup.keyUseVault")).toBeInTheDocument();
+
+    // Choosing manual reveals the API-key field (override path).
+    await act(async () => {
+      fireEvent.click(manualToggle);
+    });
+    expect(screen.getByPlaceholderText("sk-ant-...")).toBeInTheDocument();
+
+    // Switching back to vault hides it again.
+    await act(async () => {
+      fireEvent.click(screen.getByText("setup.keyUseVault"));
+    });
+    expect(screen.queryByPlaceholderText("sk-ant-...")).toBeNull();
+
+    // Finish works with NO typed key (vault mode); no empty setEnv is written.
+    await act(async () => {
+      fireEvent.click(screen.getByText("setup.finish"));
+    });
+    await waitFor(() => expect(onComplete).toHaveBeenCalled());
+    expect(api.setEnv).not.toHaveBeenCalled();
+  });
+
   it("Back on the model step returns to the secrets step", async () => {
     install(mockAPI());
     render(<Setup onComplete={vi.fn()} />);

@@ -77,6 +77,11 @@ export default {
     "No keys resolved. Check the helper command, or that the vault is unlocked.",
   keyFromVault:
     "✓ {{key}} is resolved from your vault — no need to enter it. ({{provider}})",
+  // Toggle shown when the vault already provides the model credential: the user
+  // can use it, or override by entering their own API key.
+  keySourceLabel: "API key source",
+  keyUseVault: "Use vault credential",
+  keyEnterManual: "Enter an API key",
 
   // ── First-run vault onboarding ──────────────────────────────────────────
   vaultChecking: "Checking for an existing vault…",
