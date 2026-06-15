@@ -413,42 +413,28 @@ function checkRuntimeEnvKeyMismatch(profile?: string): ConfigHealthIssue[] {
     return [];
   }
 
-  // Look for a non-empty key that is a KNOWN ALIAS of the expected key — i.e.
-  // genuinely the same provider's credential saved under an equivalent name
-  // (e.g. ANTHROPIC_TOKEN / CLAUDE_CODE_OAUTH_TOKEN for ANTHROPIC_API_KEY).
-  // CRITICAL: do NOT fall back to "any *_API_KEY / *_TOKEN in .env". That
-  // greedy heuristic would pick an UNRELATED service's credential (e.g.
-  // MATRIX_ACCESS_TOKEN, NTFY_TOKEN) and offer to copy it into the provider key
-  // slot — a credential-bleed that writes a wrong, non-working value AND mislabels
-  // another service's secret. A copy is only safe when the source is an accepted
-  // alias of the destination. If no alias is populated, there is no safe
-  // auto-fix here — that's MODEL_KEY_MISSING territory (the user must supply the
-  // real key), not a rename.
+  // A populated KNOWN ALIAS means the credential is ALREADY SATISFIED — not
+  // "saved under the wrong name." The gateway's provider plugin reads
+  // ANTHROPIC_API_KEY, ANTHROPIC_TOKEN AND CLAUDE_CODE_OAUTH_TOKEN directly
+  // (env_vars=(...)), so any one of them authenticates. There is NOTHING to fix
+  // and NOTHING to copy: returning a mismatch here is a false positive, and the
+  // "copy alias → ANTHROPIC_API_KEY" auto-fix is ACTIVELY HARMFUL for the OAuth
+  // case — an OAuth token (CLAUDE_CODE_OAUTH_TOKEN / sk-ant-oat…) is only valid
+  // on the Authorization: Bearer path; copied into the ANTHROPIC_API_KEY slot it
+  // gets sent as the x-api-key header → Anthropic 401 "invalid x-api-key" (the
+  // documented OAuth-in-api-key-slot self-inflicted-401 trap). So: if an accepted
+  // alias is populated, the credential is present under a valid name — emit NO
+  // issue. (The greedy "any *_API_KEY/*_TOKEN" heuristic that used to live here
+  // was also a credential-bleed footgun — see AIR-020 — and is gone entirely.)
   const aliasNames = KEY_ALIASES[expectedKey] ?? [];
-  const candidates = Object.entries(env).filter(
-    ([k, v]) => aliasNames.includes(k) && (v ?? "").trim() !== "",
-  );
-  if (candidates.length === 0) return [];
+  const aliasSatisfied = aliasNames.some((k) => (env[k] ?? "").trim() !== "");
+  if (aliasSatisfied) return [];
 
-  // Pick the populated alias (first match — alias order is preference order).
-  const [otherKey] = candidates[0];
-  const { envFile } = profilePaths(profile);
-  return [
-    {
-      code: "UI_RUNTIME_ENVKEY_MISMATCH",
-      severity: "warning",
-      message: `${expectedKey} is empty but ${otherKey} has a value — likely saved under the wrong name.`,
-      detail:
-        `Your active model's base URL (${mc.baseUrl}) expects ${expectedKey}, ` +
-        `but only ${otherKey} is populated. Auto-fix copies the value across ` +
-        "(the original entry is left alone).",
-      locations: [envFile],
-      autoFixable: true,
-      fixDescription: `Copy ${otherKey} → ${expectedKey} in .env.`,
-      fixLocation: ".env",
-      context: { from: otherKey, to: expectedKey },
-    },
-  ];
+  // No expected key, no accepted alias, no custom-endpoint fallback → the
+  // credential is genuinely absent. That's MODEL_KEY_MISSING territory (the user
+  // must supply the real key), NOT a rename/copy. Do not fabricate a copy source
+  // from an unrelated credential.
+  return [];
 }
 
 /**
