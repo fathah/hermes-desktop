@@ -11,6 +11,11 @@ import {
   findRunBySession,
   loadingSessionIds as deriveLoadingSessionIds,
 } from "./chatRuns";
+import {
+  deleteChatRunTranscript,
+  persistChatRunsState,
+  restoreChatRunsState,
+} from "./chatRunPersistence";
 import { ActiveSessionsBar } from "./ActiveSessionsBar";
 import Sessions from "../Sessions/Sessions";
 import Agents from "../Agents/Agents";
@@ -103,12 +108,24 @@ function Layout({
 }: LayoutProps = {}): React.JSX.Element {
   const { t } = useI18n();
   const [view, setView] = useState<View>("chat");
+  const restoredRunsRef = useRef<{
+    value: ReturnType<typeof restoreChatRunsState>;
+  } | null>(null);
+  if (restoredRunsRef.current === null) {
+    restoredRunsRef.current = { value: restoreChatRunsState() };
+  }
   // Multiple conversations coexist (background sessions + multi-agent). Each is
   // a ChatRun; all are mounted, only the active one is shown. `activeProfile`
   // tracks the selected profile and always equals the active run's profile.
-  const [activeProfile, setActiveProfile] = useState("default");
-  const [runs, setRuns] = useState<ChatRun[]>(() => [mintRun("default")]);
-  const [activeRunId, setActiveRunId] = useState<string>(() => runs[0].runId);
+  const [activeProfile, setActiveProfile] = useState(
+    () => restoredRunsRef.current?.value?.activeProfile ?? "default",
+  );
+  const [runs, setRuns] = useState<ChatRun[]>(
+    () => restoredRunsRef.current?.value?.runs ?? [mintRun("default")],
+  );
+  const [activeRunId, setActiveRunId] = useState<string>(
+    () => restoredRunsRef.current?.value?.activeRunId ?? runs[0].runId,
+  );
   // While a resume's history is loading, show its spinner immediately.
   const [resumingSessionId, setResumingSessionId] = useState<string | null>(
     null,
@@ -120,6 +137,10 @@ function Layout({
 
   const currentSessionId =
     runs.find((r) => r.runId === activeRunId)?.sessionId ?? null;
+
+  useEffect(() => {
+    persistChatRunsState(runs, activeRunId);
+  }, [runs, activeRunId]);
 
   const loadingSessionIds = useMemo(
     () => deriveLoadingSessionIds(runs),
@@ -399,6 +420,7 @@ function Layout({
   const handleCloseRun = useCallback(
     (runId: string) => {
       window.hermesAPI.abortChat(runId);
+      deleteChatRunTranscript(runId);
       const idx = runs.findIndex((r) => r.runId === runId);
       const remaining = runs.filter((r) => r.runId !== runId);
       if (remaining.length === 0) {

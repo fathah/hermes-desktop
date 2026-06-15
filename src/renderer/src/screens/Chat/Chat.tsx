@@ -20,6 +20,11 @@ import {
 } from "./hooks/useDashboardChatTransport";
 import { useI18n } from "../../components/useI18n";
 import { buildChatTranscript } from "./transcriptUtils";
+import { dbItemsToChatMessages, type DbHistoryItem } from "./sessionHistory";
+import {
+  deleteChatRunTranscript,
+  saveChatRunTranscript,
+} from "../Layout/chatRunPersistence";
 import { ConfigHealthBanner } from "../../components/ConfigHealthBanner";
 import type { Attachment } from "../../../../shared/attachments";
 import type { ActiveTurn, ChatMessage, UsageState } from "./types";
@@ -265,6 +270,31 @@ function Chat({
     activeTurnRef,
   });
 
+  const hydratedInitialSessionRef = useRef(false);
+  useEffect(() => {
+    if (hydratedInitialSessionRef.current) return;
+    if (!initialSessionId || messages.length > 0) return;
+    hydratedInitialSessionRef.current = true;
+    let cancelled = false;
+    window.hermesAPI
+      .getSessionMessages(initialSessionId)
+      .then((items) => {
+        if (cancelled) return;
+        const restored = dbItemsToChatMessages(items as DbHistoryItem[]);
+        if (restored.length > 0) setMessages(restored);
+      })
+      .catch(() => {
+        /* best-effort restore; sending can still resume by session id */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [initialSessionId, messages.length]);
+
+  useEffect(() => {
+    saveChatRunTranscript(runId, messages);
+  }, [runId, messages]);
+
   // No parent-driven reset effects: each run is its own <Chat key={runId}>
   // instance. A new chat is a fresh mount, and switching sessions just flips
   // which mounted instance is shown — local state (session id, context folder,
@@ -368,6 +398,7 @@ function Chat({
       void window.hermesAPI.clearStagedAttachments(idToDelete);
     }
     setMessages([]);
+    deleteChatRunTranscript(runId);
     setHermesSessionId(null);
     setContextFolder(null);
     activeTurnRef.current = null;
@@ -375,7 +406,9 @@ function Chat({
     setToolProgress(null);
     queueRef.current = [];
     setQueuedMessages([]);
-  }, [isLoading, runId, hermesSessionId, setMessages]);
+    reportedTitleRef.current = false;
+    onTitleChange?.(runId, "");
+  }, [isLoading, runId, hermesSessionId, setMessages, onTitleChange]);
 
   const localCommands = useLocalCommands({
     profile,

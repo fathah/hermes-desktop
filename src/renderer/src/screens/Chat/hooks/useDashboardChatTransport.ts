@@ -660,7 +660,11 @@ export function dashboardSeedMessagesFromTranscript(
   for (const message of messages) {
     if (!isBubbleMessage(message)) continue;
     if (message.role === "user" && message.id === options.excludeUserId) continue;
-    if (message.localOnly || message.error || message.pending) continue;
+    // Pending is renderer-local, but if a connection/runtime session has to be
+    // recreated from the visible transcript, that partially streamed assistant
+    // text is still the only context the user saw.  Error/local-only rows stay
+    // excluded; pending-but-readable assistant content is preserved.
+    if (message.localOnly || message.error) continue;
     if (failedUserIds.has(message.id)) continue;
     const content = normalizeMessageText(message.content);
     if (!content) continue;
