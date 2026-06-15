@@ -129,6 +129,14 @@ export function registerNotesIpc(
     },
   );
 
+  safeHandle(
+    "sps-index-unlinked-mentions",
+    async (_event, path: string, profile?: string) => {
+      requireLocalWorkspace();
+      return (await getSpsNoteIndex(profile)).unlinkedMentions(path);
+    },
+  );
+
   safeHandle("sps-index-links", async (_event, profile?: string) => {
     requireLocalWorkspace();
     return (await getSpsNoteIndex(profile)).links();

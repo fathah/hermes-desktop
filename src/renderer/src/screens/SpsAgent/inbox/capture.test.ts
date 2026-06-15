@@ -33,6 +33,25 @@ describe("buildCapture", () => {
     expect(body.trim()).toBe("Some clipped text");
   });
 
+  it("serializes web selections and highlights for Learn This captures", () => {
+    const { markdown } = buildCapture(
+      {
+        source: "web",
+        body: "Reader summary",
+        title: "A web clip",
+        url: "https://example.com/post",
+        selection: "quoted paragraph",
+        highlights: ["first highlight", "second highlight"],
+        capturedAt: 1_700_000_000_000,
+      },
+      "cap-selection",
+    );
+    const { props, body } = rowFromMarkdown(markdown);
+    expect(props.selection).toBe("quoted paragraph");
+    expect(props.highlights).toEqual(["first highlight", "second highlight"]);
+    expect(body).toContain("Reader summary");
+  });
+
   it("omits optional fields (via/url) when absent", () => {
     const { markdown } = buildCapture(
       { source: "quick-note", body: "note", capturedAt: 1 },

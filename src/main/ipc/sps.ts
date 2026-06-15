@@ -1,3 +1,4 @@
+import { app } from "electron";
 import { safeHandle } from "./safe-handle";
 import { existsSync } from "fs";
 import { exec } from "child_process";
@@ -15,6 +16,7 @@ import {
   spsSave,
   type PageContext as SpsPageContext,
 } from "../sps-agent";
+import { writeSpsCapture } from "../sps-capture";
 import { spsGetWorkSession, spsSetWorkSession } from "../sps-work-sessions";
 import {
   listActiveWorkRuns,
@@ -26,6 +28,14 @@ import { appendWikiLog, type WikiLogOp } from "../sps-wiki-log";
 import { ensureIndexCoverage } from "../sps-ingest";
 import { resolveSpsVaultDir } from "../sps-storage";
 import { spsImportOkfBundle, spsExportOkfBundle } from "../sps-okf";
+import {
+  applyMarkdownImportPlan,
+  createMarkdownImportPlan,
+} from "../sps-import";
+import {
+  updatePageProperties,
+  type SpsPropertyPatch,
+} from "../sps-properties";
 import { runTelosAudit, runPipingPattern } from "../telos-auditor";
 import {
   oaSearchWorks,
@@ -45,6 +55,13 @@ import type {
   ActiveWorkCreateInput,
   ActiveWorkPatch,
 } from "../../shared/active-work";
+import type {
+  SpsCaptureInput,
+  SpsImportPlan,
+  SpsImportSource,
+} from "../../shared/sps-types";
+
+const importPlans = new Map<string, SpsImportPlan>();
 
 export function registerSpsIpc(): void {
   // SPS Agent workspace (unfurl / assistant / persistence)
@@ -66,6 +83,21 @@ export function registerSpsIpc(): void {
   );
   safeHandle("sps-ingest-inbox", (_event, profile?: string) =>
     spsIngestInbox(profile),
+  );
+  safeHandle("sps-register-deep-links", () =>
+    app.setAsDefaultProtocolClient("sps"),
+  );
+  safeHandle(
+    "sps-capture",
+    async (_event, input: SpsCaptureInput, profile?: string) => {
+      const capture = { ...input };
+      if (capture.source === "web" && capture.url) {
+        const unfurled = await spsUnfurl(capture.url);
+        capture.title = capture.title?.trim() || unfurled.title;
+        capture.description = capture.description?.trim() || unfurled.desc;
+      }
+      return writeSpsCapture(resolveSpsVaultDir(profile), capture);
+    },
   );
   safeHandle(
     "sps-file-answer",
@@ -97,9 +129,56 @@ export function registerSpsIpc(): void {
       spsSave(ws, profile, baseRev),
   );
   safeHandle(
+    "sps-update-page-properties",
+    (_event, pageId: string, patch: SpsPropertyPatch, profile?: string) =>
+      updatePageProperties(resolveSpsVaultDir(profile), pageId, patch),
+  );
+  safeHandle(
     "sps-import-okf-bundle",
     (_event, bundleDir: string, profile?: string) =>
       spsImportOkfBundle(bundleDir, profile),
+  );
+  safeHandle(
+    "sps-create-import-plan",
+    async (
+      _event,
+      input: { source: SpsImportSource; targetFolder?: string },
+      profile?: string,
+    ) => {
+      if (input.source.kind !== "markdown-folder") {
+        throw new Error(
+          `Import dry-run is not implemented for ${input.source.kind}.`,
+        );
+      }
+      const plan = await createMarkdownImportPlan({
+        source: input.source,
+        vaultDir: resolveSpsVaultDir(profile),
+        targetFolder: input.targetFolder,
+      });
+      importPlans.set(plan.id, plan);
+      return plan;
+    },
+  );
+  safeHandle(
+    "sps-apply-import-plan",
+    async (_event, planId: string, profile?: string) => {
+      const plan = importPlans.get(planId);
+      if (!plan) {
+        return {
+          success: false,
+          pagesCreated: 0,
+          conflicts: 0,
+          skipped: 0,
+          error: "Import plan not found. Create a fresh dry-run first.",
+        };
+      }
+      const result = await applyMarkdownImportPlan(
+        plan,
+        resolveSpsVaultDir(profile),
+      );
+      if (result.success) importPlans.delete(planId);
+      return result;
+    },
   );
   safeHandle(
     "sps-export-okf-bundle",

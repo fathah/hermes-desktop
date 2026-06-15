@@ -6,7 +6,7 @@
 // scripts/verify-note-index.ts under ELECTRON_RUN_AS_NODE=1. Keep this file to
 // the pure functions that need no native module.
 import { describe, expect, it } from "vitest";
-import { parseFrontmatter } from "./note-index";
+import { findUnlinkedMentionTargets, parseFrontmatter } from "./note-index";
 
 describe("parseFrontmatter", () => {
   it("splits YAML frontmatter from the body", () => {
@@ -32,5 +32,39 @@ describe("parseFrontmatter", () => {
     const { props, body } = parseFrontmatter(`---\n: : bad : :\n---\nbody`);
     expect(props).toEqual({});
     expect(body).toBe("body");
+  });
+});
+
+describe("findUnlinkedMentionTargets", () => {
+  it("matches page ids, titles, and aliases while ignoring explicit wikilinks", () => {
+    const hits = findUnlinkedMentionTargets(
+      "Atlas depends on Maya. [[Roadmap]] is already linked. Atlassian is not Atlas.",
+      [
+        {
+          path: "Project-Atlas.md",
+          title: "Project Atlas",
+          props: { aliases: ["Atlas"] },
+          mtime: 1,
+        },
+        {
+          path: "Roadmap.md",
+          title: "Roadmap",
+          props: {},
+          mtime: 1,
+        },
+        {
+          path: "Maya.md",
+          title: "Maya",
+          props: {},
+          mtime: 1,
+        },
+      ],
+      "Home.md",
+    );
+
+    expect(hits).toEqual([
+      { source: "Home.md", target: "Maya.md", phrase: "Maya" },
+      { source: "Home.md", target: "Project-Atlas.md", phrase: "Atlas" },
+    ]);
   });
 });

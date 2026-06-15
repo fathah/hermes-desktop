@@ -1159,8 +1159,12 @@
 }
 
 .sps-scope .backlinks-title {
-  margin: 0;
+  margin: 12px 0 8px;
   font-weight: 600;
+}
+
+.sps-scope .backlinks-header .backlinks-title {
+  margin: 0;
 }
 
 .sps-scope .backlinks-description {
@@ -1174,6 +1178,7 @@
   border: 1px dashed var(--hair-soft);
   border-radius: 8px;
   padding: 24px 16px;
+  margin-bottom: 14px;
   text-align: center;
   color: var(--tx-4);
   font-size: 13px;
@@ -1190,6 +1195,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  margin-bottom: 14px;
 }
 
 .sps-scope .backlinks-item {
@@ -1214,6 +1220,15 @@
 .sps-scope .backlinks-item-label {
   font-weight: 500;
   color: var(--tx-1);
+}
+
+.sps-scope .backlinks-item-phrase {
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--tx-3);
+  font-size: 12px;
 }
 
 .sps-scope .backlinks-item-chevron {

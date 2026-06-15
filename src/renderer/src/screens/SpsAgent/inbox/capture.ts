@@ -38,6 +38,10 @@ export interface CaptureInput {
   via?: string;
   /** Origin URL for web-clips. */
   url?: string;
+  /** User-selected source text from a web clip or share extension. */
+  selection?: string;
+  /** Highlight snippets captured from a clipper extension. */
+  highlights?: string[];
   /** Epoch ms. Passed in so this stays pure (Date.now is the caller's job). */
   capturedAt: number;
 }
@@ -70,6 +74,9 @@ export function buildCapture(input: CaptureInput, id = uid("cap")): Capture {
   };
   if (input.via) props.via = input.via;
   if (input.url) props.url = input.url;
+  if (input.selection?.trim()) props.selection = input.selection.trim();
+  const highlights = input.highlights?.map((h) => h.trim()).filter(Boolean);
+  if (highlights?.length) props.highlights = highlights;
   const markdown = rowToMarkdown(props, input.body.trim());
   return { id, markdown };
 }

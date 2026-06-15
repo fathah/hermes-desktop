@@ -89,6 +89,44 @@ export function useVaultBacklinks(pageId: string | null): string[] {
   return backlinks;
 }
 
+export interface UnlinkedMention {
+  source: string;
+  target: string;
+  phrase: string;
+}
+
+export function useUnlinkedMentions(pageId: string | null): UnlinkedMention[] {
+  const [mentions, setMentions] = useState<UnlinkedMention[]>([]);
+  const rebuildVersion = useIndexRebuildVersion();
+  useEffect(() => {
+    let cancelled = false;
+    setMentions([]);
+    if (!pageId) return;
+    const api = window.hermesAPI;
+    if (!api?.spsFindUnlinkedMentions) return;
+    api
+      .spsFindUnlinkedMentions(pageId)
+      .then((rows) => {
+        if (!cancelled) {
+          setMentions(
+            rows.map((row) => ({
+              source: row.source.replace(MD_SUFFIX, ""),
+              target: row.target.replace(MD_SUFFIX, ""),
+              phrase: row.phrase,
+            })),
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setMentions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pageId, rebuildVersion]);
+  return mentions;
+}
+
 export interface VaultEdge {
   source: string;
   target: string;

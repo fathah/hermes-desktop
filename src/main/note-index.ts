@@ -149,6 +149,12 @@ export interface NoteRecord {
   mtime: number;
 }
 
+export interface UnlinkedMentionHit {
+  source: string;
+  target: string;
+  phrase: string;
+}
+
 export interface NoteSearchHit {
   path: string;
   title: string;
@@ -242,6 +248,50 @@ function candidateNames(relPath: string): string[] {
   return Array.from(
     new Set([normalizeName(fwd), normalizeName(noExt), normalizeName(base)]),
   ).filter(Boolean);
+}
+
+function mentionPhrases(note: NoteRecord): string[] {
+  const phrases = new Set<string>();
+  const add = (value: unknown): void => {
+    if (typeof value !== "string") return;
+    const clean = value.trim();
+    if (clean) phrases.add(clean);
+  };
+  add(note.path.replace(/\.(md|markdown)$/i, ""));
+  add(basename(note.path, extname(note.path)));
+  add(note.title);
+  const aliases = note.props.aliases;
+  if (Array.isArray(aliases)) aliases.forEach(add);
+  return [...phrases].sort((a, b) => b.length - a.length || a.localeCompare(b));
+}
+
+function maskExplicitWikilinks(text: string): string {
+  return text.replace(/\[\[[^\]]+\]\]/g, (match) => " ".repeat(match.length));
+}
+
+function phraseRegex(phrase: string): RegExp {
+  const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^A-Za-z0-9_-])(${escaped})(?=$|[^A-Za-z0-9_-])`, "i");
+}
+
+export function findUnlinkedMentionTargets(
+  body: string,
+  notes: NoteRecord[],
+  source: string,
+): UnlinkedMentionHit[] {
+  const searchable = maskExplicitWikilinks(body);
+  const hits: UnlinkedMentionHit[] = [];
+  for (const note of notes) {
+    if (note.path === source) continue;
+    for (const phrase of mentionPhrases(note)) {
+      if (!phraseRegex(phrase).test(searchable)) continue;
+      hits.push({ source, target: note.path, phrase });
+      break;
+    }
+  }
+  return hits.sort(
+    (a, b) => a.target.localeCompare(b.target) || a.phrase.localeCompare(b.phrase),
+  );
 }
 
 function isNoteFile(path: string): boolean {
@@ -480,6 +530,28 @@ export class NoteIndex {
     return { path: row.path, title: row.title, props, mtime: row.mtime };
   }
 
+  private linkTargetNames(note: NoteRecord): string[] {
+    const names = new Set(candidateNames(note.path));
+    const add = (value: unknown): void => {
+      if (typeof value !== "string") return;
+      const norm = normalizeName(value);
+      if (norm) names.add(norm);
+    };
+    add(note.title);
+    const aliases = note.props.aliases;
+    if (Array.isArray(aliases)) aliases.forEach(add);
+    return [...names].filter(Boolean);
+  }
+
+  private recordForPath(relPath: string): NoteRecord | null {
+    const row = this.db
+      .prepare(`SELECT path,title,props,mtime FROM notes WHERE path = ?`)
+      .get(relPath) as
+      | { path: string; title: string; props: string; mtime: number }
+      | undefined;
+    return row ? this.rowToRecord(row) : null;
+  }
+
   /** Ensure an expression index over a frontmatter property exists (lazy). */
   private ensurePropIndex(prop: string): void {
     const safe = safeProp(prop);
@@ -595,7 +667,8 @@ export class NoteIndex {
 
   /** Notes that [[wikilink]] to the given note (order-independent resolution). */
   backlinks(relPath: string): string[] {
-    const candidates = candidateNames(relPath);
+    const note = this.recordForPath(relPath);
+    const candidates = note ? this.linkTargetNames(note) : candidateNames(relPath);
     if (candidates.length === 0) return [];
     const placeholders = candidates.map(() => "?").join(",");
     const rows = this.db
@@ -610,15 +683,22 @@ export class NoteIndex {
    *  view). Only edges whose target resolves to an indexed note are returned;
    *  self-links and duplicate edges are dropped. */
   links(): Array<{ source: string; target: string; type: string }> {
-    const notes = this.db.prepare(`SELECT path FROM notes`).all() as Array<{
-      path: string;
-    }>;
+    const notes = (
+      this.db
+        .prepare(`SELECT path,title,props,mtime FROM notes`)
+        .all() as Array<{
+        path: string;
+        title: string;
+        props: string;
+        mtime: number;
+      }>
+    ).map((row) => this.rowToRecord(row));
     // Map each note's candidate names → its relPath so a normalized link target
     // resolves to a concrete note (first note to claim a name wins).
     const nameToPath = new Map<string, string>();
-    for (const { path } of notes) {
-      for (const name of candidateNames(path)) {
-        if (!nameToPath.has(name)) nameToPath.set(name, path);
+    for (const note of notes) {
+      for (const name of this.linkTargetNames(note)) {
+        if (!nameToPath.has(name)) nameToPath.set(name, note.path);
       }
     }
     const rows = this.db
@@ -640,12 +720,19 @@ export class NoteIndex {
   /** Raw [[wikilink]]s whose target does NOT resolve to an indexed note
    *  (broken links — the inverse of links(), for lint). Deduped per edge. */
   unresolvedLinks(): Array<{ source: string; target: string; type: string }> {
-    const notes = this.db.prepare(`SELECT path FROM notes`).all() as Array<{
-      path: string;
-    }>;
+    const notes = (
+      this.db
+        .prepare(`SELECT path,title,props,mtime FROM notes`)
+        .all() as Array<{
+        path: string;
+        title: string;
+        props: string;
+        mtime: number;
+      }>
+    ).map((row) => this.rowToRecord(row));
     const known = new Set<string>();
-    for (const { path } of notes) {
-      for (const name of candidateNames(path)) known.add(name);
+    for (const note of notes) {
+      for (const name of this.linkTargetNames(note)) known.add(name);
     }
     const rows = this.db
       .prepare(`SELECT source, target_norm, type FROM links`)
@@ -729,6 +816,33 @@ export class NoteIndex {
       .prepare(`SELECT DISTINCT source FROM tags WHERE tag = ? COLLATE NOCASE`)
       .all(clean) as Array<{ source: string }>;
     return rows.map((r) => r.source);
+  }
+
+  unlinkedMentions(relPath: string): UnlinkedMentionHit[] {
+    const rows = this.db
+      .prepare(`SELECT path,title,props,body,mtime FROM notes`)
+      .all() as Array<{
+      path: string;
+      title: string;
+      props: string;
+      body: string;
+      mtime: number;
+    }>;
+    const notes = rows.map((row) => this.rowToRecord(row));
+    if (!notes.some((note) => note.path === relPath)) return [];
+    const hits: UnlinkedMentionHit[] = [];
+    for (const row of rows) {
+      if (row.path === relPath) continue;
+      hits.push(
+        ...findUnlinkedMentionTargets(row.body, notes, row.path).filter(
+          (hit) => hit.target === relPath,
+        ),
+      );
+    }
+    return hits.sort(
+      (a, b) =>
+        a.source.localeCompare(b.source) || a.phrase.localeCompare(b.phrase),
+    );
   }
 
   status(): NoteIndexStatus {

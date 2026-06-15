@@ -9,9 +9,22 @@
 // the substrate (and its index) materializes, while the JSON blob stays the
 // authoritative store until parity is proven (S6).
 import { blocksToMarkdown, markdownToBlocks } from "./blockMarkdown";
-import type { Block, PageMeta } from "../types";
+import type { Block, PageMeta, SpsPropertyValue } from "../types";
 
 const FRONTMATTER_RE = /^---\n([\s\S]*?)\n---\n?/;
+const RESERVED_KEYS = new Set([
+  "title",
+  "icon",
+  "cover",
+  "source",
+  "ingestedAt",
+  "journal",
+  "date",
+  "time",
+  "mood",
+  "tags",
+  "aliases",
+]);
 
 /** Serialize a page (its properties + blocks) to a markdown file string.
  *  Block ids in `anchoredIds` are persisted so comment anchors survive (F2). */
@@ -42,6 +55,15 @@ export function pageToMarkdown(
   // which the note-index's real YAML parser reads as an array.
   if (meta.tags !== undefined && meta.tags.length > 0)
     fm.push(`tags: ${JSON.stringify(meta.tags)}`);
+  if (meta.aliases !== undefined && meta.aliases.length > 0)
+    fm.push(`aliases: ${JSON.stringify(meta.aliases)}`);
+  const extra = meta.properties ?? {};
+  for (const key of Object.keys(extra).sort()) {
+    if (RESERVED_KEYS.has(key)) continue;
+    const value = extra[key];
+    if (!isSpsPropertyValue(value)) continue;
+    fm.push(`${key}: ${JSON.stringify(value)}`);
+  }
   const body = blocksToMarkdown(blocks, anchoredIds);
   if (fm.length === 0) return body;
   return `---\n${fm.join("\n")}\n---\n\n${body}`;
@@ -63,6 +85,7 @@ export function pageFromMarkdown(md: string): {
 
 function parseScalarFrontmatter(text: string): Partial<PageMeta> {
   const out: Partial<PageMeta> = {};
+  const properties: Record<string, SpsPropertyValue> = {};
   for (const line of text.split("\n")) {
     const sep = line.indexOf(":");
     if (sep < 0) continue;
@@ -87,6 +110,23 @@ function parseScalarFrontmatter(text: string): Partial<PageMeta> {
     else if (key === "mood" && typeof value === "string") out.mood = value;
     else if (key === "tags" && Array.isArray(value))
       out.tags = value.filter((t): t is string => typeof t === "string");
+    else if (key === "aliases" && Array.isArray(value))
+      out.aliases = value.filter((t): t is string => typeof t === "string");
+    else if (!RESERVED_KEYS.has(key) && isSpsPropertyValue(value))
+      properties[key] = value;
   }
+  if (Object.keys(properties).length > 0) out.properties = properties;
   return out;
+}
+
+function isSpsPropertyValue(value: unknown): value is SpsPropertyValue {
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return true;
+  }
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
 }

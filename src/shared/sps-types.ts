@@ -51,6 +51,81 @@ export type StatusKey = "todo" | "doing" | "review" | "done" | "inbox" | "this_w
 export type PrioKey = "high" | "med" | "low";
 export type PersonKey = string; // 'maya' | 'theo' | 'priya' | 'sam' (+ user-added)
 
+export type SpsPropertyValue = string | number | boolean | string[] | null;
+export type SpsPageSchemaKey =
+  | "project"
+  | "task"
+  | "meeting"
+  | "person"
+  | "organization"
+  | "source"
+  | "decision"
+  | "journal";
+
+export interface SpsPropertySchema {
+  key: string;
+  label: string;
+  type: "text" | "number" | "checkbox" | "date" | "datetime" | "tags";
+  required?: boolean;
+}
+
+export interface SpsBaseViewConfig {
+  source?: string;
+  scope?: string;
+  view: DbView;
+  columns: string[];
+  filters?: Array<{ prop: string; op: "eq" | "neq" | "contains" | "exists"; value?: SpsPropertyValue }>;
+  sort?: { prop: string; dir: "asc" | "desc" };
+  titleProperty?: string;
+  schema?: SpsPageSchemaKey;
+}
+
+export type SpsImportSource =
+  | { kind: "okf-bundle"; path: string }
+  | { kind: "markdown-folder"; path: string }
+  | { kind: "document-folder"; path: string };
+
+export interface SpsImportPlanItem {
+  sourcePath: string;
+  targetPageId: string;
+  targetPath: string;
+  status: "create" | "conflict" | "skipped";
+  reason?: string;
+}
+
+export interface SpsImportPlan {
+  id: string;
+  source: SpsImportSource;
+  targetFolder?: string;
+  items: SpsImportPlanItem[];
+  summary: {
+    filesScanned: number;
+    pagesToCreate: number;
+    conflicts: number;
+    skipped: number;
+  };
+}
+
+export interface SpsImportResult {
+  success: boolean;
+  pagesCreated: number;
+  conflicts: number;
+  skipped: number;
+  error?: string;
+}
+
+export interface SpsCaptureInput {
+  source: "quick-note" | "web" | "voice" | "screenshot";
+  body: string;
+  title?: string;
+  description?: string;
+  via?: string;
+  url?: string;
+  capturedAt: number;
+  selection?: string;
+  highlights?: string[];
+}
+
 export interface ChecklistItem {
   id: string;
   text: string;
@@ -112,6 +187,8 @@ export interface Block {
   // markdown row-files under <vault>/<source>/ (via the note index) instead of
   // the embedded `rows`. Absent ⇒ classic embedded database (unchanged).
   source?: string;
+  // Bases: generalized database view over page/frontmatter collections.
+  base?: SpsBaseViewConfig;
   // bookmark
   bm?: BookmarkMeta | null;
   // image (data URL + caption)
@@ -184,6 +261,8 @@ export interface PageMeta {
   // only when present, so non-tagged pages serialize byte-identically. The
   // note-index also harvests inline `#tag`s from the body.
   tags?: string[];
+  aliases?: string[];
+  properties?: Record<string, SpsPropertyValue>;
 }
 
 export interface CommentMessage {

@@ -9,7 +9,15 @@ import type {
   ScheduledResearchItem,
   ScheduleInput,
 } from "../../shared/scheduledResearch";
-import type { SpsSaveResult } from "../../shared/sps-types";
+import type {
+  SpsCaptureInput,
+  SpsBaseViewConfig,
+  SpsImportPlan,
+  SpsImportResult,
+  SpsImportSource,
+  SpsPropertyValue,
+  SpsSaveResult,
+} from "../../shared/sps-types";
 import type {
   FederatedHit,
   FederatedSearchOpts,
@@ -101,6 +109,13 @@ export const spsBridge = {
       memory: string[];
     };
   }> => ipcRenderer.invoke("sps-ingest-inbox", profile),
+  spsRegisterDeepLinks: (): Promise<boolean> =>
+    ipcRenderer.invoke("sps-register-deep-links"),
+  spsCapture: (
+    input: SpsCaptureInput,
+    profile?: string,
+  ): Promise<{ success: boolean; id?: string; error?: string }> =>
+    ipcRenderer.invoke("sps-capture", input, profile),
   spsFileAnswer: (
     question: string,
     answer: string,
@@ -186,6 +201,12 @@ export const spsBridge = {
     baseRev?: number,
   ): Promise<SpsSaveResult> =>
     ipcRenderer.invoke("sps-save", ws, profile, baseRev),
+  spsUpdatePageProperties: (
+    pageId: string,
+    patch: Record<string, SpsPropertyValue | undefined>,
+    profile?: string,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("sps-update-page-properties", pageId, patch, profile),
   spsGetWorkSession: (
     pageId: string,
     profile?: string,
@@ -349,6 +370,34 @@ export const spsBridge = {
     ipcRenderer.invoke("sps-index-search", text, limit, profile),
   spsIndexBacklinks: (path: string, profile?: string): Promise<string[]> =>
     ipcRenderer.invoke("sps-index-backlinks", path, profile),
+  spsQueryBase: (
+    config: SpsBaseViewConfig,
+    profile?: string,
+  ): Promise<
+    Array<{
+      path: string;
+      title: string;
+      props: Record<string, unknown>;
+      mtime: number;
+    }>
+  > =>
+    ipcRenderer.invoke(
+      "sps-index-query",
+      {
+        scope: config.scope ?? config.source,
+        filters: config.filters,
+        sort: config.sort,
+        limit: 500,
+      },
+      profile,
+    ),
+  spsFindUnlinkedMentions: (
+    pageId: string,
+    profile?: string,
+  ): Promise<Array<{ source: string; target: string; phrase: string }>> => {
+    const path = pageId.endsWith(".md") || pageId.includes("/") ? pageId : `${pageId}.md`;
+    return ipcRenderer.invoke("sps-index-unlinked-mentions", path, profile);
+  },
   // Federated search: one query merged across notes + transcripts + sessions.
   federatedSearch: (
     query: string,
@@ -476,6 +525,16 @@ export const spsBridge = {
     profile?: string,
   ): Promise<{ success: boolean; pages: unknown[]; error?: string }> =>
     ipcRenderer.invoke("sps-import-okf-bundle", bundleDir, profile),
+  spsCreateImportPlan: (
+    input: { source: SpsImportSource; targetFolder?: string },
+    profile?: string,
+  ): Promise<SpsImportPlan> =>
+    ipcRenderer.invoke("sps-create-import-plan", input, profile),
+  spsApplyImportPlan: (
+    planId: string,
+    profile?: string,
+  ): Promise<SpsImportResult> =>
+    ipcRenderer.invoke("sps-apply-import-plan", planId, profile),
   spsExportOkfBundle: (
     targetDir: string,
     profile?: string,

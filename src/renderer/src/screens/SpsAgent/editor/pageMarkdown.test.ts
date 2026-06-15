@@ -90,6 +90,85 @@ describe("pageMarkdown frontmatter", () => {
     };
     expect(roundTrip(meta, [blk("p", "x")]).meta).toEqual(meta);
   });
+
+  it("preserves unknown frontmatter keys as page properties", () => {
+    const parsed = pageFromMarkdown(
+      [
+        "---",
+        'title: "Project Atlas"',
+        'owner: "Maya"',
+        "priority: 2",
+        "published: false",
+        'aliases: ["Atlas","Roadmap"]',
+        "---",
+        "",
+        "Body",
+      ].join("\n"),
+    );
+    expect(parsed.meta).toEqual({
+      title: "Project Atlas",
+      aliases: ["Atlas", "Roadmap"],
+      properties: {
+        owner: "Maya",
+        priority: 2,
+        published: false,
+      },
+    });
+  });
+
+  it("serializes aliases and extra properties after reserved keys in sorted order", () => {
+    const md = pageToMarkdown(
+      {
+        title: "Project Atlas",
+        icon: "📌",
+        cover: null,
+        tags: ["project"],
+        aliases: ["Atlas", "Roadmap"],
+        properties: {
+          owner: "Maya",
+          published: false,
+          priority: 2,
+        },
+      },
+      [blk("p", "x")],
+    );
+    expect(md).toBe(
+      [
+        "---",
+        'title: "Project Atlas"',
+        'icon: "📌"',
+        "cover: null",
+        'tags: ["project"]',
+        'aliases: ["Atlas","Roadmap"]',
+        'owner: "Maya"',
+        "priority: 2",
+        "published: false",
+        "---",
+        "",
+        "x",
+      ].join("\n"),
+    );
+  });
+
+  it("reserved frontmatter keys win over duplicate keys in properties", () => {
+    const md = pageToMarkdown(
+      {
+        title: "Reserved Title",
+        tags: ["real"],
+        properties: {
+          title: "Wrong",
+          tags: ["wrong"],
+          custom: "kept",
+        },
+      },
+      [blk("p", "x")],
+    );
+    expect(md).toContain('title: "Reserved Title"');
+    expect(md).toContain('tags: ["real"]');
+    expect(md).toContain('custom: "kept"');
+    expect(md).not.toContain("Wrong");
+    expect(md).not.toContain("wrong");
+  });
 });
 
 describe("pageMarkdown full round-trip", () => {

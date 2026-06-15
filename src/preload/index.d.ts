@@ -9,7 +9,15 @@ import type {
   LearningProposalResult,
   SkillUsageEntry,
 } from "../shared/learning";
-import type { SpsSaveResult } from "../shared/sps-types";
+import type {
+  SpsCaptureInput,
+  SpsBaseViewConfig,
+  SpsImportPlan,
+  SpsImportResult,
+  SpsImportSource,
+  SpsPropertyValue,
+  SpsSaveResult,
+} from "../shared/sps-types";
 import type {
   FederatedHit,
   FederatedSearchOpts,
@@ -1162,6 +1170,11 @@ interface HermesAPI {
       memory: string[];
     };
   }>;
+  spsRegisterDeepLinks: () => Promise<boolean>;
+  spsCapture: (
+    input: SpsCaptureInput,
+    profile?: string,
+  ) => Promise<{ success: boolean; id?: string; error?: string }>;
   spsFileAnswer: (
     question: string,
     answer: string,
@@ -1242,6 +1255,11 @@ interface HermesAPI {
     profile?: string,
     baseRev?: number,
   ) => Promise<SpsSaveResult>;
+  spsUpdatePageProperties: (
+    pageId: string,
+    patch: Record<string, SpsPropertyValue | undefined>,
+    profile?: string,
+  ) => Promise<boolean>;
   spsGetWorkSession: (
     pageId: string,
     profile?: string,
@@ -1426,6 +1444,21 @@ interface HermesAPI {
     profile?: string,
   ) => Promise<Array<{ path: string; title: string; snippet: string }>>;
   spsIndexBacklinks: (path: string, profile?: string) => Promise<string[]>;
+  spsQueryBase: (
+    config: SpsBaseViewConfig,
+    profile?: string,
+  ) => Promise<
+    Array<{
+      path: string;
+      title: string;
+      props: Record<string, unknown>;
+      mtime: number;
+    }>
+  >;
+  spsFindUnlinkedMentions: (
+    pageId: string,
+    profile?: string,
+  ) => Promise<Array<{ source: string; target: string; phrase: string }>>;
   federatedSearch: (
     query: string,
     opts?: FederatedSearchOpts,
@@ -1602,6 +1635,14 @@ interface HermesAPI {
     pages: SpsIngestPageProposal[];
     error?: string;
   }>;
+  spsCreateImportPlan: (
+    input: { source: SpsImportSource; targetFolder?: string },
+    profile?: string,
+  ) => Promise<SpsImportPlan>;
+  spsApplyImportPlan: (
+    planId: string,
+    profile?: string,
+  ) => Promise<SpsImportResult>;
   spsExportOkfBundle: (
     targetDir: string,
     profile?: string,

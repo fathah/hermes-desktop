@@ -20,6 +20,13 @@ import { runJobHeadless, tickScheduler } from "./scheduler";
 import { exec } from "child_process";
 import { createCronJob } from "./cronjobs";
 import { getSpsNoteIndex } from "./note-index";
+import { resolveSpsVaultDir } from "./sps-storage";
+import { writeSpsCapture } from "./sps-capture";
+import {
+  exportPageMarkdownTo,
+  exportRowMarkdownTo,
+  readPageMarkdownFrom,
+} from "./sps-vault";
 
 let serverInstance: ReturnType<typeof createServer> | null = null;
 let currentPort = 8645;
@@ -75,6 +82,41 @@ function getICalDates(dueStr: string): { start: string; end: string } | null {
     return { start: fmt(startD), end: fmt(endD) };
   }
   return null;
+}
+
+function readJsonRequest(req: IncomingMessage): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    req.on("data", (chunk) => {
+      body += chunk.toString();
+      if (body.length > 2_000_000) {
+        reject(new Error("Request body too large."));
+        req.destroy();
+      }
+    });
+    req.on("end", () => {
+      try {
+        const parsed = JSON.parse(body || "{}");
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          reject(new Error("JSON body must be an object."));
+          return;
+        }
+        resolve(parsed as Record<string, unknown>);
+      } catch {
+        reject(new Error("Invalid JSON body."));
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
+function writeJson(
+  res: ServerResponse,
+  status: number,
+  payload: unknown,
+): void {
+  res.writeHead(status, { "Content-Type": "application/json" });
+  res.end(JSON.stringify(payload));
 }
 
 /**
@@ -183,6 +225,117 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
         controlPort: currentPort,
       }),
     );
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/sps/status") {
+    const profile = getActiveProfileNameSync();
+    getSpsNoteIndex(profile)
+      .then((index) => writeJson(res, 200, index.status()))
+      .catch((err) => writeJson(res, 500, { error: String(err.message || err) }));
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/sps/search") {
+    const profile = getActiveProfileNameSync();
+    const q = url.searchParams.get("q") || "";
+    const limit = Number(url.searchParams.get("limit") || 20);
+    getSpsNoteIndex(profile)
+      .then((index) => writeJson(res, 200, index.search(q, limit)))
+      .catch((err) => writeJson(res, 500, { error: String(err.message || err) }));
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/sps/page") {
+    const profile = getActiveProfileNameSync();
+    const page = (url.searchParams.get("page") || "").replace(/\.md$/i, "");
+    readPageMarkdownFrom(resolveSpsVaultDir(profile), page)
+      .then((markdown) =>
+        markdown === null
+          ? writeJson(res, 404, { error: "Page not found." })
+          : writeJson(res, 200, { page, markdown }),
+      )
+      .catch((err) => writeJson(res, 500, { error: String(err.message || err) }));
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/sps/capture") {
+    void readJsonRequest(req)
+      .then((payload) => {
+        const body = typeof payload.body === "string" ? payload.body : "";
+        if (!body.trim()) {
+          writeJson(res, 400, { error: "Missing required field: body." });
+          return;
+        }
+        const profile = getActiveProfileNameSync();
+        return writeSpsCapture(resolveSpsVaultDir(profile), {
+          source: payload.source === "web" ? "web" : "quick-note",
+          body,
+          title: typeof payload.title === "string" ? payload.title : undefined,
+          description:
+            typeof payload.description === "string"
+              ? payload.description
+              : undefined,
+          via: typeof payload.via === "string" ? payload.via : "local-api",
+          url: typeof payload.url === "string" ? payload.url : undefined,
+          selection:
+            typeof payload.selection === "string" ? payload.selection : undefined,
+          highlights: Array.isArray(payload.highlights)
+            ? payload.highlights.filter((h): h is string => typeof h === "string")
+            : undefined,
+          capturedAt:
+            typeof payload.capturedAt === "number" ? payload.capturedAt : Date.now(),
+        }).then((result) => writeJson(res, result.success ? 200 : 500, result));
+      })
+      .catch((err) => writeJson(res, 400, { error: String(err.message || err) }));
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/sps/page") {
+    void readJsonRequest(req)
+      .then((payload) => {
+        const pageId = typeof payload.pageId === "string" ? payload.pageId : "";
+        const markdown =
+          typeof payload.markdown === "string" ? payload.markdown : "";
+        if (!pageId || !markdown) {
+          writeJson(res, 400, {
+            error: "Missing required fields: pageId and markdown.",
+          });
+          return;
+        }
+        const profile = getActiveProfileNameSync();
+        return exportPageMarkdownTo(resolveSpsVaultDir(profile), pageId, markdown).then(
+          (ok) => writeJson(res, ok ? 200 : 400, { success: ok }),
+        );
+      })
+      .catch((err) => writeJson(res, 400, { error: String(err.message || err) }));
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/sps/task") {
+    void readJsonRequest(req)
+      .then((payload) => {
+        const dbFolder =
+          typeof payload.dbFolder === "string" ? payload.dbFolder : "tasks";
+        const rowId =
+          typeof payload.rowId === "string"
+            ? payload.rowId
+            : `task_${Date.now()}`;
+        const markdown =
+          typeof payload.markdown === "string" ? payload.markdown : "";
+        if (!markdown) {
+          writeJson(res, 400, { error: "Missing required field: markdown." });
+          return;
+        }
+        const profile = getActiveProfileNameSync();
+        return exportRowMarkdownTo(
+          resolveSpsVaultDir(profile),
+          dbFolder,
+          rowId,
+          markdown,
+        ).then((ok) => writeJson(res, ok ? 200 : 400, { success: ok, rowId }));
+      })
+      .catch((err) => writeJson(res, 400, { error: String(err.message || err) }));
     return;
   }
 
@@ -454,10 +607,57 @@ fi
 `;
     writeFileSync(helperPath, scriptContent, "utf-8");
     chmodSync(helperPath, 0o755);
+    writeSpsHelper(binDir, port, token);
     console.log(`[CONTROL SERVER] Generated OS-native CLI tool: ${helperPath}`);
   } catch {
     console.error("[CONTROL SERVER] Failed to write hermes-ask shell helper");
   }
+}
+
+function writeSpsHelper(binDir: string, port: number, token: string): void {
+  const helperPath = join(binDir, "sps");
+  const scriptContent = `#!/bin/bash
+# Auto-generated by Hermes Control Server
+PORT="${port}"
+TOKEN="${token}"
+BASE="http://127.0.0.1:$PORT"
+
+case "$1" in
+  status)
+    curl -s -H "Authorization: Bearer $TOKEN" "$BASE/sps/status"
+    ;;
+  search)
+    if [ -z "$2" ]; then
+      echo "Usage: sps search <query>"
+      exit 1
+    fi
+    curl -s -G -H "Authorization: Bearer $TOKEN" --data-urlencode "q=$2" "$BASE/sps/search"
+    ;;
+  read)
+    if [ -z "$2" ]; then
+      echo "Usage: sps read <pageId>"
+      exit 1
+    fi
+    curl -s -G -H "Authorization: Bearer $TOKEN" --data-urlencode "page=$2" "$BASE/sps/page"
+    ;;
+  capture)
+    if [ -z "$2" ]; then
+      echo "Usage: sps capture <text> [url]"
+      exit 1
+    fi
+    BODY="$2"
+    URL="$3"
+    JSON_PAYLOAD=$(node -e 'const [body,url]=process.argv.slice(1); const payload=url ? {source:"web", body, url} : {source:"quick-note", body}; process.stdout.write(JSON.stringify(payload));' "$BODY" "$URL")
+    curl -s -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d "$JSON_PAYLOAD" "$BASE/sps/capture"
+    ;;
+  *)
+    echo "Usage: sps status | search <query> | read <pageId> | capture <text> [url]"
+    exit 1
+    ;;
+esac
+`;
+  writeFileSync(helperPath, scriptContent, "utf-8");
+  chmodSync(helperPath, 0o755);
 }
 
 function writeCronScript(): void {
