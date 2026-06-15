@@ -24,18 +24,7 @@ import {
   getConnectionConfig,
 } from "./config";
 import { expectedEnvKeyForModel } from "./installer";
-import { isLocalBaseUrl } from "../shared/url-key-map";
-
-// Credential NAME-ALIAS map — kept in LOCK-STEP with config-health.ts KEY_ALIASES
-// and Setup.tsx MODEL_KEY_ALIASES. A vault/.env may store the Anthropic
-// credential under the gateway Bearer name (ANTHROPIC_TOKEN) or the Claude Code
-// OAuth-path token name (CLAUDE_CODE_OAUTH_TOKEN) instead of the url-key-map's
-// canonical ANTHROPIC_API_KEY. The gateway's anthropic provider plugin reads all
-// three (env_vars), so any one present means the credential IS available — the
-// pre-send gate must NOT block Send just because the canonical name is empty.
-const KEY_ALIASES: Record<string, string[]> = {
-  ANTHROPIC_API_KEY: ["ANTHROPIC_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"],
-};
+import { isLocalBaseUrl, aliasesForEnvKey } from "../shared/url-key-map";
 
 export type ChatReadinessCode =
   | "NO_ACTIVE_MODEL"
@@ -175,7 +164,7 @@ export function validateChatReadiness(profile?: string): ChatReadiness {
     // user whose Anthropic credential is the OAuth token gets a false
     // "Missing ANTHROPIC_API_KEY" pre-send block even though the gateway
     // authenticates fine via the Bearer path.
-    for (const alias of KEY_ALIASES[expectedKey] ?? []) {
+    for (const alias of aliasesForEnvKey(expectedKey)) {
       if ((env[alias] ?? "").trim()) return OK;
     }
 

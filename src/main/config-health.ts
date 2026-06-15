@@ -32,7 +32,11 @@ import {
 import { safeWriteFile } from "./utils";
 import { HERMES_HOME } from "./installer";
 import { expectedEnvKeyForModel } from "./installer";
-import { expectedEnvKeyForUrl, isLocalBaseUrl } from "../shared/url-key-map";
+import {
+  expectedEnvKeyForUrl,
+  isLocalBaseUrl,
+  aliasesForEnvKey,
+} from "../shared/url-key-map";
 import { findSiblingHermesHomes } from "./wsl-detection";
 // Audit checks must consult the secrets provider too — a vault-only user has
 // their keys in the provider's backing store, not in `.env`. Importing the
@@ -297,10 +301,11 @@ function checkApiServerKeyPlacement(profile?: string): ConfigHealthIssue[] {
  * it as satisfying ANTHROPIC_API_KEY — otherwise a vault-only user whose
  * Anthropic credential is the OAuth token is falsely told to enter an API key on
  * onboarding even though the credential is already vault-provided.
+ *
+ * The alias table itself now lives in ../shared/url-key-map (KEY_ALIASES /
+ * aliasesForEnvKey) as the SINGLE SOURCE OF TRUTH shared by config-health,
+ * validation, and Setup — see Greptile P1 on PR #673.
  */
-const KEY_ALIASES: Record<string, string[]> = {
-  ANTHROPIC_API_KEY: ["ANTHROPIC_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"],
-};
 
 /**
  * Is `expectedKey` (or any accepted alias of it) present and non-empty in the
@@ -313,7 +318,7 @@ function resolvedHasKey(
   expectedKey: string,
 ): boolean {
   if ((resolved[expectedKey] ?? "").trim()) return true;
-  for (const alias of KEY_ALIASES[expectedKey] ?? []) {
+  for (const alias of aliasesForEnvKey(expectedKey)) {
     if ((resolved[alias] ?? "").trim()) return true;
   }
   return false;
@@ -426,7 +431,7 @@ function checkRuntimeEnvKeyMismatch(profile?: string): ConfigHealthIssue[] {
   // alias is populated, the credential is present under a valid name — emit NO
   // issue. (The greedy "any *_API_KEY/*_TOKEN" heuristic that used to live here
   // was also a credential-bleed footgun — see AIR-020 — and is gone entirely.)
-  const aliasNames = KEY_ALIASES[expectedKey] ?? [];
+  const aliasNames = aliasesForEnvKey(expectedKey);
   const aliasSatisfied = aliasNames.some((k) => (env[k] ?? "").trim() !== "");
   if (aliasSatisfied) return [];
 

@@ -4,7 +4,10 @@ import { PROVIDERS, LOCAL_PRESETS } from "../../constants";
 import { useI18n } from "../../components/useI18n";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
 import BrandLogo from "../../components/common/BrandLogo";
-import { expectedEnvKeyForUrl } from "../../../../shared/url-key-map";
+import {
+  expectedEnvKeyForUrl,
+  aliasesForEnvKey,
+} from "../../../../shared/url-key-map";
 
 interface SetupProps {
   onComplete: () => void;
@@ -345,19 +348,14 @@ function Setup({
   // Does the chosen security provider already resolve THIS model provider's key?
   // If so, the model step skips the key field and Continue is allowed with no
   // typed key. Local/custom providers that don't need a key are also satisfied.
-  //
-  // Credential NAME-ALIAS awareness (mirrors main-process config-health.ts
-  // KEY_ALIASES): a vault often stores the Anthropic credential under a name that
-  // differs from the url-key-map's expected ANTHROPIC_API_KEY — e.g. the gateway
-  // Bearer name ANTHROPIC_TOKEN, or the Claude Code OAuth-path token
-  // CLAUDE_CODE_OAUTH_TOKEN. All authenticate to Anthropic, so a vault holding
-  // any of them already provides the model key — the Setup step must NOT then
-  // force the user to type an API key. Keep this list in lock-step with
-  // config-health.ts KEY_ALIASES.
-  const MODEL_KEY_ALIASES: Record<string, string[]> = {
-    ANTHROPIC_API_KEY: ["ANTHROPIC_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"],
-  };
-
+  // Credential NAME-ALIAS awareness: a vault often stores the Anthropic
+  // credential under a name that differs from the url-key-map's expected
+  // ANTHROPIC_API_KEY — e.g. the gateway Bearer name ANTHROPIC_TOKEN, or the
+  // Claude Code OAuth-path token CLAUDE_CODE_OAUTH_TOKEN. All authenticate to
+  // Anthropic, so a vault holding any of them already provides the model key —
+  // the Setup step must NOT then force the user to type an API key. The alias
+  // table is the SHARED source in ../shared/url-key-map (aliasesForEnvKey) —
+  // see Greptile P1 on PR #673.
   function vaultHasModelKey(): boolean {
     // NOTE: do NOT gate on the local `secretsChoice` state here. An existing-vault
     // user reaches the model step with secretsChoice still at its "env" default
@@ -372,7 +370,7 @@ function Setup({
     if (!wanted) return false;
     if (vaultKeys.includes(wanted)) return true;
     // alias-aware: a vault credential under an equivalent name also satisfies it
-    for (const alias of MODEL_KEY_ALIASES[wanted] ?? []) {
+    for (const alias of aliasesForEnvKey(wanted)) {
       if (vaultKeys.includes(alias)) return true;
     }
     return false;

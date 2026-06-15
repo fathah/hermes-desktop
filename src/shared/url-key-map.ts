@@ -43,6 +43,33 @@ export const URL_KEY_MAP: ReadonlyArray<UrlKeyMapping> = [
 export const CUSTOM_API_KEY_ENV = "CUSTOM_API_KEY";
 
 /**
+ * Credential NAME-ALIASES: alternate env-var names that satisfy a canonical
+ * url-derived key. SINGLE SOURCE OF TRUTH — previously this map was copied
+ * verbatim in three places (config-health.ts, validation.ts, Setup.tsx), kept
+ * in sync only by comments; adding an alias to one but not the others would
+ * silently split the security gates (Greptile P1 on PR #673).
+ *
+ * The gateway's provider plugins accept several names for the same provider —
+ * e.g. the Anthropic plugin's `env_vars` are
+ * (ANTHROPIC_API_KEY, ANTHROPIC_TOKEN, CLAUDE_CODE_OAUTH_TOKEN): the canonical
+ * API key, the gateway Bearer-token name, and the Claude Code OAuth-path token.
+ * A vault/.env may store the credential under ANY of these, so every place that
+ * asks "is the credential for this provider present?" must treat them as
+ * equivalent. Keep this map in lock-step with the provider plugins' env_vars.
+ */
+export const KEY_ALIASES: Readonly<Record<string, readonly string[]>> = {
+  ANTHROPIC_API_KEY: ["ANTHROPIC_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"],
+};
+
+/**
+ * The accepted alias names for a canonical env key (empty array if none).
+ * Use this everywhere instead of redefining the alias table locally.
+ */
+export function aliasesForEnvKey(envKey: string): readonly string[] {
+  return KEY_ALIASES[envKey] ?? [];
+}
+
+/**
  * Resolve the env var name that should hold the API key for `url`.
  * Returns `CUSTOM_API_KEY` if the URL doesn't match any known provider.
  *
