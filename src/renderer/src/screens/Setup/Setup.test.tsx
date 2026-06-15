@@ -42,7 +42,9 @@ function mockAPI(
     vaultToolAvailability: vi
       .fn()
       .mockResolvedValue({ keepassxc: false, tpm: false }),
-    vaultCreate: vi.fn().mockResolvedValue({ ok: false, error: "create-exception" }),
+    vaultCreate: vi
+      .fn()
+      .mockResolvedValue({ ok: false, error: "create-exception" }),
     vaultSealTpm: vi.fn().mockResolvedValue({ ok: true, sealed: true }),
     openExternal: vi.fn(),
     ...overrides,
@@ -207,6 +209,42 @@ describe("Setup — security-provider-first flow", () => {
     expect(api.setEnv).not.toHaveBeenCalled();
   });
 
+  it("AIR-018b: model step auto-loads vault keys (no explicit Test-vault) so the toggle shows when an existing vault was configured", async () => {
+    const onComplete = vi.fn();
+    // Existing-vault user: the config already has a command provider, so the
+    // model step must detect the credential even though the user never clicked
+    // "Test vault". secretsProviderStatus resolves the OAuth token.
+    const api = mockAPI({
+      secretsProviderStatus: vi.fn().mockResolvedValue({
+        provider: "command",
+        keys: ["CLAUDE_CODE_OAUTH_TOKEN"],
+        count: 1,
+      }),
+    });
+    install(api);
+    render(<Setup onComplete={onComplete} />);
+    // Advance straight to the model step WITHOUT picking command / Test-vault.
+    await act(async () => {
+      fireEvent.click(screen.getByText("setup.continue"));
+    });
+    // Pick Anthropic.
+    await act(async () => {
+      fireEvent.click(screen.getByText("constants.anthropicName"));
+    });
+    // The auto-load effect populated vaultKeys → the alias is recognized → the
+    // vault-covered toggle appears even though Test-vault was never clicked.
+    // findByText auto-retries while the async effect resolves + re-renders.
+    expect(await screen.findByText("setup.keyEnterManual")).toBeInTheDocument();
+    expect(screen.getByText("setup.keyUseVault")).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("sk-ant-...")).toBeNull();
+    // Finish proceeds with no typed key.
+    await act(async () => {
+      fireEvent.click(screen.getByText("setup.finish"));
+    });
+    await waitFor(() => expect(onComplete).toHaveBeenCalled());
+    expect(api.setEnv).not.toHaveBeenCalled();
+  });
+
   it("Back on the model step returns to the secrets step", async () => {
     install(mockAPI());
     render(<Setup onComplete={vi.fn()} />);
@@ -243,7 +281,8 @@ describe("Setup — first-run vault onboarding (secrets stage)", () => {
         kind: "vault-file",
         keyPath: "/home/u/.config/hermes/vault.key",
         keys: ["OPENROUTER_API_KEY", "ANTHROPIC_API_KEY"],
-        suggestedCommand: "keepassxc-cli show -a Password ~/v.kdbx \"$HERMES_SECRET_KEY\"",
+        suggestedCommand:
+          'keepassxc-cli show -a Password ~/v.kdbx "$HERMES_SECRET_KEY"',
       }),
       vaultToolAvailability: vi
         .fn()
@@ -283,7 +322,8 @@ describe("Setup — first-run vault onboarding (secrets stage)", () => {
         ok: true,
         vaultPath: "/home/u/.config/hermes/vault.kdbx",
         keyPath: "/home/u/.config/hermes/vault.key",
-        suggestedCommand: "keepassxc-cli show -a Password ~/v.kdbx \"$HERMES_SECRET_KEY\"",
+        suggestedCommand:
+          'keepassxc-cli show -a Password ~/v.kdbx "$HERMES_SECRET_KEY"',
       }),
       vaultSealTpm: vi.fn().mockResolvedValue({ ok: true, sealed: true }),
     });

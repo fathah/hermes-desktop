@@ -177,6 +177,32 @@ function Setup({
     }
   }, [detectStatus, detected.found, toolAvail.keepassxc, createStatus]);
 
+  // Auto-load the vault's resolvable key NAMES when entering the model step, so
+  // detection works even if the user reached it WITHOUT explicitly clicking
+  // "Test vault" on the secrets step (e.g. an existing vault was auto-detected
+  // from config, or they simply continued). Without this, vaultKeys stays [] and
+  // the model step never shows the vault-covered toggle even though the vault
+  // provides the credential. We probe unconditionally (not gated on the local
+  // secretsChoice state, which may still be the "env" default while the CONFIG
+  // already has a command provider from a prior session/auto-detect):
+  // secretsProviderStatus() self-guards — it returns { provider:"env", keys:[] }
+  // for env, so an env user simply gets no keys and no toggle.
+  useEffect(() => {
+    if (stage !== "provider") return;
+    if (vaultKeys.length > 0) return;
+    void (async () => {
+      try {
+        const status = await window.hermesAPI.secretsProviderStatus();
+        if (status?.keys?.length) {
+          setVaultKeys(status.keys);
+          setVaultTested(true);
+        }
+      } catch {
+        /* leave vaultKeys empty — the key-entry path still works */
+      }
+    })();
+  }, [stage, vaultKeys.length]);
+
   // Map a vaultCreate() error code to friendly, actionable copy.
   function createErrorText(code: string): string {
     switch (code) {
@@ -310,7 +336,13 @@ function Setup({
   };
 
   function vaultHasModelKey(): boolean {
-    if (secretsChoice === "env") return false;
+    // NOTE: do NOT gate on the local `secretsChoice` state here. An existing-vault
+    // user reaches the model step with secretsChoice still at its "env" default
+    // (they never clicked the command tile) while the CONFIG already has a vault
+    // provider — the auto-load effect populates vaultKeys directly from
+    // secretsProviderStatus(). An empty vaultKeys already yields false below
+    // (env resolves no provider keys), so the resolved key list is the
+    // authoritative signal, not the unsynced secretsChoice radio state.
     const wanted = isLocal
       ? resolveCustomEnvKey(baseUrl.trim())
       : provider.envKey;
@@ -1061,7 +1093,7 @@ function Setup({
                   saving ||
                   (provider.needsKey &&
                     !apiKey.trim() &&
-                    !vaultHasModelKey()) ||
+                    !showingVaultCredential()) ||
                   (isLocal && !baseUrl.trim())
                 }
                 style={{ flex: 1 }}
