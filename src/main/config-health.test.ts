@@ -22,6 +22,7 @@ vi.mock("./config", () => ({
   readEnv: mocks.readEnv,
   getConfigValue: mocks.getConfigValue,
   getModelConfig: mocks.getModelConfig,
+  getConnectionConfig: mocks.getConnectionConfig,
   customEndpointKeyResolvable: mocks.customEndpointKeyResolvable,
   hasOAuthCredentials: mocks.hasOAuthCredentials,
   setEnvValue: mocks.setEnvValue,
@@ -178,6 +179,14 @@ describe("config-health audit - vault awareness", () => {
       const codes = report.issues.map((i) => i.code);
       expect(codes).not.toContain("MODEL_KEY_MISSING");
     });
+
+    it("does NOT fire MODEL_KEY_MISSING when the vault has ANTHROPIC_TOKEN (alias of ANTHROPIC_API_KEY)", () => {
+      mocks.fakeEnv = {};
+      mocks.fakeVault = { ANTHROPIC_TOKEN: "from-vault" };
+      const report = runConfigHealthCheck("default");
+      const codes = report.issues.map((i) => i.code);
+      expect(codes).not.toContain("MODEL_KEY_MISSING");
+    });
   });
 
   describe("command provider - vault-only user", () => {
@@ -295,106 +304,91 @@ describe("config-health audit - vault awareness", () => {
       expect(resolvedSecretMap("default").API_SERVER_KEY).toBe("from-vault");
     });
   });
-});
 
-describe("config-health audit — connection-mode awareness", () => {
-  beforeEach(() => {
-    FAKE_VAULT = {};
-    FAKE_ENV = {};
-    mockedReadEnv.mockReset();
-    mockedGetConfigValue.mockReset();
-    mockedGetModelConfig.mockReset();
-    mockedGetConnectionConfig.mockReset();
-    mockedCustomEndpointKeyResolvable.mockReset();
-    mockedHasOAuthCredentials.mockReset();
+  describe("config-health audit — connection-mode awareness", () => {
+    beforeEach(() => {
+      mocks.fakeVault = {};
+      mocks.fakeEnv = {};
+      mocks.readEnv.mockReset();
+      mocks.getConfigValue.mockReset();
+      mocks.getModelConfig.mockReset();
+      mocks.getConnectionConfig.mockReset();
+      mocks.customEndpointKeyResolvable.mockReset();
+      mocks.hasOAuthCredentials.mockReset();
 
-    // The footgun setup: an anthropic model selected, but NO key anywhere
-    // local (.env empty, vault empty, config.yaml empty, no OAuth). In LOCAL
-    // mode this rightly fires EMPTY_API_SERVER_KEY + MODEL_KEY_MISSING. The
-    // tests below flip ONLY the connection mode and assert those two warnings
-    // disappear — because in remote/SSH mode the keys live on the gateway.
-    mockedReadEnv.mockReturnValue({});
-    mockedGetConfigValue.mockReturnValue(null);
-    mockedGetModelConfig.mockReturnValue({
-      provider: "anthropic",
-      model: "claude-sonnet-4.6",
-      baseUrl: "",
+      mocks.readEnv.mockReturnValue({});
+      mocks.getConfigValue.mockReturnValue(null);
+      mocks.getModelConfig.mockReturnValue({
+        provider: "anthropic",
+        model: "claude-sonnet-4.6",
+        baseUrl: "",
+      });
+      mocks.customEndpointKeyResolvable.mockReturnValue(false);
+      mocks.hasOAuthCredentials.mockReturnValue(false);
     });
-    mockedCustomEndpointKeyResolvable.mockReturnValue(false);
-    mockedHasOAuthCredentials.mockReturnValue(false);
-  });
 
-  afterEach(() => {
-    for (const k of ["API_SERVER_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_TOKEN"]) {
-      delete process.env[k];
-    }
-  });
-
-  const setMode = (c: Partial<ReturnType<typeof getConnectionConfig>>) =>
-    mockedGetConnectionConfig.mockReturnValue({
-      mode: "local",
-      remoteUrl: "",
-      apiKey: "",
-      ...c,
-    } as ReturnType<typeof getConnectionConfig>);
-
-  const codes = (profile?: string) =>
-    runConfigHealthCheck(profile).issues.map((i) => i.code);
-
-  it("LOCAL mode with no key anywhere fires both key warnings (control)", () => {
-    setMode({ mode: "local" });
-    const c = codes();
-    expect(c).toContain("EMPTY_API_SERVER_KEY");
-    expect(c).toContain("MODEL_KEY_MISSING");
-  });
-
-  it("REMOTE mode suppresses both local key warnings (the bug fix)", () => {
-    setMode({ mode: "remote", remoteUrl: "http://127.0.0.1:8642" });
-    const c = codes();
-    expect(c).not.toContain("EMPTY_API_SERVER_KEY");
-    expect(c).not.toContain("MODEL_KEY_MISSING");
-  });
-
-  it("SSH mode suppresses both local key warnings", () => {
-    setMode({ mode: "ssh" });
-    const c = codes();
-    expect(c).not.toContain("EMPTY_API_SERVER_KEY");
-    expect(c).not.toContain("MODEL_KEY_MISSING");
-  });
-
-  it("REMOTE mode WITHOUT a remoteUrl still warns (misconfigured remote, gray zone)", () => {
-    // mode=remote but no URL = the desktop can't actually reach a gateway, so
-    // the keys are NOT safely 'someone else's problem'. Must NOT silently pass.
-    setMode({ mode: "remote", remoteUrl: "" });
-    const c = codes();
-    expect(c).toContain("EMPTY_API_SERVER_KEY");
-    expect(c).toContain("MODEL_KEY_MISSING");
-  });
-
-  it("REMOTE mode skips ONLY the key checks, not the whole audit", () => {
-    // Guard must be per-check, not a blanket audit short-circuit: the two key
-    // checks (API_SERVER_KEY, active-model key) are suppressed, but the audit
-    // still runs every other check. We prove the suppression is scoped by
-    // confirming the two key codes are absent while the call completes normally
-    // (returns a real report object, not a thrown/empty bail-out).
-    setMode({ mode: "remote", remoteUrl: "http://127.0.0.1:8642" });
-    const report = runConfigHealthCheck();
-    const c = report.issues.map((i) => i.code);
-    expect(c).not.toContain("EMPTY_API_SERVER_KEY");
-    expect(c).not.toContain("MODEL_KEY_MISSING");
-    // The audit ran to completion (didn't blanket-skip): summary is populated
-    // and issues is a real array the other checks contributed to.
-    expect(report.summary).toBeDefined();
-    expect(Array.isArray(report.issues)).toBe(true);
-  });
-
-  it("getConnectionConfig throwing falls back to LOCAL audit (fail safe)", () => {
-    mockedGetConnectionConfig.mockImplementation(() => {
-      throw new Error("desktop.json unreadable");
+    afterEach(() => {
+      for (const k of ["API_SERVER_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_TOKEN"]) {
+        delete process.env[k];
+      }
     });
-    const c = codes();
-    // Defensive: if we can't determine mode, audit locally rather than skip.
-    expect(c).toContain("EMPTY_API_SERVER_KEY");
-    expect(c).toContain("MODEL_KEY_MISSING");
+
+    const setMode = (overrides: Record<string, string | boolean>) =>
+      mocks.getConnectionConfig.mockReturnValue({
+        mode: "local",
+        remoteUrl: "",
+        apiKey: "",
+        ...overrides,
+      });
+
+    const codes = (profile?: string) =>
+      runConfigHealthCheck(profile).issues.map((i) => i.code);
+
+    it("LOCAL mode with no key anywhere fires both key warnings (control)", () => {
+      setMode({ mode: "local" });
+      const c = codes();
+      expect(c).toContain("EMPTY_API_SERVER_KEY");
+      expect(c).toContain("MODEL_KEY_MISSING");
+    });
+
+    it("REMOTE mode suppresses both local key warnings (the bug fix)", () => {
+      setMode({ mode: "remote", remoteUrl: "http://127.0.0.1:8642" });
+      const c = codes();
+      expect(c).not.toContain("EMPTY_API_SERVER_KEY");
+      expect(c).not.toContain("MODEL_KEY_MISSING");
+    });
+
+    it("SSH mode suppresses both local key warnings", () => {
+      setMode({ mode: "ssh" });
+      const c = codes();
+      expect(c).not.toContain("EMPTY_API_SERVER_KEY");
+      expect(c).not.toContain("MODEL_KEY_MISSING");
+    });
+
+    it("REMOTE mode WITHOUT a remoteUrl still warns (misconfigured remote, gray zone)", () => {
+      setMode({ mode: "remote", remoteUrl: "" });
+      const c = codes();
+      expect(c).toContain("EMPTY_API_SERVER_KEY");
+      expect(c).toContain("MODEL_KEY_MISSING");
+    });
+
+    it("REMOTE mode skips ONLY the key checks, not the whole audit", () => {
+      setMode({ mode: "remote", remoteUrl: "http://127.0.0.1:8642" });
+      const report = runConfigHealthCheck();
+      const c = report.issues.map((i) => i.code);
+      expect(c).not.toContain("EMPTY_API_SERVER_KEY");
+      expect(c).not.toContain("MODEL_KEY_MISSING");
+      expect(report.summary).toBeDefined();
+      expect(Array.isArray(report.issues)).toBe(true);
+    });
+
+    it("getConnectionConfig throwing falls back to LOCAL audit (fail safe)", () => {
+      mocks.getConnectionConfig.mockImplementation(() => {
+        throw new Error("desktop.json unreadable");
+      });
+      const c = codes();
+      expect(c).toContain("EMPTY_API_SERVER_KEY");
+      expect(c).toContain("MODEL_KEY_MISSING");
+    });
   });
 });
