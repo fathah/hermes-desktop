@@ -7,6 +7,7 @@ import {
   completionFailed,
   dashboardPromptTextWithAttachmentRefs,
   dashboardShouldPersistLocalOverlays,
+  DASHBOARD_SESSION_RESUME_TIMEOUT_MS,
   ensureDashboardRuntimeSession,
   isDashboardSlashWorkerExitError,
   dashboardSeedMessagesFromTranscript,
@@ -393,10 +394,18 @@ describe("dashboard attachment sync", () => {
 
 describe("submitDashboardPromptWithRecovery", () => {
   it("resumes the stored session and retries once when the live session is gone", async () => {
-    const calls: Array<{ method: string; params: unknown }> = [];
+    const calls: Array<{ method: string; params: unknown; timeoutMs?: number }> = [];
     const client = {
-      async request(method: string, params?: unknown): Promise<unknown> {
-        calls.push({ method, params });
+      async request(
+        method: string,
+        params?: unknown,
+        timeoutMs?: number,
+      ): Promise<unknown> {
+        calls.push({
+          method,
+          params,
+          ...(timeoutMs ? { timeoutMs } : {}),
+        });
         if (calls.length === 1) {
           throw new Error("session not found");
         }
@@ -427,6 +436,7 @@ describe("submitDashboardPromptWithRecovery", () => {
       {
         method: "session.resume",
         params: { session_id: "stored-1" },
+        timeoutMs: DASHBOARD_SESSION_RESUME_TIMEOUT_MS,
       },
       {
         method: "prompt.submit",
@@ -454,10 +464,18 @@ describe("submitDashboardPromptWithRecovery", () => {
 
 describe("ensureDashboardRuntimeSession", () => {
   it("resumes an existing stored session and preserves the durable id", async () => {
-    const calls: Array<{ method: string; params: unknown }> = [];
+    const calls: Array<{ method: string; params: unknown; timeoutMs?: number }> = [];
     const client = {
-      async request(method: string, params?: unknown): Promise<unknown> {
-        calls.push({ method, params });
+      async request(
+        method: string,
+        params?: unknown,
+        timeoutMs?: number,
+      ): Promise<unknown> {
+        calls.push({
+          method,
+          params,
+          ...(timeoutMs ? { timeoutMs } : {}),
+        });
         return { session_id: "live-resumed", resumed: "stored-1" };
       },
     };
@@ -478,15 +496,24 @@ describe("ensureDashboardRuntimeSession", () => {
       {
         method: "session.resume",
         params: { session_id: "stored-1", cols: 96, profile: "work" },
+        timeoutMs: DASHBOARD_SESSION_RESUME_TIMEOUT_MS,
       },
     ]);
   });
 
   it("creates a seeded session when a stale stored id cannot be resumed", async () => {
-    const calls: Array<{ method: string; params: unknown }> = [];
+    const calls: Array<{ method: string; params: unknown; timeoutMs?: number }> = [];
     const client = {
-      async request(method: string, params?: unknown): Promise<unknown> {
-        calls.push({ method, params });
+      async request(
+        method: string,
+        params?: unknown,
+        timeoutMs?: number,
+      ): Promise<unknown> {
+        calls.push({
+          method,
+          params,
+          ...(timeoutMs ? { timeoutMs } : {}),
+        });
         if (method === "session.resume") {
           throw new Error("session not found");
         }
@@ -515,6 +542,7 @@ describe("ensureDashboardRuntimeSession", () => {
       {
         method: "session.resume",
         params: { session_id: "missing-stored", cols: 96 },
+        timeoutMs: DASHBOARD_SESSION_RESUME_TIMEOUT_MS,
       },
       {
         method: "session.create",

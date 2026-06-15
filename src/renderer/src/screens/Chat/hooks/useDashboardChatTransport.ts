@@ -57,8 +57,14 @@ interface FileAttachResponse {
 }
 
 interface DashboardPromptClient {
-  request<T = unknown>(method: string, params?: unknown): Promise<T>;
+  request(
+    method: string,
+    params?: unknown,
+    timeoutMs?: number,
+  ): Promise<unknown>;
 }
+
+export const DASHBOARD_SESSION_RESUME_TIMEOUT_MS = 120_000;
 
 interface EnsureDashboardRuntimeSessionParams {
   client: DashboardPromptClient;
@@ -167,9 +173,13 @@ export async function submitDashboardPromptWithRecovery(
       throw err;
     }
 
-    const resumed = await client.request<SessionResponse>("session.resume", {
-      session_id: params.storedSessionId,
-    });
+    const resumed = (await client.request(
+      "session.resume",
+      {
+        session_id: params.storedSessionId,
+      },
+      DASHBOARD_SESSION_RESUME_TIMEOUT_MS,
+    )) as SessionResponse;
     const recoveredSessionId = resumed?.session_id;
     if (!recoveredSessionId) {
       throw err;
@@ -192,14 +202,15 @@ export async function ensureDashboardRuntimeSession(
 
   if (stored) {
     try {
-      const resumed = await params.client.request<SessionResponse>(
+      const resumed = (await params.client.request(
         "session.resume",
         {
           session_id: stored,
           cols,
           ...(params.profile ? { profile: params.profile } : {}),
         },
-      );
+        DASHBOARD_SESSION_RESUME_TIMEOUT_MS,
+      )) as SessionResponse;
       if (!resumed.session_id) {
         throw new Error("session.resume returned no session_id");
       }
@@ -218,12 +229,12 @@ export async function ensureDashboardRuntimeSession(
   const seedMessages = dashboardSeedMessagesFromTranscript(params.messages, {
     excludeUserId: params.excludeSeedUserId ?? null,
   });
-  const created = await params.client.request<SessionResponse>("session.create", {
+  const created = (await params.client.request("session.create", {
     cols,
     ...(seedMessages.length > 0 ? { messages: seedMessages } : {}),
     ...(params.contextFolder ? { cwd: params.contextFolder } : {}),
     ...(params.profile ? { profile: params.profile } : {}),
-  });
+  })) as SessionResponse;
 
   return {
     created: true,
@@ -393,14 +404,14 @@ export async function syncDashboardAttachmentsForSubmit(
     if (!contentBase64) return { handled: false, refs: [] };
 
     try {
-      const result = await client.request<ImageAttachBytesResponse>(
+      const result = (await client.request(
         "image.attach_bytes",
         {
           session_id: sessionId,
           content_base64: contentBase64,
           filename: safeAttachmentFilename(image.name, index),
         },
-      );
+      )) as ImageAttachBytesResponse;
       if (!result?.attached) {
         throw new Error(result?.message || `Could not attach ${image.name}`);
       }
@@ -433,10 +444,10 @@ export async function syncDashboardAttachmentsForSubmit(
     }
 
     try {
-      const result = await client.request<FileAttachResponse>(
+      const result = (await client.request(
         "file.attach",
         params,
-      );
+      )) as FileAttachResponse;
       if (!result?.attached || !result.ref_text) {
         throw new Error(result?.message || `Could not attach ${name}`);
       }
