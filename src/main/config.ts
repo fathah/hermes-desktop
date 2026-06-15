@@ -1067,7 +1067,16 @@ export function setModelConfig(
   let content = existsSync(configFile) ? readFileSync(configFile, "utf-8") : "";
 
   content = upsertBlockChild(content, "model", "provider", provider);
-  content = upsertBlockChild(content, "model", "default", model);
+  // NEVER write an empty model name. An empty `model.default` makes the gateway
+  // POST `model: ""`, which Anthropic/OpenAI reject with a 400/404
+  // ("model: String should have at least 1 character"). The Setup model-name
+  // field is optional, so a blank submission used to persist "" here and brick
+  // chat. When `model` is empty we leave any EXISTING model.default untouched
+  // (a prior valid selection survives) and simply don't write an empty one.
+  // Callers that genuinely want to set a model pass a non-empty string.
+  if (model.trim()) {
+    content = upsertBlockChild(content, "model", "default", model.trim());
+  }
 
   // Pick the effective base_url to write.  Precedence:
   //   1. User-supplied `baseUrl` (the renderer passes this when the user

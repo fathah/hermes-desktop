@@ -413,19 +413,24 @@ function checkRuntimeEnvKeyMismatch(profile?: string): ConfigHealthIssue[] {
     return [];
   }
 
-  // Look for any non-empty *_API_KEY / *_TOKEN that *isn't* the expected
-  // one — that's the candidate for the mismatch warning. Don't fire
-  // on a wholly-empty .env; that's MODEL_KEY_MISSING territory.
+  // Look for a non-empty key that is a KNOWN ALIAS of the expected key — i.e.
+  // genuinely the same provider's credential saved under an equivalent name
+  // (e.g. ANTHROPIC_TOKEN / CLAUDE_CODE_OAUTH_TOKEN for ANTHROPIC_API_KEY).
+  // CRITICAL: do NOT fall back to "any *_API_KEY / *_TOKEN in .env". That
+  // greedy heuristic would pick an UNRELATED service's credential (e.g.
+  // MATRIX_ACCESS_TOKEN, NTFY_TOKEN) and offer to copy it into the provider key
+  // slot — a credential-bleed that writes a wrong, non-working value AND mislabels
+  // another service's secret. A copy is only safe when the source is an accepted
+  // alias of the destination. If no alias is populated, there is no safe
+  // auto-fix here — that's MODEL_KEY_MISSING territory (the user must supply the
+  // real key), not a rename.
+  const aliasNames = KEY_ALIASES[expectedKey] ?? [];
   const candidates = Object.entries(env).filter(
-    ([k, v]) =>
-      /^[A-Z][A-Z0-9_]*(_API_KEY|_TOKEN)$/.test(k) &&
-      k !== expectedKey &&
-      k !== "API_SERVER_KEY" &&
-      (v ?? "").trim() !== "",
+    ([k, v]) => aliasNames.includes(k) && (v ?? "").trim() !== "",
   );
   if (candidates.length === 0) return [];
 
-  // Pick the candidate that looks most like a provider key (first match).
+  // Pick the populated alias (first match — alias order is preference order).
   const [otherKey] = candidates[0];
   const { envFile } = profilePaths(profile);
   return [

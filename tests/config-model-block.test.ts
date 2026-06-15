@@ -324,6 +324,32 @@ describe("setModelConfig — scoped to model: block", () => {
     expect(mc.provider).toBe("anthropic");
     expect(mc.model).toBe("claude-sonnet-4");
   });
+
+  it("never writes an EMPTY model name (the empty-model 400 guard)", async () => {
+    const configFile = join(TEST_DIR, "config.yaml");
+    const { setModelConfig, getModelConfig } =
+      await importConfigWithHome(TEST_DIR);
+    // The Setup model-name field is optional; a blank submission must NOT
+    // persist model.default: "" (which makes the gateway POST model:"" → a 400
+    // "model: String should have at least 1 character"). Provider is still set.
+    setModelConfig("anthropic", "", "");
+    const raw = readFileSync(configFile, "utf-8");
+    expect(raw).not.toMatch(/default:\s*['"]?\s*['"]?\s*$/m); // no empty default line
+    const mc = getModelConfig();
+    expect(mc.provider).toBe("anthropic");
+    expect(mc.model ?? "").toBe(""); // absent, not an empty-string write that bricks chat
+  });
+
+  it("an empty model does NOT clobber an existing valid model.default", async () => {
+    const { setModelConfig, getModelConfig } =
+      await importConfigWithHome(TEST_DIR);
+    // Establish a valid model, then a later call with an empty model (e.g. the
+    // user re-runs setup and leaves the field blank) must PRESERVE it.
+    setModelConfig("anthropic", "claude-opus-4-8", "");
+    setModelConfig("anthropic", "", "");
+    const mc = getModelConfig();
+    expect(mc.model).toBe("claude-opus-4-8");
+  });
 });
 
 describe("setModelConfig — context_length override", () => {
