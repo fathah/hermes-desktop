@@ -67,6 +67,7 @@ import type {
 import type { SrPendingUpdate, SrPatch } from "./bridges/sps";
 import type { CredentialPoolEntry } from "../shared/credentials";
 import type { CapabilityRiskSummary } from "../shared/capability-risk";
+import type { ResearchReachStatus } from "../shared/research-reach";
 import type { WhatsAppCloudStatus } from "../shared/whatsappCloud";
 
 interface ElectronAPI {
@@ -1124,6 +1125,16 @@ interface HermesAPI {
     id: string,
     profile?: string,
   ) => Promise<CapabilityRiskSummary>;
+  getResearchReachStatus: () => Promise<ResearchReachStatus>;
+  getResearchReachInstallInstructions: () => Promise<string>;
+  runResearchReachSafeInstall: () => Promise<{
+    ok: boolean;
+    stdout: string;
+    stderr: string;
+  }>;
+  importAgentReachSkill: (
+    profile?: string,
+  ) => Promise<{ imported: boolean; path?: string; error?: string }>;
 
   // Log viewer
   readLogs: (

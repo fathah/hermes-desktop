@@ -18,6 +18,7 @@ import {
 } from "../../utils/analytics";
 import { ConfigHealth } from "./ConfigHealth";
 import CapabilitySummary from "./CapabilitySummary";
+import ResearchReachSummary from "./ResearchReachSummary";
 import { HealthSurface } from "../SpsAgent/health/HealthSurface";
 import { getDevMode, setDevMode } from "../../lib/devMode";
 
@@ -752,6 +753,10 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
       </div>
 
       <CapabilitySummary
+        profile={profile}
+        active={activeTab === "agenthealth"}
+      />
+      <ResearchReachSummary
         profile={profile}
         active={activeTab === "agenthealth"}
       />

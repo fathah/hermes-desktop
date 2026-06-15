@@ -39,6 +39,7 @@ export function ResearchModal() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState(""); // streamed markdown preview
   const [toolNote, setToolNote] = useState<string | null>(null);
+  const [reachHint, setReachHint] = useState("");
   const [resultSummary, setResultSummary] = useState("");
   const [resultMsg, setResultMsg] = useState(""); // warn / error text
   const undoRef = useRef<null | (() => void)>(null);
@@ -88,6 +89,19 @@ export function ResearchModal() {
         setWebEnabled(web ? web.enabled : true);
       })
       .catch(() => setWebEnabled(true));
+    void window.hermesAPI
+      ?.getResearchReachStatus?.()
+      .then((status) => {
+        if (!status?.installed) return;
+        const ready = status.channels
+          .filter((channel) => channel.status === "ready")
+          .map((channel) => channel.label)
+          .slice(0, 4);
+        if (ready.length > 0) {
+          setReachHint(`Ready sources: ${ready.join(", ")}`);
+        }
+      })
+      .catch(() => undefined);
     // OpenAlex polite-pool / api-key config (key never round-trips — only a flag).
     void window.hermesAPI?.spsResearchGetConfig?.().then((cfg) => {
       if (!cfg) return;
@@ -399,6 +413,10 @@ export function ResearchModal() {
                 Substack & Blogs
               </button>
             </div>
+
+            {reachHint && (
+              <small className="res-status-label">{reachHint}</small>
+            )}
 
             {phase === "idle" && (
               <div className="cmts-empty res-idle-message">

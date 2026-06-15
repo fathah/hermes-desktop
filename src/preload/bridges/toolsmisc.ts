@@ -1,5 +1,6 @@
 import { ipcRenderer } from "electron";
 import type { CapabilityRiskSummary } from "../../shared/capability-risk";
+import type { ResearchReachStatus } from "../../shared/research-reach";
 
 export const toolsmiscBridge = {
   // Shell
@@ -51,6 +52,21 @@ export const toolsmiscBridge = {
     profile?: string,
   ): Promise<CapabilityRiskSummary> =>
     ipcRenderer.invoke("capability-risk-review", id, profile),
+
+  // Research Reach
+  getResearchReachStatus: (): Promise<ResearchReachStatus> =>
+    ipcRenderer.invoke("research-reach-status"),
+  getResearchReachInstallInstructions: (): Promise<string> =>
+    ipcRenderer.invoke("research-reach-install-instructions"),
+  runResearchReachSafeInstall: (): Promise<{
+    ok: boolean;
+    stdout: string;
+    stderr: string;
+  }> => ipcRenderer.invoke("research-reach-safe-install"),
+  importAgentReachSkill: (
+    profile?: string,
+  ): Promise<{ imported: boolean; path?: string; error?: string }> =>
+    ipcRenderer.invoke("research-reach-import-skill", profile),
 
   // Log viewer
   readLogs: (

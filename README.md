@@ -93,6 +93,7 @@ sudo dnf install ./hermes-desktop-<version>.rpm
 - **Profile switching** — create, delete, and switch between separate Hermes environments with isolated config
 - **14 toolsets** — web, browser, terminal, file, code execution, vision, image gen, TTS, skills, memory, session search, clarify, delegation, MoA, and task planning
 - **Memory system** — view/edit memory entries, user profile memory, capacity tracking, and discoverable memory providers (Honcho, Hindsight, Mem0, RetainDB, Supermemory, ByteRover)
+- **Research Reach (optional)** — detect Agent-Reach-style local source tooling so My Research, Learn This, and scheduled research can use richer internet sources such as GitHub, YouTube, RSS, Reddit, and Twitter/X when those local backends are installed and reviewed
 - **Persona editor** — edit and reset My Assistant's SOUL.md personality
 - **Saved models** — CRUD management for model configurations across providers
 - **Scheduled work** — schedule builder (minutes, hourly, daily, weekly, custom schedule) with 15 delivery targets

@@ -24,6 +24,7 @@ import {
 } from "../../assistant/prompts";
 import { TASKS } from "../../data/seed";
 import { commitChangeset } from "../../inbox/ingestApply";
+import { buildResearchReachPromptHint } from "../../../../../../shared/research-reach";
 import type { AgentMessage } from "../../assistant/types";
 import type { Block } from "../../types";
 import type { Store, AssistantSlice, Conversation } from "../storeTypes";
@@ -711,8 +712,16 @@ export const createAssistantSlice: StateCreator<
 
       let markdown = "";
       try {
+        let sourceHint = "";
+        try {
+          const reach = await window.hermesAPI.getResearchReachStatus?.();
+          sourceHint = buildResearchReachPromptHint(reach, "all");
+        } catch {
+          sourceHint = "";
+        }
+
         const result = await window.hermesAPI.sendMessage(
-          buildResearchPrompt(trimmed),
+          buildResearchPrompt(trimmed, { sourceHint }),
           undefined, // profile
           undefined, // resumeSessionId
           undefined, // history

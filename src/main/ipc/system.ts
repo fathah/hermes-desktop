@@ -43,6 +43,7 @@ import { getAppLocale, setAppLocale } from "../locale";
 import type { AppLocale } from "../../shared/i18n/types";
 import type { AppUpdater } from "electron-updater";
 import { registerCapabilityRiskIpc } from "./capability-risk";
+import { registerResearchReachIpc } from "./research-reach";
 
 // Dynamic import or check for updates depending on packaging
 import { registerDualHandler } from "./utility";
@@ -179,6 +180,7 @@ export function registerSystemIpc(
     listMcpServers(profile),
   );
   registerCapabilityRiskIpc();
+  registerResearchReachIpc();
 
   // Memory providers
   registerDualHandler(
