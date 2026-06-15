@@ -17,7 +17,6 @@ import {
   getSecretsProvider,
   providerListSafe,
   invalidateProviderListCache,
-  resolvedSecrets,
 } from "./secrets";
 import { canonicalProviderBaseUrl } from "./provider-registry";
 import {
@@ -229,9 +228,17 @@ export function secretsProviderStatus(profile?: string): {
 
   let keys: string[] = [];
   try {
-    // resolvedSecrets() = provider list (vault) overlaid with process.env.
-    // We expose only the KEY NAMES; values never leave the main process.
-    keys = Object.keys(resolvedSecrets(profile)).sort();
+    // AIR-017: list ONLY what the PROVIDER (vault) resolves — providerListSafe()
+    // returns provider.list() (the vault key map, spawn-floor cached), NOT the
+    // process.env-overlaid resolvedSecrets(). This is the DISPLAY-path sibling of
+    // the canWrite fail-open fix: resolvedSecrets() overlays the ENTIRE
+    // process.env (PATH, HOME, npm_config_*, …) onto the vault keys, so in the
+    // Electron main process its key count is ~130, never the true vault size.
+    // The Security Providers UI renders each of these as a "Vault Provided" key —
+    // so resolvedSecrets() here would falsely label every env var as vault-provided.
+    // providerListSafe() gives the honest vault-only set. Values never leave the
+    // main process either way; we expose only NAMES.
+    keys = Object.keys(providerListSafe(profile)).sort();
   } catch {
     keys = [];
   }
