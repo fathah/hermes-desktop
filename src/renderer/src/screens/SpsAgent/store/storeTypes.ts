@@ -15,7 +15,7 @@ import type {
 import type { WorkDetail } from "../../../../../shared/openalex/core";
 import type { ExternalSource } from "../../../../../shared/external-context";
 
-export type RightTab = "assistant" | "outline" | "comments" | "info";
+export type RightTab = "assistant" | "outline" | "comments" | "info" | "backlinks";
 
 /** A transcript hit to auto-open in the External Sessions viewer (federated
  *  search routing). Carries just enough to reconstruct the viewer call + banner. */
@@ -36,11 +36,13 @@ export interface ExternalConversationTarget {
 // wikilink graph view (F4).
 export type Surface =
   | "doc"
+  | "dashboard"
   | "cockpit"
   | "insights"
   | "memory"
   | "you"
   | "learning"
+  | "activeWork"
   | "ask"
   | "chats"
   | "graph"

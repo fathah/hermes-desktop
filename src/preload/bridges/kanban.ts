@@ -37,6 +37,9 @@ export const kanbanBridge = {
       triage?: boolean;
       skills?: string[];
       maxRetries?: number;
+      goalMode?: boolean;
+      goalMaxTurns?: number;
+      maxRuntimeSeconds?: number;
     },
     profile?: string,
   ) => ipcRenderer.invoke("kanban-create-task", input, profile),

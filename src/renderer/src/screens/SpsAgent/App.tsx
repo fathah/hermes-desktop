@@ -25,6 +25,7 @@ import { JournalSurface } from "./journal/JournalSurface";
 import { MyWorkSurface } from "./journal/MyWorkSurface";
 import { YouSurface } from "./you/YouSurface";
 import { LearningSurface } from "./learning/LearningSurface";
+import { ActiveWorkSurface } from "./activeWork/ActiveWorkSurface";
 import { CockpitSurface } from "./cockpit/CockpitSurface";
 import { InboxSurface } from "./inbox/InboxSurface";
 import { HealthSurface } from "./health/HealthSurface";
@@ -38,6 +39,15 @@ import {
 import { ObsidianEditor } from "./editor/ObsidianEditor";
 import { PersonalHealthDashboard } from "./health/PersonalHealthDashboard";
 import { RssReaderDashboard } from "./research/RssReaderDashboard";
+import { Dashboard } from "./components/Dashboard";
+
+type TaskAutomationRule = {
+  id: string;
+  title: string;
+  interval: "minute" | "hourly" | "daily" | "weekly";
+  template: "quick" | "routine" | "project";
+  lastTriggered: number;
+};
 
 export function App() {
   useHotkeys();
@@ -130,7 +140,7 @@ export function App() {
   useEffect(() => {
     const key = "sps_task_automations";
     if (!localStorage.getItem(key)) {
-      const defaultRules = [
+      const defaultRules: TaskAutomationRule[] = [
         {
           id: "rule-minute-check",
           title: "⚡ Quick Checkin",
@@ -160,11 +170,11 @@ export function App() {
       try {
         const raw = localStorage.getItem(key);
         if (!raw) return;
-        const rules = JSON.parse(raw);
+        const rules = JSON.parse(raw) as TaskAutomationRule[];
         let updated = false;
         const now = Date.now();
 
-        const triggerRule = (rule: any) => {
+        const triggerRule = (rule: TaskAutomationRule) => {
           const setBlocks = useStore.getState().setBlocks;
           const flash = useStore.getState().flash;
           const uid = () => Math.random().toString(36).substring(2, 9);
@@ -212,7 +222,7 @@ export function App() {
           });
         };
 
-        const nextRules = rules.map((rule: any) => {
+        const nextRules = rules.map((rule) => {
           let shouldTrigger = false;
           const last = rule.lastTriggered || 0;
           const diffMs = now - last;
@@ -246,6 +256,21 @@ export function App() {
     return () => clearInterval(timer);
   }, []);
 
+  // Track recently visited pages
+  useEffect(() => {
+    if (page && page !== "dashboard_scratchpad" && page !== "home") {
+      try {
+        const stored = localStorage.getItem("sps-recent-visited-pages");
+        const list: string[] = stored ? JSON.parse(stored) : [];
+        const filtered = list.filter((id) => id !== page);
+        filtered.unshift(page);
+        localStorage.setItem("sps-recent-visited-pages", JSON.stringify(filtered.slice(0, 10)));
+      } catch (err) {
+        console.error("Failed to track visited page:", err);
+      }
+    }
+  }, [page]);
+
   return (
     <div
       className="app"
@@ -267,6 +292,8 @@ export function App() {
                 </DocHeader>
               </div>
             </>
+          ) : surface === "dashboard" ? (
+            <Dashboard />
           ) : surface === "chats" ? (
             // The single Chat surface — session-backed (Recents + persistence).
             // Tool-use/approvals/diffs are gateway-driven, so there's no separate
@@ -291,6 +318,7 @@ export function App() {
               )}
               {surface === "you" && <YouSurface profile="default" />}
               {surface === "learning" && <LearningSurface profile="default" />}
+              {surface === "activeWork" && <ActiveWorkSurface />}
               {surface === "inbox" && <InboxSurface profile="default" />}
               {surface === "health" && <HealthSurface profile="default" />}
               {surface === "graph" && <GraphView />}

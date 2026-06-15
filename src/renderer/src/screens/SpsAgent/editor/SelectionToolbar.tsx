@@ -1,6 +1,6 @@
 // SelectionToolbar.tsx — floating text-selection toolbar (bold/italic/underline/
 // strike/code/link/color/highlight/comment/Ask-AI). Ported from richtext.jsx.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "../components/Icon";
 import { escapeHtml } from "../lib/html";
 import { safeLinkHref } from "../lib/sanitize";
@@ -14,6 +14,7 @@ const AI_ACTIONS: { kind: AiActionKind; label: string }[] = [
   { kind: "rewrite", label: "Rewrite clearer" },
   { kind: "summarize", label: "Summarize" },
   { kind: "why", label: "Why this approach" },
+  { kind: "cleanup", label: "AI Note Cleanup" },
 ];
 
 const TEXT_COLORS: [string, string][] = [
@@ -63,6 +64,31 @@ export function SelectionToolbar({ onComment, onAsk, onAiAction }: Props) {
   const [pop, setPop] = useState<"color" | "link" | "ai" | null>(null);
   const [linkVal, setLinkVal] = useState("");
   const savedRange = useRef<Range | null>(null);
+
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (box) {
+      const topVal = Math.max(box.y - 46, 8);
+      if (toolbarRef.current) {
+        toolbarRef.current.style.left = `${box.x}px`;
+        toolbarRef.current.style.top = `${topVal}px`;
+      }
+      if (popRef.current) {
+        if (pop === "ai") {
+          popRef.current.style.left = `${box.x - 80}px`;
+          popRef.current.style.top = `${topVal + 38}px`;
+        } else if (pop === "color") {
+          popRef.current.style.left = `${box.x - 90}px`;
+          popRef.current.style.top = `${topVal + 38}px`;
+        } else if (pop === "link") {
+          popRef.current.style.left = `${box.x - 120}px`;
+          popRef.current.style.top = `${topVal + 38}px`;
+        }
+      }
+    }
+  }, [box, pop]);
 
   useEffect(() => {
     const update = () => {
@@ -183,12 +209,11 @@ export function SelectionToolbar({ onComment, onAsk, onAiAction }: Props) {
   };
 
   if (!box) return null;
-  const top = Math.max(box.y - 46, 8);
   return (
     <>
       <div
+        ref={toolbarRef}
         className="sel-toolbar"
-        style={{ left: box.x, top, transform: "translateX(-50%)" }}
         onMouseDown={(e) => e.preventDefault()}
       >
         <button
@@ -216,10 +241,9 @@ export function SelectionToolbar({ onComment, onAsk, onAiAction }: Props) {
           <s>S</s>
         </button>
         <button
-          className="st-btn"
+          className="st-btn st-btn-mono"
           onClick={wrapCode}
           title="Inline code"
-          style={{ fontFamily: "var(--font-mono)" }}
         >
           {"<>"}
         </button>
@@ -236,7 +260,7 @@ export function SelectionToolbar({ onComment, onAsk, onAiAction }: Props) {
           onClick={() => setPop(pop === "color" ? null : "color")}
           title="Color"
         >
-          <span style={{ fontWeight: 700 }}>A</span>
+          <span className="st-btn-bold-a">A</span>
           <Icon name="chevD" size={11} />
         </button>
         <span className="st-sep"></span>
@@ -257,8 +281,8 @@ export function SelectionToolbar({ onComment, onAsk, onAiAction }: Props) {
 
       {pop === "ai" && (
         <div
+          ref={popRef}
           className="st-pop"
-          style={{ left: box.x - 80, top: top + 38 }}
           onMouseDown={(e) => e.preventDefault()}
         >
           <div className="menu-label">AI</div>
@@ -280,8 +304,8 @@ export function SelectionToolbar({ onComment, onAsk, onAiAction }: Props) {
       )}
       {pop === "color" && (
         <div
+          ref={popRef}
           className="st-pop"
-          style={{ left: box.x - 90, top: top + 38 }}
           onMouseDown={(e) => e.preventDefault()}
         >
           <div className="menu-label">Text</div>
@@ -291,7 +315,7 @@ export function SelectionToolbar({ onComment, onAsk, onAiAction }: Props) {
                 key={name}
                 className="sw"
                 title={name}
-                style={{ color: hex === "inherit" ? "var(--tx-1)" : hex }}
+                data-color={name}
                 onClick={() => applyColor(hex === "inherit" ? "#1B1D21" : hex)}
               >
                 A
@@ -305,7 +329,7 @@ export function SelectionToolbar({ onComment, onAsk, onAiAction }: Props) {
                 key={name}
                 className="sw"
                 title={name}
-                style={{ background: rgba }}
+                data-bg={name}
                 onClick={() => applyHilite(rgba)}
               ></div>
             ))}
@@ -314,8 +338,8 @@ export function SelectionToolbar({ onComment, onAsk, onAiAction }: Props) {
       )}
       {pop === "link" && (
         <div
+          ref={popRef}
           className="st-pop"
-          style={{ left: box.x - 120, top: top + 38 }}
           onMouseDown={(e) => e.stopPropagation()}
         >
           <div className="st-link-pop">

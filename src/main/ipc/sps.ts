@@ -16,6 +16,12 @@ import {
   type PageContext as SpsPageContext,
 } from "../sps-agent";
 import { spsGetWorkSession, spsSetWorkSession } from "../sps-work-sessions";
+import {
+  listActiveWorkRuns,
+  getActiveWorkRun,
+  createActiveWorkRun,
+  updateActiveWorkRun,
+} from "../active-work-runs";
 import { appendWikiLog, type WikiLogOp } from "../sps-wiki-log";
 import { ensureIndexCoverage } from "../sps-ingest";
 import { resolveSpsVaultDir } from "../sps-storage";
@@ -35,6 +41,10 @@ import {
   openAlexMcpServerPath,
   writeMcpServerEntry,
 } from "../installer";
+import type {
+  ActiveWorkCreateInput,
+  ActiveWorkPatch,
+} from "../../shared/active-work";
 
 export function registerSpsIpc(): void {
   // SPS Agent workspace (unfurl / assistant / persistence)
@@ -117,6 +127,22 @@ export function registerSpsIpc(): void {
     "sps-set-work-session",
     (_event, pageId: string, sessionId: string, profile?: string) =>
       spsSetWorkSession(pageId, sessionId, profile),
+  );
+  safeHandle("sps-active-work-list", (_event, profile?: string) =>
+    listActiveWorkRuns(profile),
+  );
+  safeHandle("sps-active-work-get", (_event, runId: string, profile?: string) =>
+    getActiveWorkRun(runId, profile),
+  );
+  safeHandle(
+    "sps-active-work-create",
+    (_event, input: ActiveWorkCreateInput, profile?: string) =>
+      createActiveWorkRun(input, profile),
+  );
+  safeHandle(
+    "sps-active-work-update",
+    (_event, runId: string, patch: ActiveWorkPatch, profile?: string) =>
+      updateActiveWorkRun(runId, patch, profile),
   );
 
   // Research (OpenAlex)

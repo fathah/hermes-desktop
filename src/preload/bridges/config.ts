@@ -239,7 +239,8 @@ export const configBridge = {
       councilGroupId,
     ),
 
-  abortChat: (): Promise<void> => ipcRenderer.invoke("abort-chat"),
+  abortChat: (sessionIdOrRunId?: string): Promise<void> =>
+    ipcRenderer.invoke("abort-chat", sessionIdOrRunId),
 
   getApiServerKeyStatus: (profile?: string): Promise<{ hasKey: boolean }> =>
     ipcRenderer.invoke("get-api-server-key-status", profile),

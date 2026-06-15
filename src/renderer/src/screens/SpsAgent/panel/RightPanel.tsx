@@ -11,6 +11,7 @@ import { AgentBody } from "../assistant/AgentBody";
 import { Outline } from "./Outline";
 import { CommentsPane, type CommentApi } from "./CommentsPane";
 import { InfoPane } from "./InfoPane";
+import { BacklinksPane } from "./BacklinksPane";
 
 export function RightPanel() {
   const tab = useStore((s) => s.rightTab);
@@ -33,6 +34,7 @@ export function RightPanel() {
     ["assistant", "Page assistant", "sparkle", null],
     ["outline", "Outline", "list", null],
     ["comments", "Notes", "comment", openCmts || null],
+    ["backlinks", "Backlinks", "share", null],
     ["info", "Info", "clock", null],
   ];
 
@@ -57,14 +59,7 @@ export function RightPanel() {
           </button>
         ))}
       </div>
-      <div
-        style={{
-          flex: 1,
-          minHeight: 0,
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
+      <div className="rp-body-wrapper">
         {tab === "assistant" && <AgentBody />}
         {tab === "outline" && (
           <Outline blocks={blocks} onScrollToBlock={scrollToBlock} />
@@ -72,6 +67,7 @@ export function RightPanel() {
         {tab === "comments" && (
           <CommentsPane comments={comments} api={commentApi} />
         )}
+        {tab === "backlinks" && <BacklinksPane />}
         {tab === "info" && (
           <InfoPane blocks={blocks} comments={comments} pageId={page} />
         )}

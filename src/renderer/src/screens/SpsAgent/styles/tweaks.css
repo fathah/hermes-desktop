@@ -342,23 +342,20 @@ button.twk-field:disabled {
 }
 
 /* Color Chip Accent overrides */
-.twk-chip[data-accent="#6b9e78"] {
-  background: #6b9e78;
+.twk-chip[data-accent="#C79400"], .twk-chip[data-accent="#c79400"] {
+  background: #C79400;
 }
-.twk-chip[data-accent="#bd9b5e"] {
-  background: #bd9b5e;
+.twk-chip[data-accent="#1B4F8A"], .twk-chip[data-accent="#1b4f8a"] {
+  background: #1B4F8A;
 }
-.twk-chip[data-accent="#7b91b8"] {
-  background: #7b91b8;
+.twk-chip[data-accent="#A1202C"], .twk-chip[data-accent="#a1202c"] {
+  background: #A1202C;
 }
-.twk-chip[data-accent="#a6789b"] {
-  background: #a6789b;
+.twk-chip[data-accent="#1F6B3A"], .twk-chip[data-accent="#1f6b3a"] {
+  background: #1F6B3A;
 }
-.twk-chip[data-accent="#c77c7c"] {
-  background: #c77c7c;
-}
-.twk-chip[data-accent="#888"] {
-  background: #888;
+.twk-chip[data-accent="#5A3A8A"], .twk-chip[data-accent="#5a3a8a"] {
+  background: #5A3A8A;
 }
 
 /* Segmented control state matching */

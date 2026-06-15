@@ -15,6 +15,7 @@ import { INBOX_FOLDER } from "../inbox/capture";
 import { ObsidianExplorer } from "./ObsidianExplorer";
 import { StatusChip } from "./StatusChip";
 import { openSettings } from "../../../lib/openSettings";
+import brandLogo from "../../../assets/icon.png";
 
 interface Identity {
   workspace: string;
@@ -71,7 +72,6 @@ export function Sidebar() {
   const startNewChat = useStore((s) => s.startNewChat);
   const setResearchOpen = useStore((s) => s.setResearchOpen);
   const setScheduledOpen = useStore((s) => s.setScheduledOpen);
-  const setAgentTasksOpen = useStore((s) => s.setAgentTasksOpen);
   const homeSurface = useStore((s) => s.t.homeSurface ?? "doc");
   // Selecting a page always returns to the document surface.
   const selectDoc = (id: string): void => {
@@ -85,6 +85,7 @@ export function Sidebar() {
   const setPaletteOpen = useStore((s) => s.setPaletteOpen);
   const setTemplatesOpen = useStore((s) => s.setTemplatesOpen);
   const setTrashOpen = useStore((s) => s.setTrashOpen);
+  const tweaksOpen = useStore((s) => s.tweaksOpen);
   const setTweaksOpen = useStore((s) => s.setTweaksOpen);
   const setTweak = useStore((s) => s.setTweak);
   const importPdf = useStore((s) => s.importPdf);
@@ -97,6 +98,22 @@ export function Sidebar() {
   const dnd: TreeDnd = { drag, setDrag, over, setOver, onMove: movePage };
   const identity = useIdentity();
   const obsidianBtnRef = useRef<HTMLButtonElement>(null);
+
+  const sidebar = useStore((s) => s.t.sidebar);
+  const isIconsMode = sidebar === "icons";
+
+  const [libOpen, setLibOpen] = useState(() => localStorage.getItem("sps-wing-lib") !== "false");
+  const [workOpen, setWorkOpen] = useState(() => localStorage.getItem("sps-wing-work") !== "false");
+  const [advOpen, setAdvOpen] = useState(() => localStorage.getItem("sps-wing-adv") !== "false");
+  const [healthOpen, setHealthOpen] = useState(() => localStorage.getItem("sps-wing-health") !== "false");
+  const [resOpen, setResOpen] = useState(() => localStorage.getItem("sps-wing-res") !== "false");
+
+  const toggleLib = (): void => { setLibOpen(!libOpen); localStorage.setItem("sps-wing-lib", String(!libOpen)); };
+  const toggleWork = (): void => { setWorkOpen(!workOpen); localStorage.setItem("sps-wing-work", String(!workOpen)); };
+  const toggleAdv = (): void => { setAdvOpen(!advOpen); localStorage.setItem("sps-wing-adv", String(!advOpen)); };
+  const toggleHealth = (): void => { setHealthOpen(!healthOpen); localStorage.setItem("sps-wing-health", String(!healthOpen)); };
+  const toggleRes = (): void => { setResOpen(!resOpen); localStorage.setItem("sps-wing-res", String(!resOpen)); };
+
 
   useEffect(() => {
     if (obsidianBtnRef.current) {
@@ -118,7 +135,7 @@ export function Sidebar() {
     <nav className="rail">
       <div className="rail-top">
         <span className="wmark">
-          <span>{identity.initial}</span>
+          <img src={brandLogo} alt="SPS" className="wmark-img" />
         </span>
         <span className="wname">{identity.workspace}</span>
         <span className="rail-chev">
@@ -146,255 +163,302 @@ export function Sidebar() {
 
         {/* ==================== WING 1: MY LIBRARY ==================== */}
         <div className="wing-group">
-          <div className="wing-header">
+          <div className="wing-header" onClick={toggleLib}>
+            <span className={`wing-chev ${libOpen ? "open" : ""}`}>
+              <Icon name="chevR" size={11} />
+            </span>
             <span className="wing-title">📖 My Library</span>
           </div>
 
-          <button
-            type="button"
-            className={`nav-item ${
-              homeSurface === "doc" && activeId === "home" && surface === "doc"
-                ? "active"
-                : ""
-            }`}
-            onClick={() => selectDoc("home")}
-          >
-            <Icon name="home" size={17} />
-            <span className="nav-label">Wiki Home</span>
-          </button>
-
-          <button
-            type="button"
-            className={`nav-item ${surface === "learning" ? "active" : ""}`}
-            onClick={() => setSurface("learning")}
-          >
-            <Icon name="sparkle" size={17} />
-            <span className="nav-label">Teach Me</span>
-          </button>
-
-          <button
-            type="button"
-            className={`nav-item ${surface === "graph" ? "active" : ""}`}
-            onClick={() => setSurface("graph")}
-          >
-            <Icon name="pageGraph" size={17} />
-            <span className="nav-label">Graph View</span>
-          </button>
-
-          {/* Inbox Navigation Row with hover-only PDF import trigger */}
-          <div className={`nav-item ${surface === "inbox" ? "active" : ""}`}>
-            <button
-              type="button"
-              className="nav-item-main"
-              onClick={() => setSurface("inbox")}
-            >
-              <Icon name="inbox" size={17} />
-              <span className="nav-label">
-                Inbox {inboxCount > 0 ? `(${inboxCount})` : ""}
-              </span>
-            </button>
-            <button
-              type="button"
-              className="nav-add"
-              title="Import PDF"
-              aria-label="Import PDF"
-              onClick={async (e) => {
-                e.stopPropagation();
-                try {
-                  await importPdf();
-                } catch (err) {
-                  console.error(err);
-                }
-              }}
-            >
-              <Icon name="plus" size={14} />
-            </button>
-          </div>
-
-
-          {/* Collapsible Sub-sections inside Library */}
-          <SidebarSection id="recents" label="Recents">
-            <SidebarRecents />
-          </SidebarSection>
-
-          <SidebarSection
-            id="private"
-            label="Notes"
-            onAdd={newPage}
-            addTitle="New page"
-          >
-            {tree
-              .filter((n) => !meta[n.id]?.journal)
-              .map((n) => (
-                <TreeNode
-                  key={n.id}
-                  node={n}
-                  depth={0}
-                  meta={meta}
-                  activeId={activeId}
-                  onSelect={selectDoc}
-                  onNewSubPage={newSubPage}
-                  onRename={renamePage}
-                  onDelete={deletePage}
-                  dnd={dnd}
-                />
-              ))}
-            {tree.length === 0 && (
-              <div className="tree-row color-tx-4-cursor-default">
-                <span className="tree-toggle leaf"></span>No pages
-              </div>
-            )}
-            <div className="nav-item pl-12" onClick={newPage}>
-              <Icon name="plus" size={14} />
-              <span className="nav-label">Add page</span>
-            </div>
-          </SidebarSection>
-
-          <div className="sec-group mt-4">
-            <div className="sec">
+          {(libOpen || isIconsMode) && (
+            <>
               <button
-                ref={obsidianBtnRef}
                 type="button"
-                className="sec-head"
-                onClick={() => setObsidianOpen(!obsidianOpen)}
+                className={`nav-item ${surface === "dashboard" ? "active" : ""}`}
+                onClick={() => setSurface("dashboard")}
               >
-                <span className={`sec-chev ${obsidianOpen ? "open" : ""}`}>
-                  <Icon name="chevR" size={12} />
-                </span>
-                <span className="sec-label">Obsidian Vault</span>
+                <Icon name="home" size={17} />
+                <span className="nav-label">Home Dashboard</span>
               </button>
-            </div>
-            {obsidianOpen && <ObsidianExplorer />}
-          </div>
+
+              <button
+                type="button"
+                className={`nav-item ${
+                  homeSurface === "doc" && activeId === "home" && surface === "doc"
+                    ? "active"
+                    : ""
+                }`}
+                onClick={() => selectDoc("home")}
+              >
+                <Icon name="doc" size={17} />
+                <span className="nav-label">Wiki Home</span>
+              </button>
+
+              <button
+                type="button"
+                className={`nav-item ${surface === "learning" ? "active" : ""}`}
+                onClick={() => setSurface("learning")}
+              >
+                <Icon name="sparkle" size={17} />
+                <span className="nav-label">Teach Me</span>
+              </button>
+
+              <button
+                type="button"
+                className={`nav-item ${surface === "graph" ? "active" : ""}`}
+                onClick={() => setSurface("graph")}
+              >
+                <Icon name="pageGraph" size={17} />
+                <span className="nav-label">Graph View</span>
+              </button>
+
+              {/* Inbox Navigation Row with hover-only PDF import trigger */}
+              <div className={`nav-item ${surface === "inbox" ? "active" : ""}`}>
+                <button
+                  type="button"
+                  className="nav-item-main"
+                  onClick={() => setSurface("inbox")}
+                >
+                  <Icon name="inbox" size={17} />
+                  <span className="nav-label">
+                    Inbox {inboxCount > 0 ? `(${inboxCount})` : ""}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="nav-add"
+                  title="Import PDF"
+                  aria-label="Import PDF"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    try {
+                      await importPdf();
+                    } catch (err) {
+                      console.error(err);
+                    }
+                  }}
+                >
+                  <Icon name="plus" size={14} />
+                </button>
+              </div>
+
+
+              {/* Collapsible Sub-sections inside Library */}
+              <SidebarSection id="recents" label="Recents">
+                <SidebarRecents />
+              </SidebarSection>
+
+              <SidebarSection
+                id="private"
+                label="Notes"
+                onAdd={newPage}
+                addTitle="New page"
+              >
+                {tree
+                  .filter((n) => !meta[n.id]?.journal)
+                  .map((n) => (
+                    <TreeNode
+                      key={n.id}
+                      node={n}
+                      depth={0}
+                      meta={meta}
+                      activeId={activeId}
+                      onSelect={selectDoc}
+                      onNewSubPage={newSubPage}
+                      onRename={renamePage}
+                      onDelete={deletePage}
+                      dnd={dnd}
+                    />
+                  ))}
+                {tree.length === 0 && (
+                  <div className="tree-row color-tx-4-cursor-default">
+                    <span className="tree-toggle leaf"></span>No pages
+                  </div>
+                )}
+                <div className="nav-item pl-12" onClick={newPage}>
+                  <Icon name="plus" size={14} />
+                  <span className="nav-label">Add page</span>
+                </div>
+              </SidebarSection>
+
+              <div className="sec-group mt-4">
+                <div className="sec">
+                  <button
+                    ref={obsidianBtnRef}
+                    type="button"
+                    className="sec-head"
+                    onClick={() => setObsidianOpen(!obsidianOpen)}
+                  >
+                    <span className={`sec-chev ${obsidianOpen ? "open" : ""}`}>
+                      <Icon name="chevR" size={12} />
+                    </span>
+                    <span className="sec-label">Obsidian Vault</span>
+                  </button>
+                </div>
+                {obsidianOpen && <ObsidianExplorer />}
+              </div>
+            </>
+          )}
         </div>
+
 
         {/* ==================== WING 2: MY WORK ==================== */}
         <div className="wing-group">
-          <div className="wing-header">
+          <div className="wing-header" onClick={toggleWork}>
+            <span className={`wing-chev ${workOpen ? "open" : ""}`}>
+              <Icon name="chevR" size={11} />
+            </span>
             <span className="wing-title">🛠️ My Work</span>
           </div>
 
-          <button
-            type="button"
-            className={`nav-item ${surface === "work" ? "active" : ""}`}
-            onClick={() => setSurface("work")}
-          >
-            <Icon name="board" size={17} />
-            <span className="nav-label">My Work</span>
-          </button>
+          {(workOpen || isIconsMode) && (
+            <>
+              <button
+                type="button"
+                className={`nav-item ${surface === "work" ? "active" : ""}`}
+                onClick={() => setSurface("work")}
+              >
+                <Icon name="board" size={17} />
+                <span className="nav-label">My Work</span>
+              </button>
 
-          <button
-            type="button"
-            className="nav-item"
-            onClick={() => setScheduledOpen(true)}
-          >
-            <Icon name="clock" size={17} />
-            <span className="nav-label">Automations</span>
-          </button>
+              <button
+                type="button"
+                className="nav-item"
+                onClick={() => setScheduledOpen(true)}
+              >
+                <Icon name="clock" size={17} />
+                <span className="nav-label">Automations</span>
+              </button>
 
-          <button
-            type="button"
-            className="nav-item"
-            onClick={() => setAgentTasksOpen(true)}
-          >
-            <Icon name="board" size={17} />
-            <span className="nav-label">Active Tasks</span>
-          </button>
+              <button
+                type="button"
+                className={`nav-item ${surface === "activeWork" ? "active" : ""}`}
+                onClick={() => setSurface("activeWork")}
+                title="View goals, running work, and the task board"
+              >
+                <Icon name="board" size={17} />
+                <span className="nav-label">Active Work</span>
+              </button>
+            </>
+          )}
         </div>
 
         {/* ==================== WING 3: MY ADVISOR ==================== */}
         <div className="wing-group">
-          <div className="wing-header">
+          <div className="wing-header" onClick={toggleAdv}>
+            <span className={`wing-chev ${advOpen ? "open" : ""}`}>
+              <Icon name="chevR" size={11} />
+            </span>
             <span className="wing-title">🎓 My Advisor</span>
           </div>
 
-          <button
-            type="button"
-            className={`nav-item ${surface === "chats" ? "active" : ""}`}
-            onClick={() => setSurface("chats")}
-          >
-            <Icon name="comment" size={17} />
-            <span className="nav-label">Converse</span>
-          </button>
+          {(advOpen || isIconsMode) && (
+            <>
+              <button
+                type="button"
+                className={`nav-item ${surface === "chats" ? "active" : ""}`}
+                onClick={() => setSurface("chats")}
+              >
+                <Icon name="comment" size={17} />
+                <span className="nav-label">Converse</span>
+              </button>
 
-          <button
-            type="button"
-            className={`nav-item ${surface === "you" ? "active" : ""}`}
-            onClick={() => setSurface("you")}
-            title="Personalize alignment settings"
-          >
-            <Icon name="wand" size={17} />
-            <span className="nav-label">My Alignment</span>
-          </button>
+              <button
+                type="button"
+                className={`nav-item ${surface === "you" ? "active" : ""}`}
+                onClick={() => setSurface("you")}
+                title="Personalize alignment settings"
+              >
+                <Icon name="wand" size={17} />
+                <span className="nav-label">My Alignment</span>
+              </button>
+            </>
+          )}
         </div>
 
         {/* ==================== WING 3.5: MY HEALTH ==================== */}
         <div className="wing-group">
-          <div className="wing-header">
+          <div className="wing-header" onClick={toggleHealth}>
+            <span className={`wing-chev ${healthOpen ? "open" : ""}`}>
+              <Icon name="chevR" size={11} />
+            </span>
             <span className="wing-title">❤️ My Health</span>
           </div>
 
-          <button
-            type="button"
-            className={`nav-item ${surface === "personal-health" ? "active" : ""}`}
-            onClick={() => setSurface("personal-health")}
-          >
-            <Icon name="heart" size={17} />
-            <span className="nav-label">Health & Ledger</span>
-          </button>
+          {(healthOpen || isIconsMode) && (
+            <>
+              <button
+                type="button"
+                className={`nav-item ${surface === "personal-health" ? "active" : ""}`}
+                onClick={() => setSurface("personal-health")}
+              >
+                <Icon name="heart" size={17} />
+                <span className="nav-label">Health & Ledger</span>
+              </button>
 
-          <button
-            type="button"
-            className={`nav-item ${surface === "journal" ? "active" : ""}`}
-            onClick={() => openJournal()}
-          >
-            <Icon name="calendar" size={17} />
-            <span className="nav-label">Journal</span>
-          </button>
+              <button
+                type="button"
+                className={`nav-item ${surface === "journal" ? "active" : ""}`}
+                onClick={() => openJournal()}
+              >
+                <Icon name="calendar" size={17} />
+                <span className="nav-label">Journal</span>
+              </button>
+            </>
+          )}
         </div>
 
         {/* ==================== WING 4: MY RESEARCH ==================== */}
         <div className="wing-group">
-          <div className="wing-header">
+          <div className="wing-header" onClick={toggleRes}>
+            <span className={`wing-chev ${resOpen ? "open" : ""}`}>
+              <Icon name="chevR" size={11} />
+            </span>
             <span className="wing-title">🔭 My Research</span>
           </div>
 
-          <button
-            type="button"
-            className="nav-item"
-            onClick={() => setResearchOpen(true)}
-          >
-            <Icon name="doc" size={17} />
-            <span className="nav-label">Deep Research</span>
-          </button>
+          {(resOpen || isIconsMode) && (
+            <>
+              <button
+                type="button"
+                className="nav-item"
+                onClick={() => setResearchOpen(true)}
+              >
+                <Icon name="doc" size={17} />
+                <span className="nav-label">Deep Research</span>
+              </button>
 
-          <button
-            type="button"
-            className={`nav-item ${surface === "equity" ? "active" : ""}`}
-            onClick={() => setSurface("equity")}
-          >
-            <Icon name="table" size={17} />
-            <span className="nav-label">Equity Research</span>
-          </button>
+              <button
+                type="button"
+                className={`nav-item ${surface === "equity" ? "active" : ""}`}
+                onClick={() => setSurface("equity")}
+              >
+                <Icon name="table" size={17} />
+                <span className="nav-label">Equity Research</span>
+              </button>
 
-          <button
-            type="button"
-            className={`nav-item ${surface === "insights" ? "active" : ""}`}
-            onClick={() => setSurface("insights")}
-          >
-            <Icon name="board" size={17} />
-            <span className="nav-label">Insights</span>
-          </button>
+              <button
+                type="button"
+                className={`nav-item ${surface === "insights" ? "active" : ""}`}
+                onClick={() => setSurface("insights")}
+              >
+                <Icon name="board" size={17} />
+                <span className="nav-label">Insights</span>
+              </button>
 
-          <button
-            type="button"
-            className={`nav-item ${surface === "rss-reader" ? "active" : ""}`}
-            onClick={() => setSurface("rss-reader")}
-          >
-            <Icon name="doc" size={17} />
-            <span className="nav-label">RSS Reader</span>
-          </button>
+              <button
+                type="button"
+                className={`nav-item ${surface === "rss-reader" ? "active" : ""}`}
+                onClick={() => setSurface("rss-reader")}
+              >
+                <Icon name="doc" size={17} />
+                <span className="nav-label">RSS Reader</span>
+              </button>
+            </>
+          )}
         </div>
+
 
         <div className="sec sec-static mt-12">
           <span className="sec-label">More</span>
@@ -428,7 +492,7 @@ export function Sidebar() {
           className="rail-foot-gear"
           title="Appearance"
           aria-label="Appearance"
-          onClick={() => setTweaksOpen(true)}
+          onClick={() => setTweaksOpen(!tweaksOpen)}
         >
           <Icon name="sun" size={16} />
         </button>

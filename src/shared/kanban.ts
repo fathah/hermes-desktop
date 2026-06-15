@@ -84,4 +84,7 @@ export interface KanbanCreateTaskInput {
   triage?: boolean;
   skills?: string[];
   maxRetries?: number;
+  goalMode?: boolean;
+  goalMaxTurns?: number;
+  maxRuntimeSeconds?: number;
 }

@@ -48,6 +48,15 @@ interface MedicationProtocol {
   titration_steps?: Array<{ week: number; dose: number }>;
 }
 
+interface MedicationLog {
+  id: string;
+  protocol_id?: string;
+  timestamp: number;
+  dose_administered?: number;
+  injection_site?: string;
+  side_effects?: string[];
+}
+
 interface MedicalDoc {
   id: string;
   file_name: string;
@@ -65,17 +74,33 @@ interface MedicalDoc {
   }>;
 }
 
+interface HealthProfile extends Record<string, unknown> {
+  active_conditions?: string[];
+}
+
+interface ClinicalDigestArticle {
+  id: string;
+  relevance_score: number;
+  feed_title?: string;
+  title: string;
+  summary_excerpt?: string;
+  published_at: number;
+  url: string;
+}
+
 export function PersonalHealthDashboard(): React.JSX.Element {
   const [activeTab, setActiveTab] = useState<
     "journal" | "peptide" | "vault" | "news"
   >("journal");
-  const [profile, setProfile] = useState<any>(null);
+  const [profile, setProfile] = useState<HealthProfile | null>(null);
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
   const [biometricLogs, setBiometricLogs] = useState<BiometricLog[]>([]);
   const [protocols, setProtocols] = useState<MedicationProtocol[]>([]);
-  const [medLogs, setMedLogs] = useState<any[]>([]);
+  const [medLogs, setMedLogs] = useState<MedicationLog[]>([]);
   const [medicalDocs, setMedicalDocs] = useState<MedicalDoc[]>([]);
-  const [clinicalDigest, setClinicalDigest] = useState<any[]>([]);
+  const [clinicalDigest, setClinicalDigest] = useState<
+    ClinicalDigestArticle[]
+  >([]);
 
   // Form states
   const [quickWeight, setQuickWeight] = useState("");

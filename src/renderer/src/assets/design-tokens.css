@@ -128,3 +128,40 @@
   --shadow-menu: 0 10px 30px rgba(0, 0, 0, 0.5);
   --scrim: rgba(0, 0, 0, 0.55);
 }
+
+/* ---------- Skins: black mode ---------- */
+:root[data-theme="dark"][data-skin="black"] {
+  --app-bg: #0a0a0a;
+  --canvas: #0f0f0f;
+  --surface: #161616;
+  --sunk: #131313;
+  --hair: #2a2a2a;
+  --hair-soft: #1f1f1f;
+  --hair-strong: #3a3a3a;
+  --tx-1: #e8e8e8;
+  --tx-2: #a6a6a6;
+  --tx-3: #777777;
+  --tx-4: #555555;
+  --row-hover: #1a1a1a;
+  --row-sel: #222222;
+  --block-hover: rgba(255, 255, 255, 0.05);
+}
+
+/* ---------- Skins: terminal mode ---------- */
+:root[data-theme="dark"][data-skin="terminal"] {
+  --app-bg: #000000;
+  --canvas: #000000;
+  --surface: #0d0d0d;
+  --sunk: #000000;
+  --hair: #203f1a;
+  --hair-soft: #142f10;
+  --hair-strong: #2c5a24;
+  --tx-1: #28fe14;
+  --tx-2: #21ca10;
+  --tx-3: #19990b;
+  --tx-4: #127008;
+  --row-hover: #0d0d0d;
+  --row-sel: #12300c;
+  --block-hover: rgba(40, 254, 20, 0.06);
+  --font-sans: var(--font-mono);
+}

@@ -43,6 +43,14 @@ function freshConversation(title = "Chat"): Conversation {
   };
 }
 
+function activeCriteriaFromBlocks(
+  blocks: Block[],
+): Array<{ text: string; done: boolean }> {
+  return blocks
+    .filter((b) => b.type === "todo" && b.text.trim())
+    .map((b) => ({ text: b.text.trim(), done: Boolean(b.done) }));
+}
+
 export const createAssistantSlice: StateCreator<
   Store,
   [],
@@ -351,6 +359,7 @@ export const createAssistantSlice: StateCreator<
 
       const planText = serializePlanBlocks(blocks);
       const message = `${buildWorkPrompt()}\n\n--- PLAN: ${meta.title} ---\n${planText}`;
+      let activeWorkId: string | null = null;
 
       get().openPanelTab("assistant");
       const userLabel = resumeId
@@ -369,6 +378,22 @@ export const createAssistantSlice: StateCreator<
         updateMsg(convId, botId, { text: [acc + note] });
       };
 
+      try {
+        const active = await window.hermesAPI.spsCreateActiveWorkRun({
+          source: "sps-work",
+          title: `Work: ${meta.title}`,
+          goal: `Execute the plan "${meta.title}"`,
+          pageId,
+          pageTitle: meta.title,
+          sessionId: resumeId,
+          clientRunId: runId,
+          criteria: activeCriteriaFromBlocks(blocks),
+        });
+        activeWorkId = active.id;
+      } catch {
+        activeWorkId = null;
+      }
+
       const cleanups = [
         window.hermesAPI.onChatChunk((chunk, rid) => {
           if (rid !== runId) return;
@@ -378,6 +403,12 @@ export const createAssistantSlice: StateCreator<
         window.hermesAPI.onChatToolProgress((t, rid) => {
           if (rid !== runId) return;
           tool = t;
+          if (activeWorkId) {
+            void window.hermesAPI.spsUpdateActiveWorkRun(activeWorkId, {
+              lastTool: t,
+              lastHeartbeatAt: Date.now(),
+            });
+          }
           render();
         }),
         window.hermesAPI.onChatApprovalAuto((req, rid) => {
@@ -411,10 +442,47 @@ export const createAssistantSlice: StateCreator<
           }));
           void window.hermesAPI.spsSetWorkSession(pageId, sessionId);
         }
+        if (activeWorkId) {
+          void window.hermesAPI.spsUpdateActiveWorkRun(activeWorkId, {
+            sessionId: result.sessionId,
+            status: "completed",
+            summary: acc.slice(0, 500),
+            completedAt: Date.now(),
+            lastTool: null,
+            artifacts: [
+              {
+                id: uid("artifact"),
+                kind: "page",
+                label: meta.title,
+                ref: pageId,
+                createdAt: Date.now(),
+              },
+              ...(result.sessionId
+                ? [
+                    {
+                      id: uid("artifact"),
+                      kind: "session" as const,
+                      label: "Assistant session",
+                      ref: result.sessionId,
+                      createdAt: Date.now(),
+                    },
+                  ]
+                : []),
+            ],
+          });
+        }
       } catch (err) {
         acc += `\n\nError: ${err instanceof Error ? err.message : "work failed"}.`;
         tool = null;
         render();
+        if (activeWorkId) {
+          void window.hermesAPI.spsUpdateActiveWorkRun(activeWorkId, {
+            status: "failed",
+            error: err instanceof Error ? err.message : "work failed",
+            completedAt: Date.now(),
+            lastTool: null,
+          });
+        }
       } finally {
         cleanups.forEach((off) => off());
         setConvThinking(convId, false);

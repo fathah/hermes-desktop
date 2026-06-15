@@ -15,7 +15,8 @@ export type AiActionKind =
   | "why"
   | "wisdom"
   | "redteam"
-  | "critique";
+  | "critique"
+  | "cleanup";
 
 /** Short label shown as the user's chat bubble for an inline action. */
 export function aiActionLabel(kind: AiActionKind, selection: string): string {
@@ -30,6 +31,7 @@ export function aiActionLabel(kind: AiActionKind, selection: string): string {
     wisdom: "Extract Wisdom",
     redteam: "Red Team",
     critique: "Critique Writing",
+    cleanup: "AI Note Cleanup",
   };
   return snippet ? `${verb[kind]}: “${snippet}”` : verb[kind];
 }
@@ -38,7 +40,7 @@ export function aiActionLabel(kind: AiActionKind, selection: string): string {
 export function buildAiActionPrompt(
   kind: AiActionKind,
   selection: string,
-): string {
+  ): string {
   const target = selection.trim();
   switch (kind) {
     case "tldr":
@@ -51,6 +53,8 @@ export function buildAiActionPrompt(
       return `Explain WHY this approach or decision makes sense, and name the main trade-off or risk. Reply as {"kind":"chat"}.\n\n${target}`;
     case "rewrite":
       return `Rewrite the following to be clearer and tighter without changing its meaning. Return a {"kind":"diff"} edit whose "find" is the first ~18 characters of the text and whose "html" is the rewrite.\n\n${target}`;
+    case "cleanup":
+      return `Clean up and format this messy note or bulleted list into well-structured, grammatical, and clean paragraphs. Return a {"kind":"diff"} edit whose "find" is the first ~18 characters of the text and whose "html" is the cleaned up version.\n\n${target}`;
     case "wisdom":
       return [
         `Extract key insights, facts, lessons, and quotes from the following text. Reply as {"kind":"chat"}.`,

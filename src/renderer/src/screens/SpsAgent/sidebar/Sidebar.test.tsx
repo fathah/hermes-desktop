@@ -67,12 +67,14 @@ describe("Sidebar", () => {
     delete (window as unknown as { hermesAPI?: unknown }).hermesAPI;
   });
 
-  it("shows Teach Me under My Assistant", () => {
+  it("shows assistant work surfaces", () => {
     render(<Sidebar />);
 
     fireEvent.click(screen.getByText("Teach Me"));
+    fireEvent.click(screen.getByText("Active Work"));
 
     expect(screen.getByText(/My Advisor/)).toBeTruthy();
     expect(store.setSurface).toHaveBeenCalledWith("learning");
+    expect(store.setSurface).toHaveBeenCalledWith("activeWork");
   });
 });

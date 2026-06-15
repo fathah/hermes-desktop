@@ -14,6 +14,11 @@ import type {
   FederatedHit,
   FederatedSearchOpts,
 } from "../../shared/federated-search";
+import type {
+  ActiveWorkCreateInput,
+  ActiveWorkPatch,
+  ActiveWorkRun,
+} from "../../shared/active-work";
 
 /** Pending scheduled-research merge, shaped for the renderer (inline changeset
  *  shape mirrors spsFileAnswer's so preload need not import main types). */
@@ -192,6 +197,24 @@ export const spsBridge = {
     profile?: string,
   ): Promise<boolean> =>
     ipcRenderer.invoke("sps-set-work-session", pageId, sessionId, profile),
+  spsListActiveWorkRuns: (profile?: string): Promise<ActiveWorkRun[]> =>
+    ipcRenderer.invoke("sps-active-work-list", profile),
+  spsGetActiveWorkRun: (
+    runId: string,
+    profile?: string,
+  ): Promise<ActiveWorkRun | null> =>
+    ipcRenderer.invoke("sps-active-work-get", runId, profile),
+  spsCreateActiveWorkRun: (
+    input: ActiveWorkCreateInput,
+    profile?: string,
+  ): Promise<ActiveWorkRun> =>
+    ipcRenderer.invoke("sps-active-work-create", input, profile),
+  spsUpdateActiveWorkRun: (
+    runId: string,
+    patch: ActiveWorkPatch,
+    profile?: string,
+  ): Promise<ActiveWorkRun | null> =>
+    ipcRenderer.invoke("sps-active-work-update", runId, patch, profile),
   equityListBaskets: (profile?: string): Promise<unknown[]> =>
     ipcRenderer.invoke("equity-list-baskets", profile),
   equitySaveBasket: (basket: unknown, profile?: string): Promise<unknown> =>
@@ -451,7 +474,7 @@ export const spsBridge = {
   spsImportOkfBundle: (
     bundleDir: string,
     profile?: string,
-  ): Promise<{ success: boolean; pages: any[]; error?: string }> =>
+  ): Promise<{ success: boolean; pages: unknown[]; error?: string }> =>
     ipcRenderer.invoke("sps-import-okf-bundle", bundleDir, profile),
   spsExportOkfBundle: (
     targetDir: string,

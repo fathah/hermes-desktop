@@ -11,7 +11,10 @@ import {
   ipcMain,
 } from "electron";
 import { join } from "path";
+import { tmpdir } from "os";
 import { pathToFileURL } from "url";
+import { exec } from "child_process";
+import { promisify } from "util";
 import {
   existsSync,
   readFileSync,
@@ -22,6 +25,8 @@ import {
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import type { AppUpdater } from "electron-updater";
 import icon from "../../resources/icon.png?asset";
+
+const execAsync = promisify(exec);
 
 import { closeSharedDb } from "./db";
 import { closeAllNoteIndexes } from "./note-index";
@@ -305,7 +310,7 @@ function createWindow(): void {
     ...(process.platform === "darwin"
       ? { trafficLightPosition: { x: 16, y: 16 } }
       : {}),
-    ...(process.platform === "linux" ? { icon } : {}),
+    ...(process.platform !== "darwin" ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       nodeIntegration: false,
@@ -493,13 +498,10 @@ function setupIPC(): void {
       await new Promise((resolve) => setTimeout(resolve, 150));
 
       const tempPath = join(
-        require("os").tmpdir(),
+        tmpdir(),
         `hermes-capture-${Date.now()}.png`,
       );
       try {
-        const { exec } = require("child_process");
-        const { promisify } = require("util");
-        const execAsync = promisify(exec);
         await execAsync(`screencapture -i "${tempPath}"`);
         if (existsSync(tempPath)) {
           const buffer = readFileSync(tempPath);
@@ -708,6 +710,13 @@ app.whenReady().then(() => {
   // A second instance is already quitting (above) — do nothing here.
   if (!gotSingleInstanceLock) return;
   app.name = "Hermes";
+  if (process.platform === "darwin") {
+    try {
+      app.dock?.setIcon(icon);
+    } catch (err) {
+      console.error("[DOCK] Failed to set dock icon:", err);
+    }
+  }
   electronApp.setAppUserModelId("com.nousresearch.hermes");
 
   app.on("browser-window-created", (_, window) => {

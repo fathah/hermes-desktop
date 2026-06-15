@@ -28,6 +28,13 @@ interface RssArticle {
   relevance_score: number;
 }
 
+interface RssArticleQuery {
+  feedId?: string;
+  readStatus?: number;
+  starStatus?: number;
+  search?: string;
+}
+
 export function RssReaderDashboard(): React.JSX.Element {
   const [feeds, setFeeds] = useState<RssFeed[]>([]);
   const [articles, setArticles] = useState<RssArticle[]>([]);
@@ -55,7 +62,7 @@ export function RssReaderDashboard(): React.JSX.Element {
       setFeeds(feedList);
 
       // Load articles with filters
-      const query: any = {};
+      const query: RssArticleQuery = {};
       if (activeFeedId) query.feedId = activeFeedId;
       if (filterMode === "unread") query.readStatus = 0;
       if (filterMode === "starred") query.starStatus = 1;

@@ -23,7 +23,11 @@ export function useHotkeys(): void {
         s.setTweak("sidebar", s.t.sidebar === "hidden" ? "full" : "hidden");
       } else if (mod && e.key.toLowerCase() === "j") {
         e.preventDefault();
-        s.setPanelOpen(!s.panelOpen);
+        if (e.shiftKey) {
+          s.setPanelOpen(!s.panelOpen);
+        } else {
+          s.setPaletteOpen(!s.paletteOpen);
+        }
       } else if (e.key === "Escape") {
         s.setOpenTask(null);
       }

@@ -28,6 +28,11 @@ import type {
   KanbanTaskDetail,
   KanbanCreateTaskInput,
 } from "../shared/kanban";
+import type {
+  ActiveWorkCreateInput,
+  ActiveWorkPatch,
+  ActiveWorkRun,
+} from "../shared/active-work";
 import type { ConfigHealthReport } from "../shared/config-health";
 import type { EquityBasket, EquityAlert } from "../shared/equity";
 import type { PublicConnectionConfig } from "../shared/connection";
@@ -76,6 +81,124 @@ interface ConfigFixLogEntry {
   profile?: string;
   valueMasked?: string;
   detail?: string;
+}
+
+interface SpsHealthJournalEntry {
+  id: string;
+  timestamp: number;
+  text_raw: string;
+  voice_transcription?: string;
+  mood_score?: number;
+  tags: string[];
+  media?: Array<{
+    id: string;
+    file_path: string;
+    mime_type: string;
+    parsed_payload?: Record<string, unknown>;
+  }>;
+}
+
+interface SpsHealthBiometricLog {
+  id: string;
+  timestamp: number;
+  weight_kg?: number;
+  skeletal_muscle_mass_kg?: number;
+  body_fat_pct?: number;
+  systolic_bp?: number;
+  diastolic_bp?: number;
+  fasting_glucose_mgdl?: number;
+  sleep_score?: number;
+  hrv_ms?: number;
+}
+
+interface SpsHealthMedicationProtocol {
+  id: string;
+  name: string;
+  substance_type: string;
+  vial_size_mg?: number;
+  diluent_ml?: number;
+  dosage_unit: string;
+  syringe_units_per_ml: number;
+  half_life_hours?: number;
+  schedule_cron: string;
+  titration_steps?: Array<{ week: number; dose: number }>;
+}
+
+interface SpsHealthMedicationLog {
+  id: string;
+  protocol_id?: string;
+  timestamp: number;
+  dose_administered?: number;
+  injection_site?: string;
+  side_effects?: string[];
+  notes?: string;
+}
+
+interface SpsHealthBiomarker {
+  name: string;
+  value: number | string;
+  unit: string;
+  referenceRangeLow?: number;
+  referenceRangeHigh?: number;
+  isOutOfRange: boolean;
+}
+
+interface SpsHealthMedicalDoc {
+  id: string;
+  file_name: string;
+  file_path: string;
+  uploaded_at: number;
+  doc_type: string;
+  ocr_content_text?: string;
+  extracted_biomarkers?: SpsHealthBiomarker[];
+}
+
+interface SpsHealthProfile extends Record<string, unknown> {
+  active_conditions?: string[];
+}
+
+interface SpsClinicalDigestArticle {
+  id: string;
+  relevance_score: number;
+  feed_title?: string;
+  title: string;
+  summary_excerpt?: string;
+  published_at: number;
+  url: string;
+}
+
+interface SpsRssFeed {
+  id: string;
+  url: string;
+  title: string;
+  site_url?: string;
+  description?: string;
+  category: string;
+  last_fetched_at?: number;
+}
+
+interface SpsRssArticle {
+  id: string;
+  feed_id: string;
+  feed_title?: string;
+  guid: string;
+  title: string;
+  author?: string;
+  url: string;
+  published_at: number;
+  content_raw?: string;
+  content_text?: string;
+  summary_excerpt?: string;
+  read_status: number;
+  star_status: number;
+  relevance_score: number;
+}
+
+interface SpsIngestPageProposal {
+  op: "create" | "update";
+  pageId: string;
+  title: string;
+  markdown: string;
 }
 
 interface ObsidianFileNode {
@@ -266,7 +389,7 @@ interface HermesAPI {
     sessionId: string,
     councilGroupId: string,
   ) => Promise<void>;
-  abortChat: () => Promise<void>;
+  abortChat: (sessionIdOrRunId?: string) => Promise<void>;
   getApiServerKeyStatus: (profile?: string) => Promise<{ hasKey: boolean }>;
   generateApiServerKey: (profile?: string) => Promise<{ key: string }>;
   copyToClipboard: (text: string) => Promise<void>;
@@ -1128,6 +1251,20 @@ interface HermesAPI {
     sessionId: string,
     profile?: string,
   ) => Promise<boolean>;
+  spsListActiveWorkRuns: (profile?: string) => Promise<ActiveWorkRun[]>;
+  spsGetActiveWorkRun: (
+    runId: string,
+    profile?: string,
+  ) => Promise<ActiveWorkRun | null>;
+  spsCreateActiveWorkRun: (
+    input: ActiveWorkCreateInput,
+    profile?: string,
+  ) => Promise<ActiveWorkRun>;
+  spsUpdateActiveWorkRun: (
+    runId: string,
+    patch: ActiveWorkPatch,
+    profile?: string,
+  ) => Promise<ActiveWorkRun | null>;
   equityListBaskets: (profile?: string) => Promise<EquityBasket[]>;
   equitySaveBasket: (
     basket: Partial<EquityBasket>,
@@ -1312,40 +1449,65 @@ interface HermesAPI {
   spsTriggerScreencapture: (profile?: string) => Promise<string | null>;
 
   // Health APIs
-  spsHealthGetProfile: (profile?: string) => Promise<any>;
+  spsHealthGetProfile: (
+    profile?: string,
+  ) => Promise<SpsHealthProfile | null>;
   spsHealthSaveProfile: (
-    profileData: any,
+    profileData: Record<string, unknown>,
     profile?: string,
   ) => Promise<boolean>;
-  spsHealthAddJournalEntry: (entry: any, profile?: string) => Promise<string>;
-  spsHealthGetJournalEntries: (profile?: string) => Promise<any[]>;
+  spsHealthAddJournalEntry: (
+    entry: Partial<SpsHealthJournalEntry>,
+    profile?: string,
+  ) => Promise<string>;
+  spsHealthGetJournalEntries: (
+    profile?: string,
+  ) => Promise<SpsHealthJournalEntry[]>;
   spsHealthDeleteJournalEntry: (
     entryId: string,
     profile?: string,
   ) => Promise<boolean>;
-  spsHealthAddBiometricLog: (log: any, profile?: string) => Promise<string>;
-  spsHealthGetBiometricLogs: (profile?: string) => Promise<any[]>;
-  spsHealthSaveMedicationProtocol: (
-    protocol: any,
+  spsHealthAddBiometricLog: (
+    log: Partial<SpsHealthBiometricLog>,
     profile?: string,
   ) => Promise<string>;
-  spsHealthGetMedicationProtocols: (profile?: string) => Promise<any[]>;
+  spsHealthGetBiometricLogs: (
+    profile?: string,
+  ) => Promise<SpsHealthBiometricLog[]>;
+  spsHealthSaveMedicationProtocol: (
+    protocol: Partial<SpsHealthMedicationProtocol>,
+    profile?: string,
+  ) => Promise<string>;
+  spsHealthGetMedicationProtocols: (
+    profile?: string,
+  ) => Promise<SpsHealthMedicationProtocol[]>;
   spsHealthDeleteMedicationProtocol: (
     protocolId: string,
     profile?: string,
   ) => Promise<boolean>;
-  spsHealthAddMedicationLog: (log: any, profile?: string) => Promise<string>;
-  spsHealthGetMedicationLogs: (profile?: string) => Promise<any[]>;
-  spsHealthGetMedicalDocs: (profile?: string) => Promise<any[]>;
-  spsHealthAddMedicalDoc: (doc: any, profile?: string) => Promise<string>;
+  spsHealthAddMedicationLog: (
+    log: Partial<SpsHealthMedicationLog>,
+    profile?: string,
+  ) => Promise<string>;
+  spsHealthGetMedicationLogs: (
+    profile?: string,
+  ) => Promise<SpsHealthMedicationLog[]>;
+  spsHealthGetMedicalDocs: (profile?: string) => Promise<SpsHealthMedicalDoc[]>;
+  spsHealthAddMedicalDoc: (
+    doc: Partial<SpsHealthMedicalDoc>,
+    profile?: string,
+  ) => Promise<string>;
   spsHealthDeleteMedicalDoc: (
     docId: string,
     profile?: string,
   ) => Promise<boolean>;
 
   // RSS APIs
-  spsRssGetFeeds: (profile?: string) => Promise<any[]>;
-  spsRssAddFeed: (feedData: any, profile?: string) => Promise<string>;
+  spsRssGetFeeds: (profile?: string) => Promise<SpsRssFeed[]>;
+  spsRssAddFeed: (
+    feedData: Partial<SpsRssFeed>,
+    profile?: string,
+  ) => Promise<string>;
   spsRssDeleteFeed: (feedId: string, profile?: string) => Promise<boolean>;
   spsRssGetArticles: (
     query?: {
@@ -1357,7 +1519,7 @@ interface HermesAPI {
       offset?: number;
     },
     profile?: string,
-  ) => Promise<any[]>;
+  ) => Promise<SpsRssArticle[]>;
   spsRssMarkArticleRead: (
     articleId: string,
     readStatus: number,
@@ -1371,7 +1533,9 @@ interface HermesAPI {
   spsRssSyncFeeds: (
     profile?: string,
   ) => Promise<{ success: boolean; count: number }>;
-  spsRssGetClinicalDigest: (profile?: string) => Promise<any[]>;
+  spsRssGetClinicalDigest: (
+    profile?: string,
+  ) => Promise<SpsClinicalDigestArticle[]>;
 
   spsIndexStatus: (profile?: string) => Promise<{
     root: string;
@@ -1433,7 +1597,11 @@ interface HermesAPI {
   spsImportOkfBundle: (
     bundleDir: string,
     profile?: string,
-  ) => Promise<{ success: boolean; pages: any[]; error?: string }>;
+  ) => Promise<{
+    success: boolean;
+    pages: SpsIngestPageProposal[];
+    error?: string;
+  }>;
   spsExportOkfBundle: (
     targetDir: string,
     profile?: string,

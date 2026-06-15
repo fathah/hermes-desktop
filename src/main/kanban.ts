@@ -231,6 +231,11 @@ export async function createTask(
   if (input.triage) args.push("--triage");
   if (input.maxRetries !== undefined)
     args.push("--max-retries", String(input.maxRetries));
+  if (input.goalMode) args.push("--goal");
+  if (input.goalMaxTurns !== undefined)
+    args.push("--goal-max-turns", String(input.goalMaxTurns));
+  if (input.maxRuntimeSeconds !== undefined)
+    args.push("--max-runtime", String(input.maxRuntimeSeconds));
   for (const skill of input.skills || []) {
     args.push("--skill", skill);
   }

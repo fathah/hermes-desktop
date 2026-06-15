@@ -525,6 +525,20 @@ export function TweaksPanel() {
   const t = useStore((s) => s.t);
   const setTweak = useStore((s) => s.setTweak);
   const { setTheme } = useTheme();
+
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open, setOpen]);
+
   if (!open) return null;
   // Toggling dark here is the reciprocal of the Settings → Appearance control:
   // drive BOTH the SPS Tweaks flag (paints the workspace) and ThemeProvider
