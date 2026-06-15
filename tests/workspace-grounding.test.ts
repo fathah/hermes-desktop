@@ -61,7 +61,7 @@ vi.mock("../src/main/note-index", async () => {
 const semanticSearch = vi.fn().mockResolvedValue({ results: [] });
 vi.mock("../src/main/semantic-index", () => ({
   semanticManager: {
-    search: (...args: any[]) => semanticSearch(...args),
+    search: (...args: unknown[]) => semanticSearch(...args),
   },
 }));
 

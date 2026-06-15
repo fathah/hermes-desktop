@@ -276,7 +276,7 @@ function WhatsAppCloudSetup({
         <div>Verify Token in Meta matches WHATSAPP_CLOUD_VERIFY_TOKEN</div>
         <div>Webhook fields include the messages subscription</div>
         <div>Direct-message support only in this Hermes adapter version</div>
-        <div>Messages outside Meta's 24-hour window require templates</div>
+        <div>Messages outside Meta&apos;s 24-hour window require templates</div>
       </div>
 
       <div className="whatsapp-cloud-actions">

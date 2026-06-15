@@ -321,7 +321,7 @@ export async function spsExportOkfBundle(
 
     // Recursively collect all markdown files in the vault (standard & rows)
     const vaultFiles: string[] = [];
-    async function collectVaultFiles(dir: string) {
+    async function collectVaultFiles(dir: string): Promise<void> {
       const entries = await fs.readdir(dir, { withFileTypes: true });
       for (const entry of entries) {
         const fullPath = join(dir, entry.name);

@@ -148,7 +148,7 @@ export class ForceSimulation {
       for (let j = i + 1; j < n; j++) {
         const v = nodes[j];
         let dx = v.x - u.x;
-        let dy = v.y - u.y;
+        const dy = v.y - u.y;
         if (dx === 0) dx = 0.1;
         const dist = Math.sqrt(dx * dx + dy * dy) || 0.1;
         const minDist = u.r + v.r + 28; // radii + safety spacing margin

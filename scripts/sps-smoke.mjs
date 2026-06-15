@@ -181,7 +181,6 @@ setTimeout(() => {
   process.exit(2);
 }, 120000).unref();
 
-const MOD = process.platform === "darwin" ? "Meta" : "Control";
 const expectedShots = [
   "01-home",
   "02-palette",

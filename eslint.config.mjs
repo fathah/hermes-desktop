@@ -58,6 +58,7 @@ export default defineConfig(
     rules: {
       ...eslintPluginReactHooks.configs.recommended.rules,
       ...eslintPluginReactRefresh.configs.vite.rules,
+      "react/prop-types": "off",
       "react-hooks/set-state-in-effect": "off",
       "react-hooks/refs": "off",
       "react-refresh/only-export-components": "off",
@@ -79,6 +80,7 @@ export default defineConfig(
     files: ["**/*.{js,mjs,cjs}"],
     rules: {
       "@typescript-eslint/explicit-function-return-type": "off",
+      "@typescript-eslint/no-require-imports": "off",
     },
   },
   {

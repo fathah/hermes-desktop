@@ -7,6 +7,20 @@ import { execFileSync } from "child_process";
 const HERMES_PYTHON = "/Users/amar/.hermes/hermes-agent/venv/bin/python";
 const CLUSTER_SCRIPT =
   "/Users/amar/.hermes/skills/curation/newsroom-curator/cluster_news.py";
+const TEST_TIMEOUT_MS = 30_000;
+
+function runCluster(inboxDir: string): Record<string, Array<{ id: string; title: string }>> {
+  const outputRaw = execFileSync(HERMES_PYTHON, [CLUSTER_SCRIPT, inboxDir], {
+    env: {
+      ...process.env,
+      HF_HUB_OFFLINE: "1",
+      TRANSFORMERS_OFFLINE: "1",
+      OPENAI_API_KEY: "",
+    },
+    timeout: TEST_TIMEOUT_MS,
+  });
+  return JSON.parse(outputRaw.toString().trim());
+}
 
 describe("Newsroom Curator: Semantic Similarity Clustering", () => {
   let tempVaultDir: string;
@@ -83,11 +97,7 @@ Leaders and security representatives from European nations gathered in Geneva to
     );
 
     // Execute the python clustering script
-    const outputRaw = execFileSync(HERMES_PYTHON, [
-      CLUSTER_SCRIPT,
-      tempInboxDir,
-    ]);
-    const clusters = JSON.parse(outputRaw.toString().trim());
+    const clusters = runCluster(tempInboxDir);
 
     // Assertions
     expect(clusters).toBeDefined();
@@ -138,7 +148,7 @@ Leaders and security representatives from European nations gathered in Geneva to
     expect(genevaCluster.map((c) => c.id)).toContain(
       "geopolitical-summit-geneva",
     );
-  });
+  }, TEST_TIMEOUT_MS);
 
   it("filters out processed captures and only ingests unprocessed ones", () => {
     // Plant one unprocessed capture and one processed capture
@@ -162,11 +172,7 @@ source: manual
 This is an old document.`,
     );
 
-    const outputRaw = execFileSync(HERMES_PYTHON, [
-      CLUSTER_SCRIPT,
-      tempInboxDir,
-    ]);
-    const clusters = JSON.parse(outputRaw.toString().trim());
+    const clusters = runCluster(tempInboxDir);
 
     // Accumulate all items in clusters
     const allItems: Array<{ id: string }> = [];
@@ -176,7 +182,7 @@ This is an old document.`,
 
     expect(allItems.map((i) => i.id)).toContain("fresh-capture");
     expect(allItems.map((i) => i.id)).not.toContain("old-capture");
-  });
+  }, TEST_TIMEOUT_MS);
 
   it("respects custom similarity threshold from curator-settings.md", () => {
     // Group 1: GPT-5 articles (moderately similar, group together under threshold=0.45)
@@ -213,16 +219,12 @@ An initial review of OpenAI's new GPT-5 model reveals substantial logic capabili
     );
 
     // Execute clustering
-    const outputRaw = execFileSync(HERMES_PYTHON, [
-      CLUSTER_SCRIPT,
-      tempInboxDir,
-    ]);
-    const clusters = JSON.parse(outputRaw.toString().trim());
+    const clusters = runCluster(tempInboxDir);
 
     // With 0.95 similarity threshold, they should not group together
     const clusterKeys = Object.keys(clusters);
     expect(clusterKeys.length).toBe(2); // Two separate clusters
-  });
+  }, TEST_TIMEOUT_MS);
 
   it("filters out captures containing keywords from ignored_topics", () => {
     // Article 1: Interesting topic
@@ -260,11 +262,7 @@ Some celebrity did something trivial today.`,
     );
 
     // Execute clustering
-    const outputRaw = execFileSync(HERMES_PYTHON, [
-      CLUSTER_SCRIPT,
-      tempInboxDir,
-    ]);
-    const clusters = JSON.parse(outputRaw.toString().trim());
+    const clusters = runCluster(tempInboxDir);
 
     // Accumulate all articles
     const allItems: Array<{ id: string }> = [];
@@ -274,5 +272,5 @@ Some celebrity did something trivial today.`,
 
     expect(allItems.map((i) => i.id)).toContain("interesting-article");
     expect(allItems.map((i) => i.id)).not.toContain("ignored-gossip");
-  });
+  }, TEST_TIMEOUT_MS);
 });

@@ -1,6 +1,7 @@
 import { spawn } from "child_process";
 import { randomUUID } from "crypto";
 import http from "http";
+import type { ClientRequest } from "http";
 import https from "https";
 import { homedir } from "os";
 import {
@@ -432,7 +433,7 @@ export function sendMessageViaApi(
   const mc = getModelConfig(profile);
   const effectiveModel = modelOverride?.model || mc.model;
   const controller = new AbortController();
-  let activeRequest: any = null;
+  let activeRequest: ClientRequest | null = null;
   let finished = false;
   let hasContent = false;
   let lastError = "";
@@ -463,7 +464,7 @@ export function sendMessageViaApi(
   async function executeRequest(
     retryBudget: number,
     customBudgetChars?: number,
-  ) {
+  ): Promise<void> {
     if (finished || controller.signal.aborted) return;
 
     // 1. Gating / Context Injection Hook (The Security Guard)
@@ -794,7 +795,9 @@ export function sendMessageViaApi(
       if (activeRequest) {
         try {
           activeRequest.destroy();
-        } catch {}
+        } catch {
+          // Ignore cleanup failures after the abort signal has already fired.
+        }
       }
     },
   };

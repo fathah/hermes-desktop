@@ -53,7 +53,7 @@ function getICalDates(dueStr: string): { start: string; end: string } | null {
     const day = parseInt(d);
     const startD = new Date(Date.UTC(year, month, day));
     const endD = new Date(Date.UTC(year, month, day + 1));
-    const fmt = (date: Date) => {
+    const fmt = (date: Date): string => {
       const ys = String(date.getUTCFullYear());
       const ms = String(date.getUTCMonth() + 1).padStart(2, "0");
       const ds = String(date.getUTCDate()).padStart(2, "0");
@@ -66,7 +66,7 @@ function getICalDates(dueStr: string): { start: string; end: string } | null {
   if (!isNaN(parsed.getTime())) {
     const startD = new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate()));
     const endD = new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate() + 1));
-    const fmt = (date: Date) => {
+    const fmt = (date: Date): string => {
       const ys = String(date.getUTCFullYear());
       const ms = String(date.getUTCMonth() + 1).padStart(2, "0");
       const ds = String(date.getUTCDate()).padStart(2, "0");

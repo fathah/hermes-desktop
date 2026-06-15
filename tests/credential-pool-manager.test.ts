@@ -1,7 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { join } from "path";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { mkdirSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
+
+type ConfigModule = typeof import("../src/main/config");
+type CredentialPoolManagerCtor =
+  typeof import("../src/main/config/credential-pool-manager").CredentialPoolManager;
 
 const TEST_DIR = join(
   tmpdir(),
@@ -9,10 +13,10 @@ const TEST_DIR = join(
 );
 
 async function freshConfig(home: string): Promise<{
-  addCredentialPoolEntry: any;
-  getCredentialPool: any;
-  readEnv: any;
-  CredentialPoolManager: any;
+  addCredentialPoolEntry: ConfigModule["addCredentialPoolEntry"];
+  getCredentialPool: ConfigModule["getCredentialPool"];
+  readEnv: ConfigModule["readEnv"];
+  CredentialPoolManager: CredentialPoolManagerCtor;
 }> {
   vi.resetModules();
   process.env.HERMES_HOME = home;

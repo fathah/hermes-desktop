@@ -2,6 +2,29 @@ import { getSharedDb } from "../db";
 import { safeHandle } from "./safe-handle";
 import { randomUUID } from "crypto";
 
+type JsonRecord = Record<string, unknown>;
+
+interface RssArticleQuery {
+  feedId?: string;
+  readStatus?: number;
+  starStatus?: number;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+interface MockArticle {
+  guid: string;
+  title: string;
+  author: string;
+  url: string;
+  published_at: number;
+  content_raw: string;
+  content_text: string;
+  summary_excerpt: string;
+  relevance_score: number;
+}
+
 export function registerHealthRssIpc(): void {
   // --- HEALTH MODULE ---
 
@@ -12,7 +35,7 @@ export function registerHealthRssIpc(): void {
 
     let row = db
       .prepare("SELECT * FROM health_profiles WHERE id = ?")
-      .get("default") as any;
+      .get("default") as JsonRecord | undefined;
     if (!row) {
       db.prepare(
         `INSERT INTO health_profiles (id, weight_goal_kg, muscle_goal_kg, active_conditions, med_and_supp_list, rss_feeds)
@@ -27,21 +50,21 @@ export function registerHealthRssIpc(): void {
       );
       row = db
         .prepare("SELECT * FROM health_profiles WHERE id = ?")
-        .get("default") as any;
+        .get("default") as JsonRecord | undefined;
     }
 
     if (row) {
       // Deserialize JSON fields
-      row.active_conditions = JSON.parse(row.active_conditions || "[]");
-      row.med_and_supp_list = JSON.parse(row.med_and_supp_list || "[]");
-      row.rss_feeds = JSON.parse(row.rss_feeds || "[]");
+      row.active_conditions = JSON.parse(String(row.active_conditions || "[]"));
+      row.med_and_supp_list = JSON.parse(String(row.med_and_supp_list || "[]"));
+      row.rss_feeds = JSON.parse(String(row.rss_feeds || "[]"));
     }
     return row;
   });
 
   // Save/Update health profile
   safeHandle("sps-health-save-profile", async (_event, ...args) => {
-    const profileData = args[0] as any;
+    const profileData = args[0] as JsonRecord | undefined;
     const db = getSharedDb(false);
     if (!db) return false;
 
@@ -67,7 +90,7 @@ export function registerHealthRssIpc(): void {
 
   // Add/Update journal entry
   safeHandle("sps-health-add-journal-entry", async (_event, ...args) => {
-    const entry = args[0] as any;
+    const entry = args[0] as JsonRecord | undefined;
     const db = getSharedDb(false);
     if (!db) throw new Error("Database not available");
 
@@ -116,15 +139,15 @@ export function registerHealthRssIpc(): void {
 
     const entries = db
       .prepare("SELECT * FROM journal_entries ORDER BY timestamp DESC")
-      .all() as any[];
+      .all() as JsonRecord[];
     for (const entry of entries) {
-      entry.tags = JSON.parse(entry.tags || "[]");
+      entry.tags = JSON.parse(String(entry.tags || "[]"));
       // Load associated media
       entry.media = db
         .prepare("SELECT * FROM journal_media WHERE entry_id = ?")
-        .all(entry.id) as any[];
-      for (const m of entry.media) {
-        m.parsed_payload = JSON.parse(m.parsed_payload || "{}");
+        .all(entry.id) as JsonRecord[];
+      for (const m of entry.media as JsonRecord[]) {
+        m.parsed_payload = JSON.parse(String(m.parsed_payload || "{}"));
       }
     }
     return entries;
@@ -141,7 +164,7 @@ export function registerHealthRssIpc(): void {
 
   // Add biometric log
   safeHandle("sps-health-add-biometric-log", async (_event, ...args) => {
-    const logData = args[0] as any;
+    const logData = args[0] as JsonRecord | undefined;
     const db = getSharedDb(false);
     if (!db) throw new Error("Database not available");
 
@@ -207,7 +230,7 @@ export function registerHealthRssIpc(): void {
 
   // Save/Update Medication Protocol
   safeHandle("sps-health-save-medication-protocol", async (_event, ...args) => {
-    const protocol = args[0] as any;
+    const protocol = args[0] as JsonRecord | undefined;
     const db = getSharedDb(false);
     if (!db) throw new Error("Database not available");
 
@@ -258,9 +281,9 @@ export function registerHealthRssIpc(): void {
     if (!db) return [];
     const rows = db
       .prepare("SELECT * FROM medication_protocols")
-      .all() as any[];
+      .all() as JsonRecord[];
     for (const row of rows) {
-      row.titration_steps = JSON.parse(row.titration_steps || "[]");
+      row.titration_steps = JSON.parse(String(row.titration_steps || "[]"));
     }
     return rows;
   });
@@ -281,7 +304,7 @@ export function registerHealthRssIpc(): void {
 
   // Add Medication Administration Log
   safeHandle("sps-health-add-medication-log", async (_event, ...args) => {
-    const mLog = args[0] as any;
+    const mLog = args[0] as JsonRecord | undefined;
     const db = getSharedDb(false);
     if (!db) throw new Error("Database not available");
 
@@ -312,9 +335,9 @@ export function registerHealthRssIpc(): void {
     if (!db) return [];
     const rows = db
       .prepare("SELECT * FROM medication_logs ORDER BY timestamp DESC")
-      .all() as any[];
+      .all() as JsonRecord[];
     for (const row of rows) {
-      row.side_effects = JSON.parse(row.side_effects || "[]");
+      row.side_effects = JSON.parse(String(row.side_effects || "[]"));
     }
     return rows;
   });
@@ -325,16 +348,18 @@ export function registerHealthRssIpc(): void {
     if (!db) return [];
     const rows = db
       .prepare("SELECT * FROM medical_vault_docs ORDER BY uploaded_at DESC")
-      .all() as any[];
+      .all() as JsonRecord[];
     for (const row of rows) {
-      row.extracted_biomarkers = JSON.parse(row.extracted_biomarkers || "[]");
+      row.extracted_biomarkers = JSON.parse(
+        String(row.extracted_biomarkers || "[]"),
+      );
     }
     return rows;
   });
 
   // Add Medical Vault Document
   safeHandle("sps-health-add-medical-doc", async (_event, ...args) => {
-    const doc = args[0] as any;
+    const doc = args[0] as JsonRecord | undefined;
     const db = getSharedDb(false);
     if (!db) throw new Error("Database not available");
 
@@ -343,10 +368,10 @@ export function registerHealthRssIpc(): void {
     const file_path = doc?.file_path;
     const uploaded_at = doc?.uploaded_at || Date.now();
     const doc_type = doc?.doc_type || "lab_report";
-    const ocr_content_text = doc?.ocr_content_text || "";
+    const ocr_content_text = String(doc?.ocr_content_text || "");
 
     // Simple layout-aware NER/Biomarker extraction using regex matches on the text
-    const extracted: Array<any> = [];
+    const extracted: JsonRecord[] = [];
 
     // Regular expression helpers for key biomarkers
     const patterns = [
@@ -412,7 +437,7 @@ export function registerHealthRssIpc(): void {
 
     // Also look for Blood Pressure e.g., 120/80
     const bpMatch = ocr_content_text.match(
-      /(?:blood\s*pressure|bp)\s*[:=]?\s*(\d{2,3})\s*[\/\\]\s*(\d{2,3})/i,
+      /(?:blood\s*pressure|bp)\s*[:=]?\s*(\d{2,3})\s*[/\\]\s*(\d{2,3})/i,
     );
     if (bpMatch && bpMatch[1] && bpMatch[2]) {
       const sys = parseInt(bpMatch[1], 10);
@@ -465,7 +490,7 @@ export function registerHealthRssIpc(): void {
 
   // Add Feed
   safeHandle("sps-rss-add-feed", async (_event, ...args) => {
-    const feedData = args[0] as any;
+    const feedData = args[0] as JsonRecord | undefined;
     const db = getSharedDb(false);
     if (!db) throw new Error("Database not available");
 
@@ -495,13 +520,13 @@ export function registerHealthRssIpc(): void {
 
   // Get Articles with FTS Search & filters
   safeHandle("sps-rss-get-articles", async (_event, ...args) => {
-    const query = args[0] as any;
+    const query = args[0] as RssArticleQuery | undefined;
     const db = getSharedDb(true);
     if (!db) return [];
 
     let sql =
       "SELECT a.*, f.title as feed_title FROM rss_articles a JOIN rss_feeds f ON a.feed_id = f.id";
-    const params: any[] = [];
+    const params: Array<string | number> = [];
     const clauses: string[] = [];
 
     if (query?.feedId) {
@@ -581,12 +606,15 @@ export function registerHealthRssIpc(): void {
     const db = getSharedDb(false);
     if (!db) return { success: false, count: 0 };
 
-    const feeds = db.prepare("SELECT * FROM rss_feeds").all() as any[];
+    const feeds = db.prepare("SELECT * FROM rss_feeds").all() as JsonRecord[];
     let count = 0;
 
     for (const feed of feeds) {
       try {
-        const mockArticles = getMockArticlesForFeed(feed.id, feed.title);
+        const mockArticles = getMockArticlesForFeed(
+          String(feed.id || ""),
+          String(feed.title || ""),
+        );
         const insertArticle = db.prepare(
           `INSERT OR IGNORE INTO rss_articles (
             id, feed_id, guid, title, author, url, published_at, content_raw, content_text, summary_excerpt, relevance_score
@@ -630,10 +658,12 @@ export function registerHealthRssIpc(): void {
 
     const profile = db
       .prepare("SELECT * FROM health_profiles WHERE id = ?")
-      .get("default") as any;
+      .get("default") as JsonRecord | undefined;
     if (!profile) return [];
 
-    const conditions: string[] = JSON.parse(profile.active_conditions || "[]");
+    const conditions: string[] = JSON.parse(
+      String(profile.active_conditions || "[]"),
+    );
     if (conditions.length === 0) return [];
 
     // Search RSS articles for text matches against our conditions
@@ -655,7 +685,10 @@ export function registerHealthRssIpc(): void {
 }
 
 // Helpers for mock articles
-function getMockArticlesForFeed(feedId: string, feedTitle: string): Array<any> {
+function getMockArticlesForFeed(
+  feedId: string,
+  feedTitle: string,
+): MockArticle[] {
   const now = Date.now();
   if (
     feedTitle.toLowerCase().includes("health") ||

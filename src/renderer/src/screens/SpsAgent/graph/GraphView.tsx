@@ -109,7 +109,8 @@ export function GraphView() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const rawCtx = canvas.getContext("2d") as any;
+    const rawCtx =
+      canvas.getContext("2d") as Partial<CanvasRenderingContext2D> | null;
     if (!rawCtx) return;
     const ctx = rawCtx as CanvasRenderingContext2D;
 
@@ -124,8 +125,13 @@ export function GraphView() {
         actualBoundingBoxDescent: 0,
         actualBoundingBoxLeft: 0,
         actualBoundingBoxRight: 0,
+        alphabeticBaseline: 0,
+        emHeightAscent: 0,
+        emHeightDescent: 0,
         fontBoundingBoxAscent: 0,
         fontBoundingBoxDescent: 0,
+        hangingBaseline: 0,
+        ideographicBaseline: 0,
       });
     }
     if (!rawCtx.save) rawCtx.save = () => {};

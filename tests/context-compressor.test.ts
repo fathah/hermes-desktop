@@ -45,7 +45,10 @@ describe("ContextCompressor", () => {
     ];
 
     const result = compressor.compress(messages);
-    const content = result[0].content as any[];
+    const content = result[0].content as Array<{
+      text?: string;
+      image_url?: { url?: string };
+    }>;
     expect(content[0].text).toContain("[Truncated 16 characters");
     expect(content[1].image_url?.url).toBe("data:img");
   });

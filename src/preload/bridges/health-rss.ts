@@ -1,28 +1,45 @@
 import { ipcRenderer } from "electron";
 
+type JsonRecord = Record<string, unknown>;
+
+interface RssArticleQuery {
+  feedId?: string;
+  readStatus?: number;
+  starStatus?: number;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
 export const healthRssBridge = {
-  spsHealthGetProfile: (profile?: string): Promise<any> =>
+  spsHealthGetProfile: (profile?: string): Promise<JsonRecord | null> =>
     ipcRenderer.invoke("sps-health-get-profile", profile),
   spsHealthSaveProfile: (
-    profileData: any,
+    profileData: JsonRecord,
     profile?: string,
   ): Promise<boolean> =>
     ipcRenderer.invoke("sps-health-save-profile", profileData, profile),
-  spsHealthAddJournalEntry: (entry: any, profile?: string): Promise<string> =>
+  spsHealthAddJournalEntry: (
+    entry: JsonRecord,
+    profile?: string,
+  ): Promise<string> =>
     ipcRenderer.invoke("sps-health-add-journal-entry", entry, profile),
-  spsHealthGetJournalEntries: (profile?: string): Promise<any[]> =>
+  spsHealthGetJournalEntries: (profile?: string): Promise<JsonRecord[]> =>
     ipcRenderer.invoke("sps-health-get-journal-entries", profile),
   spsHealthDeleteJournalEntry: (
     entryId: string,
     profile?: string,
   ): Promise<boolean> =>
     ipcRenderer.invoke("sps-health-delete-journal-entry", entryId, profile),
-  spsHealthAddBiometricLog: (log: any, profile?: string): Promise<string> =>
+  spsHealthAddBiometricLog: (
+    log: JsonRecord,
+    profile?: string,
+  ): Promise<string> =>
     ipcRenderer.invoke("sps-health-add-biometric-log", log, profile),
-  spsHealthGetBiometricLogs: (profile?: string): Promise<any[]> =>
+  spsHealthGetBiometricLogs: (profile?: string): Promise<JsonRecord[]> =>
     ipcRenderer.invoke("sps-health-get-biometric-logs", profile),
   spsHealthSaveMedicationProtocol: (
-    protocol: any,
+    protocol: JsonRecord,
     profile?: string,
   ): Promise<string> =>
     ipcRenderer.invoke(
@@ -30,7 +47,7 @@ export const healthRssBridge = {
       protocol,
       profile,
     ),
-  spsHealthGetMedicationProtocols: (profile?: string): Promise<any[]> =>
+  spsHealthGetMedicationProtocols: (profile?: string): Promise<JsonRecord[]> =>
     ipcRenderer.invoke("sps-health-get-medication-protocols", profile),
   spsHealthDeleteMedicationProtocol: (
     protocolId: string,
@@ -41,13 +58,19 @@ export const healthRssBridge = {
       protocolId,
       profile,
     ),
-  spsHealthAddMedicationLog: (log: any, profile?: string): Promise<string> =>
+  spsHealthAddMedicationLog: (
+    log: JsonRecord,
+    profile?: string,
+  ): Promise<string> =>
     ipcRenderer.invoke("sps-health-add-medication-log", log, profile),
-  spsHealthGetMedicationLogs: (profile?: string): Promise<any[]> =>
+  spsHealthGetMedicationLogs: (profile?: string): Promise<JsonRecord[]> =>
     ipcRenderer.invoke("sps-health-get-medication-logs", profile),
-  spsHealthGetMedicalDocs: (profile?: string): Promise<any[]> =>
+  spsHealthGetMedicalDocs: (profile?: string): Promise<JsonRecord[]> =>
     ipcRenderer.invoke("sps-health-get-medical-docs", profile),
-  spsHealthAddMedicalDoc: (doc: any, profile?: string): Promise<string> =>
+  spsHealthAddMedicalDoc: (
+    doc: JsonRecord,
+    profile?: string,
+  ): Promise<string> =>
     ipcRenderer.invoke("sps-health-add-medical-doc", doc, profile),
   spsHealthDeleteMedicalDoc: (
     docId: string,
@@ -55,23 +78,16 @@ export const healthRssBridge = {
   ): Promise<boolean> =>
     ipcRenderer.invoke("sps-health-delete-medical-doc", docId, profile),
 
-  spsRssGetFeeds: (profile?: string): Promise<any[]> =>
+  spsRssGetFeeds: (profile?: string): Promise<JsonRecord[]> =>
     ipcRenderer.invoke("sps-rss-get-feeds", profile),
-  spsRssAddFeed: (feedData: any, profile?: string): Promise<string> =>
+  spsRssAddFeed: (feedData: JsonRecord, profile?: string): Promise<string> =>
     ipcRenderer.invoke("sps-rss-add-feed", feedData, profile),
   spsRssDeleteFeed: (feedId: string, profile?: string): Promise<boolean> =>
     ipcRenderer.invoke("sps-rss-delete-feed", feedId, profile),
   spsRssGetArticles: (
-    query?: {
-      feedId?: string;
-      readStatus?: number;
-      starStatus?: number;
-      search?: string;
-      limit?: number;
-      offset?: number;
-    },
+    query?: RssArticleQuery,
     profile?: string,
-  ): Promise<any[]> =>
+  ): Promise<JsonRecord[]> =>
     ipcRenderer.invoke("sps-rss-get-articles", query, profile),
   spsRssMarkArticleRead: (
     articleId: string,
@@ -99,6 +115,6 @@ export const healthRssBridge = {
     profile?: string,
   ): Promise<{ success: boolean; count: number }> =>
     ipcRenderer.invoke("sps-rss-sync-feeds", profile),
-  spsRssGetClinicalDigest: (profile?: string): Promise<any[]> =>
+  spsRssGetClinicalDigest: (profile?: string): Promise<JsonRecord[]> =>
     ipcRenderer.invoke("sps-rss-get-clinical-digest", profile),
 };

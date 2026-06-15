@@ -16,6 +16,8 @@ export interface AllowlistEntry {
   approved_at: string;
 }
 
+type HookPayload = Record<string, unknown>;
+
 export class ShellHookManager {
   /**
    * Reads configured hooks from config.yaml in the active profile home.
@@ -107,7 +109,7 @@ export class ShellHookManager {
    */
   public static async runHook(
     event: string,
-    payload: any,
+    payload: HookPayload,
     profile?: string,
   ): Promise<{
     action: "allow" | "block";
@@ -171,7 +173,7 @@ export class ShellHookManager {
   private static executeSubprocessHook(
     command: string,
     event: string,
-    payload: any,
+    payload: HookPayload,
   ): Promise<{
     action: "allow" | "block";
     message?: string;
