@@ -237,11 +237,16 @@ describe("A5: bootstrap API never throws on any environment (contract invariant)
     expect(typeof result!.error).toBe("string");
   });
 
-  it("sealKeyFileToTpm degrades to {ok:false,sealed:false} for a missing key-file (never a false 'sealed')", () => {
-    let r: ReturnType<typeof sealKeyFileToTpm> | undefined;
-    expect(() => {
-      r = sealKeyFileToTpm(join(scratch, "no-such.key"));
-    }).not.toThrow();
+  it("sealKeyFileToTpm degrades to {ok:false,sealed:false} for a missing key-file (never a false 'sealed')", async () => {
+    // sealKeyFileToTpm is async (AIR-016: the TPM seal runs off the main thread
+    // so it can't freeze the UI). The missing-key guard returns before any
+    // subprocess, so this resolves immediately — assert it resolves, not rejects.
+    let r: Awaited<ReturnType<typeof sealKeyFileToTpm>> | undefined;
+    await expect(
+      (async () => {
+        r = await sealKeyFileToTpm(join(scratch, "no-such.key"));
+      })(),
+    ).resolves.toBeUndefined();
     expect(r!.ok).toBe(false);
     expect(r!.sealed).toBe(false); // a missing key is NEVER reported as sealed
   });

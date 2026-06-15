@@ -1177,7 +1177,10 @@ function setupIPC(): void {
   // hardware protection that didn't happen.
   ipcMain.handle("vault-seal-tpm", async (_event, keyPath: string) => {
     const { sealKeyFileToTpm } = await import("./secrets/vaultBootstrap");
-    return sealKeyFileToTpm(keyPath);
+    // AIR-016: sealKeyFileToTpm is async (the TPM seal can block 7–15s); await
+    // it so the handler resolves only when done, while the main thread stayed
+    // free the whole time (the renderer keeps painting its spinner).
+    return await sealKeyFileToTpm(keyPath);
   });
 
   ipcMain.handle(

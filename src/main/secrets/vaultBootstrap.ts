@@ -1,4 +1,9 @@
-import { execFileSync, type ExecFileSyncOptions } from "child_process";
+import {
+  execFileSync,
+  execFile,
+  type ExecFileSyncOptions,
+  type ExecFileOptions,
+} from "child_process";
 import { existsSync, mkdirSync, chmodSync, statSync, readFileSync } from "fs";
 import { dirname } from "path";
 import {
@@ -65,7 +70,18 @@ export interface SealResult {
   error?: string;
 }
 
-/** Quiet exec: returns trimmed stdout or null on any failure. Never throws. */
+/**
+ * Quiet exec: returns trimmed stdout or null on any failure. Never throws.
+ *
+ * SYNCHRONOUS — reserved for the FAST, sub-100ms probe calls (`command -v`,
+ * `readlink`) that run during UI render to decide what affordances to OFFER.
+ * Measured: the full checkToolAvailability() probe burst is ~7ms, so blocking
+ * the main thread for it is imperceptible. The SLOW subprocesses (db-create,
+ * systemd-creds TPM seal — up to TOOL_TIMEOUT_MS) MUST NOT use this; they use
+ * tryExecAsync below so a 7–15s op never freezes the Electron main thread
+ * (AIR-016). Keep this rule when adding a new exec: fast probe → tryExec; any
+ * call that can take seconds (vault create, TPM, network) → tryExecAsync.
+ */
 function tryExec(
   file: string,
   args: string[],
@@ -82,6 +98,40 @@ function tryExec(
   } catch {
     return null;
   }
+}
+
+/**
+ * Async sibling of tryExec for the SLOW subprocesses (db-create, TPM seal).
+ * Returns trimmed stdout or null on any failure (non-zero exit, timeout, spawn
+ * error). NEVER throws and NEVER rejects — the whole point is that the caller
+ * can `await` it from an async IPC handler without the event loop blocking, so
+ * the renderer keeps painting (spinner, cancel) during a 7–15s TPM dance.
+ * AIR-016: the wedge was `execFileSync` on the main thread; this is the fix.
+ */
+function tryExecAsync(
+  file: string,
+  args: string[],
+  opts: ExecFileOptions = {},
+): Promise<string | null> {
+  return new Promise((resolve) => {
+    execFile(
+      file,
+      args,
+      {
+        timeout: TOOL_TIMEOUT_MS,
+        windowsHide: true,
+        ...opts,
+      },
+      (err, stdout) => {
+        // Any error (timeout SIGTERM, non-zero exit, ENOENT) → null, never throw.
+        if (err) {
+          resolve(null);
+          return;
+        }
+        resolve(stdout ? stdout.toString().trim() : "");
+      },
+    );
+  });
 }
 
 /** Is a binary on PATH? Uses `command -v` via /bin/sh (POSIX). */
@@ -309,7 +359,7 @@ export function createVault(opts?: {
  *
  * Never throws.
  */
-export function sealKeyFileToTpm(keyPath: string): SealResult {
+export async function sealKeyFileToTpm(keyPath: string): Promise<SealResult> {
   if (!existsSync(keyPath)) {
     return { ok: false, sealed: false, error: "keyfile-not-found" };
   }
@@ -327,7 +377,10 @@ export function sealKeyFileToTpm(keyPath: string): SealResult {
   // Prefer systemd-creds encrypt --with-key=tpm2: writes a TPM-bound blob.
   if (hasBinary("systemd-creds")) {
     const sealedPath = keyPath + ".tpm";
-    const out = tryExec("systemd-creds", [
+    // AIR-016: this call is the slow one (measured 7–15s, bounded by
+    // TOOL_TIMEOUT_MS — the TPM2 + polkit dance). It MUST run async so the
+    // Electron main thread is not frozen while it runs; the IPC handler awaits.
+    const out = await tryExecAsync("systemd-creds", [
       "encrypt",
       "--with-key=tpm2",
       keyPath,
