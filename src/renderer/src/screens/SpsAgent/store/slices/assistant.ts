@@ -693,7 +693,7 @@ export const createAssistantSlice: StateCreator<
     // synthesize the cited brief into a durable wiki page and auto-commit it to
     // the knowledge base. Returns an `undo` closure so the modal can offer a
     // one-click reversal. SPS is single-profile, so profile is left undefined.
-    runResearch: async (topic, handlers) => {
+    runResearch: async (topic, handlers, intent = "all") => {
       const trimmed = topic.trim();
       if (!trimmed) return { ok: false, error: "Enter a topic to research." };
       const runId = uid("run");
@@ -715,7 +715,7 @@ export const createAssistantSlice: StateCreator<
         let sourceHint = "";
         try {
           const reach = await window.hermesAPI.getResearchReachStatus?.();
-          sourceHint = buildResearchReachPromptHint(reach, "all");
+          sourceHint = buildResearchReachPromptHint(reach, intent);
         } catch {
           sourceHint = "";
         }

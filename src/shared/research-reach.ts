@@ -166,7 +166,9 @@ export function buildResearchReachPromptHint(
   const focus =
     intent === "social"
       ? " Prioritize discussion sources when tools are ready."
-      : "";
+      : intent === "substack"
+        ? " Prioritize Substack publication pages, author archives, and /feed RSS feeds through ready RSS and web-page channels. Do not use Twitter/X or Reddit as substitutes for Substack coverage."
+        : "";
   const readyText = ready.length
     ? `Research Reach available channels: ${ready.join(", ")}.${focus}`
     : "Research Reach is installed, but no channels are currently ready.";

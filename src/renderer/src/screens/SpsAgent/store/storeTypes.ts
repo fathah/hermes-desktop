@@ -14,6 +14,7 @@ import type {
 } from "../types";
 import type { WorkDetail } from "../../../../../shared/openalex/core";
 import type { ExternalSource } from "../../../../../shared/external-context";
+import type { ResearchReachIntent } from "../../../../../shared/research-reach";
 
 export type RightTab = "assistant" | "outline" | "comments" | "info" | "backlinks";
 
@@ -350,6 +351,7 @@ export interface AssistantSlice {
       onChunk?: (markdown: string) => void;
       onTool?: (tool: string | null) => void;
     },
+    intent?: ResearchReachIntent,
   ) => Promise<{
     ok: boolean;
     error?: string;

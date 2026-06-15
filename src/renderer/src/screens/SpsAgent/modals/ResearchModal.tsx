@@ -154,7 +154,7 @@ export function ResearchModal() {
     const res = await runResearch(finalQuery, {
       onChunk: (md) => setProgress(md),
       onTool: (tool) => setToolNote(tool),
-    });
+    }, sourceFilter);
     if (res.ok) {
       setPhase("done");
       setResultSummary(res.summary || t);

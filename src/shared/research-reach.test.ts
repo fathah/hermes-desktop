@@ -125,6 +125,41 @@ describe("buildResearchReachPromptHint", () => {
       "Reddit is not currently ready; do not claim Reddit coverage unless a tool call succeeds.",
     );
   });
+
+  it("steers Substack research toward RSS and web sources", () => {
+    const status = normalizeAgentReachDoctor({
+      rss: {
+        status: "ok",
+        name: "RSS/Atom",
+        message: "ok",
+        tier: 0,
+        active_backend: "feedparser",
+      },
+      web: {
+        status: "ok",
+        name: "Web",
+        message: "ok",
+        tier: 0,
+        active_backend: "Jina Reader",
+      },
+      twitter: {
+        status: "warn",
+        name: "Twitter/X",
+        message: "login required",
+        tier: 1,
+      },
+    });
+
+    const hint = buildResearchReachPromptHint(status, "substack");
+
+    expect(hint).toContain("Prioritize Substack publication pages");
+    expect(hint).toContain("/feed RSS feeds");
+    expect(hint).toContain("RSS via feedparser");
+    expect(hint).toContain("Web pages via Jina Reader");
+    expect(hint).toContain(
+      "Twitter/X is not currently ready; do not claim Twitter/X coverage unless a tool call succeeds.",
+    );
+  });
 });
 
 describe("buildResearchPrompt with Research Reach hint", () => {
