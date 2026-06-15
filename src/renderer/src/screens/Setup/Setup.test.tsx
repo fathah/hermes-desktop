@@ -7,6 +7,8 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import Setup, { pickDefaultModel } from "./Setup";
+
 vi.mock("../../components/useI18n", () => ({
   useI18n: () => ({
     // Echo key + interpolated params so assertions can match on key names.
@@ -22,8 +24,6 @@ vi.mock("../../components/common/BrandLogo", () => ({
 vi.mock("../../components/VerifyWarningBanner", () => ({
   default: () => <div data-testid="verify-banner" />,
 }));
-
-import Setup from "./Setup";
 
 function mockAPI(
   overrides: Record<string, ReturnType<typeof vi.fn>> = {},
@@ -47,6 +47,9 @@ function mockAPI(
       .mockResolvedValue({ ok: false, error: "create-exception" }),
     vaultSealTpm: vi.fn().mockResolvedValue({ ok: true, sealed: true }),
     openExternal: vi.fn(),
+    discoverProviderModels: vi
+      .fn()
+      .mockResolvedValue({ models: [], status: "ok", cached: false }),
     ...overrides,
   };
 }
@@ -441,5 +444,103 @@ describe("Setup — first-run vault onboarding (secrets stage)", () => {
     ).toBeInTheDocument();
     // No TPM offer on failure.
     expect(screen.queryByText("setup.vaultTpmSealBtn")).toBeNull();
+  });
+});
+
+describe("pickDefaultModel — blank-field fallback selection (AIR-019)", () => {
+  it("returns '' for an empty list", () => {
+    expect(pickDefaultModel([])).toBe("");
+  });
+
+  it("prefers a clean stable id over a dated snapshot / preview", () => {
+    expect(
+      pickDefaultModel([
+        "claude-opus-4-20250219",
+        "claude-sonnet-4-5",
+        "claude-3-5-sonnet-preview",
+      ]),
+    ).toBe("claude-sonnet-4-5");
+  });
+
+  it("keeps the provider's ordering among clean ids (first preferred)", () => {
+    expect(pickDefaultModel(["claude-opus-4-8", "claude-sonnet-4-5"])).toBe(
+      "claude-opus-4-8",
+    );
+  });
+
+  it("falls back to the first id when every id is noisy", () => {
+    expect(pickDefaultModel(["model-20240101", "model-preview"])).toBe(
+      "model-20240101",
+    );
+  });
+
+  it("trims and skips blank entries", () => {
+    expect(pickDefaultModel(["", "  ", " claude-sonnet-4-5 "])).toBe(
+      "claude-sonnet-4-5",
+    );
+  });
+});
+
+describe("Setup — blank model field uses discovered model (AIR-019)", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("queries the provider endpoint and persists a discovered model when the field is left blank", async () => {
+    const api = mockAPI({
+      discoverProviderModels: vi.fn().mockResolvedValue({
+        models: ["claude-sonnet-4-5", "claude-opus-4-20250219"],
+        status: "ok",
+        cached: false,
+      }),
+    });
+    install(api);
+    render(<Setup onComplete={vi.fn()} />);
+    // secrets step → model step (env default; openrouter selected, needs key)
+    await act(async () => {
+      fireEvent.click(screen.getByText("setup.continue"));
+    });
+    // openrouter needs a key; type one so Finish is allowed, leave MODEL blank.
+    const keyField = screen.getByPlaceholderText("sk-or-v1-...");
+    await act(async () => {
+      fireEvent.change(keyField, { target: { value: "sk-or-v1-test" } });
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("setup.finish"));
+    });
+    await waitFor(() => expect(api.discoverProviderModels).toHaveBeenCalled());
+    // setModelConfig must be called with the discovered (clean) model, not "".
+    await waitFor(() =>
+      expect(api.setModelConfig).toHaveBeenCalledWith(
+        "openrouter",
+        "claude-sonnet-4-5",
+        expect.any(String),
+      ),
+    );
+  });
+
+  it("persists no model (empty) when discovery is unreachable — the main-process guard handles it", async () => {
+    const api = mockAPI({
+      discoverProviderModels: vi
+        .fn()
+        .mockResolvedValue({ models: [], status: "error", cached: false }),
+    });
+    install(api);
+    render(<Setup onComplete={vi.fn()} />);
+    await act(async () => {
+      fireEvent.click(screen.getByText("setup.continue"));
+    });
+    const keyField = screen.getByPlaceholderText("sk-or-v1-...");
+    await act(async () => {
+      fireEvent.change(keyField, { target: { value: "sk-or-v1-test" } });
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("setup.finish"));
+    });
+    await waitFor(() =>
+      expect(api.setModelConfig).toHaveBeenCalledWith(
+        "openrouter",
+        "",
+        expect.any(String),
+      ),
+    );
   });
 });

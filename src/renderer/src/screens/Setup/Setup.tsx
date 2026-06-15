@@ -13,6 +13,29 @@ interface SetupProps {
   onDismissVerifyWarning?: () => void;
 }
 
+/**
+ * Choose a sensible default model id from a provider's /v1/models list, used
+ * when the user leaves the optional model-name field blank. Providers generally
+ * return their catalogue newest-first, but we defensively de-prioritise ids that
+ * are clearly NOT a good silent default:
+ *   - dated snapshots (e.g. `...-20250219`) — pin to a frozen build the user
+ *     didn't ask for; prefer the rolling/base id.
+ *   - `-preview` / `-beta` / `deprecated` — unstable or sunset.
+ * Among the remaining "clean" ids we keep the provider's own ordering (first =
+ * most preferred). If everything is filtered out, fall back to the first id so
+ * we still return SOMETHING discoverable rather than empty.
+ * Exported for unit testing.
+ */
+export function pickDefaultModel(models: string[]): string {
+  const ids = models.map((m) => m.trim()).filter(Boolean);
+  if (ids.length === 0) return "";
+  const isNoisy = (id: string): boolean =>
+    /\d{8}/.test(id) || // a date snapshot like 20250219
+    /-(preview|beta|alpha|rc\d*|deprecated|legacy)\b/i.test(id);
+  const clean = ids.find((id) => !isNoisy(id));
+  return clean ?? ids[0];
+}
+
 function Setup({
   onComplete,
   verifyWarning,
@@ -394,7 +417,29 @@ function Setup({
 
       const configProvider = isLocal ? "custom" : provider.configProvider;
       const configBaseUrl = isLocal ? baseUrl.trim() : provider.baseUrl;
-      const configModel = modelName.trim() || "";
+      // Model name: the field is OPTIONAL. When the user leaves it blank, query
+      // the provider's /v1/models endpoint and use a returned model id as the
+      // fallback (a LIVE default — beats a hardcoded constant that goes stale
+      // when the provider renames models). Best-effort: if discovery is
+      // unreachable (no network / unresolved key) we persist no model and the
+      // main-process guard preserves any existing valid selection rather than
+      // writing an empty model.default (which 400s the gateway).
+      let configModel = modelName.trim();
+      if (!configModel) {
+        try {
+          const disc = await window.hermesAPI.discoverProviderModels(
+            configProvider,
+            configBaseUrl || undefined,
+            undefined,
+            undefined,
+          );
+          if (disc.status === "ok" && disc.models.length > 0) {
+            configModel = pickDefaultModel(disc.models);
+          }
+        } catch {
+          /* discovery best-effort; fall through with empty configModel */
+        }
+      }
       await window.hermesAPI.setModelConfig(
         configProvider,
         configModel,
