@@ -28,8 +28,35 @@ interface AnchorSnapshot {
   textParts: string[];
 }
 
+const CARD_CONTAINER_SELECTOR =
+  "article,li,section,[role='article'],[data-testid*='card'],[class*='card']";
+const RENDER_SETTLE_TIMEOUT_MS = 5_000;
+const RENDER_SETTLE_POLL_MS = 100;
+
 function cleanVisibleText(value: string | null | undefined): string {
   return (value || "").replace(/\s+/g, " ").trim();
+}
+
+export function isAllowedSubstackDiscoveryUrl(rawUrl: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return false;
+  }
+
+  if (url.protocol !== "https:") return false;
+  if (url.hostname !== "substack.com") return false;
+  if (url.search || url.hash) return false;
+  if (url.pathname === "/explore") return true;
+  return /^\/search\/[^/]+$/.test(url.pathname);
+}
+
+function assertAllowedSubstackDiscoveryUrl(rawUrl: string): string {
+  if (!isAllowedSubstackDiscoveryUrl(rawUrl)) {
+    throw new Error(`Unsupported Substack discovery URL: ${rawUrl}`);
+  }
+  return new URL(rawUrl).toString();
 }
 
 function normalizePublicationUrl(rawHref: string): string | null {
@@ -52,7 +79,7 @@ function normalizePublicationUrl(rawHref: string): string | null {
 }
 
 function textPartsFromElement(element: Element): string[] {
-  return Array.from(element.querySelectorAll("h1,h2,h3,h4,p,span,div"))
+  return Array.from(element.querySelectorAll("h1,h2,h3,h4,p,span"))
     .map((node) => cleanVisibleText(node.textContent))
     .filter(Boolean);
 }
@@ -61,17 +88,27 @@ function queryFirstText(element: Element, selectors: string): string {
   return cleanVisibleText(element.querySelector(selectors)?.textContent);
 }
 
+function cardElementForAnchor(anchor: Element): Element {
+  if (queryFirstText(anchor, "h1,h2,h3,h4")) return anchor;
+  return (
+    anchor.closest(CARD_CONTAINER_SELECTOR) ?? anchor.parentElement ?? anchor
+  );
+}
+
 function snapshotAnchorsWithDom(html: string): AnchorSnapshot[] | null {
   if (typeof DOMParser === "undefined") return null;
 
   const doc = new DOMParser().parseFromString(html, "text/html");
-  return Array.from(doc.querySelectorAll("a[href]")).map((anchor) => ({
-    href: anchor.getAttribute("href") || "",
-    title: queryFirstText(anchor, "h1,h2,h3,h4"),
-    description: queryFirstText(anchor, "p"),
-    author: queryFirstText(anchor, "[rel='author'],[data-testid*='author']"),
-    textParts: textPartsFromElement(anchor),
-  }));
+  return Array.from(doc.querySelectorAll("a[href]")).map((anchor) => {
+    const card = cardElementForAnchor(anchor);
+    return {
+      href: anchor.getAttribute("href") || "",
+      title: queryFirstText(card, "h1,h2,h3,h4"),
+      description: queryFirstText(card, "p"),
+      author: queryFirstText(card, "[rel='author'],[data-testid*='author']"),
+      textParts: textPartsFromElement(card),
+    };
+  });
 }
 
 function stripTags(html: string): string {
@@ -91,19 +128,54 @@ function extractFirstTaggedText(html: string, tagNames: string[]): string {
   return match ? stripTags(match[2]) : "";
 }
 
+function findNearestMarkupContainer(
+  html: string,
+  anchorStart: number,
+  anchorEnd: number,
+): string | null {
+  for (const tagName of ["article", "section", "li", "div"]) {
+    const openPattern = new RegExp(`<${tagName}\\b[^>]*>`, "gi");
+    const beforeAnchor = html.slice(0, anchorStart);
+    const openings = Array.from(beforeAnchor.matchAll(openPattern));
+    const opening = openings.at(-1);
+    if (!opening || opening.index === undefined) continue;
+
+    const closePattern = new RegExp(`</${tagName}>`, "i");
+    const afterAnchor = html.slice(anchorEnd);
+    const closing = afterAnchor.match(closePattern);
+    if (!closing || closing.index === undefined) continue;
+
+    return html.slice(
+      opening.index,
+      anchorEnd + closing.index + closing[0].length,
+    );
+  }
+
+  return null;
+}
+
+function markupHasHeading(html: string): boolean {
+  return /<h[1-4]\b/i.test(html);
+}
+
 function snapshotAnchorsWithMarkup(html: string): AnchorSnapshot[] {
   const anchors: AnchorSnapshot[] = [];
   const anchorPattern = /<a\b[^>]*\bhref=(["'])(.*?)\1[^>]*>([\s\S]*?)<\/a>/gi;
 
   for (const match of html.matchAll(anchorPattern)) {
-    const body = match[3] || "";
+    const anchorBody = match[3] || "";
+    const anchorStart = match.index ?? 0;
+    const anchorEnd = anchorStart + match[0].length;
+    const body = markupHasHeading(anchorBody)
+      ? anchorBody
+      : findNearestMarkupContainer(html, anchorStart, anchorEnd) || anchorBody;
     anchors.push({
       href: match[2] || "",
       title: extractFirstTaggedText(body, ["h1", "h2", "h3", "h4"]),
       description: extractFirstTaggedText(body, ["p"]),
       author: "",
       textParts: Array.from(
-        body.matchAll(/<(h1|h2|h3|h4|p|span|div)\b[^>]*>([\s\S]*?)<\/\1>/gi),
+        body.matchAll(/<(h1|h2|h3|h4|p|span)\b[^>]*>([\s\S]*?)<\/\1>/gi),
       )
         .map((part) => stripTags(part[2] || ""))
         .filter(Boolean),
@@ -171,41 +243,110 @@ export function extractSubstackVisibleCards(
   return cards;
 }
 
+async function waitForSubstackCardCandidates(
+  webContents: Electron.WebContents,
+): Promise<void> {
+  await webContents.executeJavaScript(
+    `new Promise((resolve) => {
+      const hasCandidate = () => Array.from(document.querySelectorAll("a[href]")).some((anchor) => {
+        try {
+          const url = new URL(anchor.href);
+          return url.protocol === "https:" && url.hostname.endsWith(".substack.com");
+        } catch {
+          return false;
+        }
+      });
+      if (hasCandidate()) {
+        resolve(true);
+        return;
+      }
+      const startedAt = Date.now();
+      const poll = () => {
+        if (hasCandidate() || Date.now() - startedAt >= ${RENDER_SETTLE_TIMEOUT_MS}) {
+          resolve(hasCandidate());
+          return;
+        }
+        setTimeout(poll, ${RENDER_SETTLE_POLL_MS});
+      };
+      setTimeout(poll, ${RENDER_SETTLE_POLL_MS});
+    })`,
+    true,
+  );
+}
+
 export async function discoverSubstackCardsWithBrowser(
   category: string,
   sourceUrl: string,
 ): Promise<ScoredSubstackCard[]> {
+  const allowedSourceUrl = assertAllowedSubstackDiscoveryUrl(sourceUrl);
   const { BrowserWindow } = await import("electron");
   const win = new BrowserWindow({
     show: false,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      partition: `substack-radar:${Date.now()}:${Math.random()
+        .toString(36)
+        .slice(2)}`,
       sandbox: true,
+      webviewTag: false,
     },
   });
   const discoveredAt = Date.now();
+  const browserSession = win.webContents.session;
+
+  win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  win.webContents.on("will-attach-webview", (event) => {
+    event.preventDefault();
+  });
+  win.webContents.on("will-navigate", (event, url) => {
+    if (!isAllowedSubstackDiscoveryUrl(url)) {
+      event.preventDefault();
+    }
+  });
+  win.webContents.on("will-redirect", (event, url) => {
+    if (!isAllowedSubstackDiscoveryUrl(url)) {
+      event.preventDefault();
+    }
+  });
+  browserSession.webRequest.onBeforeRequest(
+    { urls: ["*://*/*"] },
+    (details, callback) => {
+      if (
+        (details.resourceType === "mainFrame" ||
+          details.resourceType === "subFrame") &&
+        !isAllowedSubstackDiscoveryUrl(details.url)
+      ) {
+        callback({ cancel: true });
+        return;
+      }
+      callback({ cancel: false });
+    },
+  );
 
   try {
-    await win.loadURL(sourceUrl);
+    await win.loadURL(allowedSourceUrl);
+    await waitForSubstackCardCandidates(win.webContents);
     const renderedHtml = await win.webContents.executeJavaScript(
       "document.documentElement.outerHTML",
       true,
     );
     if (typeof renderedHtml !== "string") return [];
 
-    return extractSubstackVisibleCards(renderedHtml, category, sourceUrl).map(
-      (card) => ({
-        ...card,
-        id: buildSubstackRadarCandidateId(card.publicationUrl),
-        score: scoreSubstackRadarCandidate({
-          title: card.title,
-          description: card.description,
-          visibleSignals: card.visibleSignals,
-        }),
-        discoveredAt,
+    return extractSubstackVisibleCards(
+      renderedHtml,
+      category,
+      allowedSourceUrl,
+    ).map((card) => ({
+      ...card,
+      id: buildSubstackRadarCandidateId(card.publicationUrl),
+      score: scoreSubstackRadarCandidate({
+        title: card.title,
+        description: card.description,
+        visibleSignals: card.visibleSignals,
       }),
-    );
+      discoveredAt,
+    }));
   } finally {
     if (!win.isDestroyed()) {
       win.destroy();
