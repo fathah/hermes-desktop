@@ -134,6 +134,23 @@ describe("Substack Radar run store", () => {
       ),
     ).toEqual({ ok: false, error: "Candidate not found." });
   });
+
+  it("rejects invalid status payloads without corrupting stored runs", () => {
+    const run = sampleRun();
+    writeSubstackRadarRuns([run], undefined, profileHome);
+
+    expect(
+      setSubstackRadarCandidateStatus(
+        {
+          runId: "run-1",
+          candidateId: "candidate-1",
+          status: "archived",
+        } as unknown as Parameters<typeof setSubstackRadarCandidateStatus>[0],
+        profileHome,
+      ),
+    ).toEqual({ ok: false, error: "Invalid candidate status." });
+    expect(readSubstackRadarRuns(undefined, profileHome)).toEqual([run]);
+  });
 });
 
 describe("getApprovedSubstackRadarFeeds", () => {
@@ -174,5 +191,38 @@ describe("getApprovedSubstackRadarFeeds", () => {
     expect(
       readSubstackRadarRuns(undefined, profileHome)[0].candidates[0].status,
     ).toBe("approved");
+  });
+
+  it("does not overwrite status changes made while feeds are validating", async () => {
+    const run = sampleRun();
+    run.candidates[0].status = "approved";
+    writeSubstackRadarRuns([run], undefined, profileHome);
+
+    await getApprovedSubstackRadarFeeds(
+      { runId: "run-1" },
+      async () => {
+        setSubstackRadarCandidateStatus(
+          {
+            runId: "run-1",
+            candidateId: "candidate-1",
+            status: "rejected",
+          },
+          profileHome,
+        );
+        return {
+          ok: true,
+          feedUrl: "https://example.substack.com/feed",
+          siteUrl: "https://example.substack.com/",
+          title: "Example",
+          description: "RSS",
+          sourceType: "substack",
+        };
+      },
+      profileHome,
+    );
+
+    expect(
+      readSubstackRadarRuns(undefined, profileHome)[0].candidates[0].status,
+    ).toBe("rejected");
   });
 });

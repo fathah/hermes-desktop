@@ -164,9 +164,25 @@ export function writeSubstackRadarRuns(
 }
 
 export function setSubstackRadarCandidateStatus(
-  input: SubstackRadarSetCandidateStatusInput,
+  input: unknown,
   homeOverride?: string,
 ): { ok: true } | { ok: false; error: string } {
+  if (!isRecord(input)) {
+    return { ok: false, error: "Invalid candidate status input." };
+  }
+  if (typeof input.runId !== "string" || !input.runId) {
+    return { ok: false, error: "Invalid run ID." };
+  }
+  if (typeof input.candidateId !== "string" || !input.candidateId) {
+    return { ok: false, error: "Invalid candidate ID." };
+  }
+  if (input.status !== "approved" && input.status !== "rejected") {
+    return { ok: false, error: "Invalid candidate status." };
+  }
+  if (input.profile !== undefined && typeof input.profile !== "string") {
+    return { ok: false, error: "Invalid profile." };
+  }
+
   const runs = readSubstackRadarRuns(input.profile, homeOverride);
   const run = runs.find((item) => item.id === input.runId);
   if (!run) return { ok: false, error: "Run not found." };
@@ -278,7 +294,6 @@ export async function getApprovedSubstackRadarFeeds(
     feeds.push({ candidateId: candidate.id, feed });
   }
 
-  writeSubstackRadarRuns(runs, input.profile, homeOverride);
   return { added: 0, feeds };
 }
 
