@@ -1,5 +1,6 @@
 import React, { useCallback, useState, useEffect } from "react";
 import { Icon } from "../components/Icon";
+import { SubstackRadarPanel } from "./SubstackRadarPanel";
 
 interface RssFeed {
   id: string;
@@ -60,6 +61,7 @@ export function RssReaderDashboard(): React.JSX.Element {
   );
   const [isSyncing, setIsSyncing] = useState(false);
   const [fontSize, setFontSize] = useState(15);
+  const [showSubstackRadar, setShowSubstackRadar] = useState(false);
 
   // New feed form
   const [newFeedUrl, setNewFeedUrl] = useState("");
@@ -268,6 +270,12 @@ ${art.content_raw?.replace(/<[^>]*>/g, "") || art.summary_excerpt || "No content
         <div className="flex-row-gap-12">
           <button
             className="log-submit-btn refresh-btn-style"
+            onClick={() => setShowSubstackRadar((prev) => !prev)}
+          >
+            Discover Substacks
+          </button>
+          <button
+            className="log-submit-btn refresh-btn-style"
             onClick={() => {
               setAddFeedMode("substack");
               setShowAddFeedModal(true);
@@ -286,6 +294,8 @@ ${art.content_raw?.replace(/<[^>]*>/g, "") || art.summary_excerpt || "No content
           </button>
         </div>
       </header>
+
+      {showSubstackRadar && <SubstackRadarPanel />}
 
       {/* Main Three-Pane layout */}
       <div className="rss-three-pane">
