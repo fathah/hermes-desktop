@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SubstackRadarPanel } from "./SubstackRadarPanel";
 
@@ -30,6 +36,37 @@ const latestRun = {
     },
   ],
 };
+
+function makeRun(
+  id: string,
+  overrides: Partial<typeof latestRun> = {},
+): typeof latestRun {
+  return {
+    ...latestRun,
+    id,
+    query: id,
+    categories: [id],
+    startedAt: latestRun.startedAt + (id === "run-2" ? 1_000 : 0),
+    candidates: latestRun.candidates.map((candidate) => ({
+      ...candidate,
+      title: id === "run-2" ? "Fresh Letters" : "Example Letters",
+      category: id,
+      status: "new" as const,
+    })),
+    ...overrides,
+  };
+}
+
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+} {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
 
 const api = {
   spsSubstackRadarRun: vi.fn(),
@@ -92,6 +129,30 @@ describe("SubstackRadarPanel", () => {
     });
   });
 
+  it("does not let a slow initial run load overwrite a newly completed discovery", async () => {
+    const listRuns = deferred<(typeof latestRun)[]>();
+    api.spsSubstackRadarListRuns.mockReturnValue(listRuns.promise);
+    api.spsSubstackRadarRun.mockResolvedValue(makeRun("run-2"));
+
+    render(<SubstackRadarPanel />);
+
+    fireEvent.change(screen.getByLabelText(/categories or keywords/i), {
+      target: { value: "fresh" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /run discovery/i }));
+
+    await waitFor(() => {
+      expect(api.spsSubstackRadarRun).toHaveBeenCalledWith({
+        categories: ["fresh"],
+      });
+    });
+
+    listRuns.resolve([makeRun("run-1")]);
+
+    expect(await screen.findByText("Fresh Letters")).toBeInTheDocument();
+    expect(screen.queryByText("Example Letters")).not.toBeInTheDocument();
+  });
+
   it("loads existing runs and displays returned candidate details", async () => {
     api.spsSubstackRadarListRuns.mockResolvedValue([latestRun]);
 
@@ -114,13 +175,13 @@ describe("SubstackRadarPanel", () => {
     expect(screen.getByText(/status: new/i)).toBeInTheDocument();
   });
 
-  it("approving a candidate calls the status API and enables Add Approved Feeds", async () => {
+  it("approving a candidate calls the status API and enables feed URL preview", async () => {
     api.spsSubstackRadarListRuns.mockResolvedValue([latestRun]);
 
     render(<SubstackRadarPanel />);
 
     const addButton = await screen.findByRole("button", {
-      name: /add approved feeds/i,
+      name: /preview approved feed urls/i,
     });
     expect(addButton).toBeDisabled();
 
@@ -136,7 +197,7 @@ describe("SubstackRadarPanel", () => {
     expect(addButton).toBeEnabled();
   });
 
-  it("adds approved feeds and displays the result", async () => {
+  it("previews approved feed URLs and displays the result", async () => {
     api.spsSubstackRadarListRuns.mockResolvedValue([
       {
         ...latestRun,
@@ -147,7 +208,9 @@ describe("SubstackRadarPanel", () => {
     render(<SubstackRadarPanel />);
 
     fireEvent.click(
-      await screen.findByRole("button", { name: /add approved feeds/i }),
+      await screen.findByRole("button", {
+        name: /preview approved feed urls/i,
+      }),
     );
 
     await waitFor(() => {
@@ -156,7 +219,7 @@ describe("SubstackRadarPanel", () => {
       });
     });
     expect(
-      await screen.findByText(/added 1 approved feed/i),
+      await screen.findByText(/validated 1 approved feed url/i),
     ).toBeInTheDocument();
     expect(
       screen.getByText("https://example.substack.com/feed"),
@@ -178,5 +241,39 @@ describe("SubstackRadarPanel", () => {
       });
     });
     expect(screen.getByText(/status: rejected/i)).toBeInTheDocument();
+  });
+
+  it("does not apply a stale status update to a newer active run", async () => {
+    const statusUpdate = deferred<{ ok: boolean }>();
+    api.spsSubstackRadarListRuns.mockResolvedValue([makeRun("run-1")]);
+    api.spsSubstackRadarSetCandidateStatus.mockReturnValue(
+      statusUpdate.promise,
+    );
+    api.spsSubstackRadarRun.mockResolvedValue(makeRun("run-2"));
+
+    render(<SubstackRadarPanel />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /^approve$/i }));
+
+    await waitFor(() => {
+      expect(api.spsSubstackRadarSetCandidateStatus).toHaveBeenCalledWith({
+        runId: "run-1",
+        candidateId: "candidate-1",
+        status: "approved",
+      });
+    });
+
+    fireEvent.change(screen.getByLabelText(/categories or keywords/i), {
+      target: { value: "fresh" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /run discovery/i }));
+
+    expect(await screen.findByText("Fresh Letters")).toBeInTheDocument();
+
+    await act(async () => {
+      statusUpdate.resolve({ ok: true });
+    });
+
+    expect(screen.getByText(/status: new/i)).toBeInTheDocument();
   });
 });

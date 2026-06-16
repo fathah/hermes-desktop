@@ -1,61 +1,19 @@
 import { ipcRenderer } from "electron";
-import type { SubstackRadarVisibleSignals } from "../../shared/substack-radar";
+import type {
+  SubstackRadarAddApprovedFeedsResult,
+  SubstackRadarRun,
+} from "../../shared/substack-radar";
 
-export type { SubstackRadarVisibleSignals } from "../../shared/substack-radar";
-
-export type SubstackRadarRunStatus = "running" | "complete" | "failed";
-export type SubstackRadarCandidateStatus = "new" | "approved" | "rejected";
-
-export interface SubstackRadarCandidate {
-  id: string;
-  publicationUrl: string;
-  feedUrl?: string;
-  title: string;
-  description: string;
-  author?: string;
-  category: string;
-  visibleSignals: SubstackRadarVisibleSignals;
-  sourcePageUrl: string;
-  discoveredAt: number;
-  score: number;
-  status: SubstackRadarCandidateStatus;
-}
-
-export interface SubstackRadarRun {
-  id: string;
-  query: string;
-  categories: string[];
-  status: SubstackRadarRunStatus;
-  startedAt: number;
-  finishedAt?: number;
-  sourceUrls: string[];
-  candidates: SubstackRadarCandidate[];
-  error?: string;
-}
-
-export type SubstackRadarDiscoveredFeed =
-  | {
-      ok: true;
-      feedUrl: string;
-      siteUrl: string;
-      title: string;
-      description: string;
-      sourceType: "substack";
-    }
-  | {
-      ok: false;
-      error: string;
-    };
-
-export interface SubstackRadarApprovedFeed {
-  candidateId: string;
-  feed: SubstackRadarDiscoveredFeed;
-}
-
-export interface SubstackRadarAddApprovedFeedsResult {
-  added: number;
-  feeds: SubstackRadarApprovedFeed[];
-}
+export type {
+  SubstackRadarAddApprovedFeedsResult,
+  SubstackRadarApprovedFeed,
+  SubstackRadarCandidate,
+  SubstackRadarCandidateStatus,
+  SubstackRadarDiscoveredFeed,
+  SubstackRadarRun,
+  SubstackRadarRunStatus,
+  SubstackRadarVisibleSignals,
+} from "../../shared/substack-radar";
 
 export const substackRadarBridge = {
   spsSubstackRadarRun: (input: {

@@ -5,6 +5,60 @@ export interface SubstackRadarVisibleSignals {
   recommendationText?: string;
 }
 
+export type SubstackRadarRunStatus = "running" | "complete" | "failed";
+export type SubstackRadarCandidateStatus = "new" | "approved" | "rejected";
+
+export interface SubstackRadarCandidate {
+  id: string;
+  publicationUrl: string;
+  feedUrl?: string;
+  title: string;
+  description: string;
+  author?: string;
+  category: string;
+  visibleSignals: SubstackRadarVisibleSignals;
+  sourcePageUrl: string;
+  discoveredAt: number;
+  score: number;
+  status: SubstackRadarCandidateStatus;
+}
+
+export interface SubstackRadarRun {
+  id: string;
+  query: string;
+  categories: string[];
+  status: SubstackRadarRunStatus;
+  startedAt: number;
+  finishedAt?: number;
+  sourceUrls: string[];
+  candidates: SubstackRadarCandidate[];
+  error?: string;
+}
+
+export type SubstackRadarDiscoveredFeed =
+  | {
+      ok: true;
+      feedUrl: string;
+      siteUrl: string;
+      title: string;
+      description: string;
+      sourceType: "substack";
+    }
+  | {
+      ok: false;
+      error: string;
+    };
+
+export interface SubstackRadarApprovedFeed {
+  candidateId: string;
+  feed: SubstackRadarDiscoveredFeed;
+}
+
+export interface SubstackRadarAddApprovedFeedsResult {
+  added: number;
+  feeds: SubstackRadarApprovedFeed[];
+}
+
 export interface SubstackRadarScoreInput {
   title: string;
   description: string;

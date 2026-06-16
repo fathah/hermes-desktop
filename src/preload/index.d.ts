@@ -78,7 +78,7 @@ import type {
 import type {
   SubstackRadarAddApprovedFeedsResult,
   SubstackRadarRun,
-} from "./bridges/substack-radar";
+} from "../shared/substack-radar";
 import type { CredentialPoolEntry } from "../shared/credentials";
 import type { CapabilityRiskSummary } from "../shared/capability-risk";
 import type { ResearchReachStatus } from "../shared/research-reach";

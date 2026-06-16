@@ -1,10 +1,21 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type {
   SubstackRadarAddApprovedFeedsResult,
   SubstackRadarCandidate,
   SubstackRadarCandidateStatus,
   SubstackRadarRun,
-} from "../../../../../preload/bridges/substack-radar";
+} from "../../../../../shared/substack-radar";
+
+interface StatusUpdatingTarget {
+  runId: string;
+  candidateId: string;
+}
 
 function parseCategories(input: string): string[] {
   const seen = new Set<string>();
@@ -52,11 +63,14 @@ export function SubstackRadarPanel(): React.JSX.Element {
   const [activeRun, setActiveRun] = useState<SubstackRadarRun | null>(null);
   const [isLoadingRuns, setIsLoadingRuns] = useState(true);
   const [isRunning, setIsRunning] = useState(false);
-  const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
+  const [statusUpdating, setStatusUpdating] =
+    useState<StatusUpdatingTarget | null>(null);
   const [isAddingFeeds, setIsAddingFeeds] = useState(false);
   const [error, setError] = useState("");
   const [addResult, setAddResult] =
     useState<SubstackRadarAddApprovedFeedsResult | null>(null);
+  const hasUserStartedRunRef = useRef(false);
+  const activeRunIdRef = useRef<string | null>(null);
 
   const categories = useMemo(
     () => parseCategories(categoryInput),
@@ -65,6 +79,10 @@ export function SubstackRadarPanel(): React.JSX.Element {
   const approvedCount =
     activeRun?.candidates.filter((candidate) => candidate.status === "approved")
       .length ?? 0;
+
+  useEffect(() => {
+    activeRunIdRef.current = activeRun?.id ?? null;
+  }, [activeRun?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,7 +98,7 @@ export function SubstackRadarPanel(): React.JSX.Element {
       setError("");
       try {
         const runs = await api.spsSubstackRadarListRuns();
-        if (!cancelled) {
+        if (!cancelled && !hasUserStartedRunRef.current) {
           setActiveRun(mostRecentRun(runs));
         }
       } catch (err) {
@@ -106,6 +124,7 @@ export function SubstackRadarPanel(): React.JSX.Element {
     if (!api || categories.length === 0) return;
 
     setIsRunning(true);
+    hasUserStartedRunRef.current = true;
     setError("");
     setAddResult(null);
     try {
@@ -126,27 +145,38 @@ export function SubstackRadarPanel(): React.JSX.Element {
     const api = window.hermesAPI;
     if (!api || !activeRun) return;
 
-    setStatusUpdatingId(candidateId);
+    const runId = activeRun.id;
+    setStatusUpdating({ runId, candidateId });
     setError("");
     setAddResult(null);
     try {
       const result = await api.spsSubstackRadarSetCandidateStatus({
-        runId: activeRun.id,
+        runId,
         candidateId,
         status,
       });
       if (!result.ok) {
-        setError(result.error || "Could not update candidate status.");
+        if (activeRunIdRef.current === runId) {
+          setError(result.error || "Could not update candidate status.");
+        }
         return;
       }
       setActiveRun((current) =>
-        current ? updateCandidateStatus(current, candidateId, status) : current,
+        current?.id === runId
+          ? updateCandidateStatus(current, candidateId, status)
+          : current,
       );
     } catch (err) {
       console.error("[RSS UI] Substack radar status update failed:", err);
-      setError("Could not update candidate status.");
+      if (activeRunIdRef.current === runId) {
+        setError("Could not update candidate status.");
+      }
     } finally {
-      setStatusUpdatingId(null);
+      setStatusUpdating((current) =>
+        current?.runId === runId && current.candidateId === candidateId
+          ? null
+          : current,
+      );
     }
   };
 
@@ -164,7 +194,7 @@ export function SubstackRadarPanel(): React.JSX.Element {
       setAddResult(result);
     } catch (err) {
       console.error("[RSS UI] Substack radar add approved feeds failed:", err);
-      setError("Could not add approved feeds.");
+      setError("Could not validate approved feed URLs.");
     } finally {
       setIsAddingFeeds(false);
     }
@@ -186,7 +216,7 @@ export function SubstackRadarPanel(): React.JSX.Element {
           onClick={addApprovedFeeds}
           disabled={approvedCount === 0 || isAddingFeeds}
         >
-          {isAddingFeeds ? "Adding..." : "Add Approved Feeds"}
+          {isAddingFeeds ? "Validating..." : "Preview Approved Feed URLs"}
         </button>
       </div>
 
@@ -216,8 +246,8 @@ export function SubstackRadarPanel(): React.JSX.Element {
       {addResult && (
         <div className="substack-radar-result">
           <div>
-            Added {addResult.added} approved{" "}
-            {addResult.added === 1 ? "feed" : "feeds"}.
+            Validated {addResult.added} approved feed{" "}
+            {addResult.added === 1 ? "URL" : "URLs"}.
           </div>
           {addResult.feeds.map((item) => (
             <div key={item.candidateId} className="substack-radar-result-feed">
@@ -227,7 +257,7 @@ export function SubstackRadarPanel(): React.JSX.Element {
         </div>
       )}
 
-      {isLoadingRuns ? (
+      {isLoadingRuns && !activeRun ? (
         <div className="rss-empty-text">Loading previous radar runs...</div>
       ) : activeRun ? (
         <div className="substack-radar-candidates">
@@ -267,7 +297,10 @@ export function SubstackRadarPanel(): React.JSX.Element {
                       onClick={() =>
                         setCandidateStatus(candidate.id, "approved")
                       }
-                      disabled={statusUpdatingId === candidate.id}
+                      disabled={
+                        statusUpdating?.runId === activeRun.id &&
+                        statusUpdating.candidateId === candidate.id
+                      }
                     >
                       Approve
                     </button>
@@ -277,7 +310,10 @@ export function SubstackRadarPanel(): React.JSX.Element {
                       onClick={() =>
                         setCandidateStatus(candidate.id, "rejected")
                       }
-                      disabled={statusUpdatingId === candidate.id}
+                      disabled={
+                        statusUpdating?.runId === activeRun.id &&
+                        statusUpdating.candidateId === candidate.id
+                      }
                     >
                       Reject
                     </button>
