@@ -1,3 +1,5 @@
+import { isIP } from "node:net";
+
 import type { SubstackRadarVisibleSignals } from "../shared/substack-radar";
 import {
   buildSubstackRadarCandidateId,
@@ -39,6 +41,7 @@ const CARD_CONTAINER_SELECTOR =
 const RENDER_SETTLE_TIMEOUT_MS = 5_000;
 const RENDER_SETTLE_POLL_MS = 100;
 const RENDER_SETTLE_STABLE_POLLS = 2;
+const BROWSER_OPERATION_TIMEOUT_MS = 10_000;
 
 function cleanVisibleText(value: string | null | undefined): string {
   return (value || "").replace(/\s+/g, " ").trim();
@@ -57,6 +60,56 @@ export function isAllowedSubstackDiscoveryUrl(rawUrl: string): boolean {
   if (url.search || url.hash) return false;
   if (url.pathname === "/explore") return true;
   return /^\/search\/[^/]+$/.test(url.pathname);
+}
+
+function isPrivateOrLocalHostname(hostname: string): boolean {
+  const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (normalized === "localhost" || normalized.endsWith(".localhost")) {
+    return true;
+  }
+
+  const ipVersion = isIP(normalized);
+  if (ipVersion === 4) {
+    const octets = normalized.split(".").map((part) => Number(part));
+    const [first = 0, second = 0] = octets;
+    return (
+      first === 0 ||
+      first === 10 ||
+      first === 127 ||
+      (first === 169 && second === 254) ||
+      (first === 172 && second >= 16 && second <= 31) ||
+      (first === 192 && second === 168)
+    );
+  }
+  if (ipVersion === 6) {
+    return (
+      normalized === "::1" ||
+      normalized.startsWith("fc") ||
+      normalized.startsWith("fd") ||
+      normalized.startsWith("fe80:")
+    );
+  }
+
+  return false;
+}
+
+export function isAllowedSubstackBrowserRequestUrl(rawUrl: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return false;
+  }
+
+  if (url.protocol !== "https:") return false;
+  const hostname = url.hostname.toLowerCase();
+  if (isPrivateOrLocalHostname(hostname)) return false;
+
+  return (
+    hostname === "substack.com" ||
+    hostname.endsWith(".substack.com") ||
+    hostname === "substackcdn.com"
+  );
 }
 
 function assertAllowedSubstackDiscoveryUrl(rawUrl: string): string {
@@ -309,12 +362,30 @@ function wait(ms: number): Promise<void> {
   });
 }
 
+function withTimeout<T>(
+  operation: Promise<T>,
+  timeoutMs: number,
+  label: string,
+): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(() => {
+      reject(new Error(`Timed out ${label}`));
+    }, timeoutMs);
+  });
+
+  return Promise.race([operation, timeoutPromise]).finally(() => {
+    if (timeout) clearTimeout(timeout);
+  });
+}
+
 async function readRenderedHtml(
   webContents: Electron.WebContents,
 ): Promise<string> {
-  const renderedHtml = await webContents.executeJavaScript(
-    "document.documentElement.outerHTML",
-    true,
+  const renderedHtml = await withTimeout(
+    webContents.executeJavaScript("document.documentElement.outerHTML", true),
+    BROWSER_OPERATION_TIMEOUT_MS,
+    "reading rendered Substack HTML",
   );
   return typeof renderedHtml === "string" ? renderedHtml : "";
 }
@@ -393,13 +464,9 @@ export async function discoverSubstackCardsWithBrowser(
     }
   });
   browserSession.webRequest.onBeforeRequest(
-    { urls: ["*://*/*"] },
+    { urls: ["<all_urls>"] },
     (details, callback) => {
-      if (
-        (details.resourceType === "mainFrame" ||
-          details.resourceType === "subFrame") &&
-        !isAllowedSubstackDiscoveryUrl(details.url)
-      ) {
+      if (!isAllowedSubstackBrowserRequestUrl(details.url)) {
         callback({ cancel: true });
         return;
       }
@@ -408,7 +475,11 @@ export async function discoverSubstackCardsWithBrowser(
   );
 
   try {
-    await win.loadURL(allowedSourceUrl);
+    await withTimeout(
+      win.loadURL(allowedSourceUrl),
+      BROWSER_OPERATION_TIMEOUT_MS,
+      "loading Substack page",
+    );
     const renderedHtml = await waitForSubstackCardCandidates(
       win.webContents,
       category,
@@ -432,6 +503,7 @@ export async function discoverSubstackCardsWithBrowser(
     }));
   } finally {
     if (!win.isDestroyed()) {
+      win.webContents.stop();
       win.destroy();
     }
   }
