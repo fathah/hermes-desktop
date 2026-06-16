@@ -32,6 +32,7 @@ export interface CachedSession {
   source: string;
   messageCount: number;
   model: string;
+  parentId: string | null;
 }
 
 interface CacheData {
@@ -104,7 +105,7 @@ export function syncSessionCache(): CachedSession[] {
     // Fetch sessions newer than last sync, or all if first sync
     const rows = db
       .prepare(
-        `SELECT s.id, s.started_at, s.source, s.message_count, s.model, s.title
+        `SELECT s.id, s.started_at, s.source, s.message_count, s.model, s.title, s.parent_session_id
          FROM sessions s
          WHERE s.started_at > ?
          ORDER BY s.started_at DESC`,
@@ -116,6 +117,7 @@ export function syncSessionCache(): CachedSession[] {
       message_count: number;
       model: string;
       title: string | null;
+      parent_session_id: string | null;
     }>;
 
     // Index existing sessions by id once so the per-row update below is
@@ -132,12 +134,14 @@ export function syncSessionCache(): CachedSession[] {
       const existing = existingById.get(row.id);
       if (existing) {
         existing.messageCount = row.message_count;
+        existing.parentId = row.parent_session_id || null;
         if (row.model) existing.model = row.model;
         if (row.title) existing.title = row.title;
         continue;
       }
 
       let title = row.title || "";
+      const parentId = row.parent_session_id || null;
       if (!title) {
         try {
           const msg = db
@@ -162,6 +166,7 @@ export function syncSessionCache(): CachedSession[] {
         source: row.source,
         messageCount: row.message_count,
         model: row.model || "",
+        parentId,
       });
     }
 

@@ -180,6 +180,7 @@ export interface SearchResult {
   messageCount: number;
   model: string;
   snippet: string;
+  parentId: string | null;
 }
 
 export function dedupeSearchRowsBySession<T extends { session_id: string }>(
@@ -315,7 +316,8 @@ export function searchSessions(query: string, limit = 20): SearchResult[] {
           s.started_at,
           s.source,
           s.message_count,
-          s.model
+          s.model,
+          s.parent_session_id
         FROM sessions s
         WHERE LOWER(COALESCE(s.title, '')) LIKE ? ESCAPE '\\'
           OR LOWER(s.id) LIKE ? ESCAPE '\\'
@@ -333,6 +335,7 @@ export function searchSessions(query: string, limit = 20): SearchResult[] {
       source: string;
       message_count: number;
       model: string;
+      parent_session_id: string | null;
     }>;
 
     const titleMatches = titleRows.map((r) => ({
@@ -365,6 +368,7 @@ export function searchSessions(query: string, limit = 20): SearchResult[] {
               s.source,
               s.message_count,
               s.model,
+              s.parent_session_id,
               snippet(messages_fts, 0, '<<', '>>', '...', 40) as snippet
             FROM messages_fts
             JOIN messages m ON m.id = messages_fts.rowid
@@ -380,6 +384,7 @@ export function searchSessions(query: string, limit = 20): SearchResult[] {
           source: string;
           message_count: number;
           model: string;
+          parent_session_id: string | null;
           snippet: string;
         }>)
       : [];
@@ -394,7 +399,8 @@ export function searchSessions(query: string, limit = 20): SearchResult[] {
           s.started_at,
           s.source,
           s.message_count,
-          s.model
+          s.model,
+          s.parent_session_id
         FROM messages m
         JOIN sessions s ON s.id = m.session_id
         WHERE LOWER(COALESCE(m.content, '')) LIKE ? ESCAPE '\\'
@@ -413,6 +419,7 @@ export function searchSessions(query: string, limit = 20): SearchResult[] {
       source: string;
       message_count: number;
       model: string;
+      parent_session_id: string | null;
     }>;
 
     const messageMatches = messageRows.map((r) => ({
@@ -422,6 +429,7 @@ export function searchSessions(query: string, limit = 20): SearchResult[] {
       source: r.source,
       message_count: r.message_count,
       model: r.model,
+      parent_session_id: r.parent_session_id,
       snippet: decodeSearchSnippet(r.content, r.message_id, trimmedQuery),
     }));
 
@@ -436,6 +444,7 @@ export function searchSessions(query: string, limit = 20): SearchResult[] {
       source: r.source,
       messageCount: r.message_count,
       model: r.model || "",
+      parentId: r.parent_session_id || null,
       snippet: r.snippet || "",
     }));
   } catch {
