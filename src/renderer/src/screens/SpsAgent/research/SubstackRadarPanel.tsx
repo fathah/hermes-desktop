@@ -312,10 +312,17 @@ export function SubstackRadarPanel(): React.JSX.Element {
             </div>
           ) : (
             activeRun.candidates.map((candidate) => (
-              <article key={candidate.id} className="substack-radar-candidate">
+              <article
+                key={candidate.id}
+                className={`substack-radar-candidate substack-radar-candidate--${candidate.status}`}
+              >
                 <div className="substack-radar-candidate-header">
                   <h4>{candidate.title}</h4>
-                  <span>Status: {candidate.status}</span>
+                  <span
+                    className={`substack-radar-status substack-radar-status--${candidate.status}`}
+                  >
+                    Status: {candidate.status}
+                  </span>
                 </div>
                 <p>{candidate.description}</p>
                 <div className="substack-radar-candidate-grid">
