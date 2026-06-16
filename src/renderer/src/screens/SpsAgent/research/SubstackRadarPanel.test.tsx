@@ -271,8 +271,6 @@ describe("SubstackRadarPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /run discovery/i }));
 
     await act(async () => {
-      discovery.resolve(makeRun("run-2"));
-      await Promise.resolve();
       preview.resolve({
         added: 0,
         feeds: [
@@ -289,6 +287,15 @@ describe("SubstackRadarPanel", () => {
           },
         ],
       });
+    });
+
+    expect(screen.queryByText(/validated 1 approved feed url/i)).toBeNull();
+    expect(
+      screen.queryByText("https://stale.substack.com/feed"),
+    ).not.toBeInTheDocument();
+
+    await act(async () => {
+      discovery.resolve(makeRun("run-2"));
     });
 
     expect(await screen.findByText("Fresh Letters")).toBeInTheDocument();

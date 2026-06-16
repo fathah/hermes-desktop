@@ -17,6 +17,11 @@ interface StatusUpdatingTarget {
   candidateId: string;
 }
 
+interface PreviewTarget {
+  runId: string;
+  generation: number;
+}
+
 function parseCategories(input: string): string[] {
   const seen = new Set<string>();
   const categories: string[] = [];
@@ -65,12 +70,13 @@ export function SubstackRadarPanel(): React.JSX.Element {
   const [isRunning, setIsRunning] = useState(false);
   const [statusUpdating, setStatusUpdating] =
     useState<StatusUpdatingTarget | null>(null);
-  const [addingFeedsRunId, setAddingFeedsRunId] = useState<string | null>(null);
+  const [addingFeeds, setAddingFeeds] = useState<PreviewTarget | null>(null);
   const [error, setError] = useState("");
   const [addResult, setAddResult] =
     useState<SubstackRadarAddApprovedFeedsResult | null>(null);
   const hasUserStartedRunRef = useRef(false);
   const activeRunIdRef = useRef<string | null>(null);
+  const previewGenerationRef = useRef(0);
 
   const commitActiveRun = useCallback((run: SubstackRadarRun | null): void => {
     activeRunIdRef.current = run?.id ?? null;
@@ -126,6 +132,8 @@ export function SubstackRadarPanel(): React.JSX.Element {
 
     setIsRunning(true);
     hasUserStartedRunRef.current = true;
+    previewGenerationRef.current += 1;
+    setAddingFeeds(null);
     setError("");
     setAddResult(null);
     try {
@@ -186,23 +194,34 @@ export function SubstackRadarPanel(): React.JSX.Element {
     if (!api || !activeRun || approvedCount === 0) return;
 
     const runId = activeRun.id;
-    setAddingFeedsRunId(runId);
+    const generation = previewGenerationRef.current;
+    setAddingFeeds({ runId, generation });
     setError("");
     setAddResult(null);
     try {
       const result = await api.spsSubstackRadarAddApprovedFeeds({
         runId,
       });
-      if (activeRunIdRef.current === runId) {
+      if (
+        activeRunIdRef.current === runId &&
+        previewGenerationRef.current === generation
+      ) {
         setAddResult(result);
       }
     } catch (err) {
       console.error("[RSS UI] Substack radar add approved feeds failed:", err);
-      if (activeRunIdRef.current === runId) {
+      if (
+        activeRunIdRef.current === runId &&
+        previewGenerationRef.current === generation
+      ) {
         setError("Could not validate approved feed URLs.");
       }
     } finally {
-      setAddingFeedsRunId((current) => (current === runId ? null : current));
+      setAddingFeeds((current) =>
+        current?.runId === runId && current.generation === generation
+          ? null
+          : current,
+      );
     }
   };
 
@@ -220,9 +239,9 @@ export function SubstackRadarPanel(): React.JSX.Element {
           type="button"
           className="log-submit-btn save-journal-entry-btn"
           onClick={addApprovedFeeds}
-          disabled={approvedCount === 0 || addingFeedsRunId === activeRun?.id}
+          disabled={approvedCount === 0 || addingFeeds?.runId === activeRun?.id}
         >
-          {addingFeedsRunId === activeRun?.id
+          {addingFeeds?.runId === activeRun?.id
             ? "Validating..."
             : "Preview Approved Feed URLs"}
         </button>
