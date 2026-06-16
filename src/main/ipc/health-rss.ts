@@ -9,6 +9,42 @@ import {
 
 type JsonRecord = Record<string, unknown>;
 
+export function addRssFeedRecord(feedData: JsonRecord | undefined): string {
+  const db = getSharedDb(false);
+  if (!db) throw new Error("Database not available");
+
+  const id = randomUUID();
+  const url = feedData?.url;
+  const title = feedData?.title || "Untitled Feed";
+  const site_url = feedData?.site_url || "";
+  const description = feedData?.description || "";
+  const category = feedData?.category || "Uncategorized";
+
+  if (typeof url === "string") {
+    const existing = db
+      .prepare("SELECT id FROM rss_feeds WHERE url = ?")
+      .get(url) as { id: string } | undefined;
+    if (existing?.id) return existing.id;
+  }
+
+  try {
+    db.prepare(
+      `INSERT INTO rss_feeds (id, url, title, site_url, description, category, last_fetched_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run(id, url, title, site_url, description, category, Date.now());
+  } catch (err) {
+    if (typeof url === "string") {
+      const existing = db
+        .prepare("SELECT id FROM rss_feeds WHERE url = ?")
+        .get(url) as { id: string } | undefined;
+      if (existing?.id) return existing.id;
+    }
+    throw err;
+  }
+
+  return id;
+}
+
 interface RssArticleQuery {
   feedId?: string;
   readStatus?: number;
@@ -504,22 +540,7 @@ export function registerHealthRssIpc(): void {
   // Add Feed
   safeHandle("sps-rss-add-feed", async (_event, ...args) => {
     const feedData = args[0] as JsonRecord | undefined;
-    const db = getSharedDb(false);
-    if (!db) throw new Error("Database not available");
-
-    const id = randomUUID();
-    const url = feedData?.url;
-    const title = feedData?.title || "Untitled Feed";
-    const site_url = feedData?.site_url || "";
-    const description = feedData?.description || "";
-    const category = feedData?.category || "Uncategorized";
-
-    db.prepare(
-      `INSERT INTO rss_feeds (id, url, title, site_url, description, category, last_fetched_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ).run(id, url, title, site_url, description, category, Date.now());
-
-    return id;
+    return addRssFeedRecord(feedData);
   });
 
   // Delete Feed

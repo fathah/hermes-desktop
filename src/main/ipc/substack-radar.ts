@@ -4,6 +4,7 @@ import { join } from "path";
 
 import { discoverSubstackCardsWithBrowser } from "../substack-radar-browser";
 import { discoverSubstackFeed } from "../rss-discovery";
+import { addRssFeedRecord } from "./health-rss";
 import type {
   SubstackRadarAddApprovedFeedsInput,
   SubstackRadarAddApprovedFeedsResult,
@@ -28,6 +29,8 @@ type FeedDiscoverer = (
   publicationUrl: string,
 ) => Promise<SubstackRadarDiscoveredFeed>;
 
+type FeedAdder = (feedData: Record<string, unknown>) => string;
+
 export function buildSubstackRadarSourceUrl(category: string): string {
   return `https://substack.com/search/${encodeURIComponent(category)}`;
 }
@@ -51,7 +54,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function isCandidateStatus(
   value: unknown,
 ): value is SubstackRadarCandidateStatus {
-  return value === "new" || value === "approved" || value === "rejected";
+  return (
+    value === "new" ||
+    value === "approved" ||
+    value === "rejected" ||
+    value === "added"
+  );
 }
 
 function isRunStatus(value: unknown): value is SubstackRadarRunStatus {
@@ -239,6 +247,7 @@ export async function getApprovedSubstackRadarFeeds(
   input: SubstackRadarAddApprovedFeedsInput,
   feedDiscoverer: FeedDiscoverer = discoverSubstackFeed,
   homeOverride?: string,
+  feedAdder: FeedAdder = addRssFeedRecord,
 ): Promise<SubstackRadarAddApprovedFeedsResult> {
   const runs = readSubstackRadarRuns(input.profile, homeOverride);
   const run = runs.find((item) => item.id === input.runId);
@@ -249,10 +258,28 @@ export async function getApprovedSubstackRadarFeeds(
     if (candidate.status !== "approved") continue;
     const feed = await feedDiscoverer(candidate.publicationUrl);
     if (!feed.ok) continue;
-    feeds.push({ candidateId: candidate.id, feed });
+
+    const latestRuns = readSubstackRadarRuns(input.profile, homeOverride);
+    const latestRun = latestRuns.find((item) => item.id === input.runId);
+    const latestCandidate = latestRun?.candidates.find(
+      (item) => item.id === candidate.id,
+    );
+    if (!latestRun || latestCandidate?.status !== "approved") continue;
+
+    const feedId = feedAdder({
+      url: feed.feedUrl,
+      title: feed.title,
+      site_url: feed.siteUrl,
+      description: feed.description,
+      category: "Substack",
+    });
+
+    latestCandidate.status = "added";
+    writeSubstackRadarRuns(latestRuns, input.profile, homeOverride);
+    feeds.push({ candidateId: candidate.id, feed, feedId });
   }
 
-  return { added: 0, feeds };
+  return { added: feeds.length, feeds };
 }
 
 export function registerSubstackRadarIpc(): void {

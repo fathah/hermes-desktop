@@ -6,7 +6,11 @@ export interface SubstackRadarVisibleSignals {
 }
 
 export type SubstackRadarRunStatus = "running" | "complete" | "failed";
-export type SubstackRadarCandidateStatus = "new" | "approved" | "rejected";
+export type SubstackRadarCandidateStatus =
+  | "new"
+  | "approved"
+  | "rejected"
+  | "added";
 
 export interface SubstackRadarCandidate {
   id: string;
@@ -52,6 +56,7 @@ export type SubstackRadarDiscoveredFeed =
 export interface SubstackRadarApprovedFeed {
   candidateId: string;
   feed: SubstackRadarDiscoveredFeed;
+  feedId?: string;
 }
 
 export interface SubstackRadarAddApprovedFeedsResult {

@@ -9,13 +9,15 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { TEST_HOME } = vi.hoisted(() => {
+const { TEST_HOME, mockGetSharedDb, mockFeedRows } = vi.hoisted(() => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const path = require("path");
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const os = require("os");
   return {
     TEST_HOME: path.join(os.tmpdir(), `substack-radar-${Date.now()}`),
+    mockGetSharedDb: vi.fn(),
+    mockFeedRows: new Map<string, { id: string }>(),
   };
 });
 
@@ -23,6 +25,11 @@ vi.mock("../installer", () => ({
   HERMES_HOME: TEST_HOME,
 }));
 
+vi.mock("../db", () => ({
+  getSharedDb: mockGetSharedDb,
+}));
+
+import { addRssFeedRecord } from "./health-rss";
 import {
   buildSubstackRadarSourceUrl,
   getApprovedSubstackRadarFeeds,
@@ -33,6 +40,29 @@ import {
 } from "./substack-radar";
 
 let profileHome: string;
+
+function makeMockRssDb(): { prepare: ReturnType<typeof vi.fn> } {
+  return {
+    prepare: vi.fn((sql: string) => {
+      if (sql.includes("SELECT id FROM rss_feeds WHERE url = ?")) {
+        return {
+          get: vi.fn((url: string) => mockFeedRows.get(url)),
+        };
+      }
+      if (sql.includes("INSERT INTO rss_feeds")) {
+        return {
+          run: vi.fn((id: string, url: string) => {
+            if (mockFeedRows.has(url)) {
+              throw new Error("UNIQUE constraint failed: rss_feeds.url");
+            }
+            mockFeedRows.set(url, { id });
+          }),
+        };
+      }
+      throw new Error(`Unexpected SQL in mock DB: ${sql}`);
+    }),
+  };
+}
 
 function sampleRun(): SubstackRadarRun {
   return {
@@ -63,6 +93,8 @@ function sampleRun(): SubstackRadarRun {
 
 beforeEach(() => {
   profileHome = mkdtempSync(join(tmpdir(), "substack-radar-home-"));
+  mockFeedRows.clear();
+  mockGetSharedDb.mockReturnValue(makeMockRssDb());
 });
 
 afterEach(() => {
@@ -154,7 +186,56 @@ describe("Substack Radar run store", () => {
 });
 
 describe("getApprovedSubstackRadarFeeds", () => {
-  it("returns successful feed validations without adding RSS rows", async () => {
+  it("adds successful feed validations to RSS and marks candidates added", async () => {
+    const run = sampleRun();
+    run.candidates[0].status = "approved";
+    writeSubstackRadarRuns([run], undefined, profileHome);
+    const feedAdder = vi.fn(() => "feed-1");
+
+    const result = await getApprovedSubstackRadarFeeds(
+      { runId: "run-1" },
+      async () => ({
+        ok: true,
+        feedUrl: "https://example.substack.com/feed",
+        siteUrl: "https://example.substack.com/",
+        title: "Example",
+        description: "RSS",
+        sourceType: "substack",
+      }),
+      profileHome,
+      feedAdder,
+    );
+
+    expect(result).toEqual({
+      added: 1,
+      feeds: [
+        {
+          candidateId: "candidate-1",
+          feedId: "feed-1",
+          feed: {
+            ok: true,
+            feedUrl: "https://example.substack.com/feed",
+            siteUrl: "https://example.substack.com/",
+            title: "Example",
+            description: "RSS",
+            sourceType: "substack",
+          },
+        },
+      ],
+    });
+    expect(feedAdder).toHaveBeenCalledWith({
+      url: "https://example.substack.com/feed",
+      title: "Example",
+      site_url: "https://example.substack.com/",
+      description: "RSS",
+      category: "Substack",
+    });
+    expect(
+      readSubstackRadarRuns(undefined, profileHome)[0].candidates[0].status,
+    ).toBe("added");
+  });
+
+  it("counts duplicate feed URLs as resolved when the feed adder returns an existing id", async () => {
     const run = sampleRun();
     run.candidates[0].status = "approved";
     writeSubstackRadarRuns([run], undefined, profileHome);
@@ -170,24 +251,31 @@ describe("getApprovedSubstackRadarFeeds", () => {
         sourceType: "substack",
       }),
       profileHome,
+      () => "existing-feed",
     );
 
-    expect(result).toEqual({
-      added: 0,
-      feeds: [
-        {
-          candidateId: "candidate-1",
-          feed: {
-            ok: true,
-            feedUrl: "https://example.substack.com/feed",
-            siteUrl: "https://example.substack.com/",
-            title: "Example",
-            description: "RSS",
-            sourceType: "substack",
-          },
-        },
-      ],
-    });
+    expect(result.added).toBe(1);
+    expect(result.feeds[0].feedId).toBe("existing-feed");
+    expect(
+      readSubstackRadarRuns(undefined, profileHome)[0].candidates[0].status,
+    ).toBe("added");
+  });
+
+  it("skips validation failures without adding RSS rows or marking candidates", async () => {
+    const run = sampleRun();
+    run.candidates[0].status = "approved";
+    writeSubstackRadarRuns([run], undefined, profileHome);
+    const feedAdder = vi.fn(() => "feed-1");
+
+    const result = await getApprovedSubstackRadarFeeds(
+      { runId: "run-1" },
+      async () => ({ ok: false, error: "No RSS feed found." }),
+      profileHome,
+      feedAdder,
+    );
+
+    expect(result).toEqual({ added: 0, feeds: [] });
+    expect(feedAdder).not.toHaveBeenCalled();
     expect(
       readSubstackRadarRuns(undefined, profileHome)[0].candidates[0].status,
     ).toBe("approved");
@@ -197,8 +285,9 @@ describe("getApprovedSubstackRadarFeeds", () => {
     const run = sampleRun();
     run.candidates[0].status = "approved";
     writeSubstackRadarRuns([run], undefined, profileHome);
+    const feedAdder = vi.fn(() => "feed-1");
 
-    await getApprovedSubstackRadarFeeds(
+    const result = await getApprovedSubstackRadarFeeds(
       { runId: "run-1" },
       async () => {
         setSubstackRadarCandidateStatus(
@@ -219,10 +308,44 @@ describe("getApprovedSubstackRadarFeeds", () => {
         };
       },
       profileHome,
+      feedAdder,
     );
 
+    expect(result).toEqual({ added: 0, feeds: [] });
+    expect(feedAdder).not.toHaveBeenCalled();
     expect(
       readSubstackRadarRuns(undefined, profileHome)[0].candidates[0].status,
     ).toBe("rejected");
+  });
+
+  it("returns an empty result when the run is missing", async () => {
+    await expect(
+      getApprovedSubstackRadarFeeds(
+        { runId: "missing" },
+        async () => {
+          throw new Error("should not validate");
+        },
+        profileHome,
+        () => "feed-1",
+      ),
+    ).resolves.toEqual({ added: 0, feeds: [] });
+  });
+});
+
+describe("addRssFeedRecord", () => {
+  it("returns an existing RSS feed id for duplicate feed URLs", () => {
+    mockFeedRows.set("https://example.substack.com/feed", {
+      id: "existing-feed",
+    });
+
+    expect(
+      addRssFeedRecord({
+        url: "https://example.substack.com/feed",
+        title: "Example",
+        site_url: "https://example.substack.com/",
+        description: "RSS",
+        category: "Substack",
+      }),
+    ).toBe("existing-feed");
   });
 });
