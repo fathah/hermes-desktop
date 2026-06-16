@@ -18,6 +18,7 @@ import {
   getConfigValue,
 } from "./config";
 import { providerDoesNotNeedApiKey } from "./providers";
+import { aliasesForEnvKey } from "../shared/url-key-map";
 import { getActiveProfileNameSync, profileHome, stripAnsi } from "./utils";
 import { setupAskpass, AskpassHandle } from "./askpass";
 import { precacheSudoCredentials } from "./sudoCreds";
@@ -374,10 +375,26 @@ export function expectedEnvKeyForModel(
   return null;
 }
 
-function envHasUsableValue(
+/**
+ * True iff `content` (.env text) holds a usable value for `expectedKey` OR any
+ * of its accepted aliases (KEY_ALIASES). When `expectedKey` is null (provider
+ * not catalogued), accepts any `*_API_KEY`. Exported for unit testing the
+ * alias-equivalence behavior of the install gate.
+ */
+export function envHasUsableValue(
   content: string,
   expectedKey: string | null,
 ): boolean {
+  // A vault/.env may store the provider credential under the canonical key OR
+  // any accepted alias (e.g. anthropic accepts ANTHROPIC_API_KEY,
+  // ANTHROPIC_TOKEN, or CLAUDE_CODE_OAUTH_TOKEN). The install gate must treat
+  // them as equivalent — otherwise a vault-only user whose key is stored under
+  // an alias is falsely forced back through Setup on every launch. Mirrors the
+  // alias handling already in config-health and validation; KEY_ALIASES is the
+  // single source of truth (../shared/url-key-map).
+  const acceptedKeys = expectedKey
+    ? new Set<string>([expectedKey, ...aliasesForEnvKey(expectedKey)])
+    : null;
   for (const line of content.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) continue;
@@ -393,10 +410,17 @@ function envHasUsableValue(
     ) {
       value = value.slice(1, -1);
     }
-    if (!value) continue;
+    // Re-trim AFTER unquoting so a quoted-blank `KEY="  "` is treated as empty
+    // (not a usable credential) — otherwise a blank-but-quoted value would
+    // falsely satisfy the install gate.
+    if (!value.trim()) continue;
 
-    if (expectedKey) {
-      if (key === expectedKey) return true;
+    if (acceptedKeys) {
+      // Match the canonical key or any of its accepted aliases. This is an
+      // allowlist scoped to the provider's own key names — an unrelated token
+      // (TELEGRAM_BOT_TOKEN etc.) does NOT satisfy the gate (no credential
+      // bleed).
+      if (acceptedKeys.has(key)) return true;
     } else {
       // No known mapping for this provider/URL — accept any value that
       // looks like a credential. Avoids regressing users on providers
