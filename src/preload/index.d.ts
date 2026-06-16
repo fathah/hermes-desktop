@@ -75,6 +75,10 @@ import type {
   SrPendingUpdate,
   SrPatch,
 } from "./bridges/sps";
+import type {
+  SubstackRadarAddApprovedFeedsResult,
+  SubstackRadarRun,
+} from "./bridges/substack-radar";
 import type { CredentialPoolEntry } from "../shared/credentials";
 import type { CapabilityRiskSummary } from "../shared/capability-risk";
 import type { ResearchReachStatus } from "../shared/research-reach";
@@ -1634,10 +1638,8 @@ interface HermesAPI {
   spsSubstackRadarRun: (input: {
     categories: string[];
     profile?: string;
-  }) => Promise<Record<string, unknown>>;
-  spsSubstackRadarListRuns: (
-    profile?: string,
-  ) => Promise<Record<string, unknown>[]>;
+  }) => Promise<SubstackRadarRun>;
+  spsSubstackRadarListRuns: (profile?: string) => Promise<SubstackRadarRun[]>;
   spsSubstackRadarSetCandidateStatus: (input: {
     runId: string;
     candidateId: string;
@@ -1647,7 +1649,7 @@ interface HermesAPI {
   spsSubstackRadarAddApprovedFeeds: (input: {
     runId: string;
     profile?: string;
-  }) => Promise<{ added: number; feeds: Record<string, unknown>[] }>;
+  }) => Promise<SubstackRadarAddApprovedFeedsResult>;
 
   spsIndexStatus: (profile?: string) => Promise<{
     root: string;

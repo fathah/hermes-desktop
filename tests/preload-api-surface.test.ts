@@ -6,6 +6,10 @@ const ROOT = join(__dirname, "..");
 // The hermesAPI methods live in per-domain bridge modules (src/preload/bridges/*)
 // merged by index.ts; scan all of them so parity covers the full surface.
 const bridgesDir = join(ROOT, "src/preload/bridges");
+const substackRadarBridgeSrc = readFileSync(
+  join(bridgesDir, "substack-radar.ts"),
+  "utf-8",
+);
 const bridgeSrc = readdirSync(bridgesDir)
   .filter((f) => f.endsWith(".ts"))
   .map((f) => readFileSync(join(bridgesDir, f), "utf-8"))
@@ -134,6 +138,21 @@ describe("New APIs from v0.8/v0.9 features", () => {
       expect(preloadMethods).toContain(method);
       expect(typeMethods).toContain(method);
     }
+  });
+
+  it("types Substack radar APIs with structured results", () => {
+    expect(preloadTypes).toContain("SubstackRadarRun");
+    expect(preloadTypes).toContain("SubstackRadarAddApprovedFeedsResult");
+    expect(substackRadarBridgeSrc).toContain("Promise<SubstackRadarRun>");
+    expect(substackRadarBridgeSrc).toContain("Promise<SubstackRadarRun[]>");
+    expect(substackRadarBridgeSrc).toContain(
+      "Promise<SubstackRadarAddApprovedFeedsResult>",
+    );
+    expect(preloadTypes).toContain("Promise<SubstackRadarRun>");
+    expect(preloadTypes).toContain("Promise<SubstackRadarRun[]>");
+    expect(preloadTypes).toContain(
+      "Promise<SubstackRadarAddApprovedFeedsResult>",
+    );
   });
 });
 
