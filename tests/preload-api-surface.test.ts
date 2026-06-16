@@ -142,7 +142,17 @@ describe("New APIs from v0.8/v0.9 features", () => {
 
   it("types Substack radar APIs with structured results", () => {
     expect(preloadTypes).toContain("SubstackRadarRun");
+    expect(preloadTypes).toContain("SubstackRadarRunInput");
+    expect(preloadTypes).toContain("SubstackRadarSetCandidateStatusInput");
+    expect(preloadTypes).toContain("SubstackRadarAddApprovedFeedsInput");
     expect(preloadTypes).toContain("SubstackRadarAddApprovedFeedsResult");
+    expect(substackRadarBridgeSrc).toContain("SubstackRadarRunInput");
+    expect(substackRadarBridgeSrc).toContain(
+      "SubstackRadarSetCandidateStatusInput",
+    );
+    expect(substackRadarBridgeSrc).toContain(
+      "SubstackRadarAddApprovedFeedsInput",
+    );
     expect(substackRadarBridgeSrc).toContain("Promise<SubstackRadarRun>");
     expect(substackRadarBridgeSrc).toContain("Promise<SubstackRadarRun[]>");
     expect(substackRadarBridgeSrc).toContain(

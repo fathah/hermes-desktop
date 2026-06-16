@@ -86,7 +86,7 @@ beforeEach(() => {
   api.spsSubstackRadarRun.mockResolvedValue(latestRun);
   api.spsSubstackRadarSetCandidateStatus.mockResolvedValue({ ok: true });
   api.spsSubstackRadarAddApprovedFeeds.mockResolvedValue({
-    added: 1,
+    added: 0,
     feeds: [
       {
         candidateId: "candidate-1",

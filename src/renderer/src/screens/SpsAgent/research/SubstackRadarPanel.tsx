@@ -246,8 +246,8 @@ export function SubstackRadarPanel(): React.JSX.Element {
       {addResult && (
         <div className="substack-radar-result">
           <div>
-            Validated {addResult.added} approved feed{" "}
-            {addResult.added === 1 ? "URL" : "URLs"}.
+            Validated {addResult.feeds.length} approved feed{" "}
+            {addResult.feeds.length === 1 ? "URL" : "URLs"}.
           </div>
           {addResult.feeds.map((item) => (
             <div key={item.candidateId} className="substack-radar-result-feed">

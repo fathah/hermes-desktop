@@ -76,8 +76,11 @@ import type {
   SrPatch,
 } from "./bridges/sps";
 import type {
+  SubstackRadarAddApprovedFeedsInput,
   SubstackRadarAddApprovedFeedsResult,
   SubstackRadarRun,
+  SubstackRadarRunInput,
+  SubstackRadarSetCandidateStatusInput,
 } from "../shared/substack-radar";
 import type { CredentialPoolEntry } from "../shared/credentials";
 import type { CapabilityRiskSummary } from "../shared/capability-risk";
@@ -1635,21 +1638,16 @@ interface HermesAPI {
   spsRssGetClinicalDigest: (
     profile?: string,
   ) => Promise<SpsClinicalDigestArticle[]>;
-  spsSubstackRadarRun: (input: {
-    categories: string[];
-    profile?: string;
-  }) => Promise<SubstackRadarRun>;
+  spsSubstackRadarRun: (
+    input: SubstackRadarRunInput,
+  ) => Promise<SubstackRadarRun>;
   spsSubstackRadarListRuns: (profile?: string) => Promise<SubstackRadarRun[]>;
-  spsSubstackRadarSetCandidateStatus: (input: {
-    runId: string;
-    candidateId: string;
-    status: "approved" | "rejected";
-    profile?: string;
-  }) => Promise<{ ok: boolean; error?: string }>;
-  spsSubstackRadarAddApprovedFeeds: (input: {
-    runId: string;
-    profile?: string;
-  }) => Promise<SubstackRadarAddApprovedFeedsResult>;
+  spsSubstackRadarSetCandidateStatus: (
+    input: SubstackRadarSetCandidateStatusInput,
+  ) => Promise<{ ok: boolean; error?: string }>;
+  spsSubstackRadarAddApprovedFeeds: (
+    input: SubstackRadarAddApprovedFeedsInput,
+  ) => Promise<SubstackRadarAddApprovedFeedsResult>;
 
   spsIndexStatus: (profile?: string) => Promise<{
     root: string;

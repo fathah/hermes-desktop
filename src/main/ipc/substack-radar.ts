@@ -3,68 +3,30 @@ import { randomUUID } from "crypto";
 import { join } from "path";
 
 import { discoverSubstackCardsWithBrowser } from "../substack-radar-browser";
-import {
-  discoverSubstackFeed,
-  type SubstackDiscoveryResult,
-} from "../rss-discovery";
-import type { SubstackRadarVisibleSignals } from "../../shared/substack-radar";
+import { discoverSubstackFeed } from "../rss-discovery";
+import type {
+  SubstackRadarAddApprovedFeedsInput,
+  SubstackRadarAddApprovedFeedsResult,
+  SubstackRadarCandidate,
+  SubstackRadarCandidateStatus,
+  SubstackRadarDiscoveredFeed,
+  SubstackRadarRun,
+  SubstackRadarRunInput,
+  SubstackRadarRunStatus,
+  SubstackRadarSetCandidateStatusInput,
+} from "../../shared/substack-radar";
 import { profileHome, safeWriteFile } from "../utils";
 import { safeHandle } from "./safe-handle";
 
-type SubstackRadarRunStatus = "running" | "complete" | "failed";
-type SubstackRadarCandidateStatus = "new" | "approved" | "rejected";
+export type { SubstackRadarRun } from "../../shared/substack-radar";
 
 interface SubstackRadarStore {
   runs: SubstackRadarRun[];
 }
 
-interface SubstackRadarRunInput {
-  categories?: string[];
-  profile?: string;
-}
-
-interface SubstackRadarSetCandidateStatusInput {
-  runId: string;
-  candidateId: string;
-  status: "approved" | "rejected";
-  profile?: string;
-}
-
-interface SubstackRadarAddApprovedFeedsInput {
-  runId: string;
-  profile?: string;
-}
-
 type FeedDiscoverer = (
   publicationUrl: string,
-) => Promise<SubstackDiscoveryResult>;
-
-export interface SubstackRadarCandidate {
-  id: string;
-  publicationUrl: string;
-  feedUrl?: string;
-  title: string;
-  description: string;
-  author?: string;
-  category: string;
-  visibleSignals: SubstackRadarVisibleSignals;
-  sourcePageUrl: string;
-  discoveredAt: number;
-  score: number;
-  status: SubstackRadarCandidateStatus;
-}
-
-export interface SubstackRadarRun {
-  id: string;
-  query: string;
-  categories: string[];
-  status: SubstackRadarRunStatus;
-  startedAt: number;
-  finishedAt?: number;
-  sourceUrls: string[];
-  candidates: SubstackRadarCandidate[];
-  error?: string;
-}
+) => Promise<SubstackRadarDiscoveredFeed>;
 
 export function buildSubstackRadarSourceUrl(category: string): string {
   return `https://substack.com/search/${encodeURIComponent(category)}`;
@@ -277,16 +239,12 @@ export async function getApprovedSubstackRadarFeeds(
   input: SubstackRadarAddApprovedFeedsInput,
   feedDiscoverer: FeedDiscoverer = discoverSubstackFeed,
   homeOverride?: string,
-): Promise<{
-  added: 0;
-  feeds: Array<{ candidateId: string; feed: SubstackDiscoveryResult }>;
-}> {
+): Promise<SubstackRadarAddApprovedFeedsResult> {
   const runs = readSubstackRadarRuns(input.profile, homeOverride);
   const run = runs.find((item) => item.id === input.runId);
   if (!run) return { added: 0, feeds: [] };
 
-  const feeds: Array<{ candidateId: string; feed: SubstackDiscoveryResult }> =
-    [];
+  const feeds: SubstackRadarAddApprovedFeedsResult["feeds"] = [];
   for (const candidate of run.candidates) {
     if (candidate.status !== "approved") continue;
     const feed = await feedDiscoverer(candidate.publicationUrl);

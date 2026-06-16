@@ -59,6 +59,23 @@ export interface SubstackRadarAddApprovedFeedsResult {
   feeds: SubstackRadarApprovedFeed[];
 }
 
+export interface SubstackRadarRunInput {
+  categories?: string[];
+  profile?: string;
+}
+
+export interface SubstackRadarSetCandidateStatusInput {
+  runId: string;
+  candidateId: string;
+  status: "approved" | "rejected";
+  profile?: string;
+}
+
+export interface SubstackRadarAddApprovedFeedsInput {
+  runId: string;
+  profile?: string;
+}
+
 export interface SubstackRadarScoreInput {
   title: string;
   description: string;
