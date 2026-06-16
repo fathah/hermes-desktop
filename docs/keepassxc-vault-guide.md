@@ -180,6 +180,35 @@ Once you've confirmed a key resolves from the vault, you can remove it from
 | "Permission denied" reading the vault (snap) | Vault is in a hidden dir or `/tmp`. Move it under `~/secrets/`. |
 | A vault key seems ignored | A value already in your shell env or `.env` **wins** over the provider. Check for a stale `.env` entry. |
 | Entry not found | The entry **title** must exactly equal the env var name (e.g. `OPENROUTER_API_KEY`). |
+| App reverts to an older build after you quit it | Auto-update is re-downloading the public release and installing it over your locally-built/patched app on quit. Set `desktop.auto_update: false` (see below), or toggle **Settings → Automatic updates** off, then reinstall your build once. |
+
+---
+
+## Disabling auto-update (`desktop.auto_update`)
+
+The desktop app ships with **automatic updates ON by default** — it checks
+GitHub for a newer release and installs it on launch/quit. That is the right
+default for almost everyone, and **this setting changes nothing for you unless
+you opt out**.
+
+If you run a **locally-built or patched app** (for example a vault-aware build
+you compiled yourself and installed into `/opt`), the auto-updater will happily
+overwrite it with the upstream release the next time you quit, and you'll lose
+your changes. To stop that, disable updates:
+
+- **In the UI:** Settings → **Automatic updates** → off. A restart applies it.
+- **In `config.yaml`:**
+
+  ```yaml
+  desktop:
+    auto_update: false
+  ```
+
+Only an explicit `false` (or `0`) disables it; any other value — and the
+unset default — keeps auto-update enabled. The setting is read once at launch,
+so **restart the app** after changing it. When disabled, the app neither checks
+for nor downloads updates; you update by building/installing a new artifact
+yourself.
 
 ---
 

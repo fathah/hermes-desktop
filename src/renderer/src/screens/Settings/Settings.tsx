@@ -213,6 +213,10 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
   const [analyticsEnabled, setAnalyticsEnabled] = useState(() =>
     getAnalyticsConsent(),
   );
+  // Auto-update opt-out (desktop.auto_update). Default ENABLED — only an
+  // explicit `false` in config.yaml disables it. Mirrors the main-process gate
+  // in setupUpdater() so the UI and the updater agree.
+  const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(true);
   const loadConfigRequestRef = useRef(0);
 
   const loadConfig = useCallback(async (): Promise<void> => {
@@ -248,6 +252,20 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
     setSshLocalPort(conn.ssh?.localPort ? String(conn.ssh.localPort) : "");
     setApiServerKeyMissing(!keyStatus.hasKey);
     connLoaded.current = true;
+
+    // Auto-update opt-out: enabled unless config.yaml sets desktop.auto_update
+    // to a falsey string. Default (null/unset) => enabled, matching upstream.
+    try {
+      const au = (
+        await window.hermesAPI.getConfig("desktop.auto_update", profile)
+      )
+        ?.toString()
+        .trim()
+        .toLowerCase();
+      setAutoUpdateEnabled(!(au === "false" || au === "0"));
+    } catch {
+      setAutoUpdateEnabled(true);
+    }
 
     const homeResult = await Promise.resolve()
       .then(() => window.hermesAPI.getHermesHome(profile))
@@ -836,6 +854,44 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
             >
               {dumpRunning ? t("settings.running") : t("settings.debugDump")}
             </button>
+          </div>
+          <div className="settings-hermes-detail" style={{ marginTop: 10 }}>
+            <div>
+              <div className="settings-theme-system-label">
+                {t("settings.autoUpdate.label")}
+              </div>
+              <div className="settings-theme-system-hint">
+                {t("settings.autoUpdate.hint")}
+              </div>
+            </div>
+            <label
+              className="tools-toggle"
+              style={{ marginLeft: 12 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <input
+                type="checkbox"
+                checked={autoUpdateEnabled}
+                onChange={async (e) => {
+                  const enabled = e.target.checked;
+                  setAutoUpdateEnabled(enabled);
+                  try {
+                    await window.hermesAPI.setConfig(
+                      "desktop.auto_update",
+                      enabled ? "true" : "false",
+                      profile,
+                    );
+                    setUpdateResult(t("settings.autoUpdate.savedRestart"));
+                    setUpdateResultType("success");
+                  } catch {
+                    setAutoUpdateEnabled(!enabled);
+                    setUpdateResult(t("settings.autoUpdate.saveFailed"));
+                    setUpdateResultType("error");
+                  }
+                }}
+              />
+              <span className="tools-toggle-track" />
+            </label>
           </div>
           {updateResult && (
             <div

@@ -133,6 +133,7 @@ import {
   readEnv,
   setEnvValue,
   getConfigValue,
+  isAutoUpdateDisabled,
   setConfigValue,
   getHermesHome,
   getModelConfig,
@@ -2779,8 +2780,21 @@ function setupUpdater(): void {
   // portable .exe), same as dev mode.
   const isPortableBuild = !!process.env.PORTABLE_EXECUTABLE_DIR;
 
-  if (!app.isPackaged || isPortableBuild) {
-    // Skip auto-update in dev mode and portable builds
+  // Opt-out gate for the auto-updater. ENABLED BY DEFAULT (upstream behavior is
+  // unchanged for everyone): only an explicit `desktop.auto_update: false` in
+  // config.yaml turns it off. This lets a user who runs a locally-built /opt
+  // artifact (e.g. a vault-patched build) stop electron-updater from silently
+  // re-downloading the public release and overwriting their build on quit
+  // (autoInstallOnAppQuit). Treated exactly like dev/portable: register the
+  // no-op IPC handlers and return before any autoDownload wiring. Decision is
+  // the pure, unit-tested isAutoUpdateDisabled() in ./config.
+  const autoUpdateDisabled = isAutoUpdateDisabled(
+    getConfigValue("desktop.auto_update"),
+  );
+
+  if (!app.isPackaged || isPortableBuild || autoUpdateDisabled) {
+    // Skip auto-update in dev mode, portable builds, and when explicitly
+    // disabled via config (desktop.auto_update: false).
     ipcMain.handle("check-for-updates", async () => null);
     ipcMain.handle("download-update", () => true);
     ipcMain.handle("install-update", () => {});

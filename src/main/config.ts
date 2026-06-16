@@ -276,6 +276,26 @@ export function decideCanWrite(input: {
   };
 }
 
+/**
+ * Pure decision for the auto-updater opt-out gate — extracted so it is
+ * unit-testable without the Electron/IPC coupling in setupUpdater().
+ *
+ * ENABLED BY DEFAULT: only an explicit falsey config value
+ * (`desktop.auto_update: false`, also accepts "0") disables it. A null/unset/
+ * empty/whitespace setting — the upstream default — keeps auto-update ON, so
+ * the community behavior is unchanged. The opt-out exists for users running a
+ * locally-built or patched /opt artifact who must stop electron-updater from
+ * silently re-downloading the public release and overwriting their build on
+ * quit (autoInstallOnAppQuit).
+ *
+ * The input is the RAW config string (getConfigValue returns string | null);
+ * normalization (trim/lowercase) happens here so callers stay thin.
+ */
+export function isAutoUpdateDisabled(rawSetting: string | null): boolean {
+  const v = (rawSetting ?? "").trim().toLowerCase();
+  return v === "false" || v === "0";
+}
+
 export function secretsProviderCanWrite(profile?: string): {
   canWrite: boolean;
   canDelete: boolean;

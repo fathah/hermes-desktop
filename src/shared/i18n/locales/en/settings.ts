@@ -98,6 +98,12 @@ export default {
   runDiagnosis: "Run Diagnosis",
   running: "Running...",
   debugDump: "Debug Dump",
+  autoUpdate: {
+    label: "Automatic updates",
+    hint: "Check for and install new versions on launch and quit. Turn off if you run a locally-built or patched app — a restart is required for the change to take effect.",
+    savedRestart: "Saved. Restart the app for the change to take effect.",
+    saveFailed: "Could not save the auto-update setting.",
+  },
   migrationDetected: "OpenClaw Installation Detected",
   migrationDesc:
     "Found OpenClaw at <code>{{path}}</code>. You can migrate your configuration, API keys, sessions, and skills to Hermes.",
