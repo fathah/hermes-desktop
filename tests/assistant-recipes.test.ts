@@ -64,6 +64,7 @@ import {
   saveAssistantRecipeRun,
   updateAssistantRecipe,
 } from "../src/main/assistant-recipes";
+import { ASSISTANT_RECIPE_TEMPLATES } from "../src/shared/assistant-recipes";
 
 beforeEach(() => {
   assistantSpy.mockClear();
@@ -72,6 +73,23 @@ beforeEach(() => {
 });
 
 describe("assistant recipe store", () => {
+  it("includes a review-first Content post writer template", () => {
+    const template = ASSISTANT_RECIPE_TEMPLATES.find(
+      (item) => item.kind === "content-writer",
+    );
+
+    expect(template).toMatchObject({
+      title: "Content post writer",
+      defaultActions: [
+        "read_workspace",
+        "search_web",
+        "draft_content",
+        "propose_changes",
+      ],
+    });
+    expect(template?.defaultOutput).toContain("three draft variants");
+  });
+
   it("creates a recipe and a profile skill", async () => {
     const created = await createAssistantRecipe({
       name: "Article Agent",

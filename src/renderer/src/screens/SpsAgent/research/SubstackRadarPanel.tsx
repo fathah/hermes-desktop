@@ -11,6 +11,8 @@ import type {
   SubstackRadarCandidateStatus,
   SubstackRadarRun,
 } from "../../../../../shared/substack-radar";
+import type { ContentIdea } from "../../../../../shared/content-studio";
+import { saveContentIdea } from "../content/contentStudioStorage";
 
 interface StatusUpdatingTarget {
   runId: string;
@@ -72,6 +74,7 @@ export function SubstackRadarPanel(): React.JSX.Element {
     useState<StatusUpdatingTarget | null>(null);
   const [addingFeeds, setAddingFeeds] = useState<PreviewTarget | null>(null);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [addResult, setAddResult] =
     useState<SubstackRadarAddApprovedFeedsResult | null>(null);
   const hasUserStartedRunRef = useRef(false);
@@ -135,6 +138,7 @@ export function SubstackRadarPanel(): React.JSX.Element {
     previewGenerationRef.current += 1;
     setAddingFeeds(null);
     setError("");
+    setNotice("");
     setAddResult(null);
     try {
       const run = await api.spsSubstackRadarRun({ categories });
@@ -157,6 +161,7 @@ export function SubstackRadarPanel(): React.JSX.Element {
     const runId = activeRun.id;
     setStatusUpdating({ runId, candidateId });
     setError("");
+    setNotice("");
     setAddResult(null);
     try {
       const result = await api.spsSubstackRadarSetCandidateStatus({
@@ -197,6 +202,7 @@ export function SubstackRadarPanel(): React.JSX.Element {
     const generation = previewGenerationRef.current;
     setAddingFeeds({ runId, generation });
     setError("");
+    setNotice("");
     setAddResult(null);
     try {
       const result = await api.spsSubstackRadarAddApprovedFeeds({
@@ -238,6 +244,38 @@ export function SubstackRadarPanel(): React.JSX.Element {
           : current,
       );
     }
+  };
+
+  const saveCandidateAsContentIdea = async (
+    candidate: SubstackRadarCandidate,
+  ): Promise<void> => {
+    const date = new Date().toISOString().slice(0, 10);
+    const signals = visibleSignalText(candidate).join(" · ");
+    const idea: ContentIdea = {
+      id: `idea-radar-${candidate.id}`,
+      title: candidate.title,
+      sourceUrls: [candidate.publicationUrl, candidate.sourcePageUrl].filter(
+        Boolean,
+      ),
+      audience: candidate.category,
+      angle: [candidate.description, signals].filter(Boolean).join("\n\n"),
+      createdAt: date,
+      updatedAt: date,
+      status: "captured",
+      capturedFrom: "substack-radar",
+      rubric: {
+        bookmarkability: candidate.score >= 70 ? 1 : 0,
+        proof: visibleSignalText(candidate).length ? 1 : 0,
+        immediateUse: 0,
+        audienceClarity: candidate.category ? 1 : 0,
+        reproducibility: 0,
+        hookStrength: 0,
+        originality: 0,
+      },
+    };
+    await saveContentIdea(idea);
+    setAddResult(null);
+    setNotice("Saved as a Content Studio idea.");
   };
 
   return (
@@ -285,6 +323,7 @@ export function SubstackRadarPanel(): React.JSX.Element {
       </button>
 
       {error && <div className="substack-radar-error">{error}</div>}
+      {notice && <div className="substack-radar-result">{notice}</div>}
       {addResult && (
         <div className="substack-radar-result">
           <div>
@@ -368,6 +407,15 @@ export function SubstackRadarPanel(): React.JSX.Element {
                     </button>
                   </div>
                 )}
+                <div className="substack-radar-actions">
+                  <button
+                    type="button"
+                    className="log-submit-btn protocol-record-btn"
+                    onClick={() => void saveCandidateAsContentIdea(candidate)}
+                  >
+                    Save as content idea
+                  </button>
+                </div>
               </article>
             ))
           )}

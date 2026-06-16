@@ -12,6 +12,8 @@ import { workspaceParity } from "../editor/workspaceVault";
 import { pageToMarkdown } from "../editor/pageMarkdown";
 import { getStorageMode } from "../lib/storageMode";
 import type { PageMeta, TreeNode } from "../types";
+import type { ContentIdea } from "../../../../../shared/content-studio";
+import { saveContentIdea } from "../content/contentStudioStorage";
 
 interface ActionItem {
   kind: "action";
@@ -95,7 +97,9 @@ export function CommandPalette() {
       if (!path) throw new Error("No active Obsidian note was reported.");
       const markdown = await window.hermesAPI.readObsidianFile?.(path);
       if (!markdown) throw new Error(`Could not read ${path}.`);
-      const pageId = path.replace(/\.md$/i, "").replace(/[^A-Za-z0-9_-]+/g, "-");
+      const pageId = path
+        .replace(/\.md$/i, "")
+        .replace(/[^A-Za-z0-9_-]+/g, "-");
       await window.hermesAPI.spsCreateVaultProposal?.({
         source: "obsidian",
         title: `Process ${path}`,
@@ -136,6 +140,40 @@ export function CommandPalette() {
       flash(e instanceof Error ? e.message : String(e), { tone: "warn" });
     }
   }, [flash]);
+
+  const saveSelectionAsContentIdea = useCallback(async (): Promise<void> => {
+    const selection = window.getSelection()?.toString().trim() || "";
+    if (!selection) {
+      flash("Select workspace text before saving a content idea.", {
+        tone: "warn",
+      });
+      return;
+    }
+    const date = new Date().toISOString().slice(0, 10);
+    const title = meta[page]?.title || "Selected workspace text";
+    const idea: ContentIdea = {
+      id: `idea-selection-${Date.now().toString(36)}`,
+      title,
+      sourceUrls: [],
+      audience: "",
+      angle: selection,
+      createdAt: date,
+      updatedAt: date,
+      status: "captured",
+      capturedFrom: "workspace-selection",
+      rubric: {
+        bookmarkability: 0,
+        proof: 0,
+        immediateUse: 0,
+        audienceClarity: 0,
+        reproducibility: 0,
+        hookStrength: 0,
+        originality: 1,
+      },
+    };
+    await saveContentIdea(idea);
+    flash("Saved selected text as a Content Studio idea.");
+  }, [flash, meta, page]);
 
   const actions: ActionItem[] = useMemo(
     () => [
@@ -217,7 +255,9 @@ export function CommandPalette() {
         run: () => {
           const markdown = pageToMarkdown(meta[page] ?? {}, docs[page] ?? []);
           void window.hermesAPI.spsExportPage?.(page, markdown).then((ok) => {
-            flash(ok ? "Synced current page to vault" : "Vault sync unavailable");
+            flash(
+              ok ? "Synced current page to vault" : "Vault sync unavailable",
+            );
           });
         },
       },
@@ -274,7 +314,8 @@ export function CommandPalette() {
         desc: "Queue a projects Base proposal scoped to the current folder.",
         run: () => {
           const crumbIds = computePathIds(tree, page);
-          const folderId = crumbIds.length > 1 ? crumbIds[crumbIds.length - 2] : page;
+          const folderId =
+            crumbIds.length > 1 ? crumbIds[crumbIds.length - 2] : page;
           const folder = meta[folderId]?.title || folderId || "Projects";
           void window.hermesAPI
             .spsCreateBaseProposal?.({ recipe: "projects", folder })
@@ -282,6 +323,16 @@ export function CommandPalette() {
               flash(`Queued ${proposal.title} Base for review`);
               setSurface("review");
             });
+        },
+      },
+      {
+        kind: "action",
+        id: "content-idea-selection",
+        icon: "sparkle",
+        label: "Save selection as content idea",
+        desc: "Capture selected workspace text into Content Studio.",
+        run: () => {
+          void saveSelectionAsContentIdea();
         },
       },
       {
@@ -409,6 +460,7 @@ export function CommandPalette() {
       tree,
       processActiveObsidianNote,
       importObsidianFolder,
+      saveSelectionAsContentIdea,
     ],
   );
 

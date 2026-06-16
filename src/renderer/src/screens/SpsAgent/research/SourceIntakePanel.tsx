@@ -3,8 +3,10 @@ import type {
   SourceIntakeResult,
   SourceIntakeStatus,
 } from "../../../../../shared/source-intake";
+import { type ContentIdea } from "../../../../../shared/content-studio";
 import { Icon } from "../components/Icon";
 import { SubstackRadarPanel } from "./SubstackRadarPanel";
+import { saveContentIdea } from "../content/contentStudioStorage";
 
 type SourceTab = "find" | "add" | "review";
 
@@ -105,6 +107,33 @@ export function SourceIntakePanel({
     } finally {
       setSaving(false);
     }
+  }
+
+  async function saveAsContentIdea(): Promise<void> {
+    if (!result?.ok) return;
+    const date = new Date().toISOString().slice(0, 10);
+    const idea: ContentIdea = {
+      id: `idea-${Date.now().toString(36)}`,
+      title: result.title,
+      sourceUrls: [result.canonicalUrl],
+      audience: "",
+      angle: result.excerpt,
+      createdAt: date,
+      updatedAt: date,
+      status: "captured",
+      capturedFrom: "source-preview",
+      rubric: {
+        bookmarkability: 0,
+        proof: result.links.length ? 1 : 0,
+        immediateUse: 0,
+        audienceClarity: 0,
+        reproducibility: 0,
+        hookStrength: 0,
+        originality: 0,
+      },
+    };
+    await saveContentIdea(idea);
+    setMessage("Saved as content idea.");
   }
 
   async function showSetup(): Promise<void> {
@@ -218,6 +247,14 @@ export function SourceIntakePanel({
                   onClick={() => void saveToKb()}
                 >
                   {saving ? "Saving..." : "Save to KB"}
+                </button>
+                <button
+                  type="button"
+                  className="log-submit-btn protocol-record-btn"
+                  disabled={saving}
+                  onClick={() => void saveAsContentIdea()}
+                >
+                  Save as content idea
                 </button>
               </div>
             </>

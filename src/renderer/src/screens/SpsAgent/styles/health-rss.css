@@ -1407,3 +1407,80 @@
   justify-content: flex-end;
   margin-top: 12px;
 }
+
+.sps-scope .content-studio-surface {
+  padding: 28px;
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.sps-scope .content-studio-pill {
+  align-self: flex-start;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 10px;
+  color: var(--tx-2);
+  font-size: 12px;
+  background: var(--bg-2);
+}
+
+.sps-scope .content-studio-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.sps-scope .content-studio-grid label,
+.sps-scope .content-studio-rubric label {
+  display: grid;
+  gap: 6px;
+  color: var(--tx-2);
+  font-size: 12px;
+}
+
+.sps-scope .content-studio-rubric {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.sps-scope .content-studio-score,
+.sps-scope .content-studio-quality {
+  margin-top: 12px;
+  color: var(--tx-2);
+  font-size: 13px;
+}
+
+.sps-scope .content-studio-packet,
+.sps-scope .content-studio-analytics {
+  display: grid;
+  gap: 10px;
+}
+
+.sps-scope .content-studio-packet {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.sps-scope .content-studio-packet > div,
+.sps-scope .content-studio-analytics > div {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--bg-2);
+}
+
+.sps-scope .content-studio-packet p,
+.sps-scope .content-studio-analytics span {
+  display: block;
+  margin: 6px 0 0;
+  color: var(--tx-3);
+  font-size: 12px;
+}
+
+@media (max-width: 760px) {
+  .sps-scope .content-studio-grid,
+  .sps-scope .content-studio-packet {
+    grid-template-columns: 1fr;
+  }
+}

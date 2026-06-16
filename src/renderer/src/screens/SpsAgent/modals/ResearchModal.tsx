@@ -15,6 +15,8 @@ import { useStore } from "../store";
 import { Icon } from "../components/Icon";
 import { SpsModal } from "./SpsModal";
 import { research, type WorkSummary } from "../research";
+import { saveContentIdea } from "../content/contentStudioStorage";
+import type { ContentIdea } from "../../../../../shared/content-studio";
 
 type Mode = "research" | "papers" | "study";
 type Phase = "idle" | "running" | "done" | "warn" | "error";
@@ -173,10 +175,14 @@ export function ResearchModal() {
       finalQuery = `Using Google search engine, research: ${t}`;
     }
 
-    const res = await runResearch(finalQuery, {
-      onChunk: (md) => setProgress(md),
-      onTool: (tool) => setToolNote(tool),
-    }, sourceFilter);
+    const res = await runResearch(
+      finalQuery,
+      {
+        onChunk: (md) => setProgress(md),
+        onTool: (tool) => setToolNote(tool),
+      },
+      sourceFilter,
+    );
     if (res.ok) {
       setPhase("done");
       setResultSummary(res.summary || t);
@@ -308,6 +314,35 @@ export function ResearchModal() {
     } finally {
       setStudySaving(false);
     }
+  };
+
+  const saveResearchAsContentIdea = async (): Promise<void> => {
+    const title = topic.trim() || studyFocus.trim();
+    if (!title) return;
+    const date = new Date().toISOString().slice(0, 10);
+    const idea: ContentIdea = {
+      id: `idea-research-${Date.now().toString(36)}`,
+      title,
+      sourceUrls: [],
+      audience: "",
+      angle:
+        resultSummary || progress || studyResult || "Captured from Research.",
+      createdAt: date,
+      updatedAt: date,
+      status: "captured",
+      capturedFrom: "research-reach",
+      rubric: {
+        bookmarkability: 0,
+        proof: resultSummary || progress || studyResult ? 1 : 0,
+        immediateUse: 0,
+        audienceClarity: 0,
+        reproducibility: 0,
+        hookStrength: 0,
+        originality: 1,
+      },
+    };
+    await saveContentIdea(idea);
+    flash("Saved research as a Content Studio idea.");
   };
 
   const undoStudySave = () => {
@@ -493,6 +528,12 @@ export function ResearchModal() {
                   <button className="cover-btn" onClick={onClose}>
                     Open
                   </button>
+                  <button
+                    className="cover-btn"
+                    onClick={() => void saveResearchAsContentIdea()}
+                  >
+                    Save as content idea
+                  </button>
                 </div>
               </div>
             )}
@@ -532,10 +573,10 @@ export function ResearchModal() {
                 {notebookState === "checking"
                   ? "Checking..."
                   : notebookState === "working"
-                  ? "Enabling..."
-                  : notebookReady
-                    ? "NotebookLM enabled"
-                    : "Enable NotebookLM"}
+                    ? "Enabling..."
+                    : notebookReady
+                      ? "NotebookLM enabled"
+                      : "Enable NotebookLM"}
               </button>
             </div>
 
@@ -604,6 +645,12 @@ export function ResearchModal() {
                       disabled={studySaving}
                     >
                       {studySaving ? "Saving..." : "Save to wiki"}
+                    </button>
+                    <button
+                      className="cover-btn"
+                      onClick={() => void saveResearchAsContentIdea()}
+                    >
+                      Save as content idea
                     </button>
                   </div>
                 </div>

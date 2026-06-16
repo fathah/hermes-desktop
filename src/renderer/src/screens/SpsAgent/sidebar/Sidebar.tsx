@@ -463,6 +463,17 @@ export function Sidebar() {
                 <Icon name="doc" size={17} />
                 <span className="nav-label">RSS Reader</span>
               </button>
+
+              <button
+                type="button"
+                className={`nav-item ${
+                  surface === "contentStudio" ? "active" : ""
+                }`}
+                onClick={() => setSurface("contentStudio")}
+              >
+                <Icon name="sparkle" size={17} />
+                <span className="nav-label">Content Studio</span>
+              </button>
             </>
           )}
         </div>

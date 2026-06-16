@@ -9,6 +9,7 @@ const api = {
   spsRssAddFeed: vi.fn(),
   spsRssSyncFeeds: vi.fn(),
   spsFileResearch: vi.fn(),
+  spsExportRow: vi.fn(),
   spsSubstackRadarListRuns: vi.fn(),
 };
 
@@ -52,6 +53,7 @@ beforeEach(() => {
     "pipx install crawl4ai",
   );
   api.spsFileResearch.mockResolvedValue({ ok: true, captureCount: 0 });
+  api.spsExportRow.mockResolvedValue(true);
   api.spsRssAddFeed.mockResolvedValue("feed-1");
   api.spsRssSyncFeeds.mockResolvedValue({ success: true, count: 1 });
   api.spsSubstackRadarListRuns.mockResolvedValue([]);
@@ -82,6 +84,29 @@ describe("SourceIntakePanel", () => {
       );
       expect(screen.getByText("Saved to Knowledge Base.")).toBeInTheDocument();
     });
+  });
+
+  it("saves a preview as a Content Studio idea", async () => {
+    render(<SourceIntakePanel />);
+
+    fireEvent.change(screen.getByLabelText(/source url/i), {
+      target: { value: "https://example.com/page" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /read source/i }));
+
+    expect(await screen.findByText("Example Page")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: /save as content idea/i }),
+    );
+
+    expect(
+      await screen.findByText("Saved as content idea."),
+    ).toBeInTheDocument();
+    expect(api.spsExportRow).toHaveBeenCalledWith(
+      "content-ideas",
+      expect.stringContaining("content-idea-example-page"),
+      expect.stringContaining('type: "content-idea"'),
+    );
   });
 
   it("shows Crawl4AI setup guidance when extraction is unavailable", async () => {

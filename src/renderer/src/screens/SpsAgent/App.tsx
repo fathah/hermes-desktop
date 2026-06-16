@@ -41,6 +41,7 @@ import { ObsidianEditor } from "./editor/ObsidianEditor";
 import { PersonalHealthDashboard } from "./health/PersonalHealthDashboard";
 import { RssReaderDashboard } from "./research/RssReaderDashboard";
 import { Dashboard } from "./components/Dashboard";
+import { ContentStudioSurface } from "./content/ContentStudioSurface";
 
 type TaskAutomationRule = {
   id: string;
@@ -310,6 +311,8 @@ export function App() {
             <PersonalHealthDashboard />
           ) : surface === "rss-reader" ? (
             <RssReaderDashboard />
+          ) : surface === "contentStudio" ? (
+            <ContentStudioSurface />
           ) : (
             <div className="doc-scroll scroll">
               {surface === "cockpit" && <CockpitSurface />}

@@ -197,6 +197,10 @@ const expectedShots = [
   "10-journal",
   "11-journal-entry",
   "11b-journal-entry-scrolled",
+  "12-content-studio",
+  "13-content-studio-low-score",
+  "14-content-studio-run",
+  "15-content-studio-analytics",
 ];
 const shots = [];
 const shotFailures = [];
@@ -356,6 +360,41 @@ await shot("11b-journal-entry-scrolled", async () => {
     const el = document.querySelector(".doc-scroll");
     if (el) el.scrollTop = 450;
   });
+});
+
+// 12 — Content Studio surface mounts and creates its review-first workspace pack.
+await shot("12-content-studio", async () => {
+  await win.locator(".nav-item", { hasText: "Content Studio" }).first().click();
+  await win.getByRole("heading", { name: "Content Studio" }).waitFor({
+    timeout: 8000,
+  });
+  await win.getByText("Workspace pack ready").waitFor({ timeout: 8000 });
+});
+
+// 13 — low-score ideas are blocked unless explicitly overridden.
+await shot("13-content-studio-low-score", async () => {
+  await win.getByLabel("Idea title").fill("Smoke thin idea");
+  await win.getByLabel("Source URL").fill("https://example.com/smoke");
+  await win.getByRole("button", { name: "Start content run" }).click();
+  await win.getByText(/Score at least 10\/14/).waitFor({ timeout: 8000 });
+});
+
+// 14 — explicit override creates a manual, row-backed content run.
+await shot("14-content-studio-run", async () => {
+  await win.getByLabel("Override low score").check();
+  await win.getByRole("button", { name: "Start content run" }).click();
+  await win.getByText(/Created Run - Smoke thin idea/).waitFor({
+    timeout: 8000,
+  });
+});
+
+// 15 — manual analytics entry computes the BM/Like signal.
+await shot("15-content-studio-analytics", async () => {
+  await win.getByLabel("Analytics slug").fill("smoke-post");
+  await win.getByLabel("Bookmarks").fill("45");
+  await win.getByLabel("Likes").fill("30");
+  await win.getByRole("button", { name: "Log analytics" }).click();
+  await win.getByText("BM/Like 1.50").waitFor({ timeout: 8000 });
 });
 
 console.log("SHOTS_OK:", shots.length, "—", shots.join(", "));

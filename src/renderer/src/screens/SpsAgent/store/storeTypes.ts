@@ -55,7 +55,8 @@ export type Surface =
   | "obsidian-note"
   | "work"
   | "personal-health"
-  | "rss-reader";
+  | "rss-reader"
+  | "contentStudio";
 
 // Named, toggleable sidebar sections (Notion 3.1 grammar). Order here is the
 // render order in the rail.

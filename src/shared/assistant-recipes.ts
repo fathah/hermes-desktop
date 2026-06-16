@@ -1,6 +1,7 @@
 export type AssistantRecipeKind =
   | "research-brief"
   | "article-writer"
+  | "content-writer"
   | "meeting-debrief"
   | "file-processor"
   | "morning-briefing"
@@ -208,6 +209,46 @@ export const ASSISTANT_RECIPE_TEMPLATES: AssistantRecipeTemplate[] = [
         key: "length",
         label: "Length",
         placeholder: "Short post, newsletter, long-form article",
+      },
+    ],
+  },
+  {
+    kind: "content-writer",
+    title: "Content post writer",
+    description:
+      "Turn a sourced idea into review-first short-form post variants.",
+    defaultJob:
+      "Research the idea, verify claims against sources, write three draft variants with different hooks, and propose a final publish packet for review.",
+    defaultInputs:
+      "A scored content idea, source links, target audience, platform, hook route, and disclosure notes.",
+    defaultOutput:
+      "three draft variants, source notes, an asset brief, disclosure reminders, and a final publish packet.",
+    defaultActions: [
+      "read_workspace",
+      "search_web",
+      "draft_content",
+      "propose_changes",
+    ],
+    fields: [
+      {
+        key: "idea",
+        label: "Idea",
+        placeholder: "What sourced idea should become a post?",
+      },
+      {
+        key: "platform",
+        label: "Platform",
+        placeholder: "X, LinkedIn, newsletter, blog, YouTube script",
+      },
+      {
+        key: "hook",
+        label: "Hook route",
+        placeholder: "Freebie reveal, setup guide, comparison, proof-led",
+      },
+      {
+        key: "disclosure",
+        label: "Disclosure notes",
+        placeholder: "Sponsor, free account, affiliate, synthetic media, none",
       },
     ],
   },

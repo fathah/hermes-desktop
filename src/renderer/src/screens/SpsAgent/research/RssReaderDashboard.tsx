@@ -1,6 +1,8 @@
 import React, { useCallback, useState, useEffect } from "react";
 import { Icon } from "../components/Icon";
 import { SourceIntakePanel } from "./SourceIntakePanel";
+import { saveContentIdea } from "../content/contentStudioStorage";
+import type { ContentIdea } from "../../../../../shared/content-studio";
 
 interface RssFeed {
   id: string;
@@ -156,6 +158,35 @@ ${art.content_raw?.replace(/<[^>]*>/g, "") || art.summary_excerpt || "No content
     } catch (err) {
       console.error("[RSS UI] Save to wiki failed:", err);
     }
+  };
+
+  const saveArticleAsContentIdea = async (art: RssArticle): Promise<void> => {
+    const date = new Date().toISOString().slice(0, 10);
+    const idea: ContentIdea = {
+      id: `idea-rss-${art.id}`,
+      title: art.title,
+      sourceUrls: [art.url],
+      audience: "",
+      angle:
+        art.summary_excerpt ||
+        art.content_text?.slice(0, 280) ||
+        "Captured from RSS Reader.",
+      createdAt: date,
+      updatedAt: date,
+      status: "captured",
+      capturedFrom: "rss-reader",
+      rubric: {
+        bookmarkability: art.star_status ? 1 : 0,
+        proof: art.url ? 1 : 0,
+        immediateUse: 0,
+        audienceClarity: 0,
+        reproducibility: 0,
+        hookStrength: 0,
+        originality: 0,
+      },
+    };
+    await saveContentIdea(idea);
+    alert("Saved as a Content Studio idea.");
   };
 
   // Group feeds by category
@@ -334,6 +365,14 @@ ${art.content_raw?.replace(/<[^>]*>/g, "") || art.summary_excerpt || "No content
                       onClick={() => saveToSpsPage(activeArticle)}
                     >
                       📥 Ingest to SPS Page
+                    </button>
+                    <button
+                      className="log-submit-btn protocol-record-btn"
+                      onClick={() =>
+                        void saveArticleAsContentIdea(activeArticle)
+                      }
+                    >
+                      Save as content idea
                     </button>
                   </div>
                 </div>
