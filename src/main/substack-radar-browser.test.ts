@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   extractSubstackVisibleCards,
   isAllowedSubstackDiscoveryUrl,
+  isSubstackRenderSnapshotSettled,
+  snapshotSubstackRenderState,
 } from "./substack-radar-browser";
 
 const html = `
@@ -136,5 +138,42 @@ describe("isAllowedSubstackDiscoveryUrl", () => {
     expect(isAllowedSubstackDiscoveryUrl("http://substack.com/explore")).toBe(
       false,
     );
+  });
+});
+
+describe("Substack render settle snapshots", () => {
+  it("does not settle before delayed sibling card content is visible", () => {
+    const earlyHtml = `
+      <main>
+        <article>
+          <a href="https://slowfieldnotes.substack.com">Open publication</a>
+        </article>
+      </main>
+    `;
+    const settledHtml = `
+      <main>
+        <article>
+          <a href="https://slowfieldnotes.substack.com">Open publication</a>
+          <h3>Slow Field Notes</h3>
+          <p>Delayed reporting about rendered discovery cards.</p>
+          <span>44K subscribers</span>
+        </article>
+      </main>
+    `;
+
+    const early = snapshotSubstackRenderState(
+      earlyHtml,
+      "AI agents",
+      "https://substack.com/explore",
+    );
+    const settled = snapshotSubstackRenderState(
+      settledHtml,
+      "AI agents",
+      "https://substack.com/explore",
+    );
+
+    expect(isSubstackRenderSnapshotSettled(early, early, 2)).toBe(false);
+    expect(isSubstackRenderSnapshotSettled(early, settled, 1)).toBe(false);
+    expect(isSubstackRenderSnapshotSettled(settled, settled, 2)).toBe(true);
   });
 });

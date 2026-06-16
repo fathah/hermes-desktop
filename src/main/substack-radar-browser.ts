@@ -14,6 +14,12 @@ export interface ExtractedSubstackCard {
   sourcePageUrl: string;
 }
 
+export interface SubstackRenderSettleSnapshot {
+  candidateCount: number;
+  readyCandidateCount: number;
+  visibleText: string;
+}
+
 type ScoredSubstackCard = ExtractedSubstackCard & {
   id: string;
   score: number;
@@ -32,6 +38,7 @@ const CARD_CONTAINER_SELECTOR =
   "article,li,section,[role='article'],[data-testid*='card'],[class*='card']";
 const RENDER_SETTLE_TIMEOUT_MS = 5_000;
 const RENDER_SETTLE_POLL_MS = 100;
+const RENDER_SETTLE_STABLE_POLLS = 2;
 
 function cleanVisibleText(value: string | null | undefined): string {
   return (value || "").replace(/\s+/g, " ").trim();
@@ -243,35 +250,111 @@ export function extractSubstackVisibleCards(
   return cards;
 }
 
-async function waitForSubstackCardCandidates(
+function hasVisibleSignals(signals: SubstackRadarVisibleSignals): boolean {
+  return Object.values(signals).some((value) => Boolean(value?.trim()));
+}
+
+function isReadySubstackCard(card: ExtractedSubstackCard): boolean {
+  return Boolean(
+    card.title.trim() &&
+    (card.description.trim() || hasVisibleSignals(card.visibleSignals)),
+  );
+}
+
+export function snapshotSubstackRenderState(
+  html: string,
+  category: string,
+  sourcePageUrl: string,
+): SubstackRenderSettleSnapshot {
+  const cards = extractSubstackVisibleCards(html, category, sourcePageUrl);
+  return {
+    candidateCount: cards.length,
+    readyCandidateCount: cards.filter(isReadySubstackCard).length,
+    visibleText: cards
+      .map((card) =>
+        [
+          card.publicationUrl,
+          card.title,
+          card.description,
+          card.author,
+          card.visibleSignals.subscriberText,
+          card.visibleSignals.badgeText,
+          card.visibleSignals.postCountText,
+          card.visibleSignals.recommendationText,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      )
+      .join("\n---\n"),
+  };
+}
+
+export function isSubstackRenderSnapshotSettled(
+  previous: SubstackRenderSettleSnapshot | null,
+  current: SubstackRenderSettleSnapshot,
+  stablePolls: number,
+): boolean {
+  if (!previous) return false;
+  if (stablePolls < RENDER_SETTLE_STABLE_POLLS) return false;
+  if (current.readyCandidateCount < 1) return false;
+  return (
+    previous.candidateCount === current.candidateCount &&
+    previous.visibleText === current.visibleText
+  );
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function readRenderedHtml(
   webContents: Electron.WebContents,
-): Promise<void> {
-  await webContents.executeJavaScript(
-    `new Promise((resolve) => {
-      const hasCandidate = () => Array.from(document.querySelectorAll("a[href]")).some((anchor) => {
-        try {
-          const url = new URL(anchor.href);
-          return url.protocol === "https:" && url.hostname.endsWith(".substack.com");
-        } catch {
-          return false;
-        }
-      });
-      if (hasCandidate()) {
-        resolve(true);
-        return;
-      }
-      const startedAt = Date.now();
-      const poll = () => {
-        if (hasCandidate() || Date.now() - startedAt >= ${RENDER_SETTLE_TIMEOUT_MS}) {
-          resolve(hasCandidate());
-          return;
-        }
-        setTimeout(poll, ${RENDER_SETTLE_POLL_MS});
-      };
-      setTimeout(poll, ${RENDER_SETTLE_POLL_MS});
-    })`,
+): Promise<string> {
+  const renderedHtml = await webContents.executeJavaScript(
+    "document.documentElement.outerHTML",
     true,
   );
+  return typeof renderedHtml === "string" ? renderedHtml : "";
+}
+
+async function waitForSubstackCardCandidates(
+  webContents: Electron.WebContents,
+  category: string,
+  sourcePageUrl: string,
+): Promise<string> {
+  const startedAt = Date.now();
+  let previous: SubstackRenderSettleSnapshot | null = null;
+  let stablePolls = 0;
+  let latestHtml = "";
+
+  while (Date.now() - startedAt < RENDER_SETTLE_TIMEOUT_MS) {
+    latestHtml = await readRenderedHtml(webContents);
+    const current = snapshotSubstackRenderState(
+      latestHtml,
+      category,
+      sourcePageUrl,
+    );
+    if (
+      previous &&
+      previous.candidateCount === current.candidateCount &&
+      previous.visibleText === current.visibleText
+    ) {
+      stablePolls += 1;
+    } else {
+      stablePolls = 1;
+    }
+
+    if (isSubstackRenderSnapshotSettled(previous, current, stablePolls)) {
+      return latestHtml;
+    }
+
+    previous = current;
+    await wait(RENDER_SETTLE_POLL_MS);
+  }
+
+  return latestHtml || readRenderedHtml(webContents);
 }
 
 export async function discoverSubstackCardsWithBrowser(
@@ -326,12 +409,12 @@ export async function discoverSubstackCardsWithBrowser(
 
   try {
     await win.loadURL(allowedSourceUrl);
-    await waitForSubstackCardCandidates(win.webContents);
-    const renderedHtml = await win.webContents.executeJavaScript(
-      "document.documentElement.outerHTML",
-      true,
+    const renderedHtml = await waitForSubstackCardCandidates(
+      win.webContents,
+      category,
+      allowedSourceUrl,
     );
-    if (typeof renderedHtml !== "string") return [];
+    if (!renderedHtml) return [];
 
     return extractSubstackVisibleCards(
       renderedHtml,
