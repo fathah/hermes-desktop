@@ -65,7 +65,7 @@ export function SubstackRadarPanel(): React.JSX.Element {
   const [isRunning, setIsRunning] = useState(false);
   const [statusUpdating, setStatusUpdating] =
     useState<StatusUpdatingTarget | null>(null);
-  const [isAddingFeeds, setIsAddingFeeds] = useState(false);
+  const [addingFeedsRunId, setAddingFeedsRunId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [addResult, setAddResult] =
     useState<SubstackRadarAddApprovedFeedsResult | null>(null);
@@ -184,19 +184,24 @@ export function SubstackRadarPanel(): React.JSX.Element {
     const api = window.hermesAPI;
     if (!api || !activeRun || approvedCount === 0) return;
 
-    setIsAddingFeeds(true);
+    const runId = activeRun.id;
+    setAddingFeedsRunId(runId);
     setError("");
     setAddResult(null);
     try {
       const result = await api.spsSubstackRadarAddApprovedFeeds({
-        runId: activeRun.id,
+        runId,
       });
-      setAddResult(result);
+      if (activeRunIdRef.current === runId) {
+        setAddResult(result);
+      }
     } catch (err) {
       console.error("[RSS UI] Substack radar add approved feeds failed:", err);
-      setError("Could not validate approved feed URLs.");
+      if (activeRunIdRef.current === runId) {
+        setError("Could not validate approved feed URLs.");
+      }
     } finally {
-      setIsAddingFeeds(false);
+      setAddingFeedsRunId((current) => (current === runId ? null : current));
     }
   };
 
@@ -214,9 +219,11 @@ export function SubstackRadarPanel(): React.JSX.Element {
           type="button"
           className="log-submit-btn save-journal-entry-btn"
           onClick={addApprovedFeeds}
-          disabled={approvedCount === 0 || isAddingFeeds}
+          disabled={approvedCount === 0 || addingFeedsRunId === activeRun?.id}
         >
-          {isAddingFeeds ? "Validating..." : "Preview Approved Feed URLs"}
+          {addingFeedsRunId === activeRun?.id
+            ? "Validating..."
+            : "Preview Approved Feed URLs"}
         </button>
       </div>
 

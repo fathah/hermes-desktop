@@ -226,6 +226,76 @@ describe("SubstackRadarPanel", () => {
     ).toBeInTheDocument();
   });
 
+  it("does not display stale preview results under a newer active run", async () => {
+    const preview = deferred<{
+      added: number;
+      feeds: Array<{
+        candidateId: string;
+        feed: {
+          ok: true;
+          feedUrl: string;
+          siteUrl: string;
+          title: string;
+          description: string;
+          sourceType: "substack";
+        };
+      }>;
+    }>();
+    api.spsSubstackRadarListRuns.mockResolvedValue([
+      {
+        ...makeRun("run-1"),
+        candidates: [{ ...latestRun.candidates[0], status: "approved" }],
+      },
+    ]);
+    api.spsSubstackRadarAddApprovedFeeds.mockReturnValue(preview.promise);
+    api.spsSubstackRadarRun.mockResolvedValue(makeRun("run-2"));
+
+    render(<SubstackRadarPanel />);
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: /preview approved feed urls/i,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(api.spsSubstackRadarAddApprovedFeeds).toHaveBeenCalledWith({
+        runId: "run-1",
+      });
+    });
+
+    fireEvent.change(screen.getByLabelText(/categories or keywords/i), {
+      target: { value: "fresh" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /run discovery/i }));
+
+    expect(await screen.findByText("Fresh Letters")).toBeInTheDocument();
+
+    await act(async () => {
+      preview.resolve({
+        added: 0,
+        feeds: [
+          {
+            candidateId: "candidate-1",
+            feed: {
+              ok: true,
+              feedUrl: "https://stale.substack.com/feed",
+              siteUrl: "https://stale.substack.com",
+              title: "Stale Letters",
+              description: "Old preview result.",
+              sourceType: "substack",
+            },
+          },
+        ],
+      });
+    });
+
+    expect(screen.queryByText(/validated 1 approved feed url/i)).toBeNull();
+    expect(
+      screen.queryByText("https://stale.substack.com/feed"),
+    ).not.toBeInTheDocument();
+  });
+
   it("rejecting a candidate calls the status API and updates the status", async () => {
     api.spsSubstackRadarListRuns.mockResolvedValue([latestRun]);
 
