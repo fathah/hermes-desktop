@@ -72,6 +72,7 @@ import {
   stopExternalContextScans,
 } from "./ipc/external-context";
 import { registerHealthRssIpc } from "./ipc/health-rss";
+import { registerSubstackRadarIpc } from "./ipc/substack-radar";
 import { closeExternalContextDb } from "./external-context/index";
 import { startScheduler, stopScheduler } from "./scheduler";
 import {
@@ -488,6 +489,7 @@ function setupIPC(): void {
   registerFederatedSearchIpc();
   scheduleExternalContextScans(() => mainWindow);
   registerHealthRssIpc();
+  registerSubstackRadarIpc();
 
   ipcMain.handle(
     "sps-trigger-screencapture",
