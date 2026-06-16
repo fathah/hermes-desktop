@@ -34,9 +34,11 @@ export function buildSubstackRadarCandidateId(publicationUrl: string): string {
 
 function parseVisibleCount(text: string | undefined): number {
   if (!text) return 0;
-  const match = text.match(/([\d.]+)\s*([kKmM])?/);
+  const match = text.match(
+    /(\d+(?:[,\s]\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)\s*([kKmM])?/,
+  );
   if (!match) return 0;
-  const value = Number(match[1]);
+  const value = Number(match[1].replace(/[,\s]/g, ""));
   if (!Number.isFinite(value)) return 0;
   const suffix = match[2]?.toLowerCase();
   if (suffix === "m") return value * 1_000_000;

@@ -41,4 +41,23 @@ describe("scoreSubstackRadarCandidate", () => {
       }),
     ).toBe(92);
   });
+
+  it("scores grouped subscriber totals as 10k+ visible counts", () => {
+    const input = {
+      title: "Agent Notes",
+      description: "Deep writing about AI agents.",
+      visibleSignals: {
+        subscriberText: "12,345 subscribers",
+      },
+    };
+
+    expect(scoreSubstackRadarCandidate(input)).toBe(
+      scoreSubstackRadarCandidate({
+        ...input,
+        visibleSignals: {
+          subscriberText: "12K subscribers",
+        },
+      }),
+    );
+  });
 });
