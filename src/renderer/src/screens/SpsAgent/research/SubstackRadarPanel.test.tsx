@@ -247,8 +247,9 @@ describe("SubstackRadarPanel", () => {
         candidates: [{ ...latestRun.candidates[0], status: "approved" }],
       },
     ]);
+    const discovery = deferred<typeof latestRun>();
     api.spsSubstackRadarAddApprovedFeeds.mockReturnValue(preview.promise);
-    api.spsSubstackRadarRun.mockResolvedValue(makeRun("run-2"));
+    api.spsSubstackRadarRun.mockReturnValue(discovery.promise);
 
     render(<SubstackRadarPanel />);
 
@@ -269,9 +270,9 @@ describe("SubstackRadarPanel", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /run discovery/i }));
 
-    expect(await screen.findByText("Fresh Letters")).toBeInTheDocument();
-
     await act(async () => {
+      discovery.resolve(makeRun("run-2"));
+      await Promise.resolve();
       preview.resolve({
         added: 0,
         feeds: [
@@ -290,6 +291,7 @@ describe("SubstackRadarPanel", () => {
       });
     });
 
+    expect(await screen.findByText("Fresh Letters")).toBeInTheDocument();
     expect(screen.queryByText(/validated 1 approved feed url/i)).toBeNull();
     expect(
       screen.queryByText("https://stale.substack.com/feed"),

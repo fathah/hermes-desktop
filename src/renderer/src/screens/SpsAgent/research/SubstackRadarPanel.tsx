@@ -72,6 +72,11 @@ export function SubstackRadarPanel(): React.JSX.Element {
   const hasUserStartedRunRef = useRef(false);
   const activeRunIdRef = useRef<string | null>(null);
 
+  const commitActiveRun = useCallback((run: SubstackRadarRun | null): void => {
+    activeRunIdRef.current = run?.id ?? null;
+    setActiveRun(run);
+  }, []);
+
   const categories = useMemo(
     () => parseCategories(categoryInput),
     [categoryInput],
@@ -79,10 +84,6 @@ export function SubstackRadarPanel(): React.JSX.Element {
   const approvedCount =
     activeRun?.candidates.filter((candidate) => candidate.status === "approved")
       .length ?? 0;
-
-  useEffect(() => {
-    activeRunIdRef.current = activeRun?.id ?? null;
-  }, [activeRun?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -99,7 +100,7 @@ export function SubstackRadarPanel(): React.JSX.Element {
       try {
         const runs = await api.spsSubstackRadarListRuns();
         if (!cancelled && !hasUserStartedRunRef.current) {
-          setActiveRun(mostRecentRun(runs));
+          commitActiveRun(mostRecentRun(runs));
         }
       } catch (err) {
         console.error("[RSS UI] Substack radar run load failed:", err);
@@ -117,7 +118,7 @@ export function SubstackRadarPanel(): React.JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [commitActiveRun]);
 
   const runDiscovery = useCallback(async (): Promise<void> => {
     const api = window.hermesAPI;
@@ -129,14 +130,14 @@ export function SubstackRadarPanel(): React.JSX.Element {
     setAddResult(null);
     try {
       const run = await api.spsSubstackRadarRun({ categories });
-      setActiveRun(run);
+      commitActiveRun(run);
     } catch (err) {
       console.error("[RSS UI] Substack radar run failed:", err);
       setError("Could not run Substack discovery.");
     } finally {
       setIsRunning(false);
     }
-  }, [categories]);
+  }, [categories, commitActiveRun]);
 
   const setCandidateStatus = async (
     candidateId: string,
