@@ -9,7 +9,10 @@ import {
 } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DashboardRpcEvent } from "../dashboardGatewayClient";
-import { useDashboardChatTransport } from "./useDashboardChatTransport";
+import {
+  dashboardSeedMessagesFromTranscript,
+  useDashboardChatTransport,
+} from "./useDashboardChatTransport";
 import type { ActiveTurn, ChatMessage } from "../types";
 
 const dashboardMock = vi.hoisted(() => ({
@@ -32,7 +35,9 @@ vi.mock("../dashboardGatewayClient", () => ({
     connected = true;
     request = dashboardMock.request;
 
-    constructor(options: { onEvent?: (event: DashboardRpcEvent) => void } = {}) {
+    constructor(
+      options: { onEvent?: (event: DashboardRpcEvent) => void } = {},
+    ) {
       dashboardMock.onEvent = options.onEvent ?? null;
       dashboardMock.instances.push(this);
     }
@@ -341,5 +346,25 @@ describe("useDashboardChatTransport recovery", () => {
     expect(requests.map((request) => request.method)).toContain(
       "prompt.submit",
     );
+  });
+
+  it("keeps pending assistant text when recreating context from the visible transcript", () => {
+    expect(
+      dashboardSeedMessagesFromTranscript([
+        { id: "user-1", role: "user", content: "original prompt" },
+        {
+          id: "agent-1",
+          role: "agent",
+          content: "partial work that streamed before reconnect",
+          pending: true,
+        },
+      ]),
+    ).toEqual([
+      { role: "user", content: "original prompt" },
+      {
+        role: "assistant",
+        content: "partial work that streamed before reconnect",
+      },
+    ]);
   });
 });
