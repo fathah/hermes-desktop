@@ -33,18 +33,28 @@ const sshConfig: SshConfig = {
 
 function runWithHermesShim(command: string): Buffer {
   const home = mkdtempSync(join(tmpdir(), "hermes-ssh-cmd-home-"));
-  const bin = join(home, "bin");
-  mkdirSync(bin, { recursive: true });
-  const hermes = join(bin, "hermes");
+  // Install the shim at a path buildRemoteHermesCmd PROBES BY ABSOLUTE PATH
+  // ($HOME/.local/bin/hermes), not just on PATH. The command runs under
+  // `bash -lc` (a login shell), which re-sources /etc/profile and RESETS PATH —
+  // so a shim reachable only via a prepended PATH entry is dropped, and the
+  // final `command -v hermes` fallback then finds either nothing (clean CI
+  // container → the test fails) or a real host hermes (dev box → the test
+  // passes for the wrong reason). Placing the shim at the probed absolute
+  // location makes the `[ -x $HOME/.local/bin/hermes ]` branch fire first,
+  // independent of login-shell PATH behavior and of whether a real hermes
+  // exists on the host. PATH is still prepended as belt-and-suspenders.
+  const localBin = join(home, ".local", "bin");
+  mkdirSync(localBin, { recursive: true });
+  const hermes = join(localBin, "hermes");
   writeFileSync(
     hermes,
     [
       "#!/usr/bin/env bash",
       'if [ "$1" = "doctor" ]; then',
-      '  printf "doctor stderr preserved\\n" >&2',
+      '  printf "doctor stderr preserved\\\\n" >&2',
       "  exit 0",
       "fi",
-      'printf "%s\\0" "$@"',
+      'printf "%s\\\\0" "$@"',
       "",
     ].join("\n"),
   );
@@ -53,7 +63,7 @@ function runWithHermesShim(command: string): Buffer {
     env: {
       ...process.env,
       HOME: home,
-      PATH: `${bin}:${process.env.PATH || ""}`,
+      PATH: `${localBin}:${process.env.PATH || ""}`,
     },
   });
 }
