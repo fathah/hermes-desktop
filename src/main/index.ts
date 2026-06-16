@@ -1123,7 +1123,9 @@ function setupIPC(): void {
       if (!gate.canWrite) return { ok: false, error: "write-not-permitted" };
       const { commandWriteSecret } =
         await import("./secrets/commandProviderWrite");
-      const result = commandWriteSecret(key, value, profile);
+      const result = await commandWriteSecret(key, value, profile).catch(
+        () => ({ ok: false as const, error: "write-failed" }),
+      );
       if (result.ok) invalidateSecretsCache();
       return result;
     },
@@ -1137,7 +1139,10 @@ function setupIPC(): void {
       if (!gate.canDelete) return { ok: false, error: "delete-not-permitted" };
       const { commandDeleteSecret } =
         await import("./secrets/commandProviderWrite");
-      const result = commandDeleteSecret(key, profile);
+      const result = await commandDeleteSecret(key, profile).catch(() => ({
+        ok: false as const,
+        error: "delete-failed",
+      }));
       if (result.ok) invalidateSecretsCache();
       return result;
     },
