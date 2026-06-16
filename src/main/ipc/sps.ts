@@ -32,10 +32,7 @@ import {
   applyMarkdownImportPlan,
   createMarkdownImportPlan,
 } from "../sps-import";
-import {
-  updatePageProperties,
-  type SpsPropertyPatch,
-} from "../sps-properties";
+import { updatePageProperties, type SpsPropertyPatch } from "../sps-properties";
 import { runTelosAudit, runPipingPattern } from "../telos-auditor";
 import {
   oaSearchWorks,
@@ -77,6 +74,19 @@ import {
 import { buildVaultHealthReport } from "../vault-health";
 import { buildContextPack } from "../context-packs";
 import { createBaseProposalInput } from "../base-workbenches";
+import {
+  createAssistantRecipe,
+  deleteAssistantRecipe,
+  listAssistantRecipeRuns,
+  listAssistantRecipes,
+  runAssistantRecipe,
+  saveAssistantRecipeRun,
+  updateAssistantRecipe,
+} from "../assistant-recipes";
+import type {
+  AssistantRecipePatch,
+  CreateAssistantRecipeInput,
+} from "../../shared/assistant-recipes";
 
 const importPlans = new Map<string, SpsImportPlan>();
 
@@ -159,8 +169,7 @@ export function registerSpsIpc(): void {
   );
   safeHandle(
     "sps-dismiss-vault-proposal",
-    (_event, id: string, profile?: string) =>
-      dismissVaultProposal(id, profile),
+    (_event, id: string, profile?: string) => dismissVaultProposal(id, profile),
   );
   safeHandle(
     "sps-build-context-pack",
@@ -171,6 +180,39 @@ export function registerSpsIpc(): void {
     "sps-create-base-proposal",
     (_event, input: SpsBaseProposalInput, profile?: string) =>
       createVaultProposal(createBaseProposalInput(input), profile),
+  );
+  safeHandle("sps-list-assistant-recipes", (_event, profile?: string) =>
+    listAssistantRecipes(profile),
+  );
+  safeHandle(
+    "sps-create-assistant-recipe",
+    (_event, input: CreateAssistantRecipeInput, profile?: string) =>
+      createAssistantRecipe(input, profile),
+  );
+  safeHandle(
+    "sps-update-assistant-recipe",
+    (_event, id: string, patch: AssistantRecipePatch, profile?: string) =>
+      updateAssistantRecipe(id, patch, profile),
+  );
+  safeHandle(
+    "sps-delete-assistant-recipe",
+    (_event, id: string, profile?: string) =>
+      deleteAssistantRecipe(id, profile),
+  );
+  safeHandle(
+    "sps-run-assistant-recipe",
+    (_event, id: string, userInput?: string, profile?: string) =>
+      runAssistantRecipe(id, userInput, profile),
+  );
+  safeHandle(
+    "sps-list-assistant-recipe-runs",
+    (_event, recipeId?: string, profile?: string) =>
+      listAssistantRecipeRuns(recipeId, profile),
+  );
+  safeHandle(
+    "sps-save-assistant-recipe-run",
+    (_event, runId: string, profile?: string) =>
+      saveAssistantRecipeRun(runId, profile),
   );
   safeHandle("sps-load", (_event, profile?: string) => spsLoad(profile));
   safeHandle(

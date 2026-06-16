@@ -51,6 +51,7 @@ import { resolveSpsVaultDir } from "./sps-storage";
 import { resolveAssetPath, writeAsset } from "./sps-assets";
 import { startEquityAlertWatcher } from "./equity-alerts";
 import { startScheduledResearch } from "./scheduled-research";
+import { startAssistantRecipeScheduler } from "./assistant-recipes";
 import { updaterLogger } from "./updater-log";
 import { getConnectionConfig } from "./config";
 import {
@@ -343,6 +344,7 @@ function createWindow(): void {
     void startEquityAlertWatcher(() => mainWindow);
     // Scheduled research: catch up on launch, then tick on a timer.
     startScheduledResearch(() => mainWindow);
+    startAssistantRecipeScheduler(() => mainWindow);
   });
 
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
@@ -499,10 +501,7 @@ function setupIPC(): void {
       }
       await new Promise((resolve) => setTimeout(resolve, 150));
 
-      const tempPath = join(
-        tmpdir(),
-        `hermes-capture-${Date.now()}.png`,
-      );
+      const tempPath = join(tmpdir(), `hermes-capture-${Date.now()}.png`);
       try {
         await execAsync(`screencapture -i "${tempPath}"`);
         if (existsSync(tempPath)) {

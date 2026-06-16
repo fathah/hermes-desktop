@@ -71,6 +71,15 @@ import type {
   ScheduleInput,
 } from "../shared/scheduledResearch";
 import type {
+  AssistantRecipe,
+  AssistantRecipePatch,
+  AssistantRecipeResult,
+  AssistantRecipeRunRecord,
+  AssistantRecipeRunResult,
+  AssistantRecipeSaveRunResult,
+  CreateAssistantRecipeInput,
+} from "../shared/assistant-recipes";
+import type {
   NotebookLmMcpStatus,
   SrPendingUpdate,
   SrPatch,
@@ -1316,6 +1325,33 @@ interface HermesAPI {
     input: SpsBaseProposalInput,
     profile?: string,
   ) => Promise<VaultProposal>;
+  spsListAssistantRecipes: (profile?: string) => Promise<AssistantRecipe[]>;
+  spsCreateAssistantRecipe: (
+    input: CreateAssistantRecipeInput,
+    profile?: string,
+  ) => Promise<AssistantRecipeResult>;
+  spsUpdateAssistantRecipe: (
+    id: string,
+    patch: AssistantRecipePatch,
+    profile?: string,
+  ) => Promise<AssistantRecipeResult>;
+  spsDeleteAssistantRecipe: (
+    id: string,
+    profile?: string,
+  ) => Promise<AssistantRecipeResult>;
+  spsRunAssistantRecipe: (
+    id: string,
+    userInput?: string,
+    profile?: string,
+  ) => Promise<AssistantRecipeRunResult>;
+  spsListAssistantRecipeRuns: (
+    recipeId?: string,
+    profile?: string,
+  ) => Promise<AssistantRecipeRunRecord[]>;
+  spsSaveAssistantRecipeRun: (
+    runId: string,
+    profile?: string,
+  ) => Promise<AssistantRecipeSaveRunResult>;
   spsLoad: (profile?: string) => Promise<unknown | null>;
   spsSave: (
     ws: unknown,

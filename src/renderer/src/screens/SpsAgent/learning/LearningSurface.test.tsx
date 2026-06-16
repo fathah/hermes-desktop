@@ -5,6 +5,13 @@ vi.mock("../you/MemoryTimeline", () => ({
   MemoryTimeline: () => <div>Learned memory timeline</div>,
 }));
 
+const { setSurface } = vi.hoisted(() => ({ setSurface: vi.fn() }));
+
+vi.mock("../store", () => ({
+  useStore: (selector: (state: { setSurface: typeof setSurface }) => unknown) =>
+    selector({ setSurface }),
+}));
+
 import { LearningSurface } from "./LearningSurface";
 
 const api = {
@@ -30,6 +37,14 @@ const api = {
   restoreArchivedSkill: vi.fn(),
   pinSkill: vi.fn(),
   unpinSkill: vi.fn(),
+  spsListAssistantRecipes: vi.fn(),
+  spsCreateAssistantRecipe: vi.fn(),
+  spsUpdateAssistantRecipe: vi.fn(),
+  spsDeleteAssistantRecipe: vi.fn(),
+  spsRunAssistantRecipe: vi.fn(),
+  spsListAssistantRecipeRuns: vi.fn(),
+  spsSaveAssistantRecipeRun: vi.fn(),
+  spsCreateVaultProposal: vi.fn(),
 };
 
 function installApi(): void {
@@ -104,6 +119,80 @@ beforeEach(() => {
   api.runCuratorNow.mockResolvedValue({ success: true, output: "ran" });
   api.pauseCurator.mockResolvedValue({ success: true, output: "paused" });
   api.resumeCurator.mockResolvedValue({ success: true, output: "resumed" });
+  api.spsListAssistantRecipes.mockResolvedValue([
+    {
+      id: "r1",
+      name: "Research brief",
+      kind: "research-brief",
+      description: "Research a topic.",
+      job: "Research the topic.",
+      inputs: "A topic.",
+      output: "A briefing.",
+      allowedActions: ["read_workspace", "search_web", "draft_content"],
+      reviewMode: "review-first",
+      skillName: "assistant-research-brief",
+      skillPath: "/s/assistant-research-brief",
+      enabled: true,
+      createdAt: 1,
+      updatedAt: 1,
+    },
+  ]);
+  api.spsListAssistantRecipeRuns.mockResolvedValue([
+    {
+      id: "run1",
+      recipeId: "r1",
+      recipeName: "Research brief",
+      input: "Focus on risks.",
+      resultText: "Brief finished.",
+      status: "success",
+      createdAt: 1,
+      durationMs: 25,
+      savedProposalId: "vp1",
+      savedPageId: "assistant-results/research-brief-19700101000000",
+      trigger: "manual",
+    },
+  ]);
+  api.spsCreateAssistantRecipe.mockResolvedValue({
+    ok: true,
+    recipe: {
+      id: "r2",
+      name: "Article Agent",
+      kind: "article-writer",
+      description: "",
+      job: "Draft articles.",
+      inputs: "Topic.",
+      output: "Article.",
+      allowedActions: ["read_workspace", "draft_content"],
+      reviewMode: "review-first",
+      skillName: "assistant-article-agent",
+      enabled: true,
+      createdAt: 1,
+      updatedAt: 1,
+    },
+  });
+  api.spsUpdateAssistantRecipe.mockResolvedValue({ ok: true });
+  api.spsDeleteAssistantRecipe.mockResolvedValue({ ok: true });
+  api.spsRunAssistantRecipe.mockResolvedValue({
+    ok: true,
+    run: {
+      id: "run2",
+      recipeId: "r1",
+      recipeName: "Research brief",
+      input: "",
+      resultText: "Brief finished.",
+      status: "success",
+      createdAt: 2,
+      durationMs: 30,
+      trigger: "manual",
+    },
+    result: { kind: "chat", reply: ["Brief finished."] },
+  });
+  api.spsSaveAssistantRecipeRun.mockResolvedValue({
+    ok: true,
+    proposalId: "vp2",
+    pageId: "assistant-results/research-brief-19700101000002",
+  });
+  api.spsCreateVaultProposal.mockResolvedValue({ id: "vp1" });
 });
 
 afterEach(() => {
@@ -115,9 +204,13 @@ describe("LearningSurface", () => {
     render(<LearningSurface profile="default" />);
 
     expect(await screen.findByText("Learn This")).toBeInTheDocument();
+    expect(screen.getByText("Assistants")).toBeInTheDocument();
     expect(screen.getByText("Memories")).toBeInTheDocument();
     expect(screen.getByText("Skills")).toBeInTheDocument();
     expect(screen.getByText("Curator")).toBeInTheDocument();
+    expect(await screen.findByText("Build an Assistant")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Memories"));
     expect(
       await screen.findByText("Prefers terse answers."),
     ).toBeInTheDocument();
@@ -126,6 +219,82 @@ describe("LearningSurface", () => {
     await waitFor(() =>
       expect(api.acceptLearningProposal).toHaveBeenCalledWith("m1", "default"),
     );
+  });
+
+  it("creates a saved assistant recipe from the form", async () => {
+    render(<LearningSurface profile="default" />);
+
+    fireEvent.change(await screen.findByLabelText("Assistant template"), {
+      target: { value: "article-writer" },
+    });
+    fireEvent.change(screen.getByLabelText("Assistant name"), {
+      target: { value: "Article Agent" },
+    });
+    fireEvent.change(screen.getByLabelText("Audience"), {
+      target: { value: "Founders" },
+    });
+    fireEvent.change(screen.getByLabelText("Tone"), {
+      target: { value: "Clear" },
+    });
+    fireEvent.change(screen.getByLabelText("Length"), {
+      target: { value: "Short post" },
+    });
+    fireEvent.click(screen.getByText("Create assistant"));
+
+    await waitFor(() =>
+      expect(api.spsCreateAssistantRecipe).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "Article Agent",
+          kind: "article-writer",
+          job: expect.stringContaining("Audience: Founders"),
+          inputs: expect.stringContaining("Tone: Clear"),
+          output: expect.stringContaining("Length: Short post"),
+          reviewMode: "review-first",
+        }),
+        "default",
+      ),
+    );
+  });
+
+  it("runs a saved assistant recipe", async () => {
+    render(<LearningSurface profile="default" />);
+
+    fireEvent.click(await screen.findByText("Run"));
+
+    await waitFor(() =>
+      expect(api.spsRunAssistantRecipe).toHaveBeenCalledWith(
+        "r1",
+        "",
+        "default",
+      ),
+    );
+    expect(await screen.findByText("Brief finished.")).toBeInTheDocument();
+  });
+
+  it("queues the latest assistant result for vault review", async () => {
+    render(<LearningSurface profile="default" />);
+
+    fireEvent.change(await screen.findByLabelText("Assistant run input"), {
+      target: { value: "Focus on risks." },
+    });
+    fireEvent.click(screen.getByText("Run"));
+    fireEvent.click(await screen.findByText("Send to review"));
+
+    await waitFor(() =>
+      expect(api.spsSaveAssistantRecipeRun).toHaveBeenCalledWith(
+        "run2",
+        "default",
+      ),
+    );
+    expect(setSurface).toHaveBeenCalledWith("review");
+  });
+
+  it("shows compact assistant run history", async () => {
+    render(<LearningSurface profile="default" />);
+
+    expect(await screen.findByText(/saved/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText("View past runs"));
+    expect(screen.getAllByText(/saved/).length).toBeGreaterThan(1);
   });
 
   it("creates a pending skill proposal from a repo draft", async () => {

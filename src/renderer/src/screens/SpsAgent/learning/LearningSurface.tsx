@@ -3,9 +3,24 @@ import type {
   LearningProposal,
   SkillUsageEntry,
 } from "../../../../../shared/learning";
+import {
+  ASSISTANT_RECIPE_TEMPLATES,
+  type AssistantRecipe,
+  type AssistantRecipeAction,
+  type AssistantRecipeKind,
+  type AssistantRecipeReviewMode,
+  type AssistantRecipeRunRecord,
+  type AssistantRecipeScheduleCadence,
+} from "../../../../../shared/assistant-recipes";
 import { MemoryTimeline } from "../you/MemoryTimeline";
+import { useStore } from "../store";
+import {
+  AssistantRecipesTab,
+  compileTemplateRecipe,
+  defaultFieldValues,
+} from "./AssistantRecipesTab";
 
-type Tab = "memories" | "skills" | "curator";
+type Tab = "recipes" | "memories" | "skills" | "curator";
 
 interface SkillRow {
   name: string;
@@ -27,7 +42,11 @@ export function LearningSurface({
 }: {
   profile?: string;
 }): React.JSX.Element {
-  const [tab, setTab] = useState<Tab>("memories");
+  const defaultRecipe = ASSISTANT_RECIPE_TEMPLATES[0];
+  const setSurface = useStore((s) => s.setSurface);
+  const [tab, setTab] = useState<Tab>("recipes");
+  const [recipes, setRecipes] = useState<AssistantRecipe[]>([]);
+  const [recipeRuns, setRecipeRuns] = useState<AssistantRecipeRunRecord[]>([]);
   const [proposals, setProposals] = useState<LearningProposal[]>([]);
   const [installed, setInstalled] = useState<SkillRow[]>([]);
   const [disabled, setDisabled] = useState<SkillRow[]>([]);
@@ -47,6 +66,28 @@ export function LearningSurface({
   const [manualSkill, setManualSkill] = useState("");
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState("");
+  const [recipeKind, setRecipeKind] = useState<AssistantRecipeKind>(
+    defaultRecipe.kind,
+  );
+  const [recipeName, setRecipeName] = useState(defaultRecipe.title);
+  const [recipeDescription, setRecipeDescription] = useState(
+    defaultRecipe.description,
+  );
+  const [recipeFieldValues, setRecipeFieldValues] = useState<
+    Record<string, string>
+  >(defaultFieldValues(defaultRecipe));
+  const [recipeActions, setRecipeActions] = useState<AssistantRecipeAction[]>(
+    defaultRecipe.defaultActions,
+  );
+  const [recipeReviewMode, setRecipeReviewMode] =
+    useState<AssistantRecipeReviewMode>("review-first");
+  const [recipeScheduleEnabled, setRecipeScheduleEnabled] = useState(false);
+  const [recipeScheduleCadence, setRecipeScheduleCadence] =
+    useState<AssistantRecipeScheduleCadence>("daily");
+  const [recipeScheduleHour, setRecipeScheduleHour] = useState(8);
+  const [recipeRunInput, setRecipeRunInput] = useState("");
+  const [recipeRunResult, setRecipeRunResult] = useState("");
+  const [lastRecipeRunId, setLastRecipeRunId] = useState("");
 
   const pendingMemories = proposals.filter(
     (p) => p.kind === "memory" && p.status === "pending",
@@ -57,6 +98,16 @@ export function LearningSurface({
 
   const loadProposals = useCallback(async () => {
     setProposals(await window.hermesAPI.listLearningProposals(profile));
+  }, [profile]);
+
+  const loadRecipes = useCallback(async () => {
+    setRecipes(await window.hermesAPI.spsListAssistantRecipes(profile));
+  }, [profile]);
+
+  const loadRecipeRuns = useCallback(async () => {
+    setRecipeRuns(
+      await window.hermesAPI.spsListAssistantRecipeRuns(undefined, profile),
+    );
   }, [profile]);
 
   const loadSkills = useCallback(async () => {
@@ -82,10 +133,12 @@ export function LearningSurface({
   }, [profile]);
 
   useEffect(() => {
+    void loadRecipes();
+    void loadRecipeRuns();
     void loadProposals();
     void loadSkills();
     void loadCurator();
-  }, [loadProposals, loadSkills, loadCurator]);
+  }, [loadRecipes, loadRecipeRuns, loadProposals, loadSkills, loadCurator]);
 
   async function run<T>(
     label: string,
@@ -153,6 +206,142 @@ export function LearningSurface({
     } else if (res) {
       setNotice(res.error || "Could not create skill.");
     }
+  }
+
+  function selectRecipeTemplate(kind: AssistantRecipeKind): void {
+    const template =
+      ASSISTANT_RECIPE_TEMPLATES.find((item) => item.kind === kind) ||
+      ASSISTANT_RECIPE_TEMPLATES[0];
+    setRecipeKind(template.kind);
+    setRecipeName(template.title);
+    setRecipeDescription(template.description);
+    setRecipeFieldValues(defaultFieldValues(template));
+    setRecipeActions(template.defaultActions);
+    setRecipeReviewMode("review-first");
+    setRecipeScheduleEnabled(false);
+  }
+
+  function setRecipeFieldValue(key: string, value: string): void {
+    setRecipeFieldValues((current) => ({ ...current, [key]: value }));
+  }
+
+  function toggleRecipeAction(action: AssistantRecipeAction): void {
+    setRecipeActions((current) =>
+      current.includes(action)
+        ? current.filter((item) => item !== action)
+        : [...current, action],
+    );
+    if (
+      action === "send_messages" ||
+      action === "process_files" ||
+      action === "schedule_runs"
+    ) {
+      setRecipeReviewMode("review-first");
+    }
+    if (action === "send_messages") {
+      setRecipeScheduleEnabled(false);
+    }
+  }
+
+  async function createRecipe(): Promise<void> {
+    const name = recipeName.trim();
+    const template =
+      ASSISTANT_RECIPE_TEMPLATES.find((item) => item.kind === recipeKind) ||
+      ASSISTANT_RECIPE_TEMPLATES[0];
+    const { job, inputs, output } = compileTemplateRecipe(
+      template,
+      recipeFieldValues,
+    );
+    if (!name || !job || !inputs || !output) return;
+    const res = await run("create-recipe", () =>
+      window.hermesAPI.spsCreateAssistantRecipe(
+        {
+          name,
+          kind: recipeKind,
+          description: recipeDescription,
+          job,
+          inputs,
+          output,
+          allowedActions: recipeActions,
+          reviewMode: recipeReviewMode,
+          schedule: recipeScheduleEnabled
+            ? {
+                enabled: true,
+                cadence: recipeScheduleCadence,
+                hour: recipeScheduleHour,
+              }
+            : undefined,
+        },
+        profile,
+      ),
+    );
+    if (res?.ok) {
+      setNotice("Assistant created. It is ready to run from this tab.");
+      await loadRecipes();
+      await loadRecipeRuns();
+      await loadSkills();
+    } else if (res) {
+      setNotice(res.error || "Could not create assistant.");
+    }
+  }
+
+  async function runRecipe(recipe: AssistantRecipe): Promise<void> {
+    const res = await run(`run-recipe-${recipe.id}`, () =>
+      window.hermesAPI.spsRunAssistantRecipe(
+        recipe.id,
+        recipeRunInput,
+        profile,
+      ),
+    );
+    if (res?.ok) {
+      const result = res.run?.resultText || "";
+      setRecipeRunResult(result);
+      setLastRecipeRunId(res.run?.id || "");
+      setNotice(`${recipe.name} finished. Review the result below.`);
+      await loadRecipes();
+      await loadRecipeRuns();
+    } else if (res) {
+      setNotice(res.error || "Could not run assistant.");
+      if (res.run) await loadRecipeRuns();
+    }
+  }
+
+  async function saveRecipeResult(): Promise<void> {
+    if (!lastRecipeRunId) return;
+    const saved = await run("save-recipe-result", () =>
+      window.hermesAPI.spsSaveAssistantRecipeRun(lastRecipeRunId, profile),
+    );
+    if (saved?.ok) {
+      setNotice("Queued assistant result for review.");
+      await loadRecipeRuns();
+      setSurface("review");
+    } else if (saved) {
+      setNotice(saved.error || "Could not queue assistant result.");
+    }
+  }
+
+  async function toggleRecipe(recipe: AssistantRecipe): Promise<void> {
+    const res = await run(`toggle-recipe-${recipe.id}`, () =>
+      window.hermesAPI.spsUpdateAssistantRecipe(
+        recipe.id,
+        { enabled: !recipe.enabled },
+        profile,
+      ),
+    );
+    if (res?.ok) {
+      await loadRecipes();
+      await loadRecipeRuns();
+    } else if (res) setNotice(res.error || "Could not update assistant.");
+  }
+
+  async function deleteRecipe(recipe: AssistantRecipe): Promise<void> {
+    const res = await run(`delete-recipe-${recipe.id}`, () =>
+      window.hermesAPI.spsDeleteAssistantRecipe(recipe.id, profile),
+    );
+    if (res?.ok) {
+      await loadRecipes();
+      await loadRecipeRuns();
+    } else if (res) setNotice(res.error || "Could not delete assistant.");
   }
 
   async function generateDraft(): Promise<void> {
@@ -244,18 +433,20 @@ export function LearningSurface({
       </header>
 
       <div className="settings-subnav">
-        {(["memories", "skills", "curator"] as const).map((id) => (
+        {(["recipes", "memories", "skills", "curator"] as const).map((id) => (
           <button
             key={id}
             type="button"
             className={`settings-subnav-tab ${tab === id ? "active" : ""}`}
             onClick={() => setTab(id)}
           >
-            {id === "memories"
-              ? "Memories"
-              : id === "skills"
-                ? "Skills"
-                : "Curator"}
+            {id === "recipes"
+              ? "Assistants"
+              : id === "memories"
+                ? "Memories"
+                : id === "skills"
+                  ? "Skills"
+                  : "Curator"}
           </button>
         ))}
       </div>
@@ -264,6 +455,40 @@ export function LearningSurface({
         <div className="memory-error learning-surface-notice">{notice}</div>
       )}
 
+      {tab === "recipes" && (
+        <AssistantRecipesTab
+          recipes={recipes}
+          runs={recipeRuns}
+          recipeKind={recipeKind}
+          recipeName={recipeName}
+          setRecipeName={setRecipeName}
+          recipeDescription={recipeDescription}
+          setRecipeDescription={setRecipeDescription}
+          recipeFieldValues={recipeFieldValues}
+          setRecipeFieldValue={setRecipeFieldValue}
+          recipeActions={recipeActions}
+          recipeReviewMode={recipeReviewMode}
+          setRecipeReviewMode={setRecipeReviewMode}
+          recipeScheduleEnabled={recipeScheduleEnabled}
+          setRecipeScheduleEnabled={setRecipeScheduleEnabled}
+          recipeScheduleCadence={recipeScheduleCadence}
+          setRecipeScheduleCadence={setRecipeScheduleCadence}
+          recipeScheduleHour={recipeScheduleHour}
+          setRecipeScheduleHour={setRecipeScheduleHour}
+          recipeRunInput={recipeRunInput}
+          setRecipeRunInput={setRecipeRunInput}
+          recipeRunResult={recipeRunResult}
+          canSaveRecipeResult={Boolean(lastRecipeRunId)}
+          selectRecipeTemplate={selectRecipeTemplate}
+          toggleRecipeAction={toggleRecipeAction}
+          createRecipe={createRecipe}
+          runRecipe={runRecipe}
+          saveRecipeResult={saveRecipeResult}
+          toggleRecipe={toggleRecipe}
+          deleteRecipe={deleteRecipe}
+          busy={busy}
+        />
+      )}
       {tab === "memories" && (
         <MemoriesTab
           pending={pendingMemories}

@@ -10,6 +10,15 @@ import type {
   ScheduleInput,
 } from "../../shared/scheduledResearch";
 import type {
+  AssistantRecipe,
+  AssistantRecipePatch,
+  AssistantRecipeResult,
+  AssistantRecipeRunRecord,
+  AssistantRecipeRunResult,
+  AssistantRecipeSaveRunResult,
+  CreateAssistantRecipeInput,
+} from "../../shared/assistant-recipes";
+import type {
   SpsCaptureInput,
   SpsBaseViewConfig,
   SpsBaseProposalInput,
@@ -175,9 +184,7 @@ export const spsBridge = {
     };
   }> =>
     ipcRenderer.invoke("sps-file-research", topic, researchedMarkdown, profile),
-  spsNotebookLmEnsureMcp: (
-    profile?: string,
-  ): Promise<NotebookLmMcpStatus> =>
+  spsNotebookLmEnsureMcp: (profile?: string): Promise<NotebookLmMcpStatus> =>
     ipcRenderer.invoke("sps-notebooklm-ensure-mcp", profile),
   spsNotebookLmStatus: (profile?: string): Promise<NotebookLmMcpStatus> =>
     ipcRenderer.invoke("sps-notebooklm-status", profile),
@@ -246,6 +253,40 @@ export const spsBridge = {
     profile?: string,
   ): Promise<VaultProposal> =>
     ipcRenderer.invoke("sps-create-base-proposal", input, profile),
+  spsListAssistantRecipes: (profile?: string): Promise<AssistantRecipe[]> =>
+    ipcRenderer.invoke("sps-list-assistant-recipes", profile),
+  spsCreateAssistantRecipe: (
+    input: CreateAssistantRecipeInput,
+    profile?: string,
+  ): Promise<AssistantRecipeResult> =>
+    ipcRenderer.invoke("sps-create-assistant-recipe", input, profile),
+  spsUpdateAssistantRecipe: (
+    id: string,
+    patch: AssistantRecipePatch,
+    profile?: string,
+  ): Promise<AssistantRecipeResult> =>
+    ipcRenderer.invoke("sps-update-assistant-recipe", id, patch, profile),
+  spsDeleteAssistantRecipe: (
+    id: string,
+    profile?: string,
+  ): Promise<AssistantRecipeResult> =>
+    ipcRenderer.invoke("sps-delete-assistant-recipe", id, profile),
+  spsRunAssistantRecipe: (
+    id: string,
+    userInput?: string,
+    profile?: string,
+  ): Promise<AssistantRecipeRunResult> =>
+    ipcRenderer.invoke("sps-run-assistant-recipe", id, userInput, profile),
+  spsListAssistantRecipeRuns: (
+    recipeId?: string,
+    profile?: string,
+  ): Promise<AssistantRecipeRunRecord[]> =>
+    ipcRenderer.invoke("sps-list-assistant-recipe-runs", recipeId, profile),
+  spsSaveAssistantRecipeRun: (
+    runId: string,
+    profile?: string,
+  ): Promise<AssistantRecipeSaveRunResult> =>
+    ipcRenderer.invoke("sps-save-assistant-recipe-run", runId, profile),
   spsLoad: (profile?: string): Promise<unknown | null> =>
     ipcRenderer.invoke("sps-load", profile),
   spsSave: (
@@ -448,7 +489,8 @@ export const spsBridge = {
     pageId: string,
     profile?: string,
   ): Promise<Array<{ source: string; target: string; phrase: string }>> => {
-    const path = pageId.endsWith(".md") || pageId.includes("/") ? pageId : `${pageId}.md`;
+    const path =
+      pageId.endsWith(".md") || pageId.includes("/") ? pageId : `${pageId}.md`;
     return ipcRenderer.invoke("sps-index-unlinked-mentions", path, profile);
   },
   // Federated search: one query merged across notes + transcripts + sessions.
