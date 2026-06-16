@@ -94,6 +94,10 @@ import type {
 import type { CredentialPoolEntry } from "../shared/credentials";
 import type { CapabilityRiskSummary } from "../shared/capability-risk";
 import type { ResearchReachStatus } from "../shared/research-reach";
+import type {
+  SourceIntakeResult,
+  SourceIntakeStatus,
+} from "../shared/source-intake";
 import type { WhatsAppCloudStatus } from "../shared/whatsappCloud";
 
 interface ElectronAPI {
@@ -1684,6 +1688,9 @@ interface HermesAPI {
   spsSubstackRadarAddApprovedFeeds: (
     input: SubstackRadarAddApprovedFeedsInput,
   ) => Promise<SubstackRadarAddApprovedFeedsResult>;
+  sourceIntakeStatus: () => Promise<SourceIntakeStatus>;
+  sourceIntakePreviewUrl: (url: string) => Promise<SourceIntakeResult>;
+  sourceIntakeInstallInstructions: () => Promise<string>;
 
   spsIndexStatus: (profile?: string) => Promise<{
     root: string;

@@ -942,6 +942,126 @@
   line-height: 1.45;
   color: #94a3b8;
 }
+.sps-scope .source-intake-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 16px 24px 0;
+  padding: 16px;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 8px;
+}
+.sps-scope .source-intake-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.sps-scope .source-intake-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #f8fafc;
+}
+.sps-scope .source-intake-status {
+  margin-top: 4px;
+  color: #94a3b8;
+  font-size: 12px;
+}
+.sps-scope .source-intake-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(72px, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border-radius: 8px;
+  background: rgba(2, 6, 23, 0.42);
+}
+.sps-scope .source-intake-tab {
+  border: 0;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.sps-scope .source-intake-tab.active {
+  background: rgba(96, 165, 250, 0.14);
+  color: #dbeafe;
+}
+.sps-scope .source-intake-add {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto auto;
+  gap: 10px;
+  align-items: end;
+}
+.sps-scope .source-intake-url input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.sps-scope .source-intake-review {
+  min-height: 120px;
+}
+.sps-scope .source-intake-preview {
+  border: 1px solid rgba(96, 165, 250, 0.24);
+  border-radius: 8px;
+  background: rgba(2, 6, 23, 0.32);
+  padding: 12px;
+}
+.sps-scope .source-intake-preview-title {
+  color: #e2e8f0;
+  font-size: 14px;
+  font-weight: 700;
+}
+.sps-scope .source-intake-preview-url {
+  margin-top: 4px;
+  color: #93c5fd;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.sps-scope .source-intake-preview-excerpt {
+  margin-top: 8px;
+  color: #cbd5e1;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.sps-scope .source-intake-markdown,
+.sps-scope .source-intake-setup {
+  margin: 12px 0 0;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 8px;
+  padding: 10px;
+  color: #cbd5e1;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.sps-scope .source-intake-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.sps-scope .source-intake-empty,
+.sps-scope .source-intake-message {
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.sps-scope .source-intake-message {
+  border: 1px solid rgba(52, 211, 153, 0.28);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: rgba(6, 78, 59, 0.14);
+  color: #bbf7d0;
+}
 .sps-scope .substack-radar-panel {
   display: flex;
   flex-direction: column;

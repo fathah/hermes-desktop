@@ -164,6 +164,19 @@ describe("New APIs from v0.8/v0.9 features", () => {
       "Promise<SubstackRadarAddApprovedFeedsResult>",
     );
   });
+
+  it("has Source Intake APIs", () => {
+    for (const method of [
+      "sourceIntakeStatus",
+      "sourceIntakePreviewUrl",
+      "sourceIntakeInstallInstructions",
+    ]) {
+      expect(preloadMethods).toContain(method);
+      expect(typeMethods).toContain(method);
+    }
+    expect(preloadTypes).toContain("SourceIntakeStatus");
+    expect(preloadTypes).toContain("SourceIntakeResult");
+  });
 });
 
 // ─── Legacy APIs still present ──────────────────────────

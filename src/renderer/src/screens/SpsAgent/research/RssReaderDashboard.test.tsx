@@ -12,6 +12,10 @@ const api = {
   spsRssMarkArticleRead: vi.fn(),
   spsRssToggleArticleStar: vi.fn(),
   spsFileResearch: vi.fn(),
+  sourceIntakeStatus: vi.fn(),
+  sourceIntakePreviewUrl: vi.fn(),
+  sourceIntakeInstallInstructions: vi.fn(),
+  spsSubstackRadarListRuns: vi.fn(),
 };
 
 function installApi(): void {
@@ -33,6 +37,36 @@ beforeEach(() => {
   });
   api.spsRssAddFeed.mockResolvedValue("feed-1");
   api.spsRssSyncFeeds.mockResolvedValue({ success: true, count: 2 });
+  api.sourceIntakeStatus.mockResolvedValue({
+    checkedAt: 1,
+    capabilities: [
+      {
+        key: "rss",
+        label: "RSS and Substack feeds",
+        ready: true,
+        message: "Built in",
+      },
+    ],
+  });
+  api.sourceIntakePreviewUrl.mockResolvedValue({
+    ok: true,
+    sourceUrl: "https://example.substack.com/p/post",
+    canonicalUrl: "https://example.substack.com/feed",
+    title: "Example Substack",
+    markdown:
+      "# Example Substack\n\nSharp notes.\n\n## Sources\n- [Example Substack](https://example.substack.com)",
+    excerpt: "Sharp notes.",
+    links: [
+      "https://example.substack.com/feed",
+      "https://example.substack.com",
+    ],
+    engine: "rss",
+    fetchedAt: 1,
+  });
+  api.sourceIntakeInstallInstructions.mockResolvedValue(
+    "pipx install crawl4ai",
+  );
+  api.spsSubstackRadarListRuns.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -43,21 +77,18 @@ describe("RssReaderDashboard Substack flow", () => {
   it("discovers a public Substack feed, adds it, and syncs", async () => {
     render(<RssReaderDashboard />);
 
-    fireEvent.click(screen.getByRole("button", { name: /add feed/i }));
-    fireEvent.change(
-      screen.getByLabelText(/substack publication or article url/i),
-      {
-        target: { value: "https://example.substack.com/p/post" },
-      },
-    );
-    fireEvent.click(screen.getByRole("button", { name: /find feed/i }));
+    fireEvent.click(screen.getByRole("button", { name: /sources/i }));
+    fireEvent.change(screen.getByLabelText(/source url/i), {
+      target: { value: "https://example.substack.com/p/post" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /read source/i }));
 
     expect(await screen.findByText("Example Substack")).toBeInTheDocument();
     expect(
       screen.getByText("https://example.substack.com/feed"),
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /add and sync/i }));
+    fireEvent.click(screen.getByRole("button", { name: /add feed/i }));
 
     await waitFor(() => {
       expect(api.spsRssAddFeed).toHaveBeenCalledWith({

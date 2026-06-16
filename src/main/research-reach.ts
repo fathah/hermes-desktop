@@ -5,6 +5,7 @@ import { join } from "path";
 import { normalizeAgentReachDoctor } from "../shared/research-reach";
 import type { ResearchReachStatus } from "../shared/research-reach";
 import { recordSkillCapability } from "./capability-risk-store";
+import { getCrawl4AiStatus, type Crawl4AiStatus } from "./crawl4ai";
 import { profileHome } from "./utils";
 
 export interface CommandResult {
@@ -61,47 +62,91 @@ function parseVersion(stdout: string): string | null {
   return match?.[1] ?? null;
 }
 
+function withCrawl4AiChannel(
+  status: ResearchReachStatus,
+  crawl?: Crawl4AiStatus,
+): ResearchReachStatus {
+  if (!crawl) return status;
+  const channel = {
+    key: "crawl4ai",
+    label: "Public webpage extraction",
+    status: crawl.installed && crawl.doctorOk ? "ready" : "needsSetup",
+    tier: 0,
+    activeBackend: crawl.installed ? "Crawl4AI CLI" : null,
+    backends: ["Crawl4AI CLI"],
+    message:
+      crawl.installed && crawl.doctorOk
+        ? `Crawl4AI${crawl.version ? ` v${crawl.version}` : ""} ready`
+        : crawl.error || "Crawl4AI is optional and not ready.",
+    needsLogin: false,
+    zeroConfig: false,
+  } satisfies ResearchReachStatus["channels"][number];
+
+  return {
+    ...status,
+    installed: status.installed || crawl.installed,
+    checkedAt: Date.now(),
+    channels: [...status.channels, channel],
+  };
+}
+
 export async function getResearchReachStatusFromRunner(
   runner: CommandRunner,
+  crawl?: Crawl4AiStatus,
 ): Promise<ResearchReachStatus> {
   const version = await runner("agent-reach", ["--version"], 8000);
   if (!version.ok) {
-    return {
-      installed: false,
-      version: null,
-      channels: [],
-      checkedAt: Date.now(),
-      error: "Agent-Reach is not installed.",
-    };
+    return withCrawl4AiChannel(
+      {
+        installed: false,
+        version: null,
+        channels: [],
+        checkedAt: Date.now(),
+        error: "Agent-Reach is not installed.",
+      },
+      crawl,
+    );
   }
 
   const parsedVersion = parseVersion(version.stdout);
   const doctor = await runner("agent-reach", ["doctor", "--json"], 30000);
   if (!doctor.ok) {
-    return {
-      installed: true,
-      version: parsedVersion,
-      channels: [],
-      checkedAt: Date.now(),
-      error: "Agent-Reach doctor failed.",
-    };
+    return withCrawl4AiChannel(
+      {
+        installed: true,
+        version: parsedVersion,
+        channels: [],
+        checkedAt: Date.now(),
+        error: "Agent-Reach doctor failed.",
+      },
+      crawl,
+    );
   }
 
   try {
-    return normalizeAgentReachDoctor(JSON.parse(doctor.stdout), parsedVersion);
+    return withCrawl4AiChannel(
+      normalizeAgentReachDoctor(JSON.parse(doctor.stdout), parsedVersion),
+      crawl,
+    );
   } catch {
-    return {
-      installed: false,
-      version: parsedVersion,
-      channels: [],
-      checkedAt: Date.now(),
-      error: "Agent-Reach is installed but doctor did not return JSON.",
-    };
+    return withCrawl4AiChannel(
+      {
+        installed: false,
+        version: parsedVersion,
+        channels: [],
+        checkedAt: Date.now(),
+        error: "Agent-Reach is installed but doctor did not return JSON.",
+      },
+      crawl,
+    );
   }
 }
 
-export function getResearchReachStatus(): Promise<ResearchReachStatus> {
-  return getResearchReachStatusFromRunner(runCommand);
+export async function getResearchReachStatus(): Promise<ResearchReachStatus> {
+  return getResearchReachStatusFromRunner(
+    runCommand,
+    await getCrawl4AiStatus(),
+  );
 }
 
 export function getResearchReachInstallInstructions(): string {
@@ -113,6 +158,11 @@ export function getResearchReachInstallInstructions(): string {
     "   agent-reach doctor --json",
     "3. For no-system-change setup:",
     "   agent-reach install --env=auto --safe",
+    "",
+    "Optional public webpage extraction:",
+    "   pipx install crawl4ai",
+    "   crawl4ai-setup",
+    "   crawl4ai-doctor",
     "",
     "SPS will never import cookies or install global tools without explicit user action.",
   ].join("\n");
@@ -131,7 +181,9 @@ export function agentReachSkillCandidates(home = homedir()): string[] {
 }
 
 export function findAgentReachSkillSource(home = homedir()): string | null {
-  return agentReachSkillCandidates(home).find((path) => existsSync(path)) ?? null;
+  return (
+    agentReachSkillCandidates(home).find((path) => existsSync(path)) ?? null
+  );
 }
 
 export function importAgentReachSkill(profile?: string): {

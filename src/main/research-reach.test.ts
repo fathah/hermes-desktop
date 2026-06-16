@@ -43,6 +43,31 @@ describe("getResearchReachStatusFromRunner", () => {
     );
   });
 
+  it("adds Crawl4AI as a separate public webpage channel", async () => {
+    const run = vi.fn(async () => ({
+      ok: false,
+      stdout: "",
+      stderr: "command not found",
+    }));
+
+    const status = await getResearchReachStatusFromRunner(run, {
+      installed: true,
+      version: "0.8.9",
+      doctorOk: true,
+      checkedAt: 1,
+    });
+
+    expect(status.installed).toBe(true);
+    expect(status.channels).toEqual([
+      expect.objectContaining({
+        key: "crawl4ai",
+        label: "Public webpage extraction",
+        status: "ready",
+        activeBackend: "Crawl4AI CLI",
+      }),
+    ]);
+  });
+
   it("does not leak stderr into UI when agent-reach is missing", async () => {
     const run = vi.fn(async () => ({
       ok: false,

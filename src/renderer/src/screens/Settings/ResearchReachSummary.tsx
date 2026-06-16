@@ -115,7 +115,9 @@ function ResearchReachSummary({
           <div className="cap-summary">
             <div className="cap-summary-counts">
               <span className="cap-count">
-                {status?.installed ? "Agent-Reach installed" : "Not installed"}
+                {status?.installed
+                  ? "Local source tools available"
+                  : "No local source tools ready"}
               </span>
               {status?.version && (
                 <span className="cap-count">v{status.version}</span>

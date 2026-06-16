@@ -1,6 +1,6 @@
 import React, { useCallback, useState, useEffect } from "react";
 import { Icon } from "../components/Icon";
-import { SubstackRadarPanel } from "./SubstackRadarPanel";
+import { SourceIntakePanel } from "./SourceIntakePanel";
 
 interface RssFeed {
   id: string;
@@ -36,20 +36,6 @@ interface RssArticleQuery {
   search?: string;
 }
 
-type SubstackDiscoveryResult =
-  | {
-      ok: true;
-      feedUrl: string;
-      siteUrl: string;
-      title: string;
-      description: string;
-      sourceType: "substack";
-    }
-  | {
-      ok: false;
-      error: string;
-    };
-
 export function RssReaderDashboard(): React.JSX.Element {
   const [feeds, setFeeds] = useState<RssFeed[]>([]);
   const [articles, setArticles] = useState<RssArticle[]>([]);
@@ -61,22 +47,7 @@ export function RssReaderDashboard(): React.JSX.Element {
   );
   const [isSyncing, setIsSyncing] = useState(false);
   const [fontSize, setFontSize] = useState(15);
-  const [showSubstackRadar, setShowSubstackRadar] = useState(false);
-
-  // New feed form
-  const [newFeedUrl, setNewFeedUrl] = useState("");
-  const [newFeedCategory, setNewFeedCategory] = useState("Technology");
-  const [newFeedTitle, setNewFeedTitle] = useState("");
-  const [showAddFeedModal, setShowAddFeedModal] = useState(false);
-  const [addFeedMode, setAddFeedMode] = useState<"substack" | "rss">(
-    "substack",
-  );
-  const [substackUrl, setSubstackUrl] = useState("");
-  const [substackDiscovery, setSubstackDiscovery] =
-    useState<SubstackDiscoveryResult | null>(null);
-  const [substackError, setSubstackError] = useState("");
-  const [isDiscoveringSubstack, setIsDiscoveringSubstack] = useState(false);
-  const [isAddingSubstack, setIsAddingSubstack] = useState(false);
+  const [showSources, setShowSources] = useState(false);
 
   const loadData = useCallback(async (): Promise<void> => {
     try {
@@ -116,76 +87,6 @@ export function RssReaderDashboard(): React.JSX.Element {
       console.error("[RSS Sync] Scraper error:", err);
     } finally {
       setIsSyncing(false);
-    }
-  };
-
-  const handleAddFeed = async (): Promise<void> => {
-    const api = window.hermesAPI;
-    if (!api || !newFeedUrl) return;
-
-    await api.spsRssAddFeed({
-      url: newFeedUrl,
-      category: newFeedCategory,
-      title: newFeedTitle || "New Feed",
-    });
-
-    setNewFeedUrl("");
-    setNewFeedTitle("");
-    setShowAddFeedModal(false);
-    loadData();
-  };
-
-  const closeAddFeedModal = (): void => {
-    setShowAddFeedModal(false);
-    setSubstackError("");
-    setSubstackDiscovery(null);
-    setIsDiscoveringSubstack(false);
-    setIsAddingSubstack(false);
-  };
-
-  const handleDiscoverSubstack = async (): Promise<void> => {
-    const api = window.hermesAPI;
-    if (!api || !substackUrl.trim()) return;
-
-    setIsDiscoveringSubstack(true);
-    setSubstackError("");
-    setSubstackDiscovery(null);
-    try {
-      const result = await api.spsRssDiscoverSubstack(substackUrl);
-      setSubstackDiscovery(result);
-      if (!result.ok) {
-        setSubstackError(result.error);
-      }
-    } catch (err) {
-      console.error("[RSS UI] Substack discovery failed:", err);
-      setSubstackError("Could not validate that Substack feed.");
-    } finally {
-      setIsDiscoveringSubstack(false);
-    }
-  };
-
-  const handleAddSubstackFeed = async (): Promise<void> => {
-    const api = window.hermesAPI;
-    if (!api || !substackDiscovery?.ok) return;
-
-    setIsAddingSubstack(true);
-    try {
-      await api.spsRssAddFeed({
-        url: substackDiscovery.feedUrl,
-        site_url: substackDiscovery.siteUrl,
-        title: substackDiscovery.title,
-        description: substackDiscovery.description,
-        category: "Substack",
-      });
-      await api.spsRssSyncFeeds();
-      setSubstackUrl("");
-      closeAddFeedModal();
-      await loadData();
-    } catch (err) {
-      console.error("[RSS UI] Add Substack feed failed:", err);
-      setSubstackError("Could not add and sync that Substack feed.");
-    } finally {
-      setIsAddingSubstack(false);
     }
   };
 
@@ -270,19 +171,10 @@ ${art.content_raw?.replace(/<[^>]*>/g, "") || art.summary_excerpt || "No content
         <div className="flex-row-gap-12">
           <button
             className="log-submit-btn refresh-btn-style"
-            onClick={() => setShowSubstackRadar((prev) => !prev)}
+            onClick={() => setShowSources((prev) => !prev)}
           >
-            Discover Substacks
-          </button>
-          <button
-            className="log-submit-btn refresh-btn-style"
-            onClick={() => {
-              setAddFeedMode("substack");
-              setShowAddFeedModal(true);
-            }}
-          >
-            <Icon name="plus" size={13} className="refresh-icon-style" /> Add
-            Feed
+            <Icon name="plus" size={13} className="refresh-icon-style" />{" "}
+            Sources
           </button>
           <button
             className="log-submit-btn refresh-btn-style"
@@ -295,7 +187,7 @@ ${art.content_raw?.replace(/<[^>]*>/g, "") || art.summary_excerpt || "No content
         </div>
       </header>
 
-      {showSubstackRadar && <SubstackRadarPanel />}
+      {showSources && <SourceIntakePanel onFeedsChanged={loadData} />}
 
       {/* Main Three-Pane layout */}
       <div className="rss-three-pane">
@@ -471,144 +363,6 @@ ${art.content_raw?.replace(/<[^>]*>/g, "") || art.summary_excerpt || "No content
           )}
         </div>
       </div>
-
-      {/* Add Feed Dialog Modal */}
-      {showAddFeedModal && (
-        <div className="add-feed-modal-overlay">
-          <div className="glass-panel add-feed-modal-panel">
-            <h3 className="add-feed-modal-title">Add Feed</h3>
-            <div className="add-feed-mode-tabs" role="tablist">
-              <button
-                type="button"
-                className={`add-feed-mode-tab ${addFeedMode === "substack" ? "active" : ""}`}
-                onClick={() => setAddFeedMode("substack")}
-              >
-                Substack
-              </button>
-              <button
-                type="button"
-                className={`add-feed-mode-tab ${addFeedMode === "rss" ? "active" : ""}`}
-                onClick={() => setAddFeedMode("rss")}
-              >
-                RSS / Atom
-              </button>
-            </div>
-
-            {addFeedMode === "substack" ? (
-              <>
-                <div className="log-input-group">
-                  <label htmlFor="substack-url">
-                    Substack publication or article URL
-                  </label>
-                  <input
-                    id="substack-url"
-                    type="text"
-                    value={substackUrl}
-                    placeholder="https://example.substack.com/p/post"
-                    title="Substack URL"
-                    onChange={(e) => {
-                      setSubstackUrl(e.target.value);
-                      setSubstackDiscovery(null);
-                      setSubstackError("");
-                    }}
-                  />
-                </div>
-                <div className="substack-feed-note">
-                  Public RSS only. Private posts and subscriber-only content are
-                  not imported.
-                </div>
-                {substackError && (
-                  <div className="substack-feed-error">{substackError}</div>
-                )}
-                {substackDiscovery?.ok && (
-                  <div className="substack-feed-preview">
-                    <div className="substack-feed-preview-title">
-                      {substackDiscovery.title}
-                    </div>
-                    <div className="substack-feed-preview-url">
-                      {substackDiscovery.feedUrl}
-                    </div>
-                    {substackDiscovery.description && (
-                      <div className="substack-feed-preview-description">
-                        {substackDiscovery.description}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </>
-            ) : (
-              <>
-                <div className="log-input-group">
-                  <label htmlFor="new-feed-url">Feed URL</label>
-                  <input
-                    id="new-feed-url"
-                    type="text"
-                    value={newFeedUrl}
-                    placeholder="https://example.com/rss"
-                    title="Feed URL"
-                    onChange={(e) => setNewFeedUrl(e.target.value)}
-                  />
-                </div>
-                <div className="log-input-group">
-                  <label htmlFor="new-feed-title">Feed Title</label>
-                  <input
-                    id="new-feed-title"
-                    type="text"
-                    value={newFeedTitle}
-                    placeholder="e.g. Health News"
-                    title="Feed Title"
-                    onChange={(e) => setNewFeedTitle(e.target.value)}
-                  />
-                </div>
-                <div className="log-input-group">
-                  <label htmlFor="new-feed-category">Category / Folder</label>
-                  <input
-                    id="new-feed-category"
-                    type="text"
-                    value={newFeedCategory}
-                    placeholder="e.g. Technology"
-                    title="Feed Category"
-                    onChange={(e) => setNewFeedCategory(e.target.value)}
-                  />
-                </div>
-              </>
-            )}
-            <div className="modal-footer-row">
-              <button
-                className="log-submit-btn record-audio-btn"
-                onClick={closeAddFeedModal}
-              >
-                Cancel
-              </button>
-              {addFeedMode === "substack" ? (
-                <>
-                  <button
-                    className="log-submit-btn protocol-record-btn"
-                    onClick={handleDiscoverSubstack}
-                    disabled={isDiscoveringSubstack || !substackUrl.trim()}
-                  >
-                    {isDiscoveringSubstack ? "Finding..." : "Find Feed"}
-                  </button>
-                  <button
-                    className="log-submit-btn save-journal-entry-btn"
-                    onClick={handleAddSubstackFeed}
-                    disabled={!substackDiscovery?.ok || isAddingSubstack}
-                  >
-                    {isAddingSubstack ? "Syncing..." : "Add and Sync"}
-                  </button>
-                </>
-              ) : (
-                <button
-                  className="log-submit-btn save-journal-entry-btn"
-                  onClick={handleAddFeed}
-                >
-                  Save Feed
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -14,6 +14,8 @@ Substack Radar helps Hermes find public Substack publications from categories or
 
 Browser discovery is a discovery aid, not the durable content ingestion path. RSS remains the source used for ongoing post sync.
 
+The unified SPS **Sources** flow can also preview a selected public Substack URL. It still tries public RSS first. If a public feed is not available and optional Crawl4AI extraction is installed, Hermes may use Crawl4AI to enrich that one public URL for review and Knowledge Base saving. This does not change the durable sync path: subscribed Substack sources remain RSS feeds.
+
 ## Safety Boundary
 
 Substack Radar is limited to public Substack discovery.
@@ -21,6 +23,7 @@ Substack Radar is limited to public Substack discovery.
 - No Twitter/X, Reddit, Facebook, or other social platforms are included in this feature.
 - No saved browser profile cookies, login credentials, private posts, subscriber-only posts, paywalled content, or account automation are used. Browser automation runs in an isolated public-page session.
 - Browser automation is public-page discovery only.
+- Crawl4AI enrichment, when available, is public HTTPS URL extraction only.
 - Discovery results are heuristic. They come from visible page text and signals, so they can miss relevant sources, duplicate sources, or score a source imperfectly.
 - Approval is explicit. A discovered candidate does not become a feed until the user approves it and RSS discovery validates it.
 
