@@ -285,6 +285,35 @@ export function decideCanWrite(input: {
  */
 export { isAutoUpdateDisabled } from "../shared/auto-update-gate";
 
+/**
+ * Pure decision for whether setupUpdater() should SKIP all electron-updater
+ * wiring — extracted so the safety-critical gate is unit-testable without the
+ * Electron/ipcMain/`require("electron-updater")` coupling in setupUpdater().
+ *
+ * Returns true (skip wiring — register only the no-op IPC handlers and return)
+ * when ANY of:
+ *   - not packaged (dev mode): electron-updater can't replace a dev checkout.
+ *   - portable build: no install location to replace; an update check just
+ *     surfaces a spurious failure.
+ *   - explicitly disabled via config (`desktop.auto_update: false`/`0`): a user
+ *     on a locally-built/patched /opt artifact opted out so the updater can't
+ *     re-download the public release and overwrite their build on quit
+ *     (autoInstallOnAppQuit).
+ *
+ * When this returns true, setupUpdater() MUST return before it sets
+ * autoUpdater.autoDownload / autoInstallOnAppQuit — that early return IS the
+ * protection the opt-out exists for. This predicate makes that gate provable.
+ */
+export function shouldSkipUpdaterWiring(input: {
+  isPackaged: boolean;
+  isPortableBuild: boolean;
+  autoUpdateDisabled: boolean;
+}): boolean {
+  return (
+    !input.isPackaged || input.isPortableBuild || input.autoUpdateDisabled
+  );
+}
+
 export function secretsProviderCanWrite(profile?: string): {
   canWrite: boolean;
   canDelete: boolean;

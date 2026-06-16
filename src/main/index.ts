@@ -134,6 +134,7 @@ import {
   setEnvValue,
   getConfigValue,
   isAutoUpdateDisabled,
+  shouldSkipUpdaterWiring,
   setConfigValue,
   getHermesHome,
   getModelConfig,
@@ -2793,9 +2794,16 @@ function setupUpdater(): void {
     getConfigValue("desktop.auto_update"),
   );
 
-  if (!app.isPackaged || isPortableBuild || autoUpdateDisabled) {
+  if (
+    shouldSkipUpdaterWiring({
+      isPackaged: app.isPackaged,
+      isPortableBuild,
+      autoUpdateDisabled,
+    })
+  ) {
     // Skip auto-update in dev mode, portable builds, and when explicitly
-    // disabled via config (desktop.auto_update: false).
+    // disabled via config (desktop.auto_update: false). Register the no-op IPC
+    // handlers and return BEFORE any autoDownload/autoInstallOnAppQuit wiring.
     ipcMain.handle("check-for-updates", async () => null);
     ipcMain.handle("download-update", () => true);
     ipcMain.handle("install-update", () => {});
