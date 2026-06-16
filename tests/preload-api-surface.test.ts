@@ -123,6 +123,18 @@ describe("New APIs from v0.8/v0.9 features", () => {
       expect(typeMethods).toContain(method);
     }
   });
+
+  it("has Substack radar APIs", () => {
+    for (const method of [
+      "spsSubstackRadarRun",
+      "spsSubstackRadarListRuns",
+      "spsSubstackRadarSetCandidateStatus",
+      "spsSubstackRadarAddApprovedFeeds",
+    ]) {
+      expect(preloadMethods).toContain(method);
+      expect(typeMethods).toContain(method);
+    }
+  });
 });
 
 // ─── Legacy APIs still present ──────────────────────────

@@ -1250,9 +1250,7 @@ interface HermesAPI {
       memory: string[];
     };
   }>;
-  spsNotebookLmEnsureMcp: (
-    profile?: string,
-  ) => Promise<NotebookLmMcpStatus>;
+  spsNotebookLmEnsureMcp: (profile?: string) => Promise<NotebookLmMcpStatus>;
   spsNotebookLmStatus: (profile?: string) => Promise<NotebookLmMcpStatus>;
   spsAppendWikiLog: (
     op: "ingest" | "file-answer" | "lint" | "research" | "digest",
@@ -1633,6 +1631,23 @@ interface HermesAPI {
   spsRssGetClinicalDigest: (
     profile?: string,
   ) => Promise<SpsClinicalDigestArticle[]>;
+  spsSubstackRadarRun: (input: {
+    categories: string[];
+    profile?: string;
+  }) => Promise<Record<string, unknown>>;
+  spsSubstackRadarListRuns: (
+    profile?: string,
+  ) => Promise<Record<string, unknown>[]>;
+  spsSubstackRadarSetCandidateStatus: (input: {
+    runId: string;
+    candidateId: string;
+    status: "approved" | "rejected";
+    profile?: string;
+  }) => Promise<{ ok: boolean; error?: string }>;
+  spsSubstackRadarAddApprovedFeeds: (input: {
+    runId: string;
+    profile?: string;
+  }) => Promise<{ added: number; feeds: Record<string, unknown>[] }>;
 
   spsIndexStatus: (profile?: string) => Promise<{
     root: string;
