@@ -186,6 +186,20 @@ interface SpsRssFeed {
   last_fetched_at?: number;
 }
 
+type SpsSubstackDiscoveryResult =
+  | {
+      ok: true;
+      feedUrl: string;
+      siteUrl: string;
+      title: string;
+      description: string;
+      sourceType: "substack";
+    }
+  | {
+      ok: false;
+      error: string;
+    };
+
 interface SpsRssArticle {
   id: string;
   feed_id: string;
@@ -1493,9 +1507,7 @@ interface HermesAPI {
   spsTriggerScreencapture: (profile?: string) => Promise<string | null>;
 
   // Health APIs
-  spsHealthGetProfile: (
-    profile?: string,
-  ) => Promise<SpsHealthProfile | null>;
+  spsHealthGetProfile: (profile?: string) => Promise<SpsHealthProfile | null>;
   spsHealthSaveProfile: (
     profileData: Record<string, unknown>,
     profile?: string,
@@ -1548,6 +1560,10 @@ interface HermesAPI {
 
   // RSS APIs
   spsRssGetFeeds: (profile?: string) => Promise<SpsRssFeed[]>;
+  spsRssDiscoverSubstack: (
+    inputUrl: string,
+    profile?: string,
+  ) => Promise<SpsSubstackDiscoveryResult>;
   spsRssAddFeed: (
     feedData: Partial<SpsRssFeed>,
     profile?: string,

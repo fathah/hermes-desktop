@@ -80,6 +80,11 @@ export const healthRssBridge = {
 
   spsRssGetFeeds: (profile?: string): Promise<JsonRecord[]> =>
     ipcRenderer.invoke("sps-rss-get-feeds", profile),
+  spsRssDiscoverSubstack: (
+    inputUrl: string,
+    profile?: string,
+  ): Promise<JsonRecord> =>
+    ipcRenderer.invoke("sps-rss-discover-substack", inputUrl, profile),
   spsRssAddFeed: (feedData: JsonRecord, profile?: string): Promise<string> =>
     ipcRenderer.invoke("sps-rss-add-feed", feedData, profile),
   spsRssDeleteFeed: (feedId: string, profile?: string): Promise<boolean> =>

@@ -1,6 +1,11 @@
 import { getSharedDb } from "../db";
 import { safeHandle } from "./safe-handle";
 import { randomUUID } from "crypto";
+import {
+  discoverSubstackFeed,
+  fetchRssArticles,
+  type ParsedRssArticle,
+} from "../rss-discovery";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -24,6 +29,8 @@ interface MockArticle {
   summary_excerpt: string;
   relevance_score: number;
 }
+
+type RssArticleInsert = ParsedRssArticle | MockArticle;
 
 export function registerHealthRssIpc(): void {
   // --- HEALTH MODULE ---
@@ -488,6 +495,12 @@ export function registerHealthRssIpc(): void {
     return db.prepare("SELECT * FROM rss_feeds").all();
   });
 
+  // Discover public Substack feed metadata from a publication or article URL
+  safeHandle("sps-rss-discover-substack", async (_event, ...args) => {
+    const inputUrl = String(args[0] || "");
+    return discoverSubstackFeed(inputUrl);
+  });
+
   // Add Feed
   safeHandle("sps-rss-add-feed", async (_event, ...args) => {
     const feedData = args[0] as JsonRecord | undefined;
@@ -601,7 +614,7 @@ export function registerHealthRssIpc(): void {
     return true;
   });
 
-  // Sync RSS Feeds (Periodic background worker stub, supports mock scraping & online fallbacks)
+  // Sync RSS Feeds (fetches public RSS/Atom articles, with mock fallback for legacy seeded feeds)
   safeHandle("sps-rss-sync-feeds", async () => {
     const db = getSharedDb(false);
     if (!db) return { success: false, count: 0 };
@@ -611,19 +624,27 @@ export function registerHealthRssIpc(): void {
 
     for (const feed of feeds) {
       try {
-        const mockArticles = getMockArticlesForFeed(
-          String(feed.id || ""),
-          String(feed.title || ""),
-        );
+        const feedUrl = String(feed.url || "");
+        let articles: RssArticleInsert[] = [];
+        if (feedUrl.startsWith("http://") || feedUrl.startsWith("https://")) {
+          articles = await fetchRssArticles(feedUrl);
+        }
+        if (articles.length === 0) {
+          articles = getMockArticlesForFeed(
+            String(feed.id || ""),
+            String(feed.title || ""),
+          );
+        }
+
         const insertArticle = db.prepare(
           `INSERT OR IGNORE INTO rss_articles (
             id, feed_id, guid, title, author, url, published_at, content_raw, content_text, summary_excerpt, relevance_score
            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         );
 
-        for (const art of mockArticles) {
+        for (const art of articles) {
           const id = randomUUID();
-          insertArticle.run(
+          const result = insertArticle.run(
             id,
             feed.id,
             art.guid,
@@ -636,7 +657,7 @@ export function registerHealthRssIpc(): void {
             art.summary_excerpt,
             art.relevance_score,
           );
-          count++;
+          count += result.changes;
         }
 
         db.prepare("UPDATE rss_feeds SET last_fetched_at = ? WHERE id = ?").run(
