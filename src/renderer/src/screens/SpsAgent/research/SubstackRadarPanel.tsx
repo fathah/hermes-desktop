@@ -206,6 +206,21 @@ export function SubstackRadarPanel(): React.JSX.Element {
         activeRunIdRef.current === runId &&
         previewGenerationRef.current === generation
       ) {
+        const addedCandidateIds = new Set(
+          result.feeds.map((item) => item.candidateId),
+        );
+        setActiveRun((current) =>
+          current?.id === runId
+            ? {
+                ...current,
+                candidates: current.candidates.map((candidate) =>
+                  addedCandidateIds.has(candidate.id)
+                    ? { ...candidate, status: "added" }
+                    : candidate,
+                ),
+              }
+            : current,
+        );
         setAddResult(result);
       }
     } catch (err) {
@@ -214,7 +229,7 @@ export function SubstackRadarPanel(): React.JSX.Element {
         activeRunIdRef.current === runId &&
         previewGenerationRef.current === generation
       ) {
-        setError("Could not validate approved feed URLs.");
+        setError("Could not add approved feeds.");
       }
     } finally {
       setAddingFeeds((current) =>
@@ -242,8 +257,8 @@ export function SubstackRadarPanel(): React.JSX.Element {
           disabled={approvedCount === 0 || addingFeeds?.runId === activeRun?.id}
         >
           {addingFeeds?.runId === activeRun?.id
-            ? "Validating..."
-            : "Preview Approved Feed URLs"}
+            ? "Adding..."
+            : "Add Approved Feeds"}
         </button>
       </div>
 
@@ -273,8 +288,8 @@ export function SubstackRadarPanel(): React.JSX.Element {
       {addResult && (
         <div className="substack-radar-result">
           <div>
-            Validated {addResult.feeds.length} approved feed{" "}
-            {addResult.feeds.length === 1 ? "URL" : "URLs"}.
+            Added {addResult.added} approved feed
+            {addResult.added === 1 ? "" : "s"}.
           </div>
           {addResult.feeds.map((item) => (
             <div key={item.candidateId} className="substack-radar-result-feed">

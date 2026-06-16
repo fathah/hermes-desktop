@@ -86,10 +86,11 @@ beforeEach(() => {
   api.spsSubstackRadarRun.mockResolvedValue(latestRun);
   api.spsSubstackRadarSetCandidateStatus.mockResolvedValue({ ok: true });
   api.spsSubstackRadarAddApprovedFeeds.mockResolvedValue({
-    added: 0,
+    added: 1,
     feeds: [
       {
         candidateId: "candidate-1",
+        feedId: "feed-1",
         feed: {
           ok: true,
           feedUrl: "https://example.substack.com/feed",
@@ -175,13 +176,13 @@ describe("SubstackRadarPanel", () => {
     expect(screen.getByText(/status: new/i)).toBeInTheDocument();
   });
 
-  it("approving a candidate calls the status API and enables feed URL preview", async () => {
+  it("approving a candidate calls the status API and enables feed adding", async () => {
     api.spsSubstackRadarListRuns.mockResolvedValue([latestRun]);
 
     render(<SubstackRadarPanel />);
 
     const addButton = await screen.findByRole("button", {
-      name: /preview approved feed urls/i,
+      name: /add approved feeds/i,
     });
     expect(addButton).toBeDisabled();
 
@@ -197,7 +198,7 @@ describe("SubstackRadarPanel", () => {
     expect(addButton).toBeEnabled();
   });
 
-  it("previews approved feed URLs and displays the result", async () => {
+  it("adds approved feeds, marks candidates added, and disables the add button", async () => {
     api.spsSubstackRadarListRuns.mockResolvedValue([
       {
         ...latestRun,
@@ -209,7 +210,7 @@ describe("SubstackRadarPanel", () => {
 
     fireEvent.click(
       await screen.findByRole("button", {
-        name: /preview approved feed urls/i,
+        name: /add approved feeds/i,
       }),
     );
 
@@ -219,15 +220,19 @@ describe("SubstackRadarPanel", () => {
       });
     });
     expect(
-      await screen.findByText(/validated 1 approved feed url/i),
+      await screen.findByText(/added 1 approved feed\./i),
     ).toBeInTheDocument();
     expect(
       screen.getByText("https://example.substack.com/feed"),
     ).toBeInTheDocument();
+    expect(screen.getByText(/status: added/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /add approved feeds/i }),
+    ).toBeDisabled();
   });
 
-  it("does not display stale preview results under a newer active run", async () => {
-    const preview = deferred<{
+  it("does not display stale add results under a newer active run", async () => {
+    const addResult = deferred<{
       added: number;
       feeds: Array<{
         candidateId: string;
@@ -248,14 +253,14 @@ describe("SubstackRadarPanel", () => {
       },
     ]);
     const discovery = deferred<typeof latestRun>();
-    api.spsSubstackRadarAddApprovedFeeds.mockReturnValue(preview.promise);
+    api.spsSubstackRadarAddApprovedFeeds.mockReturnValue(addResult.promise);
     api.spsSubstackRadarRun.mockReturnValue(discovery.promise);
 
     render(<SubstackRadarPanel />);
 
     fireEvent.click(
       await screen.findByRole("button", {
-        name: /preview approved feed urls/i,
+        name: /add approved feeds/i,
       }),
     );
 
@@ -271,7 +276,7 @@ describe("SubstackRadarPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /run discovery/i }));
 
     await act(async () => {
-      preview.resolve({
+      addResult.resolve({
         added: 0,
         feeds: [
           {
@@ -281,7 +286,7 @@ describe("SubstackRadarPanel", () => {
               feedUrl: "https://stale.substack.com/feed",
               siteUrl: "https://stale.substack.com",
               title: "Stale Letters",
-              description: "Old preview result.",
+              description: "Old add result.",
               sourceType: "substack",
             },
           },
@@ -289,7 +294,7 @@ describe("SubstackRadarPanel", () => {
       });
     });
 
-    expect(screen.queryByText(/validated 1 approved feed url/i)).toBeNull();
+    expect(screen.queryByText(/added 1 approved feed\./i)).toBeNull();
     expect(
       screen.queryByText("https://stale.substack.com/feed"),
     ).not.toBeInTheDocument();
@@ -299,7 +304,7 @@ describe("SubstackRadarPanel", () => {
     });
 
     expect(await screen.findByText("Fresh Letters")).toBeInTheDocument();
-    expect(screen.queryByText(/validated 1 approved feed url/i)).toBeNull();
+    expect(screen.queryByText(/added 1 approved feed\./i)).toBeNull();
     expect(
       screen.queryByText("https://stale.substack.com/feed"),
     ).not.toBeInTheDocument();
