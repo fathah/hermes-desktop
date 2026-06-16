@@ -19,7 +19,7 @@ Browser discovery is a discovery aid, not the durable content ingestion path. RS
 Substack Radar is limited to public Substack discovery.
 
 - No Twitter/X, Reddit, Facebook, or other social platforms are included in this feature.
-- No browser cookies, login credentials, private posts, subscriber-only posts, paywalled content, or account automation are used.
+- No saved browser profile cookies, login credentials, private posts, subscriber-only posts, paywalled content, or account automation are used. Browser automation runs in an isolated public-page session.
 - Browser automation is public-page discovery only.
 - Discovery results are heuristic. They come from visible page text and signals, so they can miss relevant sources, duplicate sources, or score a source imperfectly.
 - Approval is explicit. A discovered candidate does not become a feed until the user approves it and RSS discovery validates it.
