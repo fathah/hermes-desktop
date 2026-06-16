@@ -2787,7 +2787,8 @@ function setupUpdater(): void {
   // re-downloading the public release and overwriting their build on quit
   // (autoInstallOnAppQuit). Treated exactly like dev/portable: register the
   // no-op IPC handlers and return before any autoDownload wiring. Decision is
-  // the pure, unit-tested isAutoUpdateDisabled() in ./config.
+  // the pure, unit-tested isAutoUpdateDisabled() — the single source of truth in
+  // ../shared/auto-update-gate, re-exported through ./config.
   const autoUpdateDisabled = isAutoUpdateDisabled(
     getConfigValue("desktop.auto_update"),
   );

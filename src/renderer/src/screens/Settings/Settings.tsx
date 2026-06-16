@@ -4,6 +4,7 @@ import { useFont } from "../../components/FontProvider";
 import { THEMES, FONT_OPTIONS } from "../../constants";
 import { useI18n } from "../../components/useI18n";
 import { APP_LOCALES, type AppLocale } from "../../../../shared/i18n";
+import { isAutoUpdateDisabled } from "../../../../shared/auto-update-gate";
 import {
   Check,
   ChevronDown,
@@ -255,14 +256,14 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
 
     // Auto-update opt-out: enabled unless config.yaml sets desktop.auto_update
     // to a falsey string. Default (null/unset) => enabled, matching upstream.
+    // Uses the shared single-source-of-truth gate so the UI and the
+    // main-process updater in setupUpdater() cannot drift.
     try {
-      const au = (
-        await window.hermesAPI.getConfig("desktop.auto_update", profile)
-      )
-        ?.toString()
-        .trim()
-        .toLowerCase();
-      setAutoUpdateEnabled(!(au === "false" || au === "0"));
+      const au = await window.hermesAPI.getConfig(
+        "desktop.auto_update",
+        profile,
+      );
+      setAutoUpdateEnabled(!isAutoUpdateDisabled(au));
     } catch {
       setAutoUpdateEnabled(true);
     }

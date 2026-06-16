@@ -277,24 +277,13 @@ export function decideCanWrite(input: {
 }
 
 /**
- * Pure decision for the auto-updater opt-out gate — extracted so it is
- * unit-testable without the Electron/IPC coupling in setupUpdater().
- *
- * ENABLED BY DEFAULT: only an explicit falsey config value
- * (`desktop.auto_update: false`, also accepts "0") disables it. A null/unset/
- * empty/whitespace setting — the upstream default — keeps auto-update ON, so
- * the community behavior is unchanged. The opt-out exists for users running a
- * locally-built or patched /opt artifact who must stop electron-updater from
- * silently re-downloading the public release and overwriting their build on
- * quit (autoInstallOnAppQuit).
- *
- * The input is the RAW config string (getConfigValue returns string | null);
- * normalization (trim/lowercase) happens here so callers stay thin.
+ * Auto-updater opt-out gate. Re-exported from the shared single-source-of-truth
+ * helper (src/shared/auto-update-gate.ts) so the main-process gate in
+ * setupUpdater() and the renderer's "Automatic updates" toggle CANNOT drift —
+ * both consume the identical normalization. See that module for the full
+ * contract (ENABLED BY DEFAULT; only an explicit `false`/`0` disables).
  */
-export function isAutoUpdateDisabled(rawSetting: string | null): boolean {
-  const v = (rawSetting ?? "").trim().toLowerCase();
-  return v === "false" || v === "0";
-}
+export { isAutoUpdateDisabled } from "../shared/auto-update-gate";
 
 export function secretsProviderCanWrite(profile?: string): {
   canWrite: boolean;
