@@ -94,6 +94,7 @@ export default {
   queued:
     "{{count}} mensagem(ns) em fila — serão enviadas quando o agente terminar",
   queuedCancel: "Remover da fila",
+  queuedEdit: "Editar mensagem na fila",
   worktree: {
     loading: "A carregar",
     empty: "A pasta está vazia",

@@ -82,6 +82,7 @@ export default {
     version: "Tampilkan versi Hermes",
   },
   queuedCancel: "Batalkan pesan antrian",
+  queuedEdit: "Edit pesan antrian",
   worktree: {
     loading: "Memuat",
     empty: "Folder kosong",

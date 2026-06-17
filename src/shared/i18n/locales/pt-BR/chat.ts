@@ -82,6 +82,7 @@ export default {
     version: "Mostrar a versão do Hermes",
   },
   queuedCancel: "Remover da fila",
+  queuedEdit: "Editar mensagem na fila",
   worktree: {
     loading: "Carregando",
     empty: "A pasta está vazia",

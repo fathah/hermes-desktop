@@ -452,6 +452,11 @@ function Chat({
     setQueuedMessages([...queueRef.current]);
   }, []);
 
+  const handleEditQueued = useCallback((index: number, newText: string) => {
+    queueRef.current[index] = { ...queueRef.current[index], text: newText };
+    setQueuedMessages([...queueRef.current]);
+  }, []);
+
   const handleSubmitOrQueue = useCallback(
     (text: string, attachments: Attachment[]) => {
       if (isLoading) {
@@ -573,6 +578,7 @@ function Chat({
         <QueuedMessages
           messages={queuedMessages}
           onRemove={handleRemoveQueued}
+          onEdit={handleEditQueued}
         />
         <ChatInput
           ref={chatInputRef}

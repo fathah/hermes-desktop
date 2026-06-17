@@ -81,6 +81,7 @@ export default {
     version: "Hermes バージョンを表示",
   },
   queuedCancel: "キューから削除",
+  queuedEdit: "キュー内のメッセージを編集",
   worktree: {
     loading: "読み込み中",
     empty: "フォルダは空です",

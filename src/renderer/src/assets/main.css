@@ -3405,6 +3405,37 @@ body {
   background: var(--bg-hover, rgba(255, 255, 255, 0.08));
 }
 
+.chat-queue-edit {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm, 6px);
+}
+
+.chat-queue-edit:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+}
+
+.chat-queue-edit-input {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 6px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-focus, var(--accent));
+  border-radius: var(--radius-sm, 4px);
+  outline: none;
+}
+
 /* Input area */
 .chat-input-area {
   position: relative;
