@@ -1,4 +1,5 @@
-import { memo, useMemo } from "react";
+import { memo, useMemo, useState, useCallback, useEffect, useRef } from "react";
+import { Copy } from "lucide-react";
 import icon from "../../assets/icon.png";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
 import { AttachmentChip } from "../../components/AttachmentChip";
@@ -30,15 +31,14 @@ export const HermesAvatar = memo(function HermesAvatar({
   );
 });
 
-/**
- * Empty box the size of an avatar. Rendered in place of the avatar on
- * continuation rows of a turn (the thinking/tool rows and answer bubble that
- * follow the first row) so one turn shows a single avatar while every row
- * stays aligned to the same content column.
- */
 export const AvatarSpacer = memo(function AvatarSpacer(): React.JSX.Element {
   return <div className="chat-avatar" aria-hidden="true" />;
 });
+
+interface ContextMenuState {
+  x: number;
+  y: number;
+}
 
 interface MessageRowProps {
   msg: ChatMessage;
@@ -46,8 +46,6 @@ interface MessageRowProps {
   isLoading: boolean;
   onApprove: () => void;
   onDeny: () => void;
-  /** False on continuation rows of a turn — render a spacer instead of the
-   *  avatar so the turn reads as one grouped block. Defaults to true. */
   showAvatar?: boolean;
 }
 
@@ -60,35 +58,65 @@ export const MessageRow = memo(function MessageRow({
   showAvatar = true,
 }: MessageRowProps): React.JSX.Element {
   const { t } = useI18n();
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  // MessageRow is wrapped in memo() but still re-renders on any prop change
-  // (e.g. isLoading toggling at the end of a stream), and `parseMediaTokens`
-  // runs a full regex pipeline. Cache the result against the message content
-  // so a long conversation doesn't reparse every row on every render.
-  // Only agent bubbles need media parsing — user bubbles render content
-  // verbatim — so this is gated on the role to skip the work entirely for
-  // user rows. (Follow-up item from PR #303 review.)
   const bubbleContent = isChatBubbleMessage(msg)
     ? (msg as ChatBubbleMessage).content
     : null;
+
   const segments = useMemo(
     () =>
       msg.role === "agent" && bubbleContent
-        ? // Recover any tool/skill call the model leaked as text (e.g. a raw
-          // `<skill_view>{"answer": …}</skill_view>` tag) before tokenizing.
-          parseMediaTokens(cleanLeakedToolTags(bubbleContent))
+        ? parseMediaTokens(cleanLeakedToolTags(bubbleContent))
         : null,
     [msg.role, bubbleContent],
   );
 
-  // Only chat bubble messages have content/attachments
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      setContextMenu({ x: e.clientX, y: e.clientY });
+    },
+    [],
+  );
+
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+
+  const handleCopy = useCallback(async () => {
+    if (!bubbleContent) return;
+    try {
+      await window.hermesAPI.copyToClipboard(bubbleContent);
+    } catch {
+      // ignore clipboard errors
+    }
+    closeContextMenu();
+  }, [bubbleContent, closeContextMenu]);
+
+  // Close context menu on click outside or Escape
+  useEffect(() => {
+    if (!contextMenu) return;
+    function onClick(e: MouseEvent): void {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        closeContextMenu();
+      }
+    }
+    function onKey(e: KeyboardEvent): void {
+      if (e.key === "Escape") closeContextMenu();
+    }
+    document.addEventListener("click", onClick, true);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("click", onClick, true);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [contextMenu, closeContextMenu]);
+
   if (!isChatBubbleMessage(msg)) {
     return (
       <div className={`chat-message chat-message-${msg.role}`}>
         {showAvatar ? <HermesAvatar /> : <AvatarSpacer />}
-        <div className={`chat-bubble chat-bubble-${msg.role}`}>
-          {/* Reasoning/tool messages handled separately */}
-        </div>
+        <div className={`chat-bubble chat-bubble-${msg.role}`} />
       </div>
     );
   }
@@ -106,6 +134,7 @@ export const MessageRow = memo(function MessageRow({
       className={`chat-message chat-message-${msg.role}${
         showAvatar ? "" : " chat-message--grouped"
       }`}
+      onContextMenu={handleContextMenu}
     >
       {!showAvatar ? (
         <AvatarSpacer />
@@ -131,11 +160,6 @@ export const MessageRow = memo(function MessageRow({
             ? segments.map((segment) =>
                 segment.type === "text" ? (
                   segment.value.trim() ? (
-                    // Keyed on the segment's character offset rather than its
-                    // array index — a MEDIA: token appearing mid-stream shifts
-                    // every subsequent index, which would otherwise re-mount
-                    // each downstream MediaSegmentView and re-fire its
-                    // `mediaFileExists` probe.
                     <AgentMarkdown key={`t-${segment.start}`}>
                       {segment.value}
                     </AgentMarkdown>
@@ -158,14 +182,28 @@ export const MessageRow = memo(function MessageRow({
       </div>
       {showApprovalBar && (
         <div className="chat-approval-bar">
-          <button
-            className="chat-approval-btn chat-approve"
-            onClick={onApprove}
-          >
+          <button className="chat-approval-btn chat-approve" onClick={onApprove}>
             {t("chat.approve")}
           </button>
           <button className="chat-approval-btn chat-deny" onClick={onDeny}>
             {t("chat.deny")}
+          </button>
+        </div>
+      )}
+
+      {contextMenu && (
+        <div
+          ref={menuRef}
+          className="chat-context-menu"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          <button
+            type="button"
+            className="chat-context-menu-item"
+            onClick={handleCopy}
+          >
+            <Copy size={14} />
+            <span>{t("chat.copyMessage")}</span>
           </button>
         </div>
       )}

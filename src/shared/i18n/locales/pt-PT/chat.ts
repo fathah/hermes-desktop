@@ -93,6 +93,7 @@ export default {
   },
   queued:
     "{{count}} mensagem(ns) em fila — serão enviadas quando o agente terminar",
+  copyMessage: "Copiar mensagem",
   queuedCancel: "Remover da fila",
   worktree: {
     loading: "A carregar",

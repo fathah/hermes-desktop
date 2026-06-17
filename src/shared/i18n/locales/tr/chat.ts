@@ -104,6 +104,7 @@ export default {
     version: "Hermes sürümünü göster",
   },
   queued: "{{count}} mesaj sırada — ajan işini bitirince gönderilecek",
+  copyMessage: "Mesajı kopyala",
   queuedCancel: "Sıradan kaldır",
   worktree: {
     loading: "Yükleniyor",

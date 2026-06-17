@@ -10738,3 +10738,36 @@ body {
   font-size: 11px;
   color: var(--text-muted);
 }
+
+/* Right-click context menu on messages */
+.chat-context-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 160px;
+  padding: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.chat-context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: background var(--transition);
+  text-align: left;
+}
+
+.chat-context-menu-item:hover {
+  background: var(--bg-hover);
+}

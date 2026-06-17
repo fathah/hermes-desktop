@@ -81,6 +81,7 @@ export default {
     persona: "Tampilkan persona saat ini",
     version: "Tampilkan versi Hermes",
   },
+  copyMessage: "Salin pesan",
   queuedCancel: "Batalkan pesan antrian",
   worktree: {
     loading: "Memuat",

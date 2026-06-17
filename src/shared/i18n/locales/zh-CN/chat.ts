@@ -77,6 +77,7 @@ export default {
     persona: "查看当前人格",
     version: "查看 Hermes 版本",
   },
+  copyMessage: "复制消息",
   queuedCancel: "从队列中移除",
   worktree: {
     loading: "加载中",

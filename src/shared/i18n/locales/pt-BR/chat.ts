@@ -81,6 +81,7 @@ export default {
     persona: "Mostrar a persona atual",
     version: "Mostrar a versão do Hermes",
   },
+  copyMessage: "Copiar mensagem",
   queuedCancel: "Remover da fila",
   worktree: {
     loading: "Carregando",

@@ -107,6 +107,7 @@ export default {
     version: "Mostrar la versión de Hermes",
   },
   queued: "{{count}} mensaje(s) en cola — se enviará cuando el agente termine",
+  copyMessage: "Copiar mensaje",
   queuedCancel: "Quitar de la cola",
   worktree: {
     loading: "Cargando",

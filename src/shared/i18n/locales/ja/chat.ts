@@ -80,6 +80,7 @@ export default {
     persona: "現在のペルソナを表示",
     version: "Hermes バージョンを表示",
   },
+  copyMessage: "メッセージをコピー",
   queuedCancel: "キューから削除",
   worktree: {
     loading: "読み込み中",

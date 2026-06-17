@@ -66,6 +66,7 @@ export default {
     version: "檢視 Hermes 版本",
   },
   queued: "{{count}} 則訊息已排隊 — 代理完成後將自動傳送",
+  copyMessage: "複製訊息",
   queuedCancel: "從佇列中移除",
   worktree: {
     loading: "載入中",
