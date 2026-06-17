@@ -16,6 +16,7 @@ import {
   type ContentIdea,
 } from "../../../../../shared/content-studio";
 import { saveContentIdea } from "../content/contentStudioStorage";
+import { useStore } from "../store";
 
 interface StatusUpdatingTarget {
   runId: string;
@@ -69,6 +70,7 @@ function visibleSignalText(candidate: SubstackRadarCandidate): string[] {
 }
 
 export function SubstackRadarPanel(): React.JSX.Element {
+  const openContentStudioIdea = useStore((s) => s.openContentStudioIdea);
   const [categoryInput, setCategoryInput] = useState("");
   const [activeRun, setActiveRun] = useState<SubstackRadarRun | null>(null);
   const [isLoadingRuns, setIsLoadingRuns] = useState(true);
@@ -282,6 +284,7 @@ export function SubstackRadarPanel(): React.JSX.Element {
       },
     };
     await saveContentIdea(idea);
+    openContentStudioIdea(idea);
     setAddResult(null);
     setNotice("Saved as a Content Studio idea.");
   };
@@ -316,6 +319,7 @@ export function SubstackRadarPanel(): React.JSX.Element {
       },
     });
     await saveContentIdea(idea);
+    openContentStudioIdea(idea);
     setAddResult(null);
     setNotice("Saved approved sources as a Content Studio idea.");
   };

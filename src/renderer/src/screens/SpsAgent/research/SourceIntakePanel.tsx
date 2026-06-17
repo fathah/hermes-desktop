@@ -11,6 +11,7 @@ import {
 import { Icon } from "../components/Icon";
 import { SubstackRadarPanel } from "./SubstackRadarPanel";
 import { saveContentIdea } from "../content/contentStudioStorage";
+import { useStore } from "../store";
 
 type SourceTab = "find" | "add" | "study" | "review";
 
@@ -43,6 +44,7 @@ function extractChatReply(res: unknown): string {
 export function SourceIntakePanel({
   onFeedsChanged,
 }: SourceIntakePanelProps): React.JSX.Element {
+  const openContentStudioIdea = useStore((s) => s.openContentStudioIdea);
   const [tab, setTab] = useState<SourceTab>("add");
   const [status, setStatus] = useState<SourceIntakeStatus | null>(null);
   const [url, setUrl] = useState("");
@@ -149,6 +151,7 @@ export function SourceIntakePanel({
       rubric: { proof: result.links.length ? 1 : 0 },
     });
     await saveContentIdea(idea);
+    openContentStudioIdea(idea);
     setMessage("Saved as content idea.");
   }
 
@@ -174,14 +177,14 @@ export function SourceIntakePanel({
     setSaving(true);
     setMessage("");
     try {
-      await saveContentIdea(
-        buildContentIdeaFromSources({
-          id: `idea-sources-${Date.now().toString(36)}`,
-          title: ideaTitle.trim() || ideaSources[0]?.title,
-          sources: ideaSources,
-          capturedFrom: "sources",
-        }),
-      );
+      const idea = buildContentIdeaFromSources({
+        id: `idea-sources-${Date.now().toString(36)}`,
+        title: ideaTitle.trim() || ideaSources[0]?.title,
+        sources: ideaSources,
+        capturedFrom: "sources",
+      });
+      await saveContentIdea(idea);
+      openContentStudioIdea(idea);
       setMessage("Created Content Studio idea.");
     } finally {
       setSaving(false);
@@ -213,16 +216,16 @@ export function SourceIntakePanel({
     setSaving(true);
     setMessage("");
     try {
-      await saveContentIdea(
-        buildContentIdeaFromSources({
-          id: `idea-study-${Date.now().toString(36)}`,
-          title: studyFocus.trim(),
-          sources: urls.map((sourceUrl) => ({ url: sourceUrl })),
-          angle: studyResult,
-          capturedFrom: "source-study",
-          rubric: { proof: urls.length ? 1 : 0, originality: 1 },
-        }),
-      );
+      const idea = buildContentIdeaFromSources({
+        id: `idea-study-${Date.now().toString(36)}`,
+        title: studyFocus.trim(),
+        sources: urls.map((sourceUrl) => ({ url: sourceUrl })),
+        angle: studyResult,
+        capturedFrom: "source-study",
+        rubric: { proof: urls.length ? 1 : 0, originality: 1 },
+      });
+      await saveContentIdea(idea);
+      openContentStudioIdea(idea);
       setMessage("Saved study as content idea.");
     } finally {
       setSaving(false);

@@ -151,6 +151,10 @@ export function ContentStudioSurface({
   const meta = useStore((s) => s.meta);
   const makePage = useStore((s) => s.makePage);
   const flash = useStore((s) => s.flash);
+  const pendingContentStudioIdea = useStore((s) => s.pendingContentStudioIdea);
+  const clearPendingContentStudioIdea = useStore(
+    (s) => s.clearPendingContentStudioIdea,
+  );
   const [contentRootId, setContentRootId] = useState("");
   const [activePanel, setActivePanel] = useState<ContentStudioPanel>("ideas");
   const [dashboardSummary, setDashboardSummary] =
@@ -286,6 +290,24 @@ export function ContentStudioSurface({
       cancelled = true;
     };
   }, [profile]);
+
+  useEffect(() => {
+    if (!pendingContentStudioIdea) return;
+    setIdeaTitle(pendingContentStudioIdea.title);
+    setSourceUrlsText(pendingContentStudioIdea.sourceUrls.join("\n"));
+    setAudience(pendingContentStudioIdea.audience);
+    setAngle(pendingContentStudioIdea.angle);
+    setRubric(pendingContentStudioIdea.rubric);
+    setOverrideLowScore(Boolean(pendingContentStudioIdea.overrideLowScore));
+    setCurrentIdea(pendingContentStudioIdea);
+    setCurrentRun(null);
+    setRunMessage("");
+    setVariantMessage("");
+    setLastAssistantRunId("");
+    setDraftVariants([]);
+    setActivePanel("ideas");
+    clearPendingContentStudioIdea();
+  }, [clearPendingContentStudioIdea, pendingContentStudioIdea]);
 
   const score = useMemo(() => scoreContentIdea(rubric), [rubric]);
 

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ContentStudioSurface } from "./ContentStudioSurface";
+import type { ContentIdea } from "../../../../../shared/content-studio";
 import type { PageMeta, TreeNode } from "../types";
 
 const store = vi.hoisted(() => ({
@@ -10,6 +11,8 @@ const store = vi.hoisted(() => ({
   selectPage: vi.fn(),
   setSurface: vi.fn(),
   flash: vi.fn(),
+  pendingContentStudioIdea: null as ContentIdea | null,
+  clearPendingContentStudioIdea: vi.fn(),
 }));
 const api = vi.hoisted(() => ({
   spsExportRow: vi.fn(),
@@ -35,6 +38,8 @@ beforeEach(() => {
   store.selectPage.mockReset();
   store.setSurface.mockReset();
   store.flash.mockReset();
+  store.pendingContentStudioIdea = null;
+  store.clearPendingContentStudioIdea.mockReset();
   store.makePage.mockImplementation(
     () => `pg-${store.makePage.mock.calls.length}`,
   );
@@ -132,6 +137,66 @@ describe("ContentStudioSurface", () => {
         "content-root",
       );
     }
+  });
+
+  it("prefills scoring and run generation from a captured source handoff", async () => {
+    store.pendingContentStudioIdea = {
+      id: "idea-prefilled-source",
+      title: "Prefilled source idea",
+      sourceUrls: ["https://example.com/source"],
+      audience: "founders",
+      angle: "Turn this source into a concrete operator checklist.",
+      createdAt: "2026-06-17",
+      updatedAt: "2026-06-17",
+      status: "captured",
+      capturedFrom: "source-preview",
+      rubric: {
+        bookmarkability: 2,
+        proof: 2,
+        immediateUse: 2,
+        audienceClarity: 2,
+        reproducibility: 1,
+        hookStrength: 1,
+        originality: 1,
+      },
+    };
+
+    render(<ContentStudioSurface />);
+
+    expect(
+      await screen.findByDisplayValue("Prefilled source idea"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByDisplayValue("https://example.com/source"),
+    ).toBeInTheDocument();
+    expect(screen.getByDisplayValue("founders")).toBeInTheDocument();
+    expect(
+      screen.getByDisplayValue(
+        "Turn this source into a concrete operator checklist.",
+      ),
+    ).toBeInTheDocument();
+    expect(await screen.findByText(/Score: 11\/14/)).toBeInTheDocument();
+    expect(store.clearPendingContentStudioIdea).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Start content run" }));
+
+    await waitFor(() =>
+      expect(api.spsExportRow).toHaveBeenCalledWith(
+        "content-runs",
+        expect.stringContaining("content-run-run-prefilled-source-idea"),
+        expect.stringContaining("https://example.com/source"),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Generate variants" }));
+
+    await waitFor(() =>
+      expect(api.spsRunAssistantRecipe).toHaveBeenCalledWith(
+        "recipe-content",
+        expect.stringContaining("Prefilled source idea"),
+        "default",
+      ),
+    );
   });
 
   it("blocks starting a run for low-score ideas until override is selected", async () => {

@@ -8,6 +8,14 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SubstackRadarPanel } from "./SubstackRadarPanel";
 
+const store = vi.hoisted(() => ({
+  openContentStudioIdea: vi.fn(),
+}));
+
+vi.mock("../store", () => ({
+  useStore: (selector: (s: typeof store) => unknown) => selector(store),
+}));
+
 const latestRun = {
   id: "run-1",
   query: "AI agents, markets",
@@ -82,6 +90,7 @@ function installApi(): void {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  store.openContentStudioIdea.mockReset();
   installApi();
   api.spsSubstackRadarListRuns.mockResolvedValue([]);
   api.spsSubstackRadarRun.mockResolvedValue(latestRun);
@@ -375,6 +384,41 @@ describe("SubstackRadarPanel", () => {
     expect(markdown).toContain("https://example.substack.com");
     expect(markdown).toContain("https://second.substack.com");
     expect(markdown).not.toContain("https://rejected.substack.com");
+    expect(store.openContentStudioIdea).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Approved Substack sources",
+        sourceUrls: [
+          "https://example.substack.com",
+          "https://substack.com/discover/ai-agents",
+          "https://second.substack.com",
+          "https://substack.com/discover/markets",
+        ],
+        capturedFrom: "substack-radar",
+      }),
+    );
+  });
+
+  it("opens Content Studio from a saved radar candidate", async () => {
+    api.spsSubstackRadarListRuns.mockResolvedValue([latestRun]);
+
+    render(<SubstackRadarPanel />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /save as content idea/i }),
+    );
+
+    await waitFor(() =>
+      expect(store.openContentStudioIdea).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Example Letters",
+          sourceUrls: [
+            "https://example.substack.com",
+            "https://substack.com/discover/ai-agents",
+          ],
+          capturedFrom: "substack-radar",
+        }),
+      ),
+    );
   });
 
   it("does not apply a stale status update to a newer active run", async () => {

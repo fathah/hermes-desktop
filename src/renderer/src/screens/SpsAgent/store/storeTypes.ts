@@ -15,8 +15,14 @@ import type {
 import type { WorkDetail } from "../../../../../shared/openalex/core";
 import type { ExternalSource } from "../../../../../shared/external-context";
 import type { ResearchReachIntent } from "../../../../../shared/research-reach";
+import type { ContentIdea } from "../../../../../shared/content-studio";
 
-export type RightTab = "assistant" | "outline" | "comments" | "info" | "backlinks";
+export type RightTab =
+  | "assistant"
+  | "outline"
+  | "comments"
+  | "info"
+  | "backlinks";
 
 /** A transcript hit to auto-open in the External Sessions viewer (federated
  *  search routing). Carries just enough to reconstruct the viewer call + banner. */
@@ -239,11 +245,14 @@ export interface UiSlice {
   // cleanly (re-captures the pending prompt, reloads the transcript).
   chatNonce: number;
   activeObsidianPath: string | null;
+  pendingContentStudioIdea: ContentIdea | null;
 
   setPanelOpen: (v: boolean) => void;
   setRightTab: (t: RightTab) => void;
   openPanelTab: (t: RightTab) => void;
   setSurface: (s: Surface) => void;
+  openContentStudioIdea: (idea: ContentIdea) => void;
+  clearPendingContentStudioIdea: () => void;
   setPaletteOpen: (v: boolean) => void;
   setTemplatesOpen: (v: { parent: string | null } | null) => void;
   setTrashOpen: (v: boolean) => void;

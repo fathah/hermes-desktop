@@ -2,6 +2,14 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SourceIntakePanel } from "./SourceIntakePanel";
 
+const store = vi.hoisted(() => ({
+  openContentStudioIdea: vi.fn(),
+}));
+
+vi.mock("../store", () => ({
+  useStore: (selector: (s: typeof store) => unknown) => selector(store),
+}));
+
 const api = {
   sourceIntakeStatus: vi.fn(),
   sourceIntakePreviewUrl: vi.fn(),
@@ -20,6 +28,7 @@ function installApi(): void {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  store.openContentStudioIdea.mockReset();
   installApi();
   api.sourceIntakeStatus.mockResolvedValue({
     checkedAt: 1,
@@ -114,6 +123,13 @@ describe("SourceIntakePanel", () => {
       expect.stringContaining("content-idea-example-page"),
       expect.stringContaining('type: "content-idea"'),
     );
+    expect(store.openContentStudioIdea).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Example Page",
+        sourceUrls: ["https://example.com/page"],
+        capturedFrom: "source-preview",
+      }),
+    );
   });
 
   it("creates one Content Studio idea from multiple reviewed sources", async () => {
@@ -168,6 +184,13 @@ describe("SourceIntakePanel", () => {
     const markdown = String(api.spsExportRow.mock.calls.at(-1)?.[2] ?? "");
     expect(markdown).toContain("https://one.example/page");
     expect(markdown).toContain("https://two.example/page");
+    expect(store.openContentStudioIdea).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Combined source idea",
+        sourceUrls: ["https://one.example/page", "https://two.example/page"],
+        capturedFrom: "sources",
+      }),
+    );
   });
 
   it("saves a Study sources result as one Content Studio idea with corpus URLs", async () => {
@@ -202,6 +225,13 @@ describe("SourceIntakePanel", () => {
     expect(markdown).toContain("https://one.example/study");
     expect(markdown).toContain("https://two.example/study");
     expect(markdown).toContain("The corpus argues");
+    expect(store.openContentStudioIdea).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Source-backed workflows",
+        sourceUrls: ["https://one.example/study", "https://two.example/study"],
+        capturedFrom: "source-study",
+      }),
+    );
   });
 
   it("shows Crawl4AI setup guidance when extraction is unavailable", async () => {

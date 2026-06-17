@@ -59,6 +59,7 @@ export const createUiSlice: StateCreator<Store, [], [], UiSlice> = (
   pendingChatPrompt: null,
   chatNonce: 0,
   activeObsidianPath: null,
+  pendingContentStudioIdea: null,
 
   setPanelOpen: (v) => set({ panelOpen: v }),
   setRightTab: (t) => {
@@ -72,6 +73,13 @@ export const createUiSlice: StateCreator<Store, [], [], UiSlice> = (
     set({ panelOpen: true, rightTab: t });
   },
   setSurface: (s) => set({ surface: s }),
+  openContentStudioIdea: (idea) =>
+    set({
+      surface: "contentStudio",
+      pendingContentStudioIdea: idea,
+      researchOpen: false,
+    }),
+  clearPendingContentStudioIdea: () => set({ pendingContentStudioIdea: null }),
   setPaletteOpen: (v) => set({ paletteOpen: v }),
   setTemplatesOpen: (v) => set({ templatesOpen: v }),
   setTrashOpen: (v) => set({ trashOpen: v }),

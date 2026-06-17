@@ -41,6 +41,7 @@ export function ResearchModal() {
   const runResearch = useStore((s) => s.runResearch);
   const saveStudyToWiki = useStore((s) => s.saveStudyToWiki);
   const flash = useStore((s) => s.flash);
+  const openContentStudioIdea = useStore((s) => s.openContentStudioIdea);
   const onClose = () => setResearchOpen(false);
 
   const [mode, setMode] = useState<Mode>("research");
@@ -342,6 +343,7 @@ export function ResearchModal() {
       },
     };
     await saveContentIdea(idea);
+    openContentStudioIdea(idea);
     flash("Saved research as a Content Studio idea.");
   };
 
