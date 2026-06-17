@@ -288,10 +288,19 @@ export const CONTENT_STUDIO_PLAYBOOKS: ContentStudioPlaybook[] = [
       originality: 1,
     },
     suggestedHookRoutes: ["proof-led", "checklist", "contrarian"],
-    evidenceRequirements: ["pricing/source page", "tested workflow", "limits"],
+    evidenceRequirements: [
+      "source proof",
+      "tested workflow",
+      "limits/tradeoffs",
+    ],
     assetBriefPrompt:
-      "Show the tool, the workflow, and the result side by side.",
-    publishChecklist: ["source link", "tested limitation", "manual publish"],
+      "Show the tool, tested workflow, practical value, and key limitation side by side.",
+    publishChecklist: [
+      "source link",
+      "tested limitation",
+      "fair-critic caveat",
+      "manual publish",
+    ],
     bypassesQualityGate: false,
   },
   {
@@ -1110,6 +1119,11 @@ export function buildContentWriterPrompt(input: {
 }): string {
   return [
     "Create exactly three review-first short-form draft variants.",
+    "Write for one save-worthy audience, not a generic feed.",
+    "Add original value beyond summarizing sources: a tested workflow, useful frame, reusable checklist, or honest limitation.",
+    "Do not invent numbers, model availability, free-tier claims, or platform coverage.",
+    "Put source gaps and hostile-reader objections in sourceNotes.",
+    "Keep the publish packet manual and disclosure-aware.",
     "Use this exact structure for parsing:",
     "Variant A",
     "hookRoute: ...",
@@ -1138,7 +1152,6 @@ export function buildContentWriterPrompt(input: {
     `Platform: ${input.platform}`,
     `Hook route: ${input.hookRoute}`,
     `Sources: ${input.sourceUrls.join(", ") || "none"}`,
-    "Do not invent numbers. Flag missing proof in sourceNotes.",
   ].join("\n");
 }
 

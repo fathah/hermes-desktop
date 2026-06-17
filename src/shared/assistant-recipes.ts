@@ -218,11 +218,11 @@ export const ASSISTANT_RECIPE_TEMPLATES: AssistantRecipeTemplate[] = [
     description:
       "Turn a sourced idea into review-first short-form post variants.",
     defaultJob:
-      "Research the idea, verify claims against sources, write three draft variants with different hooks, and propose a final publish packet for review.",
+      "Research the idea, add original value beyond the sources, verify claims, name evidence gaps and fair objections, write three draft variants with different hooks, and propose a manual-review publish packet.",
     defaultInputs:
-      "A scored content idea, source links, target audience, platform, hook route, and disclosure notes.",
+      "A scored content idea, source links, target audience, platform, hook route, evidence gaps, and disclosure notes.",
     defaultOutput:
-      "three draft variants, source notes, an asset brief, disclosure reminders, and a final publish packet.",
+      "three draft variants, source notes with evidence gaps, an asset brief, disclosure reminders, and a manual review publish packet.",
     defaultActions: [
       "read_workspace",
       "search_web",

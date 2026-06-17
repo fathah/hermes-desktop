@@ -88,6 +88,11 @@ describe("assistant recipe store", () => {
       ],
     });
     expect(template?.defaultOutput).toContain("three draft variants");
+    expect(template?.defaultJob).toContain("original");
+    expect(template?.defaultJob).toContain("evidence gaps");
+    expect(template?.defaultInputs).toContain("disclosure");
+    expect(template?.defaultOutput).toContain("manual review");
+    expect(template?.defaultOutput).toContain("disclosure");
   });
 
   it("creates a recipe and a profile skill", async () => {

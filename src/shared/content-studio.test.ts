@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   calculateBmLike,
   buildContentStudioDashboard,
+  buildContentWriterPrompt,
   buildContentIdeaFromSources,
   buildWeeklyReviewProposals,
   canStartContentRun,
@@ -469,6 +470,40 @@ describe("creator playbooks", () => {
       bypassesQualityGate: false,
     });
     expect(teardown?.rubric.bookmarkability).toBe(2);
+    expect(teardown?.evidenceRequirements).toEqual(
+      expect.arrayContaining([
+        "source proof",
+        "tested workflow",
+        "limits/tradeoffs",
+      ]),
+    );
+    expect(teardown?.assetBriefPrompt).toContain("practical value");
+    expect(teardown?.publishChecklist).toEqual(
+      expect.arrayContaining(["fair-critic caveat", "manual publish"]),
+    );
+  });
+
+  it("builds a Steelman content-writer prompt without changing the variant parse contract", () => {
+    const prompt = buildContentWriterPrompt({
+      title: "Agent Reach setup",
+      sourceUrls: ["https://example.com/source"],
+      audience: "AI builders",
+      angle: "Show the tested workflow and limits",
+      platform: "x",
+      hookRoute: "proof-led",
+    });
+
+    expect(prompt).toContain("one save-worthy audience");
+    expect(prompt).toContain("original value beyond summarizing sources");
+    expect(prompt).toContain(
+      "Do not invent numbers, model availability, free-tier claims, or platform coverage.",
+    );
+    expect(prompt).toContain("source gaps");
+    expect(prompt).toContain("hostile-reader objections");
+    expect(prompt).toContain("manual and disclosure-aware");
+    expect(prompt).toMatch(
+      /Variant A[\s\S]*Variant B[\s\S]*Variant C[\s\S]*hookRoute: \.\.\.[\s\S]*draftText: \.\.\.[\s\S]*sourceNotes: \.\.\./,
+    );
   });
 });
 
