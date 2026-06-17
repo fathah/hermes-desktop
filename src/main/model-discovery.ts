@@ -11,8 +11,8 @@
  * picker; this mirrors that flow on the desktop side without going
  * through the Python CLI.
  */
-import http from "http";
-import https from "https";
+import http from "node:http";
+import https from "node:https";
 import { URL } from "url";
 import { execFile } from "child_process";
 import { readEnv, readAuthStore } from "./config";

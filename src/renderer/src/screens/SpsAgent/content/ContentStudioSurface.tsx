@@ -22,6 +22,10 @@ import {
   type DraftClaim,
   type DraftVariant,
 } from "../../../../../shared/content-studio";
+import {
+  buildDeckInputFromContentIdea,
+  buildDeckInputFromContentRun,
+} from "../../../../../shared/deck-studio";
 import { ASSISTANT_RECIPE_TEMPLATES } from "../../../../../shared/assistant-recipes";
 import { blk } from "../lib/ids";
 import { useStore } from "../store";
@@ -155,6 +159,7 @@ export function ContentStudioSurface({
   const clearPendingContentStudioIdea = useStore(
     (s) => s.clearPendingContentStudioIdea,
   );
+  const openDeckStudioInput = useStore((s) => s.openDeckStudioInput);
   const [contentRootId, setContentRootId] = useState("");
   const [activePanel, setActivePanel] = useState<ContentStudioPanel>("ideas");
   const [dashboardSummary, setDashboardSummary] =
@@ -722,6 +727,25 @@ export function ContentStudioSurface({
     setActivePanel(panel);
   }
 
+  function openIdeaDeck(): void {
+    const idea = currentIdea || buildIdea();
+    openDeckStudioInput(buildDeckInputFromContentIdea(idea));
+    flash("Opened Deck Studio with this content idea.");
+  }
+
+  function openRunDeck(): void {
+    if (!currentRun) return;
+    openDeckStudioInput(
+      buildDeckInputFromContentRun(currentRun, {
+        audience: currentIdea?.audience || "content team",
+        style: currentIdea?.angle
+          ? `source-grounded, creator-friendly, ${currentIdea.angle}`
+          : "source-grounded, creator-friendly",
+      }),
+    );
+    flash("Opened Deck Studio with this content run.");
+  }
+
   return (
     <div className="content-studio-surface">
       <div className="active-work-head">
@@ -769,6 +793,29 @@ export function ContentStudioSurface({
         onGenerateVariants={() => void generateVariants()}
         onSaveAssistantResult={() => void saveAssistantResult()}
       />
+
+      <section className="active-work-section">
+        <h2>Deck handoff</h2>
+        <p className="content-studio-quality">
+          Turn the current idea or active run into a source-grounded deck brief.
+        </p>
+        <div className="memory-entry-form-actions">
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={openIdeaDeck}
+            disabled={!ideaTitle.trim() && !angle.trim() && !sourceUrlsText.trim()}
+          >
+            Deck from idea
+          </button>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={openRunDeck}
+            disabled={!currentRun}
+          >
+            Deck from run
+          </button>
+        </div>
+      </section>
 
       <DraftWorkbench
         draftText={draftText}

@@ -80,6 +80,13 @@ import type {
   CreateAssistantRecipeInput,
 } from "../shared/assistant-recipes";
 import type {
+  DeckExportResult,
+  DeckGenerationInput,
+  DeckGenerationResult,
+  DeckProject,
+  DeckStudioVaultRow,
+} from "../shared/deck-studio";
+import type {
   NotebookLmMcpStatus,
   SrPendingUpdate,
   SrPatch,
@@ -1329,6 +1336,28 @@ interface HermesAPI {
     input: SpsBaseProposalInput,
     profile?: string,
   ) => Promise<VaultProposal>;
+  deckGenerate: (
+    input: DeckGenerationInput,
+    profile?: string,
+  ) => Promise<DeckGenerationResult>;
+  deckSave: (
+    project: DeckProject,
+    profile?: string,
+  ) => Promise<{ ok: boolean; rowId?: string }>;
+  deckList: (profile?: string) => Promise<DeckStudioVaultRow[]>;
+  deckRead: (rowId: string, profile?: string) => Promise<DeckProject | null>;
+  deckExportPdf: (
+    project: DeckProject,
+    profile?: string,
+  ) => Promise<DeckExportResult>;
+  deckExportPptx: (
+    project: DeckProject,
+    profile?: string,
+  ) => Promise<DeckExportResult>;
+  deckOpenExport: (
+    filePath: string,
+    profile?: string,
+  ) => Promise<{ ok: boolean; error?: string }>;
   spsListAssistantRecipes: (profile?: string) => Promise<AssistantRecipe[]>;
   spsCreateAssistantRecipe: (
     input: CreateAssistantRecipeInput,

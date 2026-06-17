@@ -30,7 +30,7 @@ const { spawned, TEST_HOME, TEST_REPO, healthStatuses, apiRequests } =
     };
   });
 
-vi.mock("http", () => ({
+vi.mock("node:http", () => ({
   default: {
     request: (
       _url: string,
@@ -95,7 +95,7 @@ vi.mock("http", () => ({
   },
 }));
 
-vi.mock("https", () => ({
+vi.mock("node:https", () => ({
   default: {
     request: () => ({
       write: () => {},

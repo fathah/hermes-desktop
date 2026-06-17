@@ -10,8 +10,8 @@ import {
 } from "fs";
 import { join } from "path";
 import { homedir } from "os";
-import http from "http";
-import https from "https";
+import http from "node:http";
+import https from "node:https";
 import { getSshTunnelUrl } from "../ssh-tunnel";
 import {
   HERMES_HOME,

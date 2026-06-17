@@ -474,6 +474,17 @@ export function Sidebar() {
                 <Icon name="sparkle" size={17} />
                 <span className="nav-label">Content Studio</span>
               </button>
+
+              <button
+                type="button"
+                className={`nav-item ${
+                  surface === "deckStudio" ? "active" : ""
+                }`}
+                onClick={() => setSurface("deckStudio")}
+              >
+                <Icon name="board" size={17} />
+                <span className="nav-label">Deck Studio</span>
+              </button>
             </>
           )}
         </div>

@@ -1,4 +1,4 @@
-import { createServer, IncomingMessage, ServerResponse } from "http";
+import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { randomBytes } from "crypto";
 import {
   writeFileSync,

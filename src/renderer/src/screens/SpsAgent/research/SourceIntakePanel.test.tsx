@@ -4,6 +4,7 @@ import { SourceIntakePanel } from "./SourceIntakePanel";
 
 const store = vi.hoisted(() => ({
   openContentStudioIdea: vi.fn(),
+  openDeckStudioInput: vi.fn(),
 }));
 
 vi.mock("../store", () => ({
@@ -29,6 +30,7 @@ function installApi(): void {
 beforeEach(() => {
   vi.clearAllMocks();
   store.openContentStudioIdea.mockReset();
+  store.openDeckStudioInput.mockReset();
   installApi();
   api.sourceIntakeStatus.mockResolvedValue({
     checkedAt: 1,
@@ -132,6 +134,36 @@ describe("SourceIntakePanel", () => {
     );
   });
 
+  it("opens Deck Studio from a reviewed source", async () => {
+    render(<SourceIntakePanel />);
+
+    fireEvent.change(screen.getByLabelText(/source url/i), {
+      target: { value: "https://example.com/page" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /read source/i }));
+
+    expect(await screen.findByText("Example Page")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /deck from source/i }));
+
+    expect(store.openDeckStudioInput).toHaveBeenCalledWith(
+      expect.objectContaining({
+        notes: expect.stringContaining("# Example Page"),
+        title: "Example Page",
+        theme: "research",
+        sourceRefs: [
+          expect.objectContaining({
+            kind: "research",
+            label: "Example Page",
+            locator: "https://example.com/page",
+          }),
+        ],
+      }),
+    );
+    expect(
+      await screen.findByText("Opened Deck Studio with this source."),
+    ).toBeInTheDocument();
+  });
+
   it("creates one Content Studio idea from multiple reviewed sources", async () => {
     api.sourceIntakePreviewUrl.mockImplementation((inputUrl: string) =>
       Promise.resolve({
@@ -232,6 +264,33 @@ describe("SourceIntakePanel", () => {
         capturedFrom: "source-study",
       }),
     );
+  });
+
+  it("opens Deck Studio from a study result", async () => {
+    render(<SourceIntakePanel />);
+
+    fireEvent.click(screen.getByRole("tab", { name: /study/i }));
+    fireEvent.change(screen.getByLabelText(/study focus/i), {
+      target: { value: "Source-backed workflows" },
+    });
+    fireEvent.change(screen.getByLabelText(/corpus description/i), {
+      target: { value: "Use https://one.example/study." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^study$/i }));
+
+    expect(await screen.findByText(/source-backed workflows/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /deck from study/i }));
+
+    expect(store.openDeckStudioInput).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Source-backed workflows",
+        notes: expect.stringContaining("The corpus argues"),
+        theme: "research",
+      }),
+    );
+    expect(
+      await screen.findByText("Opened Deck Studio with this study."),
+    ).toBeInTheDocument();
   });
 
   it("shows Crawl4AI setup guidance when extraction is unavailable", async () => {

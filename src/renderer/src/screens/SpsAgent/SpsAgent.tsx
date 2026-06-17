@@ -23,6 +23,7 @@ import "./styles/ask.css";
 import "./styles/equity.css";
 import "./styles/tweaks.css";
 import "./styles/health-rss.css";
+import "./styles/deck-studio.css";
 import "./screen.css";
 import { App } from "./App";
 import { useStore, hydrateWorkspace } from "./store";

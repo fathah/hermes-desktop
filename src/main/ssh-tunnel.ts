@@ -2,7 +2,7 @@ import { ChildProcess, spawn } from "child_process";
 import { homedir } from "os";
 import { join } from "path";
 import net from "net";
-import http from "http";
+import http from "node:http";
 import { buildSshControlOptions } from "./ssh-options";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 

@@ -1,8 +1,8 @@
 import { spawn } from "child_process";
 import { randomUUID } from "crypto";
-import http from "http";
-import type { ClientRequest } from "http";
-import https from "https";
+import http from "node:http";
+import type { ClientRequest } from "node:http";
+import https from "node:https";
 import { homedir } from "os";
 import {
   HERMES_HOME,

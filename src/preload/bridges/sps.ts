@@ -42,6 +42,13 @@ import type {
   ActiveWorkPatch,
   ActiveWorkRun,
 } from "../../shared/active-work";
+import type {
+  DeckExportResult,
+  DeckGenerationInput,
+  DeckGenerationResult,
+  DeckProject,
+  DeckStudioVaultRow,
+} from "../../shared/deck-studio";
 
 /** Pending scheduled-research merge, shaped for the renderer (inline changeset
  *  shape mirrors spsFileAnswer's so preload need not import main types). */
@@ -253,6 +260,37 @@ export const spsBridge = {
     profile?: string,
   ): Promise<VaultProposal> =>
     ipcRenderer.invoke("sps-create-base-proposal", input, profile),
+  deckGenerate: (
+    input: DeckGenerationInput,
+    profile?: string,
+  ): Promise<DeckGenerationResult> =>
+    ipcRenderer.invoke("deck-generate", input, profile),
+  deckSave: (
+    project: DeckProject,
+    profile?: string,
+  ): Promise<{ ok: boolean; rowId?: string }> =>
+    ipcRenderer.invoke("deck-save", project, profile),
+  deckList: (profile?: string): Promise<DeckStudioVaultRow[]> =>
+    ipcRenderer.invoke("deck-list", profile),
+  deckRead: (
+    rowId: string,
+    profile?: string,
+  ): Promise<DeckProject | null> => ipcRenderer.invoke("deck-read", rowId, profile),
+  deckExportPdf: (
+    project: DeckProject,
+    profile?: string,
+  ): Promise<DeckExportResult> =>
+    ipcRenderer.invoke("deck-export-pdf", project, profile),
+  deckExportPptx: (
+    project: DeckProject,
+    profile?: string,
+  ): Promise<DeckExportResult> =>
+    ipcRenderer.invoke("deck-export-pptx", project, profile),
+  deckOpenExport: (
+    filePath: string,
+    profile?: string,
+  ): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke("deck-open-export", filePath, profile),
   spsListAssistantRecipes: (profile?: string): Promise<AssistantRecipe[]> =>
     ipcRenderer.invoke("sps-list-assistant-recipes", profile),
   spsCreateAssistantRecipe: (

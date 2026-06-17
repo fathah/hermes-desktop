@@ -2,6 +2,7 @@ export type AssistantRecipeKind =
   | "research-brief"
   | "article-writer"
   | "content-writer"
+  | "deck-builder"
   | "meeting-debrief"
   | "file-processor"
   | "morning-briefing"
@@ -249,6 +250,41 @@ export const ASSISTANT_RECIPE_TEMPLATES: AssistantRecipeTemplate[] = [
         key: "disclosure",
         label: "Disclosure notes",
         placeholder: "Sponsor, free account, affiliate, synthetic media, none",
+      },
+    ],
+  },
+  {
+    kind: "deck-builder",
+    title: "Deck builder",
+    description:
+      "Turn rough notes and sourced workspace context into a review-first slide deck outline.",
+    defaultJob:
+      "Read the selected notes, clarify the audience and goal, choose a coherent narrative, and return a strict DeckProject JSON draft for Deck Studio.",
+    defaultInputs:
+      "Rough notes, selected workspace context, target audience, deck goal, desired length, and visual style.",
+    defaultOutput:
+      "Strict DeckProject JSON only: supported slide kinds, concise slide copy, source references, evidenceRefs, and speaker notes for review.",
+    defaultActions: ["read_workspace", "draft_content", "propose_changes"],
+    fields: [
+      {
+        key: "audience",
+        label: "Audience",
+        placeholder: "Seed investors, executive team, students, product buyers",
+      },
+      {
+        key: "goal",
+        label: "Goal",
+        placeholder: "Raise a round, teach a concept, align a product decision",
+      },
+      {
+        key: "length",
+        label: "Length",
+        placeholder: "5, 8, 10, or 12 slides",
+      },
+      {
+        key: "style",
+        label: "Style",
+        placeholder: "Investor, research, product, lecture, executive",
       },
     ],
   },

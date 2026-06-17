@@ -16,6 +16,7 @@ import type { WorkDetail } from "../../../../../shared/openalex/core";
 import type { ExternalSource } from "../../../../../shared/external-context";
 import type { ResearchReachIntent } from "../../../../../shared/research-reach";
 import type { ContentIdea } from "../../../../../shared/content-studio";
+import type { DeckGenerationInput } from "../../../../../shared/deck-studio";
 
 export type RightTab =
   | "assistant"
@@ -62,7 +63,8 @@ export type Surface =
   | "work"
   | "personal-health"
   | "rss-reader"
-  | "contentStudio";
+  | "contentStudio"
+  | "deckStudio";
 
 // Named, toggleable sidebar sections (Notion 3.1 grammar). Order here is the
 // render order in the rail.
@@ -246,6 +248,7 @@ export interface UiSlice {
   chatNonce: number;
   activeObsidianPath: string | null;
   pendingContentStudioIdea: ContentIdea | null;
+  pendingDeckStudioInput: DeckGenerationInput | null;
 
   setPanelOpen: (v: boolean) => void;
   setRightTab: (t: RightTab) => void;
@@ -253,6 +256,8 @@ export interface UiSlice {
   setSurface: (s: Surface) => void;
   openContentStudioIdea: (idea: ContentIdea) => void;
   clearPendingContentStudioIdea: () => void;
+  openDeckStudioInput: (input: DeckGenerationInput) => void;
+  clearPendingDeckStudioInput: () => void;
   setPaletteOpen: (v: boolean) => void;
   setTemplatesOpen: (v: { parent: string | null } | null) => void;
   setTrashOpen: (v: boolean) => void;

@@ -17,6 +17,7 @@ import { SpsModal } from "./SpsModal";
 import { research, type WorkSummary } from "../research";
 import { saveContentIdea } from "../content/contentStudioStorage";
 import type { ContentIdea } from "../../../../../shared/content-studio";
+import { buildDeckInputFromResearch } from "../../../../../shared/deck-studio";
 
 type Mode = "research" | "papers" | "study";
 type Phase = "idle" | "running" | "done" | "warn" | "error";
@@ -42,6 +43,7 @@ export function ResearchModal() {
   const saveStudyToWiki = useStore((s) => s.saveStudyToWiki);
   const flash = useStore((s) => s.flash);
   const openContentStudioIdea = useStore((s) => s.openContentStudioIdea);
+  const openDeckStudioInput = useStore((s) => s.openDeckStudioInput);
   const onClose = () => setResearchOpen(false);
 
   const [mode, setMode] = useState<Mode>("research");
@@ -347,6 +349,21 @@ export function ResearchModal() {
     flash("Saved research as a Content Studio idea.");
   };
 
+  const openResearchDeck = (): void => {
+    const title = topic.trim() || studyFocus.trim();
+    const markdown = progress || resultSummary || studyResult;
+    if (!title || !markdown.trim()) return;
+    openDeckStudioInput(
+      buildDeckInputFromResearch({
+        title,
+        markdown,
+        locator: mode === "study" ? "Research / Study sources" : "Research",
+      }),
+    );
+    setResearchOpen(false);
+    flash("Opened Deck Studio with this research.");
+  };
+
   const undoStudySave = () => {
     studyUndoRef.current?.();
     studyUndoRef.current = null;
@@ -536,6 +553,9 @@ export function ResearchModal() {
                   >
                     Save as content idea
                   </button>
+                  <button className="cover-btn" onClick={openResearchDeck}>
+                    Deck from research
+                  </button>
                 </div>
               </div>
             )}
@@ -653,6 +673,9 @@ export function ResearchModal() {
                       onClick={() => void saveResearchAsContentIdea()}
                     >
                       Save as content idea
+                    </button>
+                    <button className="cover-btn" onClick={openResearchDeck}>
+                      Deck from study
                     </button>
                   </div>
                 </div>

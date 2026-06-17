@@ -39,14 +39,14 @@ const { capturedRequests, makeMockRequest } = vi.hoisted(() => {
 
 // ── Mock Node.js http/https modules ──
 
-vi.mock("http", () => ({
+vi.mock("node:http", () => ({
   default: {
     request: (url: string, options: Record<string, unknown>) =>
       makeMockRequest(url, options),
   },
 }));
 
-vi.mock("https", () => ({
+vi.mock("node:https", () => ({
   default: {
     request: (url: string, options: Record<string, unknown>) =>
       makeMockRequest(url, options),

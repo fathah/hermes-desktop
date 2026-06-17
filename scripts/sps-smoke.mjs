@@ -204,6 +204,8 @@ const expectedShots = [
   "16-content-studio-evidence-block",
   "17-content-studio-evidence-approve",
   "18-content-studio-publish",
+  "19-deck-studio",
+  "20-deck-studio-export",
 ];
 const shots = [];
 const shotFailures = [];
@@ -436,6 +438,37 @@ await shot("18-content-studio-publish", async () => {
   await win
     .getByText(/Publish packet marked published/)
     .waitFor({ timeout: 8000 });
+});
+
+// 19 — Deck Studio turns rough notes into an approved editable slide preview.
+await shot("19-deck-studio", async () => {
+  await win.locator(".nav-item", { hasText: "Deck Studio" }).first().click();
+  await win.getByRole("heading", { name: "Deck Studio" }).waitFor({
+    timeout: 8000,
+  });
+  await win
+    .getByLabel("Rough notes")
+    .fill(
+      "Wallet Club\nSubscription fatigue\nScattered budgeting\nSmart auto-budgeting",
+    );
+  await win.getByRole("button", { name: "Generate outline" }).click();
+  await win.getByText("The Problem").waitFor({ timeout: 8000 });
+  await win.getByRole("button", { name: "Approve outline" }).click();
+  await win.locator('[data-testid="deck-canvas"]').waitFor({ timeout: 8000 });
+  await win.getByLabel("Theme").selectOption("research");
+  await win
+    .locator('[data-testid="deck-canvas"][data-theme="research"]')
+    .waitFor({ timeout: 8000 });
+});
+
+// 20 — Deck Studio export writes PDF/PPTX outputs plus notes sidecar.
+await shot("20-deck-studio-export", async () => {
+  await win.getByRole("button", { name: "export" }).click();
+  await win.getByRole("button", { name: "Export PDF" }).click();
+  await win.getByText(/PDF exported:/).waitFor({ timeout: 15000 });
+  await win.getByRole("button", { name: "Export PPTX" }).click();
+  await win.getByText(/PPTX exported:/).waitFor({ timeout: 15000 });
+  await win.getByText(/Notes sidecar:/).waitFor({ timeout: 8000 });
 });
 
 console.log("SHOTS_OK:", shots.length, "—", shots.join(", "));

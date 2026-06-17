@@ -42,6 +42,7 @@ import { PersonalHealthDashboard } from "./health/PersonalHealthDashboard";
 import { RssReaderDashboard } from "./research/RssReaderDashboard";
 import { Dashboard } from "./components/Dashboard";
 import { ContentStudioSurface } from "./content/ContentStudioSurface";
+import { DeckStudioSurface } from "./deck/DeckStudioSurface";
 
 type TaskAutomationRule = {
   id: string;
@@ -313,6 +314,8 @@ export function App() {
             <RssReaderDashboard />
           ) : surface === "contentStudio" ? (
             <ContentStudioSurface />
+          ) : surface === "deckStudio" ? (
+            <DeckStudioSurface />
           ) : (
             <div className="doc-scroll scroll">
               {surface === "cockpit" && <CockpitSurface />}

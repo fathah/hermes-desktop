@@ -8,6 +8,7 @@ import {
   parseContentSourceUrls,
   type ContentIdeaSourceRecord,
 } from "../../../../../shared/content-studio";
+import { buildDeckInputFromResearch } from "../../../../../shared/deck-studio";
 import { Icon } from "../components/Icon";
 import { SubstackRadarPanel } from "./SubstackRadarPanel";
 import { saveContentIdea } from "../content/contentStudioStorage";
@@ -45,6 +46,7 @@ export function SourceIntakePanel({
   onFeedsChanged,
 }: SourceIntakePanelProps): React.JSX.Element {
   const openContentStudioIdea = useStore((s) => s.openContentStudioIdea);
+  const openDeckStudioInput = useStore((s) => s.openDeckStudioInput);
   const [tab, setTab] = useState<SourceTab>("add");
   const [status, setStatus] = useState<SourceIntakeStatus | null>(null);
   const [url, setUrl] = useState("");
@@ -155,6 +157,18 @@ export function SourceIntakePanel({
     setMessage("Saved as content idea.");
   }
 
+  function openPreviewDeck(): void {
+    if (!result?.ok) return;
+    openDeckStudioInput(
+      buildDeckInputFromResearch({
+        title: result.title,
+        markdown: result.markdown,
+        locator: result.canonicalUrl,
+      }),
+    );
+    setMessage("Opened Deck Studio with this source.");
+  }
+
   function addResultToIdeaSources(): void {
     if (!result?.ok) return;
     const nextSource = {
@@ -230,6 +244,18 @@ export function SourceIntakePanel({
     } finally {
       setSaving(false);
     }
+  }
+
+  function openStudyDeck(): void {
+    if (!studyFocus.trim() || !studyResult.trim()) return;
+    openDeckStudioInput(
+      buildDeckInputFromResearch({
+        title: studyFocus.trim(),
+        markdown: `${studyCorpus}\n\n${studyResult}`.trim(),
+        locator: "Sources / Study",
+      }),
+    );
+    setMessage("Opened Deck Studio with this study.");
   }
 
   async function showSetup(): Promise<void> {
@@ -390,6 +416,13 @@ export function SourceIntakePanel({
                 >
                   Save as content idea
                 </button>
+                <button
+                  type="button"
+                  className="log-submit-btn protocol-record-btn"
+                  onClick={openPreviewDeck}
+                >
+                  Deck from source
+                </button>
               </div>
             </>
           ) : (
@@ -441,6 +474,13 @@ export function SourceIntakePanel({
                 onClick={() => void saveStudyAsContentIdea()}
               >
                 Save study as content idea
+              </button>
+              <button
+                type="button"
+                className="log-submit-btn protocol-record-btn"
+                onClick={openStudyDeck}
+              >
+                Deck from study
               </button>
             </>
           )}
