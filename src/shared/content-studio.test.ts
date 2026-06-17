@@ -1,19 +1,30 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateBmLike,
+  buildContentStudioDashboard,
+  buildWeeklyReviewProposals,
   canStartContentRun,
   CONTENT_STUDIO_FOLDERS,
+  CONTENT_STUDIO_PLAYBOOKS,
+  contentEvidenceToRow,
   contentIdeaToRow,
   contentRowId,
   contentRunToRow,
   evaluateDraftQuality,
+  findHighBookmarkLowLikePosts,
+  findWeakPosts,
+  findWinningHookRoutes,
+  getNextContentActions,
   parseDraftVariants,
   parseContentIdeaMarkdown,
   rowToAnalyticsSnapshot,
+  rowToContentEvidence,
   rowToContentIdea,
   scoreContentIdea,
   serializeContentIdeaMarkdown,
+  summarizeContentAnalytics,
   type AnalyticsSnapshot,
+  type ContentEvidence,
   type ContentIdea,
   type ContentRun,
 } from "./content-studio";
@@ -118,6 +129,60 @@ describe("evaluateDraftQuality", () => {
       true,
     );
   });
+
+  it("requires claim-specific evidence even when a source URL is present", () => {
+    const draftId = "draft-1";
+    const withoutEvidence = evaluateDraftQuality({
+      text: "This workflow always saves 30 minutes.",
+      sourceUrls: ["https://example.com/proof"],
+      evidence: [],
+      draftId,
+      hasMaterialConnection: false,
+      disclosureText: "",
+      includesRealisticSyntheticMedia: false,
+      syntheticMediaDisclosure: false,
+    });
+
+    expect(withoutEvidence.ok).toBe(false);
+    expect(withoutEvidence.claims).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          claimId: "claim-draft-1-0",
+          status: "needs source",
+          evidenceIds: [],
+        }),
+      ]),
+    );
+
+    const evidence: ContentEvidence = {
+      id: "ev-1",
+      claimId: "claim-draft-1-0",
+      runId: "run-1",
+      draftId,
+      sourceUrl: "https://example.com/proof",
+      sourceTitle: "Proof",
+      snippet: "The measured workflow saved 30 minutes.",
+      note: "Supports the numeric time claim.",
+      createdAt: "2026-06-17T00:00:00Z",
+    };
+    const withEvidence = evaluateDraftQuality({
+      text: "This workflow always saves 30 minutes.",
+      sourceUrls: ["https://example.com/proof"],
+      evidence: [evidence],
+      draftId,
+      hasMaterialConnection: false,
+      disclosureText: "",
+      includesRealisticSyntheticMedia: false,
+      syntheticMediaDisclosure: false,
+    });
+
+    expect(withEvidence.ok).toBe(true);
+    expect(withEvidence.claims[0]).toMatchObject({
+      claimId: "claim-draft-1-0",
+      status: "sourced",
+      evidenceIds: ["ev-1"],
+    });
+  });
 });
 
 describe("content studio row contracts", () => {
@@ -187,6 +252,166 @@ describe("content studio row contracts", () => {
       bmLike: 1.5,
       notes: "Notes",
     });
+  });
+
+  it("serializes evidence rows for claim-level review", () => {
+    const evidence: ContentEvidence = {
+      id: "evidence-1",
+      claimId: "claim-draft-1-0",
+      runId: "run-1",
+      draftId: "draft-1",
+      sourceUrl: "https://example.com/proof",
+      sourceTitle: "Proof source",
+      snippet: "The source supports this claim.",
+      note: "Use in final post.",
+      createdAt: "2026-06-17T00:00:00Z",
+    };
+
+    const row = contentEvidenceToRow(evidence);
+
+    expect(CONTENT_STUDIO_FOLDERS.evidence).toBe("content-evidence");
+    expect(row.folder).toBe("content-evidence");
+    expect(row.props).toMatchObject({
+      type: "content-evidence",
+      claimId: "claim-draft-1-0",
+      sourceUrl: "https://example.com/proof",
+    });
+    expect(rowToContentEvidence(row.props, row.body)).toMatchObject(evidence);
+  });
+});
+
+describe("content studio dashboard and analytics helpers", () => {
+  const rows = {
+    ideas: [
+      {
+        path: "content-ideas/a.md",
+        title: "Captured",
+        props: { status: "captured", score: 0 },
+        mtime: 1,
+      },
+      {
+        path: "content-ideas/b.md",
+        title: "Ready",
+        props: { status: "scored", score: 12 },
+        mtime: 1,
+      },
+    ],
+    runs: [
+      {
+        path: "content-runs/r.md",
+        title: "Run",
+        props: { id: "run-1", status: "drafting", state: "drafting" },
+        mtime: 1,
+      },
+    ],
+    drafts: [
+      {
+        path: "content-drafts/d.md",
+        title: "Draft",
+        props: {
+          runId: "run-2",
+          status: "needs-review",
+          unsupportedClaimCount: 2,
+        },
+        mtime: 1,
+      },
+    ],
+    published: [
+      {
+        path: "content-published/p.md",
+        title: "Ready packet",
+        props: { slug: "ready", status: "ready" },
+        mtime: 1,
+      },
+      {
+        path: "content-published/pub.md",
+        title: "Published packet",
+        props: { slug: "live", status: "published" },
+        mtime: 1,
+      },
+    ],
+    analytics: [
+      {
+        path: "content-analytics/a.md",
+        title: "live 24h",
+        props: {
+          slug: "live",
+          snapshotWindow: "24h",
+          hookRoute: "proof-led",
+          bmLike: 2.4,
+          bookmarks: 24,
+          likes: 10,
+          comments: 1,
+          views: 1000,
+        },
+        mtime: 1,
+      },
+      {
+        path: "content-analytics/b.md",
+        title: "weak 24h",
+        props: {
+          slug: "weak",
+          snapshotWindow: "24h",
+          hookRoute: "checklist",
+          bmLike: 0.1,
+          bookmarks: 1,
+          likes: 10,
+          comments: 0,
+          views: 500,
+        },
+        mtime: 1,
+      },
+    ],
+  };
+
+  it("builds dashboard counts and next actions from row-backed data", () => {
+    const summary = buildContentStudioDashboard(rows);
+
+    expect(summary.capturedIdeasNeedingScore).toBe(1);
+    expect(summary.highScoreIdeasReadyForRun).toBe(1);
+    expect(summary.activeRunsNeedingVariants).toBe(1);
+    expect(summary.draftsNeedingEvidence).toBe(1);
+    expect(summary.publishPacketsReady).toBe(1);
+    expect(summary.analyticsDue).toBe(1);
+    expect(summary.weeklyReviewDue).toBe(true);
+    expect(getNextContentActions(summary)[0]).toMatchObject({
+      panel: "evidence",
+      count: 1,
+    });
+  });
+
+  it("summarizes analytics winners, weak posts, and weekly proposals", () => {
+    const summary = summarizeContentAnalytics(rows.analytics);
+
+    expect(summary.topPosts[0].slug).toBe("live");
+    expect(findWinningHookRoutes(rows.analytics)[0]).toMatchObject({
+      hookRoute: "proof-led",
+      count: 1,
+    });
+    expect(findHighBookmarkLowLikePosts(rows.analytics)[0].slug).toBe("live");
+    expect(findWeakPosts(rows.analytics)[0].slug).toBe("weak");
+    expect(buildWeeklyReviewProposals(summary)).toMatchObject({
+      memoryRules: expect.arrayContaining([
+        expect.stringContaining("proof-led"),
+      ]),
+      vaultTitle: "Content Studio Weekly Review",
+    });
+  });
+});
+
+describe("creator playbooks", () => {
+  it("ships concrete playbook defaults without bypassing gates", () => {
+    const teardown = CONTENT_STUDIO_PLAYBOOKS.find(
+      (playbook) => playbook.id === "ai-tool-teardown",
+    );
+
+    expect(CONTENT_STUDIO_PLAYBOOKS).toHaveLength(5);
+    expect(teardown).toMatchObject({
+      defaultPlatform: "x",
+      suggestedHookRoutes: expect.arrayContaining(["proof-led"]),
+      bypassesQualityGate: false,
+    });
+    expect(teardown?.rubric.bookmarkability).toBe(2);
   });
 });
 

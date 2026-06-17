@@ -1,13 +1,17 @@
 import {
   analyticsSnapshotToRow,
+  contentEvidenceToRow,
   contentIdeaToRow,
   contentRunToRow,
+  CONTENT_STUDIO_FOLDERS,
   draftVariantToRow,
   publishedPostToRow,
   type AnalyticsSnapshot,
+  type ContentEvidence,
   type ContentIdea,
   type ContentRun,
   type ContentStudioRow,
+  type ContentStudioVaultRow,
   type DraftVariant,
   type PublishedPost,
 } from "../../../../../shared/content-studio";
@@ -67,4 +71,43 @@ export function savePublishedPost(
   profile = "default",
 ): Promise<void> {
   return exportContentStudioRow(publishedPostToRow(post), profile);
+}
+
+export function saveContentEvidence(
+  evidence: ContentEvidence,
+  profile = "default",
+): Promise<void> {
+  return exportContentStudioRow(contentEvidenceToRow(evidence), profile);
+}
+
+export async function listContentStudioRows(
+  folder: string,
+  profile = "default",
+): Promise<ContentStudioVaultRow[]> {
+  const api = window.hermesAPI;
+  if (!api?.spsIndexQuery) return [];
+  const rows =
+    profile && profile !== "default"
+      ? await api.spsIndexQuery({ scope: folder }, profile)
+      : await api.spsIndexQuery({ scope: folder });
+  return rows as ContentStudioVaultRow[];
+}
+
+export async function readContentStudioDashboardRows(
+  profile = "default",
+): Promise<{
+  ideas: ContentStudioVaultRow[];
+  runs: ContentStudioVaultRow[];
+  drafts: ContentStudioVaultRow[];
+  published: ContentStudioVaultRow[];
+  analytics: ContentStudioVaultRow[];
+}> {
+  const [ideas, runs, drafts, published, analytics] = await Promise.all([
+    listContentStudioRows(CONTENT_STUDIO_FOLDERS.ideas, profile),
+    listContentStudioRows(CONTENT_STUDIO_FOLDERS.runs, profile),
+    listContentStudioRows(CONTENT_STUDIO_FOLDERS.drafts, profile),
+    listContentStudioRows(CONTENT_STUDIO_FOLDERS.published, profile),
+    listContentStudioRows(CONTENT_STUDIO_FOLDERS.analytics, profile),
+  ]);
+  return { ideas, runs, drafts, published, analytics };
 }

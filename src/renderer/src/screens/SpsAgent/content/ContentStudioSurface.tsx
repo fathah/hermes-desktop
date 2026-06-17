@@ -1,17 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  buildContentStudioDashboard,
+  buildWeeklyReviewProposals,
   calculateBmLike,
+  calculateRate,
   canStartContentRun,
+  CONTENT_STUDIO_PLAYBOOKS,
   buildContentWriterPrompt,
   CONTENT_STUDIO_FOLDERS,
   evaluateDraftQuality,
   parseDraftVariants,
   scoreContentIdea,
   type AnalyticsSnapshot,
+  type ContentEvidence,
   type ContentIdea,
   type ContentRun,
+  type ContentStudioDashboardSummary,
+  type ContentStudioPanel,
   type ContentStudioRubric,
   type DraftClaim,
+  type DraftVariant,
 } from "../../../../../shared/content-studio";
 import { ASSISTANT_RECIPE_TEMPLATES } from "../../../../../shared/assistant-recipes";
 import { blk } from "../lib/ids";
@@ -19,10 +27,19 @@ import { useStore } from "../store";
 import type { PageMeta, TreeNode } from "../types";
 import {
   saveAnalyticsSnapshot,
+  saveContentEvidence,
   saveContentRun,
   saveDraftVariant,
   savePublishedPost,
+  readContentStudioDashboardRows,
 } from "./contentStudioStorage";
+import { AnalyticsLoop } from "./AnalyticsLoop";
+import { ContentIdeaPanel } from "./ContentIdeaPanel";
+import { ContentStudioDashboard } from "./ContentStudioDashboard";
+import { DraftWorkbench } from "./DraftWorkbench";
+import { EvidenceLedger, buildLocalEvidence } from "./EvidenceLedger";
+import { PublishQueue } from "./PublishQueue";
+import { WeeklyReviewPanel } from "./WeeklyReviewPanel";
 
 const PACK_PAGES = [
   "Ideas",
@@ -52,16 +69,6 @@ const EMPTY_RUBRIC: ContentStudioRubric = {
   hookStrength: 0,
   originality: 0,
 };
-
-const RUBRIC_LABELS: Array<[keyof ContentStudioRubric, string]> = [
-  ["bookmarkability", "Bookmarkable"],
-  ["proof", "Hard proof"],
-  ["immediateUse", "Useful now"],
-  ["audienceClarity", "Audience clear"],
-  ["reproducibility", "Can follow it"],
-  ["hookStrength", "Strong hook"],
-  ["originality", "Original value"],
-];
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
@@ -122,6 +129,18 @@ function packBlocks(title: string) {
   ];
 }
 
+function emptyDashboardSummary(): ContentStudioDashboardSummary {
+  return {
+    capturedIdeasNeedingScore: 0,
+    highScoreIdeasReadyForRun: 0,
+    activeRunsNeedingVariants: 0,
+    draftsNeedingEvidence: 0,
+    publishPacketsReady: 0,
+    analyticsDue: 0,
+    weeklyReviewDue: false,
+  };
+}
+
 export function ContentStudioSurface({
   profile = "default",
 }: {
@@ -132,6 +151,10 @@ export function ContentStudioSurface({
   const makePage = useStore((s) => s.makePage);
   const flash = useStore((s) => s.flash);
   const [contentRootId, setContentRootId] = useState("");
+  const [activePanel, setActivePanel] = useState<ContentStudioPanel>("ideas");
+  const [dashboardSummary, setDashboardSummary] =
+    useState<ContentStudioDashboardSummary>(emptyDashboardSummary);
+  const [selectedPlaybookId, setSelectedPlaybookId] = useState("");
   const [ideaTitle, setIdeaTitle] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
   const [audience, setAudience] = useState("");
@@ -143,18 +166,31 @@ export function ContentStudioSurface({
   const [runMessage, setRunMessage] = useState("");
   const [variantMessage, setVariantMessage] = useState("");
   const [lastAssistantRunId, setLastAssistantRunId] = useState("");
+  const [draftVariants, setDraftVariants] = useState<DraftVariant[]>([]);
   const [draftText, setDraftText] = useState("");
+  const [draftId, setDraftId] = useState("draft-manual");
   const [hasMaterialConnection, setHasMaterialConnection] = useState(false);
   const [disclosureText, setDisclosureText] = useState("");
   const [syntheticMedia, setSyntheticMedia] = useState(false);
   const [syntheticDisclosure, setSyntheticDisclosure] = useState(false);
   const [qualityMessage, setQualityMessage] = useState("");
   const [qualityClaims, setQualityClaims] = useState<DraftClaim[]>([]);
+  const [evidence, setEvidence] = useState<ContentEvidence[]>([]);
+  const [evidenceUrl, setEvidenceUrl] = useState("");
+  const [evidenceSnippet, setEvidenceSnippet] = useState("");
+  const [manualPublishUrl, setManualPublishUrl] = useState("");
+  const [plannedPublishedAt, setPlannedPublishedAt] = useState("");
   const [analyticsSlug, setAnalyticsSlug] = useState("");
+  const [views, setViews] = useState("");
   const [bookmarks, setBookmarks] = useState("");
   const [likes, setLikes] = useState("");
+  const [comments, setComments] = useState("");
   const [analytics, setAnalytics] = useState<
-    (AnalyticsSnapshot & { slug: string; bmLike: number | null })[]
+    (AnalyticsSnapshot & {
+      slug: string;
+      bmLike: number | null;
+      bookmarkRate?: number | null;
+    })[]
   >([]);
 
   useEffect(() => {
@@ -185,6 +221,70 @@ export function ContentStudioSurface({
     }
     setContentRootId(root);
   }, [makePage, meta, tree]);
+
+  useEffect(() => {
+    let cancelled = false;
+    readContentStudioDashboardRows(profile)
+      .then((rows) => {
+        if (cancelled) return;
+        setDashboardSummary(buildContentStudioDashboard(rows));
+        if (rows.analytics.length > 0) {
+          setAnalytics(
+            rows.analytics.map((row) => {
+              const snapshot: AnalyticsSnapshot & {
+                slug: string;
+                bmLike: number | null;
+                bookmarkRate?: number | null;
+              } = {
+                slug: String(row.props.slug || row.title || "untitled-post"),
+                platform:
+                  typeof row.props.platform === "string"
+                    ? row.props.platform
+                    : "x",
+                snapshotWindow:
+                  row.props.snapshotWindow === "24h" ||
+                  row.props.snapshotWindow === "72h" ||
+                  row.props.snapshotWindow === "7d" ||
+                  row.props.snapshotWindow === "manual"
+                    ? row.props.snapshotWindow
+                    : "manual",
+                views: numberValue(String(row.props.views ?? 0)),
+                likes: numberValue(String(row.props.likes ?? 0)),
+                bookmarks: numberValue(String(row.props.bookmarks ?? 0)),
+                comments: numberValue(String(row.props.comments ?? 0)),
+                bmLike:
+                  typeof row.props.bmLike === "number"
+                    ? row.props.bmLike
+                    : calculateBmLike({
+                        bookmarks: numberValue(
+                          String(row.props.bookmarks ?? 0),
+                        ),
+                        likes: numberValue(String(row.props.likes ?? 0)),
+                      }),
+                bookmarkRate:
+                  typeof row.props.bookmarkRate === "number"
+                    ? row.props.bookmarkRate
+                    : calculateRate(
+                        numberValue(String(row.props.bookmarks ?? 0)),
+                        numberValue(String(row.props.views ?? 0)),
+                      ),
+                capturedAt:
+                  typeof row.props.capturedAt === "string"
+                    ? row.props.capturedAt
+                    : undefined,
+              };
+              return snapshot;
+            }),
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setDashboardSummary(emptyDashboardSummary());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [profile]);
 
   const score = useMemo(() => scoreContentIdea(rubric), [rubric]);
 
@@ -325,6 +425,7 @@ export function ContentStudioSurface({
     for (const variant of parsed.variants) {
       await saveDraftVariant(variant, profile);
     }
+    setDraftVariants(parsed.variants);
     setVariantMessage(
       parsed.fallback
         ? "Saved raw assistant result for review."
@@ -349,6 +450,9 @@ export function ContentStudioSurface({
     const result = evaluateDraftQuality({
       text: draftText,
       sourceUrls: currentIdea?.sourceUrls ?? (sourceUrl ? [sourceUrl] : []),
+      evidence,
+      draftId,
+      runId: currentRun?.id,
       hasMaterialConnection,
       disclosureText,
       includesRealisticSyntheticMedia: syntheticMedia,
@@ -366,6 +470,7 @@ export function ContentStudioSurface({
         id: `published-${Date.now().toString(36)}`,
         runId: currentRun?.id || "manual",
         slug: slug(currentRun?.title || currentIdea?.title || "manual-post"),
+        status: "ready",
         platform: currentRun?.platform || "x",
         finalCopy: draftText,
         linkComment: sourceUrl,
@@ -383,19 +488,128 @@ export function ContentStudioSurface({
     );
   }
 
+  async function attachEvidence(): Promise<void> {
+    const result = evaluateDraftQuality({
+      text: draftText,
+      sourceUrls: currentIdea?.sourceUrls ?? (sourceUrl ? [sourceUrl] : []),
+      evidence,
+      draftId,
+      runId: currentRun?.id,
+      hasMaterialConnection,
+      disclosureText,
+      includesRealisticSyntheticMedia: syntheticMedia,
+      syntheticMediaDisclosure: syntheticDisclosure,
+    });
+    const claims = result.claims.filter((item) => item.status !== "sourced");
+    setQualityClaims(result.claims);
+    if (claims.length === 0 || !evidenceUrl.trim() || !evidenceSnippet.trim()) {
+      setQualityMessage("Add a detected claim, source URL, and snippet first.");
+      return;
+    }
+    const items = claims.map((claim) =>
+      buildLocalEvidence({
+        claim,
+        runId: currentRun?.id || "manual",
+        draftId,
+        sourceUrl: evidenceUrl.trim(),
+        snippet: evidenceSnippet.trim(),
+      }),
+    );
+    await Promise.all(items.map((item) => saveContentEvidence(item, profile)));
+    const nextEvidence = [...evidence, ...items];
+    setEvidence(nextEvidence);
+    const next = evaluateDraftQuality({
+      text: draftText,
+      sourceUrls: currentIdea?.sourceUrls ?? (sourceUrl ? [sourceUrl] : []),
+      evidence: nextEvidence,
+      draftId,
+      runId: currentRun?.id,
+      hasMaterialConnection,
+      disclosureText,
+      includesRealisticSyntheticMedia: syntheticMedia,
+      syntheticMediaDisclosure: syntheticDisclosure,
+    });
+    setQualityClaims(next.claims);
+    setQualityMessage("Evidence attached. Re-run approval when ready.");
+  }
+
+  function approveVariant(variant: DraftVariant): void {
+    setDraftText(variant.text);
+    setDraftId(variant.id);
+    void saveDraftVariant(
+      {
+        ...variant,
+        approved: true,
+        status: "approved",
+        approvedAt: new Date().toISOString(),
+      },
+      profile,
+    );
+  }
+
+  async function markPublished(): Promise<void> {
+    const slugValue = slug(
+      currentRun?.title || currentIdea?.title || "manual-post",
+    );
+    await savePublishedPost(
+      {
+        id: `published-${Date.now().toString(36)}`,
+        runId: currentRun?.id || "manual",
+        slug: slugValue,
+        status: "published",
+        platform: currentRun?.platform || "x",
+        finalCopy: draftText,
+        linkComment: sourceUrl,
+        sourceNotes: (currentIdea?.sourceUrls ?? [sourceUrl])
+          .filter(Boolean)
+          .join("\n"),
+        disclosureText,
+        assetChecklist: ["Manual publish URL captured"],
+        manualPublishUrl: manualPublishUrl.trim(),
+        plannedPublishedAt: plannedPublishedAt.trim(),
+        publishedAt: new Date().toISOString(),
+      },
+      profile,
+    );
+    for (const snapshotWindow of ["24h", "72h", "7d"] as const) {
+      await saveAnalyticsSnapshot(
+        {
+          slug: slugValue,
+          platform: currentRun?.platform || "x",
+          snapshotWindow,
+          bookmarks: 0,
+          likes: 0,
+          views: 0,
+          comments: 0,
+          reposts: 0,
+          notes: "Analytics due.",
+          capturedAt: new Date().toISOString(),
+        },
+        profile,
+      );
+    }
+    flash("Publish packet marked published. Analytics prompts created.");
+  }
+
   function logAnalytics(): void {
     const snapshot = {
       slug: analyticsSlug.trim() || "untitled-post",
       platform: "x",
-      snapshotWindow: "manual" as const,
+      snapshotWindow: "24h" as const,
+      views: numberValue(views),
       bookmarks: numberValue(bookmarks),
       likes: numberValue(likes),
+      comments: numberValue(comments),
       capturedAt: new Date().toISOString(),
     };
     void saveAnalyticsSnapshot(snapshot, profile);
     setAnalytics((items) => [
       ...items,
-      { ...snapshot, bmLike: calculateBmLike(snapshot) },
+      {
+        ...snapshot,
+        bmLike: calculateBmLike(snapshot),
+        bookmarkRate: calculateRate(snapshot.bookmarks, snapshot.views),
+      },
     ]);
   }
 
@@ -414,21 +628,39 @@ export function ContentStudioSurface({
       { scope: CONTENT_STUDIO_FOLDERS.drafts },
       profile,
     );
-    const winner = [...analyticsRows].sort(
-      (a, b) => Number(b.props?.bmLike ?? 0) - Number(a.props?.bmLike ?? 0),
-    )[0];
-    const hookRoute =
-      typeof winner?.props?.hookRoute === "string"
-        ? winner.props.hookRoute
-        : "proof-led";
-    const body = `Content Studio hook rule: prefer ${hookRoute} when BM/Like is strong.`;
-    await api.createLearningProposal?.(
-      { kind: "memory", body, source: { type: "manual" } },
-      profile,
-    );
+    const proposals = buildWeeklyReviewProposals({
+      topPosts: [...analyticsRows]
+        .map((row) => ({
+          slug: String(row.props?.slug || row.title || "untitled-post"),
+          hookRoute: String(row.props?.hookRoute || "manual"),
+          bmLike:
+            typeof row.props?.bmLike === "number" ? row.props.bmLike : null,
+          bookmarks: Number(row.props?.bookmarks ?? 0),
+          likes: Number(row.props?.likes ?? 0),
+          comments: Number(row.props?.comments ?? 0),
+          views: Number(row.props?.views ?? 0),
+          bookmarkRate: calculateRate(
+            Number(row.props?.bookmarks ?? 0),
+            Number(row.props?.views ?? 0),
+          ),
+          commentRate: calculateRate(
+            Number(row.props?.comments ?? 0),
+            Number(row.props?.views ?? 0),
+          ),
+        }))
+        .sort((a, b) => Number(b.bmLike ?? 0) - Number(a.bmLike ?? 0)),
+      weakPosts: [],
+      highBookmarkLowLikePosts: [],
+    });
+    for (const body of proposals.memoryRules) {
+      await api.createLearningProposal?.(
+        { kind: "memory", body, source: { type: "manual" } },
+        profile,
+      );
+    }
     await api.spsCreateVaultProposal?.({
       source: "manual",
-      title: "Content Studio weekly review",
+      title: proposals.vaultTitle,
       summary:
         "Review Content Studio winners and update hook, voice, source, and template rules.",
       operations: [
@@ -436,8 +668,8 @@ export function ContentStudioSurface({
           id: `content-weekly-${Date.now()}`,
           kind: "upsert-page",
           pageId: "content-studio-weekly-review",
-          title: "Content Studio Weekly Review",
-          markdown: `# Content Studio Weekly Review\n\n${body}\n`,
+          title: proposals.vaultTitle,
+          markdown: proposals.vaultMarkdown,
         },
       ],
     });
@@ -446,6 +678,18 @@ export function ContentStudioSurface({
 
   function updateRubric(key: keyof ContentStudioRubric, value: string): void {
     setRubric((current) => ({ ...current, [key]: numberValue(value) }));
+  }
+
+  function selectPlaybook(id: string): void {
+    setSelectedPlaybookId(id);
+    const playbook = CONTENT_STUDIO_PLAYBOOKS.find((item) => item.id === id);
+    if (!playbook) return;
+    setRubric(playbook.rubric);
+    setAngle((current) => current || playbook.assetBriefPrompt);
+  }
+
+  function selectPanel(panel: ContentStudioPanel): void {
+    setActivePanel(panel);
   }
 
   return (
@@ -463,123 +707,47 @@ export function ContentStudioSurface({
         </div>
       </div>
 
-      <section className="active-work-section">
-        <h2>Score Idea</h2>
-        <div className="content-studio-grid">
-          <label>
-            <span>Idea title</span>
-            <input
-              aria-label="Idea title"
-              className="inbox-input"
-              value={ideaTitle}
-              onChange={(event) => setIdeaTitle(event.target.value)}
-              placeholder="Agent-Reach setup without API-key hype"
-            />
-          </label>
-          <label>
-            <span>Source URL</span>
-            <input
-              aria-label="Source URL"
-              className="inbox-input"
-              value={sourceUrl}
-              onChange={(event) => setSourceUrl(event.target.value)}
-              placeholder="https://example.com/source"
-            />
-          </label>
-          <label>
-            <span>Audience</span>
-            <input
-              aria-label="Audience"
-              className="inbox-input"
-              value={audience}
-              onChange={(event) => setAudience(event.target.value)}
-              placeholder="Who should save this?"
-            />
-          </label>
-          <label>
-            <span>Angle</span>
-            <input
-              aria-label="Angle"
-              className="inbox-input"
-              value={angle}
-              onChange={(event) => setAngle(event.target.value)}
-              placeholder="What original value does this add?"
-            />
-          </label>
-        </div>
-        <div className="content-studio-rubric">
-          {RUBRIC_LABELS.map(([key, label]) => (
-            <label key={key}>
-              <span>{label}</span>
-              <input
-                aria-label={label}
-                type="number"
-                min={0}
-                max={2}
-                className="inbox-input"
-                value={rubric[key]}
-                onChange={(event) => updateRubric(key, event.target.value)}
-              />
-            </label>
-          ))}
-        </div>
-        <label className="memory-entry-card">
-          <input
-            type="checkbox"
-            aria-label="Override low score"
-            checked={overrideLowScore}
-            onChange={(event) => setOverrideLowScore(event.target.checked)}
-          />
-          <span className="memory-entry-content">
-            Override low score
-            <small className="learning-surface-small-block">
-              Use only when a strategic reason beats the rubric.
-            </small>
-          </span>
-        </label>
-        <div className="memory-entry-form-actions">
-          <button className="btn btn-secondary btn-sm" onClick={scoreIdea}>
-            Score idea
-          </button>
-          <button
-            className="btn btn-primary btn-sm"
-            onClick={() => void startRun()}
-          >
-            Start content run
-          </button>
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={() => void generateVariants()}
-          >
-            Generate variants
-          </button>
-          <button
-            className="btn btn-secondary btn-sm"
-            disabled={!lastAssistantRunId}
-            onClick={() => void saveAssistantResult()}
-          >
-            Save assistant result to Review Queue
-          </button>
-        </div>
-        <div className="content-studio-score">
-          Score: {score.total}/{score.max} - {score.recommendation}
-        </div>
-        {runMessage && <div className="active-work-error">{runMessage}</div>}
-        {variantMessage && (
-          <div className="content-studio-quality">{variantMessage}</div>
-        )}
-      </section>
+      <ContentStudioDashboard
+        summary={dashboardSummary}
+        onSelectPanel={selectPanel}
+      />
 
-      <section className="active-work-section">
-        <h2>Draft Quality Gate</h2>
-        <textarea
-          className="memory-entry-textarea"
-          aria-label="Final draft"
-          rows={5}
-          value={draftText}
-          onChange={(event) => setDraftText(event.target.value)}
-          placeholder="Paste the final approved draft here before publishing manually."
-        />
+      <div className="content-studio-pill">Selected: {activePanel}</div>
+
+      <ContentIdeaPanel
+        playbooks={CONTENT_STUDIO_PLAYBOOKS}
+        selectedPlaybookId={selectedPlaybookId}
+        onSelectPlaybook={selectPlaybook}
+        ideaTitle={ideaTitle}
+        sourceUrl={sourceUrl}
+        audience={audience}
+        angle={angle}
+        rubric={rubric}
+        overrideLowScore={overrideLowScore}
+        scoreText={`Score: ${score.total}/${score.max} - ${score.recommendation}`}
+        runMessage={runMessage}
+        variantMessage={variantMessage}
+        lastAssistantRunId={lastAssistantRunId}
+        onIdeaTitleChange={setIdeaTitle}
+        onSourceUrlChange={setSourceUrl}
+        onAudienceChange={setAudience}
+        onAngleChange={setAngle}
+        onRubricChange={updateRubric}
+        onOverrideChange={setOverrideLowScore}
+        onScoreIdea={scoreIdea}
+        onStartRun={() => void startRun()}
+        onGenerateVariants={() => void generateVariants()}
+        onSaveAssistantResult={() => void saveAssistantResult()}
+      />
+
+      <DraftWorkbench
+        draftText={draftText}
+        variants={draftVariants}
+        qualityMessage={qualityMessage}
+        onDraftTextChange={setDraftText}
+        onApproveDraft={() => void runQualityGate()}
+        onApproveVariant={approveVariant}
+      >
         <div className="you-rules-list learning-surface-list-mt">
           <label className="memory-entry-card">
             <input
@@ -621,109 +789,41 @@ export function ContentStudioSurface({
           onChange={(event) => setDisclosureText(event.target.value)}
           placeholder="Visible disclosure text, when needed"
         />
-        <button
-          className="btn btn-primary btn-sm"
-          onClick={() => void runQualityGate()}
-        >
-          Approve final draft
-        </button>
-        {qualityClaims.length > 0 && (
-          <div className="content-studio-quality">
-            {qualityClaims.map((claim) => (
-              <div key={`${claim.kind}-${claim.text}`}>
-                {claim.text} - {claim.status}
-              </div>
-            ))}
-          </div>
-        )}
-        {qualityMessage && (
-          <div className="content-studio-quality">{qualityMessage}</div>
-        )}
-      </section>
+        <EvidenceLedger
+          claims={qualityClaims}
+          evidenceUrl={evidenceUrl}
+          evidenceSnippet={evidenceSnippet}
+          onEvidenceUrlChange={setEvidenceUrl}
+          onEvidenceSnippetChange={setEvidenceSnippet}
+          onAttachEvidence={() => void attachEvidence()}
+        />
+      </DraftWorkbench>
 
-      <section className="active-work-section">
-        <h2>Publish Packet</h2>
-        <div className="content-studio-packet">
-          <div>
-            <strong>Asset brief</strong>
-            <p>
-              Create a concrete visual prompt, attach the final asset manually,
-              and disclose realistic synthetic media where needed.
-            </p>
-          </div>
-          <div>
-            <strong>Manual publishing only</strong>
-            <p>
-              SPS prepares copy, source notes, and a link comment. It does not
-              auto-post, bulk-post, import cookies, or bypass platform rules.
-            </p>
-          </div>
-          <div>
-            <strong>Weekly review</strong>
-            <p>
-              Compare winners by bookmark ratio and propose new hook, voice,
-              source, and template learnings through Learn This.
-            </p>
-          </div>
-        </div>
-        <button
-          className="btn btn-secondary btn-sm"
-          onClick={() => void runWeeklyReview()}
-        >
-          Run weekly review
-        </button>
-      </section>
+      <PublishQueue
+        manualPublishUrl={manualPublishUrl}
+        plannedPublishedAt={plannedPublishedAt}
+        onManualPublishUrlChange={setManualPublishUrl}
+        onPlannedPublishedAtChange={setPlannedPublishedAt}
+        onMarkPublished={() => void markPublished()}
+        onRunWeeklyReview={() => void runWeeklyReview()}
+      />
 
-      <section className="active-work-section">
-        <h2>Analytics</h2>
-        <div className="content-studio-grid">
-          <label>
-            <span>Analytics slug</span>
-            <input
-              aria-label="Analytics slug"
-              className="inbox-input"
-              value={analyticsSlug}
-              onChange={(event) => setAnalyticsSlug(event.target.value)}
-              placeholder="agent-reach-setup"
-            />
-          </label>
-          <label>
-            <span>Bookmarks</span>
-            <input
-              aria-label="Bookmarks"
-              className="inbox-input"
-              type="number"
-              min={0}
-              value={bookmarks}
-              onChange={(event) => setBookmarks(event.target.value)}
-            />
-          </label>
-          <label>
-            <span>Likes</span>
-            <input
-              aria-label="Likes"
-              className="inbox-input"
-              type="number"
-              min={0}
-              value={likes}
-              onChange={(event) => setLikes(event.target.value)}
-            />
-          </label>
-        </div>
-        <button className="btn btn-primary btn-sm" onClick={logAnalytics}>
-          Log analytics
-        </button>
-        <div className="content-studio-analytics">
-          {analytics.map((item) => (
-            <div key={`${item.slug}-${item.bookmarks}-${item.likes}`}>
-              <strong>{item.slug}</strong>
-              <span>
-                BM/Like {item.bmLike === null ? "n/a" : item.bmLike.toFixed(2)}
-              </span>
-            </div>
-          ))}
-        </div>
-      </section>
+      <AnalyticsLoop
+        analyticsSlug={analyticsSlug}
+        views={views}
+        bookmarks={bookmarks}
+        likes={likes}
+        comments={comments}
+        analytics={analytics}
+        onSlugChange={setAnalyticsSlug}
+        onViewsChange={setViews}
+        onBookmarksChange={setBookmarks}
+        onLikesChange={setLikes}
+        onCommentsChange={setComments}
+        onLogAnalytics={logAnalytics}
+      />
+
+      <WeeklyReviewPanel onRunWeeklyReview={() => void runWeeklyReview()} />
     </div>
   );
 }

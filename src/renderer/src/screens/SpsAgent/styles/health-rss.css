@@ -1431,11 +1431,69 @@
 }
 
 .sps-scope .content-studio-grid label,
-.sps-scope .content-studio-rubric label {
+.sps-scope .content-studio-rubric label,
+.sps-scope .content-studio-field {
   display: grid;
   gap: 6px;
   color: var(--tx-2);
   font-size: 12px;
+}
+
+.sps-scope .content-studio-field {
+  margin-bottom: 12px;
+}
+
+.sps-scope .content-studio-section-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.sps-scope .content-studio-section-head p,
+.sps-scope .content-studio-muted {
+  margin: 4px 0 0;
+  color: var(--tx-3);
+  font-size: 13px;
+}
+
+.sps-scope .content-studio-dashboard,
+.sps-scope .content-studio-variant-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.sps-scope .content-studio-dashboard-card,
+.sps-scope .content-studio-variant-card,
+.sps-scope .content-studio-claim-row {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-2);
+}
+
+.sps-scope .content-studio-dashboard-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  text-align: left;
+  color: var(--tx);
+  cursor: pointer;
+}
+
+.sps-scope .content-studio-dashboard-card strong {
+  font-size: 24px;
+}
+
+.sps-scope .content-studio-next-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 14px;
+  color: var(--tx-2);
+  font-size: 13px;
 }
 
 .sps-scope .content-studio-rubric {
@@ -1456,6 +1514,31 @@
 .sps-scope .content-studio-analytics {
   display: grid;
   gap: 10px;
+}
+
+.sps-scope .content-studio-variant-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  color: var(--tx-2);
+}
+
+.sps-scope .content-studio-variant-card p {
+  margin: 0;
+  color: var(--tx);
+}
+
+.sps-scope .content-studio-claim-list {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.sps-scope .content-studio-claim-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
 }
 
 .sps-scope .content-studio-packet {
@@ -1480,7 +1563,9 @@
 
 @media (max-width: 760px) {
   .sps-scope .content-studio-grid,
-  .sps-scope .content-studio-packet {
+  .sps-scope .content-studio-packet,
+  .sps-scope .content-studio-dashboard,
+  .sps-scope .content-studio-variant-grid {
     grid-template-columns: 1fr;
   }
 }

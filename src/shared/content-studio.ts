@@ -51,10 +51,14 @@ export interface DraftVariant {
   text: string;
   hookRoute: string;
   approved: boolean;
-  status?: "draft" | "needs-review" | "approved";
+  status?: "draft" | "needs-review" | "approved" | "rejected";
   sourceNotes?: string;
   assetBrief?: string;
   disclosureNotes?: string;
+  approvedAt?: string;
+  qualityStatus?: "unchecked" | "blocked" | "ready";
+  claimCount?: number;
+  unsupportedClaimCount?: number;
 }
 
 export interface AssetBrief {
@@ -70,6 +74,7 @@ export interface PublishedPost {
   runId: string;
   slug: string;
   url?: string;
+  status?: "ready" | "published" | "needs-fix";
   publishedAt?: string;
   platform?: string;
   finalCopy?: string;
@@ -77,6 +82,8 @@ export interface PublishedPost {
   sourceNotes?: string;
   disclosureText?: string;
   assetChecklist?: string[];
+  plannedPublishedAt?: string;
+  manualPublishUrl?: string;
 }
 
 export interface AnalyticsSnapshot {
@@ -90,8 +97,22 @@ export interface AnalyticsSnapshot {
   comments?: number;
   reposts?: number;
   bmLike?: number | null;
+  commentRate?: number | null;
+  bookmarkRate?: number | null;
   notes?: string;
   capturedAt?: string;
+}
+
+export interface ContentEvidence {
+  id: string;
+  claimId: string;
+  runId: string;
+  draftId: string;
+  sourceUrl: string;
+  sourceTitle: string;
+  snippet: string;
+  note: string;
+  createdAt: string;
 }
 
 export interface ContentScore {
@@ -103,6 +124,9 @@ export interface ContentScore {
 export interface DraftQualityInput {
   text: string;
   sourceUrls: string[];
+  evidence?: ContentEvidence[];
+  draftId?: string;
+  runId?: string;
   hasMaterialConnection: boolean;
   disclosureText: string;
   includesRealisticSyntheticMedia: boolean;
@@ -117,9 +141,11 @@ export interface DraftQualityResult {
 }
 
 export interface DraftClaim {
+  claimId: string;
   text: string;
   kind: "numeric" | "absolute";
   status: "sourced" | "needs source" | "unsupported";
+  evidenceIds: string[];
 }
 
 export type ContentStudioRowKind =
@@ -128,7 +154,8 @@ export type ContentStudioRowKind =
   | "draft-variant"
   | "asset-brief"
   | "published-post"
-  | "analytics-snapshot";
+  | "analytics-snapshot"
+  | "content-evidence";
 
 export interface ContentStudioRow {
   folder: string;
@@ -142,6 +169,83 @@ export interface ParsedDraftVariants {
   fallback: boolean;
 }
 
+export interface ContentStudioVaultRow {
+  path: string;
+  title: string;
+  props: Record<string, unknown>;
+  mtime: number;
+}
+
+export interface ContentStudioDashboardRows {
+  ideas: ContentStudioVaultRow[];
+  runs: ContentStudioVaultRow[];
+  drafts: ContentStudioVaultRow[];
+  published: ContentStudioVaultRow[];
+  analytics: ContentStudioVaultRow[];
+}
+
+export type ContentStudioPanel =
+  | "ideas"
+  | "runs"
+  | "drafts"
+  | "evidence"
+  | "publish"
+  | "analytics"
+  | "review";
+
+export interface ContentStudioDashboardSummary {
+  capturedIdeasNeedingScore: number;
+  highScoreIdeasReadyForRun: number;
+  activeRunsNeedingVariants: number;
+  draftsNeedingEvidence: number;
+  publishPacketsReady: number;
+  analyticsDue: number;
+  weeklyReviewDue: boolean;
+}
+
+export interface ContentStudioNextAction {
+  panel: ContentStudioPanel;
+  label: string;
+  count: number;
+  priority: number;
+}
+
+export interface ContentAnalyticsPost {
+  slug: string;
+  hookRoute: string;
+  bmLike: number | null;
+  bookmarks: number;
+  likes: number;
+  comments: number;
+  views: number;
+  bookmarkRate: number | null;
+  commentRate: number | null;
+}
+
+export interface ContentAnalyticsSummary {
+  topPosts: ContentAnalyticsPost[];
+  weakPosts: ContentAnalyticsPost[];
+  highBookmarkLowLikePosts: ContentAnalyticsPost[];
+}
+
+export interface WeeklyReviewProposals {
+  memoryRules: string[];
+  vaultTitle: string;
+  vaultMarkdown: string;
+}
+
+export interface ContentStudioPlaybook {
+  id: string;
+  title: string;
+  defaultPlatform: string;
+  rubric: ContentStudioRubric;
+  suggestedHookRoutes: string[];
+  evidenceRequirements: string[];
+  assetBriefPrompt: string;
+  publishChecklist: string[];
+  bypassesQualityGate: false;
+}
+
 export const CONTENT_STUDIO_FOLDERS = {
   ideas: "content-ideas",
   runs: "content-runs",
@@ -149,7 +253,116 @@ export const CONTENT_STUDIO_FOLDERS = {
   assets: "content-assets",
   published: "content-published",
   analytics: "content-analytics",
+  evidence: "content-evidence",
 } as const;
+
+export const CONTENT_STUDIO_PLAYBOOKS: ContentStudioPlaybook[] = [
+  {
+    id: "ai-tool-teardown",
+    title: "AI tool teardown",
+    defaultPlatform: "x",
+    rubric: {
+      bookmarkability: 2,
+      proof: 2,
+      immediateUse: 2,
+      audienceClarity: 2,
+      reproducibility: 1,
+      hookStrength: 2,
+      originality: 1,
+    },
+    suggestedHookRoutes: ["proof-led", "checklist", "contrarian"],
+    evidenceRequirements: ["pricing/source page", "tested workflow", "limits"],
+    assetBriefPrompt:
+      "Show the tool, the workflow, and the result side by side.",
+    publishChecklist: ["source link", "tested limitation", "manual publish"],
+    bypassesQualityGate: false,
+  },
+  {
+    id: "workflow-before-after",
+    title: "Workflow before/after",
+    defaultPlatform: "x",
+    rubric: {
+      bookmarkability: 2,
+      proof: 1,
+      immediateUse: 2,
+      audienceClarity: 2,
+      reproducibility: 2,
+      hookStrength: 1,
+      originality: 2,
+    },
+    suggestedHookRoutes: ["before-after", "checklist"],
+    evidenceRequirements: ["before state", "after state", "steps"],
+    assetBriefPrompt: "Show the old flow, the new flow, and the saved step.",
+    publishChecklist: [
+      "steps included",
+      "before/after clear",
+      "manual publish",
+    ],
+    bypassesQualityGate: false,
+  },
+  {
+    id: "research-backed-short-post",
+    title: "Research-backed short post",
+    defaultPlatform: "x",
+    rubric: {
+      bookmarkability: 2,
+      proof: 2,
+      immediateUse: 1,
+      audienceClarity: 2,
+      reproducibility: 1,
+      hookStrength: 2,
+      originality: 2,
+    },
+    suggestedHookRoutes: ["proof-led", "surprising-stat"],
+    evidenceRequirements: ["primary source", "numeric claim", "context"],
+    assetBriefPrompt: "Make a small source-backed chart or annotated excerpt.",
+    publishChecklist: ["claim evidence", "source note", "manual publish"],
+    bypassesQualityGate: false,
+  },
+  {
+    id: "product-launch-post",
+    title: "Product launch post",
+    defaultPlatform: "x",
+    rubric: {
+      bookmarkability: 1,
+      proof: 1,
+      immediateUse: 2,
+      audienceClarity: 2,
+      reproducibility: 1,
+      hookStrength: 2,
+      originality: 2,
+    },
+    suggestedHookRoutes: ["problem-solution", "demo"],
+    evidenceRequirements: ["live product", "claim support", "availability"],
+    assetBriefPrompt: "Show the product in use, with one concrete result.",
+    publishChecklist: [
+      "availability clear",
+      "asset attached",
+      "manual publish",
+    ],
+    bypassesQualityGate: false,
+  },
+  {
+    id: "case-study",
+    title: "Case study",
+    defaultPlatform: "x",
+    rubric: {
+      bookmarkability: 2,
+      proof: 2,
+      immediateUse: 1,
+      audienceClarity: 2,
+      reproducibility: 1,
+      hookStrength: 2,
+      originality: 2,
+    },
+    suggestedHookRoutes: ["proof-led", "before-after"],
+    evidenceRequirements: ["baseline", "outcome", "method"],
+    assetBriefPrompt:
+      "Show the starting point, intervention, and measurable result.",
+    publishChecklist: ["baseline sourced", "outcome sourced", "manual publish"],
+    bypassesQualityGate: false,
+  },
+];
 
 const RUBRIC_FIELDS: Array<keyof ContentStudioRubric> = [
   "bookmarkability",
@@ -221,7 +434,12 @@ export function evaluateDraftQuality(
   const blockers: string[] = [];
   const warnings: string[] = [];
   const text = input.text.trim();
-  const claims = extractDraftClaims(text, input.sourceUrls);
+  const claims = extractDraftClaims(
+    text,
+    input.sourceUrls,
+    input.evidence ?? [],
+    input.draftId,
+  );
 
   if (input.sourceUrls.length === 0) {
     blockers.push("Add at least one source link before approval.");
@@ -241,10 +459,7 @@ export function evaluateDraftQuality(
     blockers.push("Support numeric or performance claims with a source.");
     blockers.push("Support claims with source links before approval.");
   }
-  if (
-    claims.some((claim) => claim.status === "unsupported") &&
-    input.sourceUrls.length === 0
-  ) {
+  if (claims.some((claim) => claim.status !== "sourced")) {
     blockers.push("Support claims with source links before approval.");
   }
 
@@ -270,6 +485,14 @@ export function calculateBmLike(
 ): number | null {
   if (snapshot.likes <= 0) return null;
   return Number((snapshot.bookmarks / snapshot.likes).toFixed(2));
+}
+
+export function calculateRate(
+  numerator: number,
+  denominator?: number,
+): number | null {
+  if (!denominator || denominator <= 0) return null;
+  return Number(((numerator / denominator) * 100).toFixed(2));
 }
 
 export function serializeContentIdeaMarkdown(idea: ContentIdea): string {
@@ -362,6 +585,10 @@ export function draftVariantToRow(variant: DraftVariant): ContentStudioRow {
       sourceNotes: variant.sourceNotes,
       assetBrief: variant.assetBrief,
       disclosureNotes: variant.disclosureNotes,
+      approvedAt: variant.approvedAt,
+      qualityStatus: variant.qualityStatus,
+      claimCount: variant.claimCount ?? 0,
+      unsupportedClaimCount: variant.unsupportedClaimCount ?? 0,
     },
     body: variant.text,
   };
@@ -373,6 +600,11 @@ export function analyticsSnapshotToRow(
   const slug = snapshot.slug || "untitled-post";
   const window = snapshot.snapshotWindow || "manual";
   const bmLike = calculateBmLike(snapshot);
+  const bookmarkRate =
+    snapshot.bookmarkRate ?? calculateRate(snapshot.bookmarks, snapshot.views);
+  const commentRate =
+    snapshot.commentRate ??
+    calculateRate(snapshot.comments ?? 0, snapshot.views);
   return {
     folder: CONTENT_STUDIO_FOLDERS.analytics,
     rowId: contentRowId("analytics-snapshot", `${slug}-${window}`),
@@ -389,6 +621,8 @@ export function analyticsSnapshotToRow(
       comments: snapshot.comments ?? 0,
       reposts: snapshot.reposts ?? 0,
       bmLike,
+      bookmarkRate,
+      commentRate,
       capturedAt: snapshot.capturedAt || new Date().toISOString(),
     },
     body: snapshot.notes || "",
@@ -407,9 +641,12 @@ export function publishedPostToRow(post: PublishedPost): ContentStudioRow {
       slug: post.slug,
       platform: post.platform || "x",
       url: post.url,
+      status: post.status || "ready",
       publishedAt: post.publishedAt,
       disclosureText: post.disclosureText,
       assetChecklist: post.assetChecklist ?? [],
+      plannedPublishedAt: post.plannedPublishedAt,
+      manualPublishUrl: post.manualPublishUrl,
     },
     body: [
       "## Final Copy",
@@ -421,6 +658,29 @@ export function publishedPostToRow(post: PublishedPost): ContentStudioRow {
       "## Source Notes",
       post.sourceNotes || "",
     ].join("\n"),
+  };
+}
+
+export function contentEvidenceToRow(
+  evidence: ContentEvidence,
+): ContentStudioRow {
+  return {
+    folder: CONTENT_STUDIO_FOLDERS.evidence,
+    rowId: contentRowId(
+      "content-evidence",
+      `${evidence.claimId}-${evidence.id}`,
+    ),
+    props: {
+      type: "content-evidence",
+      id: evidence.id,
+      claimId: evidence.claimId,
+      runId: evidence.runId,
+      draftId: evidence.draftId,
+      sourceUrl: evidence.sourceUrl,
+      sourceTitle: evidence.sourceTitle,
+      createdAt: evidence.createdAt,
+    },
+    body: [evidence.snippet, evidence.note].join("\n\n"),
   };
 }
 
@@ -473,6 +733,222 @@ export function rowToAnalyticsSnapshot(
     notes: body,
     capturedAt:
       typeof props.capturedAt === "string" ? props.capturedAt : undefined,
+  };
+}
+
+export function rowToContentEvidence(
+  props: Record<string, unknown>,
+  body: string,
+): ContentEvidence {
+  const [snippet, ...noteParts] = body.split(/\n\n/);
+  return {
+    id: String(
+      props.id || contentRowId("content-evidence", String(props.claimId)),
+    ),
+    claimId: String(props.claimId || ""),
+    runId: String(props.runId || ""),
+    draftId: String(props.draftId || ""),
+    sourceUrl: String(props.sourceUrl || ""),
+    sourceTitle: String(props.sourceTitle || ""),
+    snippet: snippet || "",
+    note: noteParts.join("\n\n"),
+    createdAt: String(props.createdAt || ""),
+  };
+}
+
+export function buildContentStudioDashboard(
+  rows: ContentStudioDashboardRows,
+): ContentStudioDashboardSummary {
+  const draftRunIds = new Set(
+    rows.drafts.map((row) => String(row.props.runId || "")).filter(Boolean),
+  );
+  const publishedWindows = new Map<string, Set<string>>();
+  for (const row of rows.analytics) {
+    const slug = String(row.props.slug || "");
+    const window = String(row.props.snapshotWindow || "");
+    if (!slug || !window) continue;
+    const set = publishedWindows.get(slug) ?? new Set<string>();
+    set.add(window);
+    publishedWindows.set(slug, set);
+  }
+
+  return {
+    capturedIdeasNeedingScore: rows.ideas.filter(
+      (row) => String(row.props.status || "") === "captured",
+    ).length,
+    highScoreIdeasReadyForRun: rows.ideas.filter((row) => {
+      const status = String(row.props.status || "");
+      return (
+        Number(row.props.score ?? 0) >= 10 &&
+        (status === "captured" || status === "scored")
+      );
+    }).length,
+    activeRunsNeedingVariants: rows.runs.filter((row) => {
+      const id = String(row.props.id || "");
+      const state = String(row.props.state || row.props.status || "");
+      return state === "drafting" && !draftRunIds.has(id);
+    }).length,
+    draftsNeedingEvidence: rows.drafts.filter((row) => {
+      const status = String(row.props.status || "");
+      return (
+        status === "needs-review" ||
+        Number(row.props.unsupportedClaimCount ?? 0) > 0
+      );
+    }).length,
+    publishPacketsReady: rows.published.filter(
+      (row) => String(row.props.status || "ready") === "ready",
+    ).length,
+    analyticsDue: rows.published.filter((row) => {
+      if (String(row.props.status || "") !== "published") return false;
+      const slug = String(row.props.slug || "");
+      const windows = publishedWindows.get(slug) ?? new Set<string>();
+      return !["24h", "72h", "7d"].every((window) => windows.has(window));
+    }).length,
+    weeklyReviewDue: rows.analytics.length > 0,
+  };
+}
+
+export function contentStudioAttentionScore(
+  item: Pick<ContentStudioNextAction, "count" | "priority">,
+): number {
+  return item.count * 10 + item.priority;
+}
+
+export function getNextContentActions(
+  summary: ContentStudioDashboardSummary,
+): ContentStudioNextAction[] {
+  const actions: ContentStudioNextAction[] = [
+    {
+      panel: "evidence",
+      label: "Review draft evidence",
+      count: summary.draftsNeedingEvidence,
+      priority: 7,
+    },
+    {
+      panel: "publish",
+      label: "Publish ready packets",
+      count: summary.publishPacketsReady,
+      priority: 6,
+    },
+    {
+      panel: "runs",
+      label: "Generate variants",
+      count: summary.activeRunsNeedingVariants,
+      priority: 5,
+    },
+    {
+      panel: "ideas",
+      label: "Score captured ideas",
+      count: summary.capturedIdeasNeedingScore,
+      priority: 4,
+    },
+    {
+      panel: "ideas",
+      label: "Start high-score runs",
+      count: summary.highScoreIdeasReadyForRun,
+      priority: 3,
+    },
+    {
+      panel: "analytics",
+      label: "Log due analytics",
+      count: summary.analyticsDue,
+      priority: 2,
+    },
+    {
+      panel: "review",
+      label: "Run weekly review",
+      count: summary.weeklyReviewDue ? 1 : 0,
+      priority: 1,
+    },
+  ];
+  return actions
+    .filter((action) => action.count > 0)
+    .sort(
+      (a, b) => contentStudioAttentionScore(b) - contentStudioAttentionScore(a),
+    );
+}
+
+export function summarizeContentAnalytics(
+  rows: ContentStudioVaultRow[],
+): ContentAnalyticsSummary {
+  const posts = rows
+    .map(rowToAnalyticsPost)
+    .filter((post): post is ContentAnalyticsPost => Boolean(post));
+  const topPosts = [...posts].sort(
+    (a, b) => Number(b.bmLike ?? 0) - Number(a.bmLike ?? 0),
+  );
+  return {
+    topPosts,
+    weakPosts: findWeakPosts(rows),
+    highBookmarkLowLikePosts: findHighBookmarkLowLikePosts(rows),
+  };
+}
+
+export function findWinningHookRoutes(rows: ContentStudioVaultRow[]): Array<{
+  hookRoute: string;
+  count: number;
+  averageBmLike: number;
+}> {
+  const groups = new Map<string, { count: number; total: number }>();
+  for (const post of rows.map(rowToAnalyticsPost).filter(Boolean)) {
+    if (!post || (post.bmLike ?? 0) < 1) continue;
+    const current = groups.get(post.hookRoute) ?? { count: 0, total: 0 };
+    current.count += 1;
+    current.total += post.bmLike ?? 0;
+    groups.set(post.hookRoute, current);
+  }
+  return [...groups.entries()]
+    .map(([hookRoute, value]) => ({
+      hookRoute,
+      count: value.count,
+      averageBmLike: Number((value.total / value.count).toFixed(2)),
+    }))
+    .sort((a, b) => b.averageBmLike - a.averageBmLike);
+}
+
+export function findHighBookmarkLowLikePosts(
+  rows: ContentStudioVaultRow[],
+): ContentAnalyticsPost[] {
+  return rows
+    .map(rowToAnalyticsPost)
+    .filter((post): post is ContentAnalyticsPost =>
+      Boolean(post && (post.bmLike ?? 0) >= 1.5),
+    );
+}
+
+export function findWeakPosts(
+  rows: ContentStudioVaultRow[],
+): ContentAnalyticsPost[] {
+  return rows
+    .map(rowToAnalyticsPost)
+    .filter((post): post is ContentAnalyticsPost =>
+      Boolean(post && post.bookmarks <= 2 && post.comments <= 1),
+    );
+}
+
+export function buildWeeklyReviewProposals(
+  summary: ContentAnalyticsSummary,
+): WeeklyReviewProposals {
+  const winner = summary.topPosts[0];
+  const hookRoute = winner?.hookRoute || "proof-led";
+  const memoryRules = [
+    `Content Studio hook rule: prefer ${hookRoute} when BM/Like is strong.`,
+    "Content Studio voice rule: keep claims concrete, sourced, and manually reviewed.",
+    "Content Studio source rule: favor posts with reusable proof and clear evidence snippets.",
+  ];
+  return {
+    memoryRules,
+    vaultTitle: "Content Studio Weekly Review",
+    vaultMarkdown: [
+      "# Content Studio Weekly Review",
+      "",
+      `Winning hook route: ${hookRoute}`,
+      `Top post: ${winner?.slug || "No analytics yet"}`,
+      "",
+      "## Template improvements",
+      "- Keep evidence snippets close to every claim.",
+      "- Promote drafts with high bookmark intent.",
+    ].join("\n"),
   };
 }
 
@@ -613,21 +1089,63 @@ export function normalizeRubric(value: unknown): ContentStudioRubric {
   };
 }
 
-function extractDraftClaims(text: string, sourceUrls: string[]): DraftClaim[] {
-  const status: DraftClaim["status"] =
-    sourceUrls.length > 0 ? "sourced" : "unsupported";
+function extractDraftClaims(
+  text: string,
+  sourceUrls: string[],
+  evidence: ContentEvidence[],
+  draftId = "manual",
+): DraftClaim[] {
   const claims: DraftClaim[] = [];
+  const addClaim = (claimText: string, kind: DraftClaim["kind"]): void => {
+    const claimId = `claim-${draftId}-${claims.length}`;
+    const evidenceIds = evidence
+      .filter(
+        (item) =>
+          item.claimId === claimId ||
+          (item.draftId === draftId && Boolean(item.sourceUrl && item.snippet)),
+      )
+      .map((item) => item.id);
+    const status: DraftClaim["status"] =
+      evidenceIds.length > 0
+        ? "sourced"
+        : sourceUrls.length > 0
+          ? "needs source"
+          : "unsupported";
+    claims.push({ claimId, text: claimText, kind, status, evidenceIds });
+  };
+
   for (const match of text.matchAll(NUMERIC_CLAIM_GLOBAL_RE)) {
-    claims.push({ text: match[0], kind: "numeric", status });
+    addClaim(match[0], "numeric");
   }
   for (const match of text.matchAll(ABSOLUTE_CLAIM_RE)) {
-    claims.push({
-      text: match[0].trim(),
-      kind: "absolute",
-      status: sourceUrls.length > 0 ? "sourced" : "unsupported",
-    });
+    addClaim(match[0].trim(), "absolute");
   }
   return claims;
+}
+
+function rowToAnalyticsPost(
+  row: ContentStudioVaultRow,
+): ContentAnalyticsPost | null {
+  const slug = String(row.props.slug || row.title || "");
+  if (!slug) return null;
+  const views = numberFrom(row.props.views);
+  const bookmarks = numberFrom(row.props.bookmarks);
+  const likes = numberFrom(row.props.likes);
+  const comments = numberFrom(row.props.comments);
+  return {
+    slug,
+    hookRoute: String(row.props.hookRoute || "manual"),
+    bmLike:
+      typeof row.props.bmLike === "number"
+        ? row.props.bmLike
+        : calculateBmLike({ bookmarks, likes }),
+    bookmarks,
+    likes,
+    comments,
+    views,
+    bookmarkRate: calculateRate(bookmarks, views),
+    commentRate: calculateRate(comments, views),
+  };
 }
 
 function arrayOfStrings(value: unknown): string[] {

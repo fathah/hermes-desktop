@@ -201,6 +201,9 @@ const expectedShots = [
   "13-content-studio-low-score",
   "14-content-studio-run",
   "15-content-studio-analytics",
+  "16-content-studio-evidence-block",
+  "17-content-studio-evidence-approve",
+  "18-content-studio-publish",
 ];
 const shots = [];
 const shotFailures = [];
@@ -368,13 +371,16 @@ await shot("12-content-studio", async () => {
   await win.getByRole("heading", { name: "Content Studio" }).waitFor({
     timeout: 8000,
   });
+  await win.getByText("Content cockpit").waitFor({ timeout: 8000 });
   await win.getByText("Workspace pack ready").waitFor({ timeout: 8000 });
 });
 
 // 13 — low-score ideas are blocked unless explicitly overridden.
 await shot("13-content-studio-low-score", async () => {
   await win.getByLabel("Idea title").fill("Smoke thin idea");
-  await win.getByLabel("Source URL").fill("https://example.com/smoke");
+  await win
+    .getByRole("textbox", { name: "Source URL", exact: true })
+    .fill("https://example.com/smoke");
   await win.getByRole("button", { name: "Start content run" }).click();
   await win.getByText(/Score at least 10\/14/).waitFor({ timeout: 8000 });
 });
@@ -391,10 +397,45 @@ await shot("14-content-studio-run", async () => {
 // 15 — manual analytics entry computes the BM/Like signal.
 await shot("15-content-studio-analytics", async () => {
   await win.getByLabel("Analytics slug").fill("smoke-post");
+  await win.getByLabel("Views").fill("1000");
   await win.getByLabel("Bookmarks").fill("45");
   await win.getByLabel("Likes").fill("30");
+  await win.getByLabel("Comments").fill("6");
   await win.getByRole("button", { name: "Log analytics" }).click();
   await win.getByText("BM/Like 1.50").waitFor({ timeout: 8000 });
+  await win.getByText("Bookmark rate 4.50%").waitFor({ timeout: 8000 });
+});
+
+// 16 — claim-level approval is blocked until evidence is attached.
+await shot("16-content-studio-evidence-block", async () => {
+  await win
+    .getByLabel("Final draft")
+    .fill("This workflow always saves 30 minutes.");
+  await win.getByRole("button", { name: "Approve final draft" }).click();
+  await win.getByText(/Support claims/).waitFor({ timeout: 8000 });
+});
+
+// 17 — attaching evidence allows a manual publish packet to be prepared.
+await shot("17-content-studio-evidence-approve", async () => {
+  await win.getByLabel("Evidence source URL").fill("https://example.com/smoke");
+  await win
+    .getByLabel("Evidence snippet")
+    .fill("The source documents a 30 minute workflow saving.");
+  await win.getByRole("button", { name: "Attach evidence" }).click();
+  await win.getByText(/Evidence attached/).waitFor({ timeout: 8000 });
+  await win.getByRole("button", { name: "Approve final draft" }).click();
+  await win.getByText(/Draft approved/).waitFor({ timeout: 8000 });
+});
+
+// 18 — publishing remains manual, but the packet can be marked published.
+await shot("18-content-studio-publish", async () => {
+  await win
+    .getByLabel("Manual publish URL")
+    .fill("https://x.com/example/status/1");
+  await win.getByRole("button", { name: "Mark published" }).click();
+  await win
+    .getByText(/Publish packet marked published/)
+    .waitFor({ timeout: 8000 });
 });
 
 console.log("SHOTS_OK:", shots.length, "—", shots.join(", "));

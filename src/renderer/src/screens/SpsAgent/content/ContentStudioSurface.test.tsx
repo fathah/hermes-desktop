@@ -216,6 +216,22 @@ describe("ContentStudioSurface", () => {
     fireEvent.change(screen.getByLabelText("Source URL"), {
       target: { value: "https://example.com/proof" },
     });
+    fireEvent.change(screen.getByLabelText("Evidence source URL"), {
+      target: { value: "https://example.com/proof" },
+    });
+    fireEvent.change(screen.getByLabelText("Evidence snippet"), {
+      target: {
+        value: "The workflow reached 300K views in a sourced example.",
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Attach evidence" }));
+    await waitFor(() =>
+      expect(api.spsExportRow).toHaveBeenCalledWith(
+        "content-evidence",
+        expect.any(String),
+        expect.stringContaining("300K views"),
+      ),
+    );
     fireEvent.click(
       screen.getByRole("button", { name: "Approve final draft" }),
     );
@@ -283,5 +299,168 @@ describe("ContentStudioSurface", () => {
       );
       expect(api.spsCreateVaultProposal).toHaveBeenCalled();
     });
+  });
+
+  it("renders dashboard counts from row-backed Content Studio folders", async () => {
+    api.spsIndexQuery.mockImplementation((query: { scope?: string }) => {
+      if (query.scope === "content-ideas") {
+        return Promise.resolve([
+          {
+            path: "content-ideas/captured.md",
+            title: "Captured idea",
+            props: { status: "captured", score: 0 },
+            mtime: 1,
+          },
+          {
+            path: "content-ideas/ready.md",
+            title: "Ready idea",
+            props: { status: "scored", score: 12 },
+            mtime: 1,
+          },
+        ]);
+      }
+      if (query.scope === "content-runs") {
+        return Promise.resolve([
+          {
+            path: "content-runs/run.md",
+            title: "Run",
+            props: { id: "run-1", status: "drafting" },
+            mtime: 1,
+          },
+        ]);
+      }
+      if (query.scope === "content-drafts") {
+        return Promise.resolve([
+          {
+            path: "content-drafts/draft.md",
+            title: "Draft",
+            props: { runId: "run-2", status: "needs-review" },
+            mtime: 1,
+          },
+        ]);
+      }
+      if (query.scope === "content-published") {
+        return Promise.resolve([
+          {
+            path: "content-published/ready.md",
+            title: "Ready",
+            props: { slug: "ready", status: "ready" },
+            mtime: 1,
+          },
+        ]);
+      }
+      if (query.scope === "content-analytics") {
+        return Promise.resolve([]);
+      }
+      return Promise.resolve([]);
+    });
+
+    render(<ContentStudioSurface />);
+
+    expect(await screen.findByText("Content cockpit")).toBeInTheDocument();
+    expect(await screen.findByText("Captured ideas")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: /Captured ideas\s+1/ }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("Ready to publish")).toBeInTheDocument();
+  });
+
+  it("requires evidence before approving detected claims", async () => {
+    render(<ContentStudioSurface />);
+
+    fireEvent.change(screen.getByLabelText("Final draft"), {
+      target: { value: "This workflow always saves 30 minutes." },
+    });
+    fireEvent.change(screen.getByLabelText("Source URL"), {
+      target: { value: "https://example.com/proof" },
+    });
+    const callCountBeforeApproval = api.spsExportRow.mock.calls.length;
+    fireEvent.click(
+      screen.getByRole("button", { name: "Approve final draft" }),
+    );
+
+    expect(await screen.findByText(/Attach evidence/)).toBeInTheDocument();
+    expect(
+      api.spsExportRow.mock.calls
+        .slice(callCountBeforeApproval)
+        .some(([folder]) => folder === "content-published"),
+    ).toBe(false);
+
+    fireEvent.change(screen.getByLabelText("Evidence source URL"), {
+      target: { value: "https://example.com/proof" },
+    });
+    fireEvent.change(screen.getByLabelText("Evidence snippet"), {
+      target: { value: "A benchmark showed this workflow saves 30 minutes." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Attach evidence" }));
+
+    await waitFor(() =>
+      expect(api.spsExportRow).toHaveBeenCalledWith(
+        "content-evidence",
+        expect.stringContaining("content-evidence"),
+        expect.stringContaining("A benchmark showed"),
+      ),
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Approve final draft" }),
+    );
+
+    await waitFor(() =>
+      expect(api.spsExportRow).toHaveBeenCalledWith(
+        "content-published",
+        expect.any(String),
+        expect.stringContaining('status: "ready"'),
+      ),
+    );
+  });
+
+  it("marks publish packets as published and logs historical analytics", async () => {
+    render(<ContentStudioSurface />);
+
+    fireEvent.change(screen.getByLabelText("Manual publish URL"), {
+      target: { value: "https://x.com/example/status/1" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Mark published" }));
+
+    await waitFor(() =>
+      expect(api.spsExportRow).toHaveBeenCalledWith(
+        "content-published",
+        expect.stringContaining("published-post"),
+        expect.stringContaining('status: "published"'),
+      ),
+    );
+
+    fireEvent.change(screen.getByLabelText("Analytics slug"), {
+      target: { value: "agent-reach-setup" },
+    });
+    fireEvent.change(screen.getByLabelText("Views"), {
+      target: { value: "1000" },
+    });
+    fireEvent.change(screen.getByLabelText("Bookmarks"), {
+      target: { value: "45" },
+    });
+    fireEvent.change(screen.getByLabelText("Likes"), {
+      target: { value: "30" },
+    });
+    fireEvent.change(screen.getByLabelText("Comments"), {
+      target: { value: "6" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Log analytics" }));
+
+    expect(await screen.findByText("BM/Like 1.50")).toBeInTheDocument();
+    expect(await screen.findByText("Bookmark rate 4.50%")).toBeInTheDocument();
+  });
+
+  it("applies playbook defaults without bypassing scoring", async () => {
+    render(<ContentStudioSurface />);
+
+    fireEvent.change(screen.getByLabelText("Creator playbook"), {
+      target: { value: "ai-tool-teardown" },
+    });
+
+    expect(screen.getByLabelText("Bookmarkable")).toHaveValue(2);
+    expect(screen.getByLabelText("Hard proof")).toHaveValue(2);
+    expect(screen.getByText(/Score: 12\/14/)).toBeInTheDocument();
   });
 });
