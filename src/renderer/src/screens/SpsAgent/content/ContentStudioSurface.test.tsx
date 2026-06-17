@@ -140,7 +140,7 @@ describe("ContentStudioSurface", () => {
     fireEvent.change(screen.getByLabelText("Idea title"), {
       target: { value: "Thin trend post" },
     });
-    fireEvent.change(screen.getByLabelText("Source URL"), {
+    fireEvent.change(screen.getByLabelText("Source URLs"), {
       target: { value: "https://example.com/post" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Score idea" }));
@@ -164,13 +164,40 @@ describe("ContentStudioSurface", () => {
     );
   });
 
+  it("stores multiple manual source URLs on the content run row", async () => {
+    render(<ContentStudioSurface />);
+
+    fireEvent.change(screen.getByLabelText("Idea title"), {
+      target: { value: "Multi-source manual idea" },
+    });
+    fireEvent.change(screen.getByLabelText("Source URLs"), {
+      target: {
+        value:
+          "https://one.example/source\nhttps://two.example/source, https://one.example/source",
+      },
+    });
+    fireEvent.click(screen.getByLabelText("Override low score"));
+    fireEvent.click(screen.getByRole("button", { name: "Start content run" }));
+
+    await waitFor(() =>
+      expect(api.spsExportRow).toHaveBeenCalledWith(
+        "content-runs",
+        expect.stringContaining("content-run-run-multi-source-manual-idea"),
+        expect.stringContaining("https://two.example/source"),
+      ),
+    );
+    const markdown = String(api.spsExportRow.mock.calls.at(-1)?.[2] ?? "");
+    expect(markdown).toContain("https://one.example/source");
+    expect(markdown).toContain("https://two.example/source");
+  });
+
   it("generates three draft rows through the review-first assistant recipe", async () => {
     render(<ContentStudioSurface />);
 
     fireEvent.change(screen.getByLabelText("Idea title"), {
       target: { value: "Proof-led setup" },
     });
-    fireEvent.change(screen.getByLabelText("Source URL"), {
+    fireEvent.change(screen.getByLabelText("Source URLs"), {
       target: { value: "https://example.com/source" },
     });
     fireEvent.click(screen.getByLabelText("Override low score"));
@@ -213,7 +240,7 @@ describe("ContentStudioSurface", () => {
       expect.any(String),
     );
 
-    fireEvent.change(screen.getByLabelText("Source URL"), {
+    fireEvent.change(screen.getByLabelText("Source URLs"), {
       target: { value: "https://example.com/proof" },
     });
     fireEvent.change(screen.getByLabelText("Evidence source URL"), {
@@ -371,7 +398,7 @@ describe("ContentStudioSurface", () => {
     fireEvent.change(screen.getByLabelText("Final draft"), {
       target: { value: "This workflow always saves 30 minutes." },
     });
-    fireEvent.change(screen.getByLabelText("Source URL"), {
+    fireEvent.change(screen.getByLabelText("Source URLs"), {
       target: { value: "https://example.com/proof" },
     });
     const callCountBeforeApproval = api.spsExportRow.mock.calls.length;

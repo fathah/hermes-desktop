@@ -971,7 +971,7 @@
 }
 .sps-scope .source-intake-tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(72px, 1fr));
+  grid-template-columns: repeat(4, minmax(72px, 1fr));
   gap: 4px;
   padding: 4px;
   border-radius: 8px;
@@ -1048,6 +1048,28 @@
   gap: 8px;
   margin-top: 10px;
   flex-wrap: wrap;
+}
+.sps-scope .source-intake-idea-set,
+.sps-scope .source-intake-study {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 8px;
+  background: rgba(2, 6, 23, 0.24);
+  padding: 12px;
+}
+.sps-scope .source-intake-source-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sps-scope .source-intake-source-list span {
+  border: 1px solid rgba(96, 165, 250, 0.22);
+  border-radius: 999px;
+  color: #bfdbfe;
+  background: rgba(96, 165, 250, 0.1);
+  padding: 4px 8px;
+  font-size: 12px;
 }
 .sps-scope .source-intake-empty,
 .sps-scope .source-intake-message {

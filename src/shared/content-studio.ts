@@ -33,6 +33,23 @@ export interface ContentIdea {
   capturedFrom?: string;
 }
 
+export interface ContentIdeaSourceRecord {
+  url: string;
+  title?: string;
+  excerpt?: string;
+}
+
+export interface BuildContentIdeaFromSourcesInput {
+  id?: string;
+  title?: string;
+  sources: ContentIdeaSourceRecord[];
+  audience?: string;
+  angle?: string;
+  capturedFrom?: string;
+  createdAt?: string;
+  rubric?: Partial<ContentStudioRubric>;
+}
+
 export interface ContentRun {
   id: string;
   ideaId: string;
@@ -390,9 +407,88 @@ const SLOP_PATTERNS = [
   /\breplaces every\b/i,
 ];
 
+const SOURCE_URL_RE = /https?:\/\/[^\s<>"'`,\]]+/gi;
+
 function clampScore(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.max(0, Math.min(2, Math.round(value)));
+}
+
+function trimSourceUrl(url: string): string {
+  return url.trim().replace(/[).;:!?]+$/g, "");
+}
+
+export function parseContentSourceUrls(text: string): string[] {
+  const seen = new Set<string>();
+  const urls: string[] = [];
+  for (const match of text.matchAll(SOURCE_URL_RE)) {
+    const url = trimSourceUrl(match[0]);
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    urls.push(url);
+  }
+  return urls;
+}
+
+export function normalizeContentSourceRecords(
+  sources: ContentIdeaSourceRecord[],
+): ContentIdeaSourceRecord[] {
+  const seen = new Set<string>();
+  const result: ContentIdeaSourceRecord[] = [];
+  for (const source of sources) {
+    const url = trimSourceUrl(source.url);
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    result.push({
+      url,
+      title: source.title?.trim() || undefined,
+      excerpt: source.excerpt?.trim() || undefined,
+    });
+  }
+  return result;
+}
+
+function contentIdeaSourceAngle(sources: ContentIdeaSourceRecord[]): string {
+  return sources
+    .map((source) =>
+      [source.title || source.url, source.excerpt].filter(Boolean).join("\n"),
+    )
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+export function buildContentIdeaFromSources(
+  input: BuildContentIdeaFromSourcesInput,
+): ContentIdea {
+  const date = input.createdAt || new Date().toISOString().slice(0, 10);
+  const sources = normalizeContentSourceRecords(input.sources);
+  const title =
+    input.title?.trim() || sources[0]?.title || "Content idea from sources";
+  return {
+    id: input.id || contentRowId("content-idea", title),
+    title,
+    sourceUrls: sources.map((source) => source.url),
+    audience: input.audience?.trim() || "",
+    angle:
+      input.angle?.trim() ||
+      contentIdeaSourceAngle(sources) ||
+      "Captured from Sources.",
+    createdAt: date,
+    updatedAt: date,
+    status: "captured",
+    capturedFrom: input.capturedFrom,
+    rubric: {
+      bookmarkability: clampScore(Number(input.rubric?.bookmarkability ?? 0)),
+      proof: clampScore(
+        Number(input.rubric?.proof ?? (sources.length ? 1 : 0)),
+      ),
+      immediateUse: clampScore(Number(input.rubric?.immediateUse ?? 0)),
+      audienceClarity: clampScore(Number(input.rubric?.audienceClarity ?? 0)),
+      reproducibility: clampScore(Number(input.rubric?.reproducibility ?? 0)),
+      hookStrength: clampScore(Number(input.rubric?.hookStrength ?? 0)),
+      originality: clampScore(Number(input.rubric?.originality ?? 0)),
+    },
+  };
 }
 
 export function scoreContentIdea(rubric: ContentStudioRubric): ContentScore {

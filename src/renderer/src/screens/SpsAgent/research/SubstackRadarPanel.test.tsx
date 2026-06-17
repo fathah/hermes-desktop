@@ -73,6 +73,7 @@ const api = {
   spsSubstackRadarListRuns: vi.fn(),
   spsSubstackRadarSetCandidateStatus: vi.fn(),
   spsSubstackRadarAddApprovedFeeds: vi.fn(),
+  spsExportRow: vi.fn(),
 };
 
 function installApi(): void {
@@ -102,6 +103,7 @@ beforeEach(() => {
       },
     ],
   });
+  api.spsExportRow.mockResolvedValue(true);
 });
 
 afterEach(() => {
@@ -325,6 +327,54 @@ describe("SubstackRadarPanel", () => {
       });
     });
     expect(screen.getByText(/status: rejected/i)).toBeInTheDocument();
+  });
+
+  it("creates one Content Studio idea from approved and added candidates", async () => {
+    api.spsSubstackRadarListRuns.mockResolvedValue([
+      {
+        ...latestRun,
+        candidates: [
+          { ...latestRun.candidates[0], status: "approved" },
+          {
+            ...latestRun.candidates[0],
+            id: "candidate-2",
+            publicationUrl: "https://second.substack.com",
+            feedUrl: "https://second.substack.com/feed",
+            title: "Second Letters",
+            description: "More field notes.",
+            sourcePageUrl: "https://substack.com/discover/markets",
+            status: "added" as const,
+          },
+          {
+            ...latestRun.candidates[0],
+            id: "candidate-3",
+            publicationUrl: "https://rejected.substack.com",
+            title: "Rejected Letters",
+            status: "rejected" as const,
+          },
+        ],
+      },
+    ]);
+
+    render(<SubstackRadarPanel />);
+
+    const createButton = await screen.findByRole("button", {
+      name: /create idea from approved/i,
+    });
+    expect(createButton).toBeEnabled();
+    fireEvent.click(createButton);
+
+    await waitFor(() =>
+      expect(api.spsExportRow).toHaveBeenCalledWith(
+        "content-ideas",
+        expect.stringContaining("content-idea-approved-substack-sources"),
+        expect.stringContaining("https://second.substack.com"),
+      ),
+    );
+    const markdown = String(api.spsExportRow.mock.calls.at(-1)?.[2] ?? "");
+    expect(markdown).toContain("https://example.substack.com");
+    expect(markdown).toContain("https://second.substack.com");
+    expect(markdown).not.toContain("https://rejected.substack.com");
   });
 
   it("does not apply a stale status update to a newer active run", async () => {

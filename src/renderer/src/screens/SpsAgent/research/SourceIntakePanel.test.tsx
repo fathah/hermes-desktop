@@ -10,6 +10,7 @@ const api = {
   spsRssSyncFeeds: vi.fn(),
   spsFileResearch: vi.fn(),
   spsExportRow: vi.fn(),
+  spsSourceStudy: vi.fn(),
   spsSubstackRadarListRuns: vi.fn(),
 };
 
@@ -54,6 +55,12 @@ beforeEach(() => {
   );
   api.spsFileResearch.mockResolvedValue({ ok: true, captureCount: 0 });
   api.spsExportRow.mockResolvedValue(true);
+  api.spsSourceStudy.mockResolvedValue({
+    kind: "chat",
+    reply: [
+      "The corpus argues for slower, source-backed workflows.\n\n## Sources\n- [Second](https://two.example/study)",
+    ],
+  });
   api.spsRssAddFeed.mockResolvedValue("feed-1");
   api.spsRssSyncFeeds.mockResolvedValue({ success: true, count: 1 });
   api.spsSubstackRadarListRuns.mockResolvedValue([]);
@@ -107,6 +114,94 @@ describe("SourceIntakePanel", () => {
       expect.stringContaining("content-idea-example-page"),
       expect.stringContaining('type: "content-idea"'),
     );
+  });
+
+  it("creates one Content Studio idea from multiple reviewed sources", async () => {
+    api.sourceIntakePreviewUrl.mockImplementation((inputUrl: string) =>
+      Promise.resolve({
+        ok: true,
+        sourceUrl: inputUrl,
+        canonicalUrl: inputUrl,
+        title: inputUrl.includes("two") ? "Second Page" : "First Page",
+        markdown: `# Page\n\nBody\n\n## Sources\n- [Page](${inputUrl})`,
+        excerpt: inputUrl.includes("two") ? "Second note" : "First note",
+        links: [inputUrl],
+        engine: "unfurl",
+        fetchedAt: 1,
+      }),
+    );
+    render(<SourceIntakePanel />);
+
+    fireEvent.change(screen.getByLabelText(/source url/i), {
+      target: { value: "https://one.example/page" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /read source/i }));
+    expect(await screen.findByText("First Page")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: /add to idea sources/i }),
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: /add url/i }));
+    fireEvent.change(screen.getByLabelText(/source url/i), {
+      target: { value: "https://two.example/page" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /read source/i }));
+    expect(await screen.findByText("Second Page")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: /add to idea sources/i }),
+    );
+
+    fireEvent.change(screen.getByLabelText(/content idea title/i), {
+      target: { value: "Combined source idea" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /create content idea/i }),
+    );
+
+    await waitFor(() =>
+      expect(api.spsExportRow).toHaveBeenCalledWith(
+        "content-ideas",
+        expect.stringContaining("content-idea-combined-source-idea"),
+        expect.stringContaining("https://two.example/page"),
+      ),
+    );
+    const markdown = String(api.spsExportRow.mock.calls.at(-1)?.[2] ?? "");
+    expect(markdown).toContain("https://one.example/page");
+    expect(markdown).toContain("https://two.example/page");
+  });
+
+  it("saves a Study sources result as one Content Studio idea with corpus URLs", async () => {
+    render(<SourceIntakePanel />);
+
+    fireEvent.click(screen.getByRole("tab", { name: /study/i }));
+    fireEvent.change(screen.getByLabelText(/study focus/i), {
+      target: { value: "Source-backed workflows" },
+    });
+    fireEvent.change(screen.getByLabelText(/corpus description/i), {
+      target: {
+        value:
+          "Use https://one.example/study and the connected Knowledge Wiki notes.",
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^study$/i }));
+
+    expect(
+      await screen.findByText(/source-backed workflows/i),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: /save study as content idea/i }),
+    );
+
+    await waitFor(() =>
+      expect(api.spsSourceStudy).toHaveBeenCalledWith(
+        "Source-backed workflows",
+        "Use https://one.example/study and the connected Knowledge Wiki notes.",
+      ),
+    );
+    const markdown = String(api.spsExportRow.mock.calls.at(-1)?.[2] ?? "");
+    expect(markdown).toContain("https://one.example/study");
+    expect(markdown).toContain("https://two.example/study");
+    expect(markdown).toContain("The corpus argues");
   });
 
   it("shows Crawl4AI setup guidance when extraction is unavailable", async () => {

@@ -8,7 +8,7 @@ interface Props {
   selectedPlaybookId: string;
   onSelectPlaybook: (id: string) => void;
   ideaTitle: string;
-  sourceUrl: string;
+  sourceUrlsText: string;
   audience: string;
   angle: string;
   rubric: ContentStudioRubric;
@@ -18,7 +18,7 @@ interface Props {
   variantMessage: string;
   lastAssistantRunId: string;
   onIdeaTitleChange: (value: string) => void;
-  onSourceUrlChange: (value: string) => void;
+  onSourceUrlsChange: (value: string) => void;
   onAudienceChange: (value: string) => void;
   onAngleChange: (value: string) => void;
   onRubricChange: (key: keyof ContentStudioRubric, value: string) => void;
@@ -71,13 +71,14 @@ export function ContentIdeaPanel(props: Props): React.JSX.Element {
           />
         </label>
         <label>
-          <span>Source URL</span>
-          <input
-            aria-label="Source URL"
+          <span>Source URLs</span>
+          <textarea
+            aria-label="Source URLs"
             className="inbox-input"
-            value={props.sourceUrl}
-            onChange={(event) => props.onSourceUrlChange(event.target.value)}
-            placeholder="https://example.com/source"
+            value={props.sourceUrlsText}
+            onChange={(event) => props.onSourceUrlsChange(event.target.value)}
+            placeholder="https://example.com/source&#10;https://example.com/second"
+            rows={3}
           />
         </label>
         <label>

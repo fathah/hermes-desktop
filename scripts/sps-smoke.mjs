@@ -379,7 +379,7 @@ await shot("12-content-studio", async () => {
 await shot("13-content-studio-low-score", async () => {
   await win.getByLabel("Idea title").fill("Smoke thin idea");
   await win
-    .getByRole("textbox", { name: "Source URL", exact: true })
+    .getByRole("textbox", { name: "Source URLs", exact: true })
     .fill("https://example.com/smoke");
   await win.getByRole("button", { name: "Start content run" }).click();
   await win.getByText(/Score at least 10\/14/).waitFor({ timeout: 8000 });

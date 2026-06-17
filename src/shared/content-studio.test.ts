@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   calculateBmLike,
   buildContentStudioDashboard,
+  buildContentIdeaFromSources,
   buildWeeklyReviewProposals,
   canStartContentRun,
   CONTENT_STUDIO_FOLDERS,
@@ -16,6 +17,7 @@ import {
   findWinningHookRoutes,
   getNextContentActions,
   parseDraftVariants,
+  parseContentSourceUrls,
   parseContentIdeaMarkdown,
   rowToAnalyticsSnapshot,
   rowToContentEvidence,
@@ -186,6 +188,18 @@ describe("evaluateDraftQuality", () => {
 });
 
 describe("content studio row contracts", () => {
+  it("parses and dedupes source URLs from loose source text", () => {
+    expect(
+      parseContentSourceUrls(
+        " https://one.example/a, https://two.example/b\nhttps://one.example/a\nNotes (https://three.example/c).",
+      ),
+    ).toEqual([
+      "https://one.example/a",
+      "https://two.example/b",
+      "https://three.example/c",
+    ]);
+  });
+
   it("uses deterministic folder-backed row ids and row props", () => {
     expect(CONTENT_STUDIO_FOLDERS.ideas).toBe("content-ideas");
     expect(contentRowId("content-idea", "Agent Reach setup!!")).toBe(
@@ -277,6 +291,49 @@ describe("content studio row contracts", () => {
       sourceUrl: "https://example.com/proof",
     });
     expect(rowToContentEvidence(row.props, row.body)).toMatchObject(evidence);
+  });
+
+  it("builds one Content Studio idea from multiple source records", () => {
+    const idea = buildContentIdeaFromSources({
+      id: "idea-multi",
+      title: "Multi-source angle",
+      sources: [
+        {
+          url: "https://one.example/a",
+          title: "One",
+          excerpt: "First source note.",
+        },
+        {
+          url: "https://two.example/b",
+          title: "Two",
+          excerpt: "Second source note.",
+        },
+        {
+          url: "https://one.example/a",
+          title: "Duplicate",
+          excerpt: "Duplicate source note.",
+        },
+      ],
+      capturedFrom: "source-preview",
+      createdAt: "2026-06-17",
+    });
+
+    const row = contentIdeaToRow(idea);
+
+    expect(idea).toMatchObject({
+      id: "idea-multi",
+      title: "Multi-source angle",
+      sourceUrls: ["https://one.example/a", "https://two.example/b"],
+      capturedFrom: "source-preview",
+      status: "captured",
+    });
+    expect(row.props.sourceUrls).toEqual([
+      "https://one.example/a",
+      "https://two.example/b",
+    ]);
+    expect(row.body).toContain("First source note.");
+    expect(row.body).toContain("Second source note.");
+    expect(row.body).not.toContain("Duplicate source note.");
   });
 });
 

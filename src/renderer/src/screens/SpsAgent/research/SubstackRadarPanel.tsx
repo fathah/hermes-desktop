@@ -11,7 +11,10 @@ import type {
   SubstackRadarCandidateStatus,
   SubstackRadarRun,
 } from "../../../../../shared/substack-radar";
-import type { ContentIdea } from "../../../../../shared/content-studio";
+import {
+  buildContentIdeaFromSources,
+  type ContentIdea,
+} from "../../../../../shared/content-studio";
 import { saveContentIdea } from "../content/contentStudioStorage";
 
 interface StatusUpdatingTarget {
@@ -93,6 +96,11 @@ export function SubstackRadarPanel(): React.JSX.Element {
   const approvedCount =
     activeRun?.candidates.filter((candidate) => candidate.status === "approved")
       .length ?? 0;
+  const approvedIdeaCandidates =
+    activeRun?.candidates.filter(
+      (candidate) =>
+        candidate.status === "approved" || candidate.status === "added",
+    ) ?? [];
 
   useEffect(() => {
     let cancelled = false;
@@ -278,6 +286,40 @@ export function SubstackRadarPanel(): React.JSX.Element {
     setNotice("Saved as a Content Studio idea.");
   };
 
+  const saveApprovedAsContentIdea = async (): Promise<void> => {
+    if (approvedIdeaCandidates.length === 0) return;
+    const idea = buildContentIdeaFromSources({
+      id: `idea-radar-approved-${activeRun?.id || Date.now().toString(36)}`,
+      title: "Approved Substack sources",
+      sources: approvedIdeaCandidates.flatMap((candidate) => [
+        {
+          url: candidate.publicationUrl,
+          title: candidate.title,
+          excerpt: candidate.description,
+        },
+        {
+          url: candidate.sourcePageUrl,
+          title: `${candidate.category} discovery`,
+          excerpt: visibleSignalText(candidate).join(" · "),
+        },
+      ]),
+      audience: approvedIdeaCandidates[0]?.category || "",
+      capturedFrom: "substack-radar",
+      rubric: {
+        bookmarkability: approvedIdeaCandidates.some(
+          (candidate) => candidate.score >= 70,
+        )
+          ? 1
+          : 0,
+        proof: 1,
+        audienceClarity: approvedIdeaCandidates[0]?.category ? 1 : 0,
+      },
+    });
+    await saveContentIdea(idea);
+    setAddResult(null);
+    setNotice("Saved approved sources as a Content Studio idea.");
+  };
+
   return (
     <section className="substack-radar-panel" aria-label="Substack radar">
       <div className="substack-radar-header">
@@ -297,6 +339,14 @@ export function SubstackRadarPanel(): React.JSX.Element {
           {addingFeeds?.runId === activeRun?.id
             ? "Adding..."
             : "Add Approved Feeds"}
+        </button>
+        <button
+          type="button"
+          className="log-submit-btn protocol-record-btn"
+          onClick={() => void saveApprovedAsContentIdea()}
+          disabled={approvedIdeaCandidates.length === 0}
+        >
+          Create idea from approved
         </button>
       </div>
 

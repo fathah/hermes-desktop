@@ -3,12 +3,16 @@ import type {
   SourceIntakeResult,
   SourceIntakeStatus,
 } from "../../../../../shared/source-intake";
-import { type ContentIdea } from "../../../../../shared/content-studio";
+import {
+  buildContentIdeaFromSources,
+  parseContentSourceUrls,
+  type ContentIdeaSourceRecord,
+} from "../../../../../shared/content-studio";
 import { Icon } from "../components/Icon";
 import { SubstackRadarPanel } from "./SubstackRadarPanel";
 import { saveContentIdea } from "../content/contentStudioStorage";
 
-type SourceTab = "find" | "add" | "review";
+type SourceTab = "find" | "add" | "study" | "review";
 
 interface SourceIntakePanelProps {
   onFeedsChanged?: () => Promise<void> | void;
@@ -22,6 +26,20 @@ function feedCategory(result: SourceIntakeResult): string {
   return result.canonicalUrl.includes("substack.com") ? "Substack" : "Sources";
 }
 
+function extractChatReply(res: unknown): string {
+  if (!res || typeof res !== "object") return "";
+  const record = res as {
+    kind?: string;
+    reply?: unknown;
+    response?: unknown;
+    run?: { resultText?: unknown };
+  };
+  if (Array.isArray(record.reply)) return record.reply.map(String).join("\n");
+  if (typeof record.response === "string") return record.response;
+  if (typeof record.run?.resultText === "string") return record.run.resultText;
+  return "";
+}
+
 export function SourceIntakePanel({
   onFeedsChanged,
 }: SourceIntakePanelProps): React.JSX.Element {
@@ -33,6 +51,12 @@ export function SourceIntakePanel({
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [setup, setSetup] = useState("");
+  const [ideaSources, setIdeaSources] = useState<ContentIdeaSourceRecord[]>([]);
+  const [ideaTitle, setIdeaTitle] = useState("");
+  const [studyFocus, setStudyFocus] = useState("");
+  const [studyCorpus, setStudyCorpus] = useState("");
+  const [studyBusy, setStudyBusy] = useState(false);
+  const [studyResult, setStudyResult] = useState("");
 
   useEffect(() => {
     void window.hermesAPI
@@ -111,29 +135,98 @@ export function SourceIntakePanel({
 
   async function saveAsContentIdea(): Promise<void> {
     if (!result?.ok) return;
-    const date = new Date().toISOString().slice(0, 10);
-    const idea: ContentIdea = {
+    const idea = buildContentIdeaFromSources({
       id: `idea-${Date.now().toString(36)}`,
       title: result.title,
-      sourceUrls: [result.canonicalUrl],
-      audience: "",
-      angle: result.excerpt,
-      createdAt: date,
-      updatedAt: date,
-      status: "captured",
+      sources: [
+        {
+          url: result.canonicalUrl,
+          title: result.title,
+          excerpt: result.excerpt,
+        },
+      ],
       capturedFrom: "source-preview",
-      rubric: {
-        bookmarkability: 0,
-        proof: result.links.length ? 1 : 0,
-        immediateUse: 0,
-        audienceClarity: 0,
-        reproducibility: 0,
-        hookStrength: 0,
-        originality: 0,
-      },
-    };
+      rubric: { proof: result.links.length ? 1 : 0 },
+    });
     await saveContentIdea(idea);
     setMessage("Saved as content idea.");
+  }
+
+  function addResultToIdeaSources(): void {
+    if (!result?.ok) return;
+    const nextSource = {
+      url: result.canonicalUrl,
+      title: result.title,
+      excerpt: result.excerpt,
+    };
+    setIdeaSources((current) => {
+      if (current.some((source) => source.url === nextSource.url)) {
+        return current;
+      }
+      return [...current, nextSource];
+    });
+    setIdeaTitle((current) => current || result.title);
+    setMessage("Added to idea sources.");
+  }
+
+  async function createContentIdeaFromSources(): Promise<void> {
+    if (ideaSources.length === 0 || saving) return;
+    setSaving(true);
+    setMessage("");
+    try {
+      await saveContentIdea(
+        buildContentIdeaFromSources({
+          id: `idea-sources-${Date.now().toString(36)}`,
+          title: ideaTitle.trim() || ideaSources[0]?.title,
+          sources: ideaSources,
+          capturedFrom: "sources",
+        }),
+      );
+      setMessage("Created Content Studio idea.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function runStudy(): Promise<void> {
+    const focus = studyFocus.trim();
+    if (!focus || studyBusy) return;
+    setStudyBusy(true);
+    setStudyResult("");
+    setMessage("");
+    try {
+      const res = await window.hermesAPI.spsSourceStudy?.(
+        focus,
+        studyCorpus.trim() || undefined,
+      );
+      setStudyResult(extractChatReply(res) || "No study result returned.");
+    } catch {
+      setStudyResult("Source study failed.");
+    } finally {
+      setStudyBusy(false);
+    }
+  }
+
+  async function saveStudyAsContentIdea(): Promise<void> {
+    if (!studyFocus.trim() || !studyResult.trim() || saving) return;
+    const urls = parseContentSourceUrls(`${studyCorpus}\n${studyResult}`);
+    setSaving(true);
+    setMessage("");
+    try {
+      await saveContentIdea(
+        buildContentIdeaFromSources({
+          id: `idea-study-${Date.now().toString(36)}`,
+          title: studyFocus.trim(),
+          sources: urls.map((sourceUrl) => ({ url: sourceUrl })),
+          angle: studyResult,
+          capturedFrom: "source-study",
+          rubric: { proof: urls.length ? 1 : 0, originality: 1 },
+        }),
+      );
+      setMessage("Saved study as content idea.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function showSetup(): Promise<void> {
@@ -150,7 +243,7 @@ export function SourceIntakePanel({
           </div>
         </div>
         <div className="source-intake-tabs" role="tablist">
-          {(["find", "add", "review"] as const).map((nextTab) => (
+          {(["find", "add", "study", "review"] as const).map((nextTab) => (
             <button
               key={nextTab}
               type="button"
@@ -163,11 +256,41 @@ export function SourceIntakePanel({
                 ? "Find"
                 : nextTab === "add"
                   ? "Add URL"
-                  : "Review"}
+                  : nextTab === "study"
+                    ? "Study"
+                    : "Review"}
             </button>
           ))}
         </div>
       </div>
+
+      {ideaSources.length > 0 && (
+        <div className="source-intake-idea-set">
+          <label className="log-input-group">
+            <span>Content idea title</span>
+            <input
+              aria-label="Content idea title"
+              type="text"
+              value={ideaTitle}
+              onChange={(event) => setIdeaTitle(event.target.value)}
+              placeholder="One idea from these sources"
+            />
+          </label>
+          <div className="source-intake-source-list">
+            {ideaSources.map((source) => (
+              <span key={source.url}>{source.title || source.url}</span>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="log-submit-btn save-journal-entry-btn"
+            disabled={saving}
+            onClick={() => void createContentIdeaFromSources()}
+          >
+            Create content idea
+          </button>
+        </div>
+      )}
 
       {tab === "find" && <SubstackRadarPanel />}
 
@@ -252,6 +375,14 @@ export function SourceIntakePanel({
                   type="button"
                   className="log-submit-btn protocol-record-btn"
                   disabled={saving}
+                  onClick={addResultToIdeaSources}
+                >
+                  Add to idea sources
+                </button>
+                <button
+                  type="button"
+                  className="log-submit-btn protocol-record-btn"
+                  disabled={saving}
                   onClick={() => void saveAsContentIdea()}
                 >
                   Save as content idea
@@ -266,7 +397,57 @@ export function SourceIntakePanel({
         </div>
       )}
 
+      {tab === "study" && (
+        <div className="source-intake-study">
+          <label className="log-input-group">
+            <span>Study focus</span>
+            <input
+              aria-label="Study focus"
+              type="text"
+              value={studyFocus}
+              onChange={(event) => setStudyFocus(event.target.value)}
+              placeholder="Question or learning goal"
+            />
+          </label>
+          <label className="log-input-group">
+            <span>Corpus description</span>
+            <textarea
+              aria-label="Corpus description"
+              className="substack-radar-input"
+              value={studyCorpus}
+              onChange={(event) => setStudyCorpus(event.target.value)}
+              placeholder="Name the URLs, PDFs, articles, wiki pages, or NotebookLM sources to study."
+              rows={3}
+            />
+          </label>
+          <button
+            type="button"
+            className="log-submit-btn save-journal-entry-btn"
+            disabled={studyBusy || !studyFocus.trim()}
+            onClick={() => void runStudy()}
+          >
+            {studyBusy ? "Studying..." : "Study"}
+          </button>
+          {studyResult && (
+            <>
+              <pre className="source-intake-markdown">{studyResult}</pre>
+              <button
+                type="button"
+                className="log-submit-btn protocol-record-btn"
+                disabled={saving}
+                onClick={() => void saveStudyAsContentIdea()}
+              >
+                Save study as content idea
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {message && result?.ok && (
+        <div className="source-intake-message">{message}</div>
+      )}
+      {message && tab === "study" && (
         <div className="source-intake-message">{message}</div>
       )}
       {setup && <pre className="source-intake-setup">{setup}</pre>}

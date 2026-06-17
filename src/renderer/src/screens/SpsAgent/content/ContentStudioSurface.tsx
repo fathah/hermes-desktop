@@ -9,6 +9,7 @@ import {
   buildContentWriterPrompt,
   CONTENT_STUDIO_FOLDERS,
   evaluateDraftQuality,
+  parseContentSourceUrls,
   parseDraftVariants,
   scoreContentIdea,
   type AnalyticsSnapshot,
@@ -156,7 +157,7 @@ export function ContentStudioSurface({
     useState<ContentStudioDashboardSummary>(emptyDashboardSummary);
   const [selectedPlaybookId, setSelectedPlaybookId] = useState("");
   const [ideaTitle, setIdeaTitle] = useState("");
-  const [sourceUrl, setSourceUrl] = useState("");
+  const [sourceUrlsText, setSourceUrlsText] = useState("");
   const [audience, setAudience] = useState("");
   const [angle, setAngle] = useState("");
   const [rubric, setRubric] = useState<ContentStudioRubric>(EMPTY_RUBRIC);
@@ -293,7 +294,7 @@ export function ContentStudioSurface({
     return {
       id: `idea-${slug(ideaTitle || "untitled")}`,
       title: ideaTitle.trim() || "Untitled content idea",
-      sourceUrls: sourceUrl.trim() ? [sourceUrl.trim()] : [],
+      sourceUrls: parseContentSourceUrls(sourceUrlsText),
       audience: audience.trim(),
       angle: angle.trim(),
       createdAt: date,
@@ -449,7 +450,8 @@ export function ContentStudioSurface({
   async function runQualityGate(): Promise<void> {
     const result = evaluateDraftQuality({
       text: draftText,
-      sourceUrls: currentIdea?.sourceUrls ?? (sourceUrl ? [sourceUrl] : []),
+      sourceUrls:
+        currentIdea?.sourceUrls ?? parseContentSourceUrls(sourceUrlsText),
       evidence,
       draftId,
       runId: currentRun?.id,
@@ -473,8 +475,10 @@ export function ContentStudioSurface({
         status: "ready",
         platform: currentRun?.platform || "x",
         finalCopy: draftText,
-        linkComment: sourceUrl,
-        sourceNotes: (currentIdea?.sourceUrls ?? [sourceUrl])
+        linkComment: parseContentSourceUrls(sourceUrlsText)[0] || "",
+        sourceNotes: (
+          currentIdea?.sourceUrls ?? parseContentSourceUrls(sourceUrlsText)
+        )
           .filter(Boolean)
           .join("\n"),
         disclosureText,
@@ -491,7 +495,8 @@ export function ContentStudioSurface({
   async function attachEvidence(): Promise<void> {
     const result = evaluateDraftQuality({
       text: draftText,
-      sourceUrls: currentIdea?.sourceUrls ?? (sourceUrl ? [sourceUrl] : []),
+      sourceUrls:
+        currentIdea?.sourceUrls ?? parseContentSourceUrls(sourceUrlsText),
       evidence,
       draftId,
       runId: currentRun?.id,
@@ -520,7 +525,8 @@ export function ContentStudioSurface({
     setEvidence(nextEvidence);
     const next = evaluateDraftQuality({
       text: draftText,
-      sourceUrls: currentIdea?.sourceUrls ?? (sourceUrl ? [sourceUrl] : []),
+      sourceUrls:
+        currentIdea?.sourceUrls ?? parseContentSourceUrls(sourceUrlsText),
       evidence: nextEvidence,
       draftId,
       runId: currentRun?.id,
@@ -559,8 +565,10 @@ export function ContentStudioSurface({
         status: "published",
         platform: currentRun?.platform || "x",
         finalCopy: draftText,
-        linkComment: sourceUrl,
-        sourceNotes: (currentIdea?.sourceUrls ?? [sourceUrl])
+        linkComment: parseContentSourceUrls(sourceUrlsText)[0] || "",
+        sourceNotes: (
+          currentIdea?.sourceUrls ?? parseContentSourceUrls(sourceUrlsText)
+        )
           .filter(Boolean)
           .join("\n"),
         disclosureText,
@@ -719,7 +727,7 @@ export function ContentStudioSurface({
         selectedPlaybookId={selectedPlaybookId}
         onSelectPlaybook={selectPlaybook}
         ideaTitle={ideaTitle}
-        sourceUrl={sourceUrl}
+        sourceUrlsText={sourceUrlsText}
         audience={audience}
         angle={angle}
         rubric={rubric}
@@ -729,7 +737,7 @@ export function ContentStudioSurface({
         variantMessage={variantMessage}
         lastAssistantRunId={lastAssistantRunId}
         onIdeaTitleChange={setIdeaTitle}
-        onSourceUrlChange={setSourceUrl}
+        onSourceUrlsChange={setSourceUrlsText}
         onAudienceChange={setAudience}
         onAngleChange={setAngle}
         onRubricChange={updateRubric}
