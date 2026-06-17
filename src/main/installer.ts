@@ -376,6 +376,41 @@ export function expectedEnvKeyForModel(
 }
 
 /**
+ * Does the secrets-provider-resolved map hold a usable credential that
+ * satisfies the install gate for `expectedKey`?
+ *
+ * Alias-constrained when the provider is catalogued: only the canonical key OR
+ * one of its accepted aliases (KEY_ALIASES — single source of truth in
+ * ../shared/url-key-map) counts. An unrelated token-shaped credential in the
+ * vault (GITHUB_TOKEN, SLACK_BOT_TOKEN, …) must NOT pass — otherwise a user with
+ * no LLM key falsely clears the gate and lands on chat instead of Setup.
+ *
+ * Only when `expectedKey` is null (uncatalogued provider — we have no canonical
+ * key name to look for) do we fall back to a permissive `*_API_KEY|*_TOKEN`
+ * scan so a vault user on a custom host isn't falsely blocked.
+ *
+ * Mirrors resolvedHasKey() in config-health.ts. Exported for unit testing the
+ * security-gate behavior of the install check.
+ */
+export function vaultResolvedHasKey(
+  resolved: Record<string, unknown>,
+  expectedKey: string | null,
+): boolean {
+  const usable = (v: unknown): boolean =>
+    typeof v === "string" && v.trim() !== "";
+  if (expectedKey) {
+    return (
+      usable(resolved[expectedKey]) ||
+      aliasesForEnvKey(expectedKey).some((alias) => usable(resolved[alias]))
+    );
+  }
+  // Uncatalogued provider: accept any resolved provider-shaped credential.
+  return Object.entries(resolved).some(
+    ([k, v]) => /(_API_KEY|_TOKEN)$/.test(k) && usable(v),
+  );
+}
+
+/**
  * True iff `content` (.env text) holds a usable value for `expectedKey` OR any
  * of its accepted aliases (KEY_ALIASES). When `expectedKey` is null (provider
  * not catalogued), accepts any `*_API_KEY`. Exported for unit testing the
@@ -555,18 +590,9 @@ export function checkInstallStatus(): InstallStatus {
         const expectedKey = mc
           ? expectedEnvKeyForModel(mc.provider, mc.baseUrl)
           : null;
-        const usable = (v: unknown): boolean =>
-          typeof v === "string" && v.trim() !== "";
-        if (expectedKey && usable(resolved[expectedKey])) {
-          hasApiKey = true;
-        } else {
-          // The gateway token name may differ from the .env key name (the
-          // masking layer's Bearer variant). Accept any resolved provider-shaped
-          // credential (*_API_KEY / *_TOKEN) so a vault user isn't blocked.
-          hasApiKey = Object.entries(resolved).some(
-            ([k, v]) => /(_API_KEY|_TOKEN)$/.test(k) && usable(v),
-          );
-        }
+        // Alias-constrained when the provider is catalogued — an unrelated
+        // vault token (GITHUB_TOKEN, SLACK_BOT_TOKEN) must NOT clear the gate.
+        hasApiKey = vaultResolvedHasKey(resolved, expectedKey);
       }
     } catch {
       /* provider not resolvable — leave hasApiKey as-is */
