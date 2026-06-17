@@ -87,6 +87,11 @@ export default {
   },
   queued:
     "{{count}} wiadomość/wiadomości w kolejce — zostaną wysłane po zakończeniu pracy agenta",
+  searchPlaceholder: "Szukaj wiadomości...",
+  searchPrev: "Poprzedni",
+  searchNext: "Następny",
+  searchClose: "Zamknij",
+  searchNoMatch: "Brak wyników",
   queuedCancel: "Usuń z kolejki",
   worktree: {
     loading: "Ładowanie",

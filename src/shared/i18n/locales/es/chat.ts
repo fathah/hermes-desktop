@@ -107,6 +107,11 @@ export default {
     version: "Mostrar la versión de Hermes",
   },
   queued: "{{count}} mensaje(s) en cola — se enviará cuando el agente termine",
+  searchPlaceholder: "Buscar mensajes...",
+  searchPrev: "Anterior",
+  searchNext: "Siguiente",
+  searchClose: "Cerrar búsqueda",
+  searchNoMatch: "Sin resultados",
   queuedCancel: "Quitar de la cola",
   worktree: {
     loading: "Cargando",

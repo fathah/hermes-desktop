@@ -93,6 +93,11 @@ export default {
   },
   queued:
     "{{count}} mensagem(ns) em fila — serão enviadas quando o agente terminar",
+  searchPlaceholder: "Procurar mensagens...",
+  searchPrev: "Anterior",
+  searchNext: "Seguinte",
+  searchClose: "Fechar pesquisa",
+  searchNoMatch: "Sem resultados",
   queuedCancel: "Remover da fila",
   worktree: {
     loading: "A carregar",

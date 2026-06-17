@@ -20,8 +20,9 @@ interface MessageListProps {
   toolProgress: string | null;
   onApprove: () => void;
   onDeny: () => void;
-  /** Mark an inline clarify card resolved once the user answers/skips. */
   onClarifyResolved: (requestId: string, answer: string) => void;
+  /** Current search query for in-session search highlighting. */
+  searchQuery?: string;
 }
 
 function TypingIndicator({
@@ -66,6 +67,7 @@ export const MessageList = memo(function MessageList({
   onApprove,
   onDeny,
   onClarifyResolved,
+  searchQuery,
 }: MessageListProps): React.JSX.Element {
   // Bubbles with empty content are still hidden (live-stream placeholders).
   // History rows pass through unconditionally.
@@ -154,6 +156,7 @@ export const MessageList = memo(function MessageList({
         onApprove={onApprove}
         onDeny={onDeny}
         showAvatar={showAvatar}
+        searchQuery={searchQuery}
       />,
     );
   }

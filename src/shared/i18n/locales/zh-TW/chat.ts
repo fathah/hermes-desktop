@@ -66,6 +66,11 @@ export default {
     version: "檢視 Hermes 版本",
   },
   queued: "{{count}} 則訊息已排隊 — 代理完成後將自動傳送",
+  searchPlaceholder: "搜尋訊息...",
+  searchPrev: "上一個",
+  searchNext: "下一個",
+  searchClose: "關閉搜尋",
+  searchNoMatch: "無匹配",
   queuedCancel: "從佇列中移除",
   worktree: {
     loading: "載入中",

@@ -18,6 +18,22 @@ function isChatBubbleMessage(msg: ChatMessage): msg is ChatBubbleMessage {
   );
 }
 
+// Highlight search matches in text content
+function highlightText(text: string, query: string): React.ReactNode {
+  if (!query) return text;
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const parts = text.split(new RegExp(`(${escaped})`, "gi"));
+  return parts.map((part, i) =>
+    part.toLowerCase() === query.toLowerCase() ? (
+      <mark key={i} className="chat-search-highlight">
+        {part}
+      </mark>
+    ) : (
+      part
+    ),
+  );
+}
+
 export const HermesAvatar = memo(function HermesAvatar({
   size = 30,
 }: {
@@ -30,12 +46,6 @@ export const HermesAvatar = memo(function HermesAvatar({
   );
 });
 
-/**
- * Empty box the size of an avatar. Rendered in place of the avatar on
- * continuation rows of a turn (the thinking/tool rows and answer bubble that
- * follow the first row) so one turn shows a single avatar while every row
- * stays aligned to the same content column.
- */
 export const AvatarSpacer = memo(function AvatarSpacer(): React.JSX.Element {
   return <div className="chat-avatar" aria-hidden="true" />;
 });
@@ -46,9 +56,9 @@ interface MessageRowProps {
   isLoading: boolean;
   onApprove: () => void;
   onDeny: () => void;
-  /** False on continuation rows of a turn — render a spacer instead of the
-   *  avatar so the turn reads as one grouped block. Defaults to true. */
   showAvatar?: boolean;
+  /** Search query for highlighting matching text */
+  searchQuery?: string;
 }
 
 export const MessageRow = memo(function MessageRow({
@@ -58,37 +68,26 @@ export const MessageRow = memo(function MessageRow({
   onApprove,
   onDeny,
   showAvatar = true,
+  searchQuery,
 }: MessageRowProps): React.JSX.Element {
   const { t } = useI18n();
 
-  // MessageRow is wrapped in memo() but still re-renders on any prop change
-  // (e.g. isLoading toggling at the end of a stream), and `parseMediaTokens`
-  // runs a full regex pipeline. Cache the result against the message content
-  // so a long conversation doesn't reparse every row on every render.
-  // Only agent bubbles need media parsing — user bubbles render content
-  // verbatim — so this is gated on the role to skip the work entirely for
-  // user rows. (Follow-up item from PR #303 review.)
   const bubbleContent = isChatBubbleMessage(msg)
     ? (msg as ChatBubbleMessage).content
     : null;
   const segments = useMemo(
     () =>
       msg.role === "agent" && bubbleContent
-        ? // Recover any tool/skill call the model leaked as text (e.g. a raw
-          // `<skill_view>{"answer": …}</skill_view>` tag) before tokenizing.
-          parseMediaTokens(cleanLeakedToolTags(bubbleContent))
+        ? parseMediaTokens(cleanLeakedToolTags(bubbleContent))
         : null,
     [msg.role, bubbleContent],
   );
 
-  // Only chat bubble messages have content/attachments
   if (!isChatBubbleMessage(msg)) {
     return (
       <div className={`chat-message chat-message-${msg.role}`}>
         {showAvatar ? <HermesAvatar /> : <AvatarSpacer />}
-        <div className={`chat-bubble chat-bubble-${msg.role}`}>
-          {/* Reasoning/tool messages handled separately */}
-        </div>
+        <div className={`chat-bubble chat-bubble-${msg.role}`} />
       </div>
     );
   }
@@ -131,11 +130,6 @@ export const MessageRow = memo(function MessageRow({
             ? segments.map((segment) =>
                 segment.type === "text" ? (
                   segment.value.trim() ? (
-                    // Keyed on the segment's character offset rather than its
-                    // array index — a MEDIA: token appearing mid-stream shifts
-                    // every subsequent index, which would otherwise re-mount
-                    // each downstream MediaSegmentView and re-fire its
-                    // `mediaFileExists` probe.
                     <AgentMarkdown key={`t-${segment.start}`}>
                       {segment.value}
                     </AgentMarkdown>
@@ -149,7 +143,9 @@ export const MessageRow = memo(function MessageRow({
                   />
                 ),
               )
-            : msg.content)}
+            : searchQuery
+              ? highlightText(msg.content, searchQuery)
+              : msg.content)}
         {msg.error && (
           <div className="chat-error-message" role="alert">
             {msg.error}
@@ -158,10 +154,7 @@ export const MessageRow = memo(function MessageRow({
       </div>
       {showApprovalBar && (
         <div className="chat-approval-bar">
-          <button
-            className="chat-approval-btn chat-approve"
-            onClick={onApprove}
-          >
+          <button className="chat-approval-btn chat-approve" onClick={onApprove}>
             {t("chat.approve")}
           </button>
           <button className="chat-approval-btn chat-deny" onClick={onDeny}>

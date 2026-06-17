@@ -81,6 +81,11 @@ export default {
     persona: "Mostrar a persona atual",
     version: "Mostrar a versão do Hermes",
   },
+  searchPlaceholder: "Buscar mensagens...",
+  searchPrev: "Anterior",
+  searchNext: "Próximo",
+  searchClose: "Fechar busca",
+  searchNoMatch: "Sem resultados",
   queuedCancel: "Remover da fila",
   worktree: {
     loading: "Carregando",

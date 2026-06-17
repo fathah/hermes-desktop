@@ -104,6 +104,11 @@ export default {
     version: "Hermes sürümünü göster",
   },
   queued: "{{count}} mesaj sırada — ajan işini bitirince gönderilecek",
+  searchPlaceholder: "Mesajlarda ara...",
+  searchPrev: "Önceki",
+  searchNext: "Sonraki",
+  searchClose: "Kapat",
+  searchNoMatch: "Eşleşme yok",
   queuedCancel: "Sıradan kaldır",
   worktree: {
     loading: "Yükleniyor",

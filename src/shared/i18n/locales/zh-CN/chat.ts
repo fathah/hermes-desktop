@@ -77,6 +77,11 @@ export default {
     persona: "查看当前人格",
     version: "查看 Hermes 版本",
   },
+  searchPlaceholder: "搜索消息...",
+  searchPrev: "上一个",
+  searchNext: "下一个",
+  searchClose: "关闭搜索",
+  searchNoMatch: "无匹配",
   queuedCancel: "从队列中移除",
   worktree: {
     loading: "加载中",

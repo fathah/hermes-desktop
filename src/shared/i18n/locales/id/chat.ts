@@ -81,6 +81,11 @@ export default {
     persona: "Tampilkan persona saat ini",
     version: "Tampilkan versi Hermes",
   },
+  searchPlaceholder: "Cari pesan...",
+  searchPrev: "Sebelumnya",
+  searchNext: "Berikutnya",
+  searchClose: "Tutup",
+  searchNoMatch: "Tidak ada",
   queuedCancel: "Batalkan pesan antrian",
   worktree: {
     loading: "Memuat",

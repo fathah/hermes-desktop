@@ -80,6 +80,11 @@ export default {
     persona: "現在のペルソナを表示",
     version: "Hermes バージョンを表示",
   },
+  searchPlaceholder: "メッセージを検索...",
+  searchPrev: "前へ",
+  searchNext: "次へ",
+  searchClose: "検索を閉じる",
+  searchNoMatch: "一致なし",
   queuedCancel: "キューから削除",
   worktree: {
     loading: "読み込み中",

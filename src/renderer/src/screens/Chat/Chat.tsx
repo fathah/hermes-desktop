@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Zap } from "lucide-react";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { ChatEmptyState } from "./ChatEmptyState";
@@ -26,6 +26,7 @@ import type { ActiveTurn, ChatMessage, UsageState } from "./types";
 import type { ContextUsage } from "./ContextGauge";
 import { contextWindowForModel } from "./contextWindows";
 import { QueuedMessages } from "./QueuedMessages";
+import { ChatSearchBar } from "./ChatSearchBar";
 
 interface QueuedMessage {
   text: string;
@@ -121,6 +122,10 @@ function Chat({
   const chatInputRef = useRef<ChatInputHandle>(null);
   const queueRef = useRef<QueuedMessage[]>([]);
   const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
+  // Session search (Ctrl+F / Cmd+F)
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchMatchIndex, setSearchMatchIndex] = useState(0);
   const activeTurnRef = useRef<ActiveTurn | null>(null);
   const dashboardChatEnabled = dashboardChatEnabledForConnection(
     import.meta.env.VITE_HERMES_DESKTOP_DASHBOARD_CHAT,
@@ -278,6 +283,11 @@ function Chat({
       if ((e.metaKey || e.ctrlKey) && e.key === "n") {
         e.preventDefault();
         onNewChat?.();
+      }
+      // Ctrl/Cmd+F — open in-session search
+      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
+        e.preventDefault();
+        setSearchOpen(true);
       }
     }
     window.addEventListener("keydown", onKey);
@@ -468,6 +478,47 @@ function Chat({
     chatInputRef.current?.setText(text);
   }, []);
 
+  // ---- Session search (Ctrl+F) ----
+  // Compute match positions across all message content
+  const searchMatches = useMemo(() => {
+    if (!searchQuery) return [];
+    const q = searchQuery.toLowerCase();
+    const matches: { msgId: string; index: number }[] = [];
+    let idx = 0;
+    for (const m of messages) {
+      const content =
+        "content" in m ? ((m as { content?: string }).content || "") : "";
+      let pos = 0;
+      while ((pos = content.toLowerCase().indexOf(q, pos)) !== -1) {
+        matches.push({ msgId: m.id, index: idx++ });
+        pos += q.length;
+      }
+    }
+    return matches;
+  }, [messages, searchQuery]);
+
+  const totalMatches = searchMatches.length;
+  const safeMatchIndex = Math.min(searchMatchIndex, Math.max(0, totalMatches - 1));
+
+  const handleSearchClose = useCallback(() => {
+    setSearchOpen(false);
+    setSearchQuery("");
+    setSearchMatchIndex(0);
+  }, []);
+
+  const handleSearchPrev = useCallback(() => {
+    setSearchMatchIndex((i) => (i > 0 ? i - 1 : totalMatches - 1));
+  }, [totalMatches]);
+
+  const handleSearchNext = useCallback(() => {
+    setSearchMatchIndex((i) => (i < totalMatches - 1 ? i + 1 : 0));
+  }, [totalMatches]);
+
+  const handleSearchQueryChange = useCallback((q: string) => {
+    setSearchQuery(q);
+    setSearchMatchIndex(0);
+  }, []);
+
   const handlePickFolder = useCallback(async () => {
     const path = await window.hermesAPI.selectFolder();
     if (path) setContextFolder(path);
@@ -548,6 +599,17 @@ function Chat({
       <ConfigHealthBanner profile={profile} onOpenDiagnose={onOpenDiagnose} />
 
       <div className="chat-body">
+        {searchOpen && (
+          <ChatSearchBar
+            query={searchQuery}
+            onQueryChange={handleSearchQueryChange}
+            onClose={handleSearchClose}
+            matchIndex={safeMatchIndex}
+            totalMatches={totalMatches}
+            onPrev={handleSearchPrev}
+            onNext={handleSearchNext}
+          />
+        )}
         <div className="chat-messages" ref={containerRef}>
           {messages.length === 0 ? (
             <ChatEmptyState onSelectSuggestion={handleSuggestion} />
@@ -559,6 +621,7 @@ function Chat({
               onApprove={actions.handleApprove}
               onDeny={actions.handleDeny}
               onClarifyResolved={handleClarifyResolved}
+              searchQuery={searchOpen ? searchQuery : ""}
             />
           )}
           <div ref={bottomRef} />
