@@ -1,7 +1,9 @@
 import { memo, useMemo } from "react";
+import { RefreshCw } from "lucide-react";
 import { HermesAvatar, MessageRow } from "./MessageRow";
 import { ReasoningRow, ToolActivityGroup } from "./HistoryRow";
 import { ClarifyCard } from "./ClarifyCard";
+import { useI18n } from "../../components/useI18n";
 import type {
   ChatMessage,
   ClarifyMessage,
@@ -22,6 +24,8 @@ interface MessageListProps {
   onDeny: () => void;
   /** Mark an inline clarify card resolved once the user answers/skips. */
   onClarifyResolved: (requestId: string, answer: string) => void;
+  /** Called when the user clicks the regenerate button below the last agent response. */
+  onRegenerate?: () => void;
 }
 
 function TypingIndicator({
@@ -59,6 +63,23 @@ function isBubble(m: ChatMessage): m is import("./types").ChatBubbleMessage {
   return !k || k === "user" || k === "assistant";
 }
 
+function RegenerateBar({ onClick }: { onClick: () => void }): React.JSX.Element {
+  const { t } = useI18n();
+  return (
+    <div className="chat-regenerate-bar">
+      <button
+        type="button"
+        className="chat-regenerate-btn"
+        onClick={onClick}
+        title={t("chat.regenerate")}
+      >
+        <RefreshCw size={14} />
+        <span>{t("chat.regenerate")}</span>
+      </button>
+    </div>
+  );
+}
+
 export const MessageList = memo(function MessageList({
   messages,
   isLoading,
@@ -66,6 +87,7 @@ export const MessageList = memo(function MessageList({
   onApprove,
   onDeny,
   onClarifyResolved,
+  onRegenerate,
 }: MessageListProps): React.JSX.Element {
   // Bubbles with empty content are still hidden (live-stream placeholders).
   // History rows pass through unconditionally.
@@ -80,6 +102,13 @@ export const MessageList = memo(function MessageList({
 
   const lastBubble = [...messages].reverse().find(isBubble);
   const lastMessageIsAgent = !!lastBubble && lastBubble.role === "agent";
+
+  // Show regenerate: not loading, last message is from agent, has at least one user message
+  const hasUserMessage = messages.some(
+    (m) => isBubble(m) && m.role === "user",
+  );
+  const showRegenerate =
+    onRegenerate && !isLoading && lastMessageIsAgent && hasUserMessage;
 
   // Render plan: bubble/reasoning rows pass through one-to-one, but a
   // contiguous run of tool_call/tool_result rows folds into a single
@@ -161,6 +190,8 @@ export const MessageList = memo(function MessageList({
   return (
     <>
       {rows}
+
+      {showRegenerate && <RegenerateBar onClick={onRegenerate} />}
 
       {isLoading && !lastMessageIsAgent && (
         <TypingIndicator toolProgress={toolProgress} />

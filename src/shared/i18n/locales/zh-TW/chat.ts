@@ -67,6 +67,8 @@ export default {
   },
   queued: "{{count}} 則訊息已排隊 — 代理完成後將自動傳送",
   queuedCancel: "從佇列中移除",
+  copyMessage: "複製訊息",
+  regenerate: "重新生成",
   worktree: {
     loading: "載入中",
     empty: "資料夾是空的",

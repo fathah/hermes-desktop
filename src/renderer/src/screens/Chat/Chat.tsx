@@ -468,6 +468,17 @@ function Chat({
     chatInputRef.current?.setText(text);
   }, []);
 
+  // Regenerate: re-send the last user message to get a new agent response
+  const handleRegenerate = useCallback(() => {
+    const lastUser = [...messages]
+      .reverse()
+      .find((m) => m.role === "user") as
+      | import("./types").ChatBubbleMessage
+      | undefined;
+    if (!lastUser?.content) return;
+    void handleSendRef.current(lastUser.content, lastUser.attachments || []);
+  }, [messages]);
+
   const handlePickFolder = useCallback(async () => {
     const path = await window.hermesAPI.selectFolder();
     if (path) setContextFolder(path);
@@ -559,6 +570,7 @@ function Chat({
               onApprove={actions.handleApprove}
               onDeny={actions.handleDeny}
               onClarifyResolved={handleClarifyResolved}
+              onRegenerate={handleRegenerate}
             />
           )}
           <div ref={bottomRef} />

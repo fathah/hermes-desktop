@@ -3036,6 +3036,36 @@ body {
   background: var(--bg-hover);
 }
 
+/* Regenerate button — thin bar below the last agent response */
+.chat-regenerate-bar {
+  display: flex;
+  justify-content: flex-start;
+  margin-left: 42px;
+  margin-top: 6px;
+  margin-bottom: 4px;
+}
+
+.chat-regenerate-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.chat-regenerate-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--border-bright);
+  background: var(--bg-tertiary);
+}
+
 /* Inline clarify card — a mid-turn question rendered in the transcript. */
 .chat-clarify {
   margin-top: 8px;
