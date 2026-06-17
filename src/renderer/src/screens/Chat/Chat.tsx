@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Zap } from "lucide-react";
+import { Zap, ArrowDown } from "lucide-react";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { ChatEmptyState } from "./ChatEmptyState";
 import { MessageList } from "./MessageList";
@@ -174,7 +174,8 @@ function Chat({
     };
   }, []);
 
-  const { containerRef, bottomRef } = useChatScroll(messages);
+  const { containerRef, bottomRef, isScrolledUp, scrollToBottomNow } =
+    useChatScroll(messages);
   const modelConfig = useModelConfig(profile);
   const {
     fastMode,
@@ -562,6 +563,17 @@ function Chat({
             />
           )}
           <div ref={bottomRef} />
+          {isScrolledUp && (
+            <button
+              type="button"
+              className="chat-scroll-bottom"
+              onClick={scrollToBottomNow}
+              title={t("chat.scrollToBottom")}
+              aria-label={t("chat.scrollToBottom")}
+            >
+              <ArrowDown size={16} />
+            </button>
+          )}
         </div>
 
         {contextFolder && worktreeVisible && (

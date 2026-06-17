@@ -105,6 +105,7 @@ export default {
   },
   queued: "{{count}} mesaj sırada — ajan işini bitirince gönderilecek",
   queuedCancel: "Sıradan kaldır",
+  scrollToBottom: "En alta kaydır",
   worktree: {
     loading: "Yükleniyor",
     empty: "Klasör boş",

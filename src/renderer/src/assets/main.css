@@ -2685,6 +2685,7 @@ body {
 }
 
 .chat-messages {
+  position: relative;
   flex: 1;
   overflow-y: auto;
   padding: 24px;
@@ -4202,6 +4203,36 @@ body {
   color: var(--text-muted);
   padding: 2px 60px;
   animation: fadeIn 0.2s ease;
+}
+
+/* Floating "scroll to bottom" button — appears when the user scrolls up
+   away from the latest messages. */
+.chat-scroll-bottom {
+  position: sticky;
+  bottom: 12px;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-bright);
+  border-radius: 50%;
+  color: var(--text-secondary);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  transition: all var(--transition);
+  z-index: 10;
+}
+
+.chat-scroll-bottom:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  border-color: var(--border-focus, var(--accent));
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 /* ── Chat history sub-rows (reasoning / tool_call / tool_result) ───────
