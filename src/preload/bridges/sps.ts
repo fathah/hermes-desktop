@@ -19,6 +19,10 @@ import type {
   CreateAssistantRecipeInput,
 } from "../../shared/assistant-recipes";
 import type {
+  InstallLocalExpertResult,
+  ListLocalExpertsResult,
+} from "../../shared/local-experts";
+import type {
   SpsCaptureInput,
   SpsBaseViewConfig,
   SpsBaseProposalInput,
@@ -272,10 +276,8 @@ export const spsBridge = {
     ipcRenderer.invoke("deck-save", project, profile),
   deckList: (profile?: string): Promise<DeckStudioVaultRow[]> =>
     ipcRenderer.invoke("deck-list", profile),
-  deckRead: (
-    rowId: string,
-    profile?: string,
-  ): Promise<DeckProject | null> => ipcRenderer.invoke("deck-read", rowId, profile),
+  deckRead: (rowId: string, profile?: string): Promise<DeckProject | null> =>
+    ipcRenderer.invoke("deck-read", rowId, profile),
   deckExportPdf: (
     project: DeckProject,
     profile?: string,
@@ -325,6 +327,18 @@ export const spsBridge = {
     profile?: string,
   ): Promise<AssistantRecipeSaveRunResult> =>
     ipcRenderer.invoke("sps-save-assistant-recipe-run", runId, profile),
+  spsListLocalExperts: (profile?: string): Promise<ListLocalExpertsResult> =>
+    ipcRenderer.invoke("sps-list-local-experts", profile),
+  spsInstallLocalExpert: (
+    packId: string,
+    profile?: string,
+  ): Promise<InstallLocalExpertResult> =>
+    ipcRenderer.invoke("sps-install-local-expert", packId, profile),
+  spsUninstallLocalExpert: (
+    packId: string,
+    profile?: string,
+  ): Promise<InstallLocalExpertResult> =>
+    ipcRenderer.invoke("sps-uninstall-local-expert", packId, profile),
   spsLoad: (profile?: string): Promise<unknown | null> =>
     ipcRenderer.invoke("sps-load", profile),
   spsSave: (

@@ -80,6 +80,10 @@ import type {
   CreateAssistantRecipeInput,
 } from "../shared/assistant-recipes";
 import type {
+  InstallLocalExpertResult,
+  ListLocalExpertsResult,
+} from "../shared/local-experts";
+import type {
   DeckExportResult,
   DeckGenerationInput,
   DeckGenerationResult,
@@ -1385,6 +1389,15 @@ interface HermesAPI {
     runId: string,
     profile?: string,
   ) => Promise<AssistantRecipeSaveRunResult>;
+  spsListLocalExperts: (profile?: string) => Promise<ListLocalExpertsResult>;
+  spsInstallLocalExpert: (
+    packId: string,
+    profile?: string,
+  ) => Promise<InstallLocalExpertResult>;
+  spsUninstallLocalExpert: (
+    packId: string,
+    profile?: string,
+  ) => Promise<InstallLocalExpertResult>;
   spsLoad: (profile?: string) => Promise<unknown | null>;
   spsSave: (
     ws: unknown,

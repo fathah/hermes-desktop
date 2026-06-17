@@ -12,6 +12,7 @@ import {
   type AssistantRecipeRunRecord,
   type AssistantRecipeScheduleCadence,
 } from "../../../../../shared/assistant-recipes";
+import type { LocalExpertPackSummary } from "../../../../../shared/local-experts";
 import { MemoryTimeline } from "../you/MemoryTimeline";
 import { useStore } from "../store";
 import {
@@ -19,8 +20,9 @@ import {
   compileTemplateRecipe,
   defaultFieldValues,
 } from "./AssistantRecipesTab";
+import { LocalExpertsTab } from "./LocalExpertsTab";
 
-type Tab = "recipes" | "memories" | "skills" | "curator";
+type Tab = "recipes" | "experts" | "memories" | "skills" | "curator";
 
 interface SkillRow {
   name: string;
@@ -47,6 +49,9 @@ export function LearningSurface({
   const [tab, setTab] = useState<Tab>("recipes");
   const [recipes, setRecipes] = useState<AssistantRecipe[]>([]);
   const [recipeRuns, setRecipeRuns] = useState<AssistantRecipeRunRecord[]>([]);
+  const [localExperts, setLocalExperts] = useState<LocalExpertPackSummary[]>(
+    [],
+  );
   const [proposals, setProposals] = useState<LearningProposal[]>([]);
   const [installed, setInstalled] = useState<SkillRow[]>([]);
   const [disabled, setDisabled] = useState<SkillRow[]>([]);
@@ -110,6 +115,11 @@ export function LearningSurface({
     );
   }, [profile]);
 
+  const loadLocalExperts = useCallback(async () => {
+    const result = await window.hermesAPI.spsListLocalExperts(profile);
+    setLocalExperts(result.packs);
+  }, [profile]);
+
   const loadSkills = useCallback(async () => {
     const [on, off, local, used] = await Promise.all([
       window.hermesAPI.listInstalledSkills(profile),
@@ -135,10 +145,18 @@ export function LearningSurface({
   useEffect(() => {
     void loadRecipes();
     void loadRecipeRuns();
+    void loadLocalExperts();
     void loadProposals();
     void loadSkills();
     void loadCurator();
-  }, [loadRecipes, loadRecipeRuns, loadProposals, loadSkills, loadCurator]);
+  }, [
+    loadRecipes,
+    loadRecipeRuns,
+    loadLocalExperts,
+    loadProposals,
+    loadSkills,
+    loadCurator,
+  ]);
 
   async function run<T>(
     label: string,
@@ -320,6 +338,38 @@ export function LearningSurface({
     }
   }
 
+  async function installExpert(packId: string): Promise<void> {
+    const res = await run(`expert-${packId}`, () =>
+      window.hermesAPI.spsInstallLocalExpert(packId, profile),
+    );
+    if (res?.ok) {
+      const packTitle =
+        localExperts.find((pack) => pack.id === packId)?.title || "expert";
+      setNotice(`Installed ${packTitle}.`);
+      await loadLocalExperts();
+      await loadRecipes();
+      await loadSkills();
+    } else if (res) {
+      setNotice(res.error || "Could not install local expert.");
+    }
+  }
+
+  async function uninstallExpert(packId: string): Promise<void> {
+    const res = await run(`expert-${packId}`, () =>
+      window.hermesAPI.spsUninstallLocalExpert(packId, profile),
+    );
+    if (res?.ok) {
+      const packTitle =
+        localExperts.find((pack) => pack.id === packId)?.title || "expert";
+      setNotice(`Removed ${packTitle}; vault records were preserved.`);
+      await loadLocalExperts();
+      await loadRecipes();
+      await loadSkills();
+    } else if (res) {
+      setNotice(res.error || "Could not remove local expert.");
+    }
+  }
+
   async function toggleRecipe(recipe: AssistantRecipe): Promise<void> {
     const res = await run(`toggle-recipe-${recipe.id}`, () =>
       window.hermesAPI.spsUpdateAssistantRecipe(
@@ -433,22 +483,26 @@ export function LearningSurface({
       </header>
 
       <div className="settings-subnav">
-        {(["recipes", "memories", "skills", "curator"] as const).map((id) => (
-          <button
-            key={id}
-            type="button"
-            className={`settings-subnav-tab ${tab === id ? "active" : ""}`}
-            onClick={() => setTab(id)}
-          >
-            {id === "recipes"
-              ? "Assistants"
-              : id === "memories"
-                ? "Memories"
-                : id === "skills"
-                  ? "Skills"
-                  : "Curator"}
-          </button>
-        ))}
+        {(["recipes", "experts", "memories", "skills", "curator"] as const).map(
+          (id) => (
+            <button
+              key={id}
+              type="button"
+              className={`settings-subnav-tab ${tab === id ? "active" : ""}`}
+              onClick={() => setTab(id)}
+            >
+              {id === "recipes"
+                ? "Assistants"
+                : id === "experts"
+                  ? "Experts"
+                  : id === "memories"
+                    ? "Memories"
+                    : id === "skills"
+                      ? "Skills"
+                      : "Curator"}
+            </button>
+          ),
+        )}
       </div>
 
       {notice && (
@@ -486,6 +540,14 @@ export function LearningSurface({
           saveRecipeResult={saveRecipeResult}
           toggleRecipe={toggleRecipe}
           deleteRecipe={deleteRecipe}
+          busy={busy}
+        />
+      )}
+      {tab === "experts" && (
+        <LocalExpertsTab
+          packs={localExperts}
+          installExpert={installExpert}
+          uninstallExpert={uninstallExpert}
           busy={busy}
         />
       )}

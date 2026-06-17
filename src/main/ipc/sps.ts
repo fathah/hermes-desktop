@@ -101,6 +101,11 @@ import {
   saveAssistantRecipeRun,
   updateAssistantRecipe,
 } from "../assistant-recipes";
+import {
+  installLocalExpertPack,
+  listLocalExpertPacks,
+  uninstallLocalExpertPack,
+} from "../local-experts";
 import type {
   AssistantRecipePatch,
   CreateAssistantRecipeInput,
@@ -238,18 +243,15 @@ export function registerSpsIpc(): void {
       limit: 200,
     });
   });
-  safeHandle(
-    "deck-read",
-    async (_event, rowId: string, profile?: string) => {
-      requireLocalWorkspace();
-      const markdown = await readRowMarkdownFrom(
-        resolveSpsVaultDir(profile),
-        DECK_STUDIO_FOLDER,
-        rowId,
-      );
-      return markdown ? parseDeckProjectMarkdown(markdown) : null;
-    },
-  );
+  safeHandle("deck-read", async (_event, rowId: string, profile?: string) => {
+    requireLocalWorkspace();
+    const markdown = await readRowMarkdownFrom(
+      resolveSpsVaultDir(profile),
+      DECK_STUDIO_FOLDER,
+      rowId,
+    );
+    return markdown ? parseDeckProjectMarkdown(markdown) : null;
+  });
   safeHandle(
     "deck-export-pdf",
     (_event, project: DeckProject, profile?: string) => {
@@ -303,6 +305,19 @@ export function registerSpsIpc(): void {
     "sps-save-assistant-recipe-run",
     (_event, runId: string, profile?: string) =>
       saveAssistantRecipeRun(runId, profile),
+  );
+  safeHandle("sps-list-local-experts", (_event, profile?: string) =>
+    listLocalExpertPacks(profile),
+  );
+  safeHandle(
+    "sps-install-local-expert",
+    (_event, packId: string, profile?: string) =>
+      installLocalExpertPack(packId, profile),
+  );
+  safeHandle(
+    "sps-uninstall-local-expert",
+    (_event, packId: string, profile?: string) =>
+      uninstallLocalExpertPack(packId, profile),
   );
   safeHandle("sps-load", (_event, profile?: string) => spsLoad(profile));
   safeHandle(

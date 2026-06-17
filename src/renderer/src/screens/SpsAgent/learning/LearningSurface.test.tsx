@@ -44,6 +44,9 @@ const api = {
   spsRunAssistantRecipe: vi.fn(),
   spsListAssistantRecipeRuns: vi.fn(),
   spsSaveAssistantRecipeRun: vi.fn(),
+  spsListLocalExperts: vi.fn(),
+  spsInstallLocalExpert: vi.fn(),
+  spsUninstallLocalExpert: vi.fn(),
   spsCreateVaultProposal: vi.fn(),
 };
 
@@ -192,6 +195,39 @@ beforeEach(() => {
     proposalId: "vp2",
     pageId: "assistant-results/research-brief-19700101000002",
   });
+  api.spsListLocalExperts.mockResolvedValue({
+    packs: [
+      {
+        id: "macos",
+        title: "Mac Expert",
+        description:
+          "Source-backed macOS guidance for privacy, security, updates, Finder, networking, and developer workflows.",
+        domain: "macos",
+        version: "1.0.0",
+        recordCount: 8,
+        sourceTiers: ["apple_official", "mac_admin"],
+        installed: false,
+      },
+    ],
+  });
+  api.spsInstallLocalExpert.mockResolvedValue({
+    ok: true,
+    packId: "macos",
+    installed: true,
+    recordsWritten: 8,
+    recordsSkipped: 0,
+    recipeId: "ar_macos",
+    skillPath: "/skills/assistant-recipes/assistant-mac-expert",
+    recordsLeftInVault: false,
+  });
+  api.spsUninstallLocalExpert.mockResolvedValue({
+    ok: true,
+    packId: "macos",
+    installed: false,
+    recordsWritten: 0,
+    recordsSkipped: 8,
+    recordsLeftInVault: true,
+  });
   api.spsCreateVaultProposal.mockResolvedValue({ id: "vp1" });
 });
 
@@ -335,5 +371,22 @@ describe("LearningSurface", () => {
         "default",
       ),
     );
+  });
+
+  it("installs a local expert from the Experts tab", async () => {
+    render(<LearningSurface profile="default" />);
+
+    fireEvent.click(await screen.findByText("Experts"));
+    expect(await screen.findByText("Mac Expert")).toBeInTheDocument();
+    expect(screen.getByText(/8 records/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Install"));
+
+    await waitFor(() =>
+      expect(api.spsInstallLocalExpert).toHaveBeenCalledWith(
+        "macos",
+        "default",
+      ),
+    );
+    expect(await screen.findByText(/Installed Mac Expert/)).toBeInTheDocument();
   });
 });
