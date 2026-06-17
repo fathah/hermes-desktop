@@ -2845,6 +2845,7 @@ body {
 }
 
 .chat-bubble {
+  position: relative;
   padding: 10px 16px;
   border-radius: var(--radius-lg);
   font-size: 14px;
@@ -2879,6 +2880,60 @@ body {
 .chat-bubble-error {
   border: 1px solid color-mix(in srgb, var(--error) 35%, transparent);
   background: var(--error-bg);
+}
+
+/* Inline edit textarea for sent messages + edit button */
+.chat-bubble-edit {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 12px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-focus, var(--accent));
+  border-radius: var(--radius-md);
+  outline: none;
+  resize: none;
+  overflow: hidden;
+}
+
+.chat-bubble-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.chat-bubble-edit-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-focus, var(--accent));
+}
+
+/* Bubble actions (edit/copy) — hidden by default, shown on hover */
+.chat-bubble-actions {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 5;
+}
+
+.chat-bubble:hover .chat-bubble-actions {
+  opacity: 1;
 }
 
 .chat-error-message {

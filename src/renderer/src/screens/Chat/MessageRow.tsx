@@ -1,4 +1,5 @@
-import { memo, useMemo } from "react";
+import { memo, useMemo, useState, useRef, useCallback, useEffect } from "react";
+import { Pencil } from "lucide-react";
 import icon from "../../assets/icon.png";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
 import { AttachmentChip } from "../../components/AttachmentChip";
@@ -49,6 +50,9 @@ interface MessageRowProps {
   /** False on continuation rows of a turn — render a spacer instead of the
    *  avatar so the turn reads as one grouped block. Defaults to true. */
   showAvatar?: boolean;
+  /** Called when the user edits their last message and presses Enter.
+   *  The parent should update the message content and trigger a regenerate. */
+  onEditMessage?: (msgId: string, newContent: string) => void;
 }
 
 export const MessageRow = memo(function MessageRow({
@@ -58,28 +62,71 @@ export const MessageRow = memo(function MessageRow({
   onApprove,
   onDeny,
   showAvatar = true,
+  onEditMessage,
 }: MessageRowProps): React.JSX.Element {
   const { t } = useI18n();
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // MessageRow is wrapped in memo() but still re-renders on any prop change
-  // (e.g. isLoading toggling at the end of a stream), and `parseMediaTokens`
-  // runs a full regex pipeline. Cache the result against the message content
-  // so a long conversation doesn't reparse every row on every render.
-  // Only agent bubbles need media parsing — user bubbles render content
-  // verbatim — so this is gated on the role to skip the work entirely for
-  // user rows. (Follow-up item from PR #303 review.)
   const bubbleContent = isChatBubbleMessage(msg)
     ? (msg as ChatBubbleMessage).content
     : null;
+
   const segments = useMemo(
     () =>
       msg.role === "agent" && bubbleContent
-        ? // Recover any tool/skill call the model leaked as text (e.g. a raw
-          // `<skill_view>{"answer": …}</skill_view>` tag) before tokenizing.
-          parseMediaTokens(cleanLeakedToolTags(bubbleContent))
+        ? parseMediaTokens(cleanLeakedToolTags(bubbleContent))
         : null,
     [msg.role, bubbleContent],
   );
+
+  // Only the last user message can be edited, and only when not loading
+  const canEdit =
+    onEditMessage &&
+    msg.role === "user" &&
+    isLast &&
+    !isLoading &&
+    !!bubbleContent;
+
+  const startEdit = useCallback(() => {
+    if (!bubbleContent) return;
+    setEditText(bubbleContent);
+    setEditing(true);
+  }, [bubbleContent]);
+
+  const commitEdit = useCallback(() => {
+    const trimmed = editText.trim();
+    if (trimmed && trimmed !== bubbleContent && onEditMessage) {
+      onEditMessage(msg.id, trimmed);
+    }
+    setEditing(false);
+    setEditText("");
+  }, [editText, bubbleContent, msg.id, onEditMessage]);
+
+  const cancelEdit = useCallback(() => {
+    setEditing(false);
+    setEditText("");
+  }, []);
+
+  // Focus textarea when entering edit mode
+  useEffect(() => {
+    if (editing && textareaRef.current) {
+      textareaRef.current.focus();
+      textareaRef.current.setSelectionRange(
+        textareaRef.current.value.length,
+        textareaRef.current.value.length,
+      );
+    }
+  }, [editing]);
+
+  // Auto-resize textarea height to fit content
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta || !editing) return;
+    ta.style.height = "auto";
+    ta.style.height = ta.scrollHeight + "px";
+  }, [editText, editing]);
 
   // Only chat bubble messages have content/attachments
   if (!isChatBubbleMessage(msg)) {
@@ -126,34 +173,64 @@ export const MessageRow = memo(function MessageRow({
             ))}
           </div>
         )}
-        {msg.content &&
-          (msg.role === "agent" && segments
-            ? segments.map((segment) =>
-                segment.type === "text" ? (
-                  segment.value.trim() ? (
-                    // Keyed on the segment's character offset rather than its
-                    // array index — a MEDIA: token appearing mid-stream shifts
-                    // every subsequent index, which would otherwise re-mount
-                    // each downstream MediaSegmentView and re-fire its
-                    // `mediaFileExists` probe.
-                    <AgentMarkdown key={`t-${segment.start}`}>
-                      {segment.value}
-                    </AgentMarkdown>
-                  ) : null
-                ) : (
-                  <MediaSegmentView
-                    key={`m-${segment.start}`}
-                    token={segment.token}
-                    raw={segment.raw}
-                    source={segment.source}
-                  />
-                ),
-              )
-            : msg.content)}
-        {msg.error && (
-          <div className="chat-error-message" role="alert">
-            {msg.error}
-          </div>
+        {editing ? (
+          <textarea
+            ref={textareaRef}
+            className="chat-bubble-edit"
+            value={editText}
+            onChange={(e) => setEditText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                commitEdit();
+              }
+              if (e.key === "Escape") {
+                e.preventDefault();
+                cancelEdit();
+              }
+            }}
+            rows={1}
+          />
+        ) : (
+          <>
+            {canEdit && (
+              <div className="chat-bubble-actions">
+                <button
+                  type="button"
+                  className="chat-bubble-edit-btn"
+                  onClick={startEdit}
+                  title={t("chat.editMessage")}
+                  aria-label={t("chat.editMessage")}
+                >
+                  <Pencil size={14} />
+                </button>
+              </div>
+            )}
+            {msg.content &&
+              (msg.role === "agent" && segments
+                ? segments.map((segment) =>
+                    segment.type === "text" ? (
+                      segment.value.trim() ? (
+                        <AgentMarkdown key={`t-${segment.start}`}>
+                          {segment.value}
+                        </AgentMarkdown>
+                      ) : null
+                    ) : (
+                      <MediaSegmentView
+                        key={`m-${segment.start}`}
+                        token={segment.token}
+                        raw={segment.raw}
+                        source={segment.source}
+                      />
+                    ),
+                  )
+                : msg.content)}
+            {msg.error && (
+              <div className="chat-error-message" role="alert">
+                {msg.error}
+              </div>
+            )}
+          </>
         )}
       </div>
       {showApprovalBar && (

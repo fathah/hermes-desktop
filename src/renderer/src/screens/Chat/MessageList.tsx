@@ -22,6 +22,8 @@ interface MessageListProps {
   onDeny: () => void;
   /** Mark an inline clarify card resolved once the user answers/skips. */
   onClarifyResolved: (requestId: string, answer: string) => void;
+  /** Called when the user edits their last message and commits the edit. */
+  onEditMessage?: (msgId: string, newContent: string) => void;
 }
 
 function TypingIndicator({
@@ -66,6 +68,7 @@ export const MessageList = memo(function MessageList({
   onApprove,
   onDeny,
   onClarifyResolved,
+  onEditMessage,
 }: MessageListProps): React.JSX.Element {
   // Bubbles with empty content are still hidden (live-stream placeholders).
   // History rows pass through unconditionally.
@@ -154,6 +157,7 @@ export const MessageList = memo(function MessageList({
         onApprove={onApprove}
         onDeny={onDeny}
         showAvatar={showAvatar}
+        onEditMessage={onEditMessage}
       />,
     );
   }

@@ -468,6 +468,19 @@ function Chat({
     chatInputRef.current?.setText(text);
   }, []);
 
+  // Edit the last user message and resend
+  const handleEditMessage = useCallback(
+    (msgId: string, newContent: string) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === msgId ? { ...m, content: newContent } : m,
+        ),
+      );
+      void handleSendRef.current(newContent, []);
+    },
+    [],
+  );
+
   const handlePickFolder = useCallback(async () => {
     const path = await window.hermesAPI.selectFolder();
     if (path) setContextFolder(path);
@@ -559,6 +572,7 @@ function Chat({
               onApprove={actions.handleApprove}
               onDeny={actions.handleDeny}
               onClarifyResolved={handleClarifyResolved}
+              onEditMessage={handleEditMessage}
             />
           )}
           <div ref={bottomRef} />

@@ -88,6 +88,7 @@ export default {
   queued:
     "{{count}} wiadomość/wiadomości w kolejce — zostaną wysłane po zakończeniu pracy agenta",
   queuedCancel: "Usuń z kolejki",
+  editMessage: "Edytuj wiadomość",
   worktree: {
     loading: "Ładowanie",
     empty: "Folder jest pusty",

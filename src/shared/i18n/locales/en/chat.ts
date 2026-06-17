@@ -132,6 +132,7 @@ export default {
   queuedCount: "{{count}} queued",
   queuedAttachment: "{{count}} attachment(s)",
   queuedCancel: "Remove from queue",
+  editMessage: "Edit message",
   worktree: {
     loading: "Loading",
     empty: "Folder is empty",
