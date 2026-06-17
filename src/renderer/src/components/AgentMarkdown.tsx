@@ -108,12 +108,27 @@ function CodeBlock({
           style={_oneDark}
           language={language || "text"}
           PreTag="div"
+          showLineNumbers={code.split("\n").length > 1}
+          wrapLines={true}
+          lineNumberStyle={{
+            minWidth: "2.5em",
+            paddingRight: "1em",
+            color: "#636d83",
+            userSelect: "none",
+            textAlign: "right",
+          }}
           customStyle={{
             margin: 0,
             borderRadius: 0,
             fontSize: "13px",
             padding: "12px",
             background: "transparent",
+            overflowX: "auto",
+          }}
+          codeTagProps={{
+            style: {
+              whiteSpace: "pre",
+            },
           }}
         >
           {code}

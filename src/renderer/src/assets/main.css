@@ -2957,6 +2957,7 @@ body {
 .chat-code-block {
   border-radius: 6px;
   overflow: hidden;
+  overflow-x: auto;
   margin: 6px 0 !important;
 }
 
@@ -3002,6 +3003,16 @@ body {
   margin: 0 !important;
   padding: 12px !important;
   background: var(--code-bg) !important;
+  overflow-x: auto;
+}
+
+/* Line numbers inside code blocks */
+.chat-code-block .linenumber {
+  min-width: 2.5em;
+  padding-right: 1em;
+  color: #636d83;
+  user-select: none;
+  text-align: right;
 }
 
 .chat-code-block span[class*="token"] {
