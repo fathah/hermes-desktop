@@ -18,6 +18,8 @@ interface UseChatIPCArgs {
   runId: string;
   /** The session currently visible in this Chat, if already known. */
   sessionScopeId: string | null;
+  /** When false, skip all event registrations (dashboard transport handles them). */
+  enabled?: boolean;
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   setHermesSessionId: (id: string) => void;
   setToolProgress: (tool: string | null) => void;
@@ -45,6 +47,7 @@ export function eventMatchesRun(eventRunId: string, ownRunId: string): boolean {
 export function useChatIPC({
   runId,
   sessionScopeId,
+  enabled = true,
   setMessages,
   setHermesSessionId,
   setToolProgress,
@@ -73,6 +76,7 @@ export function useChatIPC({
   }, [sessionScopeId, stopDbPolling]);
 
   useEffect(() => {
+    if (!enabled) return;
     let disposed = false;
 
     const refreshFromDb = async (sessionId: string): Promise<void> => {
@@ -338,7 +342,7 @@ export function useChatIPC({
         completionTokens: (prev?.completionTokens || 0) + u.completionTokens,
         totalTokens: (prev?.totalTokens || 0) + u.totalTokens,
         cost: u.cost != null ? (prev?.cost || 0) + u.cost : prev?.cost,
-        contextTokens: u.promptTokens || prev?.contextTokens,
+        contextTokens: u.promptTokens ?? prev?.contextTokens,
         cacheReadTokens: u.cacheReadTokens ?? prev?.cacheReadTokens,
         cacheWriteTokens: u.cacheWriteTokens ?? prev?.cacheWriteTokens,
       }));
@@ -358,6 +362,7 @@ export function useChatIPC({
       cleanupUsage();
     };
   }, [
+    enabled,
     runId,
     setMessages,
     setHermesSessionId,

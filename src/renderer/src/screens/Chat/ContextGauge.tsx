@@ -6,6 +6,8 @@ export interface ContextUsage {
   used: number;
   /** Model context window in tokens. */
   window: number;
+  /** Cumulative prompt tokens across all turns in this session. */
+  promptTokens?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
 }
@@ -31,6 +33,7 @@ function fmtTokens(n: number): string {
 export const ContextGauge = memo(function ContextGauge({
   used,
   window: ctxWindow,
+  promptTokens,
   cacheReadTokens,
   cacheWriteTokens,
 }: ContextUsage): React.JSX.Element {
@@ -48,9 +51,12 @@ export const ContextGauge = memo(function ContextGauge({
 
   const hasCache =
     cacheReadTokens !== undefined || cacheWriteTokens !== undefined;
+  // Use cumulative promptTokens if available — cache hits are a fraction
+  // of total prompt tokens across the session, not just the latest turn.
+  const cacheBase = promptTokens && promptTokens > 0 ? promptTokens : (used || 1);
   const cacheHitPct =
-    used > 0 && cacheReadTokens
-      ? Math.min(100, Math.round((cacheReadTokens / used) * 100))
+    cacheBase > 0 && cacheReadTokens
+      ? Math.min(100, Math.round((cacheReadTokens / cacheBase) * 100))
       : 0;
 
   return (

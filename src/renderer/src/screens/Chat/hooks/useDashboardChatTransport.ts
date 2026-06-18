@@ -628,7 +628,7 @@ function usageFromPayload(payload: unknown): Partial<UsageState> | null {
     promptTokens,
     completionTokens,
     totalTokens,
-    contextTokens: promptTokens || undefined,
+    contextTokens: promptTokens,
   };
 }
 
@@ -963,7 +963,7 @@ export function useDashboardChatTransport({
               (prev?.completionTokens || 0) + (usage.completionTokens || 0),
             totalTokens: (prev?.totalTokens || 0) + (usage.totalTokens || 0),
             cost: prev?.cost,
-            contextTokens: usage.contextTokens || prev?.contextTokens,
+            contextTokens: usage.contextTokens ?? prev?.contextTokens,
             cacheReadTokens: prev?.cacheReadTokens,
             cacheWriteTokens: prev?.cacheWriteTokens,
           }));

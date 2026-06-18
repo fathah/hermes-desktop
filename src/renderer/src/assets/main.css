@@ -4035,6 +4035,26 @@ body {
   color: var(--text-secondary);
 }
 
+/* Drag-and-drop attachment reorder wrapper */
+.attachment-drag-wrapper {
+  cursor: grab;
+  transition: opacity 0.15s ease;
+}
+
+.attachment-drag-wrapper:active {
+  cursor: grabbing;
+}
+
+.attachment-dragging {
+  opacity: 0.4;
+}
+
+.attachment-drag-over {
+  outline: 2px dashed var(--border-focus, var(--accent));
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
 .attachment-chip {
   position: relative;
   display: inline-flex;

@@ -83,6 +83,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
     const [attachments, setAttachments] = useState<Attachment[]>([]);
     const [attachmentError, setAttachmentError] = useState<string | null>(null);
+    const [dragIndex, setDragIndex] = useState<number | null>(null);
+    const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const slashMenuRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -396,6 +398,35 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       setAttachmentError(null);
     }
 
+    // Drag-and-drop reordering
+    function handleDragStart(e: React.DragEvent, index: number): void {
+      setDragIndex(index);
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", String(index));
+    }
+
+    function handleDragOver(e: React.DragEvent, index: number): void {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      setDragOverIndex(index);
+    }
+
+    function handleDrop(e: React.DragEvent, index: number): void {
+      e.preventDefault();
+      if (dragIndex === null || dragIndex === index) return;
+      setAttachments((prev) => {
+        const next = [...prev];
+        const [moved] = next.splice(dragIndex, 1);
+        next.splice(index, 0, moved);
+        return next;
+      });
+    }
+
+    function handleDragEnd(): void {
+      setDragIndex(null);
+      setDragOverIndex(null);
+    }
+
     // Pre-send validation gate (#369): even with the queue model from
     // PR #379, we still block Send when readiness fails — a queued message
     // with a missing API key would just fail later. The !isLoading gate
@@ -469,12 +500,21 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         )}
         {(attachments.length > 0 || attachmentError) && (
           <div className="chat-attachment-strip">
-            {attachments.map((att) => (
-              <AttachmentChip
+            {attachments.map((att, i) => (
+              <div
                 key={att.id}
-                attachment={att}
-                onRemove={() => removeAttachment(att.id)}
-              />
+                className={`attachment-drag-wrapper${dragOverIndex === i ? " attachment-drag-over" : ""}${dragIndex === i ? " attachment-dragging" : ""}`}
+                draggable
+                onDragStart={(e) => handleDragStart(e, i)}
+                onDragOver={(e) => handleDragOver(e, i)}
+                onDrop={(e) => handleDrop(e, i)}
+                onDragEnd={handleDragEnd}
+              >
+                <AttachmentChip
+                  attachment={att}
+                  onRemove={() => removeAttachment(att.id)}
+                />
+              </div>
             ))}
             {attachmentError && (
               <div className="chat-attachment-error" role="alert">

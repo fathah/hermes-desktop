@@ -437,7 +437,13 @@ function Layout({
         )) as DbHistoryItem[];
         const run = mintRun(activeProfile, dbItemsToChatMessages(items));
         run.sessionId = sessionId;
-        setRuns((prev) => [...prev, run]);
+        setRuns((prev) => {
+          // Defend against duplicate opens: if another run for this session
+          // already landed while we were fetching, switch to it instead.
+          const existing = prev.find((r) => r.sessionId === sessionId);
+          if (existing) return prev;
+          return [...prev, run];
+        });
         setActiveRunId(run.runId);
         goTo("chat");
       } finally {
