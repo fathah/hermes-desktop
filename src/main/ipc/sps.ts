@@ -1,4 +1,4 @@
-import { app } from "electron";
+import { app, clipboard } from "electron";
 import { safeHandle } from "./safe-handle";
 import { existsSync } from "fs";
 import { exec } from "child_process";
@@ -32,6 +32,11 @@ import {
   applyMarkdownImportPlan,
   createMarkdownImportPlan,
 } from "../sps-import";
+import {
+  importClipboardScreenshot,
+  importRecentScreenshot,
+  listRecentScreenshots,
+} from "../recent-screenshots";
 import { updatePageProperties, type SpsPropertyPatch } from "../sps-properties";
 import { runTelosAudit, runPipingPattern } from "../telos-auditor";
 import {
@@ -118,6 +123,10 @@ import type {
   AssistantRecipePatch,
   CreateAssistantRecipeInput,
 } from "../../shared/assistant-recipes";
+import type {
+  SpsClipboardScreenshotImportInput,
+  SpsRecentScreenshotImportInput,
+} from "../../shared/recent-screenshots";
 
 const importPlans = new Map<string, SpsImportPlan>();
 
@@ -155,6 +164,50 @@ export function registerSpsIpc(): void {
         capture.description = capture.description?.trim() || unfurled.desc;
       }
       return writeSpsCapture(resolveSpsVaultDir(profile), capture);
+    },
+  );
+  safeHandle(
+    "sps-list-recent-screenshots",
+    async (_event, profile?: string) => {
+      requireLocalWorkspace();
+      void profile;
+      const screenshots = await listRecentScreenshots();
+      return screenshots.map(
+        ({ id, originalName, modifiedAt, size, previewDataUrl }) => ({
+          id,
+          originalName,
+          modifiedAt,
+          size,
+          ...(previewDataUrl ? { previewDataUrl } : {}),
+        }),
+      );
+    },
+  );
+  safeHandle(
+    "sps-import-recent-screenshot",
+    async (
+      _event,
+      input?: SpsRecentScreenshotImportInput,
+      profile?: string,
+    ) => {
+      requireLocalWorkspace();
+      return importRecentScreenshot(resolveSpsVaultDir(profile), input);
+    },
+  );
+  safeHandle(
+    "sps-import-clipboard-screenshot",
+    async (
+      _event,
+      input?: SpsClipboardScreenshotImportInput,
+      profile?: string,
+    ) => {
+      requireLocalWorkspace();
+      const image = clipboard.readImage();
+      return importClipboardScreenshot(
+        resolveSpsVaultDir(profile),
+        image.isEmpty() ? Buffer.alloc(0) : image.toPNG(),
+        input,
+      );
     },
   );
   safeHandle(

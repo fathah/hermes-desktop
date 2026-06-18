@@ -58,6 +58,12 @@ import type {
   DeckProject,
   DeckStudioVaultRow,
 } from "../../shared/deck-studio";
+import type {
+  SpsClipboardScreenshotImportInput,
+  SpsRecentScreenshotCandidate,
+  SpsRecentScreenshotImportInput,
+  SpsRecentScreenshotImportResult,
+} from "../../shared/recent-screenshots";
 
 /** Pending scheduled-research merge, shaped for the renderer (inline changeset
  *  shape mirrors spsFileAnswer's so preload need not import main types). */
@@ -159,6 +165,20 @@ export const spsBridge = {
     profile?: string,
   ): Promise<{ success: boolean; id?: string; error?: string }> =>
     ipcRenderer.invoke("sps-capture", input, profile),
+  spsListRecentScreenshots: (
+    profile?: string,
+  ): Promise<SpsRecentScreenshotCandidate[]> =>
+    ipcRenderer.invoke("sps-list-recent-screenshots", profile),
+  spsImportRecentScreenshot: (
+    input?: SpsRecentScreenshotImportInput,
+    profile?: string,
+  ): Promise<SpsRecentScreenshotImportResult> =>
+    ipcRenderer.invoke("sps-import-recent-screenshot", input, profile),
+  spsImportClipboardScreenshot: (
+    input?: SpsClipboardScreenshotImportInput,
+    profile?: string,
+  ): Promise<SpsRecentScreenshotImportResult> =>
+    ipcRenderer.invoke("sps-import-clipboard-screenshot", input, profile),
   spsFileAnswer: (
     question: string,
     answer: string,

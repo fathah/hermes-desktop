@@ -96,6 +96,12 @@ import type {
   DeckStudioVaultRow,
 } from "../shared/deck-studio";
 import type {
+  SpsClipboardScreenshotImportInput,
+  SpsRecentScreenshotCandidate,
+  SpsRecentScreenshotImportInput,
+  SpsRecentScreenshotImportResult,
+} from "../shared/recent-screenshots";
+import type {
   NotebookLmMcpStatus,
   SrPendingUpdate,
   SrPatch,
@@ -1246,6 +1252,17 @@ interface HermesAPI {
     input: SpsCaptureInput,
     profile?: string,
   ) => Promise<{ success: boolean; id?: string; error?: string }>;
+  spsListRecentScreenshots: (
+    profile?: string,
+  ) => Promise<SpsRecentScreenshotCandidate[]>;
+  spsImportRecentScreenshot: (
+    input?: SpsRecentScreenshotImportInput,
+    profile?: string,
+  ) => Promise<SpsRecentScreenshotImportResult>;
+  spsImportClipboardScreenshot: (
+    input?: SpsClipboardScreenshotImportInput,
+    profile?: string,
+  ) => Promise<SpsRecentScreenshotImportResult>;
   spsFileAnswer: (
     question: string,
     answer: string,
