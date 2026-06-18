@@ -1,5 +1,12 @@
-import { existsSync, mkdirSync, readFileSync } from "fs";
-import { join } from "path";
+import { createHash } from "crypto";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "fs";
+import { dirname, join } from "path";
 import { profileHome, safeWriteFile } from "../utils";
 import { exportPageMarkdownTo, exportRowMarkdownTo } from "../sps-vault";
 import { resolveSpsVaultDir } from "../sps-storage";
@@ -13,8 +20,13 @@ import {
   type InstallLocalExpertResult,
   type ListLocalExpertsResult,
   type LocalExpertInstallState,
+  type LocalExpertPackDetailResult,
+  type LocalExpertPackExportResult,
+  type LocalExpertPackImportResult,
+  type LocalExpertPackPreviewResult,
   type LocalExpertPack,
   type LocalExpertRecord,
+  getLocalExpertPackFreshness,
   validateLocalExpertPack,
 } from "../../shared/local-experts";
 import { MACOS_LOCAL_EXPERT_PACK } from "./macos-pack";
@@ -23,6 +35,10 @@ const BUILT_IN_PACKS: LocalExpertPack[] = [MACOS_LOCAL_EXPERT_PACK];
 
 function statePath(profile?: string): string {
   return join(profileHome(profile), "sps-agent", "local-experts.json");
+}
+
+function importedPacksDir(profile?: string): string {
+  return join(profileHome(profile), "sps-agent", "local-expert-packs");
 }
 
 function nowSeconds(): number {
@@ -37,12 +53,44 @@ function overviewPageId(pack: LocalExpertPack): string {
   return `expert-${pack.id}`;
 }
 
+function overviewPath(pack: LocalExpertPack): string {
+  return `${overviewPageId(pack)}.md`;
+}
+
+function recordsPath(pack: LocalExpertPack): string {
+  return `${expertFolder(pack)}/`;
+}
+
 function markdownList(items: string[]): string {
   return items.map((item) => `- ${item}`).join("\n");
 }
 
 function yamlSafe(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  if (value && typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    return `{${Object.keys(obj)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableStringify(obj[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function sha256(text: string): string {
+  return createHash("sha256").update(text).digest("hex");
+}
+
+function packHash(pack: LocalExpertPack): string {
+  return sha256(stableStringify(pack));
+}
+
+function sourceCount(pack: LocalExpertPack): number {
+  return new Set(pack.records.flatMap((record) => record.sourceUrls)).size;
 }
 
 function readState(profile?: string): LocalExpertInstallState[] {
@@ -83,8 +131,57 @@ function replaceState(
     : [next, ...states];
 }
 
-function packById(packId: string): LocalExpertPack | undefined {
-  return BUILT_IN_PACKS.find((pack) => pack.id === packId);
+function isPackEnvelope(
+  value: unknown,
+): value is { schemaVersion: number; pack: LocalExpertPack } {
+  return (
+    Boolean(value) &&
+    typeof value === "object" &&
+    (value as { schemaVersion?: unknown }).schemaVersion === 1 &&
+    Boolean((value as { pack?: unknown }).pack)
+  );
+}
+
+function readImportedPacks(profile?: string): LocalExpertPack[] {
+  const dir = importedPacksDir(profile);
+  if (!existsSync(dir)) return [];
+  const packs: LocalExpertPack[] = [];
+  for (const name of readdirSync(dir).sort()) {
+    if (!name.endsWith(".json")) continue;
+    try {
+      const parsed = JSON.parse(
+        readFileSync(join(dir, name), "utf-8"),
+      ) as unknown;
+      const pack = isPackEnvelope(parsed)
+        ? parsed.pack
+        : (parsed as LocalExpertPack);
+      const validation = validateLocalExpertPack(pack);
+      if (
+        validation.ok &&
+        !BUILT_IN_PACKS.some((item) => item.id === pack.id)
+      ) {
+        packs.push(pack);
+      }
+    } catch {
+      // Invalid imported packs are ignored by the registry and reported by preview.
+    }
+  }
+  return packs;
+}
+
+function allPacks(profile?: string): LocalExpertPack[] {
+  const builtInIds = new Set(BUILT_IN_PACKS.map((pack) => pack.id));
+  return [
+    ...BUILT_IN_PACKS,
+    ...readImportedPacks(profile).filter((pack) => !builtInIds.has(pack.id)),
+  ];
+}
+
+function packById(
+  packId: string,
+  profile?: string,
+): LocalExpertPack | undefined {
+  return allPacks(profile).find((pack) => pack.id === packId);
 }
 
 function recipeForPack(
@@ -138,6 +235,26 @@ export function renderLocalExpertRecordMarkdown(
     "## Verification",
     markdownList(record.verification),
     "",
+    ...(record.commonQuestions?.length
+      ? ["## Common Questions", markdownList(record.commonQuestions), ""]
+      : []),
+    ...(record.dontSay?.length
+      ? ["## Do Not Say", markdownList(record.dontSay), ""]
+      : []),
+    ...(record.relatedRecordIds?.length
+      ? [
+          "## Related Records",
+          markdownList(
+            record.relatedRecordIds.map(
+              (id) => `[[${expertFolder(pack)}/${id}|${id}]]`,
+            ),
+          ),
+          "",
+        ]
+      : []),
+    ...(record.authorityNotes
+      ? ["## Authority Notes", record.authorityNotes, ""]
+      : []),
     "## Risk",
     `${record.risk} - V1 is guidance-only. Do not run commands or change settings without explicit user approval.`,
     "",
@@ -149,6 +266,7 @@ export function renderLocalExpertRecordMarkdown(
 
 export function renderLocalExpertOverviewMarkdown(
   pack: LocalExpertPack,
+  installState?: LocalExpertInstallState,
 ): string {
   const validation = validateLocalExpertPack(pack);
   const tiers = [...new Set(pack.records.map((record) => record.sourceTier))];
@@ -168,6 +286,18 @@ export function renderLocalExpertOverviewMarkdown(
     `Record folder: ${expertFolder(pack)}/`,
     `Validation: ${validation.ok ? "passed" : "failed"}`,
     "",
+    ...(installState
+      ? [
+          "## Install Provenance",
+          `- Pack version: ${installState.packVersion || installState.version}`,
+          `- Pack hash: ${installState.packHash || packHash(pack)}`,
+          `- Installed at: ${installState.installedAt || "not installed"}`,
+          `- Updated at: ${installState.updatedAt}`,
+          `- Recipe id: ${installState.recipeId || "not created"}`,
+          `- Skill path: ${installState.skillPath || "not created"}`,
+          "",
+        ]
+      : []),
     "## Source Tiers",
     markdownList(tiers),
     "",
@@ -190,7 +320,7 @@ export function renderLocalExpertOverviewMarkdown(
 export function listLocalExpertPacks(profile?: string): ListLocalExpertsResult {
   const states = readState(profile);
   return {
-    packs: BUILT_IN_PACKS.map((pack) => {
+    packs: allPacks(profile).map((pack) => {
       const state = states.find((candidate) => candidate.packId === pack.id);
       return {
         id: pack.id,
@@ -206,21 +336,49 @@ export function listLocalExpertPacks(profile?: string): ListLocalExpertsResult {
         recipeId: state?.recipeId,
         skillPath: state?.skillPath,
         recordsLeftInVault: state?.recordsLeftInVault,
+        packHash: state?.packHash || packHash(pack),
+        freshness: getLocalExpertPackFreshness(pack),
+        checksEnabled: state?.checksEnabled,
       };
     }),
+  };
+}
+
+export function getLocalExpertPack(
+  packId: string,
+  profile?: string,
+): LocalExpertPackDetailResult {
+  const pack = packById(packId, profile);
+  if (!pack) {
+    return {
+      ok: false,
+      packId,
+      sourceTiers: [],
+      error: "Local expert pack not found.",
+    };
+  }
+  const states = readState(profile);
+  return {
+    ok: true,
+    packId,
+    pack,
+    installState: states.find((state) => state.packId === pack.id),
+    sourceTiers: [...new Set(pack.records.map((record) => record.sourceTier))],
+    freshness: getLocalExpertPackFreshness(pack),
   };
 }
 
 async function writePackMarkdown(
   pack: LocalExpertPack,
   profile?: string,
+  installState?: LocalExpertInstallState,
 ): Promise<{ written: number; skipped: number }> {
   const vaultDir = resolveSpsVaultDir(profile);
   mkdirSync(join(vaultDir, expertFolder(pack)), { recursive: true });
   await exportPageMarkdownTo(
     vaultDir,
     overviewPageId(pack),
-    renderLocalExpertOverviewMarkdown(pack),
+    renderLocalExpertOverviewMarkdown(pack, installState),
   );
 
   let written = 0;
@@ -288,7 +446,7 @@ export async function installLocalExpertPack(
   packId: string,
   profile?: string,
 ): Promise<InstallLocalExpertResult> {
-  const pack = packById(packId);
+  const pack = packById(packId, profile);
   if (!pack) {
     return {
       ok: false,
@@ -334,13 +492,22 @@ export async function installLocalExpertPack(
     packId: pack.id,
     installed: true,
     version: pack.version,
+    packVersion: pack.version,
     installedAt: previous?.installedAt || ts,
     updatedAt: ts,
     recordIds: pack.records.map((record) => record.id),
     recipeId: recipe.recipeId,
     skillPath: recipe.skillPath,
     recordsLeftInVault: false,
+    recordCount: pack.records.length,
+    sourceCount: sourceCount(pack),
+    overviewPath: overviewPath(pack),
+    recordsPath: recordsPath(pack),
+    packHash: packHash(pack),
+    checksEnabled: previous?.checksEnabled,
+    checksEnabledAt: previous?.checksEnabledAt,
   };
+  await writePackMarkdown(pack, profile, next);
   writeState(replaceState(states, next), profile);
 
   return {
@@ -359,7 +526,7 @@ export async function uninstallLocalExpertPack(
   packId: string,
   profile?: string,
 ): Promise<InstallLocalExpertResult> {
-  const pack = packById(packId);
+  const pack = packById(packId, profile);
   if (!pack) {
     return {
       ok: false,
@@ -386,6 +553,7 @@ export async function uninstallLocalExpertPack(
     packId: pack.id,
     installed: false,
     version: pack.version,
+    packVersion: pack.version,
     installedAt: previous?.installedAt,
     updatedAt: nowSeconds(),
     recordIds: previous?.recordIds.length
@@ -394,6 +562,13 @@ export async function uninstallLocalExpertPack(
     recipeId: recipe?.id || previous?.recipeId,
     skillPath: recipe?.skillPath || previous?.skillPath,
     recordsLeftInVault: true,
+    recordCount: previous?.recordCount || pack.records.length,
+    sourceCount: previous?.sourceCount || sourceCount(pack),
+    overviewPath: previous?.overviewPath || overviewPath(pack),
+    recordsPath: previous?.recordsPath || recordsPath(pack),
+    packHash: previous?.packHash || packHash(pack),
+    checksEnabled: previous?.checksEnabled,
+    checksEnabledAt: previous?.checksEnabledAt,
   };
   writeState(replaceState(states, next), profile);
 
@@ -407,4 +582,107 @@ export async function uninstallLocalExpertPack(
     skillPath: next.skillPath,
     recordsLeftInVault: true,
   };
+}
+
+export function previewLocalExpertPack(
+  filePath: string,
+  profile?: string,
+): LocalExpertPackPreviewResult {
+  try {
+    const parsed = JSON.parse(readFileSync(filePath, "utf-8")) as unknown;
+    const pack = isPackEnvelope(parsed)
+      ? parsed.pack
+      : (parsed as LocalExpertPack);
+    const validation = validateLocalExpertPack(pack);
+    const errors = [...validation.errors];
+    if (BUILT_IN_PACKS.some((candidate) => candidate.id === pack.id)) {
+      errors.push(`Pack id ${pack.id} conflicts with a built-in pack.`);
+    }
+    const existingImported = readImportedPacks(profile).some(
+      (candidate) => candidate.id === pack.id,
+    );
+    if (existingImported) {
+      errors.push(`Pack id ${pack.id} is already imported.`);
+    }
+    return {
+      ok: errors.length === 0,
+      canImport: errors.length === 0,
+      errors,
+      pack,
+      recordCount: Array.isArray(pack.records) ? pack.records.length : 0,
+      sourceTiers: Array.isArray(pack.sourceTiers) ? pack.sourceTiers : [],
+      packHash: validation.ok ? packHash(pack) : undefined,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      canImport: false,
+      errors: [error instanceof Error ? error.message : "Invalid JSON."],
+    };
+  }
+}
+
+export function importLocalExpertPack(
+  filePath: string,
+  profile?: string,
+): LocalExpertPackImportResult {
+  const preview = previewLocalExpertPack(filePath, profile);
+  if (!preview.ok || !preview.pack) {
+    return { ok: false, errors: preview.errors };
+  }
+  const dir = importedPacksDir(profile);
+  mkdirSync(dir, { recursive: true });
+  const target = join(dir, `${preview.pack.id}.json`);
+  safeWriteFile(
+    target,
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        importedAt: new Date().toISOString(),
+        packHash: preview.packHash,
+        pack: preview.pack,
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  return {
+    ok: true,
+    packId: preview.pack.id,
+    packHash: preview.packHash,
+    errors: [],
+  };
+}
+
+export function exportLocalExpertPack(
+  packId: string,
+  targetPath: string,
+  profile?: string,
+): LocalExpertPackExportResult {
+  const pack = packById(packId, profile);
+  if (!pack) {
+    return {
+      ok: false,
+      packId,
+      targetPath,
+      error: "Local expert pack not found.",
+    };
+  }
+  mkdirSync(dirname(targetPath), { recursive: true });
+  const hash = packHash(pack);
+  writeFileSync(
+    targetPath,
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        exportedAt: new Date().toISOString(),
+        packHash: hash,
+        pack,
+      },
+      null,
+      2,
+    )}\n`,
+    "utf-8",
+  );
+  return { ok: true, packId, targetPath, packHash: hash };
 }

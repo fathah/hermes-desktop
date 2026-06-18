@@ -12,7 +12,11 @@ import {
   type AssistantRecipeRunRecord,
   type AssistantRecipeScheduleCadence,
 } from "../../../../../shared/assistant-recipes";
-import type { LocalExpertPackSummary } from "../../../../../shared/local-experts";
+import type {
+  LocalExpertCheckRunResult,
+  LocalExpertPackDetailResult,
+  LocalExpertPackSummary,
+} from "../../../../../shared/local-experts";
 import { MemoryTimeline } from "../you/MemoryTimeline";
 import { useStore } from "../store";
 import {
@@ -52,6 +56,13 @@ export function LearningSurface({
   const [localExperts, setLocalExperts] = useState<LocalExpertPackSummary[]>(
     [],
   );
+  const [selectedExpertId, setSelectedExpertId] = useState("");
+  const [localExpertDetail, setLocalExpertDetail] =
+    useState<LocalExpertPackDetailResult | null>(null);
+  const [expertImportPath, setExpertImportPath] = useState("");
+  const [expertExportPath, setExpertExportPath] = useState("");
+  const [expertCheckRun, setExpertCheckRun] =
+    useState<LocalExpertCheckRunResult | null>(null);
   const [proposals, setProposals] = useState<LearningProposal[]>([]);
   const [installed, setInstalled] = useState<SkillRow[]>([]);
   const [disabled, setDisabled] = useState<SkillRow[]>([]);
@@ -118,7 +129,21 @@ export function LearningSurface({
   const loadLocalExperts = useCallback(async () => {
     const result = await window.hermesAPI.spsListLocalExperts(profile);
     setLocalExperts(result.packs);
+    setSelectedExpertId((current) => current || result.packs[0]?.id || "");
   }, [profile]);
+
+  const loadLocalExpertDetail = useCallback(
+    async (packId: string) => {
+      if (!packId) {
+        setLocalExpertDetail(null);
+        return;
+      }
+      setLocalExpertDetail(
+        await window.hermesAPI.spsGetLocalExpert(packId, profile),
+      );
+    },
+    [profile],
+  );
 
   const loadSkills = useCallback(async () => {
     const [on, off, local, used] = await Promise.all([
@@ -157,6 +182,10 @@ export function LearningSurface({
     loadSkills,
     loadCurator,
   ]);
+
+  useEffect(() => {
+    if (tab === "experts") void loadLocalExpertDetail(selectedExpertId);
+  }, [loadLocalExpertDetail, selectedExpertId, tab]);
 
   async function run<T>(
     label: string,
@@ -347,6 +376,7 @@ export function LearningSurface({
         localExperts.find((pack) => pack.id === packId)?.title || "expert";
       setNotice(`Installed ${packTitle}.`);
       await loadLocalExperts();
+      await loadLocalExpertDetail(packId);
       await loadRecipes();
       await loadSkills();
     } else if (res) {
@@ -363,10 +393,85 @@ export function LearningSurface({
         localExperts.find((pack) => pack.id === packId)?.title || "expert";
       setNotice(`Removed ${packTitle}; vault records were preserved.`);
       await loadLocalExperts();
+      await loadLocalExpertDetail(packId);
       await loadRecipes();
       await loadSkills();
     } else if (res) {
       setNotice(res.error || "Could not remove local expert.");
+    }
+  }
+
+  function selectExpert(packId: string): void {
+    setSelectedExpertId(packId);
+    setExpertCheckRun(null);
+    void loadLocalExpertDetail(packId);
+  }
+
+  async function previewExpertImport(): Promise<void> {
+    const source = expertImportPath.trim();
+    if (!source) return;
+    const res = await run("preview-expert-import", () =>
+      window.hermesAPI.spsPreviewLocalExpertPack(source, profile),
+    );
+    if (!res) return;
+    setNotice(
+      res.ok
+        ? `Import preview: ${res.pack?.title || "expert pack"} with ${res.recordCount || 0} records.`
+        : `Import preview failed: ${res.errors.join("; ")}`,
+    );
+  }
+
+  async function importExpertPack(): Promise<void> {
+    const source = expertImportPath.trim();
+    if (!source) return;
+    const res = await run("import-expert", () =>
+      window.hermesAPI.spsImportLocalExpertPack(source, profile),
+    );
+    if (res?.ok && res.packId) {
+      setNotice(`Imported ${res.packId}.`);
+      setExpertImportPath("");
+      await loadLocalExperts();
+      selectExpert(res.packId);
+    } else if (res) {
+      setNotice(res.errors.join("; ") || "Could not import expert pack.");
+    }
+  }
+
+  async function exportExpertPack(packId: string): Promise<void> {
+    const target = expertExportPath.trim();
+    if (!target) return;
+    const res = await run("export-expert", () =>
+      window.hermesAPI.spsExportLocalExpertPack(packId, target, profile),
+    );
+    if (res?.ok) {
+      setNotice(`Exported ${packId}.`);
+    } else if (res) {
+      setNotice(res.error || "Could not export expert pack.");
+    }
+  }
+
+  async function enableExpertChecks(packId: string): Promise<void> {
+    const res = await run("enable-expert-checks", () =>
+      window.hermesAPI.spsEnableLocalExpertChecks(packId, profile),
+    );
+    if (res?.ok) {
+      setNotice("Read-only checks enabled for review.");
+      await loadLocalExperts();
+      await loadLocalExpertDetail(packId);
+    } else if (res) {
+      setNotice(res.error || "Could not enable checks.");
+    }
+  }
+
+  async function runExpertChecks(packId: string): Promise<void> {
+    const res = await run("run-expert-checks", () =>
+      window.hermesAPI.spsRunLocalExpertChecks(packId, profile),
+    );
+    if (res?.ok) {
+      setExpertCheckRun(res);
+      setNotice("Read-only checks finished.");
+    } else if (res) {
+      setNotice(res.error || "Could not run checks.");
     }
   }
 
@@ -546,8 +651,21 @@ export function LearningSurface({
       {tab === "experts" && (
         <LocalExpertsTab
           packs={localExperts}
+          selectedPackId={selectedExpertId}
+          selectExpert={selectExpert}
+          detail={localExpertDetail}
           installExpert={installExpert}
           uninstallExpert={uninstallExpert}
+          importPath={expertImportPath}
+          setImportPath={setExpertImportPath}
+          previewImport={previewExpertImport}
+          importPack={importExpertPack}
+          exportPath={expertExportPath}
+          setExportPath={setExpertExportPath}
+          exportPack={exportExpertPack}
+          enableChecks={enableExpertChecks}
+          runChecks={runExpertChecks}
+          checkRun={expertCheckRun}
           busy={busy}
         />
       )}

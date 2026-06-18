@@ -45,8 +45,14 @@ const api = {
   spsListAssistantRecipeRuns: vi.fn(),
   spsSaveAssistantRecipeRun: vi.fn(),
   spsListLocalExperts: vi.fn(),
+  spsGetLocalExpert: vi.fn(),
   spsInstallLocalExpert: vi.fn(),
   spsUninstallLocalExpert: vi.fn(),
+  spsPreviewLocalExpertPack: vi.fn(),
+  spsImportLocalExpertPack: vi.fn(),
+  spsExportLocalExpertPack: vi.fn(),
+  spsEnableLocalExpertChecks: vi.fn(),
+  spsRunLocalExpertChecks: vi.fn(),
   spsCreateVaultProposal: vi.fn(),
 };
 
@@ -204,17 +210,69 @@ beforeEach(() => {
           "Source-backed macOS guidance for privacy, security, updates, Finder, networking, and developer workflows.",
         domain: "macos",
         version: "1.0.0",
-        recordCount: 8,
+        recordCount: 12,
         sourceTiers: ["apple_official", "mac_admin"],
         installed: false,
+        packHash: "abc123def4567890",
+        freshness: {
+          status: "current",
+          current: 12,
+          stale: 0,
+          expired: 0,
+          unknown: 0,
+        },
       },
     ],
+  });
+  api.spsGetLocalExpert.mockResolvedValue({
+    ok: true,
+    packId: "macos",
+    sourceTiers: ["apple_official", "mac_admin"],
+    freshness: {
+      status: "current",
+      current: 12,
+      stale: 0,
+      expired: 0,
+      unknown: 0,
+    },
+    pack: {
+      id: "macos",
+      title: "Mac Expert",
+      domain: "macos",
+      version: "1.0.0",
+      description: "Source-backed macOS guidance.",
+      sourceTiers: ["apple_official", "mac_admin"],
+      recipe: {
+        name: "Mac Expert",
+        description: "Mac guidance",
+        job: "Ask before suggesting Terminal commands; never claim a setting is enabled unless evidence is provided.",
+        inputs: "Question",
+        output: "Answer",
+      },
+      records: [
+        {
+          id: "privacy-screen-recording",
+          title: "Grant Screen Recording Permission",
+          topic: "privacy.screen_recording",
+          sourceTier: "apple_official",
+          macosVersions: ["15"],
+          symptoms: ["Black screen capture"],
+          steps: ["Open System Settings"],
+          verification: ["Permission is enabled"],
+          risk: "low",
+          sourceUrls: ["https://support.apple.com/guide/mac-help/welcome/mac"],
+          lastVerified: "2026-06-17",
+          tags: ["privacy"],
+          freshnessDays: 180,
+        },
+      ],
+    },
   });
   api.spsInstallLocalExpert.mockResolvedValue({
     ok: true,
     packId: "macos",
     installed: true,
-    recordsWritten: 8,
+    recordsWritten: 12,
     recordsSkipped: 0,
     recipeId: "ar_macos",
     skillPath: "/skills/assistant-recipes/assistant-mac-expert",
@@ -225,8 +283,43 @@ beforeEach(() => {
     packId: "macos",
     installed: false,
     recordsWritten: 0,
-    recordsSkipped: 8,
+    recordsSkipped: 12,
     recordsLeftInVault: true,
+  });
+  api.spsPreviewLocalExpertPack.mockResolvedValue({
+    ok: true,
+    canImport: true,
+    errors: [],
+    recordCount: 1,
+    pack: { title: "Excel Expert" },
+  });
+  api.spsImportLocalExpertPack.mockResolvedValue({
+    ok: true,
+    packId: "excel",
+    packHash: "feedface",
+    errors: [],
+  });
+  api.spsExportLocalExpertPack.mockResolvedValue({
+    ok: true,
+    packId: "macos",
+    targetPath: "/tmp/macos.json",
+    packHash: "abc123",
+  });
+  api.spsEnableLocalExpertChecks.mockResolvedValue({
+    ok: true,
+    packId: "macos",
+  });
+  api.spsRunLocalExpertChecks.mockResolvedValue({
+    ok: true,
+    packId: "macos",
+    results: [
+      {
+        id: "macos-version",
+        title: "macOS version",
+        status: "ok",
+        stdout: "15.5",
+      },
+    ],
   });
   api.spsCreateVaultProposal.mockResolvedValue({ id: "vp1" });
 });
@@ -378,7 +471,7 @@ describe("LearningSurface", () => {
 
     fireEvent.click(await screen.findByText("Experts"));
     expect(await screen.findByText("Mac Expert")).toBeInTheDocument();
-    expect(screen.getByText(/8 records/)).toBeInTheDocument();
+    expect(screen.getByText(/12 records/)).toBeInTheDocument();
     fireEvent.click(screen.getByText("Install"));
 
     await waitFor(() =>
@@ -388,5 +481,46 @@ describe("LearningSurface", () => {
       ),
     );
     expect(await screen.findByText(/Installed Mac Expert/)).toBeInTheDocument();
+  });
+
+  it("shows local expert detail and runs pack actions", async () => {
+    render(<LearningSurface profile="default" />);
+
+    fireEvent.click(await screen.findByText("Experts"));
+    expect(await screen.findByText("Pack detail")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Grant Screen Recording Permission"),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Import pack path"), {
+      target: { value: "/tmp/excel.json" },
+    });
+    fireEvent.click(screen.getByText("Preview import"));
+    await waitFor(() =>
+      expect(api.spsPreviewLocalExpertPack).toHaveBeenCalledWith(
+        "/tmp/excel.json",
+        "default",
+      ),
+    );
+
+    fireEvent.change(screen.getByLabelText("Export pack path"), {
+      target: { value: "/tmp/macos.json" },
+    });
+    fireEvent.click(screen.getByText("Export pack"));
+    await waitFor(() =>
+      expect(api.spsExportLocalExpertPack).toHaveBeenCalledWith(
+        "macos",
+        "/tmp/macos.json",
+        "default",
+      ),
+    );
+
+    fireEvent.click(screen.getByText("Enable checks"));
+    await waitFor(() =>
+      expect(api.spsEnableLocalExpertChecks).toHaveBeenCalledWith(
+        "macos",
+        "default",
+      ),
+    );
   });
 });

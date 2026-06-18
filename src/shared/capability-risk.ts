@@ -1,4 +1,4 @@
-export type CapabilityKind = "skill" | "mcp";
+export type CapabilityKind = "skill" | "mcp" | "local-expert-check";
 
 export type CapabilityRiskSeverity =
   | "info"

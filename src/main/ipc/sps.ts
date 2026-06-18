@@ -102,10 +102,18 @@ import {
   updateAssistantRecipe,
 } from "../assistant-recipes";
 import {
+  exportLocalExpertPack,
+  getLocalExpertPack,
+  importLocalExpertPack,
   installLocalExpertPack,
   listLocalExpertPacks,
+  previewLocalExpertPack,
   uninstallLocalExpertPack,
 } from "../local-experts";
+import {
+  enableLocalExpertChecks,
+  runLocalExpertChecks,
+} from "../local-experts/macos-checks";
 import type {
   AssistantRecipePatch,
   CreateAssistantRecipeInput,
@@ -310,6 +318,11 @@ export function registerSpsIpc(): void {
     listLocalExpertPacks(profile),
   );
   safeHandle(
+    "sps-get-local-expert",
+    (_event, packId: string, profile?: string) =>
+      getLocalExpertPack(packId, profile),
+  );
+  safeHandle(
     "sps-install-local-expert",
     (_event, packId: string, profile?: string) =>
       installLocalExpertPack(packId, profile),
@@ -318,6 +331,31 @@ export function registerSpsIpc(): void {
     "sps-uninstall-local-expert",
     (_event, packId: string, profile?: string) =>
       uninstallLocalExpertPack(packId, profile),
+  );
+  safeHandle(
+    "sps-preview-local-expert-pack",
+    (_event, filePath: string, profile?: string) =>
+      previewLocalExpertPack(filePath, profile),
+  );
+  safeHandle(
+    "sps-import-local-expert-pack",
+    (_event, filePath: string, profile?: string) =>
+      importLocalExpertPack(filePath, profile),
+  );
+  safeHandle(
+    "sps-export-local-expert-pack",
+    (_event, packId: string, targetPath: string, profile?: string) =>
+      exportLocalExpertPack(packId, targetPath, profile),
+  );
+  safeHandle(
+    "sps-enable-local-expert-checks",
+    (_event, packId: string, profile?: string) =>
+      enableLocalExpertChecks(packId, profile),
+  );
+  safeHandle(
+    "sps-run-local-expert-checks",
+    (_event, packId: string, profile?: string) =>
+      runLocalExpertChecks(packId, profile),
   );
   safeHandle("sps-load", (_event, profile?: string) => spsLoad(profile));
   safeHandle(

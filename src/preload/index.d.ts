@@ -81,6 +81,11 @@ import type {
 } from "../shared/assistant-recipes";
 import type {
   InstallLocalExpertResult,
+  LocalExpertCheckRunResult,
+  LocalExpertPackDetailResult,
+  LocalExpertPackExportResult,
+  LocalExpertPackImportResult,
+  LocalExpertPackPreviewResult,
   ListLocalExpertsResult,
 } from "../shared/local-experts";
 import type {
@@ -1390,6 +1395,10 @@ interface HermesAPI {
     profile?: string,
   ) => Promise<AssistantRecipeSaveRunResult>;
   spsListLocalExperts: (profile?: string) => Promise<ListLocalExpertsResult>;
+  spsGetLocalExpert: (
+    packId: string,
+    profile?: string,
+  ) => Promise<LocalExpertPackDetailResult>;
   spsInstallLocalExpert: (
     packId: string,
     profile?: string,
@@ -1398,6 +1407,27 @@ interface HermesAPI {
     packId: string,
     profile?: string,
   ) => Promise<InstallLocalExpertResult>;
+  spsPreviewLocalExpertPack: (
+    filePath: string,
+    profile?: string,
+  ) => Promise<LocalExpertPackPreviewResult>;
+  spsImportLocalExpertPack: (
+    filePath: string,
+    profile?: string,
+  ) => Promise<LocalExpertPackImportResult>;
+  spsExportLocalExpertPack: (
+    packId: string,
+    targetPath: string,
+    profile?: string,
+  ) => Promise<LocalExpertPackExportResult>;
+  spsEnableLocalExpertChecks: (
+    packId: string,
+    profile?: string,
+  ) => Promise<{ ok: boolean; packId: string; error?: string }>;
+  spsRunLocalExpertChecks: (
+    packId: string,
+    profile?: string,
+  ) => Promise<LocalExpertCheckRunResult>;
   spsLoad: (profile?: string) => Promise<unknown | null>;
   spsSave: (
     ws: unknown,

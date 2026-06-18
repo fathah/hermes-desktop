@@ -57,6 +57,13 @@ export interface McpCapabilitySnapshot {
   source?: CapabilitySourceInfo;
 }
 
+export interface LocalExpertCheckCapabilitySnapshot {
+  id: string;
+  name: string;
+  enabled: boolean;
+  commands: string[];
+}
+
 function riskPath(profile?: string): string {
   return join(profileHome(profile), "sps-agent", "capability-risk-report.json");
 }
@@ -532,6 +539,46 @@ export function buildMcpRiskReport(
   };
 }
 
+export function buildLocalExpertCheckRiskReport(
+  snapshot: LocalExpertCheckCapabilitySnapshot,
+  previous?: CapabilityRiskReport,
+): CapabilityRiskReport {
+  const installedFingerprint = sha256(stableStringify(snapshot));
+  const findings: CapabilityRiskFinding[] = [
+    {
+      id: "local-expert-check.readonly.commands",
+      severity: "medium",
+      title: "Read-only local diagnostics",
+      detail:
+        "This capability can run fixed read-only macOS inspection commands. It cannot change settings, use sudo, or execute remediation commands.",
+      source: "deterministic",
+    },
+  ];
+  const status = highestRiskStatus(findings);
+  const updateStatus = updateStatusFor(
+    previous,
+    installedFingerprint,
+    undefined,
+    status,
+  );
+  return {
+    id: `local-expert-check:${snapshot.id}`,
+    kind: "local-expert-check",
+    name: snapshot.name,
+    enabled: snapshot.enabled,
+    installedFingerprint,
+    source: {},
+    status,
+    updateStatus,
+    reviewState: reviewStateFor(previous, installedFingerprint, updateStatus),
+    findings,
+    summary: "Fixed read-only local diagnostic commands require review.",
+    lastCheckedAt: Date.now(),
+    lastReviewedAt: previous?.lastReviewedAt,
+    scanner: "deterministic-v1",
+  };
+}
+
 export function recordMcpCapability(
   name: string,
   entry: McpServerEntry,
@@ -597,6 +644,21 @@ export function recordSkillCapability(
   writeCapabilityRiskReports(reports, profile, registry.scanners || []);
 }
 
+export function recordLocalExpertCheckCapability(
+  snapshot: LocalExpertCheckCapabilitySnapshot,
+  profile?: string,
+): CapabilityRiskReport {
+  const registry = loadRegistry(profile);
+  const previous = registry.reports.find(
+    (r) => r.id === `local-expert-check:${snapshot.id}`,
+  );
+  const report = buildLocalExpertCheckRiskReport(snapshot, previous);
+  const reports = registry.reports.filter((r) => r.id !== report.id);
+  reports.push(report);
+  writeCapabilityRiskReports(reports, profile, registry.scanners || []);
+  return report;
+}
+
 export function removeSkillCapability(
   skillPath: string,
   profile?: string,
@@ -605,4 +667,3 @@ export function removeSkillCapability(
   const reports = registry.reports.filter((r) => r.id !== `skill:${skillPath}`);
   writeCapabilityRiskReports(reports, profile, registry.scanners || []);
 }
-

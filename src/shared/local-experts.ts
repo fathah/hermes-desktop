@@ -6,6 +6,11 @@ export type LocalExpertSourceTier =
   | "community_reference";
 
 export type LocalExpertRisk = "low" | "medium" | "high";
+export type LocalExpertFreshnessStatus =
+  | "current"
+  | "stale"
+  | "expired"
+  | "unknown";
 
 export interface LocalExpertRecord {
   id: string;
@@ -20,6 +25,11 @@ export interface LocalExpertRecord {
   sourceUrls: string[];
   lastVerified: string;
   tags: string[];
+  commonQuestions?: string[];
+  dontSay?: string[];
+  relatedRecordIds?: string[];
+  authorityNotes?: string;
+  freshnessDays?: number;
 }
 
 export interface LocalExpertPack {
@@ -43,12 +53,29 @@ export interface LocalExpertInstallState {
   packId: string;
   installed: boolean;
   version: string;
+  packVersion?: string;
   installedAt?: number;
   updatedAt: number;
   recordIds: string[];
   recipeId?: string;
   skillPath?: string;
   recordsLeftInVault?: boolean;
+  recordCount?: number;
+  sourceCount?: number;
+  overviewPath?: string;
+  recordsPath?: string;
+  packHash?: string;
+  checksEnabled?: boolean;
+  checksEnabledAt?: number;
+}
+
+export interface LocalExpertFreshnessSummary {
+  status: LocalExpertFreshnessStatus;
+  current: number;
+  stale: number;
+  expired: number;
+  unknown: number;
+  nextRefreshDueAt?: string;
 }
 
 export interface LocalExpertPackSummary {
@@ -65,6 +92,19 @@ export interface LocalExpertPackSummary {
   recipeId?: string;
   skillPath?: string;
   recordsLeftInVault?: boolean;
+  packHash?: string;
+  freshness: LocalExpertFreshnessSummary;
+  checksEnabled?: boolean;
+}
+
+export interface LocalExpertPackDetailResult {
+  ok: boolean;
+  packId: string;
+  pack?: LocalExpertPack;
+  installState?: LocalExpertInstallState;
+  sourceTiers: LocalExpertSourceTier[];
+  freshness?: LocalExpertFreshnessSummary;
+  error?: string;
 }
 
 export interface ListLocalExpertsResult {
@@ -80,6 +120,91 @@ export interface InstallLocalExpertResult {
   recipeId?: string;
   skillPath?: string;
   recordsLeftInVault: boolean;
+  error?: string;
+}
+
+export interface LocalExpertPackPreviewResult {
+  ok: boolean;
+  canImport: boolean;
+  errors: string[];
+  pack?: LocalExpertPack;
+  recordCount?: number;
+  sourceTiers?: LocalExpertSourceTier[];
+  packHash?: string;
+}
+
+export interface LocalExpertPackImportResult {
+  ok: boolean;
+  packId?: string;
+  packHash?: string;
+  errors: string[];
+}
+
+export interface LocalExpertPackExportResult {
+  ok: boolean;
+  packId: string;
+  targetPath: string;
+  packHash?: string;
+  error?: string;
+}
+
+export interface LocalExpertEvalCase {
+  id: string;
+  topic: string;
+  prompt: string;
+  requiredRecordIds: string[];
+  requiredConcepts: string[];
+  forbiddenPhrases: string[];
+  expectedRisk: LocalExpertRisk;
+}
+
+export interface LocalExpertEvalSuite {
+  packId: string;
+  cases: LocalExpertEvalCase[];
+}
+
+export interface LocalExpertEvalResult {
+  id: string;
+  ok: boolean;
+  missingRecordIds: string[];
+  missingConcepts: string[];
+  missingSafetyRules: string[];
+  forbiddenMatches: string[];
+  riskMatched: boolean;
+}
+
+export interface LocalExpertEvalSuiteResult {
+  ok: boolean;
+  passed: number;
+  failed: number;
+  results: LocalExpertEvalResult[];
+}
+
+export interface LocalExpertCheck {
+  id: string;
+  title: string;
+  description: string;
+  command: string;
+  args: string[];
+  readOnly: boolean;
+  timeoutMs: number;
+}
+
+export type LocalExpertCheckStatus = "ok" | "unavailable" | "error";
+
+export interface LocalExpertCheckResult {
+  id: string;
+  title: string;
+  status: LocalExpertCheckStatus;
+  stdout?: string;
+  stderr?: string;
+  error?: string;
+}
+
+export interface LocalExpertCheckRunResult {
+  ok: boolean;
+  packId: string;
+  results: LocalExpertCheckResult[];
   error?: string;
 }
 
@@ -165,7 +290,90 @@ export function validateLocalExpertPack(
       errors.push(`Record ${record.id} lastVerified must be YYYY-MM-DD.`);
     }
     if (!record.tags.length) errors.push(`Record ${record.id} needs tags.`);
+    if (record.commonQuestions && !record.commonQuestions.every(hasText)) {
+      errors.push(`Record ${record.id} commonQuestions must be text.`);
+    }
+    if (record.dontSay && !record.dontSay.every(hasText)) {
+      errors.push(`Record ${record.id} dontSay must be text.`);
+    }
+    if (record.relatedRecordIds) {
+      for (const related of record.relatedRecordIds) {
+        if (!SAFE_ID.test(related)) {
+          errors.push(`Record ${record.id} related record id is invalid.`);
+        }
+      }
+    }
+    if (
+      record.freshnessDays !== undefined &&
+      (!Number.isInteger(record.freshnessDays) || record.freshnessDays <= 0)
+    ) {
+      errors.push(`Record ${record.id} freshnessDays must be positive.`);
+    }
   }
 
   return { ok: errors.length === 0, errors };
+}
+
+function parseVerifiedDate(value: string): Date | undefined {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+}
+
+function isoDate(value: Date): string {
+  return value.toISOString().slice(0, 10);
+}
+
+export function getLocalExpertRecordFreshness(
+  record: LocalExpertRecord,
+  now = new Date(),
+): LocalExpertFreshnessStatus {
+  const verified = parseVerifiedDate(record.lastVerified);
+  if (!verified || !record.freshnessDays) return "unknown";
+  const ageMs = now.getTime() - verified.getTime();
+  if (ageMs < 0) return "current";
+  const ageDays = Math.floor(ageMs / 86_400_000);
+  if (ageDays <= record.freshnessDays) return "current";
+  if (ageDays <= record.freshnessDays * 2) return "stale";
+  return "expired";
+}
+
+export function getLocalExpertPackFreshness(
+  pack: LocalExpertPack,
+  now = new Date(),
+): LocalExpertFreshnessSummary {
+  const counts = {
+    current: 0,
+    stale: 0,
+    expired: 0,
+    unknown: 0,
+  };
+  let nextRefreshTime: number | undefined;
+  for (const record of pack.records) {
+    const status = getLocalExpertRecordFreshness(record, now);
+    counts[status] += 1;
+    const verified = parseVerifiedDate(record.lastVerified);
+    if (verified && record.freshnessDays) {
+      const due = verified.getTime() + record.freshnessDays * 86_400_000;
+      if (nextRefreshTime === undefined || due < nextRefreshTime) {
+        nextRefreshTime = due;
+      }
+    }
+  }
+  const status: LocalExpertFreshnessStatus =
+    counts.expired > 0
+      ? "expired"
+      : counts.stale > 0
+        ? "stale"
+        : counts.unknown > 0
+          ? "unknown"
+          : "current";
+  return {
+    status,
+    ...counts,
+    nextRefreshDueAt:
+      nextRefreshTime === undefined
+        ? undefined
+        : isoDate(new Date(nextRefreshTime)),
+  };
 }

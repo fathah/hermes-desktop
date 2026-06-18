@@ -20,6 +20,11 @@ import type {
 } from "../../shared/assistant-recipes";
 import type {
   InstallLocalExpertResult,
+  LocalExpertCheckRunResult,
+  LocalExpertPackDetailResult,
+  LocalExpertPackExportResult,
+  LocalExpertPackImportResult,
+  LocalExpertPackPreviewResult,
   ListLocalExpertsResult,
 } from "../../shared/local-experts";
 import type {
@@ -329,6 +334,11 @@ export const spsBridge = {
     ipcRenderer.invoke("sps-save-assistant-recipe-run", runId, profile),
   spsListLocalExperts: (profile?: string): Promise<ListLocalExpertsResult> =>
     ipcRenderer.invoke("sps-list-local-experts", profile),
+  spsGetLocalExpert: (
+    packId: string,
+    profile?: string,
+  ): Promise<LocalExpertPackDetailResult> =>
+    ipcRenderer.invoke("sps-get-local-expert", packId, profile),
   spsInstallLocalExpert: (
     packId: string,
     profile?: string,
@@ -339,6 +349,37 @@ export const spsBridge = {
     profile?: string,
   ): Promise<InstallLocalExpertResult> =>
     ipcRenderer.invoke("sps-uninstall-local-expert", packId, profile),
+  spsPreviewLocalExpertPack: (
+    filePath: string,
+    profile?: string,
+  ): Promise<LocalExpertPackPreviewResult> =>
+    ipcRenderer.invoke("sps-preview-local-expert-pack", filePath, profile),
+  spsImportLocalExpertPack: (
+    filePath: string,
+    profile?: string,
+  ): Promise<LocalExpertPackImportResult> =>
+    ipcRenderer.invoke("sps-import-local-expert-pack", filePath, profile),
+  spsExportLocalExpertPack: (
+    packId: string,
+    targetPath: string,
+    profile?: string,
+  ): Promise<LocalExpertPackExportResult> =>
+    ipcRenderer.invoke(
+      "sps-export-local-expert-pack",
+      packId,
+      targetPath,
+      profile,
+    ),
+  spsEnableLocalExpertChecks: (
+    packId: string,
+    profile?: string,
+  ): Promise<{ ok: boolean; packId: string; error?: string }> =>
+    ipcRenderer.invoke("sps-enable-local-expert-checks", packId, profile),
+  spsRunLocalExpertChecks: (
+    packId: string,
+    profile?: string,
+  ): Promise<LocalExpertCheckRunResult> =>
+    ipcRenderer.invoke("sps-run-local-expert-checks", packId, profile),
   spsLoad: (profile?: string): Promise<unknown | null> =>
     ipcRenderer.invoke("sps-load", profile),
   spsSave: (
