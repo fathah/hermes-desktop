@@ -13,8 +13,18 @@ import { Icon } from "../components/Icon";
 import { SubstackRadarPanel } from "./SubstackRadarPanel";
 import { saveContentIdea } from "../content/contentStudioStorage";
 import { useStore } from "../store";
+import { assetUrl, prettySize } from "../lib/assets";
+import { ocrImageBlobToText } from "../lib/ocr";
+import type {
+  SpsRecentScreenshotCandidate,
+  SpsRecentScreenshotImportResult,
+} from "../../../../../shared/recent-screenshots";
+import {
+  appendScreenshotOcr,
+  buildScreenshotStudyCorpus,
+} from "./screenshotOcr";
 
-type SourceTab = "find" | "add" | "study" | "review";
+type SourceTab = "find" | "add" | "screenshot" | "study" | "review";
 
 interface SourceIntakePanelProps {
   onFeedsChanged?: () => Promise<void> | void;
@@ -47,6 +57,7 @@ export function SourceIntakePanel({
 }: SourceIntakePanelProps): React.JSX.Element {
   const openContentStudioIdea = useStore((s) => s.openContentStudioIdea);
   const openDeckStudioInput = useStore((s) => s.openDeckStudioInput);
+  const setSurface = useStore((s) => s.setSurface);
   const [tab, setTab] = useState<SourceTab>("add");
   const [status, setStatus] = useState<SourceIntakeStatus | null>(null);
   const [url, setUrl] = useState("");
@@ -61,6 +72,15 @@ export function SourceIntakePanel({
   const [studyCorpus, setStudyCorpus] = useState("");
   const [studyBusy, setStudyBusy] = useState(false);
   const [studyResult, setStudyResult] = useState("");
+  const [screenshotCandidates, setScreenshotCandidates] = useState<
+    SpsRecentScreenshotCandidate[]
+  >([]);
+  const [screenshotBusy, setScreenshotBusy] = useState(false);
+  const [screenshotsLoading, setScreenshotsLoading] = useState(false);
+  const [screenshotNote, setScreenshotNote] = useState("");
+  const [ocrBusy, setOcrBusy] = useState(false);
+  const [screenshotResult, setScreenshotResult] =
+    useState<SpsRecentScreenshotImportResult | null>(null);
 
   useEffect(() => {
     void window.hermesAPI
@@ -68,6 +88,26 @@ export function SourceIntakePanel({
       .then(setStatus)
       .catch(() => setStatus(null));
   }, []);
+
+  useEffect(() => {
+    if (tab !== "screenshot") return;
+    let cancelled = false;
+    setScreenshotsLoading(true);
+    void window.hermesAPI
+      ?.spsListRecentScreenshots?.()
+      .then((candidates) => {
+        if (!cancelled) setScreenshotCandidates(candidates ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setScreenshotCandidates([]);
+      })
+      .finally(() => {
+        if (!cancelled) setScreenshotsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab]);
 
   const crawlReady = useMemo(
     () =>
@@ -224,6 +264,93 @@ export function SourceIntakePanel({
     }
   }
 
+  function prepareScreenshotStudy(
+    imported: Extract<SpsRecentScreenshotImportResult, { ok: true }>,
+    ocrText?: string,
+  ): void {
+    setStudyFocus("Study this screenshot capture");
+    setStudyCorpus(buildScreenshotStudyCorpus(imported, ocrText));
+    setTab("study");
+  }
+
+  async function importScreenshot(
+    candidateId?: string,
+    action: "inbox" | "study" = "inbox",
+  ): Promise<void> {
+    if (screenshotBusy) return;
+    setScreenshotBusy(true);
+    setMessage("");
+    setScreenshotResult(null);
+    try {
+      const imported = await window.hermesAPI.spsImportRecentScreenshot?.({
+        ...(candidateId ? { candidateId } : {}),
+        note: screenshotNote.trim(),
+      });
+      if (!imported) {
+        setMessage("Could not import that screenshot.");
+        return;
+      }
+      setScreenshotResult(imported);
+      setMessage(imported.ok ? "Imported to Inbox." : imported.error);
+      if (imported.ok && action === "study") {
+        prepareScreenshotStudy(imported, imported.ocrText);
+      }
+    } catch {
+      setMessage("Could not import that screenshot.");
+    } finally {
+      setScreenshotBusy(false);
+    }
+  }
+
+  async function importClipboardScreenshot(): Promise<void> {
+    if (screenshotBusy) return;
+    setScreenshotBusy(true);
+    setMessage("");
+    setScreenshotResult(null);
+    try {
+      const imported = await window.hermesAPI.spsImportClipboardScreenshot?.({
+        note: screenshotNote.trim(),
+      });
+      if (!imported) {
+        setMessage("Could not import from the clipboard.");
+        return;
+      }
+      setScreenshotResult(imported);
+      setMessage(imported.ok ? "Imported to Inbox." : imported.error);
+    } catch {
+      setMessage("Could not import from the clipboard.");
+    } finally {
+      setScreenshotBusy(false);
+    }
+  }
+
+  async function extractScreenshotText(
+    imported: Extract<SpsRecentScreenshotImportResult, { ok: true }>,
+  ): Promise<void> {
+    if (ocrBusy) return;
+    const api = window.hermesAPI;
+    if (!api?.spsReadRow || !api?.spsExportRow) {
+      setMessage("Could not update the Inbox capture.");
+      return;
+    }
+    setOcrBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch(assetUrl(imported.assetPath));
+      const blob = await response.blob();
+      const ocrText = await ocrImageBlobToText(blob);
+      const current = await api.spsReadRow("_inbox", imported.captureId);
+      const next = appendScreenshotOcr(current || "", ocrText);
+      await api.spsExportRow("_inbox", imported.captureId, next);
+      prepareScreenshotStudy(imported, ocrText);
+      setMessage("OCR text added to Inbox capture.");
+    } catch {
+      setMessage("Could not extract text from that screenshot.");
+    } finally {
+      setOcrBusy(false);
+    }
+  }
+
   async function saveStudyAsContentIdea(): Promise<void> {
     if (!studyFocus.trim() || !studyResult.trim() || saving) return;
     const urls = parseContentSourceUrls(`${studyCorpus}\n${studyResult}`);
@@ -272,24 +399,28 @@ export function SourceIntakePanel({
           </div>
         </div>
         <div className="source-intake-tabs" role="tablist">
-          {(["find", "add", "study", "review"] as const).map((nextTab) => (
-            <button
-              key={nextTab}
-              type="button"
-              role="tab"
-              aria-selected={tab === nextTab}
-              className={`source-intake-tab ${tab === nextTab ? "active" : ""}`}
-              onClick={() => setTab(nextTab)}
-            >
-              {nextTab === "find"
-                ? "Find"
-                : nextTab === "add"
-                  ? "Add URL"
-                  : nextTab === "study"
-                    ? "Study"
-                    : "Review"}
-            </button>
-          ))}
+          {(["find", "add", "screenshot", "study", "review"] as const).map(
+            (nextTab) => (
+              <button
+                key={nextTab}
+                type="button"
+                role="tab"
+                aria-selected={tab === nextTab}
+                className={`source-intake-tab ${tab === nextTab ? "active" : ""}`}
+                onClick={() => setTab(nextTab)}
+              >
+                {nextTab === "find"
+                  ? "Find"
+                  : nextTab === "add"
+                    ? "Add URL"
+                    : nextTab === "screenshot"
+                      ? "Screenshot"
+                      : nextTab === "study"
+                        ? "Study"
+                        : "Review"}
+              </button>
+            ),
+          )}
         </div>
       </div>
 
@@ -433,6 +564,111 @@ export function SourceIntakePanel({
         </div>
       )}
 
+      {tab === "screenshot" && (
+        <div className="source-intake-review">
+          <label className="log-input-group">
+            <span>Screenshot note</span>
+            <input
+              aria-label="Screenshot note"
+              type="text"
+              value={screenshotNote}
+              onChange={(event) => setScreenshotNote(event.target.value)}
+              placeholder="Optional context for the Inbox capture"
+            />
+          </label>
+          <button
+            type="button"
+            className="log-submit-btn save-journal-entry-btn"
+            disabled={screenshotBusy}
+            onClick={() => void importClipboardScreenshot()}
+          >
+            <Icon name="file" size={13} className="refresh-icon-style" />
+            {screenshotBusy ? "Importing..." : "Import from clipboard"}
+          </button>
+          {screenshotsLoading && (
+            <div className="source-intake-empty">
+              Looking for screenshots...
+            </div>
+          )}
+          {!screenshotsLoading && screenshotCandidates.length === 0 && (
+            <div className="source-intake-empty">
+              No recent screenshots found.
+            </div>
+          )}
+          {screenshotCandidates.length > 0 && (
+            <div className="source-intake-source-list">
+              {screenshotCandidates.map((candidate) => (
+                <div className="source-intake-preview" key={candidate.id}>
+                  {candidate.previewDataUrl ? (
+                    <img
+                      src={candidate.previewDataUrl}
+                      alt=""
+                      className="source-intake-screenshot-preview"
+                    />
+                  ) : (
+                    <div className="source-intake-empty">No thumbnail</div>
+                  )}
+                  <div className="source-intake-preview-title">
+                    {candidate.originalName}
+                  </div>
+                  <div className="source-intake-preview-url">
+                    {new Date(candidate.modifiedAt).toLocaleString()} ·{" "}
+                    {prettySize(candidate.size)}
+                  </div>
+                  <div className="source-intake-actions">
+                    <button
+                      type="button"
+                      className="log-submit-btn save-journal-entry-btn"
+                      disabled={screenshotBusy}
+                      onClick={() =>
+                        void importScreenshot(candidate.id, "inbox")
+                      }
+                    >
+                      Import to Inbox
+                    </button>
+                    <button
+                      type="button"
+                      className="log-submit-btn protocol-record-btn"
+                      disabled={screenshotBusy}
+                      onClick={() =>
+                        void importScreenshot(candidate.id, "study")
+                      }
+                    >
+                      Import + Study
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {screenshotResult?.ok && (
+            <div className="source-intake-preview">
+              <div className="source-intake-preview-title">
+                {screenshotResult.originalName}
+              </div>
+              <div className="source-intake-preview-url">
+                Saved as Inbox capture {screenshotResult.captureId}
+              </div>
+              <button
+                type="button"
+                className="log-submit-btn protocol-record-btn"
+                onClick={() => setSurface("inbox")}
+              >
+                Open Inbox
+              </button>
+              <button
+                type="button"
+                className="log-submit-btn protocol-record-btn"
+                disabled={ocrBusy}
+                onClick={() => void extractScreenshotText(screenshotResult)}
+              >
+                {ocrBusy ? "Extracting..." : "Extract text"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {tab === "study" && (
         <div className="source-intake-study">
           <label className="log-input-group">
@@ -488,6 +724,9 @@ export function SourceIntakePanel({
       )}
 
       {message && result?.ok && (
+        <div className="source-intake-message">{message}</div>
+      )}
+      {message && tab === "screenshot" && (
         <div className="source-intake-message">{message}</div>
       )}
       {message && tab === "study" && (

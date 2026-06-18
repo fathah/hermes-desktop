@@ -81,6 +81,21 @@ export async function ocrPdfToMarkdown(
   return sections.join("\n\n");
 }
 
+export async function ocrImageBlobToText(
+  blob: Blob,
+  onProgress?: (status: string) => void,
+): Promise<string> {
+  const worker = await getOcrWorker();
+  const imageUrl = URL.createObjectURL(blob);
+  try {
+    onProgress?.("recognizing");
+    const { data } = await worker.recognize(imageUrl);
+    return (data.text || "").trim();
+  } finally {
+    URL.revokeObjectURL(imageUrl);
+  }
+}
+
 /** Terminate the shared OCR worker (call when idle / on teardown). */
 export async function disposeOcrWorker(): Promise<void> {
   const pending = workerPromise;

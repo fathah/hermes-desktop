@@ -2,9 +2,16 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SourceIntakePanel } from "./SourceIntakePanel";
 
+const ocr = vi.hoisted(() => ({
+  ocrImageBlobToText: vi.fn(),
+}));
+
+vi.mock("../lib/ocr", () => ocr);
+
 const store = vi.hoisted(() => ({
   openContentStudioIdea: vi.fn(),
   openDeckStudioInput: vi.fn(),
+  setSurface: vi.fn(),
 }));
 
 vi.mock("../store", () => ({
@@ -15,10 +22,14 @@ const api = {
   sourceIntakeStatus: vi.fn(),
   sourceIntakePreviewUrl: vi.fn(),
   sourceIntakeInstallInstructions: vi.fn(),
+  spsListRecentScreenshots: vi.fn(),
   spsRssAddFeed: vi.fn(),
   spsRssSyncFeeds: vi.fn(),
   spsFileResearch: vi.fn(),
   spsExportRow: vi.fn(),
+  spsReadRow: vi.fn(),
+  spsImportRecentScreenshot: vi.fn(),
+  spsImportClipboardScreenshot: vi.fn(),
   spsSourceStudy: vi.fn(),
   spsSubstackRadarListRuns: vi.fn(),
 };
@@ -31,6 +42,15 @@ beforeEach(() => {
   vi.clearAllMocks();
   store.openContentStudioIdea.mockReset();
   store.openDeckStudioInput.mockReset();
+  store.setSurface.mockReset();
+  ocr.ocrImageBlobToText.mockReset();
+  ocr.ocrImageBlobToText.mockResolvedValue("OCR text from screenshot.");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({
+      blob: () => Promise.resolve(new Blob(["png"], { type: "image/png" })),
+    }),
+  );
   installApi();
   api.sourceIntakeStatus.mockResolvedValue({
     checkedAt: 1,
@@ -66,6 +86,34 @@ beforeEach(() => {
   );
   api.spsFileResearch.mockResolvedValue({ ok: true, captureCount: 0 });
   api.spsExportRow.mockResolvedValue(true);
+  api.spsReadRow.mockResolvedValue(
+    '---\ntitle: "Screenshot"\nsource: "screenshot"\n---\n\n![Screenshot](../_assets/a.png)\n',
+  );
+  api.spsListRecentScreenshots.mockResolvedValue([
+    {
+      id: "shot-new",
+      originalName: "Screenshot 2026-06-18 at 10.00.00.png",
+      modifiedAt: 1_797_000_100_000,
+      size: 1024,
+      previewDataUrl: "data:image/png;base64,cHJldmlldw==",
+    },
+  ]);
+  api.spsImportRecentScreenshot.mockResolvedValue({
+    ok: true,
+    captureId: "cap-shot",
+    assetPath: "a".repeat(64) + ".png",
+    originalName: "Screenshot 2026-06-18 at 09.00.00.png",
+    modifiedAt: 1_797_000_000_000,
+    source: "recent-file",
+  });
+  api.spsImportClipboardScreenshot.mockResolvedValue({
+    ok: true,
+    captureId: "cap-clipboard",
+    assetPath: "b".repeat(64) + ".png",
+    originalName: "Clipboard screenshot.png",
+    modifiedAt: 1_797_000_000_001,
+    source: "clipboard",
+  });
   api.spsSourceStudy.mockResolvedValue({
     kind: "chat",
     reply: [
@@ -78,10 +126,140 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   delete (window as unknown as { hermesAPI?: unknown }).hermesAPI;
 });
 
 describe("SourceIntakePanel", () => {
+  it("renders recent screenshot candidates and imports the selected one with a note", async () => {
+    render(<SourceIntakePanel />);
+
+    fireEvent.click(screen.getByRole("tab", { name: /screenshot/i }));
+    expect(
+      await screen.findByText("Screenshot 2026-06-18 at 10.00.00.png"),
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/screenshot note/i), {
+      target: { value: "Use this in the QA pass." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /import to inbox/i }));
+
+    await waitFor(() => {
+      expect(api.spsImportRecentScreenshot).toHaveBeenCalledWith({
+        candidateId: "shot-new",
+        note: "Use this in the QA pass.",
+      });
+      expect(screen.getByText("Imported to Inbox.")).toBeInTheDocument();
+    });
+    expect(
+      screen.getByText("Screenshot 2026-06-18 at 09.00.00.png"),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /open inbox/i }));
+
+    expect(store.setSurface).toHaveBeenCalledWith("inbox");
+  });
+
+  it("imports a screenshot image from the clipboard", async () => {
+    render(<SourceIntakePanel />);
+
+    fireEvent.click(screen.getByRole("tab", { name: /screenshot/i }));
+    fireEvent.change(await screen.findByLabelText(/screenshot note/i), {
+      target: { value: "Clipboard note." },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /import from clipboard/i }),
+    );
+
+    await waitFor(() => {
+      expect(api.spsImportClipboardScreenshot).toHaveBeenCalledWith({
+        note: "Clipboard note.",
+      });
+      expect(screen.getByText("Imported to Inbox.")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Clipboard screenshot.png")).toBeInTheDocument();
+  });
+
+  it("shows a clipboard-empty message when clipboard import has no image", async () => {
+    api.spsImportClipboardScreenshot.mockResolvedValue({
+      ok: false,
+      reason: "clipboard-empty",
+      error: "No screenshot image found on the clipboard.",
+    });
+    render(<SourceIntakePanel />);
+
+    fireEvent.click(screen.getByRole("tab", { name: /screenshot/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /import from clipboard/i }),
+    );
+
+    expect(
+      await screen.findByText("No screenshot image found on the clipboard."),
+    ).toBeInTheDocument();
+  });
+
+  it("imports a screenshot and prepares the Study tab without claiming visual understanding", async () => {
+    render(<SourceIntakePanel />);
+
+    fireEvent.click(screen.getByRole("tab", { name: /screenshot/i }));
+    expect(
+      await screen.findByText("Screenshot 2026-06-18 at 10.00.00.png"),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /import \+ study/i }));
+
+    await waitFor(() => {
+      expect(api.spsImportRecentScreenshot).toHaveBeenCalledWith({
+        candidateId: "shot-new",
+        note: "",
+      });
+      expect(screen.getByLabelText(/study focus/i)).toHaveValue(
+        "Study this screenshot capture",
+      );
+    });
+    expect(screen.getByLabelText(/corpus description/i)).toHaveValue(
+      "Screenshot Inbox capture: cap-shot\nOriginal file name: Screenshot 2026-06-18 at 09.00.00.png\nStored asset: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png\n\nOCR has not been run yet, so study should use this as a screenshot capture reference and avoid text-grounded claims until text is extracted.",
+    );
+  });
+
+  it("extracts local OCR text and appends it to the imported Inbox capture", async () => {
+    render(<SourceIntakePanel />);
+
+    fireEvent.click(screen.getByRole("tab", { name: /screenshot/i }));
+    expect(
+      await screen.findByText("Screenshot 2026-06-18 at 10.00.00.png"),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /import to inbox/i }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: /extract text/i }),
+    );
+
+    await waitFor(() => {
+      expect(ocr.ocrImageBlobToText).toHaveBeenCalled();
+      expect(api.spsReadRow).toHaveBeenCalledWith("_inbox", "cap-shot");
+      expect(api.spsExportRow).toHaveBeenCalledWith(
+        "_inbox",
+        "cap-shot",
+        expect.stringContaining("## OCR Text\n\nOCR text from screenshot."),
+      );
+      expect(
+        String(
+          (screen.getByLabelText(/corpus description/i) as HTMLTextAreaElement)
+            .value,
+        ),
+      ).toContain("OCR text from screenshot.");
+    });
+  });
+
+  it("shows a no-screenshot message when there is nothing recent to import", async () => {
+    api.spsListRecentScreenshots.mockResolvedValue([]);
+    render(<SourceIntakePanel />);
+
+    fireEvent.click(screen.getByRole("tab", { name: /screenshot/i }));
+
+    expect(
+      await screen.findByText("No recent screenshots found."),
+    ).toBeInTheDocument();
+  });
+
   it("reads a generic URL, shows preview, and saves to the Knowledge Base", async () => {
     render(<SourceIntakePanel />);
 
@@ -278,7 +456,9 @@ describe("SourceIntakePanel", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /^study$/i }));
 
-    expect(await screen.findByText(/source-backed workflows/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/source-backed workflows/i),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /deck from study/i }));
 
     expect(store.openDeckStudioInput).toHaveBeenCalledWith(
