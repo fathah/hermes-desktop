@@ -23,6 +23,8 @@ Each pack includes:
 - records with symptoms, steps, verification, risk, source URLs, tags, version
   scope, `lastVerified`, optional freshness policy, common questions, safety
   caveats, related records, and authority notes
+- optional scenarios with a title, workflow prompt, linked records, required
+  user-visible evidence, expected answer sections, and risk
 
 Installed state is stored per profile at:
 
@@ -45,6 +47,10 @@ vault/expert_<packId>/<recordId>.md
 Use the narrowest reliable source tier for each record:
 
 - `apple_official`: Apple user, deployment, security, or support docs
+- `google_workspace_official`: Google Workspace, Drive, Docs, Sheets, Slides,
+  or Google Help documentation
+- `google_developer_official`: Google Developers documentation for Workspace
+  automation surfaces such as Apps Script
 - `developer_official`: Apple Developer documentation
 - `standards_project`: structured compliance or baseline projects
 - `mac_admin`: reputable admin-practice sources
@@ -76,17 +82,51 @@ The generated recipe is review-first and workspace-grounded. It may guide the
 user through steps and verification, but it must not claim a setting is enabled
 unless the user or a cited record provides evidence.
 
+## Google Docs Editors Expert V1
+
+The built-in Google Docs Editors Expert pack uses id `google-docs-editors`. It
+covers a starter set for Google Workspace office collaboration:
+
+- Drive sharing with specific people, groups, and roles
+- restricted vs broader link sharing risk
+- stopping or limiting file sharing
+- Docs comments, suggestions, and collaboration basics
+- Sheets formulas, functions, sharing, and macros
+- Slides deck creation, presentation, and sharing
+- Apps Script planning, authorization awareness, and quota limits
+- Workspace admin policy boundaries for external sharing, app authorization,
+  Apps Script access, and Marketplace app allowlists
+
+The generated recipe is review-first and guidance-only. It must not access
+Gmail, Drive, Docs, Sheets, Slides, Apps Script, credentials, or Workspace admin
+APIs; it may only explain source-backed steps and tell the user what evidence to
+check or ask their Workspace admin to confirm. Scenario records should favor
+real office questions, such as blocked client access, accidental broad sharing,
+macro authorization, Apps Script quota failures, and review-only Slides access.
+
+Google scenarios are structured workflow prompts layered over records. They are
+read-only in SPS: the UI shows the prompt, required evidence, risk, and linked
+records, but does not open Google, run Apps Script, copy data, or call admin
+APIs.
+
 ## Evals
 
-Run the deterministic Mac Expert eval suite with:
+Run the deterministic local expert eval suite with:
 
 ```bash
 node scripts/local-experts-eval.mjs
 ```
 
 The offline suite checks required record coverage, required concepts, forbidden
-unsafe phrases, expected risk framing, and conservative recipe safety language.
-Live model evals remain opt-in and are not part of the default runner.
+unsafe phrases, expected risk framing, and conservative recipe safety language
+for built-in packs. Google Docs Editors evals also include deterministic
+answer-shape fixtures that require `What to check`, `Steps`, `Verification`,
+`Risk`, and `Sources` sections without calling a live model. Live model evals
+remain opt-in and are not part of the default runner.
+
+The quality report helper summarizes record count, unique source count, scenario
+count, stale/expired record counts, broken scenario links, and validation error
+count. It is deterministic and does not fetch sources.
 
 ## Import And Export
 

@@ -8,6 +8,8 @@ import type {
 function tierLabel(tier: string): string {
   const labels: Record<string, string> = {
     apple_official: "Apple official",
+    google_workspace_official: "Google Workspace official",
+    google_developer_official: "Google developer",
     developer_official: "Apple developer",
     standards_project: "Standards project",
     mac_admin: "Mac admin",
@@ -38,6 +40,7 @@ export function LocalExpertsTab(props: {
   const [topicFilter, setTopicFilter] = useState("all");
   const [riskFilter, setRiskFilter] = useState("all");
   const records = props.detail?.pack?.records || [];
+  const scenarios = props.detail?.pack?.scenarios || [];
   const topics = [...new Set(records.map((record) => record.topic))].sort();
   const filteredRecords = records.filter(
     (record) =>
@@ -222,6 +225,32 @@ export function LocalExpertsTab(props: {
                 ))}
               </span>
             </div>
+          )}
+
+          {scenarios.length > 0 && (
+            <>
+              <div className="settings-section-title learning-surface-list-mt">
+                Common workflows
+              </div>
+              <div className="you-rules-list learning-surface-list-mt">
+                {scenarios.map((scenario) => (
+                  <div key={scenario.id} className="memory-entry-card">
+                    <span className="memory-entry-content">
+                      <strong>{scenario.title}</strong>
+                      <small className="learning-surface-small-block">
+                        {scenario.risk} risk - {scenario.prompt}
+                      </small>
+                      <small className="learning-surface-small-block">
+                        Evidence: {scenario.requiredEvidence.join(", ")}
+                      </small>
+                      <small className="learning-surface-small-block">
+                        Records: {scenario.recordIds.join(", ")}
+                      </small>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
 
           <div className="settings-grid learning-surface-list-mt">

@@ -90,7 +90,11 @@ describe("local expert import/export", () => {
         join(TEST_HOME, "sps-agent", "local-expert-packs", "excel.json"),
       ),
     ).toBe(true);
-    expect(listed.packs.map((pack) => pack.id)).toEqual(["macos", "excel"]);
+    expect(listed.packs.map((pack) => pack.id)).toEqual([
+      "macos",
+      "google-docs-editors",
+      "excel",
+    ]);
   });
 
   it("rejects imported packs that conflict with built-ins", () => {

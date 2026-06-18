@@ -266,6 +266,23 @@ beforeEach(() => {
           freshnessDays: 180,
         },
       ],
+      scenarios: [
+        {
+          id: "client-cannot-open-shared-file",
+          title: "Client cannot open shared file",
+          prompt: "A client says they cannot open a shared Google file.",
+          recordIds: ["privacy-screen-recording"],
+          requiredEvidence: ["Exact error text", "Shared role"],
+          expectedSections: [
+            "What to check",
+            "Steps",
+            "Verification",
+            "Risk",
+            "Sources",
+          ],
+          risk: "medium",
+        },
+      ],
     },
   });
   api.spsInstallLocalExpert.mockResolvedValue({
@@ -491,6 +508,12 @@ describe("LearningSurface", () => {
     expect(
       await screen.findByText("Grant Screen Recording Permission"),
     ).toBeInTheDocument();
+    expect(await screen.findByText("Common workflows")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Client cannot open shared file"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Exact error text/)).toBeInTheDocument();
+    expect(screen.getByText(/privacy-screen-recording/)).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Import pack path"), {
       target: { value: "/tmp/excel.json" },

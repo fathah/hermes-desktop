@@ -64,10 +64,12 @@ import {
 } from "../src/main/local-experts";
 import { MACOS_LOCAL_EXPERT_PACK } from "../src/main/local-experts/macos-pack";
 import {
+  getLocalExpertPackQualityReport,
   getLocalExpertPackFreshness,
   validateLocalExpertPack,
 } from "../src/shared/local-experts";
 import { listAssistantRecipes } from "../src/main/assistant-recipes";
+import { GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK } from "../src/main/local-experts/google-workspace-pack";
 
 beforeEach(() => {
   rmSync(TEST_HOME, { recursive: true, force: true });
@@ -89,6 +91,39 @@ describe("local experts", () => {
     ).toBe(true);
   });
 
+  it("validates the built-in Google Docs Editors Expert pack", () => {
+    const result = validateLocalExpertPack(
+      GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK,
+    );
+
+    expect(result.ok).toBe(true);
+    expect(GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK.id).toBe(
+      "google-docs-editors",
+    );
+    expect(GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK.title).toBe(
+      "Google Docs Editors Expert",
+    );
+    expect(GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK.records.length).toBe(10);
+    expect(GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK.scenarios).toHaveLength(6);
+    expect(
+      GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK.records.every(
+        (record) =>
+          record.sourceUrls.length > 0 &&
+          record.lastVerified &&
+          record.appliesTo?.length,
+      ),
+    ).toBe(true);
+    expect(
+      GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK.scenarios?.every(
+        (scenario) =>
+          scenario.recordIds.length > 0 &&
+          scenario.requiredEvidence.length > 0 &&
+          scenario.expectedSections.join("|") ===
+            "What to check|Steps|Verification|Risk|Sources",
+      ),
+    ).toBe(true);
+  });
+
   it("validates enriched record metadata and source freshness", () => {
     const record = MACOS_LOCAL_EXPERT_PACK.records[0];
 
@@ -106,6 +141,60 @@ describe("local experts", () => {
     expect(freshness.current).toBe(MACOS_LOCAL_EXPERT_PACK.records.length);
     expect(freshness.stale).toBe(0);
     expect(freshness.expired).toBe(0);
+  });
+
+  it("validates Google source freshness and flags stale copied packs", () => {
+    const current = getLocalExpertPackFreshness(
+      GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK,
+      new Date("2026-06-18T12:00:00Z"),
+    );
+    const stalePack = {
+      ...GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK,
+      records: GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK.records.map((record) => ({
+        ...record,
+        lastVerified: "2025-01-01",
+      })),
+    };
+    const stale = getLocalExpertPackFreshness(
+      stalePack,
+      new Date("2026-06-18T12:00:00Z"),
+    );
+
+    expect(current.status).toBe("current");
+    expect(current.current).toBe(
+      GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK.records.length,
+    );
+    expect(stale.status).toBe("expired");
+    expect(stale.expired).toBe(stalePack.records.length);
+  });
+
+  it("reports Google pack quality and stale copied-pack quality", () => {
+    const current = getLocalExpertPackQualityReport(
+      GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK,
+      new Date("2026-06-18T12:00:00Z"),
+    );
+    const stalePack = {
+      ...GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK,
+      records: GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK.records.map((record) => ({
+        ...record,
+        lastVerified: "2025-01-01",
+      })),
+    };
+    const stale = getLocalExpertPackQualityReport(
+      stalePack,
+      new Date("2026-06-18T12:00:00Z"),
+    );
+
+    expect(current).toMatchObject({
+      packId: "google-docs-editors",
+      recordCount: 10,
+      scenarioCount: 6,
+      staleRecordCount: 0,
+      expiredRecordCount: 0,
+      brokenScenarioLinks: [],
+    });
+    expect(current.sourceCount).toBeGreaterThanOrEqual(9);
+    expect(stale.expiredRecordCount).toBe(10);
   });
 
   it("rejects duplicate record ids and non-HTTPS sources", () => {
@@ -208,6 +297,75 @@ describe("local experts", () => {
     );
   });
 
+  it("lists Google Docs Editors after Mac Expert and installs it idempotently", async () => {
+    expect(listLocalExpertPacks().packs.map((pack) => pack.id)).toEqual([
+      "macos",
+      "google-docs-editors",
+    ]);
+
+    const first = await installLocalExpertPack("google-docs-editors");
+    const second = await installLocalExpertPack("google-docs-editors");
+
+    expect(first.ok).toBe(true);
+    expect(first.recordsWritten).toBe(
+      GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK.records.length,
+    );
+    expect(first.recordsSkipped).toBe(0);
+    expect(first.recipeId).toMatch(/^ar_/);
+    expect(first.skillPath).toContain(
+      "assistant-google-docs-editors-expert",
+    );
+    expect(second.ok).toBe(true);
+    expect(second.recordsWritten).toBe(0);
+    expect(second.recordsSkipped).toBe(
+      GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK.records.length,
+    );
+    expect(second.recipeId).toBe(first.recipeId);
+    expect(second.skillPath).toBe(first.skillPath);
+
+    const state = JSON.parse(
+      readFileSync(join(TEST_HOME, "sps-agent", "local-experts.json"), "utf-8"),
+    );
+    expect(state[0]).toMatchObject({
+      packId: "google-docs-editors",
+      packVersion: GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK.version,
+      recordCount: GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK.records.length,
+      sourceCount: expect.any(Number),
+      overviewPath: "expert-google-docs-editors.md",
+      recordsPath: "expert_google-docs-editors/",
+      packHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+    });
+
+    const vault = join(TEST_HOME, "sps-agent", "vault");
+    expect(existsSync(join(vault, "expert-google-docs-editors.md"))).toBe(
+      true,
+    );
+    expect(existsSync(join(vault, "expert_google-docs-editors"))).toBe(true);
+    const row = readFileSync(
+      join(
+        vault,
+        "expert_google-docs-editors",
+        "drive-share-specific-people.md",
+      ),
+      "utf-8",
+    );
+    expect(row).toContain("Applies to: Google Drive, Google Docs editors");
+    expect(row).toContain("## Related Records");
+    expect(row).toContain("workspace-admin-policy-boundaries");
+    expect(row).toContain("## Sources");
+
+    const skillFile = join(
+      TEST_HOME,
+      "skills",
+      "assistant-recipes",
+      "assistant-google-docs-editors-expert",
+      "SKILL.md",
+    );
+    expect(readFileSync(skillFile, "utf-8")).toContain(
+      "Never access Gmail, Drive, Docs, Sheets, Slides, or Apps Script directly",
+    );
+  });
+
   it("lists install state and uninstalls without deleting vault records", async () => {
     const installed = await installLocalExpertPack("macos");
 
@@ -273,6 +431,25 @@ describe("local experts", () => {
     expect(preview.canImport).toBe(false);
     expect(preview.errors.join("\n")).toContain(
       "conflicts with a built-in pack",
+    );
+  });
+
+  it("rejects packs with broken scenario record links", () => {
+    const broken = {
+      ...GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK,
+      scenarios: [
+        {
+          ...GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK.scenarios![0],
+          recordIds: ["missing-record"],
+        },
+      ],
+    };
+
+    const result = validateLocalExpertPack(broken);
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain(
+      "Scenario client-cannot-open-shared-file links missing record: missing-record",
     );
   });
 

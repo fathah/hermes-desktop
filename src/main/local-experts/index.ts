@@ -30,8 +30,12 @@ import {
   validateLocalExpertPack,
 } from "../../shared/local-experts";
 import { MACOS_LOCAL_EXPERT_PACK } from "./macos-pack";
+import { GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK } from "./google-workspace-pack";
 
-const BUILT_IN_PACKS: LocalExpertPack[] = [MACOS_LOCAL_EXPERT_PACK];
+const BUILT_IN_PACKS: LocalExpertPack[] = [
+  MACOS_LOCAL_EXPERT_PACK,
+  GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK,
+];
 
 function statePath(profile?: string): string {
   return join(profileHome(profile), "sps-agent", "local-experts.json");
@@ -222,7 +226,9 @@ export function renderLocalExpertRecordMarkdown(
     `# ${record.title}`,
     "",
     `Topic: ${record.topic}`,
-    `macOS versions: ${record.macosVersions.join(", ")}`,
+    record.appliesTo?.length
+      ? `Applies to: ${record.appliesTo.join(", ")}`
+      : `macOS versions: ${(record.macosVersions || []).join(", ")}`,
     "",
     tags.map((tag) => `#${tag}`).join(" "),
     "",

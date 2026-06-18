@@ -1,5 +1,7 @@
 export type LocalExpertSourceTier =
   | "apple_official"
+  | "google_workspace_official"
+  | "google_developer_official"
   | "developer_official"
   | "standards_project"
   | "mac_admin"
@@ -17,7 +19,8 @@ export interface LocalExpertRecord {
   title: string;
   topic: string;
   sourceTier: LocalExpertSourceTier;
-  macosVersions: string[];
+  macosVersions?: string[];
+  appliesTo?: string[];
   symptoms: string[];
   steps: string[];
   verification: string[];
@@ -40,6 +43,7 @@ export interface LocalExpertPack {
   description: string;
   sourceTiers: LocalExpertSourceTier[];
   records: LocalExpertRecord[];
+  scenarios?: LocalExpertScenario[];
   recipe: {
     name: string;
     description: string;
@@ -47,6 +51,16 @@ export interface LocalExpertPack {
     inputs: string;
     output: string;
   };
+}
+
+export interface LocalExpertScenario {
+  id: string;
+  title: string;
+  prompt: string;
+  recordIds: string[];
+  requiredEvidence: string[];
+  expectedSections: string[];
+  risk: LocalExpertRisk;
 }
 
 export interface LocalExpertInstallState {
@@ -154,12 +168,14 @@ export interface LocalExpertEvalCase {
   prompt: string;
   requiredRecordIds: string[];
   requiredConcepts: string[];
+  requiredAnswerSections?: string[];
   forbiddenPhrases: string[];
   expectedRisk: LocalExpertRisk;
 }
 
 export interface LocalExpertEvalSuite {
   packId: string;
+  safetyRules?: string[];
   cases: LocalExpertEvalCase[];
 }
 
@@ -178,6 +194,34 @@ export interface LocalExpertEvalSuiteResult {
   passed: number;
   failed: number;
   results: LocalExpertEvalResult[];
+}
+
+export interface LocalExpertAnswerEvalResult {
+  id: string;
+  ok: boolean;
+  missingConcepts: string[];
+  missingAnswerSections: string[];
+  forbiddenMatches: string[];
+}
+
+export interface LocalExpertScenarioEvalResult {
+  id: string;
+  ok: boolean;
+  missingRecordIds: string[];
+  missingEvidence: boolean;
+  missingAnswerSections: string[];
+  forbiddenMatches: string[];
+}
+
+export interface LocalExpertPackQualityReport {
+  packId: string;
+  recordCount: number;
+  sourceCount: number;
+  scenarioCount: number;
+  staleRecordCount: number;
+  expiredRecordCount: number;
+  brokenScenarioLinks: string[];
+  validationErrorCount: number;
 }
 
 export interface LocalExpertCheck {
@@ -216,6 +260,8 @@ export interface LocalExpertValidationResult {
 const SAFE_ID = /^[a-z0-9][a-z0-9_-]*$/;
 const SOURCE_TIERS: LocalExpertSourceTier[] = [
   "apple_official",
+  "google_workspace_official",
+  "google_developer_official",
   "developer_official",
   "standards_project",
   "mac_admin",
@@ -236,6 +282,10 @@ function isHttpsUrl(value: string): boolean {
   }
 }
 
+function hasTextArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.length > 0 && value.every(hasText);
+}
+
 export function validateLocalExpertPack(
   pack: LocalExpertPack,
 ): LocalExpertValidationResult {
@@ -253,12 +303,14 @@ export function validateLocalExpertPack(
   }
 
   const seen = new Set<string>();
+  const recordIds = new Set<string>();
   for (const record of pack.records) {
     if (!SAFE_ID.test(record.id)) {
       errors.push(`Record id must be a safe id: ${record.id}`);
     }
     if (seen.has(record.id)) errors.push(`Duplicate record id: ${record.id}`);
     seen.add(record.id);
+    recordIds.add(record.id);
     if (!hasText(record.title))
       errors.push(`Record ${record.id} title is required.`);
     if (!hasText(record.topic))
@@ -266,8 +318,17 @@ export function validateLocalExpertPack(
     if (!SOURCE_TIERS.includes(record.sourceTier)) {
       errors.push(`Record ${record.id} has unsupported source tier.`);
     }
-    if (!record.macosVersions.length) {
-      errors.push(`Record ${record.id} must name macOS versions.`);
+    if (!record.macosVersions && !record.appliesTo) {
+      errors.push(`Record ${record.id} must name applicability.`);
+    }
+    if (
+      record.macosVersions !== undefined &&
+      !hasTextArray(record.macosVersions)
+    ) {
+      errors.push(`Record ${record.id} macOS versions must be text.`);
+    }
+    if (record.appliesTo !== undefined && !hasTextArray(record.appliesTo)) {
+      errors.push(`Record ${record.id} appliesTo must be text.`);
     }
     if (!record.symptoms.length)
       errors.push(`Record ${record.id} needs symptoms.`);
@@ -308,6 +369,43 @@ export function validateLocalExpertPack(
       (!Number.isInteger(record.freshnessDays) || record.freshnessDays <= 0)
     ) {
       errors.push(`Record ${record.id} freshnessDays must be positive.`);
+    }
+  }
+
+  const seenScenarios = new Set<string>();
+  for (const scenario of pack.scenarios || []) {
+    if (!SAFE_ID.test(scenario.id)) {
+      errors.push(`Scenario id must be a safe id: ${scenario.id}`);
+    }
+    if (seenScenarios.has(scenario.id)) {
+      errors.push(`Duplicate scenario id: ${scenario.id}`);
+    }
+    seenScenarios.add(scenario.id);
+    if (!hasText(scenario.title)) {
+      errors.push(`Scenario ${scenario.id} title is required.`);
+    }
+    if (!hasText(scenario.prompt)) {
+      errors.push(`Scenario ${scenario.id} prompt is required.`);
+    }
+    if (!hasTextArray(scenario.recordIds)) {
+      errors.push(`Scenario ${scenario.id} needs record links.`);
+    } else {
+      for (const recordId of scenario.recordIds) {
+        if (!recordIds.has(recordId)) {
+          errors.push(
+            `Scenario ${scenario.id} links missing record: ${recordId}`,
+          );
+        }
+      }
+    }
+    if (!hasTextArray(scenario.requiredEvidence)) {
+      errors.push(`Scenario ${scenario.id} needs required evidence.`);
+    }
+    if (!hasTextArray(scenario.expectedSections)) {
+      errors.push(`Scenario ${scenario.id} needs expected sections.`);
+    }
+    if (!RISKS.includes(scenario.risk)) {
+      errors.push(`Scenario ${scenario.id} has unsupported risk.`);
     }
   }
 
@@ -375,5 +473,37 @@ export function getLocalExpertPackFreshness(
       nextRefreshTime === undefined
         ? undefined
         : isoDate(new Date(nextRefreshTime)),
+  };
+}
+
+export function getLocalExpertPackQualityReport(
+  pack: LocalExpertPack,
+  now = new Date(),
+): LocalExpertPackQualityReport {
+  const freshnessCounts = pack.records.reduce(
+    (counts, record) => {
+      const status = getLocalExpertRecordFreshness(record, now);
+      counts[status] += 1;
+      return counts;
+    },
+    { current: 0, stale: 0, expired: 0, unknown: 0 },
+  );
+  const recordIds = new Set(pack.records.map((record) => record.id));
+  const brokenScenarioLinks = (pack.scenarios || []).flatMap((scenario) =>
+    scenario.recordIds
+      .filter((recordId) => !recordIds.has(recordId))
+      .map((recordId) => `${scenario.id}:${recordId}`),
+  );
+  const validation = validateLocalExpertPack(pack);
+  return {
+    packId: pack.id,
+    recordCount: pack.records.length,
+    sourceCount: new Set(pack.records.flatMap((record) => record.sourceUrls))
+      .size,
+    scenarioCount: pack.scenarios?.length || 0,
+    staleRecordCount: freshnessCounts.stale,
+    expiredRecordCount: freshnessCounts.expired,
+    brokenScenarioLinks,
+    validationErrorCount: validation.errors.length,
   };
 }
