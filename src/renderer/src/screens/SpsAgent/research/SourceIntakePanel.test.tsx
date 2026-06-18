@@ -20,6 +20,7 @@ const api = {
   spsFileResearch: vi.fn(),
   spsExportRow: vi.fn(),
   spsSourceStudy: vi.fn(),
+  spsCuratedBrief: vi.fn(),
   spsSubstackRadarListRuns: vi.fn(),
 };
 
@@ -70,6 +71,21 @@ beforeEach(() => {
     kind: "chat",
     reply: [
       "The corpus argues for slower, source-backed workflows.\n\n## Sources\n- [Second](https://two.example/study)",
+    ],
+  });
+  api.spsCuratedBrief.mockResolvedValue({
+    kind: "chat",
+    reply: [
+      [
+        "## Perspectives",
+        "Operators care about verifiable workflows.",
+        "",
+        "## Brief",
+        "The corpus argues for curated, source-backed pre-writing.",
+        "",
+        "## Sources",
+        "- [Curated](https://brief.example/source)",
+      ].join("\n"),
     ],
   });
   api.spsRssAddFeed.mockResolvedValue("feed-1");
@@ -278,7 +294,9 @@ describe("SourceIntakePanel", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /^study$/i }));
 
-    expect(await screen.findByText(/source-backed workflows/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/source-backed workflows/i),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /deck from study/i }));
 
     expect(store.openDeckStudioInput).toHaveBeenCalledWith(
@@ -291,6 +309,107 @@ describe("SourceIntakePanel", () => {
     expect(
       await screen.findByText("Opened Deck Studio with this study."),
     ).toBeInTheDocument();
+  });
+
+  it("runs a Curated Brief and saves source-backed output to the Knowledge Base", async () => {
+    render(<SourceIntakePanel />);
+
+    fireEvent.click(screen.getByRole("tab", { name: /study/i }));
+    fireEvent.change(screen.getByLabelText(/study focus/i), {
+      target: { value: "Source-backed workflows" },
+    });
+    fireEvent.change(screen.getByLabelText(/corpus description/i), {
+      target: { value: "Use https://one.example/study." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /curated brief/i }));
+
+    expect(
+      await screen.findByText(/curated, source-backed/i),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /save brief to kb/i }));
+
+    await waitFor(() => {
+      expect(api.spsCuratedBrief).toHaveBeenCalledWith(
+        "Source-backed workflows",
+        "Use https://one.example/study.",
+      );
+      expect(api.spsFileResearch).toHaveBeenCalledWith(
+        "Source-backed workflows",
+        expect.stringContaining("## Sources"),
+      );
+      expect(
+        screen.getByText("Saved brief to Knowledge Base."),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("does not file a Curated Brief without usable sources", async () => {
+    api.spsCuratedBrief.mockResolvedValue({
+      kind: "chat",
+      reply: [
+        "## Brief\nUnsupported synthesis.\n\n## Sources\n- Internal memory",
+      ],
+    });
+    render(<SourceIntakePanel />);
+
+    fireEvent.click(screen.getByRole("tab", { name: /study/i }));
+    fireEvent.change(screen.getByLabelText(/study focus/i), {
+      target: { value: "Unsourced brief" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /curated brief/i }));
+
+    expect(
+      await screen.findByText(/unsupported synthesis/i),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /save brief to kb/i }));
+
+    expect(api.spsFileResearch).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText(/could not find usable source links/i),
+    ).toBeInTheDocument();
+  });
+
+  it("saves a Curated Brief as a Content Studio idea and opens Deck Studio", async () => {
+    render(<SourceIntakePanel />);
+
+    fireEvent.click(screen.getByRole("tab", { name: /study/i }));
+    fireEvent.change(screen.getByLabelText(/study focus/i), {
+      target: { value: "Curated brief content" },
+    });
+    fireEvent.change(screen.getByLabelText(/corpus description/i), {
+      target: { value: "Use https://one.example/study." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /curated brief/i }));
+
+    expect(
+      await screen.findByText(/curated, source-backed/i),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: /save brief as content idea/i }),
+    );
+
+    await waitFor(() =>
+      expect(store.openContentStudioIdea).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Curated brief content",
+          sourceUrls: [
+            "https://one.example/study",
+            "https://brief.example/source",
+          ],
+          capturedFrom: "curated-brief",
+        }),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /deck from brief/i }));
+
+    expect(store.openDeckStudioInput).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Curated brief content",
+        notes: expect.stringContaining("## Perspectives"),
+        theme: "research",
+      }),
+    );
   });
 
   it("shows Crawl4AI setup guidance when extraction is unavailable", async () => {

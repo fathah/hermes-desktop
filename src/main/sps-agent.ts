@@ -19,6 +19,7 @@ import {
   type WorkspaceQueueIO,
 } from "./sps-write-queue";
 import type { Workspace, SpsSaveResult } from "../shared/sps-types";
+import { buildCuratedBriefPrompt } from "../shared/curatedBrief";
 import { buildSourceStudyPrompt } from "../shared/sourceStudy";
 import dns from "node:dns";
 import net from "node:net";
@@ -655,6 +656,28 @@ export async function spsSourceStudy(
     prompt,
     {
       pageTitle: "Source Study",
+      blocks: [],
+      notes: [],
+    },
+    profile,
+    true,
+  );
+}
+
+export async function spsCuratedBrief(
+  topic: string,
+  corpusDescription?: string,
+  profile?: string,
+): Promise<AssistantResult> {
+  const options = corpusDescription ? { corpusDescription } : undefined;
+  const prompt = [
+    buildCuratedBriefPrompt(topic, options),
+    'Inside SPS Agent, return this as {"kind":"chat"} only. Do not edit the page, create tasks, or produce any other action type.',
+  ].join("\n\n");
+  return spsAssistant(
+    prompt,
+    {
+      pageTitle: "Curated Brief",
       blocks: [],
       notes: [],
     },

@@ -22,6 +22,7 @@ const api = vi.hoisted(() => ({
   spsCreateAssistantRecipe: vi.fn(),
   spsRunAssistantRecipe: vi.fn(),
   spsSaveAssistantRecipeRun: vi.fn(),
+  spsCuratedBrief: vi.fn(),
   createLearningProposal: vi.fn(),
   spsCreateVaultProposal: vi.fn(),
 }));
@@ -78,6 +79,21 @@ disclosureNotes: None.`,
     },
   });
   api.spsSaveAssistantRecipeRun.mockResolvedValue({ ok: true });
+  api.spsCuratedBrief.mockResolvedValue({
+    kind: "chat",
+    reply: [
+      [
+        "## Perspectives",
+        "Operators need evidence before drafting.",
+        "",
+        "## Brief",
+        "A curated brief turns sources into a draftable angle.",
+        "",
+        "## Sources",
+        "- [Source](https://example.com/source)",
+      ].join("\n"),
+    ],
+  });
   api.createLearningProposal.mockResolvedValue({ ok: true });
   api.spsCreateVaultProposal.mockResolvedValue({ id: "proposal-1" });
 });
@@ -195,6 +211,59 @@ describe("ContentStudioSurface", () => {
         "recipe-content",
         expect.stringContaining("Prefilled source idea"),
         "default",
+      ),
+    );
+  });
+
+  it("generates a Curated Brief from a captured idea before starting a run", async () => {
+    store.pendingContentStudioIdea = {
+      id: "idea-curated-source",
+      title: "Curated source idea",
+      sourceUrls: ["https://example.com/source"],
+      audience: "operators",
+      angle: "Initial angle.",
+      createdAt: "2026-06-17",
+      updatedAt: "2026-06-17",
+      status: "captured",
+      capturedFrom: "source-preview",
+      rubric: {
+        bookmarkability: 2,
+        proof: 2,
+        immediateUse: 2,
+        audienceClarity: 2,
+        reproducibility: 1,
+        hookStrength: 1,
+        originality: 1,
+      },
+    };
+
+    render(<ContentStudioSurface />);
+
+    expect(
+      await screen.findByDisplayValue("Curated source idea"),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: /generate curated brief/i }),
+    );
+
+    await waitFor(() =>
+      expect(api.spsCuratedBrief).toHaveBeenCalledWith(
+        "Curated source idea",
+        expect.stringContaining("https://example.com/source"),
+        "default",
+      ),
+    );
+    expect(
+      await screen.findByDisplayValue(/curated brief turns sources/i),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Start content run" }));
+
+    await waitFor(() =>
+      expect(api.spsExportRow).toHaveBeenCalledWith(
+        "content-runs",
+        expect.stringContaining("content-run-run-curated-source-idea"),
+        expect.stringContaining("https://example.com/source"),
       ),
     );
   });

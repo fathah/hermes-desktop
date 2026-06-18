@@ -129,6 +129,12 @@ export const spsBridge = {
     profile?: string,
   ): Promise<unknown> =>
     ipcRenderer.invoke("sps-source-study", focus, corpusDescription, profile),
+  spsCuratedBrief: (
+    topic: string,
+    corpusDescription?: string,
+    profile?: string,
+  ): Promise<unknown> =>
+    ipcRenderer.invoke("sps-curated-brief", topic, corpusDescription, profile),
   spsIngestInbox: (
     profile?: string,
   ): Promise<{

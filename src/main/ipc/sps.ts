@@ -7,6 +7,7 @@ import https from "node:https";
 import {
   spsUnfurl,
   spsAssistant,
+  spsCuratedBrief,
   spsSourceStudy,
   spsIngestInbox,
   spsFileAnswer,
@@ -130,6 +131,11 @@ export function registerSpsIpc(): void {
     "sps-source-study",
     (_event, focus: string, corpusDescription?: string, profile?: string) =>
       spsSourceStudy(focus, corpusDescription, profile),
+  );
+  safeHandle(
+    "sps-curated-brief",
+    (_event, topic: string, corpusDescription?: string, profile?: string) =>
+      spsCuratedBrief(topic, corpusDescription, profile),
   );
   safeHandle("sps-ingest-inbox", (_event, profile?: string) =>
     spsIngestInbox(profile),

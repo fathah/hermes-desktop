@@ -25,6 +25,7 @@ interface Props {
   onOverrideChange: (checked: boolean) => void;
   onScoreIdea: () => void;
   onStartRun: () => void;
+  onGenerateCuratedBrief: () => void;
   onGenerateVariants: () => void;
   onSaveAssistantResult: () => void;
 }
@@ -93,12 +94,13 @@ export function ContentIdeaPanel(props: Props): React.JSX.Element {
         </label>
         <label>
           <span>Angle</span>
-          <input
+          <textarea
             aria-label="Angle"
             className="inbox-input"
             value={props.angle}
             onChange={(event) => props.onAngleChange(event.target.value)}
             placeholder="What original value does this add?"
+            rows={4}
           />
         </label>
       </div>
@@ -143,6 +145,12 @@ export function ContentIdeaPanel(props: Props): React.JSX.Element {
         </button>
         <button className="btn btn-primary btn-sm" onClick={props.onStartRun}>
           Start content run
+        </button>
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={props.onGenerateCuratedBrief}
+        >
+          Generate curated brief
         </button>
         <button
           className="btn btn-secondary btn-sm"

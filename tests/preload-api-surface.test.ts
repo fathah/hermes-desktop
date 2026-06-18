@@ -177,6 +177,11 @@ describe("New APIs from v0.8/v0.9 features", () => {
     expect(preloadTypes).toContain("SourceIntakeStatus");
     expect(preloadTypes).toContain("SourceIntakeResult");
   });
+
+  it("has Curated Brief API", () => {
+    expect(preloadMethods).toContain("spsCuratedBrief");
+    expect(typeMethods).toContain("spsCuratedBrief");
+  });
 });
 
 // ─── Legacy APIs still present ──────────────────────────

@@ -16,10 +16,14 @@ import { Icon } from "../components/Icon";
 import { SpsModal } from "./SpsModal";
 import { research, type WorkSummary } from "../research";
 import { saveContentIdea } from "../content/contentStudioStorage";
-import type { ContentIdea } from "../../../../../shared/content-studio";
+import {
+  parseContentSourceUrls,
+  type ContentIdea,
+} from "../../../../../shared/content-studio";
+import { hasCuratedBriefSources } from "../../../../../shared/curatedBrief";
 import { buildDeckInputFromResearch } from "../../../../../shared/deck-studio";
 
-type Mode = "research" | "papers" | "study";
+type Mode = "research" | "papers" | "study" | "brief";
 type Phase = "idle" | "running" | "done" | "warn" | "error";
 type NotebookState = "idle" | "checking" | "working" | "done" | "failed";
 
@@ -301,8 +305,37 @@ export function ResearchModal() {
     }
   };
 
+  const runCuratedBrief = async () => {
+    const focus = studyFocus.trim();
+    if (!focus || studyBusy) return;
+    setStudyBusy(true);
+    setStudyResult("");
+    setStudySaveMsg("");
+    studyUndoRef.current = null;
+    try {
+      const res = await window.hermesAPI?.spsCuratedBrief?.(
+        focus,
+        studyCorpus.trim() || undefined,
+      );
+      const reply = extractChatReply(res);
+      setStudyResult(reply || "No curated brief returned.");
+    } catch (err) {
+      setStudyResult(
+        err instanceof Error ? err.message : "Curated brief failed.",
+      );
+    } finally {
+      setStudyBusy(false);
+    }
+  };
+
   const saveStudy = async () => {
     if (!studyResult.trim() || studySaving) return;
+    if (mode === "brief" && !hasCuratedBriefSources(studyResult)) {
+      setStudySaveMsg(
+        "Could not find usable source links, so nothing was saved.",
+      );
+      return;
+    }
     setStudySaving(true);
     setStudySaveMsg("");
     try {
@@ -322,21 +355,24 @@ export function ResearchModal() {
   const saveResearchAsContentIdea = async (): Promise<void> => {
     const title = topic.trim() || studyFocus.trim();
     if (!title) return;
+    const sourceUrls =
+      mode === "brief" ? parseContentSourceUrls(studyResult) : [];
     const date = new Date().toISOString().slice(0, 10);
     const idea: ContentIdea = {
       id: `idea-research-${Date.now().toString(36)}`,
       title,
-      sourceUrls: [],
+      sourceUrls,
       audience: "",
       angle:
         resultSummary || progress || studyResult || "Captured from Research.",
       createdAt: date,
       updatedAt: date,
       status: "captured",
-      capturedFrom: "research-reach",
+      capturedFrom: mode === "brief" ? "curated-brief" : "research-reach",
       rubric: {
         bookmarkability: 0,
-        proof: resultSummary || progress || studyResult ? 1 : 0,
+        proof:
+          sourceUrls.length || resultSummary || progress || studyResult ? 1 : 0,
         immediateUse: 0,
         audienceClarity: 0,
         reproducibility: 0,
@@ -387,6 +423,8 @@ export function ResearchModal() {
   const notebookRecovery = notebookStatus?.commandFound
     ? `If Google auth has expired, run ${notebookStatus.nlmCommand || "nlm"} login and try again.`
     : "Install notebooklm-mcp-cli, make notebooklm-mcp available on PATH, or ask IT to set HERMES_NOTEBOOKLM_MCP_COMMAND.";
+  const sourceMode = mode === "study" || mode === "brief";
+  const briefMode = mode === "brief";
 
   return (
     <SpsModal
@@ -416,6 +454,13 @@ export function ResearchModal() {
             disabled={busy}
           >
             Study sources
+          </button>
+          <button
+            className={`pal-chip${mode === "brief" ? " on" : ""}`}
+            onClick={() => setMode("brief")}
+            disabled={busy}
+          >
+            Curated brief
           </button>
         </div>
       }
@@ -572,7 +617,7 @@ export function ResearchModal() {
               </div>
             )}
           </>
-        ) : mode === "study" ? (
+        ) : sourceMode ? (
           <>
             <div className="res-web-alert-box">
               <small className="res-small-label">
@@ -615,17 +660,31 @@ export function ResearchModal() {
                 value={studyFocus}
                 onChange={(e) => setStudyFocus(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") void runSourceStudy();
+                  if (e.key === "Enter") {
+                    void (briefMode ? runCuratedBrief() : runSourceStudy());
+                  }
                 }}
-                placeholder="Question or learning goal..."
+                placeholder={
+                  briefMode
+                    ? "Topic or decision..."
+                    : "Question or learning goal..."
+                }
                 disabled={studyBusy}
               />
               <button
                 className="cover-btn"
-                onClick={() => void runSourceStudy()}
+                onClick={() =>
+                  void (briefMode ? runCuratedBrief() : runSourceStudy())
+                }
                 disabled={studyBusy || !studyFocus.trim()}
               >
-                {studyBusy ? "Studying..." : "Study"}
+                {studyBusy
+                  ? briefMode
+                    ? "Writing..."
+                    : "Studying..."
+                  : briefMode
+                    ? "Generate brief"
+                    : "Study"}
               </button>
             </div>
 
@@ -644,9 +703,9 @@ export function ResearchModal() {
 
             {!studyResult && !studyBusy && (
               <div className="cmts-empty res-idle-message">
-                Study connected sources as a corpus: central argument, mental
-                models, disagreements, weak evidence, checks for understanding,
-                and a wiki-ready capture.
+                {briefMode
+                  ? "Build a source-grounded pre-writing brief with perspectives, questions, an evidence ledger, outline, concept links, and open questions."
+                  : "Study connected sources as a corpus: central argument, mental models, disagreements, weak evidence, checks for understanding, and a wiki-ready capture."}
               </div>
             )}
 
@@ -675,7 +734,7 @@ export function ResearchModal() {
                       Save as content idea
                     </button>
                     <button className="cover-btn" onClick={openResearchDeck}>
-                      Deck from study
+                      {briefMode ? "Deck from brief" : "Deck from study"}
                     </button>
                   </div>
                 </div>
