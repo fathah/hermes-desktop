@@ -236,6 +236,50 @@ describe("SourceIntakePanel", () => {
     );
   });
 
+  it("imports a recent screenshot and opens Deck Studio without using Study", async () => {
+    render(<SourceIntakePanel />);
+
+    fireEvent.click(screen.getByRole("tab", { name: /screenshot/i }));
+    expect(
+      await screen.findByText("Screenshot 2026-06-18 at 10.00.00.png"),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /import \+ deck/i }));
+
+    await waitFor(() => {
+      expect(api.spsImportRecentScreenshot).toHaveBeenCalledWith({
+        candidateId: "shot-new",
+        note: "",
+      });
+      expect(store.openDeckStudioInput).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Screenshot: Screenshot 2026-06-18 at 09.00.00.png",
+          theme: "research",
+          goal: "turn this screenshot capture into a deck brief",
+          notes: expect.stringContaining("Screenshot Inbox capture: cap-shot"),
+          sourceRefs: [
+            expect.objectContaining({
+              kind: "research",
+              label: "Screenshot: Screenshot 2026-06-18 at 09.00.00.png",
+              locator: "Inbox capture cap-shot",
+            }),
+          ],
+        }),
+      );
+    });
+    const deckInput = store.openDeckStudioInput.mock.calls.at(-1)?.[0];
+    expect(deckInput.notes).toContain(
+      "Original file name: Screenshot 2026-06-18 at 09.00.00.png",
+    );
+    expect(deckInput.notes).toContain(
+      "Stored asset: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png",
+    );
+    expect(deckInput.notes).toContain("OCR has not been run yet");
+    expect(api.spsSourceStudy).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText("Opened Deck Studio with this screenshot."),
+    ).toBeInTheDocument();
+  });
+
   it("extracts local OCR text and appends it to the imported Inbox capture", async () => {
     render(<SourceIntakePanel />);
 

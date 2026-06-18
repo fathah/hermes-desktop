@@ -278,9 +278,27 @@ export function SourceIntakePanel({
     setTab("study");
   }
 
+  function openScreenshotDeck(
+    imported: Extract<SpsRecentScreenshotImportResult, { ok: true }>,
+  ): void {
+    openDeckStudioInput(
+      buildDeckInputFromResearch(
+        {
+          title: `Screenshot: ${imported.originalName}`,
+          markdown: buildScreenshotStudyCorpus(imported, imported.ocrText),
+          locator: `Inbox capture ${imported.captureId}`,
+        },
+        {
+          goal: "turn this screenshot capture into a deck brief",
+        },
+      ),
+    );
+    setMessage("Opened Deck Studio with this screenshot.");
+  }
+
   async function importScreenshot(
     candidateId?: string,
-    action: "inbox" | "study" = "inbox",
+    action: "inbox" | "study" | "deck" = "inbox",
   ): Promise<void> {
     if (screenshotBusy) return;
     setScreenshotBusy(true);
@@ -299,6 +317,8 @@ export function SourceIntakePanel({
       setMessage(imported.ok ? "Imported to Inbox." : imported.error);
       if (imported.ok && action === "study") {
         prepareScreenshotStudy(imported, imported.ocrText);
+      } else if (imported.ok && action === "deck") {
+        openScreenshotDeck(imported);
       }
     } catch {
       setMessage("Could not import that screenshot.");
@@ -698,6 +718,16 @@ export function SourceIntakePanel({
                     >
                       Import + Study
                     </button>
+                    <button
+                      type="button"
+                      className="log-submit-btn protocol-record-btn"
+                      disabled={screenshotBusy}
+                      onClick={() =>
+                        void importScreenshot(candidate.id, "deck")
+                      }
+                    >
+                      Import + Deck
+                    </button>
                   </div>
                 </div>
               ))}
@@ -725,6 +755,13 @@ export function SourceIntakePanel({
                 onClick={() => void extractScreenshotText(screenshotResult)}
               >
                 {ocrBusy ? "Extracting..." : "Extract text"}
+              </button>
+              <button
+                type="button"
+                className="log-submit-btn protocol-record-btn"
+                onClick={() => openScreenshotDeck(screenshotResult)}
+              >
+                Deck from screenshot
               </button>
             </div>
           )}
