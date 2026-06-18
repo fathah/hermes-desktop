@@ -146,6 +146,20 @@ function emptyDashboardSummary(): ContentStudioDashboardSummary {
   };
 }
 
+function extractChatReply(result: unknown): string {
+  if (!result || typeof result !== "object") return "";
+  const record = result as {
+    reply?: unknown;
+    response?: unknown;
+    run?: { resultText?: unknown };
+  };
+  if (Array.isArray(record.reply)) return record.reply.map(String).join("\n");
+  if (typeof record.reply === "string") return record.reply;
+  if (typeof record.response === "string") return record.response;
+  if (typeof record.run?.resultText === "string") return record.run.resultText;
+  return "";
+}
+
 export function ContentStudioSurface({
   profile = "default",
 }: {
@@ -474,6 +488,44 @@ export function ContentStudioSurface({
     );
   }
 
+  async function generateCuratedBrief(): Promise<void> {
+    const topic = ideaTitle.trim() || "Untitled content idea";
+    const sourceUrls = parseContentSourceUrls(sourceUrlsText);
+    const corpusDescription = [
+      `Audience: ${audience.trim() || "Unspecified"}`,
+      `Angle: ${angle.trim() || "Unspecified"}`,
+      "Source URLs:",
+      sourceUrls.length > 0
+        ? sourceUrls.join("\n")
+        : sourceUrlsText.trim() || "No source URLs listed.",
+    ].join("\n");
+    setVariantMessage("Generating curated brief...");
+    const result = await window.hermesAPI.spsCuratedBrief?.(
+      topic,
+      corpusDescription,
+      profile,
+    );
+    const reply = extractChatReply(result);
+    if (!reply.trim()) {
+      setVariantMessage("No curated brief returned.");
+      return;
+    }
+    setAngle(reply);
+    const nextSourceUrls = Array.from(
+      new Set([...sourceUrls, ...parseContentSourceUrls(reply)]),
+    );
+    if (nextSourceUrls.length > 0) {
+      setSourceUrlsText(nextSourceUrls.join("\n"));
+    }
+    setCurrentIdea({
+      ...buildIdea(),
+      angle: reply.trim(),
+      sourceUrls: nextSourceUrls,
+      updatedAt: today(),
+    });
+    setVariantMessage("Generated curated brief.");
+  }
+
   async function runQualityGate(): Promise<void> {
     const result = evaluateDraftQuality({
       text: draftText,
@@ -790,6 +842,7 @@ export function ContentStudioSurface({
         onOverrideChange={setOverrideLowScore}
         onScoreIdea={scoreIdea}
         onStartRun={() => void startRun()}
+        onGenerateCuratedBrief={() => void generateCuratedBrief()}
         onGenerateVariants={() => void generateVariants()}
         onSaveAssistantResult={() => void saveAssistantResult()}
       />
@@ -803,7 +856,9 @@ export function ContentStudioSurface({
           <button
             className="btn btn-secondary btn-sm"
             onClick={openIdeaDeck}
-            disabled={!ideaTitle.trim() && !angle.trim() && !sourceUrlsText.trim()}
+            disabled={
+              !ideaTitle.trim() && !angle.trim() && !sourceUrlsText.trim()
+            }
           >
             Deck from idea
           </button>

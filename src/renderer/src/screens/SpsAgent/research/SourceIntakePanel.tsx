@@ -8,6 +8,7 @@ import {
   parseContentSourceUrls,
   type ContentIdeaSourceRecord,
 } from "../../../../../shared/content-studio";
+import { hasCuratedBriefSources } from "../../../../../shared/curatedBrief";
 import { buildDeckInputFromResearch } from "../../../../../shared/deck-studio";
 import { Icon } from "../components/Icon";
 import { SubstackRadarPanel } from "./SubstackRadarPanel";
@@ -72,6 +73,9 @@ export function SourceIntakePanel({
   const [studyCorpus, setStudyCorpus] = useState("");
   const [studyBusy, setStudyBusy] = useState(false);
   const [studyResult, setStudyResult] = useState("");
+  const [studyResultKind, setStudyResultKind] = useState<"study" | "brief">(
+    "study",
+  );
   const [screenshotCandidates, setScreenshotCandidates] = useState<
     SpsRecentScreenshotCandidate[]
   >([]);
@@ -250,6 +254,7 @@ export function SourceIntakePanel({
     if (!focus || studyBusy) return;
     setStudyBusy(true);
     setStudyResult("");
+    setStudyResultKind("study");
     setMessage("");
     try {
       const res = await window.hermesAPI.spsSourceStudy?.(
@@ -351,6 +356,51 @@ export function SourceIntakePanel({
     }
   }
 
+  async function runCuratedBrief(): Promise<void> {
+    const focus = studyFocus.trim();
+    if (!focus || studyBusy) return;
+    setStudyBusy(true);
+    setStudyResult("");
+    setStudyResultKind("brief");
+    setMessage("");
+    try {
+      const res = await window.hermesAPI.spsCuratedBrief?.(
+        focus,
+        studyCorpus.trim() || undefined,
+      );
+      setStudyResult(extractChatReply(res) || "No curated brief returned.");
+    } catch {
+      setStudyResult("Curated brief failed.");
+    } finally {
+      setStudyBusy(false);
+    }
+  }
+
+  async function saveBriefToKb(): Promise<void> {
+    if (!studyFocus.trim() || !studyResult.trim() || saving) return;
+    if (!hasCuratedBriefSources(studyResult)) {
+      setMessage("Could not find usable source links, so nothing was saved.");
+      return;
+    }
+    setSaving(true);
+    setMessage("");
+    try {
+      const saved = await window.hermesAPI.spsFileResearch(
+        studyFocus.trim(),
+        studyResult,
+      );
+      setMessage(
+        saved.ok
+          ? "Saved brief to Knowledge Base."
+          : saved.error || "Save failed.",
+      );
+    } catch {
+      setMessage("Could not save that brief.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function saveStudyAsContentIdea(): Promise<void> {
     if (!studyFocus.trim() || !studyResult.trim() || saving) return;
     const urls = parseContentSourceUrls(`${studyCorpus}\n${studyResult}`);
@@ -362,12 +412,17 @@ export function SourceIntakePanel({
         title: studyFocus.trim(),
         sources: urls.map((sourceUrl) => ({ url: sourceUrl })),
         angle: studyResult,
-        capturedFrom: "source-study",
+        capturedFrom:
+          studyResultKind === "brief" ? "curated-brief" : "source-study",
         rubric: { proof: urls.length ? 1 : 0, originality: 1 },
       });
       await saveContentIdea(idea);
       openContentStudioIdea(idea);
-      setMessage("Saved study as content idea.");
+      setMessage(
+        studyResultKind === "brief"
+          ? "Saved brief as content idea."
+          : "Saved study as content idea.",
+      );
     } finally {
       setSaving(false);
     }
@@ -379,10 +434,17 @@ export function SourceIntakePanel({
       buildDeckInputFromResearch({
         title: studyFocus.trim(),
         markdown: `${studyCorpus}\n\n${studyResult}`.trim(),
-        locator: "Sources / Study",
+        locator:
+          studyResultKind === "brief"
+            ? "Sources / Curated Brief"
+            : "Sources / Study",
       }),
     );
-    setMessage("Opened Deck Studio with this study.");
+    setMessage(
+      studyResultKind === "brief"
+        ? "Opened Deck Studio with this brief."
+        : "Opened Deck Studio with this study.",
+    );
   }
 
   async function showSetup(): Promise<void> {
@@ -700,23 +762,45 @@ export function SourceIntakePanel({
           >
             {studyBusy ? "Studying..." : "Study"}
           </button>
+          <button
+            type="button"
+            className="log-submit-btn protocol-record-btn"
+            disabled={studyBusy || !studyFocus.trim()}
+            onClick={() => void runCuratedBrief()}
+          >
+            {studyBusy ? "Working..." : "Curated Brief"}
+          </button>
           {studyResult && (
             <>
               <pre className="source-intake-markdown">{studyResult}</pre>
+              {studyResultKind === "brief" && (
+                <button
+                  type="button"
+                  className="log-submit-btn save-journal-entry-btn"
+                  disabled={saving}
+                  onClick={() => void saveBriefToKb()}
+                >
+                  {saving ? "Saving..." : "Save brief to KB"}
+                </button>
+              )}
               <button
                 type="button"
                 className="log-submit-btn protocol-record-btn"
                 disabled={saving}
                 onClick={() => void saveStudyAsContentIdea()}
               >
-                Save study as content idea
+                {studyResultKind === "brief"
+                  ? "Save brief as content idea"
+                  : "Save study as content idea"}
               </button>
               <button
                 type="button"
                 className="log-submit-btn protocol-record-btn"
                 onClick={openStudyDeck}
               >
-                Deck from study
+                {studyResultKind === "brief"
+                  ? "Deck from brief"
+                  : "Deck from study"}
               </button>
             </>
           )}

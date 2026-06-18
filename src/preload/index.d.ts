@@ -1231,6 +1231,11 @@ interface HermesAPI {
     corpusDescription?: string,
     profile?: string,
   ) => Promise<unknown>;
+  spsCuratedBrief: (
+    topic: string,
+    corpusDescription?: string,
+    profile?: string,
+  ) => Promise<unknown>;
   spsIngestInbox: (profile?: string) => Promise<{
     ok: boolean;
     captureCount: number;
