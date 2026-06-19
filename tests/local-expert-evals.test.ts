@@ -30,8 +30,29 @@ describe("local expert evals", () => {
         "notarization",
         "sandboxing",
         "tcc",
+        "full-disk-access",
+        "firewall",
+        "sip",
+        "failed-updates",
+        "launchagents",
       ]),
     );
+  });
+
+  it("uses the Mac admin source-list patch version and standards source", () => {
+    expect(MACOS_LOCAL_EXPERT_PACK.version).toBe("1.0.1");
+    expect(
+      MACOS_LOCAL_EXPERT_PACK.records.some(
+        (record) => record.sourceTier === "standards_project",
+      ),
+    ).toBe(true);
+    expect(
+      MACOS_LOCAL_EXPERT_PACK.records.some((record) =>
+        record.sourceUrls.includes(
+          "https://github.com/usnistgov/macos_security",
+        ),
+      ),
+    ).toBe(true);
   });
 
   it("fails when required records or safety language are missing", () => {

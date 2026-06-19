@@ -24,7 +24,7 @@ export const MACOS_LOCAL_EXPERT_PACK: LocalExpertPack = {
   id: "macos",
   title: "Mac Expert",
   domain: "macos",
-  version: "1.0.0",
+  version: "1.0.1",
   description:
     "Source-backed macOS guidance for privacy, security, updates, Finder, networking, and developer workflows.",
   sourceTiers: [
@@ -96,6 +96,45 @@ export const MACOS_LOCAL_EXPERT_PACK: LocalExpertPack = {
         sourceUrls: ["https://support.apple.com/guide/mac-help/welcome/mac"],
         lastVerified: "2026-06-17",
         tags: ["privacy", "permissions", "accessibility"],
+        relatedRecordIds: ["privacy-full-disk-access"],
+      },
+      {
+        id: "privacy-full-disk-access",
+        title: "Grant Full Disk Access Carefully",
+        topic: "privacy.full_disk_access",
+        sourceTier: "apple_official",
+        macosVersions: ["14", "15", "26"],
+        symptoms: [
+          "A backup, developer, security, or file-sync tool cannot inspect files it is expected to manage",
+          "An app asks for Full Disk Access after a privacy prompt",
+          "A tool reports that macOS privacy controls block file access",
+        ],
+        steps: [
+          "Confirm why the app needs broad file access and whether a narrower permission would solve the issue.",
+          "Open System Settings.",
+          "Go to Privacy & Security.",
+          "Open Full Disk Access.",
+          "Enable only the expected app or helper, then quit and reopen the app if macOS asks for a restart.",
+        ],
+        verification: [
+          "Full Disk Access lists the expected app or helper as enabled.",
+          "The app can now reach the specific protected files or folders it needed.",
+          "The user understands why broad file access is justified for this app.",
+        ],
+        risk: "high",
+        sourceUrls: [
+          "https://support.apple.com/guide/mac-help/welcome/mac",
+          "https://support.apple.com/guide/security/welcome/web",
+        ],
+        lastVerified: "2026-06-19",
+        tags: ["privacy", "permissions", "full-disk-access"],
+        relatedRecordIds: [
+          "privacy-screen-recording",
+          "privacy-accessibility",
+          "security-filevault",
+        ],
+        authorityNotes:
+          "Full Disk Access is a broad TCC privacy grant. Prefer Apple user-facing steps, and frame admin or security-tool needs as evidence to review rather than a blanket approval.",
       },
       {
         id: "security-filevault",
@@ -121,9 +160,11 @@ export const MACOS_LOCAL_EXPERT_PACK: LocalExpertPack = {
         sourceUrls: [
           "https://support.apple.com/guide/security/welcome/web",
           "https://support.apple.com/guide/deployment/welcome/web",
+          "https://github.com/usnistgov/macos_security",
         ],
         lastVerified: "2026-06-17",
         tags: ["security", "filevault", "encryption"],
+        relatedRecordIds: ["security-sip-startup-security"],
       },
       {
         id: "security-gatekeeper-quarantine",
@@ -149,9 +190,94 @@ export const MACOS_LOCAL_EXPERT_PACK: LocalExpertPack = {
         sourceUrls: [
           "https://support.apple.com/guide/security/welcome/web",
           "https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution",
+          "https://github.com/usnistgov/macos_security",
         ],
         lastVerified: "2026-06-17",
         tags: ["security", "gatekeeper", "notarization"],
+        relatedRecordIds: [
+          "security-sip-startup-security",
+          "developer-signing-notarization",
+        ],
+      },
+      {
+        id: "security-firewall",
+        title: "Review The macOS Firewall Without Overclaiming",
+        topic: "security.firewall",
+        sourceTier: "standards_project",
+        macosVersions: ["14", "15", "26"],
+        symptoms: [
+          "The user wants to know whether the macOS firewall is on",
+          "A company baseline or admin checklist mentions firewall state",
+          "Inbound connections or local network access need a security review",
+        ],
+        steps: [
+          "Open System Settings.",
+          "Go to Network.",
+          "Open Firewall and review whether the firewall is enabled.",
+          "Review Options only to understand allowed incoming connections and stealth mode; do not change rules unless the user approves the specific reason.",
+          "If the Mac is managed, compare the visible setting with the organization policy before assuming the user can change it.",
+        ],
+        verification: [
+          "Firewall settings show the current firewall state.",
+          "Any allowed incoming connection is tied to an app the user recognizes.",
+          "The user knows whether the setting is personal preference or managed by policy.",
+        ],
+        risk: "medium",
+        sourceUrls: [
+          "https://support.apple.com/guide/mac-help/welcome/mac",
+          "https://support.apple.com/guide/security/welcome/web",
+          "https://support.apple.com/guide/deployment/welcome/web",
+          "https://github.com/usnistgov/macos_security",
+        ],
+        lastVerified: "2026-06-19",
+        tags: ["security", "firewall", "network"],
+        relatedRecordIds: [
+          "networking-wifi-dns-vpn",
+          "security-gatekeeper-quarantine",
+        ],
+        authorityNotes:
+          "Use macOS Security Compliance Project material as baseline context only. This pack must not run remediation or claim compliance from guidance text alone.",
+      },
+      {
+        id: "security-sip-startup-security",
+        title: "Understand SIP And Startup Security Boundaries",
+        topic: "security.sip_startup_security",
+        sourceTier: "apple_official",
+        macosVersions: ["14", "15", "26"],
+        symptoms: [
+          "A developer or support article mentions System Integrity Protection",
+          "A security or kernel-extension issue refers to startup security",
+          "The user is unsure whether a low-level macOS protection should be changed",
+        ],
+        steps: [
+          "Identify whether the issue is about System Integrity Protection, startup security, kernel extensions, or app permissions.",
+          "Prefer app-level permissions, notarization, entitlements, or vendor guidance before considering low-level security changes.",
+          "If a vendor or admin requires a startup security change, collect the exact vendor documentation and the reason before acting.",
+          "Treat changes made from macOS Recovery as high-risk and outside routine troubleshooting.",
+        ],
+        verification: [
+          "The user can name which protection is involved: System Integrity Protection, startup security, kernel extension policy, or app permission.",
+          "There is a trusted vendor, Apple, or admin source for any requested low-level change.",
+          "The assistant has not inferred SIP or startup security state without evidence.",
+        ],
+        risk: "high",
+        sourceUrls: [
+          "https://support.apple.com/guide/security/welcome/web",
+          "https://support.apple.com/guide/deployment/welcome/web",
+          "https://github.com/usnistgov/macos_security",
+        ],
+        lastVerified: "2026-06-19",
+        tags: ["security", "sip", "startup-security"],
+        relatedRecordIds: [
+          "security-gatekeeper-quarantine",
+          "developer-signing-notarization",
+        ],
+        dontSay: [
+          "Do not present low-level security changes as routine troubleshooting.",
+          "Do not claim the Mac's SIP or startup security state unless the user provided evidence or ran an explicit read-only check.",
+        ],
+        authorityNotes:
+          "Apple Platform Security is authoritative for security architecture. mSCP can explain baseline expectations, but this pack must not turn baseline remediation into automatic advice.",
       },
       {
         id: "updates-security-releases",
@@ -177,9 +303,51 @@ export const MACOS_LOCAL_EXPERT_PACK: LocalExpertPack = {
         sourceUrls: [
           "https://support.apple.com/guide/mac-help/welcome/mac",
           "https://support.apple.com/en-us/100100",
+          "https://support.apple.com/guide/deployment/welcome/web",
+          "https://github.com/usnistgov/macos_security",
         ],
         lastVerified: "2026-06-17",
         tags: ["updates", "security", "software-update"],
+        relatedRecordIds: ["updates-failed-installers"],
+      },
+      {
+        id: "updates-failed-installers",
+        title: "Triage Failed macOS Updates And Installers",
+        topic: "updates.failed_installers",
+        sourceTier: "apple_official",
+        macosVersions: ["14", "15", "26"],
+        symptoms: [
+          "Software Update fails to download or install",
+          "A macOS installer is missing, stalled, or rejected",
+          "The user needs to understand whether a security update or full installer applies",
+        ],
+        steps: [
+          "Record the installed macOS version and the exact update or installer name.",
+          "Open System Settings, go to General, then Software Update to see the offered update.",
+          "Compare the installed version and target update with Apple's security release listing.",
+          "Check available storage and backup status before retrying a major update.",
+          "For managed Macs, ask whether MDM update deferrals or deadlines apply before assuming the update is personally controlled.",
+        ],
+        verification: [
+          "The user knows the installed macOS version and the target update or installer.",
+          "Apple's security release list explains whether the target update includes relevant fixes.",
+          "Storage, backup readiness, and management policy have been checked before retrying.",
+        ],
+        risk: "medium",
+        sourceUrls: [
+          "https://support.apple.com/guide/mac-help/welcome/mac",
+          "https://support.apple.com/en-us/100100",
+          "https://support.apple.com/guide/deployment/welcome/web",
+        ],
+        lastVerified: "2026-06-19",
+        tags: ["updates", "installer", "software-update"],
+        relatedRecordIds: [
+          "updates-security-releases",
+          "backup-time-machine-external-disk",
+          "performance-storage-pressure",
+        ],
+        authorityNotes:
+          "Use Apple security releases for version mapping. Treat admin update deferrals as a policy question, not a local workaround target.",
       },
       {
         id: "performance-login-items-background",
@@ -206,9 +374,54 @@ export const MACOS_LOCAL_EXPERT_PACK: LocalExpertPack = {
         sourceUrls: [
           "https://support.apple.com/guide/mac-help/welcome/mac",
           "https://support.apple.com/guide/deployment/welcome/web",
+          "https://github.com/usnistgov/macos_security",
         ],
         lastVerified: "2026-06-17",
         tags: ["performance", "login-items", "background-items"],
+        relatedRecordIds: ["developer-launchagents-persistence"],
+      },
+      {
+        id: "developer-launchagents-persistence",
+        title: "Orient LaunchAgents And Background Persistence",
+        topic: "developer.launchagents_persistence",
+        sourceTier: "mac_admin",
+        macosVersions: ["14", "15", "26"],
+        symptoms: [
+          "A helper, menu bar app, or background task starts after login",
+          "A developer needs to understand a LaunchAgent or LaunchDaemon behavior",
+          "The user sees a background item or persistence warning and needs safe triage",
+        ],
+        steps: [
+          "Start with System Settings Login Items & Extensions to identify user-visible background items.",
+          "Name the app, helper, LaunchAgent, or LaunchDaemon involved before suggesting any action.",
+          "For developer or admin workflows, distinguish user LaunchAgents from system LaunchDaemons and managed background items.",
+          "Use vendor or admin documentation to decide whether the item is expected before disabling or removing anything.",
+        ],
+        verification: [
+          "The item is tied to a specific app, helper, LaunchAgent, LaunchDaemon, or management profile.",
+          "The user can tell whether the behavior is user-installed, developer-created, or organization-managed.",
+          "No removal or cleanup command is suggested without explicit user approval and a trusted source.",
+        ],
+        risk: "high",
+        sourceUrls: [
+          "https://support.apple.com/guide/mac-help/welcome/mac",
+          "https://support.apple.com/guide/deployment/welcome/web",
+          "https://scriptingosx.com/",
+          "https://github.com/usnistgov/macos_security",
+        ],
+        lastVerified: "2026-06-19",
+        tags: ["developer", "launchagents", "background-items"],
+        relatedRecordIds: [
+          "performance-login-items-background",
+          "security-firewall",
+        ],
+        dontSay: [
+          "Do not tell the user to remove every background item.",
+          "Do not label an item as malicious without evidence.",
+          "Do not suggest cleanup commands without explicit approval.",
+        ],
+        authorityNotes:
+          "Use Mac admin references for field terminology and Apple deployment docs for managed behavior. Keep Objective-See-style persistence concepts conceptual; do not copy tool logic or cleanup workflows.",
       },
       {
         id: "performance-storage-pressure",
