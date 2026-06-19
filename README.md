@@ -242,6 +242,65 @@ By default, API keys live in `~/.hermes/.env` (the **env** provider). No
 configuration is needed — this is byte-for-byte the historical behavior, and
 nothing changes for you.
 
+### First-run vault setup & diagrams
+
+The setup wizard can detect an existing vault or **create a new encrypted
+KeePassXC vault** for you (no dead-end picker). The full set of diagrams —
+logical component flow, the onboarding state machine, and the **secret
+workflow** — lives in
+[docs/diagrams/vault-bootstrap-diagrams.md](docs/diagrams/vault-bootstrap-diagrams.md).
+The two most useful are embedded below.
+
+**First-run onboarding (assume nothing exists):**
+
+```mermaid
+stateDiagram-v2
+  [*] --> Detect: first run
+  Detect --> Found: tmpfs dump OR vault file on disk
+  Detect --> NotFound: nothing resolvable
+  Found --> Prefill: suggest read command (UID-safe)
+  Prefill --> ModelStep: provider resolves the model key -> hide key field
+  NotFound --> ToolCheck: checkToolAvailability()
+  ToolCheck --> CanCreate: keepassxc-cli present
+  ToolCheck --> InstallHint: CLI missing
+  InstallHint --> Detect: user installs, retry
+  CanCreate --> Create: createVault()
+  Create --> CreateOk: kdbx + key 0600, command returned
+  Create --> CreateFail: vault-already-exists / db-create-failed
+  CreateFail --> ToolCheck: surface honest error
+  CreateOk --> SealChoice: offer opt-in TPM seal
+  SealChoice --> Sealed: systemd-creds ok -> sealed=true
+  SealChoice --> Fallback: polkit/no-tpm -> sealed=false, 0600 stands
+  Sealed --> ModelStep
+  Fallback --> ModelStep
+  ModelStep --> [*]: provider configured, setup complete
+```
+
+**Secret workflow (where the value & key name are gated):**
+
+```mermaid
+flowchart TD
+  Start([User edits/reads a secret in the UI]) --> Which{Read or Write?}
+  Which -->|Detect/Read NAMES| RIPC["IPC: vault-detect-existing"]
+  RIPC --> RParse["envKeyNames(): KEEP name, DROP value"]
+  RParse --> RNames["return NAMES + paths only"]
+  RNames -.->|NEVER a value| UIback([Renderer shows key names])
+  Which -->|Write/Delete| WGate{"canWrite gate:\nprovider==command AND\nunlocked (count>0) AND helper set"}
+  WGate -->|fail-closed| Deny[/"write-not-permitted"/]
+  WGate -->|permitted| KeyVal{"VALID_KEY_NAME\n^[A-Za-z_][A-Za-z0-9_]*$"}
+  KeyVal -->|bad name| BadKey[/"bad-key (blocks KEY=VALUE / newline)"/]
+  KeyVal -->|valid| Spawn["execFileSync /bin/sh -c <user helper>"]
+  Spawn --> EnvName["KEY NAME -> HERMES_SECRET_KEY env (inert)"]
+  Spawn --> Stdin["VALUE -> helper STDIN ONLY\nnot argv/shell/env"]
+  EnvName --> Vault[("vault .kdbx")]
+  Stdin --> Vault
+  Spawn --> Result{exit code?}
+  Result -->|ok| OkR["ok:true, invalidate caches"]
+  Result -->|fail| FailR["coarse reason; VALUE never logged"]
+  OkR -.->|booleans only| UIback
+  FailR -.->|coarse reason only| UIback
+```
+
 If you'd rather not keep keys in a plaintext `.env`, the opt-in **command**
 provider resolves them by running a helper command you configure. Resolution
 order everywhere is: `process.env` → `.env` → provider → unset.

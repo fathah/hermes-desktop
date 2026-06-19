@@ -158,4 +158,36 @@ describe("S1 (get side): getSecret command-provider spawn-rate floor", () => {
     expect(() => getSecret("S1G_KEY_A")).not.toThrow();
     expect(getSecret("S1G_KEY_A")).toBeNull();
   });
+
+  // ── AIR-005: exact `<` boundary on the get() spawn floor ──────────────
+  // The floor condition is `now - last < MIN_SPAWN_INTERVAL_MS` (strict `<`,
+  // index.ts). The degrade window is therefore the half-open interval
+  // [0, MIN_SPAWN_INTERVAL_MS): a second get() degrades to null at 999ms but
+  // re-spawns at EXACTLY 1000ms. These tests pin the operator so a future
+  // `<`->`<=` slip (which would push the re-spawn to 1001ms and desync this
+  // floor from list()'s `>=` spawnAllowed at exactly 1000ms) reds a test.
+  // Catalog: ai-reviewer-findings-catalog.md AIR-005.
+  it("AIR-005: degrades at 999ms — just INSIDE the floor (strict `<`)", () => {
+    const before = getCalls;
+    const first = getSecret("S1G_KEY_A"); // spawn 1, opens floor at t0
+    vi.advanceTimersByTime(999); // now - last == 999 < 1000 -> still inside
+    const second = getSecret("S1G_KEY_A");
+    expect(getCalls - before).toBe(1); // no second spawn
+    expect(first).toMatch(/^S1G_KEY_A:v\d+$/);
+    expect(second).toBeNull();
+  });
+
+  it("AIR-005: re-spawns at EXACTLY 1000ms — boundary is exclusive (`<`, not `<=`)", () => {
+    const before = getCalls;
+    const first = getSecret("S1G_KEY_A"); // spawn 1 at t0
+    vi.advanceTimersByTime(1_000); // now - last == 1000; 1000 < 1000 is FALSE -> spawn
+    const second = getSecret("S1G_KEY_A"); // spawn 2
+    expect(getCalls - before).toBe(2);
+    expect(first).toMatch(/^S1G_KEY_A:v\d+$/);
+    expect(second).toMatch(/^S1G_KEY_A:v\d+$/);
+    // Distinct counted values prove the 1000ms call was a FRESH resolve, not a
+    // degrade — i.e. the comparison is strictly `<`. A `<=` regression would
+    // null this call and red the assertion.
+    expect(second).not.toBe(first);
+  });
 });

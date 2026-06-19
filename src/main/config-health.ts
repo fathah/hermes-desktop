@@ -20,6 +20,7 @@ import {
   appendConfigFixLog,
   customEndpointKeyResolvable,
   getConfigValue,
+  getConnectionConfig,
   getModelConfig,
   hasOAuthCredentials,
   maskKey,
@@ -31,7 +32,11 @@ import {
 import { safeWriteFile } from "./utils";
 import { HERMES_HOME } from "./installer";
 import { expectedEnvKeyForModel } from "./installer";
-import { expectedEnvKeyForUrl, isLocalBaseUrl } from "../shared/url-key-map";
+import {
+  expectedEnvKeyForUrl,
+  isLocalBaseUrl,
+  aliasesForEnvKey,
+} from "../shared/url-key-map";
 import { findSiblingHermesHomes } from "./wsl-detection";
 // Audit checks must consult the secrets provider too — a vault-only user has
 // their keys in the provider's backing store, not in `.env`. Importing the
@@ -167,7 +172,31 @@ export function autoFixIssue(
  * warning would push the user to write the key back into .env, which
  * defeats the point of vault-only mode.
  */
+/**
+ * Local key-presence checks (API_SERVER_KEY, active-model key) are only
+ * meaningful when this desktop is the thing that talks to the model — i.e.
+ * local connection mode. In remote/SSH mode the keys live on the *remote*
+ * hermes-agent gateway; the desktop only needs its connection credential
+ * (remoteApiKey / SSH creds) to reach it, which the connection screen
+ * validates separately. Auditing the local .env / provider for model keys in
+ * those modes produces false EMPTY_API_SERVER_KEY / MODEL_KEY_MISSING warnings
+ * for every remote/vault-only user. checkInstallStatus() already short-circuits
+ * on remote mode; the key-presence checks must mirror that.
+ */
+function keysAreRemoteResponsibility(): boolean {
+  try {
+    const conn = getConnectionConfig();
+    if (conn.mode === "remote" && conn.remoteUrl) return true;
+    if (conn.mode === "ssh") return true;
+  } catch {
+    // Fall through — if we can't read connection config, audit locally.
+  }
+  return false;
+}
+
 function checkApiServerKeyPlacement(profile?: string): ConfigHealthIssue[] {
+  // Remote/SSH: the gateway owns API_SERVER_KEY, not this desktop. Skip.
+  if (keysAreRemoteResponsibility()) return [];
   const issues: ConfigHealthIssue[] = [];
   const { envFile, configFile } = profilePaths(profile);
 
@@ -257,6 +286,45 @@ function checkApiServerKeyPlacement(profile?: string): ConfigHealthIssue[] {
 }
 
 /**
+ * Accepted-alias map for provider key NAMES. A vault/gateway may store a
+ * provider credential under a name that differs from the desktop's canonical
+ * `<VENDOR>_API_KEY`. Anthropic is the load-bearing case: the gateway and many
+ * vault setups use `ANTHROPIC_TOKEN`, while the desktop's url-key-map expects
+ * `ANTHROPIC_API_KEY`. Both authenticate against Anthropic, so detection must
+ * treat them as equivalent — otherwise a vault-only user with `ANTHROPIC_TOKEN`
+ * sees a false "ANTHROPIC_API_KEY is not set" warning even though the gateway
+ * authenticates fine. Add other vendor aliases here as they come up.
+ *
+ * CLAUDE_CODE_OAUTH_TOKEN is the OAuth-token name used by the Claude Code auth
+ * path / masking-layer patch (a vault stores the OAuth token under this name).
+ * It authenticates to Anthropic exactly like an API key, so detection MUST count
+ * it as satisfying ANTHROPIC_API_KEY — otherwise a vault-only user whose
+ * Anthropic credential is the OAuth token is falsely told to enter an API key on
+ * onboarding even though the credential is already vault-provided.
+ *
+ * The alias table itself now lives in ../shared/url-key-map (KEY_ALIASES /
+ * aliasesForEnvKey) as the SINGLE SOURCE OF TRUTH shared by config-health,
+ * validation, and Setup — see Greptile P1 on PR #673.
+ */
+
+/**
+ * Is `expectedKey` (or any accepted alias of it) present and non-empty in the
+ * resolved secret map? This is the alias-aware replacement for a bare
+ * `(resolved[expectedKey] ?? "").trim()` lookup, so the install gate recognizes
+ * a vault credential stored under an alternate-but-equivalent name.
+ */
+function resolvedHasKey(
+  resolved: Record<string, string>,
+  expectedKey: string,
+): boolean {
+  if ((resolved[expectedKey] ?? "").trim()) return true;
+  for (const alias of aliasesForEnvKey(expectedKey)) {
+    if ((resolved[alias] ?? "").trim()) return true;
+  }
+  return false;
+}
+
+/**
  * Active model is configured but its expected provider key isn't in
  * .env. This is the *most likely* cause of chat 401s — the user has
  * picked a model in the GUI but their key isn't where the gateway
@@ -268,6 +336,8 @@ function checkApiServerKeyPlacement(profile?: string): ConfigHealthIssue[] {
  * authoritative "is the key configured?" view.
  */
 function checkActiveModelKeyPresence(profile?: string): ConfigHealthIssue[] {
+  // Remote/SSH: the model key lives on the remote gateway, not this desktop. Skip.
+  if (keysAreRemoteResponsibility()) return [];
   const mc = getModelConfig(profile);
   if (!mc.provider || mc.provider === "auto") return [];
   if (!mc.model) return [];
@@ -284,9 +354,10 @@ function checkActiveModelKeyPresence(profile?: string): ConfigHealthIssue[] {
   // Vault check: a `command` provider (or env-injecting vault) with this
   // key configured satisfies the requirement — don't warn. This is the
   // fix for the false "NANO_GPT_API_KEY is not set in .env" warning that
-  // a vault-only user would otherwise see on every chat start.
+  // a vault-only user would otherwise see on every chat start. Alias-aware:
+  // a vault that stores ANTHROPIC_TOKEN satisfies an ANTHROPIC_API_KEY check.
   const resolved = resolvedSecretMap(profile);
-  if ((resolved[expectedKey] ?? "").trim()) return [];
+  if (resolvedHasKey(resolved, expectedKey)) return [];
 
   // OpenAI-compatible / custom endpoints resolve their key from a fallback
   // chain (URL key → CUSTOM_PROVIDER_<name>_KEY → CUSTOM_API_KEY →
@@ -347,37 +418,28 @@ function checkRuntimeEnvKeyMismatch(profile?: string): ConfigHealthIssue[] {
     return [];
   }
 
-  // Look for any non-empty *_API_KEY / *_TOKEN that *isn't* the expected
-  // one — that's the candidate for the mismatch warning. Don't fire
-  // on a wholly-empty .env; that's MODEL_KEY_MISSING territory.
-  const candidates = Object.entries(env).filter(
-    ([k, v]) =>
-      /^[A-Z][A-Z0-9_]*(_API_KEY|_TOKEN)$/.test(k) &&
-      k !== expectedKey &&
-      k !== "API_SERVER_KEY" &&
-      (v ?? "").trim() !== "",
-  );
-  if (candidates.length === 0) return [];
+  // A populated KNOWN ALIAS means the credential is ALREADY SATISFIED — not
+  // "saved under the wrong name." The gateway's provider plugin reads
+  // ANTHROPIC_API_KEY, ANTHROPIC_TOKEN AND CLAUDE_CODE_OAUTH_TOKEN directly
+  // (env_vars=(...)), so any one of them authenticates. There is NOTHING to fix
+  // and NOTHING to copy: returning a mismatch here is a false positive, and the
+  // "copy alias → ANTHROPIC_API_KEY" auto-fix is ACTIVELY HARMFUL for the OAuth
+  // case — an OAuth token (CLAUDE_CODE_OAUTH_TOKEN / sk-ant-oat…) is only valid
+  // on the Authorization: Bearer path; copied into the ANTHROPIC_API_KEY slot it
+  // gets sent as the x-api-key header → Anthropic 401 "invalid x-api-key" (the
+  // documented OAuth-in-api-key-slot self-inflicted-401 trap). So: if an accepted
+  // alias is populated, the credential is present under a valid name — emit NO
+  // issue. (The greedy "any *_API_KEY/*_TOKEN" heuristic that used to live here
+  // was also a credential-bleed footgun — see AIR-020 — and is gone entirely.)
+  const aliasNames = aliasesForEnvKey(expectedKey);
+  const aliasSatisfied = aliasNames.some((k) => (env[k] ?? "").trim() !== "");
+  if (aliasSatisfied) return [];
 
-  // Pick the candidate that looks most like a provider key (first match).
-  const [otherKey] = candidates[0];
-  const { envFile } = profilePaths(profile);
-  return [
-    {
-      code: "UI_RUNTIME_ENVKEY_MISMATCH",
-      severity: "warning",
-      message: `${expectedKey} is empty but ${otherKey} has a value — likely saved under the wrong name.`,
-      detail:
-        `Your active model's base URL (${mc.baseUrl}) expects ${expectedKey}, ` +
-        `but only ${otherKey} is populated. Auto-fix copies the value across ` +
-        "(the original entry is left alone).",
-      locations: [envFile],
-      autoFixable: true,
-      fixDescription: `Copy ${otherKey} → ${expectedKey} in .env.`,
-      fixLocation: ".env",
-      context: { from: otherKey, to: expectedKey },
-    },
-  ];
+  // No expected key, no accepted alias, no custom-endpoint fallback → the
+  // credential is genuinely absent. That's MODEL_KEY_MISSING territory (the user
+  // must supply the real key), NOT a rename/copy. Do not fabricate a copy source
+  // from an unrelated credential.
+  return [];
 }
 
 /**

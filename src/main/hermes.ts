@@ -2074,6 +2074,90 @@ const CLI_COMPAT_PROVIDER_OVERRIDE: Record<string, string> = {
   aimlapi: "custom",
 };
 
+/**
+ * Credential env-var names the desktop forwards from the security (secrets)
+ * provider into the agent/gateway env. This MUST mirror the gateway provider
+ * plugins' `env_vars` (plugins/model-providers/<p>/__init__.py): a vault user
+ * may store a provider credential under ANY accepted name — including
+ * OAuth/Bearer-token names (CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_TOKEN,
+ * COPILOT_GITHUB_TOKEN…) and per-vendor aliases that are NOT the canonical
+ * <VENDOR>_API_KEY (ZAI_API_KEY/Z_AI_API_KEY, GEMINI_API_KEY/GOOGLE_API_KEY,
+ * DASHSCOPE_API_KEY…). If a name is missing here, the CLI/non-gateway fallback
+ * path silently fails to forward that vault credential, so a provider that
+ * authenticates only via one of these names gets no key on that path.
+ *
+ * (The primary buildGatewayEnv() path overlays the FULL providerListSafe()
+ * set unfiltered and is already complete; this list keeps the CLI-fallback
+ * path in parity. Keep both in lock-step as providers are added — see the
+ * KNOWN_API_KEYS parity test that guards against drift.)
+ *
+ * Exported for the drift-guard test.
+ */
+export const KNOWN_API_KEYS = [
+  "OPENROUTER_API_KEY",
+  "OPENAI_API_KEY",
+  "OLLAMA_API_KEY",
+  "AIMLAPI_API_KEY",
+  "ANTHROPIC_API_KEY",
+  "GROQ_API_KEY",
+  "DEEPSEEK_API_KEY",
+  "TOGETHER_API_KEY",
+  "FIREWORKS_API_KEY",
+  "CEREBRAS_API_KEY",
+  "MISTRAL_API_KEY",
+  "PERPLEXITY_API_KEY",
+  "XIAOMI_API_KEY",
+  "GLM_API_KEY",
+  "KIMI_API_KEY",
+  "MINIMAX_API_KEY",
+  "MINIMAX_CN_API_KEY",
+  "HF_TOKEN",
+  "EXA_API_KEY",
+  "PARALLEL_API_KEY",
+  "TAVILY_API_KEY",
+  "FIRECRAWL_API_KEY",
+  "FAL_KEY",
+  "HONCHO_API_KEY",
+  "BROWSERBASE_API_KEY",
+  "BROWSERBASE_PROJECT_ID",
+  "VOICE_TOOLS_OPENAI_KEY",
+  "TINKER_API_KEY",
+  "WANDB_API_KEY",
+  // -- Anthropic: gateway Bearer name + Claude Code OAuth-path token --
+  "ANTHROPIC_TOKEN",
+  "CLAUDE_CODE_OAUTH_TOKEN",
+  // -- Google / Gemini --
+  "GOOGLE_API_KEY",
+  "GEMINI_API_KEY",
+  // -- Z.ai / GLM aliases --
+  "ZAI_API_KEY",
+  "Z_AI_API_KEY",
+  // -- GitHub Copilot (PAT / gh token aliases) --
+  "COPILOT_GITHUB_TOKEN",
+  "GH_TOKEN",
+  "GITHUB_TOKEN",
+  // -- Kimi / Moonshot coding + CN --
+  "KIMI_CODING_API_KEY",
+  "KIMI_CN_API_KEY",
+  // -- Alibaba / DashScope --
+  "DASHSCOPE_API_KEY",
+  "ALIBABA_CODING_PLAN_API_KEY",
+  // -- xAI --
+  "XAI_API_KEY",
+  // -- Other built-in OpenAI-compatible vendors with non-listed keys --
+  "NVIDIA_API_KEY",
+  "NOVITA_API_KEY",
+  "STEPFUN_API_KEY",
+  "GMI_API_KEY",
+  "ARCEEAI_API_KEY",
+  "KILOCODE_API_KEY",
+  "OPENCODE_ZEN_API_KEY",
+  "OPENCODE_GO_API_KEY",
+  "QWEN_API_KEY",
+  "NOUS_API_KEY",
+  "AZURE_FOUNDRY_API_KEY",
+];
+
 function sendMessageViaCli(
   message: string,
   cb: ChatCallbacks,
@@ -2136,44 +2220,6 @@ function sendMessageViaCli(
   // the built-in provider entry rather than a `custom` entry, and the
   // upstream fallback chain then misroutes the request (see #260 / the
   // `pickAutoApiKeyForCustomProvider` workaround in config.ts).
-  const KNOWN_API_KEYS = [
-    "OPENROUTER_API_KEY",
-    "OPENAI_API_KEY",
-    "OLLAMA_API_KEY",
-    "AIMLAPI_API_KEY",
-    "ANTHROPIC_API_KEY",
-    "GROQ_API_KEY",
-    "DEEPSEEK_API_KEY",
-    "TOGETHER_API_KEY",
-    "FIREWORKS_API_KEY",
-    "CEREBRAS_API_KEY",
-    "MISTRAL_API_KEY",
-    "PERPLEXITY_API_KEY",
-    "XIAOMI_API_KEY",
-    "GLM_API_KEY",
-    "KIMI_API_KEY",
-    "MINIMAX_API_KEY",
-    "MINIMAX_CN_API_KEY",
-    "HF_TOKEN",
-    "EXA_API_KEY",
-    "PARALLEL_API_KEY",
-    "TAVILY_API_KEY",
-    "FIRECRAWL_API_KEY",
-    "FAL_KEY",
-    "HONCHO_API_KEY",
-    "BROWSERBASE_API_KEY",
-    "BROWSERBASE_PROJECT_ID",
-    "VOICE_TOOLS_OPENAI_KEY",
-    "TINKER_API_KEY",
-    "WANDB_API_KEY",
-  ];
-  // Resolve the configured secrets provider's enumerable secrets ONCE (not
-  // per-key): a `command` backend would otherwise spawn the helper ~30 times
-  // synchronously here, freezing the main process if the helper blocks on an
-  // unlock prompt. list() runs the helper at most once. A bare-value helper that
-  // can't enumerate returns {} — those users resolve a key via the targeted
-  // getSecret() path elsewhere, never this broadcast loop (which would otherwise
-  // spray one secret across every vendor key name).
   const providerSecrets = providerListSafe(profile);
   for (const key of KNOWN_API_KEYS) {
     if (env[key]) continue; // already present (e.g. from process.env spread)

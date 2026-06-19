@@ -186,27 +186,50 @@ describe("runConfigHealthCheck", () => {
     ).toBeUndefined();
   });
 
-  it("flags UI_RUNTIME_ENVKEY_MISMATCH when wrong key has a value", async () => {
+  it("treats a populated OAuth-token alias as SATISFIED — no false mismatch, no harmful copy suggestion", async () => {
     writeConfig(
       [
         "model:",
-        "  provider: custom",
-        "  default: gpt-4",
-        "  base_url: https://api.openai.com/v1",
+        "  provider: anthropic",
+        "  default: claude-opus-4-8",
+        "  base_url: https://api.anthropic.com/v1",
         "",
       ].join("\n"),
     );
-    // Saved under wrong name: ANTHROPIC_API_KEY has value, OPENAI_API_KEY empty
-    writeEnv("ANTHROPIC_API_KEY=sk-misfiled-value\n");
+    // ANTHROPIC_API_KEY (the url-derived expected name) empty, but the accepted
+    // alias CLAUDE_CODE_OAUTH_TOKEN is populated — the gateway plugin reads it
+    // directly, so the credential IS satisfied. The detector must NOT flag a
+    // mismatch (a false positive) and must NOT offer to copy the OAuth token
+    // into ANTHROPIC_API_KEY (which would send it as x-api-key → 401).
+    writeEnv("CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat-xxxxxxxx\n");
     const { runConfigHealthCheck } = await freshHealth(TEST_DIR);
     const report = runConfigHealthCheck();
     const issue = report.issues.find(
       (i) => i.code === "UI_RUNTIME_ENVKEY_MISMATCH",
     );
-    expect(issue).toBeDefined();
-    expect(issue?.autoFixable).toBe(true);
-    expect(issue?.context?.from).toBe("ANTHROPIC_API_KEY");
-    expect(issue?.context?.to).toBe("OPENAI_API_KEY");
+    expect(issue).toBeUndefined();
+  });
+
+  it("does NOT suggest copying an UNRELATED service's credential into the provider key (credential-bleed guard)", async () => {
+    writeConfig(
+      [
+        "model:",
+        "  provider: anthropic",
+        "  default: claude-opus-4-8",
+        "  base_url: https://api.anthropic.com/v1",
+        "",
+      ].join("\n"),
+    );
+    // ANTHROPIC_API_KEY empty; only UNRELATED tokens are populated. The old
+    // greedy heuristic would have offered to copy MATRIX_ACCESS_TOKEN across —
+    // a credential-bleed. The alias-only detector must NOT flag a mismatch here.
+    writeEnv("MATRIX_ACCESS_TOKEN=syt-matrix-xxxx\nNTFY_TOKEN=tk_ntfy_xxxx\n");
+    const { runConfigHealthCheck } = await freshHealth(TEST_DIR);
+    const report = runConfigHealthCheck();
+    const issue = report.issues.find(
+      (i) => i.code === "UI_RUNTIME_ENVKEY_MISMATCH",
+    );
+    expect(issue).toBeUndefined();
   });
 
   it("flags NON_ASCII_CREDENTIAL for smart-quote contamination", async () => {

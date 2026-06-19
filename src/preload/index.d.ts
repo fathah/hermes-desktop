@@ -381,6 +381,48 @@ interface HermesAPI {
   ) => Promise<{ hasKey: boolean; providerId?: string; checkedAt?: number }>;
   invalidateSecretsCache: () => Promise<void>;
   generateApiServerKey: (profile?: string) => Promise<{ key: string }>;
+  secretsProviderStatus: (
+    profile?: string,
+  ) => Promise<{ provider: string; keys: string[]; count: number }>;
+  secretsProviderCanWrite: (
+    profile?: string,
+  ) => Promise<{ canWrite: boolean; canDelete: boolean }>;
+  secretsProviderWrite: (
+    key: string,
+    value: string,
+    profile?: string,
+  ) => Promise<{ ok: boolean; error?: string }>;
+  secretsProviderDelete: (
+    key: string,
+    profile?: string,
+  ) => Promise<{ ok: boolean; error?: string }>;
+  vaultDetectExisting: () => Promise<{
+    found: boolean;
+    kind: "tmpfs-env" | "vault-file" | "none";
+    path?: string;
+    keyPath?: string;
+    keys?: string[];
+    suggestedCommand?: string;
+  }>;
+  vaultToolAvailability: () => Promise<{
+    keepassxc: boolean;
+    tpm: boolean;
+    keepassxcHint?: string;
+    tpmHint?: string;
+  }>;
+  vaultCreate: (opts?: {
+    vaultPath?: string;
+    keyPath?: string;
+  }) => Promise<{
+    ok: boolean;
+    vaultPath?: string;
+    keyPath?: string;
+    suggestedCommand?: string;
+    error?: string;
+  }>;
+  vaultSealTpm: (
+    keyPath: string,
+  ) => Promise<{ ok: boolean; sealed: boolean; error?: string }>;
   copyToClipboard: (text: string) => Promise<void>;
   onContextMenuCopyChat: (
     callback: (format: "text" | "markdown") => void,

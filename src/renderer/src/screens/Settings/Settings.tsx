@@ -4,6 +4,7 @@ import { useFont } from "../../components/FontProvider";
 import { THEMES, FONT_OPTIONS } from "../../constants";
 import { useI18n } from "../../components/useI18n";
 import { APP_LOCALES, type AppLocale } from "../../../../shared/i18n";
+import { isAutoUpdateDisabled } from "../../../../shared/auto-update-gate";
 import {
   Check,
   ChevronDown,
@@ -17,6 +18,7 @@ import {
   setAnalyticsConsent,
 } from "../../utils/analytics";
 import { ConfigHealth } from "./ConfigHealth";
+import { SecretsProviders } from "./SecretsProviders";
 
 const DISCORD_COMMUNITY_URL = "https://discord.gg/vMwcnNPHc";
 type RemoteChatTransport = "auto" | "dashboard" | "legacy";
@@ -172,6 +174,7 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
   const connLoaded = useRef(false);
   const [apiServerKeyMissing, setApiServerKeyMissing] = useState(false);
   const [generatingKey, setGeneratingKey] = useState(false);
+  const [refreshingVault, setRefreshingVault] = useState(false);
 
   // SSH connection state
   const [sshHost, setSshHost] = useState("");
@@ -211,6 +214,10 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
   const [analyticsEnabled, setAnalyticsEnabled] = useState(() =>
     getAnalyticsConsent(),
   );
+  // Auto-update opt-out (desktop.auto_update). Default ENABLED — only an
+  // explicit `false` in config.yaml disables it. Mirrors the main-process gate
+  // in setupUpdater() so the UI and the updater agree.
+  const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(true);
   const loadConfigRequestRef = useRef(0);
 
   const loadConfig = useCallback(async (): Promise<void> => {
@@ -246,6 +253,20 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
     setSshLocalPort(conn.ssh?.localPort ? String(conn.ssh.localPort) : "");
     setApiServerKeyMissing(!keyStatus.hasKey);
     connLoaded.current = true;
+
+    // Auto-update opt-out: enabled unless config.yaml sets desktop.auto_update
+    // to a falsey string. Default (null/unset) => enabled, matching upstream.
+    // Uses the shared single-source-of-truth gate so the UI and the
+    // main-process updater in setupUpdater() cannot drift.
+    try {
+      const au = await window.hermesAPI.getConfig(
+        "desktop.auto_update",
+        profile,
+      );
+      setAutoUpdateEnabled(!isAutoUpdateDisabled(au));
+    } catch {
+      setAutoUpdateEnabled(true);
+    }
 
     const homeResult = await Promise.resolve()
       .then(() => window.hermesAPI.getHermesHome(profile))
@@ -296,11 +317,13 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
     void Promise.resolve().then(loadConfig);
   }, [loadConfig]);
 
+  // 10s polling so vault rotations refresh the warning UI without requiring
+  // navigation. Mirrors Gateway.tsx so both screens have the same cadence.
   useEffect(() => {
-    const unsubscribe = window.hermesAPI.onConnectionConfigChanged(() => {
+    const interval = setInterval(() => {
       void loadConfig();
-    });
-    return unsubscribe;
+    }, 10000);
+    return () => clearInterval(interval);
   }, [loadConfig]);
 
   const saveHttpProxy = useCallback(async (): Promise<void> => {
@@ -328,6 +351,18 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
       void saveHttpProxy();
     };
   }, [saveHttpProxy]);
+
+  async function refreshFromVault(): Promise<void> {
+    setRefreshingVault(true);
+    try {
+      await window.hermesAPI.invalidateSecretsCache();
+      await loadConfig();
+    } catch {
+      // fail silently — the 10s poll will catch up
+    } finally {
+      setRefreshingVault(false);
+    }
+  }
 
   async function handleMigrate(): Promise<void> {
     setMigrating(true);
@@ -702,6 +737,8 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
 
       <ConfigHealth />
 
+      <SecretsProviders profile={profile} />
+
       <div className="settings-section">
         <div className="settings-section-title">
           {t("settings.sections.hermesAgent")}
@@ -819,6 +856,44 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
               {dumpRunning ? t("settings.running") : t("settings.debugDump")}
             </button>
           </div>
+          <div className="settings-hermes-detail" style={{ marginTop: 10 }}>
+            <div>
+              <div className="settings-theme-system-label">
+                {t("settings.autoUpdate.label")}
+              </div>
+              <div className="settings-theme-system-hint">
+                {t("settings.autoUpdate.hint")}
+              </div>
+            </div>
+            <label
+              className="tools-toggle"
+              style={{ marginLeft: 12 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <input
+                type="checkbox"
+                checked={autoUpdateEnabled}
+                onChange={async (e) => {
+                  const enabled = e.target.checked;
+                  setAutoUpdateEnabled(enabled);
+                  try {
+                    await window.hermesAPI.setConfig(
+                      "desktop.auto_update",
+                      enabled ? "true" : "false",
+                      profile,
+                    );
+                    setUpdateResult(t("settings.autoUpdate.savedRestart"));
+                    setUpdateResultType("success");
+                  } catch {
+                    setAutoUpdateEnabled(!enabled);
+                    setUpdateResult(t("settings.autoUpdate.saveFailed"));
+                    setUpdateResultType("error");
+                  }
+                }}
+              />
+              <span className="tools-toggle-track" />
+            </label>
+          </div>
           {updateResult && (
             <div
               className={`settings-hermes-result ${updateResultType || "error"}`}
@@ -927,6 +1002,15 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
               {generatingKey
                 ? t("settings.generating")
                 : t("settings.generateKey")}
+            </button>
+            <button
+              className="btn btn-secondary"
+              disabled={refreshingVault}
+              onClick={() => void refreshFromVault()}
+            >
+              {refreshingVault
+                ? t("settings.refreshingFromVault")
+                : t("settings.refreshFromVault")}
             </button>
           </div>
         ) : (

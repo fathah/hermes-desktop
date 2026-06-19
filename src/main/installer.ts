@@ -15,8 +15,10 @@ import {
   getConnectionConfig,
   getModelConfig,
   hasOAuthCredentials,
+  getConfigValue,
 } from "./config";
 import { providerDoesNotNeedApiKey } from "./providers";
+import { aliasesForEnvKey } from "../shared/url-key-map";
 import { getActiveProfileNameSync, profileHome, stripAnsi } from "./utils";
 import { setupAskpass, AskpassHandle } from "./askpass";
 import { precacheSudoCredentials } from "./sudoCreds";
@@ -373,10 +375,61 @@ export function expectedEnvKeyForModel(
   return null;
 }
 
-function envHasUsableValue(
+/**
+ * Does the secrets-provider-resolved map hold a usable credential that
+ * satisfies the install gate for `expectedKey`?
+ *
+ * Alias-constrained when the provider is catalogued: only the canonical key OR
+ * one of its accepted aliases (KEY_ALIASES — single source of truth in
+ * ../shared/url-key-map) counts. An unrelated token-shaped credential in the
+ * vault (GITHUB_TOKEN, SLACK_BOT_TOKEN, …) must NOT pass — otherwise a user with
+ * no LLM key falsely clears the gate and lands on chat instead of Setup.
+ *
+ * Only when `expectedKey` is null (uncatalogued provider — we have no canonical
+ * key name to look for) do we fall back to a permissive `*_API_KEY|*_TOKEN`
+ * scan so a vault user on a custom host isn't falsely blocked.
+ *
+ * Mirrors resolvedHasKey() in config-health.ts. Exported for unit testing the
+ * security-gate behavior of the install check.
+ */
+export function vaultResolvedHasKey(
+  resolved: Record<string, unknown>,
+  expectedKey: string | null,
+): boolean {
+  const usable = (v: unknown): boolean =>
+    typeof v === "string" && v.trim() !== "";
+  if (expectedKey) {
+    return (
+      usable(resolved[expectedKey]) ||
+      aliasesForEnvKey(expectedKey).some((alias) => usable(resolved[alias]))
+    );
+  }
+  // Uncatalogued provider: accept any resolved provider-shaped credential.
+  return Object.entries(resolved).some(
+    ([k, v]) => /(_API_KEY|_TOKEN)$/.test(k) && usable(v),
+  );
+}
+
+/**
+ * True iff `content` (.env text) holds a usable value for `expectedKey` OR any
+ * of its accepted aliases (KEY_ALIASES). When `expectedKey` is null (provider
+ * not catalogued), accepts any `*_API_KEY`. Exported for unit testing the
+ * alias-equivalence behavior of the install gate.
+ */
+export function envHasUsableValue(
   content: string,
   expectedKey: string | null,
 ): boolean {
+  // A vault/.env may store the provider credential under the canonical key OR
+  // any accepted alias (e.g. anthropic accepts ANTHROPIC_API_KEY,
+  // ANTHROPIC_TOKEN, or CLAUDE_CODE_OAUTH_TOKEN). The install gate must treat
+  // them as equivalent — otherwise a vault-only user whose key is stored under
+  // an alias is falsely forced back through Setup on every launch. Mirrors the
+  // alias handling already in config-health and validation; KEY_ALIASES is the
+  // single source of truth (../shared/url-key-map).
+  const acceptedKeys = expectedKey
+    ? new Set<string>([expectedKey, ...aliasesForEnvKey(expectedKey)])
+    : null;
   for (const line of content.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) continue;
@@ -392,10 +445,17 @@ function envHasUsableValue(
     ) {
       value = value.slice(1, -1);
     }
-    if (!value) continue;
+    // Re-trim AFTER unquoting so a quoted-blank `KEY="  "` is treated as empty
+    // (not a usable credential) — otherwise a blank-but-quoted value would
+    // falsely satisfy the install gate.
+    if (!value.trim()) continue;
 
-    if (expectedKey) {
-      if (key === expectedKey) return true;
+    if (acceptedKeys) {
+      // Match the canonical key or any of its accepted aliases. This is an
+      // allowlist scoped to the provider's own key names — an unrelated token
+      // (TELEGRAM_BOT_TOKEN etc.) does NOT satisfy the gate (no credential
+      // bleed).
+      if (acceptedKeys.has(key)) return true;
     } else {
       // No known mapping for this provider/URL — accept any value that
       // looks like a credential. Avoids regressing users on providers
@@ -507,6 +567,35 @@ export function checkInstallStatus(): InstallStatus {
       hasApiKey = envHasUsableValue(content, expectedKey);
     } catch {
       /* ignore read errors */
+    }
+  }
+
+  // SECRETS-PROVIDER AWARENESS: a vault-backed user keeps no key in .env —
+  // the real value is resolved at runtime by the configured secrets provider
+  // (command/bitwarden), often under a gateway-token name (e.g. ANTHROPIC_TOKEN)
+  // that differs from the install-gate's expected .env name (ANTHROPIC_API_KEY).
+  // If a non-`env` provider is configured, ask it whether it can resolve a
+  // usable key before falsely forcing the user back through setup. Lazy require
+  // breaks the config -> secrets -> installer import cycle. Never throws.
+  if (!hasApiKey) {
+    try {
+      const provider = (getConfigValue("secrets.provider", activeProfile) || "")
+        .trim()
+        .toLowerCase();
+      if (provider && provider !== "env") {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports -- intentional lazy require to break the config<->secrets import cycle.
+        const { resolvedSecrets } =
+          require("./secrets") as typeof import("./secrets");
+        const resolved = resolvedSecrets(activeProfile);
+        const expectedKey = mc
+          ? expectedEnvKeyForModel(mc.provider, mc.baseUrl)
+          : null;
+        // Alias-constrained when the provider is catalogued — an unrelated
+        // vault token (GITHUB_TOKEN, SLACK_BOT_TOKEN) must NOT clear the gate.
+        hasApiKey = vaultResolvedHasKey(resolved, expectedKey);
+      }
+    } catch {
+      /* provider not resolvable — leave hasApiKey as-is */
     }
   }
 

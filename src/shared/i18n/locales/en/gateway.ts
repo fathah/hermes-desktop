@@ -65,4 +65,6 @@ export default {
     generateHint:
       "This key is shared between the desktop and the local gateway. Generating a new one restarts the gateway automatically.",
   },
+  refreshFromVault: "Refresh from vault",
+  refreshingFromVault: "Refreshing…",
 } as const;

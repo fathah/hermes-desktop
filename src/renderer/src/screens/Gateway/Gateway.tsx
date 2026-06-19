@@ -46,6 +46,7 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
     null,
   );
   const [generatingKey, setGeneratingKey] = useState(false);
+  const [refreshingVault, setRefreshingVault] = useState(false);
   const gatewayStatusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -53,9 +54,14 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
   const loadConfig = useCallback(async (): Promise<void> => {
     setLoadError(null);
     try {
-      const [gwStatus, platforms] = await Promise.all([
+      const [gwStatus, platforms, keyStatus] = await Promise.all([
         window.hermesAPI.gatewayStatus(),
         window.hermesAPI.getMessagingPlatforms(profile),
+        // Fetched here so the 10s poll picks up vault key rotations; a
+        // transient IPC failure must not take down the whole config load.
+        window.hermesAPI
+          .getApiServerKeyStatus(profile)
+          .catch(() => ({ hasKey: false })),
       ]);
       setGatewayRunning(gwStatus);
       // Clear stale start-failure banners once the gateway is confirmed up,
@@ -67,6 +73,7 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
         );
       }
       setCatalog(platforms);
+      setApiKeyStatus(keyStatus);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : String(err));
     }
@@ -83,22 +90,19 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
     return () => clearInterval(interval);
   }, [loadConfig]);
 
-  useEffect(() => {
-    let cancelled = false;
-    window.hermesAPI
-      .getApiServerKeyStatus(profile)
-      .then((status) => {
-        if (!cancelled) setApiKeyStatus(status);
-      })
-      .catch(() => {
-        // fail silently
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [profile]);
+  async function refreshFromVault(): Promise<void> {
+    setRefreshingVault(true);
+    try {
+      await window.hermesAPI.invalidateSecretsCache();
+      await loadConfig();
+    } catch {
+      // fail silently — the 10s poll will catch up
+    } finally {
+      setRefreshingVault(false);
+    }
+  }
 
-  const platforms = catalog?.platforms ?? [];
+  const platforms = useMemo(() => catalog?.platforms ?? [], [catalog]);
   const filteredPlatforms = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return platforms;
@@ -454,6 +458,15 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
                 {generatingKey
                   ? t("gateway.apiServerKey.regenerating")
                   : t("gateway.apiServerKey.generate")}
+              </button>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => void refreshFromVault()}
+                disabled={refreshingVault}
+              >
+                {refreshingVault
+                  ? t("gateway.refreshingFromVault")
+                  : t("gateway.refreshFromVault")}
               </button>
             </div>
             <div className="settings-field-hint">

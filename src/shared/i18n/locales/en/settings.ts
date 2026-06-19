@@ -98,6 +98,12 @@ export default {
   runDiagnosis: "Run Diagnosis",
   running: "Running...",
   debugDump: "Debug Dump",
+  autoUpdate: {
+    label: "Automatic updates",
+    hint: "Check for and install new versions on launch and quit. Turn off if you run a locally-built or patched app — a restart is required for the change to take effect.",
+    savedRestart: "Saved. Restart the app for the change to take effect.",
+    saveFailed: "Could not save the auto-update setting.",
+  },
   migrationDetected: "OpenClaw Installation Detected",
   migrationDesc:
     "Found OpenClaw at <code>{{path}}</code>. You can migrate your configuration, API keys, sessions, and skills to Hermes.",
@@ -182,4 +188,57 @@ export default {
   remoteErrorRequiredSimple: "Please enter a URL",
   remoteErrorFailedSimple: "Could not reach server",
   apiGenerated: "API key generated — gateway restarting…",
+  refreshFromVault: "Refresh from vault",
+  refreshingFromVault: "Refreshing…",
+
+  // Security Providers section (secrets.provider: env / command / bitwarden)
+  secrets_sectionTitle: "Security Providers",
+  secrets_sectionHint:
+    "Choose where Hermes resolves API keys from. Process env and .env always win over a provider — a provider only fills keys that aren't already set.",
+  secrets_active: "Active",
+  secrets_useProvider: "Use this",
+  secrets_activating: "Switching…",
+  secrets_envActiveNote:
+    "Reads keys from .env and the shell — no setup needed.",
+  secrets_providerEnvTitle: "Environment (.env)",
+  secrets_providerEnvDesc:
+    "The default. Keys come from ~/.hermes/.env and the shell environment.",
+  secrets_providerCommandTitle: "Command helper",
+  secrets_providerCommandDesc:
+    "Run a helper that prints the secret(s) — keepassxc-cli, pass, secret-tool, or a script that dumps a tmpfs env file. POSIX only.",
+  secrets_providerBitwardenTitle: "Bitwarden",
+  secrets_providerBitwardenDesc:
+    "Pull secrets from Bitwarden Secrets Manager (cloud). Configured from the CLI.",
+  secrets_helperCommandLabel: "Helper command",
+  secrets_helperCommandHint:
+    "The requested key is passed in $HERMES_SECRET_KEY (never interpolated into the command). Print the bare secret, or a KEY=VALUE dotenv blob.",
+  secrets_bitwardenCliHint:
+    "Set up Bitwarden from the terminal: hermes secrets bitwarden setup",
+  secrets_testButton: "Test",
+  secrets_testing: "Testing…",
+  secrets_testResolved: "Resolved {{count}} key(s):",
+  secrets_testValuesHidden: "Values are never displayed — only key names.",
+  secrets_vaultProvided: "Vault Provided",
+  secrets_testEmpty:
+    "No keys resolved. If this is a bare-value helper it still resolves single keys on demand; otherwise check the command.",
+  secrets_testFailed:
+    "The provider could not be tested. Check the helper command.",
+  // Stage 4 — vault edit/delete
+  secrets_writeHelperLabel: "Write / delete helpers (optional)",
+  secrets_writeHelperHint:
+    "Set these to edit/delete vault keys from here. The new value is fed to the write helper on STDIN (never the command line); the key name arrives in $HERMES_SECRET_KEY. Edit/Delete only appear when a helper is set AND the vault is unlocked.",
+  secrets_editKey: "Edit value",
+  secrets_deleteKey: "Delete key",
+  secrets_addKey: "Add key",
+  secrets_saveKey: "Save",
+  secrets_saving: "Saving…",
+  secrets_keyNamePlaceholder: "KEY_NAME (e.g. OPENROUTER_API_KEY)",
+  secrets_keyValuePlaceholder: "Secret value (write-only, never shown)",
+  secrets_mutateMissing: "Enter both a key name and a value.",
+  secrets_writeFailed:
+    "Write failed. Check the write helper and that the vault is unlocked.",
+  secrets_deleteFailed:
+    "Delete failed. Check the delete helper and that the vault is unlocked.",
+  secrets_deleteConfirm:
+    'Delete "{{key}}" from the vault? This cannot be undone.',
 } as const;

@@ -10,14 +10,9 @@ import {
   safeWriteFile,
 } from "./utils";
 import { getYamlPath } from "./yaml-path";
-// NOTE: ./secrets imports back into this module (getConfigValue / readEnv), so
-// this is a static import that closes a cycle (config -> secrets ->
-// commandProvider -> config). It is safe ONLY because BOTH sides defer all work
-// to call time: config.ts calls the three fns below inside function bodies, and
-// secrets/index.ts constructs its providers LAZILY (no `new` at module-init).
-// If you make secrets/index.ts construct a provider at module scope again, this
-// static import will throw "X is not a constructor" on load-order-dependent
-// paths. Keep provider construction lazy there, or make this import lazy here.
+// NOTE: ./secrets imports back into this module (getConfigValue / readEnv).
+// The cycle is safe because both sides only call each other's functions at
+// call time, never during module initialization.
 import {
   getSecretsProvider,
   providerListSafe,
@@ -198,6 +193,159 @@ export function invalidateSecretsCache(): void {
   // on the next provider read (S1: that cache is the helper-spawn rate floor,
   // explicit invalidation is the one sanctioned way to bust it early).
   invalidateProviderListCache();
+}
+
+/**
+ * Provider-status snapshot for the Settings UI's "Security Providers" section.
+ * Returns the active provider plus the NAMES of the keys it resolves — never
+ * the values. Used by the renderer's "Test" button so a user can confirm a
+ * vault helper actually resolves keys before relying on it, without any secret
+ * ever crossing the IPC boundary.
+ *
+ * Resolution goes through resolvedSecrets() (which itself routes through the
+ * spawn-rate-floored providerListSafe), so calling this repeatedly can't flood
+ * the main process with helper spawns.
+ */
+export function secretsProviderStatus(profile?: string): {
+  provider: string;
+  keys: string[];
+  count: number;
+} {
+  const selector = String(getConfigValue("secrets.provider", profile) ?? "")
+    .trim()
+    .toLowerCase();
+  // Back-compat: a bare bitwarden.enabled (no provider key) means bitwarden.
+  let provider = selector;
+  if (!provider) {
+    const bwEnabled = getConfigValue("secrets.bitwarden.enabled", profile);
+    provider = bwEnabled ? "bitwarden" : "env";
+  }
+
+  // env reads .env / shell directly — nothing the provider layer "resolves".
+  if (provider === "env") {
+    return { provider, keys: [], count: 0 };
+  }
+
+  let keys: string[] = [];
+  try {
+    // AIR-017: list ONLY what the PROVIDER (vault) resolves — providerListSafe()
+    // returns provider.list() (the vault key map, spawn-floor cached), NOT the
+    // process.env-overlaid resolvedSecrets(). This is the DISPLAY-path sibling of
+    // the canWrite fail-open fix: resolvedSecrets() overlays the ENTIRE
+    // process.env (PATH, HOME, npm_config_*, …) onto the vault keys, so in the
+    // Electron main process its key count is ~130, never the true vault size.
+    // The Security Providers UI renders each of these as a "Vault Provided" key —
+    // so resolvedSecrets() here would falsely label every env var as vault-provided.
+    // providerListSafe() gives the honest vault-only set. Values never leave the
+    // main process either way; we expose only NAMES.
+    keys = Object.keys(providerListSafe(profile)).sort();
+  } catch {
+    keys = [];
+  }
+  return { provider, keys, count: keys.length };
+}
+
+/**
+ * Write-capability probe for the Settings UI. Returns whether the vault can be
+ * EDITED / DELETED from the UI right now. Both are true ONLY when:
+ *   - the active provider is `command`, AND
+ *   - the respective write/delete helper is configured, AND
+ *   - the provider currently RESOLVES at least one key (proves the vault is
+ *     unlocked — you cannot safely write to a locked/empty vault).
+ * This is the gate behind the operator's "edit/delete only when unlocked" rule.
+ * No secret value ever crosses this boundary — it returns booleans only.
+ */
+/**
+ * Pure decision for the vault write/delete gate — extracted so the
+ * fail-open-on-lock invariant (H1) is unit-testable without the config/secrets
+ * module coupling. canWrite/canDelete are true ONLY when the provider is
+ * `command`, the vault currently resolves ≥1 key (providerKeyCount > 0, i.e.
+ * unlocked), AND the respective helper is configured.
+ */
+export function decideCanWrite(input: {
+  selector: string;
+  providerKeyCount: number;
+  hasWriteHelper: boolean;
+  hasDeleteHelper: boolean;
+}): { canWrite: boolean; canDelete: boolean } {
+  const unlockedCommand =
+    input.selector === "command" && input.providerKeyCount > 0;
+  return {
+    canWrite: unlockedCommand && input.hasWriteHelper,
+    canDelete: unlockedCommand && input.hasDeleteHelper,
+  };
+}
+
+/**
+ * Auto-updater opt-out gate. Re-exported from the shared single-source-of-truth
+ * helper (src/shared/auto-update-gate.ts) so the main-process gate in
+ * setupUpdater() and the renderer's "Automatic updates" toggle CANNOT drift —
+ * both consume the identical normalization. See that module for the full
+ * contract (ENABLED BY DEFAULT; only an explicit `false`/`0` disables).
+ */
+export { isAutoUpdateDisabled } from "../shared/auto-update-gate";
+
+/**
+ * Pure decision for whether setupUpdater() should SKIP all electron-updater
+ * wiring — extracted so the safety-critical gate is unit-testable without the
+ * Electron/ipcMain/`require("electron-updater")` coupling in setupUpdater().
+ *
+ * Returns true (skip wiring — register only the no-op IPC handlers and return)
+ * when ANY of:
+ *   - not packaged (dev mode): electron-updater can't replace a dev checkout.
+ *   - portable build: no install location to replace; an update check just
+ *     surfaces a spurious failure.
+ *   - explicitly disabled via config (`desktop.auto_update: false`/`0`): a user
+ *     on a locally-built/patched /opt artifact opted out so the updater can't
+ *     re-download the public release and overwrite their build on quit
+ *     (autoInstallOnAppQuit).
+ *
+ * When this returns true, setupUpdater() MUST return before it sets
+ * autoUpdater.autoDownload / autoInstallOnAppQuit — that early return IS the
+ * protection the opt-out exists for. This predicate makes that gate provable.
+ */
+export function shouldSkipUpdaterWiring(input: {
+  isPackaged: boolean;
+  isPortableBuild: boolean;
+  autoUpdateDisabled: boolean;
+}): boolean {
+  return (
+    !input.isPackaged || input.isPortableBuild || input.autoUpdateDisabled
+  );
+}
+
+export function secretsProviderCanWrite(profile?: string): {
+  canWrite: boolean;
+  canDelete: boolean;
+} {
+  const selector = String(getConfigValue("secrets.provider", profile) ?? "")
+    .trim()
+    .toLowerCase();
+  if (selector !== "command") {
+    return { canWrite: false, canDelete: false };
+  }
+  // "Unlocked" gate: count ONLY the keys the PROVIDER resolves, NOT the
+  // env-merged view. secretsProviderStatus()/resolvedSecrets() overlay all of
+  // process.env (PATH, HOME, …), so their count is never 0 in the Electron main
+  // process — using it would make the gate vacuous (fail-open) on a vault WRITE
+  // path. providerListSafe() is the raw vault list: empty when the vault is
+  // locked or has no entries.
+  let providerKeyCount = 0;
+  try {
+    providerKeyCount = Object.keys(providerListSafe(profile)).length;
+  } catch {
+    providerKeyCount = 0;
+  }
+  // Lazy require breaks the config -> secrets import cycle.
+  type WriteMod = typeof import("./secrets/commandProviderWrite");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const w = require("./secrets/commandProviderWrite") as WriteMod;
+  return decideCanWrite({
+    selector,
+    providerKeyCount,
+    hasWriteHelper: w.hasWriteHelper(profile),
+    hasDeleteHelper: w.hasDeleteHelper(profile),
+  });
 }
 
 export function readEnv(profile?: string): Record<string, string> {
@@ -957,7 +1105,16 @@ export function setModelConfig(
   let content = existsSync(configFile) ? readFileSync(configFile, "utf-8") : "";
 
   content = upsertBlockChild(content, "model", "provider", provider);
-  content = upsertBlockChild(content, "model", "default", model);
+  // NEVER write an empty model name. An empty `model.default` makes the gateway
+  // POST `model: ""`, which Anthropic/OpenAI reject with a 400/404
+  // ("model: String should have at least 1 character"). The Setup model-name
+  // field is optional, so a blank submission used to persist "" here and brick
+  // chat. When `model` is empty we leave any EXISTING model.default untouched
+  // (a prior valid selection survives) and simply don't write an empty one.
+  // Callers that genuinely want to set a model pass a non-empty string.
+  if (model.trim()) {
+    content = upsertBlockChild(content, "model", "default", model.trim());
+  }
 
   // Pick the effective base_url to write.  Precedence:
   //   1. User-supplied `baseUrl` (the renderer passes this when the user

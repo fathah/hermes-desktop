@@ -21,9 +21,10 @@ import {
   hasOAuthCredentials,
   readEnv,
   customEndpointKeyResolvable,
+  getConnectionConfig,
 } from "./config";
 import { expectedEnvKeyForModel } from "./installer";
-import { isLocalBaseUrl } from "../shared/url-key-map";
+import { isLocalBaseUrl, aliasesForEnvKey } from "../shared/url-key-map";
 
 export type ChatReadinessCode =
   | "NO_ACTIVE_MODEL"
@@ -83,6 +84,18 @@ const NO_KEY_PROVIDERS = new Set(["auto"]);
  */
 export function validateChatReadiness(profile?: string): ChatReadiness {
   try {
+    // Remote / SSH connection mode: the model API key lives on the *remote*
+    // hermes-agent gateway, not in this desktop's local .env. The desktop only
+    // needs its connection credential (remoteApiKey / SSH creds) to reach that
+    // gateway — which getConnectionConfig() already validates elsewhere. A
+    // local key-presence check here produces a false MISSING_API_KEY block for
+    // every vault-only / remote user (issue: vault-only remote users blocked
+    // from Send). checkInstallStatus() established this precedent — mirror it.
+    // Fail open: defer key validation to the remote gateway's own auth path.
+    const conn = getConnectionConfig();
+    if (conn.mode === "remote" && conn.remoteUrl) return OK;
+    if (conn.mode === "ssh") return OK;
+
     const mc = getModelConfig(profile);
     const provider = (mc.provider || "").trim().toLowerCase();
     const model = (mc.model || "").trim();
@@ -142,6 +155,18 @@ export function validateChatReadiness(profile?: string): ChatReadiness {
     // resolves the credential from a properly-shaped auth.json entry.
     // If we have that evidence, allow Send.
     if (hasOAuthCredentials(provider, profile)) return OK;
+
+    // Credential NAME-ALIAS: the canonical expectedKey is empty, but the gateway
+    // also accepts equivalent names (ANTHROPIC_TOKEN / CLAUDE_CODE_OAUTH_TOKEN for
+    // ANTHROPIC_API_KEY). If any accepted alias is populated in .env/tmpfs, the
+    // credential IS available — do NOT block Send. This mirrors the install gate,
+    // the config-health warning, and the Setup detection. Without this, a vault
+    // user whose Anthropic credential is the OAuth token gets a false
+    // "Missing ANTHROPIC_API_KEY" pre-send block even though the gateway
+    // authenticates fine via the Bearer path.
+    for (const alias of aliasesForEnvKey(expectedKey)) {
+      if ((env[alias] ?? "").trim()) return OK;
+    }
 
     return {
       ok: false,
