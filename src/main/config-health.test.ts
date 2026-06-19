@@ -143,7 +143,7 @@ describe("config-health audit - vault awareness", () => {
       mode: "local",
       remoteUrl: "",
       apiKey: "",
-    } as ReturnType<typeof getConnectionConfig>);
+    } as ReturnType<typeof mockedGetConnectionConfig>);
   });
 
   afterEach(() => {
@@ -212,7 +212,7 @@ describe("config-health audit - vault awareness", () => {
       // the alias-aware lookup, a vault-only user with ANTHROPIC_TOKEN saw a
       // false "ANTHROPIC_API_KEY is not set" warning on every chat start even
       // though the gateway authenticated fine.
-      FAKE_VAULT = { ANTHROPIC_TOKEN: "sk-ant-from-vault" };
+      mocks.fakeVault = { ANTHROPIC_TOKEN: "sk-ant-from-vault" };
       const report = runConfigHealthCheck("default");
       const codes = report.issues.map((i) => i.code);
       expect(codes).not.toContain("MODEL_KEY_MISSING");
