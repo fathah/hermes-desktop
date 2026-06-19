@@ -71,6 +71,7 @@ export function CommandPalette() {
   const setExternalSessionsOpen = useStore((s) => s.setExternalSessionsOpen);
   const setSurface = useStore((s) => s.setSurface);
   const flash = useStore((s) => s.flash);
+  const openContentStudioIdea = useStore((s) => s.openContentStudioIdea);
 
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
@@ -172,8 +173,8 @@ export function CommandPalette() {
       },
     };
     await saveContentIdea(idea);
-    flash("Saved selected text as a Content Studio idea.");
-  }, [flash, meta, page]);
+    openContentStudioIdea(idea);
+  }, [flash, meta, openContentStudioIdea, page]);
 
   const actions: ActionItem[] = useMemo(
     () => [

@@ -1,5 +1,16 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const store = vi.hoisted(() => ({
+  openContentStudioIdea: vi.fn(),
+  openDeckStudioInput: vi.fn(),
+  setSurface: vi.fn(),
+}));
+
+vi.mock("../store", () => ({
+  useStore: (selector: (s: typeof store) => unknown) => selector(store),
+}));
+
 import { RssReaderDashboard } from "./RssReaderDashboard";
 
 const api = {
@@ -16,6 +27,7 @@ const api = {
   sourceIntakePreviewUrl: vi.fn(),
   sourceIntakeInstallInstructions: vi.fn(),
   spsSubstackRadarListRuns: vi.fn(),
+  spsExportRow: vi.fn(),
 };
 
 function installApi(): void {
@@ -24,6 +36,9 @@ function installApi(): void {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  store.openContentStudioIdea.mockReset();
+  store.openDeckStudioInput.mockReset();
+  store.setSurface.mockReset();
   installApi();
   api.spsRssGetFeeds.mockResolvedValue([]);
   api.spsRssGetArticles.mockResolvedValue([]);
@@ -67,6 +82,7 @@ beforeEach(() => {
     "pipx install crawl4ai",
   );
   api.spsSubstackRadarListRuns.mockResolvedValue([]);
+  api.spsExportRow.mockResolvedValue(true);
 });
 
 afterEach(() => {
@@ -100,5 +116,50 @@ describe("RssReaderDashboard Substack flow", () => {
       });
       expect(api.spsRssSyncFeeds).toHaveBeenCalled();
     });
+  });
+
+  it("opens Content Studio after saving an RSS article as a content idea", async () => {
+    api.spsRssGetArticles.mockResolvedValue([
+      {
+        id: "rss-article-1",
+        feed_id: "feed-1",
+        feed_title: "Operator Feed",
+        guid: "guid-1",
+        title: "RSS Field Notes",
+        author: "A. Writer",
+        url: "https://example.com/rss-field-notes",
+        published_at: 1_797_000_000_000,
+        content_text: "Longer article body for operators.",
+        summary_excerpt: "A practical note from RSS.",
+        read_status: 1,
+        star_status: 1,
+        relevance_score: 91,
+      },
+    ]);
+    render(<RssReaderDashboard />);
+
+    fireEvent.click(await screen.findByText("RSS Field Notes"));
+    fireEvent.click(
+      screen.getByRole("button", { name: /save as content idea/i }),
+    );
+
+    await waitFor(() =>
+      expect(api.spsExportRow).toHaveBeenCalledWith(
+        "content-ideas",
+        "content-idea-rss-field-notes",
+        expect.stringContaining('type: "content-idea"'),
+      ),
+    );
+    const markdown = String(api.spsExportRow.mock.calls.at(-1)?.[2] ?? "");
+    expect(markdown).toContain("https://example.com/rss-field-notes");
+    expect(markdown).toContain('capturedFrom: "rss-reader"');
+    expect(store.openContentStudioIdea).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "RSS Field Notes",
+        sourceUrls: ["https://example.com/rss-field-notes"],
+        angle: "A practical note from RSS.",
+        capturedFrom: "rss-reader",
+      }),
+    );
   });
 });

@@ -2,6 +2,7 @@ import React, { useCallback, useState, useEffect } from "react";
 import { Icon } from "../components/Icon";
 import { SourceIntakePanel } from "./SourceIntakePanel";
 import { saveContentIdea } from "../content/contentStudioStorage";
+import { useStore } from "../store";
 import type { ContentIdea } from "../../../../../shared/content-studio";
 
 interface RssFeed {
@@ -39,6 +40,7 @@ interface RssArticleQuery {
 }
 
 export function RssReaderDashboard(): React.JSX.Element {
+  const openContentStudioIdea = useStore((s) => s.openContentStudioIdea);
   const [feeds, setFeeds] = useState<RssFeed[]>([]);
   const [articles, setArticles] = useState<RssArticle[]>([]);
   const [activeFeedId, setActiveFeedId] = useState<string | null>(null);
@@ -186,7 +188,7 @@ ${art.content_raw?.replace(/<[^>]*>/g, "") || art.summary_excerpt || "No content
       },
     };
     await saveContentIdea(idea);
-    alert("Saved as a Content Studio idea.");
+    openContentStudioIdea(idea);
   };
 
   // Group feeds by category
