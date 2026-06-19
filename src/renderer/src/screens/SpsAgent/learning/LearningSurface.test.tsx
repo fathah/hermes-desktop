@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from "@testing-library/react";
 
 vi.mock("../you/MemoryTimeline", () => ({
   MemoryTimeline: () => <div>Learned memory timeline</div>,
@@ -498,6 +504,228 @@ describe("LearningSurface", () => {
       ),
     );
     expect(await screen.findByText(/Installed Mac Expert/)).toBeInTheDocument();
+  });
+
+  it("shows Google Docs Editors workflows and installs that expert from the existing Experts tab", async () => {
+    api.spsListLocalExperts.mockResolvedValue({
+      packs: [
+        {
+          id: "macos",
+          title: "Mac Expert",
+          description: "Source-backed macOS guidance.",
+          domain: "macos",
+          version: "1.0.0",
+          recordCount: 12,
+          sourceTiers: ["apple_official", "mac_admin"],
+          installed: false,
+          packHash: "abc123def4567890",
+          freshness: {
+            status: "current",
+            current: 12,
+            stale: 0,
+            expired: 0,
+            unknown: 0,
+          },
+        },
+        {
+          id: "google-docs-editors",
+          title: "Google Docs Editors Expert",
+          description:
+            "Source-backed Google Workspace guidance for Drive sharing, Docs, Sheets, Slides, and lightweight Apps Script automation.",
+          domain: "google-workspace",
+          version: "1.0.0",
+          recordCount: 10,
+          sourceTiers: [
+            "google_workspace_official",
+            "google_developer_official",
+          ],
+          installed: false,
+          packHash: "feed1234cafe5678",
+          freshness: {
+            status: "current",
+            current: 10,
+            stale: 0,
+            expired: 0,
+            unknown: 0,
+          },
+        },
+      ],
+    });
+    api.spsGetLocalExpert.mockImplementation(async (packId: string) =>
+      packId === "google-docs-editors"
+        ? {
+            ok: true,
+            packId: "google-docs-editors",
+            sourceTiers: [
+              "google_workspace_official",
+              "google_developer_official",
+            ],
+            freshness: {
+              status: "current",
+              current: 10,
+              stale: 0,
+              expired: 0,
+              unknown: 0,
+            },
+            pack: {
+              id: "google-docs-editors",
+              title: "Google Docs Editors Expert",
+              domain: "google-workspace",
+              version: "1.0.0",
+              description:
+                "Source-backed Google Workspace guidance for Drive sharing, Docs, Sheets, Slides, and lightweight Apps Script automation.",
+              sourceTiers: [
+                "google_workspace_official",
+                "google_developer_official",
+              ],
+              recipe: {
+                name: "Google Docs Editors Expert",
+                description: "Google Workspace guidance",
+                job: "Never access Gmail, Drive, Docs, Sheets, Slides, or Apps Script directly.",
+                inputs: "Question and visible evidence",
+                output: "Cited guidance",
+              },
+              records: [
+                {
+                  id: "drive-share-specific-people",
+                  title: "Share Drive Files With Specific People",
+                  topic: "drive.sharing.people",
+                  sourceTier: "google_workspace_official",
+                  appliesTo: ["Google Drive", "Google Docs editors"],
+                  symptoms: ["A collaborator cannot open a Google file"],
+                  steps: ["Open Share"],
+                  verification: ["The intended person appears"],
+                  risk: "medium",
+                  sourceUrls: [
+                    "https://support.google.com/docs/answer/2494822?hl=en",
+                  ],
+                  lastVerified: "2026-06-18",
+                  tags: ["drive", "sharing", "permissions"],
+                },
+                {
+                  id: "workspace-admin-policy-boundaries",
+                  title: "Recognize Workspace Admin Policy Boundaries",
+                  topic: "workspace.admin_policy",
+                  sourceTier: "google_workspace_official",
+                  appliesTo: ["Google Workspace Admin", "Google Drive"],
+                  symptoms: ["External sharing is blocked"],
+                  steps: ["Collect the exact error text"],
+                  verification: ["A Workspace admin confirms the policy"],
+                  risk: "high",
+                  sourceUrls: ["https://support.google.com/a/answer/60781"],
+                  lastVerified: "2026-06-18",
+                  tags: ["admin", "policy", "sharing"],
+                },
+              ],
+              scenarios: [
+                {
+                  id: "client-cannot-open-shared-file",
+                  title: "Client cannot open shared file",
+                  prompt:
+                    "A client or outside collaborator says they cannot open a shared Google file.",
+                  recordIds: [
+                    "drive-share-specific-people",
+                    "workspace-admin-policy-boundaries",
+                  ],
+                  requiredEvidence: [
+                    "Exact error text or access request message",
+                    "Current role shown in Share: viewer, commenter, or editor",
+                  ],
+                  expectedSections: [
+                    "What to check",
+                    "Steps",
+                    "Verification",
+                    "Risk",
+                    "Sources",
+                  ],
+                  risk: "medium",
+                },
+              ],
+            },
+          }
+        : {
+            ok: true,
+            packId: "macos",
+            sourceTiers: ["apple_official", "mac_admin"],
+            freshness: {
+              status: "current",
+              current: 12,
+              stale: 0,
+              expired: 0,
+              unknown: 0,
+            },
+            pack: {
+              id: "macos",
+              title: "Mac Expert",
+              domain: "macos",
+              version: "1.0.0",
+              description: "Source-backed macOS guidance.",
+              sourceTiers: ["apple_official", "mac_admin"],
+              recipe: {
+                name: "Mac Expert",
+                description: "Mac guidance",
+                job: "Ask before suggesting Terminal commands.",
+                inputs: "Question",
+                output: "Answer",
+              },
+              records: [],
+            },
+          },
+    );
+    api.spsInstallLocalExpert.mockResolvedValue({
+      ok: true,
+      packId: "google-docs-editors",
+      installed: true,
+      recordsWritten: 10,
+      recordsSkipped: 0,
+      recipeId: "ar_google_docs",
+      skillPath:
+        "/skills/assistant-recipes/assistant-google-docs-editors-expert",
+      recordsLeftInVault: false,
+    });
+
+    render(<LearningSurface profile="default" />);
+
+    fireEvent.click(await screen.findByText("Experts"));
+    const googleCard = (
+      await screen.findAllByText("Google Docs Editors Expert")
+    )[0].closest(".memory-entry-card");
+    if (!(googleCard instanceof HTMLElement)) {
+      throw new Error("Google expert card was not rendered.");
+    }
+    expect(within(googleCard).getByText(/10 records/)).toBeInTheDocument();
+
+    fireEvent.click(within(googleCard).getByText("View"));
+
+    expect(
+      await screen.findByText("Client cannot open shared file"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Common workflows/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Exact error text or access request message/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/drive-share-specific-people/)).toBeInTheDocument();
+    expect(
+      screen.getByText("Share Drive Files With Specific People"),
+    ).toBeInTheDocument();
+
+    const selectedGoogleCard = screen
+      .getAllByText("Google Docs Editors Expert")[0]
+      .closest(".memory-entry-card");
+    if (!(selectedGoogleCard instanceof HTMLElement)) {
+      throw new Error("Google expert card was not available for install.");
+    }
+    fireEvent.click(within(selectedGoogleCard).getByText("Install"));
+
+    await waitFor(() =>
+      expect(api.spsInstallLocalExpert).toHaveBeenCalledWith(
+        "google-docs-editors",
+        "default",
+      ),
+    );
+    expect(
+      await screen.findByText(/Installed Google Docs Editors Expert/),
+    ).toBeInTheDocument();
   });
 
   it("shows local expert detail and runs pack actions", async () => {
