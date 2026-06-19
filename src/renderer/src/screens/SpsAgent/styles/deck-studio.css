@@ -538,6 +538,145 @@
   min-height: 44px;
 }
 
+.sps-scope[data-theme="dark"] .deck-studio {
+  background: var(--canvas);
+  color: var(--tx-1);
+}
+
+.sps-scope[data-theme="dark"] .deck-eyebrow,
+.sps-scope[data-theme="dark"] .deck-brief label,
+.sps-scope[data-theme="dark"] .deck-brief-settings label,
+.sps-scope[data-theme="dark"] .deck-inspector label,
+.sps-scope[data-theme="dark"] .deck-slide-toolbar label,
+.sps-scope[data-theme="dark"] .deck-outline-row small,
+.sps-scope[data-theme="dark"] .deck-thumb span {
+  color: var(--tx-3);
+}
+
+.sps-scope[data-theme="dark"] .deck-tabs,
+.sps-scope[data-theme="dark"] .deck-brief-settings,
+.sps-scope[data-theme="dark"] .deck-inspector,
+.sps-scope[data-theme="dark"] .deck-export,
+.sps-scope[data-theme="dark"] .deck-outline-row,
+.sps-scope[data-theme="dark"] .deck-thumb,
+.sps-scope[data-theme="dark"] .deck-issues,
+.sps-scope[data-theme="dark"] .deck-mode,
+.sps-scope[data-theme="dark"] .deck-message,
+.sps-scope[data-theme="dark"] .deck-qa-panel {
+  border-color: var(--hair);
+  background: var(--surface);
+  color: var(--tx-1);
+}
+
+.sps-scope[data-theme="dark"] .deck-tabs button {
+  color: var(--tx-2);
+}
+
+.sps-scope[data-theme="dark"] .deck-tabs button.active,
+.sps-scope[data-theme="dark"] .deck-brief-actions button,
+.sps-scope[data-theme="dark"] .deck-outline-actions button,
+.sps-scope[data-theme="dark"] .deck-export button,
+.sps-scope[data-theme="dark"] .deck-qa-panel button {
+  background: var(--accent);
+  color: #111111;
+}
+
+.sps-scope[data-theme="dark"] .deck-brief-actions .secondary,
+.sps-scope[data-theme="dark"] .deck-outline-actions .secondary,
+.sps-scope[data-theme="dark"] .deck-export .secondary {
+  border: 1px solid var(--hair);
+  background: var(--sunk);
+  color: var(--tx-1);
+}
+
+.sps-scope[data-theme="dark"] .deck-brief textarea,
+.sps-scope[data-theme="dark"] .deck-brief-settings input,
+.sps-scope[data-theme="dark"] .deck-brief-settings select,
+.sps-scope[data-theme="dark"] .deck-inspector input,
+.sps-scope[data-theme="dark"] .deck-inspector textarea,
+.sps-scope[data-theme="dark"] .deck-slide-toolbar select {
+  border-color: var(--hair);
+  background: var(--sunk);
+  color: var(--tx-1);
+}
+
+.sps-scope[data-theme="dark"] .deck-brief textarea::placeholder,
+.sps-scope[data-theme="dark"] .deck-inspector textarea::placeholder {
+  color: var(--tx-4);
+}
+
+.sps-scope[data-theme="dark"] .deck-theme-gallery button,
+.sps-scope[data-theme="dark"] .deck-saved button {
+  border-color: var(--hair);
+  background: var(--sunk);
+  color: var(--tx-1);
+}
+
+.sps-scope[data-theme="dark"] .deck-theme-gallery button.active,
+.sps-scope[data-theme="dark"] .deck-thumb.active {
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.sps-scope[data-theme="dark"] .deck-theme-gallery button span {
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.sps-scope[data-theme="dark"] .deck-saved,
+.sps-scope[data-theme="dark"] .deck-canvas {
+  border-color: var(--hair);
+}
+
+.sps-scope[data-theme="dark"] .deck-outline-row span {
+  color: var(--accent);
+}
+
+.sps-scope[data-theme="dark"] .deck-outline-row p,
+.sps-scope[data-theme="dark"] .deck-qa-panel p,
+.sps-scope[data-theme="dark"] .deck-export p,
+.sps-scope[data-theme="dark"] .deck-qa-list span {
+  color: var(--tx-2);
+}
+
+.sps-scope[data-theme="dark"] .deck-qa-ok {
+  background: color-mix(in oklab, #36d37f 18%, var(--surface));
+  color: #9df4c1;
+}
+
+.sps-scope[data-theme="dark"] .deck-qa-list div {
+  border-left-color: #d59a00;
+  background: color-mix(in oklab, #d59a00 16%, var(--surface));
+}
+
+.sps-scope[data-theme="dark"] .deck-qa-list div[data-severity="blocker"],
+.sps-scope[data-theme="dark"] .deck-issues,
+.sps-scope[data-theme="dark"] .deck-message.error {
+  border-color: #7a3624;
+  background: color-mix(in oklab, #842d12 18%, var(--surface));
+  color: #ffb59d;
+}
+
+.sps-scope[data-theme="dark"] .deck-message.success {
+  border-color: #2d6d41;
+  background: color-mix(in oklab, #185a2b 22%, var(--surface));
+  color: #a7f3b8;
+}
+
+.sps-scope[data-theme="dark"] .deck-qa-list strong {
+  color: var(--tx-1);
+}
+
+.sps-scope .deck-tabs button:focus-visible,
+.sps-scope .deck-brief-actions button:focus-visible,
+.sps-scope .deck-outline-actions button:focus-visible,
+.sps-scope .deck-export button:focus-visible,
+.sps-scope .deck-theme-gallery button:focus-visible,
+.sps-scope .deck-thumb:focus-visible,
+.sps-scope .deck-qa-panel button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 @media (max-width: 980px) {
   .sps-scope .deck-studio {
     padding: 18px;

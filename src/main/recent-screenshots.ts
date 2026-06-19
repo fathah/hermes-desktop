@@ -65,6 +65,9 @@ async function candidateDirs(
   homeDir: string,
   readMacScreenshotLocation = defaultReadMacScreenshotLocation,
 ): Promise<string[]> {
+  const envDir = process.env.HERMES_RECENT_SCREENSHOT_DIR?.trim();
+  if (envDir) return [expandHome(envDir, homeDir)];
+
   const configured = await readMacScreenshotLocation().catch(() => null);
   const dirs = [
     configured ? expandHome(configured, homeDir) : null,

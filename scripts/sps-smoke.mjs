@@ -15,8 +15,10 @@
 import { _electron as electron } from "playwright";
 import {
   chmodSync,
+  existsSync,
   mkdtempSync,
   mkdirSync,
+  readFileSync,
   readdirSync,
   unlinkSync,
   writeFileSync,
@@ -31,6 +33,19 @@ for (const name of readdirSync(OUT)) {
 }
 
 const HOME = mkdtempSync(join(tmpdir(), "hermes-smoke-"));
+const SCREENSHOT_DIR = join(HOME, "smoke-screenshots");
+const SEEDED_SCREENSHOT_NAME = "Screenshot 2026-06-19 at 09.00.00.png";
+const SEEDED_SCREENSHOT_NOTE =
+  "Use this screenshot in the smoke Deck Studio brief.";
+
+mkdirSync(SCREENSHOT_DIR, { recursive: true });
+writeFileSync(
+  join(SCREENSHOT_DIR, SEEDED_SCREENSHOT_NAME),
+  Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+    "base64",
+  ),
+);
 
 // ── install markers: file existence is enough to pass checkInstallStatus, so
 //    App.tsx routes straight to the main (SPS) screen. ───────────────────────
@@ -204,8 +219,11 @@ const expectedShots = [
   "16-content-studio-evidence-block",
   "17-content-studio-evidence-approve",
   "18-content-studio-publish",
-  "19-deck-studio",
-  "20-deck-studio-export",
+  "19-sources-screenshot",
+  "20-sources-screenshot-import",
+  "21-sources-screenshot-deck",
+  "22-deck-studio",
+  "23-deck-studio-export",
 ];
 const shots = [];
 const shotFailures = [];
@@ -219,6 +237,7 @@ const app = await electron.launch({
   env: {
     ...process.env,
     HERMES_HOME: HOME,
+    HERMES_RECENT_SCREENSHOT_DIR: SCREENSHOT_DIR,
     ELECTRON_DISABLE_SECURITY_WARNINGS: "1",
   },
 });
@@ -238,6 +257,53 @@ async function shot(name, fn) {
     const message = e instanceof Error ? e.message : String(e);
     shotFailures.push({ name, message });
     console.log("SHOT FAIL:", name, "-", message);
+  }
+}
+
+async function waitForInputValue(locator, predicate, label, timeoutMs = 8000) {
+  const start = Date.now();
+  let value = "";
+  while (Date.now() - start < timeoutMs) {
+    value = await locator.inputValue().catch(() => "");
+    if (predicate(value)) return value;
+    await win.waitForTimeout(100);
+  }
+  throw new Error(`${label} did not match; last value: ${value}`);
+}
+
+function findScreenshotCapture() {
+  const inboxDir = join(vault, "_inbox");
+  const names = readdirSync(inboxDir).filter((name) => name.endsWith(".md"));
+  for (const name of names) {
+    const path = join(inboxDir, name);
+    const markdown = readFileSync(path, "utf-8");
+    if (markdown.includes(SEEDED_SCREENSHOT_NAME)) {
+      return { path, markdown };
+    }
+  }
+  throw new Error("seeded screenshot Inbox capture was not written");
+}
+
+function assertScreenshotCapturePersisted() {
+  const { markdown } = findScreenshotCapture();
+  if (!markdown.includes('source: "screenshot"')) {
+    throw new Error("screenshot capture is missing screenshot source metadata");
+  }
+  if (!markdown.includes('captureKind: "source"')) {
+    throw new Error("screenshot capture is missing source capture kind");
+  }
+  if (!markdown.includes(SEEDED_SCREENSHOT_NOTE)) {
+    throw new Error("screenshot capture did not persist the smoke note");
+  }
+  const assetMatch = markdown.match(
+    /!\[Screenshot\]\(\.\.\/_assets\/([^)]+)\)/,
+  );
+  if (!assetMatch?.[1]) {
+    throw new Error("screenshot capture is missing an asset reference");
+  }
+  const assetPath = join(vault, "_assets", assetMatch[1]);
+  if (!existsSync(assetPath)) {
+    throw new Error(`screenshot asset was not written: ${assetPath}`);
   }
 }
 
@@ -440,8 +506,53 @@ await shot("18-content-studio-publish", async () => {
     .waitFor({ timeout: 8000 });
 });
 
-// 19 — Deck Studio turns rough notes into an approved editable slide preview.
-await shot("19-deck-studio", async () => {
+// 19 — Sources surfaces the seeded recent screenshot candidate from the isolated
+// smoke directory, not from the developer's real screenshot folders.
+await shot("19-sources-screenshot", async () => {
+  await win.locator(".nav-item", { hasText: "RSS Reader" }).first().click();
+  await win.getByText("SPS RSS Intel Reader").waitFor({ timeout: 8000 });
+  await win.getByRole("button", { name: "Sources" }).click();
+  await win.getByRole("tab", { name: "Screenshot" }).click();
+  await win.getByText(SEEDED_SCREENSHOT_NAME).waitFor({ timeout: 8000 });
+});
+
+// 20 — importing the recent screenshot writes the asset and the raw Inbox source
+// capture, including the user's note.
+await shot("20-sources-screenshot-import", async () => {
+  await win.getByLabel("Screenshot note").fill(SEEDED_SCREENSHOT_NOTE);
+  await win.getByRole("button", { name: "Import to Inbox" }).click();
+  await win.getByText("Imported to Inbox.").waitFor({ timeout: 8000 });
+  await win.getByText(/Saved as Inbox capture/).waitFor({ timeout: 8000 });
+  assertScreenshotCapturePersisted();
+});
+
+// 21 — the imported screenshot opens Deck Studio with a generated source brief
+// and the no-OCR-yet handoff, without calling live OCR or network services.
+await shot("21-sources-screenshot-deck", async () => {
+  await win.getByRole("button", { name: "Deck from screenshot" }).click();
+  await win.getByRole("heading", { name: "Deck Studio" }).waitFor({
+    timeout: 8000,
+  });
+  const roughNotes = await waitForInputValue(
+    win.getByLabel("Rough notes"),
+    (value) =>
+      value.includes("Screenshot Inbox capture") &&
+      value.includes(SEEDED_SCREENSHOT_NAME) &&
+      value.includes("OCR has not been run yet"),
+    "Deck Studio screenshot brief",
+  );
+  if (!roughNotes.includes("Stored asset:")) {
+    throw new Error("Deck Studio screenshot brief is missing the stored asset");
+  }
+  await waitForInputValue(
+    win.getByLabel("Goal"),
+    (value) => value.includes("turn this screenshot capture into a deck brief"),
+    "Deck Studio screenshot goal",
+  );
+});
+
+// 22 — Deck Studio turns rough notes into an approved editable slide preview.
+await shot("22-deck-studio", async () => {
   await win.locator(".nav-item", { hasText: "Deck Studio" }).first().click();
   await win.getByRole("heading", { name: "Deck Studio" }).waitFor({
     timeout: 8000,
@@ -461,8 +572,8 @@ await shot("19-deck-studio", async () => {
     .waitFor({ timeout: 8000 });
 });
 
-// 20 — Deck Studio export writes PDF/PPTX outputs plus notes sidecar.
-await shot("20-deck-studio-export", async () => {
+// 23 — Deck Studio export writes PDF/PPTX outputs plus notes sidecar.
+await shot("23-deck-studio-export", async () => {
   await win.getByRole("button", { name: "export" }).click();
   await win.getByRole("button", { name: "Export PDF" }).click();
   await win.getByText(/PDF exported:/).waitFor({ timeout: 15000 });

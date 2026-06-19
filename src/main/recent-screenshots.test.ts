@@ -123,6 +123,53 @@ describe("listRecentScreenshots", () => {
       "Screenshot Custom.png",
     ]);
   });
+
+  it("uses the smoke screenshot directory override without scanning fallback dirs", async () => {
+    const home = tempRoot();
+    const override = join(home, "Smoke Screenshots");
+    const configured = join(home, "Custom Screenshots");
+    const desktop = join(home, "Desktop");
+    await mkdir(override, { recursive: true });
+    await mkdir(configured, { recursive: true });
+    await mkdir(desktop, { recursive: true });
+    const nowMs = Date.UTC(2026, 5, 18, 8, 0, 0);
+    const previous = process.env.HERMES_RECENT_SCREENSHOT_DIR;
+
+    await writeDatedFile(
+      join(override, "Screenshot Smoke.png"),
+      Buffer.from("smoke"),
+      nowMs - 3_000,
+    );
+    await writeDatedFile(
+      join(configured, "Screenshot Configured.png"),
+      Buffer.from("configured"),
+      nowMs - 2_000,
+    );
+    await writeDatedFile(
+      join(desktop, "Screenshot Desktop.png"),
+      Buffer.from("desktop"),
+      nowMs - 1_000,
+    );
+
+    try {
+      process.env.HERMES_RECENT_SCREENSHOT_DIR = override;
+      const screenshots = await listRecentScreenshots({
+        homeDir: home,
+        nowMs,
+        readMacScreenshotLocation: async () => configured,
+      });
+
+      expect(screenshots.map((screenshot) => screenshot.originalName)).toEqual([
+        "Screenshot Smoke.png",
+      ]);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.HERMES_RECENT_SCREENSHOT_DIR;
+      } else {
+        process.env.HERMES_RECENT_SCREENSHOT_DIR = previous;
+      }
+    }
+  });
 });
 
 describe("importRecentScreenshot", () => {
