@@ -121,8 +121,10 @@ The offline suite checks required record coverage, required concepts, forbidden
 unsafe phrases, expected risk framing, and conservative recipe safety language
 for built-in packs. Google Docs Editors evals also include deterministic
 answer-shape fixtures that require `What to check`, `Steps`, `Verification`,
-`Risk`, and `Sources` sections without calling a live model. Live model evals
-remain opt-in and are not part of the default runner.
+`Risk`, and `Sources` sections without calling a live model. The default runner
+also installs the Google Docs Editors Expert offline, verifies scenario records,
+and proves the assistant recipe prompt/run path with mocked local services. Live
+model evals remain opt-in and are not part of the default runner.
 
 The quality report helper summarizes record count, unique source count, scenario
 count, stale/expired record counts, broken scenario links, and validation error

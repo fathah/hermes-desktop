@@ -10,7 +10,12 @@ if (process.env.LOCAL_EXPERT_LIVE_EVAL === "1") {
 
 const result = spawnSync(
   process.platform === "win32" ? "npx.cmd" : "npx",
-  ["vitest", "run", "tests/local-expert-evals.test.ts"],
+  [
+    "vitest",
+    "run",
+    "tests/local-expert-evals.test.ts",
+    "tests/local-expert-google-docs-e2e.test.ts",
+  ],
   {
     cwd: process.cwd(),
     stdio: "inherit",
