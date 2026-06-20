@@ -9,6 +9,7 @@ interface CachedSession {
   source: string;
   messageCount: number;
   model: string;
+  parentId: string | null;
 }
 
 interface SearchResult {
@@ -234,6 +235,11 @@ const SessionCard = memo(function SessionCard({
         <span className="sessions-tag sessions-tag--source">
           {session.source}
         </span>
+        {session.parentId && (
+          <span className="sessions-tag sessions-tag--child" title="Agent sub-task">
+            sub-task
+          </span>
+        )}
         <span className="sessions-tag">
           {session.messageCount} msg{session.messageCount !== 1 ? "s" : ""}
         </span>

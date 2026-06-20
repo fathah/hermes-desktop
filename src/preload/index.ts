@@ -877,6 +877,7 @@ const hermesAPI = {
       source: string;
       messageCount: number;
       model: string;
+      parentId: string | null;
     }>
   > => ipcRenderer.invoke("list-cached-sessions", limit, offset),
 
@@ -888,6 +889,7 @@ const hermesAPI = {
       source: string;
       messageCount: number;
       model: string;
+      parentId: string | null;
     }>
   > => ipcRenderer.invoke("sync-session-cache"),
 

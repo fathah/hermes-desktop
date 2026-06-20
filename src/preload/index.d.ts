@@ -691,6 +691,7 @@ interface HermesAPI {
       source: string;
       messageCount: number;
       model: string;
+      parentId: string | null;
     }>
   >;
   syncSessionCache: () => Promise<
@@ -701,6 +702,7 @@ interface HermesAPI {
       source: string;
       messageCount: number;
       model: string;
+      parentId: string | null;
     }>
   >;
   updateSessionTitle: (sessionId: string, title: string) => Promise<void>;

@@ -237,6 +237,7 @@ function normalizeCachedSession(row: RemoteRecord): CachedSession {
     source: summary.source,
     messageCount: summary.messageCount,
     model: summary.model,
+    parentId: null,
   };
 }
 
@@ -307,6 +308,7 @@ export async function remoteSearchSessions(
       messageCount: numberValue(row.message_count),
       model: stringValue(row.model),
       snippet: stringValue(row.snippet),
+      parentId: null,
     };
   });
 
@@ -357,6 +359,7 @@ async function remoteSearchRecentSessionMessages(
             messageCount: session.messageCount,
             model: session.model,
             snippet: highlightTextMatch(match, query).slice(0, 500),
+            parentId: null,
           } satisfies SearchResult;
         } catch {
           return null;
