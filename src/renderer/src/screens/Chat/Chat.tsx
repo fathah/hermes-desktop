@@ -30,15 +30,16 @@ import { ConfigHealthBanner } from "../../components/ConfigHealthBanner";
 import FollowUsModal from "../../components/FollowUsModal";
 import type { Attachment } from "../../../../shared/attachments";
 import type { SessionModelOverride } from "../../../../shared/model-override";
-import type { ActiveTurn, ChatMessage, UsageState } from "./types";
+import type {
+  ActiveTurn,
+  ChatMessage,
+  QueuedMessage,
+  UsageState,
+} from "./types";
 import type { ContextUsage } from "./ContextGauge";
 import { contextWindowForModel } from "./contextWindows";
 import { QueuedMessages } from "./QueuedMessages";
-
-interface QueuedMessage {
-  text: string;
-  attachments: Attachment[];
-}
+import { createQueuedMessage } from "./queueAnchoring";
 
 export type { ChatMessage } from "./types";
 
@@ -177,7 +178,9 @@ function Chat({
   const dragCounter = useRef(0);
   const chatInputRef = useRef<ChatInputHandle>(null);
   const queueRef = useRef<QueuedMessage[]>([]);
+  const queueSequenceRef = useRef(0);
   const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
+  const [queuePaused, setQueuePaused] = useState(false);
   const activeTurnRef = useRef<ActiveTurn | null>(null);
   const dashboardChatEnabled = dashboardChatEnabledForConnection(
     import.meta.env.VITE_HERMES_DESKTOP_DASHBOARD_CHAT,
@@ -492,7 +495,9 @@ function Chat({
     setUsage(null);
     setToolProgress(null);
     queueRef.current = [];
+    queueSequenceRef.current = 0;
     setQueuedMessages([]);
+    setQueuePaused(false);
   }, [isLoading, runId, hermesSessionId, setMessages, modelConfig.reload]);
 
   const localCommands = useLocalCommands({
@@ -535,12 +540,24 @@ function Chat({
     onDashboardUnavailable: handleDashboardUnavailable,
   });
 
-  // Defer a message onto the busy queue (used when a slash command resolves to
-  // an agent prompt while a turn is already in flight).
-  const enqueueMessage = useCallback((text: string) => {
-    queueRef.current.push({ text, attachments: [] });
-    setQueuedMessages([...queueRef.current]);
-  }, []);
+  // Capture the exact transcript boundary visible when a follow-up is queued.
+  // The queue marker is rendered from separate state, never inserted into the
+  // canonical message array that receives the active turn's stream events.
+  const enqueueMessage = useCallback(
+    (text: string, attachments: Attachment[] = []) => {
+      queueSequenceRef.current += 1;
+      const queued = createQueuedMessage(
+        text,
+        attachments,
+        messages,
+        activeTurnRef.current,
+        queueSequenceRef.current,
+      );
+      queueRef.current.push(queued);
+      setQueuedMessages([...queueRef.current]);
+    },
+    [messages],
+  );
 
   const actions = useChatActions({
     runId,
@@ -583,21 +600,31 @@ function Chat({
 
   // Drain queued messages one at a time when the agent finishes.
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || queuePaused) return;
     const next = queueRef.current.shift();
     if (!next) return;
     setQueuedMessages([...queueRef.current]);
-    handleSendRef.current(next.text, next.attachments, true).catch(() => {
-      // Put the message back at the front so it isn't silently lost if
-      // the send fails (e.g. IPC error before onChatError fires).
-      queueRef.current.unshift(next);
-      setQueuedMessages([...queueRef.current]);
-    });
-  }, [isLoading]);
+    handleSendRef
+      .current(next.text, next.attachments, true, next.anchor)
+      .catch(() => {
+        // Put the message back at the front so it isn't silently lost if
+        // the send fails (e.g. IPC error before onChatError fires).
+        queueRef.current.unshift(next);
+        setQueuedMessages([...queueRef.current]);
+        setQueuePaused(true);
+      });
+  }, [isLoading, queuePaused]);
 
-  const handleRemoveQueued = useCallback((index: number) => {
+  const handleRemoveQueued = useCallback((id: string) => {
+    const index = queueRef.current.findIndex((message) => message.id === id);
+    if (index < 0) return;
     queueRef.current.splice(index, 1);
     setQueuedMessages([...queueRef.current]);
+    setQueuePaused(false);
+  }, []);
+
+  const handleRetryQueued = useCallback(() => {
+    setQueuePaused(false);
   }, []);
 
   const handleSubmitOrQueue = useCallback(
@@ -626,13 +653,12 @@ function Chat({
         return;
       }
       if (isLoading) {
-        queueRef.current.push({ text, attachments });
-        setQueuedMessages([...queueRef.current]);
+        enqueueMessage(text, attachments);
         return;
       }
       void handleSendRef.current(text, attachments);
     },
-    [isLoading, localCommands, dashboardChatEnabled],
+    [isLoading, localCommands, dashboardChatEnabled, enqueueMessage],
   );
 
   const handleSuggestion = useCallback((text: string) => {
@@ -817,11 +843,13 @@ function Chat({
           ) : (
             <MessageList
               messages={messages}
+              queuedMessages={queuedMessages}
               isLoading={isLoading}
               toolProgress={toolProgress}
               onApprove={actions.handleApprove}
               onDeny={actions.handleDeny}
               onClarifyResolved={handleClarifyResolved}
+              onRemoveQueued={handleRemoveQueued}
             />
           )}
           <div ref={bottomRef} />
@@ -844,6 +872,8 @@ function Chat({
         <QueuedMessages
           messages={queuedMessages}
           onRemove={handleRemoveQueued}
+          paused={queuePaused}
+          onRetry={handleRetryQueued}
         />
         <ChatInput
           ref={chatInputRef}

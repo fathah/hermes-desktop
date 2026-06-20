@@ -24,6 +24,16 @@ Slash commands run on the gateway's **persistent slash-worker subprocess**, conc
 
 Because no global loading state is set, the slash branch shows its own feedback: it inserts an in-place `⏳ Running …` agent bubble, buffers the pipeline output, and replaces that bubble with the result (or `error: …`) when the command resolves — otherwise a slow or unreachable gateway would leave the user staring at nothing.
 
+## Mid-turn queue anchoring
+
+Follow-ups submitted during a running turn preserve where they were entered without changing the canonical message order consumed by stream reducers and backend history.
+
+[[src/renderer/src/screens/Chat/queueAnchoring.ts#captureQueueAnchor]] records the last message in the active turn when a plain follow-up or resolved `/queue` prompt is deferred. Pending items stay in `queuedMessages`, outside the canonical `messages` array, so reasoning, tool, and completion events cannot mistake a queued prompt for a new active-turn boundary.
+
+[[src/renderer/src/screens/Chat/queueAnchoring.ts#buildQueueAwareRenderPlan]] builds a visual-only transcript plan. It places pending queue notes and their eventual user bubbles after the captured message while leaving the underlying array in backend order. When the queue drains, the pending note is replaced by exactly one normal user message carrying the same renderer-only anchor.
+
+The `/queue` send-directive path in [[src/renderer/src/screens/Chat/hooks/useChatActions.ts#useChatActions]] does not optimistically append the literal command. It resolves the command first, defers only the resulting prompt while busy, and starts a normal turn immediately when idle. A synchronous queued-send failure removes the optimistic user row and rejects back to the queue drain, which restores the item at the front and pauses automatic draining until the user retries instead of silently losing it or entering a retry loop.
+
 ## Transport connection lifecycle
 
 Every dashboard turn first connects a JSON-RPC WebSocket to the gateway; that handshake must be time-bounded or a stalled socket wedges the whole transport with no error and no fallback (issue #718).

@@ -6,6 +6,25 @@ export type {
 import type { Attachment } from "../../../../shared/attachments";
 
 /**
+ * Renderer-only placement metadata for a prompt submitted while another turn
+ * was active. The canonical message stays in backend order; MessageList uses
+ * this anchor to preserve where the user actually submitted the follow-up.
+ */
+export interface QueueAnchor {
+  afterMessageId: string | null;
+  afterMessageIndex: number;
+  sequence: number;
+  turnId?: string;
+}
+
+export interface QueuedMessage {
+  id: string;
+  text: string;
+  attachments: Attachment[];
+  anchor: QueueAnchor;
+}
+
+/**
  * Visible chat bubble (user or assistant). Used for live streaming and as
  * one of the variants of the broader `ChatMessage` history union.
  */
@@ -23,6 +42,8 @@ export interface ChatBubbleMessage {
   localOnly?: boolean;
   /** Renderer-local turn identity used to anchor local failures. */
   turnId?: string;
+  /** Original visual position for a prompt that was submitted mid-turn. */
+  queueAnchor?: QueueAnchor;
 }
 
 /**

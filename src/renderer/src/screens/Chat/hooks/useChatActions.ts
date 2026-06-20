@@ -2,7 +2,12 @@ import { useCallback, useEffect, useRef } from "react";
 import type { ChatInputHandle } from "../ChatInput";
 import { createTurn, shouldSendToAgent } from "../chatMessages";
 import type { SlashExecOutcome } from "../slashExec";
-import type { ActiveTurn, Attachment, ChatMessage } from "../types";
+import type {
+  ActiveTurn,
+  Attachment,
+  ChatMessage,
+  QueueAnchor,
+} from "../types";
 import type { SessionModelOverride } from "../../../../../shared/model-override";
 
 /** Slash commands the desktop handles through its own renderer flow rather
@@ -69,7 +74,7 @@ interface UseChatActionsArgs {
   addAgentMessage?: (content: string) => void;
   /** Defer a message onto the busy queue. Used when a slash command resolves to
    *  an agent prompt while a turn is already in flight. */
-  enqueueMessage?: (text: string) => void;
+  enqueueMessage?: (text: string, attachments?: Attachment[]) => void;
   abortDashboard?: () => void;
 }
 
@@ -78,6 +83,7 @@ interface UseChatActionsResult {
     text: string,
     attachments?: Attachment[],
     skipLoadingCheck?: boolean,
+    queueAnchor?: QueueAnchor,
   ) => Promise<void>;
   handleQuickAsk: (text: string, attachments?: Attachment[]) => Promise<void>;
   /** Launch a side-question (`/btw`) background prompt. Bypasses the busy queue;
@@ -129,7 +135,12 @@ export function useChatActions({
   });
 
   const pushUser = useCallback(
-    (content: string, idPrefix = "user", attachments?: Attachment[]) => {
+    (
+      content: string,
+      idPrefix = "user",
+      attachments?: Attachment[],
+      queueAnchor?: QueueAnchor,
+    ) => {
       const turn = createTurn(idPrefix);
       setMessages((prev) => [
         ...prev,
@@ -139,6 +150,7 @@ export function useChatActions({
           content,
           turnId: turn.turnId,
           ...(attachments && attachments.length > 0 ? { attachments } : {}),
+          ...(queueAnchor ? { queueAnchor } : {}),
         },
       ]);
       return turn;
@@ -147,7 +159,11 @@ export function useChatActions({
   );
 
   const sendToAgent = useCallback(
-    async (text: string, attachments?: Attachment[]): Promise<void> => {
+    async (
+      text: string,
+      attachments?: Attachment[],
+      propagateError = false,
+    ): Promise<void> => {
       try {
         if (sendViaDashboard) {
           const handled = await sendViaDashboard(text, attachments);
@@ -166,11 +182,52 @@ export function useChatActions({
           runId,
           sessionModelRef.current || undefined,
         );
-      } catch {
+      } catch (error) {
         // onChatError IPC already surfaces this to the user
+        if (propagateError) throw error;
       }
     },
     [runId, profile, hermesSessionId, contextFolder, sendViaDashboard],
+  );
+
+  const runAgentTurn = useCallback(
+    async (
+      prompt: string,
+      displayText: string,
+      attachments?: Attachment[],
+      queueAnchor?: QueueAnchor,
+    ): Promise<void> => {
+      setIsLoading(true);
+      const turn = pushUser(displayText, "user", attachments, queueAnchor);
+      activeTurnRef.current = {
+        ...turn,
+        startIndex: messagesRef.current.length,
+        status: "running",
+      };
+      onSessionStarted?.();
+      try {
+        await sendToAgent(prompt, attachments, !!queueAnchor);
+      } catch (error) {
+        // A queued item remains retryable only if its optimistic user row is
+        // removed before the drain effect puts the item back at the front.
+        setMessages((prev) =>
+          prev.filter((message) => message.id !== turn.userId),
+        );
+        if (activeTurnRef.current?.turnId === turn.turnId) {
+          activeTurnRef.current = null;
+        }
+        setIsLoading(false);
+        throw error;
+      }
+    },
+    [
+      activeTurnRef,
+      onSessionStarted,
+      pushUser,
+      sendToAgent,
+      setIsLoading,
+      setMessages,
+    ],
   );
 
   // Shared "side question" flow (the 💭 quick-ask button and a typed `/btw`).
@@ -221,6 +278,7 @@ export function useChatActions({
       text: string,
       attachments?: Attachment[],
       skipLoadingCheck = false,
+      queueAnchor?: QueueAnchor,
     ): Promise<void> => {
       const hasPayload = text.length > 0 || (attachments?.length ?? 0) > 0;
       if (!hasPayload) return;
@@ -262,6 +320,34 @@ export function useChatActions({
         !RENDERER_NATIVE_SLASH.has(cmdName) &&
         (attachments?.length ?? 0) === 0
       ) {
+        // `/queue` resolves to a normal prompt. Do not optimistically append
+        // the command itself while another turn is streaming: that user row
+        // would become the renderer's latest turn boundary and split the
+        // active reasoning/tool/final output. Only the resolved prompt enters
+        // the queue, whose separate visual marker preserves submission time.
+        if (cmdName === "/queue") {
+          let buffer = "";
+          const collect = (chunk: string): void => {
+            buffer = buffer ? `${buffer}\n${chunk}` : chunk;
+          };
+          const outcome = await execSlashViaDashboard(text, collect);
+          if (outcome.kind === "send") {
+            if (isLoadingRef.current) {
+              enqueueMessage?.(outcome.message, attachments);
+            } else {
+              await runAgentTurn(outcome.message, outcome.message, attachments);
+            }
+          } else {
+            pushUser(text);
+            addAgentMessage?.(
+              outcome.kind === "error"
+                ? `error: ${outcome.message}`
+                : buffer || "(done)",
+            );
+          }
+          return;
+        }
+
         const startIndex = messagesRef.current.length;
         const turn = pushUser(text);
 
@@ -301,7 +387,7 @@ export function useChatActions({
           removePending();
           if (buffer) addAgentMessage?.(buffer);
           if (isLoadingRef.current) {
-            enqueueMessage?.(outcome.message);
+            enqueueMessage?.(outcome.message, attachments);
           } else {
             setIsLoading(true);
             activeTurnRef.current = { ...turn, startIndex, status: "running" };
@@ -314,15 +400,7 @@ export function useChatActions({
         return;
       }
 
-      setIsLoading(true);
-      const turn = pushUser(text, "user", attachments);
-      activeTurnRef.current = {
-        ...turn,
-        startIndex: messagesRef.current.length,
-        status: "running",
-      };
-      onSessionStarted?.();
-      await sendToAgent(text, attachments);
+      await runAgentTurn(text, text, attachments, queueAnchor);
     },
     [
       activeTurnRef,
@@ -330,6 +408,7 @@ export function useChatActions({
       execSlashViaDashboard,
       addAgentMessage,
       enqueueMessage,
+      runAgentTurn,
       runBackground,
       pushUser,
       onSessionStarted,
