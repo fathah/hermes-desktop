@@ -584,8 +584,7 @@ export function checkInstallStatus(): InstallStatus {
         .toLowerCase();
       if (provider && provider !== "env") {
         // eslint-disable-next-line @typescript-eslint/no-require-imports -- intentional lazy require to break the config<->secrets import cycle.
-        const { resolvedSecrets } =
-          require("./secrets") as typeof import("./secrets");
+        const { resolvedSecrets } = require("./secrets") as typeof import("./secrets");
         const resolved = resolvedSecrets(activeProfile);
         const expectedKey = mc
           ? expectedEnvKeyForModel(mc.provider, mc.baseUrl)

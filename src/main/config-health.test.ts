@@ -333,15 +333,16 @@ describe("config-health audit - vault awareness", () => {
       }
     });
 
-    const setMode = (overrides: Record<string, string | boolean>) =>
+    const setMode = (overrides: Record<string, string | boolean>): void => {
       mocks.getConnectionConfig.mockReturnValue({
         mode: "local",
         remoteUrl: "",
         apiKey: "",
         ...overrides,
       });
+    };
 
-    const codes = (profile?: string) =>
+    const codes = (profile?: string): string[] =>
       runConfigHealthCheck(profile).issues.map((i) => i.code);
 
     it("LOCAL mode with no key anywhere fires both key warnings (control)", () => {

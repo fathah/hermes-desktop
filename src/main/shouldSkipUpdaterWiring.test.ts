@@ -64,7 +64,7 @@ describe("shouldSkipUpdaterWiring — the updater wiring gate", () => {
   // "false"/"0" => skip; anything else => wire. Pins that the two gates compose
   // the way setupUpdater() composes them.
   it("composes with isAutoUpdateDisabled on a packaged build", () => {
-    const gate = (raw: string | null) =>
+    const gate = (raw: string | null): boolean =>
       shouldSkipUpdaterWiring({
         isPackaged: true,
         isPortableBuild: false,
