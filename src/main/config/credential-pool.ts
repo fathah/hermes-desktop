@@ -27,7 +27,7 @@ function authFilePath(profile?: string): string {
  * (otherwise a user's existing manual entries would vanish on first
  * read). New writes always use the full canonical shape.
  */
-interface CredentialEntry {
+export interface CredentialEntry {
   id?: string;
   label?: string;
   auth_type?: "api_key" | "oauth_device_code" | string;
@@ -40,6 +40,17 @@ interface CredentialEntry {
   request_count?: number;
   /** Legacy field — historical pool entries written with `{key, label}`. */
   key?: string;
+}
+
+export interface OAuthProviderStatus {
+  provider: string;
+  signedIn: boolean;
+  source: "providers" | "credential_pool" | null;
+}
+
+export interface OAuthProviderRemovalResult {
+  provider: string;
+  removed: boolean;
 }
 
 export function readAuthStore(profile?: string): Record<string, unknown> {
@@ -80,6 +91,99 @@ export function setCredentialPool(
   (store.credential_pool as Record<string, CredentialEntry[]>)[provider] =
     entries;
   writeAuthStore(store, profile);
+}
+
+function entryHasUsableSecret(entry: CredentialEntry | undefined): boolean {
+  if (!entry) return false;
+  return !!(
+    String(entry.access_token || "").trim() ||
+    String(entry.refresh_token || "").trim() ||
+    String(entry.api_key || "").trim()
+  );
+}
+
+function isOAuthCredentialEntry(entry: CredentialEntry | undefined): boolean {
+  if (!entryHasUsableSecret(entry)) return false;
+  return entry?.auth_type !== "api_key";
+}
+
+export function getOAuthProviderStatus(
+  provider: string,
+  profile?: string,
+): OAuthProviderStatus {
+  const cleanProvider = provider.trim();
+  const empty: OAuthProviderStatus = {
+    provider: cleanProvider,
+    signedIn: false,
+    source: null,
+  };
+  if (!cleanProvider) return empty;
+
+  const store = readAuthStore(profile);
+  const providers = store.providers;
+  if (providers && typeof providers === "object") {
+    const entry = (providers as Record<string, CredentialEntry>)[cleanProvider];
+    if (isOAuthCredentialEntry(entry)) {
+      return { provider: cleanProvider, signedIn: true, source: "providers" };
+    }
+  }
+
+  const pool = store.credential_pool;
+  const entries =
+    pool && typeof pool === "object"
+      ? (pool as Record<string, CredentialEntry[]>)[cleanProvider]
+      : undefined;
+  if (Array.isArray(entries) && entries.some(isOAuthCredentialEntry)) {
+    return {
+      provider: cleanProvider,
+      signedIn: true,
+      source: "credential_pool",
+    };
+  }
+
+  return empty;
+}
+
+export function removeOAuthProviderCredentials(
+  provider: string,
+  profile?: string,
+): OAuthProviderRemovalResult {
+  const cleanProvider = provider.trim();
+  if (!cleanProvider) return { provider: cleanProvider, removed: false };
+
+  const store = readAuthStore(profile);
+  let removed = false;
+
+  const providers = store.providers;
+  if (providers && typeof providers === "object") {
+    const providerMap = providers as Record<string, CredentialEntry>;
+    if (isOAuthCredentialEntry(providerMap[cleanProvider])) {
+      delete providerMap[cleanProvider];
+      removed = true;
+    }
+  }
+
+  const pool = store.credential_pool;
+  if (pool && typeof pool === "object") {
+    const poolMap = pool as Record<string, CredentialEntry[]>;
+    const entries = poolMap[cleanProvider];
+    if (Array.isArray(entries)) {
+      const next = entries.filter((entry) => !isOAuthCredentialEntry(entry));
+      if (next.length !== entries.length) {
+        removed = true;
+        if (next.length > 0) poolMap[cleanProvider] = next;
+        else delete poolMap[cleanProvider];
+      }
+    }
+  }
+
+  if (store.active_provider === cleanProvider) {
+    delete store.active_provider;
+    removed = true;
+  }
+
+  if (removed) writeAuthStore(store, profile);
+  return { provider: cleanProvider, removed };
 }
 
 /**
@@ -193,15 +297,7 @@ export function hasOAuthCredentials(
         : undefined;
     if (
       Array.isArray(entries) &&
-      entries.some(
-        (entry) =>
-          !!(
-            entry &&
-            (String(entry.api_key || "").trim() ||
-              String(entry.access_token || "").trim() ||
-              String(entry.refresh_token || "").trim())
-          ),
-      )
+      entries.some((entry) => entryHasUsableSecret(entry))
     ) {
       return true;
     }

@@ -21,7 +21,12 @@ import {
   runHermesImport,
   type InstallProgress,
 } from "../installer";
-import { getConnectionConfig } from "../config";
+import {
+  getConnectionConfig,
+  getHermesAgentUpdateRoutine,
+  setHermesAgentUpdateRoutine,
+} from "../config";
+import { runHermesAgentUpdateCheck } from "../hermes-agent-updates";
 import {
   sshGetHermesVersion,
   sshRunDoctor,
@@ -151,6 +156,28 @@ export function registerSystemIpc(
       return { available: false, reason: (err as Error).message };
     }
   });
+
+  safeHandle(
+    "get-hermes-agent-update-routine",
+    (_event, profile?: string) => getHermesAgentUpdateRoutine(profile),
+  );
+  safeHandle(
+    "set-hermes-agent-update-routine",
+    (
+      _event,
+      settings: Partial<{ enabled: boolean; autoApply: boolean }>,
+      profile?: string,
+    ) => setHermesAgentUpdateRoutine(settings, profile),
+  );
+  safeHandle("run-hermes-agent-update-check", async (event, profile?: string) =>
+    runHermesAgentUpdateCheck(profile, {
+      onProgress: (progress: InstallProgress) => {
+        if (!event.sender.isDestroyed()) {
+          event.sender.send("install-progress", progress);
+        }
+      },
+    }),
+  );
 
   // App version
   safeHandle("get-app-version", () => app.getVersion());

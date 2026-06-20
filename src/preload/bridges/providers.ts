@@ -33,6 +33,19 @@ export const providersBridge = {
       label,
       profile,
     ),
+  getOAuthProviderStatus: (
+    provider: string,
+    profile?: string,
+  ): Promise<{
+    provider: string;
+    signedIn: boolean;
+    source: "providers" | "credential_pool" | null;
+  }> => ipcRenderer.invoke("get-oauth-provider-status", provider, profile),
+  removeOAuthProviderCredentials: (
+    provider: string,
+    profile?: string,
+  ): Promise<{ provider: string; removed: boolean }> =>
+    ipcRenderer.invoke("remove-oauth-provider-credentials", provider, profile),
 
   // Models
   listModels: (): Promise<

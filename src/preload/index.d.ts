@@ -122,6 +122,37 @@ import type {
 } from "../shared/source-intake";
 import type { WhatsAppCloudStatus } from "../shared/whatsappCloud";
 
+type OAuthProviderStatus = {
+  provider: string;
+  signedIn: boolean;
+  source: "providers" | "credential_pool" | null;
+};
+
+type OAuthProviderRemovalResult = {
+  provider: string;
+  removed: boolean;
+};
+
+type HermesAgentUpdateRoutineResult = {
+  checkedAt: string;
+  status: "current" | "available" | "updated" | "skipped" | "error";
+  message: string;
+  localHead?: string;
+  upstreamHead?: string;
+  behindBy?: number;
+  changelog?: string;
+};
+
+type HermesAgentUpdateRoutineState = {
+  enabled: boolean;
+  autoApply: boolean;
+  schedule: string;
+  timezone: string;
+  lastCheckedAt: string | null;
+  nextCheckAt: string;
+  lastResult: HermesAgentUpdateRoutineResult | null;
+};
+
 interface ElectronAPI {
   process: {
     platform: NodeJS.Platform;
@@ -338,6 +369,16 @@ interface HermesAPI {
     upstreamHead?: string;
     reason?: string;
   }>;
+  getHermesAgentUpdateRoutine: (
+    profile?: string,
+  ) => Promise<HermesAgentUpdateRoutineState>;
+  setHermesAgentUpdateRoutine: (
+    settings: Partial<{ enabled: boolean; autoApply: boolean }>,
+    profile?: string,
+  ) => Promise<HermesAgentUpdateRoutineState>;
+  runHermesAgentUpdateCheck: (
+    profile?: string,
+  ) => Promise<HermesAgentUpdateRoutineResult>;
   getVoiceStatus: (profile?: string) => Promise<{ hasKey: boolean }>;
   transcribeAudio: (
     audio: ArrayBuffer,
@@ -922,6 +963,14 @@ interface HermesAPI {
     label: string,
     profile?: string,
   ) => Promise<Array<CredentialPoolEntry>>;
+  getOAuthProviderStatus: (
+    provider: string,
+    profile?: string,
+  ) => Promise<OAuthProviderStatus>;
+  removeOAuthProviderCredentials: (
+    provider: string,
+    profile?: string,
+  ) => Promise<OAuthProviderRemovalResult>;
 
   // Models
   listModels: () => Promise<

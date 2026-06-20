@@ -71,6 +71,56 @@ export const engineBridge = {
     upstreamHead?: string;
     reason?: string;
   }> => ipcRenderer.invoke("check-hermes-update"),
+  getHermesAgentUpdateRoutine: (
+    profile?: string,
+  ): Promise<{
+    enabled: boolean;
+    autoApply: boolean;
+    schedule: string;
+    timezone: string;
+    lastCheckedAt: string | null;
+    nextCheckAt: string;
+    lastResult: {
+      checkedAt: string;
+      status: "current" | "available" | "updated" | "skipped" | "error";
+      message: string;
+      localHead?: string;
+      upstreamHead?: string;
+      behindBy?: number;
+      changelog?: string;
+    } | null;
+  }> => ipcRenderer.invoke("get-hermes-agent-update-routine", profile),
+  setHermesAgentUpdateRoutine: (
+    settings: Partial<{ enabled: boolean; autoApply: boolean }>,
+    profile?: string,
+  ): Promise<{
+    enabled: boolean;
+    autoApply: boolean;
+    schedule: string;
+    timezone: string;
+    lastCheckedAt: string | null;
+    nextCheckAt: string;
+    lastResult: {
+      checkedAt: string;
+      status: "current" | "available" | "updated" | "skipped" | "error";
+      message: string;
+      localHead?: string;
+      upstreamHead?: string;
+      behindBy?: number;
+      changelog?: string;
+    } | null;
+  }> => ipcRenderer.invoke("set-hermes-agent-update-routine", settings, profile),
+  runHermesAgentUpdateCheck: (
+    profile?: string,
+  ): Promise<{
+    checkedAt: string;
+    status: "current" | "available" | "updated" | "skipped" | "error";
+    message: string;
+    localHead?: string;
+    upstreamHead?: string;
+    behindBy?: number;
+    changelog?: string;
+  }> => ipcRenderer.invoke("run-hermes-agent-update-check", profile),
 
   // Voice I/O (WS4)
   getVoiceStatus: (profile?: string): Promise<{ hasKey: boolean }> =>

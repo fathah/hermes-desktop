@@ -13,6 +13,8 @@ import {
   getCredentialPool,
   setCredentialPool,
   addCredentialPoolEntry,
+  getOAuthProviderStatus,
+  removeOAuthProviderCredentials,
   getConnectionConfig,
   getPublicConnectionConfig,
   resolveConnectionApiKeyUpdate,
@@ -399,6 +401,16 @@ export function registerConfigIpc(): void {
     ) => {
       return addCredentialPoolEntry(provider, apiKey, label, profile);
     },
+  );
+  safeHandle(
+    "get-oauth-provider-status",
+    (_event, provider: string, profile?: string) =>
+      getOAuthProviderStatus(provider, profile),
+  );
+  safeHandle(
+    "remove-oauth-provider-credentials",
+    (_event, provider: string, profile?: string) =>
+      removeOAuthProviderCredentials(provider, profile),
   );
 
   // Models

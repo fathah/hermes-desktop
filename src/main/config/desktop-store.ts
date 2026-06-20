@@ -108,6 +108,164 @@ export function setOnboardingCompleted(completed: boolean): void {
   writeDesktopConfig(data);
 }
 
+// ── Hermes Agent updater routine ────────────────────────────────────────────
+
+const HERMES_AGENT_UPDATE_KEY = "hermesAgentUpdateByProfile";
+const HERMES_AGENT_UPDATE_SCHEDULE = "0 4 * * *";
+const HERMES_AGENT_UPDATE_TIMEZONE = "Asia/Kolkata";
+const IST_OFFSET_MS = 330 * 60 * 1000;
+
+export type HermesAgentUpdateRoutineStatus =
+  | "current"
+  | "available"
+  | "updated"
+  | "skipped"
+  | "error";
+
+export interface HermesAgentUpdateRoutineResult {
+  checkedAt: string;
+  status: HermesAgentUpdateRoutineStatus;
+  message: string;
+  localHead?: string;
+  upstreamHead?: string;
+  behindBy?: number;
+  changelog?: string;
+}
+
+export interface HermesAgentUpdateRoutineSettings {
+  enabled: boolean;
+  autoApply: boolean;
+}
+
+export interface HermesAgentUpdateRoutineState
+  extends HermesAgentUpdateRoutineSettings {
+  schedule: typeof HERMES_AGENT_UPDATE_SCHEDULE;
+  timezone: typeof HERMES_AGENT_UPDATE_TIMEZONE;
+  lastCheckedAt: string | null;
+  nextCheckAt: string;
+  lastResult: HermesAgentUpdateRoutineResult | null;
+}
+
+interface StoredHermesAgentUpdateRoutine
+  extends Partial<HermesAgentUpdateRoutineSettings> {
+  lastCheckedAt?: string | null;
+  lastResult?: HermesAgentUpdateRoutineResult | null;
+}
+
+function profileConfigKey(profile?: string): string {
+  return profile || getActiveProfileNameSync();
+}
+
+function hermesAgentUpdateMap(
+  data: Record<string, unknown>,
+): Record<string, StoredHermesAgentUpdateRoutine> {
+  const raw = data[HERMES_AGENT_UPDATE_KEY];
+  return raw && typeof raw === "object"
+    ? (raw as Record<string, StoredHermesAgentUpdateRoutine>)
+    : {};
+}
+
+function istShiftedDate(date: Date): Date {
+  return new Date(date.getTime() + IST_OFFSET_MS);
+}
+
+function istDateKey(date: Date): string {
+  return istShiftedDate(date).toISOString().slice(0, 10);
+}
+
+function scheduledUtcForIstDate(date: Date): Date {
+  const shifted = istShiftedDate(date);
+  return new Date(
+    Date.UTC(
+      shifted.getUTCFullYear(),
+      shifted.getUTCMonth(),
+      shifted.getUTCDate(),
+      4,
+      0,
+      0,
+      0,
+    ) - IST_OFFSET_MS,
+  );
+}
+
+export function nextHermesAgentUpdateCheckAt(now = new Date()): string {
+  const today = scheduledUtcForIstDate(now);
+  if (now.getTime() < today.getTime()) return today.toISOString();
+  return scheduledUtcForIstDate(
+    new Date(today.getTime() + 24 * 60 * 60 * 1000),
+  ).toISOString();
+}
+
+export function isHermesAgentUpdateRoutineDue(
+  state: { enabled?: boolean; lastCheckedAt?: string | null },
+  now = new Date(),
+): boolean {
+  if (state.enabled === false) return false;
+  const todaySchedule = scheduledUtcForIstDate(now);
+  if (now.getTime() < todaySchedule.getTime()) return false;
+  if (!state.lastCheckedAt) return true;
+  const last = new Date(state.lastCheckedAt);
+  if (Number.isNaN(last.getTime())) return true;
+  return istDateKey(last) !== istDateKey(now);
+}
+
+export function getHermesAgentUpdateRoutine(
+  profile?: string,
+  now = new Date(),
+): HermesAgentUpdateRoutineState {
+  const data = readDesktopConfig();
+  const stored = hermesAgentUpdateMap(data)[profileConfigKey(profile)] || {};
+  const lastResult = stored.lastResult || null;
+  return {
+    enabled: stored.enabled !== false,
+    autoApply: stored.autoApply === true,
+    schedule: HERMES_AGENT_UPDATE_SCHEDULE,
+    timezone: HERMES_AGENT_UPDATE_TIMEZONE,
+    lastCheckedAt: stored.lastCheckedAt || lastResult?.checkedAt || null,
+    nextCheckAt: nextHermesAgentUpdateCheckAt(now),
+    lastResult,
+  };
+}
+
+export function setHermesAgentUpdateRoutine(
+  settings: Partial<HermesAgentUpdateRoutineSettings>,
+  profile?: string,
+): HermesAgentUpdateRoutineState {
+  const data = readDesktopConfig();
+  const key = profileConfigKey(profile);
+  const map = hermesAgentUpdateMap(data);
+  const prev = map[key] || {};
+  map[key] = {
+    ...prev,
+    ...(typeof settings.enabled === "boolean"
+      ? { enabled: settings.enabled }
+      : {}),
+    ...(typeof settings.autoApply === "boolean"
+      ? { autoApply: settings.autoApply }
+      : {}),
+  };
+  data[HERMES_AGENT_UPDATE_KEY] = map;
+  writeDesktopConfig(data);
+  return getHermesAgentUpdateRoutine(profile);
+}
+
+export function recordHermesAgentUpdateResult(
+  result: HermesAgentUpdateRoutineResult,
+  profile?: string,
+): HermesAgentUpdateRoutineState {
+  const data = readDesktopConfig();
+  const key = profileConfigKey(profile);
+  const map = hermesAgentUpdateMap(data);
+  map[key] = {
+    ...(map[key] || {}),
+    lastCheckedAt: result.checkedAt,
+    lastResult: result,
+  };
+  data[HERMES_AGENT_UPDATE_KEY] = map;
+  writeDesktopConfig(data);
+  return getHermesAgentUpdateRoutine(profile, new Date(result.checkedAt));
+}
+
 /** Per-source enable flags for the External Context Bridge. App-level (the
  *  external transcript sources live on the machine, not per profile) and
  *  default ALL OFF — indexing other AI tools' transcripts is strictly opt-in. */

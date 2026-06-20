@@ -4,8 +4,45 @@ import { useI18n } from "../../components/useI18n";
 import BrandLogo from "../../components/common/BrandLogo";
 import { useDiscoveredModels } from "../../hooks/useDiscoveredModels";
 import OAuthLoginModal from "../../components/OAuthLoginModal";
-import { KeyRound } from "../../assets/icons";
+import { KeyRound, Refresh } from "../../assets/icons";
 import type { CredentialPoolEntry } from "../../../../shared/credentials";
+
+type OAuthProviderStatus = {
+  provider: string;
+  signedIn: boolean;
+  source: "providers" | "credential_pool" | null;
+};
+
+type ProviderTestResult = {
+  type: "success" | "error";
+  message: string;
+};
+
+type AgentUpdateRoutineResult = {
+  checkedAt: string;
+  status: "current" | "available" | "updated" | "skipped" | "error";
+  message: string;
+  localHead?: string;
+  upstreamHead?: string;
+  behindBy?: number;
+  changelog?: string;
+};
+
+type AgentUpdateRoutineState = {
+  enabled: boolean;
+  autoApply: boolean;
+  schedule: string;
+  timezone: string;
+  lastCheckedAt: string | null;
+  nextCheckAt: string;
+  lastResult: AgentUpdateRoutineResult | null;
+};
+
+type ProviderSetup = (typeof PROVIDERS.setup)[number];
+
+function providerSetupForEnvKey(envKey: string): ProviderSetup | undefined {
+  return PROVIDERS.setup.find((provider) => provider.envKey === envKey);
+}
 
 function Providers({
   profile,
@@ -20,6 +57,12 @@ function Providers({
   const [env, setEnv] = useState<Record<string, string>>({});
   const [savedKey, setSavedKey] = useState<string | null>(null);
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set());
+  const [testingProviderKey, setTestingProviderKey] = useState<string | null>(
+    null,
+  );
+  const [providerTestResults, setProviderTestResults] = useState<
+    Record<string, ProviderTestResult>
+  >({});
 
   // Model config
   const [modelProvider, setModelProvider] = useState("auto");
@@ -38,11 +81,25 @@ function Providers({
   const [poolProvider, setPoolProvider] = useState("");
   const [poolNewKey, setPoolNewKey] = useState("");
   const [poolNewLabel, setPoolNewLabel] = useState("");
+  const keyInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
 
   // OAuth sign-in modal — holds the provider def being authenticated.
   const [oauthModal, setOauthModal] = useState<
     (typeof OAUTH_PROVIDERS)[number] | null
   >(null);
+  const [oauthStatuses, setOauthStatuses] = useState<
+    Record<string, OAuthProviderStatus>
+  >({});
+  const [oauthMessages, setOauthMessages] = useState<Record<string, string>>(
+    {},
+  );
+
+  const [agentUpdateRoutine, setAgentUpdateRoutine] =
+    useState<AgentUpdateRoutineState | null>(null);
+  const [agentUpdateBusy, setAgentUpdateBusy] = useState(false);
+  const [agentUpdateMessage, setAgentUpdateMessage] = useState<string | null>(
+    null,
+  );
 
   // Per-key debounce timers for env auto-save on change. Previously env
   // values were persisted only on input blur, so users who clicked the
@@ -59,22 +116,47 @@ function Providers({
   // `env` directly would capture a stale snapshot).
   const envRef = useRef<Record<string, string>>({});
 
+  const fetchOAuthStatuses = useCallback(async (): Promise<
+    Record<string, OAuthProviderStatus>
+  > => {
+    const statuses = await Promise.all(
+      OAUTH_PROVIDERS.map(async (provider) => {
+        try {
+          return [
+            provider.id,
+            await window.hermesAPI.getOAuthProviderStatus(provider.id, profile),
+          ] as const;
+        } catch {
+          return [
+            provider.id,
+            { provider: provider.id, signedIn: false, source: null },
+          ] as const;
+        }
+      }),
+    );
+    return Object.fromEntries(statuses);
+  }, [profile]);
+
   const loadConfig = useCallback(async (): Promise<void> => {
-    const [envData, mc, pool] = await Promise.all([
+    const [envData, mc, pool, oauth, routine] = await Promise.all([
       window.hermesAPI.getEnv(profile),
       window.hermesAPI.getModelConfig(profile),
-      window.hermesAPI.getCredentialPool(),
+      window.hermesAPI.getCredentialPool(profile),
+      fetchOAuthStatuses(),
+      window.hermesAPI.getHermesAgentUpdateRoutine(profile),
     ]);
     setEnv(envData);
     setModelProvider(mc.provider);
     setModelName(mc.model);
     setModelBaseUrl(mc.baseUrl);
     setCredPool(pool);
+    setOauthStatuses(oauth);
+    setAgentUpdateRoutine(routine);
 
     requestAnimationFrame(() => {
       modelLoaded.current = true;
     });
-  }, [profile]);
+  }, [fetchOAuthStatuses, profile]);
 
   useEffect(() => {
     modelLoaded.current = false;
@@ -85,16 +167,22 @@ function Providers({
   useEffect(() => {
     if (!visible) return;
     (async (): Promise<void> => {
-      const mc = await window.hermesAPI.getModelConfig(profile);
+      const [mc, oauth, routine] = await Promise.all([
+        window.hermesAPI.getModelConfig(profile),
+        fetchOAuthStatuses(),
+        window.hermesAPI.getHermesAgentUpdateRoutine(profile),
+      ]);
       modelLoaded.current = false;
       setModelProvider(mc.provider);
       setModelName(mc.model);
       setModelBaseUrl(mc.baseUrl);
+      setOauthStatuses(oauth);
+      setAgentUpdateRoutine(routine);
       requestAnimationFrame(() => {
         modelLoaded.current = true;
       });
     })();
-  }, [visible, profile]);
+  }, [fetchOAuthStatuses, visible, profile]);
 
   // Auto-save the active model config (config.yaml) — debounced 500 ms so
   // typing in the Model field still feels responsive.
@@ -211,6 +299,7 @@ function Providers({
       poolProvider,
       poolNewKey.trim(),
       poolNewLabel.trim(),
+      profile,
     );
     setCredPool((prev) => ({ ...prev, [poolProvider]: updated }));
     setPoolNewKey("");
@@ -223,7 +312,7 @@ function Providers({
   ): Promise<void> {
     const entries = [...(credPool[provider] || [])];
     entries.splice(index, 1);
-    await window.hermesAPI.setCredentialPool(provider, entries);
+    await window.hermesAPI.setCredentialPool(provider, entries, profile);
     setCredPool((prev) => ({ ...prev, [provider]: entries }));
   }
 
@@ -234,6 +323,173 @@ function Providers({
       else next.add(key);
       return next;
     });
+  }
+
+  function isSetupActive(setup: ProviderSetup | undefined): boolean {
+    if (!setup) return false;
+    const provider = setup.configProvider || setup.id;
+    if (modelProvider !== provider) return false;
+    if (provider === "custom") return modelBaseUrl === (setup.baseUrl || "");
+    return true;
+  }
+
+  function handleUseProviderSetup(setup: ProviderSetup | undefined): void {
+    if (!setup) return;
+    setModelProvider(setup.configProvider || setup.id);
+    setModelBaseUrl(setup.baseUrl || "");
+  }
+
+  function handleUseOAuthProvider(provider: string): void {
+    setModelProvider(provider);
+    setModelBaseUrl("");
+  }
+
+  async function handleAddKey(fieldKey: string): Promise<void> {
+    const value = env[fieldKey]?.trim();
+    if (!value) {
+      keyInputRefs.current.get(fieldKey)?.focus();
+      return;
+    }
+    await handleBlur(fieldKey);
+  }
+
+  async function handleTestProvider(
+    fieldKey: string,
+    setup: ProviderSetup | undefined,
+  ): Promise<void> {
+    const apiKey = env[fieldKey]?.trim();
+    if (!apiKey) {
+      setProviderTestResults((prev) => ({
+        ...prev,
+        [fieldKey]: {
+          type: "error",
+          message: t("providers.status.missingCredential"),
+        },
+      }));
+      keyInputRefs.current.get(fieldKey)?.focus();
+      return;
+    }
+    if (!setup) {
+      setProviderTestResults((prev) => ({
+        ...prev,
+        [fieldKey]: {
+          type: "error",
+          message: t("providers.status.testUnsupported"),
+        },
+      }));
+      return;
+    }
+
+    setTestingProviderKey(fieldKey);
+    try {
+      const result = await window.hermesAPI.discoverProviderModels(
+        setup.configProvider || setup.id,
+        setup.baseUrl || undefined,
+        apiKey,
+        profile,
+      );
+      if (result.status === "ok") {
+        setProviderTestResults((prev) => ({
+          ...prev,
+          [fieldKey]: {
+            type: "success",
+            message: t("providers.status.testOk", {
+              count: result.models.length,
+            }),
+          },
+        }));
+      } else {
+        const key =
+          result.status === "no-key"
+            ? "providers.status.testNoKey"
+            : result.status === "unknown-host"
+              ? "providers.status.testUnknownHost"
+              : "providers.status.testUnsupported";
+        setProviderTestResults((prev) => ({
+          ...prev,
+          [fieldKey]: { type: "error", message: t(key) },
+        }));
+      }
+    } catch (err) {
+      setProviderTestResults((prev) => ({
+        ...prev,
+        [fieldKey]: {
+          type: "error",
+          message:
+            err instanceof Error
+              ? err.message
+              : t("providers.status.testFailed"),
+        },
+      }));
+    } finally {
+      setTestingProviderKey(null);
+    }
+  }
+
+  async function refreshOAuthStatuses(): Promise<void> {
+    setOauthStatuses(await fetchOAuthStatuses());
+  }
+
+  async function handleOAuthSignOut(provider: string): Promise<void> {
+    await window.hermesAPI.removeOAuthProviderCredentials(provider, profile);
+    setOauthMessages((prev) => ({
+      ...prev,
+      [provider]: t("providers.oauth.localSignOutComplete"),
+    }));
+    await refreshOAuthStatuses();
+  }
+
+  async function handleAgentUpdateSetting(
+    settings: Partial<{ enabled: boolean; autoApply: boolean }>,
+  ): Promise<void> {
+    const updated = await window.hermesAPI.setHermesAgentUpdateRoutine(
+      settings,
+      profile,
+    );
+    setAgentUpdateRoutine(updated);
+  }
+
+  async function handleRunAgentUpdateCheck(): Promise<void> {
+    setAgentUpdateBusy(true);
+    setAgentUpdateMessage(null);
+    try {
+      const result = await window.hermesAPI.runHermesAgentUpdateCheck(profile);
+      setAgentUpdateMessage(result.message);
+      setAgentUpdateRoutine(
+        await window.hermesAPI.getHermesAgentUpdateRoutine(profile),
+      );
+    } catch (err) {
+      setAgentUpdateMessage(
+        err instanceof Error ? err.message : t("providers.agentUpdates.failed"),
+      );
+    } finally {
+      setAgentUpdateBusy(false);
+    }
+  }
+
+  function formatUpdateTime(value: string | null | undefined): string {
+    if (!value) return t("providers.agentUpdates.never");
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return new Intl.DateTimeFormat(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: "Asia/Kolkata",
+      timeZoneName: "short",
+    }).format(date);
+  }
+
+  function updateStatusClass(
+    status: AgentUpdateRoutineResult["status"],
+  ): string {
+    if (status === "available" || status === "skipped") {
+      return "provider-status-warning";
+    }
+    if (status === "error") return "provider-status-error";
+    return "provider-status-success";
   }
 
   const isCustomProvider = modelProvider === "custom";
@@ -487,63 +743,142 @@ function Providers({
           <div key={section.title} className="settings-section">
             <div className="settings-section-title">{t(section.title)}</div>
             <div className={isLlmProviders ? "provider-keys-grid" : undefined}>
-              {section.items.map((field) => (
-                <div
-                  key={field.key}
-                  className={
-                    isLlmProviders ? "provider-key-card" : "settings-field"
-                  }
-                >
-                  {isLlmProviders && (
-                    <div className="provider-key-card-head">
-                      <BrandLogo provider={field.key} size={22} />
-                      <span className="provider-key-card-title">
+              {section.items.map((field) => {
+                const setup = providerSetupForEnvKey(field.key);
+                const hasKey = Boolean(env[field.key]?.trim());
+                const isActive = isSetupActive(setup);
+                const testResult = providerTestResults[field.key];
+
+                return (
+                  <div
+                    key={field.key}
+                    className={
+                      isLlmProviders ? "provider-key-card" : "settings-field"
+                    }
+                  >
+                    {isLlmProviders && (
+                      <>
+                        <div className="provider-key-card-head">
+                          <BrandLogo
+                            provider={setup?.id || field.key}
+                            size={22}
+                          />
+                          <span className="provider-key-card-title">
+                            {t(field.label)}
+                          </span>
+                          {savedKey === field.key && (
+                            <span className="settings-saved">
+                              {t("common.saved")}
+                            </span>
+                          )}
+                        </div>
+                        <div className="provider-card-status-row">
+                          {isActive && (
+                            <span className="provider-status-pill provider-status-active">
+                              {t("providers.status.activeModel")}
+                            </span>
+                          )}
+                          <span
+                            className={`provider-status-pill ${
+                              hasKey
+                                ? "provider-status-success"
+                                : "provider-status-warning"
+                            }`}
+                          >
+                            {hasKey
+                              ? t("providers.status.apiKeySaved")
+                              : t("providers.status.missingCredential")}
+                          </span>
+                        </div>
+                      </>
+                    )}
+                    {!isLlmProviders && (
+                      <label className="settings-field-label">
                         {t(field.label)}
-                      </span>
-                      {savedKey === field.key && (
-                        <span className="settings-saved">
-                          {t("common.saved")}
-                        </span>
+                        {savedKey === field.key && (
+                          <span className="settings-saved">
+                            {t("common.saved")}
+                          </span>
+                        )}
+                      </label>
+                    )}
+                    <div className="settings-input-row">
+                      <input
+                        ref={(node) => {
+                          if (node) keyInputRefs.current.set(field.key, node);
+                          else keyInputRefs.current.delete(field.key);
+                        }}
+                        className="input"
+                        type={
+                          field.type === "password" &&
+                          !visibleKeys.has(field.key)
+                            ? "password"
+                            : "text"
+                        }
+                        value={env[field.key] || ""}
+                        onChange={(e) =>
+                          handleChange(field.key, e.target.value)
+                        }
+                        onBlur={() => handleBlur(field.key)}
+                        placeholder={t(field.label)}
+                      />
+                      {field.type === "password" && (
+                        <button
+                          className="btn-ghost settings-toggle-btn"
+                          onClick={() => toggleVisibility(field.key)}
+                        >
+                          {visibleKeys.has(field.key)
+                            ? t("common.hide")
+                            : t("common.show")}
+                        </button>
                       )}
                     </div>
-                  )}
-                  {!isLlmProviders && (
-                    <label className="settings-field-label">
-                      {t(field.label)}
-                      {savedKey === field.key && (
-                        <span className="settings-saved">
-                          {t("common.saved")}
-                        </span>
-                      )}
-                    </label>
-                  )}
-                  <div className="settings-input-row">
-                    <input
-                      className="input"
-                      type={
-                        field.type === "password" && !visibleKeys.has(field.key)
-                          ? "password"
-                          : "text"
-                      }
-                      value={env[field.key] || ""}
-                      onChange={(e) => handleChange(field.key, e.target.value)}
-                      onBlur={() => handleBlur(field.key)}
-                      placeholder={t(field.label)}
-                    />
-                    {field.type === "password" && (
-                      <button
-                        className="btn-ghost settings-toggle-btn"
-                        onClick={() => toggleVisibility(field.key)}
-                      >
-                        {visibleKeys.has(field.key)
-                          ? t("common.hide")
-                          : t("common.show")}
-                      </button>
+                    <div className="settings-field-hint">{t(field.hint)}</div>
+                    {isLlmProviders && (
+                      <>
+                        <div className="provider-key-actions">
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => void handleAddKey(field.key)}
+                          >
+                            {t("providers.status.addKey")}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            disabled={
+                              !setup || !hasKey || testingProviderKey === field.key
+                            }
+                            onClick={() =>
+                              void handleTestProvider(field.key, setup)
+                            }
+                          >
+                            {testingProviderKey === field.key
+                              ? t("providers.status.testing")
+                              : t("providers.status.test")}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-primary btn-sm"
+                            disabled={!setup || isActive}
+                            onClick={() => handleUseProviderSetup(setup)}
+                          >
+                            {t("providers.status.use")}
+                          </button>
+                        </div>
+                        {testResult && (
+                          <div
+                            className={`provider-test-result provider-test-${testResult.type}`}
+                          >
+                            {testResult.message}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
-                  <div className="settings-field-hint">{t(field.hint)}</div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         );
@@ -557,23 +892,171 @@ function Providers({
           {t("providers.oauth.sectionHint")}
         </div>
         <div className="provider-keys-grid">
-          {OAUTH_PROVIDERS.map((p) => (
-            <div key={p.id} className="provider-key-card">
-              <div className="provider-key-card-head">
-                <BrandLogo provider={p.id} size={22} />
-                <span className="provider-key-card-title">{p.name}</span>
+          {OAUTH_PROVIDERS.map((p) => {
+            const status = oauthStatuses[p.id];
+            const signedIn = Boolean(status?.signedIn);
+            const isActive = modelProvider === p.id;
+
+            return (
+              <div key={p.id} className="provider-key-card">
+                <div className="provider-key-card-head">
+                  <BrandLogo provider={p.id} size={22} />
+                  <span className="provider-key-card-title">{p.name}</span>
+                </div>
+                <div className="provider-card-status-row">
+                  {isActive && (
+                    <span className="provider-status-pill provider-status-active">
+                      {t("providers.status.activeModel")}
+                    </span>
+                  )}
+                  <span
+                    className={`provider-status-pill ${
+                      signedIn
+                        ? "provider-status-success"
+                        : "provider-status-warning"
+                    }`}
+                  >
+                    {signedIn
+                      ? t("providers.status.signedIn")
+                      : t("providers.status.missingCredential")}
+                  </span>
+                </div>
+                <div className="settings-field-hint">{t(p.desc)}</div>
+                {signedIn && (
+                  <div className="settings-field-hint">
+                    {t("providers.oauth.localSignOutHint")}
+                  </div>
+                )}
+                <div className="provider-key-actions">
+                  {!signedIn && (
+                    <button
+                      className="btn btn-secondary btn-sm oauth-signin-btn"
+                      aria-label={`${t("providers.oauth.signIn")} — ${p.name}`}
+                      onClick={() => setOauthModal(p)}
+                    >
+                      <KeyRound size={14} />
+                      {t("providers.oauth.signIn")}
+                    </button>
+                  )}
+                  {signedIn && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => void handleOAuthSignOut(p.id)}
+                    >
+                      {t("providers.oauth.localSignOut")}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    disabled={!signedIn || isActive}
+                    onClick={() => handleUseOAuthProvider(p.id)}
+                  >
+                    {t("providers.status.use")}
+                  </button>
+                </div>
+                {oauthMessages[p.id] && (
+                  <div className="provider-test-result provider-test-success">
+                    {oauthMessages[p.id]}
+                  </div>
+                )}
               </div>
-              <div className="settings-field-hint">{t(p.desc)}</div>
-              <button
-                className="btn btn-secondary btn-sm oauth-signin-btn"
-                aria-label={`${t("providers.oauth.signIn")} — ${p.name}`}
-                onClick={() => setOauthModal(p)}
-              >
-                <KeyRound size={14} />
-                {t("providers.oauth.signIn")}
-              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="settings-section">
+        <div className="settings-section-title">
+          {t("providers.agentUpdates.sectionTitle")}
+        </div>
+        <div className="settings-field-hint" style={{ marginBottom: 10 }}>
+          {t("providers.agentUpdates.sectionHint")}
+        </div>
+        <div className="provider-update-panel">
+          <div className="provider-update-controls">
+            <label className="provider-update-toggle">
+              <input
+                type="checkbox"
+                checked={agentUpdateRoutine?.enabled ?? true}
+                onChange={(event) =>
+                  void handleAgentUpdateSetting({
+                    enabled: event.currentTarget.checked,
+                  })
+                }
+              />
+              <span>{t("providers.agentUpdates.enabled")}</span>
+            </label>
+            <label className="provider-update-toggle">
+              <input
+                type="checkbox"
+                checked={agentUpdateRoutine?.autoApply ?? false}
+                onChange={(event) =>
+                  void handleAgentUpdateSetting({
+                    autoApply: event.currentTarget.checked,
+                  })
+                }
+              />
+              <span>{t("providers.agentUpdates.autoApply")}</span>
+            </label>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm provider-update-run"
+              onClick={() => void handleRunAgentUpdateCheck()}
+              disabled={agentUpdateBusy}
+            >
+              <Refresh size={14} />
+              {agentUpdateBusy
+                ? t("providers.agentUpdates.running")
+                : t("providers.agentUpdates.runNow")}
+            </button>
+          </div>
+          <div className="provider-update-grid">
+            <div>
+              <span>{t("providers.agentUpdates.schedule")}</span>
+              <strong>4:00 AM IST</strong>
             </div>
-          ))}
+            <div>
+              <span>{t("providers.agentUpdates.lastChecked")}</span>
+              <strong>
+                {formatUpdateTime(agentUpdateRoutine?.lastCheckedAt)}
+              </strong>
+            </div>
+            <div>
+              <span>{t("providers.agentUpdates.nextCheck")}</span>
+              <strong>{formatUpdateTime(agentUpdateRoutine?.nextCheckAt)}</strong>
+            </div>
+            <div>
+              <span>{t("providers.agentUpdates.lastResult")}</span>
+              {agentUpdateRoutine?.lastResult ? (
+                <strong
+                  className={`provider-update-status ${updateStatusClass(
+                    agentUpdateRoutine.lastResult.status,
+                  )}`}
+                >
+                  {t(
+                    `providers.agentUpdates.status.${agentUpdateRoutine.lastResult.status}`,
+                  )}
+                </strong>
+              ) : (
+                <strong>{t("providers.agentUpdates.noResult")}</strong>
+              )}
+            </div>
+          </div>
+          {(agentUpdateMessage || agentUpdateRoutine?.lastResult?.message) && (
+            <div className="provider-update-message">
+              {agentUpdateMessage || agentUpdateRoutine?.lastResult?.message}
+            </div>
+          )}
+          {agentUpdateRoutine?.lastResult?.changelog && (
+            <pre className="provider-update-changelog">
+              {agentUpdateRoutine.lastResult.changelog
+                .split("\n")
+                .slice(0, 8)
+                .join("\n")}
+            </pre>
+          )}
         </div>
       </div>
 
@@ -582,7 +1065,10 @@ function Providers({
           provider={oauthModal.id}
           providerLabel={oauthModal.name}
           profile={profile}
-          onClose={() => setOauthModal(null)}
+          onClose={() => {
+            setOauthModal(null);
+            void refreshOAuthStatuses();
+          }}
         />
       )}
     </div>

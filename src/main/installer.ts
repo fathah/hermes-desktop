@@ -476,16 +476,21 @@ export async function checkHermesUpdate(): Promise<HermesUpdateStatus> {
           timeout,
           ...HIDDEN_SUBPROCESS_OPTIONS,
         },
-        (error, stdout) => {
+        (error, stdout, stderr) => {
           resolve({
             ok: !error,
-            out: stripAnsi((stdout || "").toString()).trim(),
+            out:
+              stripAnsi((stdout || stderr || "").toString()).trim() ||
+              (error instanceof Error ? error.message : ""),
           });
         },
       );
     });
 
-  await runGit(["fetch", "--quiet"], 30000);
+  const fetched = await runGit(["fetch", "--quiet"], 30000);
+  if (!fetched.ok) {
+    return { available: false, reason: fetched.out || "fetch-failed" };
+  }
 
   const local = await runGit(["rev-parse", "HEAD"], 5000);
   const upstream = await runGit(["rev-parse", "@{u}"], 5000);
