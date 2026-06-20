@@ -9,9 +9,8 @@ import { tmpdir } from "os";
  * getModelConfig/readEnv/expectedEnvKeyForModel without filesystem
  * mocking.
  *
- * Fail-open semantics: any *uncertain* state (unknown provider+URL,
- * exception thrown) must return `{ok: true}`. The only "block" case
- * is a known provider missing its expected env var.
+ * Uncertain provider+URL states still return `{ok: true}`. Actual validator
+ * exceptions fail closed so a broken check cannot masquerade as green.
  */
 
 const TEST_DIR = join(tmpdir(), `hermes-test-validation-${Date.now()}`);
@@ -43,6 +42,25 @@ afterEach(() => {
 });
 
 describe("validateChatReadiness", () => {
+  it("fails closed when the validator itself throws unexpectedly", async () => {
+    vi.resetModules();
+    vi.doMock("../src/main/config", () => ({
+      getModelConfig: () => {
+        throw new Error("config exploded");
+      },
+      hasOAuthCredentials: () => false,
+      readEnv: () => ({}),
+      customEndpointKeyResolvable: () => false,
+    }));
+
+    const { validateChatReadiness } = await import("../src/main/validation");
+    const r = validateChatReadiness();
+    expect(r.ok).toBe(false);
+    expect(r.code).toBe("VALIDATION_ERROR");
+    expect(r.message).toMatch(/config exploded/);
+    vi.doUnmock("../src/main/config");
+  });
+
   it("returns ok for auto provider (key check makes no sense)", async () => {
     writeConfig(["model:", "  provider: auto", "  default: ''", ""].join("\n"));
     const { validateChatReadiness } = await freshValidation(TEST_DIR);

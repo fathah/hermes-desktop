@@ -2,19 +2,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, readFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { createMockKeychain } from "./helpers/mock-keychain";
 
 let testHome: string;
+const keychain = createMockKeychain();
 
 async function loadConfigModule(): Promise<
   typeof import("../src/main/config")
 > {
   vi.resetModules();
+  keychain.install();
   vi.stubEnv("HERMES_HOME", testHome);
   return await import("../src/main/config");
 }
 
 describe("WhatsApp Cloud platform enablement", () => {
   beforeEach(() => {
+    keychain.reset();
     testHome = mkdtempSync(join(tmpdir(), "hermes-wa-cloud-platform-"));
   });
 

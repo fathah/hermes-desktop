@@ -483,6 +483,7 @@ interface HermesAPI {
     labels: { open: string; saveAs: string },
   ) => void;
   getPathForFile: (file: File) => string;
+  grantPathForFile: (file: File) => Promise<string>;
   stageAttachment: (
     sessionId: string,
     filename: string,

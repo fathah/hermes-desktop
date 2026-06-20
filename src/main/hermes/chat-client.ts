@@ -545,12 +545,6 @@ export function sendMessageViaApi(
     function finish(error?: string): void {
       if (finished) return;
       finished = true;
-      console.log(
-        "[hermes] finish called:",
-        error ? `error=${error}` : "done",
-        "sessionId=",
-        sessionId,
-      );
       if (error) {
         cb.onError(error);
       } else {

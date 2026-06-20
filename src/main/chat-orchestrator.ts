@@ -99,10 +99,30 @@ export async function runChatTurn(
     },
   );
 
-  const contentRedactor = new StreamRedactor(secretsToRedact);
-  const reasoningRedactor = new StreamRedactor(secretsToRedact);
+  const contentRedactor = new StreamRedactor(secretsToRedact, {
+    redactShortSecrets: true,
+  });
+  const reasoningRedactor = new StreamRedactor(secretsToRedact, {
+    redactShortSecrets: true,
+  });
+  let handle: { abort: () => void } | null = null;
+  let abortRequestedBeforeHandle = false;
+  const abortCurrent = (): void => {
+    if (handle) {
+      handle.abort();
+    } else {
+      abortRequestedBeforeHandle = true;
+    }
+  };
+  const clearAbort = (): void => {
+    if (abortRegistry.get(sessionKey) === abortCurrent) {
+      abortRegistry.delete(sessionKey);
+    }
+  };
 
-  const handle = await transport(
+  abortRegistry.set(sessionKey, abortCurrent);
+
+  handle = await transport(
     req.message,
     {
       onChunk: (chunk) => {
@@ -134,7 +154,7 @@ export async function runChatTurn(
         if (reasoningFlush) {
           sink.emit("chat-reasoning-chunk", reasoningFlush);
         }
-        abortRegistry.delete(sessionKey);
+        clearAbort();
         sink.emit("chat-done", sessionId || "");
 
         if (sessionId) {
@@ -148,7 +168,7 @@ export async function runChatTurn(
       onError: (error) => {
         contentRedactor.flush();
         reasoningRedactor.flush();
-        abortRegistry.delete(sessionKey);
+        clearAbort();
         sink.emit("chat-error", error);
         rejectChat(new Error(error));
         effects.notifyError(error);
@@ -183,6 +203,11 @@ export async function runChatTurn(
     req.modelOverride,
   );
 
-  abortRegistry.set(sessionKey, handle.abort);
+  if (
+    abortRegistry.get(sessionKey) === abortCurrent &&
+    abortRequestedBeforeHandle
+  ) {
+    handle.abort();
+  }
   return promise;
 }

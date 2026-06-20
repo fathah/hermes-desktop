@@ -9,7 +9,8 @@ import {
 } from "fs";
 import { homedir } from "os";
 import { join, basename } from "path";
-import { getActiveProfileNameSync } from "./utils";
+import { getActiveProfileNameSync, safeWriteFile } from "./utils";
+import { HERMES_HOME } from "./installer/paths";
 import {
   readDesktopConfig,
   writeDesktopConfig,
@@ -69,11 +70,23 @@ function getICalDates(dueStr: string): { start: string; end: string } | null {
     };
     return { start: fmt(startD), end: fmt(endD) };
   }
-  
+
   const parsed = new Date(dueStr);
   if (!isNaN(parsed.getTime())) {
-    const startD = new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate()));
-    const endD = new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate() + 1));
+    const startD = new Date(
+      Date.UTC(
+        parsed.getUTCFullYear(),
+        parsed.getUTCMonth(),
+        parsed.getUTCDate(),
+      ),
+    );
+    const endD = new Date(
+      Date.UTC(
+        parsed.getUTCFullYear(),
+        parsed.getUTCMonth(),
+        parsed.getUTCDate() + 1,
+      ),
+    );
     const fmt = (date: Date): string => {
       const ys = String(date.getUTCFullYear());
       const ms = String(date.getUTCMonth() + 1).padStart(2, "0");
@@ -85,7 +98,9 @@ function getICalDates(dueStr: string): { start: string; end: string } | null {
   return null;
 }
 
-function readJsonRequest(req: IncomingMessage): Promise<Record<string, unknown>> {
+function readJsonRequest(
+  req: IncomingMessage,
+): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     let body = "";
     req.on("data", (chunk) => {
@@ -134,61 +149,72 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
     const token = url.searchParams.get("token") || "";
     if (token !== authToken) {
       res.writeHead(401, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Unauthorized. Token mismatch or missing." }));
+      res.end(
+        JSON.stringify({ error: "Unauthorized. Token mismatch or missing." }),
+      );
       return;
     }
 
     const profile = getActiveProfileNameSync();
-    getSpsNoteIndex(profile).then((index) => {
-      const notes = index.query({
-        filters: [{ prop: "due", op: "exists" }]
-      });
+    getSpsNoteIndex(profile)
+      .then((index) => {
+        const notes = index.query({
+          filters: [{ prop: "due", op: "exists" }],
+        });
 
-      const ical = [
-        "BEGIN:VCALENDAR",
-        "VERSION:2.0",
-        "PRODID:-//Hermes//SPS Task Sync//EN",
-        "CALSCALE:GREGORIAN",
-        "METHOD:PUBLISH"
-      ];
+        const ical = [
+          "BEGIN:VCALENDAR",
+          "VERSION:2.0",
+          "PRODID:-//Hermes//SPS Task Sync//EN",
+          "CALSCALE:GREGORIAN",
+          "METHOD:PUBLISH",
+        ];
 
-      for (const note of notes) {
-        const dueStr = String(note.props.due || "");
-        const dates = getICalDates(dueStr);
-        if (!dates) continue;
+        for (const note of notes) {
+          const dueStr = String(note.props.due || "");
+          const dates = getICalDates(dueStr);
+          if (!dates) continue;
 
-        const uid = `${note.path.replace(/\//g, "-")}@hermes`;
-        const title = String(note.props.title || note.title || basename(note.path, ".md"));
-        const status = String(note.props.status || "todo");
-        const prio = String(note.props.prio || "med");
-        const assignee = String(note.props.who || note.props.assignee || "you");
-        const desc = `Status: ${status}\\nPriority: ${prio}\\nAssignee: ${assignee}`;
-        const nowStr = new Date().toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+          const uid = `${note.path.replace(/\//g, "-")}@hermes`;
+          const title = String(
+            note.props.title || note.title || basename(note.path, ".md"),
+          );
+          const status = String(note.props.status || "todo");
+          const prio = String(note.props.prio || "med");
+          const assignee = String(
+            note.props.who || note.props.assignee || "you",
+          );
+          const desc = `Status: ${status}\\nPriority: ${prio}\\nAssignee: ${assignee}`;
+          const nowStr =
+            new Date().toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
 
-        ical.push(
-          "BEGIN:VEVENT",
-          `UID:${uid}`,
-          `DTSTAMP:${nowStr}`,
-          `DTSTART;VALUE=DATE:${dates.start}`,
-          `DTEND;VALUE=DATE:${dates.end}`,
-          `SUMMARY:${title}`,
-          `DESCRIPTION:${desc}`,
-          "STATUS:CONFIRMED",
-          "END:VEVENT"
+          ical.push(
+            "BEGIN:VEVENT",
+            `UID:${uid}`,
+            `DTSTAMP:${nowStr}`,
+            `DTSTART;VALUE=DATE:${dates.start}`,
+            `DTEND;VALUE=DATE:${dates.end}`,
+            `SUMMARY:${title}`,
+            `DESCRIPTION:${desc}`,
+            "STATUS:CONFIRMED",
+            "END:VEVENT",
+          );
+        }
+
+        ical.push("END:VCALENDAR");
+
+        res.writeHead(200, {
+          "Content-Type": "text/calendar; charset=utf-8",
+          "Content-Disposition": "attachment; filename=calendar.ics",
+        });
+        res.end(ical.join("\r\n"));
+      })
+      .catch((err) => {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({ error: `Internal server error: ${err.message}` }),
         );
-      }
-
-      ical.push("END:VCALENDAR");
-
-      res.writeHead(200, {
-        "Content-Type": "text/calendar; charset=utf-8",
-        "Content-Disposition": "attachment; filename=calendar.ics"
       });
-      res.end(ical.join("\r\n"));
-    }).catch((err) => {
-      res.writeHead(500, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: `Internal server error: ${err.message}` }));
-    });
     return;
   }
 
@@ -211,7 +237,6 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
     return;
   }
 
-
   if (req.method === "GET" && url.pathname === "/state") {
     const profile = getActiveProfileNameSync();
     const conn = getConnectionConfig();
@@ -233,7 +258,9 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
     const profile = getActiveProfileNameSync();
     getSpsNoteIndex(profile)
       .then((index) => writeJson(res, 200, index.status()))
-      .catch((err) => writeJson(res, 500, { error: String(err.message || err) }));
+      .catch((err) =>
+        writeJson(res, 500, { error: String(err.message || err) }),
+      );
     return;
   }
 
@@ -243,7 +270,9 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
     const limit = Number(url.searchParams.get("limit") || 20);
     getSpsNoteIndex(profile)
       .then((index) => writeJson(res, 200, index.search(q, limit)))
-      .catch((err) => writeJson(res, 500, { error: String(err.message || err) }));
+      .catch((err) =>
+        writeJson(res, 500, { error: String(err.message || err) }),
+      );
     return;
   }
 
@@ -256,7 +285,9 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
           ? writeJson(res, 404, { error: "Page not found." })
           : writeJson(res, 200, { page, markdown }),
       )
-      .catch((err) => writeJson(res, 500, { error: String(err.message || err) }));
+      .catch((err) =>
+        writeJson(res, 500, { error: String(err.message || err) }),
+      );
     return;
   }
 
@@ -272,18 +303,23 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
         return buildContextPack(
           {
             pageId,
-            depth: typeof payload.depth === "number" ? payload.depth : undefined,
+            depth:
+              typeof payload.depth === "number" ? payload.depth : undefined,
             includeBacklinks: payload.includeBacklinks !== false,
             includeTasks: payload.includeTasks !== false,
             includeSources: payload.includeSources !== false,
             maxBytes:
-              typeof payload.maxBytes === "number" ? payload.maxBytes : undefined,
+              typeof payload.maxBytes === "number"
+                ? payload.maxBytes
+                : undefined,
             save: payload.save === true,
           },
           profile,
         ).then((result) => writeJson(res, 200, result));
       })
-      .catch((err) => writeJson(res, 400, { error: String(err.message || err) }));
+      .catch((err) =>
+        writeJson(res, 400, { error: String(err.message || err) }),
+      );
     return;
   }
 
@@ -307,15 +343,23 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
           via: typeof payload.via === "string" ? payload.via : "local-api",
           url: typeof payload.url === "string" ? payload.url : undefined,
           selection:
-            typeof payload.selection === "string" ? payload.selection : undefined,
+            typeof payload.selection === "string"
+              ? payload.selection
+              : undefined,
           highlights: Array.isArray(payload.highlights)
-            ? payload.highlights.filter((h): h is string => typeof h === "string")
+            ? payload.highlights.filter(
+                (h): h is string => typeof h === "string",
+              )
             : undefined,
           capturedAt:
-            typeof payload.capturedAt === "number" ? payload.capturedAt : Date.now(),
+            typeof payload.capturedAt === "number"
+              ? payload.capturedAt
+              : Date.now(),
         }).then((result) => writeJson(res, result.success ? 200 : 500, result));
       })
-      .catch((err) => writeJson(res, 400, { error: String(err.message || err) }));
+      .catch((err) =>
+        writeJson(res, 400, { error: String(err.message || err) }),
+      );
     return;
   }
 
@@ -332,11 +376,15 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
           return;
         }
         const profile = getActiveProfileNameSync();
-        return exportPageMarkdownTo(resolveSpsVaultDir(profile), pageId, markdown).then(
-          (ok) => writeJson(res, ok ? 200 : 400, { success: ok }),
-        );
+        return exportPageMarkdownTo(
+          resolveSpsVaultDir(profile),
+          pageId,
+          markdown,
+        ).then((ok) => writeJson(res, ok ? 200 : 400, { success: ok }));
       })
-      .catch((err) => writeJson(res, 400, { error: String(err.message || err) }));
+      .catch((err) =>
+        writeJson(res, 400, { error: String(err.message || err) }),
+      );
     return;
   }
 
@@ -363,7 +411,9 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
           markdown,
         ).then((ok) => writeJson(res, ok ? 200 : 400, { success: ok, rowId }));
       })
-      .catch((err) => writeJson(res, 400, { error: String(err.message || err) }));
+      .catch((err) =>
+        writeJson(res, 400, { error: String(err.message || err) }),
+      );
     return;
   }
 
@@ -602,18 +652,40 @@ function listenOnPort(port: number, maxAttempts = 10): Promise<number> {
   });
 }
 
-function writeShellHelper(port: number, token: string): void {
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\"'\"'")}'`;
+}
+
+export function controlServerTokenFile(): string {
+  return join(HERMES_HOME, "control-server.token");
+}
+
+function writeControlTokenFile(token: string): string {
+  const tokenPath = controlServerTokenFile();
+  safeWriteFile(tokenPath, `${token}\n`);
   try {
-    const binDir = join(homedir(), ".hermes", "bin");
-    if (!existsSync(binDir)) {
-      mkdirSync(binDir, { recursive: true });
-    }
-    const helperPath = join(binDir, "hermes-ask");
-    const scriptContent = `#!/bin/bash
+    chmodSync(tokenPath, 0o600);
+  } catch {
+    /* best effort */
+  }
+  return tokenPath;
+}
+
+export function renderShellHelperScript(
+  port: number,
+  tokenFilePath: string,
+): string {
+  return `#!/bin/bash
 # Auto-generated by Hermes Control Server
 DESKTOP_JSON="$HOME/.hermes/desktop.json"
 PORT="${port}"
-TOKEN="${token}"
+TOKEN_FILE=${shellQuote(tokenFilePath)}
+TOKEN="$(cat "$TOKEN_FILE" 2>/dev/null | tr -d '\\r\\n')"
+
+if [ -z "$TOKEN" ]; then
+  echo "Hermes control-server token is unavailable."
+  exit 1
+fi
 
 if [ "$1" = "--state" ] || [ "$1" = "-s" ]; then
   curl -s -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:$PORT/state"
@@ -633,22 +705,23 @@ else
   curl -s -H "Authorization: Bearer $TOKEN" -X POST -H "Content-Type: application/json" -d "{\\"message\\":\\"$1\\"}" "http://127.0.0.1:$PORT/query"
 fi
 `;
-    writeFileSync(helperPath, scriptContent, "utf-8");
-    chmodSync(helperPath, 0o755);
-    writeSpsHelper(binDir, port, token);
-    console.log(`[CONTROL SERVER] Generated OS-native CLI tool: ${helperPath}`);
-  } catch {
-    console.error("[CONTROL SERVER] Failed to write hermes-ask shell helper");
-  }
 }
 
-function writeSpsHelper(binDir: string, port: number, token: string): void {
-  const helperPath = join(binDir, "sps");
-  const scriptContent = `#!/bin/bash
+export function renderSpsHelperScript(
+  port: number,
+  tokenFilePath: string,
+): string {
+  return `#!/bin/bash
 # Auto-generated by Hermes Control Server
 PORT="${port}"
-TOKEN="${token}"
+TOKEN_FILE=${shellQuote(tokenFilePath)}
+TOKEN="$(cat "$TOKEN_FILE" 2>/dev/null | tr -d '\\r\\n')"
 BASE="http://127.0.0.1:$PORT"
+
+if [ -z "$TOKEN" ]; then
+  echo "Hermes control-server token is unavailable."
+  exit 1
+fi
 
 case "$1" in
   status)
@@ -684,7 +757,28 @@ case "$1" in
     ;;
 esac
 `;
-  writeFileSync(helperPath, scriptContent, "utf-8");
+}
+
+function writeShellHelper(port: number, token: string): void {
+  try {
+    const binDir = join(homedir(), ".hermes", "bin");
+    if (!existsSync(binDir)) {
+      mkdirSync(binDir, { recursive: true });
+    }
+    const helperPath = join(binDir, "hermes-ask");
+    const tokenPath = writeControlTokenFile(token);
+    safeWriteFile(helperPath, renderShellHelperScript(port, tokenPath));
+    chmodSync(helperPath, 0o755);
+    writeSpsHelper(binDir, port, tokenPath);
+    console.log(`[CONTROL SERVER] Generated OS-native CLI tool: ${helperPath}`);
+  } catch {
+    console.error("[CONTROL SERVER] Failed to write hermes-ask shell helper");
+  }
+}
+
+function writeSpsHelper(binDir: string, port: number, tokenPath: string): void {
+  const helperPath = join(binDir, "sps");
+  safeWriteFile(helperPath, renderSpsHelperScript(port, tokenPath));
   chmodSync(helperPath, 0o755);
 }
 

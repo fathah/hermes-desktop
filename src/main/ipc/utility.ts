@@ -12,6 +12,12 @@ import { extname } from "path";
 import { readMediaAsDataUrl, saveMedia, mediaFileExists } from "../media";
 import { stageAttachment, clearStagedAttachments } from "../attachment-staging";
 import {
+  assertGrantedDirectoryPath,
+  assertGrantedFilePath,
+  grantDirectoryPath,
+  grantFilePath,
+} from "../file-access-grants";
+import {
   pythonCompress,
   pythonIsPathAllowed,
   pythonEvaluateExecution,
@@ -132,8 +138,11 @@ export function registerUtilityIpc(
   safeHandle(
     "stage-attachment",
     (_event, sessionId: string, filename: string, base64Bytes: string) => {
-      return stageAttachment(sessionId, filename, base64Bytes);
+      return grantFilePath(stageAttachment(sessionId, filename, base64Bytes));
     },
+  );
+  safeHandle("grant-file-path", (_event, filePath: string) =>
+    grantFilePath(filePath),
   );
   safeHandle("clear-staged-attachments", (_event, sessionId: string) => {
     clearStagedAttachments(sessionId);
@@ -146,7 +155,7 @@ export function registerUtilityIpc(
       ? await dialog.showOpenDialog(win, { properties: ["openDirectory"] })
       : await dialog.showOpenDialog({ properties: ["openDirectory"] });
     if (result.canceled || result.filePaths.length === 0) return null;
-    return result.filePaths[0];
+    return grantDirectoryPath(result.filePaths[0]);
   });
 
   safeHandle(
@@ -156,7 +165,8 @@ export function registerUtilityIpc(
       dirPath: string,
     ): Promise<{ name: string; isDirectory: boolean }[] | null> => {
       try {
-        const entries = await readdir(dirPath, { withFileTypes: true });
+        const grantedDir = assertGrantedDirectoryPath(dirPath);
+        const entries = await readdir(grantedDir, { withFileTypes: true });
         return entries.map((entry) => ({
           name: entry.name,
           isDirectory: entry.isDirectory(),
@@ -176,7 +186,7 @@ export function registerUtilityIpc(
     ): Promise<{ content: string; truncated: boolean } | null> => {
       try {
         const limit = maxBytes ?? 102400; // Default 100KB
-        const buffer = await readFile(filePath);
+        const buffer = await readFile(assertGrantedFilePath(filePath));
         const truncated = buffer.byteLength > limit;
         const content = truncated
           ? buffer.subarray(0, limit).toString("utf-8")
@@ -190,7 +200,7 @@ export function registerUtilityIpc(
 
   safeHandle("open-file-in-editor", async (_event, filePath: string) => {
     try {
-      await shell.openPath(filePath);
+      await shell.openPath(assertGrantedFilePath(filePath));
       return true;
     } catch {
       return false;
@@ -201,8 +211,9 @@ export function registerUtilityIpc(
     "read-image-file",
     async (_event, filePath: string): Promise<string | null> => {
       try {
-        const buffer = await readFile(filePath);
-        const ext = extname(filePath).toLowerCase().slice(1);
+        const grantedFile = assertGrantedFilePath(filePath);
+        const buffer = await readFile(grantedFile);
+        const ext = extname(grantedFile).toLowerCase().slice(1);
         const mimeType =
           ext === "png"
             ? "image/png"

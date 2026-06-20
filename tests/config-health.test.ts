@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { join } from "path";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
+import { createMockKeychain } from "./helpers/mock-keychain";
 
 /**
  * Config-health audit — runs checks against a real on-disk profile and
@@ -12,11 +13,13 @@ const TEST_DIR = join(
   tmpdir(),
   `hermes-test-config-health-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
 );
+const keychain = createMockKeychain();
 
 async function freshHealth(
   home: string,
 ): Promise<typeof import("../src/main/config-health")> {
   vi.resetModules();
+  keychain.install();
   vi.doMock("../src/main/wsl-detection", () => ({
     findSiblingHermesHomes: () => [],
   }));
@@ -33,6 +36,7 @@ function writeEnv(content: string): void {
 }
 
 beforeEach(() => {
+  keychain.reset();
   mkdirSync(TEST_DIR, { recursive: true });
 });
 
@@ -237,9 +241,11 @@ describe("autoFixIssue", () => {
     expect(result.ok).toBe(true);
     const envFile = join(TEST_DIR, ".env");
     expect(existsSync(envFile)).toBe(true);
-    expect(readFileSync(envFile, "utf-8")).toMatch(
-      /^API_SERVER_KEY=sk-migrate-me/m,
-    );
+    const envText = readFileSync(envFile, "utf-8");
+    expect(envText).toMatch(/^API_SERVER_KEY=__keychain__/m);
+    expect(envText).not.toContain("sk-migrate-me");
+    const { readEnv } = await import("../src/main/config");
+    expect(readEnv().API_SERVER_KEY).toBe("sk-migrate-me");
   });
 
   it("copies misfiled env key to the expected name", async () => {
@@ -251,9 +257,12 @@ describe("autoFixIssue", () => {
     });
     expect(result.ok).toBe(true);
     const env = readFileSync(join(TEST_DIR, ".env"), "utf-8");
-    expect(env).toMatch(/^OPENROUTER_API_KEY=sk-meant-for-openrouter/m);
+    expect(env).toMatch(/^OPENROUTER_API_KEY=__keychain__/m);
+    expect(env).not.toMatch(/^OPENROUTER_API_KEY=sk-meant-for-openrouter/m);
     // Original untouched
     expect(env).toMatch(/^GROQ_API_KEY=sk-meant-for-openrouter/m);
+    const { readEnv } = await import("../src/main/config");
+    expect(readEnv().OPENROUTER_API_KEY).toBe("sk-meant-for-openrouter");
   });
 
   it("strips non-ASCII characters from credentials", async () => {
@@ -264,7 +273,10 @@ describe("autoFixIssue", () => {
     });
     expect(result.ok).toBe(true);
     const env = readFileSync(join(TEST_DIR, ".env"), "utf-8");
-    expect(env).toMatch(/^OPENROUTER_API_KEY=sk-or-testtail/m);
+    expect(env).toMatch(/^OPENROUTER_API_KEY=__keychain__/m);
+    expect(env).not.toContain("sk-or-testtail");
+    const { readEnv } = await import("../src/main/config");
+    expect(readEnv().OPENROUTER_API_KEY).toBe("sk-or-testtail");
   });
 
   it("returns ok:false for unknown issue codes", async () => {

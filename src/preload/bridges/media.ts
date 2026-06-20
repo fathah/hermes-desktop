@@ -27,6 +27,18 @@ export const mediaBridge = {
     }
   },
 
+  grantPathForFile: (file: File): Promise<string> => {
+    let path = "";
+    try {
+      path = webUtils.getPathForFile(file) || "";
+    } catch {
+      path = "";
+    }
+    return path
+      ? ipcRenderer.invoke("grant-file-path", path)
+      : Promise.resolve("");
+  },
+
   stageAttachment: (
     sessionId: string,
     filename: string,

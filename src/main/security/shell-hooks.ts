@@ -163,7 +163,12 @@ export class ShellHookManager {
           `[ShellHookManager] Hook execution failed for ${command}:`,
           err,
         );
-        // Fail-open: don't block agent execution if hook script crashes
+        if (event.startsWith("pre_")) {
+          return {
+            action: "block",
+            message: `Hook execution failed for '${command}' on event '${event}'.`,
+          };
+        }
       }
     }
 

@@ -2,13 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { createMockKeychain } from "./helpers/mock-keychain";
 
 let testHome: string;
+const keychain = createMockKeychain();
 
 async function loadConfigModule(): Promise<
   typeof import("../src/main/config")
 > {
   vi.resetModules();
+  keychain.install();
   vi.stubEnv("HERMES_HOME", testHome);
   return await import("../src/main/config");
 }
@@ -19,6 +22,7 @@ function readEnvFile(): string {
 
 describe("environment variable write validation", () => {
   beforeEach(() => {
+    keychain.reset();
     testHome = mkdtempSync(join(tmpdir(), "hermes-env-validation-"));
   });
 
@@ -37,7 +41,8 @@ describe("environment variable write validation", () => {
       OPENAI_API_KEY: "sk-valid",
       _CUSTOM_TOKEN_2: "token=value=with=equals",
     });
-    expect(readEnvFile()).toContain("OPENAI_API_KEY=sk-valid");
+    expect(readEnvFile()).toContain("OPENAI_API_KEY=__keychain__");
+    expect(readEnvFile()).not.toContain("OPENAI_API_KEY=sk-valid");
   });
 
   it("rejects malformed environment variable names", async () => {

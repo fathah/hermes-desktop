@@ -6,11 +6,14 @@ export class StreamRedactor {
   private secrets: string[];
   private buffer = "";
 
-  constructor(secrets: string[]) {
-    // Only keep secrets that are long enough to avoid false positives (e.g. > 8 characters)
-    this.secrets = secrets.filter(
-      (s) => typeof s === "string" && s.trim().length > 8,
-    );
+  constructor(
+    secrets: string[],
+    options: { redactShortSecrets?: boolean } = {},
+  ) {
+    this.secrets = secrets.filter((s) => {
+      if (typeof s !== "string" || !s.trim()) return false;
+      return options.redactShortSecrets || s.trim().length > 8;
+    });
   }
 
   /**

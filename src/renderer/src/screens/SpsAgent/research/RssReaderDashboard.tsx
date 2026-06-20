@@ -1,5 +1,6 @@
 import React, { useCallback, useState, useEffect } from "react";
 import { Icon } from "../components/Icon";
+import { sanitizeRssHtml } from "../lib/sanitize";
 import { SourceIntakePanel } from "./SourceIntakePanel";
 import { saveContentIdea } from "../content/contentStudioStorage";
 import { useStore } from "../store";
@@ -389,9 +390,14 @@ ${art.content_raw?.replace(/<[^>]*>/g, "") || art.summary_excerpt || "No content
                 className="reader-body"
                 data-font-size={fontSize}
                 dangerouslySetInnerHTML={{
+                  // C3: content_raw is untrusted remote RSS/Atom HTML. It must
+                  // be sanitized before injection — a malicious feed article
+                  // otherwise executes JS in the privileged renderer, which
+                  // chains into sps-trigger-action (arbitrary shell). Empty
+                  // content degrades to a placeholder.
                   __html:
-                    activeArticle.content_raw ||
-                    activeArticle.summary_excerpt ||
+                    sanitizeRssHtml(activeArticle.content_raw) ||
+                    sanitizeRssHtml(activeArticle.summary_excerpt) ||
                     "<p>No content extracted.</p>",
                 }}
               />

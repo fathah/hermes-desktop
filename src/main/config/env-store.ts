@@ -15,6 +15,25 @@ import { HIDDEN_SUBPROCESS_OPTIONS } from "../process-options";
 const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 const SENSITIVE_ENV_KEYS = new Set([
+  "API_SERVER_KEY",
+  "OPENAI_API_KEY",
+  "ANTHROPIC_API_KEY",
+  "GOOGLE_API_KEY",
+  "GEMINI_API_KEY",
+  "DEEPSEEK_API_KEY",
+  "GROQ_API_KEY",
+  "OPENROUTER_API_KEY",
+  "TOGETHER_API_KEY",
+  "FIREWORKS_API_KEY",
+  "CEREBRAS_API_KEY",
+  "MISTRAL_API_KEY",
+  "PERPLEXITY_API_KEY",
+  "XAI_API_KEY",
+  "QWEN_API_KEY",
+  "MINIMAX_API_KEY",
+  "GLM_API_KEY",
+  "HF_TOKEN",
+  "HUGGINGFACE_API_KEY",
   "DISCORD_BOT_TOKEN",
   "SLACK_BOT_TOKEN",
   "SLACK_APP_TOKEN",
@@ -31,8 +50,15 @@ const SENSITIVE_ENV_KEYS = new Set([
   "FEISHU_APP_SECRET",
   "WECOM_SECRET",
   "WEBHOOK_SECRET",
-  "HASS_TOKEN"
+  "HASS_TOKEN",
 ]);
+
+function isSensitiveEnvKey(key: string): boolean {
+  if (SENSITIVE_ENV_KEYS.has(key)) return true;
+  return /(^|_)(API_KEY|TOKEN|SECRET|PASSWORD|PASSWD|PWD|ACCESS_KEY|PRIVATE_KEY)$/i.test(
+    key,
+  );
+}
 
 export function readEnv(profile?: string): Record<string, string> {
   const cacheKey = `env:${profile || "default"}`;
@@ -63,7 +89,12 @@ export function readEnv(profile?: string): Record<string, string> {
     if (value === "__keychain__") {
       try {
         const activeProfile = profile || "default";
-        const args = hermesCliArgs(["config", "get-secret", activeProfile, key]);
+        const args = hermesCliArgs([
+          "config",
+          "get-secret",
+          activeProfile,
+          key,
+        ]);
         const output = execFileSync(HERMES_PYTHON, args, {
           cwd: HERMES_REPO,
           env: {
@@ -78,7 +109,10 @@ export function readEnv(profile?: string): Record<string, string> {
         });
         value = output.toString().trim();
       } catch (err) {
-        console.error(`[Keychain] Failed to retrieve ${key} from OS Keychain:`, err);
+        console.error(
+          `[Keychain] Failed to retrieve ${key} from OS Keychain:`,
+          err,
+        );
         value = "";
       }
     }
@@ -102,10 +136,16 @@ export function setEnvValue(
   if (key === "API_SERVER_KEY") invalidateCache("apiServerKey:");
 
   let finalValue = value;
-  if (SENSITIVE_ENV_KEYS.has(key)) {
+  if (isSensitiveEnvKey(key)) {
     try {
       const activeProfile = profile || "default";
-      const args = hermesCliArgs(["config", "set-secret", activeProfile, key, value]);
+      const args = hermesCliArgs([
+        "config",
+        "set-secret",
+        activeProfile,
+        key,
+        value,
+      ]);
       execFileSync(HERMES_PYTHON, args, {
         cwd: HERMES_REPO,
         env: {
@@ -121,6 +161,9 @@ export function setEnvValue(
       finalValue = "__keychain__";
     } catch (err) {
       console.error(`[Keychain] Failed to store ${key} in OS Keychain:`, err);
+      throw new Error(
+        `Failed to store sensitive environment variable ${key} in the OS Keychain; refusing to write plaintext.`,
+      );
     }
   }
 
@@ -195,7 +238,10 @@ export function getKeychainKeys(profile?: string): string[] {
 
     return keychainKeys;
   } catch (err) {
-    console.error(`[Keychain] Failed to read ${envFile} to resolve keychain keys:`, err);
+    console.error(
+      `[Keychain] Failed to read ${envFile} to resolve keychain keys:`,
+      err,
+    );
     return [];
   }
 }

@@ -454,7 +454,7 @@ export async function processFiles(
 
     let path = "";
     try {
-      path = window.hermesAPI.getPathForFile(file) || "";
+      path = await window.hermesAPI.grantPathForFile(file);
     } catch {
       path = "";
     }

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { join } from "path";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
+import { createMockKeychain } from "./helpers/mock-keychain";
 
 /**
  * Migration on read: when getApiServerKey() resolves the key from a
@@ -22,16 +23,19 @@ import { tmpdir } from "os";
  */
 
 const TEST_DIR = join(tmpdir(), `hermes-test-migration-${Date.now()}`);
+const keychain = createMockKeychain();
 
 async function freshConfig(
   home: string,
 ): Promise<typeof import("../src/main/config")> {
   vi.resetModules();
+  keychain.install();
   process.env.HERMES_HOME = home;
   return await import("../src/main/config");
 }
 
 beforeEach(() => {
+  keychain.reset();
   mkdirSync(TEST_DIR, { recursive: true });
 });
 
@@ -48,15 +52,18 @@ describe("getApiServerKey migration (default profile)", () => {
       ["api_server:", "  token: sk-from-config-token", ""].join("\n"),
     );
     // No .env file at all yet
-    const { getApiServerKey } = await freshConfig(TEST_DIR);
+    const { getApiServerKey, readEnv } = await freshConfig(TEST_DIR);
 
     expect(getApiServerKey()).toBe("sk-from-config-token");
 
-    // .env should now exist and contain the key
+    // .env should now exist with a keychain marker, and runtime reads
+    // resolve through the keychain.
     const envFile = join(TEST_DIR, ".env");
     expect(existsSync(envFile)).toBe(true);
     const envContent = readFileSync(envFile, "utf-8");
-    expect(envContent).toMatch(/^API_SERVER_KEY=sk-from-config-token/m);
+    expect(envContent).toMatch(/^API_SERVER_KEY=__keychain__/m);
+    expect(envContent).not.toContain("sk-from-config-token");
+    expect(readEnv().API_SERVER_KEY).toBe("sk-from-config-token");
   });
 
   it("migrates from top-level API_SERVER_KEY when .env is empty", async () => {
@@ -64,12 +71,14 @@ describe("getApiServerKey migration (default profile)", () => {
       join(TEST_DIR, "config.yaml"),
       ["API_SERVER_KEY: sk-legacy-top-level", ""].join("\n"),
     );
-    const { getApiServerKey } = await freshConfig(TEST_DIR);
+    const { getApiServerKey, readEnv } = await freshConfig(TEST_DIR);
 
     expect(getApiServerKey()).toBe("sk-legacy-top-level");
 
     const envContent = readFileSync(join(TEST_DIR, ".env"), "utf-8");
-    expect(envContent).toMatch(/^API_SERVER_KEY=sk-legacy-top-level/m);
+    expect(envContent).toMatch(/^API_SERVER_KEY=__keychain__/m);
+    expect(envContent).not.toContain("sk-legacy-top-level");
+    expect(readEnv().API_SERVER_KEY).toBe("sk-legacy-top-level");
   });
 
   it("leaves the original config.yaml entry intact (additive only)", async () => {

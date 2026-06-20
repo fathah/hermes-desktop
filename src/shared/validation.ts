@@ -6,7 +6,8 @@ export type ChatReadinessCode =
   | "NO_PROVIDER"
   | "NO_BASE_URL"
   | "MISSING_API_KEY"
-  | "GATEWAY_DOWN";
+  | "GATEWAY_DOWN"
+  | "VALIDATION_ERROR";
 
 export type FixLocation = "providers" | "models" | "gateway" | "setup";
 

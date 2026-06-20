@@ -45,6 +45,12 @@ vi.mock("../src/main/scheduler", () => ({
 
 vi.mock("../src/main/utils", () => ({
   getActiveProfileNameSync: () => "test-profile",
+  safeWriteFile: (path: string, content: string) =>
+    mockWriteFileSync(path, content, "utf-8"),
+}));
+
+vi.mock("../src/main/installer/paths", () => ({
+  HERMES_HOME: "/tmp/hermes-test-home/.hermes",
 }));
 
 import {
@@ -72,11 +78,23 @@ describe("Local Control Server Integration", () => {
 
     // Verify OS-native script helper is generated
     expect(mockWriteFileSync).toHaveBeenCalled();
-    const filePath = mockWriteFileSync.mock.calls[0][0];
-    const fileContent = mockWriteFileSync.mock.calls[0][1];
+    const helperCall = mockWriteFileSync.mock.calls.find((call) =>
+      String(call[0]).includes("/tmp/hermes-test-home/.hermes/bin/hermes-ask"),
+    );
+    const tokenCall = mockWriteFileSync.mock.calls.find((call) =>
+      String(call[0]).includes(
+        "/tmp/hermes-test-home/.hermes/control-server.token",
+      ),
+    );
+    expect(helperCall).toBeDefined();
+    expect(tokenCall).toBeDefined();
+    const filePath = helperCall![0];
+    const fileContent = helperCall![1];
     expect(filePath).toContain("/tmp/hermes-test-home/.hermes/bin/hermes-ask");
     expect(fileContent).toContain(`PORT="${port}"`);
-    expect(fileContent).toContain(`TOKEN="${token}"`);
+    expect(fileContent).toContain("TOKEN_FILE=");
+    expect(fileContent).not.toContain(String(token));
+    expect(tokenCall![1]).toBe(`${token}\n`);
     expect(mockChmodSync).toHaveBeenCalledWith(filePath, 0o755);
 
     // Send HTTP query

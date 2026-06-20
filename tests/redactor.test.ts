@@ -79,6 +79,16 @@ describe("StreamRedactor", () => {
     expect(redactor.flush()).toBe("");
   });
 
+  it("can redact exact app-held secrets even when they are short", () => {
+    const redactor = new StreamRedactor(["short"], {
+      redactShortSecrets: true,
+    });
+    expect(redactor.process("token=short").chunkToEmit).toBe(
+      "token=[REDACTED]",
+    );
+    expect(redactor.flush()).toBe("");
+  });
+
   it("flushes remaining buffer on flush call", () => {
     const redactor = new StreamRedactor([secretKey1]);
 

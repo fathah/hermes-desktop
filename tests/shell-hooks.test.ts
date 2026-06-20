@@ -113,4 +113,31 @@ hooks:
     expect(res2.action).toBe("allow");
     expect(res2.context).toBeUndefined();
   });
+
+  it("fails closed when an allowlisted pre-call hook crashes", async () => {
+    const hookScriptPath = join(TEST_DIR, "crash.js");
+    writeFileSync(
+      hookScriptPath,
+      `
+      console.error("boom");
+      process.exit(1);
+      `,
+    );
+
+    writeFileSync(
+      join(TEST_DIR, "config.yaml"),
+      `
+hooks:
+  - event: pre_llm_call
+    command: node ${hookScriptPath}
+`,
+    );
+
+    const { ShellHookManager } = await freshConfig(TEST_DIR);
+    process.env.HERMES_ACCEPT_HOOKS = "true";
+
+    const res = await ShellHookManager.runHook("pre_llm_call", {}, "default");
+    expect(res.action).toBe("block");
+    expect(res.message).toMatch(/Hook execution failed/);
+  });
 });

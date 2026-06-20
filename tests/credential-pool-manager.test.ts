@@ -3,6 +3,35 @@ import { join } from "path";
 import { mkdirSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 
+const { mockExecFileSync, mockSecrets } = vi.hoisted(() => ({
+  mockExecFileSync: vi.fn((_: string, args?: string[]) => {
+    const commandIndex =
+      args?.findIndex((arg) => arg === "set-secret" || arg === "get-secret") ??
+      -1;
+    const command = commandIndex >= 0 ? args?.[commandIndex] : "";
+    const profile =
+      commandIndex >= 0 ? (args?.[commandIndex + 1] ?? "default") : "default";
+    const key = commandIndex >= 0 ? (args?.[commandIndex + 2] ?? "") : "";
+    const mapKey = `${profile}:${key}`;
+    if (command === "set-secret") {
+      mockSecrets.set(mapKey, args?.[commandIndex + 3] ?? "");
+      return Buffer.from("ok");
+    }
+    if (command === "get-secret") {
+      return Buffer.from(`${mockSecrets.get(mapKey) ?? ""}\n`);
+    }
+    return Buffer.from("ok");
+  }),
+  mockSecrets: new Map<string, string>(),
+}));
+
+vi.mock("child_process", () => {
+  const fns = {
+    execFileSync: mockExecFileSync,
+  };
+  return { ...fns, default: fns };
+});
+
 type ConfigModule = typeof import("../src/main/config");
 type CredentialPoolManagerCtor =
   typeof import("../src/main/config/credential-pool-manager").CredentialPoolManager;
@@ -32,6 +61,8 @@ async function freshConfig(home: string): Promise<{
 
 describe("CredentialPoolManager", () => {
   beforeEach(() => {
+    mockExecFileSync.mockClear();
+    mockSecrets.clear();
     mkdirSync(TEST_DIR, { recursive: true });
     // Write a base config.yaml so profilePaths doesn't throw
     writeFileSync(
@@ -108,5 +139,20 @@ describe("CredentialPoolManager", () => {
     // Should clear and select key-first since its cooldown is older/earlier
     const selected = CredentialPoolManager.rotateKey("openai", "default");
     expect(selected).toBe("key-first");
+  });
+
+  it("returns null and leaves request counts untouched if the active env write fails", async () => {
+    const { addCredentialPoolEntry, CredentialPoolManager, getCredentialPool } =
+      await freshConfig(TEST_DIR);
+    addCredentialPoolEntry("openai", "key-first", "First", "default");
+    const before = getCredentialPool("default").openai[0].request_count;
+    mockExecFileSync.mockImplementationOnce(() => {
+      throw new Error("keychain unavailable");
+    });
+
+    const selected = CredentialPoolManager.rotateKey("openai", "default");
+    expect(selected).toBeNull();
+    const pool = getCredentialPool("default").openai;
+    expect(pool[0].request_count).toBe(before);
   });
 });

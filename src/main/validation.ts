@@ -9,11 +9,9 @@
  * inline banner instead of letting the user fire off a request that
  * the gateway is about to 401 / 403 / "Configure API_SERVER_KEY" on.
  *
- * **Fail open**: any check that throws or hits an uncertain state
- * returns `{ok: true}`. The goal is to catch the obvious "model
- * configured but key missing" footgun without ever false-blocking
- * a Send. If we're not sure, allow the send and let the upstream
- * surface the error like before.
+ * Uncertain provider states still fail open, but validator failures
+ * themselves fail closed: a broken validator must not masquerade as a
+ * green readiness check.
  */
 
 import {
@@ -136,8 +134,13 @@ export function validateChatReadiness(profile?: string): ChatReadiness {
       fixLocation: "providers",
       expectedEnvKey: expectedKey,
     };
-  } catch {
-    // Fail open on any unexpected error — never false-block a Send.
-    return OK;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      ok: false,
+      code: "VALIDATION_ERROR",
+      message: `Chat readiness validation failed: ${message}`,
+      fixLocation: "setup",
+    };
   }
 }

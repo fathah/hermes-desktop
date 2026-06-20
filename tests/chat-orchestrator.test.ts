@@ -111,11 +111,54 @@ describe("runChatTurn", () => {
     const h = harness();
     const p = runChatTurn(req, h.ctx());
     await tick();
-    expect(h.abortRegistry.get("sess-key")).toBe(h.abortSpy);
+    const abort = h.abortRegistry.get("sess-key");
+    expect(abort).toEqual(expect.any(Function));
+    abort?.();
+    expect(h.abortSpy).toHaveBeenCalledOnce();
 
     h.cb().onDone(undefined);
     await p;
     expect(h.abortRegistry.has("sess-key")).toBe(false);
+  });
+
+  it("does not drop aborts requested while transport is still starting", async () => {
+    const emits: Array<{ channel: string; payload: unknown }> = [];
+    let captured: ChatCallbacks | undefined;
+    const abortSpy = vi.fn();
+    let resolveTransport: (handle: { abort: () => void }) => void = () => {};
+    const transport: ChatTransport = (_message, callbacks) => {
+      captured = callbacks;
+      return new Promise((resolve) => {
+        resolveTransport = resolve;
+      });
+    };
+    const abortRegistry = new Map<string, () => void>();
+    const effects = makeEffects();
+
+    const p = runChatTurn(req, {
+      transport,
+      sink: {
+        emit: (channel, payload) => {
+          emits.push({ channel, payload });
+          return true;
+        },
+      },
+      effects,
+      abortRegistry,
+      sessionKey: "sess-key",
+      secretsToRedact: [],
+    });
+
+    await tick();
+    abortRegistry.get("sess-key")?.();
+    expect(abortSpy).not.toHaveBeenCalled();
+
+    resolveTransport({ abort: abortSpy });
+    await tick();
+    expect(abortSpy).toHaveBeenCalledOnce();
+
+    captured?.onError("stopped");
+    await expect(p).rejects.toThrow("stopped");
   });
 
   it("aborts an in-flight turn for the same session before starting", async () => {

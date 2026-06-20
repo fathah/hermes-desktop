@@ -1,9 +1,6 @@
 import { app, clipboard } from "electron";
 import { safeHandle } from "./safe-handle";
 import { existsSync } from "fs";
-import { exec } from "child_process";
-import http from "node:http";
-import https from "node:https";
 import {
   spsUnfurl,
   spsAssistant,
@@ -77,6 +74,7 @@ import {
 import { getSpsNoteIndex } from "../note-index";
 import { exportRowMarkdownTo, readRowMarkdownFrom } from "../sps-vault";
 import { requireLocalWorkspace } from "./connection-guards";
+import { runApiAction, runShellAction } from "../sps-action-runner";
 import type {
   ActiveWorkCreateInput,
   ActiveWorkPatch,
@@ -558,84 +556,10 @@ export function registerSpsIpc(): void {
       profile?: string,
     ): Promise<{ success: boolean; output?: string; error?: string }> => {
       if (action.type === "shell") {
-        if (!action.command || !action.command.trim()) {
-          return { success: false, error: "Empty command string" };
-        }
         const vaultDir = resolveSpsVaultDir(profile);
-        return new Promise((resolve) => {
-          exec(
-            action.command!,
-            {
-              cwd: vaultDir,
-              timeout: 15000,
-            },
-            (error, stdout, stderr) => {
-              if (error) {
-                resolve({
-                  success: false,
-                  output: stdout.toString(),
-                  error: stderr.toString() || error.message,
-                });
-              } else {
-                resolve({
-                  success: true,
-                  output: stdout.toString(),
-                });
-              }
-            },
-          );
-        });
+        return runShellAction(action.command, vaultDir);
       } else if (action.type === "api") {
-        if (!action.url || !action.url.trim()) {
-          return { success: false, error: "Empty API URL string" };
-        }
-        return new Promise((resolve) => {
-          let parsedHeaders: Record<string, string> = {};
-          if (action.headers) {
-            try {
-              parsedHeaders = JSON.parse(action.headers);
-            } catch (err) {
-              return resolve({
-                success: false,
-                error: `Invalid JSON in headers: ${(err as Error).message}`,
-              });
-            }
-          }
-          const requester = action.url!.startsWith("https") ? https : http;
-          const req = requester.request(
-            action.url!,
-            {
-              method: "GET",
-              headers: parsedHeaders,
-              timeout: 15000,
-            },
-            (res) => {
-              let body = "";
-              res.on("data", (chunk) => {
-                body += chunk.toString();
-              });
-              res.on("end", () => {
-                if ((res.statusCode ?? 500) < 400) {
-                  resolve({ success: true, output: body });
-                } else {
-                  resolve({
-                    success: false,
-                    output: body,
-                    error: `Gateway returned status code ${res.statusCode}`,
-                  });
-                }
-              });
-            },
-          );
-          req.on("error", (e) => {
-            resolve({ success: false, error: e.message });
-          });
-          req.on("timeout", () => {
-            req.destroy();
-            resolve({ success: false, error: "Request timed out" });
-          });
-          req.end();
-        });
+        return runApiAction(action.url, action.headers);
       } else {
         return {
           success: false,

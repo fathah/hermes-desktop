@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { join } from "path";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
+import { createMockKeychain } from "./helpers/mock-keychain";
 
 /**
  * SIBLING_HERMES_HOME_DRIFT — config drift detection between the
@@ -20,6 +21,7 @@ const RUN_ROOT = join(
 );
 const WIN_HOME = join(RUN_ROOT, "windows");
 const WSL_HOME = join(RUN_ROOT, "wsl-ubuntu-home");
+const keychain = createMockKeychain();
 
 function writeWindowsEnv(content: string): void {
   writeFileSync(join(WIN_HOME, ".env"), content);
@@ -38,6 +40,7 @@ async function freshHealth(): Promise<
   typeof import("../src/main/config-health")
 > {
   vi.resetModules();
+  keychain.install();
   vi.doMock("../src/main/wsl-detection", () => ({
     findSiblingHermesHomes: () => [
       { distro: "Ubuntu", user: "tester", hermesHome: WSL_HOME },
@@ -48,6 +51,7 @@ async function freshHealth(): Promise<
 }
 
 beforeEach(() => {
+  keychain.reset();
   mkdirSync(WIN_HOME, { recursive: true });
   mkdirSync(WSL_HOME, { recursive: true });
 });
@@ -176,7 +180,8 @@ describe("fixSiblingHermesHomeDrift", () => {
     writeWindowsEnv("");
     writeWslEnv("CUSTOM_API_KEY=sk-copy-this-one\n");
 
-    const { fixSiblingHermesHomeDrift } = await freshHealth();
+    const { checkSiblingHermesHomeDrift, fixSiblingHermesHomeDrift } =
+      await freshHealth();
     const result = fixSiblingHermesHomeDrift(undefined, {
       field: "CUSTOM_API_KEY",
       wslHome: WSL_HOME,
@@ -187,7 +192,16 @@ describe("fixSiblingHermesHomeDrift", () => {
 
     expect(result.ok).toBe(true);
     const winEnv = readFileSync(join(WIN_HOME, ".env"), "utf-8");
-    expect(winEnv).toMatch(/^CUSTOM_API_KEY=sk-copy-this-one/m);
+    expect(winEnv).toMatch(/^CUSTOM_API_KEY=__keychain__/m);
+    expect(winEnv).not.toContain("sk-copy-this-one");
+    const { readEnv } = await import("../src/main/config");
+    expect(readEnv().CUSTOM_API_KEY).toBe("sk-copy-this-one");
+    const remainingIssues = checkSiblingHermesHomeDrift().filter(
+      (i) =>
+        i.code === "SIBLING_HERMES_HOME_DRIFT" &&
+        i.context?.field === "CUSTOM_API_KEY",
+    );
+    expect(remainingIssues).toEqual([]);
     // WSL side untouched
     const wslEnv = readFileSync(join(WSL_HOME, ".env"), "utf-8");
     expect(wslEnv).toMatch(/^CUSTOM_API_KEY=sk-copy-this-one/m);

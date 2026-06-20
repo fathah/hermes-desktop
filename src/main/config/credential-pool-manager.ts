@@ -52,20 +52,20 @@ export class CredentialPoolManager {
     profile?: string,
   ): void {
     const cleanProvider = provider.trim().toLowerCase();
-    const entries = (getCredentialPool(profile)[cleanProvider] ||
-      []) as ExtendedCredentialEntry[];
+    this.mutateProviderPool(cleanProvider, profile, (entries) => {
+      const matched = entries.find(
+        (e) =>
+          e.access_token === apiKey ||
+          e.api_key === apiKey ||
+          e.refresh_token === apiKey,
+      );
 
-    const matched = entries.find(
-      (e) =>
-        e.access_token === apiKey ||
-        e.api_key === apiKey ||
-        e.refresh_token === apiKey,
-    );
-
-    if (matched) {
-      matched.cooldown_until = Date.now() + durationMs;
-      setCredentialPool(cleanProvider, entries, profile);
-    }
+      if (matched) {
+        matched.cooldown_until = Date.now() + durationMs;
+        return true;
+      }
+      return false;
+    });
   }
 
   /**
@@ -74,52 +74,45 @@ export class CredentialPoolManager {
    */
   public static rotateKey(provider: string, profile?: string): string | null {
     const cleanProvider = provider.trim().toLowerCase();
-    const entries = (getCredentialPool(profile)[cleanProvider] ||
-      []) as ExtendedCredentialEntry[];
+    return this.mutateProviderPool(cleanProvider, profile, (entries) => {
+      if (entries.length === 0) return null;
 
-    if (entries.length === 0) return null;
+      const now = Date.now();
+      const available = entries.filter((e) => (e.cooldown_until ?? 0) <= now);
 
-    const now = Date.now();
-    // Filter available entries that are NOT on cooldown
-    const available = entries.filter((e) => {
-      const cooldown = e.cooldown_until ?? 0;
-      return cooldown <= now;
-    });
-
-    if (available.length === 0) {
-      // If all keys are on cooldown, fall back to clearing the cooldown on the oldest one
-      const sortedByCooldown = [...entries].sort((a, b) => {
-        return (a.cooldown_until ?? 0) - (b.cooldown_until ?? 0);
-      });
-      const fallback = sortedByCooldown[0];
-      if (fallback) {
-        fallback.cooldown_until = 0;
-        setCredentialPool(cleanProvider, entries, profile);
-        const token = fallback.access_token ?? fallback.api_key ?? "";
-        if (token) {
-          this.updateActiveKey(cleanProvider, token, profile);
-          return token;
-        }
+      let selected: ExtendedCredentialEntry | undefined;
+      let shouldClearCooldown = false;
+      if (available.length === 0) {
+        selected = [...entries].sort(
+          (a, b) => (a.cooldown_until ?? 0) - (b.cooldown_until ?? 0),
+        )[0];
+        shouldClearCooldown = !!selected;
+      } else {
+        selected = available.sort(
+          (a, b) => (a.priority ?? 0) - (b.priority ?? 0),
+        )[0];
       }
-      return null;
-    }
 
-    // Sort by priority ascending (priority 0 > priority 1 > priority 2)
-    const sorted = available.sort(
-      (a, b) => (a.priority ?? 0) - (b.priority ?? 0),
-    );
-    const selected = sorted[0];
-    const token = selected.access_token ?? selected.api_key ?? "";
+      const token = selected?.access_token ?? selected?.api_key ?? "";
+      if (!selected || !token) return null;
+      if (!this.updateActiveKey(cleanProvider, token, profile)) return null;
 
-    if (token) {
-      this.updateActiveKey(cleanProvider, token, profile);
-      // Increment request count for stats
+      if (shouldClearCooldown) selected.cooldown_until = 0;
       selected.request_count = (selected.request_count ?? 0) + 1;
-      setCredentialPool(cleanProvider, entries, profile);
       return token;
-    }
+    });
+  }
 
-    return null;
+  private static mutateProviderPool<T>(
+    provider: string,
+    profile: string | undefined,
+    mutator: (entries: ExtendedCredentialEntry[]) => T,
+  ): T {
+    const pool = getCredentialPool(profile);
+    const entries = (pool[provider] || []) as ExtendedCredentialEntry[];
+    const result = mutator(entries);
+    setCredentialPool(provider, entries, profile);
+    return result;
   }
 
   /**
@@ -129,15 +122,17 @@ export class CredentialPoolManager {
     provider: string,
     key: string,
     profile?: string,
-  ): void {
+  ): boolean {
     const envKey = this.getEnvKeyForProvider(provider);
     try {
       setEnvValue(envKey, key, profile);
+      return true;
     } catch (err) {
       console.error(
         `[CredentialPoolManager] Failed to write rotated env key:`,
         err,
       );
+      return false;
     }
   }
 }

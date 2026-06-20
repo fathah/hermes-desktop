@@ -102,15 +102,31 @@ describe("env-store keychain delegation", () => {
     expect(env.EMAIL_PASSWORD).toBe("resolved_secret_password");
   });
 
-  it("falls back to local plaintext writing if the keychain call fails", () => {
+  it("fails closed instead of writing sensitive plaintext if the keychain call fails", () => {
     mockExecFileSync.mockImplementation(() => {
       throw new Error("Keychain unavailable");
     });
 
-    setEnvValue("EMAIL_PASSWORD", "plain_backup_pass", "default");
+    expect(() =>
+      setEnvValue("EMAIL_PASSWORD", "plain_backup_pass", "default"),
+    ).toThrow(/refusing to write plaintext/i);
 
-    // Verify it fell back to writing plaintext to the .env file
     const envContent = mockFiles["/mock/home/profiles/default/.env"];
-    expect(envContent).toContain("EMAIL_PASSWORD=plain_backup_pass");
+    expect(envContent).toBeUndefined();
+  });
+
+  it("stores provider API keys in the keychain, not plaintext .env", () => {
+    mockExecFileSync.mockReturnValue(Buffer.from("✓"));
+
+    setEnvValue("OPENAI_API_KEY", "sk-test-secret", "default");
+
+    expect(mockExecFileSync).toHaveBeenCalledWith(
+      "python",
+      ["config", "set-secret", "default", "OPENAI_API_KEY", "sk-test-secret"],
+      expect.any(Object),
+    );
+    expect(mockFiles["/mock/home/profiles/default/.env"]).toContain(
+      "OPENAI_API_KEY=__keychain__",
+    );
   });
 });

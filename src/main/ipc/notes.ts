@@ -47,6 +47,7 @@ import { writeAsset, assetExists, gcAssets } from "../sps-assets";
 import { requireLocalWorkspace } from "./connection-guards";
 import { isAllowedExternalUrl } from "../security";
 import { HERMES_HOME } from "../installer/paths";
+import { assertGrantedFilePath, grantFilePath } from "../file-access-grants";
 import {
   recordMirrorFailure,
   readMirrorFailRecord,
@@ -229,17 +230,17 @@ export function registerNotesIpc(
       ? await dialog.showOpenDialog(win, opts)
       : await dialog.showOpenDialog(opts);
     if (result.canceled || result.filePaths.length === 0) return null;
-    return result.filePaths[0];
+    return grantFilePath(result.filePaths[0]);
   });
 
   safeHandle("sps-extract-pdf", async (_event, filePath: string) => {
     requireLocalWorkspace();
-    return extractPdfToMarkdown(filePath);
+    return extractPdfToMarkdown(assertGrantedFilePath(filePath));
   });
 
   safeHandle("sps-read-file-bytes", async (_event, filePath: string) => {
     requireLocalWorkspace();
-    const buffer = await readFile(filePath);
+    const buffer = await readFile(assertGrantedFilePath(filePath));
     return new Uint8Array(buffer);
   });
 

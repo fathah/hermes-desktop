@@ -3,12 +3,13 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { processFiles, filesFromClipboard } from "./attachmentUtils";
 
 // Stub the window.hermesAPI surface used by the path-ref code path.
-// Picker / drag-drop normally return an absolute path via webUtils; we
-// simulate the paste path (no origin) by leaving getPathForFile empty
+// Picker / drag-drop normally return an absolute granted path via preload; we
+// simulate the paste path (no origin) by leaving grantPathForFile empty
 // and routing through a fake stageAttachment.
 beforeEach(() => {
   (window as unknown as { hermesAPI: Record<string, unknown> }).hermesAPI = {
     getPathForFile: vi.fn(() => ""),
+    grantPathForFile: vi.fn(async () => ""),
     stageAttachment: vi.fn(
       async (sessionId: string, filename: string): Promise<string> =>
         `C:/staging/${sessionId || "default"}/${filename}`,
@@ -137,6 +138,7 @@ describe("processFiles", () => {
   it("uses the origin path returned by webUtils for picker/drag-drop files", async () => {
     (window as unknown as { hermesAPI: Record<string, unknown> }).hermesAPI = {
       getPathForFile: vi.fn(() => "C:/Users/me/Downloads/doc.pdf"),
+      grantPathForFile: vi.fn(async () => "C:/Users/me/Downloads/doc.pdf"),
       stageAttachment: vi.fn(),
     };
     const file = makeFile("doc.pdf", "application/pdf", "%PDF-1.4");

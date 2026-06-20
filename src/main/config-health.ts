@@ -606,10 +606,14 @@ function readSiblingFields(home: string): SiblingEnv {
 /** Current Windows-side fields, read with the same readers so the
  *  comparison is apples-to-apples. */
 function readCurrentFields(profile: string | undefined): SiblingEnv {
-  // Reuse readSiblingFields by pointing it at the profile home —
-  // identical parse logic, so any quirk in our YAML reader applies
-  // symmetrically and won't false-flag.
-  return readSiblingFields(profilePaths(profile).home);
+  const current = readSiblingFields(profilePaths(profile).home);
+  const env = readEnv(profile);
+  for (const { source, field } of DRIFT_FIELDS) {
+    if (source === "env") {
+      current.values[field] = (env[field] ?? "").trim();
+    }
+  }
+  return current;
 }
 
 function checkSiblingHermesHomeDrift(profile?: string): ConfigHealthIssue[] {
