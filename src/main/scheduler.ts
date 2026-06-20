@@ -23,6 +23,7 @@ import { listCronJobs } from "./cronjobs";
 import { triggerSelfHealing } from "./self-healing";
 import { readDesktopConfig, writeDesktopConfig } from "./config";
 import { runDreamCycle } from "./dream-cycle";
+import { maybeRunHermesAgentUpdateRoutine } from "./hermes-agent-updates";
 import { getApiUrl, getRemoteAuthHeader } from "./hermes";
 import { createLearningProposal } from "./learning-proposals";
 import { listInstalledSkills, getSkillContent } from "./skills";
@@ -243,6 +244,12 @@ export async function tickScheduler(profile?: string): Promise<void> {
   } catch (err) {
     console.error("[SCHEDULER] Error checking idle Dream Cycle:", err);
   }
+
+  void maybeRunHermesAgentUpdateRoutine(new Date(), activeProfile).catch(
+    (err) => {
+      console.error("[SCHEDULER] Error checking Hermes Agent update:", err);
+    },
+  );
 
   try {
     const jobs = await listCronJobs(true, activeProfile);

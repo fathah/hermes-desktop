@@ -197,6 +197,9 @@ describe("Legacy APIs preserved (backward compat)", () => {
     "refreshHermesVersion",
     "runHermesDoctor",
     "runHermesUpdate",
+    "getHermesAgentUpdateRoutine",
+    "setHermesAgentUpdateRoutine",
+    "runHermesAgentUpdateCheck",
     // Config
     "getEnv",
     "setEnv",
@@ -263,6 +266,8 @@ describe("Legacy APIs preserved (backward compat)", () => {
     // Credential pool
     "getCredentialPool",
     "setCredentialPool",
+    "getOAuthProviderStatus",
+    "removeOAuthProviderCredentials",
     // Cron
     "listCronJobs",
     "createCronJob",

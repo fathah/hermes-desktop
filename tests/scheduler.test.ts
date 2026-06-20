@@ -22,6 +22,7 @@ const mockTriggerSelfHealing = vi.fn();
 const mockProfileHome = vi.fn(() => "/tmp/hermes-test-profile");
 const mockWriteDesktopConfig = vi.fn();
 const mockReadDesktopConfig = vi.fn(() => ({}));
+const mockMaybeRunHermesAgentUpdateRoutine = vi.fn();
 
 vi.mock("child_process", () => {
   const fns = {
@@ -89,6 +90,13 @@ vi.mock("../src/main/self-healing", () => ({
   triggerSelfHealing: (...args: unknown[]) => mockTriggerSelfHealing(...args),
 }));
 
+vi.mock("../src/main/hermes-agent-updates", () => ({
+  maybeRunHermesAgentUpdateRoutine: (
+    now: Date,
+    profile?: string,
+  ): Promise<unknown> => mockMaybeRunHermesAgentUpdateRoutine(now, profile),
+}));
+
 vi.mock("../src/main/config", () => ({
   readDesktopConfig: () => mockReadDesktopConfig(),
   writeDesktopConfig: (c: unknown) => mockWriteDesktopConfig(c),
@@ -104,6 +112,7 @@ import {
 describe("Scheduler Service", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockMaybeRunHermesAgentUpdateRoutine.mockResolvedValue(null);
   });
 
   it("should get default scheduler config", () => {
@@ -152,6 +161,17 @@ describe("Scheduler Service", () => {
 
     // job-1 should be triggered
     expect(mockSpawn).toHaveBeenCalled();
+  });
+
+  it("checks the managed Hermes Agent update routine on scheduler ticks", async () => {
+    mockListCronJobs.mockResolvedValueOnce([]);
+
+    await tickScheduler("test-profile");
+
+    expect(mockMaybeRunHermesAgentUpdateRoutine).toHaveBeenCalledWith(
+      expect.any(Date),
+      "test-profile",
+    );
   });
 
   describe("captureScreenshot", () => {

@@ -146,6 +146,129 @@ describe("readback compatibility", () => {
     addCredentialPoolEntry("nous", "sk-new-shape", "Test");
     expect(hasOAuthCredentials("nous")).toBe(true);
   });
+
+  it("reports OAuth provider status from auth.json", async () => {
+    writeFileSync(
+      join(TEST_DIR, "auth.json"),
+      JSON.stringify(
+        {
+          version: 1,
+          providers: {
+            "xai-oauth": {
+              access_token: "oauth-access-token",
+              refresh_token: "oauth-refresh-token",
+              auth_type: "oauth_device_code",
+            },
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    const { getOAuthProviderStatus } = await freshConfig(TEST_DIR);
+
+    expect(getOAuthProviderStatus("xai-oauth")).toEqual({
+      provider: "xai-oauth",
+      signedIn: true,
+      source: "providers",
+    });
+    expect(getOAuthProviderStatus("qwen-oauth")).toEqual({
+      provider: "qwen-oauth",
+      signedIn: false,
+      source: null,
+    });
+  });
+
+  it("reports OAuth status from only the requested profile auth.json", async () => {
+    const workHome = join(TEST_DIR, "profiles", "work");
+    mkdirSync(workHome, { recursive: true });
+    writeFileSync(
+      join(TEST_DIR, "auth.json"),
+      JSON.stringify(
+        {
+          version: 1,
+          providers: {
+            "xai-oauth": {
+              access_token: "default-token",
+              auth_type: "oauth_device_code",
+            },
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    const { getOAuthProviderStatus } = await freshConfig(TEST_DIR);
+
+    expect(getOAuthProviderStatus("xai-oauth", "work")).toEqual({
+      provider: "xai-oauth",
+      signedIn: false,
+      source: null,
+    });
+  });
+
+  it("removes only local OAuth credentials for a provider", async () => {
+    writeFileSync(
+      join(TEST_DIR, "auth.json"),
+      JSON.stringify(
+        {
+          version: 1,
+          providers: {
+            nous: {
+              access_token: "oauth-access-token",
+              auth_type: "oauth_device_code",
+            },
+            "xai-oauth": {
+              access_token: "xai-token",
+              auth_type: "oauth_device_code",
+            },
+          },
+          credential_pool: {
+            nous: [
+              {
+                id: "oauth-1",
+                auth_type: "oauth_device_code",
+                access_token: "oauth-pooled-token",
+              },
+              {
+                id: "api-1",
+                auth_type: "api_key",
+                access_token: "sk-nous-api-key",
+              },
+            ],
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    const {
+      getOAuthProviderStatus,
+      getCredentialPool,
+      removeOAuthProviderCredentials,
+    } = await freshConfig(TEST_DIR);
+
+    expect(removeOAuthProviderCredentials("nous")).toEqual({
+      provider: "nous",
+      removed: true,
+    });
+    expect(getOAuthProviderStatus("nous")).toEqual({
+      provider: "nous",
+      signedIn: false,
+      source: null,
+    });
+    expect(getOAuthProviderStatus("xai-oauth").signedIn).toBe(true);
+    expect(getCredentialPool().nous).toEqual([
+      {
+        id: "api-1",
+        auth_type: "api_key",
+        access_token: "sk-nous-api-key",
+      },
+    ]);
+  });
 });
 
 describe("buildCredentialPoolEntry (pure)", () => {
