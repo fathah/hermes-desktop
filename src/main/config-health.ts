@@ -33,7 +33,6 @@ import { safeWriteFile } from "./utils";
 import { HERMES_HOME } from "./installer";
 import { expectedEnvKeyForModel } from "./installer";
 import {
-  expectedEnvKeyForUrl,
   isLocalBaseUrl,
   aliasesForEnvKey,
 } from "../shared/url-key-map";
@@ -98,7 +97,6 @@ export function runConfigHealthCheck(profile?: string): ConfigHealthReport {
   const checks: Array<(p?: string) => ConfigHealthIssue[]> = [
     checkApiServerKeyPlacement,
     checkActiveModelKeyPresence,
-    checkRuntimeEnvKeyMismatch,
     checkNonAsciiCredentials,
     checkSiblingHermesHomeDrift,
     checkLegacyToolsetName,
@@ -394,53 +392,20 @@ function checkActiveModelKeyPresence(profile?: string): ConfigHealthIssue[] {
 
 /**
  * Mismatch between the env var name the GUI saved a key under and the
- * env var name the runtime actually reads. Specifically: the user
- * picked a base URL whose canonical key is X, but their .env stores
- * a value under Y. Auto-fix copies the value to X (Option A — leave
- * the old entry alone).
+ * env var name the runtime actually reads.
+ *
+ * REMOVED (secrets/04, AIR-020). This check once auto-"fixed" a perceived
+ * mismatch by copying any populated *_API_KEY/*_TOKEN into the URL-derived
+ * key slot. That was a credential-bleed footgun (AIR-020) and — for the
+ * OAuth case — actively harmful: an OAuth token (CLAUDE_CODE_OAUTH_TOKEN /
+ * sk-ant-oat…) copied into the ANTHROPIC_API_KEY slot is sent as the
+ * x-api-key header, yielding a self-inflicted 401. Each footgun was guarded
+ * away until every path returned [], leaving a pure no-op that still cost a
+ * getModelConfig + readEnv per audit and misled readers into thinking
+ * mismatch detection existed. The genuinely-absent-credential case it was
+ * mistaken for is owned by checkActiveModelKeyPresence (MODEL_KEY_MISSING),
+ * which is the correct place to require the real key — never a rename/copy.
  */
-function checkRuntimeEnvKeyMismatch(profile?: string): ConfigHealthIssue[] {
-  const mc = getModelConfig(profile);
-  if (!mc.baseUrl) return [];
-
-  const expectedKey = expectedEnvKeyForUrl(mc.baseUrl);
-  if (expectedKey === "CUSTOM_API_KEY") return [];
-
-  const env = readEnv(profile);
-  const expectedValue = (env[expectedKey] ?? "").trim();
-  if (expectedValue) return []; // Expected key already has a value
-
-  // For OpenAI-compatible / custom endpoints, OPENAI_API_KEY and
-  // CUSTOM_API_KEY are valid fallbacks the runtime actually reads — not a
-  // "saved under the wrong name" mismatch. Don't suggest copying the value to
-  // the URL-derived key when the existing one already resolves.
-  if (customEndpointKeyResolvable(mc.provider, mc.baseUrl, profile)) {
-    return [];
-  }
-
-  // A populated KNOWN ALIAS means the credential is ALREADY SATISFIED — not
-  // "saved under the wrong name." The gateway's provider plugin reads
-  // ANTHROPIC_API_KEY, ANTHROPIC_TOKEN AND CLAUDE_CODE_OAUTH_TOKEN directly
-  // (env_vars=(...)), so any one of them authenticates. There is NOTHING to fix
-  // and NOTHING to copy: returning a mismatch here is a false positive, and the
-  // "copy alias → ANTHROPIC_API_KEY" auto-fix is ACTIVELY HARMFUL for the OAuth
-  // case — an OAuth token (CLAUDE_CODE_OAUTH_TOKEN / sk-ant-oat…) is only valid
-  // on the Authorization: Bearer path; copied into the ANTHROPIC_API_KEY slot it
-  // gets sent as the x-api-key header → Anthropic 401 "invalid x-api-key" (the
-  // documented OAuth-in-api-key-slot self-inflicted-401 trap). So: if an accepted
-  // alias is populated, the credential is present under a valid name — emit NO
-  // issue. (The greedy "any *_API_KEY/*_TOKEN" heuristic that used to live here
-  // was also a credential-bleed footgun — see AIR-020 — and is gone entirely.)
-  const aliasNames = aliasesForEnvKey(expectedKey);
-  const aliasSatisfied = aliasNames.some((k) => (env[k] ?? "").trim() !== "");
-  if (aliasSatisfied) return [];
-
-  // No expected key, no accepted alias, no custom-endpoint fallback → the
-  // credential is genuinely absent. That's MODEL_KEY_MISSING territory (the user
-  // must supply the real key), NOT a rename/copy. Do not fabricate a copy source
-  // from an unrelated credential.
-  return [];
-}
 
 /**
  * Non-ASCII characters in credential values — most often a stray curly
