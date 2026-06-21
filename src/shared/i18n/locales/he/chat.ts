@@ -7,6 +7,7 @@ export default {
   typeMessage: "הקלידו הודעה... (Shift+Enter לשורה חדשה)",
   quickAskTitle: "שאלה מהירה (/btw) - שאלה צדדית שלא תשפיע על הקשר השיחה",
   send: "שליחה",
+  searchModels: "חיפוש מודלים...",
   custom: "מותאם אישית",
   typeModelName: "הקלידו שם מודל...",
   reasoningEffort: {
@@ -37,6 +38,14 @@ export default {
   suggestionAnalyze: "ניתוח נתונים",
   approve: "אישור",
   deny: "דחייה",
+  clarify: {
+    defaultQuestion: "‏Hermes זקוק לקלט שלכם.",
+    placeholder: "הקלידו את תשובתכם…  (Ctrl+Enter לשליחה)",
+    send: "שליחה",
+    skip: "דילוג - תנו ל-Hermes להחליט",
+    skipped: "דולג - Hermes החליט",
+    error: "לא ניתן היה למסור את תשובתכם - ייתכן שהתור הסתיים. נסו שוב.",
+  },
   thinking: "חושב…",
   thought: "מחשבה",
   toolCall: "קריאה לכלי",
@@ -119,6 +128,9 @@ export default {
     version: "הצגת גרסת Hermes",
   },
   queued: "{{count}} הודעות בתור - יישלחו בסיום עבודת הסוכן",
+  queuedCount: "{{count}} בתור",
+  queuedAttachment: "{{count}} צירופים",
+  queuedCancel: "הסרה מהתור",
   worktree: {
     loading: "טוען",
     empty: "התיקייה ריקה",

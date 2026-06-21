@@ -25,4 +25,13 @@ export default {
   apiKeyLabel: "מפתח API",
   apiKeyHint:
     "נשמר כמשתנה סביבה. בוחר את מפתח הסביבה התואם לפי הכתובת, או CUSTOM_API_KEY אחרת.",
+  allProviders: "הכול",
+  browseRegistry: "עיון במודלים",
+  registryTitle: "מאגר מודלים",
+  registrySearchPlaceholder: "חיפוש ספקים ומודלים...",
+  registryAddButton: "הוספה",
+  registryAddedLabel: "נוסף",
+  registryCustomBadge: "דרך כתובת URL בסיסית",
+  registryAdded: "‏{{name}} נוסף למודלים שלכם",
+  registryLoadError: "טעינת מאגר המודלים נכשלה",
 } as const;

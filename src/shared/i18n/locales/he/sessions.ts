@@ -6,6 +6,7 @@ export default {
   empty: "אין סשנים עדיין",
   newConversation: "שיחה חדשה",
   newChat: "צ'אט חדש",
+  closeTab: "סגירת לשונית",
   today: "היום",
   yesterday: "אתמול",
   thisWeek: "השבוע",
