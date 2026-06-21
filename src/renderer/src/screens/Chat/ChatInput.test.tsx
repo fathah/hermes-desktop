@@ -69,3 +69,33 @@ describe("ChatInput — CJK IME Enter handling", () => {
     expect(onSubmit).toHaveBeenCalledWith("안녕하세요", []);
   });
 });
+
+describe("ChatInput — Enter shortcut variants", () => {
+  it("submits on plain Enter", () => {
+    const { onSubmit, textarea } = renderInput();
+    fireEvent.change(textarea, { target: { value: "hello" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    expect(onSubmit).toHaveBeenCalledWith("hello", []);
+  });
+
+  it("does not submit on Shift+Enter (newline)", () => {
+    const { onSubmit, textarea } = renderInput();
+    fireEvent.change(textarea, { target: { value: "hello" } });
+    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: true });
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("submits on Ctrl+Enter", () => {
+    const { onSubmit, textarea } = renderInput();
+    fireEvent.change(textarea, { target: { value: "hello" } });
+    fireEvent.keyDown(textarea, { key: "Enter", ctrlKey: true });
+    expect(onSubmit).toHaveBeenCalledWith("hello", []);
+  });
+
+  it("submits on Cmd+Enter (macOS)", () => {
+    const { onSubmit, textarea } = renderInput();
+    fireEvent.change(textarea, { target: { value: "hello" } });
+    fireEvent.keyDown(textarea, { key: "Enter", metaKey: true });
+    expect(onSubmit).toHaveBeenCalledWith("hello", []);
+  });
+});
