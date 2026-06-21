@@ -13,7 +13,12 @@ describe("shared i18n", () => {
   it("uses SPS-first English labels for employee-facing surfaces", () => {
     expect(t("common.appName")).toBe("SPS");
     expect(t("navigation.controlCenterTitle")).toBe("SPS Control Center");
-    expect(t("settings.tabAgentHealth")).toBe("Application Health");
+    expect(t("navigation.overview")).toBe("Overview");
+    expect(t("navigation.aiSetup")).toBe("AI Setup");
+    expect(t("navigation.connectedApps")).toBe("Connected Apps");
+    expect(t("navigation.troubleshooting")).toBe("Troubleshooting");
+    expect(t("settings.runDiagnosis")).toBe("Run Health Check");
+    expect(t("settings.debugDump")).toBe("Create Debug Report");
   });
 
   it("returns zh-CN text when available", () => {

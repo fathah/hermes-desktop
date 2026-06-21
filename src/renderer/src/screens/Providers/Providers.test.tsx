@@ -96,6 +96,7 @@ describe("Providers", () => {
     renderProviders();
 
     await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "AI Setup" })).toBeInTheDocument();
       expect(screen.getByText("xAI (Grok) API Key")).toBeInTheDocument();
     });
 

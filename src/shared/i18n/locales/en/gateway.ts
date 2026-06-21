@@ -1,11 +1,12 @@
 export default {
-  title: "Connections",
-  messagingGateway: "Messaging Connections",
+  title: "Connected Apps",
+  messagingGateway: "Messaging & Apps",
   platforms: "Platforms",
   status: "Status",
   running: "Running",
   stopped: "Stopped",
-  gatewayHint: "Connects SPS to Discord, Slack, and other platforms",
+  gatewayHint:
+    "Let My Assistant communicate through approved channels like Discord and Slack.",
   healthRecovering:
     "Connection service stopped responding — automatically restarting it…",
   healthDown:

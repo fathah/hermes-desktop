@@ -6,14 +6,28 @@
 // views that can be deep-linked, so callers and listeners stay in sync and
 // `event.detail.view` is type-checked.
 
-/** Every view the admin overlay (Layout) can show. Layout imports this as its
- *  `View` type so the deep-link target and the nav union never drift. */
+/** Every view the admin overlay can be asked to show. Legacy aliases remain
+ * accepted so old callers keep working while Layout renders task-based views. */
 export type AdminView =
+  | "overview"
+  | "aiSetup"
   | "models"
+  | "personalization"
+  | "preferences"
+  | "dataPrivacy"
+  | "connectedApps"
+  | "troubleshooting"
+  | "advanced"
+  // Legacy deep-link aliases.
   | "providers"
   | "gateway"
   | "spsAgent"
   | "settings";
+
+export type NormalizedAdminView = Exclude<
+  AdminView,
+  "providers" | "gateway" | "spsAgent" | "settings"
+>;
 
 export const OPEN_SETTINGS_EVENT = "hermes:open-settings";
 
@@ -42,32 +56,43 @@ export function openSettings(view?: AdminView): void {
 // and Layout (writes on every tab switch) share one key + one validator.
 export const ADMIN_LAST_VIEW_KEY = "hermes.admin.lastView";
 
-const KNOWN_VIEWS = new Set<AdminView>([
-  "models",
-  "providers",
-  "gateway",
-  "spsAgent",
-  "settings",
-]);
+const VIEW_ALIASES: Record<string, NormalizedAdminView> = {
+  overview: "overview",
+  aiSetup: "aiSetup",
+  providers: "aiSetup",
+  models: "models",
+  personalization: "personalization",
+  preferences: "preferences",
+  dataPrivacy: "dataPrivacy",
+  connectedApps: "connectedApps",
+  gateway: "connectedApps",
+  troubleshooting: "troubleshooting",
+  advanced: "advanced",
+  spsAgent: "overview",
+  settings: "overview",
+};
 
-function isAdminView(v: string | null): v is AdminView {
-  return v !== null && KNOWN_VIEWS.has(v as AdminView);
+export function normalizeAdminView(
+  view?: AdminView | string,
+): NormalizedAdminView {
+  if (!view) return "overview";
+  return VIEW_ALIASES[view] ?? "overview";
 }
 
-/** Last admin tab the user viewed, or "settings" if none/invalid. */
-export function readLastAdminView(): AdminView {
+/** Last normalized admin view the user viewed, or "overview" if none/invalid. */
+export function readLastAdminView(): NormalizedAdminView {
   try {
     const stored = window.localStorage.getItem(ADMIN_LAST_VIEW_KEY);
-    if (isAdminView(stored)) return stored;
+    return normalizeAdminView(stored ?? undefined);
   } catch {
     /* localStorage unavailable — fall through to default */
   }
-  return "settings";
+  return "overview";
 }
 
 export function writeLastAdminView(view: AdminView): void {
   try {
-    window.localStorage.setItem(ADMIN_LAST_VIEW_KEY, view);
+    window.localStorage.setItem(ADMIN_LAST_VIEW_KEY, normalizeAdminView(view));
   } catch {
     /* non-fatal: persistence is best-effort */
   }

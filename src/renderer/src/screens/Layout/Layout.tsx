@@ -3,6 +3,7 @@ import Settings from "../Settings/Settings";
 import Gateway from "../Gateway/Gateway";
 import Models from "../Models/Models";
 import Providers from "../Providers/Providers";
+import ControlCenterOverview from "./ControlCenterOverview";
 import RemoteNotice from "../../components/RemoteNotice";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
 import hermeslogo from "../../assets/hermes.png";
@@ -14,18 +15,28 @@ import {
   KeyRound,
   Download,
 } from "../../assets/icons";
-import type { LucideIcon } from "lucide-react";
+import {
+  Activity,
+  Home,
+  Shield,
+  SlidersHorizontal,
+  Wand2,
+  type LucideIcon,
+} from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 import { loadAndApplyActiveSkin } from "../../utils/skin";
+import { useStore as useSpsStore } from "../SpsAgent/store";
 import {
   OPEN_SETTINGS_EVENT,
+  normalizeAdminView,
   writeLastAdminView,
   type AdminView,
+  type NormalizedAdminView,
 } from "../../lib/openSettings";
 
 // The deep-linkable view set is owned by lib/openSettings so callers and this
 // host can't drift. Layout's nav is a subset of these.
-type View = AdminView;
+type View = NormalizedAdminView;
 
 // Nav is grouped by user goal rather than a flat scan. Group headers are static
 // labels; the whole Control Center still collapses via the master toggle.
@@ -42,20 +53,50 @@ interface NavGroup {
 
 const NAV_GROUPS: NavGroup[] = [
   {
-    id: "connectivity",
-    headerKey: "navigation.groupConnectivity",
+    id: "start",
+    headerKey: "navigation.groupStart",
     items: [
-      // Providers first — the #1 post-setup task and the no-API-key deep-link target.
-      { view: "providers", icon: KeyRound, labelKey: "navigation.providers" },
-      { view: "models", icon: Layers, labelKey: "navigation.models" },
-      { view: "gateway", icon: Signal, labelKey: "navigation.gateway" },
+      { view: "overview", icon: Home, labelKey: "navigation.overview" },
+      { view: "aiSetup", icon: KeyRound, labelKey: "navigation.aiSetup" },
+      {
+        view: "personalization",
+        icon: Wand2,
+        labelKey: "navigation.personalization",
+      },
     ],
   },
   {
-    id: "system",
-    headerKey: "navigation.groupSystem",
+    id: "workspace",
+    headerKey: "navigation.groupWorkspace",
     items: [
-      { view: "settings", icon: SettingsIcon, labelKey: "navigation.settings" },
+      {
+        view: "preferences",
+        icon: SlidersHorizontal,
+        labelKey: "navigation.preferences",
+      },
+      {
+        view: "dataPrivacy",
+        icon: Shield,
+        labelKey: "navigation.dataPrivacy",
+      },
+      {
+        view: "connectedApps",
+        icon: Signal,
+        labelKey: "navigation.connectedApps",
+      },
+    ],
+  },
+  {
+    id: "power",
+    headerKey: "navigation.groupPowerUser",
+    items: [
+      { view: "models", icon: Layers, labelKey: "navigation.models" },
+      {
+        view: "troubleshooting",
+        icon: Activity,
+        labelKey: "navigation.troubleshooting",
+      },
+      { view: "advanced", icon: SettingsIcon, labelKey: "navigation.advanced" },
     ],
   },
 ];
@@ -65,7 +106,8 @@ interface LayoutProps {
   onReinstall?: () => void;
   onDismissVerifyWarning?: () => void;
   /** Opening view — used when Layout is shown as the SPS admin overlay. */
-  initialView?: View;
+  initialView?: AdminView;
+  onClose?: () => void;
 }
 
 function Layout({
@@ -73,14 +115,15 @@ function Layout({
   onReinstall,
   onDismissVerifyWarning,
   initialView,
+  onClose,
 }: LayoutProps = {}): React.JSX.Element {
   const { t } = useI18n();
-  const [view, setView] = useState<View>(initialView ?? "settings");
+  const [view, setView] = useState<View>(normalizeAdminView(initialView));
   const [activeProfile, setActiveProfile] = useState("default");
   // Tabs lazy-mount on first visit, then stay mounted (display:none toggle).
   // Keeps IPC refetch / DOM rebuild off the tab-switch hot path.
   const [visitedViews, setVisitedViews] = useState<Set<View>>(
-    () => new Set<View>(["settings", ...(initialView ? [initialView] : [])]),
+    () => new Set<View>(["overview", normalizeAdminView(initialView)]),
   );
   // Remote-only mode — SSH tunnel has full access; only pure HTTP remote mode restricts screens
   const [remoteMode, setRemoteMode] = useState(false);
@@ -98,11 +141,20 @@ function Layout({
     setView(v);
   }, []);
 
+  const openPersonalization = useCallback(() => {
+    useSpsStore.getState().setSurface("you");
+    onClose?.();
+  }, [onClose]);
+
   // Remember the active tab so the overlay reopens where the user left off
   // (App reads this via readLastAdminView when no deep-link/no-API-key applies).
   useEffect(() => {
     writeLastAdminView(view);
   }, [view]);
+
+  useEffect(() => {
+    if (view === "personalization") openPersonalization();
+  }, [openPersonalization, view]);
 
   // Roving focus: arrow keys move between nav items across group boundaries.
   const handleNavKeys = useCallback(
@@ -130,8 +182,8 @@ function Layout({
   useEffect(() => {
     const onOpen = (e: WindowEventMap[typeof OPEN_SETTINGS_EVENT]): void => {
       setAdminOpen(true);
-      const target = e.detail?.view;
-      if (target) goTo(target);
+      const target = normalizeAdminView(e.detail?.view);
+      goTo(target);
     };
     window.addEventListener(OPEN_SETTINGS_EVENT, onOpen);
     return () => window.removeEventListener(OPEN_SETTINGS_EVENT, onOpen);
@@ -311,7 +363,9 @@ function Layout({
                   <button
                     key={v}
                     className={`sidebar-nav-item ${view === v ? "active" : ""}`}
-                    onClick={() => goTo(v)}
+                    onClick={() =>
+                      v === "personalization" ? openPersonalization() : goTo(v)
+                    }
                   >
                     <Icon size={16} />
                     {t(labelKey)}
@@ -395,38 +449,66 @@ function Layout({
             onDismiss={onDismissVerifyWarning}
           />
         )}
+        {visitedViews.has("overview") && (
+          <div style={paneStyle("overview")}>
+            <ControlCenterOverview
+              profile={activeProfile}
+              onNavigate={goTo}
+              onClose={onClose ?? (() => {})}
+            />
+          </div>
+        )}
+
         {visitedViews.has("models") && (
           <div style={paneStyle("models")}>
             <Models visible={view === "models"} />
           </div>
         )}
 
-        {visitedViews.has("providers") && (
-          <div style={paneStyle("providers")}>
+        {visitedViews.has("aiSetup") && (
+          <div style={paneStyle("aiSetup")}>
             {remoteMode ? (
-              <RemoteNotice feature="Providers" />
+              <RemoteNotice feature="AI Setup" />
             ) : (
               <Providers
                 profile={activeProfile}
-                visible={view === "providers"}
+                visible={view === "aiSetup"}
               />
             )}
           </div>
         )}
 
-        {visitedViews.has("gateway") && (
-          <div style={paneStyle("gateway")}>
+        {visitedViews.has("connectedApps") && (
+          <div style={paneStyle("connectedApps")}>
             {remoteMode ? (
-              <RemoteNotice feature="Gateway" />
+              <RemoteNotice feature="Connected Apps" />
             ) : (
               <Gateway profile={activeProfile} />
             )}
           </div>
         )}
 
-        {visitedViews.has("settings") && (
-          <div style={paneStyle("settings")}>
-            <Settings profile={activeProfile} />
+        {visitedViews.has("preferences") && (
+          <div style={paneStyle("preferences")}>
+            <Settings profile={activeProfile} section="preferences" />
+          </div>
+        )}
+
+        {visitedViews.has("dataPrivacy") && (
+          <div style={paneStyle("dataPrivacy")}>
+            <Settings profile={activeProfile} section="dataPrivacy" />
+          </div>
+        )}
+
+        {visitedViews.has("troubleshooting") && (
+          <div style={paneStyle("troubleshooting")}>
+            <Settings profile={activeProfile} section="troubleshooting" />
+          </div>
+        )}
+
+        {visitedViews.has("advanced") && (
+          <div style={paneStyle("advanced")}>
+            <Settings profile={activeProfile} section="advanced" />
           </div>
         )}
       </main>

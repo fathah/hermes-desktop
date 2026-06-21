@@ -1,6 +1,6 @@
 export default {
-  title: "Providers",
-  subtitle: "Configure LLM providers, API keys, and credential pools",
+  title: "AI Setup",
+  subtitle: "Connect the provider and model that power My Assistant.",
   status: {
     signedIn: "Signed in",
     apiKeySaved: "API key saved",

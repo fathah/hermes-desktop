@@ -5348,7 +5348,7 @@ body {
   color: var(--text-primary);
 }
 
-/* Tabbed sub-navigation — chunks the long Settings scroll into 5 groups. */
+/* Reused segmented sub-navigation, still used by SPS learning surfaces. */
 .settings-subnav {
   position: sticky;
   top: 0;
@@ -5383,20 +5383,58 @@ body {
   color: var(--text-primary);
 }
 
-/* Section fencing: hide sections whose data-section-tab doesn't match the
-   active tab. Elements without the attribute (e.g. the one-time migration
-   banner) are unaffected and always show. */
-.settings-container[data-tab="general"]
-  [data-section-tab]:not([data-section-tab="general"]),
-.settings-container[data-tab="connection"]
-  [data-section-tab]:not([data-section-tab="connection"]),
-.settings-container[data-tab="agenthealth"]
-  [data-section-tab]:not([data-section-tab="agenthealth"]),
-.settings-container[data-tab="data"]
-  [data-section-tab]:not([data-section-tab="data"]),
-.settings-container[data-tab="advanced"]
+/* Section fencing for the task-based Control Center. */
+.settings-container[data-section="preferences"]
+  [data-section-tab]:not([data-section-tab="preferences"]),
+.settings-container[data-section="dataPrivacy"]
+  [data-section-tab]:not([data-section-tab="dataPrivacy"]),
+.settings-container[data-section="troubleshooting"]
+  [data-section-tab]:not([data-section-tab="troubleshooting"]),
+.settings-container[data-section="advanced"]
   [data-section-tab]:not([data-section-tab="advanced"]) {
   display: none;
+}
+
+.settings-section-subtitle,
+.control-center-subtitle {
+  margin-bottom: 18px;
+}
+
+.control-center-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.control-center-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-height: 168px;
+  padding: 18px;
+  border: 1px solid var(--hair);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+}
+
+.control-center-card h2 {
+  margin: 0 0 6px;
+  font-size: 16px;
+  line-height: 1.25;
+  color: var(--text-primary);
+}
+
+.control-center-card p {
+  margin: 0 0 16px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.control-center-card-action {
+  min-height: 44px;
+  margin-top: auto;
 }
 
 .settings-section {
@@ -10072,4 +10110,3 @@ body {
 .inbox-proposed-page.skipped {
   opacity: 0.5;
 }
-

@@ -12,8 +12,9 @@ import { useFocusTrap } from "./components/useFocusTrap";
 import { captureScreenView } from "./utils/analytics";
 import {
   OPEN_SETTINGS_EVENT,
-  readLastAdminView,
+  normalizeAdminView,
   type AdminView,
+  type NormalizedAdminView,
 } from "./lib/openSettings";
 import {
   spsNewChat,
@@ -134,19 +135,19 @@ function App(): React.JSX.Element {
   // install check resolves so we don't force Providers before we know.
   const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
   const [adminInitialView, setAdminInitialView] =
-    useState<AdminView>("settings");
+    useState<NormalizedAdminView>("overview");
   const isMac = window.electron?.process?.platform === "darwin";
   const startupRunIdRef = useRef(0);
 
   // Pick the tab the overlay should open on when no explicit target is given.
   const defaultAdminView = useCallback(
-    (): AdminView => (hasApiKey === false ? "providers" : readLastAdminView()),
+    (): NormalizedAdminView => (hasApiKey === false ? "aiSetup" : "overview"),
     [hasApiKey],
   );
 
   const openAdmin = useCallback(
     (view?: AdminView): void => {
-      setAdminInitialView(view ?? defaultAdminView());
+      setAdminInitialView(view ? normalizeAdminView(view) : defaultAdminView());
       setAdminOpen(true);
     },
     [defaultAdminView],
@@ -605,6 +606,7 @@ function App(): React.JSX.Element {
                 </button>
                 <Layout
                   initialView={adminInitialView}
+                  onClose={() => setAdminOpen(false)}
                   verifyWarning={verifyWarning}
                   onReinstall={handleVerifyReinstall}
                   onDismissVerifyWarning={handleDismissVerifyWarning}
