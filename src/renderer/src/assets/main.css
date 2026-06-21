@@ -8740,9 +8740,84 @@ body {
   font-size: 13px;
 }
 
+.boot-diagnostic-card {
+  width: min(520px, calc(100vw - 40px));
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.14);
+}
+
+.boot-diagnostic-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 20px;
+  font-weight: 650;
+}
+
+.boot-diagnostic-message {
+  margin: 10px 0 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.boot-diagnostic-details {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 18px 0 0;
+}
+
+.boot-diagnostic-details > div {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-primary);
+}
+
+.boot-diagnostic-details dt {
+  margin: 0 0 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.boot-diagnostic-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.boot-diagnostic-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .boot-spinner {
     animation: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .boot-diagnostic-card {
+    width: calc(100vw - 28px);
+    padding: 18px;
+  }
+
+  .boot-diagnostic-details {
+    grid-template-columns: 1fr;
+  }
+
+  .boot-diagnostic-actions {
+    flex-direction: column;
   }
 }
 
@@ -9997,5 +10072,4 @@ body {
 .inbox-proposed-page.skipped {
   opacity: 0.5;
 }
-
 

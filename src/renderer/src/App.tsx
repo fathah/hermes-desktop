@@ -31,12 +31,93 @@ type Screen =
   | "onboarding"
   | "main";
 
+interface StartupStep {
+  label: string;
+  timeoutMs: number;
+}
+
+interface StartupIssue {
+  label: string;
+  timeoutMs: number;
+  connectionMode: "local" | "remote" | "ssh" | "unknown";
+  message: string;
+}
+
+const STARTUP_SHORT_TIMEOUT_MS = 8000;
+const STARTUP_SSH_TIMEOUT_MS = 35000;
+
+const STARTUP_STEPS = {
+  connection: {
+    label: "connection settings",
+    timeoutMs: STARTUP_SHORT_TIMEOUT_MS,
+  },
+  onboarding: {
+    label: "first-run onboarding state",
+    timeoutMs: STARTUP_SHORT_TIMEOUT_MS,
+  },
+  localInstall: {
+    label: "local install status",
+    timeoutMs: STARTUP_SHORT_TIMEOUT_MS,
+  },
+  remoteHealth: {
+    label: "remote health check",
+    timeoutMs: STARTUP_SHORT_TIMEOUT_MS,
+  },
+  sshTunnel: {
+    label: "SSH tunnel startup",
+    timeoutMs: STARTUP_SSH_TIMEOUT_MS,
+  },
+} satisfies Record<string, StartupStep>;
+
+class StartupTimeoutError extends Error {
+  constructor(public readonly step: StartupStep) {
+    super(`Timed out while checking ${step.label}.`);
+    this.name = "StartupTimeoutError";
+  }
+}
+
+class StaleStartupRunError extends Error {
+  constructor() {
+    super("Startup check was superseded.");
+    this.name = "StaleStartupRunError";
+  }
+}
+
+function withStartupTimeout<T>(
+  step: StartupStep,
+  run: () => Promise<T>,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      reject(new StartupTimeoutError(step));
+    }, step.timeoutMs);
+
+    Promise.resolve()
+      .then(run)
+      .then(
+        (value) => {
+          window.clearTimeout(timer);
+          resolve(value);
+        },
+        (err) => {
+          window.clearTimeout(timer);
+          reject(err);
+        },
+      );
+  });
+}
+
+function formatSeconds(ms: number): string {
+  return `${Math.round(ms / 1000)}s`;
+}
+
 function App(): React.JSX.Element {
   const [screen, setScreen] = useState<Screen>("loading");
   const [installError, setInstallError] = useState<string | null>(null);
   const [connectionMode, setConnectionMode] = useState<
     "local" | "remote" | "ssh"
   >("local");
+  const [startupIssue, setStartupIssue] = useState<StartupIssue | null>(null);
   // Soft warning: install files exist but the deep `verifyInstall` probe
   // failed (e.g. slow Python startup, restricted network). We surface this
   // as a dismissible banner instead of bouncing the user back to Welcome,
@@ -55,6 +136,7 @@ function App(): React.JSX.Element {
   const [adminInitialView, setAdminInitialView] =
     useState<AdminView>("settings");
   const isMac = window.electron?.process?.platform === "darwin";
+  const startupRunIdRef = useRef(0);
 
   // Pick the tab the overlay should open on when no explicit target is given.
   const defaultAdminView = useCallback(
@@ -142,9 +224,32 @@ function App(): React.JSX.Element {
   }, [screen]);
 
   const runInstallCheck = useCallback(async () => {
+    const runId = startupRunIdRef.current + 1;
+    startupRunIdRef.current = runId;
+    setStartupIssue(null);
+
     let next: Screen = "welcome";
     let error: string | null = null;
     let isRemote = false;
+    let currentConnectionMode: "local" | "remote" | "ssh" | "unknown" =
+      "unknown";
+    let currentStep = STARTUP_STEPS.connection;
+
+    const ensureCurrent = (): void => {
+      if (startupRunIdRef.current !== runId) {
+        throw new StaleStartupRunError();
+      }
+    };
+
+    const runStep = async <T,>(
+      step: StartupStep,
+      run: () => Promise<T>,
+    ): Promise<T> => {
+      currentStep = step;
+      const value = await withStartupTimeout(step, run);
+      ensureCurrent();
+      return value;
+    };
 
     // First-run gate: every path that would otherwise land in the workspace
     // routes through onboarding once, until the "completed" flag is set. Default
@@ -154,22 +259,37 @@ function App(): React.JSX.Element {
     const landing = (): Screen => (onboardingDone ? "main" : "onboarding");
 
     try {
-      const conn = await window.hermesAPI.getConnectionConfig();
+      const conn = await runStep(STARTUP_STEPS.connection, () =>
+        window.hermesAPI.getConnectionConfig(),
+      );
       isRemote = conn.mode === "remote" || conn.mode === "ssh";
+      currentConnectionMode = conn.mode;
       setConnectionMode(conn.mode);
-      onboardingDone = await window.hermesAPI.getOnboardingCompleted();
+      onboardingDone = await runStep(STARTUP_STEPS.onboarding, () =>
+        window.hermesAPI.getOnboardingCompleted(),
+      );
 
       if (conn.mode === "ssh" && conn.ssh) {
         // Start (or ensure) the SSH tunnel, then go straight to the workspace
         try {
-          await window.hermesAPI.startSshTunnel();
+          await runStep(STARTUP_STEPS.sshTunnel, () =>
+            window.hermesAPI.startSshTunnel(),
+          );
           next = landing();
         } catch (tunnelErr) {
+          if (
+            tunnelErr instanceof StartupTimeoutError ||
+            tunnelErr instanceof StaleStartupRunError
+          ) {
+            throw tunnelErr;
+          }
           error = `SSH tunnel failed to start: ${(tunnelErr as Error).message}`;
           next = "welcome";
         }
       } else if (conn.mode === "remote" && conn.remoteUrl) {
-        const ok = await window.hermesAPI.testRemoteConnection(conn.remoteUrl);
+        const ok = await runStep(STARTUP_STEPS.remoteHealth, () =>
+          window.hermesAPI.testRemoteConnection(conn.remoteUrl),
+        );
         if (ok) {
           next = landing();
         } else {
@@ -177,7 +297,9 @@ function App(): React.JSX.Element {
           next = "welcome";
         }
       } else {
-        const status = await window.hermesAPI.checkInstall();
+        const status = await runStep(STARTUP_STEPS.localInstall, () =>
+          window.hermesAPI.checkInstall(),
+        );
         setHasApiKey(status.hasApiKey);
         if (!status.installed) {
           next = "welcome";
@@ -187,10 +309,29 @@ function App(): React.JSX.Element {
           next = landing();
         }
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof StaleStartupRunError) return;
+      if (err instanceof StartupTimeoutError) {
+        if (startupRunIdRef.current === runId) {
+          startupRunIdRef.current += 1;
+          setInstallError(null);
+          setStartupIssue({
+            label: err.step.label,
+            timeoutMs: err.step.timeoutMs,
+            connectionMode: currentConnectionMode,
+            message: err.message,
+          });
+          setScreen("loading");
+        }
+        return;
+      }
+      error = `Startup check failed while checking ${currentStep.label}: ${
+        err instanceof Error ? err.message : String(err)
+      }`;
       next = "welcome";
     }
 
+    if (startupRunIdRef.current !== runId) return;
     if (error) setInstallError(error);
 
     setScreen(next);
@@ -207,11 +348,17 @@ function App(): React.JSX.Element {
       (next === "main" || next === "setup" || next === "onboarding") &&
       !isRemote
     ) {
-      window.hermesAPI.verifyInstall().then((ok) => {
-        // Files exist (checkInstall passed) but the probe failed. Surface
-        // a soft warning instead of bouncing to Welcome — see #130.
-        if (!ok) setVerifyWarning(true);
-      });
+      window.hermesAPI
+        .verifyInstall()
+        .then((ok) => {
+          if (startupRunIdRef.current !== runId) return;
+          // Files exist (checkInstall passed) but the probe failed. Surface
+          // a soft warning instead of bouncing to Welcome — see #130.
+          if (!ok) setVerifyWarning(true);
+        })
+        .catch(() => {
+          if (startupRunIdRef.current === runId) setVerifyWarning(true);
+        });
     }
   }, []);
 
@@ -235,11 +382,13 @@ function App(): React.JSX.Element {
   }
 
   function handleRetryInstall(): void {
+    setStartupIssue(null);
     setInstallError(null);
     setScreen("installing");
   }
 
   const handleRecheck = useCallback((): void => {
+    setStartupIssue(null);
     setInstallError(null);
     setScreen("loading");
     runInstallCheck();
@@ -261,6 +410,7 @@ function App(): React.JSX.Element {
   }, [screen, handleSwitchToLocal]);
 
   function handleVerifyReinstall(): void {
+    setStartupIssue(null);
     setVerifyWarning(false);
     setInstallError(null);
     setScreen("installing");
@@ -295,9 +445,88 @@ function App(): React.JSX.Element {
     [openAdmin],
   );
 
+  const copyStartupDiagnostics = useCallback((): void => {
+    if (!startupIssue) return;
+    const platform = window.electron?.process?.platform ?? "unknown";
+    const diagnostics = [
+      "SPS Agent startup diagnostics",
+      `Platform: ${platform}`,
+      `Connection mode: ${startupIssue.connectionMode}`,
+      `Startup phase: ${startupIssue.label}`,
+      `Timeout: ${formatSeconds(startupIssue.timeoutMs)}`,
+      `Message: ${startupIssue.message}`,
+    ].join("\n");
+
+    void window.hermesAPI.copyToClipboard(diagnostics);
+  }, [startupIssue]);
+
   function renderScreen(): React.JSX.Element {
     switch (screen) {
       case "loading":
+        if (startupIssue) {
+          const canSwitchToLocal =
+            startupIssue.connectionMode === "remote" ||
+            startupIssue.connectionMode === "ssh";
+          return (
+            <div className="boot-screen">
+              <img src={hermeslogo} alt="Hermes" className="boot-logo" />
+              <section
+                className="boot-diagnostic-card"
+                role="alert"
+                aria-live="assertive"
+              >
+                <h1 className="boot-diagnostic-title">
+                  Startup check is taking too long
+                </h1>
+                <p className="boot-diagnostic-message">
+                  SPS Agent did not get a response while checking{" "}
+                  <strong>{startupIssue.label}</strong> after{" "}
+                  {formatSeconds(startupIssue.timeoutMs)}. The app is still
+                  running; retry the check or choose another recovery path.
+                </p>
+                <dl className="boot-diagnostic-details">
+                  <div>
+                    <dt>Phase</dt>
+                    <dd>{startupIssue.label}</dd>
+                  </div>
+                  <div>
+                    <dt>Connection</dt>
+                    <dd>{startupIssue.connectionMode}</dd>
+                  </div>
+                  <div>
+                    <dt>Timeout</dt>
+                    <dd>{formatSeconds(startupIssue.timeoutMs)}</dd>
+                  </div>
+                </dl>
+                <div className="boot-diagnostic-actions">
+                  <button className="btn btn-primary" onClick={handleRecheck}>
+                    Retry check
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={handleRetryInstall}
+                  >
+                    Start install
+                  </button>
+                  {canSwitchToLocal && (
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => void handleSwitchToLocal()}
+                    >
+                      Switch to local
+                    </button>
+                  )}
+                  <button
+                    className="btn btn-secondary"
+                    onClick={copyStartupDiagnostics}
+                  >
+                    Copy diagnostics
+                  </button>
+                </div>
+              </section>
+            </div>
+          );
+        }
         return (
           <div className="boot-screen">
             <img src={hermeslogo} alt="Hermes" className="boot-logo" />
