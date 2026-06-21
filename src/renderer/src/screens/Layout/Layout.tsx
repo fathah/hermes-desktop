@@ -8,6 +8,9 @@ import {
   type ChatRun,
   mintRun,
   patchRun,
+  isScratchRun,
+  openSessionRunTransition,
+  selectProfileRunTransition,
   findRunBySession,
   loadingSessionIds as deriveLoadingSessionIds,
 } from "./chatRuns";
@@ -101,8 +104,9 @@ function Layout({
   const { t } = useI18n();
   const [view, setView] = useState<View>("chat");
   // Multiple conversations coexist (background sessions + multi-agent). Each is
-  // a ChatRun; all are mounted, only the active one is shown. `activeProfile`
-  // tracks the selected profile and always equals the active run's profile.
+  // a ChatRun; all are mounted, only the active one is shown. Profile switches
+  // preserve existing conversations and activate a scratch run for the selected
+  // agent so `activeProfile` stays aligned with the visible chat transport.
   const [activeProfile, setActiveProfile] = useState("default");
   const [runs, setRuns] = useState<ChatRun[]>(() => [mintRun("default")]);
   const [activeRunId, setActiveRunId] = useState<string>(() => runs[0].runId);
@@ -345,28 +349,19 @@ function Layout({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [sessionsModalOpen]);
 
-  // A run with no session, not loading and no title hasn't been used yet — a
-  // blank "scratch" chat we can re-home to another agent without spawning a tab.
-  const isScratchRun = (r: ChatRun): boolean =>
-    !r.sessionId && !r.loading && !r.title;
-
   const handleSelectProfile = useCallback(
     (name: string) => {
       // Selecting an agent is administrative: switch the active profile (the
-      // component already started its gateway via setActiveProfile) WITHOUT
-      // starting a conversation. If the current chat is a blank scratch, re-home
-      // it to the new agent so switching never piles up empty tabs; a chat with
-      // content is left intact (start a new one with Chat / New chat).
+      // component already started its gateway via setActiveProfile). Existing
+      // chats remain on their original profile, but the visible chat must move
+      // to a scratch run for the selected profile so the footer and transport
+      // never point at different agents.
       setActiveProfile(name);
-      setRuns((prev) =>
-        prev.map((r) =>
-          r.runId === activeRunId && isScratchRun(r)
-            ? { ...r, profile: name }
-            : r,
-        ),
-      );
+      const next = selectProfileRunTransition(runs, activeRunId, name);
+      setRuns(next.runs);
+      setActiveRunId(next.activeRunId);
     },
-    [activeRunId],
+    [runs, activeRunId],
   );
 
   // The "Chat" affordance: start (or reuse a blank) conversation with an agent
@@ -448,7 +443,7 @@ function Layout({
         )) as DbHistoryItem[];
         const run = mintRun(activeProfile, dbItemsToChatMessages(items));
         run.sessionId = sessionId;
-        setRuns((prev) => [...prev, run]);
+        setRuns((prev) => openSessionRunTransition(prev, activeRunId, run).runs);
         setActiveRunId(run.runId);
         goTo("chat");
       } finally {
@@ -456,7 +451,7 @@ function Layout({
         setResumingSessionId(null);
       }
     },
-    [runs, handleActivateRun, activeProfile, goTo],
+    [runs, activeRunId, handleActivateRun, activeProfile, goTo],
   );
 
   const toggleSidebar = useCallback(() => {

@@ -15,8 +15,8 @@ export interface ProfileAppearance {
  * the strip itself is draggable, while the conversation chips on top of it stay
  * clickable. When several sessions are open (background sessions / multi-agent)
  * it shows a chip per session to switch between them and watch each stream live.
- * With a single idle conversation it renders empty — just a drag area — so no
- * vertical space is wasted on a dedicated, always-present tab bar.
+ * With only a blank scratch conversation it renders empty — just a drag area —
+ * so no vertical space is wasted before there is a real session to show.
  */
 export const ActiveSessionsBar = memo(function ActiveSessionsBar({
   runs,
@@ -39,8 +39,9 @@ export const ActiveSessionsBar = memo(function ActiveSessionsBar({
   const { t } = useI18n();
 
   const anyLoading = runs.some((r) => r.loading);
-  // Nothing to switch between → leave the strip empty (pure drag area).
-  const showChips = runs.length > 1 || anyLoading;
+  const hasRealSession = runs.some((r) => r.sessionId || r.title);
+  // Nothing real to switch to yet → leave the strip empty (pure drag area).
+  const showChips = runs.length > 1 || anyLoading || hasRealSession;
 
   return (
     <div className="active-sessions-bar" role="tablist">
