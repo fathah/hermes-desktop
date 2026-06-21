@@ -775,6 +775,23 @@ export function customEndpointKeyResolvable(
     "CUSTOM_API_KEY",
     "OPENAI_API_KEY",
   ]);
+  // Mirror the runtime lookup in hermes.ts: the GUI dialog and seedDefaults()
+  // write CUSTOM_PROVIDER_<NAME>_KEY for unknown-URL providers. Without this,
+  // config-health reports "key missing" even though the gateway can resolve it.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- call-time require; models.ts has no dep on config.ts so no cycle.
+    const modelsMod = require("./models") as typeof import("./models");
+    const matching = modelsMod.readModels().find((m) => m.baseUrl === baseUrl);
+    if (matching) {
+      candidates.add(
+        "CUSTOM_PROVIDER_" +
+          matching.name.replace(/[^A-Za-z0-9]/g, "_").toUpperCase() +
+          "_KEY",
+      );
+    }
+  } catch {
+    /* ignore */
+  }
   for (const k of candidates) {
     if ((env[k] ?? "").trim()) return true;
   }
