@@ -622,9 +622,9 @@
 }
 
 .sps-scope .doc-health-badge {
-  background: rgba(229, 72, 77, 0.15);
-  color: #e5484d;
-  border: 1px solid rgba(229, 72, 77, 0.3);
+  background: rgba(217, 164, 0, 0.1);
+  color: var(--accent);
+  border: 1px solid rgba(217, 164, 0, 0.32);
   border-radius: 12px;
   padding: 4px 8px;
   font-size: 12px;
@@ -633,6 +633,23 @@
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.sps-scope .doc-health-badge[data-severity="warning"] {
+  background: rgba(229, 72, 77, 0.14);
+  color: #ff7b80;
+  border-color: rgba(229, 72, 77, 0.34);
+}
+
+.sps-scope .doc-health-badge:hover,
+.sps-scope .doc-health-badge:focus-visible {
+  background: rgba(217, 164, 0, 0.16);
+  outline: none;
+}
+
+.sps-scope .doc-health-badge[data-severity="warning"]:hover,
+.sps-scope .doc-health-badge[data-severity="warning"]:focus-visible {
+  background: rgba(229, 72, 77, 0.2);
 }
 
 .sps-scope .doc-health-popover {
@@ -668,7 +685,13 @@
 }
 
 .sps-scope .doc-health-issue-bullet {
-  color: #e5484d;
+  color: var(--accent);
+}
+
+.sps-scope
+  .doc-health-popover[data-severity="warning"]
+  .doc-health-issue-bullet {
+  color: #ff7b80;
 }
 
 .sps-scope .doc-cover .cover-fill {

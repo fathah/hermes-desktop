@@ -30,10 +30,10 @@ export class ForceSimulation {
   height: number;
 
   // Physics constants
-  charge = -350; // coulomb repulsion force
-  linkStrength = 0.05; // spring stiffness
-  linkRestLength = 100; // ideal spring distance
-  gravity = 0.018; // gravity center-pull stiffness
+  charge = -760; // coulomb repulsion force
+  linkStrength = 0.045; // spring stiffness
+  linkRestLength = 132; // ideal spring distance
+  gravity = 0.012; // gravity center-pull stiffness
   damping = 0.85; // velocity friction damping
 
   constructor(nodes: SimNode[], edges: SimEdge[], width = 640, height = 640) {
@@ -52,7 +52,14 @@ export class ForceSimulation {
     const cx = this.width / 2;
     const cy = this.height / 2;
 
-    this.nodes = nodes.map((n) => {
+    const count = Math.max(nodes.length, 1);
+    const noLinkColumns = Math.max(
+      1,
+      Math.ceil(Math.sqrt(count * (this.width / Math.max(this.height, 1)))),
+    );
+    const noLinkRows = Math.max(1, Math.ceil(count / noLinkColumns));
+
+    this.nodes = nodes.map((n, index) => {
       const prev = prevMap.get(n.id);
       if (prev) {
         return {
@@ -65,11 +72,21 @@ export class ForceSimulation {
           fy: prev.fy,
         };
       }
-      // Place new nodes with a small random spread around the center.
+      const noLinkColumn = index % noLinkColumns;
+      const noLinkRow = Math.floor(index / noLinkColumns);
+      const noLinkX = ((noLinkColumn + 1) * this.width) / (noLinkColumns + 1);
+      const noLinkY = ((noLinkRow + 1) * this.height) / (noLinkRows + 1);
+
+      // Place new nodes deterministically instead of starting every label in
+      // a tight center clump. Isolated graphs use a tidy island grid.
+      const angle = index * Math.PI * (3 - Math.sqrt(5));
+      const maxSpread = Math.min(this.width, this.height) * 0.44;
+      const radius =
+        count === 1 ? 0 : maxSpread * Math.sqrt((index + 1) / count);
       return {
         ...n,
-        x: cx + (Math.random() - 0.5) * 40,
-        y: cy + (Math.random() - 0.5) * 40,
+        x: edges.length === 0 ? noLinkX : cx + Math.cos(angle) * radius,
+        y: edges.length === 0 ? noLinkY : cy + Math.sin(angle) * radius * 0.78,
         vx: 0,
         vy: 0,
         fx: null,
@@ -151,7 +168,7 @@ export class ForceSimulation {
         const dy = v.y - u.y;
         if (dx === 0) dx = 0.1;
         const dist = Math.sqrt(dx * dx + dy * dy) || 0.1;
-        const minDist = u.r + v.r + 28; // radii + safety spacing margin
+        const minDist = u.r + v.r + 64; // radii + label safety margin
         if (dist < minDist) {
           const overlap = minDist - dist;
           const forceX = (dx / dist) * overlap * 0.22;
@@ -179,9 +196,24 @@ export class ForceSimulation {
         node.vx = 0;
         node.vy = 0;
       } else {
-        // Center gravity
-        node.vx += (cx - node.x) * this.gravity;
-        node.vy += (cy - node.y) * this.gravity;
+        // Center gravity, or a stable spread target for empty/no-link graphs.
+        if (edges.length === 0 && n > 1) {
+          const index = nodes.indexOf(node);
+          const columns = Math.max(
+            1,
+            Math.ceil(Math.sqrt(n * (this.width / Math.max(this.height, 1)))),
+          );
+          const rows = Math.max(1, Math.ceil(n / columns));
+          const column = index % columns;
+          const row = Math.floor(index / columns);
+          const targetX = ((column + 1) * this.width) / (columns + 1);
+          const targetY = ((row + 1) * this.height) / (rows + 1);
+          node.vx += (targetX - node.x) * 0.05;
+          node.vy += (targetY - node.y) * 0.05;
+        } else {
+          node.vx += (cx - node.x) * this.gravity;
+          node.vy += (cy - node.y) * this.gravity;
+        }
 
         // Update position
         node.x += node.vx;

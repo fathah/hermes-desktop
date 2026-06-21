@@ -11,6 +11,100 @@ import { treeWalkIds } from "../lib/tree";
 import { Icon } from "../components/Icon";
 import { ForceSimulation, type SimNode } from "./ForceSimulation";
 
+function cssValue(styles: CSSStyleDeclaration, name: string, fallback: string) {
+  return styles.getPropertyValue(name).trim() || fallback;
+}
+
+function isLightCanvasColor(color: string): boolean | null {
+  const value = color.trim();
+  let channels: number[] | null = null;
+
+  const hex = value.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (hex) {
+    const raw = hex[1];
+    const expanded =
+      raw.length === 3
+        ? raw
+            .split("")
+            .map((char) => char + char)
+            .join("")
+        : raw;
+    channels = [0, 2, 4].map((start) =>
+      Number.parseInt(expanded.slice(start, start + 2), 16),
+    );
+  } else {
+    const rgb = value.match(/rgba?\(([^)]+)\)/i);
+    if (rgb) {
+      channels = rgb[1]
+        .split(",")
+        .slice(0, 3)
+        .map((part) => Number.parseFloat(part.trim()));
+    }
+  }
+
+  if (!channels || channels.some((part) => Number.isNaN(part))) return null;
+  const [r, g, b] = channels.map((part) => part / 255);
+  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return luminance > 0.58;
+}
+
+function truncateCanvasText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+) {
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  let next = text;
+  while (next.length > 3 && ctx.measureText(`${next}...`).width > maxWidth) {
+    next = next.slice(0, -1);
+  }
+  return `${next.trim()}...`;
+}
+
+function graphCanvasSize(canvas: HTMLCanvasElement) {
+  const parent = canvas.parentElement;
+  const rect = parent?.getBoundingClientRect();
+  return {
+    width: Math.max(480, rect?.width || 640),
+    height: Math.max(520, rect?.height || 560),
+  };
+}
+
+type LabelRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+function labelRectsOverlap(a: LabelRect, b: LabelRect, padding = 5) {
+  return !(
+    a.x + a.width + padding < b.x ||
+    b.x + b.width + padding < a.x ||
+    a.y + a.height + padding < b.y ||
+    b.y + b.height + padding < a.y
+  );
+}
+
+function clampLabelRect(
+  rect: LabelRect,
+  stageWidth: number,
+  stageHeight: number,
+): LabelRect {
+  const margin = 12;
+  return {
+    ...rect,
+    x: Math.min(
+      Math.max(rect.x, margin),
+      Math.max(margin, stageWidth - rect.width - margin),
+    ),
+    y: Math.min(
+      Math.max(rect.y, margin),
+      Math.max(margin, stageHeight - rect.height - margin),
+    ),
+  };
+}
+
 export function GraphView() {
   const tree = useStore((s) => s.tree);
   const meta = useStore((s) => s.meta);
@@ -109,8 +203,9 @@ export function GraphView() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const rawCtx =
-      canvas.getContext("2d") as Partial<CanvasRenderingContext2D> | null;
+    const rawCtx = canvas.getContext(
+      "2d",
+    ) as Partial<CanvasRenderingContext2D> | null;
     if (!rawCtx) return;
     const ctx = rawCtx as CanvasRenderingContext2D;
 
@@ -146,20 +241,19 @@ export function GraphView() {
     if (!rawCtx.beginPath) rawCtx.beginPath = () => {};
     if (!rawCtx.fill) rawCtx.fill = () => {};
 
-    const logicalWidth = canvas.parentElement?.getBoundingClientRect().width || 640;
-    const logicalHeight = 440;
+    const initialSize = graphCanvasSize(canvas);
 
     // Instantiation or sync of simulation
     if (!simRef.current) {
       simRef.current = new ForceSimulation(
         simNodes,
         simEdges,
-        logicalWidth,
-        logicalHeight,
+        initialSize.width,
+        initialSize.height,
       );
     } else {
-      simRef.current.width = logicalWidth;
-      simRef.current.height = logicalHeight;
+      simRef.current.width = initialSize.width;
+      simRef.current.height = initialSize.height;
       simRef.current.setGraph(simNodes, simEdges);
     }
 
@@ -167,24 +261,28 @@ export function GraphView() {
     const resizeCanvas = () => {
       const parent = canvas.parentElement;
       if (!parent) return;
-      const rect = parent.getBoundingClientRect();
+      const { width, height } = graphCanvasSize(canvas);
       const dpr = window.devicePixelRatio || 1;
 
-      canvas.width = rect.width * dpr;
-      canvas.height = logicalHeight * dpr;
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
       canvas.style.width = "100%";
-      canvas.style.height = `${logicalHeight}px`;
+      canvas.style.height = "100%";
 
       if (simRef.current) {
-        simRef.current.width = rect.width;
-        simRef.current.height = logicalHeight;
+        simRef.current.width = width;
+        simRef.current.height = height;
       }
     };
 
     resizeCanvas();
+    let resizeFrameId = 0;
     let resizeObserver: ResizeObserver | null = null;
     if (typeof ResizeObserver !== "undefined") {
-      resizeObserver = new ResizeObserver(() => resizeCanvas());
+      resizeObserver = new ResizeObserver(() => {
+        cancelAnimationFrame(resizeFrameId);
+        resizeFrameId = requestAnimationFrame(resizeCanvas);
+      });
       resizeObserver.observe(canvas.parentElement || canvas);
     }
 
@@ -199,13 +297,21 @@ export function GraphView() {
 
       const dpr = window.devicePixelRatio || 1;
       const styles = getComputedStyle(canvas);
-      const isDark = styles.getPropertyValue("--theme-name")?.includes("dark") ?? true;
-      const txNormal = styles.getPropertyValue("--tx-1") || "#333333";
-      const txMuted = styles.getPropertyValue("--tx-3") || "#888888";
-      const accent = styles.getPropertyValue("--accent") || "#0066cc";
-      const accentSoft =
-        styles.getPropertyValue("--accent-soft") || "rgba(0, 102, 204, 0.15)";
-      const border = styles.getPropertyValue("--hair-strong") || "#e5e5e5";
+      const canvasColor = cssValue(styles, "--canvas", "#10100f");
+      const isDark =
+        isLightCanvasColor(canvasColor) === false ||
+        (isLightCanvasColor(canvasColor) === null &&
+          !styles.getPropertyValue("--theme-name")?.includes("light"));
+      const txNormal = cssValue(styles, "--tx-1", "#f5f1e7");
+      const txMuted = cssValue(styles, "--tx-3", "#8f8a7e");
+      const accent = cssValue(styles, "--accent", "#d9a400");
+      const accentSoft = cssValue(
+        styles,
+        "--accent-soft",
+        "rgba(217, 164, 0, 0.14)",
+      );
+      const border = cssValue(styles, "--hair-strong", "#35322b");
+      const hair = cssValue(styles, "--hair", "#29261f");
 
       // Clear canvas
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -213,6 +319,27 @@ export function GraphView() {
       ctx.save();
       // Apply High-DPI scale transform
       ctx.scale(dpr, dpr);
+
+      const stageWidth = canvas.width / dpr;
+      const stageHeight = canvas.height / dpr;
+      ctx.save();
+      ctx.globalAlpha = isDark ? 0.22 : 0.38;
+      ctx.strokeStyle = hair;
+      ctx.lineWidth = 1;
+      for (let x = 0; x <= stageWidth; x += 48) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, stageHeight);
+        ctx.stroke();
+      }
+      for (let y = 0; y <= stageHeight; y += 48) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(stageWidth, y);
+        ctx.stroke();
+      }
+      ctx.restore();
+
       // Apply pan & zoom transforms
       ctx.translate(panRef.current.x, panRef.current.y);
       ctx.scale(zoomRef.current, zoomRef.current);
@@ -267,7 +394,7 @@ export function GraphView() {
         ctx.strokeStyle = color;
         ctx.lineWidth = width;
         ctx.setLineDash(dash);
-        ctx.globalAlpha = isDimmed ? 0.06 : 0.45;
+        ctx.globalAlpha = isDimmed ? 0.04 : 0.32;
 
         // Draw spring segment
         ctx.beginPath();
@@ -281,14 +408,14 @@ export function GraphView() {
           const dx = v.x - u.x;
           const dy = v.y - u.y;
           const angle = Math.atan2(dy, dx);
-          
+
           // Align arrowhead at target boundary
           const targetR = v.r;
           const arrowX = v.x - (targetR + 4) * Math.cos(angle);
           const arrowY = v.y - (targetR + 4) * Math.sin(angle);
-          
+
           ctx.fillStyle = color;
-          ctx.globalAlpha = 0.65;
+          ctx.globalAlpha = 0.42;
           ctx.beginPath();
           ctx.moveTo(arrowX, arrowY);
           ctx.lineTo(
@@ -306,7 +433,18 @@ export function GraphView() {
       ctx.setLineDash([]);
       ctx.globalAlpha = 1.0;
 
-      // 2. Draw nodes & labels
+      const pendingLabels: Array<{
+        node: SimNode;
+        visibleLabel: string;
+        pillWidth: number;
+        pillHeight: number;
+        nodeStroke: string;
+        isActive?: boolean;
+        isHovered: boolean;
+        isDimmed: boolean;
+      }> = [];
+
+      // 2. Draw nodes
       for (const node of sim.nodes) {
         const isActive = node.active;
         const isHovered = hoverNodeRef.current?.id === node.id;
@@ -317,73 +455,154 @@ export function GraphView() {
 
         ctx.globalAlpha = isDimmed ? 0.15 : 1.0;
 
-        let nodeFill = accentSoft; // --accent-soft base
+        let nodeFill = accentSoft;
         let nodeStroke = accent;
         let glowColor = accentSoft;
 
         if (isActive) {
-          nodeFill = "rgba(217, 119, 6, 0.14)";
-          nodeStroke = "#d97706"; // warm gold
-          glowColor = "rgba(217, 119, 6, 0.28)";
+          nodeFill = "rgba(217, 164, 0, 0.24)";
+          nodeStroke = "#d9a400";
+          glowColor = "rgba(217, 164, 0, 0.2)";
         } else if (node.isJournal) {
-          nodeFill = "rgba(244, 63, 94, 0.08)";
-          nodeStroke = "#f43f5e"; // rose/pink
-          glowColor = "rgba(244, 63, 94, 0.2)";
+          nodeFill = "rgba(74, 144, 226, 0.14)";
+          nodeStroke = "#6da7df";
+          glowColor = "rgba(74, 144, 226, 0.16)";
         } else if (node.label === "") {
-          nodeFill = "rgba(107, 114, 128, 0.06)";
-          nodeStroke = "#6b7280";
-          glowColor = "rgba(107, 114, 128, 0.1)";
+          nodeFill = "rgba(143, 138, 126, 0.1)";
+          nodeStroke = txMuted;
+          glowColor = "rgba(143, 138, 126, 0.12)";
         }
 
         // Draw soft outer blur glow ring on hover/active
         if (isActive || isHovered) {
           ctx.beginPath();
-          ctx.arc(node.x, node.y, node.r + (isHovered ? 5 : 3), 0, Math.PI * 2);
+          ctx.arc(node.x, node.y, node.r + (isHovered ? 8 : 5), 0, Math.PI * 2);
           ctx.fillStyle = glowColor;
           ctx.fill();
         }
 
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, node.r + 1.5, 0, Math.PI * 2);
+        ctx.strokeStyle = isDark
+          ? "rgba(255, 255, 255, 0.05)"
+          : "rgba(0, 0, 0, 0.05)";
+        ctx.lineWidth = 5;
+        ctx.stroke();
+
         // Draw background circle
         ctx.beginPath();
         ctx.arc(node.x, node.y, node.r, 0, Math.PI * 2);
-        ctx.fillStyle = isHovered ? nodeFill.replace("0.08", "0.22").replace("0.14", "0.3") : nodeFill;
+        ctx.fillStyle = nodeFill;
         ctx.fill();
 
         ctx.strokeStyle = nodeStroke;
-        ctx.lineWidth = isActive ? 2.5 : 1.5;
+        ctx.lineWidth = isActive ? 2.25 : isHovered ? 1.75 : 1.15;
         ctx.stroke();
 
         // Draw node icon (emoji)
         if (node.icon) {
-          ctx.font = `${node.r * 1.05}px sans-serif`;
+          ctx.globalAlpha = isDimmed
+            ? 0.18
+            : isHovered || isActive
+              ? 0.92
+              : 0.7;
+          ctx.font = `${Math.max(12, node.r * 0.88)}px sans-serif`;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
           ctx.fillText(node.icon, node.x, node.y + 1);
+          ctx.globalAlpha = isDimmed ? 0.15 : 1.0;
         }
 
-        // Draw pill label background container
         const labelText = node.label || "Untitled page";
-        ctx.font = `${isHovered ? "bold " : ""}11px var(--font-sans, system-ui)`;
-        const textWidth = ctx.measureText(labelText).width;
-        const pillHeight = 17;
-        const pillWidth = textWidth + 12;
-        const pillX = node.x - pillWidth / 2;
-        const pillY = node.y + node.r + 7;
+        ctx.font = `${isHovered || isActive ? "600 " : "500 "}12px var(--font-sans, system-ui)`;
+        const visibleLabel = truncateCanvasText(ctx, labelText, 112);
+        const textWidth = ctx.measureText(visibleLabel).width;
+        const pillHeight = 22;
+        const pillWidth = textWidth + 16;
+        pendingLabels.push({
+          node,
+          visibleLabel,
+          pillWidth,
+          pillHeight,
+          nodeStroke,
+          isActive,
+          isHovered,
+          isDimmed,
+        });
+      }
 
-        ctx.fillStyle = isDark ? "rgba(24, 24, 24, 0.88)" : "rgba(255, 255, 255, 0.92)";
+      // 3. Draw labels after nodes so they can avoid each other.
+      const placedLabels: LabelRect[] = [];
+      const orderedLabels = pendingLabels.sort((a, b) => {
+        const aPriority = (a.isActive ? 2 : 0) + (a.isHovered ? 1 : 0);
+        const bPriority = (b.isActive ? 2 : 0) + (b.isHovered ? 1 : 0);
+        return bPriority - aPriority;
+      });
+
+      for (const label of orderedLabels) {
+        const { node, pillWidth, pillHeight } = label;
+        const candidates = [
+          {
+            x: node.x - pillWidth / 2,
+            y: node.y + node.r + 9,
+            width: pillWidth,
+            height: pillHeight,
+          },
+          {
+            x: node.x - pillWidth / 2,
+            y: node.y - node.r - pillHeight - 9,
+            width: pillWidth,
+            height: pillHeight,
+          },
+          {
+            x: node.x + node.r + 12,
+            y: node.y - pillHeight / 2,
+            width: pillWidth,
+            height: pillHeight,
+          },
+          {
+            x: node.x - node.r - pillWidth - 12,
+            y: node.y - pillHeight / 2,
+            width: pillWidth,
+            height: pillHeight,
+          },
+        ].map((rect) => clampLabelRect(rect, stageWidth, stageHeight));
+
+        const labelRect =
+          candidates.find((candidate) =>
+            placedLabels.every(
+              (placed) => !labelRectsOverlap(candidate, placed),
+            ),
+          ) || candidates[0];
+
+        placedLabels.push(labelRect);
+
+        ctx.globalAlpha = label.isDimmed ? 0.15 : 1.0;
+
+        ctx.fillStyle = isDark
+          ? "rgba(16, 15, 13, 0.76)"
+          : "rgba(255, 255, 255, 0.9)";
         ctx.beginPath();
-        ctx.roundRect(pillX, pillY, pillWidth, pillHeight, 5);
+        ctx.roundRect(labelRect.x, labelRect.y, pillWidth, pillHeight, 7);
         ctx.fill();
 
-        ctx.strokeStyle = isActive ? nodeStroke : border;
-        ctx.lineWidth = isActive ? 1.0 : 0.6;
+        ctx.strokeStyle =
+          label.isActive || label.isHovered ? label.nodeStroke : border;
+        ctx.lineWidth = label.isActive || label.isHovered ? 1.1 : 0.65;
         ctx.stroke();
 
-        // Draw label text
-        ctx.fillStyle = isActive ? nodeStroke : isHovered ? txNormal : txMuted;
+        ctx.fillStyle = label.isActive
+          ? "#f3c640"
+          : label.isHovered
+            ? txNormal
+            : txMuted;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText(labelText, node.x, pillY + pillHeight / 2 + 0.5);
+        ctx.fillText(
+          label.visibleLabel,
+          labelRect.x + pillWidth / 2,
+          labelRect.y + pillHeight / 2 + 0.5,
+        );
       }
 
       ctx.restore();
@@ -396,6 +615,7 @@ export function GraphView() {
 
     return () => {
       cancelAnimationFrame(animationFrameId);
+      cancelAnimationFrame(resizeFrameId);
       resizeObserver?.disconnect();
     };
   }, [simNodes, simEdges, searchTerm]);
@@ -440,10 +660,9 @@ export function GraphView() {
 
     if (hitNode) {
       dragNodeRef.current = hitNode;
-      // Impatative physics mutation during drag action
-      /* eslint-disable-next-line react-hooks/immutability */
-      hitNode.fx = hitNode.x;
+      // Imperative physics mutation during drag action.
       // eslint-disable-next-line react-hooks/immutability
+      hitNode.fx = hitNode.x;
       hitNode.fy = hitNode.y;
     }
   };
@@ -537,26 +756,41 @@ export function GraphView() {
     return (
       <div className="graph-empty">
         <Icon name="pageGraph" size={28} />
-        <div>No pages to graph yet.</div>
+        <div className="graph-empty-title">No pages to graph yet.</div>
       </div>
     );
   }
 
+  const connectedPageCount = new Set(
+    simEdges.flatMap((edge) => [edge.source, edge.target]),
+  ).size;
+
   return (
     <div className="graph-view">
       <div className="graph-head">
-        <Icon name="pageGraph" size={16} />
-        <span>Wikilink Page Graph</span>
-        <span className="title-badge">
-          {simNodes.length} page{simNodes.length === 1 ? "" : "s"} ·{" "}
-          {simEdges.length} link{simEdges.length === 1 ? "" : "s"}
-        </span>
+        <div className="graph-title">
+          <span className="graph-title-icon">
+            <Icon name="pageGraph" size={16} />
+          </span>
+          <div>
+            <h1>Page Graph</h1>
+            <div className="graph-title-meta">Wikilink map</div>
+          </div>
+        </div>
+        <div className="graph-stats" aria-label="Graph summary">
+          <span>
+            {simNodes.length} page{simNodes.length === 1 ? "" : "s"}
+          </span>
+          <span>
+            {simEdges.length} link{simEdges.length === 1 ? "" : "s"}
+          </span>
+          <span>{connectedPageCount} connected</span>
+        </div>
       </div>
 
       <div className="graph-container">
-        {/* Floating Controls Overlay */}
-        <div className="graph-controls">
-          <div className="graph-control-group">
+        <div className="graph-toolbar">
+          <div className="graph-toolbar-left">
             <div className="graph-search-box">
               <Icon name="search" size={13} style={{ opacity: 0.7 }} />
               <input
@@ -574,32 +808,35 @@ export function GraphView() {
               className={`graph-btn ${localMode ? "active" : ""}`}
               onClick={() => setLocalMode(!localMode)}
               title="Toggle Local Filter (current note and neighbors)"
+              aria-pressed={localMode}
             >
               <Icon name="wand" size={12} />
               <span>{localMode ? "Local" : "Global"}</span>
             </button>
           </div>
 
-          <div className="graph-control-group">
+          <div className="graph-toolbar-right">
             <button
               type="button"
-              className="graph-btn"
+              className="graph-icon-btn"
               onClick={() => {
                 zoomRef.current = Math.min(6.0, zoomRef.current + 0.15);
               }}
               title="Zoom In"
+              aria-label="Zoom in"
             >
-              ＋
+              <Icon name="plus" size={14} />
             </button>
             <button
               type="button"
-              className="graph-btn"
+              className="graph-icon-btn"
               onClick={() => {
                 zoomRef.current = Math.max(0.15, zoomRef.current - 0.15);
               }}
               title="Zoom Out"
+              aria-label="Zoom out"
             >
-              －
+              <span aria-hidden="true">−</span>
             </button>
             <button
               type="button"
@@ -611,34 +848,37 @@ export function GraphView() {
               }}
               title="Reset View"
             >
-              ⛶ Reset
+              <Icon name="refresh" size={13} />
+              <span>Reset</span>
             </button>
           </div>
         </div>
 
-        <canvas
-          ref={canvasRef}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onWheel={handleWheel}
-          className="graph-canvas"
-        />
+        <div className="graph-stage">
+          <canvas
+            ref={canvasRef}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onWheel={handleWheel}
+            className="graph-canvas"
+          />
 
-        {/* Screen-reader accessible alternative list of nodes for keyboard navigation & testing */}
-        <ul aria-label="Graph nodes" className="sr-only">
-          {simNodes.map((node) => (
-            <li key={node.id}>
-              <button
-                type="button"
-                onClick={() => openNote(node.id)}
-                aria-label={node.label}
-              >
-                {node.label}
-              </button>
-            </li>
-          ))}
-        </ul>
+          {/* Screen-reader accessible alternative list of nodes for keyboard navigation & testing */}
+          <ul aria-label="Graph nodes" className="sr-only">
+            {simNodes.map((node) => (
+              <li key={node.id}>
+                <button
+                  type="button"
+                  onClick={() => openNote(node.id)}
+                  aria-label={node.label}
+                >
+                  {node.label}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
     </div>
   );

@@ -688,121 +688,185 @@ button.twk-field:disabled {
 
 /* Graph View redesign and enhancements */
 .sps-scope .graph-view {
-  padding: 12px 24px 24px;
+  padding: 18px 24px 24px;
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-height: 0;
+  gap: 14px;
 }
 
 .sps-scope .graph-head {
   display: flex;
   align-items: center;
-  gap: 10px;
-  color: var(--tx-2);
-  font-weight: 600;
-  margin: 4px 0 16px;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 44px;
 }
 
-.sps-scope .graph-head .title-badge {
+.sps-scope .graph-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.sps-scope .graph-title-icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  border-radius: 8px;
+}
+
+.sps-scope .graph-title h1 {
+  margin: 0;
+  color: var(--tx-1);
+  font-size: 20px;
+  line-height: 1.15;
+  font-weight: 650;
+}
+
+.sps-scope .graph-title-meta {
+  margin-top: 3px;
   color: var(--tx-3);
-  font-weight: 400;
   font-size: 12px;
 }
 
+.sps-scope .graph-stats {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sps-scope .graph-stats span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  color: var(--tx-2);
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .sps-scope .graph-container {
-  border: 1px solid var(--hair-strong);
-  border-radius: 12px;
+  flex: 1;
+  min-height: 560px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--hair);
+  border-radius: 10px;
   overflow: hidden;
-  background: var(--bg-primary, #1a1a1a);
+  background: var(--canvas);
   position: relative;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.03) inset,
+    0 18px 42px rgba(0, 0, 0, 0.16);
 }
 
-.sps-scope .graph-canvas {
-  display: block;
-  width: 100%;
-  height: auto;
-  max-height: 540px;
-}
-
-/* Glassmorphic floating control overlay */
-.sps-scope .graph-controls {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  right: 12px;
+.sps-scope .graph-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  pointer-events: none;
+  padding: 10px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--hair);
 }
 
-.sps-scope .graph-control-group {
+.sps-scope .graph-toolbar-left,
+.sps-scope .graph-toolbar-right {
   display: flex;
   align-items: center;
-  gap: 6px;
-  pointer-events: auto;
-  background: rgba(26, 26, 26, 0.72);
-  -webkit-backdrop-filter: blur(12px) saturate(160%);
-  backdrop-filter: blur(12px) saturate(160%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  padding: 4px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.24);
+  gap: 8px;
 }
 
-/* Light mode overlay adjustments */
-.sps-scope[data-theme="light"] .graph-control-group {
-  background: rgba(255, 255, 255, 0.75);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
-}
-
-.sps-scope .graph-btn {
-  background: transparent;
-  border: none;
+.sps-scope .graph-btn,
+.sps-scope .graph-icon-btn {
+  appearance: none;
+  background: var(--canvas);
+  border: 1px solid var(--hair);
   color: var(--tx-2);
-  border-radius: 6px;
-  padding: 6px 10px;
+  border-radius: 7px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 6px;
-  transition: all 0.15s ease;
-  height: 28px;
+  justify-content: center;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    transform 0.1s ease;
+  height: 34px;
 }
 
-.sps-scope .graph-btn:hover {
+.sps-scope .graph-btn {
+  gap: 7px;
+  padding: 0 12px;
+}
+
+.sps-scope .graph-icon-btn {
+  width: 34px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.sps-scope .graph-btn:hover,
+.sps-scope .graph-icon-btn:hover {
   background: var(--row-hover);
+  border-color: var(--hair-strong);
   color: var(--tx-1);
 }
 
-.sps-scope .graph-btn.active {
+.sps-scope .graph-btn:focus-visible,
+.sps-scope .graph-icon-btn:focus-visible,
+.sps-scope .graph-search-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.sps-scope .graph-btn:active,
+.sps-scope .graph-icon-btn:active {
+  transform: translateY(1px);
+}
+
+.sps-scope .graph-btn.active,
+.sps-scope .graph-btn[aria-pressed="true"] {
   background: var(--accent);
-  color: #fff;
+  border-color: var(--accent);
+  color: var(--accent-on);
 }
 
 .sps-scope .graph-search-box {
   display: flex;
   align-items: center;
-  background: var(--canvas, #111);
+  background: var(--canvas);
   border: 1px solid var(--hair);
-  border-radius: 6px;
-  padding: 0 8px;
-  height: 28px;
-  width: 180px;
+  border-radius: 7px;
+  padding: 0 10px;
+  height: 34px;
+  width: 260px;
+  max-width: min(36vw, 320px);
   transition:
     border-color 0.15s ease,
-    width 0.2s ease;
-  pointer-events: auto;
+    box-shadow 0.15s ease;
 }
 
 .sps-scope .graph-search-box:focus-within {
   border-color: var(--accent);
-  width: 220px;
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .sps-scope .graph-search-input {
@@ -813,10 +877,38 @@ button.twk-field:disabled {
   outline: none;
   width: 100%;
   margin-left: 6px;
+  min-width: 0;
 }
 
 .sps-scope .graph-search-input::placeholder {
   color: var(--tx-3);
+}
+
+.sps-scope .graph-stage {
+  flex: 1;
+  min-height: 520px;
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface) 18%, transparent),
+      transparent 180px
+    ),
+    var(--canvas);
+}
+
+.sps-scope .graph-canvas {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+
+.sps-scope .graph-canvas:active {
+  cursor: grabbing;
 }
 
 .sps-scope .graph-empty {
@@ -829,6 +921,35 @@ button.twk-field:disabled {
   justify-content: center;
   gap: 12px;
   height: 100%;
+}
+
+.sps-scope .graph-empty-title {
+  color: var(--tx-2);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+@media (max-width: 760px) {
+  .sps-scope .graph-view {
+    padding: 14px;
+  }
+
+  .sps-scope .graph-head,
+  .sps-scope .graph-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .sps-scope .graph-stats,
+  .sps-scope .graph-toolbar-left,
+  .sps-scope .graph-toolbar-right {
+    justify-content: flex-start;
+  }
+
+  .sps-scope .graph-search-box {
+    width: 100%;
+    max-width: none;
+  }
 }
 
 /* Journal Entry Header Styling (Apple/Google Journal style) */

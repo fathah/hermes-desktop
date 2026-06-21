@@ -16,12 +16,27 @@ interface HealthErrors {
   brokenLinks: string[];
 }
 
+type HealthSeverity = "info" | "warning";
+
+function isDraftLikeUntitledPage(title: string, contentEmpty: boolean) {
+  if (!contentEmpty) return false;
+  const normalized = title.trim().toLowerCase();
+  return (
+    normalized === "" ||
+    normalized === "untitled" ||
+    normalized === "untitled page" ||
+    normalized === "untitled entry"
+  );
+}
+
 function HealthBadge({ errors }: { errors: HealthErrors }) {
   const [open, setOpen] = useState(false);
 
   const list: string[] = [];
   if (errors.isOrphan) {
-    list.push("Orphan page: this page has no inbound/outbound links.");
+    list.push(
+      "This page is not connected to the graph yet. Add a wikilink when it belongs with other notes.",
+    );
   }
   if (errors.isStale) {
     list.push("Stale page: this page has not been edited for over 30 days.");
@@ -30,21 +45,39 @@ function HealthBadge({ errors }: { errors: HealthErrors }) {
     list.push(`Broken link: points to non-existent page [[${target}]].`);
   });
 
+  const severity: HealthSeverity =
+    errors.isStale || errors.brokenLinks.length > 0 ? "warning" : "info";
+  const label = severity === "warning" ? "Needs review" : "Unlinked";
+  const popoverTitle =
+    severity === "warning" ? "Vault Health Issues" : "Connection Suggestion";
+
   return (
-    <div className="doc-health-badge-container">
+    <div
+      className="doc-health-badge-container"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
       <button
         type="button"
         className="doc-health-badge"
+        data-severity={severity}
+        aria-expanded={open}
+        aria-haspopup="dialog"
         onClick={() => setOpen(!open)}
-        onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
       >
-        <span>⚠️</span> Warning
+        <Icon
+          name={severity === "warning" ? "info" : "pageGraph"}
+          size={13}
+          stroke={1.9}
+        />
+        {label}
       </button>
 
       {open && (
-        <div className="doc-health-popover">
-          <div className="doc-health-popover-title">Vault Health Issues</div>
+        <div className="doc-health-popover" data-severity={severity}>
+          <div className="doc-health-popover-title">{popoverTitle}</div>
           {list.map((msg, i) => (
             <div key={i} className="doc-health-issue-row">
               <span className="doc-health-issue-bullet">•</span>
@@ -79,6 +112,18 @@ export function DocHeader({ children }: { children?: ReactNode }) {
 
   const [lintErrors, setLintErrors] = useState<HealthErrors | null>(null);
 
+  // Empty page = no title and no real content (0–1 empty blocks). Mirror
+  // Notion's empty-state launcher here, above the editor body.
+  const titleEmpty = !(pmeta.title || "").trim();
+  const contentEmpty =
+    blocks.length === 0 ||
+    (blocks.length === 1 && !(blocks[0].text || "").trim());
+  const showGetStarted = titleEmpty && contentEmpty;
+  const suppressOrphanOnly = isDraftLikeUntitledPage(
+    pmeta.title || "",
+    contentEmpty,
+  );
+
   // Fetch page lint errors on load / page switch
   useEffect(() => {
     let active = true;
@@ -92,9 +137,9 @@ export function DocHeader({ children }: { children?: ReactNode }) {
               const basename = path.split("/").pop() ?? "";
               return basename.replace(/\.md$/, "");
             };
-            const isOrphan = (res.orphans || []).some(
-              (p) => pageIdFromPath(p) === page,
-            );
+            const isOrphan =
+              (res.orphans || []).some((p) => pageIdFromPath(p) === page) &&
+              !suppressOrphanOnly;
             const isStale = (res.stale || []).some(
               (p) => pageIdFromPath(p) === page,
             );
@@ -119,15 +164,7 @@ export function DocHeader({ children }: { children?: ReactNode }) {
     return () => {
       active = false;
     };
-  }, [page]);
-
-  // Empty page = no title and no real content (0–1 empty blocks). Mirror
-  // Notion's empty-state launcher here, above the editor body.
-  const titleEmpty = !(pmeta.title || "").trim();
-  const contentEmpty =
-    blocks.length === 0 ||
-    (blocks.length === 1 && !(blocks[0].text || "").trim());
-  const showGetStarted = titleEmpty && contentEmpty;
+  }, [page, suppressOrphanOnly]);
 
   // Research folder with no saved papers yet → an on-ramp that teaches its own
   // use (mirrors the GetStarted launcher, but specific to the Research surface).
@@ -185,12 +222,16 @@ export function DocHeader({ children }: { children?: ReactNode }) {
               <div className="jr-meta-badge date-time">
                 <Icon name="calendar" size={13} />
                 <span>{pmeta.date ? prettyDate(pmeta.date) : "No date"}</span>
-                {pmeta.time && <span className="jr-meta-time">at {pmeta.time}</span>}
+                {pmeta.time && (
+                  <span className="jr-meta-time">at {pmeta.time}</span>
+                )}
               </div>
               {pmeta.mood && (
                 <div className="jr-meta-badge mood">
                   <span className="mood-emoji">{pmeta.mood}</span>
-                  <span className="mood-label">{MOOD_LABELS[pmeta.mood] || "Reflective"}</span>
+                  <span className="mood-label">
+                    {MOOD_LABELS[pmeta.mood] || "Reflective"}
+                  </span>
                 </div>
               )}
               {pmeta.tags && pmeta.tags.length > 0 && (

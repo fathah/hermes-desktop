@@ -10,19 +10,48 @@ describe("ForceSimulation", () => {
 
   const edges: SimEdge[] = [{ source: "A", target: "B" }];
 
-  it("initializes nodes near the center with zero velocities", () => {
+  it("initializes linked graphs with deterministic spread and zero velocities", () => {
     const sim = new ForceSimulation(nodes, edges, 600, 400);
+    const replay = new ForceSimulation(nodes, edges, 600, 400);
     expect(sim.nodes).toHaveLength(3);
 
-    for (const node of sim.nodes) {
-      // Placed around center (300, 200) plus/minus 20
-      expect(node.x).toBeGreaterThanOrEqual(280);
-      expect(node.x).toBeLessThanOrEqual(320);
-      expect(node.y).toBeGreaterThanOrEqual(180);
-      expect(node.y).toBeLessThanOrEqual(220);
+    for (const [index, node] of sim.nodes.entries()) {
+      expect(node.x).toBeGreaterThanOrEqual(0);
+      expect(node.x).toBeLessThanOrEqual(600);
+      expect(node.y).toBeGreaterThanOrEqual(0);
+      expect(node.y).toBeLessThanOrEqual(400);
+      expect(node.x).toBeCloseTo(replay.nodes[index].x);
+      expect(node.y).toBeCloseTo(replay.nodes[index].y);
       expect(node.vx).toBe(0);
       expect(node.vy).toBe(0);
     }
+
+    const nearCenter = sim.nodes.filter(
+      (node) => Math.abs(node.x - 300) <= 20 && Math.abs(node.y - 200) <= 20,
+    );
+    const distinctPositions = new Set(
+      sim.nodes.map((node) => `${Math.round(node.x)}:${Math.round(node.y)}`),
+    );
+    expect(nearCenter).toHaveLength(0);
+    expect(distinctPositions.size).toBe(sim.nodes.length);
+  });
+
+  it("places isolated graphs on a readable grid", () => {
+    const isolatedNodes: SimNode[] = [
+      ...nodes,
+      { id: "D", x: 0, y: 0, vx: 0, vy: 0, r: 10, label: "Node D" },
+    ];
+
+    const sim = new ForceSimulation(isolatedNodes, [], 600, 400);
+
+    expect(sim.nodes[0].x).toBeCloseTo(150);
+    expect(sim.nodes[0].y).toBeCloseTo(400 / 3);
+    expect(sim.nodes[1].x).toBeCloseTo(300);
+    expect(sim.nodes[1].y).toBeCloseTo(400 / 3);
+    expect(sim.nodes[2].x).toBeCloseTo(450);
+    expect(sim.nodes[2].y).toBeCloseTo(400 / 3);
+    expect(sim.nodes[3].x).toBeCloseTo(150);
+    expect(sim.nodes[3].y).toBeCloseTo((400 * 2) / 3);
   });
 
   it("updates positions and velocities when ticked", () => {
