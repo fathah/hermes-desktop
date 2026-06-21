@@ -5,7 +5,10 @@ import { useI18n } from "../../components/useI18n";
 import BrandLogo from "../../components/common/BrandLogo";
 import { detectProviderFromUrl } from "./detect-provider";
 import { useDiscoveredModels } from "../../hooks/useDiscoveredModels";
-import { expectedEnvKeyForUrl } from "../../../../shared/url-key-map";
+import {
+  CUSTOM_API_KEY_ENV,
+  expectedEnvKeyForUrl,
+} from "../../../../shared/url-key-map";
 
 interface SavedModel {
   id: string;
@@ -18,6 +21,16 @@ interface SavedModel {
 
 function providerLabelKey(value: string): string {
   return PROVIDERS.options.find((p) => p.value === value)?.label || value;
+}
+
+function customProviderEnvKey(name: string, baseUrl: string): string {
+  const urlKey = expectedEnvKeyForUrl(baseUrl);
+  if (urlKey !== CUSTOM_API_KEY_ENV) return urlKey;
+  return (
+    "CUSTOM_PROVIDER_" +
+    name.replace(/[^A-Za-z0-9]/g, "_").toUpperCase() +
+    "_KEY"
+  );
 }
 
 interface ModelsProps {
@@ -103,14 +116,14 @@ function Models({ visible }: ModelsProps = {}): React.JSX.Element {
     // configured — previously the field was always reset to empty,
     // which made the dialog look like the key was missing even when
     // chat was working fine. Resolve the env var name from the base
-    // URL via the shared URL_KEY_MAP (or CUSTOM_API_KEY fallback for
-    // unknown hosts).
+    // URL via the shared URL_KEY_MAP, or a per-provider custom key for
+    // unknown hosts with CUSTOM_API_KEY kept as a legacy read fallback.
     setFormApiKey("");
-    const envKey = expectedEnvKeyForUrl(m.baseUrl);
+    const envKey = customProviderEnvKey(m.name, m.baseUrl);
     window.hermesAPI
       .getEnv()
       .then((env) => {
-        const saved = env[envKey];
+        const saved = env[envKey] ?? env[CUSTOM_API_KEY_ENV];
         if (saved) setFormApiKey(saved);
       })
       .catch(() => {
@@ -212,7 +225,7 @@ function Models({ visible }: ModelsProps = {}): React.JSX.Element {
     }
 
     if (formApiKey.trim() && formProvider === "custom") {
-      const envKey = expectedEnvKeyForUrl(formBaseUrl.trim());
+      const envKey = customProviderEnvKey(formName.trim(), formBaseUrl.trim());
       await window.hermesAPI.setEnv(envKey, formApiKey.trim());
     }
 
