@@ -306,7 +306,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       const target = e.target;
       requestAnimationFrame(() => {
         target.style.height = "auto";
-        target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
+        target.style.height = `${Math.min(target.scrollHeight, 200)}px`;
       });
 
       if (value.startsWith("/") && !value.includes(" ")) {

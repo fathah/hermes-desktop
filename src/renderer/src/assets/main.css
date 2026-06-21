@@ -4226,7 +4226,7 @@ body {
   outline: none;
   resize: none;
   min-height: 20px;
-  max-height: 120px;
+  max-height: 200px;
   overflow-y: auto;
   line-height: 1.4;
   box-sizing: border-box;
