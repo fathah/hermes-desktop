@@ -71,3 +71,68 @@ describe("setBlocks — query-DB row-folder cleanup (F3)", () => {
     expect(del).not.toHaveBeenCalled();
   });
 });
+
+describe("purgeTrashedPage", () => {
+  it("permanently removes a trashed page and its vault files", async () => {
+    const deletePage = vi.fn().mockResolvedValue(true);
+    const deleteFolder = vi.fn().mockResolvedValue(true);
+    stubApi({ spsDeletePage: deletePage, spsDeleteDbFolder: deleteFolder });
+    useStore.setState({
+      docs: {
+        p1: [dbBlock("projects")],
+        child: [{ id: "child-block", type: "p", text: "Child" }],
+      },
+      meta: {
+        p1: { title: "Trashed project", icon: "📄", cover: null },
+        child: { title: "Child", icon: "📄", cover: null },
+      },
+      trash: [
+        {
+          id: "p1",
+          title: "Trashed project",
+          icon: "📄",
+          ids: ["p1", "child"],
+        },
+      ],
+      comments: [
+        {
+          id: "c1",
+          blockId: "child-block",
+          quote: "Remove me",
+          page: "child",
+          resolved: false,
+          messages: [],
+        },
+        {
+          id: "c2",
+          blockId: "other-block",
+          quote: "Keep me",
+          page: "other",
+          resolved: false,
+          messages: [],
+        },
+      ],
+    });
+
+    useStore.getState().purgeTrashedPage(useStore.getState().trash[0]);
+
+    expect(useStore.getState().trash).toEqual([]);
+    expect(useStore.getState().docs.p1).toBeUndefined();
+    expect(useStore.getState().docs.child).toBeUndefined();
+    expect(useStore.getState().meta.p1).toBeUndefined();
+    expect(useStore.getState().meta.child).toBeUndefined();
+    expect(useStore.getState().comments).toEqual([
+      {
+        id: "c2",
+        blockId: "other-block",
+        quote: "Keep me",
+        page: "other",
+        resolved: false,
+        messages: [],
+      },
+    ]);
+    await waitFor(() => expect(deletePage).toHaveBeenCalledWith("p1"));
+    expect(deletePage).toHaveBeenCalledWith("child");
+    expect(deleteFolder).toHaveBeenCalledWith("projects");
+  });
+});

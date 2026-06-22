@@ -1,5 +1,6 @@
 import Database from "better-sqlite3";
-import { existsSync } from "fs";
+import { dirname } from "path";
+import { existsSync, mkdirSync } from "fs";
 import { activeStateDbPath } from "./utils";
 
 let cachedDb: Database.Database | null = null;
@@ -8,9 +9,16 @@ let cachedDbReadonly = true;
 
 export function getSharedDb(readonly = true): Database.Database | null {
   const dbPath = activeStateDbPath();
-  if (!dbPath || !existsSync(dbPath)) {
+  if (!dbPath) {
     closeSharedDb();
     return null;
+  }
+  if (!existsSync(dbPath)) {
+    if (readonly) {
+      closeSharedDb();
+      return null;
+    }
+    mkdirSync(dirname(dbPath), { recursive: true });
   }
 
   // Recycle connection if:
@@ -57,6 +65,13 @@ export function initializeMetadataTable(db: Database.Database): void {
       )
       `,
     ).run();
+
+    const messagesTable = db
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='messages'",
+      )
+      .get();
+    if (!messagesTable) return;
 
     db.prepare(
       `

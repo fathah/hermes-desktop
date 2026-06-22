@@ -100,7 +100,7 @@ await check("onboarding checklist renders", async () => {
 });
 
 await check("checklist has 3 steps", async () => {
-  return (await win.locator(".ob-step").count()) === 3;
+  return (await win.locator(".ob-step-card").count()) === 3;
 });
 
 // Dismiss persists: click ×, the checklist disappears.

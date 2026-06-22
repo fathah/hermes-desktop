@@ -27,6 +27,14 @@ writeFileSync(
   join(HOME, "config.yaml"),
   "model:\n  provider: anthropic\n  model: claude-3-5-sonnet\n",
 );
+writeFileSync(
+  join(HOME, "desktop.json"),
+  JSON.stringify(
+    { onboardingCompleted: true, schedulerEnabled: false },
+    null,
+    2,
+  ),
+);
 mkdirSync(join(HOME, "sps-agent", "vault"), { recursive: true });
 writeFileSync(
   join(HOME, "sps-agent", "workspace.json"),
@@ -57,7 +65,7 @@ function fail(msg) {
 }
 
 // Open the You surface from the rail.
-await win.locator(".nav-item", { hasText: "You" }).first().click();
+await win.locator(".nav-item", { hasText: "My Alignment" }).first().click();
 await win.waitForSelector(".settings-header", { timeout: 8000 });
 const header = await win.locator(".settings-header").first().textContent();
 if (!header || !header.includes("You"))

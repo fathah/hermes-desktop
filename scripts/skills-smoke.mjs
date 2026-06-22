@@ -21,6 +21,14 @@ writeFileSync(
   join(HOME, "config.yaml"),
   "model:\n  provider: anthropic\n  model: claude-3-5-sonnet\n",
 );
+writeFileSync(
+  join(HOME, "desktop.json"),
+  JSON.stringify(
+    { onboardingCompleted: true, schedulerEnabled: false },
+    null,
+    2,
+  ),
+);
 const sps = join(HOME, "sps-agent");
 mkdirSync(join(sps, "vault"), { recursive: true });
 writeFileSync(
@@ -47,7 +55,7 @@ const fail = (m) => {
 setTimeout(() => fail("WATCHDOG_TIMEOUT"), 120000).unref();
 
 const app = await electron.launch({
-  args: ["."],
+  args: [".", `--user-data-dir=${join(HOME, "electron-userdata")}`],
   env: {
     ...process.env,
     HERMES_HOME: HOME,
@@ -59,24 +67,27 @@ await win.waitForLoadState("domcontentloaded");
 await win.waitForSelector(".app", { timeout: 30000 });
 await win.waitForTimeout(1500);
 
-// Open the admin overlay and navigate to Skills.
-await win.locator('button[aria-label="Settings"]').first().click();
-await win.waitForTimeout(600);
-await win.locator(".sidebar-nav-item", { hasText: "Skills" }).first().click();
-await win.waitForSelector(".skills-container", { timeout: 10000 });
+// Open the current Learning surface and navigate to Skills.
+await win.locator(".nav-item", { hasText: "Teach Me" }).first().click();
+await win.waitForSelector(".settings-subnav", { timeout: 10000 });
+await win.locator(".settings-subnav-tab", { hasText: "Skills" }).click();
+await win
+  .getByRole("button", { name: "Create skill" })
+  .waitFor({ timeout: 10000 });
 await win.screenshot({ path: join(OUT, "01-skills.png") });
 
 // Author a new skill.
-await win.getByText("New skill", { exact: true }).click();
-await win.waitForSelector(".skills-new-form", { timeout: 5000 });
-await win.locator(".skills-new-input").first().fill("Smoke Skill");
+await win.getByLabel("Skill name").fill("Smoke Skill");
+await win.getByLabel("Skill description").fill("when running the skills smoke");
 await win
-  .locator(".skills-new-textarea")
+  .getByLabel("Skill body")
   .fill("# Smoke Skill\n\nA skill created by the smoke test.");
-await win.getByText("Create", { exact: true }).click();
+await win.getByRole("button", { name: "Create skill" }).click();
 
 // It should appear under Installed.
-const installedCard = win.locator(".skills-card", { hasText: "Smoke Skill" });
+const installedCard = win.locator(".memory-entry-card", {
+  hasText: "Smoke Skill",
+});
 try {
   await installedCard.first().waitFor({ timeout: 10000 });
 } catch {
@@ -88,10 +99,11 @@ if (!existsSync(join(HOME, "skills", "custom", "smoke-skill", "SKILL.md")))
 await win.screenshot({ path: join(OUT, "02-created.png") });
 
 // Disable it → it should move to the Disabled section.
-await win.getByText("Disable", { exact: true }).first().click();
+await installedCard.getByText("Disable", { exact: true }).click();
 try {
   await win
-    .locator(".skills-card-disabled", { hasText: "Smoke Skill" })
+    .locator(".memory-entry-card", { hasText: "Smoke Skill" })
+    .filter({ hasText: "Enable" })
     .first()
     .waitFor({ timeout: 10000 });
 } catch {

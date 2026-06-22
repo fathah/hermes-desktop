@@ -20,6 +20,14 @@ writeFileSync(
   join(HOME, "config.yaml"),
   "model:\n  provider: anthropic\n  model: claude-3-5-sonnet\n",
 );
+writeFileSync(
+  join(HOME, "desktop.json"),
+  JSON.stringify(
+    { onboardingCompleted: true, schedulerEnabled: false },
+    null,
+    2,
+  ),
+);
 
 const sps = join(HOME, "sps-agent");
 const vault = join(sps, "vault");
@@ -58,7 +66,7 @@ setTimeout(() => {
 
 const MOD = process.platform === "darwin" ? "Meta" : "Control";
 const app = await electron.launch({
-  args: ["."],
+  args: [".", `--user-data-dir=${join(HOME, "electron-userdata")}`],
   env: {
     ...process.env,
     HERMES_HOME: HOME,
@@ -125,18 +133,14 @@ await win.waitForTimeout(400);
 
 // ── 3. Settings → Automation toggles ─────────────────────────────────────────
 try {
-  await win.keyboard.press(`${MOD}+,`);
-  await win.waitForTimeout(1200);
-  // Find and click a "Settings" nav entry if present, else assume already shown.
   await win.evaluate(() => {
-    const el = [...document.querySelectorAll("*")].find(
-      (n) =>
-        n.children.length === 0 &&
-        /^Settings$/.test((n.textContent || "").trim()),
+    window.dispatchEvent(
+      new CustomEvent("hermes:open-settings", {
+        detail: { view: "preferences" },
+      }),
     );
-    el?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
-  await win.waitForTimeout(1000);
+  await win.waitForTimeout(1200);
   const bodyText = await win.evaluate(() => document.body.innerText);
   check("Settings shows Automation section", /Automation/i.test(bodyText));
   check(
@@ -153,9 +157,11 @@ try {
 try {
   await win.keyboard.press("Escape").catch(() => {});
   // Reopen the SPS workspace (Settings overlay may still be up) and the assistant.
+  await win.keyboard.press("Escape").catch(() => {});
+  await win.waitForSelector(".topbar", { timeout: 4000 });
   await win.evaluate(() => {
     const tab = [...document.querySelectorAll(".rp-tab")].find((t) =>
-      /Assistant/i.test(t.textContent || ""),
+      /Page assistant/i.test(t.textContent || ""),
     );
     tab?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });

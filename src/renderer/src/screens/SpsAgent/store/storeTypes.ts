@@ -186,6 +186,7 @@ export interface WorkspaceSlice {
   ) => void;
   deletePage: (id?: string) => void;
   restorePage: (entry: TrashEntry) => void;
+  purgeTrashedPage: (entry: TrashEntry) => void;
   renamePage: (id: string, title: string) => void;
   movePage: (dragId: string, targetId: string, where: DropWhere) => void;
   setPMeta: (patch: Partial<PageMeta>) => void;

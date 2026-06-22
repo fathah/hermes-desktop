@@ -24,6 +24,14 @@ writeFileSync(
   join(HOME, "config.yaml"),
   "model:\n  provider: anthropic\n  model: claude-3-5-sonnet\n",
 );
+writeFileSync(
+  join(HOME, "desktop.json"),
+  JSON.stringify(
+    { onboardingCompleted: true, schedulerEnabled: false },
+    null,
+    2,
+  ),
+);
 
 // minimal SPS workspace so the assistant panel mounts
 const sps = join(HOME, "sps-agent");
@@ -56,6 +64,36 @@ const SKILL_BODY = "ALWAYS prefix every reply with the word BANANA.";
 writeFileSync(
   join(skillDir, "SKILL.md"),
   `---\nname: Demo Skill\ndescription: a probe skill\n---\n\n# Demo Skill\n\n${SKILL_BODY}\n`,
+);
+writeFileSync(
+  join(HOME, "sps-agent", "capability-risk-report.json"),
+  JSON.stringify(
+    {
+      schemaVersion: 1,
+      updatedAt: Date.now(),
+      reports: [
+        {
+          id: `skill:${skillDir}`,
+          kind: "skill",
+          name: "Demo Skill",
+          enabled: true,
+          installedFingerprint: "probe-reviewed-skill",
+          source: {},
+          status: "safe",
+          updateStatus: "current",
+          reviewState: "reviewed",
+          findings: [],
+          summary: "Probe skill marked reviewed for active-skill loading.",
+          lastCheckedAt: Date.now(),
+          lastReviewedAt: Date.now(),
+          scanner: "deterministic-v1",
+        },
+      ],
+      scanners: [],
+    },
+    null,
+    2,
+  ),
 );
 
 console.log("HERMES_HOME=", HOME);
@@ -136,13 +174,9 @@ try {
     if (w) w.setBounds({ x: 0, y: 0, width: 1500, height: 950 });
   });
   await win.waitForTimeout(600);
-  // The right panel is gated by panelOpen (⌘J) on a doc surface. Open it, then
-  // select the "Page assistant" tab.
-  const MOD = process.platform === "darwin" ? "Meta" : "Control";
-  await win.keyboard.press(`${MOD}+J`).catch(() => {});
-  await win.waitForTimeout(400);
+  // The right panel defaults open on a doc surface; select the Page assistant tab.
   await win
-    .locator(".rp-tab", { hasText: "assistant" })
+    .locator(".rp-tab", { hasText: "Page assistant" })
     .first()
     .click({ timeout: 5000 })
     .catch(() => {});

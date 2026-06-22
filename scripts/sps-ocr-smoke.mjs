@@ -27,6 +27,14 @@ writeFileSync(
   "model:\n  provider: anthropic\n  model: claude-3-5-sonnet\n",
 );
 writeFileSync(
+  join(HOME, "desktop.json"),
+  JSON.stringify(
+    { onboardingCompleted: true, schedulerEnabled: false },
+    null,
+    2,
+  ),
+);
+writeFileSync(
   join(sps, "workspace.json"),
   JSON.stringify({
     tree: [{ id: "home", children: [] }],

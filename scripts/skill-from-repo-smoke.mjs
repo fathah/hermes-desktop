@@ -30,6 +30,14 @@ writeFileSync(
   join(HOME, "config.yaml"),
   "model:\n  provider: anthropic\n  model: claude-3-5-sonnet\n",
 );
+writeFileSync(
+  join(HOME, "desktop.json"),
+  JSON.stringify(
+    { onboardingCompleted: true, schedulerEnabled: false },
+    null,
+    2,
+  ),
+);
 const sps = join(HOME, "sps-agent");
 mkdirSync(join(sps, "vault"), { recursive: true });
 writeFileSync(
@@ -56,7 +64,7 @@ const fail = (m) => {
 setTimeout(() => fail("WATCHDOG_TIMEOUT"), 120000).unref();
 
 const app = await electron.launch({
-  args: ["."],
+  args: [".", `--user-data-dir=${join(HOME, "electron-userdata")}`],
   env: {
     ...process.env,
     HERMES_HOME: HOME,
@@ -82,30 +90,31 @@ await win.waitForLoadState("domcontentloaded");
 await win.waitForSelector(".app", { timeout: 30000 });
 await win.waitForTimeout(1500);
 
-// Admin → Skills.
-await win.locator('button[aria-label="Settings"]').first().click();
-await win.waitForTimeout(600);
-await win.locator(".sidebar-nav-item", { hasText: "Skills" }).first().click();
-await win.waitForSelector(".skills-container", { timeout: 10000 });
+// Learning → Skills.
+await win.locator(".nav-item", { hasText: "Teach Me" }).first().click();
+await win.waitForSelector(".settings-subnav", { timeout: 10000 });
+await win.locator(".settings-subnav-tab", { hasText: "Skills" }).click();
+await win.getByText("Generate from repo", { exact: true }).waitFor({
+  timeout: 10000,
+});
 
-// Generate from repo → modal should prefill with the drafted name.
-await win.getByText("Generate from repo", { exact: true }).click();
+// Generate from repo → pending draft should appear, then accept it.
+await win.getByLabel("Repository path").fill(REPO);
+await win.getByText("Generate draft", { exact: true }).click();
+const draft = win.locator(".memory-entry-card", { hasText: "generated-skill" });
 try {
-  await win.waitForSelector(".skills-new-form", { timeout: 15000 });
+  await draft.first().waitFor({ timeout: 15000 });
 } catch {
-  await win.screenshot({ path: join(OUT, "99-no-modal.png") });
-  fail("New-skill modal did not open after generate");
+  await win.screenshot({ path: join(OUT, "99-no-draft.png") });
+  fail("generated skill draft did not appear");
 }
-const nameValue = await win.locator(".skills-new-input").first().inputValue();
-if (nameValue !== "generated-skill")
-  fail(`modal not prefilled with the draft name (got "${nameValue}")`);
-await win.screenshot({ path: join(OUT, "01-prefilled.png") });
+await win.screenshot({ path: join(OUT, "01-draft.png") });
 
-// Save it → appears under Installed and on disk.
-await win.getByText("Create", { exact: true }).click();
+await draft.getByText("Accept", { exact: true }).click();
 try {
   await win
-    .locator(".skills-card", { hasText: "generated-skill" })
+    .locator(".memory-entry-card", { hasText: "generated-skill" })
+    .filter({ hasText: "Disable" })
     .first()
     .waitFor({ timeout: 10000 });
 } catch {

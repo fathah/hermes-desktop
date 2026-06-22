@@ -5,6 +5,7 @@ import { SpsModal } from "./SpsModal";
 export function TrashModal() {
   const trash = useStore((s) => s.trash);
   const restorePage = useStore((s) => s.restorePage);
+  const purgeTrashedPage = useStore((s) => s.purgeTrashedPage);
   const setTrashOpen = useStore((s) => s.setTrashOpen);
   const onClose = () => setTrashOpen(false);
 
@@ -25,6 +26,20 @@ export function TrashModal() {
                 </span>
                 <button className="cover-btn" onClick={() => restorePage(p)}>
                   Restore
+                </button>
+                <button
+                  className="cover-btn"
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `Permanently delete "${p.title}"? This cannot be undone.`,
+                      )
+                    ) {
+                      purgeTrashedPage(p);
+                    }
+                  }}
+                >
+                  Delete forever
                 </button>
               </div>
             ))}

@@ -31,6 +31,14 @@ writeFileSync(
   join(HOME, "config.yaml"),
   "model:\n  provider: anthropic\n  model: claude-3-5-sonnet\n",
 );
+writeFileSync(
+  join(HOME, "desktop.json"),
+  JSON.stringify(
+    { onboardingCompleted: true, schedulerEnabled: false },
+    null,
+    2,
+  ),
+);
 
 // Seed a small vault: home → [[alpha]] (connected), plus db + a folder row that
 // are orphans (no links) so the lint surface has something to show.
@@ -150,8 +158,11 @@ try {
   );
   await shot("03-inbox-processed");
 
-  // 4 — Vault health (lint) surface: seeded orphans should render.
-  await win.locator(".nav-item", { hasText: "Vault health" }).first().click();
+  // 4 — Vault health (lint) surface: open through the command palette.
+  await win.locator(".nav-item", { hasText: "Search" }).first().click();
+  await win.waitForSelector(".palette", { timeout: 8000 });
+  await win.locator(".pal-input input").fill("Vault health");
+  await win.keyboard.press("Enter");
   await win.waitForTimeout(1500);
   const hasOrphans = await win.getByText("Orphans", { exact: false }).count();
   check(hasOrphans > 0, "Vault health surface renders lint groups");

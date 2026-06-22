@@ -63,6 +63,14 @@ writeFileSync(
   join(HOME, "config.yaml"),
   "model:\n  provider: anthropic\n  model: claude-3-5-sonnet\n",
 );
+writeFileSync(
+  join(HOME, "desktop.json"),
+  JSON.stringify(
+    { onboardingCompleted: true, schedulerEnabled: false },
+    null,
+    2,
+  ),
+);
 const sps = join(HOME, "sps-agent");
 mkdirSync(join(sps, "vault"), { recursive: true });
 writeFileSync(

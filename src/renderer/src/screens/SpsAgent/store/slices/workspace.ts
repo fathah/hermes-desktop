@@ -584,6 +584,31 @@ export const createWorkspaceSlice: StateCreator<
     get().flash("Restored to workspace");
   },
 
+  purgeTrashedPage: (entry) => {
+    const ids = entry.ids.length ? entry.ids : [entry.id];
+    const sources = new Set<string>();
+    set((s) => {
+      const docs = { ...s.docs };
+      const meta = { ...s.meta };
+      for (const id of ids) {
+        for (const source of dbSources(docs[id] || [])) sources.add(source);
+        delete docs[id];
+        delete meta[id];
+      }
+      return {
+        docs,
+        meta,
+        trash: s.trash.filter((x) => x.id !== entry.id),
+        comments: s.comments.filter(
+          (comment) => !comment.page || !ids.includes(comment.page),
+        ),
+      };
+    });
+    void deleteVaultPages(ids);
+    void deleteVaultDbFolders([...sources]);
+    get().flash("Permanently deleted");
+  },
+
   renamePage: (id, title) =>
     set((s) => ({ meta: { ...s.meta, [id]: { ...s.meta[id], title } } })),
 

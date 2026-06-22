@@ -40,7 +40,11 @@ vi.mock("better-sqlite3", () => {
   };
 });
 
-import { getSharedDb, closeSharedDb } from "../src/main/db";
+import {
+  getSharedDb,
+  closeSharedDb,
+  initializeMetadataTable,
+} from "../src/main/db";
 import * as utils from "../src/main/utils";
 
 const TEST_DIR = join(os.tmpdir(), `hermes-db-pool-test-${Date.now()}`);
@@ -91,6 +95,30 @@ describe("Database Connection Caching", () => {
     expect(dbInstances[0].pragmas).toContain("synchronous = NORMAL");
   });
 
+  it("does not create a missing database for read-only access", () => {
+    const missingPath = join(TEST_DIR, "missing-readonly", "state.db");
+    vi.spyOn(utils, "activeStateDbPath").mockReturnValue(missingPath);
+
+    const db = getSharedDb(true);
+    expect(db).toBeNull();
+
+    const dbInstances = (globalThis as DbPoolTestGlobal).__dbInstances || [];
+    expect(dbInstances.length).toBe(0);
+  });
+
+  it("opens a writable connection when the database file is missing", () => {
+    const missingPath = join(TEST_DIR, "missing-writable", "state.db");
+    vi.spyOn(utils, "activeStateDbPath").mockReturnValue(missingPath);
+
+    const db = getSharedDb(false);
+    expect(db).toBeDefined();
+
+    const dbInstances = (globalThis as DbPoolTestGlobal).__dbInstances || [];
+    expect(dbInstances.length).toBe(1);
+    expect(dbInstances[0].dbPath).toBe(missingPath);
+    expect(dbInstances[0].options).toEqual({});
+  });
+
   it("recycles connection and opens a new one when active database path changes", () => {
     const pathSpy = vi.spyOn(utils, "activeStateDbPath");
 
@@ -114,5 +142,49 @@ describe("Database Connection Caching", () => {
     const db2Again = getSharedDb(true);
     expect(db2Again).toBe(db2);
     expect(dbInstances.length).toBe(2);
+  });
+
+  it("does not create a metadata trigger when the messages table is missing", () => {
+    const preparedSql: string[] = [];
+    const runSql: string[] = [];
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const db = {
+      prepare: vi.fn((sql: string) => {
+        preparedSql.push(sql);
+        return {
+          get: () => undefined,
+          run: () => {
+            runSql.push(sql);
+            if (sql.includes("AFTER DELETE ON messages")) {
+              throw new Error("messages table missing");
+            }
+          },
+        };
+      }),
+    };
+
+    initializeMetadataTable(db as never);
+
+    expect(runSql.some((sql) => sql.includes("messages_metadata"))).toBe(true);
+    expect(
+      preparedSql.some((sql) => sql.includes("AFTER DELETE ON messages")),
+    ).toBe(false);
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it("creates the metadata cleanup trigger when the messages table exists", () => {
+    const runSql: string[] = [];
+    const db = {
+      prepare: vi.fn((sql: string) => ({
+        get: () => (sql.includes("sqlite_master") ? { name: "messages" } : {}),
+        run: () => runSql.push(sql),
+      })),
+    };
+
+    initializeMetadataTable(db as never);
+
+    expect(runSql.some((sql) => sql.includes("AFTER DELETE ON messages"))).toBe(
+      true,
+    );
   });
 });
