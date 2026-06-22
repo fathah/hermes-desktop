@@ -2,6 +2,8 @@ import { memo } from "react";
 import { Search, Clock, Mail, Code, ChartLine, Bell } from "lucide-react";
 import titleLine from "../../assets/title-line.svg";
 import { useI18n } from "../../components/useI18n";
+import ProfileAvatar from "../../components/common/ProfileAvatar";
+import { useAgentAppearance } from "./AgentAvatarContext";
 
 interface Suggestion {
   i18nKey: string;
@@ -50,19 +52,33 @@ export const ChatEmptyState = memo(function ChatEmptyState({
   onSelectSuggestion,
 }: ChatEmptyStateProps): React.JSX.Element {
   const { t } = useI18n();
+  // Show the current agent's avatar (custom image or coloured initial) so the
+  // empty state matches who you're about to talk to. The default profile keeps
+  // the Hermes wordmark logo (issue #679).
+  const { avatar, name, color } = useAgentAppearance();
+  const useProfileAvatar = !!avatar || (!!name && name !== "default");
 
   return (
     <div className="chat-empty">
       <div className="chat-empty-icon">
-        <span
-          className="chat-empty-logo"
-          role="img"
-          aria-label="Hermes"
-          style={{
-            maskImage: `url(${titleLine})`,
-            WebkitMaskImage: `url(${titleLine})`,
-          }}
-        />
+        {useProfileAvatar ? (
+          <ProfileAvatar
+            name={name || "default"}
+            color={color}
+            avatar={avatar}
+            size={64}
+          />
+        ) : (
+          <span
+            className="chat-empty-logo"
+            role="img"
+            aria-label="Hermes"
+            style={{
+              maskImage: `url(${titleLine})`,
+              WebkitMaskImage: `url(${titleLine})`,
+            }}
+          />
+        )}
       </div>
       <div className="chat-empty-text">{t("chat.emptyTitle")}</div>
       <div className="chat-empty-hint">{t("chat.emptyHint")}</div>

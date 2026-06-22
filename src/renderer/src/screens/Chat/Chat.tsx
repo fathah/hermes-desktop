@@ -4,6 +4,7 @@ import { Zap, Globe } from "lucide-react";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { ChatEmptyState } from "./ChatEmptyState";
 import { MessageList } from "./MessageList";
+import { AgentAvatarProvider } from "./AgentAvatarContext";
 import { ModelPicker } from "./ModelPicker";
 import { ReasoningEffortPicker } from "./ReasoningEffortPicker";
 import { ContextFolderChip } from "./ContextFolderChip";
@@ -53,6 +54,9 @@ interface ChatProps {
   /** Whether this run is the one currently shown (drives keyboard handlers). */
   active?: boolean;
   profile?: string;
+  /** Appearance (colour + custom avatar) of `profile`, so agent turns render
+   *  the profile's avatar instead of the default Hermes logo (issue #679). */
+  appearance?: { color?: string | null; avatar?: string | null };
   onSessionStarted?: () => void;
   onNewChat?: () => void;
   /** Optional callback to navigate to Settings → Diagnose section
@@ -74,6 +78,7 @@ function Chat({
   initialSessionId,
   active = true,
   profile,
+  appearance,
   onSessionStarted,
   onNewChat,
   onOpenDiagnose,
@@ -846,18 +851,26 @@ function Chat({
 
       <div className="chat-body">
         <div className="chat-messages" ref={containerRef}>
-          {messages.length === 0 ? (
-            <ChatEmptyState onSelectSuggestion={handleSuggestion} />
-          ) : (
-            <MessageList
-              messages={messages}
-              isLoading={isLoading}
-              toolProgress={toolProgress}
-              onApprove={actions.handleApprove}
-              onDeny={actions.handleDeny}
-              onClarifyResolved={handleClarifyResolved}
-            />
-          )}
+          <AgentAvatarProvider
+            value={{
+              name: profile,
+              color: appearance?.color,
+              avatar: appearance?.avatar,
+            }}
+          >
+            {messages.length === 0 ? (
+              <ChatEmptyState onSelectSuggestion={handleSuggestion} />
+            ) : (
+              <MessageList
+                messages={messages}
+                isLoading={isLoading}
+                toolProgress={toolProgress}
+                onApprove={actions.handleApprove}
+                onDeny={actions.handleDeny}
+                onClarifyResolved={handleClarifyResolved}
+              />
+            )}
+          </AgentAvatarProvider>
           <div ref={bottomRef} />
         </div>
 

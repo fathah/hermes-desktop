@@ -443,6 +443,24 @@ function Layout({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [sessionsModalOpen]);
 
+  // Pin the visible, not-yet-started chat to the active profile. This is the
+  // safety net behind every path that changes the active profile — launch-time
+  // restore of the persisted active_profile, the ProfileSwitcher, deep links —
+  // so a fresh chat always routes to the selected agent's gateway and memory.
+  // Without it a chat minted under "default" keeps talking to default (and its
+  // memory) even after the active profile has switched (issue #679 follow-up).
+  useEffect(() => {
+    setRuns((prev) =>
+      prev.map((r) =>
+        r.runId === activeRunId &&
+        isScratchRun(r) &&
+        r.profile !== activeProfile
+          ? { ...r, profile: activeProfile }
+          : r,
+      ),
+    );
+  }, [activeProfile, activeRunId]);
+
   const handleSelectProfile = useCallback(
     (name: string) => {
       // Selecting an agent is administrative: switch the active profile (the
@@ -757,6 +775,7 @@ function Layout({
                 initialSessionId={run.sessionId}
                 active={run.runId === activeRunId}
                 profile={run.profile}
+                appearance={getAppearance(run.profile)}
                 onNewChat={handleNewChat}
                 onOpenDiagnose={() => goTo("settings")}
                 onLoadingChange={handleRunLoading}
