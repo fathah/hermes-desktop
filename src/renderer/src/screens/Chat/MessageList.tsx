@@ -2,9 +2,12 @@ import { memo, useMemo } from "react";
 import { HermesAvatar, MessageRow } from "./MessageRow";
 import { ReasoningRow, ToolActivityGroup } from "./HistoryRow";
 import { ClarifyCard } from "./ClarifyCard";
+import { QueuedPromptRow } from "./QueuedMessages";
+import { buildQueueAwareRenderPlan } from "./queueAnchoring";
 import type {
   ChatMessage,
   ClarifyMessage,
+  QueuedMessage,
   ToolCallMessage,
   ToolResultMessage,
 } from "./types";
@@ -16,12 +19,14 @@ function isToolRow(m: ChatMessage): m is ToolCallMessage | ToolResultMessage {
 
 interface MessageListProps {
   messages: ChatMessage[];
+  queuedMessages: QueuedMessage[];
   isLoading: boolean;
   toolProgress: string | null;
   onApprove: () => void;
   onDeny: () => void;
   /** Mark an inline clarify card resolved once the user answers/skips. */
   onClarifyResolved: (requestId: string, answer: string) => void;
+  onRemoveQueued: (id: string) => void;
 }
 
 function TypingIndicator({
@@ -61,21 +66,28 @@ function isBubble(m: ChatMessage): m is import("./types").ChatBubbleMessage {
 
 export const MessageList = memo(function MessageList({
   messages,
+  queuedMessages,
   isLoading,
   toolProgress,
   onApprove,
   onDeny,
   onClarifyResolved,
+  onRemoveQueued,
 }: MessageListProps): React.JSX.Element {
-  // Bubbles with empty content are still hidden (live-stream placeholders).
-  // History rows pass through unconditionally.
-  const visibleMessages = useMemo(
+  // Queue markers and already-sent queued prompts are placed only in this
+  // visual plan. The canonical array remains untouched for stream reducers.
+  const visibleItems = useMemo(
     () =>
-      messages.filter((m) => {
-        if (!isBubble(m)) return true;
-        return !!m.error || ((m.content as string) || "").trim().length > 0;
+      buildQueueAwareRenderPlan(messages, queuedMessages).filter((item) => {
+        if (item.type === "queued") return true;
+        const message = item.message;
+        if (!isBubble(message)) return true;
+        return (
+          !!message.error ||
+          ((message.content as string) || "").trim().length > 0
+        );
       }),
-    [messages],
+    [messages, queuedMessages],
   );
 
   const lastBubble = [...messages].reverse().find(isBubble);
@@ -85,35 +97,60 @@ export const MessageList = memo(function MessageList({
   // contiguous run of tool_call/tool_result rows folds into a single
   // ToolActivityGroup (collapsed by default) instead of one bubble per call.
   const rows: React.JSX.Element[] = [];
-  for (let i = 0; i < visibleMessages.length; i++) {
-    const msg = visibleMessages[i];
+  let previousMessage: ChatMessage | undefined;
+  for (let i = 0; i < visibleItems.length; i++) {
+    const item = visibleItems[i];
+    if (item.type === "queued") {
+      rows.push(
+        <QueuedPromptRow
+          key={item.message.id}
+          message={item.message}
+          onRemove={onRemoveQueued}
+        />,
+      );
+      continue;
+    }
+
+    const msg = item.message;
     // One avatar per turn: show it only on the first row of a contiguous run
     // of same-role rows. The agent turn's thinking/tool rows + answer bubble
     // share one avatar; the continuation rows render a spacer.
-    const prev = visibleMessages[i - 1];
-    const showAvatar = !prev || prev.role !== msg.role;
+    const previousTurnId =
+      previousMessage && isBubble(previousMessage)
+        ? previousMessage.turnId
+        : undefined;
+    const currentTurnId = isBubble(msg) ? msg.turnId : undefined;
+    const showAvatar =
+      !previousMessage ||
+      previousMessage.role !== msg.role ||
+      (!!previousTurnId && !!currentTurnId && previousTurnId !== currentTurnId);
 
     if (isToolRow(msg)) {
       // Collect the whole run of consecutive tool rows.
       const group: (ToolCallMessage | ToolResultMessage)[] = [];
       const start = i;
-      while (i < visibleMessages.length && isToolRow(visibleMessages[i])) {
-        group.push(visibleMessages[i] as ToolCallMessage | ToolResultMessage);
+      while (i < visibleItems.length) {
+        const candidate = visibleItems[i];
+        if (candidate.type !== "message" || !isToolRow(candidate.message)) {
+          break;
+        }
+        group.push(candidate.message);
         i++;
       }
       i--; // step back: the for-loop's i++ advances past the run
+      const hasMessageAfter = visibleItems
+        .slice(i + 1)
+        .some((candidate) => candidate.type === "message");
       rows.push(
         <ToolActivityGroup
           key={`${group[0].id}-${start}`}
           items={group}
           // Active (spinner) only while streaming and this run is trailing.
-          active={isLoading && i === visibleMessages.length - 1}
-          showAvatar={
-            !visibleMessages[start - 1] ||
-            visibleMessages[start - 1].role !== "agent"
-          }
+          active={isLoading && !hasMessageAfter}
+          showAvatar={showAvatar}
         />,
       );
+      previousMessage = group[group.length - 1];
       continue;
     }
 
@@ -126,10 +163,16 @@ export const MessageList = memo(function MessageList({
           // Still "Thinking…" only while this is the last row and the turn is
           // streaming; once the answer arrives (or history loads) it becomes
           // a completed "Thought".
-          active={isLoading && i === visibleMessages.length - 1}
+          active={
+            isLoading &&
+            !visibleItems
+              .slice(i + 1)
+              .some((candidate) => candidate.type === "message")
+          }
           showAvatar={showAvatar}
         />,
       );
+      previousMessage = msg;
       continue;
     }
 
@@ -141,6 +184,7 @@ export const MessageList = memo(function MessageList({
           onResolved={onClarifyResolved}
         />,
       );
+      previousMessage = msg;
       continue;
     }
 
@@ -149,13 +193,24 @@ export const MessageList = memo(function MessageList({
       <MessageRow
         key={msg.id}
         msg={bubble}
-        isLast={i === visibleMessages.length - 1}
+        isLast={
+          !visibleItems
+            .slice(i + 1)
+            .some((candidate) => candidate.type === "message")
+        }
         isLoading={isLoading}
         onApprove={onApprove}
         onDeny={onDeny}
         showAvatar={showAvatar}
       />,
     );
+    // A visually relocated queued user bubble is an annotation inside the
+    // earlier agent turn, not a boundary for grouping that turn's remaining
+    // reasoning/tool rows. The next real turn still gets a fresh avatar via
+    // its distinct turnId at the canonical end of the transcript.
+    if (!(isBubble(msg) && msg.role === "user" && msg.queueAnchor)) {
+      previousMessage = msg;
+    }
   }
 
   return (

@@ -4247,6 +4247,71 @@ body {
   background: var(--bg-hover, rgba(255, 255, 255, 0.08));
 }
 
+.chat-queue-retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  border: 0;
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.chat-queue-retry:hover {
+  color: var(--text-primary);
+}
+
+/* Transcript-local queue marker. It is deliberately rendered outside the
+   canonical message array so adding it cannot change the active stream turn. */
+.chat-queued-prompt-row {
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px 0;
+}
+
+.chat-queued-prompt-note {
+  position: relative;
+  width: min(72%, 680px);
+  padding: 10px 34px 10px 12px;
+  border: 1px dashed var(--accent, #8b7cf6);
+  border-radius: var(--radius-md, 10px);
+  background: color-mix(
+    in srgb,
+    var(--accent, #8b7cf6) 8%,
+    var(--bg-secondary)
+  );
+  color: var(--text-primary);
+}
+
+.chat-queued-prompt-label,
+.chat-queued-origin-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.chat-queued-prompt-text {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.chat-queued-prompt-note > .chat-queue-remove {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+
+.chat-queued-origin-label {
+  color: color-mix(in srgb, currentColor 70%, transparent);
+}
+
 /* Input area */
 .chat-input-area {
   position: relative;

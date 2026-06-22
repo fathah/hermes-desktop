@@ -1,5 +1,5 @@
 import { memo, useMemo, useState, useCallback, useEffect, useRef } from "react";
-import { Copy, Check } from "lucide-react";
+import { Copy, Check, CircleDashed } from "lucide-react";
 import loadingGif from "../../assets/loadingo.gif";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
 import { AttachmentChip } from "../../components/AttachmentChip";
@@ -238,6 +238,12 @@ export const MessageRow = memo(function MessageRow({
           msg.error ? " chat-bubble-error" : ""
         }`}
       >
+        {msg.role === "user" && msg.queueAnchor && (
+          <div className="chat-queued-origin-label">
+            <CircleDashed size={12} />
+            <span>{t("chat.queuedSentFromHere")}</span>
+          </div>
+        )}
         {msg.content && !isLoading && (
           <div className="chat-bubble-actions">
             <button

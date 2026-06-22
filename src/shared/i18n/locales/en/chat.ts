@@ -134,6 +134,10 @@ export default {
   queuedCount: "{{count}} queued",
   queuedAttachment: "{{count}} attachment(s)",
   queuedCancel: "Remove from queue",
+  queuedSubmittedHere: "Queued during this turn",
+  queuedSentFromHere: "Queued here · sent after the turn finished",
+  queuedRetry: "Retry queued message",
+  queuedSendFailed: "Send failed — retry queue",
   copyMessage: "Copy message",
   worktree: {
     loading: "Loading",
