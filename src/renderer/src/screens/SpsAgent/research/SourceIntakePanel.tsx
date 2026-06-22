@@ -716,7 +716,7 @@ export function SourceIntakePanel({
                         void importScreenshot(candidate.id, "study")
                       }
                     >
-                      Import + Study
+                      Study
                     </button>
                     <button
                       type="button"
@@ -726,7 +726,7 @@ export function SourceIntakePanel({
                         void importScreenshot(candidate.id, "deck")
                       }
                     >
-                      Import + Deck
+                      Deck
                     </button>
                   </div>
                 </div>
@@ -761,7 +761,7 @@ export function SourceIntakePanel({
                 className="log-submit-btn protocol-record-btn"
                 onClick={() => openScreenshotDeck(screenshotResult)}
               >
-                Deck from screenshot
+                Deck
               </button>
             </div>
           )}

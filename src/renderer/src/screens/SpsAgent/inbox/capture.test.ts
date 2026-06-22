@@ -52,6 +52,36 @@ describe("buildCapture", () => {
     expect(body).toContain("Reader summary");
   });
 
+  it("serializes visual capture metadata and preserves the source image", () => {
+    const { markdown } = buildCapture(
+      {
+        source: "image",
+        body: "![Capture](../_assets/image.png)\n\nNote: Solve page 42.",
+        title: "Textbook page",
+        capturedAt: 1_700_000_000_000,
+        assetPath: "image.png",
+        originalName: "chapter-3-page-42.png",
+        mime: "image/png",
+        captureOrigin: "file",
+        ocrStatus: "not-run",
+      },
+      "cap-image",
+    );
+    const { props, body } = rowFromMarkdown(markdown);
+    expect(props).toMatchObject({
+      title: "Textbook page",
+      source: "image",
+      status: "unprocessed",
+      assetPath: "image.png",
+      originalName: "chapter-3-page-42.png",
+      mime: "image/png",
+      captureOrigin: "file",
+      ocrStatus: "not-run",
+    });
+    expect(body).toContain("![Capture](../_assets/image.png)");
+    expect(body).toContain("Solve page 42.");
+  });
+
   it("omits optional fields (via/url) when absent", () => {
     const { markdown } = buildCapture(
       { source: "quick-note", body: "note", capturedAt: 1 },

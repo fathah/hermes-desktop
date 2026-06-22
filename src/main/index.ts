@@ -85,6 +85,10 @@ import { startControlServer, stopControlServer } from "./control-server";
 import { setMainWindowGetter } from "./self-healing";
 import { log } from "./log";
 import { redactExternalText } from "./external-context/redact";
+import {
+  isRendererMediaRequestAllowed,
+  isTrustedAppRenderer,
+} from "./media-permissions";
 
 // Last-resort loggers: anything that escapes a handler or a stray promise lands
 // here as a structured, redacted line in desktop.log instead of vanishing into a
@@ -377,25 +381,21 @@ function createWindow(): void {
     return { action: "deny" };
   });
 
-  // Microphone access for push-to-talk voice input and voice notes. Grant audio-only
-  // `media` ONLY to the app renderer (file:// or the dev server); deny camera,
-  // attached webviews, and any other untrusted permission requests.
+  // Microphone access for push-to-talk voice input and voice notes. Camera is
+  // allowed only in the trusted Quick Capture renderer after a user action.
   mainWindow.webContents.session.setPermissionRequestHandler(
     (wc, permission, callback, details) => {
       const url = wc?.getURL?.() ?? "";
       const devUrl = is.dev ? process.env["ELECTRON_RENDERER_URL"] : undefined;
-      const isAppRenderer =
-        url.startsWith("file://") || (!!devUrl && url.startsWith(devUrl));
 
       if (permission === "media") {
-        if (!isAppRenderer) return callback(false);
         const mediaTypes =
           (details as { mediaTypes?: string[] }).mediaTypes ?? [];
-        callback(!mediaTypes.includes("video")); // Grant audio-only, deny video/camera
+        callback(isRendererMediaRequestAllowed({ url, mediaTypes, devUrl }));
         return;
       }
 
-      callback(isAppRenderer);
+      callback(isTrustedAppRenderer(url, devUrl));
     },
   );
 

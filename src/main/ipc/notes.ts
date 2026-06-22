@@ -233,6 +233,25 @@ export function registerNotesIpc(
     return grantFilePath(result.filePaths[0]);
   });
 
+  safeHandle("sps-pick-image", async (event) => {
+    requireLocalWorkspace();
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const opts: Electron.OpenDialogOptions = {
+      properties: ["openFile"],
+      filters: [
+        {
+          name: "Images",
+          extensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"],
+        },
+      ],
+    };
+    const result = win
+      ? await dialog.showOpenDialog(win, opts)
+      : await dialog.showOpenDialog(opts);
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return grantFilePath(result.filePaths[0]);
+  });
+
   safeHandle("sps-extract-pdf", async (_event, filePath: string) => {
     requireLocalWorkspace();
     return extractPdfToMarkdown(assertGrantedFilePath(filePath));

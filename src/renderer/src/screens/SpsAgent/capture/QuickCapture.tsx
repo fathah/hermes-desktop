@@ -5,6 +5,12 @@ import type {
   SpsCaptureKind,
   SpsPageSchemaKey,
 } from "../../../../../shared/sps-types";
+import {
+  buildVisualCaptureBody,
+  visualCaptureMimeFromPath,
+  visualCaptureTitle,
+  type VisualCaptureOrigin,
+} from "../../../../../shared/visual-capture";
 
 const CAPTURE_KINDS: SpsCaptureKind[] = [
   "note",
@@ -23,19 +29,42 @@ function schemaForCaptureKind(
   return kind === "note" ? undefined : kind;
 }
 
+interface QuickVisualCapture {
+  source: "image" | "screenshot";
+  assetPath: string;
+  originalName: string;
+  captureOrigin: VisualCaptureOrigin;
+  mime: string;
+}
+
+function stopMediaStream(stream: MediaStream | null): void {
+  stream?.getTracks().forEach((track) => track.stop());
+}
+
 export function QuickCapture() {
   const [body, setBody] = useState("");
   const [captureKind, setCaptureKind] = useState<SpsCaptureKind>("note");
+  const [visualCapture, setVisualCapture] = useState<QuickVisualCapture | null>(
+    null,
+  );
+  const [cameraError, setCameraError] = useState("");
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [recording, setRecording] = useState(false);
   const [recordTime, setRecordTime] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Focus the text area on mount
   useEffect(() => {
     textareaRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.srcObject = cameraStream;
+    return () => stopMediaStream(cameraStream);
+  }, [cameraStream]);
 
   // Timer for voice recording
   useEffect(() => {
@@ -60,11 +89,80 @@ export function QuickCapture() {
     try {
       const name = await window.hermesAPI.spsTriggerScreencapture();
       if (name) {
-        setBody((b) => `${b}\n\n![Snippet](../_assets/${name})\n`);
+        setVisualCapture({
+          source: "screenshot",
+          assetPath: name,
+          originalName: name,
+          captureOrigin: "screen-snippet",
+          mime: visualCaptureMimeFromPath(name),
+        });
       }
     } catch (err) {
       console.error("Failed to capture screen snippet:", err);
     }
+  };
+
+  const handleCamera = async () => {
+    setCameraError("");
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Camera access is unavailable in this window.");
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: false,
+      });
+      setCameraStream(stream);
+    } catch (err) {
+      setCameraStream(null);
+      const denied =
+        err instanceof DOMException &&
+        (err.name === "NotAllowedError" ||
+          err.name === "PermissionDeniedError");
+      setCameraError(
+        denied
+          ? "Camera access was denied."
+          : err instanceof Error
+            ? err.message
+            : "Camera access failed.",
+      );
+    }
+  };
+
+  const handleCameraCancel = () => {
+    stopMediaStream(cameraStream);
+    setCameraStream(null);
+  };
+
+  const handleCameraCapture = async () => {
+    const video = videoRef.current;
+    if (!video) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      setCameraError("Camera capture failed.");
+      return;
+    }
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/png"),
+    );
+    if (!blob) {
+      setCameraError("Camera capture failed.");
+      return;
+    }
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const assetPath = await window.hermesAPI.spsAssetWrite(bytes, "png");
+    setVisualCapture({
+      source: "image",
+      assetPath,
+      originalName: "camera.png",
+      captureOrigin: "camera",
+      mime: "image/png",
+    });
+    handleCameraCancel();
   };
 
   const handleVoiceToggle = async () => {
@@ -107,16 +205,37 @@ export function QuickCapture() {
 
   const handleSave = async () => {
     const text = body.trim();
-    if (!text) return;
+    if (!text && !visualCapture) return;
 
     try {
+      const capturedAt = Date.now();
       const capture = buildCapture({
-        source: "quick-note",
-        body: text,
-        capturedAt: Date.now(),
-        captureKind,
-        schema: schemaForCaptureKind(captureKind),
-        provenance: "SPS quick capture",
+        source: visualCapture ? visualCapture.source : "quick-note",
+        body: visualCapture
+          ? buildVisualCaptureBody({
+              assetPath: visualCapture.assetPath,
+              originalName: visualCapture.originalName,
+              note: text,
+            })
+          : text,
+        title: visualCapture
+          ? visualCaptureTitle({
+              captureOrigin: visualCapture.captureOrigin,
+              originalName: visualCapture.originalName,
+              capturedAt,
+            })
+          : undefined,
+        capturedAt,
+        captureKind: visualCapture ? "source" : captureKind,
+        schema: visualCapture ? "source" : schemaForCaptureKind(captureKind),
+        provenance: visualCapture
+          ? "SPS quick capture visual"
+          : "SPS quick capture",
+        assetPath: visualCapture?.assetPath,
+        originalName: visualCapture?.originalName,
+        mime: visualCapture?.mime,
+        captureOrigin: visualCapture?.captureOrigin,
+        ocrStatus: visualCapture ? "not-run" : undefined,
       });
       const ok = await window.hermesAPI.spsExportRow(
         "_inbox",
@@ -185,6 +304,16 @@ export function QuickCapture() {
               <span>Snippet</span>
             </button>
 
+            <button
+              onClick={handleCamera}
+              className="qc-btn"
+              title="Camera"
+              aria-label="Camera"
+            >
+              <Icon name="file" size={14} />
+              <span>Camera</span>
+            </button>
+
             {/* Voice button */}
             <button
               onClick={handleVoiceToggle}
@@ -208,7 +337,7 @@ export function QuickCapture() {
           {/* Save button */}
           <button
             onClick={handleSave}
-            disabled={!body.trim()}
+            disabled={!body.trim() && !visualCapture}
             className="qc-save-btn"
             title="Save note to inbox"
             aria-label="Save note to inbox"
@@ -216,6 +345,31 @@ export function QuickCapture() {
             Save to Inbox
           </button>
         </div>
+        {visualCapture && (
+          <div className="qc-visual-chip">
+            {visualCapture.captureOrigin === "camera"
+              ? "Camera photo"
+              : "Screen snippet"}{" "}
+            ready
+          </div>
+        )}
+        {cameraStream && (
+          <div className="qc-camera-preview">
+            <video ref={videoRef} autoPlay muted playsInline />
+            <div className="qc-camera-actions">
+              <button
+                className="qc-btn"
+                onClick={() => void handleCameraCapture()}
+              >
+                Capture photo
+              </button>
+              <button className="qc-btn" onClick={handleCameraCancel}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+        {cameraError && <div className="qc-error">{cameraError}</div>}
       </div>
     </div>
   );

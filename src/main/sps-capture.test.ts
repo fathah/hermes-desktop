@@ -57,6 +57,28 @@ describe("buildSpsCaptureMarkdown", () => {
       'provenance: "Captured from Obsidian active note"',
     );
   });
+
+  it("serializes visual capture metadata for save-first image captures", () => {
+    const markdown = buildSpsCaptureMarkdown({
+      source: "image",
+      title: "Camera capture",
+      body: "![Capture](../_assets/camera.png)",
+      capturedAt: 1_700_000_000_000,
+      assetPath: "camera.png",
+      originalName: "camera.png",
+      mime: "image/png",
+      captureOrigin: "camera",
+      ocrStatus: "not-run",
+    });
+
+    expect(markdown).toContain('source: "image"');
+    expect(markdown).toContain('assetPath: "camera.png"');
+    expect(markdown).toContain('originalName: "camera.png"');
+    expect(markdown).toContain('mime: "image/png"');
+    expect(markdown).toContain('captureOrigin: "camera"');
+    expect(markdown).toContain('ocrStatus: "not-run"');
+    expect(markdown.endsWith("![Capture](../_assets/camera.png)")).toBe(true);
+  });
 });
 
 describe("writeSpsCapture", () => {
@@ -74,8 +96,8 @@ describe("writeSpsCapture", () => {
     );
 
     expect(result).toEqual({ success: true, id: "cap_test" });
-    expect(readFileSync(join(vaultDir, "_inbox", "cap_test.md"), "utf-8")).toContain(
-      "A durable idea",
-    );
+    expect(
+      readFileSync(join(vaultDir, "_inbox", "cap_test.md"), "utf-8"),
+    ).toContain("A durable idea");
   });
 });

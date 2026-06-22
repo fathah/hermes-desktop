@@ -37,12 +37,30 @@ import { blk } from "../lib/ids";
 import { pageIdFromPath } from "../lib/pageId";
 import { pageFromMarkdown } from "../editor/pageMarkdown";
 import { DEFAULT_WIKI_SCHEMA } from "../../../../../shared/wikiSchema";
+import {
+  buildVisualCaptureBody,
+  visualCaptureExtFromPath,
+  visualCaptureMimeFromPath,
+  visualCaptureNameFromPath,
+  visualCaptureTitle,
+  type VisualCaptureOrigin,
+} from "../../../../../shared/visual-capture";
+import type { SpsRecentScreenshotCandidate } from "../../../../../shared/recent-screenshots";
+import { assetUrl } from "../lib/assets";
+import { ocrImageBlobToText } from "../lib/ocr";
+import {
+  appendVisualCaptureOcr,
+  buildTeachCaptureCorpus,
+  extractOcrText,
+  isVisualCaptureProps,
+  visualAssetPath,
+} from "./visualCapture";
 
 interface InboxSurfaceProps {
   profile?: string;
 }
 
-type Mode = "note" | "web" | "pdf";
+type Mode = "note" | "web" | "image" | "pdf";
 type Tab = "inbox" | "settings";
 
 const CAPTURE_KINDS: SpsCaptureKind[] = [
@@ -116,6 +134,18 @@ function timeLabel(capturedAt: unknown): string {
   }
 }
 
+function assistantReplyText(result: unknown): string {
+  if (
+    result &&
+    typeof result === "object" &&
+    "reply" in result &&
+    Array.isArray((result as { reply?: unknown }).reply)
+  ) {
+    return (result as { reply: unknown[] }).reply.map(String).join("\n\n");
+  }
+  return typeof result === "string" ? result : JSON.stringify(result, null, 2);
+}
+
 export function InboxSurface({
   profile = "default",
 }: InboxSurfaceProps): React.JSX.Element {
@@ -130,16 +160,28 @@ export function InboxSurface({
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [url, setUrl] = useState("");
+  const [imageNote, setImageNote] = useState("");
   const [noteKind, setNoteKind] = useState<SpsCaptureKind>("note");
   const [webKind, setWebKind] = useState<SpsCaptureKind>("source");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [recentScreenshots, setRecentScreenshots] = useState<
+    SpsRecentScreenshotCandidate[]
+  >([]);
+  const [recentScreenshotError, setRecentScreenshotError] = useState("");
+  const [visualBusy, setVisualBusy] = useState("");
+  const [rowBusy, setRowBusy] = useState<Record<string, string>>({});
+  const [visualMarkdown, setVisualMarkdown] = useState<Record<string, string>>(
+    {},
+  );
+  const [teachResults, setTeachResults] = useState<Record<string, string>>({});
 
   // Ingest review queue.
   const ingestCommitPage = useStore((s) => s.ingestCommitPage);
   const flash = useStore((s) => s.flash);
   const setSurface = useStore((s) => s.setSurface);
   const importPdf = useStore((s) => s.importPdf);
+  const saveStudyToWiki = useStore((s) => s.saveStudyToWiki);
   const [ingesting, setIngesting] = useState(false);
   const [changeset, setChangeset] = useState<Changeset | null>(null);
   const [skip, setSkip] = useState<Set<string>>(new Set());
@@ -198,6 +240,26 @@ export function InboxSurface({
     }
     loadSettings();
   }, [profile]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (mode !== "image") return;
+    setRecentScreenshotError("");
+    window.hermesAPI
+      ?.spsListRecentScreenshots?.(profile)
+      .then((items) => {
+        if (!cancelled) setRecentScreenshots(items ?? []);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setRecentScreenshots([]);
+          setRecentScreenshotError(e instanceof Error ? e.message : String(e));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, profile]);
 
   const saveSettings = async (): Promise<void> => {
     setSavingSettings(true);
@@ -310,6 +372,235 @@ export function InboxSurface({
       setBusy(false);
     }
   }, [url, title, webKind, writeCapture, reconcile]);
+
+  const saveVisualCapture = useCallback(
+    async (input: {
+      source: "image" | "screenshot";
+      assetPath: string;
+      originalName: string;
+      captureOrigin: VisualCaptureOrigin;
+      mime: string;
+      note?: string;
+    }) => {
+      setVisualBusy(input.captureOrigin);
+      setError("");
+      try {
+        const capturedAt = Date.now();
+        const captureTitle =
+          title.trim() ||
+          visualCaptureTitle({
+            captureOrigin: input.captureOrigin,
+            originalName: input.originalName,
+            capturedAt,
+          });
+        const { id, markdown } = buildCapture({
+          source: input.source,
+          body: buildVisualCaptureBody({
+            assetPath: input.assetPath,
+            originalName: input.originalName,
+            note: input.note,
+          }),
+          title: captureTitle,
+          via: "user",
+          capturedAt,
+          captureKind: "source",
+          schema: "source",
+          provenance: "SPS inbox visual capture",
+          assetPath: input.assetPath,
+          originalName: input.originalName,
+          mime: input.mime,
+          captureOrigin: input.captureOrigin,
+          ocrStatus: "not-run",
+        });
+        await writeCapture(markdown, id);
+        setTitle("");
+        setImageNote("");
+        reconcile();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setVisualBusy("");
+      }
+    },
+    [title, writeCapture, reconcile],
+  );
+
+  const chooseImageFile = useCallback(async () => {
+    const api = window.hermesAPI;
+    const picked = await api?.spsPickImage?.();
+    if (!picked) return;
+    const bytes = await api.spsReadFileBytes(picked);
+    const ext = visualCaptureExtFromPath(picked);
+    const assetPath = await api.spsAssetWrite(bytes, ext, profile);
+    await saveVisualCapture({
+      source: "image",
+      assetPath,
+      originalName: visualCaptureNameFromPath(picked),
+      captureOrigin: "file",
+      mime: visualCaptureMimeFromPath(picked),
+      note: imageNote,
+    });
+  }, [imageNote, profile, saveVisualCapture]);
+
+  const captureScreen = useCallback(async () => {
+    const name = await window.hermesAPI?.spsTriggerScreencapture?.();
+    if (!name) return;
+    await saveVisualCapture({
+      source: "screenshot",
+      assetPath: name,
+      originalName: name,
+      captureOrigin: "screen-snippet",
+      mime: visualCaptureMimeFromPath(name),
+      note: imageNote,
+    });
+  }, [imageNote, saveVisualCapture]);
+
+  const importClipboardScreenshot = useCallback(async () => {
+    setVisualBusy("clipboard");
+    setError("");
+    try {
+      const result = await window.hermesAPI?.spsImportClipboardScreenshot?.(
+        { note: imageNote },
+        profile,
+      );
+      if (!result) throw new Error("Clipboard import is unavailable.");
+      if (!result.ok) throw new Error(result.error);
+      setImageNote("");
+      reconcile();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setVisualBusy("");
+    }
+  }, [imageNote, profile, reconcile]);
+
+  const importRecentScreenshot = useCallback(
+    async (candidateId?: string) => {
+      setVisualBusy(candidateId || "recent-file");
+      setError("");
+      try {
+        const result = await window.hermesAPI?.spsImportRecentScreenshot?.(
+          { candidateId, note: imageNote },
+          profile,
+        );
+        if (!result)
+          throw new Error("Recent screenshot import is unavailable.");
+        if (!result.ok) throw new Error(result.error);
+        setImageNote("");
+        reconcile();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setVisualBusy("");
+      }
+    },
+    [imageNote, profile, reconcile],
+  );
+
+  const readVisualMarkdown = useCallback(
+    async (row: VaultRow): Promise<string | null> => {
+      const id = pageIdFromPath(row.path);
+      if (visualMarkdown[id]) return visualMarkdown[id];
+      return (
+        (await window.hermesAPI?.spsReadRow?.(INBOX_FOLDER, id, profile)) ??
+        null
+      );
+    },
+    [profile, visualMarkdown],
+  );
+
+  const extractVisualText = useCallback(
+    async (row: VaultRow): Promise<string | null> => {
+      const id = pageIdFromPath(row.path);
+      const assetPath = visualAssetPath(row.props);
+      if (!assetPath) return null;
+      setRowBusy((prev) => ({ ...prev, [id]: "Extracting text..." }));
+      setError("");
+      try {
+        const current = await readVisualMarkdown(row);
+        if (current == null) throw new Error("Could not read this capture.");
+        const response = await fetch(assetUrl(assetPath));
+        const blob = await response.blob();
+        const text = await ocrImageBlobToText(blob);
+        const next = appendVisualCaptureOcr(
+          current,
+          text,
+          text.trim() ? "complete" : "failed",
+        );
+        await window.hermesAPI?.spsExportRow?.(INBOX_FOLDER, id, next, profile);
+        setVisualMarkdown((prev) => ({ ...prev, [id]: next }));
+        reconcile();
+        return next;
+      } catch (e) {
+        const current = await readVisualMarkdown(row).catch(() => null);
+        if (current) {
+          const failed = appendVisualCaptureOcr(current, "", "failed");
+          await window.hermesAPI?.spsExportRow?.(
+            INBOX_FOLDER,
+            id,
+            failed,
+            profile,
+          );
+          setVisualMarkdown((prev) => ({ ...prev, [id]: failed }));
+        }
+        setError(
+          e instanceof Error
+            ? `OCR failed: ${e.message}`
+            : "OCR failed on this capture.",
+        );
+        return current;
+      } finally {
+        setRowBusy((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+      }
+    },
+    [profile, readVisualMarkdown, reconcile],
+  );
+
+  const teachVisualCapture = useCallback(
+    async (row: VaultRow): Promise<void> => {
+      const id = pageIdFromPath(row.path);
+      setRowBusy((prev) => ({ ...prev, [id]: "Teaching..." }));
+      setError("");
+      try {
+        let markdown = await readVisualMarkdown(row);
+        if (!markdown) throw new Error("Could not read this capture.");
+        if (!extractOcrText(markdown)) {
+          const withOcr = await extractVisualText(row);
+          if (withOcr) markdown = withOcr;
+        }
+        const titleText = String(row.props.title ?? row.title ?? "");
+        const result = await window.hermesAPI?.spsTeachCapture?.(
+          {
+            captureId: id,
+            title: titleText,
+            corpusDescription: buildTeachCaptureCorpus({
+              captureId: id,
+              title: titleText,
+              markdown,
+            }),
+          },
+          profile,
+        );
+        setTeachResults((prev) => ({
+          ...prev,
+          [id]: assistantReplyText(result),
+        }));
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setRowBusy((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+      }
+    },
+    [extractVisualText, profile, readVisualMarkdown],
+  );
 
   const setStatus = useCallback(
     async (row: VaultRow, status: CaptureStatus) => {
@@ -445,7 +736,11 @@ export function InboxSurface({
     });
 
   const canCapture =
-    mode === "note" ? body.trim().length > 0 : url.trim().length > 0;
+    mode === "note"
+      ? body.trim().length > 0
+      : mode === "web"
+        ? url.trim().length > 0
+        : false;
 
   return (
     <div className="inbox-surface">
@@ -495,6 +790,13 @@ export function InboxSurface({
                 <span className="nav-label">Web clip</span>
               </button>
               <button
+                className={`nav-item inbox-flex-no-shrink ${mode === "image" ? "active" : ""}`}
+                onClick={() => setMode("image")}
+              >
+                <Icon name="file" size={15} />
+                <span className="nav-label">Image</span>
+              </button>
+              <button
                 className={`nav-item inbox-flex-no-shrink ${mode === "pdf" ? "active" : ""}`}
                 onClick={() => setMode("pdf")}
               >
@@ -512,7 +814,7 @@ export function InboxSurface({
               />
             )}
 
-            {mode !== "pdf" && (
+            {(mode === "note" || mode === "web") && (
               <label className="inbox-flex-align-center-gap6">
                 Type
                 <select
@@ -555,11 +857,86 @@ export function InboxSurface({
                   if (e.key === "Enter") captureWeb();
                 }}
               />
+            ) : mode === "image" ? (
+              <div className="inbox-image-capture">
+                <textarea
+                  className="inbox-textarea inbox-textarea-resize"
+                  aria-label="Image note"
+                  placeholder="Optional note for the image capture"
+                  value={imageNote}
+                  onChange={(e) => setImageNote(e.target.value)}
+                  rows={3}
+                />
+                <div className="inbox-image-actions">
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    disabled={Boolean(visualBusy)}
+                    onClick={() => void captureScreen()}
+                    title="Capture a screen snippet"
+                  >
+                    Capture screen
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    disabled={Boolean(visualBusy)}
+                    onClick={() => void importClipboardScreenshot()}
+                    title="Import an image from the clipboard"
+                  >
+                    Import from clipboard
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    disabled={Boolean(visualBusy)}
+                    onClick={() => void chooseImageFile()}
+                    title="Choose a local image file"
+                  >
+                    Choose image file
+                  </button>
+                </div>
+                <div className="inbox-recent-screenshots">
+                  <div className="inbox-recent-title">Recent screenshots</div>
+                  {recentScreenshotError ? (
+                    <div className="inbox-empty-notice">
+                      {recentScreenshotError}
+                    </div>
+                  ) : recentScreenshots.length === 0 ? (
+                    <div className="inbox-empty-notice">
+                      No recent screenshots found.
+                    </div>
+                  ) : (
+                    <div className="inbox-recent-list">
+                      {recentScreenshots.map((shot) => (
+                        <button
+                          key={shot.id}
+                          type="button"
+                          className="btn btn-ghost btn-sm inbox-recent-item"
+                          disabled={Boolean(visualBusy)}
+                          onClick={() => void importRecentScreenshot(shot.id)}
+                          title={`Import ${shot.originalName}`}
+                        >
+                          {shot.previewDataUrl && (
+                            <img
+                              src={shot.previewDataUrl}
+                              alt=""
+                              className="inbox-recent-thumb"
+                            />
+                          )}
+                          <span>{shot.originalName}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             ) : (
               <div className="inbox-pdf-dropzone">
                 <Icon name="doc" size={32} className="inbox-pdf-icon" />
                 <div className="inbox-pdf-desc">
-                  Import a local PDF to extract and ingest it as a wiki source page.
+                  Import a local PDF to extract and ingest it as a wiki source
+                  page.
                 </div>
                 <button
                   type="button"
@@ -579,7 +956,7 @@ export function InboxSurface({
 
             {error && <div className="inbox-error">{error}</div>}
 
-            {mode !== "pdf" && (
+            {(mode === "note" || mode === "web") && (
               <div className="inbox-btn-group">
                 <button
                   className="btn btn-primary"
@@ -672,7 +1049,9 @@ export function InboxSurface({
                           <button
                             className="btn btn-ghost btn-sm"
                             onClick={() => toggleSkip(p.pageId)}
-                            title={skipped ? "Include this page" : "Skip this page"}
+                            title={
+                              skipped ? "Include this page" : "Skip this page"
+                            }
                           >
                             {skipped ? "Include" : "Skip"}
                           </button>
@@ -693,23 +1072,25 @@ export function InboxSurface({
                   </div>
                   <ul className="inbox-proposed-memories-list">
                     {changeset.memory.map((fact, i) => {
-                       const skipped = skipMem.has(i);
-                       return (
-                         <li
-                           key={i}
-                           className={`inbox-proposed-memory-item ${skipped ? "skipped" : ""}`}
-                         >
-                           <Icon name="wand" size={13} />
-                           <span className="flex-grow">{fact}</span>
-                           <button
-                             className="btn btn-ghost btn-sm"
-                             onClick={() => toggleSkipMem(i)}
-                             title={skipped ? "Remember this fact" : "Skip this fact"}
-                           >
-                             {skipped ? "Include" : "Skip"}
-                           </button>
-                         </li>
-                       );
+                      const skipped = skipMem.has(i);
+                      return (
+                        <li
+                          key={i}
+                          className={`inbox-proposed-memory-item ${skipped ? "skipped" : ""}`}
+                        >
+                          <Icon name="wand" size={13} />
+                          <span className="flex-grow">{fact}</span>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => toggleSkipMem(i)}
+                            title={
+                              skipped ? "Remember this fact" : "Skip this fact"
+                            }
+                          >
+                            {skipped ? "Include" : "Skip"}
+                          </button>
+                        </li>
+                      );
                     })}
                   </ul>
                 </div>
@@ -738,36 +1119,112 @@ export function InboxSurface({
             </div>
           ) : (
             <ul className="inbox-card-list">
-              {visible.map((row) => (
-                <li key={row.path} className="inbox-card">
-                  <div className="inbox-card-content">
-                    <div className="inbox-card-title">
-                      {String(row.props.title ?? "Untitled capture")}
+              {visible.map((row) => {
+                const id = pageIdFromPath(row.path);
+                const isVisual = isVisualCaptureProps(row.props);
+                return (
+                  <li key={row.path} className="inbox-card">
+                    <div className="inbox-card-content">
+                      <div className="inbox-card-title">
+                        {String(row.props.title ?? "Untitled capture")}
+                      </div>
+                      <div className="inbox-card-meta">
+                        <span className="inbox-source-capitalize">
+                          {String(row.props.source ?? "note")}
+                        </span>
+                        <span>·</span>
+                        <span>{timeLabel(row.props.capturedAt)}</span>
+                        {typeof row.props.ocrStatus === "string" && (
+                          <>
+                            <span>·</span>
+                            <span>OCR {row.props.ocrStatus}</span>
+                          </>
+                        )}
+                      </div>
+                      {rowBusy[id] && (
+                        <div className="inbox-row-status">{rowBusy[id]}</div>
+                      )}
+                      {teachResults[id] && (
+                        <div className="inbox-teach-result">
+                          <pre>{teachResults[id]}</pre>
+                          <div className="inbox-teach-actions">
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              onClick={() =>
+                                void saveStudyToWiki(
+                                  String(row.props.title ?? "Visual capture"),
+                                  teachResults[id],
+                                )
+                              }
+                            >
+                              Save as study page
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              onClick={() =>
+                                void navigator.clipboard?.writeText?.(
+                                  teachResults[id],
+                                )
+                              }
+                            >
+                              Copy
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              onClick={() =>
+                                setTeachResults((prev) => {
+                                  const next = { ...prev };
+                                  delete next[id];
+                                  return next;
+                                })
+                              }
+                            >
+                              Dismiss
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <div className="inbox-card-meta">
-                      <span className="inbox-source-capitalize">
-                        {String(row.props.source ?? "note")}
-                      </span>
-                      <span>·</span>
-                      <span>{timeLabel(row.props.capturedAt)}</span>
-                    </div>
-                  </div>
-                  <button
-                    title="Mark processed"
-                    className="btn btn-ghost btn-sm inbox-card-action-btn"
-                    onClick={() => setStatus(row, "processed")}
-                  >
-                    <Icon name="check" size={15} />
-                  </button>
-                  <button
-                    title="Discard"
-                    className="btn btn-ghost btn-sm inbox-card-action-btn"
-                    onClick={() => setStatus(row, "discarded")}
-                  >
-                    <Icon name="trash" size={15} />
-                  </button>
-                </li>
-              ))}
+                    {isVisual && (
+                      <>
+                        <button
+                          title="Extract text"
+                          className="btn btn-ghost btn-sm inbox-card-action-btn"
+                          disabled={Boolean(rowBusy[id])}
+                          onClick={() => void extractVisualText(row)}
+                        >
+                          Extract text
+                        </button>
+                        <button
+                          title="Teach this"
+                          className="btn btn-ghost btn-sm inbox-card-action-btn"
+                          disabled={Boolean(rowBusy[id])}
+                          onClick={() => void teachVisualCapture(row)}
+                        >
+                          Teach this
+                        </button>
+                      </>
+                    )}
+                    <button
+                      title="Mark processed"
+                      className="btn btn-ghost btn-sm inbox-card-action-btn"
+                      onClick={() => setStatus(row, "processed")}
+                    >
+                      <Icon name="check" size={15} />
+                    </button>
+                    <button
+                      title="Discard"
+                      className="btn btn-ghost btn-sm inbox-card-action-btn"
+                      onClick={() => setStatus(row, "discarded")}
+                    >
+                      <Icon name="trash" size={15} />
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </>
@@ -779,9 +1236,7 @@ export function InboxSurface({
           </div>
 
           {settingsError && (
-            <div className="inbox-settings-error-text">
-              {settingsError}
-            </div>
+            <div className="inbox-settings-error-text">{settingsError}</div>
           )}
 
           {settingsSaved && (
@@ -937,9 +1392,7 @@ export function InboxSurface({
             />
           </div>
 
-          <div
-            className="inbox-btn-group inbox-settings-actions-btn-group"
-          >
+          <div className="inbox-btn-group inbox-settings-actions-btn-group">
             <button
               className="btn btn-primary"
               disabled={savingSettings}

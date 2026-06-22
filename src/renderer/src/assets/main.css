@@ -9797,6 +9797,41 @@ body {
   color: #1a1810;
 }
 
+.qc-visual-chip,
+.qc-error {
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+.qc-visual-chip {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.qc-error {
+  color: #ffb4ab;
+}
+
+.qc-camera-preview {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.qc-camera-preview video {
+  width: 120px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.qc-camera-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .agent-markdown-fallback-pre {
   margin: 0;
   border-radius: 0;
@@ -9879,7 +9914,7 @@ body {
 .gateway-spinner {
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(127,127,127,0.2);
+  border: 2px solid rgba(127, 127, 127, 0.2);
   border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 1s linear infinite;

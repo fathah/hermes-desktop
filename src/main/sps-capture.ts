@@ -29,6 +29,12 @@ export function buildSpsCaptureMarkdown(input: SpsCaptureInput): string {
   const links = input.links?.map((link) => link.trim()).filter(Boolean);
   if (links?.length) props.links = links;
   if (input.provenance?.trim()) props.provenance = input.provenance.trim();
+  if (input.assetPath?.trim()) props.assetPath = input.assetPath.trim();
+  if (input.originalName?.trim())
+    props.originalName = input.originalName.trim();
+  if (input.mime?.trim()) props.mime = input.mime.trim();
+  if (input.captureOrigin) props.captureOrigin = input.captureOrigin;
+  if (input.ocrStatus) props.ocrStatus = input.ocrStatus;
   return rowToMarkdown(props, body);
 }
 
@@ -43,7 +49,9 @@ export async function writeSpsCapture(
     id,
     buildSpsCaptureMarkdown(input),
   );
-  return ok ? { success: true, id } : { success: false, error: "Could not write capture." };
+  return ok
+    ? { success: true, id }
+    : { success: false, error: "Could not write capture." };
 }
 
 function captureTitle(input: SpsCaptureInput): string {

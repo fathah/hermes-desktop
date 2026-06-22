@@ -21,6 +21,10 @@ import {
 import type { Workspace, SpsSaveResult } from "../shared/sps-types";
 import { buildCuratedBriefPrompt } from "../shared/curatedBrief";
 import { buildSourceStudyPrompt } from "../shared/sourceStudy";
+import {
+  buildTeachCapturePrompt,
+  type TeachCapturePromptInput,
+} from "../shared/teach-capture";
 import dns from "node:dns";
 import net from "node:net";
 import { Agent, fetch as undiciFetch } from "undici";
@@ -656,6 +660,26 @@ export async function spsSourceStudy(
     prompt,
     {
       pageTitle: "Source Study",
+      blocks: [],
+      notes: [],
+    },
+    profile,
+    true,
+  );
+}
+
+export async function spsTeachCapture(
+  input: TeachCapturePromptInput,
+  profile?: string,
+): Promise<AssistantResult> {
+  const prompt = [
+    buildTeachCapturePrompt(input),
+    'Inside SPS Agent, return this as {"kind":"chat"} only. Do not edit the page, create tasks, or produce any other action type.',
+  ].join("\n\n");
+  return spsAssistant(
+    prompt,
+    {
+      pageTitle: "Teach Capture",
       blocks: [],
       notes: [],
     },

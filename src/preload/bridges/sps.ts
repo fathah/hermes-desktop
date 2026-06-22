@@ -140,6 +140,11 @@ export const spsBridge = {
     profile?: string,
   ): Promise<unknown> =>
     ipcRenderer.invoke("sps-source-study", focus, corpusDescription, profile),
+  spsTeachCapture: (
+    input: { captureId: string; title?: string; corpusDescription: string },
+    profile?: string,
+  ): Promise<unknown> =>
+    ipcRenderer.invoke("sps-teach-capture", input, profile),
   spsCuratedBrief: (
     topic: string,
     corpusDescription?: string,
@@ -757,6 +762,8 @@ export const spsBridge = {
 
   // KB Phase 0: pick + extract a PDF for ingestion into the SPS vault.
   spsPickPdf: (): Promise<string | null> => ipcRenderer.invoke("sps-pick-pdf"),
+  spsPickImage: (): Promise<string | null> =>
+    ipcRenderer.invoke("sps-pick-image"),
   spsExtractPdf: (
     filePath: string,
   ): Promise<{

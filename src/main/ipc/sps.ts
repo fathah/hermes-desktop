@@ -5,6 +5,7 @@ import {
   spsUnfurl,
   spsAssistant,
   spsCuratedBrief,
+  spsTeachCapture,
   spsSourceStudy,
   spsIngestInbox,
   spsFileAnswer,
@@ -146,6 +147,14 @@ export function registerSpsIpc(): void {
     "sps-source-study",
     (_event, focus: string, corpusDescription?: string, profile?: string) =>
       spsSourceStudy(focus, corpusDescription, profile),
+  );
+  safeHandle(
+    "sps-teach-capture",
+    (
+      _event,
+      input: { captureId: string; title?: string; corpusDescription: string },
+      profile?: string,
+    ) => spsTeachCapture(input, profile),
   );
   safeHandle(
     "sps-curated-brief",

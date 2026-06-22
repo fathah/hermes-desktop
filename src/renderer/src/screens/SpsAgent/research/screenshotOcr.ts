@@ -1,12 +1,9 @@
 import type { SpsRecentScreenshotImportResult } from "../../../../../shared/recent-screenshots";
-
-const OCR_HEADING_RE = /\n## OCR Text\n\n[\s\S]*$/;
+import { appendVisualCaptureOcr } from "../inbox/visualCapture";
 
 export function appendScreenshotOcr(markdown: string, ocrText: string): string {
-  const text = ocrText.trim();
-  if (!text) return markdown;
-  const base = markdown.replace(OCR_HEADING_RE, "").trimEnd();
-  return `${base}\n\n## OCR Text\n\n${text}`;
+  if (!ocrText.trim()) return markdown;
+  return appendVisualCaptureOcr(markdown, ocrText);
 }
 
 export function buildScreenshotStudyCorpus(

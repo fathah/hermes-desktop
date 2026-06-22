@@ -20,7 +20,7 @@ describe("appendScreenshotOcr", () => {
       '---\ntitle: "Screenshot"\nsource: "screenshot"\n---\n\n![Screenshot](../_assets/a.png)\n';
 
     expect(appendScreenshotOcr(markdown, " Extracted text. ")).toBe(
-      '---\ntitle: "Screenshot"\nsource: "screenshot"\n---\n\n![Screenshot](../_assets/a.png)\n\n## OCR Text\n\nExtracted text.',
+      '---\ntitle: "Screenshot"\nsource: "screenshot"\nocrStatus: "complete"\n---\n\n![Screenshot](../_assets/a.png)\n\n## OCR Text\n\nExtracted text.',
     );
   });
 

@@ -220,7 +220,7 @@ describe("SourceIntakePanel", () => {
     expect(
       await screen.findByText("Screenshot 2026-06-18 at 10.00.00.png"),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /import \+ study/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^study$/i }));
 
     await waitFor(() => {
       expect(api.spsImportRecentScreenshot).toHaveBeenCalledWith({
@@ -243,7 +243,7 @@ describe("SourceIntakePanel", () => {
     expect(
       await screen.findByText("Screenshot 2026-06-18 at 10.00.00.png"),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /import \+ deck/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^deck$/i }));
 
     await waitFor(() => {
       expect(api.spsImportRecentScreenshot).toHaveBeenCalledWith({

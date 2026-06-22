@@ -1281,6 +1281,10 @@ interface HermesAPI {
     corpusDescription?: string,
     profile?: string,
   ) => Promise<unknown>;
+  spsTeachCapture: (
+    input: { captureId: string; title?: string; corpusDescription: string },
+    profile?: string,
+  ) => Promise<unknown>;
   spsCuratedBrief: (
     topic: string,
     corpusDescription?: string,
@@ -1914,6 +1918,7 @@ interface HermesAPI {
     profile?: string,
   ) => Promise<{ success: boolean; error?: string }>;
   spsPickPdf: () => Promise<string | null>;
+  spsPickImage: () => Promise<string | null>;
   spsExtractPdf: (filePath: string) => Promise<{
     title: string;
     markdown: string;

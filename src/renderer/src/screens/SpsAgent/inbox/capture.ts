@@ -16,7 +16,17 @@ import {
 } from "../editor/rowMarkdown";
 import { uid } from "../lib/ids";
 
-export type CaptureSource = "quick-note" | "web" | "voice" | "screenshot";
+import type {
+  VisualCaptureOcrStatus,
+  VisualCaptureOrigin,
+} from "../../../../../shared/visual-capture";
+
+export type CaptureSource =
+  | "quick-note"
+  | "web"
+  | "voice"
+  | "screenshot"
+  | "image";
 
 export type CaptureStatus =
   | "unprocessed"
@@ -44,10 +54,23 @@ export interface CaptureInput {
   highlights?: string[];
   /** Epoch ms. Passed in so this stays pure (Date.now is the caller's job). */
   capturedAt: number;
-  captureKind?: "note" | "source" | "project" | "person" | "decision" | "meeting" | "task" | "journal";
+  captureKind?:
+    | "note"
+    | "source"
+    | "project"
+    | "person"
+    | "decision"
+    | "meeting"
+    | "task"
+    | "journal";
   schema?: string;
   links?: string[];
   provenance?: string;
+  assetPath?: string;
+  originalName?: string;
+  mime?: string;
+  captureOrigin?: VisualCaptureOrigin;
+  ocrStatus?: VisualCaptureOcrStatus;
 }
 
 export interface Capture {
@@ -86,6 +109,12 @@ export function buildCapture(input: CaptureInput, id = uid("cap")): Capture {
   const links = input.links?.map((link) => link.trim()).filter(Boolean);
   if (links?.length) props.links = links;
   if (input.provenance?.trim()) props.provenance = input.provenance.trim();
+  if (input.assetPath?.trim()) props.assetPath = input.assetPath.trim();
+  if (input.originalName?.trim())
+    props.originalName = input.originalName.trim();
+  if (input.mime?.trim()) props.mime = input.mime.trim();
+  if (input.captureOrigin) props.captureOrigin = input.captureOrigin;
+  if (input.ocrStatus) props.ocrStatus = input.ocrStatus;
   const markdown = rowToMarkdown(props, input.body.trim());
   return { id, markdown };
 }

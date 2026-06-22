@@ -201,6 +201,12 @@ async function importScreenshotBytes(
       captureKind: "source",
       schema: "source",
       provenance: "SPS Sources recent screenshot import",
+      assetPath,
+      originalName: input.originalName,
+      mime:
+        IMAGE_MIME[extname(input.originalName).toLowerCase()] ?? "image/png",
+      captureOrigin: input.source,
+      ocrStatus: "not-run",
     });
     if (!capture.success || !capture.id) {
       return {

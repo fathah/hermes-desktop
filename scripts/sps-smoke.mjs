@@ -529,7 +529,10 @@ await shot("20-sources-screenshot-import", async () => {
 // 21 — the imported screenshot opens Deck Studio with a generated source brief
 // and the no-OCR-yet handoff, without calling live OCR or network services.
 await shot("21-sources-screenshot-deck", async () => {
-  await win.getByRole("button", { name: "Deck from screenshot" }).click();
+  await win
+    .locator(".source-intake-preview", { hasText: "Saved as Inbox capture" })
+    .getByRole("button", { name: "Deck" })
+    .click();
   await win.getByRole("heading", { name: "Deck Studio" }).waitFor({
     timeout: 8000,
   });

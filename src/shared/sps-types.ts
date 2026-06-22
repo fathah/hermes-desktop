@@ -1,4 +1,8 @@
 // sps-types.ts — domain model for the SPS Agent workspace.
+import type {
+  VisualCaptureOcrStatus,
+  VisualCaptureOrigin,
+} from "./visual-capture";
 // Derived from the prototype's data.jsx / store.jsx object shapes. The prototype
 // uses loosely-typed objects; here every field is modelled but block-specific
 // fields stay optional (a single Block interface) to keep the dynamic editor
@@ -47,7 +51,14 @@ export type BlockType =
   | "columns";
 
 export type DbView = "board" | "table" | "list" | "gallery" | "calendar";
-export type StatusKey = "todo" | "doing" | "review" | "done" | "inbox" | "this_week" | "blocked";
+export type StatusKey =
+  | "todo"
+  | "doing"
+  | "review"
+  | "done"
+  | "inbox"
+  | "this_week"
+  | "blocked";
 export type PrioKey = "high" | "med" | "low";
 export type PersonKey = string; // 'maya' | 'theo' | 'priya' | 'sam' (+ user-added)
 
@@ -74,7 +85,11 @@ export interface SpsBaseViewConfig {
   scope?: string;
   view: DbView;
   columns: string[];
-  filters?: Array<{ prop: string; op: "eq" | "neq" | "contains" | "exists"; value?: SpsPropertyValue }>;
+  filters?: Array<{
+    prop: string;
+    op: "eq" | "neq" | "contains" | "exists";
+    value?: SpsPropertyValue;
+  }>;
   sort?: { prop: string; dir: "asc" | "desc" };
   titleProperty?: string;
   schema?: SpsPageSchemaKey;
@@ -265,7 +280,7 @@ export type SpsCaptureKind =
   | "journal";
 
 export interface SpsCaptureInput {
-  source: "quick-note" | "web" | "voice" | "screenshot";
+  source: "quick-note" | "web" | "voice" | "screenshot" | "image";
   body: string;
   title?: string;
   description?: string;
@@ -278,6 +293,11 @@ export interface SpsCaptureInput {
   schema?: SpsPageSchemaKey;
   links?: string[];
   provenance?: string;
+  assetPath?: string;
+  originalName?: string;
+  mime?: string;
+  captureOrigin?: VisualCaptureOrigin;
+  ocrStatus?: VisualCaptureOcrStatus;
 }
 
 export interface ChecklistItem {

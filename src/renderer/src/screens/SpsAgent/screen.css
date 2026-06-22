@@ -145,6 +145,38 @@
   margin-top: 4px;
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sps-scope .inbox-row-status {
+  color: var(--ink-3);
+  font-size: var(--fs-12);
+  margin-top: 6px;
+}
+
+.sps-scope .inbox-teach-result {
+  margin-top: 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-2);
+  background: var(--surface-sunk);
+  overflow: hidden;
+}
+
+.sps-scope .inbox-teach-result pre {
+  margin: 0;
+  padding: 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--ink-1);
+  font-size: var(--fs-12);
+  line-height: 1.5;
+}
+
+.sps-scope .inbox-teach-actions {
+  display: flex;
+  gap: 8px;
+  padding: 8px 10px 10px;
+  flex-wrap: wrap;
 }
 
 .sps-scope .inbox-card-badge {
@@ -160,6 +192,39 @@
   justify-content: flex-end;
   gap: 8px;
   margin-top: 12px;
+}
+
+.sps-scope .inbox-image-capture {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sps-scope .inbox-image-actions,
+.sps-scope .inbox-recent-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.sps-scope .inbox-recent-title {
+  color: var(--ink-3);
+  font-size: var(--fs-12);
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.sps-scope .inbox-recent-item {
+  max-width: 220px;
+}
+
+.sps-scope .inbox-recent-thumb {
+  width: 32px;
+  height: 24px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid var(--hairline);
 }
 
 .sps-scope .inbox-proposal-section {
@@ -591,8 +656,6 @@
   opacity: 0.75;
 }
 
-
-
 .sps-scope .sps-main-layout {
   display: flex;
   min-width: 0;
@@ -813,7 +876,6 @@
   flex-direction: column;
 }
 
-
 .sps-scope .postit-card {
   height: 300px;
   position: relative;
@@ -822,9 +884,15 @@
   background: hsl(48, 100%, 93%);
   border: 1px solid hsl(48, 90%, 80%);
   color: hsl(48, 100%, 15%);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-shadow:
+    0 6px 18px rgba(0, 0, 0, 0.08),
+    0 1px 3px rgba(0, 0, 0, 0.05);
   transform: rotate(-1.5deg);
-  transition: transform 0.25s cubic-bezier(0.25, 1, 0.5, 1), box-shadow 0.25s ease, background 0.2s ease, border-color 0.2s ease;
+  transition:
+    transform 0.25s cubic-bezier(0.25, 1, 0.5, 1),
+    box-shadow 0.25s ease,
+    background 0.2s ease,
+    border-color 0.2s ease;
   display: flex;
   flex-direction: column;
 }
@@ -848,13 +916,14 @@
 
 .sps-scope .postit-card:hover {
   transform: scale(1.02) rotate(0deg);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.15), 0 2px 6px rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.15),
+    0 2px 6px rgba(0, 0, 0, 0.08);
 }
 
 .sps-scope[data-skin="terminal"] .postit-card:hover {
   box-shadow: 0 0 18px rgba(0, 255, 102, 0.35);
 }
-
 
 .sps-scope .postit-header {
   display: flex;
@@ -885,7 +954,12 @@
   position: relative;
   /* Premium text fading at bottom */
   mask-image: linear-gradient(to bottom, black 0%, black 72%, transparent 100%);
-  -webkit-mask-image: linear-gradient(to bottom, black 0%, black 72%, transparent 100%);
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    black 0%,
+    black 72%,
+    transparent 100%
+  );
 }
 
 .sps-scope .postit-text {
@@ -1119,7 +1193,6 @@
   gap: 8px;
 }
 
-
 .sps-scope .dashboard-item-button {
   background: transparent;
   border: none;
@@ -1205,7 +1278,7 @@
   text-align: center;
   color: var(--tx-4);
   font-size: 13px;
-  background: rgba(255,255,255,0.01);
+  background: rgba(255, 255, 255, 0.01);
 }
 
 .sps-scope .backlinks-empty-icon {
@@ -1605,7 +1678,10 @@
   justify-content: space-between;
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-  transition: transform 0.2s cubic-bezier(0.25, 1, 0.5, 1), box-shadow 0.2s ease, border-color 0.2s ease;
+  transition:
+    transform 0.2s cubic-bezier(0.25, 1, 0.5, 1),
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
   overflow: hidden;
   position: relative;
 }
