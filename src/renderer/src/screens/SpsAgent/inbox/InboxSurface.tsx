@@ -182,6 +182,8 @@ export function InboxSurface({
   const setSurface = useStore((s) => s.setSurface);
   const importPdf = useStore((s) => s.importPdf);
   const saveStudyToWiki = useStore((s) => s.saveStudyToWiki);
+  const pendingInboxMode = useStore((s) => s.pendingInboxMode);
+  const clearPendingInboxMode = useStore((s) => s.clearPendingInboxMode);
   const [ingesting, setIngesting] = useState(false);
   const [changeset, setChangeset] = useState<Changeset | null>(null);
   const [skip, setSkip] = useState<Set<string>>(new Set());
@@ -240,6 +242,13 @@ export function InboxSurface({
     }
     loadSettings();
   }, [profile]);
+
+  useEffect(() => {
+    if (pendingInboxMode !== "image") return;
+    setActiveTab("inbox");
+    setMode("image");
+    clearPendingInboxMode();
+  }, [pendingInboxMode, clearPendingInboxMode]);
 
   useEffect(() => {
     let cancelled = false;

@@ -28,6 +28,8 @@ const storeState = vi.hoisted(() => ({
   setSurface: vi.fn(),
   importPdf: vi.fn(),
   saveStudyToWiki: vi.fn(),
+  pendingInboxMode: null as "image" | null,
+  clearPendingInboxMode: vi.fn(),
 }));
 
 function useStoreMock<T>(selector: (state: typeof storeState) => T): T {
@@ -49,6 +51,7 @@ const api = {
   spsReadRow: vi.fn(),
   spsTeachCapture: vi.fn(),
   spsFileAnswer: vi.fn(),
+  spsListRecentScreenshots: vi.fn(),
 };
 
 function installApi(): void {
@@ -60,6 +63,8 @@ beforeEach(() => {
   vaultState.rows = [];
   vaultState.refetch.mockReset();
   storeState.flash.mockReset();
+  storeState.clearPendingInboxMode.mockReset();
+  storeState.pendingInboxMode = null;
   storeState.saveStudyToWiki.mockResolvedValue({ ok: true, pageId: "study" });
   ocr.ocrImageBlobToText.mockReset();
   ocr.ocrImageBlobToText.mockResolvedValue("Question 1 OCR text.");
@@ -92,6 +97,7 @@ beforeEach(() => {
     kind: "chat",
     reply: ["## Answers\n\n1. Worked answer with pedagogy."],
   });
+  api.spsListRecentScreenshots.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -100,6 +106,24 @@ afterEach(() => {
 });
 
 describe("InboxSurface visual captures", () => {
+  it("opens image capture mode from the first-run checklist intent", async () => {
+    storeState.pendingInboxMode = "image";
+
+    render(<InboxSurface />);
+
+    expect(
+      await screen.findByRole("button", { name: /capture screen/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /import from clipboard/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Image").closest("button")).toHaveClass("active");
+    await waitFor(() => {
+      expect(api.spsListRecentScreenshots).toHaveBeenCalledWith("default");
+    });
+    expect(storeState.clearPendingInboxMode).toHaveBeenCalledTimes(1);
+  });
+
   it("saves a chosen image file to the Inbox without OCR or teaching", async () => {
     render(<InboxSurface />);
 

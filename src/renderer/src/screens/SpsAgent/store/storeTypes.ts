@@ -250,6 +250,7 @@ export interface UiSlice {
   activeObsidianPath: string | null;
   pendingContentStudioIdea: ContentIdea | null;
   pendingDeckStudioInput: DeckGenerationInput | null;
+  pendingInboxMode: "image" | null;
 
   setPanelOpen: (v: boolean) => void;
   setRightTab: (t: RightTab) => void;
@@ -259,6 +260,8 @@ export interface UiSlice {
   clearPendingContentStudioIdea: () => void;
   openDeckStudioInput: (input: DeckGenerationInput) => void;
   clearPendingDeckStudioInput: () => void;
+  openInboxImageCapture: () => void;
+  clearPendingInboxMode: () => void;
   setPaletteOpen: (v: boolean) => void;
   setTemplatesOpen: (v: { parent: string | null } | null) => void;
   setTrashOpen: (v: boolean) => void;

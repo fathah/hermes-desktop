@@ -3,11 +3,12 @@ import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 
 const setSurface = vi.fn();
 const setPaletteOpen = vi.fn();
+const openInboxImageCapture = vi.fn();
 
 // Selector-level store mock (avoids the full store import chain).
 vi.mock("../store", () => ({
   useStore: (sel: (s: unknown) => unknown) =>
-    sel({ setSurface, setPaletteOpen }),
+    sel({ setSurface, setPaletteOpen, openInboxImageCapture }),
 }));
 
 import { OnboardingChecklist } from "./OnboardingChecklist";
@@ -16,6 +17,7 @@ beforeEach(() => {
   localStorage.clear();
   setSurface.mockClear();
   setPaletteOpen.mockClear();
+  openInboxImageCapture.mockClear();
 });
 afterEach(cleanup);
 
@@ -28,11 +30,12 @@ describe("OnboardingChecklist", () => {
     expect(screen.getByText("Search")).toBeInTheDocument();
   });
 
-  it("Capture and Ingest open the Inbox surface", () => {
+  it("Capture opens screenshot intake and Ingest opens the Inbox surface", () => {
     render(<OnboardingChecklist />);
-    fireEvent.click(screen.getByText("Open Inbox"));
+    fireEvent.click(screen.getByText("Capture screenshot"));
     fireEvent.click(screen.getByText("Process Inbox"));
-    expect(setSurface).toHaveBeenCalledTimes(2);
+    expect(openInboxImageCapture).toHaveBeenCalledTimes(1);
+    expect(setSurface).toHaveBeenCalledTimes(1);
     expect(setSurface).toHaveBeenCalledWith("inbox");
   });
 

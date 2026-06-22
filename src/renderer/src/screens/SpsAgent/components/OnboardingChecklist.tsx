@@ -22,6 +22,7 @@ export function OnboardingChecklist(): React.JSX.Element | null {
   const [dismissed, setDismissed] = useState<boolean>(isDismissed);
   const setSurface = useStore((s) => s.setSurface);
   const setPaletteOpen = useStore((s) => s.setPaletteOpen);
+  const openInboxImageCapture = useStore((s) => s.openInboxImageCapture);
 
   if (dismissed) return null;
 
@@ -39,9 +40,9 @@ export function OnboardingChecklist(): React.JSX.Element | null {
       n: 1,
       title: "Capture",
       icon: "inbox" as IconName,
-      desc: "Drop a note, link, or idea into your Inbox.",
-      cta: "Open Inbox",
-      onClick: () => setSurface("inbox"),
+      desc: "Save a screenshot, clipboard image, or recent capture.",
+      cta: "Capture screenshot",
+      onClick: openInboxImageCapture,
     },
     {
       n: 2,

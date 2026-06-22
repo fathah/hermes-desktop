@@ -8,7 +8,14 @@
 //
 // Usage:  node scripts/verify-firstrun-seed.mjs
 import { _electron as electron } from "playwright";
-import { mkdtempSync, mkdirSync, writeFileSync } from "fs";
+import {
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -16,6 +23,17 @@ const OUT = process.env.SMOKE_OUT || join(tmpdir(), "firstrun-seed");
 mkdirSync(OUT, { recursive: true });
 
 const HOME = mkdtempSync(join(tmpdir(), "hermes-firstrun-"));
+const SCREENSHOT_DIR = join(HOME, "firstrun-screenshots");
+const SEEDED_SCREENSHOT_NAME = "Screenshot 2026-06-22 at 09.00.00.png";
+
+mkdirSync(SCREENSHOT_DIR, { recursive: true });
+writeFileSync(
+  join(SCREENSHOT_DIR, SEEDED_SCREENSHOT_NAME),
+  Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+    "base64",
+  ),
+);
 
 // Install markers (skip welcome/installing/setup) + onboarding already completed
 // (skip the Onboarding screen) — but deliberately NO sps-agent/ workspace, so the
@@ -45,6 +63,7 @@ const app = await electron.launch({
   env: {
     ...process.env,
     HERMES_HOME: HOME,
+    HERMES_RECENT_SCREENSHOT_DIR: SCREENSHOT_DIR,
     ELECTRON_DISABLE_SECURITY_WARNINGS: "1",
   },
 });
@@ -67,6 +86,27 @@ async function check(name, fn) {
     failures++;
     console.log("CHECK FAIL:", name, "—", e.message);
   }
+}
+
+function findSeededScreenshotCapture() {
+  const inboxDir = join(HOME, "sps-agent", "vault", "_inbox");
+  if (!existsSync(inboxDir)) return null;
+  for (const name of readdirSync(inboxDir)) {
+    if (!name.endsWith(".md")) continue;
+    const markdown = readFileSync(join(inboxDir, name), "utf8");
+    if (markdown.includes(SEEDED_SCREENSHOT_NAME)) return { name, markdown };
+  }
+  return null;
+}
+
+async function waitForSeededScreenshotCapture() {
+  const deadline = Date.now() + 8000;
+  while (Date.now() < deadline) {
+    const found = findSeededScreenshotCapture();
+    if (found) return found;
+    await win.waitForTimeout(200);
+  }
+  return null;
 }
 
 await win.screenshot({ path: join(OUT, "firstrun.png") });
@@ -101,6 +141,42 @@ await check("onboarding checklist renders", async () => {
 
 await check("checklist has 3 steps", async () => {
   return (await win.locator(".ob-step-card").count()) === 3;
+});
+
+await check("Capture opens Inbox image screenshot intake", async () => {
+  await win.getByRole("button", { name: "Capture screenshot" }).click();
+  await win.getByRole("button", { name: "Capture screen" }).waitFor({
+    timeout: 8000,
+  });
+  await win.getByRole("button", { name: "Import from clipboard" }).waitFor({
+    timeout: 8000,
+  });
+  await win.getByText(SEEDED_SCREENSHOT_NAME).waitFor({ timeout: 8000 });
+  return (await win.locator(".inbox-image-capture").count()) === 1;
+});
+
+await check("Capture imports a seeded recent screenshot", async () => {
+  await win.getByRole("button", { name: SEEDED_SCREENSHOT_NAME }).click();
+  const found = await waitForSeededScreenshotCapture();
+  if (!found) return false;
+  const assetMatch = /!\[Screenshot\]\(\.\.\/_assets\/([^)]+)\)/.exec(
+    found.markdown,
+  );
+  if (!assetMatch) return false;
+  return (
+    found.markdown.includes('source: "screenshot"') &&
+    found.markdown.includes('captureOrigin: "recent-file"') &&
+    existsSync(join(HOME, "sps-agent", "vault", "_assets", assetMatch[1]))
+  );
+});
+
+await check("return to Start here after capture path", async () => {
+  await win
+    .locator(".tree-label, .nav-label", { hasText: "Start here" })
+    .first()
+    .click();
+  await win.locator(".ob-checklist").waitFor({ timeout: 8000 });
+  return (await win.locator(".ob-checklist").count()) > 0;
 });
 
 // Dismiss persists: click ×, the checklist disappears.

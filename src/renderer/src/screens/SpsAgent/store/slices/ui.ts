@@ -61,6 +61,7 @@ export const createUiSlice: StateCreator<Store, [], [], UiSlice> = (
   activeObsidianPath: null,
   pendingContentStudioIdea: null,
   pendingDeckStudioInput: null,
+  pendingInboxMode: null,
 
   setPanelOpen: (v) => set({ panelOpen: v }),
   setRightTab: (t) => {
@@ -88,6 +89,9 @@ export const createUiSlice: StateCreator<Store, [], [], UiSlice> = (
       researchOpen: false,
     }),
   clearPendingDeckStudioInput: () => set({ pendingDeckStudioInput: null }),
+  openInboxImageCapture: () =>
+    set({ surface: "inbox", pendingInboxMode: "image" }),
+  clearPendingInboxMode: () => set({ pendingInboxMode: null }),
   setPaletteOpen: (v) => set({ paletteOpen: v }),
   setTemplatesOpen: (v) => set({ templatesOpen: v }),
   setTrashOpen: (v) => set({ trashOpen: v }),
