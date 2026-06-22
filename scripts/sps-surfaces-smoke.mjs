@@ -192,9 +192,19 @@ const expectedShots = [
   "09-health-journal",
   "10-health-peptide",
   "11-health-vault",
+  "12-health-digest",
 ];
 const shots = [];
 const failures = [];
+const healthBrowserErrors = [];
+const healthErrorPattern =
+  /Database not available|messages_metadata|no such table|\[Health UI\] Load error/i;
+
+function recordHealthBrowserError(kind, text) {
+  if (healthErrorPattern.test(text)) {
+    healthBrowserErrors.push(`${kind}: ${text}`);
+  }
+}
 
 const { _electron: electron } = await import("playwright");
 const app = await electron.launch({
@@ -207,10 +217,15 @@ const app = await electron.launch({
 });
 const win = await app.firstWindow();
 win.on("console", (msg) => {
-  if (msg.type() === "error") console.log("BROWSER_CONSOLE_ERROR:", msg.text());
+  if (msg.type() === "error") {
+    const text = msg.text();
+    console.log("BROWSER_CONSOLE_ERROR:", text);
+    recordHealthBrowserError("console", text);
+  }
 });
 win.on("pageerror", (error) => {
   console.log("BROWSER_PAGE_ERROR:", error.message);
+  recordHealthBrowserError("pageerror", error.message);
 });
 await win.waitForLoadState("domcontentloaded");
 await win.waitForSelector(".app", { timeout: 30000 });
@@ -240,6 +255,43 @@ async function clickNav(label) {
 
 async function expectVisible(text, timeout = 8000) {
   await win.getByText(text, { exact: false }).first().waitFor({ timeout });
+}
+
+async function getHealthCollections() {
+  return win.evaluate(async () => {
+    const api = window.hermesAPI;
+    if (!api) throw new Error("hermesAPI unavailable");
+    const [journalEntries, protocols, medicalDocs, clinicalDigest] =
+      await Promise.all([
+        api.spsHealthGetJournalEntries(),
+        api.spsHealthGetMedicationProtocols(),
+        api.spsHealthGetMedicalDocs(),
+        api.spsRssGetClinicalDigest(),
+      ]);
+    return { journalEntries, protocols, medicalDocs, clinicalDigest };
+  });
+}
+
+async function seedOfflineClinicalDigest() {
+  return win.evaluate(async () => {
+    const api = window.hermesAPI;
+    if (!api) throw new Error("hermesAPI unavailable");
+    const feedId = await api.spsRssAddFeed({
+      url: "mock://health-smoke-feed",
+      title: "Health Smoke Feed",
+      site_url: "mock://health-smoke-feed",
+      description: "Offline clinical digest smoke feed",
+      category: "Clinical",
+    });
+    const sync = await api.spsRssSyncFeeds();
+    const digest = await api.spsRssGetClinicalDigest();
+    return {
+      feedId,
+      sync,
+      digestCount: digest.length,
+      titles: digest.map((article) => article.title),
+    };
+  });
 }
 
 async function closeDrawerIfOpen() {
@@ -508,6 +560,32 @@ await shot("09-health-journal", async () => {
     .fill("Smoke health journal entry.");
   await win.getByRole("button", { name: "Save Entry" }).click();
   await expectVisible("Smoke health journal entry.");
+  let health = await getHealthCollections();
+  if (
+    !health.journalEntries.some(
+      (entry) => entry.text_raw === "Smoke health journal entry.",
+    )
+  ) {
+    throw new Error("Saved health journal entry missing from IPC readback");
+  }
+  await win
+    .locator(".timeline-card", { hasText: "Smoke health journal entry." })
+    .getByRole("button", { name: "Delete Entry" })
+    .click();
+  await win
+    .getByText("Smoke health journal entry.", { exact: true })
+    .waitFor({ state: "hidden", timeout: 10000 });
+  health = await getHealthCollections();
+  if (
+    health.journalEntries.some(
+      (entry) => entry.text_raw === "Smoke health journal entry.",
+    )
+  ) {
+    throw new Error(
+      "Deleted health journal entry still present in IPC readback",
+    );
+  }
+  console.log("HEALTH_DELETE_OK: journal entry");
 });
 
 await shot("10-health-peptide", async () => {
@@ -517,6 +595,30 @@ await shot("10-health-peptide", async () => {
   await win.locator("#new-protocol-name").fill("Smoke peptide protocol");
   await win.locator(".create-protocol-row .log-submit-btn").click();
   await expectVisible("Smoke peptide protocol", 15000);
+  let health = await getHealthCollections();
+  if (
+    !health.protocols.some(
+      (protocol) => protocol.name === "Smoke peptide protocol",
+    )
+  ) {
+    throw new Error("Saved peptide protocol missing from IPC readback");
+  }
+  await win
+    .locator(".protocol-card", { hasText: "Smoke peptide protocol" })
+    .getByRole("button", { name: "Delete Protocol" })
+    .click();
+  await win
+    .getByText("Smoke peptide protocol", { exact: true })
+    .waitFor({ state: "hidden", timeout: 10000 });
+  health = await getHealthCollections();
+  if (
+    health.protocols.some(
+      (protocol) => protocol.name === "Smoke peptide protocol",
+    )
+  ) {
+    throw new Error("Deleted peptide protocol still present in IPC readback");
+  }
+  console.log("HEALTH_DELETE_OK: medication protocol");
 });
 
 await shot("11-health-vault", async () => {
@@ -524,17 +626,71 @@ await shot("11-health-vault", async () => {
   await expectVisible("Medical Vault");
   await win.locator(".scan-pdf-btn").click();
   await expectVisible("LabCorp_BloodPanel_2026.pdf", 20000);
+  let health = await getHealthCollections();
+  if (
+    !health.medicalDocs.some(
+      (doc) => doc.file_name === "LabCorp_BloodPanel_2026.pdf",
+    )
+  ) {
+    throw new Error("Saved medical document missing from IPC readback");
+  }
+  await win
+    .locator(".doc-card-item", { hasText: "LabCorp_BloodPanel_2026.pdf" })
+    .getByRole("button", { name: "Delete Document" })
+    .click();
+  await win
+    .getByText("LabCorp_BloodPanel_2026.pdf", { exact: true })
+    .waitFor({ state: "hidden", timeout: 10000 });
+  health = await getHealthCollections();
+  if (
+    health.medicalDocs.some(
+      (doc) => doc.file_name === "LabCorp_BloodPanel_2026.pdf",
+    )
+  ) {
+    throw new Error("Deleted medical document still present in IPC readback");
+  }
+  console.log("HEALTH_DELETE_OK: medical document");
+});
+
+await shot("12-health-digest", async () => {
+  const digestSeed = await seedOfflineClinicalDigest();
+  if (!digestSeed.sync.success || digestSeed.sync.count < 2) {
+    throw new Error(
+      `Expected offline digest sync to insert at least 2 articles, got ${JSON.stringify(
+        digestSeed.sync,
+      )}`,
+    );
+  }
+  if (digestSeed.digestCount < 2) {
+    throw new Error(
+      `Expected clinical digest readback to return at least 2 articles, got ${digestSeed.digestCount}`,
+    );
+  }
+  await win.getByRole("button", { name: /Refresh/ }).click();
+  await win.getByRole("button", { name: /Clinical Digest/ }).click();
+  await expectVisible("Dosing and Titration Schedules", 10000);
+  await expectVisible("HRV and Sleep Latency", 10000);
+  const health = await getHealthCollections();
+  if (health.clinicalDigest.length < 2) {
+    throw new Error("Clinical digest UI refresh did not preserve IPC readback");
+  }
+  console.log(
+    `HEALTH_DIGEST_OK: ${health.clinicalDigest.length} offline clinical articles`,
+  );
 });
 
 await app.close();
 
 console.log("SHOTS_OK:", shots.length, "—", shots.join(", "));
 const missing = expectedShots.filter((name) => !shots.includes(name));
-if (failures.length || missing.length) {
+if (failures.length || missing.length || healthBrowserErrors.length) {
   for (const failure of failures) {
     console.log(`SHOT_FAILURE: ${failure.name}: ${failure.message}`);
   }
   if (missing.length) console.log("SHOTS_MISSING:", missing.join(", "));
+  for (const error of healthBrowserErrors) {
+    console.log(`HEALTH_BROWSER_ERROR: ${error}`);
+  }
   console.log("SURFACES_SMOKE_FAILED");
   process.exit(1);
 }

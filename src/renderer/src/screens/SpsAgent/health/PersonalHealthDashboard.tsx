@@ -98,9 +98,9 @@ export function PersonalHealthDashboard(): React.JSX.Element {
   const [protocols, setProtocols] = useState<MedicationProtocol[]>([]);
   const [medLogs, setMedLogs] = useState<MedicationLog[]>([]);
   const [medicalDocs, setMedicalDocs] = useState<MedicalDoc[]>([]);
-  const [clinicalDigest, setClinicalDigest] = useState<
-    ClinicalDigestArticle[]
-  >([]);
+  const [clinicalDigest, setClinicalDigest] = useState<ClinicalDigestArticle[]>(
+    [],
+  );
 
   // Form states
   const [quickWeight, setQuickWeight] = useState("");
@@ -200,6 +200,13 @@ export function PersonalHealthDashboard(): React.JSX.Element {
 
     setQuickJournalText("");
     loadData();
+  };
+
+  const handleDeleteJournalEntry = async (id: string): Promise<void> => {
+    const api = window.hermesAPI;
+    if (!api) return;
+    await api.spsHealthDeleteJournalEntry(id);
+    await loadData();
   };
 
   const simulateVoiceRecording = (): void => {
@@ -533,13 +540,7 @@ export function PersonalHealthDashboard(): React.JSX.Element {
               <div key={entry.id} className="glass-panel timeline-card">
                 <button
                   className="timeline-delete-btn"
-                  onClick={() => {
-                    const api = window.hermesAPI;
-                    if (api) {
-                      api.spsHealthDeleteJournalEntry(entry.id);
-                      loadData();
-                    }
-                  }}
+                  onClick={() => void handleDeleteJournalEntry(entry.id)}
                   title="Delete Entry"
                   aria-label="Delete Entry"
                 >
