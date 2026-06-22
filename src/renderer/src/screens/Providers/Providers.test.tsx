@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../../components/I18nProvider";
 import Providers from "./Providers";
@@ -112,5 +112,24 @@ describe("Providers", () => {
     expect(screen.getByText("4:00 AM IST")).toBeInTheDocument();
     expect(screen.getByText("Run now")).toBeInTheDocument();
     expect(screen.getByText("Available")).toBeInTheDocument();
+  });
+
+  it("removes an API-key provider through the existing blank setEnv seam", async () => {
+    renderProviders();
+
+    const removeButton = await screen.findByRole("button", {
+      name: /remove xAI \(Grok\) API Key/i,
+    });
+    fireEvent.click(removeButton);
+
+    await waitFor(() => {
+      expect(window.hermesAPI.setEnv).toHaveBeenCalledWith(
+        "XAI_API_KEY",
+        "",
+        "work",
+      );
+    });
+    expect(screen.getByPlaceholderText("xAI (Grok) API Key")).toHaveValue("");
+    expect(screen.getAllByText("Missing credential").length).toBeGreaterThan(0);
   });
 });

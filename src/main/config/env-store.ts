@@ -60,6 +60,29 @@ function isSensitiveEnvKey(key: string): boolean {
   );
 }
 
+function keychainErrorSummary(err: unknown): Record<string, unknown> | string {
+  if (!err || typeof err !== "object") return typeof err;
+  const detail = err as {
+    code?: unknown;
+    killed?: unknown;
+    signal?: unknown;
+    status?: unknown;
+  };
+  const summary: Record<string, unknown> = {};
+  for (const field of ["status", "signal", "code", "killed"] as const) {
+    const value = detail[field];
+    if (
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean" ||
+      value === null
+    ) {
+      summary[field] = value;
+    }
+  }
+  return Object.keys(summary).length ? summary : "redacted";
+}
+
 export function readEnv(profile?: string): Record<string, string> {
   const cacheKey = `env:${profile || "default"}`;
   const cached = getCached<Record<string, string>>(cacheKey);
@@ -111,7 +134,7 @@ export function readEnv(profile?: string): Record<string, string> {
       } catch (err) {
         console.error(
           `[Keychain] Failed to retrieve ${key} from OS Keychain:`,
-          err,
+          keychainErrorSummary(err),
         );
         value = "";
       }
@@ -158,9 +181,12 @@ export function setEnvValue(
         timeout: 10000,
         ...HIDDEN_SUBPROCESS_OPTIONS,
       });
-      finalValue = "__keychain__";
+      finalValue = value.trim() ? "__keychain__" : "";
     } catch (err) {
-      console.error(`[Keychain] Failed to store ${key} in OS Keychain:`, err);
+      console.error(
+        `[Keychain] Failed to store ${key} in OS Keychain:`,
+        keychainErrorSummary(err),
+      );
       throw new Error(
         `Failed to store sensitive environment variable ${key} in the OS Keychain; refusing to write plaintext.`,
       );

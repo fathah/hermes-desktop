@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { chmodSync, mkdirSync, rmSync, writeFileSync } from "fs";
+import { join } from "path";
+import { tmpdir } from "os";
 import { expectedEnvKeyForModel } from "../src/main/installer";
 
 // Regression tests for #236: the install gate's .env check hard-coded
@@ -90,8 +93,63 @@ describe("expectedEnvKeyForModel — URL fallback for custom/auto providers", ()
   });
 });
 
-// The actual install-gate behavior is exercised end-to-end by importing
-// the module under a per-test HERMES_HOME — same pattern as the other
-// installer tests. Skipped here because the existing tests already cover
-// the file-existence half; the gap was provider awareness, which the
-// pure-function tests above pin down.
+describe("checkInstallStatus — configured provider key gate", () => {
+  const homes: string[] = [];
+
+  afterEach(() => {
+    delete process.env.HERMES_HOME;
+    vi.resetModules();
+    for (const home of homes.splice(0)) {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  async function freshInstaller(
+    home: string,
+  ): Promise<typeof import("../src/main/installer")> {
+    vi.resetModules();
+    process.env.HERMES_HOME = home;
+    return import("../src/main/installer");
+  }
+
+  function seedInstalledHome(): string {
+    const home = join(tmpdir(), `hermes-install-gate-${Date.now()}`);
+    homes.push(home);
+    const repo = join(home, "hermes-agent");
+    const bin = join(repo, "venv", "bin");
+    mkdirSync(bin, { recursive: true });
+    writeFileSync(join(bin, "python"), "#!/bin/sh\nexit 0\n", "utf-8");
+    chmodSync(join(bin, "python"), 0o755);
+    writeFileSync(join(repo, "hermes"), "#!/bin/sh\nexit 0\n", "utf-8");
+    chmodSync(join(repo, "hermes"), 0o755);
+    return home;
+  }
+
+  function writeOpenRouterConfig(home: string): void {
+    writeFileSync(
+      join(home, "config.yaml"),
+      [
+        "model:",
+        "  provider: openrouter",
+        "  default: openai/gpt-4o",
+        "  base_url: https://openrouter.ai/api/v1",
+        "",
+      ].join("\n"),
+      "utf-8",
+    );
+  }
+
+  it("treats an installed OpenRouter profile with a blank removed key as missing", async () => {
+    const home = seedInstalledHome();
+    writeOpenRouterConfig(home);
+    writeFileSync(join(home, ".env"), "OPENROUTER_API_KEY=\n", "utf-8");
+
+    const { checkInstallStatus } = await freshInstaller(home);
+
+    expect(checkInstallStatus()).toMatchObject({
+      installed: true,
+      configured: true,
+      hasApiKey: false,
+    });
+  });
+});

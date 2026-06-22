@@ -353,6 +353,23 @@ function Providers({
     await handleBlur(fieldKey);
   }
 
+  async function handleRemoveKey(fieldKey: string): Promise<void> {
+    const pending = envSaveTimers.current.get(fieldKey);
+    if (pending) {
+      clearTimeout(pending);
+      envSaveTimers.current.delete(fieldKey);
+    }
+    await window.hermesAPI.setEnv(fieldKey, "", profile);
+    setEnv((prev) => ({ ...prev, [fieldKey]: "" }));
+    setProviderTestResults((prev) => {
+      const next = { ...prev };
+      delete next[fieldKey];
+      return next;
+    });
+    setSavedKey(fieldKey);
+    setTimeout(() => setSavedKey(null), 2000);
+  }
+
   async function handleTestProvider(
     fieldKey: string,
     setup: ProviderSetup | undefined,
@@ -844,6 +861,16 @@ function Providers({
                           >
                             {t("providers.status.addKey")}
                           </button>
+                          {hasKey && (
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              aria-label={`${t("settings.remove")} ${t(field.label)}`}
+                              onClick={() => void handleRemoveKey(field.key)}
+                            >
+                              {t("settings.remove")}
+                            </button>
+                          )}
                           <button
                             type="button"
                             className="btn btn-secondary btn-sm"

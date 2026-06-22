@@ -115,6 +115,29 @@ describe("env-store keychain delegation", () => {
     expect(envContent).toBeUndefined();
   });
 
+  it("does not log secret values when the keychain call fails", () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    mockExecFileSync.mockImplementation(() => {
+      throw new Error(
+        "Command failed: python hermes config set-secret default OPENAI_API_KEY sk-test-log-secret",
+      );
+    });
+
+    expect(() =>
+      setEnvValue("OPENAI_API_KEY", "sk-test-log-secret", "default"),
+    ).toThrow(/refusing to write plaintext/i);
+
+    const loggedText = consoleError.mock.calls
+      .flatMap((args) =>
+        args.map((arg) => (arg instanceof Error ? arg.message : String(arg))),
+      )
+      .join("\n");
+    expect(loggedText).not.toContain("sk-test-log-secret");
+    consoleError.mockRestore();
+  });
+
   it("stores provider API keys in the keychain, not plaintext .env", () => {
     mockExecFileSync.mockReturnValue(Buffer.from("✓"));
 
@@ -128,5 +151,23 @@ describe("env-store keychain delegation", () => {
     expect(mockFiles["/mock/home/profiles/default/.env"]).toContain(
       "OPENAI_API_KEY=__keychain__",
     );
+  });
+
+  it("clears sensitive keys without leaving a keychain placeholder", () => {
+    mockExecFileSync.mockReturnValue(Buffer.from("✓"));
+
+    setEnvValue("OPENROUTER_API_KEY", "sk-or-test-secret", "default");
+    setEnvValue("OPENROUTER_API_KEY", "", "default");
+
+    expect(mockExecFileSync).toHaveBeenLastCalledWith(
+      "python",
+      ["config", "set-secret", "default", "OPENROUTER_API_KEY", ""],
+      expect.any(Object),
+    );
+
+    const envContent = mockFiles["/mock/home/profiles/default/.env"];
+    expect(envContent).toContain("OPENROUTER_API_KEY=");
+    expect(envContent).not.toContain("OPENROUTER_API_KEY=__keychain__");
+    expect(envContent).not.toContain("sk-or-test-secret");
   });
 });
