@@ -10,6 +10,8 @@ function tierLabel(tier: string): string {
     apple_official: "Apple official",
     google_workspace_official: "Google Workspace official",
     google_developer_official: "Google developer",
+    microsoft_365_official: "Microsoft 365 official",
+    microsoft_developer_official: "Microsoft developer",
     developer_official: "Apple developer",
     standards_project: "Standards project",
     mac_admin: "Mac admin",

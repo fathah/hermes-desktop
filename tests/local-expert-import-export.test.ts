@@ -57,21 +57,21 @@ describe("local expert import/export", () => {
   it("imports a valid custom pack and lists it after built-ins", () => {
     const custom = {
       ...MACOS_LOCAL_EXPERT_PACK,
-      id: "excel",
-      title: "Excel Expert",
-      domain: "excel",
+      id: "spreadsheet-template",
+      title: "Spreadsheet Template Expert",
+      domain: "spreadsheet-template",
       records: MACOS_LOCAL_EXPERT_PACK.records.slice(0, 1).map((record) => ({
         ...record,
-        id: "excel-file-associations",
-        topic: "excel.file_associations",
-        tags: ["excel", "files"],
+        id: "spreadsheet-template-layouts",
+        topic: "spreadsheet_template.layouts",
+        tags: ["spreadsheets", "templates"],
       })),
       recipe: {
         ...MACOS_LOCAL_EXPERT_PACK.recipe,
-        name: "Excel Expert",
+        name: "Spreadsheet Template Expert",
       },
     };
-    const source = join(TEST_HOME, "excel-pack.json");
+    const source = join(TEST_HOME, "spreadsheet-template-pack.json");
     writeFileSync(
       source,
       JSON.stringify({ schemaVersion: 1, pack: custom }, null, 2),
@@ -87,13 +87,19 @@ describe("local expert import/export", () => {
     expect(imported.ok).toBe(true);
     expect(
       existsSync(
-        join(TEST_HOME, "sps-agent", "local-expert-packs", "excel.json"),
+        join(
+          TEST_HOME,
+          "sps-agent",
+          "local-expert-packs",
+          "spreadsheet-template.json",
+        ),
       ),
     ).toBe(true);
     expect(listed.packs.map((pack) => pack.id)).toEqual([
       "macos",
       "google-docs-editors",
       "excel",
+      "spreadsheet-template",
     ]);
   });
 

@@ -51,6 +51,10 @@ Use the narrowest reliable source tier for each record:
   or Google Help documentation
 - `google_developer_official`: Google Developers documentation for Workspace
   automation surfaces such as Apps Script
+- `microsoft_365_official`: Microsoft Support, Microsoft 365, SharePoint,
+  OneDrive, Excel, and Office documentation
+- `microsoft_developer_official`: Microsoft Learn documentation for Microsoft
+  365 developer surfaces such as Excel VBA or Office automation APIs
 - `developer_official`: Apple Developer documentation
 - `standards_project`: structured compliance or baseline projects
 - `mac_admin`: reputable admin-practice sources
@@ -109,6 +113,33 @@ read-only in SPS: the UI shows the prompt, required evidence, risk, and linked
 records, but does not open Google, run Apps Script, copy data, or call admin
 APIs.
 
+## Excel Expert V1
+
+The built-in Excel Expert pack uses id `excel`. It covers a starter set for
+Microsoft Excel and Microsoft 365 workbook work:
+
+- coauthoring requirements for OneDrive, OneDrive for Business, and SharePoint
+- SharePoint and OneDrive sharing policy boundaries
+- formulas, functions, cell references, and external references
+- tables and data validation for controlled entry
+- CSV import, text import, Power Query, and data type preservation
+- PivotTable source-data review
+- chart creation and Office chart data embedded in Word or PowerPoint
+- file, workbook, and worksheet protection plus password risk
+- macro security, Trust Center awareness, and managed-device boundaries
+- recorded macro and VBA object model review
+
+The generated recipe is review-first and guidance-only. It must not open Excel
+files, inspect OneDrive or SharePoint, request credentials, call Microsoft
+Graph, run Office Scripts, run VBA/macros, change sharing, or change
+tenant/admin policy. It may only explain source-backed checks and tell the user
+what evidence to inspect or ask a Microsoft 365 admin to confirm.
+
+Excel scenarios are structured workflow prompts layered over records. They are
+read-only in SPS: the UI shows the prompt, required evidence, risk, and linked
+records, but does not open files, parse workbook contents, run automation, or
+contact Microsoft services.
+
 ## Evals
 
 Run the deterministic local expert eval suite with:
@@ -119,12 +150,13 @@ node scripts/local-experts-eval.mjs
 
 The offline suite checks required record coverage, required concepts, forbidden
 unsafe phrases, expected risk framing, and conservative recipe safety language
-for built-in packs. Google Docs Editors evals also include deterministic
-answer-shape fixtures that require `What to check`, `Steps`, `Verification`,
-`Risk`, and `Sources` sections without calling a live model. The default runner
-also installs the Google Docs Editors Expert offline, verifies scenario records,
-and proves the assistant recipe prompt/run path with mocked local services. Live
-model evals remain opt-in and are not part of the default runner.
+for built-in packs. Google Docs Editors and Excel evals also include
+deterministic answer-shape fixtures that require `What to check`, `Steps`,
+`Verification`, `Risk`, and `Sources` sections without calling a live model.
+The default runner also installs the Google Docs Editors Expert and Excel Expert
+offline, verifies scenario records, and proves the assistant recipe prompt/run
+path with mocked local services. Live model evals remain opt-in and are not part
+of the default runner.
 
 The quality report helper summarizes record count, unique source count, scenario
 count, stale/expired record counts, broken scenario links, and validation error
@@ -155,9 +187,10 @@ install software, or prove a setting is enabled unless the check succeeded.
 
 ## Adding Future Experts
 
-Add future packs, such as Excel Expert, PowerPoint Expert, or Cooking Expert, by
-creating another built-in `LocalExpertPack` and adding it to the pack registry in
-`src/main/local-experts/index.ts`, or by importing a validated local JSON pack.
+Add future packs, such as PowerPoint Expert, Word Expert, or Cooking Expert, by
+creating another built-in `LocalExpertPack` and adding it to the pack registry
+in `src/main/local-experts/index.ts`, or by importing a validated local JSON
+pack.
 
 Do not add new product code for each expert unless the domain needs a new
 capability tier. The default path is:

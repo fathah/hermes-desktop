@@ -2,6 +2,8 @@ export type LocalExpertSourceTier =
   | "apple_official"
   | "google_workspace_official"
   | "google_developer_official"
+  | "microsoft_365_official"
+  | "microsoft_developer_official"
   | "developer_official"
   | "standards_project"
   | "mac_admin"
@@ -262,6 +264,8 @@ const SOURCE_TIERS: LocalExpertSourceTier[] = [
   "apple_official",
   "google_workspace_official",
   "google_developer_official",
+  "microsoft_365_official",
+  "microsoft_developer_official",
   "developer_official",
   "standards_project",
   "mac_admin",

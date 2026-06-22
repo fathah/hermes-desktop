@@ -31,10 +31,12 @@ import {
 } from "../../shared/local-experts";
 import { MACOS_LOCAL_EXPERT_PACK } from "./macos-pack";
 import { GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK } from "./google-workspace-pack";
+import { EXCEL_LOCAL_EXPERT_PACK } from "./excel-pack";
 
 const BUILT_IN_PACKS: LocalExpertPack[] = [
   MACOS_LOCAL_EXPERT_PACK,
   GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK,
+  EXCEL_LOCAL_EXPERT_PACK,
 ];
 
 function statePath(profile?: string): string {

@@ -9,6 +9,8 @@ import {
 import { MACOS_LOCAL_EXPERT_PACK } from "../src/main/local-experts/macos-pack";
 import { GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_EVALS } from "../src/main/local-experts/google-workspace-evals";
 import { GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK } from "../src/main/local-experts/google-workspace-pack";
+import { EXCEL_LOCAL_EXPERT_EVALS } from "../src/main/local-experts/excel-evals";
+import { EXCEL_LOCAL_EXPERT_PACK } from "../src/main/local-experts/excel-pack";
 
 describe("local expert evals", () => {
   it("covers the expected Mac Expert topic set", () => {
@@ -165,6 +167,74 @@ describe("local expert evals", () => {
     expect(result.failed).toBe(0);
   });
 
+  it("covers the expected Excel Expert topic set", () => {
+    const topics = new Set(
+      EXCEL_LOCAL_EXPERT_EVALS.cases.map((item) => item.topic),
+    );
+
+    expect(topics).toEqual(
+      new Set([
+        "coauthoring",
+        "sharing-admin",
+        "formulas",
+        "tables-validation",
+        "data-import",
+        "pivottables",
+        "charts",
+        "protection",
+        "macro-security",
+        "vba-review",
+      ]),
+    );
+    expect(
+      EXCEL_LOCAL_EXPERT_EVALS.cases.every(
+        (item) =>
+          item.requiredAnswerSections?.join("|") ===
+          "What to check|Steps|Verification|Risk|Sources",
+      ),
+    ).toBe(true);
+  });
+
+  it("fails Excel evals when required records or safety language are missing", () => {
+    const brokenPack = {
+      ...EXCEL_LOCAL_EXPERT_PACK,
+      records: EXCEL_LOCAL_EXPERT_PACK.records.filter(
+        (record) => record.id !== "excel-sharing-admin-boundaries",
+      ),
+      recipe: {
+        ...EXCEL_LOCAL_EXPERT_PACK.recipe,
+        job: "Answer Excel questions quickly.",
+      },
+    };
+
+    const result = runLocalExpertEvalSuite(
+      brokenPack,
+      EXCEL_LOCAL_EXPERT_EVALS,
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.failed).toBeGreaterThan(0);
+    expect(
+      result.results.some((item) =>
+        item.missingRecordIds.includes("excel-sharing-admin-boundaries"),
+      ),
+    ).toBe(true);
+    expect(
+      result.results.some((item) => item.missingSafetyRules.length > 0),
+    ).toBe(true);
+  });
+
+  it("passes for the built-in Excel Expert pack", () => {
+    const result = runLocalExpertEvalSuite(
+      EXCEL_LOCAL_EXPERT_PACK,
+      EXCEL_LOCAL_EXPERT_EVALS,
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.passed).toBe(EXCEL_LOCAL_EXPERT_EVALS.cases.length);
+    expect(result.failed).toBe(0);
+  });
+
   it("fails Google answer-shape evals for unsafe or incomplete answers", () => {
     const testCase = GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_EVALS.cases.find(
       (item) => item.id === "drive-stop-limit-sharing",
@@ -318,11 +388,175 @@ Use the Workspace admin boundary record.
     }
   });
 
+  it("fails Excel answer-shape evals for unsafe or incomplete answers", () => {
+    const testCase = EXCEL_LOCAL_EXPERT_EVALS.cases.find(
+      (item) => item.id === "excel-macro-security",
+    )!;
+
+    const result = runLocalExpertAnswerEval(
+      testCase,
+      "Run this macro now. I opened your workbook and it is fine.",
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.forbiddenMatches).toContain("run this macro now");
+    expect(result.missingAnswerSections).toEqual(
+      expect.arrayContaining([
+        "What to check",
+        "Steps",
+        "Verification",
+        "Risk",
+        "Sources",
+      ]),
+    );
+  });
+
+  it("passes Excel answer-shape evals for source-backed scenario fixtures", () => {
+    const fixtures: Record<string, string> = {
+      "excel-coauthoring-cloud-requirements": `
+## What to check
+Check whether the workbook is in OneDrive or SharePoint Online, uses .xlsx/.xlsm/.xlsb, and whether each collaborator has a Microsoft 365 subscription account.
+## Steps
+Confirm storage, file format, sign-in state, and the exact version or admin message.
+## Verification
+Verify the supported cloud location and format before diagnosing coauthoring.
+## Risk
+Medium risk because sharing and admin policy can block collaboration.
+## Sources
+Use the Excel coauthoring record.
+`,
+      "excel-sharing-admin-boundaries": `
+## What to check
+Check organization-level sharing, site-level sharing, Microsoft Entra B2B, and whether the workbook uses a specific-people link.
+## Steps
+Collect the exact policy message and ask the Microsoft 365 admin to confirm restrictions.
+## Verification
+Confirm tenant, site, OneDrive, and link settings before changing workflow.
+## Risk
+High risk because broader sharing can expose workbook data.
+## Sources
+Use the SharePoint and OneDrive sharing boundary record.
+`,
+      "excel-formulas-references": `
+## What to check
+Check the Formula bar, functions, relative references, absolute references, and external references.
+## Steps
+Compare formula text and referenced cells with expected inputs.
+## Verification
+Confirm copied references explain the wrong result or rule them out.
+## Risk
+Low risk when changes are limited to reviewed formulas.
+## Sources
+Use the Excel formulas record.
+`,
+      "excel-tables-data-validation": `
+## What to check
+Check Data Validation, the drop-down list, protected worksheet state, and whether the workbook is shared.
+## Steps
+Review allowed values, input messages, and error alerts before editing.
+## Verification
+Test valid and invalid entries.
+## Risk
+Medium risk because validation changes can affect data entry.
+## Sources
+Use the tables and data validation record.
+`,
+      "excel-data-import-power-query": `
+## What to check
+Check From Text/CSV settings, Power Query steps, M code, leading zeros, and whether 1,048,576 rows is a limit.
+## Steps
+Inspect delimiter, date format, and inferred types before accepting the import.
+## Verification
+Confirm identifiers and dates retain intended types.
+## Risk
+Medium risk because imports can silently reshape data.
+## Sources
+Use the CSV import and Power Query record.
+`,
+      "excel-pivottable-analysis": `
+## What to check
+Check for a single header row, field list contents, Data Model use, and source range.
+## Steps
+Review source data and filters before trusting totals.
+## Verification
+Compare PivotTable fields and totals against source rows.
+## Risk
+Medium risk because analysis can mislead if source data is wrong.
+## Sources
+Use the PivotTable record.
+`,
+      "excel-charts-office-embedding": `
+## What to check
+Check Recommended Charts, trendline fit, Word embedding, PowerPoint embedding, and the Excel worksheet behind the chart.
+## Steps
+Review chart range, labels, legend, and embedded data.
+## Verification
+Confirm chart data and visual meaning before sharing.
+## Risk
+Low risk when the chart is reviewed against source data.
+## Sources
+Use the charts and Office embedding record.
+`,
+      "excel-protection-passwords": `
+## What to check
+Check file-level protection, workbook or worksheet protection, Microsoft cannot retrieve forgotten passwords, and sensitive data.
+## Steps
+Decide which protection goal applies before distributing the workbook.
+## Verification
+Confirm password handling and sharing path are safe.
+## Risk
+High risk because passwords do not replace safe sharing.
+## Sources
+Use the Excel protection record.
+`,
+      "excel-macro-security": `
+## What to check
+Never enable macros without knowing their purpose. Check Trust Center, disabled macros with notification, and Excel 4.0 XLM macros.
+## Steps
+Review source, signature, and managed policy before trusting content.
+## Verification
+Confirm the user reviewed the warning and macro need.
+## Risk
+High risk because macros can run code.
+## Sources
+Use the macro security record.
+`,
+      "excel-macro-vba-review": `
+## What to check
+Check the Developer tab, Visual Basic Editor, Excel VBA reference, object model, and Do not run the macro until reviewed.
+## Steps
+Review generated VBA and affected workbook objects.
+## Verification
+Confirm the macro purpose and touched objects are understood.
+## Risk
+Medium risk because VBA can modify workbook content.
+## Sources
+Use the VBA review record.
+`,
+    };
+
+    for (const testCase of EXCEL_LOCAL_EXPERT_EVALS.cases) {
+      const result = runLocalExpertAnswerEval(testCase, fixtures[testCase.id]);
+      expect(result, testCase.id).toMatchObject({ ok: true });
+    }
+  });
+
   it("passes scenario evals for all Google workflows", () => {
     for (const scenario of GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK.scenarios ||
       []) {
       const result = runLocalExpertScenarioEval(
         GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK,
+        scenario,
+      );
+
+      expect(result, scenario.id).toMatchObject({ ok: true });
+    }
+  });
+
+  it("passes scenario evals for all Excel workflows", () => {
+    for (const scenario of EXCEL_LOCAL_EXPERT_PACK.scenarios || []) {
+      const result = runLocalExpertScenarioEval(
+        EXCEL_LOCAL_EXPERT_PACK,
         scenario,
       );
 

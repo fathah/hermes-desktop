@@ -70,6 +70,7 @@ import {
 } from "../src/shared/local-experts";
 import { listAssistantRecipes } from "../src/main/assistant-recipes";
 import { GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK } from "../src/main/local-experts/google-workspace-pack";
+import { EXCEL_LOCAL_EXPERT_PACK } from "../src/main/local-experts/excel-pack";
 
 beforeEach(() => {
   rmSync(TEST_HOME, { recursive: true, force: true });
@@ -115,6 +116,37 @@ describe("local experts", () => {
     ).toBe(true);
     expect(
       GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK.scenarios?.every(
+        (scenario) =>
+          scenario.recordIds.length > 0 &&
+          scenario.requiredEvidence.length > 0 &&
+          scenario.expectedSections.join("|") ===
+            "What to check|Steps|Verification|Risk|Sources",
+      ),
+    ).toBe(true);
+  });
+
+  it("validates the built-in Excel Expert pack", () => {
+    const result = validateLocalExpertPack(EXCEL_LOCAL_EXPERT_PACK);
+
+    expect(result.ok).toBe(true);
+    expect(EXCEL_LOCAL_EXPERT_PACK.id).toBe("excel");
+    expect(EXCEL_LOCAL_EXPERT_PACK.title).toBe("Excel Expert");
+    expect(EXCEL_LOCAL_EXPERT_PACK.records.length).toBe(10);
+    expect(EXCEL_LOCAL_EXPERT_PACK.scenarios).toHaveLength(6);
+    expect(EXCEL_LOCAL_EXPERT_PACK.sourceTiers).toEqual([
+      "microsoft_365_official",
+      "microsoft_developer_official",
+    ]);
+    expect(
+      EXCEL_LOCAL_EXPERT_PACK.records.every(
+        (record) =>
+          record.sourceUrls.length > 0 &&
+          record.lastVerified === "2026-06-22" &&
+          record.appliesTo?.length,
+      ),
+    ).toBe(true);
+    expect(
+      EXCEL_LOCAL_EXPERT_PACK.scenarios?.every(
         (scenario) =>
           scenario.recordIds.length > 0 &&
           scenario.requiredEvidence.length > 0 &&
@@ -195,6 +227,30 @@ describe("local experts", () => {
     });
     expect(current.sourceCount).toBeGreaterThanOrEqual(9);
     expect(stale.expiredRecordCount).toBe(10);
+  });
+
+  it("reports Excel pack freshness and quality", () => {
+    const freshness = getLocalExpertPackFreshness(
+      EXCEL_LOCAL_EXPERT_PACK,
+      new Date("2026-06-22T12:00:00Z"),
+    );
+    const quality = getLocalExpertPackQualityReport(
+      EXCEL_LOCAL_EXPERT_PACK,
+      new Date("2026-06-22T12:00:00Z"),
+    );
+
+    expect(freshness.status).toBe("current");
+    expect(freshness.current).toBe(EXCEL_LOCAL_EXPERT_PACK.records.length);
+    expect(quality).toMatchObject({
+      packId: "excel",
+      recordCount: 10,
+      scenarioCount: 6,
+      staleRecordCount: 0,
+      expiredRecordCount: 0,
+      brokenScenarioLinks: [],
+      validationErrorCount: 0,
+    });
+    expect(quality.sourceCount).toBeGreaterThanOrEqual(8);
   });
 
   it("rejects duplicate record ids and non-HTTPS sources", () => {
@@ -297,10 +353,11 @@ describe("local experts", () => {
     );
   });
 
-  it("lists Google Docs Editors after Mac Expert and installs it idempotently", async () => {
+  it("lists built-in experts and installs Google Docs Editors idempotently", async () => {
     expect(listLocalExpertPacks().packs.map((pack) => pack.id)).toEqual([
       "macos",
       "google-docs-editors",
+      "excel",
     ]);
 
     const first = await installLocalExpertPack("google-docs-editors");
@@ -312,9 +369,7 @@ describe("local experts", () => {
     );
     expect(first.recordsSkipped).toBe(0);
     expect(first.recipeId).toMatch(/^ar_/);
-    expect(first.skillPath).toContain(
-      "assistant-google-docs-editors-expert",
-    );
+    expect(first.skillPath).toContain("assistant-google-docs-editors-expert");
     expect(second.ok).toBe(true);
     expect(second.recordsWritten).toBe(0);
     expect(second.recordsSkipped).toBe(
@@ -337,9 +392,7 @@ describe("local experts", () => {
     });
 
     const vault = join(TEST_HOME, "sps-agent", "vault");
-    expect(existsSync(join(vault, "expert-google-docs-editors.md"))).toBe(
-      true,
-    );
+    expect(existsSync(join(vault, "expert-google-docs-editors.md"))).toBe(true);
     expect(existsSync(join(vault, "expert_google-docs-editors"))).toBe(true);
     const row = readFileSync(
       join(
@@ -363,6 +416,59 @@ describe("local experts", () => {
     );
     expect(readFileSync(skillFile, "utf-8")).toContain(
       "Never access Gmail, Drive, Docs, Sheets, Slides, or Apps Script directly",
+    );
+  });
+
+  it("installs Excel Expert idempotently into vault rows, a profile skill, and an assistant recipe", async () => {
+    const first = await installLocalExpertPack("excel");
+    const second = await installLocalExpertPack("excel");
+
+    expect(first.ok).toBe(true);
+    expect(first.recordsWritten).toBe(EXCEL_LOCAL_EXPERT_PACK.records.length);
+    expect(first.recordsSkipped).toBe(0);
+    expect(first.recipeId).toMatch(/^ar_/);
+    expect(first.skillPath).toContain("assistant-excel-expert");
+    expect(second.ok).toBe(true);
+    expect(second.recordsWritten).toBe(0);
+    expect(second.recordsSkipped).toBe(EXCEL_LOCAL_EXPERT_PACK.records.length);
+    expect(second.recipeId).toBe(first.recipeId);
+    expect(second.skillPath).toBe(first.skillPath);
+
+    const state = JSON.parse(
+      readFileSync(join(TEST_HOME, "sps-agent", "local-experts.json"), "utf-8"),
+    );
+    expect(state[0]).toMatchObject({
+      packId: "excel",
+      packVersion: EXCEL_LOCAL_EXPERT_PACK.version,
+      recordCount: EXCEL_LOCAL_EXPERT_PACK.records.length,
+      sourceCount: expect.any(Number),
+      overviewPath: "expert-excel.md",
+      recordsPath: "expert_excel/",
+      packHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+    });
+
+    const vault = join(TEST_HOME, "sps-agent", "vault");
+    expect(existsSync(join(vault, "expert-excel.md"))).toBe(true);
+    expect(existsSync(join(vault, "expert_excel"))).toBe(true);
+    const row = readFileSync(
+      join(vault, "expert_excel", "excel-coauthoring-cloud-requirements.md"),
+      "utf-8",
+    );
+    expect(row).toContain(
+      "Applies to: Excel for Microsoft 365, Excel for the web, OneDrive, SharePoint Online",
+    );
+    expect(row).toContain("excel-sharing-admin-boundaries");
+    expect(row).toContain("## Sources");
+
+    const skillFile = join(
+      TEST_HOME,
+      "skills",
+      "assistant-recipes",
+      "assistant-excel-expert",
+      "SKILL.md",
+    );
+    expect(readFileSync(skillFile, "utf-8")).toContain(
+      "Never open Excel files, run VBA macros, run Office Scripts, or change sharing",
     );
   });
 

@@ -15,6 +15,7 @@ const result = spawnSync(
     "run",
     "tests/local-expert-evals.test.ts",
     "tests/local-expert-google-docs-e2e.test.ts",
+    "tests/local-expert-excel-e2e.test.ts",
   ],
   {
     cwd: process.cwd(),

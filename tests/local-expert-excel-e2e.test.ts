@@ -7,30 +7,30 @@ const { TEST_HOME, assistantSpy } = vi.hoisted(() => {
   const os = require("os");
   const path = require("path");
   const fs = require("fs");
-  const googleSharingAnswer = `
+  const excelCoauthoringAnswer = `
 ## What to check
-Check the Share dialog for the outside client, the exact error text, and whether their role is viewer, commenter, or editor. For managed accounts, external sharing may be blocked by work/school policy.
+Check whether the workbook is stored in OneDrive or SharePoint Online, whether the file format is .xlsx/.xlsm/.xlsb, and whether each collaborator is signed in with a Microsoft 365 subscription account.
 
 ## Steps
-Open Share, confirm the client's address or group, and choose the least access needed. If the client is outside the organization, collect the policy message before changing sharing.
+Collect the storage location, workbook format, collaborator account type, and any exact read-only, version, sync, or administrator message before suggesting a sharing change.
 
 ## Verification
-Confirm the intended person appears with the expected viewer, commenter, or editor role, and ask a Workspace admin to confirm any external sharing block.
+Confirm the workbook is in a supported cloud location and format, then verify collaborators can edit according to their intended role.
 
 ## Risk
-Medium risk because broadening access can expose sensitive office documents, and admin policy should not be bypassed.
+Medium risk because unsupported storage, tenant policy, or broad sharing can block or expose workbook collaboration.
 
 ## Sources
-Use the Google Drive sharing record and Workspace admin policy boundary record.
+Use the Excel coauthoring record and the SharePoint/OneDrive sharing boundary record.
 `;
   const base = fs.realpathSync(
-    fs.mkdtempSync(path.join(os.tmpdir(), "local-expert-google-e2e-")),
+    fs.mkdtempSync(path.join(os.tmpdir(), "local-expert-excel-e2e-")),
   );
   return {
     TEST_HOME: path.join(base, "hermes"),
     assistantSpy: vi.fn(async () => ({
       kind: "chat",
-      reply: [googleSharingAnswer],
+      reply: [excelCoauthoringAnswer],
     })),
   };
 });
@@ -88,8 +88,8 @@ import {
   runLocalExpertAnswerEval,
   runLocalExpertScenarioEval,
 } from "../src/main/local-experts/macos-evals";
-import { GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_EVALS } from "../src/main/local-experts/google-workspace-evals";
-import { GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK } from "../src/main/local-experts/google-workspace-pack";
+import { EXCEL_LOCAL_EXPERT_EVALS } from "../src/main/local-experts/excel-evals";
+import { EXCEL_LOCAL_EXPERT_PACK } from "../src/main/local-experts/excel-pack";
 
 beforeEach(() => {
   assistantSpy.mockClear();
@@ -97,92 +97,86 @@ beforeEach(() => {
   mkdirSync(TEST_HOME, { recursive: true });
 });
 
-describe("Google Docs Editors Expert offline proof", () => {
-  it("installs, exposes scenario records, and answers an office-sharing question without live services", async () => {
+describe("Excel Expert offline proof", () => {
+  it("installs, exposes scenario records, and answers a coauthoring question without live services", async () => {
     expect(listLocalExpertPacks().packs.map((pack) => pack.id)).toEqual([
       "macos",
       "google-docs-editors",
       "excel",
     ]);
 
-    const installed = await installLocalExpertPack("google-docs-editors");
+    const installed = await installLocalExpertPack("excel");
 
     expect(installed).toMatchObject({
       ok: true,
-      packId: "google-docs-editors",
+      packId: "excel",
       installed: true,
-      recordsWritten: GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK.records.length,
+      recordsWritten: EXCEL_LOCAL_EXPERT_PACK.records.length,
     });
-    expect(installed.skillPath).toContain(
-      "assistant-google-docs-editors-expert",
-    );
+    expect(installed.skillPath).toContain("assistant-excel-expert");
 
     const vault = join(TEST_HOME, "sps-agent", "vault");
-    expect(existsSync(join(vault, "expert-google-docs-editors.md"))).toBe(true);
-    const sharingRecordPath = join(
+    expect(existsSync(join(vault, "expert-excel.md"))).toBe(true);
+    const coauthoringRecordPath = join(
       vault,
-      "expert_google-docs-editors",
-      "drive-share-specific-people.md",
+      "expert_excel",
+      "excel-coauthoring-cloud-requirements.md",
     );
-    expect(existsSync(sharingRecordPath)).toBe(true);
-    expect(readFileSync(sharingRecordPath, "utf-8")).toContain(
-      "workspace-admin-policy-boundaries",
+    expect(existsSync(coauthoringRecordPath)).toBe(true);
+    expect(readFileSync(coauthoringRecordPath, "utf-8")).toContain(
+      "excel-sharing-admin-boundaries",
     );
 
-    const detail = getLocalExpertPack("google-docs-editors");
+    const detail = getLocalExpertPack("excel");
     const scenario = detail.pack?.scenarios?.find(
-      (item) => item.id === "client-cannot-open-shared-file",
+      (item) => item.id === "shared-workbook-cannot-coauthor",
     );
     expect(detail.ok).toBe(true);
     expect(scenario).toMatchObject({
-      title: "Client cannot open shared file",
+      title: "Shared workbook cannot coauthor",
       recordIds: expect.arrayContaining([
-        "drive-share-specific-people",
-        "drive-public-link-risk",
-        "workspace-admin-policy-boundaries",
+        "excel-coauthoring-cloud-requirements",
+        "excel-sharing-admin-boundaries",
       ]),
       requiredEvidence: expect.arrayContaining([
-        "Exact error text or access request message",
+        "Workbook storage location: OneDrive, OneDrive for Business, SharePoint Online, or another location",
       ]),
     });
     expect(
-      runLocalExpertScenarioEval(
-        GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK,
-        scenario!,
-      ),
+      runLocalExpertScenarioEval(EXCEL_LOCAL_EXPERT_PACK, scenario!),
     ).toMatchObject({ ok: true });
 
     const recipe = listAssistantRecipes().find(
-      (item) => item.skillName === "assistant-google-docs-editors-expert",
+      (item) => item.skillName === "assistant-excel-expert",
     );
     expect(recipe).toBeTruthy();
 
     const run = await runAssistantRecipe(
       recipe!.id,
-      "A client outside our company says they cannot open the shared Google Doc. What should I check before changing sharing?",
+      "Our team cannot coauthor an Excel workbook. What should I check before changing sharing?",
     );
 
     expect(run.ok).toBe(true);
     expect(run.run).toMatchObject({
       recipeId: recipe!.id,
-      recipeName: "Google Docs Editors Expert",
+      recipeName: "Excel Expert",
       status: "success",
       resultText: expect.stringContaining("## What to check"),
     });
     expect(run.prompt).toContain(
-      "Never access Gmail, Drive, Docs, Sheets, Slides, or Apps Script directly",
+      "Never open Excel files, run VBA macros, run Office Scripts, or change sharing",
     );
-    expect(run.prompt).toContain("Do not run scripts");
-    expect(run.prompt).toContain("expert_google-docs-editors");
+    expect(run.prompt).toContain("Do not request credentials");
+    expect(run.prompt).toContain("expert_excel");
     expect(assistantSpy).toHaveBeenCalledWith(
-      expect.stringContaining("shared Google Doc"),
-      { pageTitle: "Google Docs Editors Expert", blocks: [], notes: [] },
+      expect.stringContaining("coauthor an Excel workbook"),
+      { pageTitle: "Excel Expert", blocks: [], notes: [] },
       undefined,
       true,
     );
 
-    const evalCase = GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_EVALS.cases.find(
-      (item) => item.id === "drive-share-specific-people",
+    const evalCase = EXCEL_LOCAL_EXPERT_EVALS.cases.find(
+      (item) => item.id === "excel-coauthoring-cloud-requirements",
     )!;
     expect(
       runLocalExpertAnswerEval(evalCase, run.run!.resultText),
