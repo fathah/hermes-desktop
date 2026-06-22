@@ -184,6 +184,7 @@ const expectedShots = [
   "04-docs-page-menu",
   "04b-doc-right-panel",
   "04c-doc-editor-persistence",
+  "04d-page-tree-dnd",
   "05-trash-restore",
   "06-my-work",
   "07-automations",
@@ -255,6 +256,26 @@ async function clickNav(label) {
 
 async function expectVisible(text, timeout = 8000) {
   await win.getByText(text, { exact: false }).first().waitFor({ timeout });
+}
+
+async function dragTreeRow(sourceLabel, targetLabel, where) {
+  const source = win.locator(".tree-row", { hasText: sourceLabel }).first();
+  const target = win.locator(".tree-row", { hasText: targetLabel }).first();
+  await source.waitFor({ timeout: 8000 });
+  await target.waitFor({ timeout: 8000 });
+  await source.scrollIntoViewIfNeeded();
+  await target.scrollIntoViewIfNeeded();
+  const box = await target.boundingBox();
+  if (!box) throw new Error(`Missing drop target bounds for ${targetLabel}`);
+  const ratio = where === "before" ? 0.12 : where === "after" ? 0.88 : 0.5;
+  const clientX = box.x + box.width / 2;
+  const clientY = box.y + box.height * ratio;
+  await source.dispatchEvent("dragstart", { clientX, clientY });
+  await win.waitForTimeout(50);
+  await target.dispatchEvent("dragover", { clientX, clientY });
+  await win.waitForTimeout(50);
+  await target.dispatchEvent("drop", { clientX, clientY });
+  await source.dispatchEvent("dragend", { clientX, clientY });
 }
 
 async function getHealthCollections() {
@@ -471,6 +492,11 @@ await shot("04c-doc-editor-persistence", async () => {
     .first()
     .click({ force: true });
   await expectVisible("Alpha smoke persisted body.");
+});
+
+await shot("04d-page-tree-dnd", async () => {
+  await dragTreeRow("Alpha Smoke Edited", "Projects DB", "inside");
+  await win.waitForTimeout(900);
 });
 
 await shot("05-trash-restore", async () => {
@@ -707,6 +733,14 @@ if (!scratchMarkdown.includes("Smoke dashboard scratchpad note.")) {
 }
 if (existsSync(join(vault, "trashed_delete.md"))) {
   console.log("TRASH_PURGE_FILE_STILL_EXISTS");
+  process.exit(1);
+}
+const savedWorkspace = JSON.parse(
+  readFileSync(join(sps, "workspace.json"), "utf8"),
+);
+const savedDbNode = savedWorkspace.tree.find((node) => node.id === "db");
+if (!savedDbNode?.children?.some((node) => node.id === "alpha")) {
+  console.log("PAGE_TREE_DND_NOT_PERSISTED");
   process.exit(1);
 }
 const alphaMarkdown = readFileSync(join(vault, "alpha.md"), "utf8");

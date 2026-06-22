@@ -27,7 +27,7 @@ import {
   getOcrTime,
   isScheduledNow,
 } from "../../lib/ocrSchedule";
-import type { Block, Task } from "../../types";
+import type { Block, Task, TrashEntry, TreeNode } from "../../types";
 import type { Store, WorkspaceSlice } from "../storeTypes";
 import type { WorkDetail } from "../../../../../../shared/openalex/core";
 
@@ -71,6 +71,20 @@ function dbSources(blocks: Block[]): Set<string> {
     if (b.type === "database" && b.source) out.add(b.source);
   }
   return out;
+}
+
+function cloneTreeNode(node: TreeNode): TreeNode {
+  return { id: node.id, children: node.children.map(cloneTreeNode) };
+}
+
+function trashSubtree(entry: TrashEntry): TreeNode {
+  if (entry.subtree) return cloneTreeNode(entry.subtree);
+  return {
+    id: entry.id,
+    children: (entry.ids || [])
+      .filter((id) => id !== entry.id)
+      .map((id) => ({ id, children: [] })),
+  };
 }
 
 type StoreGet = () => Store;
@@ -557,21 +571,25 @@ export const createWorkspaceSlice: StateCreator<
       get().flash("Home can't be deleted");
       return;
     }
-    const { tree, meta } = get();
-    const node = treeFind(tree, target);
-    const ids = node ? treeWalkIds(node) : [target];
-    set((s) => ({
-      trash: [
-        ...s.trash,
-        {
-          id: target,
-          title: (meta[target] || {}).title || "Untitled",
-          icon: (meta[target] || {}).icon || "📄",
-          ids,
-        },
-      ],
-      tree: treeRemove(s.tree, target)[0],
-    }));
+    let ids = [target];
+    set((s) => {
+      const [tree, subtree] = treeRemove(s.tree, target);
+      ids = subtree ? treeWalkIds(subtree) : [target];
+      const meta = s.meta[target] || {};
+      return {
+        trash: [
+          ...s.trash,
+          {
+            id: target,
+            title: meta.title || "Untitled",
+            icon: meta.icon || "📄",
+            ids,
+            ...(subtree ? { subtree } : {}),
+          },
+        ],
+        tree,
+      };
+    });
     get().flash("Moved to trash");
     if (ids.includes(get().page)) get().selectPage("home");
   },
@@ -579,14 +597,16 @@ export const createWorkspaceSlice: StateCreator<
   restorePage: (entry) => {
     set((s) => ({
       trash: s.trash.filter((x) => x.id !== entry.id),
-      tree: treeInsert(s.tree, null, { id: entry.id, children: [] }, "root"),
+      tree: treeInsert(s.tree, null, trashSubtree(entry), "root"),
     }));
     get().flash("Restored to workspace");
   },
 
   purgeTrashedPage: (entry) => {
     const ids = entry.ids.length ? entry.ids : [entry.id];
+    const deletedIds = new Set(ids);
     const sources = new Set<string>();
+    const liveSources = new Set<string>();
     set((s) => {
       const docs = { ...s.docs };
       const meta = { ...s.meta };
@@ -594,6 +614,10 @@ export const createWorkspaceSlice: StateCreator<
         for (const source of dbSources(docs[id] || [])) sources.add(source);
         delete docs[id];
         delete meta[id];
+      }
+      for (const [id, blocks] of Object.entries(docs)) {
+        if (deletedIds.has(id)) continue;
+        for (const source of dbSources(blocks)) liveSources.add(source);
       }
       return {
         docs,
@@ -605,7 +629,9 @@ export const createWorkspaceSlice: StateCreator<
       };
     });
     void deleteVaultPages(ids);
-    void deleteVaultDbFolders([...sources]);
+    void deleteVaultDbFolders(
+      [...sources].filter((source) => !liveSources.has(source)),
+    );
     get().flash("Permanently deleted");
   },
 

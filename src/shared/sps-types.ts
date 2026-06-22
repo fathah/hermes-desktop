@@ -461,6 +461,7 @@ export interface TrashEntry {
   title: string;
   icon: string;
   ids: string[];
+  subtree?: TreeNode;
 }
 
 /** The persisted workspace document. */
