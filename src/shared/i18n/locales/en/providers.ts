@@ -38,7 +38,7 @@ export default {
   agentUpdates: {
     sectionTitle: "Hermes Agent Updates",
     sectionHint:
-      "Checks the local Hermes Agent engine every day at 4:00 AM IST. Auto-apply stays off until you enable it.",
+      "Checks the local Hermes Agent engine every day at 4:00 AM local time. Auto-apply stays off until you enable it.",
     enabled: "Daily check",
     autoApply: "Auto-apply updates",
     runNow: "Run now",

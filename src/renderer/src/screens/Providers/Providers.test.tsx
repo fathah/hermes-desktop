@@ -42,11 +42,11 @@ describe("Providers", () => {
         enabled: true,
         autoApply: false,
         schedule: "0 4 * * *",
-        timezone: "Asia/Kolkata",
-        lastCheckedAt: "2026-06-19T22:30:00.000Z",
-        nextCheckAt: "2026-06-20T22:30:00.000Z",
+        timezone: "America/New_York",
+        lastCheckedAt: "2026-06-19T08:00:00.000Z",
+        nextCheckAt: "2026-06-20T08:00:00.000Z",
         lastResult: {
-          checkedAt: "2026-06-19T22:30:00.000Z",
+          checkedAt: "2026-06-19T08:00:00.000Z",
           status: "available",
           message: "Hermes Agent update available.",
           behindBy: 2,
@@ -70,13 +70,13 @@ describe("Providers", () => {
         enabled: true,
         autoApply: false,
         schedule: "0 4 * * *",
-        timezone: "Asia/Kolkata",
+        timezone: "America/New_York",
         lastCheckedAt: null,
-        nextCheckAt: "2026-06-20T22:30:00.000Z",
+        nextCheckAt: "2026-06-20T08:00:00.000Z",
         lastResult: null,
       }),
       runHermesAgentUpdateCheck: vi.fn().mockResolvedValue({
-        checkedAt: "2026-06-20T22:30:00.000Z",
+        checkedAt: "2026-06-20T08:00:00.000Z",
         status: "available",
         message: "Hermes Agent update available.",
       }),
@@ -109,7 +109,15 @@ describe("Providers", () => {
     expect(screen.getAllByText("Use").length).toBeGreaterThan(0);
     expect(screen.getByText("Remove local sign-in")).toBeInTheDocument();
     expect(screen.getByText("Hermes Agent Updates")).toBeInTheDocument();
-    expect(screen.getByText("4:00 AM IST")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        new Intl.DateTimeFormat(undefined, {
+          hour: "numeric",
+          minute: "2-digit",
+          timeZoneName: "short",
+        }).format(new Date("2026-06-20T08:00:00.000Z")),
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Run now")).toBeInTheDocument();
     expect(screen.getByText("Available")).toBeInTheDocument();
   });

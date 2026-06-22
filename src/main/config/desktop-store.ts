@@ -112,8 +112,7 @@ export function setOnboardingCompleted(completed: boolean): void {
 
 const HERMES_AGENT_UPDATE_KEY = "hermesAgentUpdateByProfile";
 const HERMES_AGENT_UPDATE_SCHEDULE = "0 4 * * *";
-const HERMES_AGENT_UPDATE_TIMEZONE = "Asia/Kolkata";
-const IST_OFFSET_MS = 330 * 60 * 1000;
+const HERMES_AGENT_UPDATE_HOUR = 4;
 
 export type HermesAgentUpdateRoutineStatus =
   | "current"
@@ -140,7 +139,7 @@ export interface HermesAgentUpdateRoutineSettings {
 export interface HermesAgentUpdateRoutineState
   extends HermesAgentUpdateRoutineSettings {
   schedule: typeof HERMES_AGENT_UPDATE_SCHEDULE;
-  timezone: typeof HERMES_AGENT_UPDATE_TIMEZONE;
+  timezone: string;
   lastCheckedAt: string | null;
   nextCheckAt: string;
   lastResult: HermesAgentUpdateRoutineResult | null;
@@ -165,35 +164,34 @@ function hermesAgentUpdateMap(
     : {};
 }
 
-function istShiftedDate(date: Date): Date {
-  return new Date(date.getTime() + IST_OFFSET_MS);
+function localTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "local";
+  } catch {
+    return "local";
+  }
 }
 
-function istDateKey(date: Date): string {
-  return istShiftedDate(date).toISOString().slice(0, 10);
+function localDateKey(date: Date): string {
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
 }
 
-function scheduledUtcForIstDate(date: Date): Date {
-  const shifted = istShiftedDate(date);
+function scheduledLocalForDate(date: Date, dayOffset = 0): Date {
   return new Date(
-    Date.UTC(
-      shifted.getUTCFullYear(),
-      shifted.getUTCMonth(),
-      shifted.getUTCDate(),
-      4,
-      0,
-      0,
-      0,
-    ) - IST_OFFSET_MS,
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate() + dayOffset,
+    HERMES_AGENT_UPDATE_HOUR,
+    0,
+    0,
+    0,
   );
 }
 
 export function nextHermesAgentUpdateCheckAt(now = new Date()): string {
-  const today = scheduledUtcForIstDate(now);
+  const today = scheduledLocalForDate(now);
   if (now.getTime() < today.getTime()) return today.toISOString();
-  return scheduledUtcForIstDate(
-    new Date(today.getTime() + 24 * 60 * 60 * 1000),
-  ).toISOString();
+  return scheduledLocalForDate(now, 1).toISOString();
 }
 
 export function isHermesAgentUpdateRoutineDue(
@@ -201,12 +199,12 @@ export function isHermesAgentUpdateRoutineDue(
   now = new Date(),
 ): boolean {
   if (state.enabled === false) return false;
-  const todaySchedule = scheduledUtcForIstDate(now);
+  const todaySchedule = scheduledLocalForDate(now);
   if (now.getTime() < todaySchedule.getTime()) return false;
   if (!state.lastCheckedAt) return true;
   const last = new Date(state.lastCheckedAt);
   if (Number.isNaN(last.getTime())) return true;
-  return istDateKey(last) !== istDateKey(now);
+  return localDateKey(last) !== localDateKey(now);
 }
 
 export function getHermesAgentUpdateRoutine(
@@ -220,7 +218,7 @@ export function getHermesAgentUpdateRoutine(
     enabled: stored.enabled !== false,
     autoApply: stored.autoApply === true,
     schedule: HERMES_AGENT_UPDATE_SCHEDULE,
-    timezone: HERMES_AGENT_UPDATE_TIMEZONE,
+    timezone: localTimezone(),
     lastCheckedAt: stored.lastCheckedAt || lastResult?.checkedAt || null,
     nextCheckAt: nextHermesAgentUpdateCheckAt(now),
     lastResult,

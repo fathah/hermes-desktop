@@ -7,6 +7,7 @@ const TEST_DIR = join(
   tmpdir(),
   `hermes-test-agent-update-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
 );
+const ORIGINAL_TZ = process.env.TZ;
 
 async function freshConfig(
   home: string,
@@ -17,29 +18,35 @@ async function freshConfig(
 }
 
 beforeEach(() => {
+  process.env.TZ = "America/New_York";
   mkdirSync(TEST_DIR, { recursive: true });
 });
 
 afterEach(() => {
+  if (ORIGINAL_TZ === undefined) {
+    delete process.env.TZ;
+  } else {
+    process.env.TZ = ORIGINAL_TZ;
+  }
   delete process.env.HERMES_HOME;
   vi.resetModules();
   rmSync(TEST_DIR, { recursive: true, force: true });
 });
 
 describe("Hermes Agent update routine state", () => {
-  it("defaults to a daily 4 AM IST check with auto-apply off", async () => {
+  it("defaults to a daily 4 AM local check with auto-apply off", async () => {
     const { getHermesAgentUpdateRoutine } = await freshConfig(TEST_DIR);
 
     const state = getHermesAgentUpdateRoutine(
       "work",
-      new Date("2026-06-20T21:00:00.000Z"),
+      new Date("2026-06-20T07:00:00.000Z"),
     );
 
     expect(state.enabled).toBe(true);
     expect(state.autoApply).toBe(false);
-    expect(state.timezone).toBe("Asia/Kolkata");
+    expect(state.timezone).toBe("America/New_York");
     expect(state.schedule).toBe("0 4 * * *");
-    expect(state.nextCheckAt).toBe("2026-06-20T22:30:00.000Z");
+    expect(state.nextCheckAt).toBe("2026-06-20T08:00:00.000Z");
     expect(state.lastResult).toBeNull();
   });
 
@@ -63,7 +70,7 @@ describe("Hermes Agent update routine state", () => {
     ).toBe(false);
   });
 
-  it("records the latest check result and keeps the next check on the next IST day", async () => {
+  it("records the latest check result and keeps the next check on the next local day", async () => {
     const { getHermesAgentUpdateRoutine, recordHermesAgentUpdateResult } =
       await freshConfig(TEST_DIR);
 
@@ -86,37 +93,46 @@ describe("Hermes Agent update routine state", () => {
     );
     expect(state.lastCheckedAt).toBe("2026-06-20T23:05:00.000Z");
     expect(state.lastResult?.status).toBe("available");
-    expect(state.nextCheckAt).toBe("2026-06-21T22:30:00.000Z");
+    expect(state.nextCheckAt).toBe("2026-06-21T08:00:00.000Z");
   });
 
-  it("decides due status by IST calendar day", async () => {
+  it("decides due status by local calendar day", async () => {
     const { isHermesAgentUpdateRoutineDue } = await freshConfig(TEST_DIR);
 
     expect(
       isHermesAgentUpdateRoutineDue(
         { enabled: true, lastCheckedAt: null },
-        new Date("2026-06-20T22:20:00.000Z"),
+        new Date("2026-06-20T07:50:00.000Z"),
       ),
     ).toBe(false);
     expect(
       isHermesAgentUpdateRoutineDue(
         { enabled: true, lastCheckedAt: null },
-        new Date("2026-06-20T22:35:00.000Z"),
+        new Date("2026-06-20T08:05:00.000Z"),
       ),
     ).toBe(true);
     expect(
       isHermesAgentUpdateRoutineDue(
         {
           enabled: true,
-          lastCheckedAt: "2026-06-20T22:35:00.000Z",
+          lastCheckedAt: "2026-06-20T08:05:00.000Z",
         },
         new Date("2026-06-20T23:00:00.000Z"),
       ),
     ).toBe(false);
     expect(
       isHermesAgentUpdateRoutineDue(
+        {
+          enabled: true,
+          lastCheckedAt: "2026-06-20T08:05:00.000Z",
+        },
+        new Date("2026-06-21T08:05:00.000Z"),
+      ),
+    ).toBe(true);
+    expect(
+      isHermesAgentUpdateRoutineDue(
         { enabled: false, lastCheckedAt: null },
-        new Date("2026-06-20T22:35:00.000Z"),
+        new Date("2026-06-20T08:05:00.000Z"),
       ),
     ).toBe(false);
   });

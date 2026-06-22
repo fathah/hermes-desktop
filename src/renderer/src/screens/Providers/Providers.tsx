@@ -494,7 +494,19 @@ function Providers({
       day: "numeric",
       hour: "numeric",
       minute: "2-digit",
-      timeZone: "Asia/Kolkata",
+      timeZoneName: "short",
+    }).format(date);
+  }
+
+  function formatUpdateSchedule(nextCheckAt: string | null | undefined): string {
+    const parsed = nextCheckAt ? new Date(nextCheckAt) : new Date();
+    const date = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+    if (!nextCheckAt || Number.isNaN(parsed.getTime())) {
+      date.setHours(4, 0, 0, 0);
+    }
+    return new Intl.DateTimeFormat(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
       timeZoneName: "short",
     }).format(date);
   }
@@ -1042,7 +1054,9 @@ function Providers({
           <div className="provider-update-grid">
             <div>
               <span>{t("providers.agentUpdates.schedule")}</span>
-              <strong>4:00 AM IST</strong>
+              <strong>
+                {formatUpdateSchedule(agentUpdateRoutine?.nextCheckAt)}
+              </strong>
             </div>
             <div>
               <span>{t("providers.agentUpdates.lastChecked")}</span>
