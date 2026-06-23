@@ -9,6 +9,9 @@ vi.mock("electron", () => {
     app: {
       isReady: () => true,
     },
+    powerMonitor: {
+      getSystemIdleTime: () => 0,
+    },
     desktopCapturer: {
       getSources: async () => [{ thumbnail: mockThumbnail }],
     },
@@ -23,6 +26,7 @@ const mockProfileHome = vi.fn(() => "/tmp/hermes-test-profile");
 const mockWriteDesktopConfig = vi.fn();
 const mockReadDesktopConfig = vi.fn(() => ({}));
 const mockMaybeRunHermesAgentUpdateRoutine = vi.fn();
+const mockMaybeRunHermesUpstreamWatchRoutine = vi.fn();
 
 vi.mock("child_process", () => {
   const fns = {
@@ -97,6 +101,13 @@ vi.mock("../src/main/hermes-agent-updates", () => ({
   ): Promise<unknown> => mockMaybeRunHermesAgentUpdateRoutine(now, profile),
 }));
 
+vi.mock("../src/main/hermes-upstream-watch", () => ({
+  maybeRunHermesUpstreamWatchRoutine: (
+    now: Date,
+    profile?: string,
+  ): Promise<unknown> => mockMaybeRunHermesUpstreamWatchRoutine(now, profile),
+}));
+
 vi.mock("../src/main/config", () => ({
   readDesktopConfig: () => mockReadDesktopConfig(),
   writeDesktopConfig: (c: unknown) => mockWriteDesktopConfig(c),
@@ -113,6 +124,7 @@ describe("Scheduler Service", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockMaybeRunHermesAgentUpdateRoutine.mockResolvedValue(null);
+    mockMaybeRunHermesUpstreamWatchRoutine.mockResolvedValue(null);
   });
 
   it("should get default scheduler config", () => {
@@ -134,7 +146,7 @@ describe("Scheduler Service", () => {
   it("should trigger due jobs when tickScheduler runs", async () => {
     const mockJobs = [
       {
-        id: "job-1",
+        id: "upstream-watch-job-1",
         name: "Job 1",
         enabled: true,
         state: "idle",
@@ -172,6 +184,29 @@ describe("Scheduler Service", () => {
       expect.any(Date),
       "test-profile",
     );
+  });
+
+  it("checks upstream watch without blocking due cron jobs", async () => {
+    mockMaybeRunHermesUpstreamWatchRoutine.mockImplementationOnce(
+      () => new Promise(() => {}),
+    );
+    mockListCronJobs.mockResolvedValueOnce([
+      {
+        id: "job-1",
+        name: "Job 1",
+        enabled: true,
+        state: "idle",
+        next_run_at: new Date(Date.now() - 5000).toISOString(),
+      },
+    ]);
+
+    await tickScheduler("test-profile");
+
+    expect(mockMaybeRunHermesUpstreamWatchRoutine).toHaveBeenCalledWith(
+      expect.any(Date),
+      "test-profile",
+    );
+    await vi.waitFor(() => expect(mockSpawn).toHaveBeenCalled());
   });
 
   describe("captureScreenshot", () => {

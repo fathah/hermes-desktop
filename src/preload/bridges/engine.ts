@@ -84,6 +84,10 @@ export const engineBridge = {
       checkedAt: string;
       status: "current" | "available" | "updated" | "skipped" | "error";
       message: string;
+      phase?: "check" | "update" | "restart";
+      reason?: string;
+      restartStatus?: "not-needed" | "restarted" | "failed";
+      restartMessage?: string;
       localHead?: string;
       upstreamHead?: string;
       behindBy?: number;
@@ -109,18 +113,68 @@ export const engineBridge = {
       behindBy?: number;
       changelog?: string;
     } | null;
-  }> => ipcRenderer.invoke("set-hermes-agent-update-routine", settings, profile),
+  }> =>
+    ipcRenderer.invoke("set-hermes-agent-update-routine", settings, profile),
   runHermesAgentUpdateCheck: (
     profile?: string,
+    options?: Partial<{ autoApply: boolean }>,
   ): Promise<{
     checkedAt: string;
     status: "current" | "available" | "updated" | "skipped" | "error";
     message: string;
+    phase?: "check" | "update" | "restart";
+    reason?: string;
+    restartStatus?: "not-needed" | "restarted" | "failed";
+    restartMessage?: string;
     localHead?: string;
     upstreamHead?: string;
     behindBy?: number;
     changelog?: string;
-  }> => ipcRenderer.invoke("run-hermes-agent-update-check", profile),
+  }> => ipcRenderer.invoke("run-hermes-agent-update-check", profile, options),
+  getHermesUpstreamWatchState: (
+    profile?: string,
+  ): Promise<{
+    lastRunAt: string | null;
+    lastSeenCommit: string | null;
+    lastSeenRelease: string | null;
+    latestReportPath: string | null;
+    classifiedCounts: Partial<
+      Record<
+        | "runtime-required"
+        | "api-contract"
+        | "desktop-parity"
+        | "security"
+        | "cron-automation"
+        | "provider-model"
+        | "docs-only"
+        | "ignore",
+        number
+      >
+    >;
+    lastError?: string;
+  }> => ipcRenderer.invoke("get-hermes-upstream-watch-state", profile),
+  runHermesUpstreamWatch: (
+    profile?: string,
+  ): Promise<{
+    lastRunAt: string | null;
+    lastSeenCommit: string | null;
+    lastSeenRelease: string | null;
+    latestReportPath: string | null;
+    classifiedCounts: Partial<
+      Record<
+        | "runtime-required"
+        | "api-contract"
+        | "desktop-parity"
+        | "security"
+        | "cron-automation"
+        | "provider-model"
+        | "docs-only"
+        | "ignore",
+        number
+      >
+    >;
+    lastError?: string;
+  }> => ipcRenderer.invoke("run-hermes-upstream-watch", profile),
 
   // Voice I/O (WS4)
   getVoiceStatus: (profile?: string): Promise<{ hasKey: boolean }> =>

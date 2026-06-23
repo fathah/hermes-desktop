@@ -5731,6 +5731,10 @@ body {
   word-break: break-word;
 }
 
+.provider-update-path-row {
+  grid-column: 1 / -1;
+}
+
 .provider-update-status {
   width: fit-content;
   padding: 2px 7px;

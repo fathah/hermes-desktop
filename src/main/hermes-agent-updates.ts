@@ -62,13 +62,20 @@ async function gitStatusPorcelain(): Promise<{ ok: boolean; out: string }> {
   });
 }
 
-async function hermesRepoIsClean(): Promise<{ clean: boolean; reason?: string }> {
+async function hermesRepoIsClean(): Promise<{
+  clean: boolean;
+  reason?: string;
+  code?: string;
+}> {
   const status = await gitStatusPorcelain();
-  if (!status.ok) return { clean: false, reason: status.out };
+  if (!status.ok) {
+    return { clean: false, reason: status.out, code: "repo-status-failed" };
+  }
   if (status.out) {
     return {
       clean: false,
       reason: "Hermes Agent repo has uncommitted changes.",
+      code: "dirty-repo",
     };
   }
   return { clean: true };
@@ -91,6 +98,15 @@ function skippedUpdateReason(reason: string | undefined): boolean {
   );
 }
 
+function checkFailureReason(reason: string | undefined): string | undefined {
+  if (!reason) return undefined;
+  return skippedUpdateReason(reason) ? reason : "fetch-failed";
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 export async function runHermesAgentUpdateCheck(
   profile?: string,
   options: HermesAgentUpdateCheckOptions = {},
@@ -108,6 +124,11 @@ export async function runHermesAgentUpdateCheck(
         "skipped",
         "Skipped because Hermes Desktop is connected to a remote or SSH engine.",
         checkedAt,
+        {
+          phase: "check",
+          reason: "remote-mode",
+          restartStatus: "not-needed",
+        },
       );
     } else {
       const update = await checkHermesUpdate();
@@ -123,17 +144,28 @@ export async function runHermesAgentUpdateCheck(
           ? `Update check did not complete: ${update.reason}.`
           : "Hermes Agent is already current.";
         finalResult = result(status, message, checkedAt, {
+          phase: "check",
+          reason: checkFailureReason(update.reason) || "already-current",
+          restartStatus: "not-needed",
           localHead: update.localHead,
           upstreamHead: update.upstreamHead,
           changelog,
         });
       } else if (!autoApply) {
-        finalResult = result("available", "Hermes Agent update available.", checkedAt, {
-          localHead: update.localHead,
-          upstreamHead: update.upstreamHead,
-          behindBy: update.behindBy,
-          changelog,
-        });
+        finalResult = result(
+          "available",
+          "Hermes Agent update available.",
+          checkedAt,
+          {
+            phase: "check",
+            reason: "update-available",
+            restartStatus: "not-needed",
+            localHead: update.localHead,
+            upstreamHead: update.upstreamHead,
+            behindBy: update.behindBy,
+            changelog,
+          },
+        );
       } else {
         const clean = await hermesRepoIsClean();
         if (!clean.clean) {
@@ -142,6 +174,9 @@ export async function runHermesAgentUpdateCheck(
             clean.reason || "Skipped because Hermes Agent repo is not clean.",
             checkedAt,
             {
+              phase: "update",
+              reason: clean.code || "dirty-repo",
+              restartStatus: "not-needed",
               localHead: update.localHead,
               upstreamHead: update.upstreamHead,
               behindBy: update.behindBy,
@@ -149,14 +184,73 @@ export async function runHermesAgentUpdateCheck(
             },
           );
         } else {
-          await runHermesUpdate(options.onProgress || (() => {}));
-          if (isGatewayRunning(profile)) restartGateway(profile);
-          finalResult = result("updated", "Hermes Agent updated successfully.", checkedAt, {
-            localHead: update.localHead,
-            upstreamHead: update.upstreamHead,
-            behindBy: update.behindBy,
-            changelog,
-          });
+          try {
+            await runHermesUpdate(options.onProgress || (() => {}));
+          } catch (err) {
+            finalResult = result("error", errorMessage(err), checkedAt, {
+              phase: "update",
+              reason: "update-failed",
+              restartStatus: "not-needed",
+              localHead: update.localHead,
+              upstreamHead: update.upstreamHead,
+              behindBy: update.behindBy,
+              changelog,
+            });
+            recordHermesAgentUpdateResult(finalResult, profile);
+            return finalResult;
+          }
+
+          if (isGatewayRunning(profile)) {
+            try {
+              restartGateway(profile);
+              finalResult = result(
+                "updated",
+                "Hermes Agent updated successfully.",
+                checkedAt,
+                {
+                  phase: "restart",
+                  reason: "restart-succeeded",
+                  restartStatus: "restarted",
+                  localHead: update.localHead,
+                  upstreamHead: update.upstreamHead,
+                  behindBy: update.behindBy,
+                  changelog,
+                },
+              );
+            } catch (err) {
+              const restartMessage = errorMessage(err);
+              finalResult = result(
+                "updated",
+                `Hermes Agent updated, but the gateway restart failed: ${restartMessage}`,
+                checkedAt,
+                {
+                  phase: "restart",
+                  reason: "restart-failed",
+                  restartStatus: "failed",
+                  restartMessage,
+                  localHead: update.localHead,
+                  upstreamHead: update.upstreamHead,
+                  behindBy: update.behindBy,
+                  changelog,
+                },
+              );
+            }
+          } else {
+            finalResult = result(
+              "updated",
+              "Hermes Agent updated successfully.",
+              checkedAt,
+              {
+                phase: "update",
+                reason: "updated",
+                restartStatus: "not-needed",
+                localHead: update.localHead,
+                upstreamHead: update.upstreamHead,
+                behindBy: update.behindBy,
+                changelog,
+              },
+            );
+          }
         }
       }
     }
@@ -165,6 +259,11 @@ export async function runHermesAgentUpdateCheck(
       "error",
       err instanceof Error ? err.message : String(err),
       checkedAt,
+      {
+        phase: "check",
+        reason: "fetch-failed",
+        restartStatus: "not-needed",
+      },
     );
   }
 

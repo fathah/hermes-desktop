@@ -200,6 +200,8 @@ describe("Legacy APIs preserved (backward compat)", () => {
     "getHermesAgentUpdateRoutine",
     "setHermesAgentUpdateRoutine",
     "runHermesAgentUpdateCheck",
+    "getHermesUpstreamWatchState",
+    "runHermesUpstreamWatch",
     // Config
     "getEnv",
     "setEnv",

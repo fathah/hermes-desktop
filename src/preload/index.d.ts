@@ -138,6 +138,10 @@ type HermesAgentUpdateRoutineResult = {
   checkedAt: string;
   status: "current" | "available" | "updated" | "skipped" | "error";
   message: string;
+  phase?: "check" | "update" | "restart";
+  reason?: string;
+  restartStatus?: "not-needed" | "restarted" | "failed";
+  restartMessage?: string;
   localHead?: string;
   upstreamHead?: string;
   behindBy?: number;
@@ -152,6 +156,25 @@ type HermesAgentUpdateRoutineState = {
   lastCheckedAt: string | null;
   nextCheckAt: string;
   lastResult: HermesAgentUpdateRoutineResult | null;
+};
+
+type HermesUpstreamWatchCategory =
+  | "runtime-required"
+  | "api-contract"
+  | "desktop-parity"
+  | "security"
+  | "cron-automation"
+  | "provider-model"
+  | "docs-only"
+  | "ignore";
+
+type HermesUpstreamWatchState = {
+  lastRunAt: string | null;
+  lastSeenCommit: string | null;
+  lastSeenRelease: string | null;
+  latestReportPath: string | null;
+  classifiedCounts: Partial<Record<HermesUpstreamWatchCategory, number>>;
+  lastError?: string;
 };
 
 interface ElectronAPI {
@@ -379,7 +402,14 @@ interface HermesAPI {
   ) => Promise<HermesAgentUpdateRoutineState>;
   runHermesAgentUpdateCheck: (
     profile?: string,
+    options?: Partial<{ autoApply: boolean }>,
   ) => Promise<HermesAgentUpdateRoutineResult>;
+  getHermesUpstreamWatchState: (
+    profile?: string,
+  ) => Promise<HermesUpstreamWatchState>;
+  runHermesUpstreamWatch: (
+    profile?: string,
+  ) => Promise<HermesUpstreamWatchState>;
   getVoiceStatus: (profile?: string) => Promise<{ hasKey: boolean }>;
   transcribeAudio: (
     audio: ArrayBuffer,

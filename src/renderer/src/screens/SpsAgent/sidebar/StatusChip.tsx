@@ -4,6 +4,7 @@
 // no API key, Gateway when offline, else connection Settings). Polls coarsely so
 // the dot reflects gateway up/down without hammering IPC.
 import { useEffect, useState } from "react";
+import { Icon } from "../components/Icon";
 import { openSettings, type AdminView } from "../../../lib/openSettings";
 
 type Health = "ok" | "warn" | "down";
@@ -24,6 +25,7 @@ const DOT_COLOR: Record<Health, string> = {
 
 export function StatusChip(): React.JSX.Element | null {
   const [status, setStatus] = useState<Status | null>(null);
+  const [updateBusy, setUpdateBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -73,46 +75,104 @@ export function StatusChip(): React.JSX.Element | null {
   if (!status) return null;
 
   return (
-    <button
-      className="rail-status-chip"
-      title={status.hint}
-      aria-label={`Connection ${status.label}, profile ${status.profile}. ${status.hint}.`}
-      onClick={() => openSettings(status.target)}
+    <div
       style={{
         display: "flex",
         alignItems: "center",
         gap: 6,
         width: "100%",
-        padding: "4px 10px",
-        margin: 0,
-        background: "none",
-        border: "none",
-        font: "inherit",
-        fontSize: "0.72rem",
-        color: "var(--muted, #888)",
-        cursor: "pointer",
-        textAlign: "left",
       }}
     >
-      <span
-        aria-hidden="true"
+      <button
+        className="rail-status-chip"
+        title={status.hint}
+        aria-label={`Connection ${status.label}, profile ${status.profile}. ${status.hint}.`}
+        onClick={() => openSettings(status.target)}
         style={{
-          width: 7,
-          height: 7,
-          borderRadius: "50%",
-          background: DOT_COLOR[status.health],
-          flex: "none",
-        }}
-      />
-      <span
-        style={{
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          flex: "1 1 auto",
+          minWidth: 0,
+          padding: "4px 10px",
+          margin: 0,
+          background: "none",
+          border: "none",
+          font: "inherit",
+          fontSize: "0.72rem",
+          color: "var(--muted, #888)",
+          cursor: "pointer",
+          textAlign: "left",
         }}
       >
-        {status.label} · {status.profile}
-      </span>
-    </button>
+        <span
+          aria-hidden="true"
+          style={{
+            width: 7,
+            height: 7,
+            borderRadius: "50%",
+            background: DOT_COLOR[status.health],
+            flex: "none",
+          }}
+        />
+        <span
+          style={{
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {status.label} · {status.profile}
+        </span>
+      </button>
+      <button
+        type="button"
+        title="Update Hermes Agent engine now"
+        aria-label="Update Hermes Agent engine now"
+        disabled={updateBusy}
+        onClick={async () => {
+          const api = window.hermesAPI;
+          if (!api?.runHermesAgentUpdateCheck) return;
+          setUpdateBusy(true);
+          try {
+            const result = await api.runHermesAgentUpdateCheck(status.profile, {
+              autoApply: true,
+            });
+            setStatus((prev) =>
+              prev ? { ...prev, hint: result.message || prev.hint } : prev,
+            );
+          } catch (err) {
+            setStatus((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    health: "warn",
+                    hint: err instanceof Error ? err.message : String(err),
+                  }
+                : prev,
+            );
+          } finally {
+            setUpdateBusy(false);
+          }
+        }}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flex: "0 0 24px",
+          width: 24,
+          height: 24,
+          padding: 0,
+          margin: 0,
+          background: "none",
+          border: "none",
+          color: "var(--muted, #888)",
+          cursor: updateBusy ? "default" : "pointer",
+          opacity: updateBusy ? 0.55 : 1,
+        }}
+      >
+        <Icon name="refresh" size={13} />
+      </button>
+    </div>
   );
 }

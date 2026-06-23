@@ -28,6 +28,10 @@ import {
 } from "../config";
 import { runHermesAgentUpdateCheck } from "../hermes-agent-updates";
 import {
+  getHermesUpstreamWatchState,
+  runHermesUpstreamWatch,
+} from "../hermes-upstream-watch";
+import {
   sshGetHermesVersion,
   sshRunDoctor,
   sshRunUpdate,
@@ -157,9 +161,8 @@ export function registerSystemIpc(
     }
   });
 
-  safeHandle(
-    "get-hermes-agent-update-routine",
-    (_event, profile?: string) => getHermesAgentUpdateRoutine(profile),
+  safeHandle("get-hermes-agent-update-routine", (_event, profile?: string) =>
+    getHermesAgentUpdateRoutine(profile),
   );
   safeHandle(
     "set-hermes-agent-update-routine",
@@ -169,14 +172,27 @@ export function registerSystemIpc(
       profile?: string,
     ) => setHermesAgentUpdateRoutine(settings, profile),
   );
-  safeHandle("run-hermes-agent-update-check", async (event, profile?: string) =>
-    runHermesAgentUpdateCheck(profile, {
-      onProgress: (progress: InstallProgress) => {
-        if (!event.sender.isDestroyed()) {
-          event.sender.send("install-progress", progress);
-        }
-      },
-    }),
+  safeHandle(
+    "run-hermes-agent-update-check",
+    async (
+      event,
+      profile?: string,
+      options?: Partial<{ autoApply: boolean }>,
+    ) =>
+      runHermesAgentUpdateCheck(profile, {
+        autoApply: options?.autoApply,
+        onProgress: (progress: InstallProgress) => {
+          if (!event.sender.isDestroyed()) {
+            event.sender.send("install-progress", progress);
+          }
+        },
+      }),
+  );
+  safeHandle("get-hermes-upstream-watch-state", (_event, profile?: string) =>
+    getHermesUpstreamWatchState(profile),
+  );
+  safeHandle("run-hermes-upstream-watch", (_event, profile?: string) =>
+    runHermesUpstreamWatch(profile),
   );
 
   // App version

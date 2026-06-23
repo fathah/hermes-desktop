@@ -24,6 +24,7 @@ import { triggerSelfHealing } from "./self-healing";
 import { readDesktopConfig, writeDesktopConfig } from "./config";
 import { runDreamCycle } from "./dream-cycle";
 import { maybeRunHermesAgentUpdateRoutine } from "./hermes-agent-updates";
+import { maybeRunHermesUpstreamWatchRoutine } from "./hermes-upstream-watch";
 import { getApiUrl, getRemoteAuthHeader } from "./hermes";
 import { createLearningProposal } from "./learning-proposals";
 import { listInstalledSkills, getSkillContent } from "./skills";
@@ -248,6 +249,11 @@ export async function tickScheduler(profile?: string): Promise<void> {
   void maybeRunHermesAgentUpdateRoutine(new Date(), activeProfile).catch(
     (err) => {
       console.error("[SCHEDULER] Error checking Hermes Agent update:", err);
+    },
+  );
+  void maybeRunHermesUpstreamWatchRoutine(new Date(), activeProfile).catch(
+    (err) => {
+      console.error("[SCHEDULER] Error checking Hermes upstream watch:", err);
     },
   );
 

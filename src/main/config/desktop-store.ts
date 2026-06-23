@@ -121,10 +121,21 @@ export type HermesAgentUpdateRoutineStatus =
   | "skipped"
   | "error";
 
+export type HermesAgentUpdateRoutinePhase = "check" | "update" | "restart";
+
+export type HermesAgentUpdateRoutineRestartStatus =
+  | "not-needed"
+  | "restarted"
+  | "failed";
+
 export interface HermesAgentUpdateRoutineResult {
   checkedAt: string;
   status: HermesAgentUpdateRoutineStatus;
   message: string;
+  phase?: HermesAgentUpdateRoutinePhase;
+  reason?: string;
+  restartStatus?: HermesAgentUpdateRoutineRestartStatus;
+  restartMessage?: string;
   localHead?: string;
   upstreamHead?: string;
   behindBy?: number;
@@ -136,8 +147,7 @@ export interface HermesAgentUpdateRoutineSettings {
   autoApply: boolean;
 }
 
-export interface HermesAgentUpdateRoutineState
-  extends HermesAgentUpdateRoutineSettings {
+export interface HermesAgentUpdateRoutineState extends HermesAgentUpdateRoutineSettings {
   schedule: typeof HERMES_AGENT_UPDATE_SCHEDULE;
   timezone: string;
   lastCheckedAt: string | null;
@@ -145,8 +155,7 @@ export interface HermesAgentUpdateRoutineState
   lastResult: HermesAgentUpdateRoutineResult | null;
 }
 
-interface StoredHermesAgentUpdateRoutine
-  extends Partial<HermesAgentUpdateRoutineSettings> {
+interface StoredHermesAgentUpdateRoutine extends Partial<HermesAgentUpdateRoutineSettings> {
   lastCheckedAt?: string | null;
   lastResult?: HermesAgentUpdateRoutineResult | null;
 }

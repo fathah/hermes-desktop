@@ -53,6 +53,17 @@ describe("Providers", () => {
           changelog: "abc123 Update Hermes Agent",
         },
       }),
+      getHermesUpstreamWatchState: vi.fn().mockResolvedValue({
+        lastRunAt: "2026-06-19T09:00:00.000Z",
+        lastSeenCommit: "a0471e2",
+        lastSeenRelease: "v2026.6.19",
+        latestReportPath:
+          "/tmp/hermes/profiles/work/upstream-watch/2026-06-19.md",
+        classifiedCounts: {
+          "desktop-parity": 2,
+          "cron-automation": 1,
+        },
+      }),
       setModelConfig: vi.fn().mockResolvedValue(true),
       addModel: vi.fn().mockResolvedValue({}),
       setEnv: vi.fn().mockResolvedValue(true),
@@ -80,6 +91,18 @@ describe("Providers", () => {
         status: "available",
         message: "Hermes Agent update available.",
       }),
+      runHermesUpstreamWatch: vi.fn().mockResolvedValue({
+        lastRunAt: "2026-06-20T09:00:00.000Z",
+        lastSeenCommit: "a0471e2",
+        lastSeenRelease: "v2026.6.19",
+        latestReportPath:
+          "/tmp/hermes/profiles/work/upstream-watch/2026-06-20.md",
+        classifiedCounts: {
+          "desktop-parity": 2,
+          "cron-automation": 1,
+        },
+      }),
+      openFileInEditor: vi.fn().mockResolvedValue(true),
     };
 
     Object.defineProperty(window, "hermesAPI", {
@@ -96,7 +119,9 @@ describe("Providers", () => {
     renderProviders();
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "AI Setup" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: "AI Setup" }),
+      ).toBeInTheDocument();
       expect(screen.getByText("xAI (Grok) API Key")).toBeInTheDocument();
     });
 
@@ -120,6 +145,10 @@ describe("Providers", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Run now")).toBeInTheDocument();
     expect(screen.getByText("Available")).toBeInTheDocument();
+    expect(screen.getByText("Notify-only")).toBeInTheDocument();
+    expect(screen.getByText("Upstream Watch")).toBeInTheDocument();
+    expect(screen.getByText("a0471e2")).toBeInTheDocument();
+    expect(screen.getByText("Open report")).toBeInTheDocument();
   });
 
   it("removes an API-key provider through the existing blank setEnv seam", async () => {

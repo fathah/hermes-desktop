@@ -22,6 +22,10 @@ type AgentUpdateRoutineResult = {
   checkedAt: string;
   status: "current" | "available" | "updated" | "skipped" | "error";
   message: string;
+  phase?: "check" | "update" | "restart";
+  reason?: string;
+  restartStatus?: "not-needed" | "restarted" | "failed";
+  restartMessage?: string;
   localHead?: string;
   upstreamHead?: string;
   behindBy?: number;
@@ -36,6 +40,25 @@ type AgentUpdateRoutineState = {
   lastCheckedAt: string | null;
   nextCheckAt: string;
   lastResult: AgentUpdateRoutineResult | null;
+};
+
+type UpstreamWatchCategory =
+  | "runtime-required"
+  | "api-contract"
+  | "desktop-parity"
+  | "security"
+  | "cron-automation"
+  | "provider-model"
+  | "docs-only"
+  | "ignore";
+
+type UpstreamWatchState = {
+  lastRunAt: string | null;
+  lastSeenCommit: string | null;
+  lastSeenRelease: string | null;
+  latestReportPath: string | null;
+  classifiedCounts: Partial<Record<UpstreamWatchCategory, number>>;
+  lastError?: string;
 };
 
 type ProviderSetup = (typeof PROVIDERS.setup)[number];
@@ -100,6 +123,13 @@ function Providers({
   const [agentUpdateMessage, setAgentUpdateMessage] = useState<string | null>(
     null,
   );
+  const [upstreamWatch, setUpstreamWatch] = useState<UpstreamWatchState | null>(
+    null,
+  );
+  const [upstreamWatchBusy, setUpstreamWatchBusy] = useState(false);
+  const [upstreamWatchMessage, setUpstreamWatchMessage] = useState<
+    string | null
+  >(null);
 
   // Per-key debounce timers for env auto-save on change. Previously env
   // values were persisted only on input blur, so users who clicked the
@@ -138,12 +168,13 @@ function Providers({
   }, [profile]);
 
   const loadConfig = useCallback(async (): Promise<void> => {
-    const [envData, mc, pool, oauth, routine] = await Promise.all([
+    const [envData, mc, pool, oauth, routine, watch] = await Promise.all([
       window.hermesAPI.getEnv(profile),
       window.hermesAPI.getModelConfig(profile),
       window.hermesAPI.getCredentialPool(profile),
       fetchOAuthStatuses(),
       window.hermesAPI.getHermesAgentUpdateRoutine(profile),
+      window.hermesAPI.getHermesUpstreamWatchState(profile),
     ]);
     setEnv(envData);
     setModelProvider(mc.provider);
@@ -152,6 +183,7 @@ function Providers({
     setCredPool(pool);
     setOauthStatuses(oauth);
     setAgentUpdateRoutine(routine);
+    setUpstreamWatch(watch);
 
     requestAnimationFrame(() => {
       modelLoaded.current = true;
@@ -167,10 +199,11 @@ function Providers({
   useEffect(() => {
     if (!visible) return;
     (async (): Promise<void> => {
-      const [mc, oauth, routine] = await Promise.all([
+      const [mc, oauth, routine, watch] = await Promise.all([
         window.hermesAPI.getModelConfig(profile),
         fetchOAuthStatuses(),
         window.hermesAPI.getHermesAgentUpdateRoutine(profile),
+        window.hermesAPI.getHermesUpstreamWatchState(profile),
       ]);
       modelLoaded.current = false;
       setModelProvider(mc.provider);
@@ -178,6 +211,7 @@ function Providers({
       setModelBaseUrl(mc.baseUrl);
       setOauthStatuses(oauth);
       setAgentUpdateRoutine(routine);
+      setUpstreamWatch(watch);
       requestAnimationFrame(() => {
         modelLoaded.current = true;
       });
@@ -484,6 +518,44 @@ function Providers({
     }
   }
 
+  async function handleRunUpstreamWatch(): Promise<void> {
+    setUpstreamWatchBusy(true);
+    setUpstreamWatchMessage(null);
+    try {
+      const state = await window.hermesAPI.runHermesUpstreamWatch(profile);
+      setUpstreamWatch(state);
+      setUpstreamWatchMessage(
+        state.latestReportPath
+          ? t("providers.upstreamWatch.reportReady")
+          : state.lastError || t("providers.upstreamWatch.failed"),
+      );
+    } catch (err) {
+      setUpstreamWatchMessage(
+        err instanceof Error
+          ? err.message
+          : t("providers.upstreamWatch.failed"),
+      );
+    } finally {
+      setUpstreamWatchBusy(false);
+    }
+  }
+
+  function formatWatchCounts(
+    counts: UpstreamWatchState["classifiedCounts"] | undefined,
+  ): string {
+    if (!counts) return t("providers.upstreamWatch.noCounts");
+    const entries = Object.entries(counts)
+      .filter(([, count]) => Boolean(count))
+      .map(([key, count]) => `${key}: ${count}`);
+    return entries.length
+      ? entries.join(", ")
+      : t("providers.upstreamWatch.noCounts");
+  }
+
+  function shortCommit(value: string | null | undefined): string {
+    return value ? value.slice(0, 7) : t("providers.agentUpdates.never");
+  }
+
   function formatUpdateTime(value: string | null | undefined): string {
     if (!value) return t("providers.agentUpdates.never");
     const date = new Date(value);
@@ -498,7 +570,9 @@ function Providers({
     }).format(date);
   }
 
-  function formatUpdateSchedule(nextCheckAt: string | null | undefined): string {
+  function formatUpdateSchedule(
+    nextCheckAt: string | null | undefined,
+  ): string {
     const parsed = nextCheckAt ? new Date(nextCheckAt) : new Date();
     const date = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
     if (!nextCheckAt || Number.isNaN(parsed.getTime())) {
@@ -887,7 +961,9 @@ function Providers({
                             type="button"
                             className="btn btn-secondary btn-sm"
                             disabled={
-                              !setup || !hasKey || testingProviderKey === field.key
+                              !setup ||
+                              !hasKey ||
+                              testingProviderKey === field.key
                             }
                             onClick={() =>
                               void handleTestProvider(field.key, setup)
@@ -1066,7 +1142,17 @@ function Providers({
             </div>
             <div>
               <span>{t("providers.agentUpdates.nextCheck")}</span>
-              <strong>{formatUpdateTime(agentUpdateRoutine?.nextCheckAt)}</strong>
+              <strong>
+                {formatUpdateTime(agentUpdateRoutine?.nextCheckAt)}
+              </strong>
+            </div>
+            <div>
+              <span>{t("providers.agentUpdates.mode")}</span>
+              <strong>
+                {agentUpdateRoutine?.autoApply
+                  ? t("providers.agentUpdates.autoApplyMode")
+                  : t("providers.agentUpdates.notifyOnly")}
+              </strong>
             </div>
             <div>
               <span>{t("providers.agentUpdates.lastResult")}</span>
@@ -1097,6 +1183,77 @@ function Providers({
                 .slice(0, 8)
                 .join("\n")}
             </pre>
+          )}
+        </div>
+      </div>
+
+      <div className="settings-section">
+        <div className="settings-section-title">
+          {t("providers.upstreamWatch.sectionTitle")}
+        </div>
+        <div className="settings-field-hint" style={{ marginBottom: 10 }}>
+          {t("providers.upstreamWatch.sectionHint")}
+        </div>
+        <div className="provider-update-panel">
+          <div className="provider-update-controls">
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm provider-update-run"
+              onClick={() => void handleRunUpstreamWatch()}
+              disabled={upstreamWatchBusy}
+            >
+              <Refresh size={14} />
+              {upstreamWatchBusy
+                ? t("providers.upstreamWatch.running")
+                : t("providers.upstreamWatch.runNow")}
+            </button>
+            {upstreamWatch?.latestReportPath && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm provider-update-run"
+                onClick={() =>
+                  void window.hermesAPI.openFileInEditor(
+                    upstreamWatch.latestReportPath as string,
+                  )
+                }
+              >
+                {t("providers.upstreamWatch.openReport")}
+              </button>
+            )}
+          </div>
+          <div className="provider-update-grid">
+            <div>
+              <span>{t("providers.upstreamWatch.lastRun")}</span>
+              <strong>{formatUpdateTime(upstreamWatch?.lastRunAt)}</strong>
+            </div>
+            <div>
+              <span>{t("providers.upstreamWatch.latestCommit")}</span>
+              <strong>{shortCommit(upstreamWatch?.lastSeenCommit)}</strong>
+            </div>
+            <div>
+              <span>{t("providers.upstreamWatch.latestRelease")}</span>
+              <strong>
+                {upstreamWatch?.lastSeenRelease ||
+                  t("providers.agentUpdates.never")}
+              </strong>
+            </div>
+            <div>
+              <span>{t("providers.upstreamWatch.classifiedCounts")}</span>
+              <strong>
+                {formatWatchCounts(upstreamWatch?.classifiedCounts)}
+              </strong>
+            </div>
+            {upstreamWatch?.latestReportPath && (
+              <div className="provider-update-path-row">
+                <span>{t("providers.upstreamWatch.reportPath")}</span>
+                <strong>{upstreamWatch.latestReportPath}</strong>
+              </div>
+            )}
+          </div>
+          {(upstreamWatchMessage || upstreamWatch?.lastError) && (
+            <div className="provider-update-message">
+              {upstreamWatchMessage || upstreamWatch?.lastError}
+            </div>
           )}
         </div>
       </div>
