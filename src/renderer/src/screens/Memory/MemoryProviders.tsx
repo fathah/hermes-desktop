@@ -4,6 +4,7 @@ import { useI18n } from "../../components/useI18n";
 import type { MemoryProviderInfo } from "./types";
 
 const PROVIDER_URLS: Record<string, string> = {
+  recall: "https://github.com/Jnocode/recall-memory",
   honcho: "https://app.honcho.dev",
   hindsight: "https://ui.hindsight.vectorize.io",
   mem0: "https://app.mem0.ai",

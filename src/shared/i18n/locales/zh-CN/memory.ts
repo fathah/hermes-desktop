@@ -40,6 +40,7 @@ export default {
   activating: "激活中...",
   activate: "激活",
   providers: {
+    recall: "Zero-LLM tiered memory with automatic forgetting (SQLite, no API key)",
     honcho: "基于 AI 的跨会话用户画像建模，支持辩证问答和语义搜索",
     hindsight: "长期记忆，具有知识图谱和多策略检索功能",
     mem0: "服务端 LLM 事实提取，支持语义搜索和自动去重",
