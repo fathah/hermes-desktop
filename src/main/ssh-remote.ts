@@ -24,6 +24,7 @@ import { t } from "../shared/i18n";
 import { getAppLocale } from "./locale";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 import { getYamlValue, setYamlValue, deleteYamlValue } from "./yaml-utils";
+import { resolveModelConfigFromContent } from "./config/model-config";
 
 // ── SSH exec core ────────────────────────────────────────────────────────────
 
@@ -829,11 +830,7 @@ export async function sshGetModelConfig(
 ): Promise<{ provider: string; model: string; baseUrl: string }> {
   const content = await sshReadFile(config, remoteConfigPath(profile));
   if (!content) return { provider: "auto", model: "", baseUrl: "" };
-  return {
-    provider: getYamlValue(content, "model.provider") || "auto",
-    model: getYamlValue(content, "model.default") || "",
-    baseUrl: getYamlValue(content, "model.base_url") || "",
-  };
+  return resolveModelConfigFromContent(content);
 }
 
 export async function sshSetModelConfig(

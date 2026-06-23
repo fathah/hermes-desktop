@@ -190,6 +190,66 @@ describe("runConfigHealthCheck", () => {
     ).toBeUndefined();
   });
 
+  it("does NOT flag MODEL_KEY_MISSING for named local custom providers (#715)", async () => {
+    writeConfig(
+      [
+        "model:",
+        "  provider: new-api",
+        "  default: deepseek-v4-flash",
+        "providers:",
+        "  new-api:",
+        "    api: http://localhost:3000/v1",
+        "    default_model: deepseek-v4-flash",
+        "",
+      ].join("\n"),
+    );
+    const { runConfigHealthCheck } = await freshHealth(TEST_DIR);
+    const report = runConfigHealthCheck();
+    expect(
+      report.issues.find((i) => i.code === "MODEL_KEY_MISSING"),
+    ).toBeUndefined();
+  });
+
+  it("does NOT flag MODEL_KEY_MISSING for named remote custom providers with inline api_key (#715)", async () => {
+    writeConfig(
+      [
+        "model:",
+        "  provider: new-api",
+        "  default: gpt-4o",
+        "providers:",
+        "  new-api:",
+        "    api: https://api.openai.com/v1",
+        "    api_key: sk-named-provider",
+        "",
+      ].join("\n"),
+    );
+    const { runConfigHealthCheck } = await freshHealth(TEST_DIR);
+    const report = runConfigHealthCheck();
+    expect(
+      report.issues.find((i) => i.code === "MODEL_KEY_MISSING"),
+    ).toBeUndefined();
+  });
+
+  it("flags MODEL_KEY_MISSING for named remote custom providers without credential evidence (#715)", async () => {
+    writeConfig(
+      [
+        "model:",
+        "  provider: new-api",
+        "  default: gpt-4o",
+        "providers:",
+        "  new-api:",
+        "    api: https://api.openai.com/v1",
+        "",
+      ].join("\n"),
+    );
+    const { runConfigHealthCheck } = await freshHealth(TEST_DIR);
+    const report = runConfigHealthCheck();
+    const issue = report.issues.find((i) => i.code === "MODEL_KEY_MISSING");
+    expect(issue).toBeDefined();
+    expect(issue?.context?.expectedKey).toBe("OPENAI_API_KEY");
+    expect(issue?.context?.provider).toBe("new-api");
+  });
+
   it("flags UI_RUNTIME_ENVKEY_MISMATCH when wrong key has a value", async () => {
     writeConfig(
       [

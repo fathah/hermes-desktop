@@ -10,17 +10,85 @@ import { expectedEnvKeyForModel } from "../installer";
 import { getCached, setCache, invalidateCache } from "./cache";
 import { readEnv } from "./env-store";
 
-export function getModelConfig(profile?: string): {
+export interface ModelConfig {
   provider: string;
   model: string;
   baseUrl: string;
-} {
+}
+
+export interface NamedProviderConfig {
+  provider: string;
+  baseUrl: string;
+  defaultModel: string;
+  apiKey: string;
+  keyEnv: string;
+}
+
+function cleanConfigValue(value: string | null): string {
+  return (value ?? "").trim();
+}
+
+export function getNamedProviderConfigFromContent(
+  content: string,
+  provider: string,
+): NamedProviderConfig | null {
+  const name = provider.trim();
+  if (!name) return null;
+  if (getYamlValue(content, `providers.${name}`) === null) return null;
+
+  const baseUrl =
+    cleanConfigValue(getYamlValue(content, `providers.${name}.api`)) ||
+    cleanConfigValue(getYamlValue(content, `providers.${name}.url`)) ||
+    cleanConfigValue(getYamlValue(content, `providers.${name}.base_url`));
+
+  return {
+    provider: name,
+    baseUrl,
+    defaultModel: cleanConfigValue(
+      getYamlValue(content, `providers.${name}.default_model`),
+    ),
+    apiKey: cleanConfigValue(
+      getYamlValue(content, `providers.${name}.api_key`),
+    ),
+    keyEnv: cleanConfigValue(
+      getYamlValue(content, `providers.${name}.key_env`),
+    ),
+  };
+}
+
+export function resolveModelConfigFromContent(content: string): ModelConfig {
+  const defaults = { provider: "auto", model: "", baseUrl: "" };
+  const provider =
+    cleanConfigValue(getYamlValue(content, "model.provider")) ||
+    defaults.provider;
+  const namedProvider = getNamedProviderConfigFromContent(content, provider);
+
+  return {
+    provider,
+    model:
+      cleanConfigValue(getYamlValue(content, "model.default")) ||
+      namedProvider?.defaultModel ||
+      defaults.model,
+    baseUrl:
+      cleanConfigValue(getYamlValue(content, "model.base_url")) ||
+      namedProvider?.baseUrl ||
+      defaults.baseUrl,
+  };
+}
+
+export function getNamedProviderConfig(
+  provider: string,
+  profile?: string,
+): NamedProviderConfig | null {
+  const { configFile } = profilePaths(profile);
+  if (!existsSync(configFile)) return null;
+  const content = readFileSync(configFile, "utf-8");
+  return getNamedProviderConfigFromContent(content, provider);
+}
+
+export function getModelConfig(profile?: string): ModelConfig {
   const cacheKey = `mc:${profile || "default"}`;
-  const cached = getCached<{
-    provider: string;
-    model: string;
-    baseUrl: string;
-  }>(cacheKey);
+  const cached = getCached<ModelConfig>(cacheKey);
   if (cached) return cached;
 
   const { configFile } = profilePaths(profile);
@@ -28,11 +96,7 @@ export function getModelConfig(profile?: string): {
   if (!existsSync(configFile)) return defaults;
 
   const content = readFileSync(configFile, "utf-8");
-  const result = {
-    provider: getYamlValue(content, "model.provider") || defaults.provider,
-    model: getYamlValue(content, "model.default") || defaults.model,
-    baseUrl: getYamlValue(content, "model.base_url") || defaults.baseUrl,
-  };
+  const result = resolveModelConfigFromContent(content);
 
   setCache(cacheKey, result);
   return result;
@@ -64,11 +128,23 @@ export function customEndpointKeyResolvable(
   profile?: string,
 ): boolean {
   const p = (provider || "").trim().toLowerCase();
-  if (!baseUrl || !OPENAI_COMPAT_PROVIDERS.has(p)) return false;
+  const namedProvider = getNamedProviderConfig(provider, profile);
+  const namedBaseUrl = namedProvider?.baseUrl || "";
+  const effectiveBaseUrl = baseUrl || namedBaseUrl;
+  if (!effectiveBaseUrl) return false;
 
   const env = readEnv(profile);
+  if (namedProvider) {
+    if (namedProvider.apiKey) return true;
+    if (namedProvider.keyEnv && (env[namedProvider.keyEnv] ?? "").trim()) {
+      return true;
+    }
+  } else if (!OPENAI_COMPAT_PROVIDERS.has(p)) {
+    return false;
+  }
+
   const candidates = new Set<string>([
-    expectedEnvKeyForUrl(baseUrl), // URL-specific key, or CUSTOM_API_KEY
+    expectedEnvKeyForUrl(effectiveBaseUrl), // URL-specific key, or CUSTOM_API_KEY
     "CUSTOM_API_KEY",
     "OPENAI_API_KEY",
   ]);

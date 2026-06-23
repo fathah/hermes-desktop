@@ -163,6 +163,52 @@ describe("getModelConfig — scoped to model: block", () => {
     expect(mc.provider).toBe("single-quoted");
     expect(mc.baseUrl).toBe("https://example.com");
   });
+
+  it("derives the endpoint for a named custom provider from providers.<name>.api (#715)", async () => {
+    writeFileSync(
+      join(TEST_DIR, "config.yaml"),
+      [
+        "model:",
+        "  default: deepseek-v4-flash",
+        "  provider: new-api",
+        "providers:",
+        "  new-api:",
+        "    api: http://localhost:3000/v1",
+        "    api_key: sk-local-proxy",
+        "    default_model: deepseek-v4-flash",
+        "",
+      ].join("\n"),
+    );
+
+    const { getModelConfig } = await importConfigWithHome(TEST_DIR);
+    expect(getModelConfig()).toEqual({
+      provider: "new-api",
+      model: "deepseek-v4-flash",
+      baseUrl: "http://localhost:3000/v1",
+    });
+  });
+
+  it("uses providers.<name>.default_model only when model.default is absent (#715)", async () => {
+    writeFileSync(
+      join(TEST_DIR, "config.yaml"),
+      [
+        "model:",
+        "  provider: new-api",
+        "providers:",
+        "  new-api:",
+        "    base_url: https://proxy.example.com/v1",
+        "    default_model: fallback-model",
+        "",
+      ].join("\n"),
+    );
+
+    const { getModelConfig } = await importConfigWithHome(TEST_DIR);
+    expect(getModelConfig()).toEqual({
+      provider: "new-api",
+      model: "fallback-model",
+      baseUrl: "https://proxy.example.com/v1",
+    });
+  });
 });
 
 describe("setModelConfig — scoped to model: block", () => {

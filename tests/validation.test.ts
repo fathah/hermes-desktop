@@ -207,6 +207,58 @@ describe("validateChatReadiness", () => {
     expect(validateChatReadiness()).toEqual({ ok: true });
   });
 
+  it("allows a named local custom provider whose endpoint is stored under providers.<name>.api (#715)", async () => {
+    writeConfig(
+      [
+        "model:",
+        "  provider: new-api",
+        "  default: deepseek-v4-flash",
+        "providers:",
+        "  new-api:",
+        "    api: http://localhost:3000/v1",
+        "    default_model: deepseek-v4-flash",
+        "",
+      ].join("\n"),
+    );
+    const { validateChatReadiness } = await freshValidation(TEST_DIR);
+    expect(validateChatReadiness()).toEqual({ ok: true });
+  });
+
+  it("allows a named remote custom provider when its providers.<name>.api_key is configured (#715)", async () => {
+    writeConfig(
+      [
+        "model:",
+        "  provider: new-api",
+        "  default: gpt-4o",
+        "providers:",
+        "  new-api:",
+        "    api: https://api.openai.com/v1",
+        "    api_key: sk-named-provider",
+        "",
+      ].join("\n"),
+    );
+    const { validateChatReadiness } = await freshValidation(TEST_DIR);
+    expect(validateChatReadiness()).toEqual({ ok: true });
+  });
+
+  it("allows a named remote custom provider when providers.<name>.key_env points at .env (#715)", async () => {
+    writeConfig(
+      [
+        "model:",
+        "  provider: new-api",
+        "  default: gpt-4o",
+        "providers:",
+        "  new-api:",
+        "    api: https://api.openai.com/v1",
+        "    key_env: NEW_API_KEY",
+        "",
+      ].join("\n"),
+    );
+    writeEnv("NEW_API_KEY=sk-from-key-env\n");
+    const { validateChatReadiness } = await freshValidation(TEST_DIR);
+    expect(validateChatReadiness()).toEqual({ ok: true });
+  });
+
   it("fails open for unknown provider + unknown URL (we can't decide which key to check)", async () => {
     writeConfig(
       [
@@ -219,6 +271,25 @@ describe("validateChatReadiness", () => {
     );
     const { validateChatReadiness } = await freshValidation(TEST_DIR);
     expect(validateChatReadiness()).toEqual({ ok: true });
+  });
+
+  it("blocks a named custom provider on a known remote host when no provider key is configured (#715)", async () => {
+    writeConfig(
+      [
+        "model:",
+        "  provider: new-api",
+        "  default: gpt-4o",
+        "providers:",
+        "  new-api:",
+        "    api: https://api.openai.com/v1",
+        "",
+      ].join("\n"),
+    );
+    const { validateChatReadiness } = await freshValidation(TEST_DIR);
+    const r = validateChatReadiness();
+    expect(r.ok).toBe(false);
+    expect(r.code).toBe("MISSING_API_KEY");
+    expect(r.expectedEnvKey).toBe("OPENAI_API_KEY");
   });
 
   it("blocks for custom provider on a known commercial host with no key", async () => {
