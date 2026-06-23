@@ -889,6 +889,17 @@ const hermesAPI = {
       installed: boolean;
     }>
   > => ipcRenderer.invoke("list-bundled-skills"),
+  listBundledMcps: (): Promise<
+    Array<{
+      id: string;
+      name: string;
+      description: string;
+      category?: string;
+      tags?: string[];
+      catalog?: string;
+      homepage?: string;
+    }>
+  > => ipcRenderer.invoke("list-bundled-mcps"),
   getSkillContent: (skillPath: string): Promise<string> =>
     ipcRenderer.invoke("get-skill-content", skillPath),
   installSkill: (

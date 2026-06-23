@@ -249,6 +249,7 @@ import {
   fetchRegistryDetail,
   listInstalledRegistry,
   installRegistryItem,
+  listBundledMcps,
   type RegistryKind,
   type RegistryItem,
 } from "../registry";
@@ -1905,6 +1906,11 @@ export function registerIpcHandlers(context: IpcContext): void {
     const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh) return sshListBundledSkills(conn.ssh);
     return listBundledSkills();
+  });
+  ipcMain.handle("list-bundled-mcps", () => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" && conn.ssh) return [];
+    return listBundledMcps();
   });
   ipcMain.handle("get-skill-content", (_event, skillPath: string) => {
     const conn = getConnectionConfig();

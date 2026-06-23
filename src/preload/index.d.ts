@@ -692,6 +692,17 @@ interface HermesAPI {
       installed: boolean;
     }>
   >;
+  listBundledMcps: () => Promise<
+    Array<{
+      id: string;
+      name: string;
+      description: string;
+      category?: string;
+      tags?: string[];
+      catalog?: string;
+      homepage?: string;
+    }>
+  >;
   getSkillContent: (skillPath: string) => Promise<string>;
   installSkill: (
     identifier: string,

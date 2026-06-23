@@ -4,7 +4,8 @@ import { profileHome, safeWriteFile } from "./utils";
 import { installSkill, listInstalledSkills } from "./skills";
 import { createProfile } from "./profiles";
 import { writeSoul } from "./soul";
-import { listMcpServers } from "./installer";
+import { listMcpServers, HERMES_REPO } from "./installer";
+import { installMcpCatalogEntry } from "./mcp-servers";
 import type {
   RegistryKind,
   RegistryItem,
@@ -85,6 +86,29 @@ const EMPTY_CATALOG: RegistryCatalog = {
   agents: [],
   workflows: [],
 };
+
+/** Graphnosis ships in hermes-agent optional-mcps once the upstream PR merges. */
+export function listBundledMcps(): RegistryItem[] {
+  const manifestYaml = join(
+    HERMES_REPO,
+    "optional-mcps",
+    "graphnosis",
+    "manifest.yaml",
+  );
+  if (!existsSync(manifestYaml)) return [];
+  return [
+    {
+      id: "graphnosis",
+      name: "Graphnosis",
+      description:
+        "Local encrypted memory — recall, remember, edit, engrams. Requires Graphnosis app.",
+      category: "memory",
+      tags: ["memory", "local", "encrypted"],
+      catalog: "graphnosis",
+      homepage: "https://graphnosis.com/getting-started/connect-ai",
+    },
+  ];
+}
 
 // Short-lived cache so flipping between Discover sub-tabs doesn't refetch.
 let cache: { at: number; data: RegistryCatalog } | null = null;
@@ -525,6 +549,10 @@ export async function installRegistryItem(
           ? await installRegistrySkill(item, profile)
           : installSkill(item.source || item.id, profile);
       case "mcps":
+        if (item.catalog) {
+          const res = await installMcpCatalogEntry(item.catalog, {}, profile);
+          return { success: res.success, error: res.error };
+        }
         return await installMcp(item, profile);
       case "agents":
         return await installAgent(item);

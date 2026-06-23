@@ -58,5 +58,7 @@ export default {
     openviking:
       "Session-managed memory with tiered retrieval and knowledge browsing",
     byterover: "Persistent knowledge tree with tiered retrieval via brv CLI",
+    graphnosis:
+      "Local encrypted engram graph — auto-prefetch, recall, remember. Requires Graphnosis app (no API key)",
   },
 } as const;

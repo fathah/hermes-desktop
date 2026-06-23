@@ -75,6 +75,7 @@ export default function Discover({
   // Skills shipped with the hermes-agent repo, folded into the skills list
   // alongside registry skills (deduped).
   const [bundledSkills, setBundledSkills] = useState<RegistryItem[]>([]);
+  const [bundledMcps, setBundledMcps] = useState<RegistryItem[]>([]);
   const [installed, setInstalled] = useState<{
     skills: string[];
     mcps: string[];
@@ -119,9 +120,10 @@ export default function Discover({
       setLoading(true);
       setError(null);
       try {
-        const [data, bundled] = await Promise.all([
+        const [data, bundled, bundledMcpList] = await Promise.all([
           window.hermesAPI.fetchRegistry(force),
           window.hermesAPI.listBundledSkills(),
+          window.hermesAPI.listBundledMcps(),
         ]);
         if (data.error) setError(data.error);
         setCatalog({
@@ -141,6 +143,7 @@ export default function Discover({
             source: b.name,
           })),
         );
+        setBundledMcps(bundledMcpList);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load");
         setCatalog(EMPTY);
@@ -204,16 +207,28 @@ export default function Discover({
   // skills (deduped — registry entries win on id/name collision).
   const communityList = useMemo(() => {
     const list = catalog[tab] ?? [];
-    if (tab !== "skills") return list;
-    const seen = new Set([
-      ...list.map((i) => i.id),
-      ...list.map((i) => i.name),
-    ]);
-    const extra = bundledSkills.filter(
-      (b) => !seen.has(b.id) && !seen.has(b.name),
-    );
-    return [...list, ...extra];
-  }, [catalog, tab, bundledSkills]);
+    if (tab === "skills") {
+      const seen = new Set([
+        ...list.map((i) => i.id),
+        ...list.map((i) => i.name),
+      ]);
+      const extra = bundledSkills.filter(
+        (b) => !seen.has(b.id) && !seen.has(b.name),
+      );
+      return [...list, ...extra];
+    }
+    if (tab === "mcps") {
+      const seen = new Set([
+        ...list.map((i) => i.id),
+        ...list.map((i) => i.name),
+      ]);
+      const extra = bundledMcps.filter(
+        (b) => !seen.has(b.id) && !seen.has(b.name),
+      );
+      return [...list, ...extra];
+    }
+    return list;
+  }, [catalog, tab, bundledSkills, bundledMcps]);
 
   const items = useMemo(
     () =>
@@ -245,6 +260,17 @@ export default function Discover({
 
   function tabCount(key: RegistryKind): number {
     if (key === "skills") return skillsTotal;
+    if (key === "mcps") {
+      const list = catalog.mcps ?? [];
+      const seen = new Set([
+        ...list.map((i) => i.id),
+        ...list.map((i) => i.name),
+      ]);
+      const extra = bundledMcps.filter(
+        (b) => !seen.has(b.id) && !seen.has(b.name),
+      );
+      return list.length + extra.length;
+    }
     return (catalog[key] ?? []).length;
   }
 

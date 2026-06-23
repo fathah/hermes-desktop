@@ -22,6 +22,8 @@ export interface RegistryItem {
   path?: string;
   /** Bundled skills only: install identifier for `hermes skills install`. */
   source?: string;
+  /** Bundled MCP catalog entries: install name for `hermes mcp install`. */
+  catalog?: string;
 }
 
 export interface RegistryCatalog {

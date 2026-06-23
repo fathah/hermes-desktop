@@ -348,6 +348,35 @@ function Tools({
       })
     : mcpServers;
 
+  const graphnosisMcpInstalled = mcpServers.some((s) => s.name === "graphnosis");
+
+  async function handleInstallGraphnosisMcp(): Promise<void> {
+    setMcpError("");
+    setMcpMessage("");
+    setMcpBusy("install:graphnosis");
+    try {
+      const result = await window.hermesAPI.installMcpCatalogEntry(
+        "graphnosis",
+        {},
+        profile,
+      );
+      if (!result.success) {
+        setMcpError(result.error || t("tools.mcpInstallFailed"));
+        return;
+      }
+      setMcpMessage(
+        result.background
+          ? t("tools.mcpInstallStarted")
+          : t("tools.mcpInstalled"),
+      );
+      await reloadMcp();
+    } catch (err) {
+      setMcpError((err as Error).message || t("tools.mcpInstallFailed"));
+    } finally {
+      setMcpBusy("");
+    }
+  }
+
   if (loading) {
     return (
       <div className="tools-container">
@@ -489,6 +518,43 @@ function Tools({
 
               {mcpError && <div className="tools-error">{mcpError}</div>}
               {mcpMessage && <div className="tools-success">{mcpMessage}</div>}
+
+              {!graphnosisMcpInstalled && (
+                <div className="tools-graphnosis-promo">
+                  <div>
+                    <div className="tools-card-label">
+                      {t("tools.graphnosisMcpTitle")}
+                    </div>
+                    <div className="tools-card-description">
+                      {t("tools.graphnosisMcpDescription")}
+                    </div>
+                  </div>
+                  <div className="tools-graphnosis-promo-actions">
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={mcpBusy === "install:graphnosis"}
+                      onClick={() => void handleInstallGraphnosisMcp()}
+                    >
+                      <TinyIcon kind="install" />
+                      {mcpBusy === "install:graphnosis"
+                        ? t("tools.mcpInstallWorking")
+                        : t("tools.graphnosisMcpInstall")}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() =>
+                        void window.hermesAPI.openExternal(
+                          "https://graphnosis.com/download",
+                        )
+                      }
+                    >
+                      {t("tools.graphnosisMcpDownload")}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {mcpServers.length === 0 ? (
                 <div className="tools-empty">
