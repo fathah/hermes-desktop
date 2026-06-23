@@ -6274,6 +6274,32 @@ body {
   background: var(--accent-subtle);
 }
 
+.settings-zoom-value {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.settings-zoom-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.settings-zoom-button {
+  min-width: 44px;
+}
+
+.settings-zoom-range {
+  flex: 1 1 180px;
+  min-width: 160px;
+  accent-color: var(--accent);
+}
+
+.settings-zoom-reset {
+  min-width: 72px;
+}
+
 /* Language picker dropdown */
 .settings-language-select {
   position: relative;

@@ -55,6 +55,12 @@ import { startAssistantRecipeScheduler } from "./assistant-recipes";
 import { updaterLogger } from "./updater-log";
 import { getConnectionConfig } from "./config";
 import {
+  applyAppZoomToWindow,
+  resetAppZoomFactor,
+  stepAppZoomFactor,
+} from "./app-zoom";
+import type { AppZoomSettings } from "../shared/app-zoom";
+import {
   sshGatewayStatus,
   sshStartGateway,
   sshReadRemoteApiKey,
@@ -120,6 +126,17 @@ process.on("unhandledRejection", (reason) => {
 let mainWindow: BrowserWindow | null = null;
 let captureWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
+
+function broadcastAppZoomSettings(settings: AppZoomSettings): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("app-zoom-settings-changed", settings);
+  }
+}
+
+function applyAndBroadcastAppZoom(settings: AppZoomSettings): void {
+  applyAppZoomToWindow(mainWindow, settings);
+  broadcastAppZoomSettings(settings);
+}
 
 function createCaptureWindow(): void {
   if (captureWindow && !captureWindow.isDestroyed()) {
@@ -376,6 +393,10 @@ function createWindow(): void {
     },
   );
 
+  mainWindow.webContents.on("did-finish-load", () => {
+    applyAppZoomToWindow(mainWindow);
+  });
+
   mainWindow.webContents.setWindowOpenHandler((details) => {
     openExternalUrl(details.url);
     return { action: "deny" };
@@ -589,9 +610,27 @@ function buildMenu(): void {
     {
       label: "View",
       submenu: [
-        { role: "resetZoom" },
-        { role: "zoomIn" },
-        { role: "zoomOut" },
+        {
+          label: "Actual Size",
+          accelerator: "CmdOrCtrl+0",
+          click: (): void => {
+            applyAndBroadcastAppZoom(resetAppZoomFactor());
+          },
+        },
+        {
+          label: "Zoom In",
+          accelerator: "CmdOrCtrl+Plus",
+          click: (): void => {
+            applyAndBroadcastAppZoom(stepAppZoomFactor(1));
+          },
+        },
+        {
+          label: "Zoom Out",
+          accelerator: "CmdOrCtrl+-",
+          click: (): void => {
+            applyAndBroadcastAppZoom(stepAppZoomFactor(-1));
+          },
+        },
         { type: "separator" },
         { role: "togglefullscreen" },
         ...(is.dev

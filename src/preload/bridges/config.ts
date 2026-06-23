@@ -3,6 +3,7 @@ import type { Attachment } from "../../shared/attachments";
 import type { UsageAggregate, RunLedgerEntry } from "../../shared/usage";
 import type { SearchSummary } from "../../shared/searchSummary";
 import type { LoadedSkin } from "../../shared/skins";
+import type { AppZoomSettings } from "../../shared/app-zoom";
 
 export const configBridge = {
   // Configuration (profile-aware)
@@ -150,6 +151,22 @@ export const configBridge = {
     ipcRenderer.invoke("get-onboarding-completed"),
   setOnboardingCompleted: (completed: boolean): Promise<void> =>
     ipcRenderer.invoke("set-onboarding-completed", completed),
+  /** App-level display zoom, stored in desktop.json and applied by Electron. */
+  getAppZoomSettings: (): Promise<AppZoomSettings> =>
+    ipcRenderer.invoke("get-app-zoom-settings"),
+  setAppZoomFactor: (factor: number): Promise<AppZoomSettings> =>
+    ipcRenderer.invoke("set-app-zoom-factor", factor),
+  onAppZoomSettingsChanged: (
+    callback: (settings: AppZoomSettings) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      settings: AppZoomSettings,
+    ): void => callback(settings);
+    ipcRenderer.on("app-zoom-settings-changed", handler);
+    return () =>
+      ipcRenderer.removeListener("app-zoom-settings-changed", handler);
+  },
 
   setConnectionConfig: (
     mode: "local" | "remote" | "ssh",

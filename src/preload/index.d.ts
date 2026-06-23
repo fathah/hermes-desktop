@@ -1,5 +1,6 @@
 import type { AppLocale } from "../shared/i18n/types";
 import type { Attachment } from "../shared/attachments";
+import type { AppZoomSettings } from "../shared/app-zoom";
 import type { UsageAggregate, RunLedgerEntry } from "../shared/usage";
 import type { MemoryTimeline } from "../shared/memoryTimeline";
 import type { MemoryInfo } from "../shared/memory";
@@ -457,6 +458,11 @@ interface HermesAPI {
   setCompletionSound: (enabled: boolean) => Promise<void>;
   getOnboardingCompleted: () => Promise<boolean>;
   setOnboardingCompleted: (completed: boolean) => Promise<void>;
+  getAppZoomSettings: () => Promise<AppZoomSettings>;
+  setAppZoomFactor: (factor: number) => Promise<AppZoomSettings>;
+  onAppZoomSettingsChanged: (
+    callback: (settings: AppZoomSettings) => void,
+  ) => () => void;
   respondApproval: (
     runId: string,
     choice: "once" | "session" | "always" | "deny",

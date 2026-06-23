@@ -101,6 +101,11 @@ import {
   SpendingCapConfig,
 } from "../spending-limits";
 import { getWhatsAppCloudStatus } from "../whatsapp-cloud-status";
+import {
+  applyAppZoomToWebContents,
+  getAppZoomSettings,
+  setAppZoomFactor,
+} from "../app-zoom";
 
 function openExternalUrl(rawUrl: unknown): void {
   if (!isAllowedExternalUrl(rawUrl) && !isAllowedObsidianExternalUrl(rawUrl)) {
@@ -567,6 +572,13 @@ export function registerConfigIpc(): void {
   safeHandle("set-onboarding-completed", (_event, completed: boolean) =>
     setOnboardingCompleted(completed),
   );
+  safeHandle("get-app-zoom-settings", () => getAppZoomSettings());
+  safeHandle("set-app-zoom-factor", (event, factor: number) => {
+    const settings = setAppZoomFactor(factor);
+    applyAppZoomToWebContents(event.sender, settings);
+    event.sender.send("app-zoom-settings-changed", settings);
+    return settings;
+  });
 
   // Scheduler Config
   safeHandle("get-scheduler-config", () => getSchedulerConfig());

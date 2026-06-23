@@ -2,7 +2,7 @@
 // Center. Opens the real SPS Settings gear, verifies the Overview default, and
 // checks legacy deep-link aliases still land on their new task destinations.
 import { _electron as electron } from "playwright";
-import { mkdtempSync, mkdirSync, writeFileSync } from "fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -26,18 +26,43 @@ writeFileSync(
   "model:\n  provider: anthropic\n  model: claude-3-5-sonnet\n",
 );
 
-const app = await electron.launch({
-  args: [".", `--user-data-dir=${join(HOME, "electron-userdata")}`],
-  env: {
-    ...process.env,
-    HERMES_HOME: HOME,
-    ELECTRON_DISABLE_SECURITY_WARNINGS: "1",
-  },
-});
-const win = await app.firstWindow();
-await win.waitForLoadState("domcontentloaded");
-await win.waitForSelector(".app", { timeout: 30000 });
-await win.waitForTimeout(1500);
+async function launchApp() {
+  const app = await electron.launch({
+    args: [".", `--user-data-dir=${join(HOME, "electron-userdata")}`],
+    env: {
+      ...process.env,
+      HERMES_HOME: HOME,
+      ELECTRON_DISABLE_SECURITY_WARNINGS: "1",
+    },
+  });
+  const win = await app.firstWindow();
+  await win.waitForLoadState("domcontentloaded");
+  await win.waitForSelector(".app", { timeout: 30000 });
+  await win.waitForTimeout(1500);
+  return { app, win };
+}
+
+async function getZoomFactor(app) {
+  return app.evaluate(({ BrowserWindow }) => {
+    const [window] = BrowserWindow.getAllWindows();
+    return window?.webContents.getZoomFactor() ?? null;
+  });
+}
+
+async function waitForZoomFactor(app, expected) {
+  const deadline = Date.now() + 5000;
+  let zoom = await getZoomFactor(app);
+  while (Date.now() < deadline) {
+    if (typeof zoom === "number" && Math.abs(zoom - expected) < 0.001) {
+      return zoom;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    zoom = await getZoomFactor(app);
+  }
+  throw new Error(`Expected zoom factor ${expected}, got ${zoom}`);
+}
+
+let { app, win } = await launchApp();
 
 const shots = [];
 async function shot(name, fn) {
@@ -113,7 +138,27 @@ await shot("a5-preferences-no-subnav", async () => {
   await win.getByRole("heading", { name: "Preferences" }).waitFor({
     timeout: 10000,
   });
+  await win.getByText("Display zoom").waitFor({ timeout: 10000 });
 });
+
+await win.getByRole("button", { name: "Increase display zoom" }).click();
+await win.getByRole("button", { name: "Increase display zoom" }).click();
+await win.locator(".settings-zoom-value").filter({ hasText: "120%" }).waitFor({
+  timeout: 10000,
+});
+
+const zoomFactor = await waitForZoomFactor(app, 1.2);
+const desktopConfig = JSON.parse(
+  readFileSync(join(HOME, "desktop.json"), "utf-8"),
+);
+if (desktopConfig.appZoomFactor !== 1.2) {
+  throw new Error(
+    `Expected desktop.json appZoomFactor 1.2, got ${desktopConfig.appZoomFactor}`,
+  );
+}
+console.log(
+  `ZOOM_FACTOR=${zoomFactor} DESKTOP_ZOOM=${desktopConfig.appZoomFactor}`,
+);
 
 // Assertions: grouped headers exist, old Settings sub-nav is gone.
 const groupCount = await win.$$eval(
@@ -132,5 +177,10 @@ if (subnavCount !== 0) {
 }
 console.log(`GROUPS=${groupCount} SETTINGS_SUBNAV=${subnavCount}`);
 console.log(`SHOTS_OK: ${shots.length} — ${shots.join(", ")}`);
+
+await app.close();
+({ app, win } = await launchApp());
+const persistedZoomFactor = await waitForZoomFactor(app, 1.2);
+console.log(`ZOOM_FACTOR_AFTER_RELAUNCH=${persistedZoomFactor}`);
 console.log("VERIFY_DONE");
 await app.close();

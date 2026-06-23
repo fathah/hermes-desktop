@@ -5,6 +5,11 @@ import { useStore as useSpsStore } from "../SpsAgent/store";
 import { useI18n } from "../../components/useI18n";
 import { APP_LOCALES, type AppLocale } from "../../../../shared/i18n";
 import {
+  APP_ZOOM_DEFAULT,
+  appZoomSettingsFor,
+  type AppZoomSettings,
+} from "../../../../shared/app-zoom";
+import {
   Check,
   ChevronDown,
   Download,
@@ -137,6 +142,10 @@ function Settings({
   // Automation prefs (M2): scoped auto-approve + completion chime
   const [autoApprove, setAutoApproveState] = useState(false);
   const [completionSound, setCompletionSoundState] = useState(false);
+  const [appZoom, setAppZoom] = useState<AppZoomSettings>(() =>
+    appZoomSettingsFor(APP_ZOOM_DEFAULT),
+  );
+  const [appZoomSaving, setAppZoomSaving] = useState(false);
   // Approval auto-deny timeout (seconds; 0 = off). Opt-in operator safety.
   const [approvalTimeout, setApprovalTimeout] = useState("0");
 
@@ -170,14 +179,16 @@ function Settings({
 
   const loadConfig = useCallback(async (): Promise<void> => {
     // Load fast config first (cached in main process)
-    const [home, aVersion, conn, keyStatus] = await Promise.all([
+    const [home, aVersion, conn, keyStatus, zoomSettings] = await Promise.all([
       window.hermesAPI.getHermesHome(profile),
       window.hermesAPI.getAppVersion(),
       window.hermesAPI.getConnectionConfig(),
       window.hermesAPI.getApiServerKeyStatus(profile),
+      window.hermesAPI.getAppZoomSettings(),
     ]);
     setHermesHome(home);
     setAppVersion(aVersion);
+    setAppZoom(zoomSettings);
     setConnMode(conn.mode);
     setConnRemoteUrl(conn.remoteUrl);
     setConnHasApiKey(conn.hasApiKey);
@@ -225,6 +236,27 @@ function Settings({
   useEffect(() => {
     void Promise.resolve().then(loadConfig);
   }, [loadConfig]);
+
+  useEffect(() => {
+    return window.hermesAPI.onAppZoomSettingsChanged(setAppZoom);
+  }, []);
+
+  const updateAppZoom = useCallback(async (factor: number): Promise<void> => {
+    const optimistic = appZoomSettingsFor(factor);
+    setAppZoom(optimistic);
+    setAppZoomSaving(true);
+    try {
+      const settings = await window.hermesAPI.setAppZoomFactor(
+        optimistic.factor,
+      );
+      setAppZoom(settings);
+    } catch (err) {
+      console.error("Failed to update app zoom:", err);
+      setAppZoom(await window.hermesAPI.getAppZoomSettings());
+    } finally {
+      setAppZoomSaving(false);
+    }
+  }, []);
 
   function getConnectionApiKeyForSave(): string | undefined {
     // Mask sentinel in the field means "the secret is still server-side
@@ -1043,6 +1075,59 @@ function Settings({
           </div>
           <div className="settings-field-hint">
             {t("settings.appearanceHint")}
+          </div>
+        </div>
+        <div className="settings-field">
+          <label className="settings-field-label" htmlFor="app-zoom-range">
+            Display zoom
+            <span className="settings-zoom-value">{appZoom.percent}%</span>
+          </label>
+          <div className="settings-zoom-control">
+            <button
+              className="btn btn-secondary settings-zoom-button"
+              type="button"
+              onClick={() => void updateAppZoom(appZoom.factor - appZoom.step)}
+              disabled={appZoomSaving || appZoom.factor <= appZoom.min}
+              aria-label="Decrease display zoom"
+            >
+              -
+            </button>
+            <input
+              id="app-zoom-range"
+              className="settings-zoom-range"
+              type="range"
+              min={appZoom.min}
+              max={appZoom.max}
+              step={appZoom.step}
+              value={appZoom.factor}
+              onChange={(event) =>
+                void updateAppZoom(event.currentTarget.valueAsNumber)
+              }
+              aria-label="Display zoom"
+              aria-valuetext={`${appZoom.percent}%`}
+              disabled={appZoomSaving}
+            />
+            <button
+              className="btn btn-secondary settings-zoom-button"
+              type="button"
+              onClick={() => void updateAppZoom(appZoom.factor + appZoom.step)}
+              disabled={appZoomSaving || appZoom.factor >= appZoom.max}
+              aria-label="Increase display zoom"
+            >
+              +
+            </button>
+            <button
+              className="btn btn-secondary settings-zoom-reset"
+              type="button"
+              onClick={() => void updateAppZoom(APP_ZOOM_DEFAULT)}
+              disabled={appZoomSaving || appZoom.factor === APP_ZOOM_DEFAULT}
+            >
+              Reset
+            </button>
+          </div>
+          <div className="settings-field-hint">
+            Make text and interface controls larger or smaller. Applies after
+            restart too.
           </div>
         </div>
         <div className="settings-field">
