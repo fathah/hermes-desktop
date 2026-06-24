@@ -14,6 +14,7 @@ import {
   buildGatewayStartCommand,
   buildGatewayStopCommand,
   buildGatewayStatusCommand,
+  parseHermesProfileListOutput,
 } from "../src/main/ssh-remote";
 import type { SshConfig } from "../src/main/ssh-tunnel";
 
@@ -94,7 +95,7 @@ describe("ssh Hermes command quoting", () => {
       "bash -c '[ -x $HOME/hermes-agent/.venv/bin/hermes ] && exec $HOME/hermes-agent/.venv/bin/hermes 'kanban' 'create'",
     );
     expect(command).toContain(
-      `bash -c '[ -x $HOME/hermes-agent/.venv/bin/hermes ] && exec $HOME/hermes-agent/.venv/bin/hermes '"'"'kanban'"'"'`,
+      `$HOME/hermes-agent/.venv/bin/hermes '"'"'kanban'"'"'`,
     );
   });
 
@@ -173,6 +174,17 @@ describe("ssh gateway commands (issue #285)", () => {
 describe("buildRemoteHermesCmd venv probe (issue #284)", () => {
   const cmd = buildRemoteHermesCmd(["--version"]);
 
+  it("probes explicit remote launcher hooks before default install paths", () => {
+    const configLauncher = "$HOME/.config/hermes-desktop/remote-hermes";
+    const legacyLauncher = "$HOME/.hermes/desktop-remote-hermes";
+
+    expect(cmd).toContain(configLauncher);
+    expect(cmd).toContain(legacyLauncher);
+    expect(cmd.indexOf(configLauncher)).toBeLessThan(
+      cmd.indexOf("$HOME/hermes-agent/.venv/bin/hermes"),
+    );
+  });
+
   it("probes both .venv and venv for every install base", () => {
     for (const base of [
       "$HOME/hermes-agent",
@@ -188,11 +200,55 @@ describe("buildRemoteHermesCmd venv probe (issue #284)", () => {
     expect(cmd).toContain("$HOME/.local/bin/hermes");
   });
 
+  it("does not bake in deployment-specific managed runtime defaults", () => {
+    expect(cmd).not.toContain("/projects/hermes-runtime");
+    expect(cmd).not.toContain("sudo -n -u hermes");
+  });
+
   it("does not probe the /usr/local/bin sudo-wrapper it deliberately bypasses", () => {
     expect(cmd).not.toContain("/usr/local/bin/hermes");
   });
 
   it("still falls back to bare hermes on PATH", () => {
     expect(cmd).toContain("command -v hermes");
+  });
+});
+
+describe("parseHermesProfileListOutput", () => {
+  it("parses the Hermes profile table used by managed SSH launchers", () => {
+    const profiles = parseHermesProfileListOutput(`
+ Profile              Model                        Gateway      Alias        Distribution
+ ───────────────      ───────────────────────────  ───────────  ───────────  ────────────────────
+ ◆default             gpt-5.5                      running      —            —
+  biz-office          gpt-5.5                      running      biz-office   —
+  finance-accounting  gpt-5.5                      stopped      finance-accounting —
+  marketing           gpt-5.5                      running      marketing    —
+`);
+
+    expect(profiles.map((p) => p.name)).toEqual([
+      "default",
+      "biz-office",
+      "finance-accounting",
+      "marketing",
+    ]);
+    expect(profiles.find((p) => p.name === "default")?.isActive).toBe(true);
+    expect(profiles.find((p) => p.name === "marketing")?.gatewayRunning).toBe(
+      true,
+    );
+    expect(
+      profiles.find((p) => p.name === "finance-accounting")?.gatewayRunning,
+    ).toBe(false);
+  });
+
+  it("marks default active and normalizes empty model output", () => {
+    const profiles = parseHermesProfileListOutput(`
+ Profile          Model       Gateway
+ default          —           running
+ marketing        gpt-5.5     stopped
+`);
+
+    expect(profiles.find((p) => p.name === "default")?.isActive).toBe(true);
+    expect(profiles.find((p) => p.name === "default")?.model).toBe("");
+    expect(profiles.find((p) => p.name === "marketing")?.isActive).toBe(false);
   });
 });

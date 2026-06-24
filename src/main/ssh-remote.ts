@@ -1104,6 +1104,64 @@ export interface SshProfileInfo {
   gatewayRunning: boolean;
 }
 
+export function parseHermesProfileListOutput(output: string): SshProfileInfo[] {
+  const profiles: SshProfileInfo[] = [];
+
+  for (const rawLine of output.split(/\r?\n/)) {
+    const trimmed = rawLine.trim();
+    if (!trimmed) continue;
+    if (/^profile\s+model\s+gateway\b/i.test(trimmed)) continue;
+    if (/^[─\-\s]+$/.test(trimmed)) continue;
+
+    const isActive = /^[◆*]/.test(trimmed);
+    const line = trimmed.replace(/^[◆*]\s*/, "");
+    const parts = line.split(/\s+/);
+    if (parts.length < 3) continue;
+
+    const [name, model, gateway] = parts;
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name)) continue;
+
+    const gatewayState = gateway.toLowerCase();
+    if (gatewayState !== "running" && gatewayState !== "stopped") continue;
+
+    profiles.push({
+      name,
+      path: name === "default" ? "~/.hermes" : `~/.hermes/profiles/${name}`,
+      isDefault: name === "default",
+      isActive,
+      model: model === "—" ? "" : model,
+      provider: "auto",
+      hasEnv: false,
+      hasSoul: false,
+      skillCount: 0,
+      gatewayRunning: gatewayState === "running",
+    });
+  }
+
+  if (profiles.length > 0 && !profiles.some((p) => p.isActive)) {
+    const fallback = profiles.find((p) => p.isDefault) ?? profiles[0];
+    fallback.isActive = true;
+  }
+
+  return profiles;
+}
+
+async function sshListProfilesViaHermesCli(
+  config: SshConfig,
+): Promise<SshProfileInfo[]> {
+  try {
+    const out = await sshExec(
+      config,
+      buildRemoteHermesCmd(["profile", "list"], " 2>/dev/null"),
+      undefined,
+      20000,
+    );
+    return parseHermesProfileListOutput(out);
+  } catch {
+    return [];
+  }
+}
+
 export async function sshListProfiles(
   config: SshConfig,
 ): Promise<SshProfileInfo[]> {
@@ -1174,10 +1232,15 @@ if os.path.isdir(profiles_dir):
 
 print(json.dumps(profiles))
 `;
+  const cliProfiles = await sshListProfilesViaHermesCli(config);
+
   try {
     const out = await sshPython(config, script);
-    return JSON.parse(out.trim() || "[]");
+    const scannedProfiles = JSON.parse(out.trim() || "[]") as SshProfileInfo[];
+    if (cliProfiles.length > scannedProfiles.length) return cliProfiles;
+    return scannedProfiles.length > 0 ? scannedProfiles : cliProfiles;
   } catch {
+    if (cliProfiles.length > 0) return cliProfiles;
     return [
       {
         name: "default",
@@ -1582,12 +1645,20 @@ export async function sshListCachedSessions(
 // directory name is not fixed, and an install that uses the un-dotted
 // `venv` was otherwise invisible even when fully working (issue #284).
 // `~/.local/bin/hermes` is also probed, where `pip install --user` flows
-// place a wrapper. `command -v hermes` alone is not enough: the desktop's
-// non-interactive SSH does not source `~/.profile`/`~/.bashrc`, so any
-// PATH additions made there are not visible.
+// place a wrapper. Before those default install paths, probe explicit
+// per-user launcher hooks. They let managed deployments provide their own
+// executable wrapper for unusual filesystem layouts, service users, or
+// HERMES_HOME requirements without baking deployment-specific paths into the
+// desktop. `command -v hermes` alone is not enough: the desktop's
+// non-interactive SSH does not source `~/.profile`/`~/.bashrc`, so any PATH
+// additions made there are not visible.
 //
 // Exported for unit testing the probe list without a live remote host.
 export function buildRemoteHermesCmd(args: string[], extraShell = ""): string {
+  const launcherCandidates = [
+    "$HOME/.config/hermes-desktop/remote-hermes",
+    "$HOME/.hermes/desktop-remote-hermes",
+  ];
   const candidates = [
     "$HOME/hermes-agent/.venv/bin/hermes",
     "$HOME/hermes-agent/venv/bin/hermes",
@@ -1598,10 +1669,13 @@ export function buildRemoteHermesCmd(args: string[], extraShell = ""): string {
     "$HOME/.local/bin/hermes",
   ];
   const quotedArgs = args.map((a) => shellQuote(a)).join(" ");
+  const launcherProbe = launcherCandidates
+    .map((p) => `[ -x ${p} ] && exec ${p} ${quotedArgs}${extraShell}`)
+    .join("; ");
   const probe = candidates
     .map((p) => `[ -x ${p} ] && exec ${p} ${quotedArgs}${extraShell}`)
     .join("; ");
-  const script = `${probe}; command -v hermes >/dev/null && exec hermes ${quotedArgs}${extraShell}; echo "ERR: hermes CLI not found on remote PATH or in any known venv location" >&2; exit 1`;
+  const script = `${launcherProbe}; ${probe}; command -v hermes >/dev/null && exec hermes ${quotedArgs}${extraShell}; echo "ERR: hermes CLI not found on remote PATH, configured launcher, or in any known venv location" >&2; exit 1`;
   return `bash -c ${shellQuote(script)}`;
 }
 
