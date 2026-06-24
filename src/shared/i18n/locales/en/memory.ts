@@ -54,6 +54,8 @@ export default {
       "Semantic long-term memory with profile recall and entity extraction",
     holographic:
       "Local SQLite fact store with FTS5 search and trust scoring (no API key needed)",
+    "recall-sqlite":
+      "Local SQLite recall store with FTS search and no API key required.",
     openviking:
       "Session-managed memory with tiered retrieval and knowledge browsing",
     byterover: "Persistent knowledge tree with tiered retrieval via brv CLI",

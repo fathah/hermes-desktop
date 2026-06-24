@@ -47,6 +47,7 @@ export default {
     supermemory: "语义长期记忆，支持档案回忆和实体提取",
     holographic:
       "本地 SQLite 事实存储，支持 FTS5 搜索和信任评分（无需 API Key）",
+    "recall-sqlite": "本地 SQLite 召回存储，支持 FTS 搜索且无需 API Key",
     openviking: "会话管理的记忆，支持分层检索和知识浏览",
     byterover: "持久化知识树，通过 brv CLI 进行分层检索",
   },

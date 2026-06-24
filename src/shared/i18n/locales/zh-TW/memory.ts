@@ -47,6 +47,7 @@ export default {
     supermemory: "語義長期記憶，支援檔案回憶和實體擷取",
     holographic:
       "本機 SQLite 事實儲存，支援 FTS5 搜尋和信任評分（無需 API Key）",
+    "recall-sqlite": "本機 SQLite 召回儲存，支援 FTS 搜尋且無需 API Key",
     openviking: "工作階段管理的記憶，支援分層搜尋和知識瀏覽",
     byterover: "持久化知識樹，透過 brv CLI 進行分層搜尋",
   },

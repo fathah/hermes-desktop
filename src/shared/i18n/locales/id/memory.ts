@@ -57,6 +57,8 @@ export default {
       "Memori jangka panjang semantik dengan profile recall dan ekstraksi entitas",
     holographic:
       "Penyimpanan fakta SQLite lokal dengan pencarian FTS5 dan trust scoring (tanpa API key)",
+    "recall-sqlite":
+      "Penyimpanan recall SQLite lokal dengan pencarian FTS tanpa memerlukan API key",
     openviking:
       "Memori terkelola sesi dengan retrieval bertingkat dan penjelajahan pengetahuan",
     byterover:

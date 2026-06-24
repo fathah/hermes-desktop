@@ -12,11 +12,12 @@ import { randomBytes } from "crypto";
 import type { BrowserWindow } from "electron";
 import {
   getConnectionConfig,
+  getConfigValue,
   getModelConfig,
   hasOAuthCredentials,
 } from "./config";
 import { providerDoesNotNeedApiKey } from "./providers";
-import { getActiveProfileNameSync, profileHome, stripAnsi } from "./utils";
+import { getActiveProfileNameSync, stripAnsi } from "./utils";
 import { setupAskpass } from "./askpass";
 import { precacheSudoCredentials } from "./sudoCreds";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
@@ -885,6 +886,10 @@ export function discoverMemoryProviders(
       description: "memory.providers.holographic",
       envVars: [],
     },
+    "recall-sqlite": {
+      description: "memory.providers.recall-sqlite",
+      envVars: [],
+    },
     openviking: {
       description: "memory.providers.openviking",
       envVars: ["OPENVIKING_ENDPOINT", "OPENVIKING_API_KEY"],
@@ -929,11 +934,7 @@ export function discoverMemoryProviders(
 
 export function getActiveMemoryProvider(profile?: string): string {
   try {
-    const configPath = join(profileHome(profile), "config.yaml");
-    if (!existsSync(configPath)) return "";
-    const content = readFileSync(configPath, "utf-8");
-    const match = content.match(/^\s*provider:\s*["']?(\w+)["']?\s*$/m);
-    return match?.[1] || "";
+    return getConfigValue("memory.provider", profile) || "";
   } catch {
     return "";
   }

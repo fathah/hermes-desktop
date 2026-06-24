@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { t } from "./index";
+import { resources, t } from "./index";
 
 describe("shared i18n", () => {
   it("returns English text by default", () => {
@@ -57,5 +57,20 @@ describe("shared i18n", () => {
     expect(t("common.updateAvailable", "pl", { version: "1.2.3" })).toBe(
       "Aktualizacja v1.2.3",
     );
+  });
+
+  it("has recall-sqlite memory provider copy in every locale", () => {
+    expect(t("memory.providers.recall-sqlite")).toBe(
+      "Local SQLite recall store with FTS search and no API key required.",
+    );
+
+    for (const [locale, resource] of Object.entries(resources)) {
+      const memory = resource.translation.memory as {
+        providers?: Record<string, string>;
+      };
+      expect(memory.providers?.["recall-sqlite"], locale).toEqual(
+        expect.any(String),
+      );
+    }
   });
 });

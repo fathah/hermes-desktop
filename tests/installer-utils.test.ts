@@ -32,6 +32,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  delete process.env.HERMES_HOME;
+  vi.resetModules();
   rmSync(TEST_DIR, { recursive: true, force: true });
 });
 
@@ -164,6 +166,14 @@ describe("MCP server YAML parsing", () => {
 // ─── Memory provider discovery logic ────────────────────
 
 describe("Memory provider discovery", () => {
+  async function importInstallerWithHome(
+    home: string,
+  ): Promise<typeof import("../src/main/installer")> {
+    vi.resetModules();
+    process.env.HERMES_HOME = home;
+    return await import("../src/main/installer");
+  }
+
   it("creates provider list from directory scan", () => {
     // Simulate plugins/memory/ structure
     const pluginsDir = join(TEST_DIR, "plugins", "memory");
@@ -231,6 +241,29 @@ describe("Memory provider discovery", () => {
     const content = readFileSync(configPath, "utf-8");
     const match = content.match(/^\s*provider:\s*["']?(\w+)["']?\s*$/m);
     expect(match).toBeNull();
+  });
+
+  it("discovers recall-sqlite metadata and active state from real installer code", async () => {
+    const pluginsDir = join(TEST_DIR, "hermes-agent", "plugins", "memory");
+    mkdirSync(join(pluginsDir, "recall-sqlite"), { recursive: true });
+    writeFileSync(join(pluginsDir, "recall-sqlite", "__init__.py"), "");
+    writeFileSync(
+      join(TEST_DIR, "config.yaml"),
+      ["memory:", "  provider: recall-sqlite", ""].join("\n"),
+    );
+
+    const { discoverMemoryProviders, getActiveMemoryProvider } =
+      await importInstallerWithHome(TEST_DIR);
+    const providers = discoverMemoryProviders();
+
+    expect(getActiveMemoryProvider()).toBe("recall-sqlite");
+    expect(providers).toContainEqual({
+      name: "recall-sqlite",
+      description: "memory.providers.recall-sqlite",
+      installed: true,
+      active: true,
+      envVars: [],
+    });
   });
 });
 

@@ -55,6 +55,8 @@ export default {
       "Semantyczna pamięć długoterminowa z przywoływaniem profilu i ekstrakcją encji",
     holographic:
       "Lokalny magazyn faktów SQLite z wyszukiwaniem FTS5 i oceną zaufania (bez klucza API)",
+    "recall-sqlite":
+      "Lokalny magazyn przywoływania SQLite z wyszukiwaniem FTS, bez wymaganego klucza API",
     openviking:
       "Pamięć zarządzana sesyjnie z warstwowym wyszukiwaniem i przeglądaniem wiedzy",
     byterover: "Trwałe drzewo wiedzy z warstwowym wyszukiwaniem przez brv CLI",

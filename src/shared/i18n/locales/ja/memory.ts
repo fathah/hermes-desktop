@@ -52,6 +52,8 @@ export default {
     supermemory: "プロファイル想起とエンティティ抽出を備えた意味的長期メモリ",
     holographic:
       "FTS5 検索と信頼度スコアリング付きローカル SQLite 事実ストア（API キー不要）",
+    "recall-sqlite":
+      "API キー不要の FTS 検索付きローカル SQLite リコールストア",
     openviking: "階層型検索とナレッジブラウジングを備えたセッション管理メモリ",
     byterover: "brv CLI 経由の階層型検索付き永続ナレッジツリー",
   },

@@ -55,6 +55,8 @@ export default {
       "Memória semântica de longo prazo com recuperação de perfil e extração de entidades",
     holographic:
       "Armazenamento local de fatos em SQLite com busca FTS5 e pontuação de confiança (sem necessidade de chave de API)",
+    "recall-sqlite":
+      "Armazenamento local de recuperação em SQLite com busca FTS e sem exigir chave de API",
     openviking:
       "Memória gerenciada por sessão com recuperação em camadas e navegação de conhecimento",
     byterover:

@@ -1732,6 +1732,7 @@ known = {
     "retaindb": {"description": "memory.providers.retaindb", "envVars": ["RETAINDB_API_KEY"]},
     "supermemory": {"description": "memory.providers.supermemory", "envVars": ["SUPERMEMORY_API_KEY"]},
     "holographic": {"description": "memory.providers.holographic", "envVars": []},
+    "recall-sqlite": {"description": "memory.providers.recall-sqlite", "envVars": []},
     "openviking": {"description": "memory.providers.openviking", "envVars": ["OPENVIKING_ENDPOINT", "OPENVIKING_API_KEY"]},
     "byterover": {"description": "memory.providers.byterover", "envVars": ["BRV_API_KEY"]},
 }
