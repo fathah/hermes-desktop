@@ -5,6 +5,7 @@ import { ResearchModal } from "./ResearchModal";
 const store = vi.hoisted(() => ({
   setResearchOpen: vi.fn(),
   setScheduledOpen: vi.fn(),
+  setScheduledDraftTopic: vi.fn(),
   importResearchWork: vi.fn(),
   runResearch: vi.fn(),
   saveStudyToWiki: vi.fn(),

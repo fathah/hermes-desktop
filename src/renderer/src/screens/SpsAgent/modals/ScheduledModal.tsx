@@ -11,8 +11,16 @@ import { SpsModal } from "./SpsModal";
 import { commitChangeset } from "../inbox/ingestApply";
 import {
   CADENCES,
+  IMPORTANCE_THRESHOLDS,
+  SOURCE_INTENTS,
   cadenceLabel,
+  normalizeMonitorSourcePlan,
   type Cadence,
+  type ImportanceThreshold,
+  type MonitorDiscoveryResult,
+  type MonitorSourceEntry,
+  type MonitorSourceStatus,
+  type SourceIntent,
 } from "../../../../../shared/scheduledResearch";
 import type { CronJob } from "../../../../../shared/cronjobs";
 
@@ -22,8 +30,55 @@ type Pending = Awaited<
 >[number];
 type SkipInfo = { skipCount: number; lastSkipAt: number; lastReason: string };
 
+const SOURCE_INTENT_LABELS: Record<SourceIntent, string> = {
+  all: "All",
+  web: "Web",
+  rss: "RSS",
+  substack: "Substack",
+  social: "Social",
+};
+
+const IMPORTANCE_LABELS: Record<ImportanceThreshold, string> = {
+  digest: "Digest",
+  noteworthy: "Noteworthy",
+  breaking: "Breaking",
+};
+
+const SOURCE_STATUS_LABELS: Record<MonitorSourceStatus, string> = {
+  suggested: "Suggested",
+  approved: "Approved",
+  ignored: "Ignored",
+  unavailable: "Unavailable",
+};
+
+function sourceTarget(source: MonitorSourceEntry): string {
+  return source.url ?? source.query ?? "";
+}
+
+function groupedSources(
+  sources: MonitorSourceEntry[],
+): Array<[MonitorSourceEntry["kind"], MonitorSourceEntry[]]> {
+  const order: MonitorSourceEntry["kind"][] = [
+    "rss",
+    "substack",
+    "web",
+    "social",
+  ];
+  return order
+    .map(
+      (kind) =>
+        [kind, sources.filter((s) => s.kind === kind)] as [
+          MonitorSourceEntry["kind"],
+          MonitorSourceEntry[],
+        ],
+    )
+    .filter(([, list]) => list.length > 0);
+}
+
 export function ScheduledModal() {
   const setScheduledOpen = useStore((s) => s.setScheduledOpen);
+  const scheduledDraftTopic = useStore((s) => s.scheduledDraftTopic);
+  const setScheduledDraftTopic = useStore((s) => s.setScheduledDraftTopic);
   const ingestCommitPage = useStore((s) => s.ingestCommitPage);
   const selectPage = useStore((s) => s.selectPage);
   const flash = useStore((s) => s.flash);
@@ -39,6 +94,15 @@ export function ScheduledModal() {
   const [topic, setTopic] = useState("");
   const [cadence, setCadence] = useState<Cadence>("weekly");
   const [hour, setHour] = useState(8);
+  const [sourceIntent, setSourceIntent] = useState<SourceIntent>("all");
+  const [importanceThreshold, setImportanceThreshold] =
+    useState<ImportanceThreshold>("noteworthy");
+  const [telegramPush, setTelegramPush] = useState(false);
+  const [sourcePlan, setSourcePlan] = useState<MonitorSourceEntry[]>([]);
+  const [discovery, setDiscovery] = useState<MonitorDiscoveryResult | null>(
+    null,
+  );
+  const [discovering, setDiscovering] = useState(false);
   const [wantAutoApply, setWantAutoApply] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -103,6 +167,64 @@ export function ScheduledModal() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!scheduledDraftTopic) return;
+    setTopic(scheduledDraftTopic);
+    setScheduledDraftTopic(null);
+  }, [scheduledDraftTopic, setScheduledDraftTopic]);
+
+  const onDiscoverSources = async () => {
+    const t = topic.trim();
+    if (!t) return;
+    setDiscovering(true);
+    setError("");
+    try {
+      const result = await window.hermesAPI.srDiscoverSources({
+        topic: t,
+        sourceIntent,
+        existingPlan: sourcePlan,
+      });
+      setDiscovery(result);
+      setSourcePlan(result.candidates);
+    } finally {
+      setDiscovering(false);
+    }
+  };
+
+  const setLocalSourceStatus = (id: string, status: MonitorSourceStatus) => {
+    setSourcePlan((plan) =>
+      normalizeMonitorSourcePlan(
+        plan.map((source) =>
+          source.id === id ? { ...source, status } : source,
+        ),
+      ),
+    );
+  };
+
+  const editLocalSource = (id: string, value: string) => {
+    setSourcePlan((plan) =>
+      plan.map((source) => {
+        if (source.id !== id) return source;
+        if (source.url) return { ...source, url: value };
+        return { ...source, query: value };
+      }),
+    );
+  };
+
+  const updateScheduleSourceStatus = async (
+    schedule: Schedule,
+    sourceId: string,
+    status: MonitorSourceStatus,
+  ) => {
+    const next = normalizeMonitorSourcePlan(
+      (schedule.sourcePlan ?? []).map((source) =>
+        source.id === sourceId ? { ...source, status } : source,
+      ),
+    );
+    await window.hermesAPI.srUpdateSourcePlan(schedule.id, next);
+    await refresh();
+  };
+
   const onCreate = async () => {
     const t = topic.trim();
     if (!t) return;
@@ -113,6 +235,11 @@ export function ScheduledModal() {
         topic: t,
         cadence,
         hour,
+        sourceIntent,
+        sourcePlan,
+        importanceThreshold,
+        telegramPush,
+        telegramMode: "summary-only",
         autoApply: wantAutoApply,
       });
       if (!res.ok) {
@@ -120,6 +247,8 @@ export function ScheduledModal() {
         return;
       }
       setTopic("");
+      setSourcePlan([]);
+      setDiscovery(null);
       await refresh();
     } finally {
       setCreating(false);
@@ -232,13 +361,13 @@ export function ScheduledModal() {
   };
 
   return (
-    <SpsModal title="⏱ Scheduled" onClose={onClose} width={660}>
+    <SpsModal title="Signal Briefs" onClose={onClose} width={760}>
       <div className="modal-body">
         {/* ── create ── */}
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1fr auto auto auto",
+            gridTemplateColumns: "minmax(220px, 1fr) auto auto",
             gap: 8,
             marginBottom: 6,
             alignItems: "center",
@@ -253,7 +382,7 @@ export function ScheduledModal() {
               onKeyDown={(e) => {
                 if (e.key === "Enter") void onCreate();
               }}
-              placeholder="Research this topic on a schedule…"
+              placeholder="Monitor this topic…"
             />
           </div>
           <select
@@ -264,6 +393,51 @@ export function ScheduledModal() {
             {CADENCES.map((c) => (
               <option key={c} value={c}>
                 {c}
+              </option>
+            ))}
+          </select>
+          <button
+            className="cover-btn"
+            onClick={() => void onCreate()}
+            disabled={creating || !topic.trim()}
+          >
+            {creating ? "Adding…" : "Create"}
+          </button>
+        </div>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 8,
+            marginBottom: 8,
+            fontSize: 12,
+            color: "var(--tx-3)",
+            alignItems: "center",
+          }}
+        >
+          <select
+            className="cover-btn"
+            value={sourceIntent}
+            onChange={(e) => setSourceIntent(e.target.value as SourceIntent)}
+            title="Source focus"
+          >
+            {SOURCE_INTENTS.map((intent) => (
+              <option key={intent} value={intent}>
+                {SOURCE_INTENT_LABELS[intent]}
+              </option>
+            ))}
+          </select>
+          <select
+            className="cover-btn"
+            value={importanceThreshold}
+            onChange={(e) =>
+              setImportanceThreshold(e.target.value as ImportanceThreshold)
+            }
+            title="Importance threshold"
+          >
+            {IMPORTANCE_THRESHOLDS.map((threshold) => (
+              <option key={threshold} value={threshold}>
+                {IMPORTANCE_LABELS[threshold]}
               </option>
             ))}
           </select>
@@ -281,21 +455,19 @@ export function ScheduledModal() {
           </select>
           <button
             className="cover-btn"
-            onClick={() => void onCreate()}
-            disabled={creating || !topic.trim()}
+            onClick={() => void onDiscoverSources()}
+            disabled={discovering || !topic.trim()}
           >
-            {creating ? "Adding…" : "Add"}
+            {discovering ? "Discovering…" : "Discover sources"}
           </button>
-        </div>
-        <div
-          style={{
-            display: "flex",
-            gap: 16,
-            marginBottom: 8,
-            fontSize: 12,
-            color: "var(--tx-3)",
-          }}
-        >
+          <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <input
+              type="checkbox"
+              checked={telegramPush}
+              onChange={(e) => setTelegramPush(e.target.checked)}
+            />
+            Telegram summary
+          </label>
           <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
             <input
               type="checkbox"
@@ -315,6 +487,84 @@ export function ScheduledModal() {
           >
             {error}
           </small>
+        )}
+        {sourcePlan.length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            <div className="c-name" style={{ marginBottom: 6 }}>
+              Source review
+            </div>
+            {discovery?.warnings.map((warning) => (
+              <small
+                key={warning}
+                style={{ color: "var(--tx-3)", display: "block" }}
+              >
+                {warning}
+              </small>
+            ))}
+            <div className="scroll" style={{ maxHeight: "22vh" }}>
+              {groupedSources(sourcePlan).map(([kind, list]) => (
+                <div key={kind} style={{ marginBottom: 6 }}>
+                  <small style={{ color: "var(--tx-3)" }}>
+                    {SOURCE_INTENT_LABELS[kind]}
+                  </small>
+                  {list.map((source) => (
+                    <div
+                      key={source.id}
+                      className="lst-row"
+                      style={{
+                        alignItems: "center",
+                        gap: 8,
+                        height: "auto",
+                        padding: "6px",
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div className="c-name">{source.label}</div>
+                        <input
+                          className="cover-btn"
+                          value={sourceTarget(source)}
+                          onChange={(e) =>
+                            editLocalSource(source.id, e.target.value)
+                          }
+                          style={{ width: "100%", textAlign: "left" }}
+                        />
+                      </div>
+                      <span
+                        className={
+                          source.status === "approved"
+                            ? "pal-chip on"
+                            : "pal-chip"
+                        }
+                        style={{ pointerEvents: "none" }}
+                      >
+                        {SOURCE_STATUS_LABELS[source.status]}
+                      </span>
+                      {source.status !== "approved" && (
+                        <button
+                          className="cover-btn"
+                          onClick={() =>
+                            setLocalSourceStatus(source.id, "approved")
+                          }
+                        >
+                          Approve
+                        </button>
+                      )}
+                      {source.status !== "ignored" && (
+                        <button
+                          className="cover-btn"
+                          onClick={() =>
+                            setLocalSourceStatus(source.id, "ignored")
+                          }
+                        >
+                          Ignore
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
         {/* ── pending updates ── */}
@@ -363,74 +613,161 @@ export function ScheduledModal() {
         {/* ── schedules ── */}
         <div style={{ marginTop: 12 }}>
           <div className="c-name" style={{ marginBottom: 6 }}>
-            Schedules
+            Monitors
           </div>
           {schedules.length === 0 && (
             <div className="cmts-empty" style={{ padding: "16px 0" }}>
-              No schedules yet. Add a topic above to keep a wiki page current
-              automatically — you review each update before it lands.
+              No monitors yet. Add a topic above to keep a cited Signal Brief
+              current — you review each update before it lands.
             </div>
           )}
-          <div className="scroll" style={{ maxHeight: "34vh" }}>
-            {schedules.map((s) => (
-              <div
-                key={s.id}
-                className="lst-row"
-                style={{
-                  alignItems: "flex-start",
-                  gap: 8,
-                  height: "auto",
-                  padding: "8px 6px",
-                }}
-              >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div
-                    className="c-name"
-                    style={{ display: "flex", alignItems: "center", gap: 6 }}
-                  >
-                    {s.kind === "digest" && (
-                      <span
-                        className="pal-chip on"
-                        style={{ pointerEvents: "none" }}
-                      >
-                        Digest
-                      </span>
+          <div className="scroll" style={{ maxHeight: "38vh" }}>
+            {schedules.map((s) => {
+              const plan = normalizeMonitorSourcePlan(s.sourcePlan);
+              const approved = plan.filter(
+                (source) => source.status === "approved",
+              ).length;
+              const suggested = plan.filter(
+                (source) => source.status === "suggested",
+              ).length;
+              return (
+                <div
+                  key={s.id}
+                  className="lst-row"
+                  style={{
+                    alignItems: "flex-start",
+                    gap: 8,
+                    height: "auto",
+                    padding: "8px 6px",
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      className="c-name"
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      {s.kind === "digest" ? (
+                        <span
+                          className="pal-chip on"
+                          style={{ pointerEvents: "none" }}
+                        >
+                          Digest
+                        </span>
+                      ) : (
+                        <span
+                          className="pal-chip on"
+                          style={{ pointerEvents: "none" }}
+                        >
+                          Signal Brief
+                        </span>
+                      )}
+                      {s.kind === "digest"
+                        ? s.scope?.source
+                          ? `External sessions · ${s.scope.source}`
+                          : "External sessions"
+                        : s.topic}
+                    </div>
+                    <small style={{ color: "var(--tx-3)", display: "block" }}>
+                      {cadenceLabel(s.cadence, s.hour)} · {fmtLast(s.lastRunAt)}
+                      {s.kind === "digest"
+                        ? " · app-open only"
+                        : s.cronJobId
+                          ? " · runs in background"
+                          : " · app-open only"}
+                      {s.kind !== "digest" && s.sourceIntent
+                        ? ` · ${SOURCE_INTENT_LABELS[s.sourceIntent]}`
+                        : ""}
+                      {approved
+                        ? ` · ${approved} approved source${approved === 1 ? "" : "s"}`
+                        : ""}
+                      {suggested ? ` · ${suggested} suggested` : ""}
+                      {s.telegramPush ? " · Telegram summary" : ""}
+                      {s.autoApply ? " · auto-apply" : ""}
+                      {!s.enabled ? " · paused" : ""}
+                    </small>
+                    {plan.length > 0 && (
+                      <div style={{ marginTop: 6 }}>
+                        {plan.map((source) => (
+                          <div
+                            key={source.id}
+                            style={{
+                              display: "flex",
+                              gap: 6,
+                              alignItems: "center",
+                              marginTop: 4,
+                            }}
+                          >
+                            <small
+                              style={{
+                                color: "var(--tx-3)",
+                                flex: 1,
+                                minWidth: 0,
+                              }}
+                            >
+                              {SOURCE_INTENT_LABELS[source.kind]} ·{" "}
+                              {source.label} ·{" "}
+                              {SOURCE_STATUS_LABELS[source.status]}
+                            </small>
+                            {source.status !== "approved" && (
+                              <button
+                                className="cover-btn"
+                                onClick={() =>
+                                  void updateScheduleSourceStatus(
+                                    s,
+                                    source.id,
+                                    "approved",
+                                  )
+                                }
+                              >
+                                Approve
+                              </button>
+                            )}
+                            {source.status !== "ignored" && (
+                              <button
+                                className="cover-btn"
+                                onClick={() =>
+                                  void updateScheduleSourceStatus(
+                                    s,
+                                    source.id,
+                                    "ignored",
+                                  )
+                                }
+                              >
+                                Ignore
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     )}
-                    {s.kind === "digest"
-                      ? s.scope?.source
-                        ? `External sessions · ${s.scope.source}`
-                        : "External sessions"
-                      : s.topic}
                   </div>
-                  <small style={{ color: "var(--tx-3)", display: "block" }}>
-                    {cadenceLabel(s.cadence, s.hour)} · {fmtLast(s.lastRunAt)}
-                    {s.kind === "digest"
-                      ? " · app-open only"
-                      : s.cronJobId
-                        ? " · runs in background"
-                        : " · app-open only"}
-                    {s.autoApply ? " · auto-apply" : ""}
-                    {!s.enabled ? " · paused" : ""}
-                  </small>
+                  <button
+                    className="cover-btn"
+                    disabled={busyId === s.id}
+                    onClick={() => void onRunNow(s.id)}
+                  >
+                    {busyId === s.id ? "Running…" : "Run now"}
+                  </button>
+                  <button
+                    className="cover-btn"
+                    onClick={() => void onToggle(s)}
+                  >
+                    {s.enabled ? "Pause" : "Resume"}
+                  </button>
+                  <button
+                    className="cover-btn"
+                    onClick={() => void onDelete(s.id)}
+                  >
+                    Delete
+                  </button>
                 </div>
-                <button
-                  className="cover-btn"
-                  disabled={busyId === s.id}
-                  onClick={() => void onRunNow(s.id)}
-                >
-                  {busyId === s.id ? "Running…" : "Run now"}
-                </button>
-                <button className="cover-btn" onClick={() => void onToggle(s)}>
-                  {s.enabled ? "Pause" : "Resume"}
-                </button>
-                <button
-                  className="cover-btn"
-                  onClick={() => void onDelete(s.id)}
-                >
-                  Delete
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 

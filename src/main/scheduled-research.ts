@@ -52,10 +52,19 @@ import {
   validateScheduleInput,
   cronExprFor,
   periodStart,
+  buildMonitorDiscoveryResult,
+  buildMonitorSourceHint,
+  inferBriefImportance,
+  meetsImportanceThreshold,
+  normalizeMonitorSourcePlan,
   MAX_SCHEDULES,
   type ScheduledResearchItem,
   type ScheduleInput,
+  type MonitorDiscoveryInput,
+  type MonitorDiscoveryResult,
+  type MonitorSourceEntry,
 } from "../shared/scheduledResearch";
+import { fetchRssArticles } from "./rss-discovery";
 
 export type RunOutcome = "changed" | "no-change" | "no-sources" | "error";
 
@@ -98,7 +107,7 @@ async function createPairedCron(
     const name = `sr:${item.id}`;
     const res = await createCronJob(
       cronExprFor(item.cadence, item.hour),
-      buildScheduledCronPrompt(item.topic),
+      buildScheduledCronPrompt(item.topic, buildMonitorSourceHint(item)),
       name,
       "local",
       profile,
@@ -167,6 +176,19 @@ export async function createSchedule(
     id: newId(),
     kind: isDigest ? "digest" : "research",
     scope: isDigest ? input.scope : undefined,
+    sourceIntent: isDigest ? undefined : (input.sourceIntent ?? "all"),
+    sourcePlan: isDigest
+      ? undefined
+      : normalizeMonitorSourcePlan(input.sourcePlan),
+    importanceThreshold: isDigest
+      ? undefined
+      : (input.importanceThreshold ?? "noteworthy"),
+    telegramPush: isDigest ? undefined : (input.telegramPush ?? false),
+    telegramMode: isDigest
+      ? undefined
+      : input.telegramPush
+        ? (input.telegramMode ?? "summary-only")
+        : input.telegramMode,
     topic,
     pageId,
     cadence: input.cadence,
@@ -200,7 +222,18 @@ export async function createSchedule(
 export async function updateSchedule(
   id: string,
   patch: Partial<
-    Pick<ScheduledResearchItem, "cadence" | "hour" | "enabled" | "autoApply">
+    Pick<
+      ScheduledResearchItem,
+      | "cadence"
+      | "hour"
+      | "enabled"
+      | "autoApply"
+      | "sourceIntent"
+      | "sourcePlan"
+      | "importanceThreshold"
+      | "telegramPush"
+      | "telegramMode"
+    >
   >,
   profile?: string,
 ): Promise<{ ok: boolean; error?: string }> {
@@ -208,11 +241,24 @@ export async function updateSchedule(
   const item = reg.schedules.find((s) => s.id === id);
   if (!item) return { ok: false, error: "Schedule not found." };
   const cronShapeChanged =
-    patch.cadence !== undefined || patch.hour !== undefined;
+    patch.cadence !== undefined ||
+    patch.hour !== undefined ||
+    patch.sourceIntent !== undefined ||
+    patch.sourcePlan !== undefined ||
+    patch.importanceThreshold !== undefined ||
+    patch.telegramPush !== undefined ||
+    patch.telegramMode !== undefined;
   if (patch.cadence !== undefined) item.cadence = patch.cadence;
   if (patch.hour !== undefined) item.hour = patch.hour;
   if (patch.enabled !== undefined) item.enabled = patch.enabled;
   if (patch.autoApply !== undefined) item.autoApply = patch.autoApply;
+  if (patch.sourceIntent !== undefined) item.sourceIntent = patch.sourceIntent;
+  if (patch.sourcePlan !== undefined)
+    item.sourcePlan = normalizeMonitorSourcePlan(patch.sourcePlan);
+  if (patch.importanceThreshold !== undefined)
+    item.importanceThreshold = patch.importanceThreshold;
+  if (patch.telegramPush !== undefined) item.telegramPush = patch.telegramPush;
+  if (patch.telegramMode !== undefined) item.telegramMode = patch.telegramMode;
   saveRegistry(reg, profile);
   // Keep the paired cron job in sync.
   try {
@@ -233,6 +279,21 @@ export async function updateSchedule(
     /* best-effort; desktop fallback covers it */
   }
   return { ok: true };
+}
+
+export async function discoverScheduleSources(
+  input: MonitorDiscoveryInput,
+  _profile?: string,
+): Promise<MonitorDiscoveryResult> {
+  return buildMonitorDiscoveryResult(input);
+}
+
+export async function updateScheduleSourcePlan(
+  id: string,
+  sourcePlan: MonitorSourceEntry[],
+  profile?: string,
+): Promise<{ ok: boolean; error?: string }> {
+  return updateSchedule(id, { sourcePlan }, profile);
 }
 
 export async function deleteSchedule(
@@ -374,6 +435,153 @@ function sha256(s: string): string {
   return createHash("sha256").update(s).digest("hex");
 }
 
+function approvedFeedSources(
+  item: ScheduledResearchItem,
+): MonitorSourceEntry[] {
+  return normalizeMonitorSourcePlan(item.sourcePlan).filter(
+    (source) =>
+      source.status === "approved" &&
+      !!source.url &&
+      (source.kind === "rss" || source.kind === "substack"),
+  );
+}
+
+function stampSourcesChecked(
+  itemId: string,
+  sourceIds: string[],
+  profile?: string,
+): void {
+  if (!sourceIds.length) return;
+  const reg = loadRegistry(profile);
+  const found = reg.schedules.find((s) => s.id === itemId);
+  if (!found?.sourcePlan) return;
+  const checked = new Set(sourceIds);
+  const now = Date.now();
+  found.sourcePlan = normalizeMonitorSourcePlan(found.sourcePlan).map(
+    (source) =>
+      checked.has(source.id) ? { ...source, lastCheckedAt: now } : source,
+  );
+  saveRegistry(reg, profile);
+}
+
+async function buildApprovedFeedContext(
+  item: ScheduledResearchItem,
+  profile?: string,
+): Promise<string> {
+  const feeds = approvedFeedSources(item).slice(0, 8);
+  if (!feeds.length) return "";
+
+  const checkedIds: string[] = [];
+  const seen = new Set<string>();
+  const sections: string[] = [];
+  for (const source of feeds) {
+    if (!source.url) continue;
+    try {
+      const articles = await fetchRssArticles(source.url);
+      checkedIds.push(source.id);
+      const lines = articles
+        .filter((article) => article.url || article.title)
+        .slice(0, 8)
+        .map((article) => {
+          const key = sha256(`${article.url || ""}\n${article.title}`);
+          if (seen.has(key)) return "";
+          seen.add(key);
+          const date = article.published_at
+            ? new Date(article.published_at).toISOString().slice(0, 10)
+            : "";
+          const title = article.title || "Untitled";
+          const link = article.url ? `[${title}](${article.url})` : title;
+          const excerpt = article.summary_excerpt
+            ? ` — ${article.summary_excerpt}`
+            : "";
+          return `- ${date ? `${date}: ` : ""}${link}${excerpt}`;
+        })
+        .filter(Boolean);
+      if (lines.length) {
+        sections.push(`### ${source.label}\n${lines.join("\n")}`);
+      }
+    } catch {
+      checkedIds.push(source.id);
+    }
+  }
+  stampSourcesChecked(item.id, checkedIds, profile);
+  if (!sections.length) return "";
+  return [
+    "Recent entries fetched from approved RSS/Substack sources:",
+    ...sections,
+  ].join("\n");
+}
+
+async function buildRunSourceHint(
+  item: ScheduledResearchItem,
+  profile?: string,
+): Promise<string> {
+  const parts = [buildMonitorSourceHint(item)];
+  const feedContext = await buildApprovedFeedContext(item, profile);
+  if (feedContext) parts.push(feedContext);
+  return parts.join("\n\n");
+}
+
+function telegramChannelConfigured(): boolean {
+  try {
+    const raw = readFileSync(
+      join(HERMES_HOME, "channel_directory.json"),
+      "utf-8",
+    );
+    return raw.toLowerCase().includes("telegram");
+  } catch {
+    return false;
+  }
+}
+
+function oneLineSummary(value: string): string {
+  return value.replace(/\s+/g, " ").trim().slice(0, 280);
+}
+
+async function deliverTelegramSummary(
+  item: ScheduledResearchItem,
+  summary: string,
+  brief: string,
+  profile?: string,
+): Promise<string | null> {
+  if (!item.telegramPush) return null;
+  const threshold = item.importanceThreshold ?? "noteworthy";
+  const importance = inferBriefImportance(`${summary}\n${brief}`);
+  if (!meetsImportanceThreshold(importance, threshold)) {
+    return `Telegram skipped: ${importance} below ${threshold}.`;
+  }
+  if (!telegramChannelConfigured()) {
+    return "Telegram delivery unavailable: no configured Telegram channel.";
+  }
+
+  const line = oneLineSummary(`${item.topic}: ${summary}`);
+  try {
+    const result = await gatewayChat(
+      [
+        {
+          role: "user",
+          content: [
+            "Send exactly one Telegram message to the user's configured Telegram channel using the Hermes messaging tool.",
+            "Use summary-only mode. Do not include extra commentary.",
+            `Message: ${line}`,
+            "If Telegram is not configured or the send fails, reply with TELEGRAM_UNAVAILABLE followed by the reason.",
+          ].join("\n"),
+        },
+      ],
+      512,
+      profile,
+    );
+    if (/TELEGRAM_UNAVAILABLE|failed|error|not configured/i.test(result)) {
+      return `Telegram delivery failed: ${oneLineSummary(result) || "unknown error"}`;
+    }
+    return null;
+  } catch (err) {
+    return `Telegram delivery failed: ${
+      err instanceof Error ? err.message : "unknown error"
+    }`;
+  }
+}
+
 /** Build the OpenAI-style merge messages for a brief. Pluggable so research and
  *  digest schedules share the same pending/hash/notify path below. */
 type MergeMessagesBuilder = (
@@ -443,12 +651,23 @@ async function mergeBriefAndQueue(
     profile,
   );
   stampHash(item, briefHash, profile);
+  const deliveryNote = await deliverTelegramSummary(
+    item,
+    merged.summary,
+    cappedBrief,
+    profile,
+  );
   getWindow?.()?.webContents.send("scheduled-research-update", {
     scheduleId: item.id,
     topic: item.topic,
     summary: merged.summary,
   });
-  return { outcome: "changed", summary: merged.summary };
+  return {
+    outcome: "changed",
+    summary: deliveryNote
+      ? `${merged.summary} (${deliveryNote})`
+      : merged.summary,
+  };
 }
 
 /** Immediate run ("Run now", app-open): research turn → merge → pending. Always
@@ -463,7 +682,14 @@ export async function runScheduledResearch(
   let summary = "";
   try {
     const brief = await gatewayChat(
-      [{ role: "user", content: buildResearchPrompt(item.topic) }],
+      [
+        {
+          role: "user",
+          content: buildResearchPrompt(item.topic, {
+            sourceHint: await buildRunSourceHint(item, profile),
+          }),
+        },
+      ],
       3000,
       profile,
     );

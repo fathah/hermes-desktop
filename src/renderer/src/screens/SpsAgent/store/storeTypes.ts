@@ -217,6 +217,8 @@ export interface UiSlice {
   researchOpen: boolean;
   /** The Scheduled Research management modal is open. */
   scheduledOpen: boolean;
+  /** Topic handed off from Research into the Signal Brief monitor create form. */
+  scheduledDraftTopic: string | null;
   /** The read-only Agent tasks (Kanban oversight) modal is open. */
   agentTasksOpen: boolean;
   /** The External Sessions (other AI tools' transcripts) modal is open. */
@@ -267,6 +269,7 @@ export interface UiSlice {
   setTrashOpen: (v: boolean) => void;
   setResearchOpen: (v: boolean) => void;
   setScheduledOpen: (v: boolean) => void;
+  setScheduledDraftTopic: (topic: string | null) => void;
   setAgentTasksOpen: (v: boolean) => void;
   setExternalSessionsOpen: (v: boolean) => void;
   /** Open the External Sessions modal focused on a specific transcript. */

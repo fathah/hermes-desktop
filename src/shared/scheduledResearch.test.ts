@@ -2,6 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   slugForTopic,
   validateScheduleInput,
+  buildMonitorDiscoveryPrompt,
+  buildMonitorSourceHint,
+  meetsImportanceThreshold,
+  normalizeMonitorSourcePlan,
   periodKey,
   periodStart,
   isDue,
@@ -39,6 +43,167 @@ describe("validateScheduleInput", () => {
     expect(
       validateScheduleInput({ topic: "x", cadence: "daily", hour: 25 }),
     ).toMatch(/hour/i);
+  });
+
+  it("accepts monitor source focus, threshold, and Telegram summary mode", () => {
+    expect(
+      validateScheduleInput({
+        topic: "AI agent launches",
+        cadence: "weekly",
+        sourceIntent: "rss",
+        importanceThreshold: "noteworthy",
+        telegramPush: true,
+        telegramMode: "summary-only",
+        sourcePlan: [
+          {
+            id: "rss-agent-feed",
+            kind: "rss",
+            label: "Agent Feed",
+            url: "https://example.com/feed",
+            status: "approved",
+          },
+        ],
+      }),
+    ).toBeNull();
+  });
+
+  it("rejects invalid monitor source focus, threshold, and Telegram mode", () => {
+    expect(
+      validateScheduleInput({
+        topic: "x",
+        cadence: "daily",
+        sourceIntent: "x" as never,
+      }),
+    ).toMatch(/source focus/i);
+    expect(
+      validateScheduleInput({
+        topic: "x",
+        cadence: "daily",
+        importanceThreshold: "urgent" as never,
+      }),
+    ).toMatch(/importance/i);
+    expect(
+      validateScheduleInput({
+        topic: "x",
+        cadence: "daily",
+        telegramPush: true,
+        telegramMode: "chat" as never,
+      }),
+    ).toMatch(/telegram/i);
+  });
+});
+
+describe("monitor source helpers", () => {
+  it("normalizes approved source plans and rejects unsafe URLs", () => {
+    const plan = normalizeMonitorSourcePlan([
+      {
+        kind: "rss",
+        label: "Agent Feed",
+        url: "HTTPS://Example.com/feed#fragment",
+        status: "approved",
+        lastCheckedAt: 123,
+      },
+      {
+        kind: "rss",
+        label: "Duplicate",
+        url: "https://example.com/feed",
+        status: "suggested",
+      },
+      {
+        kind: "rss",
+        label: "Bad",
+        url: "javascript:alert(1)",
+        status: "approved",
+      },
+      {
+        kind: "social",
+        label: "Reddit search",
+        query: "  reddit   AI agents  ",
+        status: "unavailable",
+      },
+    ]);
+
+    expect(plan).toEqual([
+      {
+        id: expect.stringMatching(/^rss_/),
+        kind: "rss",
+        label: "Agent Feed",
+        url: "https://example.com/feed",
+        status: "approved",
+        lastCheckedAt: 123,
+      },
+      {
+        id: expect.stringMatching(/^social_/),
+        kind: "social",
+        label: "Reddit search",
+        query: "reddit AI agents",
+        status: "unavailable",
+      },
+    ]);
+  });
+
+  it("builds a discovery prompt that treats suggestions as reviewable metadata", () => {
+    const prompt = buildMonitorDiscoveryPrompt(
+      "competitor pricing changes",
+      "social",
+    );
+
+    expect(prompt).toContain("competitor pricing changes");
+    expect(prompt).toContain("reviewable");
+    expect(prompt).toContain("social");
+    expect(prompt).toContain("Do not claim Reddit/X coverage");
+  });
+
+  it("builds run source hints from approved sources only", () => {
+    const sourcePlan = normalizeMonitorSourcePlan([
+      {
+        kind: "rss",
+        label: "Agent Feed",
+        url: "https://example.com/feed",
+        status: "approved",
+      },
+      {
+        kind: "web",
+        label: "Ignored web",
+        query: "ignored query",
+        status: "ignored",
+      },
+    ]);
+
+    const itemWithSources: ScheduledResearchItem = {
+      id: "sr_x",
+      topic: "AI agent launches",
+      pageId: "ai-agent-launches",
+      cadence: "weekly",
+      hour: 8,
+      autoApply: false,
+      enabled: true,
+      createdAt: 0,
+      lastRunAt: 0,
+      lastChangeHash: "",
+      sourceIntent: "rss",
+      sourcePlan,
+      importanceThreshold: "breaking",
+      telegramPush: true,
+      telegramMode: "summary-only",
+    };
+
+    const hint = buildMonitorSourceHint(itemWithSources);
+
+    expect(hint).toContain("Source focus: rss");
+    expect(hint).toContain("RSS: Agent Feed (https://example.com/feed)");
+    expect(hint).not.toContain("ignored query");
+    expect(hint).toContain("Importance threshold: breaking");
+    expect(hint).toContain("Telegram push requested: summary-only");
+  });
+
+  it("compares importance classifications against the configured threshold", () => {
+    expect(meetsImportanceThreshold("digest", "digest")).toBe(true);
+    expect(meetsImportanceThreshold("digest", "noteworthy")).toBe(false);
+    expect(meetsImportanceThreshold("noteworthy", "noteworthy")).toBe(true);
+    expect(meetsImportanceThreshold("noteworthy", "breaking")).toBe(false);
+    expect(meetsImportanceThreshold("breaking", "noteworthy")).toBe(true);
+    expect(meetsImportanceThreshold("breaking", "breaking")).toBe(true);
   });
 });
 

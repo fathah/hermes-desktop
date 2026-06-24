@@ -68,6 +68,9 @@ import type { ProfileInfo } from "../shared/profiles";
 import type { CronJob } from "../shared/cronjobs";
 import type { SessionSummary } from "../shared/sessions";
 import type {
+  MonitorDiscoveryInput,
+  MonitorDiscoveryResult,
+  MonitorSourceEntry,
   ScheduledResearchItem,
   ScheduleInput,
 } from "../shared/scheduledResearch";
@@ -2071,9 +2074,18 @@ interface HermesAPI {
     input: ScheduleInput,
     profile?: string,
   ) => Promise<{ ok: boolean; item?: ScheduledResearchItem; error?: string }>;
+  srDiscoverSources: (
+    input: MonitorDiscoveryInput,
+    profile?: string,
+  ) => Promise<MonitorDiscoveryResult>;
   srUpdate: (
     id: string,
     patch: SrPatch,
+    profile?: string,
+  ) => Promise<{ ok: boolean; error?: string }>;
+  srUpdateSourcePlan: (
+    id: string,
+    sourcePlan: MonitorSourceEntry[],
     profile?: string,
   ) => Promise<{ ok: boolean; error?: string }>;
   srDelete: (id: string, profile?: string) => Promise<{ ok: boolean }>;

@@ -6,6 +6,9 @@ import type {
   WorkDetail as ResearchWorkDetail,
 } from "../../shared/openalex/core";
 import type {
+  MonitorDiscoveryInput,
+  MonitorDiscoveryResult,
+  MonitorSourceEntry,
   ScheduledResearchItem,
   ScheduleInput,
 } from "../../shared/scheduledResearch";
@@ -92,6 +95,11 @@ export type SrPatch = Partial<{
   hour: number;
   enabled: boolean;
   autoApply: boolean;
+  sourceIntent: ScheduledResearchItem["sourceIntent"];
+  sourcePlan: MonitorSourceEntry[];
+  importanceThreshold: ScheduledResearchItem["importanceThreshold"];
+  telegramPush: boolean;
+  telegramMode: ScheduledResearchItem["telegramMode"];
 }>;
 
 export interface NotebookLmMcpStatus {
@@ -921,12 +929,23 @@ export const spsBridge = {
     profile?: string,
   ): Promise<{ ok: boolean; item?: ScheduledResearchItem; error?: string }> =>
     ipcRenderer.invoke("sr-create", input, profile),
+  srDiscoverSources: (
+    input: MonitorDiscoveryInput,
+    profile?: string,
+  ): Promise<MonitorDiscoveryResult> =>
+    ipcRenderer.invoke("sr-discover-sources", input, profile),
   srUpdate: (
     id: string,
     patch: SrPatch,
     profile?: string,
   ): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke("sr-update", id, patch, profile),
+  srUpdateSourcePlan: (
+    id: string,
+    sourcePlan: MonitorSourceEntry[],
+    profile?: string,
+  ): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke("sr-update-source-plan", id, sourcePlan, profile),
   srDelete: (id: string, profile?: string): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke("sr-delete", id, profile),
   srRunNow: (

@@ -42,6 +42,7 @@ interface NotebookLmMcpStatus {
 export function ResearchModal() {
   const setResearchOpen = useStore((s) => s.setResearchOpen);
   const setScheduledOpen = useStore((s) => s.setScheduledOpen);
+  const setScheduledDraftTopic = useStore((s) => s.setScheduledDraftTopic);
   const importResearchWork = useStore((s) => s.importResearchWork);
   const runResearch = useStore((s) => s.runResearch);
   const saveStudyToWiki = useStore((s) => s.saveStudyToWiki);
@@ -153,12 +154,12 @@ export function ResearchModal() {
     }
   };
 
-  // "Schedule this topic" → create a weekly schedule + jump to the Scheduled
-  // manager (where the user can tune cadence / auto-apply).
+  // "Schedule this topic" → prefill the Signal Briefs creator. The monitor is
+  // only created after the user reviews cadence, sources, and push settings.
   const onScheduleThis = async () => {
     const t = topic.trim();
     if (!t) return;
-    await window.hermesAPI.srCreate?.({ topic: t, cadence: "weekly" });
+    setScheduledDraftTopic(t);
     setResearchOpen(false);
     setScheduledOpen(true);
   };

@@ -43,6 +43,7 @@ export const createUiSlice: StateCreator<Store, [], [], UiSlice> = (
   trashOpen: false,
   researchOpen: false,
   scheduledOpen: false,
+  scheduledDraftTopic: null,
   agentTasksOpen: false,
   externalSessionsOpen: false,
   externalSessionsTarget: null,
@@ -97,6 +98,7 @@ export const createUiSlice: StateCreator<Store, [], [], UiSlice> = (
   setTrashOpen: (v) => set({ trashOpen: v }),
   setResearchOpen: (v) => set({ researchOpen: v }),
   setScheduledOpen: (v) => set({ scheduledOpen: v }),
+  setScheduledDraftTopic: (topic) => set({ scheduledDraftTopic: topic }),
   setAgentTasksOpen: (v) => set({ agentTasksOpen: v }),
   setExternalSessionsOpen: (v) => set({ externalSessionsOpen: v }),
   openExternalConversation: (target) =>

@@ -8,8 +8,14 @@ import {
   listPending,
   removePending,
   triggerScheduleNow,
+  discoverScheduleSources,
+  updateScheduleSourcePlan,
 } from "../scheduled-research";
-import type { ScheduleInput } from "../../shared/scheduledResearch";
+import type {
+  MonitorDiscoveryInput,
+  MonitorSourceEntry,
+  ScheduleInput,
+} from "../../shared/scheduledResearch";
 
 type SchedulePatch = Parameters<typeof updateSchedule>[1];
 
@@ -21,9 +27,19 @@ export function registerScheduledResearchIpc(
     createSchedule(input, profile),
   );
   safeHandle(
+    "sr-discover-sources",
+    (_e, input: MonitorDiscoveryInput, profile?: string) =>
+      discoverScheduleSources(input, profile),
+  );
+  safeHandle(
     "sr-update",
     (_e, id: string, patch: SchedulePatch, profile?: string) =>
       updateSchedule(id, patch, profile),
+  );
+  safeHandle(
+    "sr-update-source-plan",
+    (_e, id: string, sourcePlan: MonitorSourceEntry[], profile?: string) =>
+      updateScheduleSourcePlan(id, sourcePlan, profile),
   );
   safeHandle("sr-delete", (_e, id: string, profile?: string) =>
     deleteSchedule(id, profile),
