@@ -21,6 +21,7 @@ import {
   type MonitorSourceEntry,
   type MonitorSourceStatus,
   type SourceIntent,
+  type TelegramDeliveryStatus,
 } from "../../../../../shared/scheduledResearch";
 import type { CronJob } from "../../../../../shared/cronjobs";
 
@@ -42,6 +43,15 @@ const IMPORTANCE_LABELS: Record<ImportanceThreshold, string> = {
   digest: "Digest",
   noteworthy: "Noteworthy",
   breaking: "Breaking",
+};
+
+const TELEGRAM_SETUP_URL =
+  "https://hermes-agent.nousresearch.com/docs/user-guide/messaging/telegram";
+
+const TELEGRAM_UNAVAILABLE_STATUS: TelegramDeliveryStatus = {
+  available: false,
+  reason: "missing-channel",
+  message: "No configured Telegram channel was found.",
 };
 
 const SOURCE_STATUS_LABELS: Record<MonitorSourceStatus, string> = {
@@ -98,6 +108,8 @@ export function ScheduledModal() {
   const [importanceThreshold, setImportanceThreshold] =
     useState<ImportanceThreshold>("noteworthy");
   const [telegramPush, setTelegramPush] = useState(false);
+  const [telegramStatus, setTelegramStatus] =
+    useState<TelegramDeliveryStatus | null>(null);
   const [sourcePlan, setSourcePlan] = useState<MonitorSourceEntry[]>([]);
   const [discovery, setDiscovery] = useState<MonitorDiscoveryResult | null>(
     null,
@@ -133,16 +145,20 @@ export function ScheduledModal() {
   };
 
   const refresh = async () => {
-    const [s, p, cron, sk] = await Promise.all([
+    const [s, p, cron, sk, telegram] = await Promise.all([
       window.hermesAPI.srList(),
       window.hermesAPI.srListPending(),
       window.hermesAPI.listCronJobs(true).catch(() => [] as CronJob[]),
       window.hermesAPI
         .getSchedulerSkips()
         .catch(() => ({}) as Record<string, SkipInfo>),
+      window.hermesAPI
+        .srTelegramStatus()
+        .catch(() => TELEGRAM_UNAVAILABLE_STATUS),
     ]);
     setCronJobs(cron || []);
     setSkips(sk || {});
+    setTelegramStatus(telegram);
     const applied = await autoApplyPending(p || [], s || []);
     if (applied) {
       const p2 = await window.hermesAPI.srListPending();
@@ -172,6 +188,12 @@ export function ScheduledModal() {
     setTopic(scheduledDraftTopic);
     setScheduledDraftTopic(null);
   }, [scheduledDraftTopic, setScheduledDraftTopic]);
+
+  useEffect(() => {
+    if (telegramStatus && !telegramStatus.available && telegramPush) {
+      setTelegramPush(false);
+    }
+  }, [telegramPush, telegramStatus]);
 
   const onDiscoverSources = async () => {
     const t = topic.trim();
@@ -228,6 +250,7 @@ export function ScheduledModal() {
   const onCreate = async () => {
     const t = topic.trim();
     if (!t) return;
+    const canUseTelegram = telegramStatus?.available === true;
     setCreating(true);
     setError("");
     try {
@@ -238,7 +261,7 @@ export function ScheduledModal() {
         sourceIntent,
         sourcePlan,
         importanceThreshold,
-        telegramPush,
+        telegramPush: canUseTelegram ? telegramPush : false,
         telegramMode: "summary-only",
         autoApply: wantAutoApply,
       });
@@ -254,6 +277,9 @@ export function ScheduledModal() {
       setCreating(false);
     }
   };
+
+  const telegramAvailable = telegramStatus?.available === true;
+  const telegramUnavailable = telegramStatus !== null && !telegramAvailable;
 
   const onRunNow = async (id: string) => {
     setBusyId(id);
@@ -460,14 +486,55 @@ export function ScheduledModal() {
           >
             {discovering ? "Discovering…" : "Discover sources"}
           </button>
-          <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <label
+            style={{
+              display: "flex",
+              gap: 6,
+              alignItems: "center",
+              opacity: telegramAvailable ? 1 : 0.65,
+            }}
+          >
             <input
               type="checkbox"
               checked={telegramPush}
-              onChange={(e) => setTelegramPush(e.target.checked)}
+              disabled={!telegramAvailable}
+              aria-describedby={
+                telegramAvailable ? undefined : "telegram-summary-status"
+              }
+              onChange={(e) => {
+                if (!telegramAvailable) return;
+                setTelegramPush(e.target.checked);
+              }}
             />
             Telegram summary
           </label>
+          {!telegramAvailable && (
+            <span
+              id="telegram-summary-status"
+              style={{
+                display: "inline-flex",
+                gap: 6,
+                alignItems: "center",
+                flexWrap: "wrap",
+                color: "var(--tx-3)",
+              }}
+            >
+              {telegramUnavailable
+                ? "Telegram is not configured. Set it up before enabling push summaries."
+                : "Checking Telegram setup…"}
+              {telegramUnavailable && (
+                <button
+                  type="button"
+                  className="cover-btn"
+                  onClick={() =>
+                    void window.hermesAPI.openExternal(TELEGRAM_SETUP_URL)
+                  }
+                >
+                  Set up Telegram
+                </button>
+              )}
+            </span>
+          )}
           <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
             <input
               type="checkbox"
@@ -686,7 +753,11 @@ export function ScheduledModal() {
                         ? ` · ${approved} approved source${approved === 1 ? "" : "s"}`
                         : ""}
                       {suggested ? ` · ${suggested} suggested` : ""}
-                      {s.telegramPush ? " · Telegram summary" : ""}
+                      {s.telegramPush
+                        ? telegramAvailable
+                          ? " · Telegram summary"
+                          : " · Telegram setup needed"
+                        : ""}
                       {s.autoApply ? " · auto-apply" : ""}
                       {!s.enabled ? " · paused" : ""}
                     </small>

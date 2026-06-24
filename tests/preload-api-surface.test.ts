@@ -186,10 +186,13 @@ describe("New APIs from v0.8/v0.9 features", () => {
   it("has Signal Brief monitor APIs", () => {
     expect(preloadMethods).toContain("srDiscoverSources");
     expect(preloadMethods).toContain("srUpdateSourcePlan");
+    expect(preloadMethods).toContain("srTelegramStatus");
     expect(typeMethods).toContain("srDiscoverSources");
     expect(typeMethods).toContain("srUpdateSourcePlan");
+    expect(typeMethods).toContain("srTelegramStatus");
     expect(preloadTypes).toContain("MonitorSourceEntry");
     expect(preloadTypes).toContain("MonitorDiscoveryResult");
+    expect(preloadTypes).toContain("TelegramDeliveryStatus");
   });
 });
 

@@ -11,6 +11,7 @@ import {
   discoverScheduleSources,
   updateScheduleSourcePlan,
 } from "../scheduled-research";
+import { getTelegramDeliveryStatus } from "../telegram-delivery";
 import type {
   MonitorDiscoveryInput,
   MonitorSourceEntry,
@@ -23,6 +24,9 @@ export function registerScheduledResearchIpc(
   getWindow: () => BrowserWindow | null,
 ): void {
   safeHandle("sr-list", (_e, profile?: string) => listSchedules(profile));
+  safeHandle("sr-telegram-status", (_e, profile?: string) =>
+    getTelegramDeliveryStatus(profile),
+  );
   safeHandle("sr-create", (_e, input: ScheduleInput, profile?: string) =>
     createSchedule(input, profile),
   );

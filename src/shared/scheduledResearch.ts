@@ -46,6 +46,12 @@ export type ImportanceThreshold = (typeof IMPORTANCE_THRESHOLDS)[number];
 export const TELEGRAM_MODES = ["summary-only"] as const;
 export type TelegramMode = (typeof TELEGRAM_MODES)[number];
 
+export interface TelegramDeliveryStatus {
+  available: boolean;
+  reason: "configured" | "missing-channel";
+  message: string;
+}
+
 export interface MonitorSourceEntry {
   id: string;
   kind: MonitorSourceKind;

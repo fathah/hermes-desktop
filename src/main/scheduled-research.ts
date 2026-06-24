@@ -65,6 +65,7 @@ import {
   type MonitorSourceEntry,
 } from "../shared/scheduledResearch";
 import { fetchRssArticles } from "./rss-discovery";
+import { telegramChannelConfigured } from "./telegram-delivery";
 
 export type RunOutcome = "changed" | "no-change" | "no-sources" | "error";
 
@@ -522,18 +523,6 @@ async function buildRunSourceHint(
   return parts.join("\n\n");
 }
 
-function telegramChannelConfigured(): boolean {
-  try {
-    const raw = readFileSync(
-      join(HERMES_HOME, "channel_directory.json"),
-      "utf-8",
-    );
-    return raw.toLowerCase().includes("telegram");
-  } catch {
-    return false;
-  }
-}
-
 function oneLineSummary(value: string): string {
   return value.replace(/\s+/g, " ").trim().slice(0, 280);
 }
@@ -550,7 +539,7 @@ async function deliverTelegramSummary(
   if (!meetsImportanceThreshold(importance, threshold)) {
     return `Telegram skipped: ${importance} below ${threshold}.`;
   }
-  if (!telegramChannelConfigured()) {
+  if (!telegramChannelConfigured(profile)) {
     return "Telegram delivery unavailable: no configured Telegram channel.";
   }
 

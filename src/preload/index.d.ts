@@ -73,6 +73,7 @@ import type {
   MonitorSourceEntry,
   ScheduledResearchItem,
   ScheduleInput,
+  TelegramDeliveryStatus,
 } from "../shared/scheduledResearch";
 import type {
   AssistantRecipe,
@@ -2070,6 +2071,7 @@ interface HermesAPI {
 
   // ── Scheduled Research ──
   srList: (profile?: string) => Promise<ScheduledResearchItem[]>;
+  srTelegramStatus: (profile?: string) => Promise<TelegramDeliveryStatus>;
   srCreate: (
     input: ScheduleInput,
     profile?: string,

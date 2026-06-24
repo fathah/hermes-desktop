@@ -11,6 +11,7 @@ import type {
   MonitorSourceEntry,
   ScheduledResearchItem,
   ScheduleInput,
+  TelegramDeliveryStatus,
 } from "../../shared/scheduledResearch";
 import type {
   AssistantRecipe,
@@ -924,6 +925,8 @@ export const spsBridge = {
   // ── Scheduled Research ──
   srList: (profile?: string): Promise<ScheduledResearchItem[]> =>
     ipcRenderer.invoke("sr-list", profile),
+  srTelegramStatus: (profile?: string): Promise<TelegramDeliveryStatus> =>
+    ipcRenderer.invoke("sr-telegram-status", profile),
   srCreate: (
     input: ScheduleInput,
     profile?: string,
