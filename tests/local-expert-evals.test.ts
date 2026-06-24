@@ -181,6 +181,10 @@ describe("local expert evals", () => {
         "data-import",
         "pivottables",
         "charts",
+        "workbook-recovery",
+        "embedded-chart-triage",
+        "readability-gridlines",
+        "worksheet-order",
         "protection",
         "macro-security",
         "vba-review",
@@ -230,7 +234,14 @@ describe("local expert evals", () => {
       EXCEL_LOCAL_EXPERT_EVALS,
     );
 
-    expect(result.ok).toBe(true);
+    expect(
+      result.ok,
+      JSON.stringify(
+        result.results.filter((item) => !item.ok),
+        null,
+        2,
+      ),
+    ).toBe(true);
     expect(result.passed).toBe(EXCEL_LOCAL_EXPERT_EVALS.cases.length);
     expect(result.failed).toBe(0);
   });
@@ -496,6 +507,54 @@ Confirm chart data and visual meaning before sharing.
 Low risk when the chart is reviewed against source data.
 ## Sources
 Use the charts and Office embedding record.
+`,
+      "excel-workbook-recovery-repair": `
+## What to check
+Check the exact File Recovery warning, whether Open and Repair offers Repair or Extract Data, whether AutoRecover exists, and whether there is a backup copy.
+## Steps
+Preserve the original workbook, move a copy local if disk or network errors appear, and use Excel recovery options only on evidence.
+## Verification
+Compare recovered values or formulas against a backup copy or last saved version before trusting the workbook.
+## Risk
+High risk because corrupted workbook recovery can lose data.
+## Sources
+Use the workbook recovery and repair record.
+`,
+      "excel-embedded-chart-triage": `
+## What to check
+Check the chart range, Excel worksheet, Word or PowerPoint location, and whether the chart depends on a linked workbook.
+## Steps
+Review series names, axis labels, legend, embedded data, and linked workbook warnings before changing the chart.
+## Verification
+Confirm the visible chart matches the intended embedded worksheet or linked workbook evidence.
+## Risk
+Medium risk because chart data can mislead workbook readers.
+## Sources
+Use the embedded chart triage record.
+`,
+      "excel-gridlines-readability-cleanup": `
+## What to check
+Check gridlines, print preview, cell formatting, Freeze Panes, and whether the range should become a table.
+## Steps
+Adjust readability choices without changing formulas, values, or sharing.
+## Verification
+Confirm screen, print, and scrolling readability for the intended audience.
+## Risk
+Low risk when cleanup is limited to presentation.
+## Sources
+Use the gridlines and readability cleanup record.
+`,
+      "excel-worksheet-order-cleanup": `
+## What to check
+Check Move or Copy Sheet, the Before sheet placement, move to end choice, 3-D references, and formulas or charts that reference moved sheets.
+## Steps
+Record current tab order, choose the intended order, and verify references after moving or copying sheets.
+## Verification
+Confirm worksheet order and referenced data still match the workbook's workflow.
+## Risk
+Medium risk because moving sheets can change formula or chart meaning.
+## Sources
+Use the worksheet order cleanup record.
 `,
       "excel-protection-passwords": `
 ## What to check

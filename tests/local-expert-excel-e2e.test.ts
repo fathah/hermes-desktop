@@ -23,14 +23,34 @@ Medium risk because unsupported storage, tenant policy, or broad sharing can blo
 ## Sources
 Use the Excel coauthoring record and the SharePoint/OneDrive sharing boundary record.
 `;
+  const excelRecoveryAnswer = `
+## What to check
+Check the exact File Recovery warning, whether Open and Repair offers Repair or Extract Data, whether AutoRecover exists, and whether there is a backup copy.
+
+## Steps
+Preserve the original workbook, move a copy local if disk or network errors appear, and use Excel recovery options only on evidence.
+
+## Verification
+Compare recovered values or formulas against a backup copy or last saved version before trusting the workbook.
+
+## Risk
+High risk because corrupted workbook recovery can lose data.
+
+## Sources
+Use the workbook recovery and repair record.
+`;
   const base = fs.realpathSync(
     fs.mkdtempSync(path.join(os.tmpdir(), "local-expert-excel-e2e-")),
   );
   return {
     TEST_HOME: path.join(base, "hermes"),
-    assistantSpy: vi.fn(async () => ({
+    assistantSpy: vi.fn(async (prompt: string) => ({
       kind: "chat",
-      reply: [excelCoauthoringAnswer],
+      reply: [
+        prompt.includes("corrupted")
+          ? excelRecoveryAnswer
+          : excelCoauthoringAnswer,
+      ],
     })),
   };
 });
@@ -131,6 +151,9 @@ describe("Excel Expert offline proof", () => {
     const scenario = detail.pack?.scenarios?.find(
       (item) => item.id === "shared-workbook-cannot-coauthor",
     );
+    const recoveryScenario = detail.pack?.scenarios?.find(
+      (item) => item.id === "workbook-repair-warning-triage",
+    );
     expect(detail.ok).toBe(true);
     expect(scenario).toMatchObject({
       title: "Shared workbook cannot coauthor",
@@ -144,6 +167,19 @@ describe("Excel Expert offline proof", () => {
     });
     expect(
       runLocalExpertScenarioEval(EXCEL_LOCAL_EXPERT_PACK, scenario!),
+    ).toMatchObject({ ok: true });
+    expect(recoveryScenario).toMatchObject({
+      title: "Workbook repair warning triage",
+      recordIds: expect.arrayContaining([
+        "excel-workbook-recovery-repair",
+        "excel-macro-security",
+      ]),
+      requiredEvidence: expect.arrayContaining([
+        "Exact Excel repair, recovery, disk, or network warning text",
+      ]),
+    });
+    expect(
+      runLocalExpertScenarioEval(EXCEL_LOCAL_EXPERT_PACK, recoveryScenario!),
     ).toMatchObject({ ok: true });
 
     const recipe = listAssistantRecipes().find(
@@ -166,6 +202,9 @@ describe("Excel Expert offline proof", () => {
     expect(run.prompt).toContain(
       "Never open Excel files, run VBA macros, run Office Scripts, or change sharing",
     );
+    expect(run.prompt).toContain(
+      "Never repair workbooks or claim data was recovered",
+    );
     expect(run.prompt).toContain("Do not request credentials");
     expect(run.prompt).toContain("expert_excel");
     expect(assistantSpy).toHaveBeenCalledWith(
@@ -180,6 +219,22 @@ describe("Excel Expert offline proof", () => {
     )!;
     expect(
       runLocalExpertAnswerEval(evalCase, run.run!.resultText),
+    ).toMatchObject({
+      ok: true,
+    });
+
+    const repairRun = await runAssistantRecipe(
+      recipe!.id,
+      "Excel says this workbook is corrupted. What should I check before trying Open and Repair?",
+    );
+    expect(repairRun.ok).toBe(true);
+    expect(repairRun.run?.resultText).toContain("## What to check");
+    expect(repairRun.prompt).toContain("Never repair workbooks");
+    const recoveryEvalCase = EXCEL_LOCAL_EXPERT_EVALS.cases.find(
+      (item) => item.id === "excel-workbook-recovery-repair",
+    )!;
+    expect(
+      runLocalExpertAnswerEval(recoveryEvalCase, repairRun.run!.resultText),
     ).toMatchObject({
       ok: true,
     });

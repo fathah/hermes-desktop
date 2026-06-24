@@ -125,6 +125,10 @@ Microsoft Excel and Microsoft 365 workbook work:
 - CSV import, text import, Power Query, and data type preservation
 - PivotTable source-data review
 - chart creation and Office chart data embedded in Word or PowerPoint
+- workbook recovery and repair-warning triage
+- broken embedded chart and linked workbook triage
+- gridline, formatting, print, and Freeze Panes readability cleanup
+- worksheet order, sheet-tab, and Move/Copy Sheet cleanup
 - file, workbook, and worksheet protection plus password risk
 - macro security, Trust Center awareness, and managed-device boundaries
 - recorded macro and VBA object model review
@@ -139,6 +143,10 @@ Excel scenarios are structured workflow prompts layered over records. They are
 read-only in SPS: the UI shows the prompt, required evidence, risk, and linked
 records, but does not open files, parse workbook contents, run automation, or
 contact Microsoft services.
+Workbook triage records are checklists only: they can point the user to
+source-backed Excel recovery, chart, readability, and worksheet-order evidence,
+but they do not repair files, recover data, execute macros, or verify workbook
+contents.
 
 ## Evals
 

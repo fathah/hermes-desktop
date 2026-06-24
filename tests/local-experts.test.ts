@@ -131,8 +131,9 @@ describe("local experts", () => {
     expect(result.ok).toBe(true);
     expect(EXCEL_LOCAL_EXPERT_PACK.id).toBe("excel");
     expect(EXCEL_LOCAL_EXPERT_PACK.title).toBe("Excel Expert");
-    expect(EXCEL_LOCAL_EXPERT_PACK.records.length).toBe(10);
-    expect(EXCEL_LOCAL_EXPERT_PACK.scenarios).toHaveLength(6);
+    expect(EXCEL_LOCAL_EXPERT_PACK.version).toBe("1.0.1");
+    expect(EXCEL_LOCAL_EXPERT_PACK.records.length).toBe(14);
+    expect(EXCEL_LOCAL_EXPERT_PACK.scenarios).toHaveLength(10);
     expect(EXCEL_LOCAL_EXPERT_PACK.sourceTiers).toEqual([
       "microsoft_365_official",
       "microsoft_developer_official",
@@ -141,10 +142,18 @@ describe("local experts", () => {
       EXCEL_LOCAL_EXPERT_PACK.records.every(
         (record) =>
           record.sourceUrls.length > 0 &&
-          record.lastVerified === "2026-06-22" &&
+          ["2026-06-22", "2026-06-24"].includes(record.lastVerified) &&
           record.appliesTo?.length,
       ),
     ).toBe(true);
+    expect(EXCEL_LOCAL_EXPERT_PACK.records.map((record) => record.id)).toEqual(
+      expect.arrayContaining([
+        "excel-workbook-recovery-repair",
+        "excel-embedded-chart-triage",
+        "excel-gridlines-readability-cleanup",
+        "excel-worksheet-order-cleanup",
+      ]),
+    );
     expect(
       EXCEL_LOCAL_EXPERT_PACK.scenarios?.every(
         (scenario) =>
@@ -243,14 +252,14 @@ describe("local experts", () => {
     expect(freshness.current).toBe(EXCEL_LOCAL_EXPERT_PACK.records.length);
     expect(quality).toMatchObject({
       packId: "excel",
-      recordCount: 10,
-      scenarioCount: 6,
+      recordCount: 14,
+      scenarioCount: 10,
       staleRecordCount: 0,
       expiredRecordCount: 0,
       brokenScenarioLinks: [],
       validationErrorCount: 0,
     });
-    expect(quality.sourceCount).toBeGreaterThanOrEqual(8);
+    expect(quality.sourceCount).toBeGreaterThanOrEqual(13);
   });
 
   it("rejects duplicate record ids and non-HTTPS sources", () => {
@@ -459,6 +468,12 @@ describe("local experts", () => {
     );
     expect(row).toContain("excel-sharing-admin-boundaries");
     expect(row).toContain("## Sources");
+    const recoveryRow = readFileSync(
+      join(vault, "expert_excel", "excel-workbook-recovery-repair.md"),
+      "utf-8",
+    );
+    expect(recoveryRow).toContain("## Sources");
+    expect(recoveryRow).toContain("excel-macro-security");
 
     const skillFile = join(
       TEST_HOME,
@@ -469,6 +484,9 @@ describe("local experts", () => {
     );
     expect(readFileSync(skillFile, "utf-8")).toContain(
       "Never open Excel files, run VBA macros, run Office Scripts, or change sharing",
+    );
+    expect(readFileSync(skillFile, "utf-8")).toContain(
+      "Never repair workbooks or claim data was recovered",
     );
   });
 
