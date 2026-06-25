@@ -50,6 +50,9 @@ export function dbItemsToChatMessages(
             id: `db-${it.id}`,
             role: "user",
             content: it.content || "",
+            ...(typeof it.timestamp === "number"
+              ? { timestamp: it.timestamp }
+              : {}),
             ...(it.attachments && it.attachments.length > 0
               ? { attachments: it.attachments }
               : {}),
@@ -59,6 +62,9 @@ export function dbItemsToChatMessages(
             id: `db-${it.id}`,
             role: "agent",
             content: it.content || "",
+            ...(typeof it.timestamp === "number"
+              ? { timestamp: it.timestamp }
+              : {}),
             ...(it.error ? { error: it.error, localOnly: true } : {}),
             ...(it.attachments && it.attachments.length > 0
               ? { attachments: it.attachments }
@@ -280,13 +286,24 @@ function mergeDbMetadataIntoStreamed(
   if ("kind" in streamed) return streamed;
   const s = streamed as ChatBubbleMessage;
   const d = db as ChatBubbleMessage;
+  // The canonical DB row carries the recorded timestamp the live stream
+  // never had — adopt it so the hover time matches history after refresh.
+  const timestamp =
+    s.timestamp ?? (typeof d.timestamp === "number" ? d.timestamp : undefined);
   // Attachments from the DB that the stream didn't deliver.
-  if (
-    d.attachments &&
+  const needsAttachments =
+    !!d.attachments &&
     d.attachments.length > 0 &&
-    (!s.attachments || s.attachments.length === 0)
+    (!s.attachments || s.attachments.length === 0);
+  if (
+    needsAttachments ||
+    (timestamp !== undefined && timestamp !== s.timestamp)
   ) {
-    return { ...s, attachments: d.attachments };
+    return {
+      ...s,
+      ...(needsAttachments ? { attachments: d.attachments } : {}),
+      ...(timestamp !== undefined ? { timestamp } : {}),
+    };
   }
   return s;
 }

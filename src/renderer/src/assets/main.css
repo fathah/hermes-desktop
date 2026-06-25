@@ -1857,6 +1857,272 @@ body {
   color: var(--text-muted);
 }
 
+/* ── Session row "options" affordance (ChatGPT-style …) ── */
+.sidebar-recent-session {
+  position: relative;
+}
+
+.sidebar-recent-session-options {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--transition),
+    background var(--transition),
+    color var(--transition);
+}
+
+/* Reveal the … on hover/focus of the row, or while its menu is open. */
+.sidebar-recent-session:hover .sidebar-recent-session-options,
+.sidebar-recent-session:focus-within .sidebar-recent-session-options,
+.sidebar-recent-session.menu-open .sidebar-recent-session-options {
+  opacity: 1;
+}
+
+.sidebar-recent-session-options:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+/* Keep the title clear of the … control when it is visible. */
+.sidebar-recent-session:hover .sidebar-recent-session-title,
+.sidebar-recent-session:focus-within .sidebar-recent-session-title,
+.sidebar-recent-session.menu-open .sidebar-recent-session-title {
+  padding-right: 24px;
+}
+
+.sidebar-recent-session.menu-open {
+  background: var(--bg-tertiary);
+}
+
+.sidebar-recent-session.editing {
+  padding: 3px 10px;
+}
+
+.sidebar-recent-session-rename {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid var(--accent, var(--border-bright));
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-primary, var(--bg-secondary));
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  outline: none;
+}
+
+/* ── Floating session context menu (portal to body) ── */
+.sidebar-session-menu {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.36);
+  font-family: var(--font-sans);
+  /* Open animation scales from the anchored top-left corner. */
+  transform-origin: top left;
+  will-change: transform, opacity;
+}
+
+/* Height-animating wrapper (motion `layout`) that clips the cross-sliding
+   pages so neither spills past the rounded menu edge during the swap. */
+.sidebar-session-menu-body {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.sidebar-session-menu-page {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* While a page is exiting (popLayout pins it absolutely), it must overlay the
+   incoming page at full width rather than collapse. */
+.sidebar-session-menu-body > .sidebar-session-menu-page {
+  width: 100%;
+}
+
+.sidebar-session-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: var(--radius-sm, 6px);
+  background: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.sidebar-session-menu-item svg {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.sidebar-session-menu-item span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-session-menu-item:hover {
+  background: var(--bg-tertiary);
+}
+
+.sidebar-session-menu-item--danger {
+  color: var(--error);
+}
+
+.sidebar-session-menu-item--danger svg {
+  color: var(--error);
+}
+
+.sidebar-session-menu-chevron {
+  flex: 0 0 auto !important;
+  margin-left: auto;
+}
+
+.sidebar-session-menu-divider {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border-bright);
+}
+
+.sidebar-session-menu-back {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: var(--radius-sm, 6px);
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+}
+
+.sidebar-session-menu-back:hover {
+  color: var(--text-primary);
+}
+
+.sidebar-session-menu-back-icon {
+  transform: rotate(180deg);
+}
+
+.sidebar-session-menu-scroll {
+  display: flex;
+  flex-direction: column;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.sidebar-session-menu-project-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-session-menu-check {
+  flex: 0 0 auto !important;
+  margin-left: auto;
+  color: var(--accent-text, var(--accent)) !important;
+}
+
+.sidebar-session-menu-empty {
+  padding: 8px 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* ── Sidebar delete confirmation (portal to body) ── */
+.sidebar-session-delete-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.sidebar-session-delete-modal {
+  width: min(360px, calc(100vw - 32px));
+  padding: 18px;
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+}
+
+.sidebar-session-delete-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.sidebar-session-delete-header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.sidebar-session-delete-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-session-delete-body {
+  margin: 0 0 18px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.sidebar-session-delete-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 /* Full-list sessions modal (sidebar "Show more" / Cmd+K). Reuses
    .models-modal-overlay for the backdrop; sized to 80% of the viewport. */
 .sessions-modal {
@@ -3460,14 +3726,22 @@ body {
   flex: 1;
   overflow-y: auto;
   padding: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  /* Block flow, NOT a flex column. `content-visibility: auto` on the rows
+     (below) lets the browser skip layout/paint for off-screen messages, which
+     is what keeps typing fast in long conversations (#748). A flex column
+     defeats that: it measures every child's intrinsic size to lay the column
+     out, forcing layout of skipped subtrees and reporting a wrong
+     `scrollHeight` — which would also break the auto-scroll math in
+     useChatScroll. Inter-row spacing that the flex `gap` used to provide now
+     comes from each row's own bottom margin/padding. */
 }
 
 /* Empty state */
 .chat-empty {
-  flex: 1;
+  /* The scroll container is block flow now (see .chat-messages), so `flex: 1`
+     no longer stretches this to fill the height. `min-height: 100%` makes it
+     fill the container so its own flex centering still works. */
+  min-height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -3566,8 +3840,22 @@ body {
 .chat-message {
   display: flex;
   gap: 12px;
+  width: 100%;
   max-width: 85%;
   animation: messageIn 0.2s ease;
+  position: relative;
+  /* Replaces the old container flex `gap` (now block flow). Also gives the
+     hover timestamp (.chat-bubble-time, ~15px below the bubble) room *inside*
+     this box so the paint containment that `content-visibility` implies does
+     not clip it. */
+  padding-bottom: 16px;
+  /* Skip layout + paint for rows scrolled out of view. This turns the
+     per-keystroke document reflow from O(all messages) into O(visible rows),
+     fixing the input lag in long conversations. `auto` for the intrinsic size
+     means the real measured height is remembered after a row renders once, so
+     the scrollbar stays accurate; 120px is only the first-paint estimate. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 120px;
 }
 
 @keyframes messageIn {
@@ -3582,13 +3870,13 @@ body {
 }
 
 .chat-message-user {
-  align-self: flex-end;
+  /* Right-align in block flow (replaces the flex-column `align-self: flex-end`).
+     `row-reverse` keeps the bubble on the outer edge with the avatar inside. */
+  margin-left: auto;
   flex-direction: row-reverse;
 }
 
-.chat-message-agent {
-  align-self: flex-start;
-}
+/* Agent rows are left-aligned by default in block flow — no rule needed. */
 
 /* Continuation rows of a turn (thinking/tool rows + answer that share one
    avatar). Pull them closer to the row above so the turn reads as one block
@@ -3672,6 +3960,37 @@ body {
 }
 
 .chat-bubble:hover .chat-bubble-actions {
+  opacity: 1;
+}
+
+/* Hover timestamp — sits just below the bubble, revealed on row hover.
+   Anchored inside .chat-message's bottom padding (not overflowing it): the
+   `content-visibility` on .chat-message implies paint containment, which would
+   clip anything spilling past the box, so this sits at bottom:1px within the
+   16px padding instead of overflowing at -15px. */
+.chat-bubble-time {
+  position: absolute;
+  bottom: 1px;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+/* Agent rows start after the avatar (28px + 12px gap); user rows are
+   right-aligned. Anchor the time to the bubble's outer edge accordingly. */
+.chat-message-agent .chat-bubble-time {
+  left: 40px;
+}
+
+.chat-message-user .chat-bubble-time {
+  right: 0;
+}
+
+.chat-message:hover .chat-bubble-time {
   opacity: 1;
 }
 
@@ -3881,6 +4200,10 @@ body {
 /* Inline clarify card — a mid-turn question rendered in the transcript. */
 .chat-clarify {
   margin-top: 8px;
+  /* Not a .chat-message, so it doesn't carry the row padding-bottom that now
+     provides inter-row spacing — add the 16px the container's flex gap used
+     to give it. */
+  margin-bottom: 16px;
   margin-left: 42px;
   padding: 14px 16px;
   border: 1px solid var(--border);

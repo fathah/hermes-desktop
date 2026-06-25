@@ -1,11 +1,13 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   memo,
   type RefObject,
 } from "react";
+import { createPortal } from "react-dom";
 import { useI18n } from "../../components/useI18n";
 import {
   ChevronDown,
@@ -13,7 +15,14 @@ import {
   Circle,
   Folder,
   Loader,
+  MoreHorizontal,
+  Pin,
+  X,
 } from "../../assets/icons";
+import SidebarSessionMenu, {
+  type SidebarMenuProject,
+  type SidebarMenuTarget,
+} from "./SidebarSessionMenu";
 
 interface RecentSession {
   id: string;
@@ -36,6 +45,28 @@ const INFINITE_SCROLL_THRESHOLD_PX = 180;
 const PROJECTS_OPEN_KEY = "hermes.sidebar.projectsOpen";
 const CHATS_OPEN_KEY = "hermes.sidebar.chatsOpen";
 const FOLDERS_CLOSED_KEY = "hermes.sidebar.closedProjectFolders";
+const PINNED_OPEN_KEY = "hermes.sidebar.pinnedOpen";
+// Pinned session ids live in localStorage like the disclosure state — pinning
+// is a desktop-only UI affordance, not part of the agent session schema.
+const PINNED_IDS_KEY = "hermes.sidebar.pinnedSessions";
+
+function readStoredPinned(): Set<string> {
+  try {
+    const raw = localStorage.getItem(PINNED_IDS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(parsed) ? parsed.filter(String) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function storePinned(ids: Set<string>): void {
+  try {
+    localStorage.setItem(PINNED_IDS_KEY, JSON.stringify(Array.from(ids)));
+  } catch {
+    /* ignore persistence failures */
+  }
+}
 
 function readStoredOpen(key: string): boolean {
   try {
@@ -133,6 +164,7 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
   loadingSessionIds,
   resumingSessionId,
   onSelect,
+  onSessionDeleted,
   scrollRootRef,
 }: {
   open: boolean;
@@ -144,6 +176,8 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
   /** A session whose history is being fetched for resume (transient spinner). */
   resumingSessionId: string | null;
   onSelect: (sessionId: string) => void;
+  /** Notifies Layout when a row is deleted so it can leave a stale active chat. */
+  onSessionDeleted?: (sessionId: string) => void;
   /** Scroll container owned by Layout; nearing its bottom loads the next page. */
   scrollRootRef: RefObject<HTMLDivElement | null>;
 }): React.JSX.Element | null {
@@ -161,6 +195,22 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
   const [closedProjectFolders, setClosedProjectFolders] = useState<Set<string>>(
     () => readStoredClosedFolders(),
   );
+  const [pinnedIds, setPinnedIds] = useState<Set<string>>(() =>
+    readStoredPinned(),
+  );
+  const [pinnedOpen, setPinnedOpen] = useState(() =>
+    readStoredOpen(PINNED_OPEN_KEY),
+  );
+  // Row whose context menu is open, anchored to viewport coordinates.
+  const [menuTarget, setMenuTarget] = useState<SidebarMenuTarget | null>(null);
+  // Inline rename: the row id being edited and its working title.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
+  const editingIdRef = useRef<string | null>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
+  // Pending delete confirmation (small inline dialog in a portal-free overlay).
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const lastRefreshRef = useRef(0);
   const sessionsRef = useRef<RecentSession[]>([]);
   const hasMoreRef = useRef(false);
@@ -174,6 +224,14 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
     hasMoreRef.current = hasMore;
   }, [hasMore]);
 
+  useEffect(() => {
+    editingIdRef.current = editingId;
+  }, [editingId]);
+
+  useEffect(() => {
+    storePinned(pinnedIds);
+  }, [pinnedIds]);
+
   const normalizeRows = useCallback(
     (
       list: Array<{
@@ -183,13 +241,11 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
       }>,
       limit = RECENT_SESSIONS_PAGE_SIZE,
     ): RecentSession[] =>
-      list
-        .slice(0, limit)
-        .map(({ id, title, contextFolder }) => ({
-          id,
-          title,
-          contextFolder: contextFolder ?? null,
-        })),
+      list.slice(0, limit).map(({ id, title, contextFolder }) => ({
+        id,
+        title,
+        contextFolder: contextFolder ?? null,
+      })),
     [],
   );
 
@@ -390,7 +446,171 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
   // tracks. Effects above are still gated on `open`, so a collapsed sidebar
   // does no fetching while keeping the last-loaded list ready to animate.
   const expanded = open;
-  const { projectGroups, chats } = groupSessionsByWorkspace(sessions);
+
+  // Pinned rows are pulled out of the normal grouping and shown in their own
+  // section at the top (ChatGPT-style), preserving recency order.
+  const pinnedSessions = useMemo(
+    () => sessions.filter((s) => pinnedIds.has(s.id)),
+    [sessions, pinnedIds],
+  );
+  const { projectGroups, chats } = useMemo(
+    () =>
+      groupSessionsByWorkspace(sessions.filter((s) => !pinnedIds.has(s.id))),
+    [sessions, pinnedIds],
+  );
+
+  // Every distinct project folder currently in use, so "Move to project" lists
+  // them all — even ones whose only conversation is pinned or filtered out.
+  const projectChoices = useMemo<SidebarMenuProject[]>(() => {
+    const byPath = new Map<string, SidebarMenuProject>();
+    for (const s of sessions) {
+      const folder = s.contextFolder?.trim();
+      if (folder && !byPath.has(folder)) {
+        byPath.set(folder, { path: folder, name: folderName(folder) });
+      }
+    }
+    return Array.from(byPath.values());
+  }, [sessions]);
+
+  const togglePinned = (): void => {
+    setPinnedOpen((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(PINNED_OPEN_KEY, String(next));
+      } catch {
+        /* ignore persistence failures */
+      }
+      return next;
+    });
+  };
+
+  const handleTogglePin = useCallback((id: string): void => {
+    setPinnedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const startRename = useCallback((s: RecentSession): void => {
+    setEditingId(s.id);
+    setEditingTitle(s.title || "");
+    setTimeout(() => {
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
+    }, 0);
+  }, []);
+
+  const cancelRename = useCallback((): void => {
+    setEditingId(null);
+    setEditingTitle("");
+  }, []);
+
+  const confirmRename = useCallback(
+    async (id: string, value: string): Promise<void> => {
+      const trimmed = value.trim();
+      const current = sessionsRef.current.find((s) => s.id === id);
+      if (!trimmed || trimmed === (current?.title ?? "")) {
+        cancelRename();
+        return;
+      }
+      const previous = current?.title ?? "";
+      // Optimistic local update; roll back if the write fails.
+      setSessions((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, title: trimmed } : s)),
+      );
+      if (editingIdRef.current === id) cancelRename();
+      try {
+        await window.hermesAPI.updateSessionTitle(id, trimmed);
+      } catch (err) {
+        console.error("Failed to rename session", id, err);
+        setSessions((prev) =>
+          prev.map((s) => (s.id === id ? { ...s, title: previous } : s)),
+        );
+      }
+    },
+    [cancelRename],
+  );
+
+  const handleMoveToProject = useCallback(
+    async (id: string, folder: string | null): Promise<void> => {
+      const normalized = folder?.trim() || null;
+      const current = sessionsRef.current.find((s) => s.id === id);
+      if ((current?.contextFolder ?? null) === normalized) return;
+      const previous = current?.contextFolder ?? null;
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === id ? { ...s, contextFolder: normalized } : s,
+        ),
+      );
+      try {
+        await window.hermesAPI.setSessionContextFolder(id, normalized);
+        // Other surfaces (chat view, Sessions screen) listen for this to
+        // refresh their own grouping.
+        window.dispatchEvent(
+          new CustomEvent("hermes-session-context-folder-changed"),
+        );
+      } catch (err) {
+        console.error("Failed to move session to project", id, err);
+        setSessions((prev) =>
+          prev.map((s) =>
+            s.id === id ? { ...s, contextFolder: previous } : s,
+          ),
+        );
+      }
+    },
+    [],
+  );
+
+  const handlePickNewFolder = useCallback(
+    async (id: string): Promise<void> => {
+      try {
+        const folder = await window.hermesAPI.selectFolder();
+        if (folder) await handleMoveToProject(id, folder);
+      } catch (err) {
+        console.error("Folder selection failed", err);
+      }
+    },
+    [handleMoveToProject],
+  );
+
+  const confirmDelete = useCallback(
+    async (id: string): Promise<void> => {
+      setDeleting(true);
+      setSessions((prev) => prev.filter((s) => s.id !== id));
+      setPinnedIds((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      try {
+        await window.hermesAPI.deleteSession(id);
+        onSessionDeleted?.(id);
+      } catch (err) {
+        console.error("Failed to delete session", id, err);
+      } finally {
+        setDeleting(false);
+        setPendingDeleteId(null);
+        void refresh(true);
+      }
+    },
+    [onSessionDeleted, refresh],
+  );
+
+  const openMenuForSession = useCallback(
+    (s: RecentSession, x: number, y: number): void => {
+      setMenuTarget({
+        id: s.id,
+        title: s.title,
+        contextFolder: s.contextFolder ?? null,
+        x,
+        y,
+      });
+    },
+    [],
+  );
 
   const toggleProjects = (): void => {
     setProjectsOpen((prev) => {
@@ -430,26 +650,75 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
     s: RecentSession,
     project = false,
     visible = expanded,
+    pinned = false,
   ): React.JSX.Element => {
     const title = s.title || t("sessions.newConversation");
     const loading = resumingSessionId === s.id || loadingSessionIds.has(s.id);
     const active = !loading && currentSessionId === s.id;
+    const editing = editingId === s.id;
+    const menuOpen = menuTarget?.id === s.id;
+
+    if (editing) {
+      return (
+        <div
+          key={s.id}
+          className={`sidebar-recent-session ${
+            project ? "project-child" : ""
+          } editing`}
+        >
+          <input
+            ref={renameInputRef}
+            className="sidebar-recent-session-rename"
+            type="text"
+            value={editingTitle}
+            onChange={(e) => setEditingTitle(e.target.value)}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void confirmRename(s.id, editingTitle);
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                cancelRename();
+              }
+            }}
+            onBlur={() => void confirmRename(s.id, editingTitle)}
+            tabIndex={visible ? 0 : -1}
+          />
+        </div>
+      );
+    }
+
+    // `div role=button` (not <button>) so the trailing "options" control can be
+    // a real nested button without invalid button-in-button markup.
     return (
-      <button
+      <div
         key={s.id}
-        type="button"
+        role="button"
+        tabIndex={visible ? 0 : -1}
         className={`sidebar-recent-session ${project ? "project-child" : ""} ${
           active ? "active" : ""
-        }`}
+        } ${menuOpen ? "menu-open" : ""}`}
         onClick={() => onSelect(s.id)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onSelect(s.id);
+          }
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          openMenuForSession(s, e.clientX, e.clientY);
+        }}
         title={title}
-        tabIndex={visible ? 0 : -1}
       >
         {loading ? (
           <Loader
             className="sidebar-recent-session-dot sidebar-recent-session-dot--loading"
             size={11}
           />
+        ) : pinned ? (
+          <Pin className="sidebar-recent-session-dot" size={11} />
         ) : (
           <Circle
             className={`sidebar-recent-session-dot ${
@@ -460,7 +729,22 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
           />
         )}
         <span className="sidebar-recent-session-title">{title}</span>
-      </button>
+        <button
+          type="button"
+          className="sidebar-recent-session-options"
+          tabIndex={visible ? 0 : -1}
+          aria-label={t("navigation.sessionMenu.options")}
+          title={t("navigation.sessionMenu.options")}
+          onClick={(e) => {
+            e.stopPropagation();
+            const rect = e.currentTarget.getBoundingClientRect();
+            openMenuForSession(s, rect.right, rect.bottom + 4);
+          }}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <MoreHorizontal size={15} />
+        </button>
+      </div>
     );
   };
 
@@ -470,6 +754,41 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
       aria-hidden={!expanded}
     >
       <div className="sidebar-recent-sessions">
+        {pinnedSessions.length > 0 && (
+          <div className="sidebar-recent-section">
+            <button
+              type="button"
+              className="sidebar-recent-section-toggle"
+              onClick={togglePinned}
+              aria-expanded={pinnedOpen}
+              tabIndex={expanded ? 0 : -1}
+            >
+              <span>{t("navigation.pinned")}</span>
+              {pinnedOpen ? (
+                <ChevronDown
+                  className="sidebar-recent-disclosure-icon"
+                  size={13}
+                />
+              ) : (
+                <ChevronRight
+                  className="sidebar-recent-disclosure-icon"
+                  size={13}
+                />
+              )}
+            </button>
+            <div
+              className={`sidebar-recent-collapse ${
+                pinnedOpen ? "expanded" : ""
+              }`}
+            >
+              <div className="sidebar-recent-collapse-inner">
+                {pinnedSessions.map((s) =>
+                  renderSessionButton(s, false, expanded && pinnedOpen, true),
+                )}
+              </div>
+            </div>
+          </div>
+        )}
         {projectGroups.length > 0 && (
           <div className="sidebar-recent-section">
             <button
@@ -565,9 +884,7 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
             )}
           </button>
           <div
-            className={`sidebar-recent-collapse ${
-              chatsOpen ? "expanded" : ""
-            }`}
+            className={`sidebar-recent-collapse ${chatsOpen ? "expanded" : ""}`}
           >
             <div className="sidebar-recent-collapse-inner">
               {chats.length > 0 ? (
@@ -592,6 +909,82 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
           </div>
         )}
       </div>
+      {expanded && menuTarget && (
+        <SidebarSessionMenu
+          target={menuTarget}
+          isPinned={pinnedIds.has(menuTarget.id)}
+          projects={projectChoices}
+          scrollContainer={scrollRootRef.current}
+          onClose={() => setMenuTarget(null)}
+          onTogglePin={() => handleTogglePin(menuTarget.id)}
+          onRename={() => {
+            const s = sessions.find((row) => row.id === menuTarget.id);
+            if (s) startRename(s);
+          }}
+          onMoveToProject={(path) =>
+            void handleMoveToProject(menuTarget.id, path)
+          }
+          onPickNewFolder={() => void handlePickNewFolder(menuTarget.id)}
+          onDelete={() => setPendingDeleteId(menuTarget.id)}
+        />
+      )}
+      {pendingDeleteId &&
+        createPortal(
+          <div
+            className="sidebar-session-delete-overlay"
+            role="presentation"
+            onClick={() => {
+              if (!deleting) setPendingDeleteId(null);
+            }}
+          >
+            <div
+              className="sidebar-session-delete-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="sidebar-session-delete-title"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="sidebar-session-delete-header">
+                <h3 id="sidebar-session-delete-title">
+                  {t("navigation.sessionMenu.deleteConfirmTitle")}
+                </h3>
+                <button
+                  type="button"
+                  className="btn-ghost sidebar-session-delete-close"
+                  onClick={() => setPendingDeleteId(null)}
+                  disabled={deleting}
+                  aria-label={t("navigation.sessionMenu.deleteCancel")}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <p className="sidebar-session-delete-body">
+                {t("navigation.sessionMenu.deleteConfirm")}
+              </p>
+              <div className="sidebar-session-delete-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setPendingDeleteId(null)}
+                  disabled={deleting}
+                >
+                  {t("navigation.sessionMenu.deleteCancel")}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  onClick={() => void confirmDelete(pendingDeleteId)}
+                  disabled={deleting}
+                >
+                  {deleting
+                    ? t("navigation.sessionMenu.deleting")
+                    : t("navigation.sessionMenu.deleteConfirmAction")}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 });

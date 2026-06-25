@@ -2,6 +2,7 @@ import {
   useState,
   useRef,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useCallback,
   forwardRef,
@@ -112,16 +113,26 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
     }, []);
 
-    const applyHistoryText = useCallback(
-      (text: string): void => {
-        setInput(text);
-        requestAnimationFrame(() => {
-          autoResize();
-          inputRef.current?.setSelectionRange(text.length, text.length);
-        });
-      },
-      [autoResize],
-    );
+    // Resize the textarea once per committed value, in a layout effect, rather
+    // than reading `scrollHeight` inside a requestAnimationFrame on every
+    // keystroke. The synchronous scrollHeight read forces a document reflow;
+    // doing it here (post-commit, pre-paint) keeps it to a single measurement
+    // and lets `content-visibility` on off-screen rows bound its cost — this is
+    // the input-lag fix for long conversations (#748). All `setInput` paths
+    // (typing, history recall, voice, imperative setText/appendText) funnel
+    // through here, so none of them need to resize by hand.
+    // @lat: [[chat-performance#Textarea auto-resize avoids per-keystroke reflow]]
+    useLayoutEffect(() => {
+      autoResize();
+    }, [input, autoResize]);
+
+    const applyHistoryText = useCallback((text: string): void => {
+      setInput(text);
+      // Resize runs via the layout effect; just place the caret at the end.
+      requestAnimationFrame(() => {
+        inputRef.current?.setSelectionRange(text.length, text.length);
+      });
+    }, []);
 
     const history = useInputHistory({
       currentInput: input,
@@ -180,8 +191,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       () => ({
         setText(text: string): void {
           setInput(text);
+          // Resize runs via the layout effect; place the caret + focus.
           requestAnimationFrame(() => {
-            autoResize();
             if (inputRef.current) {
               inputRef.current.setSelectionRange(text.length, text.length);
               inputRef.current.focus();
@@ -192,7 +203,6 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           setInput((prev) => {
             const next = prev ? `${prev}\n${text}` : text;
             requestAnimationFrame(() => {
-              autoResize();
               if (inputRef.current) {
                 inputRef.current.setSelectionRange(next.length, next.length);
                 inputRef.current.focus();
@@ -214,7 +224,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           return ingestFiles(files);
         },
       }),
-      [autoResize, ingestFiles],
+      [ingestFiles],
     );
 
     // Refocus the textarea when a streaming response ends
@@ -302,12 +312,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     ): void {
       const value = e.target.value;
       setInput(value);
-
-      const target = e.target;
-      requestAnimationFrame(() => {
-        target.style.height = "auto";
-        target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
-      });
+      // Height is handled by the useLayoutEffect on `input` above.
 
       if (value.startsWith("/") && !value.includes(" ")) {
         const query = value.split(" ")[0];

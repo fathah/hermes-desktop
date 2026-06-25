@@ -1,4 +1,5 @@
 import { memo, useMemo, useState, useCallback, useEffect, useRef } from "react";
+import { formatDistanceToNowStrict } from "date-fns";
 import { Copy, Check } from "lucide-react";
 import loadingGif from "../../assets/loadingo.gif";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
@@ -10,6 +11,37 @@ import type { ChatBubbleMessage, ChatMessage } from "./types";
 
 export const APPROVAL_RE =
   /⚠️.*dangerous|requires? (your )?approval|\/approve.*\/deny|do you want (me )?to (proceed|continue|run|execute)/i;
+
+/**
+ * Coerce a DB timestamp to epoch milliseconds. The agent's state.db stores
+ * message times in seconds, but other paths hand us milliseconds — anything
+ * below this threshold (≈ year 2001 in ms) is far too small to be a real ms
+ * time, so it's a seconds value and gets scaled up. Without this a seconds
+ * value renders as ~Jan 1970.
+ */
+const MS_THRESHOLD = 1e12;
+function toEpochMs(ts: number): number {
+  return ts < MS_THRESHOLD ? ts * 1000 : ts;
+}
+
+/**
+ * Relative "time ago" label for the hover-time element — e.g. "5 minutes
+ * ago", "2 hours ago", "3 days ago". Uses date-fns rather than hand-rolled
+ * thresholds. Times within the last few seconds read "just now".
+ */
+function formatBubbleTime(ts: number): string {
+  const ms = toEpochMs(ts);
+  if (Date.now() - ms < 10_000) return "just now";
+  return formatDistanceToNowStrict(ms, { addSuffix: true });
+}
+
+/** Absolute timestamp for the tooltip and `<time dateTime>` value. */
+function formatBubbleTimeAbsolute(ts: number): string {
+  return new Date(toEpochMs(ts)).toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
 
 function isChatBubbleMessage(msg: ChatMessage): msg is ChatBubbleMessage {
   return (
@@ -219,6 +251,10 @@ export const MessageRow = memo(function MessageRow({
     isLast &&
     APPROVAL_RE.test(msg.content);
   const hasAttachments = !!msg.attachments && msg.attachments.length > 0;
+  const bubbleTime =
+    typeof msg.timestamp === "number" && msg.timestamp > 0
+      ? formatBubbleTime(msg.timestamp)
+      : null;
 
   return (
     <div
@@ -288,6 +324,15 @@ export const MessageRow = memo(function MessageRow({
           </div>
         )}
       </div>
+      {bubbleTime && (
+        <time
+          className="chat-bubble-time"
+          dateTime={new Date(toEpochMs(msg.timestamp!)).toISOString()}
+          title={formatBubbleTimeAbsolute(msg.timestamp!)}
+        >
+          {bubbleTime}
+        </time>
+      )}
       {showApprovalBar && (
         <div className="chat-approval-bar">
           <button

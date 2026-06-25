@@ -1,6 +1,6 @@
 {
   "name": "hermes-desktop",
-  "version": "0.6.34",
+  "version": "0.7.0",
   "description": "Hermes Agent Desktop — self-improving AI assistant",
   "main": "./out/main/index.js",
   "author": "fathah",
@@ -40,6 +40,7 @@
     "@types/react-syntax-highlighter": "^15.5.13",
     "@wesbos/code-icons": "^1.2.4",
     "better-sqlite3": "^12.8.0",
+    "date-fns": "^4.4.0",
     "electron-updater": "^6.3.9",
     "ethers": "^6.17.0",
     "highlight.js": "^11.11.1",

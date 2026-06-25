@@ -23,6 +23,8 @@ export interface ChatBubbleMessage {
   localOnly?: boolean;
   /** Renderer-local turn identity used to anchor local failures. */
   turnId?: string;
+  /** Epoch-ms the message was recorded; surfaced as a hover timestamp. */
+  timestamp?: number;
 }
 
 /**

@@ -1981,7 +1981,7 @@ def configured_port(text):
         return None
     start, end, _ = bounds
     for line in lines[start + 1:end]:
-        m = re.match(r"^\\s*port\\s*:\\s*[\\\"']?(\\d+)[\\\"']?\\s*(?:#.*)?$", line)
+        m = re.match(r"^\\s*port\\s*:\\s*[\\"']?(\\d+)[\\"']?\\s*(?:#.*)?$", line)
         if m:
             port = int(m.group(1))
             if 0 < port < 65536:

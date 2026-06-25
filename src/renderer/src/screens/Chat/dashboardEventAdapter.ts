@@ -401,6 +401,18 @@ function normalizeText(value: string): string {
  * side (e.g. `"…worl" + "d…"`), so a coincidental shared character isn't
  * treated as a real seam. Punctuation and whitespace are valid seams.
  */
+function commonSuffixLength(a: string, b: string): number {
+  let i = a.length - 1;
+  let j = b.length - 1;
+  let n = 0;
+  while (i >= 0 && j >= 0 && a[i] === b[j]) {
+    i--;
+    j--;
+    n++;
+  }
+  return n;
+}
+
 function tailHeadOverlap(a: string, b: string): number {
   const word = /\w/;
   const max = Math.min(a.length, b.length);
@@ -450,6 +462,21 @@ export function mergeStreamedWithFinal(
 
   const overlap = tailHeadOverlap(streamedContent, finalContent);
   if (overlap > 0) return `${streamedContent}${finalContent.slice(overlap)}`;
+
+  // A re-streamed correction: the streamed deltas were garbled (e.g. a
+  // corrupted CJK prefix) but converged on the same ending as the final text.
+  // When the two share a substantial common tail they are the *same* sentence,
+  // not the pre-tool-call + answer pair that the concatenate branch handles —
+  // so the clean final replaces the garbled stream instead of stacking a near
+  // duplicate above it.
+  const suffix = commonSuffixLength(streamedContent, finalContent);
+  if (suffix > 0) {
+    const shared = finalContent.slice(finalContent.length - suffix);
+    const meaningful = shared.replace(/[\s\p{P}]/gu, "").length;
+    const shorter = Math.min(streamedContent.length, finalContent.length);
+    if (meaningful >= 3 && suffix / shorter >= 0.5) return finalContent;
+  }
+
   return `${streamedContent}\n\n${finalContent}`;
 }
 
