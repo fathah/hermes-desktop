@@ -67,6 +67,10 @@ try {
   console.error("[updater] Failed to load autoUpdater:", err);
 }
 
+function isWindowsUnsignedAutoUpdateBlocked(): boolean {
+  return process.platform === "win32";
+}
+
 export function registerSystemIpc(
   mainWindowGetter: () => BrowserWindow | null,
 ): void {
@@ -240,6 +244,12 @@ export function registerSystemIpc(
   if (!app.isPackaged || isPortableBuild || !autoUpdater) {
     safeHandle("check-for-updates", async () => null);
     safeHandle("download-update", () => true);
+    safeHandle("install-update", () => {});
+    return;
+  }
+  if (isWindowsUnsignedAutoUpdateBlocked()) {
+    safeHandle("check-for-updates", async () => null);
+    safeHandle("download-update", () => false);
     safeHandle("install-update", () => {});
     return;
   }

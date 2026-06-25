@@ -169,4 +169,16 @@ describe("SemanticGraphManager", () => {
     expect(indexSpy).toHaveBeenCalledTimes(1);
     expect(indexSpy).toHaveBeenCalledWith("/vault/path/c");
   });
+
+  it("cancels a pending debounced index when stopped", () => {
+    const indexSpy = vi
+      .spyOn(semanticManager, "index")
+      .mockResolvedValue({ ok: true });
+
+    semanticManager.triggerIndex("/vault/path");
+    semanticManager.stop();
+    vi.advanceTimersByTime(1600);
+
+    expect(indexSpy).not.toHaveBeenCalled();
+  });
 });

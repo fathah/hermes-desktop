@@ -14,6 +14,10 @@ const ROOT = join(__dirname, "..");
 const mainSrc = readFileSync(join(ROOT, "src/main/index.ts"), "utf-8");
 const preloadSrc = readFileSync(join(ROOT, "src/preload/index.ts"), "utf-8");
 const installerSrc = readFileSync(join(ROOT, "src/main/installer.ts"), "utf-8");
+const systemIpcSrc = readFileSync(
+  join(ROOT, "src/main/ipc/system.ts"),
+  "utf-8",
+);
 const rendererHtml = readFileSync(
   join(ROOT, "src/renderer/index.html"),
   "utf-8",
@@ -41,6 +45,30 @@ describe("Electron main process hardening", () => {
     expect(mainSrc).toContain('app.on("web-contents-created"');
     expect(mainSrc).toContain('contents.getType() === "webview"');
     expect(mainSrc).toContain("hardenAttachedWebContents(contents)");
+  });
+
+  it("stops the semantic index helper during app shutdown", () => {
+    expect(mainSrc).toContain(
+      'import { semanticManager } from "./semantic-index"',
+    );
+    const stopPos = mainSrc.indexOf("semanticManager.stop()");
+    const closeIndexesPos = mainSrc.indexOf("void closeAllNoteIndexes()");
+    expect(stopPos).toBeGreaterThan(-1);
+    expect(closeIndexesPos).toBeGreaterThan(-1);
+    expect(stopPos).toBeLessThan(closeIndexesPos);
+  });
+
+  it("disables packaged Windows auto-update while Windows builds are unsigned", () => {
+    expect(mainSrc).toContain("isWindowsUnsignedAutoUpdateBlocked()");
+    expect(mainSrc).toContain('process.platform === "win32"');
+    expect(mainSrc).toContain(
+      "[updater] Disabled on unsigned Windows builds; use manual updates.",
+    );
+    expect(systemIpcSrc).toContain("isWindowsUnsignedAutoUpdateBlocked()");
+    expect(systemIpcSrc).toContain('process.platform === "win32"');
+    expect(systemIpcSrc).toContain(
+      'safeHandle("download-update", () => false)',
+    );
   });
 
   it("routes shell.openExternal through the allowlist helper", () => {

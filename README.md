@@ -32,7 +32,7 @@ Instead of managing the CLI by hand, SPS walks through install, provider setup, 
 
 ### Windows
 
-> **Windows users:** The installer is not code-signed. Windows SmartScreen will warn on first launch — click "More info" → "Run anyway".
+> **Windows users:** The installer is not code-signed. Windows SmartScreen will warn on first launch — click "More info" → "Run anyway". Auto-update is disabled on unsigned Windows builds; update manually from the Releases page until signed Windows artifacts are available.
 
 > **WSL users:** If the installer stalls at `Switching to root user to install dependencies...`, Playwright is waiting for a sudo password that has no TTY to read from. Grant passwordless sudo for the install, then revert when finished:
 >

@@ -11,6 +11,8 @@
 // Pure-ish + dependency-light so the policy is unit-testable; the IPC layer in
 // ipc/sps.ts is a thin wrapper that supplies the vault cwd.
 import { execFile } from "child_process";
+import { realpath } from "fs/promises";
+import { isAbsolute, relative, resolve } from "path";
 import { fetch as undiciFetch } from "undici";
 import { isCommandSafe } from "./autonomy";
 import { guardedAgent } from "./sps-agent";
@@ -24,6 +26,33 @@ export interface ActionOutcome {
 const SHELL_TIMEOUT_MS = 15_000;
 const API_TIMEOUT_MS = 15_000;
 const API_MAX_BYTES = 1024 * 1024;
+const VAULT_SCOPED_READ_BINARIES = new Set([
+  "cat",
+  "head",
+  "tail",
+  "grep",
+  "rg",
+  "wc",
+  "stat",
+  "file",
+  "du",
+]);
+const SEARCH_OPTION_FLAGS_WITH_VALUE = new Set([
+  "-A",
+  "-B",
+  "-C",
+  "-m",
+  "--after-context",
+  "--before-context",
+  "--context",
+  "--max-count",
+]);
+const HEAD_TAIL_OPTION_FLAGS_WITH_VALUE = new Set([
+  "-c",
+  "-n",
+  "--lines",
+  "--bytes",
+]);
 const BLOCKED_HEADER_NAMES = new Set([
   "authorization",
   "cookie",
@@ -43,6 +72,75 @@ const BLOCKED_HEADER_NAMES = new Set([
  */
 function tokenize(command: string): string[] {
   return command.trim().split(/\s+/).filter(Boolean);
+}
+
+function optionFlagsWithValue(binary: string): Set<string> {
+  if (binary === "grep" || binary === "rg")
+    return SEARCH_OPTION_FLAGS_WITH_VALUE;
+  if (binary === "head" || binary === "tail")
+    return HEAD_TAIL_OPTION_FLAGS_WITH_VALUE;
+  return new Set();
+}
+
+function positionalArgs(binary: string, args: string[]): string[] {
+  const valueFlags = optionFlagsWithValue(binary);
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === "--") {
+      out.push(...args.slice(i + 1));
+      break;
+    }
+    if (arg.startsWith("-")) {
+      if (valueFlags.has(arg)) i++;
+      continue;
+    }
+    out.push(arg);
+  }
+  return out;
+}
+
+function pathOperands(binary: string, args: string[]): string[] {
+  if (!VAULT_SCOPED_READ_BINARIES.has(binary)) return [];
+  const positional = positionalArgs(binary, args);
+  if (binary === "grep" || binary === "rg") {
+    return positional.slice(1);
+  }
+  return positional;
+}
+
+function isWithinPath(root: string, target: string): boolean {
+  const rel = relative(root, target);
+  return rel === "" || (!!rel && !rel.startsWith("..") && !isAbsolute(rel));
+}
+
+async function validateVaultScopedPaths(
+  binary: string,
+  args: string[],
+  cwd: string,
+): Promise<string | null> {
+  const operands = pathOperands(binary, args);
+  if (operands.length === 0) return null;
+  let vaultRoot: string;
+  try {
+    vaultRoot = await realpath(cwd);
+  } catch {
+    return "Vault path is unavailable";
+  }
+  for (const operand of operands) {
+    try {
+      const candidate = isAbsolute(operand)
+        ? operand
+        : resolve(vaultRoot, operand);
+      const target = await realpath(candidate);
+      if (!isWithinPath(vaultRoot, target)) {
+        return `Path is outside the vault: ${operand}`;
+      }
+    } catch {
+      return `Path is outside the vault or unavailable: ${operand}`;
+    }
+  }
+  return null;
 }
 
 /**
@@ -66,23 +164,33 @@ export function runShellAction(
   }
 
   const [binary, ...args] = tokenize(cmd);
-  return new Promise((resolve) => {
-    execFile(
-      binary,
-      args,
-      { cwd, shell: false, timeout: SHELL_TIMEOUT_MS, maxBuffer: 1024 * 1024 },
-      (error, stdout, stderr) => {
-        if (error) {
-          resolve({
-            success: false,
-            output: stdout.toString(),
-            error: stderr.toString() || error.message,
-          });
-        } else {
-          resolve({ success: true, output: stdout.toString() });
-        }
-      },
-    );
+  return validateVaultScopedPaths(binary, args, cwd).then((pathError) => {
+    if (pathError) {
+      return { success: false, error: pathError };
+    }
+    return new Promise<ActionOutcome>((resolve) => {
+      execFile(
+        binary,
+        args,
+        {
+          cwd,
+          shell: false,
+          timeout: SHELL_TIMEOUT_MS,
+          maxBuffer: 1024 * 1024,
+        },
+        (error, stdout, stderr) => {
+          if (error) {
+            resolve({
+              success: false,
+              output: stdout.toString(),
+              error: stderr.toString() || error.message,
+            });
+          } else {
+            resolve({ success: true, output: stdout.toString() });
+          }
+        },
+      );
+    });
   });
 }
 

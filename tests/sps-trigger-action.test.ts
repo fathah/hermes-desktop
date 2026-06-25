@@ -4,7 +4,10 @@
 // RSS stored-XSS) became arbitrary command execution. This test pins the new
 // contract: only allowlisted read-only binaries run, via execFile (no shell),
 // and every shell-metacharacter / mutating case is rejected.
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 
 // Mock child_process so we never spawn anything real; capture the args.
 // `node:child_process` and `child_process` resolve to the same module, so we
@@ -57,6 +60,14 @@ function response(
 }
 
 describe("runShellAction (C1 shell allowlist + no-shell execFile)", () => {
+  const tempDirs: string[] = [];
+
+  function makeTempDir(prefix: string): string {
+    const dir = mkdtempSync(join(tmpdir(), prefix));
+    tempDirs.push(dir);
+    return dir;
+  }
+
   beforeEach(() => {
     execFileMock.mockClear();
     execFileMock.mockImplementation(
@@ -69,6 +80,12 @@ describe("runShellAction (C1 shell allowlist + no-shell execFile)", () => {
         cb(null, Buffer.from(`${cmd} ${args.join(" ")}`), Buffer.from(""));
       },
     );
+  });
+
+  afterEach(() => {
+    for (const dir of tempDirs.splice(0)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("rejects empty / whitespace-only commands", async () => {
@@ -141,6 +158,56 @@ describe("runShellAction (C1 shell allowlist + no-shell execFile)", () => {
     expect(cmd).toBe("ls"); // argv[0] is the bare binary, not a shell
     expect(args).toEqual(["-la"]);
     expect(opts).toMatchObject({ shell: false, cwd: "/vault" });
+  });
+
+  it("allows file-reading commands for vault-local paths", async () => {
+    const vault = makeTempDir("hermes-action-vault-");
+    writeFileSync(join(vault, "note.md"), "vault-local");
+
+    const res = await runShellAction("cat note.md", vault);
+
+    expect(res.success).toBe(true);
+    expect(execFileMock).toHaveBeenCalledTimes(1);
+    const [cmd, args, opts] = execFileMock.mock.calls[0];
+    expect(cmd).toBe("cat");
+    expect(args).toEqual(["note.md"]);
+    expect(opts).toMatchObject({ shell: false, cwd: vault });
+  });
+
+  it("rejects file-reading commands that target paths outside the vault", async () => {
+    const vault = makeTempDir("hermes-action-vault-");
+    const outside = makeTempDir("hermes-action-outside-");
+    const outsideFile = join(outside, "desktop.json");
+    writeFileSync(outsideFile, "secret");
+
+    for (const cmd of [
+      `cat ${outsideFile}`,
+      "cat ../desktop.json",
+      `grep token ${outsideFile}`,
+    ]) {
+      const res = await runShellAction(cmd, vault);
+      expect(res.success, `should reject ${cmd}`).toBe(false);
+      expect(res.error).toMatch(/outside|vault|path|unsafe/i);
+    }
+    expect(execFileMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects vault-local symlinks that resolve outside the vault", async () => {
+    const vault = makeTempDir("hermes-action-vault-");
+    const outside = makeTempDir("hermes-action-outside-");
+    const outsideFile = join(outside, "secret.txt");
+    writeFileSync(outsideFile, "secret");
+    symlinkSync(outsideFile, join(vault, "linked-secret.txt"));
+
+    for (const cmd of [
+      "cat linked-secret.txt",
+      "grep -n token linked-secret.txt",
+    ]) {
+      const res = await runShellAction(cmd, vault);
+      expect(res.success, `should reject ${cmd}`).toBe(false);
+      expect(res.error).toMatch(/outside|vault|path/i);
+    }
+    expect(execFileMock).not.toHaveBeenCalled();
   });
 
   it("passes through execFile errors as a failure result (never throws)", async () => {

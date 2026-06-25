@@ -14,6 +14,11 @@ function getSafeStorage(): typeof safeStorage {
   return (globalThis as MockSafeStorageGlobal).mockSafeStorage ?? safeStorage;
 }
 
+export function isSecretEncryptionAvailable(): boolean {
+  const storage = getSafeStorage();
+  return !!storage?.isEncryptionAvailable();
+}
+
 export function encryptSecret(secret: string): string {
   if (!secret) return "";
   const storage = getSafeStorage();
@@ -25,6 +30,18 @@ export function encryptSecret(secret: string): string {
     }
   }
   return secret;
+}
+
+export function canDecryptSecret(payload: string): boolean {
+  if (!payload) return false;
+  const storage = getSafeStorage();
+  if (!storage || !storage.isEncryptionAvailable()) return false;
+  try {
+    storage.decryptString(Buffer.from(payload, "base64"));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function decryptSecret(payload: string): string {

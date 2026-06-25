@@ -2,7 +2,12 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import { HERMES_HOME } from "../installer";
 import { getActiveProfileNameSync } from "../utils";
-import { encryptSecret, decryptSecret } from "./secrets";
+import {
+  canDecryptSecret,
+  encryptSecret,
+  decryptSecret,
+  isSecretEncryptionAvailable,
+} from "./secrets";
 import {
   EXTERNAL_SOURCES,
   defaultExternalSourceConfig,
@@ -19,17 +24,30 @@ function desktopConfigFile(): string {
   return join(HERMES_HOME, "desktop.json");
 }
 
-export function readDesktopConfig(): Record<string, unknown> {
+const DESKTOP_SECRET_FIELDS = [
+  "remoteApiKey",
+  "apiServerKey",
+  "openalexApiKey",
+] as const;
+
+function readDesktopConfigRaw(): Record<string, unknown> | null {
   try {
     const f = desktopConfigFile();
-    if (!existsSync(f)) return {};
+    if (!existsSync(f)) return null;
     const data = JSON.parse(readFileSync(f, "utf-8"));
-    if (data && typeof data === "object") {
-      if (typeof data.remoteApiKey === "string") {
-        data.remoteApiKey = decryptSecret(data.remoteApiKey);
-      }
-      if (typeof data.apiServerKey === "string") {
-        data.apiServerKey = decryptSecret(data.apiServerKey);
+    return data && typeof data === "object" ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+export function readDesktopConfig(): Record<string, unknown> {
+  try {
+    const data = readDesktopConfigRaw();
+    if (!data) return {};
+    for (const field of DESKTOP_SECRET_FIELDS) {
+      if (typeof data[field] === "string") {
+        data[field] = decryptSecret(data[field]);
       }
     }
     return data;
@@ -44,14 +62,27 @@ export function writeDesktopConfig(data: Record<string, unknown>): void {
   }
   const clone = JSON.parse(JSON.stringify(data));
   if (clone && typeof clone === "object") {
-    if (typeof clone.remoteApiKey === "string") {
-      clone.remoteApiKey = encryptSecret(clone.remoteApiKey);
-    }
-    if (typeof clone.apiServerKey === "string") {
-      clone.apiServerKey = encryptSecret(clone.apiServerKey);
+    for (const field of DESKTOP_SECRET_FIELDS) {
+      if (typeof clone[field] === "string") {
+        clone[field] = encryptSecret(clone[field]);
+      }
     }
   }
   writeFileSync(desktopConfigFile(), JSON.stringify(clone, null, 2), "utf-8");
+}
+
+export function migrateDesktopConfigSecrets(): void {
+  if (!isSecretEncryptionAvailable()) return;
+  const raw = readDesktopConfigRaw();
+  if (!raw) return;
+  const hasLegacyPlaintext = DESKTOP_SECRET_FIELDS.some((field) => {
+    const value = raw[field];
+    return (
+      typeof value === "string" && value.length > 0 && !canDecryptSecret(value)
+    );
+  });
+  if (!hasLegacyPlaintext) return;
+  writeDesktopConfig(readDesktopConfig());
 }
 
 // ── Desktop automation prefs (M2) ────────────────────────────────────────────

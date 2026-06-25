@@ -17,6 +17,13 @@ describe("isCommandSafe", () => {
     expect(isCommandSafe("git diff HEAD~1")).toBe(false);
   });
 
+  it("rejects direct path escape attempts for read binaries", () => {
+    expect(isCommandSafe("cat /Users/example/.ssh/id_rsa")).toBe(false);
+    expect(isCommandSafe("cat ../desktop.json")).toBe(false);
+    expect(isCommandSafe("cat .env")).toBe(false);
+    expect(isCommandSafe("grep token /etc/passwd")).toBe(false);
+  });
+
   it("rejects mutating or unknown binaries", () => {
     expect(isCommandSafe("rm -rf /")).toBe(false);
     expect(isCommandSafe("npm install")).toBe(false);

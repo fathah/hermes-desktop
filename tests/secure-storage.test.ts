@@ -1,4 +1,7 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 
 // Mock Electron safeStorage module before importing config
 let isEncryptionAvailableMock = true;
@@ -72,5 +75,68 @@ describe("config secure secret storage", () => {
 
     const decrypted = decryptSecret(encrypted);
     expect(decrypted).toBe(plaintext);
+  });
+});
+
+describe("desktop.json secret fields", () => {
+  let testDir: string;
+
+  async function freshConfig(
+    home: string,
+  ): Promise<typeof import("../src/main/config")> {
+    vi.resetModules();
+    process.env.HERMES_HOME = home;
+    (globalThis as SecureStorageTestGlobal).mockSafeStorage = safeStorageMock;
+    return await import("../src/main/config");
+  }
+
+  beforeEach(() => {
+    isEncryptionAvailableMock = true;
+    testDir = mkdtempSync(join(tmpdir(), "hermes-openalex-secret-"));
+  });
+
+  afterEach(() => {
+    delete process.env.HERMES_HOME;
+    delete (globalThis as SecureStorageTestGlobal).mockSafeStorage;
+    rmSync(testDir, { recursive: true, force: true });
+  });
+
+  it("encrypts OpenAlex API keys while preserving decrypted reads", async () => {
+    const { readDesktopConfig, writeDesktopConfig } =
+      await freshConfig(testDir);
+
+    writeDesktopConfig({
+      openalexMailto: "research@example.com",
+      openalexApiKey: "oa-secret-key",
+    });
+
+    const raw = readFileSync(join(testDir, "desktop.json"), "utf-8");
+    expect(raw).not.toContain("oa-secret-key");
+    expect(
+      Buffer.from(JSON.parse(raw).openalexApiKey, "base64").toString("utf-8"),
+    ).toBe("encrypted:oa-secret-key");
+    expect(readDesktopConfig().openalexApiKey).toBe("oa-secret-key");
+  });
+
+  it("migrates legacy plaintext OpenAlex API keys through the encrypted writer", async () => {
+    writeFileSync(
+      join(testDir, "desktop.json"),
+      JSON.stringify(
+        {
+          openalexMailto: "research@example.com",
+          openalexApiKey: "legacy-openalex-key",
+        },
+        null,
+        2,
+      ),
+    );
+
+    const { migrateDesktopConfigSecrets, readDesktopConfig } =
+      await freshConfig(testDir);
+    migrateDesktopConfigSecrets();
+
+    const raw = readFileSync(join(testDir, "desktop.json"), "utf-8");
+    expect(raw).not.toContain("legacy-openalex-key");
+    expect(readDesktopConfig().openalexApiKey).toBe("legacy-openalex-key");
   });
 });

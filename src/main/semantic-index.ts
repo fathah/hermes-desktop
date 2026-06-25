@@ -83,6 +83,11 @@ class SemanticGraphManager {
   }
 
   stop(): void {
+    if (this.indexDebounceTimer) {
+      clearTimeout(this.indexDebounceTimer);
+      this.indexDebounceTimer = null;
+    }
+    this.pendingVaultPath = null;
     if (this.proc) {
       this.proc.kill();
       this.proc = null;

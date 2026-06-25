@@ -68,6 +68,23 @@ const SAFE_GIT_SUBCOMMANDS = new Set([
 // fail closed.
 const SHELL_METACHARS = /[;&|<>`$(){}\\!*?~\n\r]/;
 
+function hasUnsafePathOperand(parts: string[]): boolean {
+  return parts.slice(1).some((arg) => {
+    if (!arg || arg.startsWith("-")) return false;
+    return (
+      arg.startsWith("/") ||
+      /^[A-Za-z]:\//.test(arg) ||
+      arg === "." ||
+      arg === ".." ||
+      arg.startsWith("../") ||
+      arg.includes("/../") ||
+      arg.endsWith("/..") ||
+      arg.startsWith(".") ||
+      arg.includes("/.")
+    );
+  });
+}
+
 /**
  * Is this a single, read-only terminal command we can safely auto-approve?
  * Conservative: rejects anything with shell metacharacters, anything whose
@@ -102,6 +119,7 @@ export function isCommandSafe(command: string): boolean {
     }
     return true;
   }
+  if (hasUnsafePathOperand(parts)) return false;
   return true;
 }
 

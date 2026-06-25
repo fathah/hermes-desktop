@@ -30,6 +30,7 @@ const execAsync = promisify(exec);
 
 import { closeSharedDb } from "./db";
 import { closeAllNoteIndexes } from "./note-index";
+import { semanticManager } from "./semantic-index";
 import { isAllowedObsidianExternalUrl } from "./obsidian";
 import {
   stopHealthPolling,
@@ -53,7 +54,7 @@ import { startEquityAlertWatcher } from "./equity-alerts";
 import { startScheduledResearch } from "./scheduled-research";
 import { startAssistantRecipeScheduler } from "./assistant-recipes";
 import { updaterLogger } from "./updater-log";
-import { getConnectionConfig } from "./config";
+import { getConnectionConfig, migrateDesktopConfigSecrets } from "./config";
 import {
   applyAppZoomToWindow,
   resetAppZoomFactor,
@@ -681,6 +682,12 @@ function setupUpdater(): void {
   if (!app.isPackaged || isPortableBuild) {
     return;
   }
+  if (isWindowsUnsignedAutoUpdateBlocked()) {
+    console.warn(
+      "[updater] Disabled on unsigned Windows builds; use manual updates.",
+    );
+    return;
+  }
 
   // Dynamic import to avoid electron-updater issues in dev mode
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -718,6 +725,10 @@ function setupUpdater(): void {
   setTimeout(() => {
     autoUpdater.checkForUpdates().catch(() => {});
   }, 5000);
+}
+
+function isWindowsUnsignedAutoUpdateBlocked(): boolean {
+  return process.platform === "win32";
 }
 
 // Opt-in Chrome DevTools Protocol port for E2E testing. Set
@@ -760,6 +771,7 @@ app.whenReady().then(() => {
     }
   }
   electronApp.setAppUserModelId("com.nousresearch.hermes");
+  migrateDesktopConfigSecrets();
 
   app.on("browser-window-created", (_, window) => {
     optimizer.watchWindowShortcuts(window);
@@ -863,6 +875,7 @@ app.on("before-quit", () => {
   // Leave profile gateways running on quit (see window-all-closed) so bots
   // and other platforms stay online headless.
   stopSshTunnel();
+  semanticManager.stop();
   void closeAllNoteIndexes();
   stopExternalContextScans();
   closeExternalContextDb();
