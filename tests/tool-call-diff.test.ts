@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeLineDiff } from "../src/shared/diff";
+import { computeLineDiff } from "../src/renderer/src/lib/diff";
 
 const NUL = String.fromCharCode(0);
 

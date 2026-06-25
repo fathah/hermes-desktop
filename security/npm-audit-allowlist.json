@@ -1,0 +1,94 @@
+{
+  "lastReviewed": "2026-06-25",
+  "notes": "Accepted residual npm audit baseline. Do not add entries for fixable advisories without documenting why they cannot be patched safely.",
+  "entries": [
+    {
+      "name": "@chevrotain/cst-dts-gen",
+      "severity": "moderate",
+      "range": "11.0.0 - 11.1.0",
+      "reason": "Excalidraw/Mermaid parser subtree pinned by @excalidraw/excalidraw@0.18.1; npm's available fix downgrades Excalidraw to a React 17/18 peer line."
+    },
+    {
+      "name": "@chevrotain/gast",
+      "severity": "moderate",
+      "range": "11.0.0 - 11.1.0",
+      "reason": "Excalidraw/Mermaid parser subtree pinned by @excalidraw/excalidraw@0.18.1; npm's available fix downgrades Excalidraw to a React 17/18 peer line."
+    },
+    {
+      "name": "@excalidraw/excalidraw",
+      "severity": "moderate",
+      "range": "0.5.0-a78d45417 || 0.17.1-08b13f9 - 0.17.1-test || >=0.18.0-699826",
+      "reason": "Current React 19-compatible Excalidraw release is pinned to the affected Mermaid subtree; npm's available fix is a semver-major downgrade to 0.17.6."
+    },
+    {
+      "name": "@excalidraw/mermaid-to-excalidraw",
+      "severity": "moderate",
+      "range": "*",
+      "reason": "Transitive Excalidraw/Mermaid subtree residual; re-evaluate when Excalidraw ships a React 19-compatible update."
+    },
+    {
+      "name": "@mermaid-js/parser",
+      "severity": "moderate",
+      "range": "<=0.6.3",
+      "reason": "Transitive Excalidraw/Mermaid parser residual; re-evaluate when Excalidraw ships a React 19-compatible update."
+    },
+    {
+      "name": "@wesbos/code-icons",
+      "severity": "low",
+      "range": ">=1.2.0",
+      "reason": "code-icons bundles old build tooling as regular dependencies; those Vite/esbuild copies are not executed by this app."
+    },
+    {
+      "name": "chevrotain",
+      "severity": "moderate",
+      "range": "11.0.0 - 11.1.0",
+      "reason": "Excalidraw/Mermaid parser subtree pinned by @excalidraw/excalidraw@0.18.1; npm's available fix downgrades Excalidraw to a React 17/18 peer line."
+    },
+    {
+      "name": "esbuild",
+      "severity": "moderate",
+      "range": "<=0.24.2",
+      "advisories": ["https://github.com/advisories/GHSA-67mh-4wv8-2f99"],
+      "reason": "Residual is only @wesbos/code-icons' bundled build tooling, not the root build/runtime esbuild."
+    },
+    {
+      "name": "langium",
+      "severity": "moderate",
+      "range": "2.1.0 - 4.1.3",
+      "reason": "Excalidraw/Mermaid parser subtree pinned by @excalidraw/excalidraw@0.18.1; npm's available fix downgrades Excalidraw to a React 17/18 peer line."
+    },
+    {
+      "name": "lodash-es",
+      "severity": "high",
+      "range": "<=4.17.23",
+      "advisories": [
+        "https://github.com/advisories/GHSA-r5fr-rjxr-66jc",
+        "https://github.com/advisories/GHSA-f23m-r3pf-42rh",
+        "https://github.com/advisories/GHSA-xxjr-mmjv-4gpg"
+      ],
+      "reason": "No patched lodash-es 4.x exists; current reachability is through Mermaid parser construction for user-authored diagrams."
+    },
+    {
+      "name": "nanoid",
+      "severity": "moderate",
+      "range": "4.0.0 - 5.0.8",
+      "advisories": ["https://github.com/advisories/GHSA-mwcw-c2x4-8c55"],
+      "reason": "Transitive Excalidraw/Mermaid residual; practical impact is nil for Excalidraw's integer nanoid usage."
+    },
+    {
+      "name": "vite",
+      "severity": "high",
+      "range": "<=6.4.2",
+      "advisories": [
+        "https://github.com/advisories/GHSA-g4jq-h2w9-997c",
+        "https://github.com/advisories/GHSA-jqfw-vq24-v9c3",
+        "https://github.com/advisories/GHSA-93m4-6634-74q7",
+        "https://github.com/advisories/GHSA-4w7w-66w2-5vf9",
+        "https://github.com/advisories/GHSA-c27g-q93r-2cwf",
+        "https://github.com/advisories/GHSA-v6wh-96g9-6wx3",
+        "https://github.com/advisories/GHSA-fx2h-pf6j-xcff"
+      ],
+      "reason": "Residual is only @wesbos/code-icons' bundled Vite 4 tooling; the root Vite toolchain is patched."
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 import type {
   ContentStudioPlaybook,
   ContentStudioRubric,
-} from "../../../../../shared/content-studio";
+} from "../../../lib/content-studio";
 
 interface Props {
   playbooks: ContentStudioPlaybook[];

@@ -30,6 +30,7 @@ describe("Electron main process hardening", () => {
     expect(mainSrc).toContain("sandbox: true");
     expect(mainSrc).toContain("webSecurity: true");
     expect(mainSrc).toContain("allowRunningInsecureContent: false");
+    expect(mainSrc).not.toContain("webviewTag: true");
   });
 
   it("blocks untrusted top-level navigation and webview attachment", () => {

@@ -5,6 +5,9 @@ const mockExistsSync = vi.fn();
 const mockExec = vi.fn((cmd, cb) => {
   if (typeof cb === "function") cb(null, "success", "");
 });
+const mockExecFile = vi.fn((_file, _args, _opts, cb) => {
+  if (typeof cb === "function") cb(null, "success", "");
+});
 const mockUnlinkSync = vi.fn();
 
 const filesInMemory = new Map<string, string>();
@@ -63,6 +66,13 @@ vi.mock("child_process", () => {
     exec: (...args: unknown[]) => {
       const cb = args[args.length - 1];
       mockExec(...args);
+      if (typeof cb === "function") {
+        (cb as (...args: unknown[]) => void)(null, "success", "");
+      }
+    },
+    execFile: (...args: unknown[]) => {
+      const cb = args[args.length - 1];
+      mockExecFile(...args);
       if (typeof cb === "function") {
         (cb as (...args: unknown[]) => void)(null, "success", "");
       }
@@ -159,8 +169,19 @@ describe("launchd Daemon & File-based Single Flight Locking", () => {
       "<string>com.nousresearch.hermes-scheduler</string>",
     );
     expect(plistContent).toContain("<key>StartInterval</key>");
-    expect(mockExec).toHaveBeenCalled();
-    expect(mockExec.mock.calls[1][0]).toContain("launchctl bootstrap");
+    expect(mockExec).not.toHaveBeenCalled();
+    expect(mockExecFile).toHaveBeenCalledWith(
+      "launchctl",
+      ["bootout", `gui/${process.getuid?.() ?? 0}`, plistPath],
+      expect.objectContaining({ shell: false }),
+      expect.any(Function),
+    );
+    expect(mockExecFile).toHaveBeenCalledWith(
+      "launchctl",
+      ["bootstrap", `gui/${process.getuid?.() ?? 0}`, plistPath],
+      expect.objectContaining({ shell: false }),
+      expect.any(Function),
+    );
 
     Object.defineProperty(process, "platform", { value: originalPlatform });
   });

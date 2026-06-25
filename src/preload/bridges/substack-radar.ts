@@ -6,6 +6,7 @@ import type {
   SubstackRadarRunInput,
   SubstackRadarSetCandidateStatusInput,
 } from "../../shared/substack-radar";
+import type { SubstackRadarBridgeApi } from "./substack-radar.types";
 
 export type {
   SubstackRadarAddApprovedFeedsResult,
@@ -36,4 +37,4 @@ export const substackRadarBridge = {
     input: SubstackRadarAddApprovedFeedsInput,
   ): Promise<SubstackRadarAddApprovedFeedsResult> =>
     ipcRenderer.invoke("sps-substack-radar-add-approved-feeds", input),
-};
+} satisfies SubstackRadarBridgeApi;

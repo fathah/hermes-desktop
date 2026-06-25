@@ -1,13 +1,11 @@
 import { ipcRenderer } from "electron";
 import type { AppLocale } from "../../shared/i18n/types";
+import type { EngineBridgeApi } from "./engine.types";
 
 export const engineBridge = {
   // Installation
-  checkInstall: (): Promise<{
-    installed: boolean;
-    configured: boolean;
-    hasApiKey: boolean;
-  }> => ipcRenderer.invoke("check-install"),
+  checkInstall: (() =>
+    ipcRenderer.invoke("check-install")) as EngineBridgeApi["checkInstall"],
 
   verifyInstall: (): Promise<boolean> => ipcRenderer.invoke("verify-install"),
 
@@ -215,4 +213,4 @@ export const engineBridge = {
   getLocale: (): Promise<AppLocale> => ipcRenderer.invoke("get-locale"),
   setLocale: (locale: AppLocale): Promise<AppLocale> =>
     ipcRenderer.invoke("set-locale", locale),
-};
+} satisfies EngineBridgeApi;

@@ -68,7 +68,7 @@ export function QuickCapture() {
 
   // Timer for voice recording
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    let timer: ReturnType<typeof setInterval> | undefined;
     if (recording) {
       timer = setInterval(() => {
         setRecordTime((t) => t + 1);

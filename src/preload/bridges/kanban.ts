@@ -1,4 +1,5 @@
 import { ipcRenderer } from "electron";
+import type { KanbanBridgeApi } from "./kanban.types";
 
 export const kanbanBridge = {
   // Kanban
@@ -79,4 +80,4 @@ export const kanbanBridge = {
     ipcRenderer.invoke("kanban-comment-task", taskId, body, profile),
   kanbanDispatchOnce: (dryRun?: boolean, profile?: string) =>
     ipcRenderer.invoke("kanban-dispatch-once", dryRun, profile),
-};
+} satisfies KanbanBridgeApi;

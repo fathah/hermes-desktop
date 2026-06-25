@@ -2,7 +2,7 @@ import {
   getNextContentActions,
   type ContentStudioDashboardSummary,
   type ContentStudioPanel,
-} from "../../../../../shared/content-studio";
+} from "../../../lib/content-studio";
 
 interface DashboardCard {
   label: string;

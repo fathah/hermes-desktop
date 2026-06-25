@@ -21,7 +21,7 @@ import {
   type ContentStudioRubric,
   type DraftClaim,
   type DraftVariant,
-} from "../../../../../shared/content-studio";
+} from "../../../lib/content-studio";
 import {
   buildDeckInputFromContentIdea,
   buildDeckInputFromContentRun,

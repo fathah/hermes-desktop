@@ -6,13 +6,13 @@ import {
   remainingSeconds,
   type ApprovalChoice,
   type ApprovalState,
-} from "../../../../shared/approval";
+} from "../../lib/approval";
 import {
   initDelegationState,
   applyDelegateEvent,
   buildTree,
   type DelegateNode,
-} from "../../../../shared/delegation";
+} from "../../lib/delegation";
 
 /**
  * Subscribes to the gateway's approval (B1) and delegation (B3) SSE signals

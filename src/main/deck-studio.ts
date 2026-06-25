@@ -146,7 +146,10 @@ export async function generateDeckProject(
   }
 
   try {
-    const firstRaw = await callDeckModel(buildDeckGenerationPrompt(input), profile);
+    const firstRaw = await callDeckModel(
+      buildDeckGenerationPrompt(input),
+      profile,
+    );
     const first = parseModelDeck(firstRaw);
     if (first.project && runDeckQa(first.project).ok) {
       return {
@@ -215,6 +218,7 @@ function renderBody(project: DeckProject): string {
 <html>
 <head>
   <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'none'; img-src 'none'; connect-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'" />
   <style>
     @page { size: 16in 9in; margin: 0; }
     * { box-sizing: border-box; }
@@ -341,7 +345,11 @@ export async function exportDeckPdf(
   await mkdir(exportsDir, { recursive: true });
   const outPath = join(
     exportsDir,
-    nextDeckExportName(await existingExportNames(exportsDir), project.title, "pdf"),
+    nextDeckExportName(
+      await existingExportNames(exportsDir),
+      project.title,
+      "pdf",
+    ),
   );
   const notesPath = await writeDeckNotesSidecar(project, exportsDir);
 
@@ -398,7 +406,11 @@ export async function exportDeckPptx(
   await mkdir(exportsDir, { recursive: true });
   const outPath = join(
     exportsDir,
-    nextDeckExportName(await existingExportNames(exportsDir), project.title, "pptx"),
+    nextDeckExportName(
+      await existingExportNames(exportsDir),
+      project.title,
+      "pptx",
+    ),
   );
   const notesPath = await writeDeckNotesSidecar(project, exportsDir);
   const pptx = new pptxgen();
@@ -409,20 +421,24 @@ export async function exportDeckPptx(
   pptx.title = project.title;
 
   for (const [index, deckSlide] of project.slides.entries()) {
-    const theme = DECK_THEME_TOKENS[project.theme] ?? DECK_THEME_TOKENS.investor;
+    const theme =
+      DECK_THEME_TOKENS[project.theme] ?? DECK_THEME_TOKENS.investor;
     const slide = pptx.addSlide();
     slide.bkgd = stripHex(theme.background);
     slide.color = stripHex(theme.foreground);
-    slide.addText(`${String(index + 1).padStart(2, "0")} / ${project.slides.length}`, {
-      x: 11.4,
-      y: 0.25,
-      w: 1.3,
-      h: 0.2,
-      fontSize: 8,
-      bold: true,
-      color: stripHex(theme.muted),
-      align: "right",
-    });
+    slide.addText(
+      `${String(index + 1).padStart(2, "0")} / ${project.slides.length}`,
+      {
+        x: 11.4,
+        y: 0.25,
+        w: 1.3,
+        h: 0.2,
+        fontSize: 8,
+        bold: true,
+        color: stripHex(theme.muted),
+        align: "right",
+      },
+    );
     slide.addText(deckSlide.kind.toUpperCase(), {
       x: 0.55,
       y: 0.35,
@@ -509,7 +525,10 @@ export async function exportDeckPptx(
   return { ok: true, path: outPath, notesPath };
 }
 
-export function isSafeDeckExportPath(filePath: string, vaultDir: string): boolean {
+export function isSafeDeckExportPath(
+  filePath: string,
+  vaultDir: string,
+): boolean {
   const rel = relative(deckExportsDir(vaultDir), filePath);
   return Boolean(rel) && !rel.startsWith("..") && !rel.startsWith("/");
 }
@@ -519,7 +538,10 @@ export async function openDeckExport(
   vaultDir: string,
 ): Promise<{ ok: boolean; error?: string }> {
   if (!isSafeDeckExportPath(filePath, vaultDir)) {
-    return { ok: false, error: "Deck export path is outside the export folder." };
+    return {
+      ok: false,
+      error: "Deck export path is outside the export folder.",
+    };
   }
   const error = await shell.openPath(filePath);
   return error ? { ok: false, error } : { ok: true };

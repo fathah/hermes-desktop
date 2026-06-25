@@ -3,7 +3,7 @@ import {
   remainingSeconds,
   type ApprovalState,
   type ApprovalChoice,
-} from "../../../../shared/approval";
+} from "../../lib/approval";
 
 /**
  * Command-approval cards (idea B1). Renders any pending dangerous-command

@@ -1,5 +1,6 @@
 import { ipcRenderer } from "electron";
 import type { CredentialPoolEntry } from "../../shared/credentials";
+import type { ProvidersBridgeApi } from "./providers.types";
 
 export const providersBridge = {
   // Credential Pool (profile-aware: reads/writes the named profile's
@@ -78,4 +79,4 @@ export const providersBridge = {
 
   updateModel: (id: string, fields: Record<string, string>): Promise<boolean> =>
     ipcRenderer.invoke("update-model", id, fields),
-};
+} satisfies ProvidersBridgeApi;

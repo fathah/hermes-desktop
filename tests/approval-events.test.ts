@@ -7,7 +7,7 @@ import {
   safeKey,
   remainingSeconds,
   type PendingApproval,
-} from "../src/shared/approval";
+} from "../src/renderer/src/lib/approval";
 
 describe("remainingSeconds", () => {
   const t0 = 1_000_000;

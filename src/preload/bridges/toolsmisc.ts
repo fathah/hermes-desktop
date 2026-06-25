@@ -1,6 +1,7 @@
 import { ipcRenderer } from "electron";
 import type { CapabilityRiskSummary } from "../../shared/capability-risk";
 import type { ResearchReachStatus } from "../../shared/research-reach";
+import type { ToolsmiscBridgeApi } from "./toolsmisc.types";
 
 export const toolsmiscBridge = {
   // Shell
@@ -74,4 +75,4 @@ export const toolsmiscBridge = {
     lines?: number,
   ): Promise<{ content: string; path: string }> =>
     ipcRenderer.invoke("read-logs", logFile, lines),
-};
+} satisfies ToolsmiscBridgeApi;

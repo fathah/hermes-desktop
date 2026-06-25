@@ -14,7 +14,7 @@ import type {
 import {
   buildContentIdeaFromSources,
   type ContentIdea,
-} from "../../../../../shared/content-studio";
+} from "../../../lib/content-studio";
 import { saveContentIdea } from "../content/contentStudioStorage";
 import { useStore } from "../store";
 

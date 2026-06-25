@@ -1,4 +1,5 @@
 import { ipcRenderer, webUtils } from "electron";
+import type { MediaBridgeApi } from "./media.types";
 
 export const mediaBridge = {
   // Media (agent-generated images / files — issue #299)
@@ -259,4 +260,4 @@ export const mediaBridge = {
     ipcRenderer.on("chat-delegate-progress", handler);
     return () => ipcRenderer.removeListener("chat-delegate-progress", handler);
   },
-};
+} satisfies MediaBridgeApi;

@@ -15,7 +15,7 @@ import type {
 import type { WorkDetail } from "../../../../../shared/openalex/core";
 import type { ExternalSource } from "../../../../../shared/external-context";
 import type { ResearchReachIntent } from "../../../../../shared/research-reach";
-import type { ContentIdea } from "../../../../../shared/content-studio";
+import type { ContentIdea } from "../../../lib/content-studio";
 import type { DeckGenerationInput } from "../../../../../shared/deck-studio";
 
 export type RightTab =

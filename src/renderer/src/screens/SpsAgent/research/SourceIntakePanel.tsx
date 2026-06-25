@@ -7,7 +7,7 @@ import {
   buildContentIdeaFromSources,
   parseContentSourceUrls,
   type ContentIdeaSourceRecord,
-} from "../../../../../shared/content-studio";
+} from "../../../lib/content-studio";
 import { hasCuratedBriefSources } from "../../../../../shared/curatedBrief";
 import { buildDeckInputFromResearch } from "../../../../../shared/deck-studio";
 import { Icon } from "../components/Icon";

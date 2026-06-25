@@ -14,7 +14,7 @@ import {
   type ContentStudioVaultRow,
   type DraftVariant,
   type PublishedPost,
-} from "../../../../../shared/content-studio";
+} from "../../../lib/content-studio";
 import { rowToMarkdown } from "../editor/rowMarkdown";
 
 export async function exportContentStudioRow(

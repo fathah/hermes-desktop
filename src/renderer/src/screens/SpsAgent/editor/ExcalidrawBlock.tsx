@@ -10,6 +10,7 @@
 // regenerated on every markdown round-trip.
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { uid } from "../lib/ids";
+import { sanitizeSvg } from "../lib/sanitize";
 import { useStore } from "../store";
 import type { Block } from "../types";
 
@@ -49,7 +50,7 @@ export function ExcalidrawBlock({ block, setType }: Props) {
       .then((res) => {
         if (cancelled) return;
         setScene(res.scene);
-        setPreviewSvg(res.svg);
+        setPreviewSvg(sanitizeSvg(res.svg));
         setReady(true);
       })
       .catch(() => {
@@ -63,7 +64,7 @@ export function ExcalidrawBlock({ block, setType }: Props) {
   const persist = (sceneJson: string, svg: string) => {
     const assetId = assetIdRef.current;
     setScene(sceneJson);
-    setPreviewSvg(svg);
+    setPreviewSvg(sanitizeSvg(svg));
     void window.hermesAPI
       .spsWriteExcalidraw(page, assetId, sceneJson, svg)
       .then((ok) => {
@@ -101,7 +102,6 @@ export function ExcalidrawBlock({ block, setType }: Props) {
       title="Click to edit drawing"
     >
       {previewSvg ? (
-        // The preview is the user's own exported drawing (local content).
         <div
           className="b-excalidraw-preview"
           dangerouslySetInnerHTML={{ __html: previewSvg }}

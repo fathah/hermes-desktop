@@ -18,11 +18,12 @@ import {
 } from "./config";
 import { isGatewayRunning, sendMessage } from "./hermes";
 import { runJobHeadless, tickScheduler } from "./scheduler";
-import { exec } from "child_process";
+import { execFile } from "child_process";
 import { createCronJob } from "./cronjobs";
 import { getSpsNoteIndex } from "./note-index";
 import { resolveSpsVaultDir } from "./sps-storage";
 import { writeSpsCapture } from "./sps-capture";
+import { log } from "./log";
 import {
   exportPageMarkdownTo,
   exportRowMarkdownTo,
@@ -890,6 +891,11 @@ function findNodePath(): string {
   return process.execPath;
 }
 
+function launchdGuiTarget(): string | null {
+  const uid = process.getuid?.();
+  return typeof uid === "number" ? `gui/${uid}` : null;
+}
+
 export function manageLaunchAgent(enabled: boolean): void {
   if (process.platform !== "darwin") return;
 
@@ -897,6 +903,8 @@ export function manageLaunchAgent(enabled: boolean): void {
   const plistDir = join(home, "Library", "LaunchAgents");
   const plistPath = join(plistDir, "com.nousresearch.hermes-scheduler.plist");
   const logsDir = join(home, ".hermes", "logs");
+  const guiTarget = launchdGuiTarget();
+  if (!guiTarget) return;
 
   if (!existsSync(plistDir)) {
     try {
@@ -906,27 +914,30 @@ export function manageLaunchAgent(enabled: boolean): void {
     }
   }
 
-  const bootoutCmd = `launchctl bootout gui/$(id -u) "${plistPath}"`;
-  exec(bootoutCmd, () => {
-    if (!enabled) {
-      try {
-        if (existsSync(plistPath)) {
-          unlinkSync(plistPath);
+  execFile(
+    "launchctl",
+    ["bootout", guiTarget, plistPath],
+    { shell: false },
+    () => {
+      if (!enabled) {
+        try {
+          if (existsSync(plistPath)) {
+            unlinkSync(plistPath);
+          }
+        } catch {
+          // ignore
         }
-      } catch {
-        // ignore
+        return;
       }
-      return;
-    }
 
-    const nodePath = findNodePath();
-    const cronScriptPath = join(home, ".hermes", "bin", "hermes-cron.js");
-    const isElectron = nodePath === process.execPath;
-    const envBlock = isElectron
-      ? `    <key>EnvironmentVariables</key>\n    <dict>\n        <key>ELECTRON_RUN_AS_NODE</key>\n        <string>1</string>\n    </dict>`
-      : "";
+      const nodePath = findNodePath();
+      const cronScriptPath = join(home, ".hermes", "bin", "hermes-cron.js");
+      const isElectron = nodePath === process.execPath;
+      const envBlock = isElectron
+        ? `    <key>EnvironmentVariables</key>\n    <dict>\n        <key>ELECTRON_RUN_AS_NODE</key>\n        <string>1</string>\n    </dict>`
+        : "";
 
-    const plistContent = `<?xml version="1.0" encoding="UTF-8"?>
+      const plistContent = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -950,27 +961,35 @@ ${envBlock}
 </plist>
 `;
 
-    try {
-      if (!existsSync(logsDir)) mkdirSync(logsDir, { recursive: true });
-      writeFileSync(plistPath, plistContent, "utf-8");
+      try {
+        if (!existsSync(logsDir)) mkdirSync(logsDir, { recursive: true });
+        writeFileSync(plistPath, plistContent, "utf-8");
 
-      const bootstrapCmd = `launchctl bootstrap gui/$(id -u) "${plistPath}"`;
-      exec(bootstrapCmd, (err) => {
-        if (err) {
-          console.error(
-            "[CONTROL SERVER] Failed to bootstrap launchd plist:",
-            err,
-          );
-        } else {
-          console.log(
-            "[CONTROL SERVER] Successfully bootstrapped launchd plist",
-          );
-        }
-      });
-    } catch (err) {
-      console.error("[CONTROL SERVER] Error writing LaunchAgent plist:", err);
-    }
-  });
+        execFile(
+          "launchctl",
+          ["bootstrap", guiTarget, plistPath],
+          { shell: false },
+          (err) => {
+            if (err) {
+              log.error("control-server", {
+                msg: "failed to bootstrap launchd plist",
+                error: err.message,
+              });
+            } else {
+              log.info("control-server", {
+                msg: "successfully bootstrapped launchd plist",
+              });
+            }
+          },
+        );
+      } catch (err) {
+        log.error("control-server", {
+          msg: "error writing LaunchAgent plist",
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    },
+  );
 }
 
 /**

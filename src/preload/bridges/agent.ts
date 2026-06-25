@@ -1,5 +1,4 @@
 import { ipcRenderer } from "electron";
-import type { Attachment } from "../../shared/attachments";
 import type { MemoryInfo } from "../../shared/memory";
 import type { MemoryTimeline } from "../../shared/memoryTimeline";
 import type {
@@ -13,6 +12,7 @@ import type {
   GatewayHealthChange,
 } from "../../shared/gateway";
 import type { WhatsAppCloudStatus } from "../../shared/whatsappCloud";
+import type { AgentBridgeApi } from "./agent.types";
 
 export const agentBridge = {
   // Gateway
@@ -61,17 +61,11 @@ export const agentBridge = {
     }>
   > => ipcRenderer.invoke("list-sessions", limit, offset),
 
-  getSessionMessages: (
-    sessionId: string,
-  ): Promise<
-    Array<{
-      id: number;
-      role: "user" | "assistant";
-      content: string;
-      timestamp: number;
-      attachments?: Attachment[];
-    }>
-  > => ipcRenderer.invoke("get-session-messages", sessionId),
+  getSessionMessages: ((sessionId: string) =>
+    ipcRenderer.invoke(
+      "get-session-messages",
+      sessionId,
+    )) as AgentBridgeApi["getSessionMessages"],
 
   // Profiles
   listProfiles: (): Promise<
@@ -404,4 +398,4 @@ export const agentBridge = {
     ipcRenderer.on("obsidian-file-changed", handler);
     return () => ipcRenderer.removeListener("obsidian-file-changed", handler);
   },
-};
+} satisfies AgentBridgeApi;

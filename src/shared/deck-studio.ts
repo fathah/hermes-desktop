@@ -1,5 +1,7 @@
 import { parse, stringify } from "yaml";
-import type { ContentIdea, ContentRun } from "./content-studio";
+
+// Shared by main export/IPC, preload types, and renderer UI. Keep this module
+// outside renderer-only lib even though nearby Content Studio code is renderer-local.
 
 export const DECK_STUDIO_FOLDER = "deck-studio";
 
@@ -191,6 +193,22 @@ export interface DeckResearchInput {
   title: string;
   markdown: string;
   locator?: string;
+}
+
+export interface DeckContentIdeaInput {
+  id: string;
+  title: string;
+  sourceUrls: string[];
+  audience: string;
+  angle: string;
+}
+
+export interface DeckContentRunInput {
+  id: string;
+  title: string;
+  platform: string;
+  hookRoute: string;
+  sourceUrls: string[];
 }
 
 export interface DeckThemeTokens {
@@ -391,7 +409,9 @@ const FRONTMATTER_RE = /^---\n([\s\S]*?)\n---\n?/;
 const JSON_FENCE_RE = /```json\n([\s\S]*?)\n```/;
 
 function isDeckThemeId(value: unknown): value is DeckThemeId {
-  return typeof value === "string" && DECK_THEME_IDS.includes(value as DeckThemeId);
+  return (
+    typeof value === "string" && DECK_THEME_IDS.includes(value as DeckThemeId)
+  );
 }
 
 function isDeckSlideKind(value: unknown): value is DeckSlideKind {
@@ -434,10 +454,12 @@ export function getDeckTemplateRecipe(
 }
 
 function firstNonEmptyLine(text: string): string {
-  return text
-    .split(/\r?\n/)
-    .map((line) => line.replace(/^[-*#\s]+/, "").trim())
-    .find(Boolean) ?? "Untitled Deck";
+  return (
+    text
+      .split(/\r?\n/)
+      .map((line) => line.replace(/^[-*#\s]+/, "").trim())
+      .find(Boolean) ?? "Untitled Deck"
+  );
 }
 
 function normalizeNoteLines(notes: string): string[] {
@@ -459,7 +481,10 @@ export function createDeckProject(input: DeckGenerationInput): DeckProject {
   const lines = normalizeNoteLines(input.notes);
   const title = (input.title || firstNonEmptyLine(input.notes)).trim();
   const now = input.createdAt ?? new Date().toISOString();
-  const slideCount = Math.max(4, Math.min(12, Math.round(input.slideCount || 6)));
+  const slideCount = Math.max(
+    4,
+    Math.min(12, Math.round(input.slideCount || 6)),
+  );
   const sourceRefs: DeckSourceRef[] =
     input.sourceRefs && input.sourceRefs.length > 0
       ? input.sourceRefs
@@ -472,7 +497,9 @@ export function createDeckProject(input: DeckGenerationInput): DeckProject {
           },
         ];
   const evidenceRefs = sourceRefs.map((source) => source.id);
-  const keyLines = lines.filter((line) => line.toLowerCase() !== title.toLowerCase());
+  const keyLines = lines.filter(
+    (line) => line.toLowerCase() !== title.toLowerCase(),
+  );
   const slides: DeckSlide[] = [
     {
       id: "slide-1",
@@ -578,7 +605,10 @@ export function createDeckProject(input: DeckGenerationInput): DeckProject {
 }
 
 export function scoreSlideDensity(slide: DeckSlide): DeckDensityResult {
-  const bodyChars = slide.body.reduce((sum, block) => sum + block.text.length, 0);
+  const bodyChars = slide.body.reduce(
+    (sum, block) => sum + block.text.length,
+    0,
+  );
   const visualChars = slide.visuals.reduce(
     (sum, visual) =>
       sum +
@@ -588,8 +618,13 @@ export function scoreSlideDensity(slide: DeckSlide): DeckDensityResult {
     0,
   );
   const textChars =
-    slide.title.length + (slide.subtitle?.length ?? 0) + bodyChars + visualChars;
-  const bulletCount = slide.body.filter((block) => block.kind === "bullet").length;
+    slide.title.length +
+    (slide.subtitle?.length ?? 0) +
+    bodyChars +
+    visualChars;
+  const bulletCount = slide.body.filter(
+    (block) => block.kind === "bullet",
+  ).length;
   const score = textChars + bulletCount * 35 + slide.visuals.length * 30;
   const issues: string[] = [];
 
@@ -604,7 +639,12 @@ export function scoreSlideDensity(slide: DeckSlide): DeckDensityResult {
     textChars,
     bulletCount,
     issues,
-    level: score > 760 || issues.length > 1 ? "crowded" : score > 540 ? "dense" : "ok",
+    level:
+      score > 760 || issues.length > 1
+        ? "crowded"
+        : score > 540
+          ? "dense"
+          : "ok",
   };
 }
 
@@ -634,7 +674,9 @@ export function contrastRatio(foreground: string, background: string): number {
   return Number(((light + 0.05) / (dark + 0.05)).toFixed(2));
 }
 
-export function validateDeckProject(project: DeckProject): DeckValidationResult {
+export function validateDeckProject(
+  project: DeckProject,
+): DeckValidationResult {
   const issues: DeckValidationIssue[] = [];
   if (!project.title?.trim()) {
     issues.push({
@@ -706,15 +748,17 @@ export function validateDeckProject(project: DeckProject): DeckValidationResult 
 }
 
 export function runDeckQa(project: DeckProject): DeckQaResult {
-  const issues: DeckQaIssue[] = validateDeckProject(project).issues.map((issue) => ({
-    code: issue.code,
-    severity:
-      issue.code === "density" || issue.code === "body_text"
-        ? "warning"
-        : "blocker",
-    path: issue.path,
-    message: issue.message,
-  }));
+  const issues: DeckQaIssue[] = validateDeckProject(project).issues.map(
+    (issue) => ({
+      code: issue.code,
+      severity:
+        issue.code === "density" || issue.code === "body_text"
+          ? "warning"
+          : "blocker",
+      path: issue.path,
+      message: issue.message,
+    }),
+  );
 
   project.slides.forEach((slide, index) => {
     const path = `slides.${index}`;
@@ -748,13 +792,18 @@ export function runDeckQa(project: DeckProject): DeckQaResult {
         severity: "warning",
         path: `${path}.evidenceRefs`,
         slideId: slide.id,
-        message: "Source-grounded slides should cite at least one source reference.",
+        message:
+          "Source-grounded slides should cite at least one source reference.",
       });
     }
   });
 
-  const blockers = issues.filter((issue) => issue.severity === "blocker").length;
-  const warnings = issues.filter((issue) => issue.severity === "warning").length;
+  const blockers = issues.filter(
+    (issue) => issue.severity === "blocker",
+  ).length;
+  const warnings = issues.filter(
+    (issue) => issue.severity === "warning",
+  ).length;
   return { ok: blockers === 0, blockers, warnings, issues };
 }
 
@@ -817,17 +866,22 @@ export function buildDeckInputFromPage(
     .map((block) => block.text?.trim())
     .filter(Boolean)
     .join("\n");
-  return defaultDeckInput(input.title, `${input.title}\n${body}`.trim(), {
-    id: `src-page-${slugify(input.pageId)}`,
-    label: input.title,
-    kind: "page",
-    locator: `${input.pageId.replace(/\.md$/, "")}.md`,
-    excerpt: body.slice(0, 280),
-  }, overrides);
+  return defaultDeckInput(
+    input.title,
+    `${input.title}\n${body}`.trim(),
+    {
+      id: `src-page-${slugify(input.pageId)}`,
+      label: input.title,
+      kind: "page",
+      locator: `${input.pageId.replace(/\.md$/, "")}.md`,
+      excerpt: body.slice(0, 280),
+    },
+    overrides,
+  );
 }
 
 export function buildDeckInputFromContentIdea(
-  idea: ContentIdea,
+  idea: DeckContentIdeaInput,
   overrides: Partial<DeckGenerationInput> = {},
 ): DeckGenerationInput {
   const sourceText = idea.sourceUrls.map((url) => `Source: ${url}`).join("\n");
@@ -850,7 +904,7 @@ export function buildDeckInputFromContentIdea(
 }
 
 export function buildDeckInputFromContentRun(
-  run: ContentRun,
+  run: DeckContentRunInput,
   overrides: Partial<DeckGenerationInput> = {},
 ): DeckGenerationInput {
   const sourceText = run.sourceUrls.map((url) => `Source: ${url}`).join("\n");
@@ -875,17 +929,22 @@ export function buildDeckInputFromResearch(
   input: DeckResearchInput,
   overrides: Partial<DeckGenerationInput> = {},
 ): DeckGenerationInput {
-  return defaultDeckInput(input.title, `${input.title}\n${input.markdown}`.trim(), {
-    id: `src-research-${slugify(input.title)}`,
-    label: input.title,
-    kind: "research",
-    locator: input.locator,
-    excerpt: input.markdown.slice(0, 280),
-  }, {
-    goal: "turn this research into a source-grounded deck",
-    theme: "research",
-    ...overrides,
-  });
+  return defaultDeckInput(
+    input.title,
+    `${input.title}\n${input.markdown}`.trim(),
+    {
+      id: `src-research-${slugify(input.title)}`,
+      label: input.title,
+      kind: "research",
+      locator: input.locator,
+      excerpt: input.markdown.slice(0, 280),
+    },
+    {
+      goal: "turn this research into a source-grounded deck",
+      theme: "research",
+      ...overrides,
+    },
+  );
 }
 
 export function nextDeckExportName(
@@ -974,13 +1033,21 @@ export function deckProjectToRow(project: DeckProject): DeckStudioRow {
   };
 }
 
-export function rowToDeckProject(props: Record<string, unknown>, body: string): DeckProject {
+export function rowToDeckProject(
+  props: Record<string, unknown>,
+  body: string,
+): DeckProject {
   const fromBody = parseDeckProjectMarkdown(body);
-  const title = typeof props.title === "string" && props.title ? props.title : fromBody.title;
+  const title =
+    typeof props.title === "string" && props.title
+      ? props.title
+      : fromBody.title;
   return { ...fromBody, title };
 }
 
-export function parseDeckProjectFrontmatter(markdown: string): Record<string, unknown> {
+export function parseDeckProjectFrontmatter(
+  markdown: string,
+): Record<string, unknown> {
   const match = FRONTMATTER_RE.exec(markdown);
   if (!match) return {};
   const parsed = parse(match[1]) as unknown;

@@ -1,4 +1,5 @@
 import { ipcRenderer } from "electron";
+import type { SystemBridgeApi } from "./system.types";
 
 export const systemBridge = {
   // Updates
@@ -196,4 +197,4 @@ export const systemBridge = {
   // Git Changelog
   getGitChangelog: (): Promise<string> =>
     ipcRenderer.invoke("get-git-changelog"),
-};
+} satisfies SystemBridgeApi;

@@ -11,15 +11,19 @@ const substackRadarBridgeSrc = readFileSync(
   "utf-8",
 );
 const bridgeSrc = readdirSync(bridgesDir)
-  .filter((f) => f.endsWith(".ts"))
+  .filter((f) => f.endsWith(".ts") && !f.endsWith(".types.ts"))
+  .map((f) => readFileSync(join(bridgesDir, f), "utf-8"))
+  .join("\n");
+const bridgeTypeSrc = readdirSync(bridgesDir)
+  .filter((f) => f.endsWith(".types.ts"))
   .map((f) => readFileSync(join(bridgesDir, f), "utf-8"))
   .join("\n");
 const preloadSrc =
   readFileSync(join(ROOT, "src/preload/index.ts"), "utf-8") + "\n" + bridgeSrc;
-const preloadTypes = readFileSync(
-  join(ROOT, "src/preload/index.d.ts"),
-  "utf-8",
-);
+const preloadTypes =
+  readFileSync(join(ROOT, "src/preload/index.d.ts"), "utf-8") +
+  "\n" +
+  bridgeTypeSrc;
 
 /**
  * Extract method names from the hermesAPI object in preload/index.ts.
@@ -36,18 +40,19 @@ function extractPreloadMethods(src: string): string[] {
 }
 
 /**
- * Extract method names from the HermesAPI interface in index.d.ts.
+ * Extract method names from the per-domain bridge interfaces.
  */
 function extractTypeMethods(src: string): string[] {
   const methods: string[] = [];
-  // Match lines inside `interface HermesAPI { ... }`
-  const interfaceMatch = src.match(/interface\s+HermesAPI\s*\{([\s\S]*?)^\}/m);
-  if (!interfaceMatch) return [];
-  const body = interfaceMatch[1];
-  const re = /^\s{2}(\w+)\s*[:(]/gm;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(body)) !== null) {
-    methods.push(m[1]);
+  const interfaceRe = /export\s+interface\s+\w+BridgeApi\s*\{([\s\S]*?)^\}/gm;
+  let interfaceMatch: RegExpExecArray | null;
+  while ((interfaceMatch = interfaceRe.exec(src)) !== null) {
+    const body = interfaceMatch[1];
+    const methodRe = /^\s{2}(\w+)\s*[:(]/gm;
+    let methodMatch: RegExpExecArray | null;
+    while ((methodMatch = methodRe.exec(body)) !== null) {
+      methods.push(methodMatch[1]);
+    }
   }
   return [...new Set(methods)];
 }
@@ -158,10 +163,10 @@ describe("New APIs from v0.8/v0.9 features", () => {
     expect(substackRadarBridgeSrc).toContain(
       "Promise<SubstackRadarAddApprovedFeedsResult>",
     );
-    expect(preloadTypes).toContain("Promise<SubstackRadarRun>");
-    expect(preloadTypes).toContain("Promise<SubstackRadarRun[]>");
+    expect(preloadTypes).toContain("Promise<Api.SubstackRadarRun>");
+    expect(preloadTypes).toContain("Promise<Api.SubstackRadarRun[]>");
     expect(preloadTypes).toContain(
-      "Promise<SubstackRadarAddApprovedFeedsResult>",
+      "Promise<Api.SubstackRadarAddApprovedFeedsResult>",
     );
   });
 

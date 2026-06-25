@@ -1,7 +1,7 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ApprovalQueue } from "./ApprovalQueue";
-import type { ApprovalState } from "../../../../shared/approval";
+import type { ApprovalState } from "../../lib/approval";
 
 // LOW-5: the approval queue must be announced to assistive tech. Without a live
 // region + dialog roles, screen-reader users never learn a dangerous command is

@@ -12,6 +12,7 @@
     "verify:note-index": "bash scripts/verify-note-index.sh",
     "verify:external-context": "bash scripts/verify-external-context.sh",
     "verify:firstrun-seed": "node scripts/verify-firstrun-seed.mjs",
+    "audit:ci": "node scripts/check-npm-audit.mjs",
     "smoke:diagrams": "node scripts/diagram-smoke.mjs",
     "smoke:live-research": "node scripts/sps-research-smoke.mjs",
     "smoke:signal-briefs": "node scripts/signal-briefs-dogfood.mjs",

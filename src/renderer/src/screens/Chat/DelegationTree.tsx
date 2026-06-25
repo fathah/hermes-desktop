@@ -1,4 +1,4 @@
-import type { DelegateNode } from "../../../../shared/delegation";
+import type { DelegateNode } from "../../lib/delegation";
 
 /**
  * Live subagent delegation tree (idea B3). Renders the parent→child tree built

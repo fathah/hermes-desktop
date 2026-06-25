@@ -2,6 +2,7 @@
 import { describe, it, expect } from "vitest";
 import {
   sanitizeHtml,
+  sanitizeSvg,
   safeLinkHref,
 } from "../src/renderer/src/screens/SpsAgent/lib/sanitize";
 
@@ -44,5 +45,15 @@ describe("SPS Agent link/HTML sanitization (XSS defense)", () => {
     expect(out).toMatch(/href="https:\/\/x\.com"/);
     expect(out).toMatch(/color/);
     expect(out).toMatch(/data-cmt="c1"/);
+  });
+
+  it("sanitizes SVG previews while preserving diagram styling", () => {
+    const out = sanitizeSvg(
+      '<svg xmlns="http://www.w3.org/2000/svg"><style>.a{fill:red}</style><g onload="alert(1)"><text class="a">Hi</text><foreignObject><div onclick="x()">bad</div></foreignObject></g><script>alert(1)</script></svg>',
+    );
+    expect(out).toContain("<svg");
+    expect(out).toContain("<style>.a{fill:red}</style>");
+    expect(out).toContain('<text class="a">Hi</text>');
+    expect(out).not.toMatch(/onload|onclick|foreignObject|<script|alert/i);
   });
 });

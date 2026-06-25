@@ -1,4 +1,4 @@
-import type { DraftVariant } from "../../../../../shared/content-studio";
+import type { DraftVariant } from "../../../lib/content-studio";
 
 interface Props {
   draftText: string;

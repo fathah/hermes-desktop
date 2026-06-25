@@ -17,9 +17,10 @@ import {
   scoreSlideDensity,
   serializeDeckProjectMarkdown,
   validateDeckProject,
+  type DeckContentIdeaInput,
+  type DeckContentRunInput,
   type DeckProject,
 } from "./deck-studio";
-import type { ContentIdea, ContentRun } from "./content-studio";
 
 const baseDeck: DeckProject = {
   id: "deck-agent-reach",
@@ -72,22 +73,24 @@ describe("Deck Studio contracts", () => {
   it("accepts valid deck IR and rejects unsafe generated structures", () => {
     expect(validateDeckProject(baseDeck).ok).toBe(true);
     expect(validateDeckProject({ ...baseDeck, slides: [] }).issues).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ code: "empty_deck" }),
-      ]),
+      expect.arrayContaining([expect.objectContaining({ code: "empty_deck" })]),
     );
     expect(
       validateDeckProject({
         ...baseDeck,
         theme: "neon" as DeckProject["theme"],
       }).issues,
-    ).toEqual(expect.arrayContaining([expect.objectContaining({ code: "theme" })]));
+    ).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: "theme" })]),
+    );
     expect(
       validateDeckProject({
         ...baseDeck,
         slides: [{ ...baseDeck.slides[0], title: "" }],
       }).issues,
-    ).toEqual(expect.arrayContaining([expect.objectContaining({ code: "title" })]));
+    ).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: "title" })]),
+    );
     expect(
       validateDeckProject({
         ...baseDeck,
@@ -98,7 +101,9 @@ describe("Deck Studio contracts", () => {
           },
         ],
       }).issues,
-    ).toEqual(expect.arrayContaining([expect.objectContaining({ code: "slide_kind" })]));
+    ).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: "slide_kind" })]),
+    );
   });
 
   it("flags crowded slides and passes normal deterministic layouts", () => {
@@ -166,7 +171,8 @@ describe("Deck Studio contracts", () => {
 
   it("creates a usable first-draft project from rough notes", () => {
     const deck = createDeckProject({
-      notes: "Wallet Club\nSubscription fatigue\nScattered budgeting\nAuto-budgeting solution",
+      notes:
+        "Wallet Club\nSubscription fatigue\nScattered budgeting\nAuto-budgeting solution",
       audience: "seed investors",
       goal: "pitch the product",
       theme: "investor",
@@ -194,37 +200,22 @@ describe("Deck Studio contracts", () => {
       locator: "home.md",
     });
 
-    const idea: ContentIdea = {
+    const idea: DeckContentIdeaInput = {
       id: "idea-1",
       title: "Wallet Club pitch",
       sourceUrls: ["https://example.com/source"],
       audience: "seed investors",
       angle: "Turn subscription fatigue into a budgeting wedge.",
-      createdAt: "2026-06-17",
-      updatedAt: "2026-06-17",
-      status: "captured",
-      rubric: {
-        bookmarkability: 1,
-        proof: 1,
-        immediateUse: 1,
-        audienceClarity: 1,
-        reproducibility: 1,
-        hookStrength: 1,
-        originality: 1,
-      },
     };
     const ideaInput = buildDeckInputFromContentIdea(idea);
     expect(ideaInput.audience).toBe("seed investors");
     expect(ideaInput.sourceRefs?.[0]).toMatchObject({ kind: "content" });
 
-    const run: ContentRun = {
+    const run: DeckContentRunInput = {
       id: "run-1",
-      ideaId: "idea-1",
       title: "Run - Wallet Club pitch",
       platform: "deck",
       hookRoute: "proof-led",
-      state: "drafting",
-      createdAt: "2026-06-17",
       sourceUrls: ["https://example.com/source"],
     };
     expect(buildDeckInputFromContentRun(run).goal).toContain("deck");
@@ -270,7 +261,10 @@ describe("Deck Studio contracts", () => {
     });
     expect(
       nextDeckExportName(
-        ["deck-project-wallet-club-v001.pdf", "deck-project-wallet-club-v002.pdf"],
+        [
+          "deck-project-wallet-club-v001.pdf",
+          "deck-project-wallet-club-v002.pdf",
+        ],
         "Wallet Club",
         "pdf",
       ),

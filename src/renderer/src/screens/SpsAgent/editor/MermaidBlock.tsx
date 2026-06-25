@@ -4,10 +4,10 @@
 // fence in the vault markdown (Obsidian and GitHub render it natively). mermaid
 // is heavy, so it is lazy-imported on first render and shared across blocks.
 //
-// Safety: we rely on mermaid's own `securityLevel: "strict"` (html-encodes
-// labels, blocks click/script) rather than an inline-html sanitiser, which
-// would destroy the SVG markup. The diagram is the user's own local content.
+// Safety: mermaid's `securityLevel: "strict"` handles labels/clicks, and the
+// rendered SVG is still passed through DOMPurify before innerHTML insertion.
 import { useEffect, useRef, useState } from "react";
+import { sanitizeSvg } from "../lib/sanitize";
 import type { Block } from "../types";
 
 type Mermaid = (typeof import("mermaid"))["default"];
@@ -58,7 +58,7 @@ export function MermaidBlock({ block, setType }: Props) {
       .then((mermaid) => mermaid.render(renderId, code))
       .then((result) => {
         if (cancelled) return;
-        setSvg(result.svg);
+        setSvg(sanitizeSvg(result.svg));
         setError(null);
       })
       .catch((e: unknown) => {
@@ -102,7 +102,6 @@ export function MermaidBlock({ block, setType }: Props) {
       {error ? (
         <div className="b-mermaid-error">⚠ {error}</div>
       ) : (
-        // mermaid output is trusted (securityLevel: strict); see file header.
         <div
           className="b-mermaid-preview"
           dangerouslySetInnerHTML={{ __html: svg }}

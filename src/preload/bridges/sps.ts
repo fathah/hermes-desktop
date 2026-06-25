@@ -68,52 +68,15 @@ import type {
   SpsRecentScreenshotImportInput,
   SpsRecentScreenshotImportResult,
 } from "../../shared/recent-screenshots";
-
-/** Pending scheduled-research merge, shaped for the renderer (inline changeset
- *  shape mirrors spsFileAnswer's so preload need not import main types). */
-export interface SrPendingUpdate {
-  id: string;
-  scheduleId: string;
-  topic: string;
-  pageId: string;
-  ts: number;
-  summary: string;
-  changeset: {
-    summary: string;
-    pages: Array<{
-      op: "create" | "update";
-      pageId: string;
-      title: string;
-      markdown: string;
-    }>;
-    captures: Array<{ id: string; status: "processed" | "discarded" }>;
-    memory: string[];
-  };
-}
-
-export type SrPatch = Partial<{
-  cadence: ScheduledResearchItem["cadence"];
-  hour: number;
-  enabled: boolean;
-  autoApply: boolean;
-  sourceIntent: ScheduledResearchItem["sourceIntent"];
-  sourcePlan: MonitorSourceEntry[];
-  importanceThreshold: ScheduledResearchItem["importanceThreshold"];
-  telegramPush: boolean;
-  telegramMode: ScheduledResearchItem["telegramMode"];
-}>;
-
-export interface NotebookLmMcpStatus {
-  registered: boolean;
-  alreadyPresent: boolean;
-  commandFound: boolean;
-  command: string;
-  args: string[];
-  source: "env" | "user-bin" | "path" | "claude-code" | "existing";
-  nlmCommand: string | null;
-  restarted: boolean;
-  message: string;
-}
+import type {
+  EquityAlert,
+  EquityBasket,
+  NotebookLmMcpStatus,
+  SpsIngestPageProposal,
+  SrPatch,
+  SrPendingUpdate,
+} from "../api-types";
+import type { SpsBridgeApi } from "./sps.types";
 
 export const spsBridge = {
   // SPS Agent workspace
@@ -463,19 +426,25 @@ export const spsBridge = {
     profile?: string,
   ): Promise<ActiveWorkRun | null> =>
     ipcRenderer.invoke("sps-active-work-update", runId, patch, profile),
-  equityListBaskets: (profile?: string): Promise<unknown[]> =>
+  equityListBaskets: (profile?: string): Promise<EquityBasket[]> =>
     ipcRenderer.invoke("equity-list-baskets", profile),
-  equitySaveBasket: (basket: unknown, profile?: string): Promise<unknown> =>
+  equitySaveBasket: (
+    basket: Partial<EquityBasket>,
+    profile?: string,
+  ): Promise<EquityBasket> =>
     ipcRenderer.invoke("equity-save-basket", basket, profile),
   equityDeleteBasket: (basketId: string, profile?: string): Promise<boolean> =>
     ipcRenderer.invoke("equity-delete-basket", basketId, profile),
-  equityListAlerts: (limit?: number, profile?: string): Promise<unknown[]> =>
+  equityListAlerts: (
+    limit?: number,
+    profile?: string,
+  ): Promise<EquityAlert[]> =>
     ipcRenderer.invoke("equity-list-alerts", limit, profile),
   equityMarkAlertRead: (alertId: string, profile?: string): Promise<boolean> =>
     ipcRenderer.invoke("equity-mark-alert-read", alertId, profile),
-  onEquityAlert: (callback: (alert: unknown) => void): (() => void) => {
+  onEquityAlert: (callback: (alert: EquityAlert) => void): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, alert: unknown): void =>
-      callback(alert);
+      callback(alert as EquityAlert);
     ipcRenderer.on("equity-alert", handler);
     return () => ipcRenderer.removeListener("equity-alert", handler);
   },
@@ -751,8 +720,11 @@ export const spsBridge = {
   spsImportOkfBundle: (
     bundleDir: string,
     profile?: string,
-  ): Promise<{ success: boolean; pages: unknown[]; error?: string }> =>
-    ipcRenderer.invoke("sps-import-okf-bundle", bundleDir, profile),
+  ): Promise<{
+    success: boolean;
+    pages: SpsIngestPageProposal[];
+    error?: string;
+  }> => ipcRenderer.invoke("sps-import-okf-bundle", bundleDir, profile),
   spsCreateImportPlan: (
     input: { source: SpsImportSource; targetFolder?: string },
     profile?: string,
@@ -978,4 +950,4 @@ export const spsBridge = {
   },
   spsTriggerScreencapture: (profile?: string): Promise<string | null> =>
     ipcRenderer.invoke("sps-trigger-screencapture", profile),
-};
+} satisfies SpsBridgeApi;

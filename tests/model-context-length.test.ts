@@ -5,7 +5,7 @@ import {
   contextFillFraction,
   contextFillPercent,
   DEFAULT_CONTEXT_LENGTH,
-} from "../src/shared/model-context";
+} from "../src/renderer/src/lib/model-context";
 
 describe("normalizeModelId", () => {
   it("lowercases and collapses separators", () => {

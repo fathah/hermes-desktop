@@ -4,7 +4,7 @@ import { sanitizeRssHtml } from "../lib/sanitize";
 import { SourceIntakePanel } from "./SourceIntakePanel";
 import { saveContentIdea } from "../content/contentStudioStorage";
 import { useStore } from "../store";
-import type { ContentIdea } from "../../../../../shared/content-studio";
+import type { ContentIdea } from "../../../lib/content-studio";
 
 interface RssFeed {
   id: string;

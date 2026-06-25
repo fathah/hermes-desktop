@@ -4,6 +4,10 @@ import type { UsageAggregate, RunLedgerEntry } from "../../shared/usage";
 import type { SearchSummary } from "../../shared/searchSummary";
 import type { LoadedSkin } from "../../shared/skins";
 import type { AppZoomSettings } from "../../shared/app-zoom";
+import type { ConfigFixLogEntry } from "../api-types";
+import type { ConfigHealthReport } from "../../shared/config-health";
+import type { PublicConnectionConfig } from "../../shared/connection";
+import type { ConfigBridgeApi } from "./config.types";
 
 export const configBridge = {
   // Configuration (profile-aware)
@@ -38,9 +42,9 @@ export const configBridge = {
     expectedEnvKey?: string;
   }> => ipcRenderer.invoke("validate-chat-readiness", profile),
 
-  getConfigHealth: (profile?: string): Promise<unknown> =>
+  getConfigHealth: (profile?: string): Promise<ConfigHealthReport> =>
     ipcRenderer.invoke("get-config-health", profile),
-  rerunConfigHealth: (profile?: string): Promise<unknown> =>
+  rerunConfigHealth: (profile?: string): Promise<ConfigHealthReport> =>
     ipcRenderer.invoke("rerun-config-health", profile),
   autofixConfigIssue: (
     code: string,
@@ -48,7 +52,7 @@ export const configBridge = {
     context?: Record<string, string>,
   ): Promise<{ ok: boolean; message?: string }> =>
     ipcRenderer.invoke("autofix-config-issue", code, profile, context),
-  getConfigFixLog: (maxEntries?: number): Promise<unknown[]> =>
+  getConfigFixLog: (maxEntries?: number): Promise<ConfigFixLogEntry[]> =>
     ipcRenderer.invoke("get-config-fix-log", maxEntries),
 
   getConfig: (key: string, profile?: string): Promise<string | null> =>
@@ -77,19 +81,8 @@ export const configBridge = {
   isRemoteMode: (): Promise<boolean> => ipcRenderer.invoke("is-remote-mode"),
   isRemoteOnlyMode: (): Promise<boolean> =>
     ipcRenderer.invoke("is-remote-only-mode"),
-  getConnectionConfig: (): Promise<{
-    mode: "local" | "remote" | "ssh";
-    remoteUrl: string;
-    hasApiKey: boolean;
-    ssh: {
-      host: string;
-      port: number;
-      username: string;
-      keyPath: string;
-      remotePort: number;
-      localPort: number;
-    };
-  }> => ipcRenderer.invoke("get-connection-config"),
+  getConnectionConfig: (): Promise<PublicConnectionConfig> =>
+    ipcRenderer.invoke("get-connection-config"),
 
   /** Usage / cost analytics for a profile (idea A2). */
   getUsageStats: (profile?: string): Promise<UsageAggregate> =>
@@ -267,4 +260,4 @@ export const configBridge = {
 
   copyToClipboard: (text: string): Promise<void> =>
     ipcRenderer.invoke("copy-to-clipboard", text),
-};
+} satisfies ConfigBridgeApi;

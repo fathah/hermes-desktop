@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { computeLineDiff } from "../../../../shared/diff";
+import { computeLineDiff } from "../../lib/diff";
 
 /**
  * Inline unified diff for a file-edit tool call (idea A1 / Phase 0d). Renders

@@ -12,7 +12,7 @@ import { workspaceParity } from "../editor/workspaceVault";
 import { pageToMarkdown } from "../editor/pageMarkdown";
 import { getStorageMode } from "../lib/storageMode";
 import type { PageMeta, TreeNode } from "../types";
-import type { ContentIdea } from "../../../../../shared/content-studio";
+import type { ContentIdea } from "../../../lib/content-studio";
 import { saveContentIdea } from "../content/contentStudioStorage";
 
 interface ActionItem {

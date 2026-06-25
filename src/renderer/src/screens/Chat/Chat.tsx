@@ -4,7 +4,7 @@ import { ChatHeader } from "./ChatHeader";
 import { useChatSignals } from "./useChatSignals";
 import { ApprovalQueue } from "./ApprovalQueue";
 import { DelegationTree } from "./DelegationTree";
-import { listCommand } from "../../../../shared/checkpoints";
+import { listCommand } from "../../lib/checkpoints";
 import { ChatEmptyState } from "./ChatEmptyState";
 import { MessageList } from "./MessageList";
 import { ModelPicker } from "./ModelPicker";

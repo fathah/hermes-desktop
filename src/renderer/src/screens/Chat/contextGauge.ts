@@ -1,13 +1,10 @@
 /**
  * Pure helpers for the context-budget gauge and compression marker (idea A3).
  * Kept dependency-free for unit testing; the model→context-length math lives in
- * shared/model-context.
+ * renderer lib/model-context.
  */
 
-import {
-  contextFillPercent,
-  getContextLength,
-} from "../../../../shared/model-context";
+import { contextFillPercent, getContextLength } from "../../lib/model-context";
 
 /** Compact token count: 1500 → "1.5k", 200000 → "200k". */
 export function formatTokensShort(n: number): string {

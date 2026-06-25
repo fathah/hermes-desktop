@@ -14,7 +14,23 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Dependency review
+        uses: actions/dependency-review-action@v4
+
   check:
     runs-on: ubuntu-latest
     steps:
@@ -29,6 +45,20 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Audit dependencies
+        run: npm run audit:ci
+
+      - name: Generate CycloneDX SBOM
+        # Excalidraw's React 17/18 peer metadata is an accepted residual in this
+        # React 19 app; lockfile mode keeps npm SBOM generation reproducible.
+        run: npm sbom --package-lock-only --legacy-peer-deps --sbom-format cyclonedx --sbom-type application > sbom.cdx.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-cyclonedx
+          path: sbom.cdx.json
 
       - name: Typecheck
         run: npm run typecheck

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ContentStudioSurface } from "./ContentStudioSurface";
-import type { ContentIdea } from "../../../../../shared/content-studio";
+import type { ContentIdea } from "../../../lib/content-studio";
 import type { PageMeta, TreeNode } from "../types";
 
 const store = vi.hoisted(() => ({

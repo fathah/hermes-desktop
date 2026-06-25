@@ -343,7 +343,6 @@ function createWindow(): void {
       sandbox: true,
       webSecurity: true,
       allowRunningInsecureContent: false,
-      webviewTag: true,
     },
   });
 
@@ -441,7 +440,10 @@ function createWindow(): void {
     (event, webPreferences, params) => {
       if (!isAllowedWebviewUrl(params.src)) {
         event.preventDefault();
-        console.warn("[SECURITY] Blocked webview attachment for untrusted URL");
+        log.warn("security", {
+          msg: "blocked webview attachment for untrusted URL",
+          src: params.src,
+        });
         return;
       }
 

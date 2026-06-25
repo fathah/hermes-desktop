@@ -4,14 +4,14 @@ This document records the project's `npm audit` posture: what was remediated, an
 **intentionally-accepted residual** with the rationale for each. It exists so that a non-empty
 `npm audit` is an interpretable, reviewable baseline rather than ambient noise.
 
-Last reviewed: 2026-06-06 (Hermes Desktop 0.5.4).
+Last reviewed: 2026-06-25 (Hermes Desktop 0.5.4).
 
 ## Summary
 
 |        | Low | Moderate | High | Total                            |
 | ------ | --- | -------- | ---- | -------------------------------- |
 | Before | 1   | 13       | 5    | 19                               |
-| After  | 1   | 9        | 3    | **13 (all accepted, see below)** |
+| After  | 1   | 9        | 2    | **12 (all accepted, see below)** |
 
 Remediation was deliberately **surgical**: scoped `overrides` for the cleanly-patchable
 dev/build-time advisories, no semver-major bumps, and **no** `@excalidraw/excalidraw` downgrade
@@ -32,6 +32,10 @@ All dev/build-time, pinned forward within the same semver major (low risk):
 | `nanoid` (3.x)          | `^3.3.12` | `@excalidraw/excalidraw` (pinned `3.3.3`) | predictable IDs (was `<3.3.8`)                  |
 | `brace-expansion` (5.x) | `5.0.6`   | minimatch@10 (eslint toolchain)           | ReDoS via numeric range (was `>=5.0.0 <5.0.6`)  |
 
+2026-06-25 CI hardening also refreshed fixable advisories within existing semver ranges, including
+`dompurify`, `undici`, root `vite`/`esbuild`, `posthog-js`/OpenTelemetry transitives,
+`@babel/core`, `hono`, `form-data`, `tar`, `protobufjs`, and `js-yaml`.
+
 Notes on scoping:
 
 - `nanoid` and `brace-expansion` are **version/parent-scoped** overrides, not global. A global
@@ -41,14 +45,13 @@ Notes on scoping:
 
 ## Accepted residual (13) — not fixable without breaking the app
 
-### 1. `lodash` (high) + `lodash-es` (high) — no patched 4.x exists
+### 1. `lodash-es` (high) — no patched 4.x exists
 
 GHSA-r5fr-rjxr-66jc (`_.template` code injection), GHSA-xxjr-mmjv-4gpg / GHSA-f23m-r3pf-42rh
 (`_.unset`/`_.omit` prototype pollution). The advisories' vulnerable range is `<=4.17.23` with **no
 fixed 4.x published** — the only "fix" is a hypothetical lodash 5 that does not exist as a stable
 release. There is no override that clears these.
 
-- `lodash` is **dev-only** (electron-winstaller → electron-builder; runs at Windows-installer build time).
 - `lodash-es` **ships**, but is reachable only through Mermaid diagram parsing
   (`mermaid`/`@excalidraw` → `@mermaid-js/parser` → `langium` → `chevrotain`). chevrotain uses lodash
   internally for **parser construction**, not to evaluate user-controlled template strings or
@@ -89,5 +92,5 @@ the rest of the code-icons build-tooling residual.
   release and breaks the React 19 build.
 - The remediation is fully reversible: delete the `overrides` block in `package.json` and
   `npm install` to revert.
-- There is currently **no CI `npm audit` gate**; if one is added, allowlist the advisory IDs above
-  (e.g. via `audit-ci` / `.nsprc`) so the gate fails only on _new_ advisories.
+- CI runs `npm run audit:ci`, which parses `npm audit --json` and allows only the reviewed residuals
+  in `security/npm-audit-allowlist.json`, so the gate fails on _new_ advisories.

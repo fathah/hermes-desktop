@@ -40,6 +40,15 @@ export function sanitizeHtml(html: string): string {
   });
 }
 
+export function sanitizeSvg(svg: string | null | undefined): string {
+  if (typeof svg !== "string" || svg.length === 0) return "";
+  return DOMPurify.sanitize(svg, {
+    USE_PROFILES: { svg: true, svgFilters: true },
+    FORBID_TAGS: ["foreignObject", "script"],
+    ALLOW_DATA_ATTR: false,
+  });
+}
+
 /**
  * Tags permitted in remote RSS/Atom article bodies. Broader than the block
  * editor allowlist above (RSS carries structured prose: headings, lists,

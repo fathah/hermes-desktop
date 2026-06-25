@@ -1,7 +1,4 @@
-import type {
-  ContentEvidence,
-  DraftClaim,
-} from "../../../../../shared/content-studio";
+import type { ContentEvidence, DraftClaim } from "../../../lib/content-studio";
 
 interface Props {
   claims: DraftClaim[];

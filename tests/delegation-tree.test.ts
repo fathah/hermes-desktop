@@ -6,7 +6,7 @@ import {
   MAX_CONCURRENT_CHILDREN,
   type DelegateEvent,
   type DelegationState,
-} from "../src/shared/delegation";
+} from "../src/renderer/src/lib/delegation";
 
 function feed(events: DelegateEvent[]): DelegationState {
   let s = initDelegationState();

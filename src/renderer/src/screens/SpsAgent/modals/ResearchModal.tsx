@@ -19,7 +19,7 @@ import { saveContentIdea } from "../content/contentStudioStorage";
 import {
   parseContentSourceUrls,
   type ContentIdea,
-} from "../../../../../shared/content-studio";
+} from "../../../lib/content-studio";
 import { hasCuratedBriefSources } from "../../../../../shared/curatedBrief";
 import { buildDeckInputFromResearch } from "../../../../../shared/deck-studio";
 

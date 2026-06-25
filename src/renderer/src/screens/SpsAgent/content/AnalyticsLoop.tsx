@@ -1,4 +1,4 @@
-import type { AnalyticsSnapshot } from "../../../../../shared/content-studio";
+import type { AnalyticsSnapshot } from "../../../lib/content-studio";
 
 interface Props {
   analyticsSlug: string;

@@ -10,6 +10,7 @@ import type {
   ExternalSource,
   ExternalSourceConfig,
 } from "../../shared/external-context";
+import type { ExternalContextBridgeApi } from "./external-context.types";
 
 /** Renderer bridge for the External Context Bridge (search + viewer + toggles). */
 export const externalContextBridge = {
@@ -104,4 +105,4 @@ export const externalContextBridge = {
     return () =>
       ipcRenderer.removeListener("external-context-progress", handler);
   },
-};
+} satisfies ExternalContextBridgeApi;
