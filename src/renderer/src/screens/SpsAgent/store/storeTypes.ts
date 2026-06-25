@@ -163,6 +163,8 @@ export interface WorkspaceSlice {
   ocrEnqueue: (filePath: string, title: string, pageCount: number) => void;
   /** Resume persisted OCR jobs + start the overnight scheduler (call on launch). */
   ocrResume: () => void;
+  /** Stop the overnight scheduler (call on workspace unmount/HMR cleanup). */
+  ocrStopScheduler: () => void;
   /** Drain the OCR queue immediately, regardless of the overnight setting (P3). */
   ocrRunNow: () => void;
   /** Toggle deferring OCR to the overnight window (P3); persisted. */

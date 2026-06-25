@@ -234,6 +234,42 @@ async function main(): Promise<void> {
   await li.close();
   await rm(lroot, { recursive: true, force: true });
 
+  // ── Unlinked mentions: target-only scan preserves result semantics without
+  // scanning every note against every other note.
+  console.log("\nUnlinked mentions — target-only scan:");
+  const mroot = await mkdtemp(join(tmpdir(), "note-index-mentions-"));
+  await writeFile(
+    join(mroot, "alpha.md"),
+    `---\naliases: ["A Prime"]\n---\n# Alpha\nTarget note.\n`,
+  );
+  await writeFile(
+    join(mroot, "source-one.md"),
+    `# Source One\nAlpha appears as plain text.\n`,
+  );
+  await writeFile(
+    join(mroot, "source-two.md"),
+    `# Source Two\nThe alias A Prime appears as plain text.\n`,
+  );
+  await writeFile(
+    join(mroot, "source-linked.md"),
+    `# Source Linked\nAn explicit [[alpha]] link is not an unlinked mention.\n`,
+  );
+  const mi = await NoteIndex.open(mroot);
+  eq(
+    mi.unlinkedMentions("alpha.md")
+      .map((hit) => hit.source)
+      .sort(),
+    ["source-one.md", "source-two.md"],
+    "unlinkedMentions scans other bodies for the requested target only",
+  );
+  eq(
+    mi.unlinkedMentions("missing.md"),
+    [],
+    "unlinkedMentions returns no hits for a missing target",
+  );
+  await mi.close();
+  await rm(mroot, { recursive: true, force: true });
+
   // ── Typed Links: relationship type extraction
   console.log("\nTyped Links — relationship type extraction:");
   const tlroot = await mkdtemp(join(tmpdir(), "note-index-typed-"));

@@ -2205,6 +2205,21 @@
   gap: 16px;
 }
 
+.sps-scope .agent-message-virtual-list {
+  position: relative;
+  width: 100%;
+  flex: 0 0 auto;
+}
+
+.sps-scope .agent-message-virtual-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding-bottom: 16px;
+}
+
 .sps-scope .msg {
   display: flex;
   gap: 10px;

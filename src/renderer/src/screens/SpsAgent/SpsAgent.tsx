@@ -51,7 +51,10 @@ export function SpsAgent() {
         /* no bridge / no skins — leave tweaks-only theming */
       }
     })();
-    return () => setThemeScope(null);
+    return () => {
+      useStore.getState().ocrStopScheduler();
+      setThemeScope(null);
+    };
   }, []);
   return (
     <div className="sps-scope" ref={scopeRef}>

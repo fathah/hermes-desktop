@@ -3294,6 +3294,28 @@ body {
   gap: 16px;
 }
 
+.chat-message-virtual-list {
+  position: relative;
+  width: 100%;
+  flex: 0 0 auto;
+}
+
+.chat-message-virtual-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding-bottom: 16px;
+}
+
+.chat-message-virtual-row-inner {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+}
+
 /* Empty state */
 .chat-empty {
   flex: 1;
@@ -3458,6 +3480,10 @@ body {
   overflow-x: auto;
   -webkit-user-select: text;
   user-select: text;
+}
+
+.chat-streaming-text {
+  white-space: pre-wrap;
 }
 
 .chat-bubble-user {

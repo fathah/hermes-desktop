@@ -109,6 +109,21 @@
   gap: 12px;
 }
 
+.sps-scope .inbox-card-list-virtual {
+  position: relative;
+  display: block;
+  gap: 0;
+}
+
+.sps-scope .inbox-card-virtual-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding-bottom: 12px;
+}
+
 .sps-scope .inbox-card {
   background: var(--surface);
   border: 1px solid var(--hairline);

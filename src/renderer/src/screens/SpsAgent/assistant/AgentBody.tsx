@@ -1,6 +1,7 @@
 // AgentBody.tsx — assistant chat panel (messages, suggestion chips, composer).
 // Ported from agent.jsx AgentBody; reads/acts through the store.
 import { useEffect, useRef, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Icon } from "../components/Icon";
 import { useStore } from "../store";
 import { scrollToProposal } from "../lib/scroll";
@@ -12,6 +13,7 @@ import {
 import { useChatSkills, slugifySkill } from "../../../lib/useChatSkills";
 import { ActiveSkillChips } from "../../../components/ActiveSkillChips";
 import { contextChipLabel } from "./contextChip";
+import type { AgentMessage } from "./types";
 
 // Slash tokens the SPS composer already routes to its own prompt builders — a
 // skill must never shadow these (see store.runAgent).
@@ -64,6 +66,13 @@ export function AgentBody() {
   const [filed, setFiled] = useState<Set<string>>(new Set());
   const bodyRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
+  const messageVirtualizer = useVirtualizer({
+    count: messages.length,
+    getScrollElement: () => bodyRef.current,
+    estimateSize: () => 128,
+    overscan: 8,
+    getItemKey: (index) => messages[index]?.id ?? index,
+  });
 
   // `/skill-name` loading. SPS is single-profile, so profile is left undefined —
   // the main process resolves it the same way the SPS send path does, so the
@@ -189,6 +198,241 @@ export function AgentBody() {
     taRef.current?.focus();
   });
 
+  const renderMessage = (m: AgentMessage): React.JSX.Element => (
+    <div className={`msg ${m.role}`}>
+      <span className="who">
+        {m.role === "user" ? "You" : <Icon name="sparkle" size={13} />}
+      </span>
+      <div className="bubble">
+        {m.text.map((para, i) => (
+          <p key={i}>{para}</p>
+        ))}
+        {m.context &&
+          !dismissedChips.has(m.id) &&
+          contextChipLabel(m.context) && (
+            <div
+              className="ctx-chip"
+              title="This reply was grounded in your own workspace — your standing rules, saved memory, and related notes."
+            >
+              <Icon name="sparkle" size={11} />
+              <span>Used your {contextChipLabel(m.context)}</span>
+              <button
+                className="ctx-chip-x"
+                title="Dismiss"
+                onClick={() => dismissChip(m.id)}
+              >
+                <Icon name="x" size={11} />
+              </button>
+            </div>
+          )}
+        {/* Query-that-compounds: file a grounded informational answer back
+            as a durable wiki page (Karpathy's `outputs/` layer). Not shown
+            for action proposals (diff/db/ssh/config). */}
+        {m.role === "bot" &&
+          m.context &&
+          !m.proposalId &&
+          !m.dbAction &&
+          !m.sshAction &&
+          !m.configAction &&
+          (filed.has(m.id) ? (
+            <div className="applied-note">
+              <Icon name="check" size={13} /> Filed to wiki
+            </div>
+          ) : (
+            <div className="ai-action" style={{ marginTop: 4 }}>
+              <button
+                className="sg-chip"
+                disabled={filing.has(m.id)}
+                title="Synthesize this answer into a durable, cross-linked wiki page"
+                onClick={() => onFileToWiki(m.id)}
+              >
+                <Icon name="sparkle" size={12} />{" "}
+                {filing.has(m.id) ? "Filing…" : "Save to wiki"}
+              </button>
+            </div>
+          ))}
+        {m.proposalId && (
+          <div onClick={() => scrollToProposal(m.proposalId!)}>
+            {m.status === "applied" ? (
+              <span className="applied-note">
+                <Icon name="check" size={14} /> Applied to page
+              </span>
+            ) : m.status === "rejected" ? (
+              <span className="applied-note rejected-note">
+                <Icon name="x" size={13} /> Discarded
+              </span>
+            ) : (
+              <span className="ref">{m.label} — review in page ↗</span>
+            )}
+          </div>
+        )}
+        {m.dbAction &&
+          (m.status === "applied" ? (
+            <span className="applied-note">
+              <Icon name="check" size={14} /> Board updated
+            </span>
+          ) : m.status === "rejected" ? (
+            <span className="applied-note rejected-note">
+              <Icon name="x" size={13} /> Dismissed
+            </span>
+          ) : (
+            <div className="ai-action">
+              <button
+                className="pa-btn pa-accept"
+                onClick={() => onApplyDb(m.id, m.dbAction!)}
+              >
+                <Icon name="check" size={13} /> {m.label}
+              </button>
+              <button
+                className="pa-btn pa-reject"
+                onClick={() => onDismissDb(m.id)}
+              >
+                Dismiss
+              </button>
+            </div>
+          ))}
+        {m.sshAction &&
+          (m.status === "applied" ? (
+            <span className="applied-note">
+              <Icon name="check" size={14} /> SSH tunnel updated
+            </span>
+          ) : m.status === "rejected" ? (
+            <span className="applied-note rejected-note">
+              <Icon name="x" size={13} /> Connection request canceled
+            </span>
+          ) : (
+            <div
+              className="security-consent-box"
+              style={{
+                marginTop: 8,
+                padding: 10,
+                borderRadius: 8,
+                background: "rgba(255, 100, 100, 0.08)",
+                border: "1px solid rgba(255, 100, 100, 0.2)",
+              }}
+            >
+              <div
+                style={{
+                  fontWeight: 600,
+                  color: "var(--tx-1)",
+                  fontSize: 13,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  marginBottom: 4,
+                }}
+              >
+                <Icon
+                  name="settings"
+                  size={14}
+                  style={{ color: "var(--warn, #e65100)" }}
+                />{" "}
+                Security Permission Required
+              </div>
+              <p
+                style={{
+                  fontSize: 12,
+                  color: "var(--tx-2)",
+                  lineHeight: 1.4,
+                  margin: "0 0 8px 0",
+                }}
+              >
+                {getPlainEnglishExplanation(m)}
+              </p>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button
+                  className="pa-btn pa-accept"
+                  style={{ padding: "4px 8px", fontSize: 12 }}
+                  onClick={() => onApplySsh(m.id, m.sshAction!.action)}
+                >
+                  Approve & Execute
+                </button>
+                <button
+                  className="pa-btn pa-reject"
+                  style={{ padding: "4px 8px", fontSize: 12 }}
+                  onClick={() => onDismissDb(m.id)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ))}
+        {m.configAction &&
+          (m.status === "applied" ? (
+            <span className="applied-note">
+              <Icon name="check" size={14} /> Credentials saved
+            </span>
+          ) : m.status === "rejected" ? (
+            <span className="applied-note rejected-note">
+              <Icon name="x" size={13} /> Key save request canceled
+            </span>
+          ) : (
+            <div
+              className="security-consent-box"
+              style={{
+                marginTop: 8,
+                padding: 10,
+                borderRadius: 8,
+                background: "rgba(255, 100, 100, 0.08)",
+                border: "1px solid rgba(255, 100, 100, 0.2)",
+              }}
+            >
+              <div
+                style={{
+                  fontWeight: 600,
+                  color: "var(--tx-1)",
+                  fontSize: 13,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  marginBottom: 4,
+                }}
+              >
+                <Icon
+                  name="settings"
+                  size={14}
+                  style={{ color: "var(--warn, #e65100)" }}
+                />{" "}
+                Security Permission Required
+              </div>
+              <p
+                style={{
+                  fontSize: 12,
+                  color: "var(--tx-2)",
+                  lineHeight: 1.4,
+                  margin: "0 0 8px 0",
+                }}
+              >
+                {getPlainEnglishExplanation(m)}
+              </p>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button
+                  className="pa-btn pa-accept"
+                  style={{ padding: "4px 8px", fontSize: 12 }}
+                  onClick={() =>
+                    onApplyConfig(
+                      m.id,
+                      m.configAction!.provider,
+                      m.configAction!.key,
+                    )
+                  }
+                >
+                  Approve & Save
+                </button>
+                <button
+                  className="pa-btn pa-reject"
+                  style={{ padding: "4px 8px", fontSize: 12 }}
+                  onClick={() => onDismissDb(m.id)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ))}
+      </div>
+    </div>
+  );
+
   return (
     <>
       {/* Tab strip (M3 #5) — one tab per concurrent conversation. */}
@@ -259,240 +503,25 @@ export function AgentBody() {
         </button>
       </div>
       <div className="agent-body scroll" ref={bodyRef}>
-        {messages.map((m) => (
-          <div key={m.id} className={`msg ${m.role}`}>
-            <span className="who">
-              {m.role === "user" ? "You" : <Icon name="sparkle" size={13} />}
-            </span>
-            <div className="bubble">
-              {m.text.map((para, i) => (
-                <p key={i}>{para}</p>
-              ))}
-              {m.context &&
-                !dismissedChips.has(m.id) &&
-                contextChipLabel(m.context) && (
-                  <div
-                    className="ctx-chip"
-                    title="This reply was grounded in your own workspace — your standing rules, saved memory, and related notes."
-                  >
-                    <Icon name="sparkle" size={11} />
-                    <span>Used your {contextChipLabel(m.context)}</span>
-                    <button
-                      className="ctx-chip-x"
-                      title="Dismiss"
-                      onClick={() => dismissChip(m.id)}
-                    >
-                      <Icon name="x" size={11} />
-                    </button>
-                  </div>
-                )}
-              {/* Query-that-compounds: file a grounded informational answer back
-                  as a durable wiki page (Karpathy's `outputs/` layer). Not shown
-                  for action proposals (diff/db/ssh/config). */}
-              {m.role === "bot" &&
-                m.context &&
-                !m.proposalId &&
-                !m.dbAction &&
-                !m.sshAction &&
-                !m.configAction &&
-                (filed.has(m.id) ? (
-                  <div className="applied-note">
-                    <Icon name="check" size={13} /> Filed to wiki
-                  </div>
-                ) : (
-                  <div className="ai-action" style={{ marginTop: 4 }}>
-                    <button
-                      className="sg-chip"
-                      disabled={filing.has(m.id)}
-                      title="Synthesize this answer into a durable, cross-linked wiki page"
-                      onClick={() => onFileToWiki(m.id)}
-                    >
-                      <Icon name="sparkle" size={12} />{" "}
-                      {filing.has(m.id) ? "Filing…" : "Save to wiki"}
-                    </button>
-                  </div>
-                ))}
-              {m.proposalId && (
-                <div onClick={() => scrollToProposal(m.proposalId!)}>
-                  {m.status === "applied" ? (
-                    <span className="applied-note">
-                      <Icon name="check" size={14} /> Applied to page
-                    </span>
-                  ) : m.status === "rejected" ? (
-                    <span className="applied-note rejected-note">
-                      <Icon name="x" size={13} /> Discarded
-                    </span>
-                  ) : (
-                    <span className="ref">{m.label} — review in page ↗</span>
-                  )}
-                </div>
-              )}
-              {m.dbAction &&
-                (m.status === "applied" ? (
-                  <span className="applied-note">
-                    <Icon name="check" size={14} /> Board updated
-                  </span>
-                ) : m.status === "rejected" ? (
-                  <span className="applied-note rejected-note">
-                    <Icon name="x" size={13} /> Dismissed
-                  </span>
-                ) : (
-                  <div className="ai-action">
-                    <button
-                      className="pa-btn pa-accept"
-                      onClick={() => onApplyDb(m.id, m.dbAction!)}
-                    >
-                      <Icon name="check" size={13} /> {m.label}
-                    </button>
-                    <button
-                      className="pa-btn pa-reject"
-                      onClick={() => onDismissDb(m.id)}
-                    >
-                      Dismiss
-                    </button>
-                  </div>
-                ))}
-              {m.sshAction &&
-                (m.status === "applied" ? (
-                  <span className="applied-note">
-                    <Icon name="check" size={14} /> SSH tunnel updated
-                  </span>
-                ) : m.status === "rejected" ? (
-                  <span className="applied-note rejected-note">
-                    <Icon name="x" size={13} /> Connection request canceled
-                  </span>
-                ) : (
-                  <div
-                    className="security-consent-box"
-                    style={{
-                      marginTop: 8,
-                      padding: 10,
-                      borderRadius: 8,
-                      background: "rgba(255, 100, 100, 0.08)",
-                      border: "1px solid rgba(255, 100, 100, 0.2)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontWeight: 600,
-                        color: "var(--tx-1)",
-                        fontSize: 13,
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 6,
-                        marginBottom: 4,
-                      }}
-                    >
-                      <Icon
-                        name="settings"
-                        size={14}
-                        style={{ color: "var(--warn, #e65100)" }}
-                      />{" "}
-                      Security Permission Required
-                    </div>
-                    <p
-                      style={{
-                        fontSize: 12,
-                        color: "var(--tx-2)",
-                        lineHeight: 1.4,
-                        margin: "0 0 8px 0",
-                      }}
-                    >
-                      {getPlainEnglishExplanation(m)}
-                    </p>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button
-                        className="pa-btn pa-accept"
-                        style={{ padding: "4px 8px", fontSize: 12 }}
-                        onClick={() => onApplySsh(m.id, m.sshAction!.action)}
-                      >
-                        Approve & Execute
-                      </button>
-                      <button
-                        className="pa-btn pa-reject"
-                        style={{ padding: "4px 8px", fontSize: 12 }}
-                        onClick={() => onDismissDb(m.id)}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              {m.configAction &&
-                (m.status === "applied" ? (
-                  <span className="applied-note">
-                    <Icon name="check" size={14} /> Credentials saved
-                  </span>
-                ) : m.status === "rejected" ? (
-                  <span className="applied-note rejected-note">
-                    <Icon name="x" size={13} /> Key save request canceled
-                  </span>
-                ) : (
-                  <div
-                    className="security-consent-box"
-                    style={{
-                      marginTop: 8,
-                      padding: 10,
-                      borderRadius: 8,
-                      background: "rgba(255, 100, 100, 0.08)",
-                      border: "1px solid rgba(255, 100, 100, 0.2)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontWeight: 600,
-                        color: "var(--tx-1)",
-                        fontSize: 13,
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 6,
-                        marginBottom: 4,
-                      }}
-                    >
-                      <Icon
-                        name="settings"
-                        size={14}
-                        style={{ color: "var(--warn, #e65100)" }}
-                      />{" "}
-                      Security Permission Required
-                    </div>
-                    <p
-                      style={{
-                        fontSize: 12,
-                        color: "var(--tx-2)",
-                        lineHeight: 1.4,
-                        margin: "0 0 8px 0",
-                      }}
-                    >
-                      {getPlainEnglishExplanation(m)}
-                    </p>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button
-                        className="pa-btn pa-accept"
-                        style={{ padding: "4px 8px", fontSize: 12 }}
-                        onClick={() =>
-                          onApplyConfig(
-                            m.id,
-                            m.configAction!.provider,
-                            m.configAction!.key,
-                          )
-                        }
-                      >
-                        Approve & Save
-                      </button>
-                      <button
-                        className="pa-btn pa-reject"
-                        style={{ padding: "4px 8px", fontSize: 12 }}
-                        onClick={() => onDismissDb(m.id)}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ))}
-            </div>
-          </div>
-        ))}
+        <div
+          className="agent-message-virtual-list"
+          style={{ height: `${messageVirtualizer.getTotalSize()}px` }}
+        >
+          {messageVirtualizer.getVirtualItems().map((virtualRow) => {
+            const message = messages[virtualRow.index];
+            return (
+              <div
+                key={virtualRow.key}
+                className="agent-message-virtual-row"
+                data-index={virtualRow.index}
+                ref={messageVirtualizer.measureElement}
+                style={{ transform: `translateY(${virtualRow.start}px)` }}
+              >
+                {renderMessage(message)}
+              </div>
+            );
+          })}
+        </div>
         {thinking && (
           <div className="msg bot">
             <span className="who">

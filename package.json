@@ -42,6 +42,7 @@
     "@fontsource/jetbrains-mono": "^5.2.8",
     "@fontsource/source-serif-4": "^5.2.9",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@tanstack/react-virtual": "^3.14.3",
     "@types/highlight.js": "^9.12.4",
     "@types/react-syntax-highlighter": "^15.5.13",
     "@wesbos/code-icons": "^1.2.4",

@@ -7,6 +7,7 @@
 // as escaped plain text inside an explicit "untrusted" banner — never as
 // markdown, never auto-injected into a chat turn.
 import { useEffect, useRef, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useStore } from "../store";
 import { Icon } from "../components/Icon";
 import {
@@ -939,6 +940,14 @@ function ConversationViewer(props: {
 }) {
   const { hit, meta, messages, loading } = props.state;
   const [saving, setSaving] = useState(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const messageVirtualizer = useVirtualizer({
+    count: messages.length,
+    getScrollElement: () => bodyRef.current,
+    estimateSize: () => 124,
+    overscan: 8,
+    getItemKey: (index) => messages[index]?.seq ?? index,
+  });
   const save = async () => {
     setSaving(true);
     try {
@@ -992,7 +1001,7 @@ function ConversationViewer(props: {
           </button>
         </div>
       </div>
-      <div className="modal-body" style={{ overflow: "auto" }}>
+      <div className="modal-body" ref={bodyRef} style={{ overflow: "auto" }}>
         <div
           style={{
             marginBottom: 12,
@@ -1019,32 +1028,55 @@ function ConversationViewer(props: {
         {loading ? (
           <div className="cmts-empty">Loading transcript…</div>
         ) : (
-          messages.map((m) => (
-            <div key={m.seq} style={{ marginBottom: 14 }}>
-              <div
-                style={{
-                  fontSize: 11,
-                  textTransform: "uppercase",
-                  letterSpacing: 0.5,
-                  color: "var(--tx-4)",
-                  marginBottom: 2,
-                }}
-              >
-                {m.role}
-              </div>
-              <div
-                style={{
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-word",
-                  fontSize: 13,
-                  lineHeight: 1.5,
-                  color: "var(--tx-2)",
-                }}
-              >
-                {m.text}
-              </div>
-            </div>
-          ))
+          <div
+            style={{
+              position: "relative",
+              height: messageVirtualizer.getTotalSize(),
+            }}
+          >
+            {messageVirtualizer.getVirtualItems().map((virtualRow) => {
+              const m = messages[virtualRow.index];
+              return (
+                <div
+                  key={virtualRow.key}
+                  data-index={virtualRow.index}
+                  ref={messageVirtualizer.measureElement}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    boxSizing: "border-box",
+                    paddingBottom: 14,
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      textTransform: "uppercase",
+                      letterSpacing: 0.5,
+                      color: "var(--tx-4)",
+                      marginBottom: 2,
+                    }}
+                  >
+                    {m.role}
+                  </div>
+                  <div
+                    style={{
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                      fontSize: 13,
+                      lineHeight: 1.5,
+                      color: "var(--tx-2)",
+                    }}
+                  >
+                    {m.text}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
     </div>

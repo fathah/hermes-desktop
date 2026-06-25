@@ -7,6 +7,10 @@ export function setScrollContainer(el: HTMLElement | null): void {
   container = el;
 }
 
+export function getScrollContainer(): HTMLElement | null {
+  return container;
+}
+
 export function scrollToEl(el: Element | null): void {
   if (el && container) {
     const top =

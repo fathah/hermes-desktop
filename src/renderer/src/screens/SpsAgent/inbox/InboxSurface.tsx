@@ -11,6 +11,7 @@
 // (ingestCommitPage) so it appears in both storage modes — the propose-then-
 // commit keystone. Nothing the agent proposes lands until you approve it.
 import { useCallback, useState, useEffect } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Icon } from "../components/Icon";
 import { useStore } from "../store";
 import { useVaultQuery, type VaultRow } from "../hooks/useNoteIndex";
@@ -47,6 +48,7 @@ import {
 } from "../../../../../shared/visual-capture";
 import type { SpsRecentScreenshotCandidate } from "../../../../../shared/recent-screenshots";
 import { assetUrl } from "../lib/assets";
+import { getScrollContainer } from "../lib/scroll";
 import { ocrImageBlobToText } from "../lib/ocr";
 import {
   appendVisualCaptureOcr,
@@ -301,6 +303,13 @@ export function InboxSurface({
   };
 
   const visible = rows.filter((r) => !hidden.has(r.path));
+  const inboxVirtualizer = useVirtualizer({
+    count: visible.length,
+    getScrollElement: getScrollContainer,
+    estimateSize: () => 112,
+    overscan: 8,
+    getItemKey: (index) => visible[index]?.path ?? index,
+  });
 
   const reconcile = useCallback(() => {
     // Give the watcher time to re-index, then refetch and clear optimistic state.
@@ -751,6 +760,111 @@ export function InboxSurface({
         ? url.trim().length > 0
         : false;
 
+  const renderInboxCard = (row: VaultRow): React.JSX.Element => {
+    const id = pageIdFromPath(row.path);
+    const isVisual = isVisualCaptureProps(row.props);
+    return (
+      <div className="inbox-card">
+        <div className="inbox-card-content">
+          <div className="inbox-card-title">
+            {String(row.props.title ?? "Untitled capture")}
+          </div>
+          <div className="inbox-card-meta">
+            <span className="inbox-source-capitalize">
+              {String(row.props.source ?? "note")}
+            </span>
+            <span>·</span>
+            <span>{timeLabel(row.props.capturedAt)}</span>
+            {typeof row.props.ocrStatus === "string" && (
+              <>
+                <span>·</span>
+                <span>OCR {row.props.ocrStatus}</span>
+              </>
+            )}
+          </div>
+          {rowBusy[id] && (
+            <div className="inbox-row-status">{rowBusy[id]}</div>
+          )}
+          {teachResults[id] && (
+            <div className="inbox-teach-result">
+              <pre>{teachResults[id]}</pre>
+              <div className="inbox-teach-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() =>
+                    void saveStudyToWiki(
+                      String(row.props.title ?? "Visual capture"),
+                      teachResults[id],
+                    )
+                  }
+                >
+                  Save as study page
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() =>
+                    void navigator.clipboard?.writeText?.(teachResults[id])
+                  }
+                >
+                  Copy
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() =>
+                    setTeachResults((prev) => {
+                      const next = { ...prev };
+                      delete next[id];
+                      return next;
+                    })
+                  }
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        {isVisual && (
+          <>
+            <button
+              title="Extract text"
+              className="btn btn-ghost btn-sm inbox-card-action-btn"
+              disabled={Boolean(rowBusy[id])}
+              onClick={() => void extractVisualText(row)}
+            >
+              Extract text
+            </button>
+            <button
+              title="Teach this"
+              className="btn btn-ghost btn-sm inbox-card-action-btn"
+              disabled={Boolean(rowBusy[id])}
+              onClick={() => void teachVisualCapture(row)}
+            >
+              Teach this
+            </button>
+          </>
+        )}
+        <button
+          title="Mark processed"
+          className="btn btn-ghost btn-sm inbox-card-action-btn"
+          onClick={() => setStatus(row, "processed")}
+        >
+          <Icon name="check" size={15} />
+        </button>
+        <button
+          title="Discard"
+          className="btn btn-ghost btn-sm inbox-card-action-btn"
+          onClick={() => setStatus(row, "discarded")}
+        >
+          <Icon name="trash" size={15} />
+        </button>
+      </div>
+    );
+  };
+
   return (
     <div className="inbox-surface">
       <header className="inbox-header-mb">
@@ -1127,113 +1241,36 @@ export function InboxSurface({
               Nothing waiting. Captures you add land here.
             </div>
           ) : (
-            <ul className="inbox-card-list">
-              {visible.map((row) => {
-                const id = pageIdFromPath(row.path);
-                const isVisual = isVisualCaptureProps(row.props);
-                return (
-                  <li key={row.path} className="inbox-card">
-                    <div className="inbox-card-content">
-                      <div className="inbox-card-title">
-                        {String(row.props.title ?? "Untitled capture")}
-                      </div>
-                      <div className="inbox-card-meta">
-                        <span className="inbox-source-capitalize">
-                          {String(row.props.source ?? "note")}
-                        </span>
-                        <span>·</span>
-                        <span>{timeLabel(row.props.capturedAt)}</span>
-                        {typeof row.props.ocrStatus === "string" && (
-                          <>
-                            <span>·</span>
-                            <span>OCR {row.props.ocrStatus}</span>
-                          </>
-                        )}
-                      </div>
-                      {rowBusy[id] && (
-                        <div className="inbox-row-status">{rowBusy[id]}</div>
-                      )}
-                      {teachResults[id] && (
-                        <div className="inbox-teach-result">
-                          <pre>{teachResults[id]}</pre>
-                          <div className="inbox-teach-actions">
-                            <button
-                              type="button"
-                              className="btn btn-secondary btn-sm"
-                              onClick={() =>
-                                void saveStudyToWiki(
-                                  String(row.props.title ?? "Visual capture"),
-                                  teachResults[id],
-                                )
-                              }
-                            >
-                              Save as study page
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-ghost btn-sm"
-                              onClick={() =>
-                                void navigator.clipboard?.writeText?.(
-                                  teachResults[id],
-                                )
-                              }
-                            >
-                              Copy
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-ghost btn-sm"
-                              onClick={() =>
-                                setTeachResults((prev) => {
-                                  const next = { ...prev };
-                                  delete next[id];
-                                  return next;
-                                })
-                              }
-                            >
-                              Dismiss
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    {isVisual && (
-                      <>
-                        <button
-                          title="Extract text"
-                          className="btn btn-ghost btn-sm inbox-card-action-btn"
-                          disabled={Boolean(rowBusy[id])}
-                          onClick={() => void extractVisualText(row)}
-                        >
-                          Extract text
-                        </button>
-                        <button
-                          title="Teach this"
-                          className="btn btn-ghost btn-sm inbox-card-action-btn"
-                          disabled={Boolean(rowBusy[id])}
-                          onClick={() => void teachVisualCapture(row)}
-                        >
-                          Teach this
-                        </button>
-                      </>
-                    )}
-                    <button
-                      title="Mark processed"
-                      className="btn btn-ghost btn-sm inbox-card-action-btn"
-                      onClick={() => setStatus(row, "processed")}
-                    >
-                      <Icon name="check" size={15} />
-                    </button>
-                    <button
-                      title="Discard"
-                      className="btn btn-ghost btn-sm inbox-card-action-btn"
-                      onClick={() => setStatus(row, "discarded")}
-                    >
-                      <Icon name="trash" size={15} />
-                    </button>
-                  </li>
-                );
-              })}
+            <ul
+              className={`inbox-card-list ${
+                getScrollContainer() ? "inbox-card-list-virtual" : ""
+              }`}
+              style={
+                getScrollContainer()
+                  ? { height: `${inboxVirtualizer.getTotalSize()}px` }
+                  : undefined
+              }
+            >
+              {getScrollContainer()
+                ? inboxVirtualizer.getVirtualItems().map((virtualRow) => {
+                    const row = visible[virtualRow.index];
+                    return (
+                      <li
+                        key={virtualRow.key}
+                        className="inbox-card-virtual-row"
+                        data-index={virtualRow.index}
+                        ref={inboxVirtualizer.measureElement}
+                        style={{
+                          transform: `translateY(${virtualRow.start}px)`,
+                        }}
+                      >
+                        {renderInboxCard(row)}
+                      </li>
+                    );
+                  })
+                : visible.map((row) => (
+                    <li key={row.path}>{renderInboxCard(row)}</li>
+                  ))}
             </ul>
           )}
         </>

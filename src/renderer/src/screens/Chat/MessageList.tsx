@@ -1,9 +1,12 @@
 import { memo, useMemo, Fragment } from "react";
+import type { RefObject } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Check, ShieldAlert, Sparkles, Brain, Cpu, Bot } from "lucide-react";
 import { HermesAvatar, AvatarSpacer, MessageRow } from "./MessageRow";
 import { ToolGroupRow } from "./HistoryRow";
 import { isCompressionSummary } from "./contextGauge";
 import { useTtsPlayback } from "./hooks/useTtsPlayback";
+import { StreamingText } from "./StreamingText";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
 import type {
   ChatMessage,
@@ -32,6 +35,7 @@ interface MessageListProps {
   onSteelmanCritique?: (
     responses: Array<{ model: string; provider: string; content: string }>,
   ) => void;
+  scrollRef?: RefObject<HTMLElement | null>;
 }
 
 function TypingIndicator({
@@ -124,6 +128,7 @@ export const MessageList = memo(function MessageList({
   onDeny,
   onAdoptResponse,
   onSteelmanCritique,
+  scrollRef,
 }: MessageListProps): React.JSX.Element {
   const tts = useTtsPlayback(profile);
 
@@ -163,161 +168,202 @@ export const MessageList = memo(function MessageList({
   const lastBubble = [...messages].reverse().find(isBubble);
   const lastMessageIsAgent = !!lastBubble && lastBubble.role === "agent";
 
+  const rowVirtualizer = useVirtualizer({
+    count: groupedMessages.length,
+    getScrollElement: () => scrollRef?.current ?? null,
+    estimateSize: () => 112,
+    overscan: 8,
+    getItemKey: (index) => groupedMessages[index]?.id ?? index,
+  });
+
+  const renderRow = (msg: ChatMessage, i: number): React.JSX.Element => {
+    const k = (msg as { kind?: string }).kind;
+    // One avatar per turn: show it only on the first row of a contiguous
+    // run of same-role rows. An agent turn's thinking/tool rows + answer
+    // bubble share one avatar; the continuation rows render a spacer.
+    const prev = groupedMessages[i - 1];
+    const showAvatar = !prev || prev.role !== msg.role;
+
+    if (k === "tool_group") {
+      const active = isLoading && i === groupedMessages.length - 1;
+      return (
+        // Key on identity only — folding `active` into the key remounts the
+        // row when the stream finishes, collapsing any <details> the user
+        // expanded mid-stream. `active` is just a prop.
+        <ToolGroupRow
+          msg={msg as ToolGroupMessage}
+          active={active}
+          showAvatar={showAvatar}
+        />
+      );
+    }
+
+    if (k === "council_turn") {
+      const councilMsg = msg as CouncilTurnMessage;
+      const responses = Object.entries(councilMsg.responses);
+      const isAnyLoading = responses.some(([, r]) => r.isLoading);
+
+      return (
+        <div className="chat-message chat-message-agent">
+          {showAvatar ? <HermesAvatar /> : <AvatarSpacer />}
+          <div style={{ width: "100%" }}>
+            <div className="chat-council-turn">
+              {responses.map(([key, r]) => {
+                const statusText = r.isLoading ? "Streaming..." : "Done";
+                return (
+                  <div key={key} className="chat-council-col">
+                    <CouncilColumnHeader
+                      provider={r.provider}
+                      label={r.modelLabel}
+                      status={statusText}
+                      error={r.error}
+                    />
+                    <div className="chat-council-col-body">
+                      {r.reasoning && (
+                        <details className="chat-reasoning" open>
+                          <summary>Thinking process</summary>
+                          <div
+                            className="chat-reasoning-text"
+                            style={{ whiteSpace: "pre-wrap", opacity: 0.8 }}
+                          >
+                            {r.reasoning}
+                          </div>
+                        </details>
+                      )}
+                      {r.error ? (
+                        <div
+                          className="chat-error-text"
+                          style={{ color: "var(--btn-danger)" }}
+                        >
+                          Error: {r.error}
+                        </div>
+                      ) : r.content && r.isLoading ? (
+                        <StreamingText>{r.content}</StreamingText>
+                      ) : r.content ? (
+                        <AgentMarkdown>{r.content}</AgentMarkdown>
+                      ) : (
+                        <div className="chat-typing-inline">Thinking...</div>
+                      )}
+                    </div>
+                    <div className="chat-council-col-footer">
+                      <button
+                        className="chat-council-col-action"
+                        disabled={r.isLoading || !r.content}
+                        onClick={() => {
+                          if (onAdoptResponse) {
+                            onAdoptResponse(
+                              r.messageId || key,
+                              councilMsg.id,
+                              r.content,
+                              r.model,
+                              r.provider,
+                            );
+                          }
+                        }}
+                        type="button"
+                      >
+                        <Check size={12} /> Adopt
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {!isAnyLoading && onSteelmanCritique && (
+              <div className="chat-council-synthesize-bar">
+                <button
+                  className="chat-council-synthesize-btn"
+                  onClick={() => {
+                    const allResponses = responses.map(([, r]) => ({
+                      model: r.model,
+                      provider: r.provider,
+                      content: r.content,
+                    }));
+                    onSteelmanCritique(allResponses);
+                  }}
+                  type="button"
+                >
+                  <ShieldAlert size={13} /> Synthesize Consensus & Steelman
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    const bubble = msg as Extract<ChatMessage, { role: "user" | "agent" }>;
+    // Mark the point where the gateway compacted context (idea A3) so a
+    // mid-conversation summary doesn't read like the agent's own message.
+    const compressed =
+      bubble.role === "agent" &&
+      isCompressionSummary(
+        ((bubble as { content?: unknown }).content as string) || "",
+      );
+    return (
+      <>
+        {compressed && (
+          <div className="chat-compress-marker">Context compressed</div>
+        )}
+        <MessageRow
+          msg={bubble}
+          isLast={i === groupedMessages.length - 1}
+          isLoading={isLoading}
+          onApprove={onApprove}
+          onDeny={onDeny}
+          streaming={
+            isLoading &&
+            bubble.role === "agent" &&
+            i === groupedMessages.length - 1
+          }
+          showAvatar={showAvatar}
+          ttsHasKey={tts.hasKey}
+          ttsSpeaking={tts.playingId === bubble.id}
+          ttsBusy={tts.busyId === bubble.id}
+          onSpeak={() =>
+            tts.playingId === bubble.id
+              ? tts.stop()
+              : tts.play(
+                  bubble.id,
+                  ((bubble as { content?: unknown }).content as string) || "",
+                )
+          }
+        />
+      </>
+    );
+  };
+
+  const shouldVirtualize = !!scrollRef;
+
   return (
     <>
-      {groupedMessages.map((msg, i) => {
-        const k = (msg as { kind?: string }).kind;
-        // One avatar per turn: show it only on the first row of a contiguous
-        // run of same-role rows. An agent turn's thinking/tool rows + answer
-        // bubble share one avatar; the continuation rows render a spacer.
-        const prev = groupedMessages[i - 1];
-        const showAvatar = !prev || prev.role !== msg.role;
-
-        if (k === "tool_group") {
-          const active = isLoading && i === groupedMessages.length - 1;
-          return (
-            // Key on identity only — folding `active` into the key remounts the
-            // row when the stream finishes, collapsing any <details> the user
-            // expanded mid-stream. `active` is just a prop.
-            <ToolGroupRow
-              key={msg.id}
-              msg={msg as ToolGroupMessage}
-              active={active}
-              showAvatar={showAvatar}
-            />
-          );
-        }
-
-        if (k === "council_turn") {
-          const councilMsg = msg as CouncilTurnMessage;
-          const responses = Object.entries(councilMsg.responses);
-          const isAnyLoading = responses.some(([, r]) => r.isLoading);
-
-          return (
-            <div key={msg.id} className="chat-message chat-message-agent">
-              {showAvatar ? <HermesAvatar /> : <AvatarSpacer />}
-              <div style={{ width: "100%" }}>
-                <div className="chat-council-turn">
-                  {responses.map(([key, r]) => {
-                    const statusText = r.isLoading ? "Streaming..." : "Done";
-                    return (
-                      <div key={key} className="chat-council-col">
-                        <CouncilColumnHeader
-                          provider={r.provider}
-                          label={r.modelLabel}
-                          status={statusText}
-                          error={r.error}
-                        />
-                        <div className="chat-council-col-body">
-                          {r.reasoning && (
-                            <details className="chat-reasoning" open>
-                              <summary>Thinking process</summary>
-                              <div
-                                className="chat-reasoning-text"
-                                style={{ whiteSpace: "pre-wrap", opacity: 0.8 }}
-                              >
-                                {r.reasoning}
-                              </div>
-                            </details>
-                          )}
-                          {r.error ? (
-                            <div
-                              className="chat-error-text"
-                              style={{ color: "var(--btn-danger)" }}
-                            >
-                              Error: {r.error}
-                            </div>
-                          ) : r.content ? (
-                            <AgentMarkdown>{r.content}</AgentMarkdown>
-                          ) : (
-                            <div className="chat-typing-inline">
-                              Thinking...
-                            </div>
-                          )}
-                        </div>
-                        <div className="chat-council-col-footer">
-                          <button
-                            className="chat-council-col-action"
-                            disabled={r.isLoading || !r.content}
-                            onClick={() => {
-                              if (onAdoptResponse) {
-                                onAdoptResponse(
-                                  r.messageId || key,
-                                  councilMsg.id,
-                                  r.content,
-                                  r.model,
-                                  r.provider,
-                                );
-                              }
-                            }}
-                            type="button"
-                          >
-                            <Check size={12} /> Adopt
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
+      {shouldVirtualize ? (
+        <div
+          className="chat-message-virtual-list"
+          style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+        >
+          {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+            const msg = groupedMessages[virtualRow.index];
+            return (
+              <div
+                key={virtualRow.key}
+                className="chat-message-virtual-row"
+                data-index={virtualRow.index}
+                ref={rowVirtualizer.measureElement}
+                style={{ transform: `translateY(${virtualRow.start}px)` }}
+              >
+                <div className="chat-message-virtual-row-inner">
+                  {renderRow(msg, virtualRow.index)}
                 </div>
-                {!isAnyLoading && onSteelmanCritique && (
-                  <div className="chat-council-synthesize-bar">
-                    <button
-                      className="chat-council-synthesize-btn"
-                      onClick={() => {
-                        const allResponses = responses.map(([, r]) => ({
-                          model: r.model,
-                          provider: r.provider,
-                          content: r.content,
-                        }));
-                        onSteelmanCritique(allResponses);
-                      }}
-                      type="button"
-                    >
-                      <ShieldAlert size={13} /> Synthesize Consensus & Steelman
-                    </button>
-                  </div>
-                )}
               </div>
-            </div>
-          );
-        }
-
-        const bubble = msg as Extract<ChatMessage, { role: "user" | "agent" }>;
-        // Mark the point where the gateway compacted context (idea A3) so a
-        // mid-conversation summary doesn't read like the agent's own message.
-        const compressed =
-          bubble.role === "agent" &&
-          isCompressionSummary(
-            ((bubble as { content?: unknown }).content as string) || "",
-          );
-        return (
-          <Fragment key={msg.id}>
-            {compressed && (
-              <div className="chat-compress-marker">Context compressed</div>
-            )}
-            <MessageRow
-              msg={bubble}
-              isLast={i === groupedMessages.length - 1}
-              isLoading={isLoading}
-              onApprove={onApprove}
-              onDeny={onDeny}
-              showAvatar={showAvatar}
-              ttsHasKey={tts.hasKey}
-              ttsSpeaking={tts.playingId === bubble.id}
-              ttsBusy={tts.busyId === bubble.id}
-              onSpeak={() =>
-                tts.playingId === bubble.id
-                  ? tts.stop()
-                  : tts.play(
-                      bubble.id,
-                      ((bubble as { content?: unknown }).content as string) ||
-                        "",
-                    )
-              }
-            />
-          </Fragment>
-        );
-      })}
+            );
+          })}
+        </div>
+      ) : (
+        groupedMessages.map((msg, i) => (
+          <Fragment key={msg.id}>{renderRow(msg, i)}</Fragment>
+        ))
+      )}
 
       {isLoading && !lastMessageIsAgent && (
         <TypingIndicator toolProgress={toolProgress} />

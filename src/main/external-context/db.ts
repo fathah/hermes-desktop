@@ -76,6 +76,7 @@ function toFtsQuery(text: string): string {
 
 export class ExternalContextDb {
   private db: Database.Database;
+  private stmts!: Record<string, Database.Statement>;
 
   constructor(dbPath: string) {
     mkdirSync(dirname(dbPath), { recursive: true });
@@ -83,6 +84,50 @@ export class ExternalContextDb {
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("synchronous = NORMAL");
     this.ensureSchema();
+    this.prepareStatements();
+  }
+
+  private prepareStatements(): void {
+    this.stmts = {
+      deleteMessagesForConversation: this.db.prepare(
+        `DELETE FROM messages WHERE conv_id = ?`,
+      ),
+      deleteFtsForConversation: this.db.prepare(
+        `DELETE FROM messages_fts WHERE conv_id = ?`,
+      ),
+      insertMessage: this.db.prepare(
+        `INSERT OR REPLACE INTO messages(conv_id,seq,role,ts,text) VALUES(?,?,?,?,?)`,
+      ),
+      deleteFtsMessage: this.db.prepare(
+        `DELETE FROM messages_fts WHERE conv_id = ? AND seq = ?`,
+      ),
+      insertFtsMessage: this.db.prepare(
+        `INSERT INTO messages_fts(conv_id,seq,text) VALUES(?,?,?)`,
+      ),
+      recountConversation: this.db.prepare(
+        `UPDATE conversations SET message_count =
+           (SELECT COUNT(*) FROM messages WHERE messages.conv_id = conversations.conv_id)
+         WHERE conv_id = ?`,
+      ),
+      upsertFile: this.db.prepare(
+        `INSERT INTO files(path,source,strategy,offset,size,mtime)
+         VALUES(@path,@source,@strategy,@offset,@size,@mtime)
+         ON CONFLICT(path) DO UPDATE SET
+           strategy=@strategy, offset=@offset, size=@size, mtime=@mtime`,
+      ),
+      selectConversation: this.db.prepare(
+        `SELECT * FROM conversations WHERE conv_id = ?`,
+      ),
+      upsertConversation: this.db.prepare(
+        `INSERT INTO conversations
+           (conv_id,source,conversation_id,project_path,git_branch,title,started_at,last_at,message_count)
+         VALUES(@conv_id,@source,@conversation_id,@project_path,@git_branch,@title,@started_at,@last_at,
+                COALESCE((SELECT message_count FROM conversations WHERE conv_id=@conv_id),0))
+         ON CONFLICT(conv_id) DO UPDATE SET
+           project_path=@project_path, git_branch=@git_branch, title=@title,
+           started_at=@started_at, last_at=@last_at`,
+      ),
+    };
   }
 
   private ensureSchema(): void {
@@ -176,67 +221,39 @@ export class ExternalContextDb {
         (result.conversation ? [result.conversation] : []);
       const seededConvIds: string[] = [];
 
-      const delMsgForConv = this.db.prepare(
-        `DELETE FROM messages WHERE conv_id = ?`,
-      );
-      const delFtsForConv = this.db.prepare(
-        `DELETE FROM messages_fts WHERE conv_id = ?`,
-      );
       for (const conv of convs) {
         const cid = convKey(file.source, conv.conversationId);
         this.mergeConversation(cid, file.source, conv, knownSecrets);
         if (replace) {
-          delMsgForConv.run(cid);
-          delFtsForConv.run(cid);
+          this.stmts.deleteMessagesForConversation.run(cid);
+          this.stmts.deleteFtsForConversation.run(cid);
         }
         seededConvIds.push(cid);
       }
-
-      const insMsg = this.db.prepare(
-        `INSERT OR REPLACE INTO messages(conv_id,seq,role,ts,text) VALUES(?,?,?,?,?)`,
-      );
-      const delFts = this.db.prepare(
-        `DELETE FROM messages_fts WHERE conv_id = ? AND seq = ?`,
-      );
-      const insFts = this.db.prepare(
-        `INSERT INTO messages_fts(conv_id,seq,text) VALUES(?,?,?)`,
-      );
 
       const touched = new Set<string>();
       for (const m of result.messages) {
         const cid = convKey(file.source, m.conversationId);
         const safeText = redactExternalText(m.text, knownSecrets);
-        insMsg.run(cid, m.seq, m.role, m.ts, safeText);
-        delFts.run(cid, m.seq);
-        insFts.run(cid, m.seq, safeText);
+        this.stmts.insertMessage.run(cid, m.seq, m.role, m.ts, safeText);
+        this.stmts.deleteFtsMessage.run(cid, m.seq);
+        this.stmts.insertFtsMessage.run(cid, m.seq, safeText);
         touched.add(cid);
       }
 
       // Recompute message_count for every conversation we touched.
-      const recount = this.db.prepare(
-        `UPDATE conversations SET message_count =
-           (SELECT COUNT(*) FROM messages WHERE messages.conv_id = conversations.conv_id)
-         WHERE conv_id = ?`,
-      );
       for (const cid of seededConvIds) touched.add(cid);
-      for (const cid of touched) recount.run(cid);
+      for (const cid of touched) this.stmts.recountConversation.run(cid);
 
       // Advance the file cursor.
-      this.db
-        .prepare(
-          `INSERT INTO files(path,source,strategy,offset,size,mtime)
-           VALUES(@path,@source,@strategy,@offset,@size,@mtime)
-           ON CONFLICT(path) DO UPDATE SET
-             strategy=@strategy, offset=@offset, size=@size, mtime=@mtime`,
-        )
-        .run({
-          path: file.absPath,
-          source: file.source,
-          strategy: file.strategy,
-          offset: result.bytesConsumed,
-          size: file.size,
-          mtime: file.mtimeMs,
-        });
+      this.stmts.upsertFile.run({
+        path: file.absPath,
+        source: file.source,
+        strategy: file.strategy,
+        offset: result.bytesConsumed,
+        size: file.size,
+        mtime: file.mtimeMs,
+      });
     });
     tx();
   }
@@ -251,9 +268,9 @@ export class ExternalContextDb {
     conv: ParseResult["conversation"] & object,
     knownSecrets: readonly string[],
   ): void {
-    const existing = this.db
-      .prepare(`SELECT * FROM conversations WHERE conv_id = ?`)
-      .get(convId) as ConversationRow | undefined;
+    const existing = this.stmts.selectConversation.get(convId) as
+      | ConversationRow
+      | undefined;
 
     const startedAt = minNullable(existing?.started_at ?? null, conv.startedAt);
     const lastAt = maxNullable(existing?.last_at ?? null, conv.lastAt);
@@ -262,26 +279,16 @@ export class ExternalContextDb {
     const rawTitle = conv.title ?? existing?.title ?? null;
     const title = rawTitle ? redactExternalText(rawTitle, knownSecrets) : null;
 
-    this.db
-      .prepare(
-        `INSERT INTO conversations
-           (conv_id,source,conversation_id,project_path,git_branch,title,started_at,last_at,message_count)
-         VALUES(@conv_id,@source,@conversation_id,@project_path,@git_branch,@title,@started_at,@last_at,
-                COALESCE((SELECT message_count FROM conversations WHERE conv_id=@conv_id),0))
-         ON CONFLICT(conv_id) DO UPDATE SET
-           project_path=@project_path, git_branch=@git_branch, title=@title,
-           started_at=@started_at, last_at=@last_at`,
-      )
-      .run({
-        conv_id: convId,
-        source,
-        conversation_id: conv.conversationId,
-        project_path: projectPath,
-        git_branch: gitBranch,
-        title,
-        started_at: startedAt,
-        last_at: lastAt,
-      });
+    this.stmts.upsertConversation.run({
+      conv_id: convId,
+      source,
+      conversation_id: conv.conversationId,
+      project_path: projectPath,
+      git_branch: gitBranch,
+      title,
+      started_at: startedAt,
+      last_at: lastAt,
+    });
   }
 
   // ── reads ───────────────────────────────────────────────────────────────────
@@ -512,6 +519,7 @@ export class ExternalContextDb {
   rebuild(): void {
     this.dropAll();
     this.ensureSchema();
+    this.prepareStatements();
   }
 
   /** Sources that currently have at least one indexed conversation. */

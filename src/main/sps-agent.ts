@@ -59,6 +59,7 @@ import {
 import { getSpsNoteIndex } from "./note-index";
 import { createLearningProposal } from "./learning-proposals";
 import { safeFetch } from "./security/ssrf-guard";
+import { log } from "./log";
 
 // ───────────────────────── unfurl ─────────────────────────
 interface BookmarkMeta {
@@ -83,6 +84,22 @@ function pick(html: string, patterns: RegExp[]): string | undefined {
     if (m && m[1]) return decodeEntities(m[1].trim());
   }
   return undefined;
+}
+
+async function readGatewayErrorBody(
+  res: Response,
+  scope: string,
+): Promise<string> {
+  try {
+    return await res.text();
+  } catch (err) {
+    log.warn("sps-agent.gateway-error-body", {
+      scope,
+      status: res.status,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return "";
+  }
 }
 function absolute(base: string, ref: string | undefined): string | undefined {
   if (!ref) return undefined;
@@ -538,7 +555,7 @@ export async function spsAssistant(
       }),
     });
     if (!res.ok) {
-      const body = await res.text().catch(() => "");
+      const body = await readGatewayErrorBody(res, "assistant");
       throw new Error(`gateway ${res.status}: ${body.slice(0, 160)}`);
     }
     const data = (await res.json()) as {
@@ -673,7 +690,7 @@ export async function spsIngestInbox(profile?: string): Promise<IngestResult> {
       body: JSON.stringify({ model: "hermes-agent", stream: false, messages }),
     });
     if (!res.ok) {
-      const body = await res.text().catch(() => "");
+      const body = await readGatewayErrorBody(res, "ingest");
       return {
         ok: false,
         captureCount: captures.length,
@@ -845,7 +862,7 @@ export async function spsFileAnswer(
       body: JSON.stringify({ model: "hermes-agent", stream: false, messages }),
     });
     if (!res.ok) {
-      const body = await res.text().catch(() => "");
+      const body = await readGatewayErrorBody(res, "file-answer");
       return {
         ok: false,
         captureCount: 0,
@@ -930,7 +947,7 @@ export async function spsFileResearch(
         }),
       });
       if (!res.ok) {
-        const body = await res.text().catch(() => "");
+        const body = await readGatewayErrorBody(res, "file-research");
         lastError = `gateway ${res.status}: ${body.slice(0, 160)}`;
         if (res.status >= 400 && res.status < 500) {
           return { ok: false, captureCount: 0, error: lastError };
@@ -1011,7 +1028,7 @@ export async function spsExternalSaveToKb(
         }),
       });
       if (!res.ok) {
-        const body = await res.text().catch(() => "");
+        const body = await readGatewayErrorBody(res, "external-session");
         lastError = `gateway ${res.status}: ${body.slice(0, 160)}`;
         if (res.status >= 400 && res.status < 500) {
           return { ok: false, captureCount: 0, error: lastError };
@@ -1112,7 +1129,7 @@ export async function spsLintWiki(
       body: JSON.stringify({ model: "hermes-agent", stream: false, messages }),
     });
     if (!res.ok) {
-      const body = await res.text().catch(() => "");
+      const body = await readGatewayErrorBody(res, "lint");
       return {
         ...fail(`gateway ${res.status}: ${body.slice(0, 160)}`),
         mechanical,

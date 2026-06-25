@@ -945,7 +945,12 @@ export function readLogs(
   lines = 200,
 ): { content: string; path: string } {
   const logsDir = join(HERMES_HOME, "logs");
-  const allowed = ["agent.log", "errors.log", "gateway.log"];
+  const allowed = [
+    "agent.log",
+    "errors.log",
+    "gateway.log",
+    "gateway-stderr.log",
+  ];
   const file = allowed.includes(logFile) ? logFile : "agent.log";
   const fullPath = join(logsDir, file);
 

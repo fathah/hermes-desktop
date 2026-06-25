@@ -16,6 +16,7 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
   const [savedKey, setSavedKey] = useState<string | null>(null);
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set());
   const [keychainKeys, setKeychainKeys] = useState<Set<string>>(new Set());
+  const [gatewayStderrTail, setGatewayStderrTail] = useState("");
   const gatewayStatusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -58,6 +59,25 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
     loadConfig();
     loadPairings();
   }, [loadConfig, loadPairings]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (gatewayHealth !== "down") {
+      setGatewayStderrTail("");
+      return;
+    }
+    void window.hermesAPI
+      .readLogs("gateway-stderr.log", 80)
+      .then((res) => {
+        if (!cancelled) setGatewayStderrTail(res.content.trim());
+      })
+      .catch(() => {
+        if (!cancelled) setGatewayStderrTail("");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [gatewayHealth]);
 
   async function handleApprovePairing(): Promise<void> {
     if (!pairingCode.trim()) return;
@@ -234,9 +254,27 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
             </div>
           )}
           {gatewayHealth === "down" && (
-            <div className="settings-field-hint settings-field-error">
-              {t("gateway.healthDown")}
-            </div>
+            <>
+              <div className="settings-field-hint settings-field-error">
+                {t("gateway.healthDown")}
+              </div>
+              {gatewayStderrTail && (
+                <details className="settings-field-hint">
+                  <summary>Gateway stderr tail</summary>
+                  <pre
+                    style={{
+                      maxHeight: 220,
+                      overflow: "auto",
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                      margin: "8px 0 0",
+                    }}
+                  >
+                    {gatewayStderrTail}
+                  </pre>
+                </details>
+              )}
+            </>
           )}
           <div className="settings-field-hint">{t("gateway.gatewayHint")}</div>
         </div>

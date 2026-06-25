@@ -635,6 +635,7 @@ function Chat({
               isLoading={isLoading}
               toolProgress={toolProgress}
               profile={profile}
+              scrollRef={containerRef}
               onApprove={actions.handleApprove}
               onDeny={actions.handleDeny}
               onAdoptResponse={handleAdoptResponse}

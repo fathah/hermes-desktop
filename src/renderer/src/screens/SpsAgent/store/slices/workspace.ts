@@ -155,11 +155,10 @@ async function drainOcrQueue(get: StoreGet, set: StoreSet): Promise<void> {
 // Overnight scheduler (P3): once started, every 30s check whether deferral is on
 // and the clock is in the configured minute; if so, drain. Only fires while the
 // app is running (open or in the tray) — no OS daemon.
-let ocrSchedulerStarted = false;
+let ocrSchedulerHandle: ReturnType<typeof setInterval> | null = null;
 function startOcrScheduler(get: StoreGet, set: StoreSet): void {
-  if (ocrSchedulerStarted) return;
-  ocrSchedulerStarted = true;
-  setInterval(() => {
+  if (ocrSchedulerHandle) return;
+  ocrSchedulerHandle = setInterval(() => {
     if (
       get().ocrDefer &&
       peekOcrJob() &&
@@ -168,6 +167,12 @@ function startOcrScheduler(get: StoreGet, set: StoreSet): void {
       void drainOcrQueue(get, set);
     }
   }, 30000);
+}
+
+function stopOcrScheduler(): void {
+  if (!ocrSchedulerHandle) return;
+  clearInterval(ocrSchedulerHandle);
+  ocrSchedulerHandle = null;
 }
 
 export const createWorkspaceSlice: StateCreator<
@@ -362,6 +367,8 @@ export const createWorkspaceSlice: StateCreator<
     // Resume immediately unless the user chose to defer to the overnight window.
     if (!get().ocrDefer) void drainOcrQueue(get, set);
   },
+
+  ocrStopScheduler: () => stopOcrScheduler(),
 
   ocrRunNow: () => void drainOcrQueue(get, set),
 

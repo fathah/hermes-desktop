@@ -9,10 +9,6 @@
 // Engine is good at typed-then-scanned text; handwriting is a known non-goal
 // (it returns low-quality text rather than failing — the caller surfaces that).
 import { createWorker, type Worker } from "tesseract.js";
-import * as pdfjsLib from "pdfjs-dist";
-import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 // ~2x renders a typical 72dpi page to ~150dpi — legible for OCR without
 // ballooning canvas memory.
@@ -25,6 +21,7 @@ function asset(p: string): string {
 }
 
 let workerPromise: Promise<Worker> | null = null;
+let pdfjsPromise: Promise<typeof import("pdfjs-dist")> | null = null;
 
 /** Lazily create and reuse one tesseract worker (loading the 11 MB model once). */
 function getOcrWorker(): Promise<Worker> {
@@ -37,6 +34,19 @@ function getOcrWorker(): Promise<Worker> {
     });
   }
   return workerPromise;
+}
+
+function getPdfJs(): Promise<typeof import("pdfjs-dist")> {
+  if (!pdfjsPromise) {
+    pdfjsPromise = Promise.all([
+      import("pdfjs-dist"),
+      import("pdfjs-dist/build/pdf.worker.min.mjs?url"),
+    ]).then(([pdfjsLib, worker]) => {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = worker.default;
+      return pdfjsLib;
+    });
+  }
+  return pdfjsPromise;
 }
 
 export interface OcrProgress {
@@ -55,6 +65,7 @@ export async function ocrPdfToMarkdown(
   onProgress?: (p: OcrProgress) => void,
 ): Promise<string> {
   const worker = await getOcrWorker();
+  const pdfjsLib = await getPdfJs();
   const doc = await pdfjsLib.getDocument({ data: bytes }).promise;
   const sections: string[] = [];
   try {

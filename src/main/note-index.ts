@@ -25,6 +25,7 @@ import chokidar, { type FSWatcher } from "chokidar";
 import YAML from "yaml";
 import { resolveSpsVaultDir } from "./sps-storage";
 import { semanticManager } from "./semantic-index";
+import { log } from "./log";
 
 const NOTE_EXTENSIONS = new Set([".md", ".markdown"]);
 
@@ -315,6 +316,12 @@ export class NoteIndex {
   private watcher: FSWatcher | null = null;
   private ensuredPropIndexes = new Set<string>();
   private indexedAt: number | null = null;
+  private stmts!: Record<string, Database.Statement>;
+  private nameToPathCache: Map<string, string> | null = null;
+  private knownNameCache: Set<string> | null = null;
+  private indexedMtimes = new Map<string, number>();
+  private watcherPending = new Map<string, "upsert" | "unlink">();
+  private watcherDrainTimer: ReturnType<typeof setTimeout> | null = null;
 
   private constructor(
     public readonly root: string,
@@ -324,7 +331,63 @@ export class NoteIndex {
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("synchronous = NORMAL");
     this.ensureSchema();
+    this.prepareStatements();
     this.loadExistingPropIndexes();
+  }
+
+  private prepareStatements(): void {
+    this.stmts = {
+      countNotes: this.db.prepare(`SELECT COUNT(*) AS n FROM notes`),
+      countLinks: this.db.prepare(`SELECT COUNT(*) AS n FROM links`),
+      upsertNote: this.db.prepare(
+        `INSERT INTO notes(path,title,props,body,mtime,updated_at)
+         VALUES(@path,@title,@props,@body,@mtime,@now)
+         ON CONFLICT(path) DO UPDATE SET
+           title=@title, props=@props, body=@body, mtime=@mtime, updated_at=@now`,
+      ),
+      deleteFts: this.db.prepare(`DELETE FROM notes_fts WHERE path = ?`),
+      insertFts: this.db.prepare(
+        `INSERT INTO notes_fts(path,title,body) VALUES(?,?,?)`,
+      ),
+      deleteLinksForSource: this.db.prepare(
+        `DELETE FROM links WHERE source = ?`,
+      ),
+      insertLink: this.db.prepare(
+        `INSERT INTO links(source,target_norm,type) VALUES(?,?,?)`,
+      ),
+      deleteTagsForSource: this.db.prepare(`DELETE FROM tags WHERE source = ?`),
+      insertTag: this.db.prepare(`INSERT INTO tags(source,tag) VALUES(?,?)`),
+      deleteNote: this.db.prepare(`DELETE FROM notes WHERE path = ?`),
+      selectRecordByPath: this.db.prepare(
+        `SELECT path,title,props,mtime FROM notes WHERE path = ?`,
+      ),
+      selectAllNoteMetadata: this.db.prepare(
+        `SELECT path,title,props,mtime FROM notes`,
+      ),
+      selectAllNotePaths: this.db.prepare(`SELECT path FROM notes`),
+      selectAllLinks: this.db.prepare(
+        `SELECT source, target_norm, type FROM links`,
+      ),
+      selectOtherNoteBodies: this.db.prepare(
+        `SELECT path, body FROM notes WHERE path != ?`,
+      ),
+      staleNotes: this.db.prepare(
+        `SELECT path FROM notes WHERE mtime > 0 AND mtime < ? AND instr(path,'/') = 0 ORDER BY mtime ASC`,
+      ),
+      allTags: this.db.prepare(
+        `SELECT tag, COUNT(DISTINCT source) AS count
+         FROM tags GROUP BY tag COLLATE NOCASE
+         ORDER BY count DESC, tag ASC`,
+      ),
+      notesByTag: this.db.prepare(
+        `SELECT DISTINCT source FROM tags WHERE tag = ? COLLATE NOCASE`,
+      ),
+    };
+  }
+
+  private invalidateGraphCache(): void {
+    this.nameToPathCache = null;
+    this.knownNameCache = null;
   }
 
   private loadExistingPropIndexes(): void {
@@ -397,7 +460,7 @@ export class NoteIndex {
   }
 
   private count(table: "notes" | "links"): number {
-    const row = this.db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as {
+    const row = this.stmts[table === "notes" ? "countNotes" : "countLinks"].get() as {
       n: number;
     };
     return row.n;
@@ -420,63 +483,73 @@ export class NoteIndex {
     }
 
     const tx = this.db.transaction(() => {
-      this.db
-        .prepare(
-          `INSERT INTO notes(path,title,props,body,mtime,updated_at)
-           VALUES(@path,@title,@props,@body,@mtime,@now)
-           ON CONFLICT(path) DO UPDATE SET
-             title=@title, props=@props, body=@body, mtime=@mtime, updated_at=@now`,
-        )
-        .run({ path: relPath, title, props: propsJson, body, mtime, now });
+      this.stmts.upsertNote.run({
+        path: relPath,
+        title,
+        props: propsJson,
+        body,
+        mtime,
+        now,
+      });
 
-      this.db.prepare(`DELETE FROM notes_fts WHERE path = ?`).run(relPath);
-      this.db
-        .prepare(`INSERT INTO notes_fts(path,title,body) VALUES(?,?,?)`)
-        .run(relPath, title, body);
+      this.stmts.deleteFts.run(relPath);
+      this.stmts.insertFts.run(relPath, title, body);
 
-      this.db.prepare(`DELETE FROM links WHERE source = ?`).run(relPath);
-      const insLink = this.db.prepare(
-        `INSERT INTO links(source,target_norm,type) VALUES(?,?,?)`,
-      );
+      this.stmts.deleteLinksForSource.run(relPath);
       for (const link of typedLinks)
-        insLink.run(relPath, link.target_norm, link.type);
+        this.stmts.insertLink.run(relPath, link.target_norm, link.type);
 
       // Tags: frontmatter `tags` (array or string) + inline `#tag`s in the body.
-      this.db.prepare(`DELETE FROM tags WHERE source = ?`).run(relPath);
+      this.stmts.deleteTagsForSource.run(relPath);
       const fmTags = frontmatterTags(props);
       const inlineTags = extractInlineTags(body);
       const tags = new Set(
         [...fmTags, ...inlineTags].map(normalizeTag).filter(Boolean),
       );
-      const insTag = this.db.prepare(
-        `INSERT INTO tags(source,tag) VALUES(?,?)`,
-      );
-      for (const tag of tags) insTag.run(relPath, tag);
+      for (const tag of tags) this.stmts.insertTag.run(relPath, tag);
     });
     tx();
+    this.invalidateGraphCache();
   }
 
   private remove(relPath: string): void {
     const tx = this.db.transaction(() => {
-      this.db.prepare(`DELETE FROM notes WHERE path = ?`).run(relPath);
-      this.db.prepare(`DELETE FROM notes_fts WHERE path = ?`).run(relPath);
-      this.db.prepare(`DELETE FROM links WHERE source = ?`).run(relPath);
-      this.db.prepare(`DELETE FROM tags WHERE source = ?`).run(relPath);
+      this.stmts.deleteNote.run(relPath);
+      this.stmts.deleteFts.run(relPath);
+      this.stmts.deleteLinksForSource.run(relPath);
+      this.stmts.deleteTagsForSource.run(relPath);
     });
     tx();
+    this.invalidateGraphCache();
   }
 
-  private async indexAbsolute(absPath: string): Promise<void> {
-    if (!isNoteFile(absPath)) return;
+  private async indexAbsolute(
+    absPath: string,
+    opts: { skipUnchanged?: boolean; logFailures?: boolean } = {},
+  ): Promise<boolean> {
+    if (!isNoteFile(absPath)) return false;
     const relPath = relative(this.root, absPath).split(sep).join("/");
-    if (isHidden(relPath)) return;
+    if (isHidden(relPath)) return false;
     try {
-      const raw = await readFile(absPath, "utf-8");
       const info = await stat(absPath);
+      if (opts.skipUnchanged && this.indexedMtimes.get(absPath) === info.mtimeMs) {
+        return false;
+      }
+      const raw = await readFile(absPath, "utf-8");
       this.upsert(relPath, raw, info.mtimeMs);
-    } catch {
+      this.indexedMtimes.set(absPath, info.mtimeMs);
+      return true;
+    } catch (err) {
+      if (opts.logFailures) {
+        log.warn("note-index.upsert", {
+          path: relPath,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
       // File vanished between event and read — drop it from the index.
       this.remove(relPath);
+      this.indexedMtimes.delete(absPath);
+      return true;
     }
   }
 
@@ -485,6 +558,8 @@ export class NoteIndex {
     this.db.exec(
       `DELETE FROM notes; DELETE FROM notes_fts; DELETE FROM links; DELETE FROM tags;`,
     );
+    this.indexedMtimes.clear();
+    this.invalidateGraphCache();
     for (const absPath of await this.walk(this.root)) {
       await this.indexAbsolute(absPath);
     }
@@ -544,12 +619,36 @@ export class NoteIndex {
   }
 
   private recordForPath(relPath: string): NoteRecord | null {
-    const row = this.db
-      .prepare(`SELECT path,title,props,mtime FROM notes WHERE path = ?`)
-      .get(relPath) as
+    const row = this.stmts.selectRecordByPath.get(relPath) as
       | { path: string; title: string; props: string; mtime: number }
       | undefined;
     return row ? this.rowToRecord(row) : null;
+  }
+
+  private getNameToPath(): Map<string, string> {
+    if (this.nameToPathCache) return this.nameToPathCache;
+    const notes = (
+      this.stmts.selectAllNoteMetadata.all() as Array<{
+        path: string;
+        title: string;
+        props: string;
+        mtime: number;
+      }>
+    ).map((row) => this.rowToRecord(row));
+    const nameToPath = new Map<string, string>();
+    for (const note of notes) {
+      for (const name of this.linkTargetNames(note)) {
+        if (!nameToPath.has(name)) nameToPath.set(name, note.path);
+      }
+    }
+    this.nameToPathCache = nameToPath;
+    return nameToPath;
+  }
+
+  private getKnownNames(): Set<string> {
+    if (this.knownNameCache) return this.knownNameCache;
+    this.knownNameCache = new Set(this.getNameToPath().keys());
+    return this.knownNameCache;
   }
 
   /** Ensure an expression index over a frontmatter property exists (lazy). */
@@ -683,27 +782,12 @@ export class NoteIndex {
    *  view). Only edges whose target resolves to an indexed note are returned;
    *  self-links and duplicate edges are dropped. */
   links(): Array<{ source: string; target: string; type: string }> {
-    const notes = (
-      this.db
-        .prepare(`SELECT path,title,props,mtime FROM notes`)
-        .all() as Array<{
-        path: string;
-        title: string;
-        props: string;
-        mtime: number;
-      }>
-    ).map((row) => this.rowToRecord(row));
-    // Map each note's candidate names → its relPath so a normalized link target
-    // resolves to a concrete note (first note to claim a name wins).
-    const nameToPath = new Map<string, string>();
-    for (const note of notes) {
-      for (const name of this.linkTargetNames(note)) {
-        if (!nameToPath.has(name)) nameToPath.set(name, note.path);
-      }
-    }
-    const rows = this.db
-      .prepare(`SELECT source, target_norm, type FROM links`)
-      .all() as Array<{ source: string; target_norm: string; type: string }>;
+    const nameToPath = this.getNameToPath();
+    const rows = this.stmts.selectAllLinks.all() as Array<{
+      source: string;
+      target_norm: string;
+      type: string;
+    }>;
     const edges: Array<{ source: string; target: string; type: string }> = [];
     const seen = new Set<string>();
     for (const { source, target_norm, type } of rows) {
@@ -720,23 +804,12 @@ export class NoteIndex {
   /** Raw [[wikilink]]s whose target does NOT resolve to an indexed note
    *  (broken links — the inverse of links(), for lint). Deduped per edge. */
   unresolvedLinks(): Array<{ source: string; target: string; type: string }> {
-    const notes = (
-      this.db
-        .prepare(`SELECT path,title,props,mtime FROM notes`)
-        .all() as Array<{
-        path: string;
-        title: string;
-        props: string;
-        mtime: number;
-      }>
-    ).map((row) => this.rowToRecord(row));
-    const known = new Set<string>();
-    for (const note of notes) {
-      for (const name of this.linkTargetNames(note)) known.add(name);
-    }
-    const rows = this.db
-      .prepare(`SELECT source, target_norm, type FROM links`)
-      .all() as Array<{ source: string; target_norm: string; type: string }>;
+    const known = this.getKnownNames();
+    const rows = this.stmts.selectAllLinks.all() as Array<{
+      source: string;
+      target_norm: string;
+      type: string;
+    }>;
     const out: Array<{ source: string; target: string; type: string }> = [];
     const seen = new Set<string>();
     for (const { source, target_norm, type } of rows) {
@@ -755,7 +828,7 @@ export class NoteIndex {
    *  (index / log / WIKI): catalog/log/schema artifacts are intentionally
    *  link-free and would otherwise show as permanent orphan noise. */
   orphans(): string[] {
-    const notes = this.db.prepare(`SELECT path FROM notes`).all() as Array<{
+    const notes = this.stmts.selectAllNotePaths.all() as Array<{
       path: string;
     }>;
     const connected = new Set<string>();
@@ -787,11 +860,9 @@ export class NoteIndex {
     let stale: string[] = [];
     if (staleBeforeMs && staleBeforeMs > 0) {
       // Root-level pages only (exclude rows / captures), like orphans().
-      const rows = this.db
-        .prepare(
-          `SELECT path FROM notes WHERE mtime > 0 AND mtime < ? AND instr(path,'/') = 0 ORDER BY mtime ASC`,
-        )
-        .all(staleBeforeMs) as Array<{ path: string }>;
+      const rows = this.stmts.staleNotes.all(staleBeforeMs) as Array<{
+        path: string;
+      }>;
       stale = rows.map((r) => r.path);
     }
     return { orphans, brokenLinks, stale };
@@ -799,45 +870,34 @@ export class NoteIndex {
 
   /** All tags with their note counts, most-used first (for tag clouds/filters). */
   allTags(): Array<{ tag: string; count: number }> {
-    return this.db
-      .prepare(
-        `SELECT tag, COUNT(DISTINCT source) AS count
-         FROM tags GROUP BY tag COLLATE NOCASE
-         ORDER BY count DESC, tag ASC`,
-      )
-      .all() as Array<{ tag: string; count: number }>;
+    return this.stmts.allTags.all() as Array<{ tag: string; count: number }>;
   }
 
   /** Relpaths of notes carrying the given tag (case-insensitive). */
   notesByTag(tag: string): string[] {
     const clean = normalizeTag(tag);
     if (!clean) return [];
-    const rows = this.db
-      .prepare(`SELECT DISTINCT source FROM tags WHERE tag = ? COLLATE NOCASE`)
-      .all(clean) as Array<{ source: string }>;
+    const rows = this.stmts.notesByTag.all(clean) as Array<{ source: string }>;
     return rows.map((r) => r.source);
   }
 
   unlinkedMentions(relPath: string): UnlinkedMentionHit[] {
-    const rows = this.db
-      .prepare(`SELECT path,title,props,body,mtime FROM notes`)
-      .all() as Array<{
+    const target = this.recordForPath(relPath);
+    if (!target) return [];
+    const phrases = mentionPhrases(target);
+    if (phrases.length === 0) return [];
+    const rows = this.stmts.selectOtherNoteBodies.all(relPath) as Array<{
       path: string;
-      title: string;
-      props: string;
       body: string;
-      mtime: number;
     }>;
-    const notes = rows.map((row) => this.rowToRecord(row));
-    if (!notes.some((note) => note.path === relPath)) return [];
     const hits: UnlinkedMentionHit[] = [];
     for (const row of rows) {
-      if (row.path === relPath) continue;
-      hits.push(
-        ...findUnlinkedMentionTargets(row.body, notes, row.path).filter(
-          (hit) => hit.target === relPath,
-        ),
-      );
+      const searchable = maskExplicitWikilinks(row.body);
+      for (const phrase of phrases) {
+        if (!phraseRegex(phrase).test(searchable)) continue;
+        hits.push({ source: row.path, target: relPath, phrase });
+        break;
+      }
     }
     return hits.sort(
       (a, b) =>
@@ -861,25 +921,57 @@ export class NoteIndex {
     this.watcher = chokidar.watch(this.root, {
       ignoreInitial: true,
       ignored: (path) => path.split(sep).some((p) => p.startsWith(".")),
+      awaitWriteFinish: { stabilityThreshold: 500, pollInterval: 100 },
     });
-    const onUpsert = (abs: string): void => {
-      this.indexAbsolute(abs)
-        .then(() => {
-          semanticManager.triggerIndex(this.root);
-        })
-        .catch(() => {});
-    };
-    const onUnlink = (abs: string): void => {
+    this.watcher.on("add", (abs) => this.queueWatcherEvent(abs, "upsert"));
+    this.watcher.on("change", (abs) => this.queueWatcherEvent(abs, "upsert"));
+    this.watcher.on("unlink", (abs) => this.queueWatcherEvent(abs, "unlink"));
+  }
+
+  private queueWatcherEvent(abs: string, kind: "upsert" | "unlink"): void {
+    this.watcherPending.set(abs, kind);
+    if (this.watcherDrainTimer) clearTimeout(this.watcherDrainTimer);
+    this.watcherDrainTimer = setTimeout(() => {
+      this.watcherDrainTimer = null;
+      void this.drainWatcherEvents();
+    }, 250);
+  }
+
+  private async drainWatcherEvents(): Promise<void> {
+    const pending = Array.from(this.watcherPending.entries());
+    this.watcherPending.clear();
+    let changed = false;
+    for (const [abs, kind] of pending) {
       const relPath = relative(this.root, abs).split(sep).join("/");
-      this.remove(relPath);
-      semanticManager.triggerIndex(this.root);
-    };
-    this.watcher.on("add", onUpsert);
-    this.watcher.on("change", onUpsert);
-    this.watcher.on("unlink", onUnlink);
+      try {
+        if (kind === "unlink") {
+          this.remove(relPath);
+          this.indexedMtimes.delete(abs);
+          changed = true;
+          continue;
+        }
+        const didChange = await this.indexAbsolute(abs, {
+          skipUnchanged: true,
+          logFailures: true,
+        });
+        changed = changed || didChange;
+      } catch (err) {
+        log.warn("note-index.watcher", {
+          path: relPath,
+          event: kind,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+    if (changed) semanticManager.triggerIndex(this.root);
   }
 
   async close(): Promise<void> {
+    if (this.watcherDrainTimer) {
+      clearTimeout(this.watcherDrainTimer);
+      this.watcherDrainTimer = null;
+    }
+    this.watcherPending.clear();
     if (this.watcher) {
       await this.watcher.close();
       this.watcher = null;

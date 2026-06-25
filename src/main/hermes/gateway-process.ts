@@ -85,20 +85,26 @@ export function setApiServerAvailable(val: boolean | null): void {
 
 export async function isApiServerReady(profile?: string): Promise<boolean> {
   const url = `${getApiUrl(profile)}/health`;
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 1500);
+    timeoutId = setTimeout(() => controller.abort(), 1500);
 
     const res = await fetch(url, {
       method: "GET",
       headers: getRemoteAuthHeader(),
       signal: controller.signal,
     });
-    clearTimeout(timeoutId);
 
     return res.status === 200;
-  } catch {
+  } catch (err) {
+    log.warn("gateway.ready", {
+      url,
+      error: err instanceof Error ? err.message : String(err),
+    });
     return false;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
   }
 }
 

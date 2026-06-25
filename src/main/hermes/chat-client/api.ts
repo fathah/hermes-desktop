@@ -32,6 +32,12 @@ import {
   type ChatContent,
   type ChatHandle,
 } from "./messages";
+import {
+  REQUEST_TIMEOUT_MS,
+  STREAM_NO_CONTENT_DEADLINE_MS,
+  requestTimeoutForAttempt,
+  retryDelayWithinDeadline,
+} from "./deadline";
 
 export function respondRunApproval(
   runId: string,
@@ -98,6 +104,7 @@ export function sendMessageViaApi(
   let hasContent = false;
   let lastError = "";
   let sessionId = _resumeSessionId || "";
+  const noContentDeadlineAt = Date.now() + STREAM_NO_CONTENT_DEADLINE_MS;
 
   const messages: Array<{ role: string; content: ChatContent }> = [];
   if (history && history.length > 0) {
@@ -213,6 +220,16 @@ export function sendMessageViaApi(
     }
 
     function probeRealError(): void {
+      const probeTimeoutMs = hasContent
+        ? REQUEST_TIMEOUT_MS
+        : requestTimeoutForAttempt(noContentDeadlineAt);
+      if (!hasContent && probeTimeoutMs <= 0) {
+        handleRequestError(
+          "No response received from the model before the retry deadline.",
+          408,
+        );
+        return;
+      }
       const probeBody = JSON.stringify({
         model: effectiveModel || "hermes-agent",
         messages: [{ role: "user", content: userContent }],
@@ -227,7 +244,7 @@ export function sendMessageViaApi(
       const probeMod = probeUrl.startsWith("https") ? https : http;
       const probeReq = probeMod.request(
         probeUrl,
-        { method: "POST", headers: probeHeaders },
+        { method: "POST", headers: probeHeaders, timeout: probeTimeoutMs },
         (res) => {
           let raw = "";
           res.on("data", (d) => {
@@ -257,7 +274,7 @@ export function sendMessageViaApi(
           500,
         );
       });
-      probeReq.setTimeout(120000);
+      probeReq.setTimeout(probeTimeoutMs);
       probeReq.on("timeout", () => {
         probeReq.destroy();
         handleRequestError(
@@ -274,6 +291,11 @@ export function sendMessageViaApi(
       console.log("[hermes] Error Doctor classification:", classification);
 
       if (classification.retryable && retryBudget > 0 && !hasContent) {
+        if (requestTimeoutForAttempt(noContentDeadlineAt) <= 0) {
+          finish(errorText);
+          return;
+        }
+
         if (classification.shouldCompress) {
           console.log("[hermes] Memory overflow detected. Compacting budget.");
           executeRequest(retryBudget - 1, 20000);
@@ -305,10 +327,20 @@ export function sendMessageViaApi(
         }
 
         const delay = classification.cooldownMs || 2000;
-        console.log(`[hermes] Retrying request after delay of ${delay}ms...`);
+        const boundedDelay = retryDelayWithinDeadline(
+          delay,
+          noContentDeadlineAt,
+        );
+        if (boundedDelay == null) {
+          finish(errorText);
+          return;
+        }
+        console.log(
+          `[hermes] Retrying request after delay of ${boundedDelay}ms...`,
+        );
         setTimeout(() => {
           executeRequest(retryBudget - 1, customBudgetChars);
-        }, delay);
+        }, boundedDelay);
         return;
       }
 
@@ -321,6 +353,13 @@ export function sendMessageViaApi(
 
     const url = `${getApiUrl(profile)}/v1/chat/completions`;
     const requester = url.startsWith("https") ? https : http;
+    const requestTimeoutMs = hasContent
+      ? REQUEST_TIMEOUT_MS
+      : requestTimeoutForAttempt(noContentDeadlineAt);
+    if (!hasContent && requestTimeoutMs <= 0) {
+      finish("No response received from the model before the retry deadline.");
+      return;
+    }
 
     const sseCb = { ...cb, onDone: undefined };
 
@@ -382,7 +421,7 @@ export function sendMessageViaApi(
         method: "POST",
         headers,
         signal: controller.signal,
-        timeout: 120000,
+        timeout: requestTimeoutMs,
       },
       (res) => {
         const sid = res.headers["x-hermes-session-id"];
@@ -417,7 +456,7 @@ export function sendMessageViaApi(
 
     activeRequest = req;
 
-    req.setTimeout(120000);
+    req.setTimeout(requestTimeoutMs);
 
     req.on("error", (err) => {
       if (err.name === "AbortError") return;

@@ -13,6 +13,7 @@ import { AttachmentChip } from "../../components/AttachmentChip";
 import { MediaSegmentView } from "../../components/MediaImage";
 import { useI18n } from "../../components/useI18n";
 import { parseMediaTokens } from "./mediaUtils";
+import { StreamingText } from "./StreamingText";
 import type { Attachment, ChatBubbleMessage, ChatMessage } from "./types";
 
 function ModelBadge({
@@ -104,6 +105,8 @@ interface MessageRowProps {
   ttsBusy?: boolean;
   /** Toggle speaking this message's reply. */
   onSpeak?: () => void;
+  /** Render active agent output as plain text until the final markdown pass. */
+  streaming?: boolean;
 }
 
 export const MessageRow = memo(function MessageRow({
@@ -117,6 +120,7 @@ export const MessageRow = memo(function MessageRow({
   ttsSpeaking = false,
   ttsBusy = false,
   onSpeak,
+  streaming = false,
 }: MessageRowProps): React.JSX.Element {
   const { t } = useI18n();
   const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(
@@ -133,12 +137,13 @@ export const MessageRow = memo(function MessageRow({
   const bubbleContent = isChatBubbleMessage(msg)
     ? (msg as ChatBubbleMessage).content
     : null;
+  const shouldStreamPlainText = streaming && msg.role === "agent";
   const segments = useMemo(
     () =>
-      msg.role === "agent" && bubbleContent
+      msg.role === "agent" && bubbleContent && !shouldStreamPlainText
         ? parseMediaTokens(bubbleContent)
         : null,
-    [msg.role, bubbleContent],
+    [msg.role, bubbleContent, shouldStreamPlainText],
   );
 
   // Only chat bubble messages have content/attachments
@@ -192,7 +197,9 @@ export const MessageRow = memo(function MessageRow({
           </div>
         )}
         {msg.content &&
-          (msg.role === "agent" && segments
+          (shouldStreamPlainText ? (
+            <StreamingText>{msg.content}</StreamingText>
+          ) : msg.role === "agent" && segments
             ? segments.map((segment) =>
                 segment.type === "text" ? (
                   segment.value.trim() ? (
