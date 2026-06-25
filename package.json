@@ -14,6 +14,7 @@
     "verify:firstrun-seed": "node scripts/verify-firstrun-seed.mjs",
     "smoke:diagrams": "node scripts/diagram-smoke.mjs",
     "smoke:live-research": "node scripts/sps-research-smoke.mjs",
+    "smoke:signal-briefs": "node scripts/signal-briefs-dogfood.mjs",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
