@@ -1,8 +1,22 @@
+import { EventEmitter } from "events";
 import { execFileSync } from "child_process";
 import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const { mockSpawn } = vi.hoisted(() => ({
+  mockSpawn: vi.fn(),
+}));
+
+vi.mock("child_process", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("child_process")>();
+  return {
+    ...actual,
+    spawn: mockSpawn,
+    default: { ...actual, spawn: mockSpawn },
+  };
+});
 
 vi.mock("../src/main/locale", () => ({
   getAppLocale: () => "en",
@@ -15,6 +29,7 @@ import {
   buildGatewayStopCommand,
   buildGatewayStatusCommand,
   parseHermesProfileListOutput,
+  sshDiscoverMemoryProviders,
 } from "../src/main/ssh-remote";
 import type { SshConfig } from "../src/main/ssh-tunnel";
 
@@ -31,6 +46,42 @@ const sshConfig: SshConfig = {
   remotePort: 8642,
   localPort: 18642,
 };
+
+function makeSshProcess(
+  stdoutText: string,
+  onStdin?: (input?: string) => void,
+): EventEmitter & {
+  stdout: EventEmitter & { setEncoding: (encoding: string) => void };
+  stderr: EventEmitter & { setEncoding: (encoding: string) => void };
+  stdin: { end: (input?: string) => void };
+  kill: (signal?: string) => void;
+} {
+  const proc = new EventEmitter() as EventEmitter & {
+    stdout: EventEmitter & { setEncoding: (encoding: string) => void };
+    stderr: EventEmitter & { setEncoding: (encoding: string) => void };
+    stdin: { end: (input?: string) => void };
+    kill: (signal?: string) => void;
+  };
+  proc.stdout = new EventEmitter() as EventEmitter & {
+    setEncoding: (encoding: string) => void;
+  };
+  proc.stderr = new EventEmitter() as EventEmitter & {
+    setEncoding: (encoding: string) => void;
+  };
+  proc.stdout.setEncoding = vi.fn();
+  proc.stderr.setEncoding = vi.fn();
+  proc.kill = vi.fn();
+  proc.stdin = {
+    end: (input?: string) => {
+      onStdin?.(input);
+      queueMicrotask(() => {
+        if (stdoutText) proc.stdout.emit("data", stdoutText);
+        proc.emit("close", 0);
+      });
+    },
+  };
+  return proc;
+}
 
 function runWithHermesShim(command: string): Buffer {
   const home = mkdtempSync(join(tmpdir(), "hermes-ssh-cmd-home-"));
@@ -65,6 +116,10 @@ function parseNulArgs(output: Buffer): string[] {
   return parts;
 }
 
+beforeEach(() => {
+  mockSpawn.mockReset();
+});
+
 describe("ssh remote config writes", () => {
   it.each([
     ["quote", 'bad"value'],
@@ -79,6 +134,46 @@ describe("ssh remote config writes", () => {
       ).rejects.toThrow("Config value contains illegal characters");
     },
   );
+});
+
+describe("ssh memory provider discovery", () => {
+  it("discovers recall-sqlite metadata and active state over SSH", async () => {
+    const discoveredProviders = [
+      {
+        name: "recall-sqlite",
+        description: "memory.providers.recall-sqlite",
+        envVars: [],
+        installed: true,
+        active: true,
+      },
+    ];
+    let discoveryScript = "";
+
+    mockSpawn.mockImplementation((_cmd: string, args: string[]) => {
+      const remoteCommand = args.at(-1) || "";
+      if (remoteCommand === "python3 -") {
+        return makeSshProcess(
+          `${JSON.stringify(discoveredProviders)}\n`,
+          (input) => {
+            discoveryScript = String(input || "");
+          },
+        );
+      }
+      return makeSshProcess("memory:\n  provider: recall-sqlite\n");
+    });
+
+    const providers = await sshDiscoverMemoryProviders(sshConfig);
+
+    expect(providers).toContainEqual({
+      name: "recall-sqlite",
+      description: "memory.providers.recall-sqlite",
+      installed: true,
+      active: true,
+      envVars: [],
+    });
+    expect(discoveryScript).toContain('"recall-sqlite"');
+    expect(discoveryScript).toContain("memory.providers.recall-sqlite");
+  });
 });
 
 describe("ssh Hermes command quoting", () => {
