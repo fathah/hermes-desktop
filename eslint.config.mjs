@@ -21,10 +21,10 @@ export default defineConfig(
       // fetched into public/ at build time by scripts/fetch-ocr-assets.mjs and
       // git-ignored. Third-party minified artifacts — not our source to lint.
       "src/renderer/public/tesseract/**",
-      // Standalone SPS Agent app + its design reference: separate sub-projects
-      // with their own tooling. The integrated copy under
+      // Archived standalone SPS Agent reference app: separate sub-project
+      // with its own tooling. The integrated copy under
       // src/renderer/src/screens/SpsAgent IS linted.
-      "sps-agent/**",
+      "archive/sps-agent-standalone/**",
       // CDP E2E harness — plain Node CommonJS scripts driving the
       // dev electron via Chrome DevTools Protocol for live testing.
       // They intentionally use require() because they run as one-off

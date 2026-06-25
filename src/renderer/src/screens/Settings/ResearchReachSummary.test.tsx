@@ -57,9 +57,11 @@ describe("ResearchReachSummary", () => {
     render(<ResearchReachSummary active={true} />);
 
     expect(await screen.findByText("Research Reach")).toBeInTheDocument();
-    expect(screen.getByText("GitHub")).toBeInTheDocument();
-    expect(screen.getByText("Reddit")).toBeInTheDocument();
-    expect(screen.getByText("1 ready / 1 needs setup")).toBeInTheDocument();
+    expect(await screen.findByText("GitHub")).toBeInTheDocument();
+    expect(await screen.findByText("Reddit")).toBeInTheDocument();
+    expect(
+      await screen.findByText("1 ready / 1 needs setup"),
+    ).toBeInTheDocument();
   });
 
   it("shows install instructions without running install", async () => {
@@ -77,7 +79,9 @@ describe("ResearchReachSummary", () => {
     render(<ResearchReachSummary active={true} />);
     fireEvent.click(await screen.findByRole("button", { name: /show setup/i }));
 
-    expect(await screen.findByText("pipx install agent-reach")).toBeInTheDocument();
+    expect(
+      await screen.findByText("pipx install agent-reach"),
+    ).toBeInTheDocument();
     expect(api.runResearchReachSafeInstall).not.toHaveBeenCalled();
   });
 

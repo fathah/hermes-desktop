@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { resources, t } from "./index";
+import { APP_LOCALES, resources, setLocale, t, type AppLocale } from "./index";
 
 describe("shared i18n", () => {
+  it("exposes English as the only runtime locale", () => {
+    expect(APP_LOCALES).toEqual(["en"]);
+    expect(Object.keys(resources)).toEqual(["en"]);
+  });
+
   it("returns English text by default", () => {
     expect(t("welcome.title")).toBe("Welcome to SPS");
   });
@@ -21,56 +26,20 @@ describe("shared i18n", () => {
     expect(t("settings.debugDump")).toBe("Create Debug Report");
   });
 
-  it("returns zh-CN text when available", () => {
-    expect(t("welcome.title", "zh-CN")).toBe("欢迎使用 Hermes");
+  it("normalizes stale non-English runtime locale values to English", () => {
+    expect(setLocale("es" as unknown as AppLocale)).toBe("en");
+    expect(t("welcome.title")).toBe("Welcome to SPS");
   });
 
-  it("returns zh-TW text when available", () => {
-    expect(t("welcome.title", "zh-TW")).toBe("歡迎使用 Hermes");
-  });
-
-  it("returns es text when available", () => {
-    expect(t("welcome.title", "es")).toBe("Bienvenido a Hermes");
-  });
-
-  it("returns id text when available", () => {
-    expect(t("welcome.title", "id")).toBe("Selamat datang di Hermes");
-  });
-
-  it("returns pl text when available", () => {
-    expect(t("welcome.title", "pl")).toBe("Witamy w Hermes");
-  });
-
-  it("falls back to en when zh-CN key is missing", () => {
-    expect(t("nonExistent.fallbackKey", "zh-CN")).toBe(
-      "nonExistent.fallbackKey",
+  it("preserves interpolation placeholders in English", () => {
+    expect(t("common.updateAvailable", "en", { version: "1.2.3" })).toBe(
+      "Update v1.2.3",
     );
   });
 
-  it("preserves interpolation placeholders in es", () => {
-    expect(t("common.updateAvailable", "es", { version: "1.2.3" })).toBe(
-      "Actualizar a v1.2.3",
-    );
-  });
-
-  it("preserves interpolation placeholders in pl", () => {
-    expect(t("common.updateAvailable", "pl", { version: "1.2.3" })).toBe(
-      "Aktualizacja v1.2.3",
-    );
-  });
-
-  it("has recall-sqlite memory provider copy in every locale", () => {
+  it("keeps recall-sqlite memory provider copy in the English registry", () => {
     expect(t("memory.providers.recall-sqlite")).toBe(
       "Local SQLite recall store with FTS search and no API key required.",
     );
-
-    for (const [locale, resource] of Object.entries(resources)) {
-      const memory = resource.translation.memory as {
-        providers?: Record<string, string>;
-      };
-      expect(memory.providers?.["recall-sqlite"], locale).toEqual(
-        expect.any(String),
-      );
-    }
   });
 });

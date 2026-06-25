@@ -25,10 +25,6 @@ import {
   buildTeachCapturePrompt,
   type TeachCapturePromptInput,
 } from "../shared/teach-capture";
-import dns from "node:dns";
-import net from "node:net";
-import { Agent, fetch as undiciFetch } from "undici";
-import ipaddr from "ipaddr.js";
 import {
   getApiUrl,
   getRemoteAuthHeader,
@@ -62,86 +58,7 @@ import {
 } from "./sps-ingest";
 import { getSpsNoteIndex } from "./note-index";
 import { createLearningProposal } from "./learning-proposals";
-
-// ───────────────────────── SSRF guard ─────────────────────────
-const BLOCKED_RANGES = new Set([
-  "unspecified",
-  "loopback",
-  "linkLocal",
-  "uniqueLocal",
-  "private",
-  "reserved",
-  "broadcast",
-  "carrierGradeNat",
-]);
-
-function ipIsBlocked(addr: string): boolean {
-  let ip: ipaddr.IPv4 | ipaddr.IPv6;
-  try {
-    ip = ipaddr.parse(addr);
-  } catch {
-    return true;
-  }
-  if (ip.kind() === "ipv6") {
-    const v6 = ip as ipaddr.IPv6;
-    if (v6.isIPv4MappedAddress()) ip = v6.toIPv4Address();
-  }
-  return BLOCKED_RANGES.has(ip.range());
-}
-
-/**
- * undici connect `lookup`: resolve the hostname, reject if ANY resolved address
- * is non-public, and PIN the connection to the validated address. Because undici
- * re-invokes this for every connection — including each redirect hop — a public
- * URL cannot 302 into an internal address, and there is no second unguarded DNS
- * resolution for a rebinding attacker to win.
- */
-function guardedLookup(
-  hostname: string,
-  _options: dns.LookupOptions,
-  callback: (
-    err: NodeJS.ErrnoException | null,
-    address: string | dns.LookupAddress[],
-    family?: number,
-  ) => void,
-): void {
-  const host = hostname
-    .toLowerCase()
-    .replace(/\.$/, "")
-    .replace(/^\[|\]$/g, "");
-  const pin = (addr: string): void => {
-    const family = net.isIP(addr);
-    if (!family || ipIsBlocked(addr)) {
-      callback(new Error("blocked host"), "", 0);
-      return;
-    }
-    callback(null, addr, family);
-  };
-  if (net.isIP(host)) {
-    pin(host);
-    return;
-  }
-  dns.lookup(host, { all: true }, (err, addresses) => {
-    if (err) {
-      callback(err, "", 0);
-      return;
-    }
-    if (!addresses.length) {
-      callback(new Error("unresolved host"), "", 0);
-      return;
-    }
-    if (addresses.some((a) => ipIsBlocked(a.address))) {
-      callback(new Error("blocked host"), "", 0);
-      return;
-    }
-    pin(addresses[0].address);
-  });
-}
-
-// Exported so other main-process fetchers (e.g. src/main/openalex.ts) reuse the
-// SAME IP-pinning dispatcher instead of cloning the SSRF guard — keeps the
-// load-bearing audit surface single-sourced (see CLAUDE.md).
-export const guardedAgent = new Agent({ connect: { lookup: guardedLookup } });
+import { safeFetch } from "./security/ssrf-guard";
 
 // ───────────────────────── unfurl ─────────────────────────
 interface BookmarkMeta {
@@ -185,8 +102,7 @@ export async function spsUnfurl(raw: string): Promise<BookmarkMeta> {
   }
   if (!/^https?:$/.test(target.protocol)) throw new Error("blocked scheme");
 
-  const res = await undiciFetch(target.href, {
-    dispatcher: guardedAgent, // every hop validated + IP-pinned
+  const res = await safeFetch(target.href, {
     redirect: "follow",
     signal: AbortSignal.timeout(6000),
     headers: { "User-Agent": "SPSAgentBot/1.0 (+link-preview)" },

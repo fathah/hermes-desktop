@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync, readdirSync } from "fs";
+import { readFileSync, readdirSync, statSync } from "fs";
 import { join } from "path";
 
 const ROOT = join(__dirname, "..");
@@ -36,13 +36,19 @@ function getIpcSources(): string[] {
   sources.push(readFileSync(join(ROOT, "src/main/index.ts"), "utf-8"));
 
   const ipcDir = join(ROOT, "src/main/ipc");
-  try {
-    const files = readdirSync(ipcDir);
-    for (const file of files) {
-      if (file.endsWith(".ts")) {
-        sources.push(readFileSync(join(ipcDir, file), "utf-8"));
+  function readTsFiles(dir: string): void {
+    for (const entry of readdirSync(dir)) {
+      const fullPath = join(dir, entry);
+      if (statSync(fullPath).isDirectory()) {
+        readTsFiles(fullPath);
+      } else if (entry.endsWith(".ts")) {
+        sources.push(readFileSync(fullPath, "utf-8"));
       }
     }
+  }
+
+  try {
+    readTsFiles(ipcDir);
   } catch (err) {
     console.warn("Failed to read src/main/ipc directory:", err);
   }

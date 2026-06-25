@@ -15,8 +15,7 @@ import {
 } from "fs";
 import { extname } from "path";
 import { BrowserWindow, dialog } from "electron";
-import { fetch as undiciFetch } from "undici";
-import { guardedAgent } from "./sps-agent";
+import { safeFetch } from "./security/ssrf-guard";
 
 const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
 
@@ -90,8 +89,7 @@ export async function saveMedia(
     }
 
     if (/^https?:\/\//i.test(src)) {
-      const response = await undiciFetch(src, {
-        dispatcher: guardedAgent,
+      const response = await safeFetch(src, {
         redirect: "follow",
         headers: { "User-Agent": "HermesDesktop/1.0 (+media-saver)" },
       });

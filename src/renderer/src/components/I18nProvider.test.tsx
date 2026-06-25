@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { vi } from "vitest";
 import {
   DEFAULT_ACTIVE_LOCALE,
@@ -11,17 +11,6 @@ import { useI18n } from "./useI18n";
 function Probe(): React.JSX.Element {
   const { t } = useI18n();
   return <div>{t("welcome.title")}</div>;
-}
-
-function LocaleSwitcherProbe(): React.JSX.Element {
-  const { t, setLocale } = useI18n();
-
-  return (
-    <>
-      <button onClick={() => setLocale("es")}>Switch to Spanish</button>
-      <div>{t("welcome.title")}</div>
-    </>
-  );
 }
 
 function installHermesAPI(
@@ -69,21 +58,19 @@ describe("I18nProvider", () => {
     expect(await screen.findByText("Welcome to SPS")).toBeInTheDocument();
   });
 
-  it("renders Spanish translations after switching locale", async () => {
-    render(
-      <I18nProvider>
-        <LocaleSwitcherProbe />
-      </I18nProvider>,
-    );
+  it("falls back to English when localStorage contains a stale locale", async () => {
+    localStorage.setItem("hermes-locale", "es");
 
     await act(async () => {
-      fireEvent.click(
-        screen.getByRole("button", { name: "Switch to Spanish" }),
+      render(
+        <I18nProvider>
+          <Probe />
+        </I18nProvider>,
       );
     });
 
-    expect(setLocale).toHaveBeenLastCalledWith("es");
-    expect(await screen.findByText("Bienvenido a Hermes")).toBeInTheDocument();
+    expect(await screen.findByText("Welcome to SPS")).toBeInTheDocument();
+    expect(setLocale).toHaveBeenLastCalledWith("en");
   });
 
   it("does not overwrite the main-process locale with the startup fallback", async () => {
@@ -105,10 +92,25 @@ describe("I18nProvider", () => {
     expect(setLocale).not.toHaveBeenCalled();
 
     await act(async () => {
-      resolveMainLocale("es");
+      resolveMainLocale("en");
     });
 
-    expect(setLocale).toHaveBeenLastCalledWith("es");
-    expect(await screen.findByText("Bienvenido a Hermes")).toBeInTheDocument();
+    expect(setLocale).toHaveBeenLastCalledWith("en");
+    expect(await screen.findByText("Welcome to SPS")).toBeInTheDocument();
+  });
+
+  it("normalizes a stale main-process locale to English", async () => {
+    getLocale.mockResolvedValue("es" as AppLocale);
+
+    await act(async () => {
+      render(
+        <I18nProvider>
+          <Probe />
+        </I18nProvider>,
+      );
+    });
+
+    expect(await screen.findByText("Welcome to SPS")).toBeInTheDocument();
+    expect(setLocale).toHaveBeenLastCalledWith("en");
   });
 });

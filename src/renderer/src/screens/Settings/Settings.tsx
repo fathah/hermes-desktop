@@ -3,20 +3,12 @@ import { useTheme } from "../../components/ThemeProvider";
 import { THEME_OPTIONS } from "../../constants";
 import { useStore as useSpsStore } from "../SpsAgent/store";
 import { useI18n } from "../../components/useI18n";
-import { APP_LOCALES, type AppLocale } from "../../../../shared/i18n";
 import {
   APP_ZOOM_DEFAULT,
   appZoomSettingsFor,
   type AppZoomSettings,
 } from "../../../../shared/app-zoom";
-import {
-  Check,
-  ChevronDown,
-  Download,
-  Upload,
-  FileText,
-  Send,
-} from "lucide-react";
+import { Check, Download, Upload, FileText, Send } from "lucide-react";
 import {
   getAnalyticsConsent,
   setAnalyticsConsent,
@@ -30,18 +22,6 @@ import type { SettingsSection } from "./settingsSections";
 import { SETTINGS_SECTION_COPY } from "./settingsSections";
 
 const TELEGRAM_COMMUNITY_URL = "https://t.me/hermes_agent_desktop";
-
-const LANGUAGE_NATIVE_NAMES: Record<AppLocale, string> = {
-  en: "English",
-  es: "Español",
-  id: "Bahasa Indonesia",
-  ja: "日本語",
-  pl: "Polski",
-  "pt-BR": "Português (BR)",
-  "pt-PT": "Português (PT)",
-  "zh-CN": "简体中文",
-  "zh-TW": "繁體中文（台灣）",
-};
 
 // Build a mask string the same width as the stored API key so the
 // "saved" state of the input looks like a key, not a constant blob.
@@ -70,7 +50,7 @@ function Settings({
   profile?: string;
   section: SettingsSection;
 }): React.JSX.Element {
-  const { t, locale, setLocale } = useI18n();
+  const { t } = useI18n();
   const sectionCopy = SETTINGS_SECTION_COPY[section];
   const [devModeOn, setDevModeOn] = useState(getDevMode());
   const containerRef = useRef<HTMLDivElement>(null);
@@ -719,9 +699,7 @@ function Settings({
 
       {/* Security Audit Section */}
       <div className="settings-section" data-section-tab="troubleshooting">
-        <div className="settings-section-title">
-          Dependency Security Scan
-        </div>
+        <div className="settings-section-title">Dependency Security Scan</div>
         <div className="settings-field">
           <div className="settings-field-hint" style={{ marginBottom: 12 }}>
             Scan local package locks and skill dependencies against the OSV.dev
@@ -1130,15 +1108,6 @@ function Settings({
             restart too.
           </div>
         </div>
-        <div className="settings-field">
-          <label className="settings-field-label">
-            {t("settings.language.label")}
-          </label>
-          <LanguageSelect locale={locale} onSelect={setLocale} />
-          <div className="settings-field-hint">
-            {t("settings.language.hint")}
-          </div>
-        </div>
       </div>
 
       <div className="settings-section" data-section-tab="dataPrivacy">
@@ -1473,73 +1442,6 @@ function Settings({
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-function LanguageSelect({
-  locale,
-  onSelect,
-}: {
-  locale: AppLocale;
-  onSelect: (l: AppLocale) => void;
-}): React.JSX.Element {
-  const [isOpen, setIsOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    function handleClickOutside(e: MouseEvent): void {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    function handleKey(e: KeyboardEvent): void {
-      if (e.key === "Escape") setIsOpen(false);
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleKey);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleKey);
-    };
-  }, [isOpen]);
-
-  return (
-    <div className="settings-language-select" ref={ref}>
-      <button
-        type="button"
-        className="settings-language-trigger"
-        onClick={() => setIsOpen((v) => !v)}
-        aria-haspopup="listbox"
-        aria-expanded={isOpen}
-      >
-        <span>{LANGUAGE_NATIVE_NAMES[locale]}</span>
-        <ChevronDown size={14} />
-      </button>
-      {isOpen && (
-        <div className="settings-language-dropdown" role="listbox">
-          {APP_LOCALES.map((l) => {
-            const active = l === locale;
-            return (
-              <button
-                key={l}
-                type="button"
-                role="option"
-                aria-selected={active}
-                className={`settings-language-option ${active ? "active" : ""}`}
-                onClick={() => {
-                  onSelect(l);
-                  setIsOpen(false);
-                }}
-              >
-                <span>{LANGUAGE_NATIVE_NAMES[l]}</span>
-                {active && <Check size={14} />}
-              </button>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }

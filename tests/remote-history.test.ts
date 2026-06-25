@@ -1,138 +1,201 @@
-import { describe, it, expect } from "vitest";
-import { readFileSync } from "fs";
-import { join } from "path";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const ROOT = join(__dirname, "..");
-const hermesSrc = readFileSync(
-  join(ROOT, "src/main/hermes/chat-client.ts"),
-  "utf-8",
-);
+const { capturedRequests, state, makeMockRequest } = vi.hoisted(() => {
+  const capturedRequests: Array<{
+    url: string;
+    options: Record<string, unknown>;
+    body: string;
+  }> = [];
+  const state = {
+    remoteMode: true,
+    apiAvailable: true as boolean | null,
+    apiReady: true,
+    localGatewayRunning: false,
+  };
 
-/**
- * Test that sendMessage passes history parameter in remote mode.
- *
- * This test verifies the fix for the bug where remote/SSH mode was dropping
- * conversation history, causing multi-turn conversations to degrade into
- * single-turn requests.
- */
+  function makeMockRequest(
+    url: string,
+    options: Record<string, unknown>,
+  ): {
+    write: (body: string | Buffer) => void;
+    end: () => void;
+    on: (event: string, cb: (...args: unknown[]) => void) => void;
+    destroy: () => void;
+    setTimeout: (timeout: number) => void;
+  } {
+    return {
+      write: (body: string | Buffer) => {
+        capturedRequests.push({
+          url,
+          options,
+          body: Buffer.isBuffer(body) ? body.toString("utf-8") : body,
+        });
+      },
+      end: () => {},
+      on: () => {},
+      destroy: () => {},
+      setTimeout: () => {},
+    };
+  }
+
+  return { capturedRequests, state, makeMockRequest };
+});
+
+vi.mock("node:http", () => ({
+  default: {
+    request: (url: string, options: Record<string, unknown>) =>
+      makeMockRequest(url, options),
+  },
+}));
+
+vi.mock("node:https", () => ({
+  default: {
+    request: (url: string, options: Record<string, unknown>) =>
+      makeMockRequest(url, options),
+  },
+}));
+
+vi.mock("../src/main/hermes/gateway-process", async (importActual) => {
+  const actual =
+    await importActual<typeof import("../src/main/hermes/gateway-process")>();
+  return {
+    ...actual,
+    getApiUrl: () => "http://test-api.example.com",
+    getRemoteAuthHeader: () =>
+      state.remoteMode ? { Authorization: "Bearer remote" } : {},
+    isRemoteMode: () => state.remoteMode,
+    isApiServerReady: () => Promise.resolve(state.apiReady),
+    waitForApiServerReady: () => Promise.resolve(state.apiReady),
+    isGatewayRunning: () => state.localGatewayRunning,
+    getApiServerAvailable: () => state.apiAvailable,
+    setApiServerAvailable: (value: boolean) => {
+      state.apiAvailable = value;
+    },
+    startHealthPolling: vi.fn(),
+    resolveProfile: (profile?: string) => profile || "default",
+  };
+});
+
+vi.mock("../src/main/config", () => ({
+  getApiServerKey: () => "local-key",
+  getModelConfig: () => ({
+    model: "test-model",
+    provider: "openai",
+    baseUrl: "",
+  }),
+  readEnv: () => ({}),
+  getConnectionConfig: () => ({
+    mode: state.remoteMode ? "remote" : "local",
+  }),
+}));
+
+vi.mock("../src/main/installer", () => ({
+  HERMES_HOME: "/tmp/hermes-test",
+  HERMES_PYTHON: "/usr/bin/python3",
+  HERMES_REPO: "/tmp/hermes-agent",
+  hermesCliArgs: () => ["/tmp/hermes-agent"],
+  getEnhancedPath: () => process.env.PATH || "",
+  getHermesVersion: () => Promise.resolve("test-version"),
+}));
+
+vi.mock("../src/main/security/shell-hooks", () => ({
+  ShellHookManager: {
+    runHook: vi.fn(async () => ({ action: "allow" })),
+  },
+}));
+
+vi.mock("../src/main/active-skills", () => ({
+  buildActiveSkillsSystemMessage: () => null,
+}));
+
+vi.mock("../src/main/tools", () => ({
+  getToolsets: () => [],
+}));
+
+vi.mock("../src/main/skills", () => ({
+  listInstalledSkills: () => [],
+}));
+
+vi.mock("../src/main/db", () => ({
+  getSharedDb: () => null,
+}));
+
+vi.mock("../src/main/models", () => ({
+  readModels: () => [],
+}));
+
+vi.mock("../src/main/process-options", () => ({
+  HIDDEN_SUBPROCESS_OPTIONS: {},
+}));
+
+vi.mock("../src/main/utils", () => ({
+  stripAnsi: (s: string) => s,
+}));
+
+import {
+  sendMessage,
+  type ChatCallbacks,
+} from "../src/main/hermes/chat-client";
+
+const callbacks: ChatCallbacks = {
+  onChunk: () => {},
+  onDone: () => {},
+  onError: () => {},
+};
+
+const history = [
+  { role: "user", content: "first question" },
+  { role: "agent", content: "first answer" },
+];
+
+async function latestRequestBody(): Promise<Record<string, unknown>> {
+  await vi.waitFor(() => {
+    expect(capturedRequests.length).toBeGreaterThan(0);
+  });
+  return JSON.parse(capturedRequests.at(-1)!.body) as Record<string, unknown>;
+}
+
+function assertHistoryPreserved(body: Record<string, unknown>): void {
+  const messages = body.messages as Array<{ role: string; content: string }>;
+  const userIndex = messages.findIndex(
+    (msg) => msg.role === "user" && msg.content === "first question",
+  );
+  const assistantIndex = messages.findIndex(
+    (msg) => msg.role === "assistant" && msg.content === "first answer",
+  );
+  const currentIndex = messages.findIndex(
+    (msg) => msg.role === "user" && msg.content === "follow up",
+  );
+
+  expect(userIndex).toBeGreaterThanOrEqual(0);
+  expect(assistantIndex).toBeGreaterThan(userIndex);
+  expect(currentIndex).toBeGreaterThan(assistantIndex);
+  expect(messages.at(-1)).toMatchObject({ role: "user", content: "follow up" });
+}
+
 describe("Remote/SSH Mode History Preservation", () => {
-  it("sendMessage passes history to sendMessageViaApi in remote mode", () => {
-    // Extract the sendMessage function's remote mode branch
-    const remoteModeBranch = hermesSrc.match(
-      /\/\/ Remote mode: always use API, no CLI fallback[\s\S]*?if \(isRemoteMode\(\)\) \{[\s\S]*?return sendMessageViaApi\([\s\S]*?\);[\s\S]*?\}/,
-    );
-
-    expect(remoteModeBranch).toBeDefined();
-
-    const branchCode = remoteModeBranch![0];
-
-    // Verify that sendMessageViaApi is called with history parameter.
-    // Call signature is (message, cb, profile, resumeSessionId, history, attachments).
-    const apiCallMatch = branchCode.match(
-      /return sendMessageViaApi\(([\s\S]*?)\);/,
-    );
-
-    expect(apiCallMatch).toBeDefined();
-
-    const params = apiCallMatch![1]
-      .split(",")
-      .map((p) => p.trim())
-      .filter(Boolean);
-
-    // Should have at least 5 parameters: message, cb, profile, resumeSessionId, history
-    expect(params.length).toBeGreaterThanOrEqual(5);
-
-    // history must appear somewhere in the arg list
-    expect(params.some((p) => p === "history" || p.includes("history"))).toBe(
-      true,
-    );
+  beforeEach(() => {
+    capturedRequests.length = 0;
+    state.remoteMode = true;
+    state.apiAvailable = true;
+    state.apiReady = true;
+    state.localGatewayRunning = false;
   });
 
-  it("sendMessageViaApi builds messages from history + current message", () => {
-    // Extract sendMessageViaApi function body.  The content-type element is
-    // intentionally not pinned to a literal — the type widened to a union
-    // when multimodal support landed.
-    const funcMatch = hermesSrc.match(
-      /function sendMessageViaApi\([\s\S]*?\): ChatHandle \{[\s\S]*?const messages: Array<[\s\S]*?> = \[\];[\s\S]*?if \(history && history\.length > 0\) \{[\s\S]*?for \(const msg of history\) \{[\s\S]*?messages\.push\(\{[\s\S]*?role: msg\.role === "agent" \? "assistant" : msg\.role,[\s\S]*?content: msg\.content,[\s\S]*?\}\);[\s\S]*?\}[\s\S]*?\}[\s\S]*?messages\.push\(\{ role: "user", content: [^}]+\}\);/,
-    );
+  it("serializes prior turns before the current user message in remote mode", async () => {
+    await sendMessage("follow up", callbacks, "default", undefined, history);
 
-    expect(funcMatch).toBeDefined();
-
-    // Verify the function:
-    // 1. Creates messages array
-    // 2. Iterates through history and converts "agent" to "assistant"
-    // 3. Pushes current user message at the end
-
-    const funcCode = funcMatch![0];
-
-    // Check history iteration
-    expect(funcCode).toContain("for (const msg of history)");
-
-    // Check role conversion
-    expect(funcCode).toContain('msg.role === "agent" ? "assistant" : msg.role');
-
-    // Check current message is appended (content may be a string or a
-    // multimodal-content value built upstream — both end in the same push).
-    expect(funcCode).toMatch(
-      /messages\.push\(\{ role: "user", content: \w+ \}\);/,
-    );
+    const body = await latestRequestBody();
+    assertHistoryPreserved(body);
   });
 
-  it("local API available branch also passes history", () => {
-    // Extract the local API available branch
-    const localApiBranch = hermesSrc.match(
-      /if \(apiServerAvailable\) \{[\s\S]*?return sendMessageViaApi\([\s\S]*?\);[\s\S]*?\}/,
-    );
+  it("serializes prior turns before the current user message in the local API path", async () => {
+    state.remoteMode = false;
+    state.apiAvailable = true;
 
-    expect(localApiBranch).toBeDefined();
+    await sendMessage("follow up", callbacks, "default", undefined, history);
 
-    const branchCode = localApiBranch![0];
-
-    const apiCallMatch = branchCode.match(
-      /return sendMessageViaApi\(([\s\S]*?)\);/,
-    );
-
-    expect(apiCallMatch).toBeDefined();
-
-    const params = apiCallMatch![1]
-      .split(",")
-      .map((p) => p.trim())
-      .filter(Boolean);
-
-    // Should have at least 5 parameters including history
-    expect(params.length).toBeGreaterThanOrEqual(5);
-
-    expect(params.some((p) => p === "history" || p.includes("history"))).toBe(
-      true,
-    );
-  });
-
-  it("all sendMessageViaApi calls in sendMessage include history parameter", () => {
-    // Find the sendMessage function - use a more flexible regex
-    const startMatch = hermesSrc.indexOf("export async function sendMessage(");
-    expect(startMatch).toBeGreaterThan(-1);
-
-    // Extract from "export async function sendMessage" to the next "export function" or end
-    const remainingCode = hermesSrc.substring(startMatch);
-    const endMatch = remainingCode.indexOf("\nexport function ");
-    const funcCode =
-      endMatch > 0 ? remainingCode.substring(0, endMatch) : remainingCode;
-
-    // Find all sendMessageViaApi calls
-    const apiCalls = funcCode.matchAll(/sendMessageViaApi\(([^)]+)\)/g);
-
-    const calls = Array.from(apiCalls);
-
-    // Should have at least 2 calls (remote mode + local API available)
-    expect(calls.length).toBeGreaterThanOrEqual(2);
-
-    // Verify all calls include history
-    for (const call of calls) {
-      const params = call[1].split(",").map((p) => p.trim());
-      const hasHistory = params.some(
-        (p) => p === "history" || p.includes("history"),
-      );
-      expect(hasHistory).toBe(true);
-    }
+    const body = await latestRequestBody();
+    assertHistoryPreserved(body);
   });
 });

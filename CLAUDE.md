@@ -68,8 +68,10 @@ lossless-fallback `<!-- sps:… -->` comments) and have golden byte-for-byte tes
 The SPS look is **not** re-derived in Tailwind — the prototype stylesheets are carried over verbatim
 into `screens/SpsAgent/styles/` and confined to a `.sps-scope` container by `scripts/scope-sps-css.mjs`
 (so its global `:root`/`body`/`*` rules don't leak into the Hermes renderer). Theme/layout switches are
-pure attribute swaps on the scope element. The standalone `sps-agent/` (runnable Vite app) and
-`sps-agent-prototype/` (the canonical design + interaction spec) are the upstream sources for this code.
+pure attribute swaps on the scope element. The integrated renderer at
+`src/renderer/src/screens/SpsAgent/` is canonical. The archived standalone Vite app at
+`archive/sps-agent-standalone/` is historical reference material only, and
+`sps-agent-prototype/` remains design context when present.
 
 ## Conventions that bite if missed
 
@@ -81,8 +83,8 @@ pure attribute swaps on the scope element. The standalone `sps-agent/` (runnable
   renderer UI → the Playwright-Electron smoke harness `scripts/sps-smoke.mjs`.
 - **Two TS projects, two typechecks.** `tsconfig.node.json` (main+preload) and `tsconfig.web.json`
   (renderer) — run `npm run typecheck` (both) before claiming type safety.
-- **SSRF hardening is load-bearing** in `src/main/sps-agent.ts` (link unfurl pins the validated IP and
-  re-validates every redirect hop). Don't loosen the IP-pinning lookup when editing unfurl/fetch code.
+- **SSRF hardening is load-bearing** in `src/main/security/ssrf-guard.ts` (external HTTP fetchers pin the validated IP and
+  re-validate every redirect hop). Don't loosen the IP-pinning lookup when editing unfurl/fetch code.
 - **Full verification gate** (from `docs/STORAGE.md`) before shipping substrate changes: both
   typechecks → eslint touched files → `vitest run` → `verify:note-index` → `npm run build`.
 - **Keep PRs small and single-purpose** (CONTRIBUTING.md); don't bundle formatting sweeps with logic.

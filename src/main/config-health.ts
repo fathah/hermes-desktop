@@ -27,8 +27,12 @@ import {
   setConfigValue,
   setEnvValue,
 } from "./config";
-import { getYamlValue } from "./yaml-utils";
-import { safeWriteFile } from "./utils";
+import {
+  getYamlValuesFromContent,
+  readConfigYaml,
+  readYamlFile,
+  writeYamlFile,
+} from "./config/yaml-config";
 import { HERMES_HOME } from "./installer";
 import { expectedEnvKeyForModel } from "./installer";
 import { expectedEnvKeyForUrl, isLocalBaseUrl } from "../shared/url-key-map";
@@ -587,17 +591,17 @@ function readSiblingFields(home: string): SiblingEnv {
     if (m) envMap[m[1]] = m[2].trim().replace(/^["']|["']$/g, "");
   }
   // config.yaml
-  let configText = "";
-  try {
-    if (existsSync(configFile)) configText = readFileSync(configFile, "utf-8");
-  } catch {
-    /* unreadable */
-  }
+  const configValues = getYamlValuesFromContent(
+    readYamlFile(configFile),
+    DRIFT_FIELDS.filter((field) => field.source === "config").map(
+      (field) => field.field,
+    ),
+  );
   for (const { source, field } of DRIFT_FIELDS) {
     if (source === "env") {
       values[field] = (envMap[field] ?? "").trim();
     } else {
-      values[field] = getYamlValue(configText, field) || "";
+      values[field] = configValues[field] || "";
     }
   }
   return { values, envFile, configFile };
@@ -794,16 +798,8 @@ export { checkSiblingHermesHomeDrift, fixSiblingHermesHomeDrift };
 function checkLegacyToolsetName(profile?: string): ConfigHealthIssue[] {
   const issues: ConfigHealthIssue[] = [];
   const { configFile } = profilePaths(profile);
-  if (!existsSync(configFile)) return issues;
-
-  let content: string;
-  try {
-    content = readFileSync(configFile, "utf-8");
-  } catch {
-    return issues;
-  }
-
-  if (!findLegacyToolsetEntry(content)) return issues;
+  const content = readConfigYaml(profile);
+  if (!content || !findLegacyToolsetEntry(content)) return issues;
 
   issues.push({
     code: "LEGACY_TOOLSET_NAME",
@@ -874,7 +870,7 @@ function fixLegacyToolsetName(profile?: string): {
     if (!existsSync(configFile)) {
       return { ok: false, message: "config.yaml not found" };
     }
-    const original = readFileSync(configFile, "utf-8");
+    const original = readConfigYaml(profile);
     if (!findLegacyToolsetEntry(original)) {
       return { ok: false, message: "No legacy toolset entry found." };
     }
@@ -918,7 +914,7 @@ function fixLegacyToolsetName(profile?: string): {
         message: "Detected legacy entry but rewrite did not match.",
       };
     }
-    safeWriteFile(configFile, out.join("\n"));
+    writeYamlFile(configFile, out.join("\n"));
     appendConfigFixLog({
       ts: Date.now(),
       issueCode: "LEGACY_TOOLSET_NAME",

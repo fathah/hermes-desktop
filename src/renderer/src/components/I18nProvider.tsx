@@ -13,16 +13,18 @@ void sharedI18n.use(initReactI18next);
 
 const STORAGE_KEY = "hermes-locale";
 
+function normalizeLocale(value: unknown): AppLocale {
+  return APP_LOCALES.includes(value as AppLocale)
+    ? (value as AppLocale)
+    : DEFAULT_ACTIVE_LOCALE;
+}
+
 function readStoredLocale(): AppLocale {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw && (APP_LOCALES as string[]).includes(raw)) {
-      return raw as AppLocale;
-    }
+    return normalizeLocale(localStorage.getItem(STORAGE_KEY));
   } catch {
-    /* ignore */
+    return DEFAULT_ACTIVE_LOCALE;
   }
-  return DEFAULT_ACTIVE_LOCALE;
 }
 
 const initialLocale = readStoredLocale();
@@ -41,7 +43,7 @@ export function I18nProvider({
 
   const setLocale = useCallback((nextLocale: AppLocale) => {
     userSelectedLocale.current = true;
-    setLocaleState(nextLocale);
+    setLocaleState(normalizeLocale(nextLocale));
   }, []);
 
   useEffect(() => {
@@ -55,7 +57,7 @@ export function I18nProvider({
     void getMainLocale()
       .then((mainLocale) => {
         if (cancelled || !mainLocale || userSelectedLocale.current) return;
-        setLocaleState(mainLocale);
+        setLocaleState(normalizeLocale(mainLocale));
       })
       .catch(() => {
         /* ignore */

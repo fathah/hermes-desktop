@@ -2,14 +2,12 @@
 //
 // Wraps the Electron-free shared client (src/shared/openalex/core.ts) with the
 // three things only the main process can supply:
-//   • the SSRF-hardened `guardedAgent` dispatcher (reused from sps-agent.ts —
-//     not cloned), so a redirect can't pivot to an internal address;
+//   • the SSRF-hardened `safeFetch` wrapper from security/ssrf-guard.ts, so a redirect cannot pivot to an internal address;
 //   • per-machine config (polite-pool `mailto` + optional `api_key`) read from
 //     desktop.json — these are read by OUR code, never the Hermes gateway, so
 //     they don't belong in config.yaml;
 //   • a read-through disk cache to stay within OpenAlex's free daily allowance.
 import { join } from "path";
-import { fetch as undiciFetch } from "undici";
 import {
   createOpenAlexClient,
   type FetchLike,
@@ -18,7 +16,7 @@ import {
   type WorkSummary,
   type WorkDetail,
 } from "../shared/openalex/core";
-import { guardedAgent } from "./sps-agent";
+import { safeFetch } from "./security/ssrf-guard";
 import { profileHome, getActiveProfileNameSync } from "./utils";
 import { readDesktopConfig, writeDesktopConfig } from "./config";
 import {
@@ -62,8 +60,7 @@ export function setResearchConfig(mailto: string, apiKey?: string): void {
 
 // ── client (IP-pinned fetch + current config) ──
 const guardedFetch: FetchLike = (url, init) =>
-  undiciFetch(url, {
-    dispatcher: guardedAgent, // every redirect hop re-validated + IP-pinned
+  safeFetch(url, {
     redirect: "follow",
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     headers: init?.headers,

@@ -13,9 +13,8 @@
 import { execFile } from "child_process";
 import { realpath } from "fs/promises";
 import { isAbsolute, relative, resolve } from "path";
-import { fetch as undiciFetch } from "undici";
 import { isCommandSafe } from "./autonomy";
-import { guardedAgent } from "./sps-agent";
+import { safeFetch } from "./security/ssrf-guard";
 
 export interface ActionOutcome {
   success: boolean;
@@ -253,10 +252,9 @@ export async function runApiAction(
   }
 
   try {
-    const response = await undiciFetch(target.href, {
+    const response = await safeFetch(target.href, {
       method: "GET",
       headers,
-      dispatcher: guardedAgent,
       redirect: "follow",
       signal: AbortSignal.timeout(API_TIMEOUT_MS),
     });

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import type { AppLocale } from "../src/shared/i18n";
 
 let testHome: string;
 
@@ -23,13 +24,13 @@ describe("app locale persistence", () => {
     rmSync(testHome, { recursive: true, force: true });
   });
 
-  it("reloads the saved locale after the main process restarts", async () => {
+  it("normalizes stale saved non-English locale values after restart", async () => {
     const firstRun = await loadLocaleModule();
 
-    expect(firstRun.setAppLocale("es")).toBe("es");
+    expect(firstRun.setAppLocale("es" as unknown as AppLocale)).toBe("en");
 
     const secondRun = await loadLocaleModule();
 
-    expect(secondRun.getAppLocale()).toBe("es");
+    expect(secondRun.getAppLocale()).toBe("en");
   }, 10000);
 });
