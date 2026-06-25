@@ -14,6 +14,10 @@ import {
   type ExternalSource,
   type ExternalSourceConfig,
 } from "../../shared/external-context";
+import {
+  normalizeCouncilConfig,
+  type CouncilConfig,
+} from "../../shared/council";
 
 // `desktop.json` — app-level, desktop-owned config (connection mode, encrypted
 // remote/api-server keys, and the desktop-enforced UX toggles below).
@@ -113,6 +117,34 @@ export function setAutoApprove(enabled: boolean, profile?: string): void {
   map[autoApproveKey(profile)] = enabled;
   data.autoApproveByProfile = map;
   writeDesktopConfig(data);
+}
+
+const COUNCIL_CONFIG_KEY = "councilConfigByProfile";
+
+function councilConfigMap(
+  data: Record<string, unknown>,
+): Record<string, unknown> {
+  const raw = data[COUNCIL_CONFIG_KEY];
+  return raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+}
+
+export function getCouncilConfig(profile?: string): CouncilConfig {
+  const data = readDesktopConfig();
+  const stored = councilConfigMap(data)[autoApproveKey(profile)];
+  return normalizeCouncilConfig(stored);
+}
+
+export function setCouncilConfig(
+  config: Partial<CouncilConfig>,
+  profile?: string,
+): CouncilConfig {
+  const data = readDesktopConfig();
+  const map = councilConfigMap(data);
+  const normalized = normalizeCouncilConfig(config);
+  map[autoApproveKey(profile)] = normalized;
+  data[COUNCIL_CONFIG_KEY] = map;
+  writeDesktopConfig(data);
+  return normalized;
 }
 
 /** Play a system chime when an agent run completes (handy with parallel runs). */

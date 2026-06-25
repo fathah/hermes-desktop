@@ -1,7 +1,15 @@
 import { memo, useMemo, Fragment } from "react";
 import type { RefObject } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Check, ShieldAlert, Sparkles, Brain, Cpu, Bot } from "lucide-react";
+import {
+  Check,
+  FilePlus2,
+  ShieldAlert,
+  Sparkles,
+  Brain,
+  Cpu,
+  Bot,
+} from "lucide-react";
 import { HermesAvatar, AvatarSpacer, MessageRow } from "./MessageRow";
 import { ToolGroupRow } from "./HistoryRow";
 import { isCompressionSummary } from "./contextGauge";
@@ -33,8 +41,15 @@ interface MessageListProps {
     provider: string,
   ) => void;
   onSteelmanCritique?: (
-    responses: Array<{ model: string; provider: string; content: string }>,
+    responses: Array<{
+      seatName?: string;
+      model: string;
+      provider: string;
+      content: string;
+      verdict?: import("../../../../shared/council").CouncilVerdict;
+    }>,
   ) => void;
+  onSaveCouncilArtifact?: (turn: CouncilTurnMessage) => void;
   scrollRef?: RefObject<HTMLElement | null>;
 }
 
@@ -128,6 +143,7 @@ export const MessageList = memo(function MessageList({
   onDeny,
   onAdoptResponse,
   onSteelmanCritique,
+  onSaveCouncilArtifact,
   scrollRef,
 }: MessageListProps): React.JSX.Element {
   const tts = useTtsPlayback(profile);
@@ -214,11 +230,29 @@ export const MessageList = memo(function MessageList({
                   <div key={key} className="chat-council-col">
                     <CouncilColumnHeader
                       provider={r.provider}
-                      label={r.modelLabel}
+                      label={
+                        r.seatName
+                          ? `${r.seatName} · ${r.modelLabel}`
+                          : r.modelLabel
+                      }
                       status={statusText}
                       error={r.error}
                     />
                     <div className="chat-council-col-body">
+                      {(r.toolProgress || r.approval) && (
+                        <div className="chat-council-status-stack">
+                          {r.toolProgress && (
+                            <div className="chat-tool-progress">
+                              {r.toolProgress}
+                            </div>
+                          )}
+                          {r.approval && (
+                            <div className="chat-council-approval">
+                              {r.approval}
+                            </div>
+                          )}
+                        </div>
+                      )}
                       {r.reasoning && (
                         <details className="chat-reasoning" open>
                           <summary>Thinking process</summary>
@@ -246,6 +280,11 @@ export const MessageList = memo(function MessageList({
                       )}
                     </div>
                     <div className="chat-council-col-footer">
+                      {r.verdict && (
+                        <span className={`chat-council-verdict ${r.verdict}`}>
+                          {r.verdict}
+                        </span>
+                      )}
                       <button
                         className="chat-council-col-action"
                         disabled={r.isLoading || !r.content}
@@ -269,22 +308,35 @@ export const MessageList = memo(function MessageList({
                 );
               })}
             </div>
-            {!isAnyLoading && onSteelmanCritique && (
+            {!isAnyLoading && (onSteelmanCritique || onSaveCouncilArtifact) && (
               <div className="chat-council-synthesize-bar">
-                <button
-                  className="chat-council-synthesize-btn"
-                  onClick={() => {
-                    const allResponses = responses.map(([, r]) => ({
-                      model: r.model,
-                      provider: r.provider,
-                      content: r.content,
-                    }));
-                    onSteelmanCritique(allResponses);
-                  }}
-                  type="button"
-                >
-                  <ShieldAlert size={13} /> Synthesize Consensus & Steelman
-                </button>
+                {onSteelmanCritique && (
+                  <button
+                    className="chat-council-synthesize-btn"
+                    onClick={() => {
+                      const allResponses = responses.map(([, r]) => ({
+                        seatName: r.seatName,
+                        model: r.model,
+                        provider: r.provider,
+                        content: r.content,
+                        verdict: r.verdict,
+                      }));
+                      onSteelmanCritique(allResponses);
+                    }}
+                    type="button"
+                  >
+                    <ShieldAlert size={13} /> Synthesize Consensus & Steelman
+                  </button>
+                )}
+                {onSaveCouncilArtifact && (
+                  <button
+                    className="chat-council-synthesize-btn"
+                    onClick={() => onSaveCouncilArtifact(councilMsg)}
+                    type="button"
+                  >
+                    <FilePlus2 size={13} /> Save to SPS
+                  </button>
+                )}
               </div>
             )}
           </div>

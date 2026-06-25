@@ -1,5 +1,6 @@
 export default {
   models: "Models",
+  council: "LLM Council",
   providers: "Providers",
   skills: "Skills",
   memory: "Memory",

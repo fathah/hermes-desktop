@@ -66,15 +66,24 @@ export interface CouncilTurnMessage {
   responses: {
     [modelKey: string]: {
       modelLabel: string;
+      seatId?: string;
+      seatName?: string;
+      rolePrompt?: string;
+      rubric?: string;
       provider: string;
       model: string;
       content: string;
       isLoading: boolean;
       reasoning?: string;
       error?: string;
+      toolProgress?: string;
+      approval?: string;
+      verdict?: import("../../../../shared/council").CouncilVerdict;
+      rationale?: string;
       messageId?: string | number;
     };
   };
+  prompt?: string;
 }
 
 export type ChatMessage =

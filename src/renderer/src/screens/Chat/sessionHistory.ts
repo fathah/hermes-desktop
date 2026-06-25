@@ -45,40 +45,49 @@ export function groupCouncilTurns(messages: ChatMessage[]): ChatMessage[] {
   let currentCouncilTurn: CouncilTurnMessage | null = null;
 
   for (const msg of messages) {
+    const bubble = msg as ChatBubbleMessage;
     if (
       msg.role === "agent" &&
       !("kind" in msg) &&
-      (msg as ChatBubbleMessage).councilGroupId
+      bubble.councilGroupId
     ) {
-      const gId = (msg as ChatBubbleMessage).councilGroupId;
-      const modelKey = `${(msg as ChatBubbleMessage).provider || "unknown"}:${(msg as ChatBubbleMessage).model || "unknown"}`;
+      const gId = bubble.councilGroupId;
+      const turnId = gId.startsWith("council-turn-")
+        ? gId
+        : `council-turn-${gId}`;
+      const provider = bubble.provider || "unknown";
+      const model = bubble.model || "unknown";
+      const modelKey = `${provider}:${model}`;
+      const messageId = Number(String(msg.id).replace(/^db-/, "")) || msg.id;
 
       if (
         currentCouncilTurn &&
-        currentCouncilTurn.id === `council-turn-${gId}`
+        currentCouncilTurn.id === turnId
       ) {
         currentCouncilTurn.responses[modelKey] = {
-          modelLabel: (msg as ChatBubbleMessage).model || "Unknown Model",
-          provider: (msg as ChatBubbleMessage).provider || "unknown",
-          model: (msg as ChatBubbleMessage).model || "unknown",
+          modelLabel: model,
+          provider,
+          model,
           content: msg.content || "",
           isLoading: false,
+          messageId,
         };
       } else {
         if (currentCouncilTurn) {
           grouped.push(currentCouncilTurn);
         }
         currentCouncilTurn = {
-          id: `council-turn-${gId}`,
+          id: turnId,
           kind: "council_turn",
           role: "agent",
           responses: {
             [modelKey]: {
-              modelLabel: (msg as ChatBubbleMessage).model || "Unknown Model",
-              provider: (msg as ChatBubbleMessage).provider || "unknown",
-              model: (msg as ChatBubbleMessage).model || "unknown",
+              modelLabel: model,
+              provider,
+              model,
               content: msg.content || "",
               isLoading: false,
+              messageId,
             },
           },
         };

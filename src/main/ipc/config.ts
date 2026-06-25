@@ -7,6 +7,8 @@ import {
   resolveProviderEnvKey,
   getConfigValue,
   setConfigValue,
+  getCouncilConfig,
+  setCouncilConfig,
   getHermesHome,
   getModelConfig,
   setModelConfig,
@@ -106,6 +108,7 @@ import {
   getAppZoomSettings,
   setAppZoomFactor,
 } from "../app-zoom";
+import type { CouncilConfig } from "../../shared/council";
 
 function openExternalUrl(rawUrl: unknown): void {
   if (!isAllowedExternalUrl(rawUrl) && !isAllowedObsidianExternalUrl(rawUrl)) {
@@ -184,6 +187,16 @@ export function registerConfigIpc(): void {
   );
 
   registerDualHandler("get-hermes-home", getHermesHome, sshGetHermesHome);
+
+  safeHandle("get-council-config", (_event, profile?: string) =>
+    getCouncilConfig(profile),
+  );
+
+  safeHandle(
+    "set-council-config",
+    (_event, config: Partial<CouncilConfig>, profile?: string) =>
+      setCouncilConfig(config, profile),
+  );
 
   // Model Config
   registerDualHandler("get-model-config", getModelConfig, sshGetModelConfig);

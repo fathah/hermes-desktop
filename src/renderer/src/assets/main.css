@@ -6170,6 +6170,64 @@ body {
   margin-bottom: 0;
 }
 
+.council-settings-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.council-settings-grid,
+.council-seat-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.council-settings-check,
+.council-settings-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.council-settings-check input,
+.council-settings-toggle input {
+  margin-top: 2px;
+}
+
+.council-settings-check small {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.council-seat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.council-seat-card {
+  margin-bottom: 0;
+}
+
+.council-wide-field {
+  grid-column: 1 / -1;
+}
+
+.council-textarea {
+  min-height: 92px;
+  resize: vertical;
+  line-height: 1.45;
+}
+
 .whatsapp-cloud-setup {
   margin-top: 16px;
   padding-top: 16px;
@@ -9497,9 +9555,17 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.chat-council-col-title span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chat-council-col-status {
@@ -9525,8 +9591,57 @@ body {
   background: var(--bg-tertiary);
   border-top: 1px solid var(--border);
   display: flex;
+  align-items: center;
   gap: 10px;
-  justify-content: flex-end;
+  justify-content: space-between;
+}
+
+.chat-council-status-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.chat-council-approval {
+  color: var(--success);
+  background: var(--success-bg);
+  border: 1px solid rgba(16, 185, 129, 0.22);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.chat-council-verdict {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.chat-council-verdict.endorse {
+  color: var(--success);
+  background: var(--success-bg);
+}
+
+.chat-council-verdict.challenge,
+.chat-council-verdict.abstain {
+  color: var(--warning, #f59e0b);
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.chat-council-verdict.reject {
+  color: var(--error);
+  background: var(--error-bg);
 }
 
 .chat-council-col-action {
@@ -9552,7 +9667,9 @@ body {
 
 .chat-council-synthesize-bar {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
+  gap: 8px;
   margin-top: 16px;
   margin-bottom: 8px;
   width: 100%;

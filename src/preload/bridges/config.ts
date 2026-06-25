@@ -7,6 +7,7 @@ import type { AppZoomSettings } from "../../shared/app-zoom";
 import type { ConfigFixLogEntry } from "../api-types";
 import type { ConfigHealthReport } from "../../shared/config-health";
 import type { PublicConnectionConfig } from "../../shared/connection";
+import type { CouncilConfig } from "../../shared/council";
 import type { ConfigBridgeApi } from "./config.types";
 
 export const configBridge = {
@@ -63,6 +64,15 @@ export const configBridge = {
 
   getHermesHome: (profile?: string): Promise<string> =>
     ipcRenderer.invoke("get-hermes-home", profile),
+
+  getCouncilConfig: (profile?: string): Promise<CouncilConfig> =>
+    ipcRenderer.invoke("get-council-config", profile),
+
+  setCouncilConfig: (
+    config: Partial<CouncilConfig>,
+    profile?: string,
+  ): Promise<CouncilConfig> =>
+    ipcRenderer.invoke("set-council-config", config, profile),
 
   getModelConfig: (
     profile?: string,

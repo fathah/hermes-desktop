@@ -5,6 +5,7 @@ import {
   reconcileStreamedWithDb,
   type DbHistoryItem,
 } from "../sessionHistory";
+import { parseCouncilVerdict } from "../../../../../shared/council";
 
 interface UseChatIPCArgs {
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
@@ -149,17 +150,24 @@ export function useChatIPC({
       async (sessionId, runId) => {
         if (runId !== undefined) {
           if (runId.startsWith("council-turn-")) {
+            if (sessionId) setHermesSessionId(sessionId);
             const [turnId, modelKey] = runId.split("::");
             setMessages((prev) => {
               const updated = prev.map((m) => {
                 if (m.id === turnId && m.kind === "council_turn") {
                   const resp = m.responses[modelKey];
                   if (resp) {
+                    const parsed = parseCouncilVerdict(resp.content);
                     return {
                       ...m,
                       responses: {
                         ...m.responses,
-                        [modelKey]: { ...resp, isLoading: false },
+                        [modelKey]: {
+                          ...resp,
+                          ...parsed,
+                          isLoading: false,
+                          toolProgress: undefined,
+                        },
                       },
                     };
                   }
@@ -259,7 +267,29 @@ export function useChatIPC({
 
     const cleanupToolProgress = window.hermesAPI.onChatToolProgress(
       (tool, runId) => {
-        if (runId !== undefined) return;
+        if (runId !== undefined) {
+          if (runId.startsWith("council-turn-")) {
+            const [turnId, modelKey] = runId.split("::");
+            setMessages((prev) =>
+              prev.map((m) => {
+                if (m.id === turnId && m.kind === "council_turn") {
+                  const resp = m.responses[modelKey];
+                  if (resp) {
+                    return {
+                      ...m,
+                      responses: {
+                        ...m.responses,
+                        [modelKey]: { ...resp, toolProgress: tool ?? undefined },
+                      },
+                    };
+                  }
+                }
+                return m;
+              }),
+            );
+          }
+          return;
+        }
         setToolProgress(tool);
       },
     );
@@ -268,7 +298,33 @@ export function useChatIPC({
     // behaviour isn't invisible. Legacy/global stream only (runId === undefined).
     const cleanupApprovalAuto = window.hermesAPI.onChatApprovalAuto(
       (req, runId) => {
-        if (runId !== undefined) return;
+        if (runId !== undefined) {
+          if (runId.startsWith("council-turn-")) {
+            const [turnId, modelKey] = runId.split("::");
+            const label = req.command ?? req.toolName ?? "command";
+            setMessages((prev) =>
+              prev.map((m) => {
+                if (m.id === turnId && m.kind === "council_turn") {
+                  const resp = m.responses[modelKey];
+                  if (resp) {
+                    return {
+                      ...m,
+                      responses: {
+                        ...m.responses,
+                        [modelKey]: {
+                          ...resp,
+                          approval: `Auto-approved: ${label}`,
+                        },
+                      },
+                    };
+                  }
+                }
+                return m;
+              }),
+            );
+          }
+          return;
+        }
         setMessages((prev) => [
           ...prev,
           {

@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import Settings from "../Settings/Settings";
 import Gateway from "../Gateway/Gateway";
 import Models from "../Models/Models";
+import CouncilSettings from "../Council/CouncilSettings";
 import Providers from "../Providers/Providers";
 import ControlCenterOverview from "./ControlCenterOverview";
 import RemoteNotice from "../../components/RemoteNotice";
@@ -17,6 +18,7 @@ import {
 } from "../../assets/icons";
 import {
   Activity,
+  BrainCircuit,
   Home,
   Shield,
   SlidersHorizontal,
@@ -91,6 +93,7 @@ const NAV_GROUPS: NavGroup[] = [
     headerKey: "navigation.groupPowerUser",
     items: [
       { view: "models", icon: Layers, labelKey: "navigation.models" },
+      { view: "council", icon: BrainCircuit, labelKey: "navigation.council" },
       {
         view: "troubleshooting",
         icon: Activity,
@@ -462,6 +465,12 @@ function Layout({
         {visitedViews.has("models") && (
           <div style={paneStyle("models")}>
             <Models visible={view === "models"} />
+          </div>
+        )}
+
+        {visitedViews.has("council") && (
+          <div style={paneStyle("council")}>
+            <CouncilSettings profile={activeProfile} />
           </div>
         )}
 

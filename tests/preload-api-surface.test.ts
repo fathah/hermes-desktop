@@ -225,6 +225,8 @@ describe("Legacy APIs preserved (backward compat)", () => {
     "getConfig",
     "setConfig",
     "getHermesHome",
+    "getCouncilConfig",
+    "setCouncilConfig",
     "getModelConfig",
     "setModelConfig",
     // Chat

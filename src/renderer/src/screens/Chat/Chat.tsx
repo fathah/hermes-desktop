@@ -25,7 +25,13 @@ import { buildChatTranscript } from "./transcriptUtils";
 import { ConfigHealthBanner } from "../../components/ConfigHealthBanner";
 import { getDevMode, DEV_MODE_EVENT } from "../../lib/devMode";
 import type { Attachment } from "../../../../shared/attachments";
-import type { ChatMessage, UsageState } from "./types";
+import {
+  buildCouncilModeratorPrompt,
+  DEFAULT_COUNCIL_CONFIG,
+  normalizeCouncilConfig,
+  type CouncilConfig,
+} from "../../../../shared/council";
+import type { ChatMessage, CouncilTurnMessage, UsageState } from "./types";
 
 interface QueuedMessage {
   text: string;
@@ -33,6 +39,15 @@ interface QueuedMessage {
 }
 
 export type { ChatMessage } from "./types";
+
+function lastUserPrompt(messages: ChatMessage[]): string {
+  for (const m of [...messages].reverse()) {
+    if (m.role !== "user" || !("content" in m)) continue;
+    const content = (m as { content?: unknown }).content;
+    if (typeof content === "string" && content.trim()) return content;
+  }
+  return "Original prompt not available in this transcript.";
+}
 
 interface ChatProps {
   messages: ChatMessage[];
@@ -51,6 +66,7 @@ interface ChatProps {
   /** Optional callback to navigate to Settings → Diagnose section
    *  when the user clicks "Show details" in the config-health banner. */
   onOpenDiagnose?: () => void;
+  onSaveCouncilArtifact?: (turn: CouncilTurnMessage) => void;
 }
 
 function Chat({
@@ -65,6 +81,7 @@ function Chat({
   compact,
   initialInput,
   onOpenDiagnose,
+  onSaveCouncilArtifact,
 }: ChatProps): React.JSX.Element {
   const { t } = useI18n();
   const [isLoading, setIsLoading] = useState(false);
@@ -116,6 +133,25 @@ function Chat({
   const [selectedModels, setSelectedModels] = useState<
     Array<{ provider: string; model: string; baseUrl: string; label: string }>
   >([]);
+  const [councilConfig, setCouncilConfigState] = useState<CouncilConfig>(() =>
+    normalizeCouncilConfig(DEFAULT_COUNCIL_CONFIG),
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    window.hermesAPI
+      .getCouncilConfig(profile)
+      .then((cfg) => {
+        if (!cancelled) setCouncilConfigState(normalizeCouncilConfig(cfg));
+      })
+      .catch(() => {
+        if (!cancelled)
+          setCouncilConfigState(normalizeCouncilConfig(DEFAULT_COUNCIL_CONFIG));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [profile]);
 
   // Sync selectedModels with modelConfig on load/change
   useEffect(() => {
@@ -378,6 +414,7 @@ function Chat({
     contextFolder: effectiveContextFolder,
     onCompactRequested: markCompactPending,
     selectedModels,
+    councilConfig,
   });
 
   // When the `/compact` turn finishes, carry its handoff brief into a fresh
@@ -563,15 +600,25 @@ function Chat({
 
   const handleSteelmanCritique = useCallback(
     async (
-      responses: Array<{ model: string; provider: string; content: string }>,
+      responses: Array<{
+        seatName?: string;
+        model: string;
+        provider: string;
+        content: string;
+        verdict?: import("../../../../shared/council").CouncilVerdict;
+      }>,
     ) => {
-      const responsesText = responses
-        .map((r) => `[${r.model}]:\n${r.content}`)
-        .join("\n\n---\n\n");
-
-      const promptText =
-        `You are the Council Moderator. Below are the responses from the Council of LLMs (different models) to my original query. ` +
-        `Please synthesize them into a single, cohesive response that steelmans my original thought, reconciles the best parts of each answer, and critiques any weaknesses or blind spots:\n\n${responsesText}`;
+      const promptText = buildCouncilModeratorPrompt({
+        originalPrompt: lastUserPrompt(messages),
+        config: councilConfig,
+        responses: responses.map((r) => ({
+          seatName: r.seatName || r.model,
+          provider: r.provider,
+          model: r.model,
+          content: r.content,
+          verdict: r.verdict,
+        })),
+      });
 
       // Reset selection back to standard single model before sending critique
       if (selectedModels.length > 1) {
@@ -580,7 +627,7 @@ function Chat({
 
       void actions.handleSend(promptText);
     },
-    [actions, selectedModels],
+    [actions, councilConfig, messages, selectedModels],
   );
 
   return (
@@ -640,6 +687,7 @@ function Chat({
               onDeny={actions.handleDeny}
               onAdoptResponse={handleAdoptResponse}
               onSteelmanCritique={handleSteelmanCritique}
+              onSaveCouncilArtifact={onSaveCouncilArtifact}
             />
           )}
           <DelegationTree tree={delegationTree} />

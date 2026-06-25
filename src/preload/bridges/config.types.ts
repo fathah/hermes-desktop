@@ -1,4 +1,5 @@
 import type * as Api from "../api-types";
+import type { CouncilConfig } from "../../shared/council";
 
 export interface ConfigBridgeApi {
   getEnv: (profile?: string) => Promise<Record<string, string>>;
@@ -34,6 +35,13 @@ export interface ConfigBridgeApi {
   setConfig: (key: string, value: string, profile?: string) => Promise<boolean>;
 
   getHermesHome: (profile?: string) => Promise<string>;
+
+  getCouncilConfig: (profile?: string) => Promise<CouncilConfig>;
+
+  setCouncilConfig: (
+    config: Partial<CouncilConfig>,
+    profile?: string,
+  ) => Promise<CouncilConfig>;
 
   getModelConfig: (
     profile?: string,

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MessageList } from "./MessageList";
 import type { ChatMessage, CouncilTurnMessage } from "./types";
@@ -108,5 +108,47 @@ describe("MessageList streaming flags", () => {
     expect(markdownMock).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId("agent-markdown")).toHaveTextContent("**done**");
     expect(screen.getByText("# active")).toBeInTheDocument();
+  });
+
+  it("shows council seat metadata and calls the save artifact handler", () => {
+    const onSave = vi.fn();
+    const council: CouncilTurnMessage = {
+      id: "c1",
+      kind: "council_turn",
+      role: "agent",
+      prompt: "Decide",
+      responses: {
+        skeptic: {
+          modelLabel: "claude-sonnet-4",
+          seatName: "Skeptic",
+          provider: "anthropic",
+          model: "claude-sonnet-4",
+          content: "Verdict: challenge\nAdd coverage.",
+          isLoading: false,
+          toolProgress: "read src/main.ts",
+          approval: "Auto-approved: rg",
+          verdict: "challenge",
+        },
+      },
+    };
+
+    render(
+      <MessageList
+        messages={[council]}
+        isLoading={false}
+        toolProgress={null}
+        onApprove={vi.fn()}
+        onDeny={vi.fn()}
+        onSaveCouncilArtifact={onSave}
+      />,
+    );
+
+    expect(screen.getByText(/Skeptic/)).toBeInTheDocument();
+    expect(screen.getByText("read src/main.ts")).toBeInTheDocument();
+    expect(screen.getByText("Auto-approved: rg")).toBeInTheDocument();
+    expect(screen.getByText("challenge")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Save to SPS"));
+    expect(onSave).toHaveBeenCalledWith(council);
   });
 });

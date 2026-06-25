@@ -13,6 +13,13 @@ import type {
 } from "../types";
 import { getGroundInWorkspace } from "../../../lib/grounding";
 import { buildHandoffPrompt } from "../handoff";
+import {
+  buildCouncilSeatPrompt,
+  DEFAULT_COUNCIL_CONFIG,
+  normalizeCouncilConfig,
+  type CouncilConfig,
+  type CouncilSeatConfig,
+} from "../../../../../shared/council";
 
 function hasContent(msg: ChatMessage): msg is ChatBubbleMessage {
   return (
@@ -48,6 +55,7 @@ interface UseChatActionsArgs {
     baseUrl: string;
     label: string;
   }>;
+  councilConfig?: CouncilConfig;
 }
 
 interface UseChatActionsResult {
@@ -81,14 +89,21 @@ export function useChatActions({
   contextFolder,
   onCompactRequested,
   selectedModels,
+  councilConfig,
 }: UseChatActionsArgs): UseChatActionsResult {
   const messagesRef = useRef(messages);
   const isLoadingRef = useRef(isLoading);
   const selectedModelsRef = useRef(selectedModels);
+  const councilConfigRef = useRef<CouncilConfig>(
+    normalizeCouncilConfig(DEFAULT_COUNCIL_CONFIG),
+  );
   useEffect(() => {
     messagesRef.current = messages;
     isLoadingRef.current = isLoading;
     selectedModelsRef.current = selectedModels;
+    councilConfigRef.current = normalizeCouncilConfig(
+      councilConfig ?? DEFAULT_COUNCIL_CONFIG,
+    );
   });
 
   const pushUser = useCallback(
@@ -171,13 +186,47 @@ export function useChatActions({
 
       const activeModels = selectedModelsRef.current;
       if (activeModels.length > 1) {
-        // Council Mode: Query multiple models in parallel
+        // Council Mode: query independent seats in parallel through the
+        // regular chat path, preserving existing tool/approval behavior.
+        const cfg = councilConfigRef.current;
+        const enabledSeats = cfg.enabled
+          ? cfg.seats.filter((seat) => seat.enabled)
+          : [];
+        const configuredSeatModels = enabledSeats
+          .filter((seat) => seat.provider && seat.model)
+          .map((seat) => ({
+            provider: seat.provider,
+            model: seat.model,
+            baseUrl: seat.baseUrl,
+            label: seat.model,
+            seat,
+          }));
+        const selectedSeatModels = activeModels.map((model, index) => ({
+          ...model,
+          seat: enabledSeats[index],
+        }));
+        const councilRuns =
+          configuredSeatModels.length > 1
+            ? configuredSeatModels
+            : selectedSeatModels;
+        const cappedRuns = councilRuns.slice(0, cfg.maxConcurrentSeats);
         const turnId = `council-turn-${Date.now()}`;
-        const responses = activeModels.reduce(
-          (acc, m) => {
-            const modelKey = `${m.provider}:${m.model}`;
+        const totalSeats = cappedRuns.length;
+        const responses = cappedRuns.reduce(
+          (acc, m, index) => {
+            const seat: CouncilSeatConfig =
+              m.seat ??
+              enabledSeats[index] ??
+              DEFAULT_COUNCIL_CONFIG.seats[
+                index % DEFAULT_COUNCIL_CONFIG.seats.length
+              ];
+            const modelKey = `${seat.id}:${m.provider}:${m.model}`;
             acc[modelKey] = {
               modelLabel: m.label,
+              seatId: seat.id,
+              seatName: seat.name,
+              rolePrompt: seat.rolePrompt,
+              rubric: seat.rubric,
               provider: m.provider,
               model: m.model,
               content: "",
@@ -194,17 +243,30 @@ export function useChatActions({
             id: turnId,
             kind: "council_turn",
             role: "agent",
+            prompt: text,
             responses,
           },
         ]);
 
         try {
           await Promise.all(
-            activeModels.map((m) => {
-              const modelKey = `${m.provider}:${m.model}`;
+            cappedRuns.map((m, index) => {
+              const seat: CouncilSeatConfig =
+                m.seat ??
+                enabledSeats[index] ??
+                DEFAULT_COUNCIL_CONFIG.seats[
+                  index % DEFAULT_COUNCIL_CONFIG.seats.length
+                ];
+              const modelKey = `${seat.id}:${m.provider}:${m.model}`;
               const runId = `${turnId}::${modelKey}`;
+              const seatPrompt = buildCouncilSeatPrompt({
+                originalPrompt: text,
+                seat,
+                seatIndex: index,
+                totalSeats,
+              });
               return sendToAgent(
-                text,
+                seatPrompt,
                 attachments,
                 { model: m.model, provider: m.provider, baseUrl: m.baseUrl },
                 runId,

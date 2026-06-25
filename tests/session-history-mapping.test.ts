@@ -121,6 +121,47 @@ describe("dbItemsToChatMessages", () => {
     expect(out[1]).toMatchObject({ role: "agent" });
   });
 
+  it("groups resumed council assistant rows without changing the stored group id", () => {
+    const items: DbHistoryItem[] = [
+      { kind: "user", id: 1, content: "compare approaches" },
+      {
+        kind: "assistant",
+        id: 2,
+        content: "Use the simple path.",
+        provider: "openai",
+        model: "gpt-4.1",
+        councilGroupId: "council-turn-abc",
+      },
+      {
+        kind: "assistant",
+        id: 3,
+        content: "Watch the failure mode.",
+        provider: "anthropic",
+        model: "claude-sonnet-4",
+        councilGroupId: "council-turn-abc",
+      },
+    ];
+
+    const out = dbItemsToChatMessages(items);
+
+    expect(out).toHaveLength(2);
+    expect(out[1]).toMatchObject({
+      id: "council-turn-abc",
+      kind: "council_turn",
+      role: "agent",
+      responses: {
+        "openai:gpt-4.1": {
+          content: "Use the simple path.",
+          messageId: 2,
+        },
+        "anthropic:claude-sonnet-4": {
+          content: "Watch the failure mode.",
+          messageId: 3,
+        },
+      },
+    });
+  });
+
   it("survives missing optional fields with defensive defaults", () => {
     // Old sessions in state.db may have NULL values for fields the
     // current schema treats as optional. Mapping must produce a

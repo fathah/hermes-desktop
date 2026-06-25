@@ -12,6 +12,7 @@ export type AdminView =
   | "overview"
   | "aiSetup"
   | "models"
+  | "council"
   | "personalization"
   | "preferences"
   | "dataPrivacy"
@@ -61,6 +62,7 @@ const VIEW_ALIASES: Record<string, NormalizedAdminView> = {
   aiSetup: "aiSetup",
   providers: "aiSetup",
   models: "models",
+  council: "council",
   personalization: "personalization",
   preferences: "preferences",
   dataPrivacy: "dataPrivacy",
