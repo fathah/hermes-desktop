@@ -210,6 +210,22 @@ describe("New APIs from v0.8/v0.9 features", () => {
     expect(preloadTypes).toContain("MonitorDiscoveryResult");
     expect(preloadTypes).toContain("TelegramDeliveryStatus");
   });
+
+  it("has Email Eyes monitor APIs", () => {
+    for (const method of [
+      "spsEmailMonitorGetConfig",
+      "spsEmailMonitorSaveConfig",
+      "spsEmailMonitorGetStatus",
+      "spsEmailMonitorRunNow",
+      "spsEmailMonitorApplyFeedback",
+    ]) {
+      expect(preloadMethods).toContain(method);
+      expect(typeMethods).toContain(method);
+    }
+    expect(preloadTypes).toContain("EmailMonitorConfig");
+    expect(preloadTypes).toContain("EmailMonitorStatus");
+    expect(preloadTypes).toContain("EmailMonitorFeedback");
+  });
 });
 
 // ─── Legacy APIs still present ──────────────────────────

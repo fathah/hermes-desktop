@@ -75,6 +75,28 @@ export interface SpsBridgeApi {
     profile?: string,
   ) => Promise<Api.SpsRecentScreenshotImportResult>;
 
+  spsEmailMonitorGetConfig: (
+    profile?: string,
+  ) => Promise<Api.EmailMonitorConfig>;
+
+  spsEmailMonitorSaveConfig: (
+    config: Api.EmailMonitorConfig,
+    profile?: string,
+  ) => Promise<Api.EmailMonitorConfig>;
+
+  spsEmailMonitorGetStatus: (
+    profile?: string,
+  ) => Promise<Api.EmailMonitorStatus>;
+
+  spsEmailMonitorRunNow: (
+    profile?: string,
+  ) => Promise<Api.EmailMonitorRunResult>;
+
+  spsEmailMonitorApplyFeedback: (
+    feedback: Api.EmailMonitorFeedback,
+    profile?: string,
+  ) => Promise<Api.EmailMonitorConfig>;
+
   spsFileAnswer: (
     question: string,
     answer: string,

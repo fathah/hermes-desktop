@@ -79,6 +79,43 @@ describe("buildSpsCaptureMarkdown", () => {
     expect(markdown).toContain('ocrStatus: "not-run"');
     expect(markdown.endsWith("![Capture](../_assets/camera.png)")).toBe(true);
   });
+
+  it("serializes email triage metadata and attachment references", () => {
+    const markdown = buildSpsCaptureMarkdown({
+      source: "email",
+      title: "Bluebay roster change",
+      body: "## Message\n\nPlease update tonight's roster.",
+      capturedAt: 1_700_000_000_000,
+      triageLabel: "action",
+      triageReason: "Matched allowlisted sender and roster keyword.",
+      triageConfidence: 0.92,
+      emailAccount: "Ops inbox",
+      messageId: "<msg-1@example.com>",
+      folder: "INBOX",
+      uid: 42,
+      attachments: [
+        {
+          assetPath: "a".repeat(64) + ".pdf",
+          originalName: "roster.pdf",
+          mime: "application/pdf",
+          size: 1200,
+        },
+      ],
+    });
+
+    expect(markdown).toContain('source: "email"');
+    expect(markdown).toContain('triageLabel: "action"');
+    expect(markdown).toContain(
+      'triageReason: "Matched allowlisted sender and roster keyword."',
+    );
+    expect(markdown).toContain("triageConfidence: 0.92");
+    expect(markdown).toContain('emailAccount: "Ops inbox"');
+    expect(markdown).toContain('messageId: "<msg-1@example.com>"');
+    expect(markdown).toContain('folder: "INBOX"');
+    expect(markdown).toContain("uid: 42");
+    expect(markdown).toContain('"originalName":"roster.pdf"');
+    expect(markdown.endsWith("Please update tonight's roster.")).toBe(true);
+  });
 });
 
 describe("writeSpsCapture", () => {

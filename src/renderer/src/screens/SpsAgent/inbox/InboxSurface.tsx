@@ -47,6 +47,11 @@ import {
   type VisualCaptureOrigin,
 } from "../../../../../shared/visual-capture";
 import type { SpsRecentScreenshotCandidate } from "../../../../../shared/recent-screenshots";
+import type {
+  EmailMonitorConfig,
+  EmailMonitorFeedbackAction,
+  EmailMonitorStatus,
+} from "../../../../../shared/email-monitor";
 import { assetUrl } from "../lib/assets";
 import { getScrollContainer } from "../lib/scroll";
 import { ocrImageBlobToText } from "../lib/ocr";
@@ -63,7 +68,7 @@ interface InboxSurfaceProps {
 }
 
 type Mode = "note" | "web" | "image" | "pdf";
-type Tab = "inbox" | "settings";
+type Tab = "inbox" | "settings" | "sources";
 
 const CAPTURE_KINDS: SpsCaptureKind[] = [
   "note",
@@ -207,6 +212,15 @@ export function InboxSurface({
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsError, setSettingsError] = useState("");
   const [settingsSaved, setSettingsSaved] = useState(false);
+  const [emailConfig, setEmailConfig] = useState<EmailMonitorConfig | null>(
+    null,
+  );
+  const [emailStatus, setEmailStatus] = useState<EmailMonitorStatus | null>(
+    null,
+  );
+  const [emailRuleSender, setEmailRuleSender] = useState("");
+  const [emailBusy, setEmailBusy] = useState("");
+  const [emailError, setEmailError] = useState("");
 
   // Load curator settings from vault
   useEffect(() => {
@@ -244,6 +258,30 @@ export function InboxSurface({
     }
     loadSettings();
   }, [profile]);
+
+  const loadEmailMonitor = useCallback(async (): Promise<void> => {
+    const api = window.hermesAPI;
+    if (!api?.spsEmailMonitorGetConfig || !api?.spsEmailMonitorGetStatus) {
+      setEmailError("Email monitor is unavailable.");
+      return;
+    }
+    setEmailError("");
+    try {
+      const [config, status] = await Promise.all([
+        api.spsEmailMonitorGetConfig(profile),
+        api.spsEmailMonitorGetStatus(profile),
+      ]);
+      setEmailConfig(config);
+      setEmailStatus(status);
+    } catch (e) {
+      setEmailError(e instanceof Error ? e.message : String(e));
+    }
+  }, [profile]);
+
+  useEffect(() => {
+    if (activeTab !== "sources") return;
+    void loadEmailMonitor();
+  }, [activeTab, loadEmailMonitor]);
 
   useEffect(() => {
     if (pendingInboxMode !== "image") return;
@@ -745,6 +783,49 @@ export function InboxSurface({
     flash(res.message);
   }, [profile, flash]);
 
+  const applyEmailFeedback = useCallback(
+    async (
+      accountId: string,
+      action: EmailMonitorFeedbackAction,
+    ): Promise<void> => {
+      const value = emailRuleSender.trim();
+      if (!value) return;
+      setEmailBusy(action);
+      setEmailError("");
+      try {
+        const feedback =
+          action === "raise-priority"
+            ? { accountId, action, keyword: value }
+            : { accountId, action, sender: value };
+        const config = await window.hermesAPI.spsEmailMonitorApplyFeedback(
+          feedback,
+          profile,
+        );
+        setEmailConfig(config);
+        setEmailRuleSender("");
+      } catch (e) {
+        setEmailError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setEmailBusy("");
+      }
+    },
+    [emailRuleSender, profile],
+  );
+
+  const runEmailMonitor = useCallback(async (): Promise<void> => {
+    setEmailBusy("run");
+    setEmailError("");
+    try {
+      const result = await window.hermesAPI.spsEmailMonitorRunNow(profile);
+      setEmailStatus({ running: false, accounts: result.accounts });
+      if (!result.ok && result.error) setEmailError(result.error);
+    } catch (e) {
+      setEmailError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setEmailBusy("");
+    }
+  }, [profile]);
+
   const toggleSkipMem = (i: number): void =>
     setSkipMem((prev) => {
       const next = new Set(prev);
@@ -782,9 +863,7 @@ export function InboxSurface({
               </>
             )}
           </div>
-          {rowBusy[id] && (
-            <div className="inbox-row-status">{rowBusy[id]}</div>
-          )}
+          {rowBusy[id] && <div className="inbox-row-status">{rowBusy[id]}</div>}
           {teachResults[id] && (
             <div className="inbox-teach-result">
               <pre>{teachResults[id]}</pre>
@@ -865,6 +944,107 @@ export function InboxSurface({
     );
   };
 
+  const renderEmailSources = (): React.JSX.Element => {
+    const accounts = emailConfig?.accounts ?? [];
+    return (
+      <section className="inbox-section">
+        <div className="inbox-flex-align-center-gap8-mb10-bold">
+          <span>Email sources</span>
+          <span className="flex-grow" />
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            disabled={emailBusy === "run"}
+            onClick={() => void runEmailMonitor()}
+          >
+            {emailBusy === "run" ? "Checking..." : "Check now"}
+          </button>
+        </div>
+
+        {emailError && <div className="inbox-error">{emailError}</div>}
+
+        {accounts.length === 0 ? (
+          <div className="inbox-empty-notice">
+            No email accounts configured.
+          </div>
+        ) : (
+          <ul className="inbox-card-list">
+            {accounts.map((account) => {
+              const accountStatus = emailStatus?.accounts.find(
+                (status) => status.accountId === account.id,
+              );
+              return (
+                <li key={account.id} className="inbox-card">
+                  <div className="inbox-card-content">
+                    <div className="inbox-card-title">{account.label}</div>
+                    <div className="inbox-card-meta">
+                      <span>{account.emailAddress || account.imapHost}</span>
+                      <span>·</span>
+                      <span>{accountStatus?.state ?? "idle"}</span>
+                      <span>·</span>
+                      <span>{accountStatus?.captured ?? 0} captured</span>
+                      <span>·</span>
+                      <span>{accountStatus?.skipped ?? 0} skipped</span>
+                    </div>
+                    {accountStatus?.lastError && (
+                      <div className="inbox-row-status">
+                        {accountStatus.lastError}
+                      </div>
+                    )}
+                    <label className="settings-field-label">
+                      Sender rule
+                      <input
+                        className="inbox-input"
+                        value={emailRuleSender}
+                        onChange={(e) => setEmailRuleSender(e.target.value)}
+                        placeholder="person@example.com or keyword"
+                      />
+                    </label>
+                    <div className="inbox-btn-group">
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        disabled={Boolean(emailBusy)}
+                        onClick={() =>
+                          void applyEmailFeedback(
+                            account.id,
+                            "always-capture-sender",
+                          )
+                        }
+                      >
+                        Always capture sender
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        disabled={Boolean(emailBusy)}
+                        onClick={() =>
+                          void applyEmailFeedback(account.id, "ignore-sender")
+                        }
+                      >
+                        Ignore sender
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        disabled={Boolean(emailBusy)}
+                        onClick={() =>
+                          void applyEmailFeedback(account.id, "raise-priority")
+                        }
+                      >
+                        Raise priority
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+    );
+  };
+
   return (
     <div className="inbox-surface">
       <header className="inbox-header-mb">
@@ -891,6 +1071,12 @@ export function InboxSurface({
           onClick={() => setActiveTab("settings")}
         >
           Curation Settings
+        </button>
+        <button
+          className={`inbox-tab-btn ${activeTab === "sources" ? "active" : ""}`}
+          onClick={() => setActiveTab("sources")}
+        >
+          Sources
         </button>
       </div>
 
@@ -1274,6 +1460,8 @@ export function InboxSurface({
             </ul>
           )}
         </>
+      ) : activeTab === "sources" ? (
+        renderEmailSources()
       ) : (
         /* Settings Tab */
         <section className="inbox-section inbox-settings-section">

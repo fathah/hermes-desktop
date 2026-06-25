@@ -69,6 +69,12 @@ import type {
   SpsRecentScreenshotImportResult,
 } from "../../shared/recent-screenshots";
 import type {
+  EmailMonitorConfig,
+  EmailMonitorFeedback,
+  EmailMonitorRunResult,
+  EmailMonitorStatus,
+} from "../../shared/email-monitor";
+import type {
   EquityAlert,
   EquityBasket,
   NotebookLmMcpStatus,
@@ -162,6 +168,22 @@ export const spsBridge = {
     profile?: string,
   ): Promise<SpsRecentScreenshotImportResult> =>
     ipcRenderer.invoke("sps-import-clipboard-screenshot", input, profile),
+  spsEmailMonitorGetConfig: (profile?: string): Promise<EmailMonitorConfig> =>
+    ipcRenderer.invoke("sps-email-monitor-get-config", profile),
+  spsEmailMonitorSaveConfig: (
+    config: EmailMonitorConfig,
+    profile?: string,
+  ): Promise<EmailMonitorConfig> =>
+    ipcRenderer.invoke("sps-email-monitor-save-config", config, profile),
+  spsEmailMonitorGetStatus: (profile?: string): Promise<EmailMonitorStatus> =>
+    ipcRenderer.invoke("sps-email-monitor-status", profile),
+  spsEmailMonitorRunNow: (profile?: string): Promise<EmailMonitorRunResult> =>
+    ipcRenderer.invoke("sps-email-monitor-run-now", profile),
+  spsEmailMonitorApplyFeedback: (
+    feedback: EmailMonitorFeedback,
+    profile?: string,
+  ): Promise<EmailMonitorConfig> =>
+    ipcRenderer.invoke("sps-email-monitor-apply-feedback", feedback, profile),
   spsFileAnswer: (
     question: string,
     answer: string,

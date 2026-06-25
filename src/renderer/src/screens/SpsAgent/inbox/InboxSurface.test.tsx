@@ -52,6 +52,10 @@ const api = {
   spsTeachCapture: vi.fn(),
   spsFileAnswer: vi.fn(),
   spsListRecentScreenshots: vi.fn(),
+  spsEmailMonitorGetConfig: vi.fn(),
+  spsEmailMonitorGetStatus: vi.fn(),
+  spsEmailMonitorRunNow: vi.fn(),
+  spsEmailMonitorApplyFeedback: vi.fn(),
 };
 
 function installApi(): void {
@@ -98,6 +102,49 @@ beforeEach(() => {
     reply: ["## Answers\n\n1. Worked answer with pedagogy."],
   });
   api.spsListRecentScreenshots.mockResolvedValue([]);
+  api.spsEmailMonitorGetConfig.mockResolvedValue({
+    accounts: [
+      {
+        id: "ops",
+        label: "Ops inbox",
+        emailAddress: "ops@example.com",
+        imapHost: "imap.example.com",
+        enabled: true,
+        folders: ["INBOX"],
+        allowSenders: [],
+        allowDomains: [],
+        blockSenders: [],
+        blockDomains: [],
+        importanceKeywords: ["roster"],
+        ignoredKeywords: [],
+        captureThreshold: 0.45,
+        maxMessageBytes: 1048576,
+        maxAttachmentBytes: 10485760,
+      },
+    ],
+  });
+  api.spsEmailMonitorGetStatus.mockResolvedValue({
+    running: false,
+    accounts: [
+      {
+        accountId: "ops",
+        label: "Ops inbox",
+        state: "idle",
+        captured: 1,
+        skipped: 2,
+        errors: 0,
+      },
+    ],
+  });
+  api.spsEmailMonitorRunNow.mockResolvedValue({
+    ok: true,
+    captured: 1,
+    skipped: 2,
+    errors: 0,
+  });
+  api.spsEmailMonitorApplyFeedback.mockResolvedValue({
+    accounts: [],
+  });
 });
 
 afterEach(() => {
@@ -106,6 +153,39 @@ afterEach(() => {
 });
 
 describe("InboxSurface visual captures", () => {
+  it("shows email source monitor status and sends feedback actions", async () => {
+    render(<InboxSurface />);
+
+    fireEvent.click(screen.getByRole("button", { name: /sources/i }));
+
+    expect(await screen.findByText(/email sources/i)).toBeInTheDocument();
+    expect(await screen.findByText("Ops inbox")).toBeInTheDocument();
+    expect(screen.getByText(/1 captured/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 skipped/i)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/sender rule/i), {
+      target: { value: "noise@example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /ignore sender/i }));
+
+    await waitFor(() => {
+      expect(api.spsEmailMonitorApplyFeedback).toHaveBeenCalledWith(
+        {
+          accountId: "ops",
+          action: "ignore-sender",
+          sender: "noise@example.com",
+        },
+        "default",
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /check now/i }));
+
+    await waitFor(() => {
+      expect(api.spsEmailMonitorRunNow).toHaveBeenCalledWith("default");
+    });
+  });
+
   it("opens image capture mode from the first-run checklist intent", async () => {
     storeState.pendingInboxMode = "image";
 

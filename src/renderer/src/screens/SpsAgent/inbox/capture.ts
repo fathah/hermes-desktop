@@ -20,13 +20,18 @@ import type {
   VisualCaptureOcrStatus,
   VisualCaptureOrigin,
 } from "../../../../../shared/visual-capture";
+import type {
+  SpsEmailCaptureAttachment,
+  SpsCaptureInput,
+} from "../../../../../shared/sps-types";
 
 export type CaptureSource =
   | "quick-note"
   | "web"
   | "voice"
   | "screenshot"
-  | "image";
+  | "image"
+  | "email";
 
 export type CaptureStatus =
   | "unprocessed"
@@ -71,6 +76,14 @@ export interface CaptureInput {
   mime?: string;
   captureOrigin?: VisualCaptureOrigin;
   ocrStatus?: VisualCaptureOcrStatus;
+  triageLabel?: SpsCaptureInput["triageLabel"];
+  triageReason?: string;
+  triageConfidence?: number;
+  emailAccount?: string;
+  messageId?: string;
+  folder?: string;
+  uid?: number;
+  attachments?: SpsEmailCaptureAttachment[];
 }
 
 export interface Capture {
@@ -115,6 +128,17 @@ export function buildCapture(input: CaptureInput, id = uid("cap")): Capture {
   if (input.mime?.trim()) props.mime = input.mime.trim();
   if (input.captureOrigin) props.captureOrigin = input.captureOrigin;
   if (input.ocrStatus) props.ocrStatus = input.ocrStatus;
+  if (input.triageLabel) props.triageLabel = input.triageLabel;
+  if (input.triageReason?.trim())
+    props.triageReason = input.triageReason.trim();
+  if (typeof input.triageConfidence === "number")
+    props.triageConfidence = input.triageConfidence;
+  if (input.emailAccount?.trim())
+    props.emailAccount = input.emailAccount.trim();
+  if (input.messageId?.trim()) props.messageId = input.messageId.trim();
+  if (input.folder?.trim()) props.folder = input.folder.trim();
+  if (typeof input.uid === "number") props.uid = input.uid;
+  if (input.attachments?.length) props.attachments = input.attachments;
   const markdown = rowToMarkdown(props, input.body.trim());
   return { id, markdown };
 }

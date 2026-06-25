@@ -166,6 +166,12 @@ export type {
   SpsRecentScreenshotImportResult,
 } from "../shared/recent-screenshots";
 export type {
+  EmailMonitorConfig,
+  EmailMonitorFeedback,
+  EmailMonitorRunResult,
+  EmailMonitorStatus,
+} from "../shared/email-monitor";
+export type {
   SubstackRadarAddApprovedFeedsInput,
   SubstackRadarAddApprovedFeedsResult,
   SubstackRadarRun,

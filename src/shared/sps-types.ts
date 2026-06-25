@@ -279,8 +279,15 @@ export type SpsCaptureKind =
   | "task"
   | "journal";
 
+export interface SpsEmailCaptureAttachment {
+  assetPath: string;
+  originalName: string;
+  mime: string;
+  size: number;
+}
+
 export interface SpsCaptureInput {
-  source: "quick-note" | "web" | "voice" | "screenshot" | "image";
+  source: "quick-note" | "web" | "voice" | "screenshot" | "image" | "email";
   body: string;
   title?: string;
   description?: string;
@@ -298,6 +305,14 @@ export interface SpsCaptureInput {
   mime?: string;
   captureOrigin?: VisualCaptureOrigin;
   ocrStatus?: VisualCaptureOcrStatus;
+  triageLabel?: "urgent" | "action" | "knowledge" | "archive" | "ignore";
+  triageReason?: string;
+  triageConfidence?: number;
+  emailAccount?: string;
+  messageId?: string;
+  folder?: string;
+  uid?: number;
+  attachments?: SpsEmailCaptureAttachment[];
 }
 
 export interface ChecklistItem {

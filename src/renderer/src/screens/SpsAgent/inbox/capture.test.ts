@@ -82,6 +82,39 @@ describe("buildCapture", () => {
     expect(body).toContain("Solve page 42.");
   });
 
+  it("serializes email source metadata for monitor captures", () => {
+    const { markdown } = buildCapture(
+      {
+        source: "email",
+        body: "## Message\n\nPlease update tonight's roster.",
+        title: "Bluebay roster change",
+        capturedAt: 1_700_000_000_000,
+        triageLabel: "action",
+        triageReason: "Matched roster keyword.",
+        triageConfidence: 0.9,
+        emailAccount: "Ops inbox",
+        messageId: "<msg-1@example.com>",
+        folder: "INBOX",
+        uid: 42,
+      },
+      "cap-email",
+    );
+    const { props, body } = rowFromMarkdown(markdown);
+    expect(props).toMatchObject({
+      title: "Bluebay roster change",
+      source: "email",
+      status: "unprocessed",
+      triageLabel: "action",
+      triageReason: "Matched roster keyword.",
+      triageConfidence: 0.9,
+      emailAccount: "Ops inbox",
+      messageId: "<msg-1@example.com>",
+      folder: "INBOX",
+      uid: 42,
+    });
+    expect(body).toContain("Please update tonight's roster.");
+  });
+
   it("omits optional fields (via/url) when absent", () => {
     const { markdown } = buildCapture(
       { source: "quick-note", body: "note", capturedAt: 1 },
