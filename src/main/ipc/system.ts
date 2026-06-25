@@ -13,7 +13,6 @@ import {
   runHermesUpdate,
   checkHermesUpdate,
   getChangelog,
-  listMcpServers,
   discoverMemoryProviders,
   readLogs,
   runHermesDump,
@@ -53,6 +52,16 @@ import type { AppLocale } from "../../shared/i18n/types";
 import type { AppUpdater } from "electron-updater";
 import { registerCapabilityRiskIpc } from "./capability-risk";
 import { registerResearchReachIpc } from "./research-reach";
+import {
+  addMcpServer,
+  installMcpCatalogEntry,
+  listMcpCatalog,
+  listMcpServers,
+  removeMcpServer,
+  setMcpServerEnabled,
+  testMcpServer,
+  type McpServerInput,
+} from "../mcp-servers";
 
 // Dynamic import or check for updates depending on packaging
 import { registerDualHandler } from "./utility";
@@ -225,6 +234,30 @@ export function registerSystemIpc(
   // MCP servers
   safeHandle("list-mcp-servers", (_event, profile?: string) =>
     listMcpServers(profile),
+  );
+  safeHandle(
+    "add-mcp-server",
+    (_event, input: McpServerInput, profile?: string) =>
+      addMcpServer(input, profile),
+  );
+  safeHandle("remove-mcp-server", (_event, name: string, profile?: string) =>
+    removeMcpServer(name, profile),
+  );
+  safeHandle(
+    "set-mcp-server-enabled",
+    (_event, name: string, enabled: boolean, profile?: string) =>
+      setMcpServerEnabled(name, enabled, profile),
+  );
+  safeHandle("test-mcp-server", (_event, name: string, profile?: string) =>
+    testMcpServer(name, profile),
+  );
+  safeHandle("list-mcp-catalog", (_event, profile?: string) =>
+    listMcpCatalog(profile),
+  );
+  safeHandle(
+    "install-mcp-catalog-entry",
+    (_event, name: string, env?: Record<string, string>, profile?: string) =>
+      installMcpCatalogEntry(name, env || {}, profile),
   );
   registerCapabilityRiskIpc();
   registerResearchReachIpc();

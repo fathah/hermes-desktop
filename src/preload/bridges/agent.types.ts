@@ -1,7 +1,7 @@
 import type * as Api from "../api-types";
 
 export interface AgentBridgeApi {
-  startGateway: () => Promise<boolean>;
+  startGateway: () => Promise<Api.GatewayStartResult>;
 
   stopGateway: () => Promise<boolean>;
 

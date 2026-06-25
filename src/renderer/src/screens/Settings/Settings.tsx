@@ -15,6 +15,7 @@ import {
 } from "../../utils/analytics";
 import { ConfigHealth } from "./ConfigHealth";
 import CapabilitySummary from "./CapabilitySummary";
+import McpServersManager from "./McpServersManager";
 import ResearchReachSummary from "./ResearchReachSummary";
 import { HealthSurface } from "../SpsAgent/health/HealthSurface";
 import { getDevMode, setDevMode } from "../../lib/devMode";
@@ -745,6 +746,11 @@ function Settings({
       </div>
 
       <CapabilitySummary
+        profile={profile}
+        active={section === "troubleshooting"}
+        sectionTab="troubleshooting"
+      />
+      <McpServersManager
         profile={profile}
         active={section === "troubleshooting"}
         sectionTab="troubleshooting"

@@ -9,6 +9,8 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
   const { t } = useI18n();
   const gatewayHealth = useGatewayHealth();
   const [gatewayRunning, setGatewayRunning] = useState(false);
+  const [gatewayBusy, setGatewayBusy] = useState(false);
+  const [gatewayError, setGatewayError] = useState<string | null>(null);
   const [env, setEnv] = useState<Record<string, string>>({});
   const [platformEnabled, setPlatformEnabled] = useState<
     Record<string, boolean>
@@ -51,6 +53,7 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
     setKeychainKeys(new Set(keys));
     const gwStatus = await window.hermesAPI.gatewayStatus();
     setGatewayRunning(gwStatus);
+    if (gwStatus) setGatewayError(null);
     const platforms = await window.hermesAPI.getPlatformEnabled(profile);
     setPlatformEnabled(platforms);
   }, [profile]);
@@ -151,26 +154,61 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
     const interval = setInterval(async () => {
       const status = await window.hermesAPI.gatewayStatus();
       setGatewayRunning(status);
+      if (status) setGatewayError(null);
     }, 10000);
     return () => clearInterval(interval);
   }, []);
 
   async function toggleGateway(): Promise<void> {
+    if (gatewayBusy) return;
     if (gatewayStatusTimeoutRef.current) {
       clearTimeout(gatewayStatusTimeoutRef.current);
       gatewayStatusTimeoutRef.current = null;
     }
-    if (gatewayRunning) {
-      await window.hermesAPI.stopGateway();
-      setGatewayRunning(false);
-    } else {
-      const started = await window.hermesAPI.startGateway();
-      setGatewayRunning(started);
+    const wasRunning = gatewayRunning;
+    setGatewayBusy(true);
+    setGatewayError(null);
+    try {
+      if (wasRunning) {
+        const stopped = await window.hermesAPI.stopGateway();
+        if (!stopped) setGatewayError(t("gateway.stopFailed"));
+        setGatewayRunning(false);
+        return;
+      }
+
+      const result = await window.hermesAPI.startGateway();
+      setGatewayRunning(result.running);
+      if (!result.success) {
+        const message = result.error || t("gateway.startFailed");
+        setGatewayError(
+          result.logPath
+            ? `${message} ${t("gateway.checkLog", { path: result.logPath })}`
+            : message,
+        );
+        return;
+      }
+
       gatewayStatusTimeoutRef.current = setTimeout(async () => {
         const status = await window.hermesAPI.gatewayStatus();
         setGatewayRunning(status);
+        if (!status) {
+          setGatewayError(
+            result.logPath
+              ? `${t("gateway.startExited")} ${t("gateway.checkLog", {
+                  path: result.logPath,
+                })}`
+              : t("gateway.startExited"),
+          );
+        }
         gatewayStatusTimeoutRef.current = null;
       }, 5000);
+    } catch (err) {
+      const prefix = wasRunning
+        ? t("gateway.stopFailed")
+        : t("gateway.startFailed");
+      setGatewayError(`${prefix} ${(err as Error).message}`);
+    } finally {
+      setGatewayBusy(false);
     }
   }
 
@@ -244,10 +282,23 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
             <button
               className="btn btn-secondary btn-sm"
               onClick={toggleGateway}
+              disabled={gatewayBusy}
             >
-              {gatewayRunning ? t("common.stop") : t("common.start")}
+              {gatewayBusy
+                ? t("gateway.working")
+                : gatewayRunning
+                  ? t("common.stop")
+                  : t("common.start")}
             </button>
           </div>
+          {gatewayError && (
+            <div
+              className="settings-field-hint settings-field-error"
+              role="alert"
+            >
+              {gatewayError}
+            </div>
+          )}
           {gatewayHealth === "recovering" && (
             <div className="settings-field-hint">
               {t("gateway.healthRecovering")}

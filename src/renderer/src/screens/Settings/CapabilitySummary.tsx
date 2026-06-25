@@ -10,11 +10,10 @@ import type {
  * Absorbs the old standalone CapabilityReview screen (deleted in P2.4): the
  * security-oversight answer to "what can this profile's agent currently do, and
  * what's touching credentials / the filesystem right now?". Composes the same
- * existing IPC the screen used (no new handlers) and renders a compact summary —
- * installed-skill count plus the *active* tools and MCP servers (the ones that
- * actually grant the agent reach). The toggles still live in the Skills / Tools
- * surfaces; this is purely the audit glance. Loads lazily the first time the
- * Application Health tab is shown so it stays off the Settings-mount hot path.
+ * existing IPC the screen used and renders a compact summary — installed-skill
+ * count plus the *active* tools and MCP servers (the ones that actually grant
+ * the agent reach). Loads lazily the first time the Application Health tab is
+ * shown so it stays off the Settings-mount hot path.
  */
 interface Toolset {
   key: string;
@@ -105,7 +104,8 @@ function CapabilitySummary({
       <div className="settings-field">
         <div className="settings-field-hint" style={{ marginBottom: 12 }}>
           Everything My Assistant can currently access and use. Disable anything
-          you don&apos;t recognize in the workspace Skills / Tools surfaces.
+          you don&apos;t recognize from the MCP Servers manager or Skills
+          surfaces.
         </div>
         {!loaded ? (
           <div className="settings-field-hint">Loading capabilities…</div>

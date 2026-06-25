@@ -38,6 +38,7 @@ import {
   type GatewayHealthStatus,
 } from "./gateway-supervisor";
 import { log, rotateGatewayStderrIfLarge } from "../log";
+import type { GatewayStartResult } from "../../shared/gateway";
 
 export function resolveProfile(profile?: string): string | undefined {
   return normalizeProfileName(profile ?? getActiveProfileNameSync());
@@ -203,29 +204,33 @@ function invalidateApiCacheFor(profile?: string): void {
   }
 }
 
-export function startGateway(profile?: string): boolean {
+export function startGatewayDetailed(profile?: string): GatewayStartResult {
   if (isRemoteMode()) {
+    const error =
+      "The local gateway can only be started in local mode. Switch to local mode, or start the gateway on the remote Hermes host.";
     console.warn(
       "[gateway] startGateway() called in remote/SSH mode — refusing local spawn",
     );
-    return false;
+    return { success: false, running: false, error };
   }
   ensureInitialized();
-  if (isGatewayRunning(profile)) return false;
+  if (isGatewayRunning(profile)) {
+    return { success: true, running: true, alreadyRunning: true };
+  }
 
   if (!existsSync(HERMES_PYTHON)) {
-    console.error(
-      `[gateway] Cannot start: Python interpreter not found at ${HERMES_PYTHON}. ` +
-        "Is hermes-agent installed?",
-    );
-    return false;
+    const error =
+      `Cannot start the gateway because the Hermes Python interpreter was not found at ${HERMES_PYTHON}. ` +
+      "Install or repair Hermes Agent, then try again.";
+    console.error(`[gateway] ${error}`);
+    return { success: false, running: false, error };
   }
   if (!existsSync(HERMES_REPO)) {
-    console.error(
-      `[gateway] Cannot start: hermes-agent repo not found at ${HERMES_REPO}. ` +
-        "Is hermes-agent installed?",
-    );
-    return false;
+    const error =
+      `Cannot start the gateway because the hermes-agent repository was not found at ${HERMES_REPO}. ` +
+      "Install or repair Hermes Agent, then try again.";
+    console.error(`[gateway] ${error}`);
+    return { success: false, running: false, error };
   }
 
   const resolved = resolveProfile(profile);
@@ -272,13 +277,28 @@ export function startGateway(profile?: string): boolean {
   }
 
   const cliArgs = resolved ? ["--profile", resolved, "gateway"] : ["gateway"];
-  const proc = spawn(HERMES_PYTHON, hermesCliArgs(cliArgs), {
-    cwd: HERMES_REPO,
-    env: gatewayEnv,
-    stdio: ["ignore", "ignore", stderrFd >= 0 ? stderrFd : "ignore"],
-    detached: true,
-    ...HIDDEN_SUBPROCESS_OPTIONS,
-  });
+  let proc: ChildProcess;
+  try {
+    proc = spawn(HERMES_PYTHON, hermesCliArgs(cliArgs), {
+      cwd: HERMES_REPO,
+      env: gatewayEnv,
+      stdio: ["ignore", "ignore", stderrFd >= 0 ? stderrFd : "ignore"],
+      detached: true,
+      ...HIDDEN_SUBPROCESS_OPTIONS,
+    });
+  } catch (err) {
+    if (stderrFd >= 0) {
+      try {
+        closeSync(stderrFd);
+      } catch {
+        // best-effort
+      }
+    }
+    const message = err instanceof Error ? err.message : String(err);
+    const error = `Failed to start the gateway process: ${message}`;
+    console.error(`[gateway:${key}] ${error}`);
+    return { success: false, running: false, error, logPath };
+  }
 
   if (stderrFd >= 0) {
     try {
@@ -327,7 +347,12 @@ export function startGateway(profile?: string): boolean {
       });
   }, 3000);
 
-  return true;
+  return { success: true, running: true, logPath };
+}
+
+export function startGateway(profile?: string): boolean {
+  const result = startGatewayDetailed(profile);
+  return result.success && !result.alreadyRunning;
 }
 
 function parsePidFromFile(pidFile: string): number | null {

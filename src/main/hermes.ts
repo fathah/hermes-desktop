@@ -38,6 +38,7 @@ export {
   waitForApiServerReady,
   ensureApiServerConfig,
   startGateway,
+  startGatewayDetailed,
   stopGateway,
   isGatewayRunning,
   isApiReady,

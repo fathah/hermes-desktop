@@ -57,7 +57,61 @@ export type { ConfigHealthReport } from "../shared/config-health";
 export type { EquityBasket, EquityAlert } from "../shared/equity";
 export type { PublicConnectionConfig } from "../shared/connection";
 export type { ChatReadiness } from "../shared/validation";
+export type { GatewayStartResult } from "../shared/gateway";
 export type { SkillEntry } from "../shared/skills";
+
+export type McpTransport = "http" | "stdio" | "unknown";
+
+export interface McpServerInfo {
+  name: string;
+  type: McpTransport;
+  transport: McpTransport;
+  enabled: boolean;
+  detail: string;
+  url?: string;
+  command?: string;
+  args: string[];
+  env: Record<string, string>;
+  auth?: string;
+  tools?: unknown;
+}
+
+export interface McpServerInput {
+  name: string;
+  type: "http" | "stdio";
+  url?: string;
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  auth?: string;
+}
+
+export interface McpCatalogEntry {
+  name: string;
+  description: string;
+  source: string;
+  transport: McpTransport;
+  authType: string;
+  requiredEnv: Array<{ name: string; prompt: string; required: boolean }>;
+  needsInstall: boolean;
+  installed: boolean;
+  enabled: boolean;
+}
+
+export interface McpOperationResult {
+  success: boolean;
+  error?: string;
+  background?: boolean;
+  action?: string;
+  tools?: Array<{ name: string; description: string }>;
+}
+
+export interface McpCatalogResult {
+  entries: McpCatalogEntry[];
+  diagnostics: unknown[];
+  error?: string;
+}
+
 export type {
   ExternalSource,
   ExternalImportSource,

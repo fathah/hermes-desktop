@@ -94,6 +94,7 @@ import {
   normaliseRemoteUrl,
   getApiUrl,
   startGateway,
+  startGatewayDetailed,
   restartGateway,
   testRemoteConnection,
   contextFolderSystemMessage,
@@ -305,11 +306,29 @@ describe("startGateway / restartGateway in remote mode", () => {
     expect(spawnSpy).not.toHaveBeenCalled();
   });
 
+  it("startGatewayDetailed reports an actionable remote-mode refusal", () => {
+    spawnSpy.mockClear();
+    connModeRef.mode = "remote";
+    const result = startGatewayDetailed();
+    expect(result).toMatchObject({ success: false, running: false });
+    expect(result.error).toMatch(/local gateway/i);
+    expect(spawnSpy).not.toHaveBeenCalled();
+  });
+
   it("startGateway refuses to spawn in ssh mode", () => {
     spawnSpy.mockClear();
     connModeRef.mode = "ssh";
     const result = startGateway();
     expect(result).toBe(false);
+    expect(spawnSpy).not.toHaveBeenCalled();
+  });
+
+  it("startGatewayDetailed reports an actionable ssh-mode refusal", () => {
+    spawnSpy.mockClear();
+    connModeRef.mode = "ssh";
+    const result = startGatewayDetailed();
+    expect(result).toMatchObject({ success: false, running: false });
+    expect(result.error).toMatch(/remote Hermes host/i);
     expect(spawnSpy).not.toHaveBeenCalled();
   });
 

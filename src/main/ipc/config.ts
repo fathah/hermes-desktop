@@ -39,6 +39,7 @@ import {
   isGatewayRunning,
   restartGateway,
   startGateway,
+  startGatewayDetailed,
   stopGateway,
   testRemoteConnection,
   setSshRemoteApiKey,
@@ -127,7 +128,7 @@ export function registerConfigIpc(): void {
   registerDualHandler(
     "get-keychain-keys",
     (profile?: string) => getKeychainKeys(profile),
-    async (_ssh, _profile?: string) => []
+    async (_ssh, _profile?: string) => [],
   );
 
   registerDualHandler(
@@ -482,13 +483,18 @@ export function registerConfigIpc(): void {
     async () => {
       const conn = getConnectionConfig();
       if (conn.mode === "remote") {
-        return false;
+        return {
+          success: false,
+          running: false,
+          error:
+            "Remote mode points at an existing Hermes gateway. Start or restart the gateway on the remote host.",
+        };
       }
-      return startGateway();
+      return startGatewayDetailed();
     },
     async (ssh) => {
       await sshStartGateway(ssh);
-      return true;
+      return { success: true, running: true };
     },
   );
   registerDualHandler(

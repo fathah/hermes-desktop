@@ -11,3 +11,11 @@ export type GatewayHealthStatus =
 export interface GatewayHealthChange {
   status: GatewayHealthStatus;
 }
+
+export interface GatewayStartResult {
+  success: boolean;
+  running: boolean;
+  alreadyRunning?: boolean;
+  error?: string;
+  logPath?: string;
+}

@@ -101,8 +101,19 @@ describe("New APIs from v0.8/v0.9 features", () => {
   });
 
   it("has MCP server list API", () => {
-    expect(preloadMethods).toContain("listMcpServers");
-    expect(typeMethods).toContain("listMcpServers");
+    for (const method of [
+      "listMcpServers",
+      "addMcpServer",
+      "removeMcpServer",
+      "setMcpServerEnabled",
+      "testMcpServer",
+      "listMcpCatalog",
+      "installMcpCatalogEntry",
+    ]) {
+      expect(preloadMethods).toContain(method);
+      expect(typeMethods).toContain(method);
+    }
+    expect(preloadTypes).toContain("GatewayStartResult");
   });
 
   it("has memory provider discovery API", () => {

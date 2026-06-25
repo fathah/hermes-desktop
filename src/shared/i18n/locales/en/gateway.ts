@@ -5,6 +5,11 @@ export default {
   status: "Status",
   running: "Running",
   stopped: "Stopped",
+  working: "Working...",
+  startFailed: "Couldn't start the connection service.",
+  stopFailed: "Couldn't stop the connection service.",
+  startExited: "Connection service did not stay running after start.",
+  checkLog: "Check {{path}} for startup details.",
   gatewayHint:
     "Let My Assistant communicate through approved channels like Discord and Slack.",
   healthRecovering:

@@ -10,13 +10,15 @@ import type {
 import type {
   GatewayHealthStatus,
   GatewayHealthChange,
+  GatewayStartResult,
 } from "../../shared/gateway";
 import type { WhatsAppCloudStatus } from "../../shared/whatsappCloud";
 import type { AgentBridgeApi } from "./agent.types";
 
 export const agentBridge = {
   // Gateway
-  startGateway: (): Promise<boolean> => ipcRenderer.invoke("start-gateway"),
+  startGateway: (): Promise<GatewayStartResult> =>
+    ipcRenderer.invoke("start-gateway"),
   stopGateway: (): Promise<boolean> => ipcRenderer.invoke("stop-gateway"),
   gatewayStatus: (): Promise<boolean> => ipcRenderer.invoke("gateway-status"),
   gatewayHealthStatus: (): Promise<GatewayHealthStatus> =>

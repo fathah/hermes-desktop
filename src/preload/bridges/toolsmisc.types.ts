@@ -32,11 +32,36 @@ export interface ToolsmiscBridgeApi {
 
   // MCP servers
 
-  listMcpServers: (
+  listMcpServers: (profile?: string) => Promise<Api.McpServerInfo[]>;
+
+  addMcpServer: (
+    input: Api.McpServerInput,
     profile?: string,
-  ) => Promise<
-    Array<{ name: string; type: string; enabled: boolean; detail: string }>
-  >;
+  ) => Promise<Api.McpOperationResult>;
+
+  removeMcpServer: (
+    name: string,
+    profile?: string,
+  ) => Promise<Api.McpOperationResult>;
+
+  setMcpServerEnabled: (
+    name: string,
+    enabled: boolean,
+    profile?: string,
+  ) => Promise<Api.McpOperationResult>;
+
+  testMcpServer: (
+    name: string,
+    profile?: string,
+  ) => Promise<Api.McpOperationResult>;
+
+  listMcpCatalog: (profile?: string) => Promise<Api.McpCatalogResult>;
+
+  installMcpCatalogEntry: (
+    name: string,
+    env?: Record<string, string>,
+    profile?: string,
+  ) => Promise<Api.McpOperationResult>;
 
   getCapabilityRiskSummary: (
     profile?: string,

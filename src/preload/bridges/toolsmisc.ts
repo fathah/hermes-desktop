@@ -1,6 +1,12 @@
 import { ipcRenderer } from "electron";
 import type { CapabilityRiskSummary } from "../../shared/capability-risk";
 import type { ResearchReachStatus } from "../../shared/research-reach";
+import type {
+  McpCatalogResult,
+  McpOperationResult,
+  McpServerInfo,
+  McpServerInput,
+} from "../api-types";
 import type { ToolsmiscBridgeApi } from "./toolsmisc.types";
 
 export const toolsmiscBridge = {
@@ -37,11 +43,37 @@ export const toolsmiscBridge = {
   > => ipcRenderer.invoke("discover-memory-providers", profile),
 
   // MCP servers
-  listMcpServers: (
+  listMcpServers: (profile?: string): Promise<McpServerInfo[]> =>
+    ipcRenderer.invoke("list-mcp-servers", profile),
+  addMcpServer: (
+    input: McpServerInput,
     profile?: string,
-  ): Promise<
-    Array<{ name: string; type: string; enabled: boolean; detail: string }>
-  > => ipcRenderer.invoke("list-mcp-servers", profile),
+  ): Promise<McpOperationResult> =>
+    ipcRenderer.invoke("add-mcp-server", input, profile),
+  removeMcpServer: (
+    name: string,
+    profile?: string,
+  ): Promise<McpOperationResult> =>
+    ipcRenderer.invoke("remove-mcp-server", name, profile),
+  setMcpServerEnabled: (
+    name: string,
+    enabled: boolean,
+    profile?: string,
+  ): Promise<McpOperationResult> =>
+    ipcRenderer.invoke("set-mcp-server-enabled", name, enabled, profile),
+  testMcpServer: (
+    name: string,
+    profile?: string,
+  ): Promise<McpOperationResult> =>
+    ipcRenderer.invoke("test-mcp-server", name, profile),
+  listMcpCatalog: (profile?: string): Promise<McpCatalogResult> =>
+    ipcRenderer.invoke("list-mcp-catalog", profile),
+  installMcpCatalogEntry: (
+    name: string,
+    env?: Record<string, string>,
+    profile?: string,
+  ): Promise<McpOperationResult> =>
+    ipcRenderer.invoke("install-mcp-catalog-entry", name, env, profile),
   getCapabilityRiskSummary: (
     profile?: string,
   ): Promise<CapabilityRiskSummary> =>
