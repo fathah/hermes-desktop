@@ -56,7 +56,7 @@ function ensureNotebookLmMcpRegistered(profile?: string): NotebookLmMcpStatus {
         },
         profile,
       );
-      if (wasRunning) restartGateway(profile);
+      if (wasRunning) void restartGateway(profile);
       return {
         registered: true,
         alreadyPresent: true,
@@ -74,7 +74,7 @@ function ensureNotebookLmMcpRegistered(profile?: string): NotebookLmMcpStatus {
     }
     if (!current.enabled) {
       setMcpServerEnabled(name, true, profile);
-      if (wasRunning) restartGateway(profile);
+      if (wasRunning) void restartGateway(profile);
     }
     return {
       registered: true,
@@ -112,7 +112,7 @@ function ensureNotebookLmMcpRegistered(profile?: string): NotebookLmMcpStatus {
     { command: entry.command, args: entry.args, env: {}, enabled: true },
     profile,
   );
-  if (wasRunning) restartGateway(profile);
+  if (wasRunning) void restartGateway(profile);
   return {
     registered: true,
     alreadyPresent: false,

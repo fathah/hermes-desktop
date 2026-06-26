@@ -140,7 +140,7 @@ export function registerConfigIpc(): void {
         key.endsWith("_TOKEN") ||
         key === "HF_TOKEN";
       if (isGatewayRunning(profile) && looksLikeCredential) {
-        restartGateway(profile);
+        void restartGateway(profile);
       }
       return true;
     },
@@ -161,7 +161,7 @@ export function registerConfigIpc(): void {
       const envKey = resolveProviderEnvKey(provider);
       if (!envKey) return false;
       setEnvValue(envKey, key, profile);
-      if (isGatewayRunning(profile)) restartGateway(profile);
+      if (isGatewayRunning(profile)) void restartGateway(profile);
       return true;
     },
     async (ssh, provider: string, key: string, profile?: string) => {
@@ -219,7 +219,7 @@ export function registerConfigIpc(): void {
           prev.model !== model ||
           prev.baseUrl !== baseUrl)
       ) {
-        restartGateway(profile);
+        void restartGateway(profile);
       }
 
       return true;
@@ -538,7 +538,7 @@ export function registerConfigIpc(): void {
     async (platform: string, enabled: boolean, profile?: string) => {
       setPlatformEnabled(platform, enabled, profile);
       if (isGatewayRunning(profile)) {
-        restartGateway(profile);
+        void restartGateway(profile);
       }
       return true;
     },

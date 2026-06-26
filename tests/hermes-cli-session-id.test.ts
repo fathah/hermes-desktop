@@ -1,34 +1,43 @@
 import { EventEmitter } from "events";
+import { mkdirSync, rmSync } from "fs";
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 
-const { spawned, TEST_HOME, TEST_REPO, healthStatuses, apiRequests } =
-  vi.hoisted(() => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const path = require("path");
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const os = require("os");
-    return {
-      spawned: [] as Array<
-        EventEmitter & {
-          stdout: EventEmitter;
-          stderr: EventEmitter;
-          killed: boolean;
-          kill: ReturnType<typeof vi.fn>;
-          unref: ReturnType<typeof vi.fn>;
-        }
-      >,
-      TEST_HOME: path.join(
-        os.tmpdir(),
-        `hermes-cli-session-test-${Date.now()}`,
-      ),
-      TEST_REPO: os.tmpdir(),
-      healthStatuses: [] as number[],
-      apiRequests: [] as Array<{
-        body: string;
-        headers: Record<string, string>;
-      }>,
-    };
-  });
+const {
+  spawned,
+  TEST_HOME,
+  TEST_REPO,
+  healthStatuses,
+  apiRequests,
+  apiRequestErrors,
+  requestEvents,
+} = vi.hoisted(() => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const path = require("path");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const os = require("os");
+  return {
+    spawned: [] as Array<
+      EventEmitter & {
+        stdout: EventEmitter;
+        stderr: EventEmitter;
+        killed: boolean;
+        exitCode: number | null;
+        signalCode: NodeJS.Signals | null;
+        kill: ReturnType<typeof vi.fn>;
+        unref: ReturnType<typeof vi.fn>;
+      }
+    >,
+    TEST_HOME: path.join(os.tmpdir(), `hermes-cli-session-test-${Date.now()}`),
+    TEST_REPO: path.join(os.tmpdir(), `hermes-cli-session-repo-${Date.now()}`),
+    healthStatuses: [] as number[],
+    apiRequests: [] as Array<{
+      body: string;
+      headers: Record<string, string>;
+    }>,
+    apiRequestErrors: [] as string[],
+    requestEvents: [] as string[],
+  };
+});
 
 vi.mock("node:http", () => ({
   default: {
@@ -58,10 +67,20 @@ vi.mock("node:http", () => ({
           }
 
           if (_url.endsWith("/v1/chat/completions")) {
+            requestEvents.push("chat");
             apiRequests.push({
               body,
               headers: (_options.headers as Record<string, string>) || {},
             });
+            const injectedError = apiRequestErrors.shift();
+            if (injectedError === "TIMEOUT_ACCEPTED") {
+              handlers.get("timeout")?.();
+              return;
+            }
+            if (injectedError) {
+              handlers.get("error")?.(new Error(injectedError));
+              return;
+            }
             const res = new EventEmitter() as EventEmitter & {
               statusCode: number;
               headers: Record<string, string>;
@@ -85,9 +104,7 @@ vi.mock("node:http", () => ({
           handlers.set(event, handler);
           return req;
         },
-        destroy: () => {
-          handlers.get("error")?.(new Error("destroyed"));
-        },
+        destroy: () => {},
         setTimeout: () => req,
       };
       return req;
@@ -113,6 +130,8 @@ vi.mock("child_process", () => ({
         stdout: new EventEmitter(),
         stderr: new EventEmitter(),
         killed: false,
+        exitCode: null,
+        signalCode: null,
         kill: vi.fn(),
         unref: vi.fn(),
       });
@@ -125,6 +144,8 @@ vi.mock("child_process", () => ({
       stdout: new EventEmitter(),
       stderr: new EventEmitter(),
       killed: false,
+      exitCode: null,
+      signalCode: null,
       kill: vi.fn(),
       unref: vi.fn(),
     });
@@ -192,10 +213,13 @@ describe("CLI fallback session id propagation", () => {
   beforeEach(() => {
     healthStatuses.length = 0;
     apiRequests.length = 0;
+    apiRequestErrors.length = 0;
+    requestEvents.length = 0;
     originalFetch = globalThis.fetch;
     globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
       const urlStr = String(url);
       if (urlStr.endsWith("/health")) {
+        requestEvents.push("health");
         const status = healthStatuses.shift() ?? 503;
         return {
           status,
@@ -218,6 +242,7 @@ describe("CLI fallback session id propagation", () => {
     stopHealthPolling();
     spawned.length = 0;
     globalThis.fetch = originalFetch;
+    rmSync(TEST_REPO, { recursive: true, force: true });
   });
 
   it("captures the quiet CLI session id from stderr so the next desktop turn can resume it", async () => {
@@ -288,6 +313,7 @@ describe("CLI fallback session id propagation", () => {
   });
 
   it("waits for a cold gateway to become API-ready instead of falling back to CLI", async () => {
+    mkdirSync(TEST_REPO, { recursive: true });
     healthStatuses.push(503, 200);
 
     expect(startGateway()).toBe(true);
@@ -315,6 +341,7 @@ describe("CLI fallback session id propagation", () => {
   });
 
   it("re-checks health when a previously-ready local gateway is restarted cold", async () => {
+    mkdirSync(TEST_REPO, { recursive: true });
     healthStatuses.push(200);
 
     await expect(
@@ -351,6 +378,134 @@ describe("CLI fallback session id propagation", () => {
     expect(body1.messages[body1.messages.length - 1]).toMatchObject({
       role: "user",
       content: "hi after restart",
+    });
+  });
+
+  it("recovers a stopped local gateway before sending via the API", async () => {
+    mkdirSync(TEST_REPO, { recursive: true });
+    healthStatuses.push(503, 200);
+
+    const chunks: string[] = [];
+    await sendMessage("hi after update", {
+      onChunk: (chunk) => chunks.push(chunk),
+      onDone: () => {},
+      onError: () => {},
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(chunks.join("")).toBe("Hi from API");
+    expect(spawned).toHaveLength(1);
+    expect(apiRequests).toHaveLength(1);
+    const body0 = JSON.parse(apiRequests[0].body);
+    expect(body0.messages[body0.messages.length - 1]).toMatchObject({
+      role: "user",
+      content: "hi after update",
+    });
+  });
+
+  it("restarts a tracked but unhealthy local gateway before sending via the API", async () => {
+    mkdirSync(TEST_REPO, { recursive: true });
+    expect(startGateway()).toBe(true);
+    expect(spawned).toHaveLength(1);
+    healthStatuses.push(503, 503, 503, 200);
+
+    const chunks: string[] = [];
+    await expect(
+      new Promise<string | undefined>((resolve, reject) => {
+        sendMessage("hi after stale gateway", {
+          onChunk: (chunk) => chunks.push(chunk),
+          onDone: resolve,
+          onError: reject,
+        }).catch(reject);
+      }),
+    ).resolves.toBe("desk-cold-gateway");
+
+    expect(chunks.join("")).toBe("Hi from API");
+    expect(spawned).toHaveLength(2);
+    expect(apiRequests).toHaveLength(1);
+    const body0 = JSON.parse(apiRequests[0].body);
+    expect(body0.messages[body0.messages.length - 1]).toMatchObject({
+      role: "user",
+      content: "hi after stale gateway",
+    });
+  });
+
+  it("recovers after a stale ready cache and retries a local ECONNREFUSED once", async () => {
+    mkdirSync(TEST_REPO, { recursive: true });
+    healthStatuses.push(200);
+
+    await expect(
+      new Promise<string | undefined>((resolve, reject) => {
+        sendMessage("warmup", {
+          onChunk: () => {},
+          onDone: resolve,
+          onError: reject,
+        }).catch(reject);
+      }),
+    ).resolves.toBe("desk-cold-gateway");
+    expect(requestEvents).toEqual(["health", "chat"]);
+
+    apiRequestErrors.push("connect ECONNREFUSED 127.0.0.1:8765");
+    healthStatuses.push(503, 200);
+    const chunks: string[] = [];
+
+    await expect(
+      new Promise<string | undefined>((resolve, reject) => {
+        sendMessage("hi after restart", {
+          onChunk: (chunk) => chunks.push(chunk),
+          onDone: resolve,
+          onError: reject,
+        }).catch(reject);
+      }),
+    ).resolves.toBe("desk-cold-gateway");
+
+    expect(chunks.join("")).toBe("Hi from API");
+    expect(spawned).toHaveLength(1);
+    expect(apiRequests).toHaveLength(3);
+    const body2 = JSON.parse(apiRequests[2].body);
+    expect(body2.messages[body2.messages.length - 1]).toMatchObject({
+      role: "user",
+      content: "hi after restart",
+    });
+  });
+
+  it("recovers an accepted timed-out request without replaying the user message", async () => {
+    mkdirSync(TEST_REPO, { recursive: true });
+    healthStatuses.push(200);
+
+    await expect(
+      new Promise<string | undefined>((resolve, reject) => {
+        sendMessage("warmup", {
+          onChunk: () => {},
+          onDone: resolve,
+          onError: reject,
+        }).catch(reject);
+      }),
+    ).resolves.toBe("desk-cold-gateway");
+
+    apiRequestErrors.push("TIMEOUT_ACCEPTED");
+    healthStatuses.push(503, 503, 200);
+    const chunks: string[] = [];
+
+    await expect(
+      new Promise<string | undefined>((resolve, reject) => {
+        sendMessage("hi after hung gateway", {
+          onChunk: (chunk) => chunks.push(chunk),
+          onDone: resolve,
+          onError: (error) => reject(new Error(error)),
+        }).catch(reject);
+      }),
+    ).rejects.toThrow(
+      "Local Hermes gateway became unhealthy while processing this message and was restarted. Please resend the message if needed.",
+    );
+
+    expect(chunks).toEqual([]);
+    expect(spawned).toHaveLength(1);
+    expect(apiRequests).toHaveLength(2);
+    const body1 = JSON.parse(apiRequests[1].body);
+    expect(body1.messages[body1.messages.length - 1]).toMatchObject({
+      role: "user",
+      content: "hi after hung gateway",
     });
   });
 });

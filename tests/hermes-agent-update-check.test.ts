@@ -20,6 +20,7 @@ async function loadUpdateCheck(
     gitStatus?: string;
     runUpdateError?: Error;
     gatewayRunning?: boolean;
+    restartResult?: boolean;
     restartError?: Error;
   } = {},
 ): Promise<typeof import("../src/main/hermes-agent-updates")> {
@@ -59,10 +60,8 @@ async function loadUpdateCheck(
     isGatewayRunning: vi.fn(() => options.gatewayRunning ?? false),
     isRemoteMode: vi.fn(() => false),
     restartGateway: options.restartError
-      ? vi.fn(() => {
-          throw options.restartError;
-        })
-      : vi.fn(),
+      ? vi.fn().mockRejectedValue(options.restartError)
+      : vi.fn().mockResolvedValue(options.restartResult ?? true),
   }));
 
   return await import("../src/main/hermes-agent-updates");
@@ -180,5 +179,31 @@ describe("Hermes Agent update check safety status", () => {
     expect(result.reason).toBe("restart-failed");
     expect(result.restartStatus).toBe("failed");
     expect(result.restartMessage).toContain("gateway restart failed");
+  });
+
+  it("records a false restart result as a restart failure", async () => {
+    const { runHermesAgentUpdateCheck } = await loadUpdateCheck(
+      {
+        available: true,
+        localHead: "abc123",
+        upstreamHead: "def456",
+        behindBy: 2,
+      },
+      {
+        gatewayRunning: true,
+        restartResult: false,
+      },
+    );
+
+    const result = await runHermesAgentUpdateCheck("work", {
+      now: new Date("2026-06-20T22:35:00.000Z"),
+      autoApply: true,
+    });
+
+    expect(result.status).toBe("updated");
+    expect(result.phase).toBe("restart");
+    expect(result.reason).toBe("restart-failed");
+    expect(result.restartStatus).toBe("failed");
+    expect(result.restartMessage).toContain("gateway restart returned false");
   });
 });

@@ -39,6 +39,19 @@ import {
   retryDelayWithinDeadline,
 } from "./deadline";
 
+function isLocalGatewayRequestTimeout(
+  errorText: string,
+  statusCode?: number,
+): boolean {
+  return (
+    !isRemoteMode() &&
+    statusCode === 408 &&
+    /^API request timed out\. The local Hermes gateway may be unresponsive/i.test(
+      errorText,
+    )
+  );
+}
+
 export function respondRunApproval(
   runId: string,
   choice: "once" | "session" | "always" | "deny",
@@ -287,6 +300,11 @@ export function sendMessageViaApi(
     }
 
     function handleRequestError(errorText: string, statusCode?: number): void {
+      if (isLocalGatewayRequestTimeout(errorText, statusCode)) {
+        finish(errorText);
+        return;
+      }
+
       const classification = ErrorDoctor.classify(errorText, statusCode);
       console.log("[hermes] Error Doctor classification:", classification);
 

@@ -2,6 +2,7 @@ import { ChildProcess, spawn } from "child_process";
 import {
   existsSync,
   readFileSync,
+  writeFileSync,
   appendFileSync,
   unlinkSync,
   mkdirSync,
@@ -164,11 +165,12 @@ function delay(ms: number): Promise<void> {
 export async function waitForApiServerReady(
   timeoutMs = 8000,
   profile?: string,
+  pollMs = 250,
 ): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (await isApiServerReady(profile)) return true;
-    await delay(250);
+    await delay(pollMs);
   }
   return false;
 }
@@ -201,6 +203,12 @@ const appStartedProfiles = new Set<string>();
 function invalidateApiCacheFor(profile?: string): void {
   if (profileKey(profile) === profileKey(undefined)) {
     apiServerAvailable = false;
+  }
+}
+
+function setApiCacheFor(profile: string | undefined, value: boolean): void {
+  if (profileKey(profile) === profileKey(undefined)) {
+    apiServerAvailable = value;
   }
 }
 
@@ -355,25 +363,29 @@ export function startGateway(profile?: string): boolean {
   return result.success && !result.alreadyRunning;
 }
 
-function parsePidFromFile(pidFile: string): number | null {
-  if (!existsSync(pidFile)) return null;
-  try {
-    const raw = readFileSync(pidFile, "utf-8").trim();
-    const parsed = raw.startsWith("{")
-      ? JSON.parse(raw).pid
-      : parseInt(raw, 10);
-    return typeof parsed === "number" && !isNaN(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
 function gatewayPidPath(profile?: string): string {
   return join(profileHome(resolveProfile(profile)), "gateway.pid");
 }
 
 function readPidFile(profile?: string): number | null {
-  return parsePidFromFile(gatewayPidPath(profile));
+  return readPidFileEntry(profile)?.pid ?? null;
+}
+
+function readPidFileEntry(
+  profile?: string,
+): { path: string; pid: number; raw: string } | null {
+  const path = gatewayPidPath(profile);
+  if (!existsSync(path)) return null;
+  try {
+    const raw = readFileSync(path, "utf-8").trim();
+    const parsed = raw.startsWith("{")
+      ? JSON.parse(raw).pid
+      : parseInt(raw, 10);
+    const pid = typeof parsed === "number" && !isNaN(parsed) ? parsed : null;
+    return pid === null ? null : { path, pid, raw };
+  } catch {
+    return null;
+  }
 }
 
 export function stopGateway(profile?: string, force = false): void {
@@ -381,7 +393,7 @@ export function stopGateway(profile?: string, force = false): void {
   if (!force && !appStartedProfiles.has(key)) return;
 
   const proc = gatewayProcesses.get(key);
-  if (proc && !proc.killed) {
+  if (proc && isChildProcessAlive(proc)) {
     proc.kill("SIGTERM");
   }
   gatewayProcesses.delete(key);
@@ -408,9 +420,22 @@ export function stopGateway(profile?: string, force = false): void {
 
 const GATEWAY_IMAGE_PREFIXES = ["python", "pythonw"];
 
+function isChildProcessAlive(proc: ChildProcess): boolean {
+  if (proc.exitCode !== null || proc.signalCode !== null) {
+    return false;
+  }
+  if (typeof proc.pid !== "number") return !proc.killed;
+  try {
+    process.kill(proc.pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function isGatewayRunning(profile?: string): boolean {
   const proc = gatewayProcesses.get(profileKey(profile));
-  if (proc && !proc.killed) return true;
+  if (proc && isChildProcessAlive(proc)) return true;
   const pid = readPidFile(profile);
   if (!pid) return false;
   return pidIsAliveAs(pid, GATEWAY_IMAGE_PREFIXES);
@@ -447,14 +472,216 @@ export function testRemoteConnection(
   });
 }
 
-export function restartGateway(profile?: string): void {
-  if (isRemoteMode()) return;
+async function waitForApiServerStopped(
+  profile?: string,
+  timeoutMs = 5000,
+  pollMs = 250,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!(await isApiServerReady(profile))) return true;
+    await delay(pollMs);
+  }
+  return false;
+}
+
+let gatewayRestartQueueTail: Promise<unknown> = Promise.resolve();
+const gatewayRestartByProfile = new Map<string, Promise<boolean>>();
+
+function markGatewayRestartFailed(profile?: string): void {
   const key = profileKey(profile);
-  if (!appStartedProfiles.has(key) && !isGatewayRunning(profile)) return;
-  stopGateway(profile, true);
-  setTimeout(() => {
-    startGateway(profile);
-  }, 500);
+  gatewayProcesses.delete(key);
+  appStartedProfiles.delete(key);
+  invalidateApiCacheFor(profile);
+  startHealthPolling();
+}
+
+function restoreGatewayAfterRestartFailure(
+  profile: string | undefined,
+  previousProcess: ChildProcess | null,
+  previousStartedByApp: boolean,
+  previousPidEntry: { path: string; pid: number; raw: string } | null,
+): void {
+  const key = profileKey(profile);
+  if (previousProcess && isChildProcessAlive(previousProcess)) {
+    gatewayProcesses.set(key, previousProcess);
+    if (previousStartedByApp) {
+      appStartedProfiles.add(key);
+    } else {
+      appStartedProfiles.delete(key);
+    }
+    invalidateApiCacheFor(profile);
+    startHealthPolling();
+    return;
+  }
+  if (
+    previousPidEntry &&
+    pidIsAliveAs(previousPidEntry.pid, GATEWAY_IMAGE_PREFIXES)
+  ) {
+    try {
+      writeFileSync(
+        previousPidEntry.path,
+        previousPidEntry.raw || String(previousPidEntry.pid),
+        "utf-8",
+      );
+    } catch {
+      // best-effort; health polling will still recover readiness.
+    }
+    gatewayProcesses.delete(key);
+    if (previousStartedByApp) {
+      appStartedProfiles.add(key);
+    } else {
+      appStartedProfiles.delete(key);
+    }
+    invalidateApiCacheFor(profile);
+    startHealthPolling();
+    return;
+  }
+  markGatewayRestartFailed(profile);
+}
+
+async function restartGatewayLocallyOnce(
+  profile?: string,
+  healthTimeoutMs = 30000,
+  healthPollMs = 250,
+  stopTimeoutMs = 5000,
+): Promise<boolean> {
+  try {
+    if (isRemoteMode()) return false;
+    ensureInitialized();
+
+    const key = profileKey(profile);
+    const previousProcess = gatewayProcesses.get(key) ?? null;
+    const previousStartedByApp = appStartedProfiles.has(key);
+    const previousPidEntry = readPidFileEntry(profile);
+
+    stopGateway(profile, true);
+    const stopped = await waitForApiServerStopped(
+      profile,
+      stopTimeoutMs,
+      healthPollMs,
+    );
+    if (!stopped) {
+      console.error(
+        `[gateway:${key}] Restart failed: gateway did not stop before restart`,
+      );
+      restoreGatewayAfterRestartFailure(
+        profile,
+        previousProcess,
+        previousStartedByApp,
+        previousPidEntry,
+      );
+      return false;
+    }
+
+    const started = startGateway(profile);
+    if (!started) {
+      const alreadyReady = await waitForApiServerReady(
+        healthTimeoutMs,
+        profile,
+        healthPollMs,
+      );
+      setApiCacheFor(profile, alreadyReady);
+      return alreadyReady;
+    }
+
+    const ready = await waitForApiServerReady(
+      healthTimeoutMs,
+      profile,
+      healthPollMs,
+    );
+    setApiCacheFor(profile, ready);
+    if (!ready) markGatewayRestartFailed(profile);
+    return ready;
+  } catch (err) {
+    console.error("[gateway] Restart failed:", (err as Error).message);
+    markGatewayRestartFailed(profile);
+    return false;
+  }
+}
+
+export function restartGateway(
+  profile?: string,
+  healthTimeoutMs = 30000,
+  healthPollMs = 250,
+  stopTimeoutMs = 5000,
+): Promise<boolean> {
+  if (isRemoteMode()) return Promise.resolve(false);
+
+  const key = profileKey(profile);
+  const existing = gatewayRestartByProfile.get(key);
+  if (existing) return existing;
+
+  const queued = gatewayRestartQueueTail.then(
+    () =>
+      restartGatewayLocallyOnce(
+        profile,
+        healthTimeoutMs,
+        healthPollMs,
+        stopTimeoutMs,
+      ),
+    () =>
+      restartGatewayLocallyOnce(
+        profile,
+        healthTimeoutMs,
+        healthPollMs,
+        stopTimeoutMs,
+      ),
+  );
+
+  const promise = queued.finally(() => {
+    if (gatewayRestartByProfile.get(key) === promise) {
+      gatewayRestartByProfile.delete(key);
+    }
+  });
+
+  gatewayRestartByProfile.set(key, promise);
+  gatewayRestartQueueTail = promise.catch(() => undefined);
+  return promise;
+}
+
+export async function startGatewayWithRecovery(
+  profile?: string,
+  healthTimeoutMs = 8000,
+  healthPollMs = 250,
+  restartHealthTimeoutMs = 30000,
+  restartStopTimeoutMs = 5000,
+): Promise<boolean> {
+  if (isRemoteMode()) return false;
+
+  if (isGatewayRunning(profile)) {
+    const healthy = await isApiServerReady(profile);
+    if (healthy) {
+      setApiCacheFor(profile, true);
+      return true;
+    }
+    return restartGateway(
+      profile,
+      restartHealthTimeoutMs,
+      healthPollMs,
+      restartStopTimeoutMs,
+    );
+  }
+
+  const started = startGateway(profile);
+  if (!started) return false;
+
+  const ready = await waitForApiServerReady(
+    healthTimeoutMs,
+    profile,
+    healthPollMs,
+  );
+  if (ready) {
+    setApiCacheFor(profile, true);
+    return true;
+  }
+
+  return restartGateway(
+    profile,
+    restartHealthTimeoutMs,
+    healthPollMs,
+    restartStopTimeoutMs,
+  );
 }
 
 export function notifyProfileSwitched(): void {
@@ -524,7 +751,7 @@ function scheduleSupervisedRestart(backoffMs: number): void {
     // Re-check the guards at fire time — conditions may have changed during backoff.
     if (isRemoteMode()) return;
     if (isStreamOpen()) return;
-    restartGateway();
+    void restartGateway();
   }, backoffMs);
 }
 

@@ -44,6 +44,7 @@ export {
   isApiReady,
   testRemoteConnection,
   restartGateway,
+  startGatewayWithRecovery,
   notifyProfileSwitched,
   startHealthPolling,
   stopHealthPolling,

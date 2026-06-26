@@ -202,7 +202,10 @@ export async function runHermesAgentUpdateCheck(
 
           if (isGatewayRunning(profile)) {
             try {
-              restartGateway(profile);
+              const restarted = await restartGateway(profile);
+              if (!restarted) {
+                throw new Error("gateway restart returned false");
+              }
               finalResult = result(
                 "updated",
                 "Hermes Agent updated successfully.",
