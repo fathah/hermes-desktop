@@ -63,6 +63,11 @@ export type StatusKey =
 export type PrioKey = "high" | "med" | "low";
 export type PersonKey = string; // 'maya' | 'theo' | 'priya' | 'sam' (+ user-added)
 
+// Tasks-Dump routing. A captured task is classified into one of two lanes:
+//   "ai"    — the Hermes agent does it (delegated to the Kanban dispatcher)
+//   "human" — a person does it (lives on the ToDo page; the nag engine chases it)
+export type TaskRoute = "ai" | "human";
+
 export type SpsPropertyValue = string | number | boolean | string[] | null;
 export type SpsPageSchemaKey =
   | "project"
@@ -358,6 +363,15 @@ export interface Task {
   isc?: string[];
   desc?: string;
   checklist?: ChecklistItem[];
+  // Tasks-Dump (all optional — absent on legacy/hand-authored rows):
+  // `route` is the classifier lane; `delegatedTo` the Kanban task id for AI
+  // tasks (status is reflected read-only from there); `assigneeId` the person
+  // page id that owns a human task (defaults to self); `autoSendOnEscalate`
+  // opts a human task into messaging its assignee directly at high escalation.
+  route?: TaskRoute;
+  delegatedTo?: string;
+  assigneeId?: string;
+  autoSendOnEscalate?: boolean;
 }
 
 /** One editor block. Most fields are block-type specific and optional. */
