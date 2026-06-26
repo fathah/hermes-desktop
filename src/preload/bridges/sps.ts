@@ -236,6 +236,20 @@ export const spsBridge = {
     profile?: string,
   ): Promise<void> =>
     ipcRenderer.invoke("sps-wiki-log-append", op, summary, profile),
+  spsListActionReceipts: (
+    limit?: number,
+    profile?: string,
+  ): Promise<import("../../shared/action-receipts").ActionReceipt[]> =>
+    ipcRenderer.invoke("sps-list-action-receipts", limit, profile),
+  spsListPulses: (
+    limit?: number,
+    profile?: string,
+  ): Promise<import("../../shared/sps-pulse").SpsPulse[]> =>
+    ipcRenderer.invoke("sps-list-pulses", limit, profile),
+  spsEnsureAgentOrientation: (
+    profile?: string,
+  ): Promise<{ created: boolean; path: string }> =>
+    ipcRenderer.invoke("sps-ensure-agent-orientation", profile),
   spsLintWiki: (
     staleDays?: number,
     profile?: string,

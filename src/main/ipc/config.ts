@@ -1,5 +1,6 @@
 import { clipboard, shell } from "electron";
 import { safeHandle } from "./safe-handle";
+import { appendActionReceipt } from "../action-receipts";
 import {
   readEnv,
   getKeychainKeys,
@@ -139,6 +140,17 @@ export function registerConfigIpc(): void {
         key.endsWith("_API_KEY") ||
         key.endsWith("_TOKEN") ||
         key === "HF_TOKEN";
+      if (looksLikeCredential) {
+        appendActionReceipt(
+          {
+            source: "provider",
+            action: "credential",
+            outcome: "saved",
+            summary: key,
+          },
+          profile,
+        );
+      }
       if (isGatewayRunning(profile) && looksLikeCredential) {
         void restartGateway(profile);
       }
@@ -161,6 +173,15 @@ export function registerConfigIpc(): void {
       const envKey = resolveProviderEnvKey(provider);
       if (!envKey) return false;
       setEnvValue(envKey, key, profile);
+      appendActionReceipt(
+        {
+          source: "provider",
+          action: "credential",
+          outcome: "saved",
+          summary: provider,
+        },
+        profile,
+      );
       if (isGatewayRunning(profile)) void restartGateway(profile);
       return true;
     },
@@ -168,6 +189,15 @@ export function registerConfigIpc(): void {
       const envKey = resolveProviderEnvKey(provider);
       if (!envKey) return false;
       await sshSetEnvValue(ssh, envKey, key, profile);
+      appendActionReceipt(
+        {
+          source: "provider",
+          action: "credential",
+          outcome: "saved",
+          summary: provider,
+        },
+        profile,
+      );
       return true;
     },
   );
@@ -406,6 +436,16 @@ export function registerConfigIpc(): void {
       profile?: string,
     ) => {
       setCredentialPool(provider, entries, profile);
+      appendActionReceipt(
+        {
+          source: "provider",
+          action: "credential-pool",
+          outcome: "saved",
+          summary: provider,
+          counts: { entries: entries.length },
+        },
+        profile,
+      );
       return true;
     },
   );
@@ -418,7 +458,17 @@ export function registerConfigIpc(): void {
       label: string,
       profile?: string,
     ) => {
-      return addCredentialPoolEntry(provider, apiKey, label, profile);
+      const result = addCredentialPoolEntry(provider, apiKey, label, profile);
+      appendActionReceipt(
+        {
+          source: "provider",
+          action: "credential-pool-entry",
+          outcome: "saved",
+          summary: provider,
+        },
+        profile,
+      );
+      return result;
     },
   );
   safeHandle(

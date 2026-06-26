@@ -28,6 +28,10 @@ export interface VaultContextInput {
   vaultPath?: string;
   /** Structured user deep context (Telos) if available. */
   telosText?: string;
+  /** User-editable local orientation for future agent runs. */
+  agentOrientationText?: string;
+  /** Latest reviewed Daily Brief whose frontmatter opted into context. */
+  dailyBriefText?: string;
 }
 
 /** What `assembleVaultContext` actually injected — drives the renderer's trust chip. */
@@ -36,6 +40,8 @@ export interface VaultContextUsage {
   memory: number;
   rules: number;
   telos?: boolean;
+  agentOrientation: boolean;
+  dailyBrief: boolean;
 }
 
 /** The assembled preamble plus a summary of what went into it. */
@@ -48,6 +54,7 @@ const MAX_CONTEXT_CHARS = 4000;
 const MAX_SNIPPET_CHARS = 240;
 const MAX_MEMORY_ENTRY_CHARS = 280;
 const MAX_RULE_CHARS = 200;
+const MAX_CONTEXT_DOC_CHARS = 1200;
 const MAX_HITS = 6;
 const MAX_MEMORY_ENTRIES = 8;
 const MAX_RULES = 12;
@@ -74,6 +81,12 @@ function tidyRule(rule: string): string {
   return collapsed.slice(0, MAX_RULE_CHARS).trimEnd() + "…";
 }
 
+function tidyContextDoc(text: string): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= MAX_CONTEXT_DOC_CHARS) return trimmed;
+  return trimmed.slice(0, MAX_CONTEXT_DOC_CHARS).trimEnd() + "\n…";
+}
+
 /**
  * Render the retrieved context into a system-message preamble. PURE — given the
  * same input it returns the same string. Returns "" when there is nothing to add
@@ -95,6 +108,18 @@ export function formatVaultContext(input: VaultContextInput): string {
 
   if (input.telosText) {
     sections.push(input.telosText);
+  }
+
+  if (input.agentOrientationText?.trim()) {
+    sections.push(
+      `Agent Orientation:\n${tidyContextDoc(input.agentOrientationText)}`,
+    );
+  }
+
+  if (input.dailyBriefText?.trim()) {
+    sections.push(
+      `Reviewed Daily Brief:\n${tidyContextDoc(input.dailyBriefText)}`,
+    );
   }
 
   const hits = input.hits.slice(0, MAX_HITS);
@@ -146,7 +171,9 @@ export function vaultUsage(input: VaultContextInput): VaultContextUsage {
     .filter(Boolean)
     .slice(0, MAX_RULES).length;
   const telos = !!input.telosText;
-  return { notes, memory, rules, telos };
+  const agentOrientation = !!input.agentOrientationText?.trim();
+  const dailyBrief = !!input.dailyBriefText?.trim();
+  return { notes, memory, rules, telos, agentOrientation, dailyBrief };
 }
 
 /**
@@ -162,7 +189,14 @@ export async function assembleVaultContext(
 ): Promise<VaultContextResult> {
   const empty: VaultContextResult = {
     text: "",
-    used: { notes: 0, memory: 0, rules: 0, telos: false },
+    used: {
+      notes: 0,
+      memory: 0,
+      rules: 0,
+      telos: false,
+      agentOrientation: false,
+      dailyBrief: false,
+    },
   };
   try {
     const { getSpsNoteIndex } = await import("./note-index");
@@ -171,6 +205,8 @@ export async function assembleVaultContext(
     const { parseTelos, formatTelosContext } = await import("../shared/telos");
     const { existsSync, readFileSync } = await import("fs");
     const { join } = await import("path");
+    const { readAgentOrientationContext } = await import("./agent-orientation");
+    const { readLatestOptedInDailyBrief } = await import("./daily-brief");
 
     const searchText = `${pageTitle} ${query}`.trim();
     const index = await getSpsNoteIndex(profile);
@@ -210,12 +246,17 @@ export async function assembleVaultContext(
       // Optional — proceed
     }
 
+    const agentOrientationText = readAgentOrientationContext(vaultPath);
+    const dailyBriefText = readLatestOptedInDailyBrief(vaultPath);
+
     const input: VaultContextInput = {
       hits,
       memoryEntries,
       rules,
       vaultPath,
       telosText,
+      agentOrientationText,
+      dailyBriefText,
     };
     return { text: formatVaultContext(input), used: vaultUsage(input) };
   } catch {

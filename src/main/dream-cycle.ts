@@ -5,6 +5,7 @@ import { getSpsNoteIndex, parseFrontmatter } from "./note-index";
 import { resolveSpsVaultDir } from "./sps-storage";
 import { chatCompletionOnce } from "./hermes/chat-client";
 import { getActiveProfileNameSync } from "./utils";
+import { buildDailyBriefMarkdown, dailyBriefFileName } from "./daily-brief";
 import YAML from "yaml";
 
 /**
@@ -102,11 +103,11 @@ export async function runDreamCycle(profile?: string): Promise<void> {
       .map((n) => `- **${n.title}** (${n.path}): ${n.summary}`)
       .join("\n");
 
-    console.log(`[DREAM_CYCLE] Compiling Dream Report...`);
+    console.log(`[DREAM_CYCLE] Compiling Daily Brief...`);
 
-    // 3. Generate Dream Report via LLM
+    // 3. Generate Daily Brief via LLM
     const reportPrompt = `You are an AI Mentor gardening the agent's knowledge graph.
-Analyze the following notes, missing pages, and orphans from the system, and generate a cohesive, premium "Dream Report" in Markdown format.
+Analyze the following notes, missing pages, and orphans from the system, and generate a concise, review-first "Daily Brief" in Markdown format.
 
 Active Notes & Summaries:
 ${noteSummariesText || "No active notes"}
@@ -118,10 +119,12 @@ Orphaned Notes (No incoming/outgoing links):
 ${orphans || "None"}
 
 Generate a beautiful Markdown report containing:
-1. **Executive Summary**: A premium synthesis of today's knowledge gardening.
-2. **Knowledge Gaps**: Under-developed concepts or missing nodes (broken links) that need to be created.
-3. **Deadlines & Action Items**: Critical tasks or dates discovered in the notes.
-4. **AI Mentor Insights**: Creative, high-level connections between the notes.
+1. **Daily Brief**: A short synthesis of today's workspace state.
+2. **Changed or Active Pages**: Pages that look active, with one-line summaries.
+3. **Open Loops**: Broken links, orphan notes, deadlines, or action items to review.
+4. **Suggested Context**: Context the user may choose to opt into future assistant runs.
+
+The generated page frontmatter will default to context: review. Do not imply it has been injected automatically.
 
 Do not include any extra text outside the Markdown content.`;
 
@@ -133,14 +136,18 @@ Do not include any extra text outside the Markdown content.`;
       throw new Error(`Failed to compile report: ${res.error}`);
     }
 
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const reportName = `Dream Report - ${todayStr}.md`;
+    const today = new Date();
+    const reportName = dailyBriefFileName(today);
     const reportPath = join(vaultDir, reportName);
 
-    await writeFile(reportPath, res.content, "utf8");
-    console.log(`[DREAM_CYCLE] Dream Report saved to: ${reportPath}`);
+    await writeFile(
+      reportPath,
+      buildDailyBriefMarkdown({ date: today, body: res.content }),
+      "utf8",
+    );
+    console.log(`[DREAM_CYCLE] Daily Brief saved to: ${reportPath}`);
 
-    // Trigger index rebuild to pick up the new Dream Report note
+    // Trigger index rebuild to pick up the new Daily Brief note
     await noteIndex.rebuild();
   } catch (err) {
     console.error("[DREAM_CYCLE] Error in dream cycle run:", err);

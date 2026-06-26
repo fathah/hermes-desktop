@@ -1480,6 +1480,40 @@
 .sps-scope .ck-pulse-link-btn.cancel {
   color: var(--tx-3);
 }
+.sps-scope .ck-pulse-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.sps-scope .ck-pulse-feed li {
+  display: grid;
+  grid-template-columns: 54px 92px minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+  min-height: 20px;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--tx-2);
+}
+.sps-scope .ck-pulse-time {
+  color: var(--tx-3);
+  font-variant-numeric: tabular-nums;
+}
+.sps-scope .ck-pulse-kind {
+  overflow: hidden;
+  color: var(--tx-1);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sps-scope .ck-pulse-feed-empty {
+  margin: 0;
+  color: var(--tx-3);
+  font-size: 13px;
+}
 .sps-scope .ck-pulse-mission-text {
   font-size: 13.5px;
   line-height: 1.5;

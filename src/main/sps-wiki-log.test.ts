@@ -48,6 +48,11 @@ describe("appendWikiLog", () => {
     expect(body).toContain("file-answer | second");
     // Header appears exactly once.
     expect(body.match(/# Wiki log/g)).toHaveLength(1);
+
+    const pulseBody = await readFile(join(vault, "pulse.md"), "utf-8");
+    expect(pulseBody).toContain("# Workspace pulse");
+    expect(pulseBody).toContain("wiki/ingest | first");
+    expect(pulseBody).toContain("wiki/file-answer | second");
   });
 
   it("never throws on an unwritable vault dir", async () => {

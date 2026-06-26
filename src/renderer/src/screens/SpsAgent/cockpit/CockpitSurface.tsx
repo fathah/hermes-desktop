@@ -2,7 +2,7 @@
 // of widgets the user arranges (drag to reorder, 1×/2× width, add/remove). Layout
 // lives in the cockpit store slice (localStorage); each widget reads live store
 // state. Dependency-free: a CSS grid + HTML5 drag, no react-grid-layout.
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Icon } from "../components/Icon";
 import type { IconName } from "../components/iconPaths";
 import { useStore } from "../store";
@@ -463,11 +463,28 @@ function OperatorGuideWidget() {
   );
 }
 
+interface PulseRow {
+  ts: string;
+  source: string;
+  kind: string;
+  summary: string;
+}
+
+interface ReceiptRow {
+  ts: number;
+  source: string;
+  action: string;
+  outcome: string;
+  summary?: string;
+}
+
 function PulseWidget() {
   const [focus, setFocus] = useState("");
   const [editingFocus, setEditingFocus] = useState(false);
   const [focusInput, setFocusInput] = useState("");
   const [briefingLoading, setBriefingLoading] = useState(false);
+  const [pulses, setPulses] = useState<PulseRow[]>([]);
+  const [receipts, setReceipts] = useState<ReceiptRow[]>([]);
   const meta = useStore((s) => s.meta);
   const docs = useStore((s) => s.docs);
   const selectPage = useStore((s) => s.selectPage);
@@ -481,6 +498,24 @@ function PulseWidget() {
       setFocusInput(f);
     });
   }, []);
+
+  const loadPulseStreams = useCallback(async () => {
+    try {
+      const [nextPulses, nextReceipts] = await Promise.all([
+        window.hermesAPI.spsListPulses(5),
+        window.hermesAPI.spsListActionReceipts(5),
+      ]);
+      setPulses(nextPulses);
+      setReceipts(nextReceipts);
+    } catch {
+      setPulses([]);
+      setReceipts([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadPulseStreams();
+  }, [loadPulseStreams]);
 
   const saveFocus = async () => {
     const res = await window.hermesAPI.writeFocus(focusInput);
@@ -540,6 +575,26 @@ function PulseWidget() {
     selectPage(id);
     setSurface("doc");
     flash("TELOS page created in your vault!");
+  };
+
+  const ensureAgentOrientation = async () => {
+    try {
+      const res = await window.hermesAPI.spsEnsureAgentOrientation();
+      flash(
+        res.created
+          ? "Agent Orientation created in the vault."
+          : "Agent Orientation already exists.",
+      );
+      await loadPulseStreams();
+    } catch {
+      flash("Could not create Agent Orientation.", { tone: "warn" });
+    }
+  };
+
+  const formatPulseTime = (ts: string | number) => {
+    const date = new Date(ts);
+    if (!Number.isFinite(date.getTime())) return "";
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
 
   const telosData = {
@@ -690,6 +745,65 @@ function PulseWidget() {
             rows={2}
             placeholder="Focusing on..."
           />
+        )}
+      </div>
+
+      <div className="ck-divider" />
+
+      <div className="ck-pulse-section">
+        <div className="ck-pulse-title-row">
+          <span className="ck-pulse-sect-title">Workspace Pulse</span>
+          <button className="ck-pulse-link-btn" onClick={loadPulseStreams}>
+            Refresh
+          </button>
+        </div>
+        {pulses.length > 0 ? (
+          <ul className="ck-pulse-feed">
+            {pulses.map((pulse) => (
+              <li key={`${pulse.ts}-${pulse.source}-${pulse.kind}`}>
+                <span className="ck-pulse-time">
+                  {formatPulseTime(pulse.ts)}
+                </span>
+                <span className="ck-pulse-kind">
+                  {pulse.source}/{pulse.kind}
+                </span>
+                <span>{pulse.summary}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="ck-pulse-feed-empty">No pulse entries yet.</p>
+        )}
+      </div>
+
+      <div className="ck-divider" />
+
+      <div className="ck-pulse-section">
+        <div className="ck-pulse-title-row">
+          <span className="ck-pulse-sect-title">Action Receipts</span>
+          <button
+            className="ck-pulse-link-btn"
+            onClick={ensureAgentOrientation}
+          >
+            Agent Orientation
+          </button>
+        </div>
+        {receipts.length > 0 ? (
+          <ul className="ck-pulse-feed">
+            {receipts.map((receipt) => (
+              <li key={`${receipt.ts}-${receipt.source}-${receipt.action}`}>
+                <span className="ck-pulse-time">
+                  {formatPulseTime(receipt.ts)}
+                </span>
+                <span className="ck-pulse-kind">
+                  {receipt.source}/{receipt.outcome}
+                </span>
+                <span>{receipt.summary || receipt.action}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="ck-pulse-feed-empty">No action receipts yet.</p>
         )}
       </div>
 

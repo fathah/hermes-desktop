@@ -151,6 +151,17 @@ export interface SpsBridgeApi {
     profile?: string,
   ) => Promise<void>;
 
+  spsListActionReceipts: (
+    limit?: number,
+    profile?: string,
+  ) => Promise<Api.ActionReceipt[]>;
+
+  spsListPulses: (limit?: number, profile?: string) => Promise<Api.SpsPulse[]>;
+
+  spsEnsureAgentOrientation: (
+    profile?: string,
+  ) => Promise<{ created: boolean; path: string }>;
+
   spsLintWiki: (
     staleDays?: number,
     profile?: string,

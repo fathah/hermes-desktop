@@ -32,6 +32,7 @@ import { adoptCouncilResponse } from "../sessions";
 import { recordUsage } from "../usage-store";
 import { canAutoApprove } from "../autonomy";
 import { appendAuditLog } from "../audit-log";
+import { appendActionReceipt } from "../action-receipts";
 import { validateChatReadiness } from "../validation";
 import {
   runConfigHealthCheck,
@@ -43,6 +44,12 @@ import { getVoiceStatus, transcribeAudio, speakText } from "../voice";
 import type { Attachment } from "../../shared/attachments";
 
 export const activeChatAborts = new Map<string, () => void>();
+
+function payloadId(payload: unknown): string | undefined {
+  if (!payload || typeof payload !== "object") return undefined;
+  const id = (payload as Record<string, unknown>).id;
+  return typeof id === "string" && id.trim() ? id : undefined;
+}
 
 export function abortAllChats(): void {
   for (const abort of activeChatAborts.values()) {
@@ -152,6 +159,33 @@ export function registerChatIpc(
         emit: (channel, payload) => {
           if (event.sender.isDestroyed()) return false;
           try {
+            if (channel === "chat-tool-progress") {
+              appendActionReceipt(
+                {
+                  source: "assistant",
+                  action: "tool-progress",
+                  outcome: "progress",
+                  summary: payload,
+                  refs: clientRunId
+                    ? [{ kind: "client-run", id: clientRunId }]
+                    : undefined,
+                },
+                profile,
+              );
+            } else if (channel === "chat-approval-request") {
+              appendActionReceipt(
+                {
+                  source: "assistant",
+                  action: "approval",
+                  outcome: "requested",
+                  summary: "Approval requested",
+                  refs: payloadId(payload)
+                    ? [{ kind: "run", id: payloadId(payload) }]
+                    : undefined,
+                },
+                profile,
+              );
+            }
             event.sender.send(channel, payload, clientRunId);
             return true;
           } catch {
@@ -194,6 +228,16 @@ export function registerChatIpc(
               runId: req.id,
               profile: profile || "default",
             });
+            appendActionReceipt(
+              {
+                source: "assistant",
+                action: "approval",
+                outcome: "auto-approved",
+                summary: "Auto-approved command",
+                refs: [{ kind: "run", id: req.id }],
+              },
+              profile,
+            );
             console.log(`[autonomy] auto-approved: ${req.command ?? req.id}`);
             return true;
           }

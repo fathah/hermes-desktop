@@ -10,6 +10,7 @@
 // Best-effort throughout: a failed log write must never block a commit.
 import { promises as fs } from "fs";
 import { join } from "path";
+import { appendSpsPulse } from "./sps-pulse";
 
 export type WikiLogOp =
   | "ingest"
@@ -51,6 +52,11 @@ export async function appendWikiLog(
     }
     const prefix = existing.trim() ? "" : META_HEADER;
     await fs.appendFile(path, `${prefix}${line}\n`);
+    await appendSpsPulse(vaultDir, {
+      source: "wiki",
+      kind: op,
+      summary,
+    });
   } catch {
     /* best-effort: logging must never block a commit */
   }

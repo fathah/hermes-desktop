@@ -226,6 +226,19 @@ describe("New APIs from v0.8/v0.9 features", () => {
     expect(preloadTypes).toContain("EmailMonitorStatus");
     expect(preloadTypes).toContain("EmailMonitorFeedback");
   });
+
+  it("has SPS receipt, pulse, and orientation APIs", () => {
+    for (const method of [
+      "spsListActionReceipts",
+      "spsListPulses",
+      "spsEnsureAgentOrientation",
+    ]) {
+      expect(preloadMethods).toContain(method);
+      expect(typeMethods).toContain(method);
+    }
+    expect(preloadTypes).toContain("ActionReceipt");
+    expect(preloadTypes).toContain("SpsPulse");
+  });
 });
 
 // ─── Legacy APIs still present ──────────────────────────

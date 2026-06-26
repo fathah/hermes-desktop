@@ -535,7 +535,14 @@ export async function spsAssistant(
       ...vaultContext.used,
       notes: vaultContext.used.notes + pageNoteCount + graphRagNoteCount,
     };
-    const usedAnything = used.notes + used.memory + used.rules > 0;
+    const usedAnything =
+      used.notes +
+        used.memory +
+        used.rules +
+        (used.telos ? 1 : 0) +
+        (used.agentOrientation ? 1 : 0) +
+        (used.dailyBrief ? 1 : 0) >
+      0;
     const context: VaultContextUsage | undefined = usedAnything
       ? used
       : undefined;

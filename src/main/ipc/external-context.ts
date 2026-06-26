@@ -11,6 +11,7 @@
  */
 import { BrowserWindow, dialog } from "electron";
 import { safeHandle } from "./safe-handle";
+import { appendActionReceipt } from "../action-receipts";
 import type {
   ExternalImportResult,
   ExternalImportSource,
@@ -20,6 +21,7 @@ import type {
 } from "../../shared/external-context";
 import {
   EXTERNAL_IMPORT_SOURCES,
+  EXTERNAL_SOURCE_LABELS,
   formatProvenance,
 } from "../../shared/external-context";
 import { spsExternalSaveToKb } from "../sps-agent";
@@ -140,6 +142,12 @@ export function registerExternalContextIpc(
     "external-context-set-source",
     async (_e, source: ExternalSource, enabled: boolean) => {
       const cfg = setExternalContextSource(source, enabled);
+      appendActionReceipt({
+        source: "external-context",
+        action: "source-toggle",
+        outcome: enabled ? "enabled" : "disabled",
+        summary: EXTERNAL_SOURCE_LABELS[source] ?? source,
+      });
       if (enabled) {
         // Backfill the newly-enabled source immediately.
         void runScan(getWindow);
@@ -225,6 +233,16 @@ export function registerExternalContextIpc(
         await runScan(getWindow);
         const stats = getExternalContextDb().sourceStats()[source];
         emit("done");
+        appendActionReceipt({
+          source: "external-context",
+          action: "import",
+          outcome: "saved",
+          summary: EXTERNAL_SOURCE_LABELS[source] ?? source,
+          counts: {
+            conversations: stats.conversations,
+            messages: stats.messages,
+          },
+        });
         return {
           status: buildStatus(),
           source,
@@ -295,6 +313,16 @@ export function registerExternalContextIpc(
         await runScan(getWindow);
         const stats = getExternalContextDb().sourceStats().paste;
         emit("done");
+        appendActionReceipt({
+          source: "external-context",
+          action: "import",
+          outcome: "saved",
+          summary: "Pasted",
+          counts: {
+            conversations: stats.conversations,
+            messages: stats.messages,
+          },
+        });
         return {
           status: buildStatus(),
           source: "paste",

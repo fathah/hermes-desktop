@@ -1,5 +1,11 @@
 import { safeHandle } from "../safe-handle";
+import {
+  appendActionReceipt,
+  readRecentActionReceipts,
+} from "../../action-receipts";
+import { ensureAgentOrientation } from "../../agent-orientation";
 import { appendWikiLog, type WikiLogOp } from "../../sps-wiki-log";
+import { appendSpsPulse, readRecentSpsPulses } from "../../sps-pulse";
 import { ensureIndexCoverage } from "../../sps-ingest";
 import { resolveSpsVaultDir } from "../../sps-storage";
 import { spsImportOkfBundle, spsExportOkfBundle } from "../../sps-okf";
@@ -39,7 +45,51 @@ export function registerSpsVaultIpc(): void {
       // LLM-Wiki catalog so index.md always covers every page.
       const vaultDir = resolveSpsVaultDir(profile);
       await appendWikiLog(vaultDir, op, summary);
+      appendActionReceipt(
+        {
+          source: "sps",
+          action: "wiki-log",
+          outcome: "saved",
+          summary: op,
+        },
+        profile,
+      );
       await ensureIndexCoverage(vaultDir);
+    },
+  );
+  safeHandle(
+    "sps-list-action-receipts",
+    (_event, limit?: number, profile?: string) =>
+      readRecentActionReceipts(limit ?? 20, profile),
+  );
+  safeHandle(
+    "sps-list-pulses",
+    async (_event, limit?: number, profile?: string) =>
+      readRecentSpsPulses(resolveSpsVaultDir(profile), limit ?? 20),
+  );
+  safeHandle(
+    "sps-ensure-agent-orientation",
+    async (_event, profile?: string) => {
+      const result = ensureAgentOrientation(profile);
+      appendActionReceipt(
+        {
+          source: "sps",
+          action: "agent-orientation",
+          outcome: result.created ? "created" : "existing",
+          summary: "Agent Orientation",
+        },
+        profile,
+      );
+      if (result.created) {
+        const vaultDir = resolveSpsVaultDir(profile);
+        await appendSpsPulse(vaultDir, {
+          source: "sps",
+          kind: "agent-orientation",
+          summary: "Agent Orientation created",
+        });
+        await ensureIndexCoverage(vaultDir);
+      }
+      return result;
     },
   );
   safeHandle(

@@ -89,6 +89,23 @@ describe("formatVaultContext", () => {
     expect(out).toContain("User's Deep Context (Telos):");
     expect(out).toContain("Mission:\nTo live a peaceful life.");
   });
+
+  it("renders reviewed agent orientation and opted-in daily briefs", () => {
+    const out = formatVaultContext({
+      hits: [],
+      memoryEntries: [],
+      rules: [],
+      agentOrientationText:
+        "# Agent Orientation\n\nPrivacy boundaries:\n- Keep receipts redacted.",
+      dailyBriefText:
+        "# Daily Brief - 2026-06-26\n\nOpen loops:\n- Review inbox captures.",
+    });
+
+    expect(out).toContain("Agent Orientation:");
+    expect(out).toContain("Privacy boundaries:");
+    expect(out).toContain("Reviewed Daily Brief:");
+    expect(out).toContain("Review inbox captures.");
+  });
 });
 
 describe("vaultUsage", () => {
@@ -113,6 +130,23 @@ describe("vaultUsage", () => {
       memory: 0,
       rules: 0,
       telos: false,
+      agentOrientation: false,
+      dailyBrief: false,
+    });
+  });
+
+  it("counts orientation and daily brief context", () => {
+    expect(
+      vaultUsage({
+        hits: [],
+        memoryEntries: [],
+        rules: [],
+        agentOrientationText: "# Agent Orientation",
+        dailyBriefText: "# Daily Brief",
+      }),
+    ).toMatchObject({
+      agentOrientation: true,
+      dailyBrief: true,
     });
   });
 });
