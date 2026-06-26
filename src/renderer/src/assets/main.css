@@ -3289,9 +3289,9 @@ body {
   flex: 1;
   overflow-y: auto;
   padding: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  /* Block flow keeps scrollHeight trustworthy for useChatScroll and avoids
+     flex-column intrinsic measurement across long transcripts. Virtual rows
+     own their spacing via .chat-message-virtual-row padding. */
 }
 
 .chat-message-virtual-list {
@@ -3318,7 +3318,7 @@ body {
 
 /* Empty state */
 .chat-empty {
-  flex: 1;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -3407,8 +3407,14 @@ body {
 .chat-message {
   display: flex;
   gap: 12px;
+  width: 100%;
   max-width: 85%;
   animation: messageIn 0.2s ease;
+}
+
+.chat-messages > .chat-message {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 120px;
 }
 
 @keyframes messageIn {
@@ -3423,12 +3429,8 @@ body {
 }
 
 .chat-message-user {
-  align-self: flex-end;
+  margin-left: auto;
   flex-direction: row-reverse;
-}
-
-.chat-message-agent {
-  align-self: flex-start;
 }
 
 /* Continuation rows of a turn (thinking/tool rows + answer that share one

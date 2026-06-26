@@ -2,6 +2,7 @@ import {
   useState,
   useRef,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useCallback,
   forwardRef,
@@ -96,16 +97,18 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
     }, []);
 
-    const applyHistoryText = useCallback(
-      (text: string): void => {
-        setInput(text);
-        requestAnimationFrame(() => {
-          autoResize();
-          inputRef.current?.setSelectionRange(text.length, text.length);
-        });
-      },
-      [autoResize],
-    );
+    // Reading scrollHeight forces layout; keep textarea measurement to one
+    // post-commit pass per value so long transcripts do not reflow per caller.
+    useLayoutEffect(() => {
+      autoResize();
+    }, [input, autoResize]);
+
+    const applyHistoryText = useCallback((text: string): void => {
+      setInput(text);
+      requestAnimationFrame(() => {
+        inputRef.current?.setSelectionRange(text.length, text.length);
+      });
+    }, []);
 
     const history = useInputHistory({
       currentInput: input,
@@ -125,12 +128,11 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         } else {
           setInput((prev) => (prev ? `${prev} ${text}` : text));
           requestAnimationFrame(() => {
-            autoResize();
             inputRef.current?.focus();
           });
         }
       },
-      [autoResize, onSubmit],
+      [onSubmit],
     );
     const voice = useVoiceInput(profile, injectVoiceText);
 
@@ -201,7 +203,6 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         setText(text: string): void {
           setInput(text);
           requestAnimationFrame(() => {
-            autoResize();
             if (inputRef.current) {
               inputRef.current.setSelectionRange(text.length, text.length);
               inputRef.current.focus();
@@ -221,7 +222,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           return ingestFiles(files);
         },
       }),
-      [autoResize, ingestFiles],
+      [ingestFiles],
     );
 
     // Refocus the textarea when a streaming response ends
@@ -313,12 +314,6 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     ): void {
       const value = e.target.value;
       setInput(value);
-
-      const target = e.target;
-      requestAnimationFrame(() => {
-        target.style.height = "auto";
-        target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
-      });
 
       if (value.startsWith("/") && !value.includes(" ")) {
         const query = value.split(" ")[0];
