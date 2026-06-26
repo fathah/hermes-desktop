@@ -113,6 +113,12 @@ vi.mock("../src/main/config", () => ({
   writeDesktopConfig: (c: unknown) => mockWriteDesktopConfig(c),
 }));
 
+// The nag engine is its own unit (see scheduler-nag.test.ts); stub it here so
+// the scheduler tick test doesn't pull in note-index / better-sqlite3.
+vi.mock("../src/main/nag-engine", () => ({
+  nagTick: vi.fn(async () => {}),
+}));
+
 import {
   tickScheduler,
   getSchedulerConfig,
