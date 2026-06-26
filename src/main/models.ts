@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import { HERMES_HOME } from "./installer";
 import { safeWriteFile, profilePaths } from "./utils";
 import DEFAULT_MODELS from "./default-models";
+import { hostDerivedEnvKeyForUrl } from "../shared/url-key-map";
 
 const MODELS_FILE = join(HERMES_HOME, "models.json");
 
@@ -109,22 +110,39 @@ function seedDefaults(profile?: string): SavedModel[] {
         apiMode: cp.apiMode || null,
         createdAt: Date.now(),
       });
-      if (cp.apiKey) {
+      if (cp.apiKey && cp.apiKey !== "no-key-required") {
         try {
           let envContent = existsSync(envFile)
             ? readFileSync(envFile, "utf-8")
             : "";
-          const envKey =
+          const customPrefixKey =
             "CUSTOM_PROVIDER_" +
             cp.name.replace(/[^A-Za-z0-9]/g, "_").toUpperCase() +
             "_KEY";
-          const keyRegex = new RegExp(
-            "^" + envKey.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "=.*$",
-            "m",
-          );
-          if (!keyRegex.test(envContent)) {
-            envContent =
-              envContent.trimEnd() + "\n" + envKey + "=" + cp.apiKey + "\n";
+          const namesToWrite = [customPrefixKey];
+          const hostKey = hostDerivedEnvKeyForUrl(cp.baseUrl);
+          if (
+            hostKey &&
+            hostKey !== "OPENAI_API_KEY" &&
+            hostKey !== "ANTHROPIC_API_KEY" &&
+            hostKey !== customPrefixKey
+          ) {
+            namesToWrite.push(hostKey);
+          }
+
+          let modified = false;
+          for (const envKey of namesToWrite) {
+            const keyRegex = new RegExp(
+              "^" + envKey.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "=.*$",
+              "m",
+            );
+            if (!keyRegex.test(envContent)) {
+              envContent =
+                envContent.trimEnd() + "\n" + envKey + "=" + cp.apiKey + "\n";
+              modified = true;
+            }
+          }
+          if (modified) {
             safeWriteFile(envFile, envContent);
           }
         } catch {

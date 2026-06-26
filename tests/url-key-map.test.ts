@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   URL_KEY_MAP,
   expectedEnvKeyForUrl,
+  hostDerivedEnvKeyForUrl,
   isLocalBaseUrl,
   CUSTOM_API_KEY_ENV,
+  shouldPruneOpenRouterApiKey,
 } from "../src/shared/url-key-map";
 
 /**
@@ -113,5 +115,38 @@ describe("URL_KEY_MAP shape", () => {
     for (const { pattern } of URL_KEY_MAP) {
       expect(pattern.flags).toContain("i");
     }
+  });
+});
+
+describe("hostDerivedEnvKeyForUrl", () => {
+  it("returns mapped vendor keys for known commercial hosts", () => {
+    expect(hostDerivedEnvKeyForUrl("https://api.deepseek.com/v1")).toBe(
+      "DEEPSEEK_API_KEY",
+    );
+    expect(hostDerivedEnvKeyForUrl("https://api.groq.com/openai/v1")).toBe(
+      "GROQ_API_KEY",
+    );
+    expect(hostDerivedEnvKeyForUrl("https://api.mistral.ai/v1")).toBe(
+      "MISTRAL_API_KEY",
+    );
+  });
+
+  it("returns null for unknown and local custom hosts", () => {
+    expect(hostDerivedEnvKeyForUrl("https://api.unsloth.ai/v1")).toBeNull();
+    expect(hostDerivedEnvKeyForUrl("http://localhost:11434/v1")).toBeNull();
+    expect(hostDerivedEnvKeyForUrl("http://127.0.0.1:1234/v1")).toBeNull();
+    expect(hostDerivedEnvKeyForUrl("")).toBeNull();
+  });
+
+  it("matches case-insensitively", () => {
+    expect(hostDerivedEnvKeyForUrl("https://API.DeepSeek.com/v1")).toBe(
+      "DEEPSEEK_API_KEY",
+    );
+  });
+
+  it("keeps OpenRouter credentials only for OpenRouter custom endpoints", () => {
+    expect(shouldPruneOpenRouterApiKey("OPENROUTER_API_KEY")).toBe(false);
+    expect(shouldPruneOpenRouterApiKey("DEEPSEEK_API_KEY")).toBe(true);
+    expect(shouldPruneOpenRouterApiKey(null)).toBe(true);
   });
 });

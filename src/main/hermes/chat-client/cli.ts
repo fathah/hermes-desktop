@@ -14,8 +14,9 @@ import { redactSensitiveData } from "../../security";
 import { stripAnsi } from "../../utils";
 import { type Attachment, escapeXmlAttr } from "../../../shared/attachments";
 import {
+  hostDerivedEnvKeyForUrl,
   OPENAI_COMPAT_PROVIDERS,
-  URL_KEY_MAP,
+  shouldPruneOpenRouterApiKey,
 } from "../../../shared/url-key-map";
 import type { ChatCallbacks, ChatHandle } from "./messages";
 
@@ -121,12 +122,12 @@ export function sendMessageViaCli(
       env.OPENAI_BASE_URL = mc.baseUrl.replace(/\/+$/, "");
     }
 
+    const hostDerivedEnvKey = hostDerivedEnvKeyForUrl(mc.baseUrl);
+
     let resolvedKey = "";
-    for (const { pattern, envKey } of URL_KEY_MAP) {
-      if (pattern.test(mc.baseUrl)) {
-        resolvedKey = profileEnv[envKey] || env[envKey] || "";
-        break;
-      }
+    if (hostDerivedEnvKey) {
+      resolvedKey =
+        profileEnv[hostDerivedEnvKey] || env[hostDerivedEnvKey] || "";
     }
     if (!resolvedKey) {
       try {
@@ -160,7 +161,19 @@ export function sendMessageViaCli(
       env.OPENAI_API_KEY = resolvedKey || "no-key-required";
     }
 
-    delete env.OPENROUTER_API_KEY;
+    if (
+      hostDerivedEnvKey &&
+      hostDerivedEnvKey !== "OPENAI_API_KEY" &&
+      hostDerivedEnvKey !== "ANTHROPIC_API_KEY" &&
+      resolvedKey &&
+      resolvedKey !== "no-key-required"
+    ) {
+      env[hostDerivedEnvKey] = resolvedKey;
+    }
+
+    if (shouldPruneOpenRouterApiKey(hostDerivedEnvKey)) {
+      delete env.OPENROUTER_API_KEY;
+    }
     delete env.ANTHROPIC_TOKEN;
     delete env.OPENROUTER_BASE_URL;
   }

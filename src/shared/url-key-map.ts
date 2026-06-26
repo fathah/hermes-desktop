@@ -55,6 +55,19 @@ export function expectedEnvKeyForUrl(url: string | null | undefined): string {
   return CUSTOM_API_KEY_ENV;
 }
 
+export function hostDerivedEnvKeyForUrl(
+  url: string | null | undefined,
+): string | null {
+  const envKey = expectedEnvKeyForUrl(url);
+  return envKey === CUSTOM_API_KEY_ENV ? null : envKey;
+}
+
+export function shouldPruneOpenRouterApiKey(
+  hostDerivedEnvKey: string | null,
+): boolean {
+  return hostDerivedEnvKey !== "OPENROUTER_API_KEY";
+}
+
 /**
  * `true` iff the URL points at a local/private host that commonly runs
  * without provider API-key auth (LM Studio, Ollama, LAN gateways, etc.).
