@@ -1,5 +1,6 @@
 import { ipcRenderer } from "electron";
 import type { SkillEntry } from "../../shared/skills";
+import type { ContactChannel } from "../../shared/contacts";
 import type {
   RouteTaskInput,
   RouteTaskOutcome,
@@ -535,6 +536,8 @@ export const spsBridge = {
     profile?: string,
   ): Promise<RouteTaskOutcome> =>
     ipcRenderer.invoke("sps-route-task", input, profile),
+  spsOpenContactChannel: (channel: ContactChannel): Promise<boolean> =>
+    ipcRenderer.invoke("sps-open-contact-channel", channel),
   spsTakeCaptureKind: (): Promise<string | null> =>
     ipcRenderer.invoke("sps-take-capture-kind"),
   onCaptureKind: (callback: (kind: string) => void): (() => void) => {

@@ -1,4 +1,5 @@
 import type * as Api from "../api-types";
+import type { ContactChannel } from "../../shared/contacts";
 import type {
   RouteTaskInput,
   RouteTaskOutcome,
@@ -443,6 +444,8 @@ export interface SpsBridgeApi {
     input: RouteTaskInput,
     profile?: string,
   ) => Promise<RouteTaskOutcome>;
+
+  spsOpenContactChannel: (channel: ContactChannel) => Promise<boolean>;
 
   spsTakeCaptureKind: () => Promise<string | null>;
 

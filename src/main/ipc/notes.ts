@@ -15,7 +15,9 @@ import {
 import { semanticManager } from "../semantic-index";
 import { classifyTaskCandidate } from "../task-triage";
 import { routeTask } from "../task-routing";
+import { openContactChannel } from "../contact-messaging";
 import type { RouteTaskInput } from "../../shared/tasks-dump";
+import type { ContactChannel } from "../../shared/contacts";
 import { extractPdfToMarkdown } from "../pdf-extract";
 import {
   getObsidianConfig,
@@ -407,6 +409,10 @@ export function registerNotesIpc(
     "sps-route-task",
     (_event, input: RouteTaskInput, profile?: string) =>
       routeTask(input, profile),
+  );
+  // Hand off to the native app (Mail/Messages/WhatsApp) for a contact channel.
+  safeHandle("sps-open-contact-channel", (_event, channel: ContactChannel) =>
+    openContactChannel(channel),
   );
   safeHandle(
     "sps-read-row",

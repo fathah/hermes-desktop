@@ -3,6 +3,18 @@ import { useEffect, useState } from "react";
 import { Icon } from "../components/Icon";
 import { STATUS, PRIO } from "../data/seed";
 import { usePersonPages } from "../hooks/usePersonPages";
+import {
+  availableChannels,
+  type ChannelKind,
+} from "../../../../../shared/contacts";
+
+const CHANNEL_LABEL: Record<ChannelKind, string> = {
+  email: "Email",
+  sms: "SMS",
+  imessage: "iMessage",
+  whatsapp: "WhatsApp",
+  telegram: "Telegram",
+};
 import type {
   Task,
   StatusKey,
@@ -69,6 +81,11 @@ export function TaskDrawer({ task, onClose }: Props) {
   const [prio, setPrio] = useState<PrioKey>(task.prio);
   const [who, setWho] = useState<PersonKey>(task.who);
   const { persons } = usePersonPages();
+  const assignee = persons.find((p) => p.id === who);
+  // Channels we can hand off to via the OS (Telegram has no by-id deep link).
+  const messageChannels = assignee
+    ? availableChannels(assignee).filter((c) => c.kind !== "telegram")
+    : [];
   const [due, setDue] = useState(task.due);
   const [est, setEst] = useState(task.est);
 
@@ -300,6 +317,34 @@ export function TaskDrawer({ task, onClose }: Props) {
                       </option>
                     ))}
                   </select>
+                  {messageChannels.length > 0 && (
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 6,
+                        marginTop: 6,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      {messageChannels.map((channel) => (
+                        <button
+                          key={channel.kind}
+                          className="drawer-select"
+                          style={{
+                            width: "auto",
+                            padding: "2px 8px",
+                            cursor: "pointer",
+                          }}
+                          title={`Message ${assignee?.name ?? ""} via ${CHANNEL_LABEL[channel.kind]}`}
+                          onClick={() =>
+                            void window.hermesAPI.spsOpenContactChannel(channel)
+                          }
+                        >
+                          {CHANNEL_LABEL[channel.kind]}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="fk">
                   <Icon name="calendar" size={15} /> Due
