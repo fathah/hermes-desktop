@@ -1331,9 +1331,33 @@
 .sps-scope .backlinks-item-label {
   font-weight: 500;
   color: var(--tx-1);
+  min-width: 0;
+}
+
+.sps-scope .backlinks-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.sps-scope .backlinks-chip {
+  max-width: 88px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--tx-3);
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  padding: 1px 6px;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .sps-scope .backlinks-item-phrase {
+  margin-left: auto;
   max-width: 96px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1343,7 +1367,7 @@
 }
 
 .sps-scope .backlinks-item-chevron {
-  margin-left: auto;
+  margin-left: 0;
   color: var(--tx-3);
 }
 

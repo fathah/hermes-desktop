@@ -21,6 +21,11 @@ import { uid } from "../lib/ids";
 import { stripHtml } from "../lib/html";
 import { sanitizeHtml } from "../lib/sanitize";
 import { assetRel, assetNameFromRel } from "../lib/assets";
+import {
+  parseSpsWikilinks,
+  parseSpsWikilinkRaw,
+  spsWikilinkToMarkdown,
+} from "../../../../../shared/sps-wikilinks";
 import type { Block, BlockType } from "../types";
 
 // ── metadata comment (tier-2, unicode-safe) ───────────────────────────────────
@@ -73,6 +78,19 @@ function escapeInline(s: string): string {
   return s.replace(/([\\*_~=`[\]<>])/g, "\\$1");
 }
 
+function escapeInlinePreservingWikilinks(s: string): string {
+  const links = parseSpsWikilinks(s);
+  if (links.length === 0) return escapeInline(s);
+  let out = "";
+  let pos = 0;
+  for (const link of links) {
+    out += escapeInline(s.slice(pos, link.start));
+    out += link.raw;
+    pos = link.end;
+  }
+  return out + escapeInline(s.slice(pos));
+}
+
 interface InlineMd {
   md: string;
   clean: boolean;
@@ -99,6 +117,11 @@ function walkInline(node: Node, state: { clean: boolean }): string {
     }
     if (child.nodeType !== 1) return;
     const el = child as HTMLElement;
+    const wikiLink = el.getAttribute("data-sps-wikilink");
+    if (wikiLink && parseSpsWikilinkRaw(wikiLink)) {
+      out += wikiLink;
+      return;
+    }
     const tag = el.tagName;
     if (!CLEAN_INLINE_TAGS.has(tag)) {
       // span/font/mention/comment chips — markdown can't carry these.
@@ -139,6 +162,8 @@ const ESC_OPEN = String.fromCharCode(0xe000);
 const ESC_CLOSE = String.fromCharCode(0xe001);
 const CODE_OPEN = String.fromCharCode(0xe002);
 const CODE_CLOSE = String.fromCharCode(0xe003);
+const WIKI_OPEN = String.fromCharCode(0xe004);
+const WIKI_CLOSE = String.fromCharCode(0xe005);
 
 /** Parse markdown inline into canonical html + plaintext. html is omitted when
  *  the content has no inline formatting (so it matches plain-text blocks). */
@@ -157,7 +182,16 @@ export function parseInline(md: string): { text: string; html?: string } {
     return CODE_OPEN + (codes.length - 1) + CODE_CLOSE;
   });
 
-  // 3. Links, then the symmetric marks (longest delimiters first).
+  // 3. Protect Obsidian wikilinks so markdown-link parsing doesn't consume
+  //    their alias syntax.
+  const wikis: string[] = [];
+  s = s.replace(/!?\[\[[^\]\r\n]+\]\]/g, (raw) => {
+    if (!parseSpsWikilinkRaw(raw)) return raw;
+    wikis.push(raw);
+    return WIKI_OPEN + (wikis.length - 1) + WIKI_CLOSE;
+  });
+
+  // 4. Links, then the symmetric marks (longest delimiters first).
   s = s.replace(
     /\[([^\]]*)\]\(([^)]+)\)/g,
     (_m, txt, href) => `<a href="${href}">${txt}</a>`,
@@ -167,19 +201,25 @@ export function parseInline(md: string): { text: string; html?: string } {
   s = s.replace(/==([^=]+)==/g, "<mark>$1</mark>");
   s = s.replace(/\*([^*]+)\*/g, "<em>$1</em>");
 
-  // 4. Restore code spans as <code>.
+  // 5. Restore wikilinks as safe editor html with the exact raw markdown stored
+  //    in data-sps-wikilink, so export can round-trip aliases/fragments.
+  s = s.replace(new RegExp(WIKI_OPEN + "(\\d+)" + WIKI_CLOSE, "g"), (_m, i) =>
+    wikiLinkHtml(wikis[+i]),
+  );
+
+  // 6. Restore code spans as <code>.
   s = s.replace(
     new RegExp(CODE_OPEN + "(\\d+)" + CODE_CLOSE, "g"),
     (_m, i) => `<code>${escapeHtmlText(codes[+i])}</code>`,
   );
 
-  // 5. Restore escaped literals (without the backslash), html-escaping the
+  // 7. Restore escaped literals (without the backslash), html-escaping the
   //    html-significant ones so they survive as literal text, not markup.
   s = s.replace(new RegExp(ESC_OPEN + "(\\d+)" + ESC_CLOSE, "g"), (_m, i) =>
     htmlEscapeChar(escapes[+i]),
   );
 
-  const hasFormatting = /<(strong|em|s|code|a|mark|u|br)\b/.test(s);
+  const hasFormatting = /<(strong|em|s|code|a|mark|u|br|span)\b/.test(s);
   if (!hasFormatting) return { text: decodeEntities(s) };
   // Defence in depth: a hostile vault file could embed raw html in the body.
   const safe = sanitizeHtml(s);
@@ -195,6 +235,26 @@ function htmlEscapeChar(ch: string): string {
 
 function escapeHtmlText(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function escapeAttr(s: string): string {
+  return escapeHtmlText(s).replace(/"/g, "&quot;");
+}
+
+function wikiLinkHtml(raw: string): string {
+  const link = parseSpsWikilinkRaw(raw);
+  if (!link) return escapeHtmlText(raw);
+  const label = link.display || link.target;
+  const attrs =
+    `data-sps-wikilink="${escapeAttr(link.raw)}" ` +
+    `data-sps-target="${escapeAttr(link.target)}"` +
+    (link.heading ? ` data-sps-heading="${escapeAttr(link.heading)}"` : "") +
+    (link.blockId ? ` data-sps-block-id="${escapeAttr(link.blockId)}"` : "") +
+    (link.relation ? ` data-sps-relation="${escapeAttr(link.relation)}"` : "");
+  if (link.kind === "embed") {
+    return `<span class="wiki-embed-inline" ${attrs}>${escapeHtmlText(label)}</span>`;
+  }
+  return `<a href="sps://page/${encodeURIComponent(link.target)}" class="wiki-link" ${attrs}>${escapeHtmlText(label)}</a>`;
 }
 
 /** Decode HTML entities to text without ever executing markup (textarea). */
@@ -234,8 +294,9 @@ const BLOCK_ID_RE = /\s+\^([A-Za-z0-9_-]+)\s*$/;
 
 // A page-link block serializes to a bare [[pageId]] so the note-index graph
 // resolves it (a note's basename == its pageId). Round-trips losslessly.
-const PAGE_ID_RE = /^[A-Za-z0-9_-]+$/;
-const WIKILINK_RE = /^\[\[([A-Za-z0-9_-]+)\]\]$/;
+function validWikilinkPart(value: unknown): value is string {
+  return typeof value === "string" && !!value.trim() && !/[\]\r\n]/.test(value);
+}
 
 // Obsidian callouts (`> [!type] title`) ↔ our single-line callout block (an
 // emoji + text). EMOJI_TO_CALLOUT is a bijection over a curated set: each emoji
@@ -293,8 +354,14 @@ function isCleanBlock(block: Block): boolean {
   if (block.color || block.bg) return false;
   if (block.indent && !LIST_TYPES.has(block.type)) return false;
   // A sub-page link is clean only when it is a plain pageId reference.
-  if (block.type === "page")
-    return !!block.pageId && PAGE_ID_RE.test(block.pageId);
+  if (block.type === "page" || block.type === "embed") {
+    return (
+      validWikilinkPart(block.pageId) &&
+      (block.linkDisplay == null || validWikilinkPart(block.linkDisplay)) &&
+      (block.linkHeading == null || validWikilinkPart(block.linkHeading)) &&
+      (block.linkBlockId == null || validWikilinkPart(block.linkBlockId))
+    );
+  }
   // An excalidraw block is clean once it has a preview-svg path; an undrawn one
   // falls to the tier-2 stub so its block type survives the round-trip.
   if (block.type === "excalidraw") return !!block.src;
@@ -335,7 +402,17 @@ function renderInline(block: Block): string {
     const { md, clean } = inlineHtmlToMd(block.html);
     if (clean) return md;
   }
-  return escapeInline(block.text || "");
+  return escapeInlinePreservingWikilinks(block.text || "");
+}
+
+function blockWikilink(block: Block, kind: "link" | "embed" = "link"): string {
+  return spsWikilinkToMarkdown({
+    target: block.pageId || "",
+    display: block.linkDisplay,
+    heading: block.linkHeading,
+    blockId: block.linkBlockId,
+    kind,
+  });
 }
 
 /** The clean tier-1 markdown line for a block (no id marker). */
@@ -376,7 +453,9 @@ function cleanBlockLine(block: Block): string {
     case "todo":
       return indent + (block.done ? "- [x] " : "- [ ] ") + renderInline(block);
     case "page":
-      return `[[${block.pageId}]]`;
+      return blockWikilink(block);
+    case "embed":
+      return blockWikilink(block, "embed");
     default:
       return renderInline(block); // paragraph
   }
@@ -400,7 +479,9 @@ export function blocksToMarkdown(
   anchoredIds?: Set<string>,
 ): string {
   return blocks
-    .map((b) => blockToMarkdown(b, anchoredIds?.has(b.id) ?? false))
+    .map((b) =>
+      blockToMarkdown(b, (anchoredIds?.has(b.id) ?? false) || !!b.anchor),
+    )
     .join("\n\n");
 }
 
@@ -466,9 +547,17 @@ export function markdownToBlocks(md: string): Block[] {
       continue;
     }
 
-    const wikilink = WIKILINK_RE.exec(raw.trim());
+    const wikilink = parseSpsWikilinkRaw(raw.trim());
     if (wikilink) {
-      blocks.push({ id: uid(), type: "page", text: "", pageId: wikilink[1] });
+      blocks.push({
+        id: uid(),
+        type: wikilink.kind === "embed" ? "embed" : "page",
+        text: "",
+        pageId: wikilink.target,
+        ...(wikilink.display ? { linkDisplay: wikilink.display } : {}),
+        ...(wikilink.heading ? { linkHeading: wikilink.heading } : {}),
+        ...(wikilink.blockId ? { linkBlockId: wikilink.blockId } : {}),
+      });
       i++;
       continue;
     }
@@ -505,7 +594,9 @@ export function markdownToBlocks(md: string): Block[] {
     // block id (F2). Strip it from the text and reuse it as the block's id.
     const anchorMatch = BLOCK_ID_RE.exec(raw);
     const body = anchorMatch ? raw.slice(0, anchorMatch.index) : raw;
-    const idExtra: Partial<Block> = anchorMatch ? { id: anchorMatch[1] } : {};
+    const idExtra: Partial<Block> = anchorMatch
+      ? { id: anchorMatch[1], anchor: true }
+      : {};
 
     const heading = /^(#{1,3})\s+(.*)$/.exec(body);
     if (heading) {

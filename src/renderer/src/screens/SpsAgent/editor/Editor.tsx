@@ -56,12 +56,13 @@ export function Editor() {
   const pageMeta = useStore((s) => s.meta);
   const page = useStore((s) => s.page);
 
-  // Copy an in-app wikilink to a specific block — the note-index graph's native
-  // [[Title]] format, with the block id as a fragment for precision.
+  // Copy an Obsidian block ref and mark the block so markdown keeps its ^id.
   const copyBlockLink = (id: string): void => {
-    const title = pageMeta[page]?.title || "Untitled";
+    setBlocks((bs) =>
+      bs.map((b) => (b.id === id ? { ...b, anchor: true } : b)),
+    );
     void navigator.clipboard
-      ?.writeText(`[[${title}#${id}]]`)
+      ?.writeText(`[[${page}#^${id}]]`)
       .then(() => onToast("Link to block copied"))
       .catch(() => onToast("Couldn't copy link", { tone: "warn" }));
   };

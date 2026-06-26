@@ -195,6 +195,80 @@ async function main(): Promise<void> {
   await closeAllNoteIndexes();
   await rm(vault, { recursive: true, force: true });
 
+  // ── Obsidian-first links: aliases, embeds, block refs, and canonical relations.
+  console.log("\nObsidian links — aliases, embeds, block refs, relations:");
+  const oroot = await mkdtemp(join(tmpdir(), "note-index-obsidian-"));
+  await writeFile(
+    join(oroot, "home.md"),
+    `---\ntitle: "Home"\nadvisor: "[[Garry Tan]]"\ninvestor:\n  - "[[Sequoia|Sequoia Capital]]"\n---\n# Home\nSee [[tasks|Task List]], ![[brief#Summary]], and [[tasks#^todo-1]].\nadvisor:: [[Garry Tan]]\nreviewer:: [[Ghost Person#^missing-block]]\nLegacy still works: [[works_at::Garry Tan]].\n`,
+  );
+  await writeFile(
+    join(oroot, "tasks.md"),
+    `# Tasks\n- [ ] Follow up ^todo-1\n`,
+  );
+  await writeFile(join(oroot, "brief.md"), `# Brief\n## Summary\nDetails.\n`);
+  await writeFile(join(oroot, "garry tan.md"), `# Garry Tan\nPerson.\n`);
+  await writeFile(join(oroot, "sequoia.md"), `# Sequoia\nFirm.\n`);
+
+  const oi = await NoteIndex.open(oroot);
+  const obsidianEdges = oi
+    .links()
+    .map(
+      (edge) =>
+        `${edge.source}->${edge.target}:${edge.type}:${edge.kind || "link"}:${edge.targetHeading || ""}:${edge.targetBlockId || ""}`,
+    )
+    .sort();
+  eq(
+    obsidianEdges,
+    [
+      "home.md->brief.md:embed:embed:Summary:",
+      "home.md->garry tan.md:advisor:link::",
+      "home.md->garry tan.md:works_at:link::",
+      "home.md->sequoia.md:investor:link::",
+      "home.md->tasks.md:link:link::",
+      "home.md->tasks.md:link:link::todo-1",
+    ],
+    "links() preserves aliases, embeds, block refs, frontmatter relations, and legacy typed links",
+  );
+  eq(
+    oi
+      .backlinkDetails("tasks.md")
+      .map((edge) => `${edge.source}:${edge.type}:${edge.targetBlockId || ""}`)
+      .sort(),
+    ["home.md:link:", "home.md:link:todo-1"],
+    "backlinkDetails exposes page refs and block refs separately",
+  );
+  const obsidianBroken = oi.unresolvedLinks();
+  eq(
+    obsidianBroken.length,
+    1,
+    "unresolvedLinks finds one canonical typed miss",
+  );
+  eq(
+    {
+      target: obsidianBroken[0].target,
+      type: obsidianBroken[0].type,
+      block: obsidianBroken[0].targetBlockId,
+    },
+    { target: "ghost person", type: "reviewer", block: "missing-block" },
+    "broken canonical typed block link keeps relation and block id",
+  );
+  const obsidianBefore = obsidianEdges;
+  await oi.rebuild();
+  eq(
+    oi
+      .links()
+      .map(
+        (edge) =>
+          `${edge.source}->${edge.target}:${edge.type}:${edge.kind || "link"}:${edge.targetHeading || ""}:${edge.targetBlockId || ""}`,
+      )
+      .sort(),
+    obsidianBefore,
+    "Obsidian link graph rebuild is identical",
+  );
+  await oi.close();
+  await rm(oroot, { recursive: true, force: true });
+
   // ── Lint: orphans + broken [[wikilinks]] over a small vault.
   console.log("\nLint — orphans + broken links:");
   const lroot = await mkdtemp(join(tmpdir(), "note-index-lint-"));
@@ -256,7 +330,8 @@ async function main(): Promise<void> {
   );
   const mi = await NoteIndex.open(mroot);
   eq(
-    mi.unlinkedMentions("alpha.md")
+    mi
+      .unlinkedMentions("alpha.md")
       .map((hit) => hit.source)
       .sort(),
     ["source-one.md", "source-two.md"],

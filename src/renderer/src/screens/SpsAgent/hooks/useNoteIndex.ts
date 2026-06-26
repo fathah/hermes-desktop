@@ -89,6 +89,56 @@ export function useVaultBacklinks(pageId: string | null): string[] {
   return backlinks;
 }
 
+export interface VaultBacklinkDetail {
+  source: string;
+  target: string;
+  type: string;
+  kind?: "link" | "embed";
+  targetHeading?: string;
+  targetBlockId?: string;
+}
+
+function stripMd(path: string): string {
+  return path.replace(MD_SUFFIX, "");
+}
+
+/** Inbound links with relation/embed/block metadata for the backlinks pane. */
+export function useVaultBacklinkDetails(
+  pageId: string | null,
+): VaultBacklinkDetail[] {
+  const [backlinks, setBacklinks] = useState<VaultBacklinkDetail[]>([]);
+  const rebuildVersion = useIndexRebuildVersion();
+  useEffect(() => {
+    let cancelled = false;
+    setBacklinks([]);
+    if (!pageId) return;
+    const api = window.hermesAPI;
+    if (!api?.spsIndexBacklinkDetails) return;
+    api
+      .spsIndexBacklinkDetails(`${pageId}.md`)
+      .then((rows) => {
+        if (cancelled) return;
+        setBacklinks(
+          rows.map((row) => ({
+            source: stripMd(row.source),
+            target: stripMd(row.target),
+            type: row.type,
+            kind: row.kind,
+            targetHeading: row.targetHeading,
+            targetBlockId: row.targetBlockId,
+          })),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setBacklinks([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pageId, rebuildVersion]);
+  return backlinks;
+}
+
 export interface UnlinkedMention {
   source: string;
   target: string;
@@ -131,6 +181,9 @@ export interface VaultEdge {
   source: string;
   target: string;
   type?: string;
+  kind?: "link" | "embed";
+  targetHeading?: string;
+  targetBlockId?: string;
 }
 
 /** All [[wikilink]] edges between pages (pageIds, .md stripped) for the graph
@@ -146,9 +199,12 @@ export function useVaultGraph(): { edges: VaultEdge[]; refetch: () => void } {
       .then((rows) =>
         setEdges(
           rows.map((e) => ({
-            source: e.source.replace(MD_SUFFIX, ""),
-            target: e.target.replace(MD_SUFFIX, ""),
+            source: stripMd(e.source),
+            target: stripMd(e.target),
             type: e.type,
+            kind: e.kind,
+            targetHeading: e.targetHeading,
+            targetBlockId: e.targetBlockId,
           })),
         ),
       )

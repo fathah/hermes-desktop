@@ -27,6 +27,7 @@ export type {
   SpsPropertyValue,
   SpsSaveResult,
   VaultHealthReport,
+  VaultLinkEdge,
   VaultProposal,
   VaultProposalInput,
 } from "../shared/sps-types";

@@ -212,6 +212,66 @@ describe("page links as wikilinks (S3 — feeds the vault graph)", () => {
   });
   it("round-trips a plain sub-page link losslessly", () =>
     expectRoundTrip([blk("page", "", { pageId: "pg-123" })]));
+
+  it("preserves inline wikilinks in prose instead of escaping them", () => {
+    const blocks = [
+      blk(
+        "p",
+        "Discuss [[Project Atlas|Atlas]], [[Roadmap#North Star]], and [[Tasks#^todo-1]].",
+      ),
+    ];
+    const md = blocksToMarkdown(blocks);
+    expect(md).toBe(
+      "Discuss [[Project Atlas|Atlas]], [[Roadmap#North Star]], and [[Tasks#^todo-1]].",
+    );
+    expect(markdownToBlocks(md).map((b) => blocksToMarkdown([b]))).toEqual([
+      md,
+    ]);
+  });
+
+  it("preserves wikilink anchors carried in sanitized editor html", () => {
+    const raw = "[[Project Atlas|Atlas]]";
+    expect(
+      inlineHtmlToMd(
+        `<a class="wiki-link" data-sps-wikilink="${raw}" data-sps-target="Project Atlas">Atlas</a>`,
+      ),
+    ).toEqual({ md: raw, clean: true });
+  });
+
+  it("parses aliases, heading refs, and block refs into page-link blocks", () => {
+    const [alias, heading, blockRef] = markdownToBlocks(
+      "[[Project Atlas|Atlas]]\n\n[[Roadmap#North Star]]\n\n[[Tasks#^todo-1]]",
+    );
+    expect(alias).toMatchObject({
+      type: "page",
+      pageId: "Project Atlas",
+      linkDisplay: "Atlas",
+    });
+    expect(heading).toMatchObject({
+      type: "page",
+      pageId: "Roadmap",
+      linkHeading: "North Star",
+    });
+    expect(blockRef).toMatchObject({
+      type: "page",
+      pageId: "Tasks",
+      linkBlockId: "todo-1",
+    });
+    expect(blocksToMarkdown([alias, heading, blockRef])).toBe(
+      "[[Project Atlas|Atlas]]\n\n[[Roadmap#North Star]]\n\n[[Tasks#^todo-1]]",
+    );
+  });
+
+  it("round-trips Obsidian embeds as embed blocks", () => {
+    const blocks = markdownToBlocks("![[Project Atlas|Atlas]]");
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]).toMatchObject({
+      type: "embed",
+      pageId: "Project Atlas",
+      linkDisplay: "Atlas",
+    });
+    expect(blocksToMarkdown(blocks)).toBe("![[Project Atlas|Atlas]]");
+  });
 });
 
 describe("mermaid diagram block", () => {

@@ -378,6 +378,11 @@ export function GraphView() {
               dash = [6, 3];
               width = 1.8;
               break;
+            case "embed":
+              color = "#8b5cf6";
+              dash = [2, 4];
+              width = 1.8;
+              break;
             default: {
               let hash = 0;
               for (let i = 0; i < type.length; i++) {
@@ -764,6 +769,13 @@ export function GraphView() {
   const connectedPageCount = new Set(
     simEdges.flatMap((edge) => [edge.source, edge.target]),
   ).size;
+  const relationTypes = Array.from(
+    new Set(
+      simEdges
+        .map((edge) => edge.type || (edge.kind === "embed" ? "embed" : "link"))
+        .filter((type) => type && type !== "link"),
+    ),
+  ).sort();
 
   return (
     <div className="graph-view">
@@ -787,6 +799,15 @@ export function GraphView() {
           <span>{connectedPageCount} connected</span>
         </div>
       </div>
+      {relationTypes.length > 0 && (
+        <div className="graph-relation-legend" aria-label="Graph relations">
+          {relationTypes.map((type) => (
+            <span key={type} className="graph-relation-chip">
+              {type}
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="graph-container">
         <div className="graph-toolbar">

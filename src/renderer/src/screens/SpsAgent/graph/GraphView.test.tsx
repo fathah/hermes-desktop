@@ -38,13 +38,16 @@ describe("GraphView", () => {
     stubApi({
       spsIndexLinks: vi
         .fn()
-        .mockResolvedValue([{ source: "home.md", target: "tasks.md" }]),
+        .mockResolvedValue([
+          { source: "home.md", target: "tasks.md", type: "advisor" },
+        ]),
     });
     render(<GraphView />);
     expect(await screen.findByText("Home")).toBeTruthy();
     expect(screen.getByText("Tasks")).toBeTruthy();
     // Header summary updates once the (async) edge arrives.
     await waitFor(() => expect(screen.getByText(/1 link$/)).toBeTruthy());
+    expect(screen.getByText("advisor")).toBeTruthy();
   });
 
   it("opens the clicked page on the doc surface", async () => {

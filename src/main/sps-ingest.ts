@@ -14,6 +14,7 @@ import { promises as fs } from "fs";
 import { join } from "path";
 import YAML from "yaml";
 import { DEFAULT_WIKI_SCHEMA } from "../shared/wikiSchema";
+import type { VaultLinkEdge } from "../shared/sps-types";
 
 export const WIKI_SCHEMA_PAGE_ID = "WIKI";
 export const INBOX_FOLDER = "_inbox";
@@ -526,7 +527,7 @@ export function buildExternalDigestMergeMessages(
 
 export interface MechanicalLint {
   orphans: string[];
-  brokenLinks: Array<{ source: string; target: string }>;
+  brokenLinks: VaultLinkEdge[];
   stale: string[];
 }
 
@@ -609,6 +610,18 @@ Rules:
 - Output EXACTLY ONE JSON object, no prose, no markdown fence:
 {"summary":"one line","findings":[{"kind":"contradiction","page":"slug","note":"..."}],"pages":[{"op":"update","pageId":"slug","title":"Human Title","markdown":"# body"}],"captures":[],"memory":[]}`;
 
+function brokenLinkLabel(link: VaultLinkEdge): string {
+  const fragment = link.targetBlockId
+    ? `#^${link.targetBlockId}`
+    : link.targetHeading
+      ? `#${link.targetHeading}`
+      : "";
+  const wikilink = `${link.kind === "embed" ? "!" : ""}[[${link.target}${fragment}]]`;
+  return link.type && link.type !== "link" && link.type !== "embed"
+    ? `${link.type}:: ${wikilink}`
+    : wikilink;
+}
+
 /** Build the OpenAI-style messages for a lint run. Pure/testable. Page digests
  *  are untrusted vault content, so they are fenced as reference data only. */
 export function buildLintMessages(
@@ -618,7 +631,7 @@ export function buildLintMessages(
 ): Array<{ role: string; content: string }> {
   const mech = [
     `Orphans (no links in/out): ${mechanical.orphans.map(stripMdExt).join(", ") || "none"}`,
-    `Broken links: ${mechanical.brokenLinks.map((b) => `${stripMdExt(b.source)} → [[${b.target}]]`).join("; ") || "none"}`,
+    `Broken links: ${mechanical.brokenLinks.map((b) => `${stripMdExt(b.source)} → ${brokenLinkLabel(b)}`).join("; ") || "none"}`,
     `Stale: ${mechanical.stale.map(stripMdExt).join(", ") || "none"}`,
   ].join("\n");
   const pageBlock = digests

@@ -69,6 +69,10 @@
   border-radius: 6px;
   cursor: pointer;
   color: var(--tx-1);
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
 }
 .sps-scope .b-page:hover {
   background: var(--block-hover);
@@ -82,6 +86,28 @@
   text-decoration: underline;
   text-underline-offset: 3px;
   text-decoration-color: var(--hair-strong);
+}
+.sps-scope .b-page-ref,
+.sps-scope .b-embed-kind {
+  color: var(--tx-3);
+  font-size: 12px;
+  font-weight: 500;
+}
+.sps-scope .b-embed {
+  border: 1px solid var(--hair);
+  background: var(--surface);
+}
+.sps-scope .wiki-link,
+.sps-scope .wiki-embed-inline {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.sps-scope .wiki-embed-inline::before {
+  content: "!";
+  color: var(--tx-3);
+  margin-right: 1px;
 }
 
 /* ---- editable table cell ---- */

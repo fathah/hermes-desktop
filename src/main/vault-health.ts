@@ -2,6 +2,7 @@ import { readFile, readdir } from "fs/promises";
 import { join } from "path";
 import { resolveSpsVaultDir } from "./sps-storage";
 import type {
+  VaultLinkEdge,
   VaultHealthNoteSnapshot,
   VaultHealthReport,
 } from "../shared/sps-types";
@@ -9,10 +10,10 @@ import YAML from "yaml";
 
 export interface VaultHealthSnapshot {
   notes: VaultHealthNoteSnapshot[];
-  links: Array<{ source: string; target: string; type?: string }>;
+  links: VaultLinkEdge[];
   mechanical: {
     orphans: string[];
-    brokenLinks: Array<{ source: string; target: string; type?: string }>;
+    brokenLinks: VaultLinkEdge[];
     stale: string[];
   };
 }
@@ -48,9 +49,11 @@ export function buildVaultHealthReportFromSnapshot(
   const aliasRows = snapshot.notes.flatMap((note) =>
     aliases(note.props).map((alias) => ({ alias, path: note.path })),
   );
-  const duplicateAliases = duplicates(aliasRows, (row) => row.alias, "alias").map(
-    ({ key, paths }) => ({ alias: key, paths }),
-  );
+  const duplicateAliases = duplicates(
+    aliasRows,
+    (row) => row.alias,
+    "alias",
+  ).map(({ key, paths }) => ({ alias: key, paths }));
 
   const missingSchemaFields = snapshot.notes.flatMap((note) => {
     const schema = schemaName(note.props);
@@ -80,7 +83,9 @@ export function buildVaultHealthReportFromSnapshot(
         String(note.props.source ?? "").toLowerCase() === "pdf" ||
         String(note.props.mime ?? "").toLowerCase() === "application/pdf",
     )
-    .filter((note) => String(note.props.status ?? "unprocessed") !== "processed")
+    .filter(
+      (note) => String(note.props.status ?? "unprocessed") !== "processed",
+    )
     .map((note) => ({ path: note.path, title: note.title }));
 
   const degree = new Map<string, number>();
@@ -88,8 +93,10 @@ export function buildVaultHealthReportFromSnapshot(
     if (!note.path.includes("/")) degree.set(note.path, 0);
   }
   for (const link of snapshot.links) {
-    if (degree.has(link.source)) degree.set(link.source, (degree.get(link.source) ?? 0) + 1);
-    if (degree.has(link.target)) degree.set(link.target, (degree.get(link.target) ?? 0) + 1);
+    if (degree.has(link.source))
+      degree.set(link.source, (degree.get(link.source) ?? 0) + 1);
+    if (degree.has(link.target))
+      degree.set(link.target, (degree.get(link.target) ?? 0) + 1);
   }
   const weaklyConnected = [...degree.entries()]
     .filter(([path, count]) => count <= 1 && !isMetaPage(path))
@@ -207,7 +214,9 @@ function parseFrontmatter(raw: string): {
 function aliases(props: Record<string, unknown>): string[] {
   const raw = props.aliases;
   return Array.isArray(raw)
-    ? raw.filter((alias): alias is string => typeof alias === "string" && !!alias.trim())
+    ? raw.filter(
+        (alias): alias is string => typeof alias === "string" && !!alias.trim(),
+      )
     : [];
 }
 
@@ -233,10 +242,12 @@ function duplicates<T>(
   for (const row of rows) {
     const key = keyOf(row).trim();
     if (!key) continue;
-    const path = "path" in (row as object)
-      ? String((row as { path: string }).path)
-      : "";
-    grouped.set(key.toLowerCase(), [...(grouped.get(key.toLowerCase()) ?? []), path]);
+    const path =
+      "path" in (row as object) ? String((row as { path: string }).path) : "";
+    grouped.set(key.toLowerCase(), [
+      ...(grouped.get(key.toLowerCase()) ?? []),
+      path,
+    ]);
   }
   return [...grouped.entries()]
     .filter(([, paths]) => paths.length > 1)

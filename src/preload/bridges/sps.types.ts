@@ -171,7 +171,7 @@ export interface SpsBridgeApi {
     };
     mechanical: {
       orphans: string[];
-      brokenLinks: Array<{ source: string; target: string }>;
+      brokenLinks: Api.VaultLinkEdge[];
       stale: string[];
     };
     pagesScanned: number;
@@ -495,6 +495,11 @@ export interface SpsBridgeApi {
 
   spsIndexBacklinks: (path: string, profile?: string) => Promise<string[]>;
 
+  spsIndexBacklinkDetails: (
+    path: string,
+    profile?: string,
+  ) => Promise<Api.VaultLinkEdge[]>;
+
   spsQueryBase: (
     config: Api.SpsBaseViewConfig,
     profile?: string,
@@ -518,9 +523,7 @@ export interface SpsBridgeApi {
     profile?: string,
   ) => Promise<Api.FederatedHit[]>;
 
-  spsIndexLinks: (
-    profile?: string,
-  ) => Promise<Array<{ source: string; target: string; type: string }>>;
+  spsIndexLinks: (profile?: string) => Promise<Api.VaultLinkEdge[]>;
 
   spsIndexTags: (
     profile?: string,
@@ -533,7 +536,7 @@ export interface SpsBridgeApi {
     profile?: string,
   ) => Promise<{
     orphans: string[];
-    brokenLinks: Array<{ source: string; target: string; type: string }>;
+    brokenLinks: Api.VaultLinkEdge[];
     stale: string[];
   }>;
 

@@ -129,13 +129,14 @@ export interface ParityReport {
   blockAnchorsOk: boolean;
 }
 
-/** Strip the runtime id and empty paragraphs so two block lists are comparable. */
+/** Strip runtime/persistence hints and empty paragraphs so block lists compare. */
 function normalizeBlocks(blocks: Block[]): Omit<Block, "id">[] {
   return blocks
     .filter((b) => !(b.type === "p" && !(b.text || "").trim()))
     .map((b) => {
       const rest: Partial<Block> = { ...b };
       delete rest.id;
+      delete rest.anchor;
       return rest as Omit<Block, "id">;
     });
 }

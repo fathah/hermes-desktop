@@ -26,6 +26,8 @@ import YAML from "yaml";
 import { resolveSpsVaultDir } from "./sps-storage";
 import { semanticManager } from "./semantic-index";
 import { log } from "./log";
+import { extractSpsLinkEdges, maskSpsWikilinks } from "../shared/sps-wikilinks";
+import type { VaultLinkEdge } from "../shared/sps-types";
 
 const NOTE_EXTENSIONS = new Set([".md", ".markdown"]);
 
@@ -54,47 +56,25 @@ const INDEXED_PROPERTIES = new Set([
 export interface TypedLink {
   target_norm: string;
   type: string;
+  kind: "link" | "embed";
+  target_heading?: string;
+  target_block_id?: string;
 }
 
 /** Extract `[[wikilink]]` targets and relationship types from raw note content. */
-function extractBacklinks(content: string): TypedLink[] {
-  const linksMap = new Map<string, string>(); // target_norm -> type
-  const re = /\[\[([^\]]+)\]\]/g;
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(content)) !== null) {
-    const rawLink = match[1]?.trim();
-    if (!rawLink) continue;
-
-    let type = "link";
-    let target = rawLink;
-
-    // Check for double colon relationship syntax: [[relation_type::target]]
-    const doubleColonIdx = rawLink.indexOf("::");
-    if (doubleColonIdx !== -1) {
-      const parsedType = rawLink.substring(0, doubleColonIdx).trim();
-      const parsedTarget = rawLink.substring(doubleColonIdx + 2).trim();
-      // Relation type must be alphanumeric/dashes (injection protection)
-      if (parsedType && /^[A-Za-z0-9_-]+$/.test(parsedType) && parsedTarget) {
-        type = parsedType;
-        target = parsedTarget;
-      }
-    }
-
-    const norm = normalizeName(target);
-    if (norm) {
-      // Prefer specific relationship types over generic 'link'
-      const existing = linksMap.get(norm);
-      if (!existing || existing === "link") {
-        linksMap.set(norm, type);
-      }
-    }
-  }
-
-  const result: TypedLink[] = [];
-  for (const [target_norm, type] of linksMap.entries()) {
-    result.push({ target_norm, type });
-  }
-  return result;
+function extractBacklinks(
+  content: string,
+  props: Record<string, unknown> = {},
+): TypedLink[] {
+  return extractSpsLinkEdges(content, props)
+    .map((edge) => ({
+      target_norm: normalizeName(edge.target),
+      type: edge.type,
+      kind: edge.kind,
+      target_heading: edge.heading,
+      target_block_id: edge.blockId,
+    }))
+    .filter((edge) => !!edge.target_norm);
 }
 
 /** Normalize a tag: drop a leading `#`, trim. Empty → "". */
@@ -140,7 +120,7 @@ const WIKI_META_PAGES = new Set([
   "home.md",
   "Home.md",
   "home",
-  "Home"
+  "Home",
 ]);
 
 export interface NoteRecord {
@@ -267,7 +247,7 @@ function mentionPhrases(note: NoteRecord): string[] {
 }
 
 function maskExplicitWikilinks(text: string): string {
-  return text.replace(/\[\[[^\]]+\]\]/g, (match) => " ".repeat(match.length));
+  return maskSpsWikilinks(text);
 }
 
 function phraseRegex(phrase: string): RegExp {
@@ -291,7 +271,8 @@ export function findUnlinkedMentionTargets(
     }
   }
   return hits.sort(
-    (a, b) => a.target.localeCompare(b.target) || a.phrase.localeCompare(b.phrase),
+    (a, b) =>
+      a.target.localeCompare(b.target) || a.phrase.localeCompare(b.phrase),
   );
 }
 
@@ -353,7 +334,8 @@ export class NoteIndex {
         `DELETE FROM links WHERE source = ?`,
       ),
       insertLink: this.db.prepare(
-        `INSERT INTO links(source,target_norm,type) VALUES(?,?,?)`,
+        `INSERT INTO links(source,target_norm,type,kind,target_heading,target_block_id)
+         VALUES(?,?,?,?,?,?)`,
       ),
       deleteTagsForSource: this.db.prepare(`DELETE FROM tags WHERE source = ?`),
       insertTag: this.db.prepare(`INSERT INTO tags(source,tag) VALUES(?,?)`),
@@ -366,7 +348,7 @@ export class NoteIndex {
       ),
       selectAllNotePaths: this.db.prepare(`SELECT path FROM notes`),
       selectAllLinks: this.db.prepare(
-        `SELECT source, target_norm, type FROM links`,
+        `SELECT source, target_norm, type, kind, target_heading, target_block_id FROM links`,
       ),
       selectOtherNoteBodies: this.db.prepare(
         `SELECT path, body FROM notes WHERE path != ?`,
@@ -429,7 +411,10 @@ export class NoteIndex {
       CREATE TABLE IF NOT EXISTS links (
         source TEXT NOT NULL,
         target_norm TEXT NOT NULL,
-        type TEXT NOT NULL DEFAULT 'link'
+        type TEXT NOT NULL DEFAULT 'link',
+        kind TEXT NOT NULL DEFAULT 'link',
+        target_heading TEXT,
+        target_block_id TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_links_target ON links(target_norm);
       CREATE INDEX IF NOT EXISTS idx_links_source ON links(source);
@@ -448,19 +433,34 @@ export class NoteIndex {
       const columns = this.db
         .prepare("PRAGMA table_info(links)")
         .all() as Array<{ name: string }>;
-      const hasType = columns.some((col) => col.name === "type");
-      if (columns.length > 0 && !hasType) {
-        this.db.exec(
+      const existing = new Set(columns.map((col) => col.name));
+      const migrations: string[] = [];
+      if (columns.length > 0 && !existing.has("type")) {
+        migrations.push(
           "ALTER TABLE links ADD COLUMN type TEXT NOT NULL DEFAULT 'link'",
         );
       }
+      if (columns.length > 0 && !existing.has("kind")) {
+        migrations.push(
+          "ALTER TABLE links ADD COLUMN kind TEXT NOT NULL DEFAULT 'link'",
+        );
+      }
+      if (columns.length > 0 && !existing.has("target_heading")) {
+        migrations.push("ALTER TABLE links ADD COLUMN target_heading TEXT");
+      }
+      if (columns.length > 0 && !existing.has("target_block_id")) {
+        migrations.push("ALTER TABLE links ADD COLUMN target_block_id TEXT");
+      }
+      if (migrations.length > 0) this.db.exec(migrations.join(";"));
     } catch (err) {
       console.error("[NoteIndex] failed to run links table migration:", err);
     }
   }
 
   private count(table: "notes" | "links"): number {
-    const row = this.stmts[table === "notes" ? "countNotes" : "countLinks"].get() as {
+    const row = this.stmts[
+      table === "notes" ? "countNotes" : "countLinks"
+    ].get() as {
       n: number;
     };
     return row.n;
@@ -473,7 +473,7 @@ export class NoteIndex {
     const { props, body } = parseFrontmatter(raw);
     const title = deriveTitle(props, body, relPath);
     const propsJson = JSON.stringify(props ?? {});
-    const typedLinks = extractBacklinks(raw);
+    const typedLinks = extractBacklinks(body, props);
     const now = Date.now();
 
     if (props && typeof props === "object") {
@@ -497,7 +497,14 @@ export class NoteIndex {
 
       this.stmts.deleteLinksForSource.run(relPath);
       for (const link of typedLinks)
-        this.stmts.insertLink.run(relPath, link.target_norm, link.type);
+        this.stmts.insertLink.run(
+          relPath,
+          link.target_norm,
+          link.type,
+          link.kind,
+          link.target_heading ?? null,
+          link.target_block_id ?? null,
+        );
 
       // Tags: frontmatter `tags` (array or string) + inline `#tag`s in the body.
       this.stmts.deleteTagsForSource.run(relPath);
@@ -532,7 +539,10 @@ export class NoteIndex {
     if (isHidden(relPath)) return false;
     try {
       const info = await stat(absPath);
-      if (opts.skipUnchanged && this.indexedMtimes.get(absPath) === info.mtimeMs) {
+      if (
+        opts.skipUnchanged &&
+        this.indexedMtimes.get(absPath) === info.mtimeMs
+      ) {
         return false;
       }
       const raw = await readFile(absPath, "utf-8");
@@ -767,7 +777,9 @@ export class NoteIndex {
   /** Notes that [[wikilink]] to the given note (order-independent resolution). */
   backlinks(relPath: string): string[] {
     const note = this.recordForPath(relPath);
-    const candidates = note ? this.linkTargetNames(note) : candidateNames(relPath);
+    const candidates = note
+      ? this.linkTargetNames(note)
+      : candidateNames(relPath);
     if (candidates.length === 0) return [];
     const placeholders = candidates.map(() => "?").join(",");
     const rows = this.db
@@ -778,46 +790,139 @@ export class NoteIndex {
     return rows.map((r) => r.source).filter((p) => p !== relPath);
   }
 
+  backlinkDetails(relPath: string): VaultLinkEdge[] {
+    const note = this.recordForPath(relPath);
+    const candidates = note
+      ? this.linkTargetNames(note)
+      : candidateNames(relPath);
+    if (candidates.length === 0) return [];
+    const placeholders = candidates.map(() => "?").join(",");
+    const rows = this.db
+      .prepare(
+        `SELECT source, target_norm, type, kind, target_heading, target_block_id
+         FROM links WHERE target_norm IN (${placeholders})`,
+      )
+      .all(...candidates) as Array<{
+      source: string;
+      target_norm: string;
+      type: string;
+      kind: "link" | "embed";
+      target_heading: string | null;
+      target_block_id: string | null;
+    }>;
+    const out: VaultLinkEdge[] = [];
+    const seen = new Set<string>();
+    for (const row of rows) {
+      if (row.source === relPath) continue;
+      const key = [
+        row.source,
+        row.type,
+        row.kind,
+        row.target_heading ?? "",
+        row.target_block_id ?? "",
+      ].join("\u0000");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({
+        source: row.source,
+        target: relPath,
+        type: row.type,
+        kind: row.kind,
+        ...(row.target_heading ? { targetHeading: row.target_heading } : {}),
+        ...(row.target_block_id ? { targetBlockId: row.target_block_id } : {}),
+      });
+    }
+    return out;
+  }
+
   /** All resolved [[wikilink]] edges as {source, target} relPaths (F4 graph
    *  view). Only edges whose target resolves to an indexed note are returned;
    *  self-links and duplicate edges are dropped. */
-  links(): Array<{ source: string; target: string; type: string }> {
+  links(): VaultLinkEdge[] {
     const nameToPath = this.getNameToPath();
     const rows = this.stmts.selectAllLinks.all() as Array<{
       source: string;
       target_norm: string;
       type: string;
+      kind: "link" | "embed";
+      target_heading: string | null;
+      target_block_id: string | null;
     }>;
-    const edges: Array<{ source: string; target: string; type: string }> = [];
+    const edges: VaultLinkEdge[] = [];
     const seen = new Set<string>();
-    for (const { source, target_norm, type } of rows) {
+    for (const {
+      source,
+      target_norm,
+      type,
+      kind,
+      target_heading,
+      target_block_id,
+    } of rows) {
       const target = nameToPath.get(target_norm);
       if (!target || target === source) continue;
-      const key = `${source} ${target}`;
+      const key = [
+        source,
+        target,
+        type,
+        kind,
+        target_heading ?? "",
+        target_block_id ?? "",
+      ].join("\u0000");
       if (seen.has(key)) continue;
       seen.add(key);
-      edges.push({ source, target, type });
+      edges.push({
+        source,
+        target,
+        type,
+        kind,
+        ...(target_heading ? { targetHeading: target_heading } : {}),
+        ...(target_block_id ? { targetBlockId: target_block_id } : {}),
+      });
     }
     return edges;
   }
 
   /** Raw [[wikilink]]s whose target does NOT resolve to an indexed note
    *  (broken links — the inverse of links(), for lint). Deduped per edge. */
-  unresolvedLinks(): Array<{ source: string; target: string; type: string }> {
+  unresolvedLinks(): VaultLinkEdge[] {
     const known = this.getKnownNames();
     const rows = this.stmts.selectAllLinks.all() as Array<{
       source: string;
       target_norm: string;
       type: string;
+      kind: "link" | "embed";
+      target_heading: string | null;
+      target_block_id: string | null;
     }>;
-    const out: Array<{ source: string; target: string; type: string }> = [];
+    const out: VaultLinkEdge[] = [];
     const seen = new Set<string>();
-    for (const { source, target_norm, type } of rows) {
+    for (const {
+      source,
+      target_norm,
+      type,
+      kind,
+      target_heading,
+      target_block_id,
+    } of rows) {
       if (known.has(target_norm)) continue;
-      const key = `${source} ${target_norm}`;
+      const key = [
+        source,
+        target_norm,
+        type,
+        kind,
+        target_heading ?? "",
+        target_block_id ?? "",
+      ].join("\u0000");
       if (seen.has(key)) continue;
       seen.add(key);
-      out.push({ source, target: target_norm, type });
+      out.push({
+        source,
+        target: target_norm,
+        type,
+        kind,
+        ...(target_heading ? { targetHeading: target_heading } : {}),
+        ...(target_block_id ? { targetBlockId: target_block_id } : {}),
+      });
     }
     return out;
   }
@@ -852,7 +957,7 @@ export class NoteIndex {
    *  notes whose file mtime predates it. */
   lint(staleBeforeMs?: number): {
     orphans: string[];
-    brokenLinks: Array<{ source: string; target: string; type: string }>;
+    brokenLinks: VaultLinkEdge[];
     stale: string[];
   } {
     const orphans = this.orphans();

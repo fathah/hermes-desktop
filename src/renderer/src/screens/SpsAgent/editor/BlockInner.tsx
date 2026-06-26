@@ -12,6 +12,7 @@ import { BookmarkBlock } from "./BookmarkBlock";
 import { ButtonBlock } from "./ButtonBlock";
 import { ColumnsBlock } from "./ColumnsBlock";
 import { PageLinkBlock } from "./PageLinkBlock";
+import { EmbedBlock } from "./EmbedBlock";
 import { MermaidBlock } from "./MermaidBlock";
 import { ExcalidrawBlock } from "./ExcalidrawBlock";
 import { TasksDB } from "../tasks/TasksDB";
@@ -136,6 +137,14 @@ export function BlockInner(props: BlockInnerProps) {
     case "page":
       return (
         <PageLinkBlock
+          block={block}
+          pageMeta={props.pageMeta}
+          onOpenPage={props.onOpenPage}
+        />
+      );
+    case "embed":
+      return (
+        <EmbedBlock
           block={block}
           pageMeta={props.pageMeta}
           onOpenPage={props.onOpenPage}

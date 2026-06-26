@@ -1095,10 +1095,7 @@ export async function spsLintWiki(
     const raw = index.lint(staleBeforeMs);
     const mechanical: MechanicalLint = {
       orphans: raw.orphans,
-      brokenLinks: raw.brokenLinks.map((b) => ({
-        source: b.source,
-        target: b.target,
-      })),
+      brokenLinks: raw.brokenLinks,
       stale: raw.stale,
     };
     const prioritized = [

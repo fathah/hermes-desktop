@@ -11,7 +11,10 @@ import { useStore } from "../store";
 import { pageIdFromPath } from "../lib/pageId";
 import { commitChangeset } from "../inbox/ingestApply";
 import { getLintIntervalMin, setLintIntervalMin } from "../inbox/ingestPrefs";
-import type { VaultHealthReport } from "../../../../../shared/sps-types";
+import type {
+  VaultHealthReport,
+  VaultLinkEdge,
+} from "../../../../../shared/sps-types";
 
 interface HealthSurfaceProps {
   profile?: string;
@@ -24,6 +27,18 @@ type DeepLint = NonNullable<
 >;
 
 const STALE_DAYS = 30;
+
+function brokenLinkLabel(link: VaultLinkEdge): string {
+  const fragment = link.targetBlockId
+    ? `#^${link.targetBlockId}`
+    : link.targetHeading
+      ? `#${link.targetHeading}`
+      : "";
+  const wikilink = `${link.kind === "embed" ? "!" : ""}[[${link.target}${fragment}]]`;
+  return link.type && link.type !== "link" && link.type !== "embed"
+    ? `${link.type}:: ${wikilink}`
+    : wikilink;
+}
 
 export function HealthSurface({
   profile = "default",
@@ -280,7 +295,7 @@ export function HealthSurface({
                   {pageIdFromPath(b.source)}
                 </button>
                 <span className="health-arrow">→</span>
-                <span className="health-mono-text">[[{b.target}]]</span>
+                <span className="health-mono-text">{brokenLinkLabel(b)}</span>
               </li>
             ))}
           </LintGroup>
@@ -347,12 +362,17 @@ export function HealthSurface({
             count={report.missingSchemaFields.length}
           >
             {report.missingSchemaFields.map((row) => (
-              <li key={`${row.path}-${row.missing.join(",")}`} className="health-row">
+              <li
+                key={`${row.path}-${row.missing.join(",")}`}
+                className="health-row"
+              >
                 <button className="health-link" onClick={() => open(row.path)}>
                   {pageIdFromPath(row.path)}
                 </button>
                 <span className="health-arrow">·</span>
-                <span>{row.schema}: {row.missing.join(", ")}</span>
+                <span>
+                  {row.schema}: {row.missing.join(", ")}
+                </span>
               </li>
             ))}
           </LintGroup>

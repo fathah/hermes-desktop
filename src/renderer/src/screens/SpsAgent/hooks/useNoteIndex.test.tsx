@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderHook, waitFor, act } from "@testing-library/react";
 import {
   useVaultBacklinks,
+  useVaultBacklinkDetails,
   useVaultSearch,
   useVaultQuery,
   useVaultGraph,
@@ -38,6 +39,45 @@ describe("useVaultBacklinks", () => {
     stubApi({ spsIndexBacklinks: vi.fn().mockRejectedValue(new Error("x")) });
     const { result } = renderHook(() => useVaultBacklinks("home"));
     await waitFor(() => expect(result.current).toEqual([]));
+  });
+});
+
+describe("useVaultBacklinkDetails", () => {
+  it("returns relation, embed, and block-ref metadata with page ids", async () => {
+    const spy = vi.fn().mockResolvedValue([
+      {
+        source: "alpha.md",
+        target: "home.md",
+        type: "advisor",
+        kind: "link",
+        targetBlockId: "b1",
+      },
+      {
+        source: "projects/beta.md",
+        target: "home.md",
+        type: "embed",
+        kind: "embed",
+      },
+    ]);
+    stubApi({ spsIndexBacklinkDetails: spy });
+    const { result } = renderHook(() => useVaultBacklinkDetails("home"));
+    await waitFor(() => expect(result.current.length).toBe(2));
+    expect(spy).toHaveBeenCalledWith("home.md");
+    expect(result.current).toEqual([
+      {
+        source: "alpha",
+        target: "home",
+        type: "advisor",
+        kind: "link",
+        targetBlockId: "b1",
+      },
+      {
+        source: "projects/beta",
+        target: "home",
+        type: "embed",
+        kind: "embed",
+      },
+    ]);
   });
 });
 
@@ -96,15 +136,27 @@ describe("useVaultQuery", () => {
 describe("useVaultGraph", () => {
   it("maps edges to pageIds (stripping the .md suffix)", async () => {
     const spy = vi.fn().mockResolvedValue([
-      { source: "home.md", target: "tasks.md" },
-      { source: "tasks.md", target: "projects/x.md" },
+      { source: "home.md", target: "tasks.md", type: "advisor", kind: "link" },
+      {
+        source: "tasks.md",
+        target: "projects/x.md",
+        type: "embed",
+        kind: "embed",
+        targetHeading: "Summary",
+      },
     ]);
     stubApi({ spsIndexLinks: spy });
     const { result } = renderHook(() => useVaultGraph());
     await waitFor(() => expect(result.current.edges.length).toBe(2));
     expect(result.current.edges).toEqual([
-      { source: "home", target: "tasks" },
-      { source: "tasks", target: "projects/x" },
+      { source: "home", target: "tasks", type: "advisor", kind: "link" },
+      {
+        source: "tasks",
+        target: "projects/x",
+        type: "embed",
+        kind: "embed",
+        targetHeading: "Summary",
+      },
     ]);
   });
 

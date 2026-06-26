@@ -342,20 +342,25 @@ button.twk-field:disabled {
 }
 
 /* Color Chip Accent overrides */
-.twk-chip[data-accent="#C79400"], .twk-chip[data-accent="#c79400"] {
-  background: #C79400;
+.twk-chip[data-accent="#C79400"],
+.twk-chip[data-accent="#c79400"] {
+  background: #c79400;
 }
-.twk-chip[data-accent="#1B4F8A"], .twk-chip[data-accent="#1b4f8a"] {
-  background: #1B4F8A;
+.twk-chip[data-accent="#1B4F8A"],
+.twk-chip[data-accent="#1b4f8a"] {
+  background: #1b4f8a;
 }
-.twk-chip[data-accent="#A1202C"], .twk-chip[data-accent="#a1202c"] {
-  background: #A1202C;
+.twk-chip[data-accent="#A1202C"],
+.twk-chip[data-accent="#a1202c"] {
+  background: #a1202c;
 }
-.twk-chip[data-accent="#1F6B3A"], .twk-chip[data-accent="#1f6b3a"] {
-  background: #1F6B3A;
+.twk-chip[data-accent="#1F6B3A"],
+.twk-chip[data-accent="#1f6b3a"] {
+  background: #1f6b3a;
 }
-.twk-chip[data-accent="#5A3A8A"], .twk-chip[data-accent="#5a3a8a"] {
-  background: #5A3A8A;
+.twk-chip[data-accent="#5A3A8A"],
+.twk-chip[data-accent="#5a3a8a"] {
+  background: #5a3a8a;
 }
 
 /* Segmented control state matching */
@@ -756,6 +761,31 @@ button.twk-field:disabled {
   border-radius: 7px;
   font-size: 12px;
   font-weight: 600;
+}
+
+.sps-scope .graph-relation-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: -6px;
+}
+
+.sps-scope .graph-relation-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  max-width: 160px;
+  padding: 0 8px;
+  color: var(--tx-2);
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sps-scope .graph-container {

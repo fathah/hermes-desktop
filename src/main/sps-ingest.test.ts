@@ -310,7 +310,7 @@ describe("parseChangeset (research output)", () => {
 describe("buildLintMessages", () => {
   const mech = {
     orphans: ["lonely.md"],
-    brokenLinks: [{ source: "a.md", target: "ghost" }],
+    brokenLinks: [{ source: "a.md", target: "ghost", type: "link" }],
     stale: ["old.md"],
   };
   it("includes the structural report and fences untrusted page digests", () => {

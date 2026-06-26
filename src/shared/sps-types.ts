@@ -31,6 +31,7 @@ export type BlockType =
   | "code"
   | "divider"
   | "image"
+  | "embed"
   | "audio"
   | "video"
   | "file"
@@ -223,7 +224,7 @@ export interface VaultHealthNoteSnapshot {
 
 export interface VaultHealthReport {
   orphans: string[];
-  brokenLinks: Array<{ source: string; target: string; type?: string }>;
+  brokenLinks: VaultLinkEdge[];
   stale: string[];
   duplicateTitles: Array<{ title: string; paths: string[] }>;
   duplicateAliases: Array<{ alias: string; paths: string[] }>;
@@ -235,6 +236,15 @@ export interface VaultHealthReport {
   staleCaptures: Array<{ path: string; title: string; ageDays: number }>;
   unprocessedPdfs: Array<{ path: string; title: string }>;
   weaklyConnected: Array<{ path: string; degree: number }>;
+}
+
+export interface VaultLinkEdge {
+  source: string;
+  target: string;
+  type: string;
+  kind?: "link" | "embed";
+  targetHeading?: string;
+  targetBlockId?: string;
 }
 
 export interface SpsContextPackInput {
@@ -393,6 +403,10 @@ export interface Block {
   duration?: number; // audio/video length in seconds (best-effort)
   // sub-page link
   pageId?: string;
+  linkDisplay?: string;
+  linkHeading?: string;
+  linkBlockId?: string;
+  anchor?: boolean;
   // button: the prompt this agent-action button sends to the co-author on click
   // (`text` holds the visible label, `emoji` the icon).
   agentPrompt?: string;

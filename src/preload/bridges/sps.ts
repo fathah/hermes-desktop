@@ -43,6 +43,7 @@ import type {
   SpsPropertyValue,
   SpsSaveResult,
   VaultHealthReport,
+  VaultLinkEdge,
   VaultProposal,
   VaultProposalInput,
 } from "../../shared/sps-types";
@@ -255,7 +256,7 @@ export const spsBridge = {
     };
     mechanical: {
       orphans: string[];
-      brokenLinks: Array<{ source: string; target: string }>;
+      brokenLinks: VaultLinkEdge[];
       stale: string[];
     };
     pagesScanned: number;
@@ -588,6 +589,11 @@ export const spsBridge = {
     ipcRenderer.invoke("sps-index-search", text, limit, profile),
   spsIndexBacklinks: (path: string, profile?: string): Promise<string[]> =>
     ipcRenderer.invoke("sps-index-backlinks", path, profile),
+  spsIndexBacklinkDetails: (
+    path: string,
+    profile?: string,
+  ): Promise<VaultLinkEdge[]> =>
+    ipcRenderer.invoke("sps-index-backlink-details", path, profile),
   spsQueryBase: (
     config: SpsBaseViewConfig,
     profile?: string,
@@ -624,9 +630,7 @@ export const spsBridge = {
     profile?: string,
   ): Promise<FederatedHit[]> =>
     ipcRenderer.invoke("federated-search", query, opts, profile),
-  spsIndexLinks: (
-    profile?: string,
-  ): Promise<Array<{ source: string; target: string; type: string }>> =>
+  spsIndexLinks: (profile?: string): Promise<VaultLinkEdge[]> =>
     ipcRenderer.invoke("sps-index-links", profile),
   spsIndexTags: (
     profile?: string,
@@ -639,7 +643,7 @@ export const spsBridge = {
     profile?: string,
   ): Promise<{
     orphans: string[];
-    brokenLinks: Array<{ source: string; target: string; type: string }>;
+    brokenLinks: VaultLinkEdge[];
     stale: string[];
   }> => ipcRenderer.invoke("sps-lint-vault", staleDays, profile),
   spsIndexStatus: (

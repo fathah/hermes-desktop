@@ -2,14 +2,14 @@ import { Icon } from "../components/Icon";
 import { useStore } from "../store";
 import {
   useUnlinkedMentions,
-  useVaultBacklinks,
+  useVaultBacklinkDetails,
 } from "../hooks/useNoteIndex";
 
 export function BacklinksPane() {
   const currentPageId = useStore((s) => s.page);
   const selectPage = useStore((s) => s.selectPage);
   const meta = useStore((s) => s.meta);
-  const backlinks = useVaultBacklinks(currentPageId);
+  const backlinks = useVaultBacklinkDetails(currentPageId);
   const unlinkedMentions = useUnlinkedMentions(currentPageId);
 
   return (
@@ -17,9 +17,7 @@ export function BacklinksPane() {
       <div className="backlinks-container">
         <div className="backlinks-header">
           <Icon name="share" size={16} />
-          <div className="type-section-label backlinks-title">
-            Backlinks
-          </div>
+          <div className="type-section-label backlinks-title">Backlinks</div>
         </div>
         <p className="backlinks-description">Pages that reference this note.</p>
 
@@ -31,24 +29,46 @@ export function BacklinksPane() {
           </div>
         ) : (
           <div className="backlinks-list">
-            {backlinks.map((id) => (
+            {backlinks.map((link) => (
               <button
-                key={id}
+                key={`${link.source}:${link.type}:${link.kind || "link"}:${link.targetBlockId || link.targetHeading || ""}`}
                 type="button"
                 className="nav-item backlinks-item"
-                onClick={() => selectPage(id)}
+                onClick={() => selectPage(link.source)}
               >
-                <span className="backlinks-item-icon">{meta[id]?.icon || "📄"}</span>
-                <span className="nav-label backlinks-item-label">
-                  {meta[id]?.title || "Untitled"}
+                <span className="backlinks-item-icon">
+                  {meta[link.source]?.icon || "📄"}
                 </span>
-                <Icon name="chevR" size={12} className="backlinks-item-chevron" />
+                <span className="nav-label backlinks-item-label">
+                  {meta[link.source]?.title || link.source}
+                </span>
+                <span className="backlinks-meta">
+                  {link.type !== "link" && (
+                    <span className="backlinks-chip">{link.type}</span>
+                  )}
+                  {link.kind === "embed" && (
+                    <span className="backlinks-chip">embed</span>
+                  )}
+                  {link.targetBlockId && (
+                    <span className="backlinks-chip">block</span>
+                  )}
+                  {link.targetHeading && (
+                    <span className="backlinks-chip">heading</span>
+                  )}
+                </span>
+                <Icon
+                  name="chevR"
+                  size={12}
+                  className="backlinks-item-chevron"
+                />
               </button>
             ))}
           </div>
         )}
 
-        <div className="type-section-label backlinks-title">Unlinked mentions</div>
+        <div className="type-section-label backlinks-title">
+          Unlinked mentions
+        </div>
         {unlinkedMentions.length === 0 ? (
           <div className="backlinks-empty">
             <Icon name="info" size={18} className="backlinks-empty-icon" />
@@ -70,7 +90,11 @@ export function BacklinksPane() {
                   {meta[hit.source]?.title || hit.source}
                 </span>
                 <span className="backlinks-item-phrase">{hit.phrase}</span>
-                <Icon name="chevR" size={12} className="backlinks-item-chevron" />
+                <Icon
+                  name="chevR"
+                  size={12}
+                  className="backlinks-item-chevron"
+                />
               </button>
             ))}
           </div>

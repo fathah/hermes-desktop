@@ -131,6 +131,14 @@ export function registerNotesIpc(
   );
 
   safeHandle(
+    "sps-index-backlink-details",
+    async (_event, path: string, profile?: string) => {
+      requireLocalWorkspace();
+      return (await getSpsNoteIndex(profile)).backlinkDetails(path);
+    },
+  );
+
+  safeHandle(
     "sps-index-unlinked-mentions",
     async (_event, path: string, profile?: string) => {
       requireLocalWorkspace();
