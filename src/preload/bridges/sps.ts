@@ -1,6 +1,10 @@
 import { ipcRenderer } from "electron";
 import type { SkillEntry } from "../../shared/skills";
-import type { TaskTriageResult } from "../../shared/tasks-dump";
+import type {
+  RouteTaskInput,
+  RouteTaskOutcome,
+  TaskTriageResult,
+} from "../../shared/tasks-dump";
 import type {
   SearchOpts as ResearchSearchOpts,
   WorkSummary as ResearchWorkSummary,
@@ -526,6 +530,11 @@ export const spsBridge = {
     profile?: string,
   ): Promise<TaskTriageResult> =>
     ipcRenderer.invoke("sps-classify-task", text, profile),
+  spsRouteTask: (
+    input: RouteTaskInput,
+    profile?: string,
+  ): Promise<RouteTaskOutcome> =>
+    ipcRenderer.invoke("sps-route-task", input, profile),
   spsTakeCaptureKind: (): Promise<string | null> =>
     ipcRenderer.invoke("sps-take-capture-kind"),
   onCaptureKind: (callback: (kind: string) => void): (() => void) => {

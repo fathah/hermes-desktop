@@ -14,6 +14,8 @@ import {
 } from "../sps-storage";
 import { semanticManager } from "../semantic-index";
 import { classifyTaskCandidate } from "../task-triage";
+import { routeTask } from "../task-routing";
+import type { RouteTaskInput } from "../../shared/tasks-dump";
 import { extractPdfToMarkdown } from "../pdf-extract";
 import {
   getObsidianConfig,
@@ -398,6 +400,13 @@ export function registerNotesIpc(
   // later phase; for now the classifier defaults the assignee to self.)
   safeHandle("sps-classify-task", (_event, text: string, profile?: string) =>
     classifyTaskCandidate(text, { profile }),
+  );
+  // Organize: dispatch an AI task to Kanban, hold a risky one for review, or
+  // schedule the nag engine for a human task.
+  safeHandle(
+    "sps-route-task",
+    (_event, input: RouteTaskInput, profile?: string) =>
+      routeTask(input, profile),
   );
   safeHandle(
     "sps-read-row",

@@ -6,7 +6,10 @@ import type {
   SpsCaptureKind,
   SpsPageSchemaKey,
 } from "../../../../../shared/sps-types";
-import type { TaskTriageResult } from "../../../../../shared/tasks-dump";
+import type {
+  RouteTaskOutcome,
+  TaskTriageResult,
+} from "../../../../../shared/tasks-dump";
 import {
   buildVisualCaptureBody,
   visualCaptureMimeFromPath,
@@ -37,13 +40,19 @@ const TASKS_DB_FOLDER = "tasks";
 const TASK_CHIP_DISMISS_MS = 1600;
 
 /** The one-line "what happened to this task" chip shown after routing. */
-function routeChipLabel(triage: TaskTriageResult): string {
-  if (triage.route === "ai") {
-    return triage.risky
-      ? "🔍 Flagged for your review"
-      : "🤖 Hermes will handle it";
+function routeChipLabel(
+  outcome: RouteTaskOutcome,
+  triage: TaskTriageResult,
+): string {
+  if (outcome.route === "ai") {
+    return outcome.dispatched
+      ? "🤖 Hermes is on it"
+      : "🔍 Flagged for your review";
   }
   const due = triage.due ? ` · due ${triage.due}` : "";
+  if (outcome.fellBackToHuman) {
+    return `⏰ Added to your list (agent unavailable)${due}`;
+  }
   return `⏰ On your list — I'll remind you${due}`;
 }
 
@@ -288,24 +297,32 @@ export function QuickCapture() {
       }
 
       const triage = await window.hermesAPI.spsClassifyTask(text);
-      const status =
-        triage.route === "ai" ? (triage.risky ? "review" : "doing") : "todo";
+      // Organize: dispatch to Kanban / hold for review / schedule the nag.
+      const outcome = await window.hermesAPI.spsRouteTask({
+        rowId,
+        title,
+        body: detail,
+        triage,
+      });
       const props: Record<string, unknown> = {
         title,
-        status,
-        route: triage.route,
+        status: outcome.status,
+        route: outcome.route,
         assigneeId: triage.assigneeId,
         // Mirror onto `who` so the existing ToDo views render the assignee.
         who: triage.assigneeId,
       };
       if (triage.due) props.due = triage.due;
+      // For a dispatched AI task the row only points at the Kanban record;
+      // execution status lives there (read-only), so the ToDo row can't drift.
+      if (outcome.delegatedTo) props.delegatedTo = outcome.delegatedTo;
       await window.hermesAPI.spsExportRow(
         TASKS_DB_FOLDER,
         rowId,
         rowToMarkdown(props, detail),
       );
 
-      setRouteChip(routeChipLabel(triage));
+      setRouteChip(routeChipLabel(outcome, triage));
       setTimeout(() => window.close(), TASK_CHIP_DISMISS_MS);
     } catch (err) {
       console.error("Failed to save task:", err);

@@ -1,5 +1,9 @@
 import type * as Api from "../api-types";
-import type { TaskTriageResult } from "../../shared/tasks-dump";
+import type {
+  RouteTaskInput,
+  RouteTaskOutcome,
+  TaskTriageResult,
+} from "../../shared/tasks-dump";
 
 export interface SpsBridgeApi {
   spsUnfurl: (url: string) => Promise<{
@@ -434,6 +438,11 @@ export interface SpsBridgeApi {
     text: string,
     profile?: string,
   ) => Promise<TaskTriageResult>;
+
+  spsRouteTask: (
+    input: RouteTaskInput,
+    profile?: string,
+  ) => Promise<RouteTaskOutcome>;
 
   spsTakeCaptureKind: () => Promise<string | null>;
 

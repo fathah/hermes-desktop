@@ -8,7 +8,7 @@
 //     have chased a task, when to chase next). It lives in a JSON sidecar
 //     (`sps-agent/task-nag-state.json`, see src/main/tasks-dump.ts) so the nag
 //     engine can tick without rewriting markdown and thrashing the note-index.
-import type { TaskRoute } from "./sps-types";
+import type { StatusKey, TaskRoute } from "./sps-types";
 
 /** What the classifier suggests for chase frequency. `none` = don't nag. */
 export type NagCadence = "none" | "daily" | "weekly";
@@ -25,6 +25,25 @@ export interface TaskTriageResult {
   assigneeId?: string;
   reason?: string;
   confidence?: number;
+}
+
+/** Input for routing a freshly-classified task (see src/main/task-routing.ts). */
+export interface RouteTaskInput {
+  rowId: string;
+  title: string;
+  body?: string;
+  triage: TaskTriageResult;
+}
+
+/** What routing actually did, written back onto the task row + shown as a chip. */
+export interface RouteTaskOutcome {
+  route: TaskRoute;
+  status: StatusKey;
+  /** The Kanban task id for a dispatched AI task (the row reflects it read-only). */
+  delegatedTo?: string;
+  dispatched: boolean;
+  /** True when an AI dispatch failed and the task fell back to the human lane. */
+  fellBackToHuman?: boolean;
 }
 
 /** Volatile per-task nag bookkeeping, keyed by the task row id. */
@@ -82,7 +101,9 @@ export function advanceNagRecord(
 ): TaskNagRecord {
   const nextCount = record.nagCount + 1;
   const interval = nagIntervalMs(nextCount, record.cadence);
-  const nextNagAt = Number.isFinite(interval) ? now + interval : record.nextNagAt;
+  const nextNagAt = Number.isFinite(interval)
+    ? now + interval
+    : record.nextNagAt;
   return {
     ...record,
     nagCount: nextCount,
