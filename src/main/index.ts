@@ -127,6 +127,10 @@ process.on("unhandledRejection", (reason) => {
 let mainWindow: BrowserWindow | null = null;
 let captureWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
+// The capture kind the next-opened Quick Capture should default to (set by the
+// task hotkey). Read-once by the renderer on mount via `sps-take-capture-kind`,
+// and also pushed live for an already-open window. Null = the default "note".
+let pendingCaptureKind: string | null = null;
 
 function broadcastAppZoomSettings(settings: AppZoomSettings): void {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -192,6 +196,21 @@ function toggleCaptureWindow(): void {
       captureWindow.show();
       captureWindow.focus();
     }
+  }
+}
+
+// Open Quick Capture pre-set to a capture kind (used by the task hotkey).
+// Sets pendingCaptureKind for a fresh window's mount read, and also pushes the
+// kind live in case the window already exists.
+function openCaptureWindowWithKind(kind: string): void {
+  pendingCaptureKind = kind;
+  if (!captureWindow || captureWindow.isDestroyed()) {
+    createCaptureWindow();
+  }
+  if (captureWindow) {
+    captureWindow.show();
+    captureWindow.focus();
+    captureWindow.webContents.send("capture-set-kind", kind);
   }
 }
 
@@ -519,6 +538,14 @@ function setupIPC(): void {
   registerSubstackRadarIpc();
   registerSourceIntakeIpc();
 
+  // Quick Capture reads (and clears) the pending capture kind on mount, so a
+  // window freshly opened by the task hotkey defaults to Task mode.
+  ipcMain.handle("sps-take-capture-kind", () => {
+    const kind = pendingCaptureKind;
+    pendingCaptureKind = null;
+    return kind;
+  });
+
   ipcMain.handle(
     "sps-trigger-screencapture",
     async (_event, profile?: string) => {
@@ -788,6 +815,12 @@ app.whenReady().then(() => {
 
   globalShortcut.register("Alt+Space", () => {
     toggleCaptureWindow();
+  });
+
+  // Dedicated Tasks-Dump hotkey: open Quick Capture straight into Task mode.
+  // (Cmd+T collides with browsers/Finder globally, so Cmd/Ctrl+Shift+Space.)
+  globalShortcut.register("CommandOrControl+Shift+Space", () => {
+    openCaptureWindowWithKind("task");
   });
 
   app.on("web-contents-created", (_event, contents) => {

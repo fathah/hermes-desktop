@@ -1,4 +1,5 @@
 import type * as Api from "../api-types";
+import type { TaskTriageResult } from "../../shared/tasks-dump";
 
 export interface SpsBridgeApi {
   spsUnfurl: (url: string) => Promise<{
@@ -428,6 +429,15 @@ export interface SpsBridgeApi {
     markdown: string,
     profile?: string,
   ) => Promise<boolean>;
+
+  spsClassifyTask: (
+    text: string,
+    profile?: string,
+  ) => Promise<TaskTriageResult>;
+
+  spsTakeCaptureKind: () => Promise<string | null>;
+
+  onCaptureKind: (callback: (kind: string) => void) => () => void;
 
   spsReadRow: (
     dbFolder: string,

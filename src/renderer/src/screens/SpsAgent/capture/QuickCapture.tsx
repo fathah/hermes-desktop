@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { buildCapture } from "../inbox/capture";
 import { Icon } from "../components/Icon";
+import { rowToMarkdown } from "../editor/rowMarkdown";
 import type {
   SpsCaptureKind,
   SpsPageSchemaKey,
 } from "../../../../../shared/sps-types";
+import type { TaskTriageResult } from "../../../../../shared/tasks-dump";
 import {
   buildVisualCaptureBody,
   visualCaptureMimeFromPath,
@@ -29,6 +31,22 @@ function schemaForCaptureKind(
   return kind === "note" ? undefined : kind;
 }
 
+// The folder-backed query database the ToDo page reads. A task capture writes a
+// row here (not the generic _inbox) so it shows up as an actual task.
+const TASKS_DB_FOLDER = "tasks";
+const TASK_CHIP_DISMISS_MS = 1600;
+
+/** The one-line "what happened to this task" chip shown after routing. */
+function routeChipLabel(triage: TaskTriageResult): string {
+  if (triage.route === "ai") {
+    return triage.risky
+      ? "🔍 Flagged for your review"
+      : "🤖 Hermes will handle it";
+  }
+  const due = triage.due ? ` · due ${triage.due}` : "";
+  return `⏰ On your list — I'll remind you${due}`;
+}
+
 interface QuickVisualCapture {
   source: "image" | "screenshot";
   assetPath: string;
@@ -51,6 +69,8 @@ export function QuickCapture() {
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [recording, setRecording] = useState(false);
   const [recordTime, setRecordTime] = useState(0);
+  const [routeChip, setRouteChip] = useState("");
+  const [saving, setSaving] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -59,6 +79,24 @@ export function QuickCapture() {
   // Focus the text area on mount
   useEffect(() => {
     textareaRef.current?.focus();
+  }, []);
+
+  // Default to the capture kind the opener requested (the task hotkey sets
+  // "task"). Read-once on mount for a fresh window, plus a live listener so an
+  // already-open window switches too.
+  useEffect(() => {
+    let active = true;
+    const api = window.hermesAPI;
+    void api.spsTakeCaptureKind?.().then((kind) => {
+      if (active && kind) setCaptureKind(kind as SpsCaptureKind);
+    });
+    const unsubscribe = api.onCaptureKind?.((kind) =>
+      setCaptureKind(kind as SpsCaptureKind),
+    );
+    return () => {
+      active = false;
+      unsubscribe?.();
+    };
   }, []);
 
   useEffect(() => {
@@ -187,7 +225,27 @@ export function QuickCapture() {
           const arrayBuf = await blob.arrayBuffer();
           const bytes = new Uint8Array(arrayBuf);
           const name = await window.hermesAPI.spsAssetWrite(bytes, "webm");
-          setBody((b) => `${b}\n\n[Voice Note](../_assets/${name})\n`);
+
+          // Transcribe so the spoken thought becomes editable task text, then
+          // keep the audio note for provenance. Transcription is best-effort:
+          // a missing VOICE_TOOLS_OPENAI_KEY just leaves the link on its own.
+          let transcript = "";
+          try {
+            const result = await window.hermesAPI.transcribeAudio(
+              arrayBuf,
+              "audio/webm",
+            );
+            if (result.text) transcript = result.text.trim();
+            else if (result.error)
+              console.warn("Voice transcription:", result.error);
+          } catch (err) {
+            console.error("Voice transcription failed:", err);
+          }
+          const voiceLink = `[Voice Note](../_assets/${name})`;
+          const addition = transcript
+            ? `${transcript}\n\n${voiceLink}\n`
+            : `\n\n${voiceLink}\n`;
+          setBody((b) => (b ? `${b}\n${addition}` : addition));
 
           // stop all tracks
           stream.getTracks().forEach((track) => track.stop());
@@ -203,9 +261,65 @@ export function QuickCapture() {
     }
   };
 
+  // Task capture: write a real task row to the ToDo database, classify it, and
+  // record the routing decision on the row. Persist-first so a captured task is
+  // never lost even if the classifier is slow or the gateway is unreachable.
+  const saveTask = async (text: string): Promise<void> => {
+    setSaving(true);
+    try {
+      const capturedAt = Date.now();
+      const rowId = `task-${capturedAt.toString(36)}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`;
+      const firstLine = text.split("\n")[0]?.trim() || "Untitled task";
+      const title =
+        firstLine.length > 80 ? `${firstLine.slice(0, 79)}…` : firstLine;
+      const detail = text.trim() !== firstLine ? text.trim() : "";
+
+      const draft = rowToMarkdown({ title, status: "inbox" }, detail);
+      const saved = await window.hermesAPI.spsExportRow(
+        TASKS_DB_FOLDER,
+        rowId,
+        draft,
+      );
+      if (!saved) {
+        setSaving(false);
+        return;
+      }
+
+      const triage = await window.hermesAPI.spsClassifyTask(text);
+      const status =
+        triage.route === "ai" ? (triage.risky ? "review" : "doing") : "todo";
+      const props: Record<string, unknown> = {
+        title,
+        status,
+        route: triage.route,
+        assigneeId: triage.assigneeId,
+        // Mirror onto `who` so the existing ToDo views render the assignee.
+        who: triage.assigneeId,
+      };
+      if (triage.due) props.due = triage.due;
+      await window.hermesAPI.spsExportRow(
+        TASKS_DB_FOLDER,
+        rowId,
+        rowToMarkdown(props, detail),
+      );
+
+      setRouteChip(routeChipLabel(triage));
+      setTimeout(() => window.close(), TASK_CHIP_DISMISS_MS);
+    } catch (err) {
+      console.error("Failed to save task:", err);
+      setSaving(false);
+    }
+  };
+
   const handleSave = async () => {
     const text = body.trim();
     if (!text && !visualCapture) return;
+    if (captureKind === "task" && !visualCapture) {
+      await saveTask(text);
+      return;
+    }
 
     try {
       const capturedAt = Date.now();
@@ -337,14 +451,21 @@ export function QuickCapture() {
           {/* Save button */}
           <button
             onClick={handleSave}
-            disabled={!body.trim() && !visualCapture}
+            disabled={(!body.trim() && !visualCapture) || saving}
             className="qc-save-btn"
-            title="Save note to inbox"
-            aria-label="Save note to inbox"
+            title={captureKind === "task" ? "Save task" : "Save note to inbox"}
+            aria-label={
+              captureKind === "task" ? "Save task" : "Save note to inbox"
+            }
           >
-            Save to Inbox
+            {saving
+              ? "Saving…"
+              : captureKind === "task"
+                ? "Save Task"
+                : "Save to Inbox"}
           </button>
         </div>
+        {routeChip && <div className="qc-visual-chip">{routeChip}</div>}
         {visualCapture && (
           <div className="qc-visual-chip">
             {visualCapture.captureOrigin === "camera"

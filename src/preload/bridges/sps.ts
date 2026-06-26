@@ -1,5 +1,6 @@
 import { ipcRenderer } from "electron";
 import type { SkillEntry } from "../../shared/skills";
+import type { TaskTriageResult } from "../../shared/tasks-dump";
 import type {
   SearchOpts as ResearchSearchOpts,
   WorkSummary as ResearchWorkSummary,
@@ -520,6 +521,19 @@ export const spsBridge = {
     profile?: string,
   ): Promise<boolean> =>
     ipcRenderer.invoke("sps-export-row", dbFolder, rowId, markdown, profile),
+  spsClassifyTask: (
+    text: string,
+    profile?: string,
+  ): Promise<TaskTriageResult> =>
+    ipcRenderer.invoke("sps-classify-task", text, profile),
+  spsTakeCaptureKind: (): Promise<string | null> =>
+    ipcRenderer.invoke("sps-take-capture-kind"),
+  onCaptureKind: (callback: (kind: string) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, kind: string): void =>
+      callback(kind);
+    ipcRenderer.on("capture-set-kind", handler);
+    return () => ipcRenderer.removeListener("capture-set-kind", handler);
+  },
   spsReadRow: (
     dbFolder: string,
     rowId: string,

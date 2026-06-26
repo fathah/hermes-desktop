@@ -13,6 +13,7 @@ import {
   resolveSpsVaultDir,
 } from "../sps-storage";
 import { semanticManager } from "../semantic-index";
+import { classifyTaskCandidate } from "../task-triage";
 import { extractPdfToMarkdown } from "../pdf-extract";
 import {
   getObsidianConfig,
@@ -391,6 +392,12 @@ export function registerNotesIpc(
         noteMirrorFailure,
       );
     },
+  );
+  // Classify a captured task (GTD clarify). Never throws — degrades to the
+  // human lane assigned to self. (Person-aware assignee matching is wired in a
+  // later phase; for now the classifier defaults the assignee to self.)
+  safeHandle("sps-classify-task", (_event, text: string, profile?: string) =>
+    classifyTaskCandidate(text, { profile }),
   );
   safeHandle(
     "sps-read-row",
