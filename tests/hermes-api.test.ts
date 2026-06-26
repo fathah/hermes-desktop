@@ -218,6 +218,56 @@ describe("sendMessageViaApi forwards resumeSessionId", () => {
     expect(headers["X-Hermes-Session-Id"]).toBe(testSessionId);
   });
 
+  it("keeps the context folder instruction when resuming", async () => {
+    const testSessionId = "session-abc-123";
+    const contextFolder = "/Users/amar/project";
+
+    await sendMessage(
+      "follow up",
+      {
+        onChunk: () => {},
+        onDone: () => {},
+        onError: () => {},
+      },
+      "default",
+      testSessionId,
+      [
+        { role: "user", content: "previous question" },
+        { role: "agent", content: "previous answer" },
+      ],
+      undefined,
+      contextFolder,
+    );
+
+    const chatRequest = capturedRequests.find((r) =>
+      r.url.includes("/v1/chat/completions"),
+    );
+    expect(chatRequest).toBeDefined();
+    const parsed = JSON.parse(chatRequest!.body);
+    const headers = chatRequest!.options.headers as Record<string, string>;
+    const messages = parsed.messages as Array<{
+      role?: string;
+      content?: unknown;
+    }>;
+    const contextMessage = messages.find(
+      (m) =>
+        m.role === "system" &&
+        typeof m.content === "string" &&
+        m.content.includes(contextFolder),
+    );
+
+    expect(parsed.session_id).toBe(testSessionId);
+    expect(headers["X-Hermes-Session-Id"]).toBe(testSessionId);
+    expect(contextMessage).toBeDefined();
+    expect((contextMessage!.content as string).toLowerCase()).toContain(
+      "absolute paths under this folder",
+    );
+    expect(messages[messages.length - 1]).toMatchObject({
+      role: "user",
+      content: "follow up",
+    });
+  });
+
   it("generates a fresh `desk-`-prefixed X-Hermes-Session-Id when no resumeSessionId is passed", async () => {
     // Pin the new-chat session-id behaviour: instead of letting the
     // gateway fall back to its `_derive_chat_session_id` fingerprint
