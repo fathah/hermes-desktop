@@ -10,6 +10,7 @@
 // Telegram has no by-chat-id deep link, so it is an auto-send channel (gateway)
 // rather than an OS hand-off — see the nag engine for that path.
 import { shell } from "electron";
+import { gatewayChat } from "./gateway-chat";
 import type { ContactChannel } from "../shared/contacts";
 
 function phoneDigits(value: string): string {
@@ -50,6 +51,38 @@ export async function openContactChannel(
     return true;
   } catch (err) {
     console.error("[contact-messaging] openExternal failed:", err);
+    return false;
+  }
+}
+
+/**
+ * Auto-send a Telegram message to a contact via the gateway's messaging tool
+ * (the only channel that can send without the user's native app). Best-effort:
+ * returns false if Telegram is unconfigured or the send fails. Used by the nag
+ * engine for opt-in escalation to an assignee.
+ */
+export async function sendTelegramViaGateway(
+  chatId: string,
+  message: string,
+  profile?: string,
+): Promise<boolean> {
+  try {
+    const reply = await gatewayChat(
+      [
+        {
+          role: "user",
+          content: [
+            `Send exactly one Telegram message to chat id ${chatId} using the Hermes messaging tool.`,
+            `Message: ${message}`,
+            "If Telegram is not configured or the send fails, reply with UNAVAILABLE and the reason.",
+          ].join("\n"),
+        },
+      ],
+      256,
+      profile,
+    );
+    return !/unavailable|fail/i.test(reply);
+  } catch {
     return false;
   }
 }

@@ -11,6 +11,7 @@ import { join } from "path";
 import { homedir } from "os";
 import { desktopCapturer, app, powerMonitor } from "electron";
 import { HERMES_HOME, HERMES_PYTHON, hermesCliArgs } from "./installer";
+import { nagTick } from "./nag-engine";
 import {
   decideLockAcquisition,
   parseLockRecord,
@@ -202,6 +203,11 @@ let wasIdle = false;
 /**
  * Check and execute due cron jobs for the active profile.
  */
+// The nag engine runs on the scheduler tick (10s) but is throttled to ~60s so
+// overdue chasing stays cheap.
+const NAG_TICK_THROTTLE_MS = 60_000;
+let lastNagTickMs = 0;
+
 export async function tickScheduler(profile?: string): Promise<void> {
   const activeProfile = profile ?? getActiveProfileNameSync();
 
@@ -285,6 +291,17 @@ export async function tickScheduler(profile?: string): Promise<void> {
     }
   } catch (err) {
     console.error("[SCHEDULER] Error during tick:", err);
+  }
+
+  // Nag engine: chase overdue human tasks (throttled to ~60s).
+  try {
+    const nagNow = Date.now();
+    if (nagNow - lastNagTickMs >= NAG_TICK_THROTTLE_MS) {
+      lastNagTickMs = nagNow;
+      await nagTick(activeProfile);
+    }
+  } catch (err) {
+    console.error("[SCHEDULER] Error during nag tick:", err);
   }
 }
 

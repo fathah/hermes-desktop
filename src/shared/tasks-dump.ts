@@ -120,3 +120,61 @@ export function isNagDue(record: TaskNagRecord, now: number): boolean {
   if (stillSnoozed) return false;
   return record.nextNagAt <= now;
 }
+
+/** Current task facts the nag engine needs, looked up by row id from the index. */
+export interface NagTaskMeta {
+  title: string;
+  done: boolean;
+  autoSendOnEscalate: boolean;
+  assigneeId?: string;
+}
+
+/** One nag to fire this tick (the executor turns tier into a notification/send). */
+export interface NagAction {
+  rowId: string;
+  title: string;
+  tier: EscalationTier;
+  autoSend: boolean;
+  assigneeId?: string;
+}
+
+export interface NagPlan {
+  actions: NagAction[];
+  /** Records that fired — advanced and to be persisted. */
+  advanced: TaskNagRecord[];
+  /** Records whose task is done or gone — to be removed. */
+  staleIds: string[];
+}
+
+/**
+ * Decide what the nag engine should do this tick. Pure: given the nag records,
+ * the current task facts, and now, it returns the actions to fire, the advanced
+ * records to persist, and the stale records to drop (done/deleted tasks). All
+ * I/O (notifications, channel sends, persistence) is left to the caller.
+ */
+export function planNagActions(
+  records: TaskNagRecord[],
+  meta: Record<string, NagTaskMeta>,
+  now: number,
+): NagPlan {
+  const actions: NagAction[] = [];
+  const advanced: TaskNagRecord[] = [];
+  const staleIds: string[] = [];
+  for (const record of records) {
+    const taskMeta = meta[record.rowId];
+    if (!taskMeta || taskMeta.done) {
+      staleIds.push(record.rowId);
+      continue;
+    }
+    if (!isNagDue(record, now)) continue;
+    actions.push({
+      rowId: record.rowId,
+      title: taskMeta.title,
+      tier: escalationTier(record.nagCount),
+      autoSend: taskMeta.autoSendOnEscalate,
+      assigneeId: taskMeta.assigneeId,
+    });
+    advanced.push(advanceNagRecord(record, now));
+  }
+  return { actions, advanced, staleIds };
+}
