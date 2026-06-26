@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   availableChannels,
+  mergeMacContact,
   parsePersonFrontmatter,
   personMatchesQuery,
   personRefFrom,
   personToRowProps,
+  planMacSync,
   preferredChannel,
   slugifyPersonId,
   SELF_PERSON_ID,
+  type MacContact,
   type PersonFrontmatter,
   type PersonRef,
 } from "./contacts";
@@ -137,5 +140,54 @@ describe("slugifyPersonId", () => {
   it("makes a wikilink-friendly slug, empty when nothing usable", () => {
     expect(slugifyPersonId("Priya Sharma")).toBe("priya-sharma");
     expect(slugifyPersonId("  !!!  ")).toBe("");
+  });
+});
+
+describe("mergeMacContact", () => {
+  it("preserves vault memory and takes structured fields from the card", () => {
+    const existing: PersonFrontmatter = {
+      aliases: ["Wife"],
+      tags: ["family"],
+      fragments: [{ text: "met at BlueBop" }],
+      email: "old@x.com",
+      telegramChatId: "555",
+    };
+    const mac: MacContact = {
+      name: "Priya",
+      email: "new@x.com",
+      phone: "+91 98765",
+      organization: "BlueBop",
+    };
+    const merged = mergeMacContact(existing, mac);
+    // memory preserved
+    expect(merged.fragments).toEqual([{ text: "met at BlueBop" }]);
+    expect(merged.aliases).toEqual(["Wife"]);
+    expect(merged.telegramChatId).toBe("555");
+    // structured fields updated from the card
+    expect(merged.email).toBe("new@x.com");
+    expect(merged.phone).toBe("+91 98765");
+    expect(merged.organization).toBe("BlueBop");
+  });
+});
+
+describe("planMacSync", () => {
+  it("creates new contacts and merges into existing ones by slug", () => {
+    const macContacts: MacContact[] = [
+      { name: "Priya Sharma", phone: "111" },
+      { name: "New Person", email: "n@x.com" },
+      { name: "   ", email: "skip@x.com" }, // no usable name
+    ];
+    const existing: Record<string, PersonFrontmatter> = {
+      "priya-sharma": { fragments: [{ text: "wife" }] },
+    };
+    const writes = planMacSync(macContacts, existing);
+    expect(writes).toHaveLength(2);
+    const priya = writes.find((w) => w.personId === "priya-sharma");
+    expect(priya?.isNew).toBe(false);
+    expect(priya?.props).toMatchObject({ title: "Priya Sharma", phone: "111" });
+    // the existing fragment survives the sync
+    expect(priya?.props.fragments).toEqual([{ text: "wife" }]);
+    const fresh = writes.find((w) => w.personId === "new-person");
+    expect(fresh?.isNew).toBe(true);
   });
 });

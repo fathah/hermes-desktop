@@ -172,6 +172,80 @@ export function personRefFrom(
   };
 }
 
+/** A contact read from the macOS address book (iCloud-synced iPhone cards too). */
+export interface MacContact {
+  name: string;
+  email?: string;
+  phone?: string;
+  organization?: string;
+}
+
+/** Whether the native Contacts integration is installed and OS-authorized. */
+export interface MacContactsStatus {
+  available: boolean;
+  authorized: boolean;
+}
+
+/** Outcome of a Mac contacts sync. */
+export interface MacSyncResult {
+  available: boolean;
+  authorized: boolean;
+  added: number;
+  updated: number;
+  error?: string;
+}
+
+/**
+ * Merge a Mac address-book card into an existing person's frontmatter. Conflict
+ * policy: the vault is authoritative for user memory (aliases/tags/fragments are
+ * preserved untouched), the Mac card is authoritative for structured contact
+ * fields (email/phone/org fill or update). Telegram/WhatsApp ids are vault-only.
+ */
+export function mergeMacContact(
+  existing: PersonFrontmatter,
+  mac: MacContact,
+): PersonFrontmatter {
+  return {
+    ...existing,
+    ...(mac.email ? { email: mac.email } : {}),
+    ...(mac.phone ? { phone: mac.phone } : {}),
+    ...(mac.organization ? { organization: mac.organization } : {}),
+  };
+}
+
+/** One person row to write as a result of a Mac sync. */
+export interface MacSyncWrite {
+  personId: string;
+  props: Record<string, unknown>;
+  isNew: boolean;
+}
+
+/**
+ * Pure plan for a Mac contacts sync: for each card, derive a stable person id,
+ * merge into the existing contact's frontmatter (preserving fragments), and
+ * produce the row props to write. Cards with no usable name are skipped.
+ */
+export function planMacSync(
+  macContacts: MacContact[],
+  existing: Record<string, PersonFrontmatter>,
+): MacSyncWrite[] {
+  const writes: MacSyncWrite[] = [];
+  for (const mac of macContacts) {
+    const name = mac.name.trim();
+    if (!name) continue;
+    const personId = slugifyPersonId(name);
+    if (!personId) continue;
+    const existingFm = existing[personId];
+    const merged = mergeMacContact(existingFm ?? {}, mac);
+    writes.push({
+      personId,
+      props: personToRowProps(name, merged),
+      isNew: existingFm === undefined,
+    });
+  }
+  return writes;
+}
+
 /** Frontmatter props for a person row (title + schema + present fields). */
 export function personToRowProps(
   name: string,

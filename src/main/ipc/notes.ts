@@ -16,6 +16,7 @@ import { semanticManager } from "../semantic-index";
 import { classifyTaskCandidate } from "../task-triage";
 import { routeTask } from "../task-routing";
 import { openContactChannel } from "../contact-messaging";
+import { getMacContactsStatus, syncMacContacts } from "../mac-contacts";
 import type { RouteTaskInput } from "../../shared/tasks-dump";
 import type { ContactChannel } from "../../shared/contacts";
 import { extractPdfToMarkdown } from "../pdf-extract";
@@ -413,6 +414,11 @@ export function registerNotesIpc(
   // Hand off to the native app (Mail/Messages/WhatsApp) for a contact channel.
   safeHandle("sps-open-contact-channel", (_event, channel: ContactChannel) =>
     openContactChannel(channel),
+  );
+  // Mac/iPhone contacts sync (optional native module; degrades if absent).
+  safeHandle("mac-contacts-status", () => getMacContactsStatus());
+  safeHandle("mac-contacts-sync", (_event, profile?: string) =>
+    syncMacContacts(profile),
   );
   safeHandle(
     "sps-read-row",

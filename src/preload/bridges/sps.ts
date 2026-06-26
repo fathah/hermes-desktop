@@ -1,6 +1,10 @@
 import { ipcRenderer } from "electron";
 import type { SkillEntry } from "../../shared/skills";
-import type { ContactChannel } from "../../shared/contacts";
+import type {
+  ContactChannel,
+  MacContactsStatus,
+  MacSyncResult,
+} from "../../shared/contacts";
 import type {
   RouteTaskInput,
   RouteTaskOutcome,
@@ -538,6 +542,10 @@ export const spsBridge = {
     ipcRenderer.invoke("sps-route-task", input, profile),
   spsOpenContactChannel: (channel: ContactChannel): Promise<boolean> =>
     ipcRenderer.invoke("sps-open-contact-channel", channel),
+  macContactsStatus: (): Promise<MacContactsStatus> =>
+    ipcRenderer.invoke("mac-contacts-status"),
+  macContactsSync: (profile?: string): Promise<MacSyncResult> =>
+    ipcRenderer.invoke("mac-contacts-sync", profile),
   spsTakeCaptureKind: (): Promise<string | null> =>
     ipcRenderer.invoke("sps-take-capture-kind"),
   onCaptureKind: (callback: (kind: string) => void): (() => void) => {

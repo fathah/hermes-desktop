@@ -31,7 +31,10 @@ export default defineConfig({
   main: {
     build: {
       rollupOptions: {
-        external: ["better-sqlite3", "pdfjs-dist"],
+        // node-mac-contacts is an optional, macOS-only native module loaded via
+        // a guarded require in src/main/mac-contacts.ts; keep it external so the
+        // bundler ignores it when it isn't installed.
+        external: ["better-sqlite3", "pdfjs-dist", "node-mac-contacts"],
         onLog: onMainBuildLog,
       },
     },
