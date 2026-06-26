@@ -2,7 +2,7 @@
 import { Icon } from "../components/Icon";
 import { STATUS } from "../data/seed";
 import type { StatusKey, Task } from "../types";
-import { Avatar, PrioChip } from "./chips";
+import { Avatar, KanbanStatusBadge, PrioChip } from "./chips";
 
 interface Props {
   tasks: Task[];
@@ -14,6 +14,8 @@ interface Props {
   setStatus: (id: string, s: StatusKey) => void;
   addRow: () => void;
   kanbanPreset?: "standard" | "personal";
+  // Live Kanban status for a delegated card's `delegatedTo` id (optional).
+  statusFor?: (id: string | null | undefined) => string | undefined;
 }
 
 export function BoardView({
@@ -26,6 +28,7 @@ export function BoardView({
   setStatus,
   addRow,
   kanbanPreset = "standard",
+  statusFor,
 }: Props) {
   const cols: StatusKey[] =
     kanbanPreset === "personal"
@@ -59,18 +62,14 @@ export function BoardView({
             }}
           >
             <div className="board-col-head">
-              <span
-                className={`dot ${STATUS[c]?.cls || ""}`}
-              ></span>
+              <span className={`dot ${STATUS[c]?.cls || ""}`}></span>
               {STATUS[c]?.label || c}{" "}
               <span className="count">
                 {items.length}
                 {limit !== null && ` / ${limit}`}
               </span>
               {limitExceeded && (
-                <span className="wip-warning">
-                  🚨 OVER WIP LIMIT
-                </span>
+                <span className="wip-warning">🚨 OVER WIP LIMIT</span>
               )}
             </div>
             {items.map((t) => (
@@ -105,12 +104,11 @@ export function BoardView({
                 <div className="card-title">{t.title}</div>
                 <div className="card-foot">
                   <PrioChip p={t.prio} />
+                  {t.delegatedTo && (
+                    <KanbanStatusBadge status={statusFor?.(t.delegatedTo)} />
+                  )}
                   <span className="flex-grow"></span>
-                  <span
-                    className="num card-due"
-                  >
-                    {t.due}
-                  </span>
+                  <span className="num card-due">{t.due}</span>
                   <Avatar who={t.who} />
                 </div>
               </div>

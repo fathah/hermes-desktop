@@ -1,15 +1,18 @@
 // ListView.tsx — compact list with status cycle. Ported from tasks.jsx.
 import { Icon } from "../components/Icon";
 import type { Task } from "../types";
-import { Avatar, StatusChip } from "./chips";
+import { Avatar, KanbanStatusBadge, StatusChip } from "./chips";
 
 interface Props {
   tasks: Task[];
   onOpenTask: (t: Task) => void;
   cycle: (id: string) => void;
+  // Live Kanban status for a delegated row's `delegatedTo` id. Absent ⇒ no
+  // agent badge (the embedded TasksDB has no delegated rows).
+  statusFor?: (id: string | null | undefined) => string | undefined;
 }
 
-export function ListView({ tasks, onOpenTask, cycle }: Props) {
+export function ListView({ tasks, onOpenTask, cycle, statusFor }: Props) {
   return (
     <div className="lst">
       {tasks.map((t) => (
@@ -37,6 +40,9 @@ export function ListView({ tasks, onOpenTask, cycle }: Props) {
             {t.title}
           </span>
           <StatusChip s={t.status} />
+          {t.delegatedTo && (
+            <KanbanStatusBadge status={statusFor?.(t.delegatedTo)} />
+          )}
           <span className="person">
             <Avatar who={t.who} />
           </span>

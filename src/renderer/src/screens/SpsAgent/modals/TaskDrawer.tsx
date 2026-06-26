@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { Icon } from "../components/Icon";
 import { STATUS, PRIO } from "../data/seed";
 import { usePersonPages } from "../hooks/usePersonPages";
+import { useKanbanStatuses } from "../hooks/useKanbanStatuses";
+import { KanbanStatusBadge } from "../tasks/chips";
 import {
   availableChannels,
   type ChannelKind,
@@ -97,6 +99,13 @@ export function TaskDrawer({ task, onClose }: Props) {
   const [customProps, setCustomProps] = useState<Record<string, unknown>>(
     task.custom || {},
   );
+
+  // Live agent status for a row delegated to the Hermes agent (Kanban is the
+  // source of truth; the row only stores `delegatedTo`). Empty array ⇒ no poll.
+  const { statusFor } = useKanbanStatuses(
+    task.delegatedTo ? [task.delegatedTo] : [],
+  );
+  const agentStatus = statusFor(task.delegatedTo);
 
   // Load folder-backed extra data
   useEffect(() => {
@@ -271,6 +280,22 @@ export function TaskDrawer({ task, onClose }: Props) {
                     ))}
                   </select>
                 </div>
+                {task.delegatedTo && (
+                  <>
+                    <div className="fk">
+                      <Icon name="board" size={15} /> Agent
+                    </div>
+                    <div className="fv">
+                      {agentStatus ? (
+                        <KanbanStatusBadge status={agentStatus} />
+                      ) : (
+                        <span style={{ color: "var(--tx-3)" }}>
+                          Delegated · status pending…
+                        </span>
+                      )}
+                    </div>
+                  </>
+                )}
                 <div className="fk">
                   <Icon name="flag" size={15} /> Priority
                 </div>

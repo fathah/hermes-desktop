@@ -9,6 +9,7 @@
 import { useState } from "react";
 import { Icon } from "../components/Icon";
 import { useVaultQuery } from "../hooks/useNoteIndex";
+import { useKanbanStatuses } from "../hooks/useKanbanStatuses";
 import { rowToMarkdown, type RowProps } from "../editor/rowMarkdown";
 import { uid } from "../lib/ids";
 import { pageIdFromPath } from "../lib/pageId";
@@ -54,6 +55,13 @@ export function QueryDatabase({ block, update }: Props) {
   const tasks: Task[] = rows.map(vaultRowToTask);
   const rowByPath = new Map(rows.map((r) => [r.path, r] as const));
 
+  // Live agent status for rows routed to the Hermes agent. One Kanban poll
+  // feeds every delegated row's badge; no poll when nothing is delegated.
+  const delegatedIds = tasks
+    .map((t) => t.delegatedTo)
+    .filter((id): id is string => Boolean(id));
+  const { statusFor } = useKanbanStatuses(delegatedIds);
+
   const statuses: StatusKey[] =
     kanbanPreset === "personal"
       ? ["inbox", "this_week", "doing", "blocked", "done"]
@@ -93,13 +101,14 @@ export function QueryDatabase({ block, update }: Props) {
   };
 
   const addRow = (template?: "quick" | "project" | "routine"): void => {
-    const defaultStatus: StatusKey = kanbanPreset === "personal" ? "inbox" : "todo";
+    const defaultStatus: StatusKey =
+      kanbanPreset === "personal" ? "inbox" : "todo";
     const props: RowProps = {
       status: defaultStatus,
       prio: "med",
       who: "you",
       due: "",
-      est: ""
+      est: "",
     };
     let body = "";
     if (template === "quick") {
@@ -110,12 +119,14 @@ export function QueryDatabase({ block, update }: Props) {
       props.title = "New Project";
       props.prio = "high";
       props.label = "Project";
-      body = "Definition of Done:\n\n- [ ] Prerequisite: What do I need to buy/find?\n- [ ] Action Step: First micro-task (15 min)";
+      body =
+        "Definition of Done:\n\n- [ ] Prerequisite: What do I need to buy/find?\n- [ ] Action Step: First micro-task (15 min)";
     } else if (template === "routine") {
       props.title = "New Routine";
       props.prio = "med";
       props.label = "Routine";
-      body = "Links/Resources:\n\n- [ ] SOP Step 1: Start process\n- [ ] SOP Step 2: Complete routine";
+      body =
+        "Links/Resources:\n\n- [ ] SOP Step 1: Start process\n- [ ] SOP Step 2: Complete routine";
     } else {
       props.title = "New row";
     }
@@ -171,12 +182,20 @@ export function QueryDatabase({ block, update }: Props) {
             onClick={() => setViewMenuOpen(!viewMenuOpen)}
             title="Switch Database View"
           >
-            <Icon name={VIEWS.find(([v]) => v === view)?.[2] || VIEWS[0][2]} size={15} />
-            <span>{VIEWS.find(([v]) => v === view)?.[1] || VIEWS[0][1]} View</span>
+            <Icon
+              name={VIEWS.find(([v]) => v === view)?.[2] || VIEWS[0][2]}
+              size={15}
+            />
+            <span>
+              {VIEWS.find(([v]) => v === view)?.[1] || VIEWS[0][1]} View
+            </span>
             <span className="db-view-chevron">▾</span>
           </button>
           {viewMenuOpen && (
-            <div className="db-template-menu left-align" onMouseLeave={() => setViewMenuOpen(false)}>
+            <div
+              className="db-template-menu left-align"
+              onMouseLeave={() => setViewMenuOpen(false)}
+            >
               {VIEWS.map(([v, label, icon]) => (
                 <div
                   key={v}
@@ -207,18 +226,25 @@ export function QueryDatabase({ block, update }: Props) {
             <Icon name="dots" size={15} />
           </button>
           {moreMenuOpen && (
-            <div className="db-template-menu right-align" onMouseLeave={() => setMoreMenuOpen(false)}>
+            <div
+              className="db-template-menu right-align"
+              onMouseLeave={() => setMoreMenuOpen(false)}
+            >
               <div
                 className="db-template-item"
                 onClick={() => {
                   update?.({
-                    kanbanPreset: kanbanPreset === "standard" ? "personal" : "standard",
+                    kanbanPreset:
+                      kanbanPreset === "standard" ? "personal" : "standard",
                   });
                   setMoreMenuOpen(false);
                 }}
               >
                 <Icon name="board" size={14} />
-                <span>Layout: {kanbanPreset === "personal" ? "Personal" : "Standard"}</span>
+                <span>
+                  Layout:{" "}
+                  {kanbanPreset === "personal" ? "Personal" : "Standard"}
+                </span>
               </div>
               <div
                 className="db-template-item"
@@ -244,17 +270,44 @@ export function QueryDatabase({ block, update }: Props) {
             ▾
           </button>
           {menuOpen && (
-            <div className="db-template-menu" onMouseLeave={() => setMenuOpen(false)}>
-              <div className="db-template-item" onClick={() => { addRow(); setMenuOpen(false); }}>
+            <div
+              className="db-template-menu"
+              onMouseLeave={() => setMenuOpen(false)}
+            >
+              <div
+                className="db-template-item"
+                onClick={() => {
+                  addRow();
+                  setMenuOpen(false);
+                }}
+              >
                 📄 Blank Row
               </div>
-              <div className="db-template-item" onClick={() => { addRow("quick"); setMenuOpen(false); }}>
+              <div
+                className="db-template-item"
+                onClick={() => {
+                  addRow("quick");
+                  setMenuOpen(false);
+                }}
+              >
                 ⚡ Quick Win
               </div>
-              <div className="db-template-item" onClick={() => { addRow("project"); setMenuOpen(false); }}>
+              <div
+                className="db-template-item"
+                onClick={() => {
+                  addRow("project");
+                  setMenuOpen(false);
+                }}
+              >
                 🏗️ Deep Work / Project
               </div>
-              <div className="db-template-item" onClick={() => { addRow("routine"); setMenuOpen(false); }}>
+              <div
+                className="db-template-item"
+                onClick={() => {
+                  addRow("routine");
+                  setMenuOpen(false);
+                }}
+              >
                 🔁 Routine / Habit
               </div>
             </div>
@@ -272,6 +325,7 @@ export function QueryDatabase({ block, update }: Props) {
           addRow={() => addRow()}
           addCol={addCol}
           onDelete={(id) => void deleteRow(id)}
+          statusFor={statusFor}
         />
       )}
       {view === "board" && (
@@ -285,13 +339,23 @@ export function QueryDatabase({ block, update }: Props) {
           setStatus={(id, s) => setField(id, "status", s)}
           addRow={() => addRow()}
           kanbanPreset={kanbanPreset}
+          statusFor={statusFor}
         />
       )}
       {view === "list" && (
-        <ListView tasks={tasks} onOpenTask={setOpenTask} cycle={cycleStatus} />
+        <ListView
+          tasks={tasks}
+          onOpenTask={setOpenTask}
+          cycle={cycleStatus}
+          statusFor={statusFor}
+        />
       )}
-      {view === "gallery" && <GalleryView tasks={tasks} onOpenTask={setOpenTask} />}
-      {view === "calendar" && <CalendarView tasks={tasks} onOpenTask={setOpenTask} />}
+      {view === "gallery" && (
+        <GalleryView tasks={tasks} onOpenTask={setOpenTask} />
+      )}
+      {view === "calendar" && (
+        <CalendarView tasks={tasks} onOpenTask={setOpenTask} />
+      )}
 
       {rows.length === 0 && <div className="qdb-empty">No rows yet</div>}
 

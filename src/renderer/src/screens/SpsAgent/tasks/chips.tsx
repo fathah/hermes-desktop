@@ -1,5 +1,6 @@
-// chips.tsx — Avatar / StatusChip / PrioChip. Ported from tasks.jsx.
+// chips.tsx — Avatar / StatusChip / PrioChip / KanbanStatusBadge. Ported from tasks.jsx.
 import { PEOPLE, STATUS, PRIO } from "../data/seed";
+import { kanbanStatusToBadge } from "./kanbanBadge";
 import type { PersonKey, PrioKey, StatusKey } from "../types";
 
 function initialsFromName(name: string): string {
@@ -55,4 +56,25 @@ export function StatusChip({ s }: { s: StatusKey }) {
 export function PrioChip({ p }: { p: PrioKey }) {
   const pr = PRIO[p];
   return <span className={`chip ${pr.cls}`}>{pr.label}</span>;
+}
+
+// Read-only live agent status for a row delegated to the Hermes agent. The 🤖
+// marks it as the *agent's* Kanban state, distinct from the row's own vault
+// StatusChip; the chip class carries the color. Hidden when the status is
+// unknown — non-delegated rows and an unreachable Kanban both render nothing.
+export function KanbanStatusBadge({
+  status,
+}: {
+  status: string | null | undefined;
+}) {
+  const badge = kanbanStatusToBadge(status);
+  if (!badge) return null;
+  return (
+    <span
+      className={`chip ${badge.cls}`}
+      title={`Agent status: ${badge.label}`}
+    >
+      🤖 {badge.label}
+    </span>
+  );
 }

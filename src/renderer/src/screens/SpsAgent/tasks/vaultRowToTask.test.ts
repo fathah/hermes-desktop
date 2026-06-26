@@ -60,4 +60,17 @@ describe("vaultRowToTask", () => {
     expect(task.who).toBe("42");
     expect(task.custom).toEqual({ region: "north", count: "3" });
   });
+
+  it("carries delegatedTo (the Kanban id) onto the task without leaking it into custom", () => {
+    const task = vaultRowToTask(
+      row({ props: { route: "ai", delegatedTo: "k-42" } }),
+    );
+    expect(task.delegatedTo).toBe("k-42");
+    expect(task.custom).not.toHaveProperty("delegatedTo");
+  });
+
+  it("omits delegatedTo when the row has not been routed to an agent", () => {
+    const task = vaultRowToTask(row({ props: { route: "human" } }));
+    expect(task.delegatedTo).toBeUndefined();
+  });
 });

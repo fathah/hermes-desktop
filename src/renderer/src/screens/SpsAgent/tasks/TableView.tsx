@@ -2,7 +2,7 @@
 import { Icon } from "../components/Icon";
 import { PEOPLE } from "../data/seed";
 import type { DbCol, Task } from "../types";
-import { Avatar, PrioChip, StatusChip } from "./chips";
+import { Avatar, KanbanStatusBadge, PrioChip, StatusChip } from "./chips";
 import type { PropState } from "./PropMenu";
 
 interface Props {
@@ -20,6 +20,8 @@ interface Props {
   // F1: optional per-row delete (folder-backed query databases delete a file).
   // Absent ⇒ no delete affordance (the embedded TasksDB is unchanged).
   onDelete?: (id: string) => void;
+  // Live Kanban status for a delegated row's `delegatedTo` id (optional).
+  statusFor?: (id: string | null | undefined) => string | undefined;
 }
 
 export function TableView({
@@ -31,6 +33,7 @@ export function TableView({
   addRow,
   addCol,
   onDelete,
+  statusFor,
 }: Props) {
   return (
     <div style={{ overflowX: "auto" }}>
@@ -83,6 +86,9 @@ export function TableView({
                 onClick={(e) => openProp(e, t.id, "status")}
               >
                 <StatusChip s={t.status} />
+                {t.delegatedTo && (
+                  <KanbanStatusBadge status={statusFor?.(t.delegatedTo)} />
+                )}
               </td>
               <td
                 style={{ cursor: "pointer" }}
