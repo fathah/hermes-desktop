@@ -2,14 +2,42 @@
 import { PEOPLE, STATUS, PRIO } from "../data/seed";
 import type { PersonKey, PrioKey, StatusKey } from "../types";
 
-export function Avatar({ who, size = 18 }: { who: PersonKey; size?: number }) {
-  const p = PEOPLE[who] || { color: "#888", initials: "?" };
+function initialsFromName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function colorFromId(id: string): string {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+  }
+  return `hsl(${hash % 360} 45% 38%)`;
+}
+
+// Resolve a `who` id to an avatar. Seeded people (e.g. "you") keep their fixed
+// color/initials; a contact person id derives a stable color, and initials from
+// the optional display name (falling back to the id).
+export function Avatar({
+  who,
+  name,
+  size = 18,
+}: {
+  who: PersonKey;
+  name?: string;
+  size?: number;
+}) {
+  const seeded = PEOPLE[who];
+  const color = seeded?.color ?? colorFromId(who);
+  const initials = seeded?.initials ?? initialsFromName(name ?? who);
   return (
     <span
       className="av"
-      style={{ background: p.color, width: size, height: size }}
+      style={{ background: color, width: size, height: size }}
     >
-      {p.initials}
+      {initials}
     </span>
   );
 }

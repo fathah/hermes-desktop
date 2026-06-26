@@ -7,8 +7,19 @@
 // a delegated task ("nag wife about X") findable. "Me" is a first-class person
 // (SELF_PERSON_ID), the default task assignee.
 
-/** The canonical person-page id for "Me" (reuses the seeded `you` record). */
+/** The canonical person id for "Me" (reuses the seeded `you` record). */
 export const SELF_PERSON_ID = "you";
+
+/** Folder-backed query database that holds one markdown row per contact. */
+export const PERSON_FOLDER = "people";
+
+/** A readable, wikilink-friendly row id from a display name ("" if not derivable). */
+export function slugifyPersonId(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
 
 /** A messaging channel we can hand off to (P7). */
 export type ChannelKind =
@@ -86,6 +97,96 @@ export function preferredChannel(fm: PersonFrontmatter): ContactChannel | null {
     if (match) return match;
   }
   return null;
+}
+
+function asStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((v): v is string => typeof v === "string");
+  }
+  if (typeof value === "string" && value.trim()) {
+    return value
+      .split(/[,\n]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function asFragments(value: unknown): ContactFragment[] {
+  if (!Array.isArray(value)) return [];
+  const fragments: ContactFragment[] = [];
+  for (const item of value) {
+    if (typeof item === "string" && item.trim()) {
+      fragments.push({ text: item.trim() });
+    } else if (item && typeof item === "object" && "text" in item) {
+      const obj = item as Record<string, unknown>;
+      if (typeof obj.text === "string" && obj.text.trim()) {
+        fragments.push({
+          text: obj.text.trim(),
+          ...(typeof obj.when === "string" ? { when: obj.when } : {}),
+          ...(typeof obj.source === "string" ? { source: obj.source } : {}),
+        });
+      }
+    }
+  }
+  return fragments;
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+/** Parse a person page's frontmatter props into a typed PersonFrontmatter. */
+export function parsePersonFrontmatter(
+  props: Record<string, unknown>,
+): PersonFrontmatter {
+  return {
+    aliases: asStringArray(props.aliases),
+    tags: asStringArray(props.tags),
+    fragments: asFragments(props.fragments),
+    ...(asString(props.email) ? { email: asString(props.email) } : {}),
+    ...(asString(props.phone) ? { phone: asString(props.phone) } : {}),
+    ...(asString(props.telegramChatId)
+      ? { telegramChatId: asString(props.telegramChatId) }
+      : {}),
+    ...(asString(props.whatsappPhone)
+      ? { whatsappPhone: asString(props.whatsappPhone) }
+      : {}),
+    ...(asString(props.organization)
+      ? { organization: asString(props.organization) }
+      : {}),
+  };
+}
+
+/** Build a resolved PersonRef from a person page's id, title, and props. */
+export function personRefFrom(
+  id: string,
+  name: string,
+  props: Record<string, unknown>,
+): PersonRef {
+  return {
+    id,
+    name: name || id,
+    isSelf: id === SELF_PERSON_ID,
+    ...parsePersonFrontmatter(props),
+  };
+}
+
+/** Frontmatter props for a person row (title + schema + present fields). */
+export function personToRowProps(
+  name: string,
+  fm: PersonFrontmatter,
+): Record<string, unknown> {
+  const props: Record<string, unknown> = { title: name, schema: "person" };
+  if (fm.aliases?.length) props.aliases = fm.aliases;
+  if (fm.tags?.length) props.tags = fm.tags;
+  if (fm.fragments?.length) props.fragments = fm.fragments;
+  if (fm.email) props.email = fm.email;
+  if (fm.phone) props.phone = fm.phone;
+  if (fm.telegramChatId) props.telegramChatId = fm.telegramChatId;
+  if (fm.whatsappPhone) props.whatsappPhone = fm.whatsappPhone;
+  if (fm.organization) props.organization = fm.organization;
+  return props;
 }
 
 /**

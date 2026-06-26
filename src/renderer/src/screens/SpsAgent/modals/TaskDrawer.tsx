@@ -1,8 +1,15 @@
 // TaskDrawer.tsx — task detail side drawer. Ported from app.jsx TaskDrawer.
 import { useEffect, useState } from "react";
 import { Icon } from "../components/Icon";
-import { PEOPLE, STATUS, PRIO } from "../data/seed";
-import type { Task, StatusKey, PrioKey, PersonKey, ChecklistItem } from "../types";
+import { STATUS, PRIO } from "../data/seed";
+import { usePersonPages } from "../hooks/usePersonPages";
+import type {
+  Task,
+  StatusKey,
+  PrioKey,
+  PersonKey,
+  ChecklistItem,
+} from "../types";
 import { useStore } from "../store";
 import { rowToMarkdown, rowFromMarkdown } from "../editor/rowMarkdown";
 import { pageIdFromPath } from "../lib/pageId";
@@ -12,7 +19,10 @@ interface Props {
   onClose: () => void;
 }
 
-function parseChecklistAndDesc(body = ""): { desc: string; checklist: ChecklistItem[] } {
+function parseChecklistAndDesc(body = ""): {
+  desc: string;
+  checklist: ChecklistItem[];
+} {
   const lines = body.split("\n");
   const checklist: ChecklistItem[] = [];
   const descLines: string[] = [];
@@ -22,7 +32,7 @@ function parseChecklistAndDesc(body = ""): { desc: string; checklist: ChecklistI
       checklist.push({
         id: Math.random().toString(36).substring(2, 9),
         text: match[2].trim(),
-        checked: match[1].toLowerCase() === "x"
+        checked: match[1].toLowerCase() === "x",
       });
     } else {
       descLines.push(line);
@@ -30,14 +40,16 @@ function parseChecklistAndDesc(body = ""): { desc: string; checklist: ChecklistI
   }
   return {
     desc: descLines.join("\n").trim(),
-    checklist
+    checklist,
   };
 }
 
 function serializeBody(desc: string, checklist: ChecklistItem[]): string {
   let body = desc.trim();
   if (checklist.length > 0) {
-    const listMd = checklist.map(item => `- [${item.checked ? "x" : " "}] ${item.text}`).join("\n");
+    const listMd = checklist
+      .map((item) => `- [${item.checked ? "x" : " "}] ${item.text}`)
+      .join("\n");
     body = body ? `${body}\n\n${listMd}` : listMd;
   }
   return body;
@@ -56,13 +68,18 @@ export function TaskDrawer({ task, onClose }: Props) {
   const [status, setStatus] = useState<StatusKey>(task.status);
   const [prio, setPrio] = useState<PrioKey>(task.prio);
   const [who, setWho] = useState<PersonKey>(task.who);
+  const { persons } = usePersonPages();
   const [due, setDue] = useState(task.due);
   const [est, setEst] = useState(task.est);
 
   const [desc, setDesc] = useState(task.desc || "");
-  const [checklist, setChecklist] = useState<ChecklistItem[]>(task.checklist || []);
+  const [checklist, setChecklist] = useState<ChecklistItem[]>(
+    task.checklist || [],
+  );
   const [loading, setLoading] = useState(isFolderBacked);
-  const [customProps, setCustomProps] = useState<Record<string, unknown>>(task.custom || {});
+  const [customProps, setCustomProps] = useState<Record<string, unknown>>(
+    task.custom || {},
+  );
 
   // Load folder-backed extra data
   useEffect(() => {
@@ -92,11 +109,15 @@ export function TaskDrawer({ task, onClose }: Props) {
       }
     };
     void loadData();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [task.id, isFolderBacked, dbFolder, rowId]);
 
   // General persistence dispatcher
-  const saveChanges = async (patch: Partial<Task> & { descVal?: string; checklistVal?: ChecklistItem[] }) => {
+  const saveChanges = async (
+    patch: Partial<Task> & { descVal?: string; checklistVal?: ChecklistItem[] },
+  ) => {
     const nextTitle = patch.title !== undefined ? patch.title : title;
     const nextStatus = patch.status !== undefined ? patch.status : status;
     const nextPrio = patch.prio !== undefined ? patch.prio : prio;
@@ -104,7 +125,8 @@ export function TaskDrawer({ task, onClose }: Props) {
     const nextDue = patch.due !== undefined ? patch.due : due;
     const nextEst = patch.est !== undefined ? patch.est : est;
     const nextDesc = patch.descVal !== undefined ? patch.descVal : desc;
-    const nextChecklist = patch.checklistVal !== undefined ? patch.checklistVal : checklist;
+    const nextChecklist =
+      patch.checklistVal !== undefined ? patch.checklistVal : checklist;
 
     const labelVal = patch.custom?.label || task.custom?.label;
     const updatedTask: Task = {
@@ -117,7 +139,10 @@ export function TaskDrawer({ task, onClose }: Props) {
       est: nextEst,
       desc: nextDesc,
       checklist: nextChecklist,
-      custom: { ...task.custom, ...(labelVal !== undefined ? { label: labelVal } : {}) }
+      custom: {
+        ...task.custom,
+        ...(labelVal !== undefined ? { label: labelVal } : {}),
+      },
     };
     setOpenTask(updatedTask);
 
@@ -130,7 +155,7 @@ export function TaskDrawer({ task, onClose }: Props) {
         who: nextWho,
         due: nextDue,
         est: nextEst,
-        ...(labelVal !== undefined ? { label: labelVal } : {})
+        ...(labelVal !== undefined ? { label: labelVal } : {}),
       };
       const bodyMd = serializeBody(nextDesc, nextChecklist);
       const markdown = rowToMarkdown(nextProps, bodyMd);
@@ -145,7 +170,7 @@ export function TaskDrawer({ task, onClose }: Props) {
         est: nextEst,
         desc: nextDesc,
         checklist: nextChecklist,
-        custom: updatedTask.custom
+        custom: updatedTask.custom,
       });
     }
   };
@@ -154,23 +179,27 @@ export function TaskDrawer({ task, onClose }: Props) {
     const newItem: ChecklistItem = {
       id: Math.random().toString(36).substring(2, 9),
       text: "New subtask",
-      checked: false
+      checked: false,
     };
     const nextList = [...checklist, newItem];
     setChecklist(nextList);
     void saveChanges({ checklistVal: nextList });
   };
 
-  const updateChecklistItem = (itemId: string, text: string, checked: boolean) => {
-    const nextList = checklist.map(item =>
-      item.id === itemId ? { ...item, text, checked } : item
+  const updateChecklistItem = (
+    itemId: string,
+    text: string,
+    checked: boolean,
+  ) => {
+    const nextList = checklist.map((item) =>
+      item.id === itemId ? { ...item, text, checked } : item,
     );
     setChecklist(nextList);
     void saveChanges({ checklistVal: nextList });
   };
 
   const removeChecklistItem = (itemId: string) => {
-    const nextList = checklist.filter(item => item.id !== itemId);
+    const nextList = checklist.filter((item) => item.id !== itemId);
     setChecklist(nextList);
     void saveChanges({ checklistVal: nextList });
   };
@@ -179,7 +208,12 @@ export function TaskDrawer({ task, onClose }: Props) {
     <div className="scrim" onMouseDown={onClose}>
       <div className="drawer" onMouseDown={(e) => e.stopPropagation()}>
         <div className="drawer-head">
-          <button className="tb-btn" onClick={onClose} title="Close" aria-label="Close">
+          <button
+            className="tb-btn"
+            onClick={onClose}
+            title="Close"
+            aria-label="Close"
+          >
             <Icon name="x" size={17} />
           </button>
           <span className="drawer-spacer"></span>
@@ -257,9 +291,12 @@ export function TaskDrawer({ task, onClose }: Props) {
                     title="Owner"
                     aria-label="Owner"
                   >
-                    {Object.keys(PEOPLE).map((key) => (
-                      <option key={key} value={key}>
-                        {PEOPLE[key].name}
+                    {!persons.some((p) => p.id === who) && who && (
+                      <option value={who}>{who}</option>
+                    )}
+                    {persons.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
                       </option>
                     ))}
                   </select>
@@ -294,7 +331,7 @@ export function TaskDrawer({ task, onClose }: Props) {
                 </div>
               </div>
               <hr className="b-divider drawer-divider" />
-              
+
               <div className="drawer-section">
                 <h3 className="drawer-section-title">Description</h3>
                 <textarea
@@ -317,7 +354,13 @@ export function TaskDrawer({ task, onClose }: Props) {
                     <input
                       type="checkbox"
                       checked={item.checked}
-                      onChange={(e) => updateChecklistItem(item.id, item.text, e.target.checked)}
+                      onChange={(e) =>
+                        updateChecklistItem(
+                          item.id,
+                          item.text,
+                          e.target.checked,
+                        )
+                      }
                       title="Toggle subtask"
                       aria-label="Toggle subtask"
                     />
@@ -325,10 +368,16 @@ export function TaskDrawer({ task, onClose }: Props) {
                       type="text"
                       value={item.text}
                       onChange={(e) => {
-                        const nextList = checklist.map(it => it.id === item.id ? { ...it, text: e.target.value } : it);
+                        const nextList = checklist.map((it) =>
+                          it.id === item.id
+                            ? { ...it, text: e.target.value }
+                            : it,
+                        );
                         setChecklist(nextList);
                       }}
-                      onBlur={() => void saveChanges({ checklistVal: checklist })}
+                      onBlur={() =>
+                        void saveChanges({ checklistVal: checklist })
+                      }
                       title="Subtask text"
                       placeholder="Subtask text"
                       className={`drawer-checklist-input ${item.checked ? "completed" : ""}`}

@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   availableChannels,
+  parsePersonFrontmatter,
   personMatchesQuery,
+  personRefFrom,
+  personToRowProps,
   preferredChannel,
+  slugifyPersonId,
+  SELF_PERSON_ID,
   type PersonFrontmatter,
   type PersonRef,
 } from "./contacts";
@@ -77,5 +82,60 @@ describe("personMatchesQuery", () => {
   it("is case-insensitive and does not match unrelated text", () => {
     expect(personMatchesQuery(person, "SANJAY")).toBe(true);
     expect(personMatchesQuery(person, "secretary")).toBe(false);
+  });
+});
+
+describe("parsePersonFrontmatter", () => {
+  it("coerces arrays and object/string fragments from raw props", () => {
+    const fm = parsePersonFrontmatter({
+      aliases: ["Wife", "P"],
+      tags: "bluebop, family",
+      fragments: [
+        { text: "met at BlueBop", when: "2025" },
+        "son's name is Haresh",
+        { nope: true },
+      ],
+      email: "p@x.com",
+      organization: "  ",
+    });
+    expect(fm.aliases).toEqual(["Wife", "P"]);
+    expect(fm.tags).toEqual(["bluebop", "family"]);
+    expect(fm.fragments).toEqual([
+      { text: "met at BlueBop", when: "2025" },
+      { text: "son's name is Haresh" },
+    ]);
+    expect(fm.email).toBe("p@x.com");
+    expect(fm.organization).toBeUndefined(); // blank trimmed away
+  });
+});
+
+describe("personRefFrom", () => {
+  it("marks the self id and falls back name to id", () => {
+    expect(personRefFrom(SELF_PERSON_ID, "You", {}).isSelf).toBe(true);
+    expect(personRefFrom("p-x", "", {}).name).toBe("p-x");
+    expect(personRefFrom("p-x", "Asha", {}).isSelf).toBe(false);
+  });
+});
+
+describe("personToRowProps", () => {
+  it("always sets title + schema and only includes present fields", () => {
+    const props = personToRowProps("Priya", {
+      tags: ["family"],
+      phone: "123",
+    });
+    expect(props).toMatchObject({
+      title: "Priya",
+      schema: "person",
+      tags: ["family"],
+      phone: "123",
+    });
+    expect(props).not.toHaveProperty("email");
+  });
+});
+
+describe("slugifyPersonId", () => {
+  it("makes a wikilink-friendly slug, empty when nothing usable", () => {
+    expect(slugifyPersonId("Priya Sharma")).toBe("priya-sharma");
+    expect(slugifyPersonId("  !!!  ")).toBe("");
   });
 });

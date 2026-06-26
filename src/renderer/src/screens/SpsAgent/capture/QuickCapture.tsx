@@ -11,6 +11,12 @@ import type {
   TaskTriageResult,
 } from "../../../../../shared/tasks-dump";
 import {
+  PERSON_FOLDER,
+  personToRowProps,
+  slugifyPersonId,
+  type PersonFrontmatter,
+} from "../../../../../shared/contacts";
+import {
   buildVisualCaptureBody,
   visualCaptureMimeFromPath,
   visualCaptureTitle,
@@ -330,11 +336,52 @@ export function QuickCapture() {
     }
   };
 
+  // Person capture: create a real contact row (vault/people/<id>.md) so the
+  // who-picker can find them by name, alias, tag, or any captured fragment.
+  const saveContact = async (text: string): Promise<void> => {
+    setSaving(true);
+    try {
+      const firstLine = text.split("\n")[0]?.trim() || "Unnamed contact";
+      const name =
+        firstLine.length > 80 ? `${firstLine.slice(0, 79)}…` : firstLine;
+      const rest = text.trim().slice(firstLine.length).trim();
+      const id =
+        slugifyPersonId(name) ||
+        `person-${Date.now().toString(36)}-${Math.random()
+          .toString(36)
+          .slice(2, 6)}`;
+      // Keep the captured context as a fragment so the contact is searchable
+      // by it immediately (richer enrichment is a later phase).
+      const fm: PersonFrontmatter = rest
+        ? { fragments: [{ text: rest, source: "capture" }] }
+        : {};
+      const markdown = rowToMarkdown(personToRowProps(name, fm), text.trim());
+      const ok = await window.hermesAPI.spsExportRow(
+        PERSON_FOLDER,
+        id,
+        markdown,
+      );
+      if (!ok) {
+        setSaving(false);
+        return;
+      }
+      setRouteChip(`👤 Added ${name} to Contacts`);
+      setTimeout(() => window.close(), TASK_CHIP_DISMISS_MS);
+    } catch (err) {
+      console.error("Failed to save contact:", err);
+      setSaving(false);
+    }
+  };
+
   const handleSave = async () => {
     const text = body.trim();
     if (!text && !visualCapture) return;
     if (captureKind === "task" && !visualCapture) {
       await saveTask(text);
+      return;
+    }
+    if (captureKind === "person" && !visualCapture) {
+      await saveContact(text);
       return;
     }
 

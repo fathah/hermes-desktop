@@ -1,5 +1,6 @@
 // PropMenu.tsx — inline property editor (status / priority / owner). Ported from tasks.jsx.
-import { PEOPLE, PRIO, STATUS } from "../data/seed";
+import { PRIO, STATUS } from "../data/seed";
+import { usePersonPages } from "../hooks/usePersonPages";
 import { Avatar } from "./chips";
 
 export interface PropState {
@@ -16,12 +17,13 @@ interface Props {
 }
 
 export function PropMenu({ prop, onPick, onClose }: Props) {
+  const { persons } = usePersonPages();
   const opts: [string, string][] =
     prop.field === "status"
       ? Object.entries(STATUS).map(([k, v]) => [k, v.label])
       : prop.field === "prio"
         ? Object.entries(PRIO).map(([k, v]) => [k, v.label])
-        : Object.entries(PEOPLE).map(([k, v]) => [k, v.name]);
+        : persons.map((p) => [p.id, p.name]);
   return (
     <>
       <div
@@ -51,7 +53,7 @@ export function PropMenu({ prop, onPick, onClose }: Props) {
                 }}
               ></span>
             )}
-            {prop.field === "who" && <Avatar who={k} size={16} />}
+            {prop.field === "who" && <Avatar who={k} name={label} size={16} />}
             {label}
           </div>
         ))}

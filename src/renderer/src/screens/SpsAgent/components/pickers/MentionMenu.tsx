@@ -2,7 +2,9 @@
 // Ported from pickers.jsx MentionMenu.
 import { useEffect, useState } from "react";
 import { Icon } from "../Icon";
-import { PEOPLE, TREE, flattenTree } from "../../data/seed";
+import { TREE, flattenTree } from "../../data/seed";
+import { usePersonPages } from "../../hooks/usePersonPages";
+import { personMatchesQuery } from "../../../../../../shared/contacts";
 import type { MentionItem } from "../../editor/selection";
 
 interface Props {
@@ -16,27 +18,33 @@ interface Props {
 export function MentionMenu({ x, y, query, onPick, onClose }: Props) {
   const [sel, setSel] = useState(0);
   const ql = (query || "").toLowerCase();
-  const people: MentionItem[] = Object.entries(PEOPLE).map(([k, p]) => ({
-    kind: "person",
-    id: k,
-    label: p.name,
-    color: p.color,
-    initials: p.initials,
-  }));
-  const pages: MentionItem[] = flattenTree(TREE).map((n) => ({
-    kind: "page",
-    id: n.id,
-    label: n.label,
-    emoji: n.emoji,
-  }));
-  const dates: MentionItem[] = [
-    { kind: "date", id: "today", label: "Today (Jun 2, 2026)" },
-    { kind: "date", id: "tomorrow", label: "Tomorrow (Jun 3, 2026)" },
-    { kind: "date", id: "friday", label: "Friday (Jun 5, 2026)" },
-  ];
-  const all = [...people, ...pages, ...dates].filter(
-    (i) => !ql || i.label.toLowerCase().includes(ql),
-  );
+  const { persons } = usePersonPages();
+  // People are matched on name/alias/tag/fragment (reachable by any scrap),
+  // so a contact surfaces even when the query never appears in their name.
+  const people: MentionItem[] = persons
+    .filter((p) => personMatchesQuery(p, query))
+    .map((p) => ({
+      kind: "person",
+      id: p.id,
+      label: p.name,
+      initials: (p.name[0] || "?").toUpperCase(),
+    }));
+  const pages: MentionItem[] = flattenTree(TREE)
+    .map((n) => ({
+      kind: "page" as const,
+      id: n.id,
+      label: n.label,
+      emoji: n.emoji,
+    }))
+    .filter((i) => !ql || i.label.toLowerCase().includes(ql));
+  const dates: MentionItem[] = (
+    [
+      { kind: "date", id: "today", label: "Today" },
+      { kind: "date", id: "tomorrow", label: "Tomorrow" },
+      { kind: "date", id: "friday", label: "Friday" },
+    ] as MentionItem[]
+  ).filter((i) => !ql || i.label.toLowerCase().includes(ql));
+  const all = [...people, ...pages, ...dates];
   useEffect(() => {
     setSel(0);
   }, [query]);
