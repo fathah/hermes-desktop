@@ -114,7 +114,7 @@ function packBlocks(title: string) {
     return [
       blk(
         "p",
-        "Review recent analytics and queue hook, voice, source, and template learnings through Learn This.",
+        "Review recent analytics and queue hook, voice, source, and template learnings through Learning.",
       ),
     ];
   }
@@ -760,7 +760,7 @@ export function ContentStudioSurface({
         },
       ],
     });
-    flash("Weekly review queued for Learn This and Review Queue.");
+    flash("Weekly review queued for Learning and Review Queue.");
   }
 
   function updateRubric(key: keyof ContentStudioRubric, value: string): void {

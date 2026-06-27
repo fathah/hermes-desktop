@@ -355,11 +355,17 @@ describe("LearningSurface", () => {
   it("renders memories, skills, and curator tabs with pending memory proposals", async () => {
     render(<LearningSurface profile="default" />);
 
-    expect(await screen.findByText("Learn This")).toBeInTheDocument();
+    expect(await screen.findByText("Learning")).toBeInTheDocument();
     expect(screen.getByText("Assistants")).toBeInTheDocument();
     expect(screen.getByText("Memories")).toBeInTheDocument();
+    expect(screen.getByText("Advanced")).toBeInTheDocument();
+    expect(await screen.findByText("Prefers terse answers.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Advanced"));
     expect(screen.getByText("Skills")).toBeInTheDocument();
     expect(screen.getByText("Curator")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Assistants"));
     expect(await screen.findByText("Build an Assistant")).toBeInTheDocument();
 
     fireEvent.click(screen.getByText("Memories"));
@@ -376,6 +382,7 @@ describe("LearningSurface", () => {
   it("creates a saved assistant recipe from the form", async () => {
     render(<LearningSurface profile="default" />);
 
+    fireEvent.click(screen.getByText("Assistants"));
     fireEvent.change(await screen.findByLabelText("Assistant template"), {
       target: { value: "article-writer" },
     });
@@ -411,6 +418,7 @@ describe("LearningSurface", () => {
   it("runs a saved assistant recipe", async () => {
     render(<LearningSurface profile="default" />);
 
+    fireEvent.click(screen.getByText("Assistants"));
     fireEvent.click(await screen.findByText("Run"));
 
     await waitFor(() =>
@@ -426,6 +434,7 @@ describe("LearningSurface", () => {
   it("queues the latest assistant result for vault review", async () => {
     render(<LearningSurface profile="default" />);
 
+    fireEvent.click(screen.getByText("Assistants"));
     fireEvent.change(await screen.findByLabelText("Assistant run input"), {
       target: { value: "Focus on risks." },
     });
@@ -444,6 +453,7 @@ describe("LearningSurface", () => {
   it("shows compact assistant run history", async () => {
     render(<LearningSurface profile="default" />);
 
+    fireEvent.click(screen.getByText("Assistants"));
     expect(await screen.findByText(/saved/)).toBeInTheDocument();
     fireEvent.click(screen.getByText("View past runs"));
     expect(screen.getAllByText(/saved/).length).toBeGreaterThan(1);
@@ -452,6 +462,7 @@ describe("LearningSurface", () => {
   it("creates a pending skill proposal from a repo draft", async () => {
     render(<LearningSurface profile="default" />);
 
+    fireEvent.click(screen.getByText("Advanced"));
     fireEvent.click(await screen.findByText("Skills"));
     fireEvent.change(screen.getByLabelText("Repository path"), {
       target: { value: "/tmp/repo" },
@@ -478,6 +489,7 @@ describe("LearningSurface", () => {
   it("restores archived curator skills", async () => {
     render(<LearningSurface profile="default" />);
 
+    fireEvent.click(screen.getByText("Advanced"));
     fireEvent.click(await screen.findByText("Curator"));
     fireEvent.click(await screen.findByText("Restore old-skill"));
 

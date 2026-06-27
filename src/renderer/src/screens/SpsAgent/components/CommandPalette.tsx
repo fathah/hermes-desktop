@@ -70,6 +70,7 @@ export function CommandPalette() {
   const setResearchOpen = useStore((s) => s.setResearchOpen);
   const setExternalSessionsOpen = useStore((s) => s.setExternalSessionsOpen);
   const setSurface = useStore((s) => s.setSurface);
+  const openInboxImageCapture = useStore((s) => s.openInboxImageCapture);
   const flash = useStore((s) => s.flash);
   const openContentStudioIdea = useStore((s) => s.openContentStudioIdea);
 
@@ -197,6 +198,54 @@ export function CommandPalette() {
       },
       {
         kind: "action",
+        id: "capture",
+        icon: "inbox",
+        label: "Open Capture",
+        desc: "Add screenshots, sources, PDFs, notes, and review raw intake.",
+        run: () => setSurface("inbox"),
+      },
+      {
+        kind: "action",
+        id: "capture-screenshot",
+        icon: "inbox",
+        label: "Capture screenshot",
+        desc: "Start image capture from recent screenshots or clipboard input.",
+        run: () => openInboxImageCapture(),
+      },
+      {
+        kind: "action",
+        id: "work",
+        icon: "board",
+        label: "Open Work",
+        desc: "Review tasks, delegated goals, scheduled rules, and pending changes.",
+        run: () => setSurface("work"),
+      },
+      {
+        kind: "action",
+        id: "dashboard",
+        icon: "board",
+        label: "Open Dashboard",
+        desc: "Open the customizable dashboard workspace.",
+        run: () => setSurface("dashboard"),
+      },
+      {
+        kind: "action",
+        id: "learning",
+        icon: "sparkle",
+        label: "Open Learning",
+        desc: "Review remembered material, assistants, experts, skills, and curator state.",
+        run: () => setSurface("learning"),
+      },
+      {
+        kind: "action",
+        id: "graph",
+        icon: "list",
+        label: "Open Graph",
+        desc: "View local page links and workspace relationships.",
+        run: () => setSurface("graph"),
+      },
+      {
+        kind: "action",
         id: "research",
         icon: "search",
         label: "Research papers…",
@@ -226,6 +275,54 @@ export function CommandPalette() {
         label: "Vault health",
         desc: "Review semantic-lint issues across your vault — orphans, broken links, and structure.",
         run: () => setSurface("health"),
+      },
+      {
+        kind: "action",
+        id: "insights",
+        icon: "board",
+        label: "Open Insights",
+        desc: "Review token usage, cost, and workspace analytics.",
+        run: () => setSurface("insights"),
+      },
+      {
+        kind: "action",
+        id: "personal-health",
+        icon: "info",
+        label: "Open Health & Ledger",
+        desc: "Open the optional personal health workspace pack.",
+        run: () => setSurface("personal-health"),
+      },
+      {
+        kind: "action",
+        id: "equity",
+        icon: "table",
+        label: "Open Equity Research",
+        desc: "Open the optional equity research workspace pack.",
+        run: () => setSurface("equity"),
+      },
+      {
+        kind: "action",
+        id: "rss-reader",
+        icon: "doc",
+        label: "Open RSS Reader",
+        desc: "Open feed review and universal capture tools.",
+        run: () => setSurface("rss-reader"),
+      },
+      {
+        kind: "action",
+        id: "content-studio",
+        icon: "sparkle",
+        label: "Open Content Studio",
+        desc: "Open the optional content workflow pack.",
+        run: () => setSurface("contentStudio"),
+      },
+      {
+        kind: "action",
+        id: "deck-studio",
+        icon: "board",
+        label: "Open Deck Studio",
+        desc: "Open the optional deck drafting and export pack.",
+        run: () => setSurface("deckStudio"),
       },
       {
         kind: "action",
@@ -454,6 +551,7 @@ export function CommandPalette() {
       setResearchOpen,
       setExternalSessionsOpen,
       setSurface,
+      openInboxImageCapture,
       flash,
       page,
       meta,

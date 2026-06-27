@@ -105,7 +105,7 @@ function ResearchReachSummary({
       <div className="settings-section-title">Research Reach</div>
       <div className="settings-field">
         <div className="settings-field-hint" style={{ marginBottom: 12 }}>
-          Source coverage for My Research, Learn This, and scheduled research.
+          Source coverage for Research, Learning, and scheduled research.
           Uses local open-source tools when available; not production scraping at
           scale.
         </div>

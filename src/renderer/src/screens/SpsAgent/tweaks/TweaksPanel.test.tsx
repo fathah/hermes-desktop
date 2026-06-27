@@ -41,7 +41,7 @@ describe("TweaksPanel — Storage section", () => {
   });
 });
 
-describe("TweaksPanel — Learn This split", () => {
+describe("TweaksPanel — Learning split", () => {
   it("does not duplicate skill management", async () => {
     render(<TweaksPanel />);
 

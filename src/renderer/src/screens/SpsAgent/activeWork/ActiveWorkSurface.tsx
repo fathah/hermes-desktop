@@ -157,7 +157,7 @@ export function ActiveWorkSurface() {
     <div className="active-work-surface">
       <div className="active-work-head">
         <div>
-          <h1>Active Work</h1>
+          <h1>Delegated</h1>
           <p>Goals, running work, and task board.</p>
         </div>
         <button

@@ -431,6 +431,19 @@
   background: var(--hair);
   color: var(--tx-1);
 }
+.sps-scope .pack-toggle-row {
+  color: var(--tx-3);
+}
+.sps-scope .pack-state {
+  flex: none;
+  color: var(--tx-4);
+  font-size: 11px;
+  font-weight: 600;
+}
+.sps-scope .pack-list {
+  display: grid;
+  gap: 1px;
+}
 
 /* C2: row affordances are now <button>s — neutralise UA button chrome while
    keeping the layout/hover rules above. .nav-item-main is the click target that
@@ -2957,10 +2970,10 @@
    directly, NOT re-run through scope-sps-css.mjs (would double-prefix). */
 .sps-scope .ob-checklist {
   max-width: var(--content-w);
-  margin: 14px auto 0;
-  padding: 16px 20px;
+  margin: 10px auto 0;
+  padding: 10px 12px;
   border: 1px solid var(--hair);
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--surface);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
 }
@@ -2968,7 +2981,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 14px;
+  margin-bottom: 8px;
 }
 .sps-scope .ob-checklist-title {
   font-weight: 600;
@@ -2995,17 +3008,19 @@
   color: var(--tx-1);
 }
 .sps-scope .ob-checklist-steps {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 .sps-scope .ob-step-card {
   display: flex;
-  flex-direction: column;
+  flex: 1 1 180px;
+  align-items: center;
+  gap: 8px;
   background: var(--canvas);
   border: 1px solid var(--hair);
-  border-radius: 10px;
-  padding: 14px;
+  border-radius: 8px;
+  padding: 8px;
   cursor: pointer;
   transition:
     transform 0.15s ease,
@@ -3020,8 +3035,8 @@
 .sps-scope .ob-step-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
+  gap: 6px;
+  margin-bottom: 0;
 }
 .sps-scope .ob-step-badge {
   font-size: 11px;
@@ -3032,8 +3047,8 @@
   border-radius: 4px;
 }
 .sps-scope .ob-step-icon-wrap {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background: var(--accent-soft);
   color: var(--accent-text);
@@ -3042,7 +3057,8 @@
 }
 .sps-scope .ob-step-body {
   flex: 1;
-  margin-bottom: 12px;
+  min-width: 0;
+  margin-bottom: 0;
 }
 .sps-scope .ob-step-title {
   font-size: 14px;
@@ -3051,12 +3067,14 @@
   margin-bottom: 4px;
 }
 .sps-scope .ob-step-desc {
+  display: none;
   font-size: 12px;
   color: var(--tx-3);
   line-height: 1.4;
 }
 .sps-scope .ob-step-action {
-  width: 100%;
+  width: auto;
+  flex: none;
   text-align: center;
   border: 1.5px solid var(--hair);
   background: var(--surface);

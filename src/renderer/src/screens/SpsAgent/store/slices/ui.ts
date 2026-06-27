@@ -35,7 +35,7 @@ export const createUiSlice: StateCreator<Store, [], [], UiSlice> = (
   set,
   get,
 ) => ({
-  panelOpen: true,
+  panelOpen: false,
   rightTab: loadRightTab(),
   surface: loadTweaks().homeSurface ?? "doc",
   paletteOpen: false,

@@ -199,7 +199,7 @@ setTimeout(() => {
 const expectedShots = [
   "01-home",
   "02-palette",
-  "02a-learn-this",
+  "02a-learning",
   "02b-research",
   "02c-research-nudge",
   "03-graph",
@@ -260,6 +260,14 @@ async function shot(name, fn) {
   }
 }
 
+async function openCommand(label) {
+  await win.evaluate(() => {
+    window.dispatchEvent(new CustomEvent("sps:search"));
+  });
+  await win.waitForSelector(".palette", { timeout: 8000 });
+  await win.locator(".pal-item", { hasText: label }).first().click();
+}
+
 async function waitForInputValue(locator, predicate, label, timeoutMs = 8000) {
   const start = Date.now();
   let value = "";
@@ -318,9 +326,10 @@ await shot("02-palette", async () => {
 });
 await win.keyboard.press("Escape").catch(() => {});
 
-// 02a — Learn This: first-class learning surface under My Assistant.
-await shot("02a-learn-this", async () => {
-  await win.locator(".nav-item", { hasText: "Teach Me" }).first().click();
+// 02a — Learning surface, opened from command palette.
+await shot("02a-learning", async () => {
+  await openCommand("Open Learning");
+  await win.getByRole("button", { name: "Advanced" }).click();
   await win.getByRole("button", { name: "Skills" }).click();
 });
 
@@ -328,7 +337,7 @@ await shot("02a-learn-this", async () => {
 // Offline-safe: we screenshot the modal's initial state (no network dependency).
 // Proves the "Research" rail affordance → ResearchModal mount → ensure-agent-tool.
 await shot("02b-research", async () => {
-  await win.locator(".nav-item", { hasText: "Research" }).first().click();
+  await openCommand("Research papers");
   await win.waitForSelector(".modal", { timeout: 8000 });
 });
 await win.keyboard.press("Escape").catch(() => {});
@@ -350,7 +359,7 @@ await shot("02c-research-nudge", async () => {
 
 // 03 — local wikilink graph view (F4).
 await shot("03-graph", async () => {
-  await win.locator(".nav-item", { hasText: "Graph" }).first().click();
+  await openCommand("Open Graph");
 });
 
 // back to a doc page so the doc-only panel/tweaks render.
@@ -389,6 +398,7 @@ await shot("07-querydb-addrow", async () => {
 // titlebar drag-region overlays the panel tabs, so force past it.
 await shot("08-backlinks", async () => {
   await win.getByText("Alpha", { exact: true }).first().click({ force: true });
+  await openCommand("Open My Assistant");
   await win.waitForTimeout(400);
   // Dispatch the click on the tab node directly so the titlebar overlay can't
   // swallow it; React's onClick still fires from the bubbled event.
@@ -415,7 +425,7 @@ await shot("09-getstarted", async () => {
 
 // 10 — Journal calendar surface (month grid + day timeline).
 await shot("10-journal", async () => {
-  await win.locator(".nav-item", { hasText: "Journal" }).first().click();
+  await openCommand("Open Work");
   await win.waitForSelector(".jr .cal-grid", { timeout: 8000 });
 });
 
@@ -435,7 +445,7 @@ await shot("11b-journal-entry-scrolled", async () => {
 
 // 12 — Content Studio surface mounts and creates its review-first workspace pack.
 await shot("12-content-studio", async () => {
-  await win.locator(".nav-item", { hasText: "Content Studio" }).first().click();
+  await openCommand("Open Content Studio");
   await win.getByRole("heading", { name: "Content Studio" }).waitFor({
     timeout: 8000,
   });
@@ -506,12 +516,15 @@ await shot("18-content-studio-publish", async () => {
     .waitFor({ timeout: 8000 });
 });
 
-// 19 — Sources surfaces the seeded recent screenshot candidate from the isolated
+// 19 — Capture surfaces the seeded recent screenshot candidate from the isolated
 // smoke directory, not from the developer's real screenshot folders.
 await shot("19-sources-screenshot", async () => {
-  await win.locator(".nav-item", { hasText: "RSS Reader" }).first().click();
+  await openCommand("Open RSS Reader");
   await win.getByText("SPS RSS Intel Reader").waitFor({ timeout: 8000 });
-  await win.getByRole("button", { name: "Sources" }).click();
+  await win
+    .getByRole("main")
+    .getByRole("button", { name: "Capture" })
+    .click();
   await win.getByRole("tab", { name: "Screenshot" }).click();
   await win.getByText(SEEDED_SCREENSHOT_NAME).waitFor({ timeout: 8000 });
 });
@@ -556,7 +569,7 @@ await shot("21-sources-screenshot-deck", async () => {
 
 // 22 — Deck Studio turns rough notes into an approved editable slide preview.
 await shot("22-deck-studio", async () => {
-  await win.locator(".nav-item", { hasText: "Deck Studio" }).first().click();
+  await openCommand("Open Deck Studio");
   await win.getByRole("heading", { name: "Deck Studio" }).waitFor({
     timeout: 8000,
   });

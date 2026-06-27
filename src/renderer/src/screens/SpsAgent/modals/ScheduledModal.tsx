@@ -115,33 +115,18 @@ export function ScheduledModal() {
     null,
   );
   const [discovering, setDiscovering] = useState(false);
-  const [wantAutoApply, setWantAutoApply] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const topicRef = useRef<HTMLInputElement>(null);
 
-  // Silently commit pending updates whose schedule opted into autoApply (so a
-  // trusted schedule keeps its page current without a review click). Review-first
-  // schedules leave their pending for the user to Apply.
+  // Scheduled work is review-first: generated changes stay pending until the
+  // user applies them from the Work/Review surface.
   const autoApplyPending = async (
-    list: Pending[],
-    scheds: Schedule[],
+    _list: Pending[],
+    _scheds: Schedule[],
   ): Promise<boolean> => {
-    let did = false;
-    for (const p of list) {
-      const s = scheds.find((x) => x.id === p.scheduleId);
-      if (!s?.autoApply) continue;
-      try {
-        await commitChangeset(p.changeset, ingestCommitPage);
-        await window.hermesAPI.spsAppendWikiLog?.("research", p.summary);
-        await window.hermesAPI.srRemovePending(p.id);
-        did = true;
-      } catch {
-        /* leave it for manual review */
-      }
-    }
-    return did;
+    return false;
   };
 
   const refresh = async () => {
@@ -263,7 +248,7 @@ export function ScheduledModal() {
         importanceThreshold,
         telegramPush: canUseTelegram ? telegramPush : false,
         telegramMode: "summary-only",
-        autoApply: wantAutoApply,
+        autoApply: false,
       });
       if (!res.ok) {
         setError(res.error || "Couldn't create the schedule.");
@@ -387,7 +372,7 @@ export function ScheduledModal() {
   };
 
   return (
-    <SpsModal title="Signal Briefs" onClose={onClose} width={760}>
+    <SpsModal title="Scheduled Work" onClose={onClose} width={760}>
       <div className="modal-body">
         {/* ── create ── */}
         <div
@@ -535,14 +520,9 @@ export function ScheduledModal() {
               )}
             </span>
           )}
-          <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
-            <input
-              type="checkbox"
-              checked={wantAutoApply}
-              onChange={(e) => setWantAutoApply(e.target.checked)}
-            />
-            Auto-apply (skip review)
-          </label>
+          <span className="pal-chip" style={{ pointerEvents: "none" }}>
+            Review-first
+          </span>
         </div>
         {error && (
           <small
@@ -758,7 +738,7 @@ export function ScheduledModal() {
                           ? " · Telegram summary"
                           : " · Telegram setup needed"
                         : ""}
-                      {s.autoApply ? " · auto-apply" : ""}
+                      {" · review-first"}
                       {!s.enabled ? " · paused" : ""}
                     </small>
                     {plan.length > 0 && (

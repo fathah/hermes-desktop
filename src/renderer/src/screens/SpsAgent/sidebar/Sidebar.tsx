@@ -2,8 +2,9 @@
 // row, then named/toggleable/collapsible sections (Recents/Private), the
 // Obsidian Vault explorer, a persistent "New chat" launcher, and the identity
 // foot. Identity is derived from the active Hermes profile (demo fallback offline).
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { Icon } from "../components/Icon";
+import type { IconName } from "../components/iconPaths";
 import { useStore } from "../store";
 import type { DropWhere } from "../lib/tree";
 import type { TreeDnd } from "./dnd";
@@ -16,6 +17,7 @@ import { ObsidianExplorer } from "./ObsidianExplorer";
 import { StatusChip } from "./StatusChip";
 import { openSettings } from "../../../lib/openSettings";
 import brandLogo from "../../../assets/icon.png";
+import type { Surface } from "../store/storeTypes";
 
 interface Identity {
   workspace: string;
@@ -28,6 +30,46 @@ const DEMO_IDENTITY: Identity = {
   user: "You",
   initial: "S",
 };
+
+type PackId =
+  | "learning"
+  | "research"
+  | "health"
+  | "equity"
+  | "content"
+  | "deck"
+  | "obsidian"
+  | "graph";
+
+const PACKS_KEY = "sps-agent-enabled-packs-v1";
+const DEFAULT_PACKS: Record<PackId, boolean> = {
+  learning: false,
+  research: false,
+  health: false,
+  equity: false,
+  content: false,
+  deck: false,
+  obsidian: false,
+  graph: false,
+};
+
+function loadPacks(): Record<PackId, boolean> {
+  try {
+    const raw = localStorage.getItem(PACKS_KEY);
+    if (!raw) return DEFAULT_PACKS;
+    return { ...DEFAULT_PACKS, ...JSON.parse(raw) };
+  } catch {
+    return DEFAULT_PACKS;
+  }
+}
+
+function savePacks(packs: Record<PackId, boolean>): void {
+  try {
+    localStorage.setItem(PACKS_KEY, JSON.stringify(packs));
+  } catch {
+    /* non-fatal UI preference */
+  }
+}
 
 /** Derive the rail identity from the active Hermes profile (fallback: demo). */
 function useIdentity(): Identity {
@@ -68,10 +110,8 @@ export function Sidebar() {
   const surface = useStore((s) => s.surface);
   const setSurface = useStore((s) => s.setSurface);
   const selectPage = useStore((s) => s.selectPage);
-  const openJournal = useStore((s) => s.openJournal);
   const startNewChat = useStore((s) => s.startNewChat);
   const setResearchOpen = useStore((s) => s.setResearchOpen);
-  const setScheduledOpen = useStore((s) => s.setScheduledOpen);
   const homeSurface = useStore((s) => s.t.homeSurface ?? "doc");
   // Selecting a page always returns to the document surface.
   const selectDoc = (id: string): void => {
@@ -94,35 +134,36 @@ export function Sidebar() {
   const [over, setOver] = useState<{ id: string; where: DropWhere } | null>(
     null,
   );
-  const [obsidianOpen, setObsidianOpen] = useState(true);
   const dnd: TreeDnd = { drag, setDrag, over, setOver, onMove: movePage };
   const identity = useIdentity();
-  const obsidianBtnRef = useRef<HTMLButtonElement>(null);
 
   const sidebar = useStore((s) => s.t.sidebar);
   const isIconsMode = sidebar === "icons";
 
-  const [libOpen, setLibOpen] = useState(() => localStorage.getItem("sps-wing-lib") !== "false");
-  const [workOpen, setWorkOpen] = useState(() => localStorage.getItem("sps-wing-work") !== "false");
-  const [advOpen, setAdvOpen] = useState(() => localStorage.getItem("sps-wing-adv") !== "false");
-  const [healthOpen, setHealthOpen] = useState(() => localStorage.getItem("sps-wing-health") !== "false");
-  const [resOpen, setResOpen] = useState(() => localStorage.getItem("sps-wing-res") !== "false");
+  const [libraryOpen, setLibraryOpen] = useState(
+    () => localStorage.getItem("sps-wing-core-library") !== "false",
+  );
+  const [packsOpen, setPacksOpen] = useState(
+    () => localStorage.getItem("sps-wing-packs") === "true",
+  );
+  const [packs, setPacks] = useState<Record<PackId, boolean>>(loadPacks);
 
-  const toggleLib = (): void => { setLibOpen(!libOpen); localStorage.setItem("sps-wing-lib", String(!libOpen)); };
-  const toggleWork = (): void => { setWorkOpen(!workOpen); localStorage.setItem("sps-wing-work", String(!workOpen)); };
-  const toggleAdv = (): void => { setAdvOpen(!advOpen); localStorage.setItem("sps-wing-adv", String(!advOpen)); };
-  const toggleHealth = (): void => { setHealthOpen(!healthOpen); localStorage.setItem("sps-wing-health", String(!healthOpen)); };
-  const toggleRes = (): void => { setResOpen(!resOpen); localStorage.setItem("sps-wing-res", String(!resOpen)); };
+  const toggleLibrary = (): void => {
+    const next = !libraryOpen;
+    setLibraryOpen(next);
+    localStorage.setItem("sps-wing-core-library", String(next));
+  };
+  const togglePacksOpen = (): void => {
+    const next = !packsOpen;
+    setPacksOpen(next);
+    localStorage.setItem("sps-wing-packs", String(next));
+  };
+  const setPackEnabled = (id: PackId, enabled: boolean): void => {
+    const next = { ...packs, [id]: enabled };
+    setPacks(next);
+    savePacks(next);
+  };
 
-
-  useEffect(() => {
-    if (obsidianBtnRef.current) {
-      obsidianBtnRef.current.setAttribute(
-        "aria-expanded",
-        String(obsidianOpen),
-      );
-    }
-  }, [obsidianOpen]);
   // Live count of unprocessed captures for the Inbox badge.
   const { rows: inboxRows } = useVaultQuery(INBOX_FOLDER, [
     { prop: "status", op: "eq", value: "unprocessed" },
@@ -131,6 +172,47 @@ export function Sidebar() {
 
   const openPalette = (): void => setPaletteOpen(true);
   const newPage = (): void => setTemplatesOpen({ parent: null });
+  const openSurface = (next: Surface): void => setSurface(next);
+  const renderPackToggle = (id: PackId, label: string): React.JSX.Element => (
+    <button
+      key={`${id}-enable`}
+      type="button"
+      className="nav-item pack-toggle-row"
+      onClick={() => setPackEnabled(id, !packs[id])}
+    >
+      <Icon name={packs[id] ? "check" : "plus"} size={17} />
+      <span className="nav-label">{label}</span>
+      <span className="pack-state">{packs[id] ? "On" : "Enable"}</span>
+    </button>
+  );
+  const renderPackNav = (
+    id: PackId,
+    label: string,
+    icon: IconName,
+    onClick: () => void,
+    active = false,
+  ): React.JSX.Element | null =>
+    packs[id] ? (
+      <div key={label} className={`nav-item ${active ? "active" : ""}`}>
+        <button type="button" className="nav-item-main" onClick={onClick}>
+          <Icon name={icon} size={17} />
+          <span className="nav-label">{label}</span>
+        </button>
+        <button
+          type="button"
+          className="nav-add"
+          title={`Disable ${label}`}
+          aria-label={`Disable ${label}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            setPackEnabled(id, false);
+          }}
+        >
+          <Icon name="x" size={13} />
+        </button>
+      </div>
+    ) : null;
+
   return (
     <nav className="rail">
       <div className="rail-top">
@@ -161,342 +243,218 @@ export function Sidebar() {
           <span className="nav-kbd">⌘K</span>
         </button>
 
-        {/* ==================== WING 1: MY LIBRARY ==================== */}
-        <div className="wing-group">
-          <div className="wing-header" onClick={toggleLib}>
-            <span className={`wing-chev ${libOpen ? "open" : ""}`}>
-              <Icon name="chevR" size={11} />
+        <button
+          type="button"
+          className={`nav-item ${
+            homeSurface === "doc" && activeId === "home" && surface === "doc"
+              ? "active"
+              : ""
+          }`}
+          onClick={() => selectDoc("home")}
+        >
+          <Icon name="home" size={17} />
+          <span className="nav-label">Home</span>
+        </button>
+
+        <div className={`nav-item ${surface === "inbox" ? "active" : ""}`}>
+          <button
+            type="button"
+            className="nav-item-main"
+            onClick={() => openSurface("inbox")}
+          >
+            <Icon name="inbox" size={17} />
+            <span className="nav-label">
+              Capture {inboxCount > 0 ? `(${inboxCount})` : ""}
             </span>
-            <span className="wing-title">📖 My Library</span>
-          </div>
+          </button>
+          <button
+            type="button"
+            className="nav-add"
+            title="Import PDF"
+            aria-label="Import PDF"
+            onClick={async (e) => {
+              e.stopPropagation();
+              try {
+                await importPdf();
+              } catch (err) {
+                console.error(err);
+              }
+            }}
+          >
+            <Icon name="plus" size={14} />
+          </button>
+        </div>
 
-          {(libOpen || isIconsMode) && (
-            <>
-              <button
-                type="button"
-                className={`nav-item ${surface === "dashboard" ? "active" : ""}`}
-                onClick={() => setSurface("dashboard")}
-              >
-                <Icon name="home" size={17} />
-                <span className="nav-label">Home Dashboard</span>
-              </button>
+        <button
+          type="button"
+          className={`nav-item ${surface === "work" ? "active" : ""}`}
+          onClick={() => openSurface("work")}
+        >
+          <Icon name="board" size={17} />
+          <span className="nav-label">Work</span>
+        </button>
 
-              <button
-                type="button"
-                className={`nav-item ${
-                  homeSurface === "doc" && activeId === "home" && surface === "doc"
-                    ? "active"
-                    : ""
-                }`}
-                onClick={() => selectDoc("home")}
-              >
-                <Icon name="doc" size={17} />
-                <span className="nav-label">Wiki Home</span>
-              </button>
+        <button
+          type="button"
+          className={`nav-item ${surface === "chats" ? "active" : ""}`}
+          onClick={() => openSurface("chats")}
+        >
+          <Icon name="comment" size={17} />
+          <span className="nav-label">Assistant</span>
+        </button>
 
-              <button
-                type="button"
-                className={`nav-item ${surface === "learning" ? "active" : ""}`}
-                onClick={() => setSurface("learning")}
-              >
-                <Icon name="sparkle" size={17} />
-                <span className="nav-label">Teach Me</span>
-              </button>
+        <button
+          type="button"
+          className={`wing-header wing-header-button ${libraryOpen ? "open" : ""}`}
+          onClick={toggleLibrary}
+        >
+          <span className={`wing-chev ${libraryOpen ? "open" : ""}`}>
+            <Icon name="chevR" size={11} />
+          </span>
+          <span className="wing-title">Library</span>
+        </button>
 
-              <button
-                type="button"
-                className={`nav-item ${surface === "graph" ? "active" : ""}`}
-                onClick={() => setSurface("graph")}
-              >
-                <Icon name="pageGraph" size={17} />
-                <span className="nav-label">Graph View</span>
-              </button>
-
-              {/* Inbox Navigation Row with hover-only PDF import trigger */}
-              <div className={`nav-item ${surface === "inbox" ? "active" : ""}`}>
-                <button
-                  type="button"
-                  className="nav-item-main"
-                  onClick={() => setSurface("inbox")}
-                >
-                  <Icon name="inbox" size={17} />
-                  <span className="nav-label">
-                    Inbox {inboxCount > 0 ? `(${inboxCount})` : ""}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  className="nav-add"
-                  title="Import PDF"
-                  aria-label="Import PDF"
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    try {
-                      await importPdf();
-                    } catch (err) {
-                      console.error(err);
-                    }
-                  }}
-                >
-                  <Icon name="plus" size={14} />
-                </button>
-              </div>
-
-
-              {/* Collapsible Sub-sections inside Library */}
-              <SidebarSection id="recents" label="Recents">
-                <SidebarRecents />
-              </SidebarSection>
-
-              <SidebarSection
-                id="private"
-                label="Notes"
-                onAdd={newPage}
-                addTitle="New page"
-              >
-                {tree
-                  .filter((n) => !meta[n.id]?.journal)
-                  .map((n) => (
-                    <TreeNode
-                      key={n.id}
-                      node={n}
-                      depth={0}
-                      meta={meta}
-                      activeId={activeId}
-                      onSelect={selectDoc}
-                      onNewSubPage={newSubPage}
-                      onRename={renamePage}
-                      onDelete={deletePage}
-                      dnd={dnd}
-                    />
-                  ))}
-                {tree.length === 0 && (
-                  <div className="tree-row color-tx-4-cursor-default">
-                    <span className="tree-toggle leaf"></span>No pages
-                  </div>
-                )}
-                <div className="nav-item pl-12" onClick={newPage}>
-                  <Icon name="plus" size={14} />
-                  <span className="nav-label">Add page</span>
-              </div>
-              <button
-                className={`nav-item ${surface === "review" ? "active" : ""}`}
-                onClick={() => setSurface("review")}
-                title="AI Review Queue"
-              >
-                <Icon name="check" size={17} />
-                <span className="nav-label">Review Queue</span>
-              </button>
+        {(libraryOpen || isIconsMode) && (
+          <>
+            <SidebarSection id="recents" label="Recents">
+              <SidebarRecents />
             </SidebarSection>
 
-              <div className="sec-group mt-4">
-                <div className="sec">
-                  <button
-                    ref={obsidianBtnRef}
-                    type="button"
-                    className="sec-head"
-                    onClick={() => setObsidianOpen(!obsidianOpen)}
-                  >
-                    <span className={`sec-chev ${obsidianOpen ? "open" : ""}`}>
-                      <Icon name="chevR" size={12} />
-                    </span>
-                    <span className="sec-label">Obsidian Vault</span>
-                  </button>
+            <SidebarSection
+              id="private"
+              label="Pages"
+              onAdd={newPage}
+              addTitle="New page"
+            >
+              {tree
+                .filter((n) => !meta[n.id]?.journal)
+                .map((n) => (
+                  <TreeNode
+                    key={n.id}
+                    node={n}
+                    depth={0}
+                    meta={meta}
+                    activeId={activeId}
+                    onSelect={selectDoc}
+                    onNewSubPage={newSubPage}
+                    onRename={renamePage}
+                    onDelete={deletePage}
+                    dnd={dnd}
+                  />
+                ))}
+              {tree.length === 0 && (
+                <div className="tree-row color-tx-4-cursor-default">
+                  <span className="tree-toggle leaf"></span>No pages
                 </div>
-                {obsidianOpen && <ObsidianExplorer />}
-              </div>
-            </>
-          )}
-        </div>
-
-
-        {/* ==================== WING 2: MY WORK ==================== */}
-        <div className="wing-group">
-          <div className="wing-header" onClick={toggleWork}>
-            <span className={`wing-chev ${workOpen ? "open" : ""}`}>
-              <Icon name="chevR" size={11} />
-            </span>
-            <span className="wing-title">🛠️ My Work</span>
-          </div>
-
-          {(workOpen || isIconsMode) && (
-            <>
-              <button
-                type="button"
-                className={`nav-item ${surface === "work" ? "active" : ""}`}
-                onClick={() => setSurface("work")}
-              >
-                <Icon name="board" size={17} />
-                <span className="nav-label">My Work</span>
+              )}
+              <button type="button" className="nav-item pl-12" onClick={newPage}>
+                <Icon name="plus" size={14} />
+                <span className="nav-label">Add page</span>
               </button>
+            </SidebarSection>
+          </>
+        )}
 
-              <button
-                type="button"
-                className="nav-item"
-                onClick={() => setScheduledOpen(true)}
-              >
-                <Icon name="clock" size={17} />
-                <span className="nav-label">Automations</span>
-              </button>
+        <button
+          type="button"
+          className={`wing-header wing-header-button ${packsOpen ? "open" : ""}`}
+          onClick={togglePacksOpen}
+        >
+          <span className={`wing-chev ${packsOpen ? "open" : ""}`}>
+            <Icon name="chevR" size={11} />
+          </span>
+          <span className="wing-title">Workspace packs</span>
+        </button>
 
-              <button
-                type="button"
-                className={`nav-item ${surface === "activeWork" ? "active" : ""}`}
-                onClick={() => setSurface("activeWork")}
-                title="View goals, running work, and the task board"
-              >
-                <Icon name="board" size={17} />
-                <span className="nav-label">Active Work</span>
-              </button>
-            </>
-          )}
-        </div>
-
-        {/* ==================== WING 3: MY ADVISOR ==================== */}
-        <div className="wing-group">
-          <div className="wing-header" onClick={toggleAdv}>
-            <span className={`wing-chev ${advOpen ? "open" : ""}`}>
-              <Icon name="chevR" size={11} />
-            </span>
-            <span className="wing-title">🎓 My Advisor</span>
-          </div>
-
-          {(advOpen || isIconsMode) && (
-            <>
-              <button
-                type="button"
-                className={`nav-item ${surface === "chats" ? "active" : ""}`}
-                onClick={() => setSurface("chats")}
-              >
-                <Icon name="comment" size={17} />
-                <span className="nav-label">Converse</span>
-              </button>
-
-              <button
-                type="button"
-                className={`nav-item ${surface === "you" ? "active" : ""}`}
-                onClick={() => setSurface("you")}
-                title="Personalize alignment settings"
-              >
-                <Icon name="wand" size={17} />
-                <span className="nav-label">My Alignment</span>
-              </button>
-            </>
-          )}
-        </div>
-
-        {/* ==================== WING 3.5: MY HEALTH ==================== */}
-        <div className="wing-group">
-          <div className="wing-header" onClick={toggleHealth}>
-            <span className={`wing-chev ${healthOpen ? "open" : ""}`}>
-              <Icon name="chevR" size={11} />
-            </span>
-            <span className="wing-title">❤️ My Health</span>
-          </div>
-
-          {(healthOpen || isIconsMode) && (
-            <>
-              <button
-                type="button"
-                className={`nav-item ${surface === "personal-health" ? "active" : ""}`}
-                onClick={() => setSurface("personal-health")}
-              >
-                <Icon name="heart" size={17} />
-                <span className="nav-label">Health & Ledger</span>
-              </button>
-
-              <button
-                type="button"
-                className={`nav-item ${surface === "journal" ? "active" : ""}`}
-                onClick={() => openJournal()}
-              >
-                <Icon name="calendar" size={17} />
-                <span className="nav-label">Journal</span>
-              </button>
-            </>
-          )}
-        </div>
-
-        {/* ==================== WING 4: MY RESEARCH ==================== */}
-        <div className="wing-group">
-          <div className="wing-header" onClick={toggleRes}>
-            <span className={`wing-chev ${resOpen ? "open" : ""}`}>
-              <Icon name="chevR" size={11} />
-            </span>
-            <span className="wing-title">🔭 My Research</span>
-          </div>
-
-          {(resOpen || isIconsMode) && (
-            <>
-              <button
-                type="button"
-                className="nav-item"
-                onClick={() => setResearchOpen(true)}
-              >
-                <Icon name="doc" size={17} />
-                <span className="nav-label">Deep Research</span>
-              </button>
-
-              <button
-                type="button"
-                className={`nav-item ${surface === "equity" ? "active" : ""}`}
-                onClick={() => setSurface("equity")}
-              >
-                <Icon name="table" size={17} />
-                <span className="nav-label">Equity Research</span>
-              </button>
-
-              <button
-                type="button"
-                className={`nav-item ${surface === "insights" ? "active" : ""}`}
-                onClick={() => setSurface("insights")}
-              >
-                <Icon name="board" size={17} />
-                <span className="nav-label">Insights</span>
-              </button>
-
+        {(packsOpen || isIconsMode) && (
+          <div className="pack-list">
+            {renderPackNav(
+              "learning",
+              "Learning",
+              "sparkle",
+              () => openSurface("learning"),
+              surface === "learning",
+            ) ?? renderPackToggle("learning", "Learning")}
+            {renderPackNav(
+              "research",
+              "Deep Research",
+              "doc",
+              () => setResearchOpen(true),
+            ) ?? renderPackToggle("research", "Research")}
+            {packs.research && (
               <button
                 type="button"
                 className={`nav-item ${surface === "rss-reader" ? "active" : ""}`}
-                onClick={() => setSurface("rss-reader")}
+                onClick={() => openSurface("rss-reader")}
               >
                 <Icon name="doc" size={17} />
                 <span className="nav-label">RSS Reader</span>
               </button>
-
-              <button
-                type="button"
-                className={`nav-item ${
-                  surface === "contentStudio" ? "active" : ""
-                }`}
-                onClick={() => setSurface("contentStudio")}
-              >
-                <Icon name="sparkle" size={17} />
-                <span className="nav-label">Content Studio</span>
-              </button>
-
-              <button
-                type="button"
-                className={`nav-item ${
-                  surface === "deckStudio" ? "active" : ""
-                }`}
-                onClick={() => setSurface("deckStudio")}
-              >
-                <Icon name="board" size={17} />
-                <span className="nav-label">Deck Studio</span>
-              </button>
-            </>
-          )}
-        </div>
-
+            )}
+            {renderPackNav(
+              "graph",
+              "Graph",
+              "pageGraph",
+              () => openSurface("graph"),
+              surface === "graph",
+            ) ?? renderPackToggle("graph", "Graph")}
+            {renderPackNav(
+              "health",
+              "Health & Ledger",
+              "heart",
+              () => openSurface("personal-health"),
+              surface === "personal-health",
+            ) ?? renderPackToggle("health", "Health")}
+            {renderPackNav(
+              "equity",
+              "Equity Research",
+              "table",
+              () => openSurface("equity"),
+              surface === "equity",
+            ) ?? renderPackToggle("equity", "Equity")}
+            {renderPackNav(
+              "content",
+              "Content Studio",
+              "sparkle",
+              () => openSurface("contentStudio"),
+              surface === "contentStudio",
+            ) ?? renderPackToggle("content", "Content")}
+            {renderPackNav(
+              "deck",
+              "Deck Studio",
+              "board",
+              () => openSurface("deckStudio"),
+              surface === "deckStudio",
+            ) ?? renderPackToggle("deck", "Deck")}
+            {packs.obsidian ? (
+              <div className="sec-group mt-4">
+                <div className="sec sec-static">
+                  <span className="sec-label">Obsidian</span>
+                  <button
+                    type="button"
+                    className="nav-add"
+                    title="Disable Obsidian pack"
+                    aria-label="Disable Obsidian pack"
+                    onClick={() => setPackEnabled("obsidian", false)}
+                  >
+                    <Icon name="x" size={13} />
+                  </button>
+                </div>
+                <ObsidianExplorer />
+              </div>
+            ) : (
+              renderPackToggle("obsidian", "Obsidian")
+            )}
+          </div>
+        )}
 
         <div className="sec sec-static mt-12">
           <span className="sec-label">More</span>
         </div>
-        <div className="nav-item" onClick={() => setTrashOpen(true)}>
+        <button type="button" className="nav-item" onClick={() => setTrashOpen(true)}>
           <Icon name="trash" size={17} />
           <span className="nav-label">Trash</span>
-        </div>
+        </button>
       </div>
 
       <div className="rail-newchat-bar">

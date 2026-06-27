@@ -235,14 +235,14 @@ export function YouSurface({
         </div>
         <p className="settings-field-hint" style={{ marginBottom: 12 }}>
           Review pending memories, learned facts, skills, and curator actions in
-          Learn This.
+          Learning.
         </p>
         <button
           className="btn btn-secondary btn-sm"
           type="button"
           onClick={() => setSurface("learning")}
         >
-          Open Learn This
+          Open Learning
         </button>
       </div>
 

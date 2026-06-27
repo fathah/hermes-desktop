@@ -646,6 +646,15 @@
   transition: background var(--transition, 150ms ease);
 }
 
+.sps-scope .wing-header-button {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
 .sps-scope .wing-header:hover {
   background: var(--row-hover);
 }
@@ -675,6 +684,74 @@
   display: flex;
   min-width: 0;
   flex-grow: 1;
+}
+
+@media (max-width: 900px) {
+  .sps-scope .app {
+    --rail-w: 60px;
+  }
+
+  .sps-scope .app .wname,
+  .sps-scope .app .rail-chev,
+  .sps-scope .app .nav-label,
+  .sps-scope .app .sec-label,
+  .sps-scope .app .tree-label,
+  .sps-scope .app .rail-foot-name,
+  .sps-scope .app .nav-kbd,
+  .sps-scope .app .tree-toggle,
+  .sps-scope .app .tree-add,
+  .sps-scope .app .rail-collapse,
+  .sps-scope .app .wing-header,
+  .sps-scope .app .sec-group,
+  .sps-scope .app .nav-add,
+  .sps-scope .app .rail-newchat span,
+  .sps-scope .app .rail-newchat-kbd,
+  .sps-scope .app .rail-compose,
+  .sps-scope .app .pack-state {
+    display: none !important;
+  }
+
+  .sps-scope .app .rail-top,
+  .sps-scope .app .nav-item,
+  .sps-scope .app .nav-item-main,
+  .sps-scope .app .rail-newchat,
+  .sps-scope .app .rail-foot {
+    justify-content: center;
+  }
+
+  .sps-scope .app .nav-item,
+  .sps-scope .app .nav-item-main {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .sps-scope .rp {
+    display: none;
+  }
+
+  .sps-scope .tb-search-btn {
+    width: auto;
+    min-width: 36px;
+  }
+
+  .sps-scope .tb-search-label,
+  .sps-scope .tb-search-kbd {
+    display: none;
+  }
+
+  .sps-scope .ob-checklist {
+    margin-left: 12px;
+    margin-right: 12px;
+  }
+
+  .sps-scope .ob-checklist-steps {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .sps-scope .ob-step-card {
+    flex-direction: row;
+  }
 }
 
 .sps-scope .color-tx-4-cursor-default {
