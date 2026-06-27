@@ -23,6 +23,7 @@ const SPS = join(
 const screenCss = readFileSync(join(SPS, "screen.css"), "utf-8");
 const tokensCss = readFileSync(join(SPS, "styles", "sps-tokens.css"), "utf-8");
 const homeCss = readFileSync(join(SPS, "styles", "home.css"), "utf-8");
+const equityCss = readFileSync(join(SPS, "styles", "equity.css"), "utf-8");
 
 /** WCAG relative-luminance contrast ratio between two #rrggbb colors. */
 function contrast(hexA: string, hexB: string): number {
@@ -68,5 +69,37 @@ describe("SPS dark-theme text legibility", () => {
     // non-theme-aware --ink-1 token (it is invisible in dark mode).
     const inkUsages = screenCss.match(/var\(--ink-1/g) ?? [];
     expect(inkUsages.length).toBe(0);
+  });
+
+  it("uses theme-aware --tx-* (never the non-theme-aware --ink-N family) for text in equity.css", () => {
+    // Same root cause as the screen.css bug, wider blast radius. The numbered
+    // --ink-1..--ink-4 family is defined once in sps-tokens.css with NO
+    // [data-theme="dark"] override, so any --ink-N used as a text colour is stuck
+    // at its near-black light value on a dark surface. equity.css's basket / alert /
+    // calibration sections used --ink-1 (×6), --ink-2 (×4) and --ink-3 (×7) for
+    // on-surface text → invisible-to-poor contrast in the default dark theme. The
+    // theme-aware twin is --tx-1..--tx-4 (same light values, dark overrides in
+    // home.css), which the rest of equity.css already uses. (--ink-inverse and
+    // --ink-primary are not text-on-surface and remain allowed.)
+    const inkText = equityCss.match(/var\(--ink-[1-4]\)/g) ?? [];
+    expect(inkText).toEqual([]);
+
+    // Primary (--tx-1) and secondary (--tx-2) text clear WCAG AA (4.5:1) on both
+    // dark surfaces after the swap; the --ink-1/-2 they replace were ~1.0–1.8:1.
+    expect(contrast("#ece7d8", "#232118")).toBeGreaterThanOrEqual(4.5); // tx-1 warm
+    expect(contrast("#e8e8e8", "#161616")).toBeGreaterThanOrEqual(4.5); // tx-1 black
+    expect(contrast("#b6b1a2", "#232118")).toBeGreaterThanOrEqual(4.5); // tx-2 warm
+    expect(contrast("#a6a6a6", "#161616")).toBeGreaterThanOrEqual(4.5); // tx-2 black
+
+    // Tertiary/meta (--tx-3) is intentionally dimmer by design: it clears the 3:1
+    // large/secondary bar and must strictly beat the broken --ink-3 it replaces.
+    expect(contrast("#888373", "#232118")).toBeGreaterThanOrEqual(3); // tx-3 warm
+    expect(contrast("#777777", "#161616")).toBeGreaterThanOrEqual(3); // tx-3 black
+    expect(contrast("#888373", "#232118")).toBeGreaterThan(
+      contrast("#6b7079", "#232118"),
+    );
+    expect(contrast("#777777", "#161616")).toBeGreaterThan(
+      contrast("#6b7079", "#161616"),
+    );
   });
 });

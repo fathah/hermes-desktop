@@ -309,13 +309,13 @@
   border-radius: var(--r-2);
   border: 1px solid var(--hairline);
   background: transparent;
-  color: var(--ink-3);
+  color: var(--tx-3);
   cursor: pointer;
   font-size: var(--fs-12);
 }
 .sps-scope .eq-mode-active {
   background: var(--surface);
-  color: var(--ink-1);
+  color: var(--tx-1);
   border-color: var(--hairline-strong);
   font-weight: 600;
 }
@@ -327,7 +327,7 @@
   border-radius: var(--r-2);
   border: 1px solid var(--hairline-strong);
   background: var(--surface);
-  color: var(--ink-1);
+  color: var(--tx-1);
   font-size: var(--fs-12);
 }
 .sps-scope .eq-basket-tickers {
@@ -349,11 +349,11 @@
 .sps-scope .eq-basket-title {
   margin: 0;
   font-size: var(--fs-18, 1.125rem);
-  color: var(--ink-1);
+  color: var(--tx-1);
 }
 .sps-scope .eq-basket-sub {
   font-size: var(--fs-12);
-  color: var(--ink-3);
+  color: var(--tx-3);
   margin-top: var(--s-1);
 }
 .sps-scope .eq-basket-actions {
@@ -380,18 +380,18 @@
 .sps-scope .eq-basket-sortable {
   cursor: pointer;
   user-select: none;
-  color: var(--ink-2);
+  color: var(--tx-2);
 }
 .sps-scope .eq-basket-ticker {
   font-weight: 600;
-  color: var(--ink-1);
+  color: var(--tx-1);
 }
 .sps-scope .eq-basket-risk {
   text-transform: capitalize;
 }
 .sps-scope .eq-basket-why {
   white-space: normal;
-  color: var(--ink-3);
+  color: var(--tx-3);
   max-width: 260px;
 }
 .sps-scope .eq-basket-call {
@@ -421,7 +421,7 @@
 .sps-scope .eq-basket-gaps {
   margin-top: var(--s-3);
   font-size: var(--fs-12);
-  color: var(--ink-3);
+  color: var(--tx-3);
 }
 
 /* ---------- Alert Center ---------- */
@@ -488,17 +488,17 @@
 }
 .sps-scope .eq-alert-ticker {
   font-weight: 600;
-  color: var(--ink-1);
+  color: var(--tx-1);
 }
 .sps-scope .eq-alert-ts {
-  color: var(--ink-3);
+  color: var(--tx-3);
   font-family: var(--font-mono);
 }
 .sps-scope .eq-alert-mark {
   margin-left: auto;
   border: 1px solid var(--hairline-strong);
   background: transparent;
-  color: var(--ink-2);
+  color: var(--tx-2);
   border-radius: var(--r-2);
   padding: var(--s-1) var(--s-2);
   font-size: var(--fs-12);
@@ -506,7 +506,7 @@
 }
 .sps-scope .eq-alert-msg {
   margin-top: var(--s-1);
-  color: var(--ink-2);
+  color: var(--tx-2);
   font-size: var(--fs-13, 0.8125rem);
 }
 
@@ -517,7 +517,7 @@
 .sps-scope .eq-cal-h3 {
   margin: var(--s-4) 0 var(--s-2);
   font-size: var(--fs-13, 0.8125rem);
-  color: var(--ink-2);
+  color: var(--tx-2);
 }
 .sps-scope .eq-cal-badges {
   display: flex;
@@ -533,18 +533,18 @@
 }
 .sps-scope .eq-cal-badge-label {
   font-size: var(--fs-12);
-  color: var(--ink-3);
+  color: var(--tx-3);
   text-transform: capitalize;
 }
 .sps-scope .eq-cal-badge-rate {
   font-size: var(--fs-18, 1.125rem);
   font-weight: 700;
   font-family: var(--font-mono);
-  color: var(--ink-1);
+  color: var(--tx-1);
 }
 .sps-scope .eq-cal-badge-sub {
   font-size: var(--fs-12);
-  color: var(--ink-3);
+  color: var(--tx-3);
   font-family: var(--font-mono);
 }
 .sps-scope .eq-cal-tag {
