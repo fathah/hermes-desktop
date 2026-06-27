@@ -31,7 +31,7 @@
 }
 
 .sps-scope .inbox-subtitle {
-  color: var(--ink-3);
+  color: var(--tx-3);
   font-size: var(--fs-13);
   margin-top: 6px;
   margin-bottom: 20px;
@@ -62,7 +62,7 @@
   font-size: var(--fs-13);
   font-family: var(--font-sans);
   font-weight: 500;
-  color: var(--ink-3);
+  color: var(--tx-3);
   border-bottom: 2px solid transparent;
   transition: all var(--dur-1) var(--ease-out);
 }
@@ -155,7 +155,7 @@
 }
 
 .sps-scope .inbox-card-meta {
-  color: var(--ink-3);
+  color: var(--tx-3);
   font-size: var(--fs-12);
   margin-top: 4px;
   display: flex;
@@ -164,7 +164,7 @@
 }
 
 .sps-scope .inbox-row-status {
-  color: var(--ink-3);
+  color: var(--tx-3);
   font-size: var(--fs-12);
   margin-top: 6px;
 }
@@ -224,7 +224,7 @@
 }
 
 .sps-scope .inbox-recent-title {
-  color: var(--ink-3);
+  color: var(--tx-3);
   font-size: var(--fs-12);
   font-weight: 600;
   margin-bottom: 6px;
@@ -258,7 +258,7 @@
 }
 
 .sps-scope .inbox-proposal-summary {
-  color: var(--ink-2);
+  color: var(--tx-2);
   font-size: var(--fs-13);
   margin-bottom: 16px;
 }
@@ -293,14 +293,14 @@
   padding: 2px 8px;
   font-size: var(--fs-12);
   font-weight: 500;
-  color: var(--ink-2);
+  color: var(--tx-2);
 }
 
 .sps-scope .inbox-pill-remove {
   border: none;
   background: none;
   cursor: pointer;
-  color: var(--ink-3);
+  color: var(--tx-3);
   padding: 0;
   display: flex;
   align-items: center;
@@ -427,7 +427,7 @@
 .sps-scope .health-help-card-close {
   border: none;
   background: transparent;
-  color: var(--ink-3);
+  color: var(--tx-3);
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
@@ -444,7 +444,7 @@
 
 .sps-scope .health-help-intro {
   font-size: var(--fs-14, 14px);
-  color: var(--ink-2);
+  color: var(--tx-2);
   line-height: 1.5;
   margin: 0 0 16px 0;
 }
@@ -471,7 +471,7 @@
 
 .sps-scope .health-help-item-desc {
   font-size: var(--fs-12, 12.5px);
-  color: var(--ink-3);
+  color: var(--tx-3);
   line-height: 1.4;
 }
 
@@ -514,7 +514,7 @@
   border-radius: 10px;
   padding: 1px 8px;
   font-size: var(--fs-13, 13px);
-  color: var(--ink-2);
+  color: var(--tx-2);
 }
 
 .sps-scope .health-sec-hint {
@@ -577,7 +577,7 @@
   border-radius: 10px;
   padding: 1px 8px;
   font-size: var(--fs-12);
-  color: var(--ink-2);
+  color: var(--tx-2);
 }
 
 .sps-scope .inbox-footer-container {
@@ -823,12 +823,12 @@
   align-items: center;
   gap: 16px;
   margin-bottom: 16px;
-  color: var(--ink-3);
+  color: var(--tx-3);
   font-size: 12.5px;
 }
 
 .sps-scope .inbox-no-changes-notice {
-  color: var(--ink-3);
+  color: var(--tx-3);
   font-size: 13px;
 }
 

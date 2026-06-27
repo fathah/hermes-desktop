@@ -65,10 +65,22 @@ describe("SPS dark-theme text legibility", () => {
     expect(contrast("#ece7d8", "#232118")).toBeGreaterThanOrEqual(4.5);
     expect(contrast("#ece7d8", "#161616")).toBeGreaterThanOrEqual(4.5);
 
+    // --tx-2 / --tx-3 (secondary / tertiary) are theme-aware too; the dark values
+    // clear AA (tx-2) and the 3:1 large/meta bar (tx-3) on both dark surfaces.
+    expect(contrast("#b6b1a2", "#232118")).toBeGreaterThanOrEqual(4.5); // tx-2 warm
+    expect(contrast("#a6a6a6", "#161616")).toBeGreaterThanOrEqual(4.5); // tx-2 black
+    expect(contrast("#888373", "#232118")).toBeGreaterThanOrEqual(3); // tx-3 warm
+    expect(contrast("#777777", "#161616")).toBeGreaterThanOrEqual(3); // tx-3 black
+
     // Regression guard: no on-surface text in screen.css may use the
-    // non-theme-aware --ink-1 token (it is invisible in dark mode).
-    const inkUsages = screenCss.match(/var\(--ink-1/g) ?? [];
-    expect(inkUsages.length).toBe(0);
+    // non-theme-aware --ink-1/-2/-3 tokens. All three are frozen at near-black
+    // light values (--ink-1 ~1:1, --ink-2 ~1.6-1.8:1, --ink-3 ~3.2-3.6:1 on the
+    // dark surfaces) — invisible-to-poor in dark mode. --ink-4 (#9ba0a9) is the
+    // documented exception: at ~6.8:1 it is legible ON dark, and its theme-aware
+    // twin --tx-4 (#555 dark) would REGRESS it — so --ink-4 is intentionally
+    // permitted here (its separate light-mode faintness is tracked elsewhere).
+    const inkText = screenCss.match(/var\(--ink-[1-3]\)/g) ?? [];
+    expect(inkText).toEqual([]);
   });
 
   it("uses theme-aware --tx-* (never the non-theme-aware --ink-N family) for text in equity.css", () => {
