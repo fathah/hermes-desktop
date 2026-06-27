@@ -26,7 +26,7 @@
   font-size: var(--fs-22);
   font-weight: 600;
   line-height: var(--lh-tight);
-  color: var(--ink-1);
+  color: var(--tx-1);
   margin: 0;
 }
 
@@ -68,11 +68,11 @@
 }
 
 .sps-scope .inbox-tab-btn:hover {
-  color: var(--ink-1);
+  color: var(--tx-1);
 }
 
 .sps-scope .inbox-tab-btn.active {
-  color: var(--ink-1);
+  color: var(--tx-1);
   font-weight: 600;
   border-bottom-color: var(--sukhi-gold-deep);
 }
@@ -85,7 +85,7 @@
   border-radius: var(--r-1);
   border: 1px solid var(--hairline-strong);
   background: var(--surface);
-  color: var(--ink-1);
+  color: var(--tx-1);
   font-family: inherit;
   font-size: var(--fs-13);
   margin-bottom: 12px;
@@ -148,7 +148,7 @@
 .sps-scope .inbox-card-title {
   font-weight: 600;
   font-size: var(--fs-13);
-  color: var(--ink-1);
+  color: var(--tx-1);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -182,7 +182,7 @@
   padding: 10px;
   white-space: pre-wrap;
   word-break: break-word;
-  color: var(--ink-1);
+  color: var(--tx-1);
   font-size: var(--fs-12);
   line-height: 1.5;
 }
@@ -253,7 +253,7 @@
 .sps-scope .inbox-proposal-title {
   font-weight: 600;
   font-size: var(--fs-14);
-  color: var(--ink-1);
+  color: var(--tx-1);
   margin-bottom: 4px;
 }
 
@@ -319,7 +319,7 @@
   min-width: 120px;
   font-family: inherit;
   font-size: var(--fs-13);
-  color: var(--ink-1);
+  color: var(--tx-1);
   padding: 2px 4px;
 }
 
@@ -346,7 +346,7 @@
   font-size: var(--fs-24, 24px);
   margin: 0;
   flex: 1;
-  color: var(--ink-1);
+  color: var(--tx-1);
 }
 
 .sps-scope .health-recheck-btn {
@@ -384,7 +384,7 @@
 
 .sps-scope .health-help-btn:hover {
   background: var(--row-hover, rgba(127, 127, 127, 0.08));
-  color: var(--ink-1, #000);
+  color: var(--tx-1);
 }
 
 .sps-scope .health-help-card {
@@ -421,7 +421,7 @@
   gap: 6px;
   font-weight: 600;
   font-size: var(--fs-15, 15px);
-  color: var(--ink-1);
+  color: var(--tx-1);
 }
 
 .sps-scope .health-help-card-close {
@@ -439,7 +439,7 @@
 
 .sps-scope .health-help-card-close:hover {
   background: var(--row-hover, rgba(127, 127, 127, 0.12));
-  color: var(--ink-1);
+  color: var(--tx-1);
 }
 
 .sps-scope .health-help-intro {
@@ -466,7 +466,7 @@
 .sps-scope .health-help-item-title {
   font-weight: 600;
   font-size: var(--fs-13, 13px);
-  color: var(--ink-1);
+  color: var(--tx-1);
 }
 
 .sps-scope .health-help-item-desc {
@@ -506,7 +506,7 @@
 .sps-scope .health-sec-label {
   font-weight: 600;
   font-size: var(--fs-15, 15px);
-  color: var(--ink-1);
+  color: var(--tx-1);
 }
 
 .sps-scope .health-sec-count {
@@ -559,7 +559,7 @@
 .sps-scope .health-mono-text {
   font-family: var(--font-mono, monospace);
   font-size: var(--fs-13, 13px);
-  color: var(--ink-1);
+  color: var(--tx-1);
 }
 
 /* ==========================================================================
