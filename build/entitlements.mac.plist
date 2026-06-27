@@ -10,5 +10,11 @@
     <true/>
     <key>com.apple.security.cs.disable-library-validation</key>
     <true/>
+    <!-- Contacts access for the optional macOS Contacts sync (Connected Apps).
+         Inert while the app is non-sandboxed; access is gated by TCC via
+         NSContactsUsageDescription (electron-builder.yml mac.extendInfo). Kept
+         here for completeness and forward-compat if the app is ever sandboxed. -->
+    <key>com.apple.security.personal-information.addressbook</key>
+    <true/>
   </dict>
 </plist>

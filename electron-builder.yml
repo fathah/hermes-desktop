@@ -30,11 +30,16 @@ mac:
   icon: build/icon.icns
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.inherit.plist
+  # NOTE: extendInfo must be a MAPPING, not a YAML list. As a list, electron-builder
+  # injects it under numeric keys ("0","1",...) instead of merging into the plist,
+  # so every usage description is silently dropped (and Contacts, which Electron has
+  # no default for, would crash the app on first access).
   extendInfo:
-    - NSCameraUsageDescription: Application requests access to the device's camera.
-    - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
-    - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
-    - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+    NSCameraUsageDescription: Application requests access to the device's camera.
+    NSMicrophoneUsageDescription: Application requests access to the device's microphone.
+    NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
+    NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+    NSContactsUsageDescription: Hermes syncs your contacts into your workspace so the people you work with are easy to find and reach. Your contacts stay on this device.
   hardenedRuntime: true
   gatekeeperAssess: false
   notarize: true
