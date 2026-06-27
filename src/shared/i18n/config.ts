@@ -15,6 +15,7 @@ export const APP_LOCALES: AppLocale[] = [
   "tr",
   "zh-CN",
   "zh-TW",
+  "ru",
 ];
 
 // Locales that render right-to-left. Used to set the document's `dir`

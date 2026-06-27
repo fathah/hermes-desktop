@@ -8,6 +8,7 @@ export type AppLocale =
   | "pt-BR"
   | "pt-PT"
   | "tr"
+  | "ru"
   | "zh-CN"
   | "zh-TW";
 

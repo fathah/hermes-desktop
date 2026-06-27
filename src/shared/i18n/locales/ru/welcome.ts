@@ -1,0 +1,23 @@
+export default {
+  title: "Добро пожаловать в Hermes",
+  subtitle:
+    "Ваш самообучающийся AI-ассистент, который работает локально на вашем компьютере. Конфиденциальный, мощный и всегда учится.",
+  installIssueTitle: "Проблема установки",
+  getStarted: "Начать",
+  retryInstall: "Повторить установку",
+  terminalInstallHint: "Установите через терминал, затем вернитесь:",
+  recheck: "Я установил — проверьте снова",
+  switchToLocal: "Переключиться в локальный режим",
+  installSizeHint: "Это установит необходимые компоненты (~2 ГБ)",
+  copyInstallCommand: "Копировать команду установки",
+  dividerOr: "или",
+  connectRemote: "Подключиться к удалённому Hermes",
+  connectRemoteTitle: "Подключиться к удалённому Hermes",
+  connectRemoteSubtitle: "Введите URL работающего сервера Hermes API.",
+  remoteServerUrl: "URL сервера",
+  remoteApiKey: "API-ключ (необязательно)",
+  remoteApiKeyPlaceholder: "Bearer токен (API_SERVER_KEY)",
+  testingConnection: "Проверка",
+  connect: "Подключиться",
+  remoteHint: "Оставьте ключ пустым, если сервер принимает запросы без авторизации (например, через SSH-туннель к localhost).",
+} as const;
