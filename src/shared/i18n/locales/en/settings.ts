@@ -87,6 +87,15 @@ export default {
   exportBackup: "Export Backup",
   importing: "Importing...",
   importBackup: "Import Backup",
+  connectedAppsSection: "Connected Apps",
+  macContactsHint:
+    "Sync your macOS Contacts into your people. Existing notes, aliases, and tags are kept — Contacts only fills in missing email, phone, and company.",
+  macContactsUnavailable:
+    "Requires the optional node-mac-contacts module (not installed). Install it and restart to enable syncing.",
+  macContactsSync: "Sync Mac Contacts",
+  macContactsSyncing: "Syncing...",
+  macContactsSynced: "Synced — {{added}} added, {{updated}} updated.",
+  macContactsUpToDate: "Contacts already up to date.",
   logsSection: "Logs",
   refresh: "Refresh",
   emptyLog: "(empty)",

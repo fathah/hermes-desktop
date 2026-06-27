@@ -17,6 +17,7 @@ import { ConfigHealth } from "./ConfigHealth";
 import CapabilitySummary from "./CapabilitySummary";
 import McpServersManager from "./McpServersManager";
 import ResearchReachSummary from "./ResearchReachSummary";
+import ConnectedApps from "./ConnectedApps";
 import { HealthSurface } from "../SpsAgent/health/HealthSurface";
 import { getDevMode, setDevMode } from "../../lib/devMode";
 import type { SettingsSection } from "./settingsSections";
@@ -1388,6 +1389,8 @@ function Settings({
           )}
         </div>
       </div>
+
+      <ConnectedApps profile={profile} />
 
       <div className="settings-section" data-section-tab="troubleshooting">
         <div className="settings-section-title">
