@@ -121,6 +121,40 @@ export function isNagDue(record: TaskNagRecord, now: number): boolean {
   return record.nextNagAt <= now;
 }
 
+/** A read-only view of a nag record for the snooze/ack UI. */
+export interface NagSummary {
+  /** A live nagging record exists (worth showing snooze/ack controls). */
+  active: boolean;
+  /** Currently inside a snooze window. */
+  snoozed: boolean;
+  /** Short human label for the current state. */
+  label: string;
+}
+
+/** Describe a task's nag state for display. Pure; mirrors isNagDue's gates. */
+export function summarizeNag(
+  record: TaskNagRecord | null | undefined,
+  now: number,
+): NagSummary {
+  if (!record || record.done || record.cadence === "none") {
+    return { active: false, snoozed: false, label: "" };
+  }
+  if (record.snoozedUntil != null && record.snoozedUntil > now) {
+    return { active: true, snoozed: true, label: "Snoozed" };
+  }
+  const label =
+    record.nagCount === 0
+      ? "Reminder scheduled"
+      : `Reminding (${record.nagCount}×)`;
+  return { active: true, snoozed: false, label };
+}
+
+/** Snooze durations offered in the UI (added to "now" to set snoozedUntil). */
+export const NAG_SNOOZE_PRESETS: { label: string; ms: number }[] = [
+  { label: "1 day", ms: DAY_MS },
+  { label: "1 week", ms: WEEK_MS },
+];
+
 /** Current task facts the nag engine needs, looked up by row id from the index. */
 export interface NagTaskMeta {
   title: string;

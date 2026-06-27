@@ -6,6 +6,11 @@ import { usePersonPages } from "../hooks/usePersonPages";
 import { useKanbanStatuses } from "../hooks/useKanbanStatuses";
 import { KanbanStatusBadge } from "../tasks/chips";
 import {
+  summarizeNag,
+  NAG_SNOOZE_PRESETS,
+  type TaskNagRecord,
+} from "../../../../../shared/tasks-dump";
+import {
   availableChannels,
   type ChannelKind,
 } from "../../../../../shared/contacts";
@@ -106,6 +111,36 @@ export function TaskDrawer({ task, onClose }: Props) {
     task.delegatedTo ? [task.delegatedTo] : [],
   );
   const agentStatus = statusFor(task.delegatedTo);
+
+  // Nag state (volatile, JSON sidecar) for a human task's reminders. Fetched
+  // once on open; mutated by the snooze/ack controls below.
+  const [nag, setNag] = useState<TaskNagRecord | null>(null);
+  useEffect(() => {
+    if (!isFolderBacked || task.route !== "human") {
+      setNag(null);
+      return;
+    }
+    let cancelled = false;
+    void window.hermesAPI
+      .spsNagGet?.(rowId)
+      .then((rec) => {
+        if (!cancelled) setNag(rec ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [task.id, task.route, isFolderBacked, rowId]);
+
+  const snoozeNag = async (ms: number): Promise<void> => {
+    const rec = await window.hermesAPI.spsSnoozeNag?.(rowId, Date.now() + ms);
+    setNag(rec ?? null);
+  };
+  const ackNag = async (): Promise<void> => {
+    await window.hermesAPI.spsAckNag?.(rowId);
+    setNag(null);
+  };
+  const nagSummary = summarizeNag(nag, Date.now());
 
   // Load folder-backed extra data
   useEffect(() => {
@@ -401,6 +436,52 @@ export function TaskDrawer({ task, onClose }: Props) {
                 </div>
               </div>
               <hr className="b-divider drawer-divider" />
+
+              {nagSummary.active && (
+                <div className="drawer-section">
+                  <h3 className="drawer-section-title">
+                    <Icon name="clock" size={15} /> Reminders
+                  </h3>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <span style={{ color: "var(--tx-3)", fontSize: 13 }}>
+                      {nagSummary.label}
+                    </span>
+                    <span className="flex-grow" />
+                    {nagSummary.snoozed ? (
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => void snoozeNag(0)}
+                      >
+                        Resume now
+                      </button>
+                    ) : (
+                      NAG_SNOOZE_PRESETS.map((preset) => (
+                        <button
+                          key={preset.label}
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => void snoozeNag(preset.ms)}
+                        >
+                          Snooze {preset.label}
+                        </button>
+                      ))
+                    )}
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => void ackNag()}
+                      title="Stop reminding me about this task"
+                    >
+                      Stop reminders
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="drawer-section">
                 <h3 className="drawer-section-title">Description</h3>

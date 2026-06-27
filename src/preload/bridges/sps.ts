@@ -8,6 +8,7 @@ import type {
 import type {
   RouteTaskInput,
   RouteTaskOutcome,
+  TaskNagRecord,
   TaskTriageResult,
 } from "../../shared/tasks-dump";
 import type {
@@ -550,6 +551,16 @@ export const spsBridge = {
     tags?: number;
     reason?: string;
   }> => ipcRenderer.invoke("sps-propose-contact-enrichment", personId, profile),
+  spsNagGet: (rowId: string, profile?: string): Promise<TaskNagRecord | null> =>
+    ipcRenderer.invoke("sps-nag-get", rowId, profile),
+  spsSnoozeNag: (
+    rowId: string,
+    snoozedUntil: number,
+    profile?: string,
+  ): Promise<TaskNagRecord | null> =>
+    ipcRenderer.invoke("sps-nag-snooze", rowId, snoozedUntil, profile),
+  spsAckNag: (rowId: string, profile?: string): Promise<void> =>
+    ipcRenderer.invoke("sps-nag-ack", rowId, profile),
   spsOpenContactChannel: (channel: ContactChannel): Promise<boolean> =>
     ipcRenderer.invoke("sps-open-contact-channel", channel),
   macContactsStatus: (): Promise<MacContactsStatus> =>

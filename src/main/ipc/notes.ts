@@ -19,6 +19,7 @@ import { openContactChannel } from "../contact-messaging";
 import { getMacContactsStatus, syncMacContacts } from "../mac-contacts";
 import { proposeContactEnrichment } from "../contact-enrichment";
 import { createVaultProposal } from "../vault-review-queue";
+import { getNagRecord, upsertNagRecord, removeNagRecord } from "../tasks-dump";
 import type { RouteTaskInput } from "../../shared/tasks-dump";
 import {
   PERSON_FOLDER,
@@ -481,6 +482,20 @@ export function registerNotesIpc(
         tags: proposed.tags.length,
       };
     },
+  );
+  // Nag snooze/ack: let the user read and quiet a human task's reminders. The
+  // engine already honors snoozedUntil (isNagDue); ack removes the record so it
+  // stops nagging entirely (the task row itself is untouched).
+  safeHandle("sps-nag-get", (_event, rowId: string, profile?: string) =>
+    getNagRecord(rowId, profile),
+  );
+  safeHandle(
+    "sps-nag-snooze",
+    (_event, rowId: string, snoozedUntil: number, profile?: string) =>
+      upsertNagRecord(rowId, { snoozedUntil }, profile),
+  );
+  safeHandle("sps-nag-ack", (_event, rowId: string, profile?: string) =>
+    removeNagRecord(rowId, profile),
   );
   // Hand off to the native app (Mail/Messages/WhatsApp) for a contact channel.
   safeHandle("sps-open-contact-channel", (_event, channel: ContactChannel) =>

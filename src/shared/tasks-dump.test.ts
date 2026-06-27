@@ -5,6 +5,8 @@ import {
   escalationTier,
   isNagDue,
   nagIntervalMs,
+  summarizeNag,
+  NAG_SNOOZE_PRESETS,
   type TaskNagRecord,
 } from "./tasks-dump";
 
@@ -94,5 +96,50 @@ describe("isNagDue", () => {
   it("is suppressed when done", () => {
     const done: TaskNagRecord = { ...base, done: true };
     expect(isNagDue(done, NOW + WEEK)).toBe(false);
+  });
+});
+
+describe("summarizeNag", () => {
+  const base: TaskNagRecord = {
+    rowId: "t1",
+    nagCount: 0,
+    nextNagAt: NOW,
+    cadence: "daily",
+  };
+
+  it("is inactive for no record, a done task, or cadence 'none'", () => {
+    expect(summarizeNag(null, NOW).active).toBe(false);
+    expect(summarizeNag({ ...base, done: true }, NOW).active).toBe(false);
+    expect(summarizeNag({ ...base, cadence: "none" }, NOW).active).toBe(false);
+  });
+
+  it("reports a snooze while the snooze window is open", () => {
+    const s = summarizeNag({ ...base, snoozedUntil: NOW + DAY }, NOW);
+    expect(s).toEqual({ active: true, snoozed: true, label: "Snoozed" });
+  });
+
+  it("returns to active once the snooze has expired", () => {
+    const s = summarizeNag({ ...base, snoozedUntil: NOW - DAY }, NOW);
+    expect(s.snoozed).toBe(false);
+    expect(s.active).toBe(true);
+  });
+
+  it("labels a fresh vs an in-progress reminder by chase count", () => {
+    expect(summarizeNag(base, NOW).label).toBe("Reminder scheduled");
+    expect(summarizeNag({ ...base, nagCount: 3 }, NOW).label).toBe(
+      "Reminding (3×)",
+    );
+  });
+});
+
+describe("NAG_SNOOZE_PRESETS", () => {
+  it("offers day- and week-scale snoozes as positive durations", () => {
+    expect(NAG_SNOOZE_PRESETS.length).toBeGreaterThanOrEqual(2);
+    for (const p of NAG_SNOOZE_PRESETS) {
+      expect(p.ms).toBeGreaterThan(0);
+      expect(typeof p.label).toBe("string");
+    }
+    expect(NAG_SNOOZE_PRESETS.some((p) => p.ms === DAY)).toBe(true);
+    expect(NAG_SNOOZE_PRESETS.some((p) => p.ms === WEEK)).toBe(true);
   });
 });

@@ -7,6 +7,7 @@ import type {
 import type {
   RouteTaskInput,
   RouteTaskOutcome,
+  TaskNagRecord,
   TaskTriageResult,
 } from "../../shared/tasks-dump";
 
@@ -459,6 +460,16 @@ export interface SpsBridgeApi {
     tags?: number;
     reason?: string;
   }>;
+
+  spsNagGet: (rowId: string, profile?: string) => Promise<TaskNagRecord | null>;
+
+  spsSnoozeNag: (
+    rowId: string,
+    snoozedUntil: number,
+    profile?: string,
+  ) => Promise<TaskNagRecord | null>;
+
+  spsAckNag: (rowId: string, profile?: string) => Promise<void>;
 
   spsOpenContactChannel: (channel: ContactChannel) => Promise<boolean>;
 
