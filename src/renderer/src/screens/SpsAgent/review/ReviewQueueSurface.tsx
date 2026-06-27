@@ -38,7 +38,10 @@ export function ReviewQueueSurface({
   const selectedFor = (proposal: VaultProposal): Set<string> =>
     selected[proposal.id] ?? new Set(proposal.operations.map((op) => op.id));
 
-  const toggleOperation = (proposal: VaultProposal, operationId: string): void => {
+  const toggleOperation = (
+    proposal: VaultProposal,
+    operationId: string,
+  ): void => {
     setSelected((prev) => {
       const next = new Set(selectedFor(proposal));
       if (next.has(operationId)) next.delete(operationId);
@@ -57,7 +60,9 @@ export function ReviewQueueSurface({
         selectedOperationIds: picked,
         commitPage: ingestCommitPage,
       });
-      flash(`Applied ${picked.size} vault operation${picked.size === 1 ? "" : "s"}`);
+      flash(
+        `Applied ${picked.size} vault operation${picked.size === 1 ? "" : "s"}`,
+      );
       await window.hermesAPI.spsAppendWikiLog?.(
         "ingest",
         proposal.summary,
@@ -145,6 +150,17 @@ export function ReviewQueueSurface({
                         >
                           {operation.pageId}
                         </button>
+                      )}
+                      {operation.kind === "enrich-contact" && (
+                        <span
+                          className="health-mono-text"
+                          style={{ opacity: 0.75 }}
+                        >
+                          {[
+                            ...operation.fragments.map((f) => f.text),
+                            ...operation.tags.map((t) => `#${t}`),
+                          ].join(" · ")}
+                        </span>
                       )}
                     </li>
                   ))}

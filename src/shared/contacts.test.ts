@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   availableChannels,
+  mergeContactEnrichment,
   mergeMacContact,
+  parseContactEnrichment,
   parsePersonFrontmatter,
   personMatchesQuery,
   personRefFrom,
@@ -189,5 +191,75 @@ describe("planMacSync", () => {
     expect(priya?.props.fragments).toEqual([{ text: "wife" }]);
     const fresh = writes.find((w) => w.personId === "new-person");
     expect(fresh?.isNew).toBe(true);
+  });
+});
+
+describe("mergeContactEnrichment", () => {
+  it("appends new fragments and tags while preserving existing data", () => {
+    const existing: PersonFrontmatter = {
+      email: "p@x.com",
+      tags: ["family"],
+      fragments: [{ text: "wife" }],
+    };
+    const merged = mergeContactEnrichment(existing, {
+      fragments: [{ text: "handles Linking Rd lease", source: "enrichment" }],
+      tags: ["realestate"],
+    });
+    expect(merged.email).toBe("p@x.com");
+    expect(merged.tags).toEqual(["family", "realestate"]);
+    expect(merged.fragments).toEqual([
+      { text: "wife" },
+      { text: "handles Linking Rd lease", source: "enrichment" },
+    ]);
+  });
+
+  it("dedupes fragments by text and tags case-insensitively", () => {
+    const existing: PersonFrontmatter = {
+      tags: ["Family"],
+      fragments: [{ text: "Wife" }],
+    };
+    const merged = mergeContactEnrichment(existing, {
+      fragments: [{ text: "wife" }, { text: "cafe partner" }],
+      tags: ["family", "cafe"],
+    });
+    expect(merged.fragments).toEqual([
+      { text: "Wife" },
+      { text: "cafe partner" },
+    ]);
+    expect(merged.tags).toEqual(["Family", "cafe"]);
+  });
+});
+
+describe("parseContactEnrichment", () => {
+  it("coerces LLM JSON into new fragments/tags, dropping ones already present", () => {
+    const existing: PersonFrontmatter = {
+      tags: ["family"],
+      fragments: [{ text: "wife" }],
+    };
+    const parsed = parseContactEnrichment(
+      {
+        fragments: [
+          { text: "wife" }, // already present → dropped
+          { text: "runs BlueBop kitchen" },
+          { text: "   " }, // blank → dropped
+        ],
+        tags: ["family", "cafe", ""],
+      },
+      existing,
+    );
+    expect(parsed.fragments).toEqual([{ text: "runs BlueBop kitchen" }]);
+    expect(parsed.tags).toEqual(["cafe"]);
+  });
+
+  it("returns empty arrays for malformed or empty LLM output", () => {
+    const existing: PersonFrontmatter = {};
+    expect(parseContactEnrichment(null, existing)).toEqual({
+      fragments: [],
+      tags: [],
+    });
+    expect(parseContactEnrichment({ nonsense: 1 }, existing)).toEqual({
+      fragments: [],
+      tags: [],
+    });
   });
 });

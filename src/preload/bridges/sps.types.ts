@@ -449,6 +449,17 @@ export interface SpsBridgeApi {
     profile?: string,
   ) => Promise<RouteTaskOutcome>;
 
+  spsProposeContactEnrichment: (
+    personId: string,
+    profile?: string,
+  ) => Promise<{
+    created: boolean;
+    proposalId?: string;
+    fragments?: number;
+    tags?: number;
+    reason?: string;
+  }>;
+
   spsOpenContactChannel: (channel: ContactChannel) => Promise<boolean>;
 
   macContactsStatus: () => Promise<MacContactsStatus>;

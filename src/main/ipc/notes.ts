@@ -17,8 +17,14 @@ import { classifyTaskCandidate } from "../task-triage";
 import { routeTask } from "../task-routing";
 import { openContactChannel } from "../contact-messaging";
 import { getMacContactsStatus, syncMacContacts } from "../mac-contacts";
+import { proposeContactEnrichment } from "../contact-enrichment";
+import { createVaultProposal } from "../vault-review-queue";
 import type { RouteTaskInput } from "../../shared/tasks-dump";
-import type { ContactChannel } from "../../shared/contacts";
+import {
+  PERSON_FOLDER,
+  personRefFrom,
+  type ContactChannel,
+} from "../../shared/contacts";
 import { extractPdfToMarkdown } from "../pdf-extract";
 import {
   getObsidianConfig,
@@ -410,6 +416,71 @@ export function registerNotesIpc(
     "sps-route-task",
     (_event, input: RouteTaskInput, profile?: string) =>
       routeTask(input, profile),
+  );
+  // "Suggest details": propose new reachability fragments + tags for a contact
+  // from notes that mention them. Never writes the person row — it lands a
+  // proposal in the Review Queue, where the user reviews and applies it.
+  safeHandle(
+    "sps-propose-contact-enrichment",
+    async (_event, personId: string, profile?: string) => {
+      requireLocalWorkspace();
+      const basename = (p: string): string =>
+        p.split("/").pop()?.replace(/\.md$/, "") ?? "";
+      const index = await getSpsNoteIndex(profile);
+      const rows = index.query({ scope: PERSON_FOLDER });
+      const row = rows.find((r) => basename(r.path) === personId);
+      if (!row) return { created: false, reason: "not-found" };
+      const person = personRefFrom(
+        personId,
+        row.title,
+        row.props as Record<string, unknown>,
+      );
+      const queries = [person.name, ...(person.aliases ?? [])].filter(Boolean);
+      const seen = new Set<string>();
+      const snippets: string[] = [];
+      for (const q of queries) {
+        for (const hit of index.search(q, 6)) {
+          if (hit.path === row.path || !hit.snippet) continue;
+          const clean = hit.snippet.replace(/[⟦⟧]/g, "").trim();
+          if (!clean || seen.has(clean)) continue;
+          seen.add(clean);
+          snippets.push(clean);
+        }
+      }
+      if (!snippets.length) return { created: false, reason: "no-context" };
+      const proposed = await proposeContactEnrichment(
+        person,
+        snippets.slice(0, 12),
+        profile,
+      );
+      if (!proposed.fragments.length && !proposed.tags.length) {
+        return { created: false, reason: "nothing-new" };
+      }
+      const proposal = await createVaultProposal(
+        {
+          source: "enrichment",
+          title: `Enrich ${person.name}`,
+          summary: `Suggested ${proposed.fragments.length} fragment(s) and ${proposed.tags.length} tag(s) for ${person.name}.`,
+          operations: [
+            {
+              id: "op_1",
+              kind: "enrich-contact",
+              pageId: `${PERSON_FOLDER}/${personId}`,
+              personName: person.name,
+              fragments: proposed.fragments,
+              tags: proposed.tags,
+            },
+          ],
+        },
+        profile,
+      );
+      return {
+        created: true,
+        proposalId: proposal.id,
+        fragments: proposed.fragments.length,
+        tags: proposed.tags.length,
+      };
+    },
   );
   // Hand off to the native app (Mail/Messages/WhatsApp) for a contact channel.
   safeHandle("sps-open-contact-channel", (_event, channel: ContactChannel) =>

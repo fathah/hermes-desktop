@@ -4,6 +4,13 @@ import type {
 } from "../../../../../shared/sps-types";
 import type { IngestPageProposal } from "../inbox/ingestApply";
 import { INBOX_FOLDER, withStatus } from "../inbox/capture";
+import {
+  PERSON_FOLDER,
+  mergeContactEnrichment,
+  parsePersonFrontmatter,
+  personToRowProps,
+} from "../../../../../shared/contacts";
+import { rowFromMarkdown, rowToMarkdown } from "../editor/rowMarkdown";
 
 export interface CommitVaultProposalOptions {
   profile?: string;
@@ -41,7 +48,10 @@ async function commitOperation(
   options: CommitVaultProposalOptions,
 ): Promise<void> {
   const api = window.hermesAPI;
-  if (operation.kind === "upsert-page" || operation.kind === "create-base-page") {
+  if (
+    operation.kind === "upsert-page" ||
+    operation.kind === "create-base-page"
+  ) {
     options.commitPage({
       op: "create",
       pageId: operation.pageId,
@@ -59,7 +69,9 @@ async function commitOperation(
     return;
   }
   if (operation.kind === "replace-wikilink") {
-    throw new Error("Replace-wikilink proposals must be reviewed manually in v1.");
+    throw new Error(
+      "Replace-wikilink proposals must be reviewed manually in v1.",
+    );
   }
   if (operation.kind === "mark-duplicate-merged") {
     await api.spsUpdatePageProperties?.(
@@ -87,5 +99,31 @@ async function commitOperation(
   }
   if (operation.kind === "add-memory") {
     await api.addMemoryEntry?.(operation.body, options.profile);
+    return;
+  }
+  if (operation.kind === "enrich-contact") {
+    // pageId is "people/<rowId>" — append the proposed fragments/tags through
+    // the person-row serializer so existing frontmatter + body are preserved
+    // (and `tags`, which the generic frontmatter patcher reserves, is writable).
+    const rowId = operation.pageId.split("/").slice(1).join("/");
+    const current = await api.spsReadRow?.(
+      PERSON_FOLDER,
+      rowId,
+      options.profile,
+    );
+    if (!current) return;
+    const { props, body } = rowFromMarkdown(current);
+    const merged = mergeContactEnrichment(parsePersonFrontmatter(props), {
+      fragments: operation.fragments,
+      tags: operation.tags,
+    });
+    const name =
+      (typeof props.title === "string" && props.title) || operation.personName;
+    await api.spsExportRow?.(
+      PERSON_FOLDER,
+      rowId,
+      rowToMarkdown(personToRowProps(name, merged), body),
+      options.profile,
+    );
   }
 }

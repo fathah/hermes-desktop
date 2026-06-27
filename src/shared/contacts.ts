@@ -158,6 +158,73 @@ export function parsePersonFrontmatter(
   };
 }
 
+/** New fragments + tags to propose for / merge into a contact. */
+export interface ContactEnrichment {
+  fragments: ContactFragment[];
+  tags: string[];
+}
+
+/**
+ * Coerce raw LLM output into the NEW fragments/tags worth proposing for a
+ * contact: total + best-effort (bad input → empty), blanks dropped, and
+ * filtered against what the person already has so a proposal never restates a
+ * known fact. Fragment dedupe is by text, tag dedupe by value — both
+ * case-insensitive.
+ */
+export function parseContactEnrichment(
+  raw: unknown,
+  existing: PersonFrontmatter,
+): ContactEnrichment {
+  if (!raw || typeof raw !== "object") return { fragments: [], tags: [] };
+  const obj = raw as Record<string, unknown>;
+  const haveFragments = new Set(
+    (existing.fragments ?? []).map((f) => f.text.trim().toLowerCase()),
+  );
+  const haveTags = new Set((existing.tags ?? []).map((t) => t.toLowerCase()));
+  const fragments = asFragments(obj.fragments).filter(
+    (f) => !haveFragments.has(f.text.toLowerCase()),
+  );
+  const tags = asStringArray(obj.tags)
+    .map((t) => t.trim())
+    .filter((t) => t && !haveTags.has(t.toLowerCase()));
+  return { fragments, tags };
+}
+
+/**
+ * Append proposed fragments/tags onto a contact's existing frontmatter,
+ * preserving every other field (email/phone/org/…) and the order of existing
+ * entries. Defensive case-insensitive dedupe so a double-apply can't duplicate
+ * a row — the vault stays authoritative for memory (cf. mergeMacContact).
+ */
+export function mergeContactEnrichment(
+  existing: PersonFrontmatter,
+  add: Partial<ContactEnrichment>,
+): PersonFrontmatter {
+  const seenFragments = new Set(
+    (existing.fragments ?? []).map((f) => f.text.trim().toLowerCase()),
+  );
+  const fragments = [...(existing.fragments ?? [])];
+  for (const frag of add.fragments ?? []) {
+    const key = frag.text.trim().toLowerCase();
+    if (!key || seenFragments.has(key)) continue;
+    seenFragments.add(key);
+    fragments.push(frag);
+  }
+  const seenTags = new Set((existing.tags ?? []).map((t) => t.toLowerCase()));
+  const tags = [...(existing.tags ?? [])];
+  for (const tag of add.tags ?? []) {
+    const key = tag.toLowerCase();
+    if (!key || seenTags.has(key)) continue;
+    seenTags.add(key);
+    tags.push(tag);
+  }
+  return {
+    ...existing,
+    ...(fragments.length ? { fragments } : {}),
+    ...(tags.length ? { tags } : {}),
+  };
+}
+
 /** Build a resolved PersonRef from a person page's id, title, and props. */
 export function personRefFrom(
   id: string,

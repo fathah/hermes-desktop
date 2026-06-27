@@ -195,6 +195,18 @@ export interface VaultAddMemoryOperation extends VaultOperationBase {
   body: string;
 }
 
+// AI-proposed enrichment for a contact's person row. Appended (never clobbered)
+// through the person-row serializer at commit time, so it can carry `tags`
+// (which the generic update-frontmatter patcher reserves) alongside fragments.
+export interface VaultEnrichContactOperation extends VaultOperationBase {
+  kind: "enrich-contact";
+  // "people/<rowId>" — also gives the Review Queue its open-page link for free.
+  pageId: string;
+  personName: string;
+  fragments: { text: string; when?: string; source?: string }[];
+  tags: string[];
+}
+
 export type VaultOperation =
   | VaultUpsertPageOperation
   | VaultUpdateFrontmatterOperation
@@ -202,10 +214,18 @@ export type VaultOperation =
   | VaultMarkDuplicateMergedOperation
   | VaultCreateBasePageOperation
   | VaultMarkCaptureOperation
-  | VaultAddMemoryOperation;
+  | VaultAddMemoryOperation
+  | VaultEnrichContactOperation;
 
 export interface VaultProposalInput {
-  source: "inbox" | "health" | "base" | "obsidian" | "context-pack" | "manual";
+  source:
+    | "inbox"
+    | "health"
+    | "base"
+    | "obsidian"
+    | "context-pack"
+    | "manual"
+    | "enrichment";
   title: string;
   summary: string;
   operations: VaultOperation[];

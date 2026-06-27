@@ -13,9 +13,19 @@ interface Props {
   query: string;
   onPick: (item: MentionItem) => void;
   onClose: () => void;
+  // Manual "Suggest details" — ask the AI to propose fragments/tags for this
+  // contact (lands in the Review Queue). Absent ⇒ no enrich affordance.
+  onProposeEnrichment?: (personId: string) => void;
 }
 
-export function MentionMenu({ x, y, query, onPick, onClose }: Props) {
+export function MentionMenu({
+  x,
+  y,
+  query,
+  onPick,
+  onClose,
+  onProposeEnrichment,
+}: Props) {
   const [sel, setSel] = useState(0);
   const ql = (query || "").toLowerCase();
   const { persons } = usePersonPages();
@@ -103,6 +113,28 @@ export function MentionMenu({ x, y, query, onPick, onClose }: Props) {
             {it.kind === "page" && <span>{it.emoji}</span>}
             {it.kind === "date" && <Icon name="calendar" size={15} />}
             <span style={{ flex: 1 }}>{it.label}</span>
+            {it.kind === "person" && onProposeEnrichment && (
+              <button
+                type="button"
+                title="Suggest details for this contact"
+                aria-label={`Suggest details for ${it.label}`}
+                style={{
+                  marginRight: 6,
+                  background: "transparent",
+                  border: 0,
+                  cursor: "pointer",
+                  fontSize: 13,
+                  lineHeight: 1,
+                }}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onProposeEnrichment(it.id);
+                }}
+              >
+                ✨
+              </button>
+            )}
             <span style={{ color: "var(--tx-4)", fontSize: 11 }}>
               {it.kind}
             </span>

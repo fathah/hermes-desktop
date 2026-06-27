@@ -540,6 +540,16 @@ export const spsBridge = {
     profile?: string,
   ): Promise<RouteTaskOutcome> =>
     ipcRenderer.invoke("sps-route-task", input, profile),
+  spsProposeContactEnrichment: (
+    personId: string,
+    profile?: string,
+  ): Promise<{
+    created: boolean;
+    proposalId?: string;
+    fragments?: number;
+    tags?: number;
+    reason?: string;
+  }> => ipcRenderer.invoke("sps-propose-contact-enrichment", personId, profile),
   spsOpenContactChannel: (channel: ContactChannel): Promise<boolean> =>
     ipcRenderer.invoke("sps-open-contact-channel", channel),
   macContactsStatus: (): Promise<MacContactsStatus> =>

@@ -342,6 +342,28 @@ export function Editor() {
     onInputFromDom(id, el);
   };
 
+  // Manual "Suggest details": ask the AI to propose fragments/tags for a
+  // contact. Nothing is written to the row — the result lands in the Review
+  // Queue. Best-effort: a gateway/contact miss just toasts and moves on.
+  const proposeEnrichment = (personId: string): void => {
+    setMention(null);
+    void (async () => {
+      try {
+        const res =
+          await window.hermesAPI.spsProposeContactEnrichment?.(personId);
+        if (res?.created) {
+          onToast(
+            `Suggested ${res.fragments ?? 0} fragment(s) + ${res.tags ?? 0} tag(s) — review in the AI Review Queue`,
+          );
+        } else {
+          onToast("No new contact details to suggest");
+        }
+      } catch {
+        onToast("Could not suggest contact details");
+      }
+    })();
+  };
+
   const toggleTodo = (id: string) =>
     setBlocks((bs) =>
       bs.map((b) => (b.id === id ? { ...b, done: !b.done } : b)),
@@ -537,6 +559,7 @@ export function Editor() {
           query={mention.query}
           onPick={pickMention}
           onClose={() => setMention(null)}
+          onProposeEnrichment={proposeEnrichment}
         />
       )}
       {bmenu && (
