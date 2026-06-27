@@ -208,7 +208,7 @@ ${art.content_raw?.replace(/<[^>]*>/g, "") || art.summary_excerpt || "No content
             onClick={() => setShowSources((prev) => !prev)}
           >
             <Icon name="plus" size={13} className="refresh-icon-style" />{" "}
-            Sources
+            Capture
           </button>
           <button
             className="log-submit-btn refresh-btn-style"

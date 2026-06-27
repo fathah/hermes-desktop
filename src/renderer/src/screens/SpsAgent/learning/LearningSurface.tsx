@@ -50,7 +50,7 @@ export function LearningSurface({
 }): React.JSX.Element {
   const defaultRecipe = ASSISTANT_RECIPE_TEMPLATES[0];
   const setSurface = useStore((s) => s.setSurface);
-  const [tab, setTab] = useState<Tab>("recipes");
+  const [tab, setTab] = useState<Tab>("memories");
   const [recipes, setRecipes] = useState<AssistantRecipe[]>([]);
   const [recipeRuns, setRecipeRuns] = useState<AssistantRecipeRunRecord[]>([]);
   const [localExperts, setLocalExperts] = useState<LocalExpertPackSummary[]>(
@@ -578,37 +578,55 @@ export function LearningSurface({
       <header className="memory-header">
         <div>
           <h1 className="settings-header learning-surface-header-title">
-            Learn This
+            Learning
           </h1>
           <p className="memory-subtitle">
-            Review what My Assistant should remember, which skills it can use,
-            and what the curator has archived.
+            Review captured material, recent learnings, and what My Assistant
+            should remember before opening builder controls.
           </p>
         </div>
       </header>
 
       <div className="settings-subnav">
-        {(["recipes", "experts", "memories", "skills", "curator"] as const).map(
-          (id) => (
+        {(["memories", "recipes", "experts"] as const).map((id) => (
+          <button
+            key={id}
+            type="button"
+            className={`settings-subnav-tab ${tab === id ? "active" : ""}`}
+            onClick={() => setTab(id)}
+          >
+            {id === "memories"
+              ? "Memories"
+              : id === "recipes"
+                ? "Assistants"
+                : "Experts"}
+          </button>
+        ))}
+        <button
+          type="button"
+          className={`settings-subnav-tab ${
+            tab === "skills" || tab === "curator" ? "active" : ""
+          }`}
+          onClick={() => setTab("skills")}
+        >
+          Advanced
+        </button>
+      </div>
+
+      {(tab === "skills" || tab === "curator") && (
+        <div className="settings-subnav learning-advanced-subnav">
+          {(["skills", "curator"] as const).map((id) => (
             <button
               key={id}
               type="button"
               className={`settings-subnav-tab ${tab === id ? "active" : ""}`}
               onClick={() => setTab(id)}
             >
-              {id === "recipes"
-                ? "Assistants"
-                : id === "experts"
-                  ? "Experts"
-                  : id === "memories"
-                    ? "Memories"
-                    : id === "skills"
-                      ? "Skills"
-                      : "Curator"}
+              {id === "skills" ? "Skills" : "Curator"}
             </button>
-          ),
-        )}
-      </div>
+          ))}
+        </div>
+      )}
 
       {notice && (
         <div className="memory-error learning-surface-notice">{notice}</div>

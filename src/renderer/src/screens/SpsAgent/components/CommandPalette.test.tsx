@@ -27,6 +27,7 @@ const store = vi.hoisted(() => ({
   setResearchOpen: vi.fn(),
   setExternalSessionsOpen: vi.fn(),
   setSurface: vi.fn(),
+  openInboxImageCapture: vi.fn(),
   flash: vi.fn(),
   openContentStudioIdea: vi.fn(),
   runAgent: vi.fn(),

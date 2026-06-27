@@ -35,6 +35,7 @@ const store = vi.hoisted(() => ({
   setTrashOpen: vi.fn(),
   setTweaksOpen: vi.fn(),
   setTweak: vi.fn(),
+  importPdf: vi.fn(),
   toggleSection: vi.fn(),
 }));
 
@@ -67,14 +68,17 @@ describe("Sidebar", () => {
     delete (window as unknown as { hermesAPI?: unknown }).hermesAPI;
   });
 
-  it("shows assistant work surfaces", () => {
+  it("shows the core loop by default", () => {
     render(<Sidebar />);
 
-    fireEvent.click(screen.getByText("Teach Me"));
-    fireEvent.click(screen.getByText("Active Work"));
+    fireEvent.click(screen.getByText("Capture"));
+    fireEvent.click(screen.getByText("Work"));
+    fireEvent.click(screen.getByText("Assistant"));
 
-    expect(screen.getByText(/My Advisor/)).toBeTruthy();
-    expect(store.setSurface).toHaveBeenCalledWith("learning");
-    expect(store.setSurface).toHaveBeenCalledWith("activeWork");
+    expect(screen.getByText("Workspace packs")).toBeTruthy();
+    expect(screen.queryByText("Content Studio")).toBeNull();
+    expect(store.setSurface).toHaveBeenCalledWith("inbox");
+    expect(store.setSurface).toHaveBeenCalledWith("work");
+    expect(store.setSurface).toHaveBeenCalledWith("chats");
   });
 });

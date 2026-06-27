@@ -27,6 +27,7 @@ function Setup({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [showKey, setShowKey] = useState(false);
+  const [showAdvancedProviders, setShowAdvancedProviders] = useState(false);
 
   const provider = PROVIDERS.setup.find((p) => p.id === selectedProvider)!;
   const isLocal = selectedProvider === "local";
@@ -93,22 +94,83 @@ function Setup({
       <h1 className="setup-title">{t("setup.title")}</h1>
       <p className="setup-subtitle">{t("setup.subtitle")}</p>
 
-      <div className="setup-provider-grid">
-        {PROVIDERS.setup.map((p) => (
+      <div className="setup-recommendation">
+        <button
+          type="button"
+          className={`setup-recommended-card ${
+            selectedProvider === "openrouter" ? "selected" : ""
+          }`}
+          onClick={() => {
+            setSelectedProvider("openrouter");
+            setError("");
+          }}
+        >
+          <BrandLogo provider="openrouter" size={28} matchTheme={true} />
+          <div>
+            <div className="setup-provider-name">Use OpenRouter</div>
+            <div className="setup-provider-desc">
+              Recommended for first run. Paste one key and pick a model later.
+            </div>
+          </div>
+          <span className="setup-provider-tag">Recommended</span>
+        </button>
+
+        <div className="setup-recovery-row">
           <button
-            key={p.id}
-            className={`setup-provider-card ${selectedProvider === p.id ? "selected" : ""}`}
+            type="button"
+            className={`setup-provider-card compact ${
+              selectedProvider === "local" ? "selected" : ""
+            }`}
             onClick={() => {
-              setSelectedProvider(p.id);
+              setSelectedProvider("local");
               setError("");
             }}
           >
-            <BrandLogo provider={p.id} size={24} matchTheme={true} />
-            <div className="setup-provider-name">{t(p.name)}</div>
-            {p.tag && <div className="setup-provider-tag">{t(p.tag)}</div>}
+            <BrandLogo provider="local" size={20} matchTheme={true} />
+            <span>Use local or remote server</span>
           </button>
-        ))}
+          <button
+            type="button"
+            className="setup-link setup-advanced-toggle"
+            onClick={() => setShowAdvancedProviders((open) => !open)}
+          >
+            Advanced providers
+            <ArrowRight
+              size={12}
+              style={{
+                transform: showAdvancedProviders
+                  ? "rotate(90deg)"
+                  : undefined,
+              }}
+            />
+          </button>
+        </div>
       </div>
+
+      {showAdvancedProviders && (
+        <div className="setup-provider-grid">
+          {PROVIDERS.setup
+            .filter((p) => p.id !== "openrouter" && p.id !== "local")
+            .map((p) => (
+              <button
+                key={p.id}
+                className={`setup-provider-card ${
+                  selectedProvider === p.id ? "selected" : ""
+                }`}
+                onClick={() => {
+                  setSelectedProvider(p.id);
+                  setError("");
+                }}
+              >
+                <BrandLogo provider={p.id} size={24} matchTheme={true} />
+                <div className="setup-provider-name">{t(p.name)}</div>
+                {p.tag && (
+                  <div className="setup-provider-tag">{t(p.tag)}</div>
+                )}
+              </button>
+            ))}
+        </div>
+      )}
 
       <div className="setup-form">
         {isLocal ? (

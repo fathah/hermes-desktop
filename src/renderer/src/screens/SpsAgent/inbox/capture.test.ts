@@ -33,7 +33,7 @@ describe("buildCapture", () => {
     expect(body.trim()).toBe("Some clipped text");
   });
 
-  it("serializes web selections and highlights for Learn This captures", () => {
+  it("serializes web selections and highlights for Learning captures", () => {
     const { markdown } = buildCapture(
       {
         source: "web",

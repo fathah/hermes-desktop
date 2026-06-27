@@ -269,11 +269,13 @@ async function launch(label) {
 }
 
 async function openSignalBriefs(win) {
-  await win.locator(".nav-item", { hasText: "Automations" }).first().click({
+  await win.locator(".nav-item", { hasText: "Work" }).first().click({
     timeout: 8000,
   });
+  await win.getByRole("tab", { name: "Scheduled" }).click();
+  await win.getByRole("button", { name: "Manage rules" }).click();
   await win.waitForSelector(".modal", { timeout: 8000 });
-  await win.getByText("Signal Briefs", { exact: false }).first().waitFor({
+  await win.getByText("Scheduled Work", { exact: false }).first().waitFor({
     timeout: 8000,
   });
 }

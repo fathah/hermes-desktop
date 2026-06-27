@@ -472,10 +472,10 @@ export function SourceIntakePanel({
   }
 
   return (
-    <section className="source-intake-panel" aria-label="Sources">
+    <section className="source-intake-panel" aria-label="Capture">
       <div className="source-intake-header">
         <div>
-          <h3>Sources</h3>
+          <h3>Capture</h3>
           <div className="source-intake-status">
             {crawlReady ? "Public page extraction ready" : "RSS ready"}
           </div>

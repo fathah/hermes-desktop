@@ -362,18 +362,28 @@ function Layout({
                 <div className="sidebar-nav-group-header">
                   {t(group.headerKey)}
                 </div>
-                {group.items.map(({ view: v, icon: Icon, labelKey }) => (
-                  <button
-                    key={v}
-                    className={`sidebar-nav-item ${view === v ? "active" : ""}`}
-                    onClick={() =>
-                      v === "personalization" ? openPersonalization() : goTo(v)
-                    }
-                  >
-                    <Icon size={16} />
-                    {t(labelKey)}
-                  </button>
-                ))}
+                {group.items
+                  .filter(
+                    ({ view: v }) =>
+                      !(
+                        remoteMode &&
+                        (v === "aiSetup" || v === "connectedApps")
+                      ),
+                  )
+                  .map(({ view: v, icon: Icon, labelKey }) => (
+                    <button
+                      key={v}
+                      className={`sidebar-nav-item ${view === v ? "active" : ""}`}
+                      onClick={() =>
+                        v === "personalization"
+                          ? openPersonalization()
+                          : goTo(v)
+                      }
+                    >
+                      <Icon size={16} />
+                      {t(labelKey)}
+                    </button>
+                  ))}
               </div>
             ))}
         </nav>
@@ -456,6 +466,7 @@ function Layout({
           <div style={paneStyle("overview")}>
             <ControlCenterOverview
               profile={activeProfile}
+              remoteMode={remoteMode}
               onNavigate={goTo}
               onClose={onClose ?? (() => {})}
             />

@@ -91,8 +91,13 @@ await win.waitForSelector(".app", { timeout: 30000 });
 await win.waitForTimeout(1500);
 
 // Learning → Skills.
-await win.locator(".nav-item", { hasText: "Teach Me" }).first().click();
+await win.evaluate(() => {
+  window.dispatchEvent(new CustomEvent("sps:search"));
+});
+await win.waitForSelector(".palette", { timeout: 8000 });
+await win.locator(".pal-item", { hasText: "Open Learning" }).first().click();
 await win.waitForSelector(".settings-subnav", { timeout: 10000 });
+await win.locator(".settings-subnav-tab", { hasText: "Advanced" }).click();
 await win.locator(".settings-subnav-tab", { hasText: "Skills" }).click();
 await win.getByText("Generate from repo", { exact: true }).waitFor({
   timeout: 10000,

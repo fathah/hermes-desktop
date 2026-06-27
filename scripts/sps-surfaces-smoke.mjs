@@ -1,5 +1,5 @@
 // Offline smoke for SPS surfaces that were still only manually tracked in the
-// feature-status workbook: dashboard, trash, My Work, task drawer, automations,
+// feature-status workbook: dashboard, trash, Work, task drawer, scheduled rules,
 // Insights, and Personal Health.
 import {
   chmodSync,
@@ -254,6 +254,14 @@ async function clickNav(label) {
   await win.locator(".nav-item", { hasText: label }).first().click();
 }
 
+async function openCommand(label) {
+  await win.evaluate(() => {
+    window.dispatchEvent(new CustomEvent("sps:search"));
+  });
+  await win.waitForSelector(".palette", { timeout: 8000 });
+  await win.locator(".pal-item", { hasText: label }).first().click();
+}
+
 async function expectVisible(text, timeout = 8000) {
   await win.getByText(text, { exact: false }).first().waitFor({ timeout });
 }
@@ -380,7 +388,7 @@ async function clickPanelTab(label) {
 }
 
 await shot("01-dashboard", async () => {
-  await clickNav("Home Dashboard");
+  await openCommand("Open Dashboard");
   await expectVisible("Scratch Pad");
   await expectVisible("Pinned Notes");
   await expectVisible("Today's Schedule");
@@ -520,7 +528,7 @@ await shot("05-trash-restore", async () => {
 });
 
 await shot("06-my-work", async () => {
-  await clickNav("My Work");
+  await clickNav("Work");
   await expectVisible("At a Glance");
   await expectVisible("Quick Actions");
   await expectVisible("Assistant Status");
@@ -532,30 +540,32 @@ await shot("06-my-work", async () => {
 });
 
 await shot("07-automations", async () => {
-  await win.locator(".nav-item", { hasText: "Automations" }).first().click();
+  await clickNav("Work");
+  await win.getByRole("tab", { name: "Scheduled" }).click();
+  await win.getByRole("button", { name: "Manage rules" }).click();
   await win.locator(".modal").waitFor({ timeout: 8000 });
-  await expectVisible("Schedules");
+  await expectVisible("Scheduled Work");
   await win
-    .getByPlaceholder("Research this topic on a schedule…")
+    .getByPlaceholder("Monitor this topic…")
     .fill("Smoke automation topic");
   await win
     .locator(".modal")
-    .getByRole("button", { name: "Add", exact: true })
+    .getByRole("button", { name: "Create", exact: true })
     .click();
   await expectVisible("Smoke automation topic", 20000);
   await win.getByRole("button", { name: "Delete" }).first().click();
-  await expectVisible("No schedules yet");
+  await expectVisible("No monitors yet");
   await closeModalIfOpen();
 });
 
 await shot("08-insights", async () => {
-  await clickNav("Insights");
+  await openCommand("Open Insights");
   await expectVisible("Token usage and cost");
   await expectVisible("No usage recorded yet");
 });
 
 await shot("09-journal-entry", async () => {
-  await clickNav("Journal");
+  await clickNav("Work");
   await expectVisible("New entry");
   await win
     .getByRole("button", { name: /New entry/ })
@@ -564,7 +574,7 @@ await shot("09-journal-entry", async () => {
   await expectVisible("Journal entry created");
   await win.locator(".doc-title").fill("Smoke journal entry");
   await win.locator(".block.empty").first().fill("Smoke journal body.");
-  await clickNav("Journal");
+  await clickNav("Work");
   await expectVisible("Smoke journal entry");
   const entry = win.locator(".jr-entry", { hasText: "Smoke journal entry" });
   await entry.getByTitle("Set mood").click();
@@ -575,7 +585,7 @@ await shot("09-journal-entry", async () => {
 });
 
 await shot("09-health-journal", async () => {
-  await clickNav("Health & Ledger");
+  await openCommand("Open Health & Ledger");
   await expectVisible("My Health & Ledger");
   await win.getByLabel("Weight (kg)").fill("78.4");
   await win.getByLabel("Fasting Glucose (mg/dL)").fill("92");

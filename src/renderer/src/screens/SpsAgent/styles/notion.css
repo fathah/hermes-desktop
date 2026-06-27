@@ -1448,12 +1448,67 @@
 }
 
 /* ---------- My Work Unified layout ---------- */
+.sps-scope .work-shell {
+  width: min(1200px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 24px 0 32px;
+}
+
+.sps-scope .work-shell-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.sps-scope .work-shell-head h1 {
+  margin: 0;
+  font-size: 26px;
+  line-height: 1.2;
+}
+
+.sps-scope .work-shell-head p,
+.sps-scope .work-rule-head p {
+  margin: 6px 0 0;
+  color: var(--tx-3);
+  font-size: 13px;
+}
+
+.sps-scope .work-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--hair);
+  padding-bottom: 8px;
+}
+
+.sps-scope .work-tab {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--tx-2);
+  border-radius: 8px;
+  padding: 7px 12px;
+  font: 600 13px/1 var(--font-sans);
+  cursor: pointer;
+}
+
+.sps-scope .work-tab:hover {
+  background: var(--row-hover);
+  color: var(--tx-1);
+}
+
+.sps-scope .work-tab.active {
+  background: var(--surface);
+  border-color: var(--hair);
+  color: var(--tx-1);
+}
+
 .sps-scope .work-unified-container {
   display: flex;
   gap: 24px;
-  max-width: 1300px;
-  margin: 0 auto;
-  padding: 24px;
+  margin: 0;
+  padding: 0;
   align-items: flex-start;
 }
 
@@ -1510,6 +1565,57 @@
   border: none;
   background: transparent;
   box-shadow: none;
+}
+
+.sps-scope .work-rule-panel {
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.sps-scope .work-rule-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.sps-scope .work-rule-head h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.sps-scope .work-rule-list {
+  display: grid;
+  gap: 8px;
+}
+
+.sps-scope .work-rule-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--hair-soft);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--canvas);
+}
+
+.sps-scope .work-rule-main {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.sps-scope .work-rule-main strong {
+  color: var(--tx-1);
+}
+
+.sps-scope .work-rule-main span,
+.sps-scope .work-rule-main small {
+  color: var(--tx-3);
 }
 
 /* ---------- Active Work surface ---------- */
@@ -1637,6 +1743,32 @@
 
 .sps-scope .active-work-detail-stack {
   margin-top: 12px;
+}
+
+@media (max-width: 980px) {
+  .sps-scope .work-shell {
+    width: min(100% - 24px, 760px);
+    padding-top: 16px;
+  }
+
+  .sps-scope .work-unified-container {
+    flex-direction: column;
+  }
+
+  .sps-scope .work-unified-left,
+  .sps-scope .work-unified-right {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+  }
+
+  .sps-scope .work-rule-head,
+  .sps-scope .work-rule-row,
+  .sps-scope .active-work-head,
+  .sps-scope .active-work-run {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 
 /* Refactored styles from DayTimeline.tsx */
