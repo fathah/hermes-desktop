@@ -109,7 +109,6 @@
   font-family: var(--font-mono);
 }
 
-
 /* ---------- Accent (driven by Tweaks) ---------- */
 .sps-scope {
   --accent: #c79400; /* sukhi gold-deep default */
@@ -1780,6 +1779,12 @@
 }
 .sps-scope .db-tool {
   color: var(--tx-3);
+  /* Flat by design — :hover supplies var(--row-hover). Without an explicit
+     background/border these <button>s fall through to the UA default
+     (ButtonFace #efefef), which stays light in dark mode → light-on-light
+     invisible text (e.g. the "Table View" switcher). */
+  background: none;
+  border: none;
   font-size: 13px;
   padding: 5px 8px;
   border-radius: 5px;
@@ -2981,7 +2986,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
 }
 .sps-scope .ob-checklist-dismiss:hover {
   background: var(--row-hover);
@@ -3000,7 +3007,10 @@
   border-radius: 10px;
   padding: 14px;
   cursor: pointer;
-  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 .sps-scope .ob-step-card:hover {
   border-color: var(--hair-strong);
@@ -3056,7 +3066,10 @@
   padding: 6px 12px;
   font-size: 12px;
   cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
 }
 .sps-scope .ob-step-card:hover .ob-step-action {
   background: var(--accent);
@@ -3078,7 +3091,10 @@
   cursor: pointer;
   margin: 0 10px 0 auto;
   width: 280px;
-  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
 }
 
 .sps-scope .tb-search-btn:hover {

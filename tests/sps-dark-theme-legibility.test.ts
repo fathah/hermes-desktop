@@ -114,4 +114,14 @@ describe("SPS dark-theme text legibility", () => {
       contrast("#6b7079", "#161616"),
     );
   });
+
+  it("gives .db-tool an explicit background (no light UA ButtonFace leak in dark mode)", () => {
+    // A styled <button> with no `background` falls through to Chromium's default
+    // ButtonFace (#efefef) — which stays light in dark mode → light-on-light
+    // invisible text (the QueryDB "Table View" switcher rendered at ~1.07:1).
+    // The base .db-tool rule must declare its own background.
+    const rule = homeCss.match(/\.sps-scope\s+\.db-tool\s*\{([^}]*)\}/);
+    expect(rule).not.toBeNull();
+    expect(rule?.[1]).toMatch(/background\s*:/);
+  });
 });
