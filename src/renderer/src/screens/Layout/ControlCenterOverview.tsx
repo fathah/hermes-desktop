@@ -1,5 +1,25 @@
+import { useEffect, useState } from "react";
 import { useStore as useSpsStore } from "../SpsAgent/store";
 import type { NormalizedAdminView } from "../../lib/openSettings";
+
+interface ModelConfig {
+  provider: string;
+  model: string;
+  baseUrl: string;
+}
+
+interface ChatReadiness {
+  ok: boolean;
+  code?: string;
+  fixLocation?: string;
+}
+
+interface AiStatus {
+  status: string;
+  activeModel: string;
+  action: string;
+  target: NormalizedAdminView;
+}
 
 interface OverviewCard {
   title: string;
@@ -17,16 +37,111 @@ interface ControlCenterOverviewProps {
   onClose: () => void;
 }
 
+const REMOTE_AI_STATUS: AiStatus = {
+  status: "Remote-managed",
+  activeModel: "Configured on remote server",
+  action: "Check remote server",
+  target: "troubleshooting",
+};
+
+const LOADING_AI_STATUS: AiStatus = {
+  status: "Check setup",
+  activeModel: "Checking setup...",
+  action: "Run diagnostics",
+  target: "troubleshooting",
+};
+
+function readinessTarget(fixLocation?: string): NormalizedAdminView {
+  if (fixLocation === "providers" || fixLocation === "setup") {
+    return "aiSetup";
+  }
+  if (fixLocation === "models") return "models";
+  if (fixLocation === "gateway") return "connectedApps";
+  return "troubleshooting";
+}
+
+function readinessStatus(readiness: ChatReadiness): string {
+  if (readiness.ok) return "Ready to chat";
+  if (
+    readiness.fixLocation === "providers" ||
+    readiness.code === "MISSING_API_KEY"
+  ) {
+    return "Add API key";
+  }
+  if (
+    readiness.fixLocation === "models" ||
+    readiness.code === "NO_ACTIVE_MODEL"
+  ) {
+    return "Choose a model";
+  }
+  return "Check setup";
+}
+
+function readinessAction(status: string): string {
+  if (status === "Ready to chat") return "Open AI Setup";
+  if (status === "Add API key") return "Open AI Setup";
+  if (status === "Choose a model") return "Open Models";
+  return "Run diagnostics";
+}
+
+function modelLabel(modelConfig: ModelConfig): string {
+  const provider = modelConfig.provider.trim();
+  const model = modelConfig.model.trim();
+  if (!model) return "No model selected";
+  return provider ? `${provider} / ${model}` : model;
+}
+
 function ControlCenterOverview({
   profile = "default",
   remoteMode = false,
   onNavigate,
   onClose,
 }: ControlCenterOverviewProps): React.JSX.Element {
+  const [aiStatus, setAiStatus] = useState<AiStatus>(
+    remoteMode ? REMOTE_AI_STATUS : LOADING_AI_STATUS,
+  );
+
   const openPersonalization = (): void => {
     useSpsStore.getState().setSurface("you");
     onClose();
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    if (remoteMode) {
+      setAiStatus(REMOTE_AI_STATUS);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setAiStatus(LOADING_AI_STATUS);
+    void (async () => {
+      try {
+        const [, modelConfig, readiness] = await Promise.all([
+          window.hermesAPI.getConnectionConfig(),
+          window.hermesAPI.getModelConfig(profile),
+          window.hermesAPI.validateChatReadiness(profile),
+        ]);
+        if (cancelled) return;
+        const status = readinessStatus(readiness);
+        setAiStatus({
+          status,
+          activeModel: modelLabel(modelConfig),
+          action: readinessAction(status),
+          target: readiness.ok
+            ? "aiSetup"
+            : readinessTarget(readiness.fixLocation),
+        });
+      } catch {
+        if (!cancelled) setAiStatus(LOADING_AI_STATUS);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [profile, remoteMode]);
 
   const cards: OverviewCard[] = [
     {
@@ -82,19 +197,19 @@ function ControlCenterOverview({
 
       <section className="control-center-status-strip">
         <div>
-          <span>Connection</span>
-          <strong>{remoteMode ? "Remote Hermes" : "Local Hermes"}</strong>
+          <span>AI status</span>
+          <strong>{aiStatus.status}</strong>
         </div>
         <div>
-          <span>Next action</span>
-          <strong>{remoteMode ? "Check remote server" : "Verify AI setup"}</strong>
+          <span>Active model</span>
+          <strong>{aiStatus.activeModel}</strong>
         </div>
         <button
           type="button"
           className="btn btn-secondary"
-          onClick={() => onNavigate("troubleshooting")}
+          onClick={() => onNavigate(aiStatus.target)}
         >
-          Run diagnostics
+          {aiStatus.action}
         </button>
       </section>
 

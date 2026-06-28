@@ -1,5 +1,11 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ControlCenterOverview from "./ControlCenterOverview";
 import type { NormalizedAdminView } from "../../lib/openSettings";
 
@@ -11,9 +17,49 @@ vi.mock("../SpsAgent/store", () => ({
   },
 }));
 
+function installHermesApi(
+  overrides: Partial<Window["hermesAPI"]> = {},
+): Partial<Window["hermesAPI"]> {
+  const api = {
+    getConnectionConfig: vi.fn().mockResolvedValue({
+      mode: "local",
+      remoteUrl: "",
+      hasApiKey: true,
+      apiKeyLength: 16,
+      ssh: {
+        host: "",
+        port: 22,
+        username: "",
+        keyPath: "",
+        remotePort: 8642,
+        localPort: 18642,
+      },
+    }),
+    getModelConfig: vi.fn().mockResolvedValue({
+      provider: "anthropic",
+      model: "claude-3-5-sonnet",
+      baseUrl: "",
+    }),
+    validateChatReadiness: vi.fn().mockResolvedValue({ ok: true }),
+    ...overrides,
+  } satisfies Partial<Window["hermesAPI"]>;
+
+  Object.defineProperty(window, "hermesAPI", {
+    configurable: true,
+    value: api,
+  });
+  return api;
+}
+
 describe("ControlCenterOverview", () => {
   beforeEach(() => {
     setSurface.mockClear();
+    installHermesApi();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete (window as unknown as { hermesAPI?: unknown }).hermesAPI;
   });
 
   it("renders the task cards users need from the settings gear", () => {
@@ -49,10 +95,116 @@ describe("ControlCenterOverview", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Open Personalization" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open Personalization" }),
+    );
 
     expect(setSurface).toHaveBeenCalledWith("you");
     expect(onClose).toHaveBeenCalled();
     expect(onNavigate).not.toHaveBeenCalled();
+  });
+
+  it("shows ready local AI status and the active model", async () => {
+    render(
+      <ControlCenterOverview
+        onNavigate={vi.fn()}
+        onClose={vi.fn()}
+        profile="default"
+      />,
+    );
+
+    expect(await screen.findByText("Ready to chat")).toBeInTheDocument();
+    expect(
+      screen.getByText("anthropic / claude-3-5-sonnet"),
+    ).toBeInTheDocument();
+    expect(window.hermesAPI.getConnectionConfig).toHaveBeenCalled();
+    expect(window.hermesAPI.getModelConfig).toHaveBeenCalledWith("default");
+    expect(window.hermesAPI.validateChatReadiness).toHaveBeenCalledWith(
+      "default",
+    );
+  });
+
+  it("routes missing API key status to AI Setup", async () => {
+    installHermesApi({
+      validateChatReadiness: vi.fn().mockResolvedValue({
+        ok: false,
+        code: "MISSING_API_KEY",
+        fixLocation: "providers",
+      }),
+    });
+    const onNavigate = vi.fn<(view: NormalizedAdminView) => void>();
+
+    render(
+      <ControlCenterOverview
+        onNavigate={onNavigate}
+        onClose={vi.fn()}
+        profile="default"
+      />,
+    );
+
+    expect(await screen.findByText("Add API key")).toBeInTheDocument();
+    const statusStrip = screen.getByText("AI status").closest("section");
+    expect(statusStrip).not.toBeNull();
+    fireEvent.click(
+      within(statusStrip as HTMLElement).getByRole("button", {
+        name: "Open AI Setup",
+      }),
+    );
+
+    expect(onNavigate).toHaveBeenCalledWith("aiSetup");
+  });
+
+  it("routes missing active model status to Models", async () => {
+    installHermesApi({
+      getModelConfig: vi.fn().mockResolvedValue({
+        provider: "anthropic",
+        model: "",
+        baseUrl: "",
+      }),
+      validateChatReadiness: vi.fn().mockResolvedValue({
+        ok: false,
+        code: "NO_ACTIVE_MODEL",
+        fixLocation: "models",
+      }),
+    });
+    const onNavigate = vi.fn<(view: NormalizedAdminView) => void>();
+
+    render(
+      <ControlCenterOverview
+        onNavigate={onNavigate}
+        onClose={vi.fn()}
+        profile="default"
+      />,
+    );
+
+    expect(await screen.findByText("Choose a model")).toBeInTheDocument();
+    expect(screen.getByText("No model selected")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open Models" }));
+
+    expect(onNavigate).toHaveBeenCalledWith("models");
+  });
+
+  it("shows remote-managed status without local model readiness checks", async () => {
+    const api = installHermesApi();
+
+    render(
+      <ControlCenterOverview
+        onNavigate={vi.fn()}
+        onClose={vi.fn()}
+        profile="default"
+        remoteMode
+      />,
+    );
+
+    const statusStrip = screen.getByText("AI status").closest("section");
+    expect(statusStrip).not.toBeNull();
+    expect(
+      within(statusStrip as HTMLElement).getByText("Remote-managed"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Configured on remote server")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(api.getModelConfig).not.toHaveBeenCalled();
+      expect(api.validateChatReadiness).not.toHaveBeenCalled();
+    });
   });
 });

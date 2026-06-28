@@ -90,7 +90,7 @@ writeFileSync(
 );
 writeFileSync(
   join(HOME, "config.yaml"),
-  "model:\n  provider: anthropic\n  model: claude-3-5-sonnet\n",
+  "model:\n  provider: anthropic\n  default: claude-3-5-sonnet\n",
 );
 
 // ── seed an SPS workspace: a home page that wikilinks to Alpha, the Alpha page
@@ -202,6 +202,7 @@ const expectedShots = [
   "02a-learning",
   "02b-research",
   "02c-research-nudge",
+  "02d-control-center",
   "03-graph",
   "04-tweaks",
   "05-tweaks-section-toggled",
@@ -356,6 +357,20 @@ await shot("02c-research-nudge", async () => {
   });
   await win.waitForSelector(".gs-row", { timeout: 8000 });
 });
+
+// 02d — Settings opens the Control Center Overview with live AI readiness and
+// the active model from the seeded smoke config.
+await shot("02d-control-center", async () => {
+  await win.getByRole("button", { name: "Settings" }).click();
+  await win
+    .getByRole("dialog", { name: "SPS Control Center" })
+    .waitFor({ timeout: 8000 });
+  await win.getByText("claude-3-5-sonnet").waitFor({ timeout: 8000 });
+});
+await win
+  .getByRole("button", { name: "Close settings" })
+  .click()
+  .catch(() => {});
 
 // 03 — local wikilink graph view (F4).
 await shot("03-graph", async () => {
