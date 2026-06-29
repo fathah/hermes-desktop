@@ -214,6 +214,18 @@ function openCaptureWindowWithKind(kind: string): void {
   }
 }
 
+function triggerTaskCaptureHotkey(): void {
+  openCaptureWindowWithKind("task");
+}
+
+if (process.env.HERMES_SMOKE_QUICK_CAPTURE === "1") {
+  (
+    globalThis as typeof globalThis & {
+      __HERMES_SMOKE_TRIGGER_TASK_CAPTURE__?: () => void;
+    }
+  ).__HERMES_SMOKE_TRIGGER_TASK_CAPTURE__ = triggerTaskCaptureHotkey;
+}
+
 function createTray(): void {
   if (tray) return;
   try {
@@ -820,7 +832,7 @@ app.whenReady().then(() => {
   // Dedicated Tasks-Dump hotkey: open Quick Capture straight into Task mode.
   // (Cmd+T collides with browsers/Finder globally, so Cmd/Ctrl+Shift+Space.)
   globalShortcut.register("CommandOrControl+Shift+Space", () => {
-    openCaptureWindowWithKind("task");
+    triggerTaskCaptureHotkey();
   });
 
   app.on("web-contents-created", (_event, contents) => {
