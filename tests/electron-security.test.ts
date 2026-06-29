@@ -48,6 +48,12 @@ describe("Electron main process hardening", () => {
     expect(mainSrc).toContain("hardenAttachedWebContents(contents)");
   });
 
+  it("keeps the quick-capture smoke driver env-gated and out of preload", () => {
+    expect(mainSrc).toContain('process.env.HERMES_SMOKE_QUICK_CAPTURE === "1"');
+    expect(mainSrc).toContain("__HERMES_SMOKE_TRIGGER_TASK_CAPTURE__");
+    expect(preloadSrc).not.toContain("__HERMES_SMOKE_TRIGGER_TASK_CAPTURE__");
+  });
+
   it("stops the semantic index helper during app shutdown", () => {
     expect(mainSrc).toContain(
       'import { semanticManager } from "./semantic-index"',

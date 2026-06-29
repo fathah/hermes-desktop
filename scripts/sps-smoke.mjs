@@ -13,6 +13,7 @@
 // workspace (blob + vault) that exercises wikilinks and a folder-backed query
 // database.
 import { _electron as electron } from "playwright";
+import { createServer } from "http";
 import {
   chmodSync,
   existsSync,
@@ -37,6 +38,8 @@ const SCREENSHOT_DIR = join(HOME, "smoke-screenshots");
 const SEEDED_SCREENSHOT_NAME = "Screenshot 2026-06-19 at 09.00.00.png";
 const SEEDED_SCREENSHOT_NOTE =
   "Use this screenshot in the smoke Deck Studio brief.";
+const QUICK_CAPTURE_TASK_TEXT =
+  "Ask Priya to send the launch checklist\nBefore noon.";
 
 mkdirSync(SCREENSHOT_DIR, { recursive: true });
 writeFileSync(
@@ -225,9 +228,74 @@ const expectedShots = [
   "21-sources-screenshot-deck",
   "22-deck-studio",
   "23-deck-studio-export",
+  "24-quick-capture-task",
 ];
 const shots = [];
 const shotFailures = [];
+
+async function startFakeGateway() {
+  const server = createServer((req, res) => {
+    if (req.url === "/health") {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: true }));
+      return;
+    }
+
+    if (req.url === "/v1/chat/completions") {
+      let body = "";
+      req.setEncoding("utf8");
+      req.on("data", (chunk) => {
+        body += chunk;
+      });
+      req.on("end", () => {
+        if (!body.includes(QUICK_CAPTURE_TASK_TEXT.split("\n")[0])) {
+          res.writeHead(400, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "unexpected smoke task text" }));
+          return;
+        }
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    route: "human",
+                    risky: false,
+                    due: "",
+                    nagCadence: "daily",
+                    assigneeId: "you",
+                    reason: "Smoke task needs a human follow-up.",
+                    confidence: 0.91,
+                  }),
+                },
+              },
+            ],
+          }),
+        );
+      });
+      return;
+    }
+
+    res.writeHead(404, { "content-type": "application/json" });
+    res.end(JSON.stringify({ error: "not found" }));
+  });
+
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    throw new Error("fake gateway did not bind to a TCP port");
+  }
+  return {
+    url: `http://127.0.0.1:${address.port}`,
+    close: () => new Promise((resolve) => server.close(resolve)),
+  };
+}
+
+const fakeGateway = await startFakeGateway();
 
 const app = await electron.launch({
   // Isolate Electron's userData (alongside the temp HERMES_HOME) so the smoke
@@ -239,10 +307,11 @@ const app = await electron.launch({
     ...process.env,
     HERMES_HOME: HOME,
     HERMES_RECENT_SCREENSHOT_DIR: SCREENSHOT_DIR,
+    HERMES_SMOKE_QUICK_CAPTURE: "1",
     ELECTRON_DISABLE_SECURITY_WARNINGS: "1",
   },
 });
-const win = await app.firstWindow();
+const win = await app.firstWindow({ timeout: 60000 });
 await win.waitForLoadState("domcontentloaded");
 await win.waitForSelector(".app", { timeout: 30000 });
 await win.waitForTimeout(1800);
@@ -313,6 +382,50 @@ function assertScreenshotCapturePersisted() {
   const assetPath = join(vault, "_assets", assetMatch[1]);
   if (!existsSync(assetPath)) {
     throw new Error(`screenshot asset was not written: ${assetPath}`);
+  }
+}
+
+function findQuickCaptureTaskRow() {
+  const tasksDir = join(vault, "tasks");
+  const names = readdirSync(tasksDir).filter((name) => name.endsWith(".md"));
+  for (const name of names) {
+    const path = join(tasksDir, name);
+    const markdown = readFileSync(path, "utf-8");
+    if (markdown.includes(QUICK_CAPTURE_TASK_TEXT)) {
+      return { rowId: name.replace(/\.md$/, ""), path, markdown };
+    }
+  }
+  throw new Error("quick-capture task row was not written");
+}
+
+function assertQuickCaptureTaskPersisted() {
+  const { rowId, markdown } = findQuickCaptureTaskRow();
+  for (const expected of [
+    'status: "todo"',
+    'route: "human"',
+    'assigneeId: "you"',
+    'who: "you"',
+    QUICK_CAPTURE_TASK_TEXT.split("\n")[1],
+  ]) {
+    if (!markdown.includes(expected)) {
+      throw new Error(`quick-capture task row is missing ${expected}`);
+    }
+  }
+
+  const nagPath = join(sps, "task-nag-state.json");
+  if (!existsSync(nagPath)) {
+    throw new Error("quick-capture task did not create nag state");
+  }
+  const nagRecords = JSON.parse(readFileSync(nagPath, "utf-8"));
+  if (!Array.isArray(nagRecords)) {
+    throw new Error("task nag state is not an array");
+  }
+  const nag = nagRecords.find((record) => record.rowId === rowId);
+  if (!nag) {
+    throw new Error("task nag state is missing the captured row id");
+  }
+  if (nag.cadence !== "daily") {
+    throw new Error(`task nag cadence mismatch: ${nag.cadence}`);
   }
 }
 
@@ -613,8 +726,48 @@ await shot("23-deck-studio-export", async () => {
   await win.getByText(/Notes sidecar:/).waitFor({ timeout: 8000 });
 });
 
+// 24 — the real task hotkey path opens the separate Quick Capture BrowserWindow
+// in Task mode, then persists through renderer → preload IPC → main task routing.
+try {
+  await win.evaluate((url) => {
+    return window.hermesAPI.setConnectionConfig("remote", url, "");
+  }, fakeGateway.url);
+  const captureWindowPromise = app.waitForEvent("window", { timeout: 8000 });
+  await app.evaluate(() => {
+    const hook = globalThis.__HERMES_SMOKE_TRIGGER_TASK_CAPTURE__;
+    if (typeof hook !== "function") {
+      throw new Error("quick-capture smoke hook is unavailable");
+    }
+    hook();
+  });
+  const captureWin = await captureWindowPromise;
+  await captureWin.waitForLoadState("domcontentloaded");
+  await captureWin.waitForSelector(".qc-panel", { timeout: 8000 });
+  if (!captureWin.url().includes("window=capture")) {
+    throw new Error(`unexpected quick-capture window URL: ${captureWin.url()}`);
+  }
+  const kind = await captureWin.getByLabel("Capture type").inputValue();
+  if (kind !== "task") {
+    throw new Error(`quick-capture kind mismatch: ${kind}`);
+  }
+  await captureWin.getByRole("textbox").fill(QUICK_CAPTURE_TASK_TEXT);
+  await captureWin.getByRole("button", { name: "Save Task" }).click();
+  await captureWin.getByText(/On your list/).waitFor({ timeout: 10000 });
+  assertQuickCaptureTaskPersisted();
+  await captureWin.screenshot({
+    path: join(OUT, "24-quick-capture-task.png"),
+  });
+  shots.push("24-quick-capture-task");
+  console.log("SHOT ok:", "24-quick-capture-task");
+} catch (e) {
+  const message = e instanceof Error ? e.message : String(e);
+  shotFailures.push({ name: "24-quick-capture-task", message });
+  console.log("SHOT FAIL:", "24-quick-capture-task", "-", message);
+}
+
 console.log("SHOTS_OK:", shots.length, "—", shots.join(", "));
 await app.close();
+await fakeGateway.close();
 const missingShots = expectedShots.filter((name) => !shots.includes(name));
 if (shotFailures.length || missingShots.length) {
   for (const failure of shotFailures) {
