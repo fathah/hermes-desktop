@@ -45,11 +45,25 @@ describe("Gateway", () => {
       approvePairing: vi.fn().mockResolvedValue({ success: true }),
       revokePairing: vi.fn().mockResolvedValue({ success: true }),
       clearPendingPairings: vi.fn().mockResolvedValue({ success: true }),
+      macContactsStatus: vi.fn().mockResolvedValue({
+        available: true,
+        authorized: true,
+      }),
+      macContactsSync: vi.fn().mockResolvedValue({
+        available: true,
+        authorized: true,
+        added: 1,
+        updated: 0,
+      }),
     };
 
     Object.defineProperty(window, "hermesAPI", {
       configurable: true,
       value: hermesAPI as unknown as Window["hermesAPI"],
+    });
+    Object.defineProperty(window, "electron", {
+      configurable: true,
+      value: { process: { platform: "darwin" } },
     });
   });
 
@@ -69,5 +83,21 @@ describe("Gateway", () => {
     await waitFor(() => {
       expect(window.hermesAPI.startGateway).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it("surfaces macOS Contacts sync from the real Connected Apps page", async () => {
+    renderGateway();
+
+    const sync = await screen.findByRole("button", {
+      name: /Sync Mac Contacts/,
+    });
+    fireEvent.click(sync);
+
+    await waitFor(() => {
+      expect(window.hermesAPI.macContactsSync).toHaveBeenCalledWith("work");
+    });
+    expect(
+      await screen.findByText("Synced — 1 added, 0 updated."),
+    ).toBeVisible();
   });
 });

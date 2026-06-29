@@ -4,6 +4,7 @@ import { useI18n } from "../../components/useI18n";
 import { useGatewayHealth } from "../../hooks/useGatewayHealth";
 import PlatformCard from "./components/PlatformCard";
 import WhatsAppCloudSetup from "./components/WhatsAppCloudSetup";
+import ConnectedApps from "../Settings/ConnectedApps";
 
 function Gateway({ profile }: { profile?: string }): React.JSX.Element {
   const { t } = useI18n();
@@ -266,6 +267,8 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
   return (
     <div className="settings-container">
       <h1 className="settings-header">{t("gateway.title")}</h1>
+
+      <ConnectedApps profile={profile} />
 
       <div className="settings-section">
         <div className="settings-section-title">

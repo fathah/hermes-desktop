@@ -39,10 +39,21 @@ export default function ConnectedApps({
   async function handleSync(): Promise<void> {
     setSyncing(true);
     setResult(null);
-    const synced = await window.hermesAPI.macContactsSync(profile);
-    setResult(synced);
-    setStatus({ available: synced.available, authorized: synced.authorized });
-    setSyncing(false);
+    try {
+      const synced = await window.hermesAPI.macContactsSync(profile);
+      setResult(synced);
+      setStatus({ available: synced.available, authorized: synced.authorized });
+    } catch (err) {
+      setResult({
+        available: status?.available ?? true,
+        authorized: status?.authorized ?? false,
+        added: 0,
+        updated: 0,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setSyncing(false);
+    }
   }
 
   const unavailable = status !== null && !status.available;
@@ -65,7 +76,7 @@ export default function ConnectedApps({
   }
 
   return (
-    <div className="settings-section" data-section-tab="dataPrivacy">
+    <div className="settings-section">
       <div className="settings-section-title">
         {t("settings.connectedAppsSection")}
       </div>

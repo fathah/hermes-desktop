@@ -34,6 +34,13 @@ function mockApi(status: MacStatus, sync: MacSync): void {
   };
 }
 
+function mockApiRejected(status: MacStatus, error: Error): void {
+  (window as unknown as { hermesAPI: unknown }).hermesAPI = {
+    macContactsStatus: vi.fn().mockResolvedValue(status),
+    macContactsSync: vi.fn().mockRejectedValue(error),
+  };
+}
+
 function setPlatform(platform: string): void {
   (window as unknown as { electron?: unknown }).electron = {
     process: { platform },
@@ -93,6 +100,21 @@ describe("<ConnectedApps>", () => {
     await waitFor(() =>
       expect(screen.getByText("Contacts access not granted")).toBeTruthy(),
     );
+  });
+
+  it("renders a rejected sync error and re-enables the button", async () => {
+    mockApiRejected(
+      { available: true, authorized: true },
+      new Error("Native module crashed"),
+    );
+    render(<ConnectedApps profile="default" />);
+
+    fireEvent.click(screen.getByText("settings.macContactsSync"));
+
+    await waitFor(() =>
+      expect(screen.getByText("Native module crashed")).toBeTruthy(),
+    );
+    expect(screen.getByText("settings.macContactsSync")).not.toBeDisabled();
   });
 
   it("reports 'already up to date' when nothing changed", async () => {

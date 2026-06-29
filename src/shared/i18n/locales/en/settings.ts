@@ -87,7 +87,7 @@ export default {
   exportBackup: "Export Backup",
   importing: "Importing...",
   importBackup: "Import Backup",
-  connectedAppsSection: "Connected Apps",
+  connectedAppsSection: "macOS Contacts",
   macContactsHint:
     "Sync your macOS Contacts into your people. Existing notes, aliases, and tags are kept — Contacts only fills in missing email, phone, and company.",
   macContactsUnavailable:
