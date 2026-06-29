@@ -43,6 +43,12 @@ export default {
   downloading: "Downloading {{percent}}%",
   restartToUpdate: "Restart to update",
   updateFailed: "Update failed",
+  desktopUpdateTitle: "Desktop update v{{version}}",
+  desktopUpdateIntro:
+    "Review the release notes before downloading the Desktop update.",
+  desktopUpdateReleaseNotesFallback:
+    "No release notes were included with this update.",
+  downloadUpdate: "Download update",
   agentUpdateAvailable: "SPS update available",
   agentUpdating: "Updating SPS…",
   agentUpdated: "SPS updated",

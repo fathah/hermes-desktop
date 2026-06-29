@@ -104,6 +104,25 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
+function normalizeReleaseNotes(notes: unknown): string {
+  if (!notes) return "";
+  if (typeof notes === "string") return notes;
+  if (Array.isArray(notes)) {
+    return notes
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object") {
+          const note = (item as Record<string, unknown>).note;
+          return typeof note === "string" ? note : "";
+        }
+        return "";
+      })
+      .filter(Boolean)
+      .join("\n\n");
+  }
+  return String(notes);
+}
+
 interface LayoutProps {
   verifyWarning?: boolean;
   onReinstall?: () => void;
@@ -229,6 +248,8 @@ function Layout({
   >(null);
   const [downloadPercent, setDownloadPercent] = useState(0);
   const [updateError, setUpdateError] = useState<string | null>(null);
+  const [updateReleaseNotes, setUpdateReleaseNotes] = useState("");
+  const [showAppUpdateModal, setShowAppUpdateModal] = useState(false);
 
   // Hermes *runtime* update (WS3) — distinct from the Electron-shell auto-update
   // above. Detects when the locally-checked-out agent is behind upstream and
@@ -245,6 +266,7 @@ function Layout({
   useEffect(() => {
     const cleanupAvailable = window.hermesAPI.onUpdateAvailable((info) => {
       setUpdateVersion(info.version);
+      setUpdateReleaseNotes(normalizeReleaseNotes(info.releaseNotes));
       setUpdateState("available");
       setUpdateError(null);
       setDownloadPercent(0);
@@ -260,6 +282,7 @@ function Layout({
     });
     const cleanupError = window.hermesAPI.onUpdateError((message) => {
       setUpdateState("error");
+      setShowAppUpdateModal(false);
       setUpdateError(message);
       setDownloadPercent(0);
     });
@@ -314,18 +337,24 @@ function Layout({
     }
   }
 
+  async function downloadAppUpdate(): Promise<void> {
+    setUpdateError(null);
+    setDownloadPercent(0);
+    setUpdateState("downloading");
+    try {
+      const ok = await window.hermesAPI.downloadUpdate();
+      if (!ok) setUpdateState("error");
+    } catch (err) {
+      setUpdateError(err instanceof Error ? err.message : String(err));
+      setUpdateState("error");
+    }
+  }
+
   async function handleUpdate(): Promise<void> {
-    if (updateState === "available" || updateState === "error") {
-      setUpdateError(null);
-      setDownloadPercent(0);
-      setUpdateState("downloading");
-      try {
-        const ok = await window.hermesAPI.downloadUpdate();
-        if (!ok) setUpdateState("error");
-      } catch (err) {
-        setUpdateError(err instanceof Error ? err.message : String(err));
-        setUpdateState("error");
-      }
+    if (updateState === "available") {
+      setShowAppUpdateModal(true);
+    } else if (updateState === "error") {
+      await downloadAppUpdate();
     } else if (updateState === "ready") {
       await window.hermesAPI.installUpdate();
     }
@@ -532,6 +561,78 @@ function Layout({
           </div>
         )}
       </main>
+
+      {/* Desktop app release notes modal */}
+      {showAppUpdateModal && (
+        <div
+          className="skills-detail-overlay"
+          onClick={() => setShowAppUpdateModal(false)}
+        >
+          <div
+            className="schedules-modal"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 500 }}
+          >
+            <div className="schedules-modal-header">
+              <h3>
+                {t("common.desktopUpdateTitle", {
+                  version: updateVersion || "",
+                })}
+              </h3>
+              <button
+                className="btn-ghost"
+                onClick={() => setShowAppUpdateModal(false)}
+                style={{ fontSize: 24, lineHeight: 1 }}
+              >
+                &times;
+              </button>
+            </div>
+            <div
+              className="schedules-modal-body"
+              style={{ display: "flex", flexDirection: "column", gap: 12 }}
+            >
+              <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>
+                {t("common.desktopUpdateIntro")}
+              </p>
+
+              <div
+                style={{
+                  maxHeight: 250,
+                  overflowY: "auto",
+                  background: "var(--bg-tertiary, rgba(127,127,127,0.06))",
+                  border: "1px solid var(--border)",
+                  borderRadius: 6,
+                  padding: 12,
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 12,
+                  whiteSpace: "pre-wrap",
+                  lineHeight: 1.4,
+                }}
+              >
+                {updateReleaseNotes ||
+                  t("common.desktopUpdateReleaseNotesFallback")}
+              </div>
+            </div>
+            <div className="schedules-modal-footer">
+              <button
+                className="btn btn-secondary"
+                onClick={() => setShowAppUpdateModal(false)}
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  setShowAppUpdateModal(false);
+                  void downloadAppUpdate();
+                }}
+              >
+                {t("common.downloadUpdate")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Git Changelog / What's New Modal */}
       {showChangelogModal && (

@@ -9,6 +9,16 @@ export interface SystemBridgeApi {
 
   getAppVersion: () => Promise<string>;
 
+  getDesktopUpdateRoutine: () => Promise<Api.DesktopUpdateRoutineState>;
+
+  setDesktopUpdateRoutine: (
+    settings: Partial<{ enabled: boolean; autoDownload: boolean }>,
+  ) => Promise<Api.DesktopUpdateRoutineState>;
+
+  runDesktopUpdateCheck: (
+    options?: Partial<{ autoDownload: boolean }>,
+  ) => Promise<Api.DesktopUpdateRoutineResult>;
+
   onUpdateAvailable: (
     callback: (info: { version: string; releaseNotes: string }) => void,
   ) => () => void;

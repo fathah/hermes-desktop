@@ -100,6 +100,19 @@ describe("New APIs from v0.8/v0.9 features", () => {
     expect(typeMethods).toContain("runHermesDump");
   });
 
+  it("has Desktop update routine APIs", () => {
+    for (const method of [
+      "getDesktopUpdateRoutine",
+      "setDesktopUpdateRoutine",
+      "runDesktopUpdateCheck",
+    ]) {
+      expect(preloadMethods).toContain(method);
+      expect(typeMethods).toContain(method);
+    }
+    expect(preloadTypes).toContain("DesktopUpdateRoutineState");
+    expect(preloadTypes).toContain("DesktopUpdateRoutineResult");
+  });
+
   it("has MCP server list API", () => {
     for (const method of [
       "listMcpServers",

@@ -22,10 +22,13 @@ import {
 } from "../installer";
 import {
   getConnectionConfig,
+  getDesktopUpdateRoutine,
   getHermesAgentUpdateRoutine,
+  setDesktopUpdateRoutine,
   setHermesAgentUpdateRoutine,
 } from "../config";
 import { runHermesAgentUpdateCheck } from "../hermes-agent-updates";
+import { runDesktopUpdateCheck } from "../desktop-update-routine";
 import {
   getHermesUpstreamWatchState,
   runHermesUpstreamWatch,
@@ -210,6 +213,17 @@ export function registerSystemIpc(
 
   // App version
   safeHandle("get-app-version", () => app.getVersion());
+  safeHandle("get-desktop-update-routine", () => getDesktopUpdateRoutine());
+  safeHandle(
+    "set-desktop-update-routine",
+    (_event, settings: Partial<{ enabled: boolean; autoDownload: boolean }>) =>
+      setDesktopUpdateRoutine(settings),
+  );
+  safeHandle(
+    "run-desktop-update-check",
+    (_event, options?: Partial<{ autoDownload: boolean }>) =>
+      runDesktopUpdateCheck({ autoDownload: options?.autoDownload }),
+  );
 
   // Locale
   safeHandle("get-locale", () => getAppLocale());

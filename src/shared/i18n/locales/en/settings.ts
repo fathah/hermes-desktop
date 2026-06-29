@@ -102,6 +102,22 @@ export default {
   updating: "Updating...",
   updateEngine: "Update Engine",
   latestVersion: "Already up to date",
+  desktopUpdates: {
+    title: "Desktop updates",
+    nightlyCheck: "Check nightly for Desktop updates",
+    nightlyCheckHint:
+      "Runs once per local day at 4:00 AM while the app is open. It records availability and shows release notes before downloading.",
+    autoDownload: "Auto-download available Desktop updates",
+    autoDownloadHint:
+      "Off by default. When enabled, the nightly check downloads the update; restart still remains your choice.",
+    schedule: "Schedule",
+    lastChecked: "Last checked",
+    nextCheck: "Next check",
+    lastStatus: "Last status",
+    runNow: "Run now",
+    running: "Checking...",
+    unavailable: "No checks yet",
+  },
   runningDiagnosis: "Running health check...",
   runDiagnosis: "Run Health Check",
   running: "Running...",

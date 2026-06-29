@@ -8,6 +8,17 @@ export const systemBridge = {
   downloadUpdate: (): Promise<boolean> => ipcRenderer.invoke("download-update"),
   installUpdate: (): Promise<void> => ipcRenderer.invoke("install-update"),
   getAppVersion: (): Promise<string> => ipcRenderer.invoke("get-app-version"),
+  getDesktopUpdateRoutine: (): ReturnType<
+    SystemBridgeApi["getDesktopUpdateRoutine"]
+  > => ipcRenderer.invoke("get-desktop-update-routine"),
+  setDesktopUpdateRoutine: (
+    settings: Partial<{ enabled: boolean; autoDownload: boolean }>,
+  ): ReturnType<SystemBridgeApi["setDesktopUpdateRoutine"]> =>
+    ipcRenderer.invoke("set-desktop-update-routine", settings),
+  runDesktopUpdateCheck: (
+    options?: Partial<{ autoDownload: boolean }>,
+  ): ReturnType<SystemBridgeApi["runDesktopUpdateCheck"]> =>
+    ipcRenderer.invoke("run-desktop-update-check", options),
 
   onUpdateAvailable: (
     callback: (info: { version: string; releaseNotes: string }) => void,

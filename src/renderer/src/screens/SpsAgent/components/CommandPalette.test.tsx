@@ -45,16 +45,23 @@ vi.mock("../store", () => {
 import { CommandPalette } from "./CommandPalette";
 
 const api = {
+  getAppVersion: vi.fn(),
   spsExportRow: vi.fn(),
 };
 
 function installApi(): void {
   (window as unknown as { hermesAPI: unknown }).hermesAPI = api;
+  (window as unknown as { electron: unknown }).electron = {
+    process: { platform: "darwin" },
+  };
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
+  localStorage.setItem("hermes-desktop-last-seen-version", "0.5.4");
   installApi();
+  api.getAppVersion.mockResolvedValue("0.5.5");
   api.spsExportRow.mockResolvedValue(true);
   vi.spyOn(window, "getSelection").mockReturnValue({
     toString: () => "Selected proof that should become a draft angle.",
@@ -64,9 +71,20 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   delete (window as unknown as { hermesAPI?: unknown }).hermesAPI;
+  delete (window as unknown as { electron?: unknown }).electron;
 });
 
 describe("CommandPalette", () => {
+  it("offers what's new when update affordances are unseen", async () => {
+    render(<CommandPalette />);
+
+    const [actionLabel] = await screen.findAllByText("What's new");
+
+    fireEvent.mouseDown(actionLabel);
+
+    expect(store.setSurface).toHaveBeenCalledWith("doc");
+  });
+
   it("opens Content Studio after saving selected workspace text as a content idea", async () => {
     render(<CommandPalette />);
 

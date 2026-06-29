@@ -26,6 +26,7 @@ import { readDesktopConfig, writeDesktopConfig } from "./config";
 import { runDreamCycle } from "./dream-cycle";
 import { maybeRunHermesAgentUpdateRoutine } from "./hermes-agent-updates";
 import { maybeRunHermesUpstreamWatchRoutine } from "./hermes-upstream-watch";
+import { maybeRunDesktopUpdateRoutine } from "./desktop-update-routine";
 import { getApiUrl, getRemoteAuthHeader } from "./hermes";
 import { createLearningProposal } from "./learning-proposals";
 import { listInstalledSkills, getSkillContent } from "./skills";
@@ -257,6 +258,9 @@ export async function tickScheduler(profile?: string): Promise<void> {
       console.error("[SCHEDULER] Error checking Hermes Agent update:", err);
     },
   );
+  void maybeRunDesktopUpdateRoutine(new Date()).catch((err) => {
+    console.error("[SCHEDULER] Error checking Desktop update:", err);
+  });
   void maybeRunHermesUpstreamWatchRoutine(new Date(), activeProfile).catch(
     (err) => {
       console.error("[SCHEDULER] Error checking Hermes upstream watch:", err);

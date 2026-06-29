@@ -225,6 +225,26 @@ export type HermesAgentUpdateRoutineState = {
   lastResult: HermesAgentUpdateRoutineResult | null;
 };
 
+export type DesktopUpdateRoutineResult = {
+  checkedAt: string;
+  status: "current" | "available" | "downloaded" | "skipped" | "error";
+  message: string;
+  phase?: "check" | "download";
+  reason?: string;
+  version?: string;
+  releaseNotes?: string;
+};
+
+export type DesktopUpdateRoutineState = {
+  enabled: boolean;
+  autoDownload: boolean;
+  schedule: string;
+  timezone: string;
+  lastCheckedAt: string | null;
+  nextCheckAt: string;
+  lastResult: DesktopUpdateRoutineResult | null;
+};
+
 export type HermesUpstreamWatchCategory =
   | "runtime-required"
   | "api-contract"

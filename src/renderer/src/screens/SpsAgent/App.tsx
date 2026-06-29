@@ -43,6 +43,10 @@ import { RssReaderDashboard } from "./research/RssReaderDashboard";
 import { Dashboard } from "./components/Dashboard";
 import { ContentStudioSurface } from "./content/ContentStudioSurface";
 import { DeckStudioSurface } from "./deck/DeckStudioSurface";
+import { WhatsNewPanel } from "./updates/WhatsNewPanel";
+import { openSettings } from "../../lib/openSettings";
+import type { ReleaseAffordanceAction } from "../../../../shared/update-affordances";
+import type { Surface } from "./store/storeTypes";
 
 const NARROW_WORKSPACE_QUERY = "(max-width: 900px)";
 
@@ -59,9 +63,34 @@ export function App() {
   const setPanelOpen = useStore((s) => s.setPanelOpen);
   const surface = useStore((s) => s.surface);
   const chatNonce = useStore((s) => s.chatNonce);
+  const setSurface = useStore((s) => s.setSurface);
+  const setTemplatesOpen = useStore((s) => s.setTemplatesOpen);
+  const setResearchOpen = useStore((s) => s.setResearchOpen);
+  const setScheduledOpen = useStore((s) => s.setScheduledOpen);
+  const setPaletteOpen = useStore((s) => s.setPaletteOpen);
   const docScrollRef = useRef<HTMLDivElement>(null);
   const [narrowWorkspace, setNarrowWorkspace] = useState(isNarrowWorkspace);
   const wasNarrowRef = useRef(narrowWorkspace);
+
+  const runReleaseAffordance = (action: ReleaseAffordanceAction): void => {
+    if (action.kind === "surface") {
+      setSurface(action.surface as Surface);
+      return;
+    }
+    if (action.kind === "settings") {
+      openSettings(action.view);
+      return;
+    }
+    if (action.modal === "research") {
+      setResearchOpen(true);
+    } else if (action.modal === "scheduled") {
+      setScheduledOpen(true);
+    } else if (action.modal === "templates") {
+      setTemplatesOpen({ parent: null });
+    } else {
+      setPaletteOpen(true);
+    }
+  };
 
   useEffect(() => {
     setScrollContainer(docScrollRef.current);
@@ -189,6 +218,7 @@ export function App() {
               <Topbar />
               <div className="doc-scroll scroll" ref={docScrollRef}>
                 <OnboardingChecklist />
+                <WhatsNewPanel onRunAction={runReleaseAffordance} />
                 <DocHeader>
                   {/* distinct key so the editor remounts (clean refs) on page switch */}
                   <Editor key={`ed-${page}`} />

@@ -27,6 +27,7 @@ const mockWriteDesktopConfig = vi.fn();
 const mockReadDesktopConfig = vi.fn(() => ({}));
 const mockMaybeRunHermesAgentUpdateRoutine = vi.fn();
 const mockMaybeRunHermesUpstreamWatchRoutine = vi.fn();
+const mockMaybeRunDesktopUpdateRoutine = vi.fn();
 
 vi.mock("child_process", () => {
   const fns = {
@@ -108,6 +109,11 @@ vi.mock("../src/main/hermes-upstream-watch", () => ({
   ): Promise<unknown> => mockMaybeRunHermesUpstreamWatchRoutine(now, profile),
 }));
 
+vi.mock("../src/main/desktop-update-routine", () => ({
+  maybeRunDesktopUpdateRoutine: (now: Date): Promise<unknown> =>
+    mockMaybeRunDesktopUpdateRoutine(now),
+}));
+
 vi.mock("../src/main/config", () => ({
   readDesktopConfig: () => mockReadDesktopConfig(),
   writeDesktopConfig: (c: unknown) => mockWriteDesktopConfig(c),
@@ -131,6 +137,7 @@ describe("Scheduler Service", () => {
     vi.clearAllMocks();
     mockMaybeRunHermesAgentUpdateRoutine.mockResolvedValue(null);
     mockMaybeRunHermesUpstreamWatchRoutine.mockResolvedValue(null);
+    mockMaybeRunDesktopUpdateRoutine.mockResolvedValue(null);
   });
 
   it("should get default scheduler config", () => {
@@ -189,6 +196,16 @@ describe("Scheduler Service", () => {
     expect(mockMaybeRunHermesAgentUpdateRoutine).toHaveBeenCalledWith(
       expect.any(Date),
       "test-profile",
+    );
+  });
+
+  it("checks the Desktop update routine on scheduler ticks", async () => {
+    mockListCronJobs.mockResolvedValueOnce([]);
+
+    await tickScheduler("test-profile");
+
+    expect(mockMaybeRunDesktopUpdateRoutine).toHaveBeenCalledWith(
+      expect.any(Date),
     );
   });
 

@@ -336,6 +336,137 @@ export function recordHermesAgentUpdateResult(
   return getHermesAgentUpdateRoutine(profile, new Date(result.checkedAt));
 }
 
+// ── Desktop app updater routine ─────────────────────────────────────────────
+
+const DESKTOP_UPDATE_KEY = "desktopUpdateRoutine";
+const DESKTOP_UPDATE_SCHEDULE = "0 4 * * *";
+const DESKTOP_UPDATE_HOUR = 4;
+
+export type DesktopUpdateRoutineStatus =
+  | "current"
+  | "available"
+  | "downloaded"
+  | "skipped"
+  | "error";
+
+export type DesktopUpdateRoutinePhase = "check" | "download";
+
+export interface DesktopUpdateRoutineResult {
+  checkedAt: string;
+  status: DesktopUpdateRoutineStatus;
+  message: string;
+  phase?: DesktopUpdateRoutinePhase;
+  reason?: string;
+  version?: string;
+  releaseNotes?: string;
+}
+
+export interface DesktopUpdateRoutineSettings {
+  enabled: boolean;
+  autoDownload: boolean;
+}
+
+export interface DesktopUpdateRoutineState extends DesktopUpdateRoutineSettings {
+  schedule: typeof DESKTOP_UPDATE_SCHEDULE;
+  timezone: string;
+  lastCheckedAt: string | null;
+  nextCheckAt: string;
+  lastResult: DesktopUpdateRoutineResult | null;
+}
+
+interface StoredDesktopUpdateRoutine extends Partial<DesktopUpdateRoutineSettings> {
+  lastCheckedAt?: string | null;
+  lastResult?: DesktopUpdateRoutineResult | null;
+}
+
+function desktopUpdateRoutineState(
+  data: Record<string, unknown>,
+): StoredDesktopUpdateRoutine {
+  const raw = data[DESKTOP_UPDATE_KEY];
+  return raw && typeof raw === "object"
+    ? (raw as StoredDesktopUpdateRoutine)
+    : {};
+}
+
+function scheduledDesktopUpdateLocalForDate(date: Date, dayOffset = 0): Date {
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate() + dayOffset,
+    DESKTOP_UPDATE_HOUR,
+    0,
+    0,
+    0,
+  );
+}
+
+export function nextDesktopUpdateCheckAt(now = new Date()): string {
+  const today = scheduledDesktopUpdateLocalForDate(now);
+  if (now.getTime() < today.getTime()) return today.toISOString();
+  return scheduledDesktopUpdateLocalForDate(now, 1).toISOString();
+}
+
+export function isDesktopUpdateRoutineDue(
+  state: { enabled?: boolean; lastCheckedAt?: string | null },
+  now = new Date(),
+): boolean {
+  if (state.enabled === false) return false;
+  const todaySchedule = scheduledDesktopUpdateLocalForDate(now);
+  if (now.getTime() < todaySchedule.getTime()) return false;
+  if (!state.lastCheckedAt) return true;
+  const last = new Date(state.lastCheckedAt);
+  if (Number.isNaN(last.getTime())) return true;
+  return localDateKey(last) !== localDateKey(now);
+}
+
+export function getDesktopUpdateRoutine(
+  now = new Date(),
+): DesktopUpdateRoutineState {
+  const stored = desktopUpdateRoutineState(readDesktopConfig());
+  const lastResult = stored.lastResult || null;
+  return {
+    enabled: stored.enabled !== false,
+    autoDownload: stored.autoDownload === true,
+    schedule: DESKTOP_UPDATE_SCHEDULE,
+    timezone: localTimezone(),
+    lastCheckedAt: stored.lastCheckedAt || lastResult?.checkedAt || null,
+    nextCheckAt: nextDesktopUpdateCheckAt(now),
+    lastResult,
+  };
+}
+
+export function setDesktopUpdateRoutine(
+  settings: Partial<DesktopUpdateRoutineSettings>,
+): DesktopUpdateRoutineState {
+  const data = readDesktopConfig();
+  const prev = desktopUpdateRoutineState(data);
+  data[DESKTOP_UPDATE_KEY] = {
+    ...prev,
+    ...(typeof settings.enabled === "boolean"
+      ? { enabled: settings.enabled }
+      : {}),
+    ...(typeof settings.autoDownload === "boolean"
+      ? { autoDownload: settings.autoDownload }
+      : {}),
+  };
+  writeDesktopConfig(data);
+  return getDesktopUpdateRoutine();
+}
+
+export function recordDesktopUpdateRoutineResult(
+  result: DesktopUpdateRoutineResult,
+): DesktopUpdateRoutineState {
+  const data = readDesktopConfig();
+  const prev = desktopUpdateRoutineState(data);
+  data[DESKTOP_UPDATE_KEY] = {
+    ...prev,
+    lastCheckedAt: result.checkedAt,
+    lastResult: result,
+  };
+  writeDesktopConfig(data);
+  return getDesktopUpdateRoutine(new Date(result.checkedAt));
+}
+
 /** Per-source enable flags for the External Context Bridge. App-level (the
  *  external transcript sources live on the machine, not per profile) and
  *  default ALL OFF — indexing other AI tools' transcripts is strictly opt-in. */

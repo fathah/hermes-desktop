@@ -14,6 +14,7 @@ import { getStorageMode } from "../lib/storageMode";
 import type { PageMeta, TreeNode } from "../types";
 import type { ContentIdea } from "../../../lib/content-studio";
 import { saveContentIdea } from "../content/contentStudioStorage";
+import { useWhatsNew } from "../updates/useWhatsNew";
 
 interface ActionItem {
   kind: "action";
@@ -73,6 +74,7 @@ export function CommandPalette() {
   const openInboxImageCapture = useStore((s) => s.openInboxImageCapture);
   const flash = useStore((s) => s.flash);
   const openContentStudioIdea = useStore((s) => s.openContentStudioIdea);
+  const whatsNew = useWhatsNew();
 
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
@@ -179,6 +181,20 @@ export function CommandPalette() {
 
   const actions: ActionItem[] = useMemo(
     () => [
+      ...(whatsNew.items.length > 0
+        ? [
+            {
+              kind: "action" as const,
+              id: "whats-new",
+              icon: "sparkle" as const,
+              label: "What's new",
+              desc: `Review ${whatsNew.items.length} new capability${
+                whatsNew.items.length === 1 ? "" : "ies"
+              } in this update.`,
+              run: () => setSurface("doc"),
+            },
+          ]
+        : []),
       {
         kind: "action",
         id: "newchat",
@@ -560,6 +576,7 @@ export function CommandPalette() {
       processActiveObsidianNote,
       importObsidianFolder,
       saveSelectionAsContentIdea,
+      whatsNew.items.length,
     ],
   );
 

@@ -8,7 +8,14 @@ import {
   appZoomSettingsFor,
   type AppZoomSettings,
 } from "../../../../shared/app-zoom";
-import { Check, Download, Upload, FileText, Send } from "lucide-react";
+import {
+  Check,
+  Download,
+  Upload,
+  FileText,
+  RefreshCw,
+  Send,
+} from "lucide-react";
 import {
   getAnalyticsConsent,
   setAnalyticsConsent,
@@ -23,6 +30,13 @@ import type { SettingsSection } from "./settingsSections";
 import { SETTINGS_SECTION_COPY } from "./settingsSections";
 
 const TELEGRAM_COMMUNITY_URL = "https://t.me/hermes_agent_desktop";
+
+type DesktopUpdateRoutineState = Awaited<
+  ReturnType<Window["hermesAPI"]["getDesktopUpdateRoutine"]>
+>;
+type DesktopUpdateRoutineResult = NonNullable<
+  DesktopUpdateRoutineState["lastResult"]
+>;
 
 // Build a mask string the same width as the stored API key so the
 // "saved" state of the input looks like a key, not a constant blob.
@@ -42,6 +56,13 @@ function getCachedVersion(): string | null {
   } catch {
     return null;
   }
+}
+
+function formatRoutineDate(value: string | null | undefined): string {
+  if (!value) return "Never";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
 }
 
 function Settings({
@@ -74,6 +95,12 @@ function Settings({
   const [updateResultType, setUpdateResultType] = useState<
     "success" | "error" | null
   >(null);
+  const [desktopUpdateRoutine, setDesktopUpdateRoutineState] =
+    useState<DesktopUpdateRoutineState | null>(null);
+  const [desktopUpdateRunning, setDesktopUpdateRunning] = useState(false);
+  const [desktopUpdateError, setDesktopUpdateError] = useState<string | null>(
+    null,
+  );
 
   // Connection mode
   const [connMode, setConnMode] = useState<"local" | "remote" | "ssh">("local");
@@ -160,15 +187,18 @@ function Settings({
 
   const loadConfig = useCallback(async (): Promise<void> => {
     // Load fast config first (cached in main process)
-    const [home, aVersion, conn, keyStatus, zoomSettings] = await Promise.all([
-      window.hermesAPI.getHermesHome(profile),
-      window.hermesAPI.getAppVersion(),
-      window.hermesAPI.getConnectionConfig(),
-      window.hermesAPI.getApiServerKeyStatus(profile),
-      window.hermesAPI.getAppZoomSettings(),
-    ]);
+    const [home, aVersion, conn, keyStatus, zoomSettings, desktopRoutine] =
+      await Promise.all([
+        window.hermesAPI.getHermesHome(profile),
+        window.hermesAPI.getAppVersion(),
+        window.hermesAPI.getConnectionConfig(),
+        window.hermesAPI.getApiServerKeyStatus(profile),
+        window.hermesAPI.getAppZoomSettings(),
+        window.hermesAPI.getDesktopUpdateRoutine(),
+      ]);
     setHermesHome(home);
     setAppVersion(aVersion);
+    setDesktopUpdateRoutineState(desktopRoutine);
     setAppZoom(zoomSettings);
     setConnMode(conn.mode);
     setConnRemoteUrl(conn.remoteUrl);
@@ -406,6 +436,36 @@ function Settings({
     }
   }
 
+  async function handleDesktopUpdateSetting(
+    settings: Partial<{ enabled: boolean; autoDownload: boolean }>,
+  ): Promise<void> {
+    setDesktopUpdateError(null);
+    try {
+      const updated = await window.hermesAPI.setDesktopUpdateRoutine(settings);
+      setDesktopUpdateRoutineState(updated);
+    } catch (err) {
+      setDesktopUpdateError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleRunDesktopUpdateCheck(): Promise<void> {
+    setDesktopUpdateRunning(true);
+    setDesktopUpdateError(null);
+    try {
+      const result = await window.hermesAPI.runDesktopUpdateCheck();
+      setDesktopUpdateRoutineState(
+        await window.hermesAPI.getDesktopUpdateRoutine(),
+      );
+      if (result.status === "error") {
+        setDesktopUpdateError(result.message);
+      }
+    } catch (err) {
+      setDesktopUpdateError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDesktopUpdateRunning(false);
+    }
+  }
+
   // Parse "Hermes Agent v0.7.0 (2026.4.3) Project: ... Python: 3.11.15 OpenAI SDK: 2.30.0 Update available: ..."
   const parsedVersion = (() => {
     if (!hermesVersion) return null;
@@ -418,6 +478,8 @@ function Settings({
     const updateInfo = updateMatch?.[1]?.trim() || null;
     return { version, date, python, sdk, updateInfo };
   })();
+  const desktopLastResult: DesktopUpdateRoutineResult | null =
+    desktopUpdateRoutine?.lastResult ?? null;
 
   return (
     <div
@@ -565,6 +627,120 @@ function Settings({
             <pre className="settings-hermes-doctor">{dumpOutput}</pre>
           )}
         </div>
+      </div>
+
+      <div className="settings-section" data-section-tab="troubleshooting">
+        <div className="settings-section-title">
+          {t("settings.desktopUpdates.title")}
+        </div>
+        <div className="settings-field">
+          <label className="settings-field-label">
+            {t("settings.desktopUpdates.nightlyCheck")}
+            <label
+              className="tools-toggle"
+              style={{ marginLeft: 12, verticalAlign: "middle" }}
+            >
+              <input
+                type="checkbox"
+                checked={desktopUpdateRoutine?.enabled ?? true}
+                onChange={(e) =>
+                  void handleDesktopUpdateSetting({
+                    enabled: e.target.checked,
+                  })
+                }
+              />
+              <span className="tools-toggle-track" />
+            </label>
+          </label>
+          <div className="settings-field-hint">
+            {t("settings.desktopUpdates.nightlyCheckHint")}
+          </div>
+        </div>
+        <div className="settings-field">
+          <label className="settings-field-label">
+            {t("settings.desktopUpdates.autoDownload")}
+            <label
+              className="tools-toggle"
+              style={{ marginLeft: 12, verticalAlign: "middle" }}
+            >
+              <input
+                type="checkbox"
+                checked={desktopUpdateRoutine?.autoDownload ?? false}
+                onChange={(e) =>
+                  void handleDesktopUpdateSetting({
+                    autoDownload: e.target.checked,
+                  })
+                }
+              />
+              <span className="tools-toggle-track" />
+            </label>
+          </label>
+          <div className="settings-field-hint">
+            {t("settings.desktopUpdates.autoDownloadHint")}
+          </div>
+        </div>
+        <div className="settings-hermes-row">
+          <div className="settings-hermes-detail">
+            <span className="settings-hermes-label">
+              {t("settings.desktopUpdates.schedule")}
+            </span>
+            <span className="settings-hermes-value">
+              {desktopUpdateRoutine?.schedule || "0 4 * * *"}
+            </span>
+          </div>
+          <div className="settings-hermes-detail">
+            <span className="settings-hermes-label">
+              {t("settings.desktopUpdates.lastChecked")}
+            </span>
+            <span className="settings-hermes-value">
+              {formatRoutineDate(desktopUpdateRoutine?.lastCheckedAt)}
+            </span>
+          </div>
+          <div className="settings-hermes-detail">
+            <span className="settings-hermes-label">
+              {t("settings.desktopUpdates.nextCheck")}
+            </span>
+            <span className="settings-hermes-value">
+              {formatRoutineDate(desktopUpdateRoutine?.nextCheckAt)}
+            </span>
+          </div>
+          <div className="settings-hermes-detail">
+            <span className="settings-hermes-label">
+              {t("settings.desktopUpdates.lastStatus")}
+            </span>
+            <span className="settings-hermes-value">
+              {desktopLastResult
+                ? `${desktopLastResult.status}${
+                    desktopLastResult.version
+                      ? ` · v${desktopLastResult.version}`
+                      : ""
+                  }`
+                : t("settings.desktopUpdates.unavailable")}
+            </span>
+          </div>
+        </div>
+        {desktopLastResult?.message && (
+          <div className="settings-field-hint" style={{ marginTop: 10 }}>
+            {desktopLastResult.message}
+          </div>
+        )}
+        <div className="settings-hermes-actions" style={{ marginTop: 12 }}>
+          <button
+            className="btn btn-secondary"
+            onClick={() => void handleRunDesktopUpdateCheck()}
+            disabled={desktopUpdateRunning}
+          >
+            <RefreshCw size={14} style={{ marginRight: 6 }} />
+            {desktopUpdateRunning
+              ? t("settings.desktopUpdates.running")
+              : t("settings.desktopUpdates.runNow")}
+          </button>
+        </div>
+        {desktopUpdateError && (
+          <div className="settings-hermes-result error">
+            {desktopUpdateError}
+          </div>
+        )}
       </div>
 
       {/* Prompt Budget Visualizer Section */}
