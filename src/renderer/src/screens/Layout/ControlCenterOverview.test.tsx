@@ -184,12 +184,13 @@ describe("ControlCenterOverview", () => {
     expect(onNavigate).toHaveBeenCalledWith("models");
   });
 
-  it("shows remote-managed status without local model readiness checks", async () => {
+  it("shows remote connection guidance without local-only setup dead ends", async () => {
     const api = installHermesApi();
+    const onNavigate = vi.fn<(view: NormalizedAdminView) => void>();
 
     render(
       <ControlCenterOverview
-        onNavigate={vi.fn()}
+        onNavigate={onNavigate}
         onClose={vi.fn()}
         profile="default"
         remoteMode
@@ -202,6 +203,28 @@ describe("ControlCenterOverview", () => {
       within(statusStrip as HTMLElement).getByText("Remote-managed"),
     ).toBeInTheDocument();
     expect(screen.getByText("Configured on remote server")).toBeInTheDocument();
+    fireEvent.click(
+      within(statusStrip as HTMLElement).getByRole("button", {
+        name: "Review remote connection",
+      }),
+    );
+    expect(onNavigate).toHaveBeenCalledWith("advanced");
+
+    expect(
+      screen.queryByRole("button", { name: "Open AI Setup" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Open Connected Apps" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Remote-managed" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Remote Connection" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Review Connection" }));
+    expect(onNavigate).toHaveBeenCalledWith("advanced");
     await waitFor(() => {
       expect(api.getModelConfig).not.toHaveBeenCalled();
       expect(api.validateChatReadiness).not.toHaveBeenCalled();

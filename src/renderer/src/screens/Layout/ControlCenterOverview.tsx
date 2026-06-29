@@ -27,7 +27,6 @@ interface OverviewCard {
   action: string;
   view?: NormalizedAdminView;
   onClick?: () => void;
-  unavailable?: boolean;
 }
 
 interface ControlCenterOverviewProps {
@@ -40,8 +39,8 @@ interface ControlCenterOverviewProps {
 const REMOTE_AI_STATUS: AiStatus = {
   status: "Remote-managed",
   activeModel: "Configured on remote server",
-  action: "Check remote server",
-  target: "troubleshooting",
+  action: "Review remote connection",
+  target: "advanced",
 };
 
 const LOADING_AI_STATUS: AiStatus = {
@@ -144,15 +143,24 @@ function ControlCenterOverview({
   }, [profile, remoteMode]);
 
   const cards: OverviewCard[] = [
-    {
-      title: "AI Setup",
-      description: remoteMode
-        ? "AI providers are configured on the remote Hermes server."
-        : "Connect the provider and model that power My Assistant.",
-      action: remoteMode ? "Remote-managed" : "Open AI Setup",
-      view: remoteMode ? undefined : "aiSetup",
-      unavailable: remoteMode,
-    },
+    ...(remoteMode
+      ? [
+          {
+            title: "Remote Connection",
+            description:
+              "Review the remote URL, saved API key, and connection test for this Hermes server.",
+            action: "Review Connection",
+            view: "advanced" as const,
+          },
+        ]
+      : [
+          {
+            title: "AI Setup",
+            description: "Connect the provider and model that power My Assistant.",
+            action: "Open AI Setup",
+            view: "aiSetup" as const,
+          },
+        ]),
     {
       title: "Personalization",
       description: "Teach My Assistant how you think and want it to respond.",
@@ -171,15 +179,16 @@ function ControlCenterOverview({
       action: "Open Data & Privacy",
       view: "dataPrivacy",
     },
-    {
-      title: "Connected Apps",
-      description: remoteMode
-        ? "Messaging gateways run on the remote server, not this desktop shell."
-        : "Let My Assistant communicate through approved channels.",
-      action: remoteMode ? "Remote-managed" : "Open Connected Apps",
-      view: remoteMode ? undefined : "connectedApps",
-      unavailable: remoteMode,
-    },
+    ...(remoteMode
+      ? []
+      : [
+          {
+            title: "Connected Apps",
+            description: "Let My Assistant communicate through approved channels.",
+            action: "Open Connected Apps",
+            view: "connectedApps" as const,
+          },
+        ]),
     {
       title: "Troubleshooting",
       description: "Check health, versions, logs, and diagnostic reports.",
@@ -223,7 +232,6 @@ function ControlCenterOverview({
             <button
               type="button"
               className="btn btn-secondary control-center-card-action"
-              disabled={card.unavailable}
               onClick={() =>
                 card.onClick
                   ? card.onClick()
