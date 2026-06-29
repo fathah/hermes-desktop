@@ -152,7 +152,7 @@ export function ObsidianExplorer() {
       <div
         style={{
           padding: "8px 16px",
-          color: "var(--tx-4)",
+          color: "var(--tx-2)",
           fontSize: 11.5,
           lineHeight: 1.4,
         }}

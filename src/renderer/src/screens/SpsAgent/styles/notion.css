@@ -1058,11 +1058,8 @@
 .sps-scope .jr-btn.primary {
   border-color: transparent;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-on);
   font-weight: 600;
-}
-.sps-scope[data-theme="dark"] .jr-btn.primary {
-  color: #1a1810;
 }
 /* calendar cells become clickable in the journal surface */
 .sps-scope .jr .cal-day {

@@ -23,7 +23,13 @@ const SPS = join(
 const screenCss = readFileSync(join(SPS, "screen.css"), "utf-8");
 const tokensCss = readFileSync(join(SPS, "styles", "sps-tokens.css"), "utf-8");
 const homeCss = readFileSync(join(SPS, "styles", "home.css"), "utf-8");
+const askCss = readFileSync(join(SPS, "styles", "ask.css"), "utf-8");
+const notionCss = readFileSync(join(SPS, "styles", "notion.css"), "utf-8");
 const equityCss = readFileSync(join(SPS, "styles", "equity.css"), "utf-8");
+const obsidianExplorerTsx = readFileSync(
+  join(SPS, "sidebar", "ObsidianExplorer.tsx"),
+  "utf-8",
+);
 
 /** WCAG relative-luminance contrast ratio between two #rrggbb colors. */
 function contrast(hexA: string, hexB: string): number {
@@ -41,6 +47,13 @@ function contrast(hexA: string, hexB: string): number {
   const l1 = lum(hexA) + 0.05;
   const l2 = lum(hexB) + 0.05;
   return Math.max(l1, l2) / Math.min(l1, l2);
+}
+
+function cssRule(css: string, selector: string): string {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = css.match(new RegExp(`${escaped}\\s*\\{([^}]*)\\}`));
+  expect(match, `Missing CSS rule for ${selector}`).not.toBeNull();
+  return match?.[1] ?? "";
 }
 
 describe("SPS dark-theme text legibility", () => {
@@ -123,5 +136,40 @@ describe("SPS dark-theme text legibility", () => {
     const rule = homeCss.match(/\.sps-scope\s+\.db-tool\s*\{([^}]*)\}/);
     expect(rule).not.toBeNull();
     expect(rule?.[1]).toMatch(/background\s*:/);
+  });
+
+  it("uses --accent-on for interactive accent-filled controls, not white on gold", () => {
+    // The default accent is Sukhi gold (#c79400). White text on that fill is
+    // only 2.74:1; the on-accent token must supply the readable foreground.
+    expect(contrast("#ffffff", "#c79400")).toBeLessThan(4.5);
+    expect(contrast("#1b1d21", "#c79400")).toBeGreaterThanOrEqual(4.5);
+
+    const accentControls = [
+      [homeCss, ".sps-scope .rail-newchat"],
+      [homeCss, ".sps-scope .pal-chip.on"],
+      [homeCss, ".sps-scope .qdb-add"],
+      [homeCss, ".sps-scope .ck-ask-go"],
+      [homeCss, ".sps-scope .pa-accept"],
+      [homeCss, ".sps-scope .ob-step-card:hover .ob-step-action"],
+      [askCss, ".sps-scope .ask-send"],
+      [notionCss, ".sps-scope .jr-btn.primary"],
+      [screenCss, ".sps-scope .health-recheck-btn"],
+    ] as const;
+
+    for (const [css, selector] of accentControls) {
+      const rule = cssRule(css, selector);
+      expect(rule, selector).toMatch(/background:\s*var\(--accent/);
+      expect(rule, selector).toMatch(/color:\s*var\(--accent-on/);
+      expect(rule, selector).not.toMatch(/color:\s*#fff/i);
+    }
+  });
+
+  it("promotes Obsidian setup instructions above the faint --tx-4 tier", () => {
+    const notConfiguredBranch = obsidianExplorerTsx.match(
+      /if \(!enabled\)[\s\S]*?Obsidian vault path is not configured\.[\s\S]*?Tweaks Panel/,
+    );
+    expect(notConfiguredBranch).not.toBeNull();
+    expect(notConfiguredBranch?.[0]).toContain('color: "var(--tx-2)"');
+    expect(notConfiguredBranch?.[0]).not.toContain('color: "var(--tx-4)"');
   });
 });

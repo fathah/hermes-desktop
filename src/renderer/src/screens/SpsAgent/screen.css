@@ -354,7 +354,7 @@
   border-radius: var(--r-2, 7px);
   border: none;
   background: var(--accent, #2d7ff9);
-  color: #fff;
+  color: var(--accent-on, #fff);
   cursor: pointer;
   font-family: inherit;
   font-size: var(--fs-13, 13px);

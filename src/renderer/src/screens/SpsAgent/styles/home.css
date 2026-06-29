@@ -1348,7 +1348,7 @@
   padding: 0 14px;
   border-radius: 7px;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-on);
   font-size: 13px;
   font-weight: 600;
 }
@@ -1737,10 +1737,7 @@
 }
 .sps-scope .pa-accept {
   background: var(--accent);
-  color: #fff;
-}
-.sps-scope[data-theme="dark"] .pa-accept {
-  color: #1a1810;
+  color: var(--accent-on);
 }
 .sps-scope .pa-accept:hover {
   filter: brightness(1.08);
@@ -2691,7 +2688,7 @@
   border: none;
   border-radius: 8px;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-on);
   font-family: inherit;
   font-size: 13px;
   font-weight: 600;
@@ -2803,7 +2800,7 @@
 .sps-scope .pal-chip.on {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--accent-on);
 }
 .sps-scope .pal-chip:disabled {
   opacity: 0.5;
@@ -2956,7 +2953,7 @@
   border-radius: 7px;
   padding: 6px 12px;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-on);
   font-family: inherit;
   font-size: 13px;
   font-weight: 600;
@@ -3092,7 +3089,7 @@
 .sps-scope .ob-step-card:hover .ob-step-action {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--accent-on);
 }
 
 /* Global search bar button in Topbar */

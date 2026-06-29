@@ -1,6 +1,7 @@
 // theme.ts — the single place that maps Tweak values onto <html>.
 // Mirrors the prototype's app.jsx effect (lines 60-68) EXACTLY. Dark mode and
-// every layout/typography switch is a pure attribute/CSS-var swap — no JS color math.
+// layout/typography switches are pure attribute/CSS-var swaps; the small colour
+// calculation here only keeps text readable on user-selected accent fills.
 
 export type Tweaks = {
   dark: boolean;
@@ -35,6 +36,50 @@ export const WIDTHS: Record<Tweaks["width"], string> = {
   wide: "880px",
   full: "none",
 };
+
+function parseHexColor(hex: string): [number, number, number] | null {
+  const raw = hex.trim().replace(/^#/, "");
+  const value = /^[0-9a-f]{3}$/i.test(raw)
+    ? raw
+        .split("")
+        .map((c) => c + c)
+        .join("")
+    : raw;
+  if (!/^[0-9a-f]{6}$/i.test(value)) return null;
+  const n = parseInt(value, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+function relativeLuminance([r, g, b]: [number, number, number]): number {
+  const lin = (c: number): number => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
+function contrastRatio(
+  a: [number, number, number],
+  b: [number, number, number],
+): number {
+  const l1 = relativeLuminance(a) + 0.05;
+  const l2 = relativeLuminance(b) + 0.05;
+  return Math.max(l1, l2) / Math.min(l1, l2);
+}
+
+function accentForeground(accent: string): string {
+  const accentRgb = parseHexColor(accent);
+  if (!accentRgb) return "#ffffff";
+  const darkInk = "#1b1d21";
+  const darkRgb = parseHexColor(darkInk);
+  if (darkRgb && contrastRatio(darkRgb, accentRgb) >= 4.5) return darkInk;
+  return "#ffffff";
+}
+
+function applyAccentVars(target: HTMLElement, accent: string): void {
+  target.style.setProperty("--accent", accent);
+  target.style.setProperty("--accent-on", accentForeground(accent));
+}
 
 // The SPS Agent design system is scoped to a `.sps-scope` container inside the
 // Hermes renderer (so its --accent/fonts/global rules don't leak). Tweak attributes
@@ -76,11 +121,17 @@ export function setSkinVars(vars: Record<string, string>): void {
   for (const r of targets) {
     for (const k of Object.keys(skinVars)) {
       if (!(k in vars)) r.style.removeProperty(k);
+      if (k === "--accent" && !("--accent" in vars)) {
+        r.style.removeProperty("--accent-on");
+      }
     }
   }
   skinVars = { ...vars };
   for (const r of targets) {
-    for (const [k, v] of Object.entries(skinVars)) r.style.setProperty(k, v);
+    for (const [k, v] of Object.entries(skinVars)) {
+      if (k === "--accent") applyAccentVars(r, v);
+      else r.style.setProperty(k, v);
+    }
   }
 }
 
@@ -94,10 +145,13 @@ export function applyTweaks(t: Tweaks): void {
   );
   r.setAttribute("data-bodyfont", t.bodyfont);
   r.setAttribute("data-width", t.width === "full" ? "full" : "fixed");
-  r.style.setProperty("--accent", t.accent);
+  applyAccentVars(r, t.accent);
   r.style.setProperty("--content-w", WIDTHS[t.width] || "740px");
   // Re-apply skin vars last so they layer over the tweak vars above.
-  for (const [k, v] of Object.entries(skinVars)) r.style.setProperty(k, v);
+  for (const [k, v] of Object.entries(skinVars)) {
+    if (k === "--accent") applyAccentVars(r, v);
+    else r.style.setProperty(k, v);
+  }
   // Mirror ONLY theme + accent to the document root (density/width/bodyfont are
   // SPS-layout-specific). This is what keeps the admin overlay in lockstep with
   // the workspace; ThemeProvider yields while the scope is active.
@@ -105,6 +159,6 @@ export function applyTweaks(t: Tweaks): void {
     const root = document.documentElement;
     root.setAttribute("data-theme", t.dark ? "dark" : "light");
     root.setAttribute("data-skin", t.darkSkin);
-    root.style.setProperty("--accent", t.accent);
+    applyAccentVars(root, t.accent);
   }
 }
