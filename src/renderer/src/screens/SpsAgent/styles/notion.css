@@ -668,6 +668,7 @@
   gap: 1px;
   padding: 0 6px;
   border-bottom: 1px solid var(--hair-soft);
+  overflow: hidden;
   /* Same macOS drag-region trap as the topbar: this tab row sits in the top 28px
      window-drag strip (.drag-region, fixed, z 1000). Lift it above so the tabs are
      clickable; empty space stays a drag handle, the tab buttons opt out. */
@@ -680,6 +681,7 @@
 }
 .sps-scope .rp-tab {
   height: 30px;
+  min-width: 30px;
   padding: 0 8px;
   border: none;
   background: none;
@@ -691,6 +693,14 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  flex: 0 1 auto;
+  position: relative;
+}
+.sps-scope .rp-tab-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .sps-scope .rp-tab:hover {
   background: var(--row-hover);
@@ -717,6 +727,9 @@
 }
 .sps-scope .rp-close {
   margin-left: auto;
+  flex: 0 0 30px;
+  justify-content: center;
+  padding: 0;
 }
 .sps-scope .rp-body {
   flex: 1;

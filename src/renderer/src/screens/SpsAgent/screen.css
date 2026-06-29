@@ -683,7 +683,9 @@
 .sps-scope .sps-main-layout {
   display: flex;
   min-width: 0;
+  min-height: 0;
   flex-grow: 1;
+  position: relative;
 }
 
 @media (max-width: 900px) {
@@ -725,8 +727,41 @@
     padding-right: 0;
   }
 
-  .sps-scope .rp {
+  .sps-scope .doc {
+    padding-left: 28px;
+    padding-right: 28px;
+  }
+
+  .sps-scope .app[data-workspace-width="narrow"] .rp {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(360px, calc(100% - 12px));
+    max-width: calc(100% - 12px);
+    height: 100%;
+    z-index: 60;
+    box-shadow: var(--shadow-pop);
+  }
+
+  .sps-scope .app[data-workspace-width="narrow"] .rp-tabs {
+    gap: 2px;
+    padding: 0 8px;
+  }
+
+  .sps-scope .app[data-workspace-width="narrow"] .rp-tab {
+    width: 32px;
+    min-width: 32px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .sps-scope .app[data-workspace-width="narrow"] .rp-tab-label {
     display: none;
+  }
+
+  .sps-scope .app[data-workspace-width="narrow"] .rp-close {
+    margin-left: auto;
   }
 
   .sps-scope .tb-search-btn {

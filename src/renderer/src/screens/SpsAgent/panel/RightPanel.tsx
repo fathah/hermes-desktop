@@ -16,6 +16,7 @@ import { BacklinksPane } from "./BacklinksPane";
 export function RightPanel() {
   const tab = useStore((s) => s.rightTab);
   const setTab = useStore((s) => s.openPanelTab);
+  const setPanelOpen = useStore((s) => s.setPanelOpen);
   const blocks = useStore(selectCurrentBlocks);
   // select raw state, derive per-page comments via useMemo (a selector that
   // .filter()s would return a new array each call → infinite re-render loop)
@@ -53,11 +54,23 @@ export function RightPanel() {
             key={id}
             className={`rp-tab ${tab === id ? "active" : ""}`}
             onClick={() => setTab(id)}
+            title={label}
+            aria-label={label}
           >
-            <Icon name={icon} size={15} /> {label}
+            <Icon name={icon} size={15} />
+            <span className="rp-tab-label">{label}</span>
             {badge ? <span className="badge">{badge}</span> : null}
           </button>
         ))}
+        <button
+          type="button"
+          className="rp-tab rp-close"
+          onClick={() => setPanelOpen(false)}
+          title="Close side panel"
+          aria-label="Close side panel"
+        >
+          <Icon name="x" size={15} />
+        </button>
       </div>
       <div className="rp-body-wrapper">
         {tab === "assistant" && <AgentBody />}

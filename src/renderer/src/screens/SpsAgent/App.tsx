@@ -1,7 +1,7 @@
 // App.tsx — composition root. Phase 3 wires the sidebar + shell + doc header.
 // The block editor (Phase 4), right panel (Phase 7), pickers/palette/modals/tweaks
 // (Phases 5/9) slot into the marked placeholders.
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useStore } from "./store";
 import { useHotkeys } from "./hooks/useHotkeys";
 import { setScrollContainer } from "./lib/scroll";
@@ -44,19 +44,46 @@ import { Dashboard } from "./components/Dashboard";
 import { ContentStudioSurface } from "./content/ContentStudioSurface";
 import { DeckStudioSurface } from "./deck/DeckStudioSurface";
 
+const NARROW_WORKSPACE_QUERY = "(max-width: 900px)";
+
+function isNarrowWorkspace(): boolean {
+  if (typeof window === "undefined" || !window.matchMedia) return false;
+  return window.matchMedia(NARROW_WORKSPACE_QUERY).matches;
+}
+
 export function App() {
   useHotkeys();
   const sidebar = useStore((s) => s.t.sidebar);
   const page = useStore((s) => s.page);
   const panelOpen = useStore((s) => s.panelOpen);
+  const setPanelOpen = useStore((s) => s.setPanelOpen);
   const surface = useStore((s) => s.surface);
   const chatNonce = useStore((s) => s.chatNonce);
   const docScrollRef = useRef<HTMLDivElement>(null);
+  const [narrowWorkspace, setNarrowWorkspace] = useState(isNarrowWorkspace);
+  const wasNarrowRef = useRef(narrowWorkspace);
 
   useEffect(() => {
     setScrollContainer(docScrollRef.current);
     return () => setScrollContainer(null);
   }, []);
+
+  useEffect(() => {
+    if (!window.matchMedia) return;
+    const query = window.matchMedia(NARROW_WORKSPACE_QUERY);
+    const update = (): void => setNarrowWorkspace(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    const enteredNarrow = narrowWorkspace && !wasNarrowRef.current;
+    wasNarrowRef.current = narrowWorkspace;
+    if (enteredNarrow && surface === "doc" && panelOpen) {
+      setPanelOpen(false);
+    }
+  }, [narrowWorkspace, panelOpen, setPanelOpen, surface]);
 
   // Scheduled in-app ingest: while the app is open and auto-apply is on, run the
   // ingest loop every N minutes (0 = off). Reconfigures live on a prefs change.
@@ -151,6 +178,7 @@ export function App() {
       className="app"
       data-rail={sidebar}
       data-panel={panelOpen && surface === "doc" ? "open" : "closed"}
+      data-workspace-width={narrowWorkspace ? "narrow" : "wide"}
     >
       <Sidebar />
 

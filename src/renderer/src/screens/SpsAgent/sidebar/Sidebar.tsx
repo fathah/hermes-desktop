@@ -179,6 +179,8 @@ export function Sidebar() {
       type="button"
       className="nav-item pack-toggle-row"
       onClick={() => setPackEnabled(id, !packs[id])}
+      title={label}
+      aria-label={`${packs[id] ? "Disable" : "Enable"} ${label}`}
     >
       <Icon name={packs[id] ? "check" : "plus"} size={17} />
       <span className="nav-label">{label}</span>
@@ -194,7 +196,13 @@ export function Sidebar() {
   ): React.JSX.Element | null =>
     packs[id] ? (
       <div key={label} className={`nav-item ${active ? "active" : ""}`}>
-        <button type="button" className="nav-item-main" onClick={onClick}>
+        <button
+          type="button"
+          className="nav-item-main"
+          onClick={onClick}
+          title={label}
+          aria-label={label}
+        >
           <Icon name={icon} size={17} />
           <span className="nav-label">{label}</span>
         </button>
@@ -237,7 +245,13 @@ export function Sidebar() {
       </div>
 
       <div className="rail-scroll scroll">
-        <button type="button" className="nav-item" onClick={openPalette}>
+        <button
+          type="button"
+          className="nav-item"
+          onClick={openPalette}
+          title="Search"
+          aria-label="Search"
+        >
           <Icon name="search" size={17} />
           <span className="nav-label">Search</span>
           <span className="nav-kbd">⌘K</span>
@@ -251,6 +265,8 @@ export function Sidebar() {
               : ""
           }`}
           onClick={() => selectDoc("home")}
+          title="Home"
+          aria-label="Home"
         >
           <Icon name="home" size={17} />
           <span className="nav-label">Home</span>
@@ -261,6 +277,8 @@ export function Sidebar() {
             type="button"
             className="nav-item-main"
             onClick={() => openSurface("inbox")}
+            title="Capture"
+            aria-label="Capture"
           >
             <Icon name="inbox" size={17} />
             <span className="nav-label">
@@ -289,6 +307,8 @@ export function Sidebar() {
           type="button"
           className={`nav-item ${surface === "work" ? "active" : ""}`}
           onClick={() => openSurface("work")}
+          title="Work"
+          aria-label="Work"
         >
           <Icon name="board" size={17} />
           <span className="nav-label">Work</span>
@@ -298,6 +318,8 @@ export function Sidebar() {
           type="button"
           className={`nav-item ${surface === "chats" ? "active" : ""}`}
           onClick={() => openSurface("chats")}
+          title="Assistant"
+          aria-label="Assistant"
         >
           <Icon name="comment" size={17} />
           <span className="nav-label">Assistant</span>
@@ -386,6 +408,8 @@ export function Sidebar() {
                 type="button"
                 className={`nav-item ${surface === "rss-reader" ? "active" : ""}`}
                 onClick={() => openSurface("rss-reader")}
+                title="RSS Reader"
+                aria-label="RSS Reader"
               >
                 <Icon name="doc" size={17} />
                 <span className="nav-label">RSS Reader</span>
@@ -451,19 +475,35 @@ export function Sidebar() {
         <div className="sec sec-static mt-12">
           <span className="sec-label">More</span>
         </div>
-        <button type="button" className="nav-item" onClick={() => setTrashOpen(true)}>
+        <button
+          type="button"
+          className="nav-item"
+          onClick={() => setTrashOpen(true)}
+          title="Trash"
+          aria-label="Trash"
+        >
           <Icon name="trash" size={17} />
           <span className="nav-label">Trash</span>
         </button>
       </div>
 
       <div className="rail-newchat-bar">
-        <button className="rail-newchat" onClick={() => startNewChat()}>
+        <button
+          className="rail-newchat"
+          onClick={() => startNewChat()}
+          title="New chat"
+          aria-label="New chat"
+        >
           <Icon name="sparkle" size={16} />
           <span>New chat</span>
           <span className="rail-newchat-kbd">⌘O</span>
         </button>
-        <button className="rail-compose" title="New page" onClick={newPage}>
+        <button
+          className="rail-compose"
+          title="New page"
+          aria-label="New page"
+          onClick={newPage}
+        >
           <Icon name="callout" size={16} />
         </button>
       </div>

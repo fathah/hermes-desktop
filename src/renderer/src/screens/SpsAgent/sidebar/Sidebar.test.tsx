@@ -6,7 +6,7 @@ const store = vi.hoisted(() => ({
   meta: {},
   page: "home",
   surface: "doc",
-  t: { homeSurface: "doc" },
+  t: { homeSurface: "doc", sidebar: "full" },
   sectionsEnabled: {
     aiAssistant: true,
     workspaceTools: false,
@@ -80,5 +80,15 @@ describe("Sidebar", () => {
     expect(store.setSurface).toHaveBeenCalledWith("inbox");
     expect(store.setSurface).toHaveBeenCalledWith("work");
     expect(store.setSurface).toHaveBeenCalledWith("chats");
+  });
+
+  it("labels primary rail actions for icon-only mode", () => {
+    render(<Sidebar />);
+
+    for (const label of ["Search", "Home", "Capture", "Work", "Assistant"]) {
+      const button = screen.getByRole("button", { name: label });
+      expect(button.getAttribute("title")).toBe(label);
+      expect(button.getAttribute("aria-label")).toBe(label);
+    }
   });
 });
