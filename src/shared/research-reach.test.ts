@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildResearchPrompt } from "./research";
 import {
   buildResearchReachPromptHint,
+  describeResearchReachIntent,
   normalizeAgentReachDoctor,
   summarizeResearchReach,
 } from "./research-reach";
@@ -41,35 +42,88 @@ describe("normalizeAgentReachDoctor", () => {
         key: "github",
         label: "GitHub",
         status: "ready",
+        category: "code",
+        risk: "none",
+        actionKind: "authenticateGh",
+        canUseNow: true,
         tier: 0,
         activeBackend: "gh CLI",
         backends: ["gh CLI"],
         message: "gh CLI 可用",
         needsLogin: false,
         zeroConfig: true,
+        userFacingSetup: "Sign in with gh auth login for private repositories and higher rate limits.",
       },
       {
         key: "reddit",
         label: "Reddit",
         status: "needsSetup",
+        category: "social",
+        risk: "login",
+        actionKind: "configureChannel",
+        canUseNow: false,
         tier: 1,
         activeBackend: "OpenCLI",
         backends: ["OpenCLI", "rdt-cli"],
         message: "OpenCLI installed but not connected",
         needsLogin: true,
         zeroConfig: false,
+        userFacingSetup: "Connect a login-backed Reddit reader outside Hermes before relying on Reddit coverage.",
       },
       {
         key: "twitter",
         label: "Twitter/X",
         status: "unavailable",
+        category: "social",
+        risk: "login",
+        actionKind: "configureChannel",
+        canUseNow: false,
         tier: 1,
         activeBackend: null,
         backends: ["twitter-cli", "OpenCLI"],
         message: "Twitter CLI 未安装",
         needsLogin: true,
         zeroConfig: false,
+        userFacingSetup: "Configure a Twitter/X backend outside Hermes before relying on Twitter/X coverage.",
       },
+    ]);
+  });
+
+  it("classifies optional MCP and webpage channels for user-facing setup", () => {
+    const status = normalizeAgentReachDoctor({
+      exa_search: {
+        status: "off",
+        name: "全网语义搜索",
+        message: "mcporter not configured",
+        tier: 0,
+        backends: ["Exa via mcporter"],
+      },
+      web: {
+        status: "ok",
+        name: "任意网页",
+        message: "Jina Reader ready",
+        tier: 0,
+        backends: ["Jina Reader"],
+        active_backend: "Jina Reader",
+      },
+    });
+
+    expect(status.channels).toEqual([
+      expect.objectContaining({
+        key: "exa_search",
+        category: "search",
+        risk: "thirdPartyMcp",
+        actionKind: "installOptionalBackend",
+        canUseNow: false,
+      }),
+      expect.objectContaining({
+        key: "web",
+        category: "web",
+        risk: "none",
+        actionKind: "none",
+        canUseNow: true,
+        userFacingSetup: "No setup required.",
+      }),
     ]);
   });
 
@@ -159,6 +213,45 @@ describe("buildResearchReachPromptHint", () => {
     expect(hint).toContain(
       "Twitter/X is not currently ready; do not claim Twitter/X coverage unless a tool call succeeds.",
     );
+  });
+});
+
+describe("source readiness helpers", () => {
+  it("summarizes intent-specific ready and blocked channels", () => {
+    const status = normalizeAgentReachDoctor({
+      web: {
+        status: "ok",
+        name: "Web",
+        message: "ok",
+        tier: 0,
+        active_backend: "Jina Reader",
+      },
+      reddit: {
+        status: "warn",
+        name: "Reddit",
+        message: "login required",
+        tier: 1,
+      },
+      twitter: {
+        status: "off",
+        name: "Twitter/X",
+        message: "missing backend",
+        tier: 1,
+      },
+    });
+
+    expect(describeResearchReachIntent(status, "social")).toEqual({
+      readyLabels: [],
+      blockedLabels: ["Reddit", "Twitter/X"],
+      message: "Social sources need setup: Reddit, Twitter/X.",
+      tone: "warn",
+    });
+    expect(describeResearchReachIntent(status, "all")).toEqual({
+      readyLabels: ["Web pages"],
+      blockedLabels: [],
+      message: "Ready sources: Web pages.",
+      tone: "ready",
+    });
   });
 });
 

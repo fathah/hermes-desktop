@@ -11,8 +11,20 @@ function statusLabel(status: string): string {
 
 function channelDetail(channel: ResearchReachStatus["channels"][number]): string {
   const backend = channel.activeBackend || channel.backends[0] || "No backend";
-  const setup = channel.needsLogin ? "login/setup may be required" : "no setup";
-  return `${backend} - ${setup}`;
+  const risk =
+    channel.risk === "login" || channel.risk === "cookie" || channel.needsLogin
+      ? "login-backed"
+      : channel.risk === "thirdPartyMcp"
+        ? "third-party MCP"
+        : channel.risk === "fragile"
+          ? "fragile backend"
+          : "no sensitive setup";
+  const setup =
+    channel.userFacingSetup ||
+    (channel.status === "ready"
+      ? "No setup required."
+      : "Configure outside Hermes, then check status again.");
+  return `${backend} - ${risk}. ${setup}`;
 }
 
 function ResearchReachSummary({
@@ -76,8 +88,8 @@ function ResearchReachSummary({
       const result = await window.hermesAPI.runResearchReachSafeInstall();
       setMessage(
         result.ok
-          ? "Safe setup completed. Check status again to refresh channels."
-          : "Safe setup failed or Agent-Reach is not installed.",
+          ? "Setup preview complete. Check status again to refresh channels."
+          : "Setup preview failed or Agent-Reach is not installed.",
       );
       await refresh();
     } finally {
@@ -102,12 +114,12 @@ function ResearchReachSummary({
 
   return (
     <div className="settings-section" data-section-tab={sectionTab}>
-      <div className="settings-section-title">Research Reach</div>
+      <div className="settings-section-title">Source Coverage</div>
       <div className="settings-field">
         <div className="settings-field-hint" style={{ marginBottom: 12 }}>
-          Source coverage for Research, Learning, and scheduled research.
-          Uses local open-source tools when available; not production scraping at
-          scale.
+          Research Reach checks optional local source tools for Research,
+          Learning, and scheduled research. Ready means My Assistant may try a
+          source; saved research still needs real fetched URLs.
         </div>
         {!loaded ? (
           <div className="settings-field-hint">Checking Research Reach...</div>
@@ -116,8 +128,8 @@ function ResearchReachSummary({
             <div className="cap-summary-counts">
               <span className="cap-count">
                 {status?.installed
-                  ? "Local source tools available"
-                  : "No local source tools ready"}
+                  ? "Local source coverage detected"
+                  : "No local source coverage ready"}
               </span>
               {status?.version && (
                 <span className="cap-count">v{status.version}</span>
@@ -164,7 +176,7 @@ function ResearchReachSummary({
                 style={{ marginLeft: 8 }}
                 onClick={() => void showInstructions()}
               >
-                Show setup
+                Setup
               </button>
               <button
                 type="button"
@@ -173,7 +185,7 @@ function ResearchReachSummary({
                 disabled={checking}
                 onClick={() => void runSafeInstall()}
               >
-                Run safe setup
+                Preview setup
               </button>
               <button
                 type="button"

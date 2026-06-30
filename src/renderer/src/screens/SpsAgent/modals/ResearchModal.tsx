@@ -22,6 +22,10 @@ import {
 } from "../../../lib/content-studio";
 import { hasCuratedBriefSources } from "../../../../../shared/curatedBrief";
 import { buildDeckInputFromResearch } from "../../../../../shared/deck-studio";
+import {
+  describeResearchReachIntent,
+  type ResearchReachStatus,
+} from "../../../../../shared/research-reach";
 
 type Mode = "research" | "papers" | "study" | "brief";
 type Phase = "idle" | "running" | "done" | "warn" | "error";
@@ -61,7 +65,9 @@ export function ResearchModal() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState(""); // streamed markdown preview
   const [toolNote, setToolNote] = useState<string | null>(null);
-  const [reachHint, setReachHint] = useState("");
+  const [reachStatus, setReachStatus] = useState<ResearchReachStatus | null>(
+    null,
+  );
   const [resultSummary, setResultSummary] = useState("");
   const [resultMsg, setResultMsg] = useState(""); // warn / error text
   const undoRef = useRef<null | (() => void)>(null);
@@ -116,14 +122,7 @@ export function ResearchModal() {
     void window.hermesAPI
       ?.getResearchReachStatus?.()
       .then((status) => {
-        if (!status?.installed) return;
-        const ready = status.channels
-          .filter((channel) => channel.status === "ready")
-          .map((channel) => channel.label)
-          .slice(0, 4);
-        if (ready.length > 0) {
-          setReachHint(`Ready sources: ${ready.join(", ")}`);
-        }
+        setReachStatus(status ?? null);
       })
       .catch(() => undefined);
     // OpenAlex polite-pool / api-key config (key never round-trips — only a flag).
@@ -410,6 +409,10 @@ export function ResearchModal() {
 
   const busy = phase === "running" || studyBusy || studySaving;
   const researchBusy = phase === "running";
+  const sourceReadiness = describeResearchReachIntent(
+    reachStatus,
+    sourceFilter,
+  );
   const notebookBusy =
     notebookState === "checking" || notebookState === "working";
   const notebookCanEnable =
@@ -551,8 +554,10 @@ export function ResearchModal() {
               </button>
             </div>
 
-            {reachHint && (
-              <small className="res-status-label">{reachHint}</small>
+            {sourceReadiness.message && (
+              <small className="res-status-label">
+                {sourceReadiness.message}
+              </small>
             )}
 
             {phase === "idle" && (

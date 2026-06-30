@@ -75,6 +75,56 @@ beforeEach(() => {
 });
 
 describe("ResearchModal", () => {
+  it("warns when social source coverage is not ready", async () => {
+    api.getResearchReachStatus.mockResolvedValue({
+      installed: true,
+      version: "1.5.0",
+      checkedAt: Date.now(),
+      channels: [
+        {
+          key: "web",
+          label: "Web pages",
+          status: "ready",
+          tier: 0,
+          activeBackend: "Jina Reader",
+          backends: ["Jina Reader"],
+          message: "ready",
+          needsLogin: false,
+          zeroConfig: true,
+        },
+        {
+          key: "reddit",
+          label: "Reddit",
+          status: "needsSetup",
+          tier: 1,
+          activeBackend: null,
+          backends: ["OpenCLI"],
+          message: "login required",
+          needsLogin: true,
+          zeroConfig: false,
+        },
+        {
+          key: "twitter",
+          label: "Twitter/X",
+          status: "unavailable",
+          tier: 1,
+          activeBackend: null,
+          backends: ["twitter-cli"],
+          message: "missing backend",
+          needsLogin: true,
+          zeroConfig: false,
+        },
+      ],
+    });
+
+    render(<ResearchModal />);
+    fireEvent.click(await screen.findByRole("button", { name: /socials/i }));
+
+    expect(
+      await screen.findByText("Social sources need setup: Reddit, Twitter/X."),
+    ).toBeInTheDocument();
+  });
+
   it("opens Content Studio from saved research", async () => {
     render(<ResearchModal />);
 

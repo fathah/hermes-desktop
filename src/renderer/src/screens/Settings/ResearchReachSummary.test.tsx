@@ -56,12 +56,16 @@ describe("ResearchReachSummary", () => {
 
     render(<ResearchReachSummary active={true} />);
 
-    expect(await screen.findByText("Research Reach")).toBeInTheDocument();
+    expect(await screen.findByText("Source Coverage")).toBeInTheDocument();
+    expect(
+      await screen.findByText(/ready means my assistant may try/i),
+    ).toBeInTheDocument();
     expect(await screen.findByText("GitHub")).toBeInTheDocument();
     expect(await screen.findByText("Reddit")).toBeInTheDocument();
     expect(
       await screen.findByText("1 ready / 1 needs setup"),
     ).toBeInTheDocument();
+    expect(await screen.findByText(/login-backed/i)).toBeInTheDocument();
   });
 
   it("shows install instructions without running install", async () => {
@@ -77,12 +81,34 @@ describe("ResearchReachSummary", () => {
     );
 
     render(<ResearchReachSummary active={true} />);
-    fireEvent.click(await screen.findByRole("button", { name: /show setup/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Setup$/ }));
 
     expect(
       await screen.findByText("pipx install agent-reach"),
     ).toBeInTheDocument();
     expect(api.runResearchReachSafeInstall).not.toHaveBeenCalled();
+  });
+
+  it("previews setup without presenting it as an install", async () => {
+    api.getResearchReachStatus.mockResolvedValue({
+      installed: true,
+      version: "1.5.0",
+      checkedAt: Date.now(),
+      channels: [],
+    });
+    api.runResearchReachSafeInstall.mockResolvedValue({
+      ok: true,
+      stdout: "safe mode",
+      stderr: "",
+    });
+
+    render(<ResearchReachSummary active={true} />);
+    fireEvent.click(await screen.findByRole("button", { name: /preview setup/i }));
+
+    expect(api.runResearchReachSafeInstall).toHaveBeenCalled();
+    expect(
+      await screen.findByText(/setup preview complete/i),
+    ).toBeInTheDocument();
   });
 
   it("loads lazily only when active", async () => {

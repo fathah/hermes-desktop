@@ -71,6 +71,10 @@ function withCrawl4AiChannel(
     key: "crawl4ai",
     label: "Public webpage extraction",
     status: crawl.installed && crawl.doctorOk ? "ready" : "needsSetup",
+    category: "web",
+    risk: "fragile",
+    actionKind: "installOptionalBackend",
+    canUseNow: crawl.installed && crawl.doctorOk,
     tier: 0,
     activeBackend: crawl.installed ? "Crawl4AI CLI" : null,
     backends: ["Crawl4AI CLI"],
@@ -80,6 +84,9 @@ function withCrawl4AiChannel(
         : crawl.error || "Crawl4AI is optional and not ready.",
     needsLogin: false,
     zeroConfig: false,
+    userFacingSetup: crawl.installed
+      ? "Run crawl4ai-doctor and resolve any reported local setup issues."
+      : "Install Crawl4AI outside Hermes to enable richer public webpage extraction.",
   } satisfies ResearchReachStatus["channels"][number];
 
   return {

@@ -37,14 +37,22 @@ Crawl4AI is optional. SPS does not bundle it, silently install it, start its Doc
 
 ## Setup
 
-Open Settings -> Application Health -> Research Reach.
+Open Settings -> Application Health -> Source Coverage.
 
 Use:
 
 - Check status: inspect available channels.
-- Show setup: see safe install commands.
-- Run safe setup: ask Agent-Reach what is needed without making system changes.
+- Setup: see safe install commands.
+- Preview setup: ask Agent-Reach what is needed without making system changes.
 - Import skill: let My Assistant learn Agent-Reach routing commands after review.
+
+The status labels are intentionally conservative:
+
+- Ready: My Assistant may try this source during a research turn.
+- Needs setup: the source needs user-managed login, auth, MCP, or backend setup before it should be relied on.
+- Unavailable/error: the source must not be claimed in a saved brief unless a later tool call actually succeeds.
+
+Ready does not make a brief publishable by itself. SPS still requires fetched source URLs before saving research into the Knowledge Base.
 
 Optional Crawl4AI setup:
 
