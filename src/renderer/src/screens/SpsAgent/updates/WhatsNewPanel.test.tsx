@@ -10,10 +10,10 @@ import { WhatsNewPanel } from "./WhatsNewPanel";
 
 beforeEach(() => {
   localStorage.clear();
-  localStorage.setItem("hermes-desktop-last-seen-version", "0.5.4");
+  localStorage.setItem("hermes-desktop-last-seen-version", "0.5.3");
   vi.stubGlobal("electron", { process: { platform: "darwin" } });
   vi.stubGlobal("hermesAPI", {
-    getAppVersion: vi.fn().mockResolvedValue("0.5.5"),
+    getAppVersion: vi.fn().mockResolvedValue("0.5.4"),
   });
 });
 
@@ -75,7 +75,7 @@ describe("WhatsNewPanel", () => {
 
     await waitFor(() =>
       expect(localStorage.getItem("hermes-desktop-last-seen-version")).toBe(
-        "0.5.5",
+        "0.5.4",
       ),
     );
   });

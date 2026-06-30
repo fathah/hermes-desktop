@@ -59,9 +59,9 @@ function installApi(): void {
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
-  localStorage.setItem("hermes-desktop-last-seen-version", "0.5.4");
+  localStorage.setItem("hermes-desktop-last-seen-version", "0.5.3");
   installApi();
-  api.getAppVersion.mockResolvedValue("0.5.5");
+  api.getAppVersion.mockResolvedValue("0.5.4");
   api.spsExportRow.mockResolvedValue(true);
   vi.spyOn(window, "getSelection").mockReturnValue({
     toString: () => "Selected proof that should become a draft angle.",

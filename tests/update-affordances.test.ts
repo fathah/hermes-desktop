@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   RELEASE_AFFORDANCES,
@@ -5,6 +6,10 @@ import {
   releaseAffordancesSince,
   type ReleaseAffordance,
 } from "../src/shared/update-affordances";
+
+const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
+  version: string;
+};
 
 const fixtures: ReleaseAffordance[] = [
   {
@@ -62,5 +67,19 @@ describe("update affordances", () => {
       { kind: "surface", surface: "doc" },
       { kind: "modal", modal: "tweaks" },
     ]);
+    expect(RELEASE_AFFORDANCES.map((a) => a.introducedIn)).toEqual([
+      "0.5.4",
+      "0.5.4",
+      "0.5.4",
+    ]);
+  });
+
+  it("does not future-date registered affordances past the shipped app version", () => {
+    for (const affordance of RELEASE_AFFORDANCES) {
+      expect(
+        compareAppVersions(affordance.introducedIn, packageJson.version),
+        `${affordance.id} introducedIn should not be after package version ${packageJson.version}`,
+      ).toBeLessThanOrEqual(0);
+    }
   });
 });

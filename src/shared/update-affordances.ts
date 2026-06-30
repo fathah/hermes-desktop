@@ -54,7 +54,7 @@ export interface ReleaseAffordance {
 export const RELEASE_AFFORDANCES: ReleaseAffordance[] = [
   {
     id: "control-center-ai-readiness",
-    introducedIn: "0.5.5",
+    introducedIn: "0.5.4",
     title: "Control Center AI readiness",
     body: "See the active model, setup status, missing key or model guidance, and remote connection path from one Control Center.",
     cta: "Open Control Center",
@@ -62,7 +62,7 @@ export const RELEASE_AFFORDANCES: ReleaseAffordance[] = [
   },
   {
     id: "sps-narrow-workspace",
-    introducedIn: "0.5.5",
+    introducedIn: "0.5.4",
     title: "Intentional narrow workspace",
     body: "Narrow SPS windows now collapse the side panel on entry, expose a real close button, and keep assistant and sidebar shortcuts separate.",
     cta: "Open Workspace",
@@ -70,7 +70,7 @@ export const RELEASE_AFFORDANCES: ReleaseAffordance[] = [
   },
   {
     id: "sps-dark-theme-legibility",
-    introducedIn: "0.5.5",
+    introducedIn: "0.5.4",
     title: "Readable SPS dark theme",
     body: "Dark theme surfaces and accent-filled controls now use theme-aware foregrounds so workspace text stays legible.",
     cta: "Open Appearance",
