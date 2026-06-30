@@ -57,6 +57,8 @@ export default function ConnectedApps({
   }
 
   const unavailable = status !== null && !status.available;
+  const permissionRequired =
+    status !== null && status.available && !status.authorized && !result;
 
   let resultMessage: string | null = null;
   let resultOk = false;
@@ -89,11 +91,16 @@ export default function ConnectedApps({
             {t("settings.macContactsUnavailable")}
           </div>
         )}
+        {permissionRequired && (
+          <div className="settings-field-hint" style={{ marginBottom: 10 }}>
+            {t("settings.macContactsPermissionRequired")}
+          </div>
+        )}
         <div className="settings-hermes-actions">
           <button
             className="btn btn-secondary"
             onClick={handleSync}
-            disabled={syncing}
+            disabled={syncing || unavailable}
           >
             <RefreshCw size={14} style={{ marginRight: 6 }} />
             {syncing

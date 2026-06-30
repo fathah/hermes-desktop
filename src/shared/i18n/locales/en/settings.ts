@@ -92,6 +92,8 @@ export default {
     "Sync your macOS Contacts into your people. Existing notes, aliases, and tags are kept — Contacts only fills in missing email, phone, and company.",
   macContactsUnavailable:
     "Requires the optional node-mac-contacts module (not installed). Install it and restart to enable syncing.",
+  macContactsPermissionRequired:
+    "Contacts permission is not granted yet. Click Sync Mac Contacts to ask macOS for access. If you denied it earlier, enable Contacts for Hermes in System Settings.",
   macContactsSync: "Sync Mac Contacts",
   macContactsSyncing: "Syncing...",
   macContactsSynced: "Synced — {{added}} added, {{updated}} updated.",

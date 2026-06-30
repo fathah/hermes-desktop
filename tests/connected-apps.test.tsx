@@ -141,6 +141,22 @@ describe("<ConnectedApps>", () => {
     await waitFor(() =>
       expect(screen.getByText("settings.macContactsUnavailable")).toBeTruthy(),
     );
+    expect(screen.getByText("settings.macContactsSync")).toBeDisabled();
+  });
+
+  it("shows the permission hint before sync when Contacts access is not granted", async () => {
+    mockApi(
+      { available: true, authorized: false },
+      { available: true, authorized: false, added: 0, updated: 0 },
+    );
+    render(<ConnectedApps profile="default" />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("settings.macContactsPermissionRequired"),
+      ).toBeTruthy(),
+    );
+    expect(screen.getByText("settings.macContactsSync")).not.toBeDisabled();
   });
 
   it("renders nothing off macOS", () => {
