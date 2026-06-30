@@ -68,6 +68,7 @@ export function App() {
   const setResearchOpen = useStore((s) => s.setResearchOpen);
   const setScheduledOpen = useStore((s) => s.setScheduledOpen);
   const setPaletteOpen = useStore((s) => s.setPaletteOpen);
+  const setTweaksOpen = useStore((s) => s.setTweaksOpen);
   const docScrollRef = useRef<HTMLDivElement>(null);
   const [narrowWorkspace, setNarrowWorkspace] = useState(isNarrowWorkspace);
   const wasNarrowRef = useRef(narrowWorkspace);
@@ -87,8 +88,10 @@ export function App() {
       setScheduledOpen(true);
     } else if (action.modal === "templates") {
       setTemplatesOpen({ parent: null });
-    } else {
+    } else if (action.modal === "palette") {
       setPaletteOpen(true);
+    } else {
+      setTweaksOpen(true);
     }
   };
 

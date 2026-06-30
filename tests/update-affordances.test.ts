@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  RELEASE_AFFORDANCES,
   compareAppVersions,
   releaseAffordancesSince,
   type ReleaseAffordance,
@@ -7,12 +8,12 @@ import {
 
 const fixtures: ReleaseAffordance[] = [
   {
-    id: "capture-pdf",
+    id: "workspace-polish",
     introducedIn: "0.5.5",
-    title: "Capture PDFs",
-    body: "Import PDFs into Capture and review the extracted content.",
-    cta: "Open Capture",
-    action: { kind: "surface", surface: "inbox" },
+    title: "Workspace polish",
+    body: "Improve existing workspace behavior.",
+    cta: "Open Workspace",
+    action: { kind: "surface", surface: "doc" },
   },
   {
     id: "deck-studio",
@@ -34,10 +35,32 @@ describe("update affordances", () => {
   it("returns only features introduced after the last seen version", () => {
     expect(
       releaseAffordancesSince("0.5.4", "0.5.6", fixtures).map((a) => a.id),
-    ).toEqual(["capture-pdf", "deck-studio"]);
+    ).toEqual(["workspace-polish", "deck-studio"]);
     expect(
       releaseAffordancesSince("0.5.5", "0.5.6", fixtures).map((a) => a.id),
     ).toEqual(["deck-studio"]);
     expect(releaseAffordancesSince("0.5.6", "0.5.6", fixtures)).toEqual([]);
+  });
+
+  it("registers the recent shipped SPS changes instead of placeholders", () => {
+    const ids = RELEASE_AFFORDANCES.map((a) => a.id);
+
+    expect(ids).toEqual([
+      "control-center-ai-readiness",
+      "sps-narrow-workspace",
+      "sps-dark-theme-legibility",
+    ]);
+    expect(ids).not.toEqual(
+      expect.arrayContaining([
+        "capture-pdf",
+        "work-review",
+        "desktop-updates",
+      ]),
+    );
+    expect(RELEASE_AFFORDANCES.map((a) => a.action)).toEqual([
+      { kind: "settings", view: "overview" },
+      { kind: "surface", surface: "doc" },
+      { kind: "modal", modal: "tweaks" },
+    ]);
   });
 });

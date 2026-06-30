@@ -28,11 +28,16 @@ export type ReleaseAffordanceAction =
   | { kind: "surface"; surface: ReleaseSurfaceTarget }
   | {
       kind: "settings";
-      view: "providers" | "settings" | "gateway" | "connectedApps";
+      view:
+        | "overview"
+        | "providers"
+        | "settings"
+        | "gateway"
+        | "connectedApps";
     }
   | {
       kind: "modal";
-      modal: "research" | "scheduled" | "templates" | "palette";
+      modal: "research" | "scheduled" | "templates" | "palette" | "tweaks";
     };
 
 export interface ReleaseAffordance {
@@ -48,28 +53,28 @@ export interface ReleaseAffordance {
 
 export const RELEASE_AFFORDANCES: ReleaseAffordance[] = [
   {
-    id: "capture-pdf",
+    id: "control-center-ai-readiness",
     introducedIn: "0.5.5",
-    title: "PDFs in Capture",
-    body: "Import PDFs into Capture and route extracted notes through review.",
-    cta: "Open Capture",
-    action: { kind: "surface", surface: "inbox" },
+    title: "Control Center AI readiness",
+    body: "See the active model, setup status, missing key or model guidance, and remote connection path from one Control Center.",
+    cta: "Open Control Center",
+    action: { kind: "settings", view: "overview" },
   },
   {
-    id: "work-review",
+    id: "sps-narrow-workspace",
     introducedIn: "0.5.5",
-    title: "Work review queue",
-    body: "Review tasks, delegated goals, scheduled rules, and pending changes from one surface.",
-    cta: "Open Work",
-    action: { kind: "surface", surface: "work" },
+    title: "Intentional narrow workspace",
+    body: "Narrow SPS windows now collapse the side panel on entry, expose a real close button, and keep assistant and sidebar shortcuts separate.",
+    cta: "Open Workspace",
+    action: { kind: "surface", surface: "doc" },
   },
   {
-    id: "desktop-updates",
+    id: "sps-dark-theme-legibility",
     introducedIn: "0.5.5",
-    title: "Nightly update checks",
-    body: "Hermes can check for Desktop and Agent updates every night while the app is open.",
-    cta: "Open Settings",
-    action: { kind: "settings", view: "settings" },
+    title: "Readable SPS dark theme",
+    body: "Dark theme surfaces and accent-filled controls now use theme-aware foregrounds so workspace text stays legible.",
+    cta: "Open Appearance",
+    action: { kind: "modal", modal: "tweaks" },
   },
 ];
 

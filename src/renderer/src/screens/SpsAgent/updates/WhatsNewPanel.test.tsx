@@ -26,10 +26,44 @@ describe("WhatsNewPanel", () => {
   it("shows unseen affordances after an app version change", async () => {
     render(<WhatsNewPanel onRunAction={vi.fn()} />);
 
-    expect(await screen.findByText("PDFs in Capture")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Open Capture" }),
+      await screen.findByText("Control Center AI readiness"),
     ).toBeInTheDocument();
+    expect(screen.getByText("Intentional narrow workspace")).toBeInTheDocument();
+    expect(screen.getByText("Readable SPS dark theme")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Open Control Center" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Open Workspace" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Open Appearance" }),
+    ).toBeInTheDocument();
+  });
+
+  it("routes each affordance CTA to the expected in-app target", async () => {
+    const onRunAction = vi.fn();
+    render(<WhatsNewPanel onRunAction={onRunAction} />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Open Control Center" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Open Workspace" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Appearance" }));
+
+    expect(onRunAction).toHaveBeenNthCalledWith(1, {
+      kind: "settings",
+      view: "overview",
+    });
+    expect(onRunAction).toHaveBeenNthCalledWith(2, {
+      kind: "surface",
+      surface: "doc",
+    });
+    expect(onRunAction).toHaveBeenNthCalledWith(3, {
+      kind: "modal",
+      modal: "tweaks",
+    });
   });
 
   it("persists dismissal at the current version", async () => {
