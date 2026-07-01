@@ -5226,12 +5226,30 @@ body {
   border-radius: 10px;
   background: var(--code-bg, rgba(127, 127, 127, 0.03));
 }
+.chat-delegation-summary {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 22px;
+}
+.chat-delegation-summary:focus-visible {
+  outline: 2px solid var(--accent, #4f7cff);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
 .chat-delegation-title {
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0;
   color: var(--text-muted);
-  margin-bottom: 6px;
+}
+.chat-delegation-counts {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.chat-delegation-body {
+  margin-top: 8px;
 }
 .chat-delegation-row {
   display: flex;
