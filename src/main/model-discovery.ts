@@ -11,9 +11,6 @@
  * picker; this mirrors that flow on the desktop side without going
  * through the Python CLI.
  */
-import http from "node:http";
-import https from "node:https";
-import { URL } from "url";
 import { execFile } from "child_process";
 import { readEnv, readAuthStore } from "./config";
 import {
@@ -27,6 +24,7 @@ import {
 // same lookup without pulling in this whole file (and triggering a
 // circular import via `model-discovery → config → ...`).
 import { PROVIDER_BASE_URLS } from "./provider-registry";
+import { providerFetch } from "./security/network-policy";
 
 /** Providers whose `/models` we never call — either they don't expose it,
  *  use a different protocol, or rely on OAuth credentials we can't
@@ -161,71 +159,34 @@ async function fetchNousFreeModelIds(
     if (!token || !base) return [];
 
     const url = `${base.replace(/\/+$/, "")}/models`;
-    return await new Promise<string[]>((resolve) => {
-      const u = new URL(url);
-      const mod = u.protocol === "https:" ? https : http;
-      const req = mod.request(
-        {
-          method: "GET",
-          protocol: u.protocol,
-          hostname: u.hostname,
-          port: u.port || undefined,
-          path: `${u.pathname}${u.search}`,
-          headers: {
-            Accept: "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          timeout: 10_000,
-        },
-        (res) => {
-          if (!res.statusCode || res.statusCode >= 400) {
-            res.resume();
-            resolve([]);
-            return;
-          }
-          let body = "";
-          res.setEncoding("utf-8");
-          res.on("data", (chunk) => {
-            body += chunk;
-          });
-          res.on("end", () => {
-            try {
-              const j = JSON.parse(body) as {
-                data?: Array<{
-                  id?: string;
-                  pricing?: { prompt?: string; completion?: string };
-                }>;
-              };
-              const free = (j.data || [])
-                .filter((m) => {
-                  // Free iff both prompt and completion cost zero. The
-                  // Portal returns them as strings like "0.0000000000".
-                  const pr = String(m.pricing?.prompt ?? "").trim();
-                  const co = String(m.pricing?.completion ?? "").trim();
-                  return (
-                    pr !== "" &&
-                    co !== "" &&
-                    parseFloat(pr) === 0 &&
-                    parseFloat(co) === 0
-                  );
-                })
-                .map((m) => String(m.id || "").trim())
-                .filter(Boolean);
-              resolve(uniqueSorted(free));
-            } catch {
-              resolve([]);
-            }
-          });
-          res.on("error", () => resolve([]));
-        },
-      );
-      req.on("error", () => resolve([]));
-      req.on("timeout", () => {
-        req.destroy();
-        resolve([]);
-      });
-      req.end();
+    const res = await providerFetch(url, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      signal: AbortSignal.timeout(10_000),
     });
+    if (!res.ok) return [];
+    const j = (await res.json()) as {
+      data?: Array<{
+        id?: string;
+        pricing?: { prompt?: string; completion?: string };
+      }>;
+    };
+    const free = (j.data || [])
+      .filter((m) => {
+        // Free iff both prompt and completion cost zero. The Portal returns
+        // them as strings like "0.0000000000".
+        const pr = String(m.pricing?.prompt ?? "").trim();
+        const co = String(m.pricing?.completion ?? "").trim();
+        return (
+          pr !== "" && co !== "" && parseFloat(pr) === 0 && parseFloat(co) === 0
+        );
+      })
+      .map((m) => String(m.id || "").trim())
+      .filter(Boolean);
+    return uniqueSorted(free);
   } catch {
     return [];
   }
@@ -338,46 +299,22 @@ function authHeaders(provider: string, apiKey: string): Record<string, string> {
   return { Authorization: `Bearer ${apiKey}` };
 }
 
-function fetchModelsHttp(
+async function fetchModelsHttp(
   url: string,
   headers: Record<string, string>,
   timeoutMs: number,
 ): Promise<string[]> {
-  return new Promise((resolve) => {
-    const u = new URL(url);
-    const mod = u.protocol === "https:" ? https : http;
-    const req = mod.request(
-      {
-        method: "GET",
-        protocol: u.protocol,
-        hostname: u.hostname,
-        port: u.port || undefined,
-        path: `${u.pathname}${u.search}`,
-        headers: { Accept: "application/json", ...headers },
-        timeout: timeoutMs,
-      },
-      (res) => {
-        if (!res.statusCode || res.statusCode >= 400) {
-          res.resume();
-          resolve([]);
-          return;
-        }
-        let body = "";
-        res.setEncoding("utf-8");
-        res.on("data", (chunk) => {
-          body += chunk;
-        });
-        res.on("end", () => resolve(parseModelIds(body)));
-        res.on("error", () => resolve([]));
-      },
-    );
-    req.on("error", () => resolve([]));
-    req.on("timeout", () => {
-      req.destroy();
-      resolve([]);
+  try {
+    const res = await providerFetch(url, {
+      method: "GET",
+      headers: { Accept: "application/json", ...headers },
+      signal: AbortSignal.timeout(timeoutMs),
     });
-    req.end();
-  });
+    if (!res.ok) return [];
+    return parseModelIds(await res.text());
+  } catch {
+    return [];
+  }
 }
 
 export interface DiscoverModelsResult {

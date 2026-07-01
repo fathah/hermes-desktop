@@ -23,6 +23,7 @@ import {
 import { isValidNamedProfileName, profileHome } from "./utils";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 import { getApiUrl, getRemoteAuthHeader } from "./hermes";
+import { gatewayFetch } from "./security/network-policy";
 import { recordSkillCapability, removeSkillCapability } from "./capability-risk-store";
 import { getSharedDb } from "./db";
 
@@ -1041,19 +1042,25 @@ export async function generateSkillFromRepo(
     return { success: false, error: "Could not read the repository." };
 
   try {
-    const res = await fetch(`${getApiUrl(profile)}/v1/chat/completions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...getRemoteAuthHeader() },
-      signal: AbortSignal.timeout(120000),
-      body: JSON.stringify({
-        model: "hermes-agent",
-        stream: false,
-        messages: [
-          { role: "system", content: SKILL_AUTHOR_SYSTEM },
-          { role: "user", content: `Repository digest:\n\n${digest}` },
-        ],
-      }),
-    });
+    const res = await gatewayFetch(
+      `${getApiUrl(profile)}/v1/chat/completions`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...getRemoteAuthHeader(),
+        },
+        signal: AbortSignal.timeout(120000),
+        body: JSON.stringify({
+          model: "hermes-agent",
+          stream: false,
+          messages: [
+            { role: "system", content: SKILL_AUTHOR_SYSTEM },
+            { role: "user", content: `Repository digest:\n\n${digest}` },
+          ],
+        }),
+      },
+    );
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       return {

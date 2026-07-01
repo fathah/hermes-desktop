@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { profileHome } from "./utils";
+import { publicFetch } from "./security/network-policy";
 
 export type HermesUpstreamWatchCategory =
   | "runtime-required"
@@ -128,7 +129,7 @@ function apiFetch(): FetchLike {
   if (typeof fetch !== "function") {
     throw new Error("Global fetch is not available for upstream watch.");
   }
-  return (url, init) => fetch(url, init);
+  return (url, init) => publicFetch(url, init);
 }
 
 async function fetchJson<T>(

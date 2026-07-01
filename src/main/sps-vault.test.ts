@@ -1,6 +1,6 @@
 // sps-vault.test.ts — S2b: the additive markdown mirror (pure fs/path).
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdtemp, rm, readFile, readdir } from "fs/promises";
+import { mkdir, mkdtemp, rm, readFile, readdir } from "fs/promises";
 import { existsSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -18,6 +18,8 @@ import {
   readVaultPages,
   readVaultManifest,
   writeVaultManifest,
+  writeVaultSnapshot,
+  SNAPSHOT_JOURNAL_FILE,
   backupFile,
   writeAssetTo,
   readAssetFrom,
@@ -255,6 +257,48 @@ describe("vault-as-authoritative I/O (S6)", () => {
     expect(await readVaultManifest(dir)).toBeNull();
     expect(await writeVaultManifest(dir, '{"page":"home"}')).toBe(true);
     expect(await readVaultManifest(dir)).toBe('{"page":"home"}');
+  });
+
+  it("writes pages and manifest as a journaled snapshot", async () => {
+    const ok = await writeVaultSnapshot(dir, {
+      pages: { home: "# Home", sub: "# Sub" },
+      manifest: '{"page":"home"}',
+    });
+
+    expect(ok).toBe(true);
+    expect(await readFile(join(dir, "home.md"), "utf-8")).toBe("# Home");
+    expect(await readFile(join(dir, "sub.md"), "utf-8")).toBe("# Sub");
+    expect(await readVaultManifest(dir)).toBe('{"page":"home"}');
+    expect(existsSync(join(dir, SNAPSHOT_JOURNAL_FILE))).toBe(false);
+  });
+
+  it("rejects invalid snapshot page ids before creating a journal", async () => {
+    const ok = await writeVaultSnapshot(dir, {
+      pages: { "../escape": "x" },
+      manifest: "{}",
+    });
+
+    expect(ok).toBe(false);
+    expect(existsSync(join(dir, SNAPSHOT_JOURNAL_FILE))).toBe(false);
+    expect(await readdir(dir)).toEqual([]);
+  });
+
+  it("leaves the snapshot journal when a page write fails after journaling", async () => {
+    const errors: unknown[] = [];
+    await mkdir(join(dir, "home.md"));
+
+    const ok = await writeVaultSnapshot(
+      dir,
+      { pages: { home: "# Home" }, manifest: "{}" },
+      (e) => errors.push(e),
+    );
+
+    expect(ok).toBe(false);
+    expect(errors).toHaveLength(1);
+    const journal = JSON.parse(
+      await readFile(join(dir, SNAPSHOT_JOURNAL_FILE), "utf-8"),
+    ) as { pageIds: string[] };
+    expect(journal.pageIds).toEqual(["home"]);
   });
 
   it("backs up a file to a timestamped sibling", async () => {

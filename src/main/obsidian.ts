@@ -12,6 +12,7 @@ import {
 import chokidar, { type FSWatcher } from "chokidar";
 import { decryptSecret, encryptSecret } from "./config";
 import { profileHome, safeWriteFile } from "./utils";
+import { providerFetch } from "./security/network-policy";
 
 export type ObsidianFileNode = {
   name: string;
@@ -369,7 +370,7 @@ export async function callObsidianFunction(
   if (!bridgeUrl || !bridgeToken) {
     throw new Error("Obsidian bridge is not configured");
   }
-  const response = await fetch(
+  const response = await providerFetch(
     `${bridgeUrl.replace(/\/+$/, "")}/function/${name}`,
     {
       method: "POST",

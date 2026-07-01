@@ -12,8 +12,8 @@
 //
 // Pure fs/path/crypto only (no Electron) so it is unit-testable; index.ts
 // supplies the per-profile vault directory.
-import { promises as fs, existsSync } from "fs";
-import { join } from "path";
+import { promises as fs, existsSync, realpathSync } from "fs";
+import { isAbsolute, join, relative } from "path";
 import { createHash } from "crypto";
 
 export const ASSETS_DIR = "_assets";
@@ -57,8 +57,7 @@ export async function writeAsset(
 
 /** True only when `name` is a valid asset name and the file exists. */
 export function assetExists(vaultDir: string, name: string): boolean {
-  if (!isValidAssetName(name)) return false;
-  return existsSync(join(vaultDir, ASSETS_DIR, name));
+  return resolveAssetPath(vaultDir, name) !== null;
 }
 
 /**
@@ -71,7 +70,18 @@ export function resolveAssetPath(
   name: string,
 ): string | null {
   if (!isValidAssetName(name)) return null;
-  return join(vaultDir, ASSETS_DIR, name);
+  const dir = join(vaultDir, ASSETS_DIR);
+  const target = join(dir, name);
+  if (!existsSync(target)) return null;
+  try {
+    const root = realpathSync(dir);
+    const resolved = realpathSync(target);
+    const rel = relative(root, resolved);
+    if (!rel || rel.startsWith("..") || isAbsolute(rel)) return null;
+    return resolved;
+  } catch {
+    return null;
+  }
 }
 
 /**

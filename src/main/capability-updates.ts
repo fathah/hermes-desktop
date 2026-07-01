@@ -5,6 +5,7 @@ import type {
   CapabilitySourceInfo,
   CapabilityUpdateStatus,
 } from "../shared/capability-risk";
+import { publicFetch } from "./security/network-policy";
 
 const UPDATE_TIMEOUT_MS = 12_000;
 
@@ -63,7 +64,7 @@ async function latestPackage(pkg: PackageRef): Promise<string | undefined> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), UPDATE_TIMEOUT_MS);
   try {
-    const res = await fetch(url, { signal: ctrl.signal });
+    const res = await publicFetch(url, { signal: ctrl.signal });
     if (!res.ok) return undefined;
     const json = (await res.json()) as {
       "dist-tags"?: { latest?: string };

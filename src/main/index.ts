@@ -13,7 +13,7 @@ import {
 import { join } from "path";
 import { tmpdir } from "os";
 import { pathToFileURL } from "url";
-import { exec } from "child_process";
+import { execFile } from "child_process";
 import { promisify } from "util";
 import {
   existsSync,
@@ -26,7 +26,7 @@ import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import type { AppUpdater } from "electron-updater";
 import icon from "../../resources/icon.png?asset";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 import { closeSharedDb } from "./db";
 import { closeAllNoteIndexes } from "./note-index";
@@ -50,6 +50,7 @@ import {
 } from "./security";
 import { resolveSpsVaultDir } from "./sps-storage";
 import { resolveAssetPath, writeAsset } from "./sps-assets";
+import { buildScreencaptureArgs } from "./screencapture";
 import { startEquityAlertWatcher } from "./equity-alerts";
 import { startScheduledResearch } from "./scheduled-research";
 import { startAssistantRecipeScheduler } from "./assistant-recipes";
@@ -570,7 +571,7 @@ function setupIPC(): void {
 
       const tempPath = join(tmpdir(), `hermes-capture-${Date.now()}.png`);
       try {
-        await execAsync(`screencapture -i "${tempPath}"`);
+        await execFileAsync("screencapture", buildScreencaptureArgs(tempPath));
         if (existsSync(tempPath)) {
           const buffer = readFileSync(tempPath);
           try {

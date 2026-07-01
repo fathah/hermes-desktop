@@ -520,6 +520,19 @@ function getShellProfile(home: string): string | null {
   return null;
 }
 
+export function buildUnixInstallCommand({
+  shellProfile,
+  scriptPath,
+}: {
+  shellProfile: string | null;
+  scriptPath: string;
+}): string {
+  return [
+    shellProfile ? `source ${shQuote(shellProfile)} 2>/dev/null;` : "",
+    `bash ${shQuote(scriptPath)} --skip-setup`,
+  ].join(" ");
+}
+
 const STAGE_MARKERS: { pattern: RegExp; step: number; title: string }[] = [
   {
     pattern: /Checking (for )?(git|uv|python|node|ripgrep|ffmpeg)/i,
@@ -626,10 +639,7 @@ export async function runInstall(
 
       const shellProfile = getShellProfile(home);
       const scriptPath = getBundledScriptPath("install.sh");
-      const installCmd = [
-        shellProfile ? `source "${shellProfile}" 2>/dev/null;` : "",
-        `bash ${shQuote(scriptPath)} --skip-setup`,
-      ].join(" ");
+      const installCmd = buildUnixInstallCommand({ shellProfile, scriptPath });
 
       const basePath = getEnhancedPath();
       const proc = spawn("bash", ["-c", installCmd], {

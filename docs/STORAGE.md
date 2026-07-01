@@ -24,6 +24,7 @@ Everything lives under the active profile's home directory
     <pageId>.md               # one markdown file per page (frontmatter + blocks)
     <dbFolder>/<rowId>.md      # rows of a folder-backed query database (S4)
     _manifest.json            # structure the page files can't hold (see below)
+    _manifest.pending.json     # transient snapshot-write journal
     .note-index.db            # the derived better-sqlite3 index (rebuildable)
 ```
 
@@ -35,6 +36,10 @@ Everything lives under the active profile's home directory
   database block opts into this folder‑backed mode by carrying a `source` field.
 - **`_manifest.json`**: the page tree, trash, comments, and current page — the
   structure that individual page files can't represent on their own.
+- **`_manifest.pending.json`**: a transient journal created while vault-mode
+  page files and `_manifest.json` are written as one main-process snapshot. It
+  is removed after a successful manifest commit and left behind only when a
+  snapshot write fails mid-flight.
 
 ## Storage modes (the `storageMode` flag)
 

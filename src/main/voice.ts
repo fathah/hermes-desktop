@@ -8,6 +8,7 @@
 // to `{ error }` so the renderer can surface a message without a crash.
 
 import { readEnv } from "./config";
+import { publicFetch } from "./security/network-policy";
 
 const OPENAI_AUDIO_BASE = "https://api.openai.com/v1/audio";
 const STT_MODEL = "whisper-1";
@@ -77,7 +78,7 @@ export async function transcribeAudio(
     const blob = new Blob([audio], { type: mime || "audio/webm" });
     form.append("file", blob, audioFilename(mime));
     form.append("model", STT_MODEL);
-    const res = await fetch(`${OPENAI_AUDIO_BASE}/transcriptions`, {
+    const res = await publicFetch(`${OPENAI_AUDIO_BASE}/transcriptions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${key}` },
       body: form,
@@ -114,7 +115,7 @@ export async function speakText(
   const input = (text ?? "").trim();
   if (!input) return { error: "Nothing to speak" };
   try {
-    const res = await fetch(`${OPENAI_AUDIO_BASE}/speech`, {
+    const res = await publicFetch(`${OPENAI_AUDIO_BASE}/speech`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${key}`,

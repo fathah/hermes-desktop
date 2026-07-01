@@ -8,6 +8,7 @@ import {
   getRemoteAuthHeader,
   isRemoteMode,
 } from "../gateway-process";
+import { gatewayFetch } from "../../security/network-policy";
 import type { ChatHandle } from "./messages";
 
 export async function chatCompletionOnce(
@@ -34,7 +35,7 @@ export async function chatCompletionOnce(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 120000);
 
-    const res = await fetch(url, {
+    const res = await gatewayFetch(url, {
       method: "POST",
       headers,
       body,

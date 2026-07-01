@@ -4,6 +4,10 @@ This document records the project's `npm audit` posture: what was remediated, an
 **intentionally-accepted residual** with the rationale for each. It exists so that a non-empty
 `npm audit` is an interpretable, reviewable baseline rather than ambient noise.
 
+For app-level compatibility residuals (network policy classes, calendar feed
+tokens, CSP exceptions, updater trust chain, and shell compatibility), see
+[`SECURITY-RESIDUALS.md`](./SECURITY-RESIDUALS.md).
+
 Last reviewed: 2026-06-25 (Hermes Desktop 0.5.4).
 
 ## Summary

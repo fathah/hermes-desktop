@@ -34,6 +34,7 @@ import { buildContextPack } from "./context-packs";
 let serverInstance: ReturnType<typeof createServer> | null = null;
 let currentPort = 8645;
 let authToken = "";
+let calendarFeedToken = "";
 
 /**
  * Generate a secure token if one is not already present, and store it in desktop.json.
@@ -52,6 +53,36 @@ function ensureAuthToken(): string {
   config.controlServerToken = authToken;
   writeDesktopConfig(config);
   return authToken;
+}
+
+function ensureCalendarFeedToken(): string {
+  const config = readDesktopConfig();
+  if (
+    typeof config.calendarFeedToken === "string" &&
+    config.calendarFeedToken
+  ) {
+    calendarFeedToken = config.calendarFeedToken;
+    return calendarFeedToken;
+  }
+
+  calendarFeedToken = randomBytes(32).toString("hex");
+  config.calendarFeedToken = calendarFeedToken;
+  writeDesktopConfig(config);
+  return calendarFeedToken;
+}
+
+function hasBearerControlToken(req: IncomingMessage): boolean {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) return false;
+  return authHeader.substring(7).trim() === authToken;
+}
+
+function isCalendarAuthorized(req: IncomingMessage, url: URL): boolean {
+  if (hasBearerControlToken(req)) return true;
+  if (url.searchParams.get("feedToken") === calendarFeedToken) return true;
+  // Compatibility for existing calendar subscriptions. Keep this calendar-only:
+  // general control endpoints still require the Authorization header below.
+  return url.searchParams.get("token") === authToken;
 }
 
 function getICalDates(dueStr: string): { start: string; end: string } | null {
@@ -147,8 +178,7 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
 
   // iCal calendar feed synchronization route
   if (req.method === "GET" && url.pathname === "/calendar.ics") {
-    const token = url.searchParams.get("token") || "";
-    if (token !== authToken) {
+    if (!isCalendarAuthorized(req, url)) {
       res.writeHead(401, { "Content-Type": "application/json" });
       res.end(
         JSON.stringify({ error: "Unauthorized. Token mismatch or missing." }),
@@ -231,8 +261,7 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
     return;
   }
 
-  const token = authHeader.substring(7).trim();
-  if (token !== authToken) {
+  if (!hasBearerControlToken(req)) {
     res.writeHead(401, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "Unauthorized. Token mismatch." }));
     return;
@@ -1002,6 +1031,7 @@ export async function startControlServer(): Promise<number> {
   }
 
   ensureAuthToken();
+  ensureCalendarFeedToken();
 
   serverInstance = createServer(handleRequest);
   try {
@@ -1017,10 +1047,11 @@ export async function startControlServer(): Promise<number> {
 /**
  * Stop the control server.
  */
-export function stopControlServer(): void {
-  if (serverInstance) {
-    console.log("[CONTROL SERVER] Stopping control server.");
-    serverInstance.close();
-    serverInstance = null;
-  }
+export function stopControlServer(): Promise<void> {
+  if (!serverInstance) return Promise.resolve();
+  const server = serverInstance;
+  serverInstance = null;
+  return new Promise((resolve) => {
+    server.close(() => resolve());
+  });
 }

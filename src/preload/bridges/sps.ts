@@ -597,6 +597,11 @@ export const spsBridge = {
     ipcRenderer.invoke("sps-vault-read", profile),
   spsVaultWriteManifest: (json: string, profile?: string): Promise<boolean> =>
     ipcRenderer.invoke("sps-vault-write-manifest", json, profile),
+  spsVaultWriteSnapshot: (
+    snapshot: { pages: Record<string, string>; manifest: string },
+    profile?: string,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("sps-vault-write-snapshot", snapshot, profile),
   spsBackupWorkspace: (profile?: string): Promise<string | null> =>
     ipcRenderer.invoke("sps-backup-workspace", profile),
   spsWriteExcalidraw: (

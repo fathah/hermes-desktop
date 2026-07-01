@@ -5,6 +5,7 @@ import {
   migrateToVault,
   readVaultWorkspace,
   writeVaultWorkspace,
+  saveVaultPage,
   rollbackToBlob,
   deleteVaultPages,
   deleteVaultDbFolders,
@@ -47,20 +48,21 @@ afterEach(() => {
 
 describe("migrateToVault — safety gate", () => {
   it("backs up the blob and writes every page + the manifest", async () => {
-    const exportPage = vi.fn().mockResolvedValue(true);
-    const writeManifest = vi.fn().mockResolvedValue(true);
+    const writeSnapshot = vi.fn().mockResolvedValue(true);
     const backup = vi.fn().mockResolvedValue("/x/workspace.json.bak-1");
     stubApi({
-      spsExportPage: exportPage,
-      spsVaultWriteManifest: writeManifest,
+      spsVaultWriteSnapshot: writeSnapshot,
       spsBackupWorkspace: backup,
     });
     const res = await migrateToVault(makeWorkspace());
     expect(res.ok).toBe(true);
     expect(res.backup).toBe("/x/workspace.json.bak-1");
     expect(backup).toHaveBeenCalledTimes(1);
-    expect(exportPage).toHaveBeenCalledTimes(2); // home + sub
-    expect(writeManifest).toHaveBeenCalledTimes(1);
+    expect(writeSnapshot).toHaveBeenCalledTimes(1);
+    expect(Object.keys(writeSnapshot.mock.calls[0][0].pages).sort()).toEqual([
+      "home",
+      "sub",
+    ]);
   });
 
   it("migrates a block-anchored comment, persisting the anchored block id (F2)", async () => {
@@ -73,12 +75,10 @@ describe("migrateToVault — safety gate", () => {
       resolved: false,
       messages: [],
     };
-    const exportPage = vi.fn().mockResolvedValue(true);
-    const writeManifest = vi.fn().mockResolvedValue(true);
+    const writeSnapshot = vi.fn().mockResolvedValue(true);
     const backup = vi.fn().mockResolvedValue("/x/workspace.json.bak-1");
     stubApi({
-      spsExportPage: exportPage,
-      spsVaultWriteManifest: writeManifest,
+      spsVaultWriteSnapshot: writeSnapshot,
       spsBackupWorkspace: backup,
     });
     const ws = makeWorkspace({
@@ -88,11 +88,9 @@ describe("migrateToVault — safety gate", () => {
     const res = await migrateToVault(ws);
     expect(res.ok).toBe(true);
     expect(backup).toHaveBeenCalledTimes(1);
-    expect(exportPage).toHaveBeenCalledTimes(2);
+    expect(writeSnapshot).toHaveBeenCalledTimes(1);
     // The anchored page carries the block-id marker so the comment re-anchors.
-    const homeMd = exportPage.mock.calls.find((c) => c[0] === "home")?.[1] as
-      | string
-      | undefined;
+    const homeMd = writeSnapshot.mock.calls[0][0].pages.home as string;
     expect(homeMd).toContain(`^${anchored.id}`);
   });
 
@@ -155,15 +153,25 @@ describe("read / write / rollback round-trip", () => {
   });
 
   it("writeVaultWorkspace writes one page per doc plus the manifest", async () => {
-    const exportPage = vi.fn().mockResolvedValue(true);
-    const writeManifest = vi.fn().mockResolvedValue(true);
-    stubApi({
-      spsExportPage: exportPage,
-      spsVaultWriteManifest: writeManifest,
-    });
+    const writeSnapshot = vi.fn().mockResolvedValue(true);
+    stubApi({ spsVaultWriteSnapshot: writeSnapshot });
     await writeVaultWorkspace(makeWorkspace());
-    expect(exportPage).toHaveBeenCalledTimes(2);
-    expect(writeManifest).toHaveBeenCalledTimes(1);
+    expect(writeSnapshot).toHaveBeenCalledTimes(1);
+    expect(Object.keys(writeSnapshot.mock.calls[0][0].pages).sort()).toEqual([
+      "home",
+      "sub",
+    ]);
+  });
+
+  it("saveVaultPage writes one page plus the manifest in one snapshot IPC call", async () => {
+    const writeSnapshot = vi.fn().mockResolvedValue(true);
+    stubApi({ spsVaultWriteSnapshot: writeSnapshot });
+
+    await saveVaultPage(makeWorkspace(), "home");
+
+    expect(writeSnapshot).toHaveBeenCalledTimes(1);
+    expect(Object.keys(writeSnapshot.mock.calls[0][0].pages)).toEqual(["home"]);
+    expect(writeSnapshot.mock.calls[0][0].manifest).toContain('"page"');
   });
 });
 

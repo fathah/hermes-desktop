@@ -22,12 +22,12 @@ import type { Dirent } from "fs";
 import { mkdir, readdir, readFile, stat } from "fs/promises";
 import { basename, extname, join, relative, sep } from "path";
 import chokidar, { type FSWatcher } from "chokidar";
-import YAML from "yaml";
 import { resolveSpsVaultDir } from "./sps-storage";
 import { semanticManager } from "./semantic-index";
 import { log } from "./log";
 import { extractSpsLinkEdges, maskSpsWikilinks } from "../shared/sps-wikilinks";
 import type { VaultLinkEdge } from "../shared/sps-types";
+import { parseYamlFrontmatterMarkdown } from "../shared/sps-frontmatter";
 
 const NOTE_EXTENSIONS = new Set([".md", ".markdown"]);
 
@@ -108,7 +108,6 @@ function extractInlineTags(body: string): string[] {
   return [...tags];
 }
 const INDEX_DB_FILE = ".note-index.db";
-const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 
 // Wiki META pages (Karpathy LLM-Wiki): the LLM-maintained catalog, the
 // append-only evolution log, and the schema. They are intentionally link-free
@@ -175,19 +174,7 @@ export function parseFrontmatter(raw: string): {
   props: Record<string, unknown>;
   body: string;
 } {
-  const match = FRONTMATTER_RE.exec(raw);
-  if (!match) return { props: {}, body: raw };
-  const body = raw.slice(match[0].length);
-  try {
-    const parsed = YAML.parse(match[1]);
-    const props =
-      parsed && typeof parsed === "object" && !Array.isArray(parsed)
-        ? (parsed as Record<string, unknown>)
-        : {};
-    return { props, body };
-  } catch {
-    return { props: {}, body };
-  }
+  return parseYamlFrontmatterMarkdown(raw);
 }
 
 function firstHeading(body: string): string | null {

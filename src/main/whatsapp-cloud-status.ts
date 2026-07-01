@@ -1,4 +1,5 @@
 import { readEnv } from "./config";
+import { providerFetch } from "./security/network-policy";
 import {
   buildWhatsAppCloudStatus,
   parseWhatsAppCloudWebhookPort,
@@ -41,7 +42,7 @@ export async function getWhatsAppCloudStatus(
   const timeout = setTimeout(() => ctrl.abort(), 1500);
 
   try {
-    const res = await fetch(`http://127.0.0.1:${port}/health`, {
+    const res = await providerFetch(`http://127.0.0.1:${port}/health`, {
       headers: { accept: "application/json" },
       signal: ctrl.signal,
     });

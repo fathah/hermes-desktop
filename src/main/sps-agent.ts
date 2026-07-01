@@ -9,16 +9,6 @@
 //                     (/v1/chat/completions), returning a structured AssistantResult.
 //                     Real model + tools + memory; no canned logic, no browser key.
 //   • sps:load / sps:save — durable workspace persistence under the profile home.
-import { promises as fs } from "fs";
-import { join } from "path";
-import {
-  WorkspaceWriteQueue,
-  selectBackupsToPrune,
-  OVERSIZE_ADVISORY_BYTES,
-  type RevisionedWorkspace,
-  type WorkspaceQueueIO,
-} from "./sps-write-queue";
-import type { Workspace, SpsSaveResult } from "../shared/sps-types";
 import { buildCuratedBriefPrompt } from "../shared/curatedBrief";
 import { buildSourceStudyPrompt } from "../shared/sourceStudy";
 import {
@@ -31,11 +21,6 @@ import {
   isRemoteMode,
   buildRetrievalSystemMessage,
 } from "./hermes";
-import {
-  profileHome,
-  getActiveProfileNameSync,
-  safeWriteFileAsync,
-} from "./utils";
 import { assembleVaultContext, type VaultContextUsage } from "./sps-context";
 import { buildActiveSkillsSystemMessage } from "./active-skills";
 import { resolveSpsVaultDir } from "./sps-storage";
@@ -59,7 +44,10 @@ import {
 import { getSpsNoteIndex } from "./note-index";
 import { createLearningProposal } from "./learning-proposals";
 import { safeFetch } from "./security/ssrf-guard";
+import { gatewayFetch } from "./security/network-policy";
 import { log } from "./log";
+
+export { spsBackupWorkspace, spsLoad, spsSave } from "./sps-agent/persistence";
 
 // ───────────────────────── unfurl ─────────────────────────
 interface BookmarkMeta {
@@ -546,7 +534,7 @@ export async function spsAssistant(
     const context: VaultContextUsage | undefined = usedAnything
       ? used
       : undefined;
-    const res = await fetch(url, {
+    const res = await gatewayFetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...getRemoteAuthHeader() },
       signal: AbortSignal.timeout(120000),
@@ -690,7 +678,7 @@ export async function spsIngestInbox(profile?: string): Promise<IngestResult> {
     const schema = await readWikiSchema(vaultDir);
     const messages = buildIngestMessages(schema, captures);
     const url = `${getApiUrl(profile)}/v1/chat/completions`;
-    const res = await fetch(url, {
+    const res = await gatewayFetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...getRemoteAuthHeader() },
       signal: AbortSignal.timeout(180000),
@@ -734,7 +722,7 @@ Return ONLY a JSON array, with no other prose or markdown formatting (no code fe
           await Promise.all(
             changeset.pages.map(async (page) => {
               try {
-                const auditRes = await fetch(auditUrl, {
+                const auditRes = await gatewayFetch(auditUrl, {
                   method: "POST",
                   headers: {
                     "Content-Type": "application/json",
@@ -862,7 +850,7 @@ export async function spsFileAnswer(
       related,
     );
     const url = `${getApiUrl(profile)}/v1/chat/completions`;
-    const res = await fetch(url, {
+    const res = await gatewayFetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...getRemoteAuthHeader() },
       signal: AbortSignal.timeout(180000),
@@ -939,7 +927,7 @@ export async function spsFileResearch(
     // immediately on a 4xx (auth/client errors won't improve on retry).
     let lastError = "My Assistant didn't return a usable page.";
     for (let attempt = 1; attempt <= 2; attempt++) {
-      const res = await fetch(url, {
+      const res = await gatewayFetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1020,7 +1008,7 @@ export async function spsExternalSaveToKb(
     // occasionally flaky); bail immediately on a 4xx.
     let lastError = "My Assistant didn't return a usable page.";
     for (let attempt = 1; attempt <= 2; attempt++) {
-      const res = await fetch(url, {
+      const res = await gatewayFetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1126,7 +1114,7 @@ export async function spsLintWiki(
     const schema = await readWikiSchema(vaultDir);
     const messages = buildLintMessages(schema, mechanical, digests);
     const url = `${getApiUrl(profile)}/v1/chat/completions`;
-    const res = await fetch(url, {
+    const res = await gatewayFetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...getRemoteAuthHeader() },
       signal: AbortSignal.timeout(180000),
@@ -1158,129 +1146,6 @@ export async function spsLintWiki(
     };
   } catch (err) {
     return fail(err instanceof Error ? err.message : "lint error");
-  }
-}
-
-// ───────────────────────── persistence ─────────────────────────
-function workspacePath(profile?: string): string {
-  return join(
-    profileHome(profile || getActiveProfileNameSync()),
-    "sps-agent",
-    "workspace.json",
-  );
-}
-
-function workspaceDir(profile?: string): string {
-  return join(profileHome(profile || getActiveProfileNameSync()), "sps-agent");
-}
-
-export async function spsLoad(profile?: string): Promise<unknown | null> {
-  try {
-    const raw = await fs.readFile(workspacePath(profile), "utf-8");
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
-// ── Workspace write-safety (Phase 1.5) ──
-// One serialized write queue per profile guards workspace.json against the
-// whole-blob last-write-wins hazard: overlapping saves can't interleave their
-// read-modify-write, and a save derived from a stale revision is reload-merged
-// rather than blindly overwriting a concurrent writer's pages.
-const writeQueues = new Map<string, WorkspaceWriteQueue>();
-
-function listBackups(profile?: string): Promise<string[]> {
-  const dir = workspaceDir(profile);
-  return fs
-    .readdir(dir)
-    .then((names) =>
-      names
-        .filter((name) => name.startsWith("workspace.json.bak-"))
-        .map((name) => join(dir, name)),
-    )
-    .catch(() => []);
-}
-
-function makeQueueIo(profile?: string): WorkspaceQueueIO {
-  const p = workspacePath(profile);
-  return {
-    async read() {
-      const data = await spsLoad(profile);
-      return (data as RevisionedWorkspace | null) ?? null;
-    },
-    async write(blob) {
-      const json = JSON.stringify(blob);
-      await safeWriteFileAsync(p, json);
-      return Buffer.byteLength(json);
-    },
-    async backup() {
-      await spsBackupWorkspace(profile);
-    },
-    async prune(keep) {
-      const existing = await listBackups(profile);
-      const stale = selectBackupsToPrune(existing, keep);
-      await Promise.all(stale.map((path) => fs.unlink(path).catch(() => {})));
-    },
-    now() {
-      return Date.now();
-    },
-  };
-}
-
-function queueFor(profile?: string): WorkspaceWriteQueue {
-  const key = profile || getActiveProfileNameSync();
-  let queue = writeQueues.get(key);
-  if (!queue) {
-    queue = new WorkspaceWriteQueue(makeQueueIo(profile));
-    writeQueues.set(key, queue);
-  }
-  return queue;
-}
-
-export async function spsSave(
-  ws: unknown,
-  profile?: string,
-  baseRev?: number,
-): Promise<SpsSaveResult> {
-  // The reset path (clearWorkspace sends null): bypass the queue/merge — there
-  // is nothing to protect — and drop the cached queue so the next save starts
-  // its revision tracking fresh from disk.
-  if (ws === null || typeof ws !== "object") {
-    writeQueues.delete(profile || getActiveProfileNameSync());
-    try {
-      await safeWriteFileAsync(workspacePath(profile), JSON.stringify(ws));
-      return { ok: true, rev: 0, merged: false };
-    } catch (err) {
-      return {
-        ok: false,
-        error: err instanceof Error ? err.message : String(err),
-        rev: 0,
-        merged: false,
-      };
-    }
-  }
-
-  const outcome = await queueFor(profile).enqueue(ws as Workspace, baseRev);
-  const oversize =
-    typeof outcome.bytes === "number" &&
-    outcome.bytes > OVERSIZE_ADVISORY_BYTES;
-  return { ...outcome, oversize };
-}
-
-/** Copy the JSON blob to a timestamped backup (used before a vault migration,
- *  and by the write queue's rolling-backup policy — first save per session and
- *  every Nth save thereafter, pruned to a small rolling window). */
-export async function spsBackupWorkspace(
-  profile?: string,
-): Promise<string | null> {
-  try {
-    const p = workspacePath(profile);
-    const backup = `${p}.bak-${Date.now()}`;
-    await fs.copyFile(p, backup);
-    return backup;
-  } catch {
-    return null;
   }
 }
 

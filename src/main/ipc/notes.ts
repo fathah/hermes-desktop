@@ -52,6 +52,7 @@ import {
   readVaultPages,
   readVaultManifest,
   writeVaultManifest,
+  writeVaultSnapshot,
   writeAssetTo,
   readAssetFrom,
 } from "../sps-vault";
@@ -61,6 +62,7 @@ import { requireLocalWorkspace } from "./connection-guards";
 import { isAllowedExternalUrl } from "../security";
 import { HERMES_HOME } from "../installer/paths";
 import { assertGrantedFilePath, grantFilePath } from "../file-access-grants";
+import { assertFileWithinByteLimit } from "../file-size-limits";
 import {
   recordMirrorFailure,
   readMirrorFailRecord,
@@ -280,7 +282,9 @@ export function registerNotesIpc(
 
   safeHandle("sps-read-file-bytes", async (_event, filePath: string) => {
     requireLocalWorkspace();
-    const buffer = await readFile(assertGrantedFilePath(filePath));
+    const grantedFile = assertGrantedFilePath(filePath);
+    assertFileWithinByteLimit(grantedFile);
+    const buffer = await readFile(grantedFile);
     return new Uint8Array(buffer);
   });
 
@@ -548,6 +552,14 @@ export function registerNotesIpc(
     "sps-vault-write-manifest",
     (_event, json: string, profile?: string) =>
       writeVaultManifest(spsVaultDir(profile), json, noteMirrorFailure),
+  );
+  safeHandle(
+    "sps-vault-write-snapshot",
+    (
+      _event,
+      snapshot: { pages: Record<string, string>; manifest: string },
+      profile?: string,
+    ) => writeVaultSnapshot(spsVaultDir(profile), snapshot, noteMirrorFailure),
   );
   safeHandle("sps-backup-workspace", (_event, profile?: string) =>
     spsBackupWorkspace(profile),

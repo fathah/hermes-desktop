@@ -8,6 +8,7 @@ import { join } from "path";
 import { getSpsNoteIndex } from "./note-index";
 import { getApiUrl, getRemoteAuthHeader } from "./hermes";
 import { resolveSpsVaultDir } from "./sps-storage";
+import { gatewayFetch } from "./security/network-policy";
 
 export interface AuditResult {
   success: boolean;
@@ -99,7 +100,7 @@ export async function runTelosAudit(profile?: string): Promise<AuditResult> {
     ].join("\n");
 
     const apiUrl = `${getApiUrl(profile)}/v1/chat/completions`;
-    const res = await fetch(apiUrl, {
+    const res = await gatewayFetch(apiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...getRemoteAuthHeader() },
       signal: AbortSignal.timeout(120000),
@@ -199,7 +200,7 @@ ${text}`;
     }
 
     const apiUrl = `${getApiUrl(profile)}/v1/chat/completions`;
-    const res = await fetch(apiUrl, {
+    const res = await gatewayFetch(apiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...getRemoteAuthHeader() },
       signal: AbortSignal.timeout(120000),

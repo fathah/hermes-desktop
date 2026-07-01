@@ -11,6 +11,7 @@ import { readdir, readFile } from "fs/promises";
 import { extname } from "path";
 import { readMediaAsDataUrl, saveMedia, mediaFileExists } from "../media";
 import { stageAttachment, clearStagedAttachments } from "../attachment-staging";
+import { assertFileWithinByteLimit } from "../file-size-limits";
 import {
   assertGrantedDirectoryPath,
   assertGrantedFilePath,
@@ -212,6 +213,7 @@ export function registerUtilityIpc(
     async (_event, filePath: string): Promise<string | null> => {
       try {
         const grantedFile = assertGrantedFilePath(filePath);
+        assertFileWithinByteLimit(grantedFile);
         const buffer = await readFile(grantedFile);
         const ext = extname(grantedFile).toLowerCase().slice(1);
         const mimeType =

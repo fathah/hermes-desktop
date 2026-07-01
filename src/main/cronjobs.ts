@@ -17,6 +17,7 @@ import {
   augmentPrompt,
   parseCreatedJobId,
 } from "./cron-quality";
+import { gatewayFetch } from "./security/network-policy";
 import type { CronJob } from "../shared/cronjobs";
 export type { CronJob };
 
@@ -66,7 +67,7 @@ async function remoteFetch(
     ...((init.headers as Record<string, string>) || {}),
   };
   const apiUrl = await getCronApiUrl(headers);
-  return fetch(`${apiUrl}${path}`, { ...init, headers });
+  return gatewayFetch(`${apiUrl}${path}`, { ...init, headers });
 }
 
 async function getCronApiUrl(headers: Record<string, string>): Promise<string> {
@@ -97,7 +98,7 @@ async function isCronFallbackHealthy(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 1500);
   try {
-    const res = await fetch(`${apiUrl}/health`, {
+    const res = await gatewayFetch(`${apiUrl}/health`, {
       method: "GET",
       headers,
       signal: controller.signal,

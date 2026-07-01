@@ -6,6 +6,7 @@ import {
 } from "../crawl4ai";
 import { discoverSubstackFeed, parseRssFeedMetadata } from "../rss-discovery";
 import { spsUnfurl } from "../sps-agent";
+import { publicFetch } from "../security/network-policy";
 import {
   routeSourceInput,
   type SourceIntakeResult,
@@ -57,7 +58,7 @@ function resultFromFeed(input: {
 }
 
 async function previewRssUrl(sourceUrl: string): Promise<SourceIntakeResult> {
-  const response = await fetch(sourceUrl, {
+  const response = await publicFetch(sourceUrl, {
     signal: AbortSignal.timeout(10000),
     headers: {
       accept:

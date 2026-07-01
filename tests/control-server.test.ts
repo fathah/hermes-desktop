@@ -25,6 +25,7 @@ const mockWriteDesktopConfig = vi.fn();
 const mockSendMessage = vi.fn();
 const mockIsGatewayRunning = vi.fn(() => false);
 const mockRunJobHeadless = vi.fn(() => Promise.resolve(true));
+const mockCalendarQuery = vi.fn(() => []);
 
 vi.mock("../src/main/config", () => ({
   readDesktopConfig: () => mockReadDesktopConfig(),
@@ -41,6 +42,10 @@ vi.mock("../src/main/hermes", () => ({
 vi.mock("../src/main/scheduler", () => ({
   runJobHeadless: (jobId: string, jobName: string, profile: string) =>
     mockRunJobHeadless(jobId, jobName, profile),
+}));
+
+vi.mock("../src/main/note-index", () => ({
+  getSpsNoteIndex: () => Promise.resolve({ query: mockCalendarQuery }),
 }));
 
 vi.mock("../src/main/utils", () => ({
@@ -63,8 +68,8 @@ describe("Local Control Server Integration", () => {
     vi.clearAllMocks();
   });
 
-  afterEach(() => {
-    stopControlServer();
+  afterEach(async () => {
+    await stopControlServer();
   });
 
   it("should start control server, write token to config, and handle GET /state", async () => {
@@ -74,6 +79,7 @@ describe("Local Control Server Integration", () => {
     const port = await startControlServer();
     expect(port).toBeGreaterThanOrEqual(8645);
     expect(desktopConfig.controlServerToken).toBeDefined();
+    expect(desktopConfig.calendarFeedToken).toBeDefined();
     const token = desktopConfig.controlServerToken;
 
     // Verify OS-native script helper is generated
@@ -123,6 +129,56 @@ describe("Local Control Server Integration", () => {
     });
 
     expect(res.status).toBe(401);
+  });
+
+  it("serves /calendar.ics with Authorization bearer control token", async () => {
+    const desktopConfig: Record<string, unknown> = {};
+    mockReadDesktopConfig.mockReturnValue(desktopConfig);
+    mockCalendarQuery.mockReturnValueOnce([
+      {
+        path: "tasks/task-1.md",
+        title: "Task One",
+        props: { due: "2026-07-03", status: "todo" },
+      },
+    ]);
+
+    const port = await startControlServer();
+    const token = desktopConfig.controlServerToken;
+
+    const res = await fetch(`http://127.0.0.1:${port}/calendar.ics`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("SUMMARY:Task One");
+  });
+
+  it("serves /calendar.ics with the feed-only query token", async () => {
+    const desktopConfig: Record<string, unknown> = {};
+    mockReadDesktopConfig.mockReturnValue(desktopConfig);
+
+    const port = await startControlServer();
+    const feedToken = desktopConfig.calendarFeedToken;
+
+    const res = await fetch(
+      `http://127.0.0.1:${port}/calendar.ics?feedToken=${feedToken}`,
+    );
+
+    expect(res.status).toBe(200);
+  });
+
+  it("keeps legacy /calendar.ics query control-token compatibility", async () => {
+    const desktopConfig: Record<string, unknown> = {};
+    mockReadDesktopConfig.mockReturnValue(desktopConfig);
+
+    const port = await startControlServer();
+    const token = desktopConfig.controlServerToken;
+
+    const res = await fetch(
+      `http://127.0.0.1:${port}/calendar.ics?token=${token}`,
+    );
+
+    expect(res.status).toBe(200);
   });
 
   it("should trigger a background job on POST /cron/trigger", async () => {

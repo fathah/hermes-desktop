@@ -12,6 +12,7 @@ import { profileHome } from "./utils";
 import { listInstalledSkills } from "./skills";
 import { readDesktopConfig, readEnv } from "./config";
 import { getApiUrl, getRemoteAuthHeader } from "./hermes";
+import { gatewayFetch, publicFetch } from "./security/network-policy";
 
 let mainWindowGetter: (() => BrowserWindow | null) | null = null;
 
@@ -407,7 +408,7 @@ async function callTriageLLM(
       ],
     };
 
-    const res = await fetch(`${apiUrl}/v1/chat/completions`, {
+    const res = await gatewayFetch(`${apiUrl}/v1/chat/completions`, {
       method: "POST",
       headers,
       body: JSON.stringify(payload),
@@ -441,7 +442,7 @@ async function callGeminiDirectly(
   screenshotPath: string | null,
 ): Promise<{ success: boolean; rawOutput?: string; error?: string }> {
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
     const parts: Array<Record<string, unknown>> = [{ text: prompt }];
     if (screenshotPath && existsSync(screenshotPath)) {
@@ -454,9 +455,12 @@ async function callGeminiDirectly(
       });
     }
 
-    const res = await fetch(url, {
+    const res = await publicFetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
       body: JSON.stringify({
         contents: [{ parts }],
         generationConfig: {

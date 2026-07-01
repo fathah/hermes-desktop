@@ -19,6 +19,22 @@ import {
 import { pageToMarkdown } from "../editor/pageMarkdown";
 import type { Workspace } from "../types";
 
+async function writeVaultSnapshot(
+  pages: Record<string, string>,
+  manifest: string,
+): Promise<void> {
+  const api = window.hermesAPI;
+  if (api?.spsVaultWriteSnapshot) {
+    await api.spsVaultWriteSnapshot({ pages, manifest });
+    return;
+  }
+  if (!api?.spsExportPage || !api.spsVaultWriteManifest) return;
+  await Promise.all(
+    Object.entries(pages).map(([id, md]) => api.spsExportPage(id, md)),
+  );
+  await api.spsVaultWriteManifest(manifest);
+}
+
 /** Read the authoritative vault into a workspace, or null if not populated. */
 export async function readVaultWorkspace(): Promise<Workspace | null> {
   const api = window.hermesAPI;
@@ -35,13 +51,8 @@ export async function readVaultWorkspace(): Promise<Workspace | null> {
 
 /** Write a whole workspace to the vault (every page file + the manifest). */
 export async function writeVaultWorkspace(ws: Workspace): Promise<void> {
-  const api = window.hermesAPI;
-  if (!api?.spsExportPage || !api.spsVaultWriteManifest) return;
-  const { pages } = workspaceToVault(ws);
-  await Promise.all(
-    Object.entries(pages).map(([id, md]) => api.spsExportPage(id, md)),
-  );
-  await api.spsVaultWriteManifest(JSON.stringify(workspaceManifest(ws)));
+  const { pages, manifest } = workspaceToVault(ws);
+  await writeVaultSnapshot(pages, JSON.stringify(manifest));
 }
 
 /** Persist a single page + the manifest while in vault mode (debounced save). */
@@ -49,15 +60,15 @@ export async function saveVaultPage(
   ws: Workspace,
   pageId: string,
 ): Promise<void> {
-  const api = window.hermesAPI;
-  if (!api?.spsExportPage || !api.spsVaultWriteManifest) return;
   const md = pageToMarkdown(
     ws.meta[pageId] ?? {},
     ws.docs[pageId] ?? [],
     commentAnchorIds(ws.comments),
   );
-  await api.spsExportPage(pageId, md);
-  await api.spsVaultWriteManifest(JSON.stringify(workspaceManifest(ws)));
+  await writeVaultSnapshot(
+    { [pageId]: md },
+    JSON.stringify(workspaceManifest(ws)),
+  );
 }
 
 /** Best-effort: remove orphaned page files from the vault (F3). Used when pages

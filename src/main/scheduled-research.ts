@@ -20,6 +20,7 @@ import { join } from "path";
 import { createHash } from "crypto";
 import type { BrowserWindow } from "electron";
 import { getApiUrl, getRemoteAuthHeader } from "./hermes";
+import { gatewayFetch } from "./security/network-policy";
 import { resolveSpsVaultDir } from "./sps-storage";
 import { profileHome } from "./utils";
 import { HERMES_HOME } from "./installer";
@@ -410,7 +411,7 @@ async function gatewayChat(
   profile?: string,
 ): Promise<string> {
   const url = `${getApiUrl(profile)}/v1/chat/completions`;
-  const res = await fetch(url, {
+  const res = await gatewayFetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...getRemoteAuthHeader() },
     signal: AbortSignal.timeout(240000),

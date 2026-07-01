@@ -503,6 +503,11 @@ export interface SpsBridgeApi {
 
   spsVaultWriteManifest: (json: string, profile?: string) => Promise<boolean>;
 
+  spsVaultWriteSnapshot: (
+    snapshot: { pages: Record<string, string>; manifest: string },
+    profile?: string,
+  ) => Promise<boolean>;
+
   spsBackupWorkspace: (profile?: string) => Promise<string | null>;
 
   spsWriteExcalidraw: (

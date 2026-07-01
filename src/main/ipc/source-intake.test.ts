@@ -5,11 +5,13 @@ const {
   mockCrawlPublicUrl,
   mockUnfurl,
   mockDiscoverSubstack,
+  mockPublicFetch,
 } = vi.hoisted(() => ({
   mockCrawlStatus: vi.fn(),
   mockCrawlPublicUrl: vi.fn(),
   mockUnfurl: vi.fn(),
   mockDiscoverSubstack: vi.fn(),
+  mockPublicFetch: vi.fn(),
 }));
 
 vi.mock("../crawl4ai", () => ({
@@ -29,6 +31,10 @@ vi.mock("../rss-discovery", async (importOriginal) => {
     discoverSubstackFeed: mockDiscoverSubstack,
   };
 });
+
+vi.mock("../security/network-policy", () => ({
+  publicFetch: mockPublicFetch,
+}));
 
 import { getSourceIntakeStatus, previewSourceUrl } from "./source-intake";
 
@@ -54,6 +60,12 @@ beforeEach(() => {
     description: "Sharp notes.",
     sourceType: "substack",
   });
+  mockPublicFetch.mockResolvedValue(
+    new Response(
+      `<?xml version="1.0"?><rss><channel><title>Feed Title</title><description>Feed notes.</description><link>https://example.com</link></channel></rss>`,
+      { status: 200 },
+    ),
+  );
 });
 
 describe("getSourceIntakeStatus", () => {
@@ -135,5 +147,23 @@ describe("previewSourceUrl", () => {
       engine: "unfurl",
     });
     expect(result.markdown).toContain("## Sources");
+  });
+
+  it("previews RSS URLs through the public SSRF-hardened fetch helper", async () => {
+    const result = await previewSourceUrl("https://example.com/feed.xml");
+
+    expect(mockPublicFetch).toHaveBeenCalledWith(
+      "https://example.com/feed.xml",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          accept: expect.stringContaining("application/rss+xml"),
+        }),
+      }),
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      title: "Feed Title",
+      engine: "rss",
+    });
   });
 });

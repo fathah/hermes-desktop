@@ -2,6 +2,7 @@ import { execFile } from "child_process";
 import { existsSync, readFileSync } from "fs";
 import { getApiServerKey } from "./config";
 import { getApiUrl, getRemoteAuthHeader, isRemoteMode } from "./hermes";
+import { gatewayFetch } from "./security/network-policy";
 import { getEnhancedPath, HERMES_PYTHON, hermesCliArgs } from "./installer";
 import { admitMcpCapability } from "./capability-risk-store";
 import { profilePaths, safeWriteFile } from "./utils";
@@ -650,7 +651,7 @@ async function mcpApi<T>(
   if (init.body && !headers["Content-Type"]) {
     headers["Content-Type"] = "application/json";
   }
-  const response = await fetch(`${getApiUrl(profile)}${path}`, {
+  const response = await gatewayFetch(`${getApiUrl(profile)}${path}`, {
     ...init,
     headers,
   });

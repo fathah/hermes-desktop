@@ -17,6 +17,7 @@ import {
   type DeckProject,
 } from "../shared/deck-studio";
 import { getApiUrl, getRemoteAuthHeader, isRemoteOnlyMode } from "./hermes";
+import { gatewayFetch } from "./security/network-policy";
 
 interface ModelParseResult {
   project: DeckProject | null;
@@ -78,7 +79,7 @@ async function callDeckModel(
   prompt: string,
   profile?: string,
 ): Promise<string> {
-  const res = await fetch(`${getApiUrl(profile)}/v1/chat/completions`, {
+  const res = await gatewayFetch(`${getApiUrl(profile)}/v1/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...getRemoteAuthHeader() },
     signal: AbortSignal.timeout(120000),

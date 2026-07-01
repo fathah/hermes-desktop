@@ -19,6 +19,13 @@ vi.mock("../src/main/hermes", () => ({
   getRemoteAuthHeader: () => ({}),
 }));
 
+vi.mock("../src/main/security/network-policy", () => ({
+  gatewayFetch: (input: RequestInfo | URL, init?: RequestInit) =>
+    fetch(input, init),
+  publicFetch: (input: RequestInfo | URL, init?: RequestInit) =>
+    fetch(input, init),
+}));
+
 vi.mock("../src/main/skills", () => ({
   listInstalledSkills: () => mockListInstalledSkills(),
 }));
@@ -276,5 +283,46 @@ describe("Self-Healing Loop", () => {
     expect(Array.isArray(userContent)).toBe(true);
     expect(userContent[1].type).toBe("image_url");
     expect(userContent[1].image_url.url).toContain("data:image/png;base64,");
+  });
+
+  it("should send Gemini API keys in headers instead of query strings", async () => {
+    mockReadEnv.mockReturnValue({ GOOGLE_API_KEY: "gemini-secret-key" });
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  text: JSON.stringify({
+                    explanation: "Fixing through Gemini",
+                    fileToPatch: "test_script.py",
+                    patchedContent: "print('gemini fixed!')",
+                  }),
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const res = await triggerSelfHealing(
+      "job-1",
+      "Test Job",
+      "/tmp/hermes-test-profile/logs/routines/routine-job-1.log",
+      "test-profile",
+    );
+
+    expect(res.success).toBe(true);
+    const [url, init] = mockFetch.mock.calls[0];
+    expect(String(url)).not.toContain("gemini-secret-key");
+    expect(String(url)).not.toContain("?key=");
+    expect(init.headers).toMatchObject({
+      "Content-Type": "application/json",
+      "x-goog-api-key": "gemini-secret-key",
+    });
   });
 });

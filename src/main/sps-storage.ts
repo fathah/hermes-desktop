@@ -12,6 +12,7 @@
 // point; existing files in the old location are left untouched.
 import {
   mkdirSync,
+  realpathSync,
   readFileSync,
   readdirSync,
   rmSync,
@@ -62,7 +63,13 @@ export function chooseVaultDir(
   override: string | undefined,
   defaultDir: string,
 ): string {
-  if (override && isAbsolute(override)) return override;
+  if (override && isAbsolute(override)) {
+    try {
+      return realpathSync(override);
+    } catch {
+      return override;
+    }
+  }
   return defaultDir;
 }
 
@@ -124,11 +131,6 @@ export function setVaultLocation(
   const valid = isValidVaultDirInput(trimmed);
   if (!valid.ok) return { ok: false, error: valid.error };
 
-  // Setting it back to the default is just a reset.
-  if (trimmed === defaultVaultDir(profile)) {
-    return { ok: true, location: resetVaultLocation(profile) };
-  }
-
   try {
     mkdirSync(trimmed, { recursive: true });
   } catch (e) {
@@ -137,17 +139,25 @@ export function setVaultLocation(
       error: `Can't create that folder: ${(e as Error).message}`,
     };
   }
+  const canonicalDir = chooseVaultDir(trimmed, trimmed);
+  const def = defaultVaultDir(profile);
+  const canonicalDefault = chooseVaultDir(def, def);
+  // Setting it back to the default is just a reset.
+  if (canonicalDir === canonicalDefault) {
+    return { ok: true, location: resetVaultLocation(profile) };
+  }
+
   // Non-destructive writability probe.
   try {
-    const probe = join(trimmed, ".sps-write-probe");
+    const probe = join(canonicalDir, ".sps-write-probe");
     writeFileSync(probe, "");
     rmSync(probe, { force: true });
   } catch {
     return { ok: false, error: "That folder isn't writable." };
   }
 
-  const nonEmpty = isNonEmptyDir(trimmed);
-  writeStorageConfig({ vaultDir: trimmed }, profile);
+  const nonEmpty = isNonEmptyDir(canonicalDir);
+  writeStorageConfig({ vaultDir: canonicalDir }, profile);
   return { ok: true, location: getVaultLocation(profile), nonEmpty };
 }
 

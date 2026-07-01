@@ -22,6 +22,7 @@ import {
   getEnhancedPath,
 } from "../installer";
 import { getConnectionConfig, getApiServerKey, readEnv } from "../config";
+import { gatewayFetch } from "../security/network-policy";
 import {
   pidIsAliveAs,
   profileHome,
@@ -98,7 +99,7 @@ export async function isApiServerReady(profile?: string): Promise<boolean> {
     const controller = new AbortController();
     timeoutId = setTimeout(() => controller.abort(), 1500);
 
-    const res = await fetch(url, {
+    const res = await gatewayFetch(url, {
       method: "GET",
       headers: getRemoteAuthHeader(),
       signal: controller.signal,

@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 
-const { TEST_HOME } = vi.hoisted(() => {
+const { TEST_HOME, mockPublicFetch } = vi.hoisted(() => {
   /* eslint-disable @typescript-eslint/no-require-imports */
   const fs = require("fs");
   const os = require("os");
@@ -12,11 +12,16 @@ const { TEST_HOME } = vi.hoisted(() => {
     TEST_HOME: fs.realpathSync(
       fs.mkdtempSync(path.join(os.tmpdir(), "cap-risk-test-")),
     ),
+    mockPublicFetch: vi.fn(),
   };
 });
 
 vi.mock("../src/main/utils", () => ({
   profileHome: () => TEST_HOME,
+}));
+
+vi.mock("../src/main/security/network-policy", () => ({
+  publicFetch: mockPublicFetch,
 }));
 
 import {
@@ -45,6 +50,7 @@ afterEach(() => {
   rmSync(skillDir, { recursive: true, force: true });
   rmSync(sourceDir, { recursive: true, force: true });
   rmSync(TEST_HOME, { recursive: true, force: true });
+  mockPublicFetch.mockReset();
 });
 
 describe("capability risk scanner", () => {
@@ -210,7 +216,7 @@ describe("capability risk scanner", () => {
   });
 
   it("marks package-backed capabilities when a newer registry version exists", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+    mockPublicFetch.mockResolvedValueOnce(
       new Response(JSON.stringify({ "dist-tags": { latest: "2.0.0" } }), {
         status: 200,
       }),
@@ -233,6 +239,5 @@ describe("capability risk scanner", () => {
     expect(enriched.updateStatus).toBe("rescanWarn");
     expect(enriched.reviewState).toBe("needsReview");
     expect(enriched.source.packageLatest).toBe("2.0.0");
-    fetchSpy.mockRestore();
   });
 });

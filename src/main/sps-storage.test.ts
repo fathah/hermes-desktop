@@ -1,6 +1,15 @@
 // sps-storage.test.ts — the pure vault-location decision logic (no fs/profile
 // coupling). The I/O wrappers are exercised by the app + the note-index proof.
 import { describe, expect, it } from "vitest";
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+} from "fs";
+import { join } from "path";
+import { tmpdir } from "os";
 import { chooseVaultDir, isValidVaultDirInput } from "./sps-storage";
 
 describe("isValidVaultDirInput", () => {
@@ -30,5 +39,17 @@ describe("chooseVaultDir", () => {
   });
   it("ignores a non-absolute override (falls back to default)", () => {
     expect(chooseVaultDir("not/absolute", def)).toBe(def);
+  });
+  it("canonicalizes an existing absolute override", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sps-storage-"));
+    const target = join(dir, "target");
+    const link = join(dir, "link");
+    try {
+      mkdirSync(target);
+      symlinkSync(target, link);
+      expect(chooseVaultDir(link, def)).toBe(realpathSync(target));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

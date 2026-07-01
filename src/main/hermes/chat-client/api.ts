@@ -12,6 +12,7 @@ import { CredentialPoolManager } from "../../config/credential-pool-manager";
 import { buildActiveSkillsSystemMessage } from "../../active-skills";
 import { redactSensitiveData } from "../../security";
 import { ShellHookManager } from "../../security/shell-hooks";
+import { gatewayFetch } from "../../security/network-policy";
 import {
   processCustomEvent as parseCustomEvent,
   processSseData,
@@ -106,7 +107,7 @@ async function fetchJsonProbe(
     CHAT_TRANSPORT_PROBE_TIMEOUT_MS,
   );
   try {
-    const res = await fetch(url, {
+    const res = await gatewayFetch(url, {
       method: "GET",
       headers: authProbeHeaders(headers),
       signal: controller.signal,

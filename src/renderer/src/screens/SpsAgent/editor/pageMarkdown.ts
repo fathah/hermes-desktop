@@ -10,8 +10,12 @@
 // authoritative store until parity is proven (S6).
 import { blocksToMarkdown, markdownToBlocks } from "./blockMarkdown";
 import type { Block, PageMeta, SpsPropertyValue } from "../types";
-
-const FRONTMATTER_RE = /^---\n([\s\S]*?)\n---\n?/;
+import {
+  frontmatterJsonLine,
+  parseJsonScalarFrontmatter,
+  splitSpsFrontmatter,
+  wrapFrontmatterLines,
+} from "../../../../../shared/sps-frontmatter";
 const RESERVED_KEYS = new Set([
   "title",
   "icon",
@@ -34,39 +38,40 @@ export function pageToMarkdown(
   anchoredIds?: Set<string>,
 ): string {
   const fm: string[] = [];
-  if (meta.title !== undefined) fm.push(`title: ${JSON.stringify(meta.title)}`);
-  if (meta.icon !== undefined) fm.push(`icon: ${JSON.stringify(meta.icon)}`);
-  if (meta.cover !== undefined) fm.push(`cover: ${JSON.stringify(meta.cover)}`);
+  if (meta.title !== undefined)
+    fm.push(frontmatterJsonLine("title", meta.title));
+  if (meta.icon !== undefined) fm.push(frontmatterJsonLine("icon", meta.icon));
+  if (meta.cover !== undefined)
+    fm.push(frontmatterJsonLine("cover", meta.cover));
   // KB ingestion keys (Phase 0) — appended after cover so pages without them
   // serialize byte-for-byte identically to before (golden tests stay green).
   if (meta.source !== undefined)
-    fm.push(`source: ${JSON.stringify(meta.source)}`);
+    fm.push(frontmatterJsonLine("source", meta.source));
   if (meta.ingestedAt !== undefined)
-    fm.push(`ingestedAt: ${JSON.stringify(meta.ingestedAt)}`);
+    fm.push(frontmatterJsonLine("ingestedAt", meta.ingestedAt));
   // Journal entry properties — emitted only when set so non-journal pages stay
   // byte-identical (and so the note-index can query entries by date/mood).
   if (meta.journal !== undefined)
-    fm.push(`journal: ${JSON.stringify(meta.journal)}`);
-  if (meta.date !== undefined) fm.push(`date: ${JSON.stringify(meta.date)}`);
-  if (meta.time !== undefined) fm.push(`time: ${JSON.stringify(meta.time)}`);
-  if (meta.mood !== undefined) fm.push(`mood: ${JSON.stringify(meta.mood)}`);
+    fm.push(frontmatterJsonLine("journal", meta.journal));
+  if (meta.date !== undefined) fm.push(frontmatterJsonLine("date", meta.date));
+  if (meta.time !== undefined) fm.push(frontmatterJsonLine("time", meta.time));
+  if (meta.mood !== undefined) fm.push(frontmatterJsonLine("mood", meta.mood));
   // Tags appended last and only when non-empty — keeps non-tagged pages
   // byte-identical. `JSON.stringify(string[])` is a valid YAML flow sequence,
   // which the note-index's real YAML parser reads as an array.
   if (meta.tags !== undefined && meta.tags.length > 0)
-    fm.push(`tags: ${JSON.stringify(meta.tags)}`);
+    fm.push(frontmatterJsonLine("tags", meta.tags));
   if (meta.aliases !== undefined && meta.aliases.length > 0)
-    fm.push(`aliases: ${JSON.stringify(meta.aliases)}`);
+    fm.push(frontmatterJsonLine("aliases", meta.aliases));
   const extra = meta.properties ?? {};
   for (const key of Object.keys(extra).sort()) {
     if (RESERVED_KEYS.has(key)) continue;
     const value = extra[key];
     if (!isSpsPropertyValue(value)) continue;
-    fm.push(`${key}: ${JSON.stringify(value)}`);
+    fm.push(frontmatterJsonLine(key, value));
   }
   const body = blocksToMarkdown(blocks, anchoredIds);
-  if (fm.length === 0) return body;
-  return `---\n${fm.join("\n")}\n---\n\n${body}`;
+  return wrapFrontmatterLines(fm, body, "\n\n");
 }
 
 /** Parse a markdown file string back into page properties + blocks. */
@@ -74,11 +79,10 @@ export function pageFromMarkdown(md: string): {
   meta: Partial<PageMeta>;
   blocks: Block[];
 } {
-  const match = FRONTMATTER_RE.exec(md);
-  if (!match) return { meta: {}, blocks: markdownToBlocks(md) };
-  const body = md.slice(match[0].length);
+  const { frontmatter, body } = splitSpsFrontmatter(md);
+  if (frontmatter === null) return { meta: {}, blocks: markdownToBlocks(md) };
   return {
-    meta: parseScalarFrontmatter(match[1]),
+    meta: parseScalarFrontmatter(frontmatter),
     blocks: markdownToBlocks(body),
   };
 }
@@ -86,17 +90,7 @@ export function pageFromMarkdown(md: string): {
 function parseScalarFrontmatter(text: string): Partial<PageMeta> {
   const out: Partial<PageMeta> = {};
   const properties: Record<string, SpsPropertyValue> = {};
-  for (const line of text.split("\n")) {
-    const sep = line.indexOf(":");
-    if (sep < 0) continue;
-    const key = line.slice(0, sep).trim();
-    const rawValue = line.slice(sep + 1).trim();
-    let value: unknown = rawValue;
-    try {
-      value = JSON.parse(rawValue);
-    } catch {
-      /* keep the raw string */
-    }
+  for (const [key, value] of Object.entries(parseJsonScalarFrontmatter(text))) {
     if (key === "title" && typeof value === "string") out.title = value;
     else if (key === "icon" && typeof value === "string") out.icon = value;
     else if (key === "cover") out.cover = value as PageMeta["cover"];
@@ -128,5 +122,7 @@ function isSpsPropertyValue(value: unknown): value is SpsPropertyValue {
   ) {
     return true;
   }
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === "string")
+  );
 }

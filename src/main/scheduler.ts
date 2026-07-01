@@ -28,6 +28,7 @@ import { maybeRunHermesAgentUpdateRoutine } from "./hermes-agent-updates";
 import { maybeRunHermesUpstreamWatchRoutine } from "./hermes-upstream-watch";
 import { maybeRunDesktopUpdateRoutine } from "./desktop-update-routine";
 import { getApiUrl, getRemoteAuthHeader } from "./hermes";
+import { gatewayFetch } from "./security/network-policy";
 import { createLearningProposal } from "./learning-proposals";
 import { listInstalledSkills, getSkillContent } from "./skills";
 
@@ -363,7 +364,7 @@ The remediation card body should explain:
 Your output must be a single, concise explanation representing the study card body. Keep it clear, professional, and educational. Use markdown formatting. Do not include any HTML, JSON, or formatting wrappers, just return the plain markdown content of the card.`;
 
     const url = `${getApiUrl(profile)}/v1/chat/completions`;
-    const res = await fetch(url, {
+    const res = await gatewayFetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...getRemoteAuthHeader() },
       signal: AbortSignal.timeout(60000),

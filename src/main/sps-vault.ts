@@ -234,6 +234,7 @@ export async function readAssetFrom(
 // ── S6: the vault as the authoritative store (page files + a structure manifest) ─
 
 const MANIFEST_FILE = "_manifest.json";
+export const SNAPSHOT_JOURNAL_FILE = "_manifest.pending.json";
 
 /** Read every root-level page file (sub-folders are database rows, not pages). */
 export async function readVaultPages(
@@ -278,6 +279,54 @@ export async function writeVaultManifest(
 ): Promise<boolean> {
   try {
     await safeWriteFileAsync(join(vaultDir, MANIFEST_FILE), json);
+    return true;
+  } catch (err) {
+    onError?.(err);
+    return false;
+  }
+}
+
+export interface VaultSnapshotWrite {
+  pages: Record<string, string>;
+  manifest: string;
+}
+
+/** Write page files plus the manifest behind a small pending journal. */
+export async function writeVaultSnapshot(
+  vaultDir: string,
+  snapshot: VaultSnapshotWrite,
+  onError?: MirrorWriteErrorSink,
+): Promise<boolean> {
+  const pageIds = Object.keys(snapshot.pages);
+  if (pageIds.some((pageId) => !isValidPageId(pageId))) return false;
+
+  const journalPath = join(vaultDir, SNAPSHOT_JOURNAL_FILE);
+  try {
+    await safeWriteFileAsync(
+      journalPath,
+      JSON.stringify({ startedAt: Date.now(), pageIds }, null, 2),
+    );
+  } catch (err) {
+    onError?.(err);
+    return false;
+  }
+
+  for (const [pageId, markdown] of Object.entries(snapshot.pages)) {
+    const ok = await exportPageMarkdownTo(
+      vaultDir,
+      pageId,
+      markdown,
+      onError,
+    );
+    if (!ok) return false;
+  }
+
+  if (!(await writeVaultManifest(vaultDir, snapshot.manifest, onError))) {
+    return false;
+  }
+
+  try {
+    await fs.rm(journalPath, { force: true });
     return true;
   } catch (err) {
     onError?.(err);

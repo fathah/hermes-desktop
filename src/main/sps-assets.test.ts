@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { promises as fs, existsSync } from "fs";
+import { promises as fs, existsSync, realpathSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import {
@@ -59,10 +59,23 @@ describe("writeAsset", () => {
 });
 
 describe("resolveAssetPath", () => {
-  it("rejects malformed names (traversal-proof)", () => {
+  it("rejects malformed names (traversal-proof)", async () => {
     expect(resolveAssetPath(vault, "../../secret")).toBeNull();
-    const good = `${"f".repeat(64)}.png`;
-    expect(resolveAssetPath(vault, good)).toBe(join(vault, ASSETS_DIR, good));
+
+    const good = await writeAsset(vault, Buffer.from("good"), "png");
+    expect(resolveAssetPath(vault, good)).toBe(
+      realpathSync(join(vault, ASSETS_DIR, good)),
+    );
+  });
+
+  it("rejects valid-looking asset symlinks that resolve outside _assets", async () => {
+    const outside = join(vault, "outside.txt");
+    await fs.writeFile(outside, "secret");
+    await fs.mkdir(join(vault, ASSETS_DIR), { recursive: true });
+    const name = `${"f".repeat(64)}.txt`;
+    await fs.symlink(outside, join(vault, ASSETS_DIR, name));
+
+    expect(resolveAssetPath(vault, name)).toBeNull();
   });
 });
 

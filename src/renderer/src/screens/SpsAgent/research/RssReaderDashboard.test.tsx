@@ -93,7 +93,8 @@ describe("RssReaderDashboard Substack flow", () => {
   it("discovers a public Substack feed, adds it, and syncs", async () => {
     render(<RssReaderDashboard />);
 
-    fireEvent.click(screen.getByRole("button", { name: /sources/i }));
+    fireEvent.click(screen.getByRole("button", { name: /capture/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /add url/i }));
     fireEvent.change(screen.getByLabelText(/source url/i), {
       target: { value: "https://example.substack.com/p/post" },
     });

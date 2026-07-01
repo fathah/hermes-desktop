@@ -30,6 +30,7 @@ const { mockState, spawned, TEST_HOME, TEST_REPO, spawnMock } = vi.hoisted(
         stdout: new EventEmitter(),
         stderr: new EventEmitter(),
         kill: vi.fn(),
+        unref: vi.fn(),
       });
       calls.push({
         env: {
@@ -99,10 +100,9 @@ vi.mock("../src/main/process-options", () => ({
   HIDDEN_SUBPROCESS_OPTIONS: {},
 }));
 
-import { sendMessage, stopHealthPolling } from "../src/main/hermes";
+import { sendMessageViaCli } from "../src/main/hermes/chat-client/cli";
 
 describe("custom provider host-derived key compatibility", () => {
-  let originalFetch: typeof globalThis.fetch;
   let originalDeepseek: string | undefined;
   let originalOpenai: string | undefined;
 
@@ -116,22 +116,13 @@ describe("custom provider host-derived key compatibility", () => {
     };
     mockState.profileEnv = {};
     mockState.models = [];
-    originalFetch = globalThis.fetch;
     originalDeepseek = process.env.DEEPSEEK_API_KEY;
     originalOpenai = process.env.OPENAI_API_KEY;
     delete process.env.DEEPSEEK_API_KEY;
     delete process.env.OPENAI_API_KEY;
-    globalThis.fetch = vi.fn(async () => ({
-      status: 503,
-      ok: false,
-      text: async () => "",
-      json: async () => ({}),
-    })) as unknown as typeof globalThis.fetch;
   });
 
   afterEach(() => {
-    stopHealthPolling();
-    globalThis.fetch = originalFetch;
     if (originalDeepseek === undefined) {
       delete process.env.DEEPSEEK_API_KEY;
     } else {
@@ -159,7 +150,7 @@ describe("custom provider host-derived key compatibility", () => {
       },
     ];
 
-    await sendMessage("hello", {
+    sendMessageViaCli("hello", {
       onChunk: () => {},
       onDone: () => {},
       onError: () => {},
@@ -171,7 +162,7 @@ describe("custom provider host-derived key compatibility", () => {
   });
 
   it("does not write the no-key-required sentinel to the host-derived vendor key", async () => {
-    await sendMessage("hello", {
+    sendMessageViaCli("hello", {
       onChunk: () => {},
       onDone: () => {},
       onError: () => {},
