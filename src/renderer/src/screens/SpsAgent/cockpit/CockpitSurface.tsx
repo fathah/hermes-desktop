@@ -12,6 +12,8 @@ import { OPERATOR_GUIDE } from "../../../lib/operatorGuide";
 import { pageFromMarkdown } from "../editor/pageMarkdown";
 import { blk } from "../lib/ids";
 import { openSettings } from "../../../lib/openSettings";
+import { OperatorReadinessPanel } from "../../../components/OperatorReadinessPanel";
+import type { OperatorReadinessAction } from "../../../../../shared/operator-readiness";
 
 const WIDGET_META: Record<WidgetKind, { title: string; icon: IconName }> = {
   quick: { title: "Quick actions", icon: "wand" },
@@ -34,12 +36,27 @@ export function CockpitSurface() {
   const remove = useStore((s) => s.removeCockpitWidget);
   const add = useStore((s) => s.addCockpitWidget);
   const reset = useStore((s) => s.resetCockpit);
+  const setSurface = useStore((s) => s.setSurface);
+  const setScheduledOpen = useStore((s) => s.setScheduledOpen);
   const [drag, setDrag] = useState<number | null>(null);
   const [addOpen, setAddOpen] = useState(false);
 
   const present = new Set(cockpit.map((w) => w.kind));
   const available = (Object.keys(WIDGET_META) as WidgetKind[]).filter(
     (k) => !present.has(k),
+  );
+  const handleReadinessAction = useCallback(
+    (action: OperatorReadinessAction): void => {
+      const target = action.target;
+      if (target.kind === "settings") {
+        openSettings(target.view);
+      } else if (target.kind === "surface") {
+        setSurface(target.surface);
+      } else {
+        setScheduledOpen(true);
+      }
+    },
+    [setScheduledOpen, setSurface],
   );
 
   return (
@@ -93,6 +110,8 @@ export function CockpitSurface() {
           </button>
         </div>
       </div>
+
+      <OperatorReadinessPanel onAction={handleReadinessAction} />
 
       {cockpit.length === 0 ? (
         <div className="ck-empty-surface">

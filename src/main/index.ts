@@ -82,6 +82,7 @@ import {
 import { registerHealthRssIpc } from "./ipc/health-rss";
 import { registerSubstackRadarIpc } from "./ipc/substack-radar";
 import { registerSourceIntakeIpc } from "./ipc/source-intake";
+import { registerOperatorReadinessIpc } from "./ipc/operator-readiness";
 import { closeExternalContextDb } from "./external-context/index";
 import { startScheduler, stopScheduler } from "./scheduler";
 import {
@@ -549,6 +550,7 @@ function setupIPC(): void {
   registerHealthRssIpc();
   registerSubstackRadarIpc();
   registerSourceIntakeIpc();
+  registerOperatorReadinessIpc();
 
   // Quick Capture reads (and clears) the pending capture kind on mount, so a
   // window freshly opened by the task hotkey defaults to Task mode.

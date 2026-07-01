@@ -45,6 +45,8 @@ export const configBridge = {
 
   getConfigHealth: (profile?: string): Promise<ConfigHealthReport> =>
     ipcRenderer.invoke("get-config-health", profile),
+  getOperatorReadiness: (profile?: string) =>
+    ipcRenderer.invoke("get-operator-readiness", profile),
   rerunConfigHealth: (profile?: string): Promise<ConfigHealthReport> =>
     ipcRenderer.invoke("rerun-config-health", profile),
   autofixConfigIssue: (

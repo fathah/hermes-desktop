@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useStore } from "../store";
 import { Icon } from "../components/Icon";
 import { JournalCalendar } from "./JournalCalendar";
@@ -18,8 +18,11 @@ import {
 } from "../cockpit/CockpitSurface";
 import { ActiveWorkSurface } from "../activeWork/ActiveWorkSurface";
 import { ReviewQueueSurface } from "../review/ReviewQueueSurface";
+import { openSettings } from "../../../lib/openSettings";
+import { OperatorReadinessPanel } from "../../../components/OperatorReadinessPanel";
 import { cadenceLabel } from "../../../../../shared/scheduledResearch";
 import type { CronJob } from "../../../../../shared/cronjobs";
+import type { OperatorReadinessAction } from "../../../../../shared/operator-readiness";
 
 type WorkTab = "tasks" | "delegated" | "scheduled" | "review";
 type Schedule = Awaited<ReturnType<typeof window.hermesAPI.srList>>[number];
@@ -177,6 +180,8 @@ export function MyWorkSurface() {
   const selected = useStore((s) => s.journalDate);
   const setJournalDate = useStore((s) => s.setJournalDate);
   const createJournalEntry = useStore((s) => s.createJournalEntry);
+  const setSurface = useStore((s) => s.setSurface);
+  const setScheduledOpen = useStore((s) => s.setScheduledOpen);
   const [tab, setTab] = useState<WorkTab>("tasks");
 
   const [monthAnchor, setMonthAnchor] = useState(selected);
@@ -190,6 +195,19 @@ export function MyWorkSurface() {
     setMonthAnchor(today);
     setJournalDate(today);
   };
+  const handleReadinessAction = useCallback(
+    (action: OperatorReadinessAction): void => {
+      const target = action.target;
+      if (target.kind === "settings") {
+        openSettings(target.view);
+      } else if (target.kind === "surface") {
+        setSurface(target.surface);
+      } else {
+        setScheduledOpen(true);
+      }
+    },
+    [setScheduledOpen, setSurface],
+  );
 
   return (
     <div className="doc-scroll scroll">
@@ -275,6 +293,14 @@ export function MyWorkSurface() {
             </div>
 
             <div className="work-unified-right">
+              <div className="work-right-section-title">
+                <Icon name="checkbox" size={16} />
+                <span>Operator Readiness</span>
+              </div>
+              <div className="work-widget-card">
+                <OperatorReadinessPanel onAction={handleReadinessAction} />
+              </div>
+
               <div className="work-right-section-title">
                 <Icon name="board" size={16} />
                 <span>At a Glance</span>

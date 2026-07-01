@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useStore as useSpsStore } from "../SpsAgent/store";
 import type { NormalizedAdminView } from "../../lib/openSettings";
+import { OperatorReadinessPanel } from "../../components/OperatorReadinessPanel";
+import type { OperatorReadinessAction } from "../../../../shared/operator-readiness";
 
 interface ModelConfig {
   provider: string;
@@ -102,6 +104,21 @@ function ControlCenterOverview({
 
   const openPersonalization = (): void => {
     useSpsStore.getState().setSurface("you");
+    onClose();
+  };
+
+  const handleReadinessAction = (action: OperatorReadinessAction): void => {
+    const target = action.target;
+    if (target.kind === "settings") {
+      onNavigate(target.view);
+      return;
+    }
+    if (target.kind === "surface") {
+      useSpsStore.getState().setSurface(target.surface);
+      onClose();
+      return;
+    }
+    useSpsStore.getState().setScheduledOpen(true);
     onClose();
   };
 
@@ -221,6 +238,11 @@ function ControlCenterOverview({
           {aiStatus.action}
         </button>
       </section>
+
+      <OperatorReadinessPanel
+        profile={profile}
+        onAction={handleReadinessAction}
+      />
 
       <div className="control-center-list">
         {cards.map((card) => (

@@ -1,17 +1,20 @@
 // StatusChip.tsx — always-visible "which Hermes am I talking to?" indicator in
 // the rail footer: connection mode, active agent, and a health dot. Clicking
 // deep-links to the admin tab most relevant to the current state (Providers when
-// no API key, Gateway when offline, else connection Settings). Polls coarsely so
-// the dot reflects gateway up/down without hammering IPC.
+// no API key, Gateway when unhealthy, else connection Settings). The supervisor
+// push stream keeps transient gateway states visible without hammering IPC.
 import { useEffect, useState } from "react";
 import { Icon } from "../components/Icon";
 import { openSettings, type AdminView } from "../../../lib/openSettings";
+import type { GatewayHealthStatus } from "../../../../../shared/gateway";
 
 type Health = "ok" | "warn" | "down";
 
 interface Status {
   label: string; // Local / Remote / SSH <host>
   profile: string; // active agent name
+  hasApiKey: boolean;
+  gatewayHealth: GatewayHealthStatus;
   health: Health;
   target: AdminView; // where a click goes
   hint: string;
@@ -23,6 +26,54 @@ const DOT_COLOR: Record<Health, string> = {
   down: "#d83c3c",
 };
 
+function healthLevel(status: GatewayHealthStatus): Health {
+  if (status === "healthy") return "ok";
+  if (status === "down") return "down";
+  return "warn";
+}
+
+function gatewayHint(status: GatewayHealthStatus): string {
+  switch (status) {
+    case "healthy":
+      return "Gateway healthy";
+    case "unhealthy":
+      return "Gateway unhealthy";
+    case "recovering":
+      return "Gateway recovering";
+    case "down":
+      return "Gateway down";
+  }
+}
+
+function buildStatus(
+  label: string,
+  profile: string,
+  hasApiKey: boolean,
+  gatewayHealth: GatewayHealthStatus,
+): Status {
+  if (!hasApiKey) {
+    return {
+      label,
+      profile,
+      hasApiKey,
+      gatewayHealth,
+      health: "warn",
+      target: "providers",
+      hint: "No API key — add one in Providers",
+    };
+  }
+
+  return {
+    label,
+    profile,
+    hasApiKey,
+    gatewayHealth,
+    health: healthLevel(gatewayHealth),
+    target: gatewayHealth === "healthy" ? "settings" : "gateway",
+    hint: gatewayHint(gatewayHealth),
+  };
+}
+
 export function StatusChip(): React.JSX.Element | null {
   const [status, setStatus] = useState<Status | null>(null);
   const [updateBusy, setUpdateBusy] = useState(false);
@@ -33,9 +84,11 @@ export function StatusChip(): React.JSX.Element | null {
       const api = window.hermesAPI;
       if (!api?.getConnectionConfig) return;
       try {
-        const [conn, gatewayUp, profiles] = await Promise.all([
+        const [conn, gatewayHealth, profiles] = await Promise.all([
           api.getConnectionConfig(),
-          api.gatewayStatus ? api.gatewayStatus() : Promise.resolve(false),
+          api.gatewayHealthStatus
+            ? api.gatewayHealthStatus()
+            : Promise.resolve("healthy" as GatewayHealthStatus),
           api.listProfiles ? api.listProfiles() : Promise.resolve([]),
         ]);
         if (cancelled) return;
@@ -46,28 +99,28 @@ export function StatusChip(): React.JSX.Element | null {
             : conn.mode === "ssh"
               ? `SSH ${conn.ssh?.host ?? ""}`.trim()
               : "Remote";
-
-        let health: Health = "ok";
-        let target: AdminView = "settings";
-        let hint = "Connection healthy";
-        if (!conn.hasApiKey) {
-          health = "warn";
-          target = "providers";
-          hint = "No API key — add one in Providers";
-        } else if (!gatewayUp) {
-          health = "down";
-          target = "gateway";
-          hint = "Connections offline";
-        }
-        setStatus({ label, profile: active, health, target, hint });
+        setStatus(buildStatus(label, active, conn.hasApiKey, gatewayHealth));
       } catch {
         /* offline / no gateway — leave the last good value */
       }
     };
     void load();
+    const unsubscribe = window.hermesAPI.onGatewayHealthChanged?.((change) => {
+      setStatus((prev) =>
+        prev
+          ? buildStatus(
+              prev.label,
+              prev.profile,
+              prev.hasApiKey,
+              change.status,
+            )
+          : prev,
+      );
+    });
     const timer = setInterval(() => void load(), 30_000);
     return () => {
       cancelled = true;
+      unsubscribe?.();
       clearInterval(timer);
     };
   }, []);

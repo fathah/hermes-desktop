@@ -8,14 +8,58 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ControlCenterOverview from "./ControlCenterOverview";
 import type { NormalizedAdminView } from "../../lib/openSettings";
+import type { OperatorReadinessReport } from "../../../../shared/operator-readiness";
 
 const setSurface = vi.fn();
+const setScheduledOpen = vi.fn();
 
 vi.mock("../SpsAgent/store", () => ({
   useStore: {
-    getState: () => ({ setSurface }),
+    getState: () => ({ setSurface, setScheduledOpen }),
   },
 }));
+
+function readinessReport(): OperatorReadinessReport {
+  return {
+    profile: "default",
+    status: "attention",
+    headline: "Ready with follow-up work",
+    summary: "0 blocked, 3 need attention, 0 ready.",
+    generatedAt: 1,
+    items: [
+      {
+        id: "review",
+        title: "Review queue",
+        status: "attention",
+        summary: "2 pending vault proposals need review.",
+        action: {
+          label: "Open Review Queue",
+          target: { kind: "surface", surface: "review" },
+        },
+      },
+      {
+        id: "scheduler",
+        title: "Scheduler",
+        status: "attention",
+        summary: "1 scheduled job skip recorded.",
+        action: {
+          label: "Open Scheduled",
+          target: { kind: "modal", modal: "scheduled" },
+        },
+      },
+      {
+        id: "storage",
+        title: "Storage writes",
+        status: "attention",
+        summary: "1 storage warning reported.",
+        action: {
+          label: "Open Data & Privacy",
+          target: { kind: "settings", view: "dataPrivacy" },
+        },
+      },
+    ],
+  };
+}
 
 function installHermesApi(
   overrides: Partial<Window["hermesAPI"]> = {},
@@ -41,6 +85,7 @@ function installHermesApi(
       baseUrl: "",
     }),
     validateChatReadiness: vi.fn().mockResolvedValue({ ok: true }),
+    getOperatorReadiness: vi.fn().mockResolvedValue(readinessReport()),
     ...overrides,
   } satisfies Partial<Window["hermesAPI"]>;
 
@@ -54,6 +99,7 @@ function installHermesApi(
 describe("ControlCenterOverview", () => {
   beforeEach(() => {
     setSurface.mockClear();
+    setScheduledOpen.mockClear();
     installHermesApi();
   });
 
@@ -122,6 +168,43 @@ describe("ControlCenterOverview", () => {
     expect(window.hermesAPI.validateChatReadiness).toHaveBeenCalledWith(
       "default",
     );
+  });
+
+  it("shows operator readiness and routes its fix actions", async () => {
+    const onClose = vi.fn();
+    const onNavigate = vi.fn<(view: NormalizedAdminView) => void>();
+
+    render(
+      <ControlCenterOverview
+        onNavigate={onNavigate}
+        onClose={onClose}
+        profile="default"
+      />,
+    );
+
+    const panel = await screen.findByRole("region", {
+      name: "Operator readiness",
+    });
+    expect(within(panel).getByText("Ready with follow-up work")).toBeInTheDocument();
+    expect(window.hermesAPI.getOperatorReadiness).toHaveBeenCalledWith(
+      "default",
+    );
+
+    fireEvent.click(
+      within(panel).getByRole("button", { name: "Open Review Queue" }),
+    );
+    expect(setSurface).toHaveBeenCalledWith("review");
+    expect(onClose).toHaveBeenCalled();
+
+    fireEvent.click(
+      within(panel).getByRole("button", { name: "Open Scheduled" }),
+    );
+    expect(setScheduledOpen).toHaveBeenCalledWith(true);
+
+    fireEvent.click(
+      within(panel).getByRole("button", { name: "Open Data & Privacy" }),
+    );
+    expect(onNavigate).toHaveBeenCalledWith("dataPrivacy");
   });
 
   it("routes missing API key status to AI Setup", async () => {

@@ -20,6 +20,10 @@ export interface ConfigBridgeApi {
 
   getConfigHealth: (profile?: string) => Promise<Api.ConfigHealthReport>;
 
+  getOperatorReadiness: (
+    profile?: string,
+  ) => Promise<Api.OperatorReadinessReport>;
+
   rerunConfigHealth: (profile?: string) => Promise<Api.ConfigHealthReport>;
 
   autofixConfigIssue: (

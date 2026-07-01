@@ -4,9 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("../../../lib/openSettings", () => ({ openSettings: vi.fn() }));
 
 import { StatusChip } from "./StatusChip";
+import type { GatewayHealthChange } from "../../../../../shared/gateway";
 
 describe("StatusChip", () => {
+  let gatewayHealthCallback: ((change: GatewayHealthChange) => void) | null;
+
   beforeEach(() => {
+    gatewayHealthCallback = null;
     Object.defineProperty(window, "hermesAPI", {
       configurable: true,
       value: {
@@ -14,7 +18,11 @@ describe("StatusChip", () => {
           mode: "local",
           hasApiKey: true,
         }),
-        gatewayStatus: vi.fn().mockResolvedValue(true),
+        gatewayHealthStatus: vi.fn().mockResolvedValue("recovering"),
+        onGatewayHealthChanged: vi.fn((callback) => {
+          gatewayHealthCallback = callback;
+          return vi.fn();
+        }),
         listProfiles: vi
           .fn()
           .mockResolvedValue([{ name: "work", isActive: true }]),
@@ -45,5 +53,23 @@ describe("StatusChip", () => {
         { autoApply: true },
       );
     });
+  });
+
+  it("reflects supervisor health push states", async () => {
+    render(<StatusChip />);
+
+    expect(
+      await screen.findByRole("button", { name: /Gateway recovering/ }),
+    ).toBeInTheDocument();
+
+    gatewayHealthCallback?.({ status: "unhealthy" });
+    expect(
+      await screen.findByRole("button", { name: /Gateway unhealthy/ }),
+    ).toBeInTheDocument();
+
+    gatewayHealthCallback?.({ status: "down" });
+    expect(
+      await screen.findByRole("button", { name: /Gateway down/ }),
+    ).toBeInTheDocument();
   });
 });

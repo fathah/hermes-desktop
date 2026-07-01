@@ -139,6 +139,12 @@ describe("New APIs from v0.8/v0.9 features", () => {
     expect(typeMethods).toContain("onGlobalVoiceTrigger");
   });
 
+  it("has operator readiness API", () => {
+    expect(preloadMethods).toContain("getOperatorReadiness");
+    expect(typeMethods).toContain("getOperatorReadiness");
+    expect(preloadTypes).toContain("OperatorReadinessReport");
+  });
+
   it("has obsidian APIs", () => {
     for (const method of [
       "getObsidianConfig",

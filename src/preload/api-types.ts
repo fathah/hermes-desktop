@@ -57,6 +57,7 @@ export type {
   ActiveWorkRun,
 } from "../shared/active-work";
 export type { ConfigHealthReport } from "../shared/config-health";
+export type { OperatorReadinessReport } from "../shared/operator-readiness";
 export type { EquityBasket, EquityAlert } from "../shared/equity";
 export type { PublicConnectionConfig } from "../shared/connection";
 export type { ChatReadiness } from "../shared/validation";
