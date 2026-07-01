@@ -22,6 +22,7 @@ import { ContextCompressor } from "../context-compressor";
 import { ErrorDoctor } from "../error-doctor";
 import {
   getApiUrl,
+  getChatTransportCacheGeneration,
   getRemoteAuthHeader,
   isRemoteMode,
 } from "../gateway-process";
@@ -50,6 +51,316 @@ function isLocalGatewayRequestTimeout(
       errorText,
     )
   );
+}
+
+export type HermesChatTransport =
+  | "v1ChatCompletions"
+  | "apiChatCompletions"
+  | "sessionChatStream"
+  | "unsupported";
+
+const CHAT_TRANSPORT_CACHE_TTL_MS = 30_000;
+const CHAT_TRANSPORT_PROBE_TIMEOUT_MS = 750;
+
+const chatTransportCache = new Map<
+  string,
+  { transport: HermesChatTransport; expiresAt: number }
+>();
+
+export function clearHermesChatTransportCache(): void {
+  chatTransportCache.clear();
+}
+
+function chatTransportCacheKey(baseUrl: string, mode: string): string {
+  return `${mode}:${getChatTransportCacheGeneration()}:${baseUrl}`;
+}
+
+function cacheChatTransport(
+  baseUrl: string,
+  mode: string,
+  transport: HermesChatTransport,
+): HermesChatTransport {
+  if (transport !== "unsupported") {
+    chatTransportCache.set(chatTransportCacheKey(baseUrl, mode), {
+      transport,
+      expiresAt: Date.now() + CHAT_TRANSPORT_CACHE_TTL_MS,
+    });
+  }
+  return transport;
+}
+
+function authProbeHeaders(
+  headers: Record<string, string>,
+): Record<string, string> {
+  const auth = headers.Authorization;
+  return auth ? { Authorization: auth } : {};
+}
+
+async function fetchJsonProbe(
+  url: string,
+  headers: Record<string, string>,
+): Promise<{ ok: boolean; status: number; data: unknown } | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    CHAT_TRANSPORT_PROBE_TIMEOUT_MS,
+  );
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      headers: authProbeHeaders(headers),
+      signal: controller.signal,
+    });
+    const text = await res.text();
+    let data: unknown = null;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = text;
+    }
+    return {
+      ok: res.status >= 200 && res.status < 300,
+      status: res.status,
+      data,
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function openApiPaths(data: unknown): Record<string, unknown> | null {
+  if (!data || typeof data !== "object") return null;
+  const paths = (data as { paths?: unknown }).paths;
+  if (!paths || typeof paths !== "object") return null;
+  return paths as Record<string, unknown>;
+}
+
+function selectTransportFromPaths(
+  paths: Record<string, unknown>,
+  excluded: Set<HermesChatTransport>,
+): HermesChatTransport | null {
+  const keys = Object.keys(paths);
+  const has = (path: string): boolean => keys.includes(path);
+  const hasSessionStream = keys.some((path) =>
+    /^\/api\/sessions\/\{[^/]+\}\/chat\/stream$/.test(path),
+  );
+
+  if (has("/v1/chat/completions") && !excluded.has("v1ChatCompletions")) {
+    return "v1ChatCompletions";
+  }
+  if (has("/api/chat/completions") && !excluded.has("apiChatCompletions")) {
+    return "apiChatCompletions";
+  }
+  if (
+    hasSessionStream &&
+    has("/api/sessions") &&
+    !excluded.has("sessionChatStream")
+  ) {
+    return "sessionChatStream";
+  }
+  return null;
+}
+
+function jsonMentions(data: unknown, needle: string): boolean {
+  try {
+    return JSON.stringify(data).includes(needle);
+  } catch {
+    return false;
+  }
+}
+
+function selectTransportFromCapabilities(
+  data: unknown,
+  excluded: Set<HermesChatTransport>,
+): HermesChatTransport | null {
+  if (!data || typeof data !== "object") return null;
+  const value = data as Record<string, unknown>;
+  if (
+    !excluded.has("v1ChatCompletions") &&
+    (jsonMentions(data, "/v1/chat/completions") ||
+      value.chat_completions === true)
+  ) {
+    return "v1ChatCompletions";
+  }
+  if (
+    !excluded.has("apiChatCompletions") &&
+    jsonMentions(data, "/api/chat/completions")
+  ) {
+    return "apiChatCompletions";
+  }
+  if (
+    !excluded.has("sessionChatStream") &&
+    (jsonMentions(data, "/api/sessions/{session_id}/chat/stream") ||
+      value.session_chat_streaming === true)
+  ) {
+    return "sessionChatStream";
+  }
+  return null;
+}
+
+async function resolveHermesChatTransport(
+  baseUrl: string,
+  headers: Record<string, string>,
+  options: {
+    exclude?: HermesChatTransport[];
+    bypassCache?: boolean;
+  } = {},
+): Promise<HermesChatTransport> {
+  if (!isRemoteMode()) return "v1ChatCompletions";
+
+  const mode = getConnectionConfig().mode;
+  const excluded = new Set(options.exclude || []);
+  const cacheKey = chatTransportCacheKey(baseUrl, mode);
+  const cached = chatTransportCache.get(cacheKey);
+  if (
+    !options.bypassCache &&
+    excluded.size === 0 &&
+    cached &&
+    cached.expiresAt > Date.now()
+  ) {
+    return cached.transport;
+  }
+
+  let sawAuthoritativeSurface = false;
+  const openApi = await fetchJsonProbe(`${baseUrl}/openapi.json`, headers);
+  if (openApi?.ok) {
+    sawAuthoritativeSurface = true;
+    const paths = openApiPaths(openApi.data);
+    const transport = paths ? selectTransportFromPaths(paths, excluded) : null;
+    if (transport) return cacheChatTransport(baseUrl, mode, transport);
+  }
+
+  const capabilities = await fetchJsonProbe(
+    `${baseUrl}/v1/capabilities`,
+    headers,
+  );
+  if (capabilities?.ok) {
+    sawAuthoritativeSurface = true;
+    const transport = selectTransportFromCapabilities(
+      capabilities.data,
+      excluded,
+    );
+    if (transport) return cacheChatTransport(baseUrl, mode, transport);
+  }
+
+  if (excluded.has("v1ChatCompletions")) {
+    return "apiChatCompletions";
+  }
+
+  return sawAuthoritativeSurface
+    ? "unsupported"
+    : cacheChatTransport(baseUrl, mode, "v1ChatCompletions");
+}
+
+function unsupportedRemoteChatMessage(): string {
+  return (
+    "Connected Hermes backend does not expose a compatible chat API. " +
+    "Connect Remote/SSH to the Hermes proxy/API-server port, not the v0.17 serve/dashboard port."
+  );
+}
+
+function chatCompletionPath(transport: HermesChatTransport): string {
+  return transport === "apiChatCompletions"
+    ? "/api/chat/completions"
+    : "/v1/chat/completions";
+}
+
+function chatContentToText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((part) => {
+      if (
+        part &&
+        typeof part === "object" &&
+        (part as { type?: unknown }).type === "text" &&
+        typeof (part as { text?: unknown }).text === "string"
+      ) {
+        return (part as { text: string }).text;
+      }
+      const imageUrl = (part as { image_url?: { url?: unknown } })?.image_url
+        ?.url;
+      if (typeof imageUrl === "string") return `[Image: ${imageUrl}]`;
+      return "";
+    })
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function parseEventStreamBlock(block: string): {
+  eventType: string;
+  data: string;
+} {
+  let eventType = "";
+  const dataLines: string[] = [];
+  for (const line of block.split("\n")) {
+    if (line.startsWith("event: ")) {
+      eventType = line.slice(7).trim();
+    } else if (line.startsWith("data: ")) {
+      dataLines.push(line.slice(6));
+    }
+  }
+  return { eventType, data: dataLines.join("\n") };
+}
+
+function parseJsonObject(data: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(data);
+    return parsed && typeof parsed === "object"
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function postJson(
+  url: string,
+  headers: Record<string, string>,
+  body: Record<string, unknown>,
+  signal: AbortSignal,
+  timeoutMs: number,
+): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    const rawBody = JSON.stringify(body);
+    const bodyBuf = Buffer.from(rawBody, "utf-8");
+    const requester = url.startsWith("https") ? https : http;
+    const req = requester.request(
+      url,
+      {
+        method: "POST",
+        headers: {
+          ...headers,
+          "Content-Type": "application/json",
+          "Content-Length": String(bodyBuf.length),
+        },
+        signal,
+        timeout: timeoutMs,
+      },
+      (res) => {
+        let raw = "";
+        res.on("data", (chunk) => {
+          raw += chunk.toString();
+        });
+        res.on("end", () => {
+          if ((res.statusCode ?? 500) >= 400) {
+            reject(new Error(`Gateway returned ${res.statusCode}`));
+            return;
+          }
+          resolve(parseJsonObject(raw));
+        });
+      },
+    );
+    req.on("error", reject);
+    req.on("timeout", () => {
+      req.destroy();
+      reject(new Error("Request timed out"));
+    });
+    req.write(bodyBuf);
+    req.end();
+  });
 }
 
 export function respondRunApproval(
@@ -117,6 +428,7 @@ export function sendMessageViaApi(
   let hasContent = false;
   let lastError = "";
   let sessionId = _resumeSessionId || "";
+  let triedV1MethodFallback = false;
   const noContentDeadlineAt = Date.now() + STREAM_NO_CONTENT_DEADLINE_MS;
 
   const messages: Array<{ role: string; content: ChatContent }> = [];
@@ -144,6 +456,7 @@ export function sendMessageViaApi(
   async function executeRequest(
     retryBudget: number,
     customBudgetChars?: number,
+    forcedTransport?: HermesChatTransport,
   ): Promise<void> {
     if (finished || controller.signal.aborted) return;
 
@@ -181,26 +494,16 @@ export function sendMessageViaApi(
     });
     const compressedMessages = compressor.compress(messages);
 
-    const body = JSON.stringify({
-      model: effectiveModel || "hermes-agent",
-      messages: compressedMessages,
-      stream: true,
-      ...(_resumeSessionId ? { session_id: _resumeSessionId } : {}),
-    });
-
-    const bodyBuf = Buffer.from(body, "utf-8");
-
     // Dynamic headers compilation for credential pool rotation read-back
-    const headers: Record<string, string> = {
+    const baseHeaders: Record<string, string> = {
       "Content-Type": "application/json",
-      "Content-Length": String(bodyBuf.length),
       ...getRemoteAuthHeader(),
     };
 
     if (!isRemoteMode()) {
       const apiServerKey = getApiServerKey(profile);
       if (apiServerKey) {
-        headers.Authorization = `Bearer ${apiServerKey}`;
+        baseHeaders.Authorization = `Bearer ${apiServerKey}`;
       }
     }
 
@@ -210,17 +513,16 @@ export function sendMessageViaApi(
       const envKey = CredentialPoolManager.getEnvKeyForProvider(provider);
       const activeKey = readEnv(profile)[envKey] || process.env[envKey] || "";
       if (activeKey) {
-        headers.Authorization = `Bearer ${activeKey}`;
+        baseHeaders.Authorization = `Bearer ${activeKey}`;
       }
     }
 
-    const hasAuth = "Authorization" in headers;
-    if (!sessionId && hasAuth) {
-      sessionId = `desk-${Date.now()}-${randomUUID()}`;
-    }
-    if (sessionId) {
-      headers["X-Hermes-Session-Id"] = sessionId;
-    }
+    const baseUrl = getApiUrl(profile);
+    const selectedTransport =
+      forcedTransport ||
+      (await resolveHermesChatTransport(baseUrl, baseHeaders));
+    let headers: Record<string, string> = {};
+    let chatUrl = "";
 
     function finish(error?: string): void {
       if (finished) return;
@@ -230,6 +532,228 @@ export function sendMessageViaApi(
       } else {
         cb.onDone(sessionId || undefined);
       }
+    }
+
+    if (finished || controller.signal.aborted) return;
+
+    if (selectedTransport === "unsupported") {
+      finish(unsupportedRemoteChatMessage());
+      return;
+    }
+
+    if (selectedTransport === "sessionChatStream") {
+      await executeSessionChatStream();
+      return;
+    }
+
+    const hasAuth = "Authorization" in baseHeaders;
+    if (!sessionId && hasAuth) {
+      sessionId = `desk-${Date.now()}-${randomUUID()}`;
+    }
+
+    const body = JSON.stringify({
+      model: effectiveModel || "hermes-agent",
+      messages: compressedMessages,
+      stream: true,
+      ...(_resumeSessionId ? { session_id: _resumeSessionId } : {}),
+    });
+
+    const bodyBuf = Buffer.from(body, "utf-8");
+    headers = {
+      ...baseHeaders,
+      "Content-Length": String(bodyBuf.length),
+    };
+    if (sessionId) {
+      headers["X-Hermes-Session-Id"] = sessionId;
+    }
+    chatUrl = `${baseUrl}${chatCompletionPath(selectedTransport)}`;
+
+    async function executeSessionChatStream(): Promise<void> {
+      const requestTimeoutMs = hasContent
+        ? REQUEST_TIMEOUT_MS
+        : requestTimeoutForAttempt(noContentDeadlineAt);
+      if (!hasContent && requestTimeoutMs <= 0) {
+        finish(
+          "No response received from the model before the retry deadline.",
+        );
+        return;
+      }
+
+      try {
+        let streamSessionId = _resumeSessionId || "";
+        if (!streamSessionId) {
+          const created = await postJson(
+            `${baseUrl}/api/sessions`,
+            baseHeaders,
+            {},
+            controller.signal,
+            requestTimeoutMs,
+          );
+          const createdId =
+            created.session_id || created.sessionId || created.id;
+          if (typeof createdId !== "string" || !createdId) {
+            finish("Hermes session API did not return a session id.");
+            return;
+          }
+          streamSessionId = createdId;
+        }
+        sessionId = streamSessionId;
+
+        const systemMessage = compressedMessages
+          .filter((msg) => msg.role === "system")
+          .map((msg) => chatContentToText(msg.content))
+          .filter(Boolean)
+          .join("\n\n");
+        const streamBody = JSON.stringify({
+          message: chatContentToText(userContent),
+          ...(systemMessage ? { system_message: systemMessage } : {}),
+        });
+        const streamBodyBuf = Buffer.from(streamBody, "utf-8");
+        const streamHeaders: Record<string, string> = {
+          ...baseHeaders,
+          "Content-Length": String(streamBodyBuf.length),
+          "X-Hermes-Session-Id": streamSessionId,
+        };
+        const streamUrl = `${baseUrl}/api/sessions/${encodeURIComponent(
+          streamSessionId,
+        )}/chat/stream`;
+        const requester = streamUrl.startsWith("https") ? https : http;
+
+        const req = requester.request(
+          streamUrl,
+          {
+            method: "POST",
+            headers: streamHeaders,
+            signal: controller.signal,
+            timeout: requestTimeoutMs,
+          },
+          (res) => {
+            if ((res.statusCode ?? 200) >= 400) {
+              let raw = "";
+              res.on("data", (chunk) => {
+                raw += chunk.toString();
+              });
+              res.on("end", () => {
+                handleRequestError(
+                  raw || `Gateway returned ${res.statusCode}`,
+                  res.statusCode,
+                );
+              });
+              return;
+            }
+
+            let buffer = "";
+            res.on("data", (chunk: Buffer) => {
+              buffer += chunk.toString();
+              let boundary = buffer.indexOf("\n\n");
+              while (boundary !== -1) {
+                const block = buffer.slice(0, boundary).trim();
+                buffer = buffer.slice(boundary + 2);
+                boundary = buffer.indexOf("\n\n");
+                handleSessionBlock(block);
+                if (finished) return;
+              }
+            });
+            res.on("end", () => {
+              if (finished) return;
+              const tail = buffer.trim();
+              if (tail) handleSessionBlock(tail);
+              if (!finished) {
+                if (hasContent) finish();
+                else handleRequestError("No response received from model");
+              }
+            });
+            res.on("error", (err) => {
+              if (err.message === "aborted" || err.name === "AbortError")
+                return;
+              handleRequestError(
+                `Stream error: ${err.message}`,
+                res.statusCode,
+              );
+            });
+          },
+        );
+
+        activeRequest = req;
+        req.setTimeout(requestTimeoutMs);
+        req.on("error", (err) => {
+          if (err.name === "AbortError") return;
+          handleRequestError(`API request failed: ${err.message}`);
+        });
+        req.on("timeout", () => {
+          req.destroy();
+          handleRequestError(
+            "API request timed out. Check the remote Hermes gateway and your network connection.",
+            408,
+          );
+        });
+        req.write(streamBodyBuf);
+        req.end();
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        handleRequestError(err instanceof Error ? err.message : String(err));
+      }
+    }
+
+    function handleSessionBlock(block: string): void {
+      if (finished || !block) return;
+      const { eventType, data } = parseEventStreamBlock(block);
+      const parsed = parseJsonObject(data);
+      if (eventType === "assistant.delta") {
+        const delta = parsed.delta || parsed.content;
+        if (typeof delta === "string" && delta) {
+          hasContent = true;
+          cb.onChunk(delta);
+        }
+        return;
+      }
+      if (eventType === "error") {
+        const message =
+          typeof parsed.message === "string"
+            ? parsed.message
+            : "Hermes session stream returned an error.";
+        finish(message);
+        return;
+      }
+      if (eventType === "run.completed") {
+        const completedSessionId = parsed.session_id || parsed.sessionId;
+        if (typeof completedSessionId === "string" && completedSessionId) {
+          sessionId = completedSessionId;
+        }
+        finish();
+        return;
+      }
+      if (eventType === "done") {
+        finish();
+      }
+    }
+
+    async function retryWithoutV1MethodNotAllowed(): Promise<void> {
+      if (
+        triedV1MethodFallback ||
+        selectedTransport !== "v1ChatCompletions" ||
+        !isRemoteMode()
+      ) {
+        finish(unsupportedRemoteChatMessage());
+        return;
+      }
+      triedV1MethodFallback = true;
+      const fallbackTransport = await resolveHermesChatTransport(
+        baseUrl,
+        baseHeaders,
+        {
+          exclude: ["v1ChatCompletions"],
+          bypassCache: true,
+        },
+      );
+      if (
+        fallbackTransport === "unsupported" ||
+        fallbackTransport === "v1ChatCompletions"
+      ) {
+        finish(unsupportedRemoteChatMessage());
+        return;
+      }
+      await executeRequest(retryBudget, customBudgetChars, fallbackTransport);
     }
 
     function probeRealError(): void {
@@ -253,7 +777,7 @@ export function sendMessageViaApi(
         ...headers,
         "Content-Length": String(probeBodyBuf.length),
       };
-      const probeUrl = `${getApiUrl(profile)}/v1/chat/completions`;
+      const probeUrl = chatUrl;
       const probeMod = probeUrl.startsWith("https") ? https : http;
       const probeReq = probeMod.request(
         probeUrl,
@@ -305,6 +829,16 @@ export function sendMessageViaApi(
         return;
       }
 
+      if (
+        statusCode === 405 &&
+        selectedTransport === "v1ChatCompletions" &&
+        isRemoteMode() &&
+        !hasContent
+      ) {
+        void retryWithoutV1MethodNotAllowed();
+        return;
+      }
+
       const classification = ErrorDoctor.classify(errorText, statusCode);
       console.log("[hermes] Error Doctor classification:", classification);
 
@@ -316,7 +850,7 @@ export function sendMessageViaApi(
 
         if (classification.shouldCompress) {
           console.log("[hermes] Memory overflow detected. Compacting budget.");
-          executeRequest(retryBudget - 1, 20000);
+          executeRequest(retryBudget - 1, 20000, selectedTransport);
           return;
         }
 
@@ -339,7 +873,11 @@ export function sendMessageViaApi(
             console.log(
               "[hermes] Credential rotated successfully. Retrying request.",
             );
-            executeRequest(retryBudget - 1, customBudgetChars);
+            executeRequest(
+              retryBudget - 1,
+              customBudgetChars,
+              selectedTransport,
+            );
             return;
           }
         }
@@ -357,7 +895,7 @@ export function sendMessageViaApi(
           `[hermes] Retrying request after delay of ${boundedDelay}ms...`,
         );
         setTimeout(() => {
-          executeRequest(retryBudget - 1, customBudgetChars);
+          executeRequest(retryBudget - 1, customBudgetChars, selectedTransport);
         }, boundedDelay);
         return;
       }
@@ -369,8 +907,7 @@ export function sendMessageViaApi(
       parseCustomEvent(eventType, data, cb);
     }
 
-    const url = `${getApiUrl(profile)}/v1/chat/completions`;
-    const requester = url.startsWith("https") ? https : http;
+    const requester = chatUrl.startsWith("https") ? https : http;
     const requestTimeoutMs = hasContent
       ? REQUEST_TIMEOUT_MS
       : requestTimeoutForAttempt(noContentDeadlineAt);
@@ -434,7 +971,7 @@ export function sendMessageViaApi(
     }
 
     const req = requester.request(
-      url,
+      chatUrl,
       {
         method: "POST",
         headers,
@@ -444,6 +981,21 @@ export function sendMessageViaApi(
       (res) => {
         const sid = res.headers["x-hermes-session-id"];
         if (sid && typeof sid === "string") sessionId = sid;
+
+        if (
+          res.statusCode === 405 &&
+          selectedTransport === "v1ChatCompletions" &&
+          isRemoteMode()
+        ) {
+          res.on("data", () => {});
+          res.on("end", () => {
+            handleRequestError(
+              "Hermes backend rejected /v1/chat/completions.",
+              405,
+            );
+          });
+          return;
+        }
 
         let buffer = "";
         res.on("data", (chunk: Buffer) => {

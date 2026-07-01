@@ -102,6 +102,24 @@ vi.mock("../src/main/utils", () => ({
   stripAnsi: (s: string) => s,
 }));
 
+vi.mock("../src/main/security/shell-hooks", () => ({
+  ShellHookManager: {
+    runHook: vi.fn(async () => ({ action: "allow" })),
+  },
+}));
+
+vi.mock("../src/main/tools", () => ({
+  getToolsets: () => [],
+}));
+
+vi.mock("../src/main/skills", () => ({
+  listInstalledSkills: () => [],
+}));
+
+vi.mock("../src/main/db", () => ({
+  getSharedDb: () => null,
+}));
+
 vi.mock("../src/main/models", () => ({
   readModels: () => [],
 }));
@@ -120,12 +138,32 @@ import {
 describe("sendMessageViaApi forwards resumeSessionId", () => {
   beforeEach(() => {
     capturedRequests.length = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("", { status: 404 })),
+    );
   });
 
   afterEach(() => {
     realStopHealthPolling();
     capturedRequests.length = 0;
+    vi.unstubAllGlobals();
   });
+
+  async function waitForChatRequest(): Promise<{
+    url: string;
+    options: Record<string, unknown>;
+    body: string;
+  }> {
+    await vi.waitFor(() => {
+      expect(
+        capturedRequests.some((r) => r.url.includes("/v1/chat/completions")),
+      ).toBe(true);
+    });
+    return capturedRequests.find((r) =>
+      r.url.includes("/v1/chat/completions"),
+    )!;
+  }
 
   it("includes session_id in request body when resumeSessionId is provided", async () => {
     const testSessionId = "session-abc-123";
@@ -141,11 +179,8 @@ describe("sendMessageViaApi forwards resumeSessionId", () => {
       testSessionId,
     );
 
-    const chatRequest = capturedRequests.find((r) =>
-      r.url.includes("/v1/chat/completions"),
-    );
-    expect(chatRequest).toBeDefined();
-    const parsed = JSON.parse(chatRequest!.body);
+    const chatRequest = await waitForChatRequest();
+    const parsed = JSON.parse(chatRequest.body);
 
     expect(parsed.session_id).toBe(testSessionId);
   });
@@ -162,11 +197,8 @@ describe("sendMessageViaApi forwards resumeSessionId", () => {
       undefined,
     );
 
-    const chatRequest = capturedRequests.find((r) =>
-      r.url.includes("/v1/chat/completions"),
-    );
-    expect(chatRequest).toBeDefined();
-    const parsed = JSON.parse(chatRequest!.body);
+    const chatRequest = await waitForChatRequest();
+    const parsed = JSON.parse(chatRequest.body);
 
     expect(parsed).not.toHaveProperty("session_id");
   });
@@ -183,11 +215,8 @@ describe("sendMessageViaApi forwards resumeSessionId", () => {
       "",
     );
 
-    const chatRequest = capturedRequests.find((r) =>
-      r.url.includes("/v1/chat/completions"),
-    );
-    expect(chatRequest).toBeDefined();
-    const parsed = JSON.parse(chatRequest!.body);
+    const chatRequest = await waitForChatRequest();
+    const parsed = JSON.parse(chatRequest.body);
 
     expect(parsed).not.toHaveProperty("session_id");
   });
@@ -206,11 +235,8 @@ describe("sendMessageViaApi forwards resumeSessionId", () => {
       testSessionId,
     );
 
-    const chatRequest = capturedRequests.find((r) =>
-      r.url.includes("/v1/chat/completions"),
-    );
-    expect(chatRequest).toBeDefined();
-    const headers = chatRequest!.options.headers as Record<string, string>;
+    const chatRequest = await waitForChatRequest();
+    const headers = chatRequest.options.headers as Record<string, string>;
 
     // The gateway resumes an existing session from this request header;
     // the session_id body field is ignored. Without it every request
@@ -239,12 +265,9 @@ describe("sendMessageViaApi forwards resumeSessionId", () => {
       contextFolder,
     );
 
-    const chatRequest = capturedRequests.find((r) =>
-      r.url.includes("/v1/chat/completions"),
-    );
-    expect(chatRequest).toBeDefined();
-    const parsed = JSON.parse(chatRequest!.body);
-    const headers = chatRequest!.options.headers as Record<string, string>;
+    const chatRequest = await waitForChatRequest();
+    const parsed = JSON.parse(chatRequest.body);
+    const headers = chatRequest.options.headers as Record<string, string>;
     const messages = parsed.messages as Array<{
       role?: string;
       content?: unknown;
@@ -286,11 +309,8 @@ describe("sendMessageViaApi forwards resumeSessionId", () => {
       undefined,
     );
 
-    const chatRequest = capturedRequests.find((r) =>
-      r.url.includes("/v1/chat/completions"),
-    );
-    expect(chatRequest).toBeDefined();
-    const headers = chatRequest!.options.headers as Record<string, string>;
+    const chatRequest = await waitForChatRequest();
+    const headers = chatRequest.options.headers as Record<string, string>;
 
     expect(headers).toHaveProperty("X-Hermes-Session-Id");
     expect(headers["X-Hermes-Session-Id"]).toMatch(
@@ -314,6 +334,12 @@ describe("sendMessageViaApi forwards resumeSessionId", () => {
       undefined,
     );
 
+    await vi.waitFor(() => {
+      expect(
+        capturedRequests.filter((r) => r.url.includes("/v1/chat/completions"))
+          .length,
+      ).toBeGreaterThanOrEqual(2);
+    });
     const chatRequests = capturedRequests.filter((r) =>
       r.url.includes("/v1/chat/completions"),
     );

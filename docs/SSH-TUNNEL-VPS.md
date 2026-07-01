@@ -18,7 +18,7 @@ surface areas:
 
 | Screen / feature                               |  Remote (HTTP + API key)   |    SSH Tunnel    |
 | ---------------------------------------------- | :------------------------: | :--------------: |
-| Chat (`/v1/chat/completions`)                  |             ✅             |        ✅        |
+| Chat (`/v1` or compatible `/api` chat surface) |             ✅             |        ✅        |
 | Sessions list & search                         | ❌ reads local `~/.hermes` | ✅ via SSH proxy |
 | Skills (browse, install, uninstall)            | ❌ reads local `~/.hermes` | ✅ via SSH proxy |
 | Memory (view/edit entries, user profile)       | ❌ reads local `~/.hermes` | ✅ via SSH proxy |
@@ -52,8 +52,10 @@ On the **remote machine** (where Hermes Agent runs):
   (more on this below).
 - Your desktop's public key authorized for that user
   (`~/.ssh/authorized_keys`).
-- The Hermes API listening on `127.0.0.1:8642` (the default — it does
-  **not** need to be exposed publicly; the SSH tunnel forwards it).
+- The Hermes proxy/API server listening on `127.0.0.1:8642` (the default
+  — it does **not** need to be exposed publicly; the SSH tunnel forwards
+  it). On Hermes Agent v0.17, `hermes serve` / the dashboard port may not
+  expose `/v1/*`; point the desktop at the proxy/API-server port instead.
 
 ## Which user account should the desktop SSH in as?
 
@@ -275,6 +277,17 @@ Hermes API may require an API key locally even when bound to
 leave blank if the gateway is configured for no-auth on localhost). The
 key, if used, is the one stored in your remote Hermes `.env`/`auth.json`,
 not a value you generate on the desktop.
+
+### Chat fails with HTTP 405 on Hermes Agent v0.17
+
+You are probably tunneling to the `hermes serve` / dashboard port instead
+of the Hermes proxy/API-server port. Hermes Agent v0.17 can serve the
+dashboard UI without exposing `/v1/chat/completions`; a browser `GET` may
+load the UI while desktop chat `POST` requests fail with 405.
+
+Start or expose the Hermes proxy/API server on the remote host, keep it
+bound to `127.0.0.1`, and set **Remote Hermes Port** to that port in
+Settings -> Connection. The SSH tunnel will forward it locally.
 
 ### Windows-specific: keys not persisting across restarts
 

@@ -85,6 +85,12 @@ export function setApiServerAvailable(val: boolean | null): void {
   apiServerAvailable = val;
 }
 
+let chatTransportCacheGeneration = 0;
+
+export function getChatTransportCacheGeneration(): number {
+  return chatTransportCacheGeneration;
+}
+
 export async function isApiServerReady(profile?: string): Promise<boolean> {
   const url = `${getApiUrl(profile)}/health`;
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -124,6 +130,7 @@ export function setSshRemoteApiKey(key: string): void {
 export function clearSshRemoteApiKey(): void {
   _sshRemoteApiKey = "";
   apiServerAvailable = null;
+  chatTransportCacheGeneration += 1;
 }
 
 export function getRemoteAuthHeader(): Record<string, string> {

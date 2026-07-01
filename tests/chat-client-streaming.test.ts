@@ -15,6 +15,11 @@ import type { AddressInfo } from "net";
 // those at a fake local server so we exercise the REAL streaming/terminal-state
 // logic in sendMessageViaApi without a live Hermes gateway.
 let baseUrl = "";
+const state = {
+  remoteMode: false,
+  connectionMode: "local" as "local" | "remote" | "ssh",
+};
+const requests: Array<{ method: string; url: string; body: string }> = [];
 
 vi.mock("../src/main/hermes/gateway-process", async (importActual) => {
   const actual =
@@ -22,8 +27,9 @@ vi.mock("../src/main/hermes/gateway-process", async (importActual) => {
   return {
     ...actual,
     getApiUrl: () => baseUrl,
-    getRemoteAuthHeader: () => ({}),
-    isRemoteMode: () => false,
+    getRemoteAuthHeader: () =>
+      state.remoteMode ? { Authorization: "Bearer remote" } : {},
+    isRemoteMode: () => state.remoteMode,
     isGatewayRunning: () => true,
     isApiServerReady: () => Promise.resolve(true),
     getApiServerAvailable: () => true,
@@ -40,10 +46,13 @@ vi.mock("../src/main/config", async (importActual) => {
       provider: "openai",
       baseUrl: "",
     }),
+    readEnv: () => ({}),
+    getConnectionConfig: () => ({ mode: state.connectionMode }),
   };
 });
 
 import {
+  clearHermesChatTransportCache,
   sendMessageViaApi,
   type ChatCallbacks,
 } from "../src/main/hermes/chat-client";
@@ -62,7 +71,10 @@ beforeAll(async () => {
   server = http.createServer((req, res) => {
     let body = "";
     req.on("data", (c) => (body += c.toString()));
-    req.on("end", () => responder(req, res, body));
+    req.on("end", () => {
+      requests.push({ method: req.method || "GET", url: req.url || "", body });
+      responder(req, res, body);
+    });
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const addr = server.address() as AddressInfo;
@@ -78,6 +90,7 @@ interface Harness {
   chunks: string[];
   errors: string[];
   counters: { doneCalls: number };
+  doneSessionIds: Array<string | undefined>;
   doneP: Promise<void>;
 }
 
@@ -85,6 +98,7 @@ function callbacks(): Harness {
   const chunks: string[] = [];
   const errors: string[] = [];
   const counters = { doneCalls: 0 };
+  const doneSessionIds: Array<string | undefined> = [];
   let resolve!: () => void;
   const doneP = new Promise<void>((r) => (resolve = r));
   const cb: ChatCallbacks = {
@@ -93,12 +107,13 @@ function callbacks(): Harness {
       errors.push(e);
       resolve();
     },
-    onDone: () => {
+    onDone: (sessionId) => {
       counters.doneCalls += 1;
+      doneSessionIds.push(sessionId);
       resolve();
     },
   };
-  return { cb, chunks, errors, counters, doneP };
+  return { cb, chunks, errors, counters, doneSessionIds, doneP };
 }
 
 function isStreaming(body: string): boolean {
@@ -111,6 +126,10 @@ function isStreaming(body: string): boolean {
 
 beforeEach(() => {
   responder = (_req, res) => res.end();
+  requests.length = 0;
+  state.remoteMode = false;
+  state.connectionMode = "local";
+  clearHermesChatTransportCache();
 });
 
 describe("sendMessageViaApi terminal-state safety", () => {
@@ -179,5 +198,195 @@ describe("sendMessageViaApi terminal-state safety", () => {
     await h.doneP;
     expect(h.errors.length).toBeGreaterThan(0);
     expect(h.counters.doneCalls).toBe(0);
+  });
+});
+
+describe("sendMessageViaApi remote chat surface detection", () => {
+  it("uses /api/chat/completions on a v0.17 backend that exposes no /v1 routes", async () => {
+    state.remoteMode = true;
+    state.connectionMode = "remote";
+    responder = (req, res) => {
+      if (req.method === "GET" && req.url === "/openapi.json") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            openapi: "3.1.0",
+            paths: { "/api/chat/completions": { post: {} } },
+          }),
+        );
+        return;
+      }
+      if (req.url === "/api/chat/completions") {
+        res.writeHead(200, { "Content-Type": "text/event-stream" });
+        res.write('data: {"choices":[{"delta":{"content":"api ok"}}]}\n\n');
+        res.write("data: [DONE]\n\n");
+        res.end();
+        return;
+      }
+      res.writeHead(405, { "Content-Type": "text/html" });
+      res.end("<html>method not allowed</html>");
+    };
+
+    const h = callbacks();
+    sendMessageViaApi("hi", h.cb);
+    await h.doneP;
+
+    expect(h.errors).toHaveLength(0);
+    expect(h.chunks.join("")).toContain("api ok");
+    expect(
+      requests.some(
+        (r) => r.method === "POST" && r.url === "/v1/chat/completions",
+      ),
+    ).toBe(false);
+    expect(
+      requests.some(
+        (r) => r.method === "POST" && r.url === "/api/chat/completions",
+      ),
+    ).toBe(true);
+  });
+
+  it("falls back from a /v1/chat/completions 405 HTML response to /api/chat/completions", async () => {
+    state.remoteMode = true;
+    state.connectionMode = "ssh";
+    responder = (req, res) => {
+      if (req.method === "GET" && req.url === "/openapi.json") {
+        res.writeHead(404);
+        res.end();
+        return;
+      }
+      if (req.method === "GET" && req.url === "/v1/capabilities") {
+        res.writeHead(404);
+        res.end();
+        return;
+      }
+      if (req.url === "/v1/chat/completions") {
+        res.writeHead(405, { "Content-Type": "text/html" });
+        res.end("<html>dashboard shell</html>");
+        return;
+      }
+      if (req.url === "/api/chat/completions") {
+        res.writeHead(200, { "Content-Type": "text/event-stream" });
+        res.write(
+          'data: {"choices":[{"delta":{"content":"fallback ok"}}]}\n\n',
+        );
+        res.write("data: [DONE]\n\n");
+        res.end();
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    };
+
+    const h = callbacks();
+    sendMessageViaApi("hi", h.cb);
+    await h.doneP;
+
+    expect(h.errors).toHaveLength(0);
+    expect(h.chunks.join("")).toContain("fallback ok");
+    expect(
+      requests.filter(
+        (r) => r.method === "POST" && r.url === "/v1/chat/completions",
+      ),
+    ).toHaveLength(1);
+    expect(
+      requests.some(
+        (r) => r.method === "POST" && r.url === "/api/chat/completions",
+      ),
+    ).toBe(true);
+  });
+
+  it("adapts /api/sessions/{id}/chat/stream SSE to desktop chat callbacks", async () => {
+    state.remoteMode = true;
+    state.connectionMode = "remote";
+    responder = (req, res, body) => {
+      if (req.method === "GET" && req.url === "/openapi.json") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            openapi: "3.1.0",
+            paths: {
+              "/api/sessions": { post: {} },
+              "/api/sessions/{session_id}/chat/stream": { post: {} },
+            },
+          }),
+        );
+        return;
+      }
+      if (req.method === "POST" && req.url === "/api/sessions") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ session_id: "session-created" }));
+        return;
+      }
+      if (
+        req.method === "POST" &&
+        req.url === "/api/sessions/session-created/chat/stream"
+      ) {
+        const parsed = JSON.parse(body) as {
+          message?: string;
+          system_message?: string;
+        };
+        expect(parsed.message).toBe("hi");
+        expect(parsed.system_message).toContain("grounding");
+        res.writeHead(200, { "Content-Type": "text/event-stream" });
+        res.write(
+          'event: assistant.delta\ndata: {"delta":"session stream ok"}\n\n',
+        );
+        res.write(
+          'event: run.completed\ndata: {"session_id":"session-created"}\n\n',
+        );
+        res.write("event: done\ndata: {}\n\n");
+        res.end();
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    };
+
+    const h = callbacks();
+    sendMessageViaApi(
+      "hi",
+      h.cb,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { role: "system", content: "grounding" },
+    );
+    await h.doneP;
+
+    expect(h.errors).toHaveLength(0);
+    expect(h.chunks.join("")).toContain("session stream ok");
+    expect(h.doneSessionIds).toEqual(["session-created"]);
+  });
+
+  it("fails with an actionable error when the backend has no compatible chat route", async () => {
+    state.remoteMode = true;
+    state.connectionMode = "ssh";
+    responder = (req, res) => {
+      if (req.method === "GET" && req.url === "/openapi.json") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ openapi: "3.1.0", paths: { "/health": {} } }));
+        return;
+      }
+      if (req.method === "GET" && req.url === "/v1/capabilities") {
+        res.writeHead(404);
+        res.end();
+        return;
+      }
+      res.writeHead(500);
+      res.end("unexpected model route");
+    };
+
+    const h = callbacks();
+    sendMessageViaApi("hi", h.cb);
+    await h.doneP;
+
+    expect(h.errors.join("\n")).toMatch(/Hermes proxy\/API-server port/i);
+    expect(
+      requests.some(
+        (r) => r.method === "POST" && r.url === "/v1/chat/completions",
+      ),
+    ).toBe(false);
   });
 });
