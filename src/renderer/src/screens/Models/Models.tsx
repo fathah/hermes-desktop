@@ -50,7 +50,24 @@ function customProviderEnvKey(name: string, baseUrl: string): string {
   );
 }
 
-interface SavedModel {
+// True if some other entry in the library still resolves to this env key —
+// either another unknown-URL custom provider with the same derived name key,
+// or any model (custom or native) on the same known vendor host sharing its
+// key (e.g. two Groq-compatible entries both resolving to GROQ_API_KEY).
+// Callers must skip deleteEnv when this is true, or they'd wipe a key a
+// sibling entry still depends on.
+export function envKeyUsedByOtherModel(
+  key: string,
+  excludeId: string,
+  allModels: SavedModel[],
+): boolean {
+  return allModels.some(
+    (m) =>
+      m.id !== excludeId && customProviderEnvKey(m.name, m.baseUrl) === key,
+  );
+}
+
+export interface SavedModel {
   id: string;
   name: string;
   provider: string;
@@ -413,7 +430,10 @@ function Models({ visible }: ModelsProps = {}): React.JSX.Element {
         editingModel.baseUrl,
       );
       const newEnvKey = customProviderEnvKey(name, formBaseUrl.trim());
-      if (oldEnvKey !== newEnvKey) {
+      if (
+        oldEnvKey !== newEnvKey &&
+        !envKeyUsedByOtherModel(oldEnvKey, editingModel.id, models)
+      ) {
         await window.hermesAPI.deleteEnv(oldEnvKey);
       }
     }
@@ -428,9 +448,10 @@ function Models({ visible }: ModelsProps = {}): React.JSX.Element {
     // Clean up the per-provider env key so deleting a custom provider
     // doesn't leave CUSTOM_PROVIDER_<NAME>_KEY orphaned in .env.
     if (model && model.provider === "custom") {
-      await window.hermesAPI.deleteEnv(
-        customProviderEnvKey(model.name, model.baseUrl),
-      );
+      const envKey = customProviderEnvKey(model.name, model.baseUrl);
+      if (!envKeyUsedByOtherModel(envKey, model.id, models)) {
+        await window.hermesAPI.deleteEnv(envKey);
+      }
     }
     setConfirmDelete(null);
     await loadModels();

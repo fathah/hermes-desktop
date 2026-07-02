@@ -36,6 +36,12 @@ Custom providers in the Models library ([[src/renderer/src/screens/Models/Models
 
 Renaming a custom provider or deleting it changes or removes its derived key; `handleSave` and `handleDelete` call the new [[src/main/config.ts#deleteEnvValue]] (through `hermesAPI.deleteEnv` → the `delete-env` IPC handler, mirroring `setEnv`/`set-env`) to remove the old `CUSTOM_PROVIDER_<OLDNAME>_KEY` line so it doesn't linger in `.env`. [[src/main/ssh-remote.ts#sshDeleteEnvValue]] is the remote-mode equivalent, selected by the same `conn.mode === "ssh"` branch `set-env` already uses.
 
+### Cleanup never deletes a key another entry still resolves to
+
+Before either cleanup path deletes a key, [[src/renderer/src/screens/Models/Models.tsx#envKeyUsedByOtherModel]] checks whether another entry still resolves to it, and skips the delete if so.
+
+Two entries can legitimately derive the *same* key: two custom providers on the same known vendor host both fall back to that vendor's shared key (e.g. `GROQ_API_KEY`), or two unknown-host providers with the same display name derive the same per-name key. `envKeyUsedByOtherModel` scans the in-memory `models` list, excluding the entry being edited/deleted, for any other entry resolving to that key — without this guard, renaming or removing one entry would silently wipe the vendor key a sibling entry still depends on.
+
 ## Provider icons
 
 Each card's logo is resolved by [[src/renderer/src/components/common/BrandLogo.tsx]] from the provider id, falling back to a generic robot for unknown ids.
