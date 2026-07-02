@@ -51,7 +51,7 @@ function buildStatus(
   hasApiKey: boolean,
   gatewayHealth: GatewayHealthStatus,
 ): Status {
-  if (!hasApiKey) {
+  if (!hasApiKey && gatewayHealth !== "healthy") {
     return {
       label,
       profile,
@@ -84,12 +84,16 @@ export function StatusChip(): React.JSX.Element | null {
       const api = window.hermesAPI;
       if (!api?.getConnectionConfig) return;
       try {
-        const [conn, gatewayHealth, profiles] = await Promise.all([
-          api.getConnectionConfig(),
+        const conn = await api.getConnectionConfig();
+        const [gatewayHealth, profiles] = await Promise.all([
           api.gatewayHealthStatus
-            ? api.gatewayHealthStatus()
+            ? api
+                .gatewayHealthStatus()
+                .catch(() => "down" as GatewayHealthStatus)
             : Promise.resolve("healthy" as GatewayHealthStatus),
-          api.listProfiles ? api.listProfiles() : Promise.resolve([]),
+          api.listProfiles
+            ? api.listProfiles().catch(() => [])
+            : Promise.resolve([]),
         ]);
         if (cancelled) return;
         const active = profiles.find((p) => p.isActive)?.name ?? "default";

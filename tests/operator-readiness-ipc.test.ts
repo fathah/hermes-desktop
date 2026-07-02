@@ -5,7 +5,7 @@ import { join } from "path";
 const mocks = vi.hoisted(() => ({
   safeHandle: vi.fn(),
   validateChatReadiness: vi.fn(),
-  getGatewayHealthStatus: vi.fn(),
+  getConnectionGatewayHealthStatus: vi.fn(),
   runConfigHealthCheck: vi.fn(),
   buildVaultHealthReport: vi.fn(),
   listVaultProposals: vi.fn(),
@@ -24,8 +24,8 @@ vi.mock("../src/main/validation", () => ({
   validateChatReadiness: mocks.validateChatReadiness,
 }));
 
-vi.mock("../src/main/hermes", () => ({
-  getGatewayHealthStatus: mocks.getGatewayHealthStatus,
+vi.mock("../src/main/gateway-status", () => ({
+  getConnectionGatewayHealthStatus: mocks.getConnectionGatewayHealthStatus,
 }));
 
 vi.mock("../src/main/config-health", () => ({
@@ -62,7 +62,7 @@ describe("operator readiness main aggregation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.validateChatReadiness.mockReturnValue({ ok: true });
-    mocks.getGatewayHealthStatus.mockReturnValue("healthy");
+    mocks.getConnectionGatewayHealthStatus.mockResolvedValue("healthy");
     mocks.runConfigHealthCheck.mockReturnValue({
       ranAt: 1,
       profile: "work",
@@ -129,6 +129,7 @@ describe("operator readiness main aggregation", () => {
       "1 storage warning reported.",
     );
     expect(mocks.validateChatReadiness).toHaveBeenCalledWith("work");
+    expect(mocks.getConnectionGatewayHealthStatus).toHaveBeenCalledWith("work");
     expect(mocks.buildVaultHealthReport).toHaveBeenCalledWith("work");
     expect(mocks.listVaultProposals).toHaveBeenCalledWith("work");
     expect(mocks.getHermesAgentUpdateRoutine).toHaveBeenCalledWith("work");

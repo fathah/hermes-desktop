@@ -14,6 +14,11 @@ describe("sps serious-use smoke script", () => {
       "scheduler-skip",
       "Vault Health",
       "Gateway down",
+      "SPS_SERIOUS_USE_GATEWAY=hermetic|local|remote",
+      "SPS_GATEWAY_URL",
+      "SEAM_AUDIT",
+      "real gateway health reports healthy",
+      "operator readiness gateway item is ready from real status",
       "capture wrote one markdown file",
     ]) {
       expect(source).toContain(anchor);

@@ -72,4 +72,36 @@ describe("StatusChip", () => {
       await screen.findByRole("button", { name: /Gateway down/ }),
     ).toBeInTheDocument();
   });
+
+  it("renders remote status when profile listing is unsupported", async () => {
+    vi.mocked(window.hermesAPI.getConnectionConfig).mockResolvedValue({
+      mode: "remote",
+      remoteUrl: "http://127.0.0.1:8642",
+      hasApiKey: false,
+      apiKeyLength: 0,
+      ssh: {
+        host: "",
+        port: 22,
+        username: "",
+        keyPath: "",
+        remotePort: 8642,
+        localPort: 18642,
+      },
+    });
+    vi.mocked(window.hermesAPI.gatewayHealthStatus).mockResolvedValue(
+      "healthy",
+    );
+    vi.mocked(window.hermesAPI.listProfiles).mockRejectedValue(
+      new Error("remote unsupported"),
+    );
+
+    render(<StatusChip />);
+
+    expect(
+      await screen.findByRole("button", {
+        name: /Connection Remote, profile default\. Gateway healthy\./,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Remote · default")).toBeInTheDocument();
+  });
 });

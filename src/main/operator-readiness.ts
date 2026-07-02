@@ -1,7 +1,7 @@
 import { HERMES_HOME } from "./installer";
 import { getDesktopUpdateRoutine, getHermesAgentUpdateRoutine } from "./config";
 import { runConfigHealthCheck } from "./config-health";
-import { getGatewayHealthStatus } from "./hermes";
+import { getConnectionGatewayHealthStatus } from "./gateway-status";
 import { readMirrorFailRecord } from "./mirror-fail-counter";
 import { getSchedulerConfig, getSchedulerSkips } from "./scheduler";
 import { validateChatReadiness } from "./validation";
@@ -67,7 +67,7 @@ export async function getOperatorReadiness(
     listVaultProposals(profile),
     Promise.resolve(validateChatReadiness(profile)),
     Promise.resolve(runConfigHealthCheck(profile)),
-    Promise.resolve(getGatewayHealthStatus()),
+    getConnectionGatewayHealthStatus(profile),
     Promise.resolve(getSchedulerConfig()),
     Promise.resolve(getSchedulerSkips()),
     Promise.resolve(getDesktopUpdateRoutine()),

@@ -47,8 +47,11 @@ import {
   clearSshRemoteApiKey,
   notifyProfileSwitched,
   respondRunApproval,
-  getGatewayHealthStatus,
 } from "../hermes";
+import {
+  getConnectionGatewayHealthStatus,
+  isConnectionGatewayRunning,
+} from "../gateway-status";
 import {
   startSshTunnel,
   stopSshTunnel,
@@ -562,19 +565,9 @@ export function registerConfigIpc(): void {
       return true;
     },
   );
-  registerDualHandler(
-    "gateway-status",
-    () => isGatewayRunning(),
-    (ssh) => sshGatewayStatus(ssh),
-  );
-  // Phase 1.1 — current supervisor health status (local managed gateway). The
-  // renderer reads this once for initial paint, then live-updates via the
-  // "gateway-health-changed" push event. Remote/SSH have no supervisor, so the
-  // getter simply reports the idle "healthy" baseline there.
-  registerDualHandler(
-    "gateway-health-status",
-    () => getGatewayHealthStatus(),
-    () => getGatewayHealthStatus(),
+  safeHandle("gateway-status", () => isConnectionGatewayRunning());
+  safeHandle("gateway-health-status", () =>
+    getConnectionGatewayHealthStatus(),
   );
 
   // Platform toggles

@@ -1,6 +1,8 @@
 // Serious-use dogfood smoke for the SPS Agent operator loop.
 //
 // Usage: npm run build && node scripts/sps-serious-use-smoke.mjs
+//        SPS_SERIOUS_USE_GATEWAY=local SPS_GATEWAY_URL=http://127.0.0.1:8642 node scripts/sps-serious-use-smoke.mjs
+//        SPS_SERIOUS_USE_GATEWAY=remote SPS_GATEWAY_URL=http://host:8642 node scripts/sps-serious-use-smoke.mjs
 //
 // The harness launches the BUILT Electron app against a throwaway HERMES_HOME,
 // seeds real persisted readiness signals, and verifies the surfaces an operator
@@ -19,22 +21,64 @@ import {
 import { tmpdir } from "os";
 import { join } from "path";
 
-const OUT = process.env.SMOKE_OUT || join(tmpdir(), "sps-serious-use-smoke");
+const SMOKE_TMP_ROOT =
+  process.env.SPS_SMOKE_TMPDIR?.trim() ||
+  (process.platform === "darwin" ? "/private/tmp" : tmpdir());
+const OUT =
+  process.env.SMOKE_OUT || join(SMOKE_TMP_ROOT, "sps-serious-use-smoke");
 mkdirSync(OUT, { recursive: true });
 for (const name of readdirSync(OUT)) {
   if (name.endsWith(".png")) unlinkSync(join(OUT, name));
 }
 
-const HOME = mkdtempSync(join(tmpdir(), "hermes-serious-use-"));
+const HOME = mkdtempSync(join(SMOKE_TMP_ROOT, "hermes-serious-use-"));
 const sps = join(HOME, "sps-agent");
 const vault = join(sps, "vault");
 const now = Date.now();
+const GATEWAY_MODE = (process.env.SPS_SERIOUS_USE_GATEWAY || "hermetic")
+  .trim()
+  .toLowerCase();
 const GATEWAY_STATUS_LABELS = [
   "Gateway healthy",
   "Gateway unhealthy",
   "Gateway recovering",
   "Gateway down",
 ];
+const LIVE_GATEWAY = GATEWAY_MODE !== "hermetic";
+const GATEWAY_URL =
+  process.env.SPS_GATEWAY_URL?.trim() ||
+  (GATEWAY_MODE === "local" ? "http://127.0.0.1:8642" : "");
+const GATEWAY_KEY = process.env.SPS_GATEWAY_KEY?.trim() || "";
+
+if (!["hermetic", "local", "remote"].includes(GATEWAY_MODE)) {
+  console.log(
+    "INVALID_GATEWAY_MODE: set SPS_SERIOUS_USE_GATEWAY=hermetic|local|remote",
+  );
+  process.exit(1);
+}
+
+if (GATEWAY_MODE === "remote" && !GATEWAY_URL) {
+  console.log("LIVE_GATEWAY_MISSING_URL: set SPS_GATEWAY_URL for remote mode");
+  process.exit(1);
+}
+
+function localGatewayPort() {
+  if (GATEWAY_MODE !== "local") return 8642;
+  try {
+    const url = new URL(GATEWAY_URL);
+    if (url.hostname !== "127.0.0.1" && url.hostname !== "localhost") {
+      console.log(
+        "LIVE_GATEWAY_LOCAL_URL_UNSUPPORTED: local mode only supports localhost URLs",
+      );
+      process.exit(1);
+    }
+    if (url.port) return Number(url.port);
+    return url.protocol === "https:" ? 443 : 80;
+  } catch {
+    console.log("LIVE_GATEWAY_INVALID_URL: SPS_GATEWAY_URL must be a valid URL");
+    process.exit(1);
+  }
+}
 
 mkdirSync(join(HOME, "hermes-agent", "venv", "bin"), { recursive: true });
 mkdirSync(join(vault, "projects"), { recursive: true });
@@ -55,10 +99,39 @@ rl.on("line", (line) => {
 );
 chmodSync(pythonShim, 0o755);
 writeFileSync(join(HOME, "hermes-agent", "hermes"), "");
-writeFileSync(join(HOME, ".env"), "ANTHROPIC_API_KEY=sk-ant-test-0000000000\n");
+writeFileSync(
+  join(HOME, ".env"),
+  [
+    GATEWAY_MODE === "hermetic"
+      ? "ANTHROPIC_API_KEY=sk-ant-test-0000000000"
+      : "",
+    GATEWAY_KEY ? `API_SERVER_KEY=${GATEWAY_KEY}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n") + "\n",
+);
 writeFileSync(
   join(HOME, "config.yaml"),
-  "model:\n  provider: anthropic\n  default: claude-3-5-sonnet\n  model: claude-3-5-sonnet\n",
+  GATEWAY_MODE === "hermetic"
+    ? "model:\n  provider: anthropic\n  default: claude-3-5-sonnet\n  model: claude-3-5-sonnet\n"
+    : [
+        "model:",
+        "  provider: auto",
+        "  default: auto",
+        "  model: auto",
+        GATEWAY_MODE === "local"
+          ? [
+              "platforms:",
+              "  api_server:",
+              "    enabled: true",
+              "    extra:",
+              `      port: ${localGatewayPort()}`,
+              '      host: "127.0.0.1"',
+            ].join("\n")
+          : "",
+      ]
+        .filter(Boolean)
+        .join("\n") + "\n",
 );
 writeFileSync(
   join(HOME, "desktop.json"),
@@ -66,8 +139,10 @@ writeFileSync(
     {
       onboardingCompleted: true,
       schedulerEnabled: false,
-      connectionMode: "local",
-      remoteApiKey: "smoke-gateway-key",
+      connectionMode: GATEWAY_MODE === "remote" ? "remote" : "local",
+      remoteUrl: GATEWAY_MODE === "remote" ? GATEWAY_URL : "",
+      remoteApiKey:
+        GATEWAY_MODE === "hermetic" ? "smoke-gateway-key" : GATEWAY_KEY,
     },
     null,
     2,
@@ -204,6 +279,18 @@ writeFileSync(
 
 console.log("HERMES_HOME=", HOME);
 console.log("SMOKE_OUT=", OUT);
+console.log(
+  "SEAM_AUDIT=",
+  JSON.stringify({
+    gatewayMode: GATEWAY_MODE,
+    gatewayPath: LIVE_GATEWAY ? "real-health-status" : "fixture-visible-only",
+    gatewayUrl: GATEWAY_URL || null,
+    hasGatewayKey: Boolean(GATEWAY_KEY),
+    hermesInstall: "fixture-for-ui-boot",
+    spsWorkspace: "fixture",
+    readinessSignals: "seeded-fixture",
+  }),
+);
 
 const failures = [];
 function check(condition, message) {
@@ -281,11 +368,35 @@ try {
   check(byId.vault?.status === "attention", "Vault Health issues are counted");
   check(byId.storage?.status === "attention", "storage warnings are counted");
 
-  const gatewayButton = win.getByRole("button", {
-    name: new RegExp(GATEWAY_STATUS_LABELS.join("|")),
-  });
-  await gatewayButton.first().waitFor({ timeout: 8000 });
-  check(true, "gateway status chip is visible");
+  if (LIVE_GATEWAY) {
+    const gatewayProof = await win.evaluate(async () => {
+      const [running, health] = await Promise.all([
+        window.hermesAPI.gatewayStatus(),
+        window.hermesAPI.gatewayHealthStatus(),
+      ]);
+      return { running, health };
+    });
+    check(gatewayProof.running === true, "real gateway status is reachable");
+    check(
+      gatewayProof.health === "healthy",
+      "real gateway health reports healthy",
+    );
+    check(
+      byId.gateway?.status === "ready",
+      "operator readiness gateway item is ready from real status",
+    );
+    await win
+      .getByRole("button", { name: /Gateway healthy/ })
+      .first()
+      .waitFor({ timeout: 8000 });
+    check(true, "gateway status chip shows Gateway healthy");
+  } else {
+    const gatewayButton = win.getByRole("button", {
+      name: new RegExp(GATEWAY_STATUS_LABELS.join("|")),
+    });
+    await gatewayButton.first().waitFor({ timeout: 8000 });
+    check(true, "gateway status chip is visible");
+  }
 
   await win.getByRole("button", { name: "Settings" }).click();
   const dialog = win.getByRole("dialog", { name: "SPS Control Center" });
