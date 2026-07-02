@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildUnixInstallCommand } from "../src/main/installer";
+import { buildUnixInstallArgs } from "../src/main/installer";
 import { buildScreencaptureArgs } from "../src/main/screencapture";
 
 describe("command builders", () => {
@@ -9,15 +9,12 @@ describe("command builders", () => {
     expect(buildScreencaptureArgs(tempPath)).toEqual(["-i", tempPath]);
   });
 
-  it("shell-quotes installer script and shell-profile paths", () => {
-    const command = buildUnixInstallCommand({
-      shellProfile: "/Users/amar/odd profile's/.zshrc",
-      scriptPath: "/Applications/Hermes O'Clock/resources/install.sh",
-    });
+  it("builds installer argv without shell interpolation", () => {
+    const scriptPath = "/Applications/Hermes O'Clock/resources/install.sh";
 
-    expect(command).toBe(
-      `source '/Users/amar/odd profile'"'"'s/.zshrc' 2>/dev/null; bash '/Applications/Hermes O'"'"'Clock/resources/install.sh' --skip-setup`,
-    );
-    expect(command).not.toContain('source "');
+    expect(buildUnixInstallArgs(scriptPath)).toEqual([
+      scriptPath,
+      "--skip-setup",
+    ]);
   });
 });

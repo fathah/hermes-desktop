@@ -50,7 +50,6 @@ import {
   installBinariesFor,
   hermesCliArgs,
   getEnhancedPath,
-  shQuote,
 } from "./installer/paths";
 
 // Re-exports of MCP
@@ -507,30 +506,8 @@ export async function checkHermesUpdate(): Promise<HermesUpdateStatus> {
   );
 }
 
-function getShellProfile(home: string): string | null {
-  const candidates = [
-    join(home, ".zshrc"),
-    join(home, ".bashrc"),
-    join(home, ".bash_profile"),
-    join(home, ".profile"),
-  ];
-  for (const p of candidates) {
-    if (existsSync(p)) return p;
-  }
-  return null;
-}
-
-export function buildUnixInstallCommand({
-  shellProfile,
-  scriptPath,
-}: {
-  shellProfile: string | null;
-  scriptPath: string;
-}): string {
-  return [
-    shellProfile ? `source ${shQuote(shellProfile)} 2>/dev/null;` : "",
-    `bash ${shQuote(scriptPath)} --skip-setup`,
-  ].join(" ");
+export function buildUnixInstallArgs(scriptPath: string): string[] {
+  return [scriptPath, "--skip-setup"];
 }
 
 const STAGE_MARKERS: { pattern: RegExp; step: number; title: string }[] = [
@@ -637,12 +614,10 @@ export async function runInstall(
     return await new Promise<void>((resolve, reject) => {
       const home = homedir();
 
-      const shellProfile = getShellProfile(home);
       const scriptPath = getBundledScriptPath("install.sh");
-      const installCmd = buildUnixInstallCommand({ shellProfile, scriptPath });
 
       const basePath = getEnhancedPath();
-      const proc = spawn("bash", ["-c", installCmd], {
+      const proc = spawn("bash", buildUnixInstallArgs(scriptPath), {
         cwd: home,
         env: {
           ...process.env,

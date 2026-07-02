@@ -97,6 +97,13 @@ describe("Electron main process hardening", () => {
     expect(installerSrc).not.toContain("execSync(`");
   });
 
+  it("runs the Unix installer without a bash -c command string", () => {
+    expect(installerSrc).toContain(
+      'spawn("bash", buildUnixInstallArgs(scriptPath),',
+    );
+    expect(installerSrc).not.toContain('spawn("bash", ["-c"');
+  });
+
   it("allows bundled renderer fonts without broadening script policy", () => {
     expect(rendererHtml).toContain("font-src 'self' data:");
     expect(rendererHtml).toContain(
