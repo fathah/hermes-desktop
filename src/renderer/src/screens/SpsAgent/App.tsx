@@ -220,8 +220,13 @@ export function App() {
             <>
               <Topbar />
               <div className="doc-scroll scroll" ref={docScrollRef}>
-                <OnboardingChecklist />
-                <WhatsNewPanel onRunAction={runReleaseAffordance} />
+                <div className="home-affordance-strip">
+                  <OnboardingChecklist variant="compact" />
+                  <WhatsNewPanel
+                    onRunAction={runReleaseAffordance}
+                    variant="compact"
+                  />
+                </div>
                 <DocHeader>
                   {/* distinct key so the editor remounts (clean refs) on page switch */}
                   <Editor key={`ed-${page}`} />

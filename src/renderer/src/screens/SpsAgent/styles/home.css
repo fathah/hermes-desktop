@@ -755,6 +755,108 @@
   overflow-y: auto;
   position: relative;
 }
+.sps-scope .home-affordance-strip {
+  max-width: var(--content-w);
+  margin: 10px auto 0;
+  padding: 8px 10px;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.sps-scope .home-affordance-strip:empty {
+  display: none;
+}
+.sps-scope .home-affordance-cluster {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 300px;
+}
+.sps-scope .home-affordance-cluster + .home-affordance-cluster {
+  border-left: 1px solid var(--hair-soft);
+  padding-left: 10px;
+}
+.sps-scope .home-affordance-title {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--tx-2);
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.sps-scope .home-affordance-actions {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.sps-scope .home-affordance-action {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid var(--hair);
+  border-radius: 6px;
+  background: var(--canvas);
+  color: var(--tx-2);
+  padding: 4px 8px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 550;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+.sps-scope .home-affordance-action:hover {
+  background: var(--row-hover);
+  border-color: var(--hair-strong);
+  color: var(--tx-1);
+}
+.sps-scope .home-affordance-dismiss {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tx-3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.sps-scope .home-affordance-dismiss:hover {
+  background: var(--row-hover);
+  color: var(--tx-1);
+}
+@media (max-width: 900px) {
+  .sps-scope .home-affordance-strip {
+    margin-left: 12px;
+    margin-right: 12px;
+  }
+  .sps-scope .home-affordance-cluster {
+    flex-basis: 100%;
+  }
+  .sps-scope .home-affordance-cluster + .home-affordance-cluster {
+    border-left: none;
+    border-top: 1px solid var(--hair-soft);
+    padding-left: 0;
+    padding-top: 8px;
+  }
+}
 .sps-scope .doc {
   max-width: var(--content-w);
   margin: 0 auto;

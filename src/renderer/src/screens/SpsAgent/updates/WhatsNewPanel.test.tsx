@@ -24,11 +24,12 @@ afterEach(() => {
 
 describe("WhatsNewPanel", () => {
   it("shows unseen affordances after an app version change", async () => {
-    render(<WhatsNewPanel onRunAction={vi.fn()} />);
+    const { container } = render(<WhatsNewPanel onRunAction={vi.fn()} />);
 
     expect(
       await screen.findByText("Control Center AI readiness"),
     ).toBeInTheDocument();
+    expect(container.querySelector(".ob-checklist")).toBeInTheDocument();
     expect(screen.getByText("Intentional narrow workspace")).toBeInTheDocument();
     expect(screen.getByText("Readable SPS dark theme")).toBeInTheDocument();
     expect(
@@ -73,6 +74,60 @@ describe("WhatsNewPanel", () => {
       await screen.findByRole("button", { name: "Dismiss what's new" }),
     );
 
+    await waitFor(() =>
+      expect(localStorage.getItem("hermes-desktop-last-seen-version")).toBe(
+        "0.5.4",
+      ),
+    );
+  });
+
+  it("renders compact update actions without the full card", async () => {
+    const { container } = render(
+      <WhatsNewPanel onRunAction={vi.fn()} variant="compact" />,
+    );
+
+    expect(
+      await screen.findByText("What's new in v0.5.4"),
+    ).toBeInTheDocument();
+    expect(container.querySelector(".ob-checklist")).toBeNull();
+    expect(
+      container.querySelector(".home-affordance-updates"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Open Control Center" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Open Workspace" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Open Appearance" }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps compact CTA routing and dismissal", async () => {
+    const onRunAction = vi.fn();
+    render(<WhatsNewPanel onRunAction={onRunAction} variant="compact" />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Open Control Center" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Open Workspace" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Appearance" }));
+
+    expect(onRunAction).toHaveBeenNthCalledWith(1, {
+      kind: "settings",
+      view: "overview",
+    });
+    expect(onRunAction).toHaveBeenNthCalledWith(2, {
+      kind: "surface",
+      surface: "doc",
+    });
+    expect(onRunAction).toHaveBeenNthCalledWith(3, {
+      kind: "modal",
+      modal: "tweaks",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss what's new" }));
     await waitFor(() =>
       expect(localStorage.getItem("hermes-desktop-last-seen-version")).toBe(
         "0.5.4",

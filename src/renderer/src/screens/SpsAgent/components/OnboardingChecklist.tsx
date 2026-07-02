@@ -10,6 +10,10 @@ import type { IconName } from "./iconPaths";
 
 const DISMISS_KEY = "hermes_sps_onboarding_checklist_dismissed";
 
+interface OnboardingChecklistProps {
+  variant?: "card" | "compact";
+}
+
 function isDismissed(): boolean {
   try {
     return localStorage.getItem(DISMISS_KEY) === "true";
@@ -18,7 +22,9 @@ function isDismissed(): boolean {
   }
 }
 
-export function OnboardingChecklist(): React.JSX.Element | null {
+export function OnboardingChecklist({
+  variant = "card",
+}: OnboardingChecklistProps): React.JSX.Element | null {
   const [dismissed, setDismissed] = useState<boolean>(isDismissed);
   const setSurface = useStore((s) => s.setSurface);
   const setPaletteOpen = useStore((s) => s.setPaletteOpen);
@@ -61,6 +67,46 @@ export function OnboardingChecklist(): React.JSX.Element | null {
       onClick: () => setPaletteOpen(true),
     },
   ];
+
+  if (variant === "compact") {
+    return (
+      <div
+        className="home-affordance-cluster home-affordance-onboarding"
+        role="note"
+        aria-label="Getting started"
+      >
+        <span className="home-affordance-title">
+          <Icon name="sparkle" size={14} />
+          Get started
+        </span>
+        <div
+          className="home-affordance-actions"
+          aria-label="Getting started actions"
+        >
+          {steps.map((s) => (
+            <button
+              key={s.n}
+              type="button"
+              className="home-affordance-action"
+              onClick={s.onClick}
+            >
+              <Icon name={s.icon} size={14} />
+              <span>{s.cta}</span>
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          className="home-affordance-dismiss"
+          onClick={dismiss}
+          aria-label="Dismiss getting started"
+          title="Dismiss"
+        >
+          <Icon name="x" size={14} />
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="ob-checklist" role="note" aria-label="Getting started">
