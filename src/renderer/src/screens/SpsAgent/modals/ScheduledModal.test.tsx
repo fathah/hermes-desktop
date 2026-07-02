@@ -58,6 +58,67 @@ beforeEach(() => {
 });
 
 describe("ScheduledModal Telegram delivery UX", () => {
+  it("uses Scheduled vocabulary for the empty monitor state", async () => {
+    render(<ScheduledModal />);
+
+    expect(await screen.findByText("Scheduled")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "No topic monitors yet. Add a topic above to keep a cited workspace page current — you review each update before it lands.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Scheduled Work/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Signal Brief/i)).not.toBeInTheDocument();
+  });
+
+  it("labels topic monitors and agent jobs consistently", async () => {
+    api.srList.mockResolvedValue([
+      {
+        id: "sr_1",
+        kind: "research",
+        topic: "AI agent launches",
+        pageId: "ai-agent-launches",
+        cadence: "weekly",
+        hour: 8,
+        autoApply: false,
+        enabled: true,
+        createdAt: 1,
+        lastRunAt: 0,
+        lastChangeHash: "",
+        cronJobId: "cron_1",
+        sourceIntent: "web",
+        sourcePlan: [],
+      },
+    ]);
+    api.listCronJobs.mockResolvedValue([
+      {
+        id: "cron_2",
+        name: "Smoke skipped job",
+        schedule: "*/5 * * * *",
+        prompt: "Run the smoke job.",
+        state: "active",
+        enabled: true,
+        next_run_at: null,
+        last_run_at: null,
+        last_status: "skipped",
+        last_error: null,
+        repeat: null,
+        deliver: [],
+        skills: [],
+        script: null,
+      },
+    ]);
+
+    render(<ScheduledModal />);
+
+    expect(await screen.findByText("Topic monitor")).toBeInTheDocument();
+    expect(screen.getByText("Agent jobs (1)")).toBeInTheDocument();
+    expect(screen.getByText(/runs via scheduler/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Signal Brief/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/runs in background/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/background jobs/i)).not.toBeInTheDocument();
+  });
+
   it("disables Telegram push and opens setup docs when Telegram is unavailable", async () => {
     render(<ScheduledModal />);
 

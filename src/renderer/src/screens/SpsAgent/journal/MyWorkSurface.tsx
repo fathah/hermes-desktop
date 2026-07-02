@@ -71,7 +71,7 @@ function WorkScheduledPanel(): React.JSX.Element {
       setCronJobs(cronRows || []);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Could not load scheduled work.",
+        err instanceof Error ? err.message : "Could not load scheduled items.",
       );
     } finally {
       setLoading(false);
@@ -109,20 +109,20 @@ function WorkScheduledPanel(): React.JSX.Element {
         <div>
           <h2>Scheduled</h2>
           <p>
-            Signal Briefs and background jobs stay visible here. New output goes
-            to review before it changes your workspace.
+            Topic monitors and agent jobs stay visible here. New output goes to
+            review before it changes your workspace.
           </p>
         </div>
         <button className="cover-btn" onClick={() => setScheduledOpen(true)}>
-          <Icon name="clock" size={15} /> Manage rules
+          <Icon name="clock" size={15} /> Manage scheduled items
         </button>
       </div>
 
       {error && <div className="active-work-error">{error}</div>}
       {loading ? (
-        <div className="ck-empty">Loading scheduled work...</div>
+        <div className="ck-empty">Loading scheduled items...</div>
       ) : schedules.length === 0 && cronJobs.length === 0 ? (
-        <div className="ck-empty">No scheduled work is active.</div>
+        <div className="ck-empty">No scheduled items are active.</div>
       ) : (
         <div className="work-rule-list">
           {schedules.map((rule) => (
@@ -132,7 +132,10 @@ function WorkScheduledPanel(): React.JSX.Element {
                   {rule.kind === "digest" ? "External sessions" : rule.topic}
                 </strong>
                 <span>
-                  Signal Brief · {cadenceLabel(rule.cadence, rule.hour)} · last{" "}
+                  {rule.kind === "digest"
+                    ? "External digest"
+                    : "Topic monitor"}{" "}
+                  · {cadenceLabel(rule.cadence, rule.hour)} · last{" "}
                   {fmtTime(rule.lastRunAt)}
                 </span>
                 <small>
@@ -215,7 +218,7 @@ export function MyWorkSurface() {
         <header className="work-shell-head">
           <div>
             <h1>Work</h1>
-            <p>Tasks, delegated goals, scheduled rules, and review queue.</p>
+            <p>Tasks, delegated goals, scheduled items, and review queue.</p>
           </div>
         </header>
         <div className="work-tabs" role="tablist" aria-label="Work sections">

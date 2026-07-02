@@ -1,4 +1,4 @@
-// signal-briefs-dogfood.mjs - deterministic Electron smoke for Signal Briefs.
+// signal-briefs-dogfood.mjs - deterministic Electron smoke for topic monitors.
 //
 // Launches the BUILT app against a throwaway HERMES_HOME and a local stub
 // gateway. It proves the real renderer -> preload -> IPC -> main-process path:
@@ -49,7 +49,7 @@ Acme announced a new public agent workspace with monitor-style launch tracking f
 `;
 
 const CHANGESET = JSON.stringify({
-  summary: "Signal Brief updated - Acme launched an agent workspace",
+  summary: "Topic monitor updated - Acme launched an agent workspace",
   pages: [
     {
       op: "create",
@@ -273,9 +273,9 @@ async function openSignalBriefs(win) {
     timeout: 8000,
   });
   await win.getByRole("tab", { name: "Scheduled" }).click();
-  await win.getByRole("button", { name: "Manage rules" }).click();
+  await win.getByRole("button", { name: "Manage scheduled items" }).click();
   await win.waitForSelector(".modal", { timeout: 8000 });
-  await win.getByText("Scheduled Work", { exact: false }).first().waitFor({
+  await win.getByText("Scheduled", { exact: true }).first().waitFor({
     timeout: 8000,
   });
 }
@@ -392,7 +392,7 @@ try {
     .getByText("Pending updates (1)", { exact: false })
     .waitFor({ timeout: 30000 });
   await phase.win
-    .getByText("Signal Brief updated - Acme launched an agent workspace", {
+    .getByText("Topic monitor updated - Acme launched an agent workspace", {
       exact: false,
     })
     .waitFor({ timeout: 8000 });
@@ -414,7 +414,7 @@ try {
 
   const pagePath = join(vault, `${PAGE_ID}.md`);
   await waitFor(
-    "applied Signal Brief vault markdown",
+    "applied topic monitor vault markdown",
     () =>
       existsSync(pagePath) &&
       readFileSync(pagePath, "utf-8").includes(
@@ -440,7 +440,7 @@ try {
   console.log("RESULT gatewayHits=", JSON.stringify(gatewayHits));
   console.log("RESULT shots=", shots.join(", "));
   console.log("RESULT consoleErrors=", JSON.stringify(consoleErrors));
-  console.log("SMOKE_OK: Signal Briefs monitor flow");
+  console.log("SMOKE_OK: topic monitor flow");
 } catch (err) {
   if (activeWin) {
     await activeWin

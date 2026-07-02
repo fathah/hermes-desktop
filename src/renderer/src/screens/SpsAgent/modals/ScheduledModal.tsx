@@ -97,7 +97,7 @@ export function ScheduledModal() {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [pending, setPending] = useState<Pending[]>([]);
   // Agent-created cron jobs (ported from the deleted admin Schedules screen) —
-  // oversight only: see every background job + stop/run it. Creation of new raw
+  // oversight only: see every agent job + stop/run it. Creation of new raw
   // cron jobs stays with the agent/CLI; research/digest scheduling is above.
   const [cronJobs, setCronJobs] = useState<CronJob[]>([]);
   const [skips, setSkips] = useState<Record<string, SkipInfo>>({});
@@ -120,7 +120,7 @@ export function ScheduledModal() {
   const [error, setError] = useState("");
   const topicRef = useRef<HTMLInputElement>(null);
 
-  // Scheduled work is review-first: generated changes stay pending until the
+  // Scheduled items are review-first: generated changes stay pending until the
   // user applies them from the Work/Review surface.
   const autoApplyPending = async (
     _list: Pending[],
@@ -372,7 +372,7 @@ export function ScheduledModal() {
   };
 
   return (
-    <SpsModal title="Scheduled Work" onClose={onClose} width={760}>
+    <SpsModal title="Scheduled" onClose={onClose} width={760}>
       <div className="modal-body">
         {/* ── create ── */}
         <div
@@ -660,12 +660,12 @@ export function ScheduledModal() {
         {/* ── schedules ── */}
         <div style={{ marginTop: 12 }}>
           <div className="c-name" style={{ marginBottom: 6 }}>
-            Monitors
+            Topic monitors
           </div>
           {schedules.length === 0 && (
             <div className="cmts-empty" style={{ padding: "16px 0" }}>
-              No monitors yet. Add a topic above to keep a cited Signal Brief
-              current — you review each update before it lands.
+              No topic monitors yet. Add a topic above to keep a cited workspace
+              page current — you review each update before it lands.
             </div>
           )}
           <div className="scroll" style={{ maxHeight: "38vh" }}>
@@ -703,14 +703,14 @@ export function ScheduledModal() {
                           className="pal-chip on"
                           style={{ pointerEvents: "none" }}
                         >
-                          Digest
+                          External digest
                         </span>
                       ) : (
                         <span
                           className="pal-chip on"
                           style={{ pointerEvents: "none" }}
                         >
-                          Signal Brief
+                          Topic monitor
                         </span>
                       )}
                       {s.kind === "digest"
@@ -724,7 +724,7 @@ export function ScheduledModal() {
                       {s.kind === "digest"
                         ? " · app-open only"
                         : s.cronJobId
-                          ? " · runs in background"
+                          ? " · runs via scheduler"
                           : " · app-open only"}
                       {s.kind !== "digest" && s.sourceIntent
                         ? ` · ${SOURCE_INTENT_LABELS[s.sourceIntent]}`
@@ -822,11 +822,11 @@ export function ScheduledModal() {
           </div>
         </div>
 
-        {/* ── agent tasks (cron) — oversight of background jobs ── */}
+        {/* ── agent tasks (cron) — oversight of agent jobs ── */}
         {cronJobs.length > 0 && (
           <div style={{ marginTop: 12 }}>
             <div className="c-name" style={{ marginBottom: 6 }}>
-              Scheduled work ({cronJobs.length})
+              Agent jobs ({cronJobs.length})
             </div>
             <div className="scroll" style={{ maxHeight: "30vh" }}>
               {cronJobs.map((job) => {

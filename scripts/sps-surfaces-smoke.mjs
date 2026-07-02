@@ -1,5 +1,5 @@
 // Offline smoke for SPS surfaces that were still only manually tracked in the
-// feature-status workbook: dashboard, trash, Work, task drawer, scheduled rules,
+// feature-status workbook: dashboard, trash, Work, task drawer, scheduled items,
 // Insights, and Personal Health.
 import {
   chmodSync,
@@ -542,9 +542,9 @@ await shot("06-my-work", async () => {
 await shot("07-automations", async () => {
   await clickNav("Work");
   await win.getByRole("tab", { name: "Scheduled" }).click();
-  await win.getByRole("button", { name: "Manage rules" }).click();
+  await win.getByRole("button", { name: "Manage scheduled items" }).click();
   await win.locator(".modal").waitFor({ timeout: 8000 });
-  await expectVisible("Scheduled Work");
+  await expectVisible("Scheduled");
   await win
     .getByPlaceholder("Monitor this topic…")
     .fill("Smoke automation topic");

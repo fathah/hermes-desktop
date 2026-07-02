@@ -233,7 +233,7 @@ export function CommandPalette() {
         id: "work",
         icon: "board",
         label: "Open Work",
-        desc: "Review tasks, delegated goals, scheduled rules, and pending changes.",
+        desc: "Review tasks, delegated goals, scheduled items, and pending changes.",
         run: () => setSurface("work"),
       },
       {

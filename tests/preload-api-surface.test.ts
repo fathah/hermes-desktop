@@ -218,7 +218,7 @@ describe("New APIs from v0.8/v0.9 features", () => {
     expect(typeMethods).toContain("spsCuratedBrief");
   });
 
-  it("has Signal Brief monitor APIs", () => {
+  it("has scheduled monitor APIs", () => {
     expect(preloadMethods).toContain("srDiscoverSources");
     expect(preloadMethods).toContain("srUpdateSourcePlan");
     expect(preloadMethods).toContain("srTelegramStatus");

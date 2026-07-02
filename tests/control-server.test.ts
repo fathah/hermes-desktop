@@ -181,7 +181,7 @@ describe("Local Control Server Integration", () => {
     expect(res.status).toBe(200);
   });
 
-  it("should trigger a background job on POST /cron/trigger", async () => {
+  it("should trigger a scheduled job on POST /cron/trigger", async () => {
     const desktopConfig: Record<string, unknown> = {};
     mockReadDesktopConfig.mockReturnValue(desktopConfig);
 

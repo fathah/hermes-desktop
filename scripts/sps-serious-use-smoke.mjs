@@ -325,9 +325,9 @@ try {
   await expectText("At a Glance");
   await win.getByRole("tab", { name: "Scheduled" }).click();
   await expectText("Scheduled");
-  await win.getByRole("button", { name: "Manage rules" }).click();
+  await win.getByRole("button", { name: "Manage scheduled items" }).click();
   await win.locator(".modal").waitFor({ timeout: 8000 });
-  await expectText("Scheduled Work");
+  await expectText("Scheduled");
   await expectText("Smoke skipped job");
   await win.getByText(/skipped 2/i).first().waitFor({ timeout: 8000 });
   check(true, "scheduled skip visibility is rendered");

@@ -219,7 +219,7 @@ export interface UiSlice {
   researchOpen: boolean;
   /** The Scheduled Research management modal is open. */
   scheduledOpen: boolean;
-  /** Topic handed off from Research into the Signal Brief monitor create form. */
+  /** Topic handed off from Research into the topic monitor create form. */
   scheduledDraftTopic: string | null;
   /** The read-only Agent tasks (Kanban oversight) modal is open. */
   agentTasksOpen: boolean;

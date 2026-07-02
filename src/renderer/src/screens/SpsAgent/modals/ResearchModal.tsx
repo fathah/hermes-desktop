@@ -153,7 +153,7 @@ export function ResearchModal() {
     }
   };
 
-  // "Schedule this topic" → prefill the Signal Briefs creator. The monitor is
+  // "Schedule this topic" → prefill the topic monitor creator. The monitor is
   // only created after the user reviews cadence, sources, and push settings.
   const onScheduleThis = async () => {
     const t = topic.trim();
@@ -509,7 +509,7 @@ export function ResearchModal() {
               </button>
               <button
                 className="cover-btn"
-                title="Keep this topic current automatically (weekly)"
+                title="Create a scheduled topic monitor"
                 disabled={researchBusy || !topic.trim()}
                 onClick={() => void onScheduleThis()}
               >

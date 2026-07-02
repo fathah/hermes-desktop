@@ -73,6 +73,8 @@ describe("MyWorkSurface operator readiness", () => {
       configurable: true,
       value: {
         getOperatorReadiness: vi.fn().mockResolvedValue(readinessReport()),
+        srList: vi.fn().mockResolvedValue([]),
+        listCronJobs: vi.fn().mockResolvedValue([]),
       },
     });
   });
@@ -90,5 +92,63 @@ describe("MyWorkSurface operator readiness", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open Scheduled" }));
 
     expect(store.setScheduledOpen).toHaveBeenCalledWith(true);
+  });
+
+  it("uses Scheduled vocabulary on the scheduled tab", async () => {
+    const api = window.hermesAPI as unknown as {
+      srList: ReturnType<typeof vi.fn>;
+      listCronJobs: ReturnType<typeof vi.fn>;
+    };
+    api.srList.mockResolvedValue([
+      {
+        id: "sr_1",
+        kind: "research",
+        topic: "AI agent launches",
+        pageId: "ai-agent-launches",
+        cadence: "weekly",
+        hour: 8,
+        autoApply: false,
+        enabled: true,
+        createdAt: 1,
+        lastRunAt: 0,
+        lastChangeHash: "",
+      },
+    ]);
+    api.listCronJobs.mockResolvedValue([
+      {
+        id: "cron_1",
+        name: "Smoke skipped job",
+        schedule: "*/5 * * * *",
+        prompt: "Run the smoke job.",
+        state: "active",
+        enabled: true,
+        next_run_at: null,
+        last_run_at: null,
+        last_status: "skipped",
+        last_error: null,
+        repeat: null,
+        deliver: [],
+        skills: [],
+        script: null,
+      },
+    ]);
+
+    render(<MyWorkSurface />);
+    fireEvent.click(screen.getByRole("tab", { name: "Scheduled" }));
+
+    expect(
+      await screen.findByText(
+        "Topic monitors and agent jobs stay visible here. New output goes to review before it changes your workspace.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Manage scheduled items" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Topic monitor ·/)).toBeInTheDocument();
+    expect(screen.getByText(/Agent job ·/)).toBeInTheDocument();
+    expect(screen.queryByText(/Signal Brief/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/background jobs/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Manage rules/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/scheduled rules/i)).not.toBeInTheDocument();
   });
 });
