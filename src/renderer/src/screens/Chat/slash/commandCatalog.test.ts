@@ -53,4 +53,22 @@ describe("slash command catalog", () => {
       }),
     ).toThrow("Duplicate slash command: /inspect");
   });
+
+  it("ignores alias entries that duplicate an already-registered command", () => {
+    const upstream = agentCommandsFromCatalog({
+      pairs: [
+        ["/compact", "Compact and summarize the conversation"],
+        ["/compress", "Compress conversation with optional focus topic"],
+      ],
+      canon: { compact: "compress" },
+    });
+
+    const catalog = createSlashCatalog({
+      agentCommands: upstream.commands,
+      aliases: upstream.aliases,
+    });
+
+    expect(catalog.resolve("/compact")?.name).toBe("compact");
+    expect(catalog.resolve("/compress")?.name).toBe("compress");
+  });
 });

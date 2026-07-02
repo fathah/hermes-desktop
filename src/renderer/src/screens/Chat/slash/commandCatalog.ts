@@ -43,7 +43,7 @@ function registerAlias(
     );
   }
   if (byName.has(aliasKey) || aliases.has(aliasKey)) {
-    throw new Error(`Duplicate slash command alias: /${aliasKey}`);
+    return;
   }
   aliases.set(aliasKey, targetKey);
 }
