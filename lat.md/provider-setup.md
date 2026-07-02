@@ -28,6 +28,14 @@ For compatible/custom endpoints, an inline **API Key** field appears under Base 
 
 Ids the agent can't resolve by id are listed in `OPENAI_COMPATIBLE_BASE_URLS` ([[src/renderer/src/constants.ts]]) — openai, perplexity, and every `LOCAL_PRESETS` chip (local servers + remote endpoints like groq, deepseek, atlascloud, mistral, …). This map MUST contain every preset id, or selecting that chip mis-routes; a test in `tests/constants.test.ts` enforces it. Selecting one autofills its base URL and shows the base-URL field; on save it is persisted as `provider: custom` + `base_url`, which the gateway accepts and uses to host-derive the API key (`runtime_provider._host_derived_api_key`, e.g. `api.groq.com` → `GROQ_API_KEY`). `displayProviderFromConfig` reverse-maps a stored `custom` + known base URL back to the brand id so the dropdown re-selects it on load. Native providers (the gateway hardcodes their base URL) clear the field instead.
 
+## Models library: per-provider keys for unknown URLs
+
+Custom providers in the Models library ([[src/renderer/src/screens/Models/Models.tsx]]) that point at an unrecognized base URL each get their own env key instead of sharing one bucket, and that key is cleaned up when the provider is renamed or deleted.
+
+`expectedEnvKeyForUrl` falls back to the shared `CUSTOM_API_KEY` for any host not in [[src/shared/url-key-map.ts]], which meant every unknown-URL custom provider overwrote the same env var. [[src/renderer/src/screens/Models/Models.tsx#customProviderEnvKey]] derives `CUSTOM_PROVIDER_<NAME>_KEY` from the provider's display name in that case, used by `openEditModal` (read, with a `CUSTOM_API_KEY` fallback for entries saved before this existed) and `handleSave` (write). [[src/main/config.ts#customEndpointKeyResolvable]] mirrors the same derivation — via a call-time `require("./models")` to avoid a static import cycle — so the config-health audit checks every model sharing that base URL, not just the first `readModels()` match.
+
+Renaming a custom provider or deleting it changes or removes its derived key; `handleSave` and `handleDelete` call the new [[src/main/config.ts#deleteEnvValue]] (through `hermesAPI.deleteEnv` → the `delete-env` IPC handler, mirroring `setEnv`/`set-env`) to remove the old `CUSTOM_PROVIDER_<OLDNAME>_KEY` line so it doesn't linger in `.env`. [[src/main/ssh-remote.ts#sshDeleteEnvValue]] is the remote-mode equivalent, selected by the same `conn.mode === "ssh"` branch `set-env` already uses.
+
 ## Provider icons
 
 Each card's logo is resolved by [[src/renderer/src/components/common/BrandLogo.tsx]] from the provider id, falling back to a generic robot for unknown ids.

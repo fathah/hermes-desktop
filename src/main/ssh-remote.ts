@@ -998,6 +998,26 @@ export async function sshSetEnvValue(
   await sshWriteFile(config, envPath, lines.join("\n"));
 }
 
+export async function sshDeleteEnvValue(
+  config: SshConfig,
+  key: string,
+  profile?: string,
+): Promise<void> {
+  const envPath = remoteEnvPath(profile);
+  const content = await sshReadFile(config, envPath);
+  if (!content.trim()) return;
+
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const lines = content.split("\n");
+  const filtered = lines.filter(
+    (line) => !line.trim().match(new RegExp(`^#?\\s*${escaped}\\s*=`)),
+  );
+
+  if (filtered.length !== lines.length) {
+    await sshWriteFile(config, envPath, filtered.join("\n"));
+  }
+}
+
 // ─── Dotted-path YAML helpers (mirror of the local-mode fix) ───────────────
 //
 // The previous implementation used `^\s*<key>:` against the whole remote

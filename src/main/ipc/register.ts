@@ -23,7 +23,7 @@ import { getDashboardStatus, startDashboard, stopDashboard } from "../dashboard"
 import { startSshTunnel, ensureSshTunnel, getSshTunnelUrl, stopSshTunnel, testSshConnection, isSshTunnelActive, isSshTunnelHealthy } from "../ssh-tunnel";
 import { getClaw3dStatus, setupClaw3d, startDevServer, stopDevServer, startAdapter, stopAdapter, startAll as startClaw3dAll, stopAll as stopClaw3d, getClaw3dLogs, setClaw3dPort, getClaw3dPort, setClaw3dWsUrl, getClaw3dWsUrl, waitForClaw3dReady, type Claw3dSetupProgress } from "../claw3d";
 import { startOfficeStack } from "../office-start";
-import { readEnv, setEnvValue, getConfigValue, setConfigValue, getHermesHome, getModelConfig, setModelConfig, getCredentialPool, setCredentialPool, addCredentialPoolEntry, getConnectionConfig, getPublicConnectionConfig, normalizeRemoteChatTransport, resolveConnectionApiKeyUpdate, setConnectionConfig, getPlatformEnabled, setPlatformEnabled, getApiServerKeyStatus, invalidateSecretsCache, type ConnectionConfig } from "../config";
+import { readEnv, setEnvValue, deleteEnvValue, getConfigValue, setConfigValue, getHermesHome, getModelConfig, setModelConfig, getCredentialPool, setCredentialPool, addCredentialPoolEntry, getConnectionConfig, getPublicConnectionConfig, normalizeRemoteChatTransport, resolveConnectionApiKeyUpdate, setConnectionConfig, getPlatformEnabled, setPlatformEnabled, getApiServerKeyStatus, invalidateSecretsCache, type ConnectionConfig } from "../config";
 import { getAuxiliaryConfig, setAuxiliaryTask, resetAuxiliaryToAuto } from "../auxiliary-config";
 import { applySessionLocalOverlays, listSessions, getSessionMessages, searchSessions, deleteSession, deleteSessions } from "../sessions";
 import { syncSessionCache, listCachedSessions, updateSessionTitle } from "../session-cache";
@@ -44,7 +44,7 @@ import { listCronJobs, createCronJob, removeCronJob, pauseCronJob, resumeCronJob
 import { applyMessagingPlatformUpdate, buildDesktopMessagingPlatforms, fetchRemoteMessagingPlatforms, readLocalGatewayPlatformStates, testDesktopMessagingPlatform, testRemoteMessagingPlatform, updateRemoteMessagingPlatform } from "../messaging-platforms";
 import { listBoards as kanbanListBoards, currentBoard as kanbanCurrentBoard, switchBoard as kanbanSwitchBoard, createBoard as kanbanCreateBoard, removeBoard as kanbanRemoveBoard, listTasks as kanbanListTasks, getTask as kanbanGetTask, createTask as kanbanCreateTask, assignTask as kanbanAssignTask, completeTask as kanbanCompleteTask, blockTask as kanbanBlockTask, unblockTask as kanbanUnblockTask, archiveTask as kanbanArchiveTask, specifyTask as kanbanSpecifyTask, reclaimTask as kanbanReclaimTask, commentTask as kanbanCommentTask, dispatchOnce as kanbanDispatchOnce, listClaw3dHqTasks as kanbanListClaw3dHqTasks, type CreateTaskInput } from "../kanban";
 import { getAppLocale, setAppLocale } from "../locale";
-import { sshListInstalledSkills, sshGetSkillContent, sshInstallSkill, sshUninstallSkill, sshListBundledSkills, sshReadMemory, sshAddMemoryEntry, sshUpdateMemoryEntry, sshRemoveMemoryEntry, sshWriteUserProfile, sshReadSoul, sshWriteSoul, sshResetSoul, sshGetToolsets, sshGetPlatformToolsets, sshSetToolsetEnabled, sshSetMessagingPlatformToolsetEnabled, sshReadEnv, sshSetEnvValue, sshGetConfigValue, sshSetConfigValue, sshGetHermesHome, sshGetModelConfig, sshSetModelConfig, sshListSessions, sshGetSessionMessages, sshSearchSessions, sshListProfiles, sshCreateProfile, sshDeleteProfile, sshGatewayStatus, sshStartGateway, sshStopGateway, sshReadRemoteApiKey, sshReadDirectory, sshGetHermesVersion, sshReadLogs, sshGetPlatformEnabled, sshSetPlatformEnabled, sshListCachedSessions, sshRunDoctor, sshListModels, sshAddModel, sshRemoveModel, sshUpdateModel, sshRunUpdate, sshRunDump, sshDiscoverMemoryProviders } from "../ssh-remote";
+import { sshListInstalledSkills, sshGetSkillContent, sshInstallSkill, sshUninstallSkill, sshListBundledSkills, sshReadMemory, sshAddMemoryEntry, sshUpdateMemoryEntry, sshRemoveMemoryEntry, sshWriteUserProfile, sshReadSoul, sshWriteSoul, sshResetSoul, sshGetToolsets, sshGetPlatformToolsets, sshSetToolsetEnabled, sshSetMessagingPlatformToolsetEnabled, sshReadEnv, sshSetEnvValue, sshDeleteEnvValue, sshGetConfigValue, sshSetConfigValue, sshGetHermesHome, sshGetModelConfig, sshSetModelConfig, sshListSessions, sshGetSessionMessages, sshSearchSessions, sshListProfiles, sshCreateProfile, sshDeleteProfile, sshGatewayStatus, sshStartGateway, sshStopGateway, sshReadRemoteApiKey, sshReadDirectory, sshGetHermesVersion, sshReadLogs, sshGetPlatformEnabled, sshSetPlatformEnabled, sshListCachedSessions, sshRunDoctor, sshListModels, sshAddModel, sshRemoveModel, sshUpdateModel, sshRunUpdate, sshRunDump, sshDiscoverMemoryProviders } from "../ssh-remote";
 
 export interface IpcContext {
   activeRuns: Map<string, () => void>;
@@ -378,6 +378,19 @@ export function registerIpcHandlers(context: IpcContext): void {
       if (isGatewayRunning(profile) && looksLikeCredential) {
         restartGateway(profile);
       }
+      return true;
+    },
+  );
+
+  ipcMain.handle(
+    "delete-env",
+    async (_event, key: string, profile?: string) => {
+      const conn = getConnectionConfig();
+      if (conn.mode === "ssh" && conn.ssh) {
+        await sshDeleteEnvValue(conn.ssh, key, profile);
+        return true;
+      }
+      deleteEnvValue(key, profile);
       return true;
     },
   );

@@ -269,6 +269,30 @@ export function setEnvValue(
   safeWriteFile(envFile, lines.join("\n"));
 }
 
+/**
+ * Remove a single key from the profile's .env file, if present. Used to
+ * clean up `CUSTOM_PROVIDER_<NAME>_KEY` entries that would otherwise be
+ * orphaned when a custom provider is renamed or deleted.
+ */
+export function deleteEnvValue(key: string, profile?: string): void {
+  const { envFile } = profilePaths(profile);
+  invalidateCache(`env:${profile || "default"}`);
+  if (key === "API_SERVER_KEY") invalidateCache("apiServerKey:");
+
+  if (!existsSync(envFile)) return;
+
+  const content = readFileSync(envFile, "utf-8");
+  const lines = content.split("\n");
+  const escaped = escapeRegex(key);
+  const filtered = lines.filter(
+    (line) => !line.trim().match(new RegExp(`^#?\\s*${escaped}\\s*=`)),
+  );
+
+  if (filtered.length !== lines.length) {
+    safeWriteFile(envFile, filtered.join("\n"));
+  }
+}
+
 export function validateEnvEntry(key: string, value: string): void {
   if (!ENV_KEY_RE.test(key)) {
     throw new Error(
@@ -756,10 +780,10 @@ export function getModelContextLengthOverride(
  * does. Returns false for providers the runtime does NOT route through the
  * custom path, so their specific-key checks still apply.
  *
- * (The runtime also consults a per-model `CUSTOM_PROVIDER_<name>_KEY` ahead of
- * the generic keys; that lookup needs models.json and is intentionally omitted
- * here to keep config.ts free of a models.ts import — the generic chain covers
- * the reported cases.)
+ * The runtime also consults a per-model `CUSTOM_PROVIDER_<name>_KEY` ahead of
+ * the generic keys, so this looks up every model matching `baseUrl` (via a
+ * call-time `require("./models")` to avoid a static import cycle) and adds
+ * all of their per-provider keys as candidates.
  */
 export function customEndpointKeyResolvable(
   provider: string,
@@ -781,11 +805,15 @@ export function customEndpointKeyResolvable(
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports -- call-time require; models.ts has no dep on config.ts so no cycle.
     const modelsMod = require("./models") as typeof import("./models");
-    const matching = modelsMod.readModels().find((m) => m.baseUrl === baseUrl);
-    if (matching) {
+    // Use filter(), not find(): multiple differently-named providers can
+    // share the same unknown base URL, each with its own per-provider key.
+    // Only checking the first match left the others falsely reported as
+    // "key missing".
+    const matches = modelsMod.readModels().filter((m) => m.baseUrl === baseUrl);
+    for (const m of matches) {
       candidates.add(
         "CUSTOM_PROVIDER_" +
-          matching.name.replace(/[^A-Za-z0-9]/g, "_").toUpperCase() +
+          m.name.replace(/[^A-Za-z0-9]/g, "_").toUpperCase() +
           "_KEY",
       );
     }

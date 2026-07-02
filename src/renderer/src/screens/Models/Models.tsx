@@ -32,6 +32,11 @@ import {
   expectedEnvKeyForUrl,
   CUSTOM_API_KEY_ENV,
 } from "../../../../shared/url-key-map";
+import type {
+  ModelRegistry,
+  RegistryModelProvider,
+  RegistryModel,
+} from "../../../../shared/registry";
 
 // For unknown URLs, generate a per-provider env key to avoid all custom
 // providers colliding on the shared CUSTOM_API_KEY bucket.
@@ -44,11 +49,6 @@ function customProviderEnvKey(name: string, baseUrl: string): string {
     "_KEY"
   );
 }
-import type {
-  ModelRegistry,
-  RegistryModelProvider,
-  RegistryModel,
-} from "../../../../shared/registry";
 
 interface SavedModel {
   id: string;
@@ -404,12 +404,34 @@ function Models({ visible }: ModelsProps = {}): React.JSX.Element {
       await window.hermesAPI.setEnv(envKey, formApiKey.trim());
     }
 
+    // Renaming a custom provider (or changing its base URL) changes its
+    // derived CUSTOM_PROVIDER_<NAME>_KEY — clean up the old key so it
+    // doesn't linger orphaned in .env.
+    if (editingModel && editingModel.provider === "custom") {
+      const oldEnvKey = customProviderEnvKey(
+        editingModel.name,
+        editingModel.baseUrl,
+      );
+      const newEnvKey = customProviderEnvKey(name, formBaseUrl.trim());
+      if (oldEnvKey !== newEnvKey) {
+        await window.hermesAPI.deleteEnv(oldEnvKey);
+      }
+    }
+
     closeModal();
     await loadModels();
   }
 
   async function handleDelete(id: string): Promise<void> {
+    const model = models.find((m) => m.id === id);
     await window.hermesAPI.removeModel(id);
+    // Clean up the per-provider env key so deleting a custom provider
+    // doesn't leave CUSTOM_PROVIDER_<NAME>_KEY orphaned in .env.
+    if (model && model.provider === "custom") {
+      await window.hermesAPI.deleteEnv(
+        customProviderEnvKey(model.name, model.baseUrl),
+      );
+    }
     setConfirmDelete(null);
     await loadModels();
   }
