@@ -235,6 +235,23 @@ describe("App startup timeout", () => {
     expect(screen.queryByText("Startup check is taking too long")).toBeNull();
   });
 
+  it("routes a setup-ready local install straight to the workspace", async () => {
+    installApi({
+      checkInstall: vi.fn().mockResolvedValue({
+        installed: true,
+        configured: true,
+        hasApiKey: true,
+      }),
+    });
+
+    render(<App />);
+
+    await flushStartup();
+
+    expect(screen.getByTestId("sps-agent")).toBeInTheDocument();
+    expect(screen.queryByTestId("setup")).toBeNull();
+  });
+
   it("keeps SSH startup on the loading screen during the short IPC budget", async () => {
     installApi({
       getConnectionConfig: vi.fn().mockResolvedValue({

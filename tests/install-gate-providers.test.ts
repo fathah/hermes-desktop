@@ -113,7 +113,10 @@ describe("checkInstallStatus — configured provider key gate", () => {
   }
 
   function seedInstalledHome(): string {
-    const home = join(tmpdir(), `hermes-install-gate-${Date.now()}`);
+    const home = join(
+      tmpdir(),
+      `hermes-install-gate-${Date.now()}-${homes.length}`,
+    );
     homes.push(home);
     const repo = join(home, "hermes-agent");
     const bin = join(repo, "venv", "bin");
@@ -143,6 +146,83 @@ describe("checkInstallStatus — configured provider key gate", () => {
     const home = seedInstalledHome();
     writeOpenRouterConfig(home);
     writeFileSync(join(home, ".env"), "OPENROUTER_API_KEY=\n", "utf-8");
+
+    const { checkInstallStatus } = await freshInstaller(home);
+
+    expect(checkInstallStatus()).toMatchObject({
+      installed: true,
+      configured: true,
+      hasApiKey: false,
+    });
+  });
+
+  it("treats a configured OmniRoute-style local provider as setup-ready without a GUI key", async () => {
+    const home = seedInstalledHome();
+    writeFileSync(
+      join(home, "config.yaml"),
+      [
+        "model:",
+        "  provider: omniroute",
+        "  default: qwen/qwen3-coder",
+        "providers:",
+        "  omniroute:",
+        "    api: http://localhost:3333/v1",
+        "    default_model: qwen/qwen3-coder",
+        "",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const { checkInstallStatus } = await freshInstaller(home);
+
+    expect(checkInstallStatus()).toMatchObject({
+      installed: true,
+      configured: true,
+      hasApiKey: true,
+    });
+  });
+
+  it("treats a named remote provider as setup-ready when key_env points at a populated env value", async () => {
+    const home = seedInstalledHome();
+    writeFileSync(
+      join(home, "config.yaml"),
+      [
+        "model:",
+        "  provider: omniroute",
+        "  default: openai/gpt-4o",
+        "providers:",
+        "  omniroute:",
+        "    api: https://omniroute.example/v1",
+        "    default_model: openai/gpt-4o",
+        "    key_env: OMNIROUTE_TOKEN",
+        "",
+      ].join("\n"),
+      "utf-8",
+    );
+    writeFileSync(join(home, ".env"), "OMNIROUTE_TOKEN=sk-omni-test\n", "utf-8");
+
+    const { checkInstallStatus } = await freshInstaller(home);
+
+    expect(checkInstallStatus()).toMatchObject({
+      installed: true,
+      configured: true,
+      hasApiKey: true,
+    });
+  });
+
+  it("keeps a known commercial custom endpoint gated when no usable key is configured", async () => {
+    const home = seedInstalledHome();
+    writeFileSync(
+      join(home, "config.yaml"),
+      [
+        "model:",
+        "  provider: custom",
+        "  default: gpt-4o",
+        "  base_url: https://api.openai.com/v1",
+        "",
+      ].join("\n"),
+      "utf-8",
+    );
 
     const { checkInstallStatus } = await freshInstaller(home);
 

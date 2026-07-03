@@ -11,6 +11,7 @@ import { homedir, tmpdir } from "os";
 import { randomBytes } from "crypto";
 import type { BrowserWindow } from "electron";
 import {
+  customEndpointKeyResolvable,
   getConnectionConfig,
   getConfigValue,
   getModelConfig,
@@ -21,6 +22,7 @@ import { getActiveProfileNameSync, stripAnsi } from "./utils";
 import { setupAskpass } from "./askpass";
 import { precacheSudoCredentials } from "./sudoCreds";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
+import { isLocalBaseUrl } from "../shared/url-key-map";
 
 // Re-exports of paths and env
 export {
@@ -181,6 +183,37 @@ function envHasUsableValue(
   return false;
 }
 
+type InstallGateModelConfig = {
+  provider: string;
+  model: string;
+  baseUrl: string;
+};
+
+function hasExplicitModelConfig(mc: InstallGateModelConfig): boolean {
+  const provider = mc.provider.trim().toLowerCase();
+  const model = mc.model.trim();
+  return Boolean(provider && provider !== "auto" && model);
+}
+
+function modelConfigIsSetupReady(
+  mc: InstallGateModelConfig,
+  profile: string,
+): boolean {
+  const rawProvider = mc.provider.trim();
+  const provider = rawProvider.toLowerCase();
+  const baseUrl = mc.baseUrl.trim();
+  if (!hasExplicitModelConfig(mc)) return false;
+
+  if (hasOAuthCredentials(rawProvider, profile)) return true;
+  if (isLocalBaseUrl(baseUrl)) return true;
+  if (provider !== "custom" && providerDoesNotNeedApiKey(provider)) {
+    return true;
+  }
+  if (customEndpointKeyResolvable(rawProvider, baseUrl, profile)) return true;
+
+  return expectedEnvKeyForModel(rawProvider, baseUrl) === null;
+}
+
 export type InstallTargetState = "fresh" | "update" | "replace";
 
 export interface InstallTargetInfo {
@@ -231,17 +264,15 @@ export function checkInstallStatus(): InstallStatus {
   const installed = existsSync(HERMES_PYTHON) && existsSync(HERMES_SCRIPT);
   const envFile = activeEnvFile(activeProfile);
   const authFile = activeAuthFile(activeProfile);
-  const configured = existsSync(envFile) || existsSync(authFile);
+  let configured = existsSync(envFile) || existsSync(authFile);
   let hasApiKey = false;
   const verified = installed;
 
   let mc: { provider: string; model: string; baseUrl: string } | null = null;
   try {
     mc = getModelConfig(activeProfile);
-    if (
-      providerDoesNotNeedApiKey(mc.provider) ||
-      hasOAuthCredentials(mc.provider, activeProfile)
-    ) {
+    if (hasExplicitModelConfig(mc)) configured = true;
+    if (modelConfigIsSetupReady(mc, activeProfile)) {
       hasApiKey = true;
     }
   } catch {
