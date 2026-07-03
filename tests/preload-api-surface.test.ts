@@ -113,6 +113,18 @@ describe("New APIs from v0.8/v0.9 features", () => {
     expect(preloadTypes).toContain("DesktopUpdateRoutineResult");
   });
 
+  it("has engine capability snapshot APIs", () => {
+    for (const method of [
+      "getEngineCapabilities",
+      "refreshEngineCapabilities",
+    ]) {
+      expect(preloadMethods).toContain(method);
+      expect(typeMethods).toContain(method);
+    }
+    expect(preloadTypes).toContain("EngineCapabilityState");
+    expect(preloadTypes).toContain("EngineCapabilitySnapshot");
+  });
+
   it("has MCP server list API", () => {
     for (const method of [
       "listMcpServers",
@@ -276,6 +288,8 @@ describe("Legacy APIs preserved (backward compat)", () => {
     "getHermesAgentUpdateRoutine",
     "setHermesAgentUpdateRoutine",
     "runHermesAgentUpdateCheck",
+    "getEngineCapabilities",
+    "refreshEngineCapabilities",
     "getHermesUpstreamWatchState",
     "runHermesUpstreamWatch",
     // Config

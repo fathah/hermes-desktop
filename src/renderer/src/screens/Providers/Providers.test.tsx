@@ -64,6 +64,47 @@ describe("Providers", () => {
           "cron-automation": 1,
         },
       }),
+      getEngineCapabilities: vi.fn().mockResolvedValue({
+        installedSha: "abc123def456",
+        lastVerifiedSha: null,
+        snapshot: {
+          status: "ready",
+          fetchedAt: "2026-06-19T09:30:00.000Z",
+          mode: "local",
+          engineSha: "abc123def456",
+          features: {
+            chat_completions: true,
+            audio_api: false,
+            session_continuity_header: "X-Hermes-Session-Id",
+          },
+          endpoints: {
+            chat_completions: {
+              method: "POST",
+              path: "/v1/chat/completions",
+            },
+          },
+        },
+      }),
+      refreshEngineCapabilities: vi.fn().mockResolvedValue({
+        installedSha: "abc123def456",
+        lastVerifiedSha: null,
+        snapshot: {
+          status: "ready",
+          fetchedAt: "2026-06-19T09:31:00.000Z",
+          mode: "local",
+          engineSha: "abc123def456",
+          features: {
+            chat_completions: true,
+            audio_api: false,
+          },
+          endpoints: {
+            chat_completions: {
+              method: "POST",
+              path: "/v1/chat/completions",
+            },
+          },
+        },
+      }),
       setModelConfig: vi.fn().mockResolvedValue(true),
       addModel: vi.fn().mockResolvedValue({}),
       setEnv: vi.fn().mockResolvedValue(true),
@@ -149,6 +190,25 @@ describe("Providers", () => {
     expect(screen.getByText("Upstream Watch")).toBeInTheDocument();
     expect(screen.getByText("a0471e2")).toBeInTheDocument();
     expect(screen.getByText("Open report")).toBeInTheDocument();
+    expect(screen.getByText("Engine features")).toBeInTheDocument();
+    expect(screen.getByText("abc123d")).toBeInTheDocument();
+    expect(screen.getByText("1 enabled")).toBeInTheDocument();
+    expect(screen.getByText("1 endpoint")).toBeInTheDocument();
+  });
+
+  it("refreshes the engine capability snapshot for the active profile", async () => {
+    renderProviders();
+
+    const refreshButton = await screen.findByRole("button", {
+      name: /refresh engine features/i,
+    });
+    fireEvent.click(refreshButton);
+
+    await waitFor(() => {
+      expect(window.hermesAPI.refreshEngineCapabilities).toHaveBeenCalledWith(
+        "work",
+      );
+    });
   });
 
   it("removes an API-key provider through the existing blank setEnv seam", async () => {

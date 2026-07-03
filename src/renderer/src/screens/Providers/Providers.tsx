@@ -3,6 +3,7 @@ import { SETTINGS_SECTIONS, PROVIDERS, OAUTH_PROVIDERS } from "../../constants";
 import { useI18n } from "../../components/useI18n";
 import BrandLogo from "../../components/common/BrandLogo";
 import { useDiscoveredModels } from "../../hooks/useDiscoveredModels";
+import { useEngineCapabilities } from "../../hooks/useEngineCapabilities";
 import OAuthLoginModal from "../../components/OAuthLoginModal";
 import { KeyRound, Refresh } from "../../assets/icons";
 import type { CredentialPoolEntry } from "../../../../shared/credentials";
@@ -610,6 +611,22 @@ function Providers({
     refreshToken: discoveryRefresh,
   });
   const discoveryListId = "provider-model-discovery";
+  const engineCapabilities = useEngineCapabilities(profile, !!visible);
+  const engineSnapshot = engineCapabilities.state?.snapshot ?? null;
+  const enabledEngineFeatureCount = engineSnapshot
+    ? Object.values(engineSnapshot.features).filter((value) => value === true)
+        .length
+    : 0;
+  const engineEndpointCount = engineSnapshot
+    ? Object.keys(engineSnapshot.endpoints).length
+    : 0;
+  const engineCapabilityError =
+    engineCapabilities.error || engineSnapshot?.error || null;
+  const engineCapabilityStatus = engineCapabilities.loading
+    ? t("providers.engineCapabilities.loading")
+    : engineSnapshot?.status === "ready"
+      ? t("providers.engineCapabilities.status.ready")
+      : t("providers.engineCapabilities.status.unknown");
 
   return (
     <div className="settings-container">
@@ -1183,6 +1200,73 @@ function Providers({
                 .slice(0, 8)
                 .join("\n")}
             </pre>
+          )}
+        </div>
+      </div>
+
+      <div className="settings-section">
+        <div className="settings-section-title">
+          {t("providers.engineCapabilities.sectionTitle")}
+        </div>
+        <div className="settings-field-hint" style={{ marginBottom: 10 }}>
+          {t("providers.engineCapabilities.sectionHint")}
+        </div>
+        <div className="provider-update-panel">
+          <div className="provider-update-controls">
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm provider-update-run"
+              onClick={() => void engineCapabilities.refresh()}
+              disabled={
+                engineCapabilities.loading || engineCapabilities.refreshing
+              }
+            >
+              <Refresh size={14} />
+              {engineCapabilities.refreshing
+                ? t("providers.engineCapabilities.refreshing")
+                : t("providers.engineCapabilities.refresh")}
+            </button>
+          </div>
+          <div className="provider-update-grid">
+            <div>
+              <span>{t("providers.engineCapabilities.statusLabel")}</span>
+              <strong>{engineCapabilityStatus}</strong>
+            </div>
+            <div>
+              <span>{t("providers.engineCapabilities.installedSha")}</span>
+              <strong>
+                {shortCommit(engineCapabilities.state?.installedSha)}
+              </strong>
+            </div>
+            <div>
+              <span>{t("providers.engineCapabilities.features")}</span>
+              <strong>
+                {t("providers.engineCapabilities.enabledFeatures", {
+                  count: enabledEngineFeatureCount,
+                })}
+              </strong>
+            </div>
+            <div>
+              <span>{t("providers.engineCapabilities.endpoints")}</span>
+              <strong>
+                {engineEndpointCount === 1
+                  ? t("providers.engineCapabilities.endpointCountOne", {
+                      count: engineEndpointCount,
+                    })
+                  : t("providers.engineCapabilities.endpointCountOther", {
+                      count: engineEndpointCount,
+                    })}
+              </strong>
+            </div>
+            <div>
+              <span>{t("providers.engineCapabilities.fetchedAt")}</span>
+              <strong>{formatUpdateTime(engineSnapshot?.fetchedAt)}</strong>
+            </div>
+          </div>
+          {engineCapabilityError && (
+            <div className="provider-update-message">
+              {engineCapabilityError}
+            </div>
           )}
         </div>
       </div>

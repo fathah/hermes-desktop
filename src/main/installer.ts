@@ -506,6 +506,36 @@ export async function checkHermesUpdate(): Promise<HermesUpdateStatus> {
   );
 }
 
+export async function getInstalledEngineSha(): Promise<string | null> {
+  if (!existsSync(join(HERMES_REPO, ".git"))) {
+    return null;
+  }
+
+  const gitEnv = {
+    ...process.env,
+    PATH: getEnhancedPath(),
+    HOME: homedir(),
+    HERMES_HOME,
+  };
+
+  return new Promise((resolve) => {
+    execFile(
+      "git",
+      ["rev-parse", "HEAD"],
+      {
+        cwd: HERMES_REPO,
+        env: gitEnv,
+        timeout: 5000,
+        ...HIDDEN_SUBPROCESS_OPTIONS,
+      },
+      (error, stdout) => {
+        const out = stripAnsi((stdout || "").toString()).trim();
+        resolve(!error && out ? out : null);
+      },
+    );
+  });
+}
+
 export function buildUnixInstallArgs(scriptPath: string): string[] {
   return [scriptPath, "--skip-setup"];
 }

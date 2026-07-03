@@ -37,6 +37,7 @@ import {
   setSshRemoteApiKey,
   setGatewayHealthBroadcaster,
   setStreamOpenProvider,
+  setGatewayReadyNotifier,
 } from "./hermes";
 import { activeChatAborts } from "./ipc/chat";
 import { stopSshTunnel, startSshTunnel } from "./ssh-tunnel";
@@ -93,6 +94,7 @@ import {
 import { startControlServer, stopControlServer } from "./control-server";
 import { setMainWindowGetter } from "./self-healing";
 import { log } from "./log";
+import { refreshEngineCapabilities } from "./engine-capabilities";
 import { redactExternalText } from "./external-context/redact";
 import {
   isRendererMediaRequestAllowed,
@@ -874,6 +876,14 @@ app.whenReady().then(() => {
     mainWindow?.webContents.send("gateway-health-changed", { status }),
   );
   setStreamOpenProvider(() => activeChatAborts.size > 0);
+  setGatewayReadyNotifier((profile) => {
+    void refreshEngineCapabilities(profile).catch((err) => {
+      log.warn("engine-capabilities", {
+        msg: "gateway-ready refresh failed",
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+  });
   setupUpdater();
 
   // Start background routines scheduler and control server

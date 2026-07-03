@@ -95,6 +95,8 @@ import {
 } from "../hermes-auth";
 import { isAllowedExternalUrl } from "../security";
 import { isAllowedObsidianExternalUrl } from "../obsidian";
+import { refreshEngineCapabilities } from "../engine-capabilities";
+import { log } from "../log";
 import { registerDualHandler } from "./utility";
 import {
   getSchedulerConfig,
@@ -123,6 +125,15 @@ function openExternalUrl(rawUrl: unknown): void {
 
   shell.openExternal(rawUrl as string).catch((err) => {
     console.error("[SECURITY] Failed to open external URL:", err);
+  });
+}
+
+function refreshEngineCapabilitiesForActiveProfile(): void {
+  void refreshEngineCapabilities().catch((err) => {
+    log.warn("engine-capabilities", {
+      msg: "connection-change refresh failed",
+      error: err instanceof Error ? err.message : String(err),
+    });
   });
 }
 
@@ -336,6 +347,7 @@ export function registerConfigIpc(): void {
           apiKey,
         ),
       });
+      refreshEngineCapabilitiesForActiveProfile();
       return true;
     },
   );
@@ -360,6 +372,7 @@ export function registerConfigIpc(): void {
         mode: "ssh",
         ssh: { host, port, username, keyPath, remotePort, localPort },
       });
+      refreshEngineCapabilitiesForActiveProfile();
       return true;
     },
   );

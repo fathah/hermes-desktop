@@ -1,5 +1,8 @@
 import type * as Api from "../api-types";
 
+export type EngineCapabilitySnapshot = Api.EngineCapabilitySnapshot;
+export type EngineCapabilityState = Api.EngineCapabilityState;
+
 export interface EngineBridgeApi {
   checkInstall: () => Promise<Api.InstallStatus>;
 
@@ -62,6 +65,14 @@ export interface EngineBridgeApi {
   runHermesUpstreamWatch: (
     profile?: string,
   ) => Promise<Api.HermesUpstreamWatchState>;
+
+  getEngineCapabilities: (
+    profile?: string,
+  ) => Promise<Api.EngineCapabilityState>;
+
+  refreshEngineCapabilities: (
+    profile?: string,
+  ) => Promise<Api.EngineCapabilityState>;
 
   getVoiceStatus: (profile?: string) => Promise<{ hasKey: boolean }>;
 

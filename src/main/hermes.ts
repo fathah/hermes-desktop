@@ -53,6 +53,7 @@ export {
   setApiServerAvailable,
   setGatewayHealthBroadcaster,
   setStreamOpenProvider,
+  setGatewayReadyNotifier,
   getGatewayHealthStatus,
 } from "./hermes/gateway-process";
 

@@ -18,6 +18,11 @@ import {
   normalizeCouncilConfig,
   type CouncilConfig,
 } from "../../shared/council";
+import {
+  unknownEngineCapabilitySnapshot,
+  type EngineCapabilitySnapshot,
+  type EngineCapabilityState,
+} from "../../shared/engine-capabilities";
 
 // `desktop.json` — app-level, desktop-owned config (connection mode, encrypted
 // remote/api-server keys, and the desktop-enforced UX toggles below).
@@ -225,6 +230,91 @@ interface StoredHermesAgentUpdateRoutine extends Partial<HermesAgentUpdateRoutin
 
 function profileConfigKey(profile?: string): string {
   return profile || getActiveProfileNameSync();
+}
+
+// ── Engine capability snapshot ──────────────────────────────────────────────
+
+const ENGINE_CAPABILITIES_KEY = "engineCapabilitiesByProfile";
+
+interface StoredEngineCapabilityState
+  extends Partial<Omit<EngineCapabilityState, "snapshot">> {
+  snapshot?: EngineCapabilitySnapshot;
+}
+
+function engineCapabilitiesMap(
+  data: Record<string, unknown>,
+): Record<string, StoredEngineCapabilityState> {
+  const raw = data[ENGINE_CAPABILITIES_KEY];
+  return raw && typeof raw === "object"
+    ? (raw as Record<string, StoredEngineCapabilityState>)
+    : {};
+}
+
+function defaultEngineCapabilityState(): EngineCapabilityState {
+  return {
+    installedSha: null,
+    lastVerifiedSha: null,
+    snapshot: unknownEngineCapabilitySnapshot(),
+  };
+}
+
+function normalizeStoredEngineCapabilityState(
+  stored: StoredEngineCapabilityState | undefined,
+): EngineCapabilityState {
+  const fallback = defaultEngineCapabilityState();
+  if (!stored || typeof stored !== "object") return fallback;
+
+  const snapshot =
+    stored.snapshot && typeof stored.snapshot === "object"
+      ? {
+          ...fallback.snapshot,
+          ...stored.snapshot,
+          features:
+            stored.snapshot.features && typeof stored.snapshot.features === "object"
+              ? stored.snapshot.features
+              : {},
+          endpoints:
+            stored.snapshot.endpoints &&
+            typeof stored.snapshot.endpoints === "object"
+              ? stored.snapshot.endpoints
+              : {},
+        }
+      : fallback.snapshot;
+
+  return {
+    installedSha:
+      typeof stored.installedSha === "string" ? stored.installedSha : null,
+    lastVerifiedSha:
+      typeof stored.lastVerifiedSha === "string" ? stored.lastVerifiedSha : null,
+    snapshot,
+  };
+}
+
+export function getEngineCapabilityState(
+  profile?: string,
+): EngineCapabilityState {
+  const data = readDesktopConfig();
+  return normalizeStoredEngineCapabilityState(
+    engineCapabilitiesMap(data)[profileConfigKey(profile)],
+  );
+}
+
+export function recordEngineCapabilitySnapshot(
+  snapshot: EngineCapabilitySnapshot,
+  profile?: string,
+): EngineCapabilityState {
+  const data = readDesktopConfig();
+  const key = profileConfigKey(profile);
+  const map = engineCapabilitiesMap(data);
+  const previous = normalizeStoredEngineCapabilityState(map[key]);
+  map[key] = {
+    installedSha: snapshot.engineSha,
+    lastVerifiedSha: previous.lastVerifiedSha,
+    snapshot,
+  };
+  data[ENGINE_CAPABILITIES_KEY] = map;
+  writeDesktopConfig(data);
+  return getEngineCapabilityState(profile);
 }
 
 function hermesAgentUpdateMap(

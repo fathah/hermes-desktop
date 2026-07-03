@@ -97,15 +97,13 @@ function authProbeHeaders(
   return auth ? { Authorization: auth } : {};
 }
 
-async function fetchJsonProbe(
+export async function fetchJsonProbe(
   url: string,
   headers: Record<string, string>,
+  timeoutMs = CHAT_TRANSPORT_PROBE_TIMEOUT_MS,
 ): Promise<{ ok: boolean; status: number; data: unknown } | null> {
   const controller = new AbortController();
-  const timeout = setTimeout(
-    () => controller.abort(),
-    CHAT_TRANSPORT_PROBE_TIMEOUT_MS,
-  );
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await gatewayFetch(url, {
       method: "GET",

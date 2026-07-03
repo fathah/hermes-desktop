@@ -357,6 +357,7 @@ export function startGatewayDetailed(profile?: string): GatewayStartResult {
     isApiServerReady(profile)
       .then((ready) => {
         apiServerAvailable = ready;
+        if (ready) notifyGatewayReady(profile);
       })
       .catch((err) => {
         console.warn("[hermes] post-spawn readiness probe failed:", err);
@@ -590,6 +591,7 @@ async function restartGatewayLocallyOnce(
         healthPollMs,
       );
       setApiCacheFor(profile, alreadyReady);
+      if (alreadyReady) notifyGatewayReady(profile);
       return alreadyReady;
     }
 
@@ -599,6 +601,7 @@ async function restartGatewayLocallyOnce(
       healthPollMs,
     );
     setApiCacheFor(profile, ready);
+    if (ready) notifyGatewayReady(profile);
     if (!ready) markGatewayRestartFailed(profile);
     return ready;
   } catch (err) {
@@ -661,6 +664,7 @@ export async function startGatewayWithRecovery(
     const healthy = await isApiServerReady(profile);
     if (healthy) {
       setApiCacheFor(profile, true);
+      notifyGatewayReady(profile);
       return true;
     }
     return restartGateway(
@@ -681,6 +685,7 @@ export async function startGatewayWithRecovery(
   );
   if (ready) {
     setApiCacheFor(profile, true);
+    notifyGatewayReady(profile);
     return true;
   }
 
@@ -720,6 +725,7 @@ const SUPERVISOR_INTERVAL_MS = 30000;
 let _supervisorState: SupervisorState = initialSupervisorState();
 let _healthBroadcaster: ((status: GatewayHealthStatus) => void) | null = null;
 let _streamOpenProvider: () => boolean = () => false;
+let _gatewayReadyNotifier: ((profile?: string) => void) | null = null;
 
 // index.ts injects the renderer broadcaster (kept out of this module so it has no
 // Electron dependency and stays vitest-importable).
@@ -732,6 +738,12 @@ export function setGatewayHealthBroadcaster(
 // index.ts injects "is an interactive chat stream in-flight?" (activeChatAborts.size).
 export function setStreamOpenProvider(fn: () => boolean): void {
   _streamOpenProvider = fn;
+}
+
+export function setGatewayReadyNotifier(
+  fn: (profile?: string) => void,
+): void {
+  _gatewayReadyNotifier = fn;
 }
 
 export function getGatewayHealthStatus(): GatewayHealthStatus {
@@ -751,6 +763,14 @@ function broadcastGatewayHealth(status: GatewayHealthStatus): void {
     _healthBroadcaster?.(status);
   } catch (err) {
     console.warn("[gateway] health broadcast failed:", err);
+  }
+}
+
+function notifyGatewayReady(profile?: string): void {
+  try {
+    _gatewayReadyNotifier?.(profile);
+  } catch (err) {
+    console.warn("[gateway] ready notifier failed:", err);
   }
 }
 
@@ -796,6 +816,7 @@ async function runSupervisorTick(): Promise<void> {
       restartAttempts: decision.state.restartAttempts,
     });
     broadcastGatewayHealth(decision.state.status);
+    if (decision.state.status === "healthy") notifyGatewayReady();
   }
   if (decision.action.type === "restart") {
     log.warn("gateway-supervisor", {

@@ -46,6 +46,12 @@ export type {
 } from "../shared/openalex/core";
 export type { InstallStatus, InstallProgress } from "../shared/install";
 export type {
+  EngineCapabilityEndpoint,
+  EngineCapabilityFeatureValue,
+  EngineCapabilitySnapshot,
+  EngineCapabilityState,
+} from "../shared/engine-capabilities";
+export type {
   KanbanTask,
   KanbanBoard,
   KanbanTaskDetail,

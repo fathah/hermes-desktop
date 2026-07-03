@@ -34,6 +34,10 @@ import {
   runHermesUpstreamWatch,
 } from "../hermes-upstream-watch";
 import {
+  getEngineCapabilities,
+  refreshEngineCapabilities,
+} from "../engine-capabilities";
+import {
   sshGetHermesVersion,
   sshRunDoctor,
   sshRunUpdate,
@@ -209,6 +213,12 @@ export function registerSystemIpc(
   );
   safeHandle("run-hermes-upstream-watch", (_event, profile?: string) =>
     runHermesUpstreamWatch(profile),
+  );
+  safeHandle("get-engine-capabilities", (_event, profile?: string) =>
+    getEngineCapabilities(profile),
+  );
+  safeHandle("refresh-engine-capabilities", (_event, profile?: string) =>
+    refreshEngineCapabilities(profile),
   );
 
   // App version

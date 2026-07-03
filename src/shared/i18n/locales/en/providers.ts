@@ -77,4 +77,24 @@ export default {
     reportReady: "Upstream watch report is ready.",
     failed: "Upstream watch failed.",
   },
+  engineCapabilities: {
+    sectionTitle: "Engine features",
+    sectionHint:
+      "Snapshot of the installed Hermes Agent API surface. Unknown means this engine does not expose the capability endpoint yet.",
+    refresh: "Refresh engine features",
+    refreshing: "Refreshing...",
+    loading: "Loading...",
+    statusLabel: "Status",
+    installedSha: "Installed SHA",
+    features: "Features",
+    endpoints: "Endpoints",
+    fetchedAt: "Fetched",
+    enabledFeatures: "{{count}} enabled",
+    endpointCountOne: "{{count}} endpoint",
+    endpointCountOther: "{{count}} endpoints",
+    status: {
+      ready: "Ready",
+      unknown: "Unknown",
+    },
+  },
 } as const;

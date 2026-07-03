@@ -173,6 +173,10 @@ export const engineBridge = {
     >;
     lastError?: string;
   }> => ipcRenderer.invoke("run-hermes-upstream-watch", profile),
+  getEngineCapabilities: (profile?: string) =>
+    ipcRenderer.invoke("get-engine-capabilities", profile),
+  refreshEngineCapabilities: (profile?: string) =>
+    ipcRenderer.invoke("refresh-engine-capabilities", profile),
 
   // Voice I/O (WS4)
   getVoiceStatus: (profile?: string): Promise<{ hasKey: boolean }> =>
