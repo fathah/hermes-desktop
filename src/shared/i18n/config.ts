@@ -16,11 +16,12 @@ export const APP_LOCALES: AppLocale[] = [
   "tr",
   "zh-CN",
   "zh-TW",
+  "fa",
 ];
 
 // Locales that render right-to-left. Used to set the document's `dir`
 // attribute so the whole UI mirrors for these languages.
-export const RTL_LOCALES: AppLocale[] = ["ar", "he"];
+export const RTL_LOCALES: AppLocale[] = ["ar", "he", "fa"];
 
 export type TextDirection = "ltr" | "rtl";
 
