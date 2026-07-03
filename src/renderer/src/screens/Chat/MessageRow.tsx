@@ -88,6 +88,12 @@ function isChatBubbleMessage(msg: ChatMessage): msg is ChatBubbleMessage {
   );
 }
 
+// Detect if a given text contains strong RTL characters (Hebrew/Arabic/Persian ranges).
+function looksRtl(text?: string): boolean {
+  if (!text) return false;
+  return /[\u0591-\u08FF\uFB1D-\uFDFD\uFE70-\uFEFC]/.test(text);
+}
+
 /**
  * One full loop of `loadingo.gif`, in ms (119 frames × 40ms). Used to let the
  * animation finish its current loop after generation stops instead of freezing
@@ -292,6 +298,9 @@ export const MessageRow = memo(function MessageRow({
   const isTimeValid = isValidEpochMs(epochMs);
   const bubbleTime = isTimeValid ? formatBubbleTime(epochMs) : null;
 
+  // Determine per-bubble direction to handle mixed LTR/RTL content gracefully.
+  const bubbleDir = looksRtl(bubbleContent ?? "") ? "rtl" : "ltr";
+
   return (
     <div
       className={`chat-message chat-message-${msg.role}${
@@ -309,6 +318,8 @@ export const MessageRow = memo(function MessageRow({
         className={`chat-bubble chat-bubble-${msg.role}${
           msg.error ? " chat-bubble-error" : ""
         }`}
+        dir={bubbleDir}
+        style={{ unicodeBidi: "isolate", textAlign: bubbleDir === "rtl" ? "right" : "left" }}
       >
         {msg.content && !isLoading && !msg.isSlashLoader && (
           <div className="chat-bubble-actions">

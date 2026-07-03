@@ -39,6 +39,10 @@ describe("shared i18n", () => {
     expect(getLocaleDirection("en")).toBe("ltr");
   });
 
+  it("reports fa (Persian) as a right-to-left locale", () => {
+    expect(getLocaleDirection("fa")).toBe("rtl");
+  });
+
   it("falls back to en when zh-CN key is missing", () => {
     expect(t("nonExistent.fallbackKey", "zh-CN")).toBe(
       "nonExistent.fallbackKey",
