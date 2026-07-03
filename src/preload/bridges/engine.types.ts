@@ -2,6 +2,8 @@ import type * as Api from "../api-types";
 
 export type EngineCapabilitySnapshot = Api.EngineCapabilitySnapshot;
 export type EngineCapabilityState = Api.EngineCapabilityState;
+export type EngineContractVerificationResult =
+  Api.EngineContractVerificationResult;
 
 export interface EngineBridgeApi {
   checkInstall: () => Promise<Api.InstallStatus>;
@@ -73,6 +75,10 @@ export interface EngineBridgeApi {
   refreshEngineCapabilities: (
     profile?: string,
   ) => Promise<Api.EngineCapabilityState>;
+
+  verifyEngineContract: (
+    profile?: string,
+  ) => Promise<Api.EngineContractVerificationResult>;
 
   getVoiceStatus: (profile?: string) => Promise<{ hasKey: boolean }>;
 

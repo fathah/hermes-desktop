@@ -190,6 +190,67 @@ describe("engine capability state", () => {
     );
   });
 
+  it("persists contract verification results and advances last verified SHA only on pass", async () => {
+    resetHome();
+    const {
+      getEngineCapabilityState,
+      recordEngineCapabilitySnapshot,
+      recordEngineContractVerification,
+    } = await freshConfig();
+
+    recordEngineCapabilitySnapshot(
+      {
+        status: "ready",
+        fetchedAt: "2026-07-03T00:00:00.000Z",
+        mode: "local",
+        engineSha: "work-sha",
+        features: {},
+        endpoints: {},
+      },
+      "work",
+    );
+
+    recordEngineContractVerification(
+      {
+        checkedAt: "2026-07-03T00:01:00.000Z",
+        status: "passed",
+        findings: [],
+      },
+      "work",
+    );
+
+    expect(getEngineCapabilityState("work").lastVerifiedSha).toBe("work-sha");
+    expect(getEngineCapabilityState("work").lastVerification?.status).toBe(
+      "passed",
+    );
+
+    recordEngineCapabilitySnapshot(
+      {
+        status: "ready",
+        fetchedAt: "2026-07-03T00:02:00.000Z",
+        mode: "local",
+        engineSha: "next-sha",
+        features: {},
+        endpoints: {},
+      },
+      "work",
+    );
+    recordEngineContractVerification(
+      {
+        checkedAt: "2026-07-03T00:03:00.000Z",
+        status: "broken",
+        findings: [],
+      },
+      "work",
+    );
+
+    expect(getEngineCapabilityState("work").installedSha).toBe("next-sha");
+    expect(getEngineCapabilityState("work").lastVerifiedSha).toBe("work-sha");
+    expect(getEngineCapabilityState("work").lastVerification?.status).toBe(
+      "broken",
+    );
+  });
+
   it("records an unknown snapshot instead of throwing when capabilities are unavailable", async () => {
     resetHome();
     gatewayFetchMock.mockResolvedValue({

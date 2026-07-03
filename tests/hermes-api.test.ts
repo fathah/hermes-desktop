@@ -100,6 +100,10 @@ vi.mock("../src/main/ssh-tunnel", () => ({
 
 vi.mock("../src/main/utils", () => ({
   stripAnsi: (s: string) => s,
+  getActiveProfileNameSync: () => "default",
+  normalizeProfileName: (profile?: string) =>
+    !profile || profile === "default" ? undefined : profile,
+  profileHome: () => TEST_HOME,
 }));
 
 vi.mock("../src/main/security/shell-hooks", () => ({

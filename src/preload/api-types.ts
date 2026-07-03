@@ -52,6 +52,10 @@ export type {
   EngineCapabilityState,
 } from "../shared/engine-capabilities";
 export type {
+  EngineContractFinding,
+  EngineContractVerificationResult,
+} from "../shared/engine-contract";
+export type {
   KanbanTask,
   KanbanBoard,
   KanbanTaskDetail,
@@ -253,6 +257,7 @@ export type DesktopUpdateRoutineState = {
 };
 
 export type HermesUpstreamWatchCategory =
+  | "contract-risk"
   | "runtime-required"
   | "api-contract"
   | "desktop-parity"
@@ -268,6 +273,9 @@ export type HermesUpstreamWatchState = {
   lastSeenRelease: string | null;
   latestReportPath: string | null;
   classifiedCounts: Partial<Record<HermesUpstreamWatchCategory, number>>;
+  anchorSha?: string | null;
+  pendingCommitCount?: number;
+  contractRiskCount?: number;
   lastError?: string;
 };
 

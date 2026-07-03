@@ -1,3 +1,5 @@
+import type { EngineContractVerificationResult } from "./engine-contract";
+
 export type EngineConnectionMode = "local" | "remote" | "ssh";
 
 export type EngineCapabilityFeatureValue = boolean | string | number;
@@ -20,6 +22,7 @@ export interface EngineCapabilitySnapshot {
 export interface EngineCapabilityState {
   installedSha: string | null;
   lastVerifiedSha: string | null;
+  lastVerification: EngineContractVerificationResult | null;
   snapshot: EngineCapabilitySnapshot;
 }
 

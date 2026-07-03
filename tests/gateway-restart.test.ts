@@ -236,7 +236,7 @@ describe("gateway restart recovery", () => {
   it("recovers a stopped local gateway and proves health before returning", async () => {
     healthStatuses.push(503, 200);
 
-    await expect(startGatewayWithRecovery("work", 20, 1, 50)).resolves.toBe(
+    await expect(startGatewayWithRecovery("work", 100, 1, 50)).resolves.toBe(
       true,
     );
 

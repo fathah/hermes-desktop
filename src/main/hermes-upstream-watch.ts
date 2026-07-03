@@ -2,8 +2,11 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { profileHome } from "./utils";
 import { publicFetch } from "./security/network-policy";
+import { getInstalledEngineSha } from "./installer";
+import { ENGINE_CONTRACT } from "../shared/engine-contract";
 
 export type HermesUpstreamWatchCategory =
+  | "contract-risk"
   | "runtime-required"
   | "api-contract"
   | "desktop-parity"
@@ -19,12 +22,16 @@ export interface HermesUpstreamWatchState {
   lastSeenRelease: string | null;
   latestReportPath: string | null;
   classifiedCounts: Partial<Record<HermesUpstreamWatchCategory, number>>;
+  anchorSha?: string | null;
+  pendingCommitCount?: number;
+  contractRiskCount?: number;
   lastError?: string;
 }
 
 export interface HermesUpstreamWatchOptions {
   now?: Date;
   fetchImpl?: FetchLike;
+  installedSha?: string | null;
 }
 
 interface FetchLikeResponse {
@@ -64,6 +71,12 @@ interface GitHubRelease {
   published_at?: string;
 }
 
+interface GitHubCompareResponse {
+  ahead_by?: number;
+  commits?: GitHubCommit[];
+  files?: Array<{ filename?: string }>;
+}
+
 const OWNER = "NousResearch";
 const REPO = "hermes-agent";
 const API_BASE = `https://api.github.com/repos/${OWNER}/${REPO}`;
@@ -83,6 +96,7 @@ export const HERMES_UPSTREAM_WATCH_PATHS = [
 ] as const;
 
 const CATEGORY_ORDER: HermesUpstreamWatchCategory[] = [
+  "contract-risk",
   "security",
   "runtime-required",
   "api-contract",
@@ -159,6 +173,10 @@ function commitPathEndpoint(pathName: string): string {
   return `/commits?${params.toString()}`;
 }
 
+function compareEndpoint(anchorSha: string): string {
+  return `/compare/${encodeURIComponent(anchorSha)}...main`;
+}
+
 export function getHermesUpstreamWatchState(
   profile?: string,
 ): HermesUpstreamWatchState {
@@ -196,11 +214,15 @@ export function isHermesUpstreamWatchDue(
 export function classifyUpstreamWatchItem(input: {
   path?: string;
   message?: string;
+  contractAware?: boolean;
 }): HermesUpstreamWatchCategory {
   const pathName = (input.path || "").toLowerCase();
   const message = (input.message || "").toLowerCase();
   const text = `${pathName} ${message}`;
 
+  if (input.contractAware && isContractRiskPath(input.path || "")) {
+    return "contract-risk";
+  }
   if (pathName.startsWith("apps/desktop")) return "desktop-parity";
   if (
     pathName.startsWith("cron") ||
@@ -251,6 +273,19 @@ export function classifyUpstreamWatchItem(input: {
   return "ignore";
 }
 
+function isContractRiskPath(pathName: string): boolean {
+  const normalized = pathName.replaceAll("\\", "/");
+  if (!normalized) return false;
+  return ENGINE_CONTRACT.some((entry) =>
+    entry.upstreamPaths.some((upstreamPath) => {
+      const upstream = upstreamPath.replaceAll("\\", "/");
+      return upstream.endsWith("/")
+        ? normalized.startsWith(upstream)
+        : normalized === upstream || normalized.startsWith(`${upstream}/`);
+    }),
+  );
+}
+
 function normalizeCommit(
   raw: GitHubCommit,
   pathName: string,
@@ -276,6 +311,30 @@ function countCategories(
   return counts;
 }
 
+function normalizeCompareItems(raw: GitHubCompareResponse): NormalizedCommit[] {
+  const commits = raw.commits || [];
+  const latestCommit = commits[commits.length - 1];
+  const message = latestCommit?.commit?.message || "";
+  const sha = latestCommit?.sha || "unknown";
+  const date = latestCommit?.commit?.author?.date || null;
+  const url = latestCommit?.html_url || null;
+  return (raw.files || [])
+    .map((file) => file.filename || "")
+    .filter(Boolean)
+    .map((pathName) => ({
+      sha,
+      message,
+      date,
+      url,
+      path: pathName,
+      category: classifyUpstreamWatchItem({
+        path: pathName,
+        message,
+        contractAware: true,
+      }),
+    }));
+}
+
 function shortSha(sha: string | null | undefined): string {
   return sha ? sha.slice(0, 7) : "unknown";
 }
@@ -287,6 +346,9 @@ function writeReport(params: {
   release: GitHubRelease;
   items: NormalizedCommit[];
   counts: Partial<Record<HermesUpstreamWatchCategory, number>>;
+  anchorSha?: string | null;
+  pendingCommitCount?: number;
+  contractRiskCount?: number;
 }): string {
   const dir = ensureWatchDir(params.profile);
   const reportPath = join(dir, `${isoDateKey(params.now)}.md`);
@@ -301,6 +363,13 @@ function writeReport(params: {
     "",
     "## Latest",
     "",
+    ...(params.anchorSha
+      ? [
+          `- Anchor: ${shortSha(params.anchorSha)}`,
+          `- Pending commits: ${params.pendingCommitCount ?? 0}`,
+          `- Contract-risk files: ${params.contractRiskCount ?? 0}`,
+        ]
+      : []),
     `- Main: ${shortSha(headSha)}${params.head.html_url ? ` (${params.head.html_url})` : ""}`,
     `- Release: ${releaseTag || "unknown"}${params.release.html_url ? ` (${params.release.html_url})` : ""}`,
     "",
@@ -338,22 +407,48 @@ export async function runHermesUpstreamWatch(
   const fetchImpl = options.fetchImpl || apiFetch();
 
   try {
-    const [head, release, pathCommits] = await Promise.all([
-      fetchJson<GitHubCommit>(fetchImpl, "/commits/main"),
-      fetchJson<GitHubRelease>(fetchImpl, "/releases/latest"),
-      Promise.all(
-        HERMES_UPSTREAM_WATCH_PATHS.map(async (pathName) => ({
-          pathName,
-          commits: await fetchJson<GitHubCommit[]>(
-            fetchImpl,
-            commitPathEndpoint(pathName),
-          ),
-        })),
-      ),
-    ]);
-    const items = pathCommits.flatMap(({ pathName, commits }) =>
-      commits.map((commit) => normalizeCommit(commit, pathName)),
-    );
+    const installedSha =
+      options.installedSha !== undefined
+        ? options.installedSha
+        : await getInstalledEngineSha();
+    const release = await fetchJson<GitHubRelease>(fetchImpl, "/releases/latest");
+    let head: GitHubCommit;
+    let items: NormalizedCommit[];
+    let anchorSha: string | null = null;
+    let pendingCommitCount = 0;
+    let contractRiskCount = 0;
+
+    if (installedSha) {
+      const compare = await fetchJson<GitHubCompareResponse>(
+        fetchImpl,
+        compareEndpoint(installedSha),
+      );
+      const commits = compare.commits || [];
+      head = commits[commits.length - 1] || { sha: installedSha };
+      items = normalizeCompareItems(compare);
+      anchorSha = installedSha;
+      pendingCommitCount = compare.ahead_by ?? commits.length;
+      contractRiskCount = items.filter(
+        (item) => item.category === "contract-risk",
+      ).length;
+    } else {
+      const [latestHead, pathCommits] = await Promise.all([
+        fetchJson<GitHubCommit>(fetchImpl, "/commits/main"),
+        Promise.all(
+          HERMES_UPSTREAM_WATCH_PATHS.map(async (pathName) => ({
+            pathName,
+            commits: await fetchJson<GitHubCommit[]>(
+              fetchImpl,
+              commitPathEndpoint(pathName),
+            ),
+          })),
+        ),
+      ]);
+      head = latestHead;
+      items = pathCommits.flatMap(({ pathName, commits }) =>
+        commits.map((commit) => normalizeCommit(commit, pathName)),
+      );
+    }
     const counts = countCategories(items);
     const latestReportPath = writeReport({
       profile,
@@ -362,6 +457,9 @@ export async function runHermesUpstreamWatch(
       release,
       items,
       counts,
+      anchorSha,
+      pendingCommitCount,
+      contractRiskCount,
     });
     return writeState(
       {
@@ -370,6 +468,9 @@ export async function runHermesUpstreamWatch(
         lastSeenRelease: release.tag_name || null,
         latestReportPath,
         classifiedCounts: counts,
+        anchorSha,
+        pendingCommitCount,
+        contractRiskCount,
       },
       profile,
     );

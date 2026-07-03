@@ -152,6 +152,72 @@ describe("Hermes upstream watch", () => {
     expect(report).toContain("No SPS source files were changed.");
   });
 
+  it("anchors the watch to the installed SHA and flags contract-risk files", async () => {
+    const requested: string[] = [];
+    const fetchImpl = vi.fn(async (url: string) => {
+      requested.push(url);
+      if (url.endsWith("/compare/abc123...main")) {
+        return jsonResponse({
+          ahead_by: 2,
+          commits: [
+            {
+              sha: "def456",
+              commit: {
+                message: "feat: add gateway capability field",
+                author: { date: "2026-07-03T08:00:00Z" },
+              },
+              html_url:
+                "https://github.com/NousResearch/hermes-agent/commit/def456",
+            },
+            {
+              sha: "fed789",
+              commit: {
+                message: "docs: update README",
+                author: { date: "2026-07-03T09:00:00Z" },
+              },
+              html_url:
+                "https://github.com/NousResearch/hermes-agent/commit/fed789",
+            },
+          ],
+          files: [
+            { filename: "gateway/platforms/api_server.py" },
+            { filename: "docs/README.md" },
+          ],
+        });
+      }
+      if (url.endsWith("/releases/latest")) {
+        return jsonResponse({
+          tag_name: "v2026.7.3",
+          name: "Hermes Agent v2026.7.3",
+          html_url:
+            "https://github.com/NousResearch/hermes-agent/releases/tag/v2026.7.3",
+          published_at: "2026-07-03T10:00:00Z",
+        });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    });
+    const { runHermesUpstreamWatch } = await loadWatch();
+
+    const state = await runHermesUpstreamWatch("work", {
+      now: new Date("2026-07-03T12:00:00.000Z"),
+      fetchImpl,
+      installedSha: "abc123",
+    });
+
+    expect(state.anchorSha).toBe("abc123");
+    expect(state.lastSeenCommit).toBe("fed789");
+    expect(state.pendingCommitCount).toBe(2);
+    expect(state.contractRiskCount).toBe(1);
+    expect(state.classifiedCounts["contract-risk"]).toBe(1);
+    expect(requested.some((url) => url.includes("/commits?"))).toBe(false);
+
+    const report = readFileSync(state.latestReportPath!, "utf-8");
+    expect(report).toContain("Anchor: abc123");
+    expect(report).toContain("Pending commits: 2");
+    expect(report).toContain("contract-risk");
+    expect(report).toContain("gateway/platforms/api_server.py");
+  });
+
   it("runs at most once per local day", async () => {
     const fetchImpl = vi.fn(async (url: string) => {
       if (url.endsWith("/commits/main")) {

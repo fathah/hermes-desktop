@@ -37,6 +37,7 @@ import {
   getEngineCapabilities,
   refreshEngineCapabilities,
 } from "../engine-capabilities";
+import { verifyAndRecordEngineContract } from "../engine-contract-verify";
 import {
   sshGetHermesVersion,
   sshRunDoctor,
@@ -219,6 +220,9 @@ export function registerSystemIpc(
   );
   safeHandle("refresh-engine-capabilities", (_event, profile?: string) =>
     refreshEngineCapabilities(profile),
+  );
+  safeHandle("verify-engine-contract", (_event, profile?: string) =>
+    verifyAndRecordEngineContract(profile),
   );
 
   // App version

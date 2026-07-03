@@ -19,8 +19,25 @@ function renderProviders(): void {
   );
 }
 
+let verifyEngineContract: ReturnType<typeof vi.fn>;
+
 describe("Providers", () => {
   beforeEach(() => {
+    verifyEngineContract = vi.fn().mockResolvedValue({
+      checkedAt: "2026-06-19T10:30:00.000Z",
+      status: "broken",
+      findings: [
+        {
+          entryId: "http-chat-completions",
+          kind: "http",
+          value: "/v1/chat/completions",
+          tier: "fail",
+          verdict: "broken",
+          detail: "Missing endpoint",
+        },
+      ],
+    });
+
     const hermesAPI = {
       getLocale: vi.fn().mockResolvedValue("en"),
       setLocale: vi.fn().mockResolvedValue("en"),
@@ -57,9 +74,13 @@ describe("Providers", () => {
         lastRunAt: "2026-06-19T09:00:00.000Z",
         lastSeenCommit: "a0471e2",
         lastSeenRelease: "v2026.6.19",
+        anchorSha: "abc123def456",
+        pendingCommitCount: 2,
+        contractRiskCount: 1,
         latestReportPath:
           "/tmp/hermes/profiles/work/upstream-watch/2026-06-19.md",
         classifiedCounts: {
+          "contract-risk": 1,
           "desktop-parity": 2,
           "cron-automation": 1,
         },
@@ -67,6 +88,11 @@ describe("Providers", () => {
       getEngineCapabilities: vi.fn().mockResolvedValue({
         installedSha: "abc123def456",
         lastVerifiedSha: null,
+        lastVerification: {
+          checkedAt: "2026-06-19T10:00:00.000Z",
+          status: "passed",
+          findings: [],
+        },
         snapshot: {
           status: "ready",
           fetchedAt: "2026-06-19T09:30:00.000Z",
@@ -88,6 +114,11 @@ describe("Providers", () => {
       refreshEngineCapabilities: vi.fn().mockResolvedValue({
         installedSha: "abc123def456",
         lastVerifiedSha: null,
+        lastVerification: {
+          checkedAt: "2026-06-19T10:00:00.000Z",
+          status: "passed",
+          findings: [],
+        },
         snapshot: {
           status: "ready",
           fetchedAt: "2026-06-19T09:31:00.000Z",
@@ -105,6 +136,7 @@ describe("Providers", () => {
           },
         },
       }),
+      verifyEngineContract,
       setModelConfig: vi.fn().mockResolvedValue(true),
       addModel: vi.fn().mockResolvedValue({}),
       setEnv: vi.fn().mockResolvedValue(true),
@@ -189,11 +221,45 @@ describe("Providers", () => {
     expect(screen.getByText("Notify-only")).toBeInTheDocument();
     expect(screen.getByText("Upstream Watch")).toBeInTheDocument();
     expect(screen.getByText("a0471e2")).toBeInTheDocument();
+    expect(screen.getByText("Anchor")).toBeInTheDocument();
+    expect(screen.getByText("Pending commits")).toBeInTheDocument();
+    expect(screen.getByText("Contract-risk files")).toBeInTheDocument();
+    expect(screen.getByText("Anchor").parentElement).toHaveTextContent(
+      "abc123d",
+    );
+    expect(screen.getByText("Pending commits").parentElement).toHaveTextContent(
+      "2",
+    );
+    expect(
+      screen.getByText("Contract-risk files").parentElement,
+    ).toHaveTextContent("1");
     expect(screen.getByText("Open report")).toBeInTheDocument();
     expect(screen.getByText("Engine features")).toBeInTheDocument();
-    expect(screen.getByText("abc123d")).toBeInTheDocument();
+    expect(screen.getByText("Verify engine contract")).toBeInTheDocument();
+    expect(screen.getByText("Contract status")).toBeInTheDocument();
+    expect(screen.getByText("Passed")).toBeInTheDocument();
+    expect(screen.getByText("No findings")).toBeInTheDocument();
+    expect(screen.getAllByText("abc123d").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText("1 enabled")).toBeInTheDocument();
     expect(screen.getByText("1 endpoint")).toBeInTheDocument();
+  });
+
+  it("runs engine contract verification for the active profile", async () => {
+    renderProviders();
+
+    const button = await screen.findByRole("button", {
+      name: /verify engine contract/i,
+    });
+    fireEvent.click(button);
+
+    await waitFor(() => {
+      expect(verifyEngineContract).toHaveBeenCalledWith("work");
+      expect(screen.getByText("Broken")).toBeInTheDocument();
+      expect(screen.getByText("1 finding")).toBeInTheDocument();
+      expect(
+        screen.getByText("Engine contract has breaking findings."),
+      ).toBeInTheDocument();
+    });
   });
 
   it("refreshes the engine capability snapshot for the active profile", async () => {
@@ -201,6 +267,9 @@ describe("Providers", () => {
 
     const refreshButton = await screen.findByRole("button", {
       name: /refresh engine features/i,
+    });
+    await waitFor(() => {
+      expect(refreshButton).not.toBeDisabled();
     });
     fireEvent.click(refreshButton);
 

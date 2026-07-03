@@ -117,12 +117,14 @@ describe("New APIs from v0.8/v0.9 features", () => {
     for (const method of [
       "getEngineCapabilities",
       "refreshEngineCapabilities",
+      "verifyEngineContract",
     ]) {
       expect(preloadMethods).toContain(method);
       expect(typeMethods).toContain(method);
     }
     expect(preloadTypes).toContain("EngineCapabilityState");
     expect(preloadTypes).toContain("EngineCapabilitySnapshot");
+    expect(preloadTypes).toContain("EngineContractVerificationResult");
   });
 
   it("has MCP server list API", () => {

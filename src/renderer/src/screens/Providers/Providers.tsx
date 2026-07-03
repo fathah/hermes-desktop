@@ -7,6 +7,10 @@ import { useEngineCapabilities } from "../../hooks/useEngineCapabilities";
 import OAuthLoginModal from "../../components/OAuthLoginModal";
 import { KeyRound, Refresh } from "../../assets/icons";
 import type { CredentialPoolEntry } from "../../../../shared/credentials";
+import type {
+  EngineContractVerificationResult,
+  EngineContractVerificationStatus,
+} from "../../../../shared/engine-contract";
 
 type OAuthProviderStatus = {
   provider: string;
@@ -44,6 +48,7 @@ type AgentUpdateRoutineState = {
 };
 
 type UpstreamWatchCategory =
+  | "contract-risk"
   | "runtime-required"
   | "api-contract"
   | "desktop-parity"
@@ -58,6 +63,9 @@ type UpstreamWatchState = {
   lastSeenCommit: string | null;
   lastSeenRelease: string | null;
   latestReportPath: string | null;
+  anchorSha?: string | null;
+  pendingCommitCount?: number;
+  contractRiskCount?: number;
   classifiedCounts: Partial<Record<UpstreamWatchCategory, number>>;
   lastError?: string;
 };
@@ -131,6 +139,12 @@ function Providers({
   const [upstreamWatchMessage, setUpstreamWatchMessage] = useState<
     string | null
   >(null);
+  const [engineContractBusy, setEngineContractBusy] = useState(false);
+  const [engineContractMessage, setEngineContractMessage] = useState<
+    string | null
+  >(null);
+  const [engineContractResult, setEngineContractResult] =
+    useState<EngineContractVerificationResult | null>(null);
 
   // Per-key debounce timers for env auto-save on change. Previously env
   // values were persisted only on input blur, so users who clicked the
@@ -541,6 +555,26 @@ function Providers({
     }
   }
 
+  async function handleVerifyEngineContract(): Promise<void> {
+    setEngineContractBusy(true);
+    setEngineContractMessage(null);
+    try {
+      const result = await window.hermesAPI.verifyEngineContract(profile);
+      setEngineContractResult(result);
+      setEngineContractMessage(
+        t(`providers.engineCapabilities.verifyResult.${result.status}`),
+      );
+    } catch (err) {
+      setEngineContractMessage(
+        err instanceof Error
+          ? err.message
+          : t("providers.engineCapabilities.verifyFailed"),
+      );
+    } finally {
+      setEngineContractBusy(false);
+    }
+  }
+
   function formatWatchCounts(
     counts: UpstreamWatchState["classifiedCounts"] | undefined,
   ): string {
@@ -596,6 +630,24 @@ function Providers({
     return "provider-status-success";
   }
 
+  function engineContractStatusClass(
+    status: EngineContractVerificationStatus | undefined,
+  ): string {
+    if (status === "broken") return "provider-status-error";
+    if (status === "unknown") return "provider-status-warning";
+    return "provider-status-success";
+  }
+
+  function formatEngineContractFindings(
+    result: EngineContractVerificationResult | null,
+  ): string {
+    const count = result?.findings.length ?? 0;
+    if (count === 0) return t("providers.engineCapabilities.noFindings");
+    return count === 1
+      ? t("providers.engineCapabilities.findingCountOne", { count })
+      : t("providers.engineCapabilities.findingCountOther", { count });
+  }
+
   const isCustomProvider = modelProvider === "custom";
 
   // Live model discovery: fetch the provider's /v1/models list and feed
@@ -613,6 +665,8 @@ function Providers({
   const discoveryListId = "provider-model-discovery";
   const engineCapabilities = useEngineCapabilities(profile, !!visible);
   const engineSnapshot = engineCapabilities.state?.snapshot ?? null;
+  const engineVerification =
+    engineContractResult ?? engineCapabilities.state?.lastVerification ?? null;
   const enabledEngineFeatureCount = engineSnapshot
     ? Object.values(engineSnapshot.features).filter((value) => value === true)
         .length
@@ -1226,6 +1280,17 @@ function Providers({
                 ? t("providers.engineCapabilities.refreshing")
                 : t("providers.engineCapabilities.refresh")}
             </button>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm provider-update-run"
+              onClick={() => void handleVerifyEngineContract()}
+              disabled={engineContractBusy}
+            >
+              <Refresh size={14} />
+              {engineContractBusy
+                ? t("providers.engineCapabilities.verifyingContract")
+                : t("providers.engineCapabilities.verifyContract")}
+            </button>
           </div>
           <div className="provider-update-grid">
             <div>
@@ -1262,7 +1327,36 @@ function Providers({
               <span>{t("providers.engineCapabilities.fetchedAt")}</span>
               <strong>{formatUpdateTime(engineSnapshot?.fetchedAt)}</strong>
             </div>
+            <div>
+              <span>{t("providers.engineCapabilities.contractStatus")}</span>
+              {engineVerification ? (
+                <strong
+                  className={`provider-update-status ${engineContractStatusClass(
+                    engineVerification.status,
+                  )}`}
+                >
+                  {t(
+                    `providers.engineCapabilities.contractStatusValue.${engineVerification.status}`,
+                  )}
+                </strong>
+              ) : (
+                <strong>{t("providers.engineCapabilities.noVerification")}</strong>
+              )}
+            </div>
+            <div>
+              <span>{t("providers.engineCapabilities.contractCheckedAt")}</span>
+              <strong>{formatUpdateTime(engineVerification?.checkedAt)}</strong>
+            </div>
+            <div>
+              <span>{t("providers.engineCapabilities.contractFindings")}</span>
+              <strong>{formatEngineContractFindings(engineVerification)}</strong>
+            </div>
           </div>
+          {engineContractMessage && (
+            <div className="provider-update-message">
+              {engineContractMessage}
+            </div>
+          )}
           {engineCapabilityError && (
             <div className="provider-update-message">
               {engineCapabilityError}
@@ -1321,6 +1415,24 @@ function Providers({
                   t("providers.agentUpdates.never")}
               </strong>
             </div>
+            {upstreamWatch?.anchorSha && (
+              <div>
+                <span>{t("providers.upstreamWatch.anchor")}</span>
+                <strong>{shortCommit(upstreamWatch.anchorSha)}</strong>
+              </div>
+            )}
+            {typeof upstreamWatch?.pendingCommitCount === "number" && (
+              <div>
+                <span>{t("providers.upstreamWatch.pendingCommits")}</span>
+                <strong>{upstreamWatch.pendingCommitCount}</strong>
+              </div>
+            )}
+            {typeof upstreamWatch?.contractRiskCount === "number" && (
+              <div>
+                <span>{t("providers.upstreamWatch.contractRiskFiles")}</span>
+                <strong>{upstreamWatch.contractRiskCount}</strong>
+              </div>
+            )}
             <div>
               <span>{t("providers.upstreamWatch.classifiedCounts")}</span>
               <strong>

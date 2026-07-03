@@ -23,6 +23,7 @@ import {
   type EngineCapabilitySnapshot,
   type EngineCapabilityState,
 } from "../../shared/engine-capabilities";
+import type { EngineContractVerificationResult } from "../../shared/engine-contract";
 
 // `desktop.json` — app-level, desktop-owned config (connection mode, encrypted
 // remote/api-server keys, and the desktop-enforced UX toggles below).
@@ -254,6 +255,7 @@ function defaultEngineCapabilityState(): EngineCapabilityState {
   return {
     installedSha: null,
     lastVerifiedSha: null,
+    lastVerification: null,
     snapshot: unknownEngineCapabilitySnapshot(),
   };
 }
@@ -286,6 +288,10 @@ function normalizeStoredEngineCapabilityState(
       typeof stored.installedSha === "string" ? stored.installedSha : null,
     lastVerifiedSha:
       typeof stored.lastVerifiedSha === "string" ? stored.lastVerifiedSha : null,
+    lastVerification:
+      stored.lastVerification && typeof stored.lastVerification === "object"
+        ? (stored.lastVerification as EngineContractVerificationResult)
+        : null,
     snapshot,
   };
 }
@@ -310,7 +316,30 @@ export function recordEngineCapabilitySnapshot(
   map[key] = {
     installedSha: snapshot.engineSha,
     lastVerifiedSha: previous.lastVerifiedSha,
+    lastVerification: previous.lastVerification,
     snapshot,
+  };
+  data[ENGINE_CAPABILITIES_KEY] = map;
+  writeDesktopConfig(data);
+  return getEngineCapabilityState(profile);
+}
+
+export function recordEngineContractVerification(
+  verification: EngineContractVerificationResult,
+  profile?: string,
+): EngineCapabilityState {
+  const data = readDesktopConfig();
+  const key = profileConfigKey(profile);
+  const map = engineCapabilitiesMap(data);
+  const previous = normalizeStoredEngineCapabilityState(map[key]);
+  map[key] = {
+    installedSha: previous.installedSha,
+    lastVerifiedSha:
+      verification.status === "passed"
+        ? previous.installedSha
+        : previous.lastVerifiedSha,
+    lastVerification: verification,
+    snapshot: previous.snapshot,
   };
   data[ENGINE_CAPABILITIES_KEY] = map;
   writeDesktopConfig(data);

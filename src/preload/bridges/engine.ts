@@ -138,6 +138,7 @@ export const engineBridge = {
     latestReportPath: string | null;
     classifiedCounts: Partial<
       Record<
+        | "contract-risk"
         | "runtime-required"
         | "api-contract"
         | "desktop-parity"
@@ -149,6 +150,9 @@ export const engineBridge = {
         number
       >
     >;
+    anchorSha?: string | null;
+    pendingCommitCount?: number;
+    contractRiskCount?: number;
     lastError?: string;
   }> => ipcRenderer.invoke("get-hermes-upstream-watch-state", profile),
   runHermesUpstreamWatch: (
@@ -160,6 +164,7 @@ export const engineBridge = {
     latestReportPath: string | null;
     classifiedCounts: Partial<
       Record<
+        | "contract-risk"
         | "runtime-required"
         | "api-contract"
         | "desktop-parity"
@@ -171,12 +176,17 @@ export const engineBridge = {
         number
       >
     >;
+    anchorSha?: string | null;
+    pendingCommitCount?: number;
+    contractRiskCount?: number;
     lastError?: string;
   }> => ipcRenderer.invoke("run-hermes-upstream-watch", profile),
   getEngineCapabilities: (profile?: string) =>
     ipcRenderer.invoke("get-engine-capabilities", profile),
   refreshEngineCapabilities: (profile?: string) =>
     ipcRenderer.invoke("refresh-engine-capabilities", profile),
+  verifyEngineContract: (profile?: string) =>
+    ipcRenderer.invoke("verify-engine-contract", profile),
 
   // Voice I/O (WS4)
   getVoiceStatus: (profile?: string): Promise<{ hasKey: boolean }> =>
