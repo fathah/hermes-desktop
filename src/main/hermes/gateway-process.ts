@@ -42,6 +42,40 @@ import {
 import { log, rotateGatewayStderrIfLarge } from "../log";
 import type { GatewayStartResult } from "../../shared/gateway";
 
+export interface GatewayProcessRuntime {
+  spawn: typeof spawn;
+  gatewayFetch: typeof gatewayFetch;
+  setTimeout: typeof setTimeout;
+  clearTimeout: typeof clearTimeout;
+  setInterval: typeof setInterval;
+  clearInterval: typeof clearInterval;
+  now: () => number;
+}
+
+function defaultGatewayProcessRuntime(): GatewayProcessRuntime {
+  return {
+    spawn,
+    gatewayFetch,
+    setTimeout: globalThis.setTimeout.bind(globalThis) as typeof setTimeout,
+    clearTimeout: globalThis.clearTimeout.bind(
+      globalThis,
+    ) as typeof clearTimeout,
+    setInterval: globalThis.setInterval.bind(globalThis) as typeof setInterval,
+    clearInterval: globalThis.clearInterval.bind(
+      globalThis,
+    ) as typeof clearInterval,
+    now: () => Date.now(),
+  };
+}
+
+let gatewayProcessRuntime = defaultGatewayProcessRuntime();
+
+export function __setGatewayProcessRuntimeForTests(
+  runtime: Partial<GatewayProcessRuntime>,
+): void {
+  gatewayProcessRuntime = { ...gatewayProcessRuntime, ...runtime };
+}
+
 export function resolveProfile(profile?: string): string | undefined {
   return normalizeProfileName(profile ?? getActiveProfileNameSync());
 }
@@ -97,9 +131,12 @@ export async function isApiServerReady(profile?: string): Promise<boolean> {
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
   try {
     const controller = new AbortController();
-    timeoutId = setTimeout(() => controller.abort(), 1500);
+    timeoutId = gatewayProcessRuntime.setTimeout(
+      () => controller.abort(),
+      1500,
+    );
 
-    const res = await gatewayFetch(url, {
+    const res = await gatewayProcessRuntime.gatewayFetch(url, {
       method: "GET",
       headers: getRemoteAuthHeader(),
       signal: controller.signal,
@@ -113,7 +150,7 @@ export async function isApiServerReady(profile?: string): Promise<boolean> {
     });
     return false;
   } finally {
-    if (timeoutId) clearTimeout(timeoutId);
+    if (timeoutId) gatewayProcessRuntime.clearTimeout(timeoutId);
   }
 }
 
@@ -167,7 +204,9 @@ export function resolveRemoteApiKey(url: string, apiKey?: string): string {
 }
 
 function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve) =>
+    gatewayProcessRuntime.setTimeout(resolve, ms),
+  );
 }
 
 export async function waitForApiServerReady(
@@ -175,8 +214,8 @@ export async function waitForApiServerReady(
   profile?: string,
   pollMs = 250,
 ): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
+  const deadline = gatewayProcessRuntime.now() + timeoutMs;
+  while (gatewayProcessRuntime.now() < deadline) {
     if (await isApiServerReady(profile)) return true;
     await delay(pollMs);
   }
@@ -295,7 +334,7 @@ export function startGatewayDetailed(profile?: string): GatewayStartResult {
   const cliArgs = resolved ? ["--profile", resolved, "gateway"] : ["gateway"];
   let proc: ChildProcess;
   try {
-    proc = spawn(HERMES_PYTHON, hermesCliArgs(cliArgs), {
+    proc = gatewayProcessRuntime.spawn(HERMES_PYTHON, hermesCliArgs(cliArgs), {
       cwd: HERMES_REPO,
       env: gatewayEnv,
       stdio: ["ignore", "ignore", stderrFd >= 0 ? stderrFd : "ignore"],
@@ -351,7 +390,7 @@ export function startGatewayDetailed(profile?: string): GatewayStartResult {
   gatewayProcesses.set(key, proc);
   appStartedProfiles.add(key);
 
-  setTimeout(() => {
+  gatewayProcessRuntime.setTimeout(() => {
     if (profileKey(profile) !== profileKey(undefined)) return;
     // LOW-4: don't let a rejection here become an unhandled promise rejection.
     isApiServerReady(profile)
@@ -486,8 +525,8 @@ async function waitForApiServerStopped(
   timeoutMs = 5000,
   pollMs = 250,
 ): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
+  const deadline = gatewayProcessRuntime.now() + timeoutMs;
+  while (gatewayProcessRuntime.now() < deadline) {
     if (!(await isApiServerReady(profile))) return true;
     await delay(pollMs);
   }
@@ -499,6 +538,10 @@ const gatewayRestartByProfile = new Map<string, Promise<boolean>>();
 
 function markGatewayRestartFailed(profile?: string): void {
   const key = profileKey(profile);
+  const proc = gatewayProcesses.get(key);
+  if (proc && isChildProcessAlive(proc)) {
+    proc.kill("SIGTERM");
+  }
   gatewayProcesses.delete(key);
   appStartedProfiles.delete(key);
   invalidateApiCacheFor(profile);
@@ -740,9 +783,7 @@ export function setStreamOpenProvider(fn: () => boolean): void {
   _streamOpenProvider = fn;
 }
 
-export function setGatewayReadyNotifier(
-  fn: (profile?: string) => void,
-): void {
+export function setGatewayReadyNotifier(fn: (profile?: string) => void): void {
   _gatewayReadyNotifier = fn;
 }
 
@@ -775,7 +816,7 @@ function notifyGatewayReady(profile?: string): void {
 }
 
 function scheduleSupervisedRestart(backoffMs: number): void {
-  setTimeout(() => {
+  gatewayProcessRuntime.setTimeout(() => {
     // Re-check the guards at fire time — conditions may have changed during backoff.
     if (isRemoteMode()) return;
     if (isStreamOpen()) return;
@@ -830,14 +871,40 @@ async function runSupervisorTick(): Promise<void> {
 
 export function startHealthPolling(): void {
   if (_healthCheckInterval) return;
-  _healthCheckInterval = setInterval(() => {
+  _healthCheckInterval = gatewayProcessRuntime.setInterval(() => {
     void runSupervisorTick();
   }, SUPERVISOR_INTERVAL_MS);
 }
 
 export function stopHealthPolling(): void {
   if (_healthCheckInterval) {
-    clearInterval(_healthCheckInterval);
+    gatewayProcessRuntime.clearInterval(_healthCheckInterval);
     _healthCheckInterval = null;
   }
+}
+
+export function __resetGatewayProcessForTests(): void {
+  for (const proc of gatewayProcesses.values()) {
+    if (isChildProcessAlive(proc)) {
+      try {
+        proc.kill("SIGTERM");
+      } catch {
+        // best-effort test cleanup
+      }
+    }
+  }
+  gatewayProcesses.clear();
+  appStartedProfiles.clear();
+  gatewayRestartByProfile.clear();
+  gatewayRestartQueueTail = Promise.resolve();
+  stopHealthPolling();
+  apiServerAvailable = null;
+  chatTransportCacheGeneration = 0;
+  _sshRemoteApiKey = "";
+  _initialized = false;
+  _supervisorState = initialSupervisorState();
+  _healthBroadcaster = null;
+  _streamOpenProvider = () => false;
+  _gatewayReadyNotifier = null;
+  gatewayProcessRuntime = defaultGatewayProcessRuntime();
 }
