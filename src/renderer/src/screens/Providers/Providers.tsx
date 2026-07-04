@@ -5,7 +5,7 @@ import BrandLogo from "../../components/common/BrandLogo";
 import { useDiscoveredModels } from "../../hooks/useDiscoveredModels";
 import { useEngineCapabilities } from "../../hooks/useEngineCapabilities";
 import OAuthLoginModal from "../../components/OAuthLoginModal";
-import { KeyRound, Refresh } from "../../assets/icons";
+import { Check, KeyRound, Refresh, RotateCcw } from "../../assets/icons";
 import type { CredentialPoolEntry } from "../../../../shared/credentials";
 import type {
   EngineContractVerificationResult,
@@ -25,9 +25,15 @@ type ProviderTestResult = {
 
 type AgentUpdateRoutineResult = {
   checkedAt: string;
-  status: "current" | "available" | "updated" | "skipped" | "error";
+  status:
+    | "current"
+    | "available"
+    | "updated"
+    | "skipped"
+    | "contract-broken"
+    | "error";
   message: string;
-  phase?: "check" | "update" | "restart";
+  phase?: "check" | "update" | "restart" | "verify";
   reason?: string;
   restartStatus?: "not-needed" | "restarted" | "failed";
   restartMessage?: string;
@@ -35,6 +41,7 @@ type AgentUpdateRoutineResult = {
   upstreamHead?: string;
   behindBy?: number;
   changelog?: string;
+  contract?: EngineContractVerificationResult;
 };
 
 type AgentUpdateRoutineState = {
@@ -45,6 +52,10 @@ type AgentUpdateRoutineState = {
   lastCheckedAt: string | null;
   nextCheckAt: string;
   lastResult: AgentUpdateRoutineResult | null;
+  autoApplySuppressed: boolean;
+  autoApplySuppressionReason: "contract-broken" | null;
+  autoApplySuppressedAt: string | null;
+  autoApplySuppressedSha: string | null;
 };
 
 type UpstreamWatchCategory =
@@ -132,6 +143,8 @@ function Providers({
   const [agentUpdateMessage, setAgentUpdateMessage] = useState<string | null>(
     null,
   );
+  const [agentUpdateAcknowledgeBusy, setAgentUpdateAcknowledgeBusy] =
+    useState(false);
   const [upstreamWatch, setUpstreamWatch] = useState<UpstreamWatchState | null>(
     null,
   );
@@ -145,6 +158,10 @@ function Providers({
   >(null);
   const [engineContractResult, setEngineContractResult] =
     useState<EngineContractVerificationResult | null>(null);
+  const [engineRollbackBusy, setEngineRollbackBusy] = useState(false);
+  const [engineRollbackMessage, setEngineRollbackMessage] = useState<
+    string | null
+  >(null);
 
   // Per-key debounce timers for env auto-save on change. Previously env
   // values were persisted only on input blur, so users who clicked the
@@ -520,6 +537,7 @@ function Providers({
     setAgentUpdateMessage(null);
     try {
       const result = await window.hermesAPI.runHermesAgentUpdateCheck(profile);
+      if (result.contract) setEngineContractResult(result.contract);
       setAgentUpdateMessage(result.message);
       setAgentUpdateRoutine(
         await window.hermesAPI.getHermesAgentUpdateRoutine(profile),
@@ -530,6 +548,25 @@ function Providers({
       );
     } finally {
       setAgentUpdateBusy(false);
+    }
+  }
+
+  async function handleAcknowledgeAgentUpdateBreak(): Promise<void> {
+    setAgentUpdateAcknowledgeBusy(true);
+    setAgentUpdateMessage(null);
+    try {
+      const updated =
+        await window.hermesAPI.acknowledgeHermesAgentUpdateContractBreak(
+          profile,
+        );
+      setAgentUpdateRoutine(updated);
+      setAgentUpdateMessage(t("providers.agentUpdates.acknowledged"));
+    } catch (err) {
+      setAgentUpdateMessage(
+        err instanceof Error ? err.message : t("providers.agentUpdates.failed"),
+      );
+    } finally {
+      setAgentUpdateAcknowledgeBusy(false);
     }
   }
 
@@ -572,6 +609,49 @@ function Providers({
       );
     } finally {
       setEngineContractBusy(false);
+    }
+  }
+
+  async function handleRollbackEngine(): Promise<void> {
+    const sha = engineCapabilities.state?.lastVerifiedSha;
+    if (!sha) return;
+    if (
+      !window.confirm(
+        t("providers.engineCapabilities.rollbackConfirm", {
+          sha: shortCommit(sha),
+        }),
+      )
+    ) {
+      return;
+    }
+
+    setEngineRollbackBusy(true);
+    setEngineRollbackMessage(null);
+    try {
+      const result = await window.hermesAPI.rollbackEngine(profile);
+      if (!result.success) {
+        setEngineRollbackMessage(
+          result.error || t("providers.engineCapabilities.rollbackFailed"),
+        );
+        return;
+      }
+      setEngineRollbackMessage(
+        t("providers.engineCapabilities.rollbackSucceeded", {
+          sha: shortCommit(result.sha || sha),
+        }),
+      );
+      await engineCapabilities.refresh();
+      setAgentUpdateRoutine(
+        await window.hermesAPI.getHermesAgentUpdateRoutine(profile),
+      );
+    } catch (err) {
+      setEngineRollbackMessage(
+        err instanceof Error
+          ? err.message
+          : t("providers.engineCapabilities.rollbackFailed"),
+      );
+    } finally {
+      setEngineRollbackBusy(false);
     }
   }
 
@@ -626,7 +706,9 @@ function Providers({
     if (status === "available" || status === "skipped") {
       return "provider-status-warning";
     }
-    if (status === "error") return "provider-status-error";
+    if (status === "error" || status === "contract-broken") {
+      return "provider-status-error";
+    }
     return "provider-status-success";
   }
 
@@ -1197,6 +1279,19 @@ function Providers({
                 ? t("providers.agentUpdates.running")
                 : t("providers.agentUpdates.runNow")}
             </button>
+            {agentUpdateRoutine?.autoApplySuppressed && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm provider-update-run"
+                onClick={() => void handleAcknowledgeAgentUpdateBreak()}
+                disabled={agentUpdateAcknowledgeBusy}
+              >
+                <Check size={14} />
+                {agentUpdateAcknowledgeBusy
+                  ? t("providers.agentUpdates.acknowledging")
+                  : t("providers.agentUpdates.acknowledge")}
+              </button>
+            )}
           </div>
           <div className="provider-update-grid">
             <div>
@@ -1220,7 +1315,9 @@ function Providers({
             <div>
               <span>{t("providers.agentUpdates.mode")}</span>
               <strong>
-                {agentUpdateRoutine?.autoApply
+                {agentUpdateRoutine?.autoApplySuppressed
+                  ? t("providers.agentUpdates.autoApplyPausedMode")
+                  : agentUpdateRoutine?.autoApply
                   ? t("providers.agentUpdates.autoApplyMode")
                   : t("providers.agentUpdates.notifyOnly")}
               </strong>
@@ -1242,6 +1339,13 @@ function Providers({
               )}
             </div>
           </div>
+          {agentUpdateRoutine?.autoApplySuppressed && (
+            <div className="provider-update-message">
+              {t("providers.agentUpdates.autoApplyPaused", {
+                sha: shortCommit(agentUpdateRoutine.autoApplySuppressedSha),
+              })}
+            </div>
+          )}
           {(agentUpdateMessage || agentUpdateRoutine?.lastResult?.message) && (
             <div className="provider-update-message">
               {agentUpdateMessage || agentUpdateRoutine?.lastResult?.message}
@@ -1291,6 +1395,19 @@ function Providers({
                 ? t("providers.engineCapabilities.verifyingContract")
                 : t("providers.engineCapabilities.verifyContract")}
             </button>
+            {engineCapabilities.state?.lastVerifiedSha && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm provider-update-run"
+                onClick={() => void handleRollbackEngine()}
+                disabled={engineRollbackBusy}
+              >
+                <RotateCcw size={14} />
+                {engineRollbackBusy
+                  ? t("providers.engineCapabilities.rollingBack")
+                  : t("providers.engineCapabilities.rollback")}
+              </button>
+            )}
           </div>
           <div className="provider-update-grid">
             <div>
@@ -1360,6 +1477,11 @@ function Providers({
           {engineCapabilityError && (
             <div className="provider-update-message">
               {engineCapabilityError}
+            </div>
+          )}
+          {engineRollbackMessage && (
+            <div className="provider-update-message">
+              {engineRollbackMessage}
             </div>
           )}
         </div>

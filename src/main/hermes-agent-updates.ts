@@ -6,6 +6,7 @@ import {
   checkHermesUpdate,
   getChangelog,
   getEnhancedPath,
+  getInstalledEngineSha,
   HERMES_HOME,
   HERMES_REPO,
   runHermesUpdate,
@@ -14,16 +15,23 @@ import {
   getHermesAgentUpdateRoutine,
   isHermesAgentUpdateRoutineDue,
   recordHermesAgentUpdateResult,
+  suppressHermesAgentUpdateAutoApply,
   type HermesAgentUpdateRoutineResult,
 } from "./config";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 import { isGatewayRunning, isRemoteMode, restartGateway } from "./hermes";
 import { stripAnsi } from "./utils";
+import { refreshEngineCapabilities } from "./engine-capabilities";
+import { verifyAndRecordEngineContract } from "./engine-contract-verify";
 
 export interface HermesAgentUpdateCheckOptions {
   now?: Date;
   autoApply?: boolean;
   onProgress?: Parameters<typeof runHermesUpdate>[0];
+  getInstalledSha?: typeof getInstalledEngineSha;
+  refreshCapabilities?: typeof refreshEngineCapabilities;
+  verifyContract?: typeof verifyAndRecordEngineContract;
+  notifyContractBroken?: (message: string) => void;
 }
 
 async function gitStatusPorcelain(): Promise<{ ok: boolean; out: string }> {
@@ -107,6 +115,20 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+function defaultNotifyContractBroken(message: string): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Notification } = require("electron") as typeof import("electron");
+    if (Notification.isSupported && !Notification.isSupported()) return;
+    new Notification({
+      title: "Hermes Agent contract broken",
+      body: message,
+    }).show();
+  } catch {
+    // Best-effort OS notification; persisted update state is authoritative.
+  }
+}
+
 export async function runHermesAgentUpdateCheck(
   profile?: string,
   options: HermesAgentUpdateCheckOptions = {},
@@ -115,6 +137,13 @@ export async function runHermesAgentUpdateCheck(
   const checkedAt = now.toISOString();
   const routine = getHermesAgentUpdateRoutine(profile, now);
   const autoApply = options.autoApply ?? routine.autoApply;
+  const getInstalledSha = options.getInstalledSha || getInstalledEngineSha;
+  const refreshCapabilities =
+    options.refreshCapabilities || refreshEngineCapabilities;
+  const verifyContract =
+    options.verifyContract || verifyAndRecordEngineContract;
+  const notifyContractBroken =
+    options.notifyContractBroken || defaultNotifyContractBroken;
 
   let finalResult: HermesAgentUpdateRoutineResult;
 
@@ -166,6 +195,21 @@ export async function runHermesAgentUpdateCheck(
             changelog,
           },
         );
+      } else if (routine.autoApplySuppressed) {
+        finalResult = result(
+          "available",
+          "Hermes Agent update available, but auto-apply is paused until you acknowledge the last contract break.",
+          checkedAt,
+          {
+            phase: "check",
+            reason: "auto-apply-suppressed",
+            restartStatus: "not-needed",
+            localHead: update.localHead,
+            upstreamHead: update.upstreamHead,
+            behindBy: update.behindBy,
+            changelog,
+          },
+        );
       } else {
         const clean = await hermesRepoIsClean();
         if (!clean.clean) {
@@ -184,6 +228,7 @@ export async function runHermesAgentUpdateCheck(
             },
           );
         } else {
+          const preUpdateSha = await getInstalledSha();
           try {
             await runHermesUpdate(options.onProgress || (() => {}));
           } catch (err) {
@@ -191,7 +236,7 @@ export async function runHermesAgentUpdateCheck(
               phase: "update",
               reason: "update-failed",
               restartStatus: "not-needed",
-              localHead: update.localHead,
+              localHead: preUpdateSha || update.localHead,
               upstreamHead: update.upstreamHead,
               behindBy: update.behindBy,
               changelog,
@@ -214,7 +259,7 @@ export async function runHermesAgentUpdateCheck(
                   phase: "restart",
                   reason: "restart-succeeded",
                   restartStatus: "restarted",
-                  localHead: update.localHead,
+                  localHead: preUpdateSha || update.localHead,
                   upstreamHead: update.upstreamHead,
                   behindBy: update.behindBy,
                   changelog,
@@ -231,7 +276,7 @@ export async function runHermesAgentUpdateCheck(
                   reason: "restart-failed",
                   restartStatus: "failed",
                   restartMessage,
-                  localHead: update.localHead,
+                  localHead: preUpdateSha || update.localHead,
                   upstreamHead: update.upstreamHead,
                   behindBy: update.behindBy,
                   changelog,
@@ -247,7 +292,53 @@ export async function runHermesAgentUpdateCheck(
                 phase: "update",
                 reason: "updated",
                 restartStatus: "not-needed",
-                localHead: update.localHead,
+                localHead: preUpdateSha || update.localHead,
+                upstreamHead: update.upstreamHead,
+                behindBy: update.behindBy,
+                changelog,
+              },
+            );
+          }
+
+          try {
+            await refreshCapabilities(profile);
+            const contract = await verifyContract(profile);
+            if (contract.status === "broken") {
+              const brokenSha = await getInstalledSha();
+              const message =
+                "Hermes Agent updated, but the engine contract has breaking findings. Auto-apply is paused until you acknowledge it.";
+              suppressHermesAgentUpdateAutoApply(
+                "contract-broken",
+                brokenSha || update.upstreamHead || null,
+                checkedAt,
+                profile,
+              );
+              notifyContractBroken(message);
+              finalResult = result("contract-broken", message, checkedAt, {
+                phase: "verify",
+                reason: "contract-broken",
+                restartStatus: finalResult.restartStatus,
+                restartMessage: finalResult.restartMessage,
+                localHead: preUpdateSha || update.localHead,
+                upstreamHead: update.upstreamHead,
+                behindBy: update.behindBy,
+                changelog,
+                contract,
+              });
+            } else {
+              finalResult = { ...finalResult, contract };
+            }
+          } catch (err) {
+            finalResult = result(
+              "error",
+              `Hermes Agent updated, but contract verification failed: ${errorMessage(err)}`,
+              checkedAt,
+              {
+                phase: "verify",
+                reason: "contract-verification-failed",
+                restartStatus: finalResult.restartStatus,
+                restartMessage: finalResult.restartMessage,
+                localHead: preUpdateSha || update.localHead,
                 upstreamHead: update.upstreamHead,
                 behindBy: update.behindBy,
                 changelog,

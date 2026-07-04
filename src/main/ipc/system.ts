@@ -11,6 +11,7 @@ import {
   clearVersionCache,
   runHermesDoctor,
   runHermesUpdate,
+  rollbackEngineTo,
   checkHermesUpdate,
   getChangelog,
   discoverMemoryProviders,
@@ -21,8 +22,10 @@ import {
   type InstallProgress,
 } from "../installer";
 import {
+  acknowledgeHermesAgentUpdateContractBreak,
   getConnectionConfig,
   getDesktopUpdateRoutine,
+  getEngineCapabilityState,
   getHermesAgentUpdateRoutine,
   setDesktopUpdateRoutine,
   setHermesAgentUpdateRoutine,
@@ -209,6 +212,55 @@ export function registerSystemIpc(
         },
       }),
   );
+  safeHandle(
+    "acknowledge-hermes-agent-update-contract-break",
+    (_event, profile?: string) =>
+      acknowledgeHermesAgentUpdateContractBreak(profile),
+  );
+  safeHandle("rollback-engine", async (event, profile?: string) => {
+    if (isRemoteMode()) {
+      return {
+        success: false,
+        error: "Rollback is only available for a local Hermes Agent engine.",
+      };
+    }
+
+    const sha = getEngineCapabilityState(profile).lastVerifiedSha;
+    if (!sha) {
+      return {
+        success: false,
+        error: "No contract-verified Hermes Agent SHA is recorded for rollback.",
+      };
+    }
+
+    try {
+      await rollbackEngineTo(
+        sha,
+        (progress: InstallProgress) => {
+          if (!event.sender.isDestroyed()) {
+            event.sender.send("install-progress", progress);
+          }
+        },
+        mainWindowGetter(),
+      );
+      if (isGatewayRunning(profile)) {
+        await restartGateway(profile);
+      }
+      await refreshEngineCapabilities(profile);
+      const verification = await verifyAndRecordEngineContract(profile);
+      if (verification.status === "broken") {
+        return {
+          success: false,
+          sha,
+          error:
+            "Rolled back, but engine contract verification still reports breaking findings.",
+        };
+      }
+      return { success: true, sha };
+    } catch (err) {
+      return { success: false, sha, error: (err as Error).message };
+    }
+  });
   safeHandle("get-hermes-upstream-watch-state", (_event, profile?: string) =>
     getHermesUpstreamWatchState(profile),
   );

@@ -188,9 +188,14 @@ export type HermesAgentUpdateRoutineStatus =
   | "available"
   | "updated"
   | "skipped"
+  | "contract-broken"
   | "error";
 
-export type HermesAgentUpdateRoutinePhase = "check" | "update" | "restart";
+export type HermesAgentUpdateRoutinePhase =
+  | "check"
+  | "update"
+  | "restart"
+  | "verify";
 
 export type HermesAgentUpdateRoutineRestartStatus =
   | "not-needed"
@@ -209,6 +214,7 @@ export interface HermesAgentUpdateRoutineResult {
   upstreamHead?: string;
   behindBy?: number;
   changelog?: string;
+  contract?: EngineContractVerificationResult;
 }
 
 export interface HermesAgentUpdateRoutineSettings {
@@ -222,11 +228,19 @@ export interface HermesAgentUpdateRoutineState extends HermesAgentUpdateRoutineS
   lastCheckedAt: string | null;
   nextCheckAt: string;
   lastResult: HermesAgentUpdateRoutineResult | null;
+  autoApplySuppressed: boolean;
+  autoApplySuppressionReason: "contract-broken" | null;
+  autoApplySuppressedAt: string | null;
+  autoApplySuppressedSha: string | null;
 }
 
 interface StoredHermesAgentUpdateRoutine extends Partial<HermesAgentUpdateRoutineSettings> {
   lastCheckedAt?: string | null;
   lastResult?: HermesAgentUpdateRoutineResult | null;
+  autoApplySuppressed?: boolean;
+  autoApplySuppressionReason?: "contract-broken" | null;
+  autoApplySuppressedAt?: string | null;
+  autoApplySuppressedSha?: string | null;
 }
 
 function profileConfigKey(profile?: string): string {
@@ -405,6 +419,11 @@ export function getHermesAgentUpdateRoutine(
   const data = readDesktopConfig();
   const stored = hermesAgentUpdateMap(data)[profileConfigKey(profile)] || {};
   const lastResult = stored.lastResult || null;
+  const autoApplySuppressionReason =
+    stored.autoApplySuppressed === true &&
+    stored.autoApplySuppressionReason === "contract-broken"
+      ? "contract-broken"
+      : null;
   return {
     enabled: stored.enabled !== false,
     autoApply: stored.autoApply === true,
@@ -413,6 +432,16 @@ export function getHermesAgentUpdateRoutine(
     lastCheckedAt: stored.lastCheckedAt || lastResult?.checkedAt || null,
     nextCheckAt: nextHermesAgentUpdateCheckAt(now),
     lastResult,
+    autoApplySuppressed: autoApplySuppressionReason !== null,
+    autoApplySuppressionReason,
+    autoApplySuppressedAt:
+      autoApplySuppressionReason && typeof stored.autoApplySuppressedAt === "string"
+        ? stored.autoApplySuppressedAt
+        : null,
+    autoApplySuppressedSha:
+      autoApplySuppressionReason && typeof stored.autoApplySuppressedSha === "string"
+        ? stored.autoApplySuppressedSha
+        : null,
   };
 }
 
@@ -432,6 +461,45 @@ export function setHermesAgentUpdateRoutine(
     ...(typeof settings.autoApply === "boolean"
       ? { autoApply: settings.autoApply }
       : {}),
+  };
+  data[HERMES_AGENT_UPDATE_KEY] = map;
+  writeDesktopConfig(data);
+  return getHermesAgentUpdateRoutine(profile);
+}
+
+export function suppressHermesAgentUpdateAutoApply(
+  reason: "contract-broken",
+  sha: string | null,
+  suppressedAt: string,
+  profile?: string,
+): HermesAgentUpdateRoutineState {
+  const data = readDesktopConfig();
+  const key = profileConfigKey(profile);
+  const map = hermesAgentUpdateMap(data);
+  map[key] = {
+    ...(map[key] || {}),
+    autoApplySuppressed: true,
+    autoApplySuppressionReason: reason,
+    autoApplySuppressedAt: suppressedAt,
+    autoApplySuppressedSha: sha,
+  };
+  data[HERMES_AGENT_UPDATE_KEY] = map;
+  writeDesktopConfig(data);
+  return getHermesAgentUpdateRoutine(profile, new Date(suppressedAt));
+}
+
+export function acknowledgeHermesAgentUpdateContractBreak(
+  profile?: string,
+): HermesAgentUpdateRoutineState {
+  const data = readDesktopConfig();
+  const key = profileConfigKey(profile);
+  const map = hermesAgentUpdateMap(data);
+  map[key] = {
+    ...(map[key] || {}),
+    autoApplySuppressed: false,
+    autoApplySuppressionReason: null,
+    autoApplySuppressedAt: null,
+    autoApplySuppressedSha: null,
   };
   data[HERMES_AGENT_UPDATE_KEY] = map;
   writeDesktopConfig(data);

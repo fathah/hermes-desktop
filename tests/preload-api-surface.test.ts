@@ -118,6 +118,8 @@ describe("New APIs from v0.8/v0.9 features", () => {
       "getEngineCapabilities",
       "refreshEngineCapabilities",
       "verifyEngineContract",
+      "rollbackEngine",
+      "acknowledgeHermesAgentUpdateContractBreak",
     ]) {
       expect(preloadMethods).toContain(method);
       expect(typeMethods).toContain(method);
@@ -290,6 +292,8 @@ describe("Legacy APIs preserved (backward compat)", () => {
     "getHermesAgentUpdateRoutine",
     "setHermesAgentUpdateRoutine",
     "runHermesAgentUpdateCheck",
+    "acknowledgeHermesAgentUpdateContractBreak",
+    "rollbackEngine",
     "getEngineCapabilities",
     "refreshEngineCapabilities",
     "getHermesUpstreamWatchState",

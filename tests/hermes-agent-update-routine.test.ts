@@ -48,6 +48,10 @@ describe("Hermes Agent update routine state", () => {
     expect(state.schedule).toBe("0 4 * * *");
     expect(state.nextCheckAt).toBe("2026-06-20T08:00:00.000Z");
     expect(state.lastResult).toBeNull();
+    expect(state.autoApplySuppressed).toBe(false);
+    expect(state.autoApplySuppressionReason).toBeNull();
+    expect(state.autoApplySuppressedAt).toBeNull();
+    expect(state.autoApplySuppressedSha).toBeNull();
   });
 
   it("persists per-profile settings without sharing auto-apply", async () => {
@@ -68,6 +72,47 @@ describe("Hermes Agent update routine state", () => {
         new Date("2026-06-20T23:00:00.000Z"),
       ).autoApply,
     ).toBe(false);
+  });
+
+  it("persists contract-break suppression until explicit acknowledgement", async () => {
+    const {
+      acknowledgeHermesAgentUpdateContractBreak,
+      getHermesAgentUpdateRoutine,
+      setHermesAgentUpdateRoutine,
+      suppressHermesAgentUpdateAutoApply,
+    } = await freshConfig(TEST_DIR);
+
+    setHermesAgentUpdateRoutine({ autoApply: true }, "work");
+    suppressHermesAgentUpdateAutoApply(
+      "contract-broken",
+      "def4567890abcdef1234567890abcdef12345678",
+      "2026-06-20T23:05:00.000Z",
+      "work",
+    );
+
+    const suppressed = getHermesAgentUpdateRoutine(
+      "work",
+      new Date("2026-06-20T23:10:00.000Z"),
+    );
+    expect(suppressed.autoApply).toBe(true);
+    expect(suppressed.autoApplySuppressed).toBe(true);
+    expect(suppressed.autoApplySuppressionReason).toBe("contract-broken");
+    expect(suppressed.autoApplySuppressedAt).toBe(
+      "2026-06-20T23:05:00.000Z",
+    );
+    expect(suppressed.autoApplySuppressedSha).toBe(
+      "def4567890abcdef1234567890abcdef12345678",
+    );
+
+    setHermesAgentUpdateRoutine({ autoApply: false }, "work");
+    expect(getHermesAgentUpdateRoutine("work").autoApplySuppressed).toBe(true);
+
+    const acknowledged = acknowledgeHermesAgentUpdateContractBreak("work");
+    expect(acknowledged.autoApplySuppressed).toBe(false);
+    expect(acknowledged.autoApplySuppressionReason).toBeNull();
+    expect(acknowledged.autoApplySuppressedAt).toBeNull();
+    expect(acknowledged.autoApplySuppressedSha).toBeNull();
+    expect(acknowledged.autoApply).toBe(false);
   });
 
   it("records the latest check result and keeps the next check on the next local day", async () => {

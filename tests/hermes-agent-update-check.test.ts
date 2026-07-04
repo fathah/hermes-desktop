@@ -52,6 +52,7 @@ async function loadUpdateCheck(
     checkHermesUpdate: vi.fn().mockResolvedValue(update),
     getChangelog: vi.fn().mockResolvedValue(""),
     getEnhancedPath: vi.fn(() => process.env.PATH || ""),
+    getInstalledEngineSha: vi.fn().mockResolvedValue(update.localHead ?? null),
     runHermesUpdate: options.runUpdateError
       ? vi.fn().mockRejectedValue(options.runUpdateError)
       : vi.fn().mockResolvedValue(undefined),
@@ -63,6 +64,16 @@ async function loadUpdateCheck(
       ? vi.fn().mockRejectedValue(options.restartError)
       : vi.fn().mockResolvedValue(options.restartResult ?? true),
   }));
+  vi.doMock("../src/main/engine-capabilities", () => ({
+    refreshEngineCapabilities: vi.fn().mockResolvedValue({}),
+  }));
+  vi.doMock("../src/main/engine-contract-verify", () => ({
+    verifyAndRecordEngineContract: vi.fn().mockResolvedValue({
+      checkedAt: "2026-06-20T22:35:00.000Z",
+      status: "unknown",
+      findings: [],
+    }),
+  }));
 
   return await import("../src/main/hermes-agent-updates");
 }
@@ -72,6 +83,8 @@ afterEach(() => {
   vi.resetModules();
   vi.doUnmock("../src/main/installer");
   vi.doUnmock("../src/main/hermes");
+  vi.doUnmock("../src/main/engine-capabilities");
+  vi.doUnmock("../src/main/engine-contract-verify");
   vi.doUnmock("child_process");
   rmSync(TEST_DIR, { recursive: true, force: true });
 });
@@ -205,5 +218,193 @@ describe("Hermes Agent update check safety status", () => {
     expect(result.reason).toBe("restart-failed");
     expect(result.restartStatus).toBe("failed");
     expect(result.restartMessage).toContain("gateway restart returned false");
+  });
+
+  it("records a passed contract after auto-update", async () => {
+    const oldSha = "1111111111111111111111111111111111111111";
+    const newSha = "2222222222222222222222222222222222222222";
+    const { runHermesAgentUpdateCheck } = await loadUpdateCheck({
+      available: true,
+      localHead: oldSha,
+      upstreamHead: newSha,
+      behindBy: 1,
+    });
+
+    const contract = {
+      checkedAt: "2026-06-20T22:36:00.000Z",
+      status: "passed" as const,
+      findings: [],
+    };
+    const refreshCapabilities = vi.fn().mockResolvedValue({});
+    const verifyContract = vi.fn().mockResolvedValue(contract);
+
+    const result = await runHermesAgentUpdateCheck("work", {
+      now: new Date("2026-06-20T22:35:00.000Z"),
+      autoApply: true,
+      getInstalledSha: vi.fn().mockResolvedValue(oldSha),
+      refreshCapabilities,
+      verifyContract,
+    });
+
+    expect(result.status).toBe("updated");
+    expect(result.contract).toBe(contract);
+    expect(refreshCapabilities).toHaveBeenCalledWith("work");
+    expect(verifyContract).toHaveBeenCalledWith("work");
+  });
+
+  it("suppresses future auto-apply when the post-update contract is broken", async () => {
+    const oldSha = "1111111111111111111111111111111111111111";
+    const newSha = "2222222222222222222222222222222222222222";
+    const { runHermesAgentUpdateCheck } = await loadUpdateCheck({
+      available: true,
+      localHead: oldSha,
+      upstreamHead: newSha,
+      behindBy: 1,
+    });
+    const config = await import("../src/main/config");
+    config.recordEngineCapabilitySnapshot(
+      {
+        status: "ready",
+        fetchedAt: "2026-06-20T22:30:00.000Z",
+        mode: "local",
+        engineSha: oldSha,
+        features: {},
+        endpoints: {},
+      },
+      "work",
+    );
+    config.recordEngineContractVerification(
+      {
+        checkedAt: "2026-06-20T22:31:00.000Z",
+        status: "passed",
+        findings: [],
+      },
+      "work",
+    );
+
+    const contract = {
+      checkedAt: "2026-06-20T22:36:00.000Z",
+      status: "broken" as const,
+      findings: [
+        {
+          entryId: "cli-update",
+          kind: "cli" as const,
+          value: "update",
+          tier: "fail" as const,
+          verdict: "broken" as const,
+          detail: "Top-level command update is missing.",
+        },
+      ],
+    };
+    const refreshCapabilities = vi.fn(async (profile?: string) =>
+      config.recordEngineCapabilitySnapshot(
+        {
+          status: "ready",
+          fetchedAt: "2026-06-20T22:35:30.000Z",
+          mode: "local",
+          engineSha: newSha,
+          features: {},
+          endpoints: {},
+        },
+        profile,
+      ),
+    );
+    const verifyContract = vi.fn(async (profile?: string) => {
+      config.recordEngineContractVerification(contract, profile);
+      return contract;
+    });
+    const notifyContractBroken = vi.fn();
+    const getInstalledSha = vi
+      .fn()
+      .mockResolvedValueOnce(oldSha)
+      .mockResolvedValue(newSha);
+
+    const result = await runHermesAgentUpdateCheck("work", {
+      now: new Date("2026-06-20T22:35:00.000Z"),
+      autoApply: true,
+      getInstalledSha,
+      refreshCapabilities,
+      verifyContract,
+      notifyContractBroken,
+    });
+
+    expect(result.status).toBe("contract-broken");
+    expect(result.phase).toBe("verify");
+    expect(result.reason).toBe("contract-broken");
+    expect(result.contract).toBe(contract);
+    expect(notifyContractBroken).toHaveBeenCalledOnce();
+
+    const routine = config.getHermesAgentUpdateRoutine("work");
+    expect(routine.autoApplySuppressed).toBe(true);
+    expect(routine.autoApplySuppressionReason).toBe("contract-broken");
+    expect(routine.autoApplySuppressedSha).toBe(newSha);
+    const capabilities = config.getEngineCapabilityState("work");
+    expect(capabilities.installedSha).toBe(newSha);
+    expect(capabilities.lastVerifiedSha).toBe(oldSha);
+  });
+
+  it("does not suppress auto-apply when the post-update contract is unknown", async () => {
+    const oldSha = "1111111111111111111111111111111111111111";
+    const newSha = "2222222222222222222222222222222222222222";
+    const { runHermesAgentUpdateCheck } = await loadUpdateCheck({
+      available: true,
+      localHead: oldSha,
+      upstreamHead: newSha,
+      behindBy: 1,
+    });
+    const config = await import("../src/main/config");
+
+    const contract = {
+      checkedAt: "2026-06-20T22:36:00.000Z",
+      status: "unknown" as const,
+      findings: [],
+    };
+    const verifyContract = vi.fn(async (profile?: string) => {
+      config.recordEngineContractVerification(contract, profile);
+      return contract;
+    });
+
+    const result = await runHermesAgentUpdateCheck("work", {
+      now: new Date("2026-06-20T22:35:00.000Z"),
+      autoApply: true,
+      getInstalledSha: vi.fn().mockResolvedValue(oldSha),
+      refreshCapabilities: vi.fn().mockResolvedValue({}),
+      verifyContract,
+    });
+
+    expect(result.status).toBe("updated");
+    expect(result.contract).toBe(contract);
+    expect(config.getHermesAgentUpdateRoutine("work").autoApplySuppressed).toBe(
+      false,
+    );
+  });
+
+  it("does not auto-apply while contract-break suppression is active", async () => {
+    const oldSha = "1111111111111111111111111111111111111111";
+    const newSha = "2222222222222222222222222222222222222222";
+    const { runHermesAgentUpdateCheck } = await loadUpdateCheck({
+      available: true,
+      localHead: oldSha,
+      upstreamHead: newSha,
+      behindBy: 1,
+    });
+    const config = await import("../src/main/config");
+    const installer = await import("../src/main/installer");
+    config.setHermesAgentUpdateRoutine({ autoApply: true }, "work");
+    config.suppressHermesAgentUpdateAutoApply(
+      "contract-broken",
+      newSha,
+      "2026-06-20T22:34:00.000Z",
+      "work",
+    );
+
+    const result = await runHermesAgentUpdateCheck("work", {
+      now: new Date("2026-06-20T22:35:00.000Z"),
+      autoApply: true,
+    });
+
+    expect(result.status).toBe("available");
+    expect(result.reason).toBe("auto-apply-suppressed");
+    expect(installer.runHermesUpdate).not.toHaveBeenCalled();
   });
 });

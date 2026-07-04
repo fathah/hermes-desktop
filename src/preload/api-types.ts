@@ -2,6 +2,7 @@ import type {
   MonitorSourceEntry,
   ScheduledResearchItem,
 } from "../shared/scheduledResearch";
+import type { EngineContractVerificationResult } from "../shared/engine-contract";
 
 export type { AppLocale } from "../shared/i18n/types";
 export type { Attachment } from "../shared/attachments";
@@ -53,8 +54,8 @@ export type {
 } from "../shared/engine-capabilities";
 export type {
   EngineContractFinding,
-  EngineContractVerificationResult,
 } from "../shared/engine-contract";
+export type { EngineContractVerificationResult };
 export type {
   KanbanTask,
   KanbanBoard,
@@ -214,9 +215,15 @@ export type OAuthProviderRemovalResult = {
 
 export type HermesAgentUpdateRoutineResult = {
   checkedAt: string;
-  status: "current" | "available" | "updated" | "skipped" | "error";
+  status:
+    | "current"
+    | "available"
+    | "updated"
+    | "skipped"
+    | "contract-broken"
+    | "error";
   message: string;
-  phase?: "check" | "update" | "restart";
+  phase?: "check" | "update" | "restart" | "verify";
   reason?: string;
   restartStatus?: "not-needed" | "restarted" | "failed";
   restartMessage?: string;
@@ -224,6 +231,7 @@ export type HermesAgentUpdateRoutineResult = {
   upstreamHead?: string;
   behindBy?: number;
   changelog?: string;
+  contract?: EngineContractVerificationResult;
 };
 
 export type HermesAgentUpdateRoutineState = {
@@ -234,6 +242,10 @@ export type HermesAgentUpdateRoutineState = {
   lastCheckedAt: string | null;
   nextCheckAt: string;
   lastResult: HermesAgentUpdateRoutineResult | null;
+  autoApplySuppressed: boolean;
+  autoApplySuppressionReason: "contract-broken" | null;
+  autoApplySuppressedAt: string | null;
+  autoApplySuppressedSha: string | null;
 };
 
 export type DesktopUpdateRoutineResult = {

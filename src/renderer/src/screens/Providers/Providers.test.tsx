@@ -69,6 +69,10 @@ describe("Providers", () => {
           behindBy: 2,
           changelog: "abc123 Update Hermes Agent",
         },
+        autoApplySuppressed: false,
+        autoApplySuppressionReason: null,
+        autoApplySuppressedAt: null,
+        autoApplySuppressedSha: null,
       }),
       getHermesUpstreamWatchState: vi.fn().mockResolvedValue({
         lastRunAt: "2026-06-19T09:00:00.000Z",
@@ -158,11 +162,36 @@ describe("Providers", () => {
         lastCheckedAt: null,
         nextCheckAt: "2026-06-20T08:00:00.000Z",
         lastResult: null,
+        autoApplySuppressed: false,
+        autoApplySuppressionReason: null,
+        autoApplySuppressedAt: null,
+        autoApplySuppressedSha: null,
       }),
       runHermesAgentUpdateCheck: vi.fn().mockResolvedValue({
         checkedAt: "2026-06-20T08:00:00.000Z",
         status: "available",
         message: "Hermes Agent update available.",
+      }),
+      acknowledgeHermesAgentUpdateContractBreak: vi.fn().mockResolvedValue({
+        enabled: true,
+        autoApply: true,
+        schedule: "0 4 * * *",
+        timezone: "America/New_York",
+        lastCheckedAt: "2026-06-20T08:00:00.000Z",
+        nextCheckAt: "2026-06-21T08:00:00.000Z",
+        lastResult: {
+          checkedAt: "2026-06-20T08:00:00.000Z",
+          status: "contract-broken",
+          message: "Hermes Agent contract broken.",
+        },
+        autoApplySuppressed: false,
+        autoApplySuppressionReason: null,
+        autoApplySuppressedAt: null,
+        autoApplySuppressedSha: null,
+      }),
+      rollbackEngine: vi.fn().mockResolvedValue({
+        success: true,
+        sha: "abc123def456abc123def456abc123def456abcd",
       }),
       runHermesUpstreamWatch: vi.fn().mockResolvedValue({
         lastRunAt: "2026-06-20T09:00:00.000Z",
@@ -277,6 +306,109 @@ describe("Providers", () => {
       expect(window.hermesAPI.refreshEngineCapabilities).toHaveBeenCalledWith(
         "work",
       );
+    });
+  });
+
+  it("does not show rollback when no last verified SHA is recorded", async () => {
+    renderProviders();
+
+    await screen.findByText("Engine features");
+
+    expect(
+      screen.queryByRole("button", { name: /rollback engine/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows contract-break suppression and acknowledges it for the active profile", async () => {
+    const api = window.hermesAPI as unknown as {
+      getHermesAgentUpdateRoutine: ReturnType<typeof vi.fn>;
+      acknowledgeHermesAgentUpdateContractBreak: ReturnType<typeof vi.fn>;
+    };
+    api.getHermesAgentUpdateRoutine.mockResolvedValue({
+      enabled: true,
+      autoApply: true,
+      schedule: "0 4 * * *",
+      timezone: "America/New_York",
+      lastCheckedAt: "2026-06-20T08:00:00.000Z",
+      nextCheckAt: "2026-06-21T08:00:00.000Z",
+      lastResult: {
+        checkedAt: "2026-06-20T08:00:00.000Z",
+        status: "contract-broken",
+        message: "Hermes Agent contract broken.",
+      },
+      autoApplySuppressed: true,
+      autoApplySuppressionReason: "contract-broken",
+      autoApplySuppressedAt: "2026-06-20T08:00:00.000Z",
+      autoApplySuppressedSha: "def4567890abcdef1234567890abcdef12345678",
+    });
+
+    renderProviders();
+
+    expect(
+      await screen.findByText(/Auto-apply is paused after a broken engine contract/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Paused")).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /resume auto-apply/i }),
+    );
+
+    await waitFor(() => {
+      expect(
+        api.acknowledgeHermesAgentUpdateContractBreak,
+      ).toHaveBeenCalledWith("work");
+      expect(screen.getByText("Auto-apply resumed.")).toBeInTheDocument();
+    });
+  });
+
+  it("confirms and runs rollback to the last verified SHA", async () => {
+    const lastVerifiedSha = "abc123def456abc123def456abc123def456abcd";
+    const capabilityState = {
+      installedSha: "def4567890abcdef1234567890abcdef12345678",
+      lastVerifiedSha,
+      lastVerification: {
+        checkedAt: "2026-06-19T10:00:00.000Z",
+        status: "passed",
+        findings: [],
+      },
+      snapshot: {
+        status: "ready",
+        fetchedAt: "2026-06-19T09:30:00.000Z",
+        mode: "local",
+        engineSha: "def4567890abcdef1234567890abcdef12345678",
+        features: {},
+        endpoints: {},
+      },
+    };
+    const api = window.hermesAPI as unknown as {
+      getEngineCapabilities: ReturnType<typeof vi.fn>;
+      refreshEngineCapabilities: ReturnType<typeof vi.fn>;
+      rollbackEngine: ReturnType<typeof vi.fn>;
+    };
+    api.getEngineCapabilities.mockResolvedValue(capabilityState);
+    api.refreshEngineCapabilities.mockResolvedValue({
+      ...capabilityState,
+      installedSha: lastVerifiedSha,
+      snapshot: {
+        ...capabilityState.snapshot,
+        engineSha: lastVerifiedSha,
+      },
+    });
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    renderProviders();
+
+    const rollbackButton = await screen.findByRole("button", {
+      name: /rollback engine/i,
+    });
+    fireEvent.click(rollbackButton);
+
+    await waitFor(() => {
+      expect(confirmSpy).toHaveBeenCalledWith(
+        expect.stringContaining("reinstalls Python dependencies"),
+      );
+      expect(api.rollbackEngine).toHaveBeenCalledWith("work");
+      expect(screen.getByText(/Hermes Agent rolled back to abc123d/)).toBeInTheDocument();
     });
   });
 

@@ -60,6 +60,14 @@ export interface EngineBridgeApi {
     options?: Partial<{ autoApply: boolean }>,
   ) => Promise<Api.HermesAgentUpdateRoutineResult>;
 
+  acknowledgeHermesAgentUpdateContractBreak: (
+    profile?: string,
+  ) => Promise<Api.HermesAgentUpdateRoutineState>;
+
+  rollbackEngine: (
+    profile?: string,
+  ) => Promise<{ success: boolean; sha?: string; error?: string }>;
+
   getHermesUpstreamWatchState: (
     profile?: string,
   ) => Promise<Api.HermesUpstreamWatchState>;

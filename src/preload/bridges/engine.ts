@@ -69,66 +69,39 @@ export const engineBridge = {
     upstreamHead?: string;
     reason?: string;
   }> => ipcRenderer.invoke("check-hermes-update"),
-  getHermesAgentUpdateRoutine: (
-    profile?: string,
-  ): Promise<{
-    enabled: boolean;
-    autoApply: boolean;
-    schedule: string;
-    timezone: string;
-    lastCheckedAt: string | null;
-    nextCheckAt: string;
-    lastResult: {
-      checkedAt: string;
-      status: "current" | "available" | "updated" | "skipped" | "error";
-      message: string;
-      phase?: "check" | "update" | "restart";
-      reason?: string;
-      restartStatus?: "not-needed" | "restarted" | "failed";
-      restartMessage?: string;
-      localHead?: string;
-      upstreamHead?: string;
-      behindBy?: number;
-      changelog?: string;
-    } | null;
-  }> => ipcRenderer.invoke("get-hermes-agent-update-routine", profile),
-  setHermesAgentUpdateRoutine: (
+  getHermesAgentUpdateRoutine: ((profile?: string) =>
+    ipcRenderer.invoke(
+      "get-hermes-agent-update-routine",
+      profile,
+    )) as EngineBridgeApi["getHermesAgentUpdateRoutine"],
+  setHermesAgentUpdateRoutine: ((
     settings: Partial<{ enabled: boolean; autoApply: boolean }>,
     profile?: string,
-  ): Promise<{
-    enabled: boolean;
-    autoApply: boolean;
-    schedule: string;
-    timezone: string;
-    lastCheckedAt: string | null;
-    nextCheckAt: string;
-    lastResult: {
-      checkedAt: string;
-      status: "current" | "available" | "updated" | "skipped" | "error";
-      message: string;
-      localHead?: string;
-      upstreamHead?: string;
-      behindBy?: number;
-      changelog?: string;
-    } | null;
-  }> =>
-    ipcRenderer.invoke("set-hermes-agent-update-routine", settings, profile),
-  runHermesAgentUpdateCheck: (
+  ) =>
+    ipcRenderer.invoke(
+      "set-hermes-agent-update-routine",
+      settings,
+      profile,
+    )) as EngineBridgeApi["setHermesAgentUpdateRoutine"],
+  runHermesAgentUpdateCheck: ((
     profile?: string,
     options?: Partial<{ autoApply: boolean }>,
-  ): Promise<{
-    checkedAt: string;
-    status: "current" | "available" | "updated" | "skipped" | "error";
-    message: string;
-    phase?: "check" | "update" | "restart";
-    reason?: string;
-    restartStatus?: "not-needed" | "restarted" | "failed";
-    restartMessage?: string;
-    localHead?: string;
-    upstreamHead?: string;
-    behindBy?: number;
-    changelog?: string;
-  }> => ipcRenderer.invoke("run-hermes-agent-update-check", profile, options),
+  ) =>
+    ipcRenderer.invoke(
+      "run-hermes-agent-update-check",
+      profile,
+      options,
+    )) as EngineBridgeApi["runHermesAgentUpdateCheck"],
+  acknowledgeHermesAgentUpdateContractBreak: ((profile?: string) =>
+    ipcRenderer.invoke(
+      "acknowledge-hermes-agent-update-contract-break",
+      profile,
+    )) as EngineBridgeApi["acknowledgeHermesAgentUpdateContractBreak"],
+  rollbackEngine: ((profile?: string) =>
+    ipcRenderer.invoke(
+      "rollback-engine",
+      profile,
+    )) as EngineBridgeApi["rollbackEngine"],
   getHermesUpstreamWatchState: (
     profile?: string,
   ): Promise<{

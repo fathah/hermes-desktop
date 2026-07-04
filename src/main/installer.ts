@@ -567,8 +567,39 @@ export async function getInstalledEngineSha(): Promise<string | null> {
   });
 }
 
-export function buildUnixInstallArgs(scriptPath: string): string[] {
-  return [scriptPath, "--skip-setup"];
+export interface InstallScriptOptions {
+  commit?: string;
+}
+
+export function buildUnixInstallArgs(
+  scriptPath: string,
+  options: InstallScriptOptions = {},
+): string[] {
+  const args = [scriptPath, "--skip-setup"];
+  if (options.commit) {
+    args.push("--commit", options.commit);
+  }
+  return args;
+}
+
+export function buildWindowsInstallCommand(
+  installerExpression: string,
+  hermesHome: string,
+  installDir: string,
+  options: InstallScriptOptions = {},
+): string {
+  const parts = [
+    `& ${installerExpression}`,
+    "-SkipSetup",
+    "-HermesHome",
+    psQuote(hermesHome),
+    "-InstallDir",
+    psQuote(installDir),
+  ];
+  if (options.commit) {
+    parts.push("-Commit", psQuote(options.commit));
+  }
+  return parts.join(" ");
 }
 
 const STAGE_MARKERS: { pattern: RegExp; step: number; title: string }[] = [
@@ -615,6 +646,7 @@ const STAGE_MARKERS: { pattern: RegExp; step: number; title: string }[] = [
 export async function runInstall(
   onProgress: (progress: InstallProgress) => void,
   parentWindow?: BrowserWindow | null,
+  options: InstallScriptOptions = {},
 ): Promise<void> {
   const totalSteps = 7;
   let log = "";
@@ -644,7 +676,7 @@ export async function runInstall(
   emit("Running official Hermes install script...\n");
 
   if (IS_WINDOWS) {
-    return runInstallWindows(emit);
+    return runInstallWindows(emit, options);
   }
 
   emit("→ Checking administrator access...\n");
@@ -678,7 +710,7 @@ export async function runInstall(
       const scriptPath = getBundledScriptPath("install.sh");
 
       const basePath = getEnhancedPath();
-      const proc = spawn("bash", buildUnixInstallArgs(scriptPath), {
+      const proc = spawn("bash", buildUnixInstallArgs(scriptPath, options), {
         cwd: home,
         env: {
           ...process.env,
@@ -729,6 +761,21 @@ export async function runInstall(
   }
 }
 
+function validateEngineSha(sha: string): void {
+  if (!/^[0-9a-f]{40}$/i.test(sha)) {
+    throw new Error("Rollback requires a full 40-character engine commit SHA.");
+  }
+}
+
+export async function rollbackEngineTo(
+  sha: string,
+  onProgress: (progress: InstallProgress) => void,
+  parentWindow?: BrowserWindow | null,
+): Promise<void> {
+  validateEngineSha(sha);
+  await runInstall(onProgress, parentWindow, { commit: sha });
+}
+
 function psQuote(s: string): string {
   return `'${s.replace(/'/g, "''")}'`;
 }
@@ -746,7 +793,10 @@ function resolvePowerShellExe(): string {
   return "powershell.exe";
 }
 
-async function runInstallWindows(emit: (t: string) => void): Promise<void> {
+async function runInstallWindows(
+  emit: (t: string) => void,
+  options: InstallScriptOptions = {},
+): Promise<void> {
   const home = homedir();
   const hermesHome = HERMES_HOME;
   const installDir = HERMES_REPO;
@@ -763,7 +813,7 @@ async function runInstallWindows(emit: (t: string) => void): Promise<void> {
     `$installer = Join-Path $env:TEMP ("hermes-install-script-" + [guid]::NewGuid().ToString() + ".ps1")`,
     "$text = [System.IO.File]::ReadAllText($localScript)",
     "[System.IO.File]::WriteAllText($installer, $text, (New-Object System.Text.UTF8Encoding $true))",
-    `& $installer -SkipSetup -HermesHome ${psQuote(hermesHome)} -InstallDir ${psQuote(installDir)}`,
+    buildWindowsInstallCommand("$installer", hermesHome, installDir, options),
     "$exit = $LASTEXITCODE",
     "Remove-Item -Force -ErrorAction SilentlyContinue $installer",
     "exit $exit",
