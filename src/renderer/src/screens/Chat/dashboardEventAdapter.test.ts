@@ -48,6 +48,15 @@ describe("mergeStreamedWithFinal", () => {
     expect(merged).not.toContain("checkIt");
   });
 
+  it("uses clean final CJK markdown when streaming dropped characters (#793)", () => {
+    const streamed =
+      "## 处理结\n\n**原因**：中文流式渲染时，Markdown 表和粗体标记会相邻文本粘连。";
+    const final =
+      "## 处理结果\n\n**原因**：中文流式渲染时，Markdown 表格和粗体标记会与相邻文本粘连。";
+
+    expect(mergeStreamedWithFinal(streamed, final)).toBe(final);
+  });
+
   it("stitches a re-streamed boundary, dropping the duplicated seam", () => {
     // Tail of streamed repeats the head of final at a word boundary.
     expect(mergeStreamedWithFinal("The answer is 4", "answer is 4.")).toBe(

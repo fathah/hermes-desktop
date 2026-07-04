@@ -427,6 +427,41 @@ function tailHeadOverlap(a: string, b: string): number {
   return 0;
 }
 
+function cjkCharSet(text: string): Set<string> {
+  return new Set(
+    text.match(
+      /\p{Script=Han}|\p{Script=Hiragana}|\p{Script=Katakana}|\p{Script=Hangul}/gu,
+    ) ?? [],
+  );
+}
+
+function cjkOverlapRatio(a: string, b: string): number {
+  const aSet = cjkCharSet(a);
+  const bSet = cjkCharSet(b);
+  if (aSet.size < 4 || bSet.size < 4) return 0;
+  let shared = 0;
+  for (const ch of aSet) {
+    if (bSet.has(ch)) shared += 1;
+  }
+  return shared / Math.min(aSet.size, bSet.size);
+}
+
+function shouldPreferFinalForCjkCorrection(
+  streamedContent: string,
+  finalContent: string,
+): boolean {
+  const overlap = cjkOverlapRatio(streamedContent, finalContent);
+  if (overlap < 0.72) return false;
+
+  const streamedLength = Array.from(streamedContent).length;
+  const finalLength = Array.from(finalContent).length;
+  const lengthRatio =
+    Math.min(streamedLength, finalLength) /
+    Math.max(streamedLength, finalLength);
+
+  return lengthRatio >= 0.55;
+}
+
 /**
  * Reconcile the text accumulated from streamed `message.delta` chunks with the
  * `final_response` delivered on `message.complete`.
@@ -462,6 +497,10 @@ export function mergeStreamedWithFinal(
 
   const overlap = tailHeadOverlap(streamedContent, finalContent);
   if (overlap > 0) return `${streamedContent}${finalContent.slice(overlap)}`;
+
+  if (shouldPreferFinalForCjkCorrection(streamedContent, finalContent)) {
+    return finalContent;
+  }
 
   // A re-streamed correction: the streamed deltas were garbled (e.g. a
   // corrupted CJK prefix) but converged on the same ending as the final text.
