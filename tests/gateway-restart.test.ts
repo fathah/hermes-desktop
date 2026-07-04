@@ -10,6 +10,7 @@ const {
   healthStatuses,
   aliveGatewayPids,
   spawned,
+  spawnErrorRef,
   lifecycleEvents,
   hermesCliArgsSpy,
 } = vi.hoisted(() => {
@@ -33,6 +34,7 @@ const {
         unref: ReturnType<typeof vi.fn>;
       }
     >,
+    spawnErrorRef: { error: null as Error | null },
     lifecycleEvents: [] as string[],
     hermesCliArgsSpy: vi.fn((extra?: string[]) => [
       "/dev/null",
@@ -43,6 +45,7 @@ const {
 
 vi.mock("child_process", () => {
   const spawnMock = vi.fn(() => {
+    if (spawnErrorRef.error) throw spawnErrorRef.error;
     const id = spawned.length + 1;
     const proc = Object.assign(new EventEmitter(), {
       killed: false,
@@ -116,6 +119,7 @@ import {
   isGatewayRunning,
   restartGateway,
   startGateway,
+  startGatewayDetailed,
   startGatewayWithRecovery,
   stopGateway,
   stopHealthPolling,
@@ -141,6 +145,7 @@ describe("gateway restart recovery", () => {
     healthStatuses.length = 0;
     aliveGatewayPids.clear();
     spawned.length = 0;
+    spawnErrorRef.error = null;
     lifecycleEvents.length = 0;
     hermesCliArgsSpy.mockClear();
     originalFetch = globalThis.fetch;
@@ -170,6 +175,32 @@ describe("gateway restart recovery", () => {
 
     spawned[0].exitCode = 1;
 
+    expect(isGatewayRunning("work")).toBe(false);
+  });
+
+  it("reports spawn failures without tracking a gateway process", () => {
+    spawnErrorRef.error = new Error("spawn boom");
+
+    const result = startGatewayDetailed("work");
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        success: false,
+        running: false,
+        error: "Failed to start the gateway process: spawn boom",
+      }),
+    );
+    expect(spawned).toHaveLength(0);
+    expect(isGatewayRunning("work")).toBe(false);
+  });
+
+  it("force-stops an app-started gateway and clears running state", () => {
+    expect(startGateway("work")).toBe(true);
+    expect(isGatewayRunning("work")).toBe(true);
+
+    stopGateway("work", true);
+
+    expect(spawned[0].killed).toBe(true);
     expect(isGatewayRunning("work")).toBe(false);
   });
 

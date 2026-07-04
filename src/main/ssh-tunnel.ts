@@ -3,6 +3,7 @@ import { homedir } from "os";
 import { join } from "path";
 import net from "net";
 import http from "node:http";
+import type { ClientRequest, IncomingMessage, RequestOptions } from "node:http";
 import { buildSshControlOptions } from "./ssh-options";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 
@@ -15,9 +16,88 @@ export interface SshConfig {
   localPort: number;
 }
 
+export interface SshTunnelRuntime {
+  spawn: typeof spawn;
+  createServer: typeof net.createServer;
+  connect: (
+    port: number,
+    host: string,
+    connectionListener?: () => void,
+  ) => net.Socket;
+  request: (
+    url: string | URL,
+    options: RequestOptions,
+    callback?: (res: IncomingMessage) => void,
+  ) => ClientRequest;
+  setTimeout: typeof setTimeout;
+  clearTimeout: typeof clearTimeout;
+  now: () => number;
+}
+
+export interface SshTunnelTiming {
+  healthRequestTimeoutMs: number;
+  healthPollRequestTimeoutMs: number;
+  exitHealthTimeoutMs: number;
+  healthPollIntervalMs: number;
+  portReadyTimeoutMs: number;
+  portPollIntervalMs: number;
+  startupHealthTimeoutMs: number;
+  connectionReadyDelayMs: number;
+  connectionReadyTimeoutMs: number;
+  connectionPollIntervalMs: number;
+  connectionOverallTimeoutMs: number;
+  connectionHealthRequestTimeoutMs: number;
+}
+
+const DEFAULT_SSH_TUNNEL_TIMING: SshTunnelTiming = {
+  healthRequestTimeoutMs: 3000,
+  healthPollRequestTimeoutMs: 1500,
+  exitHealthTimeoutMs: 2000,
+  healthPollIntervalMs: 500,
+  portReadyTimeoutMs: 12000,
+  portPollIntervalMs: 400,
+  startupHealthTimeoutMs: 20000,
+  connectionReadyDelayMs: 600,
+  connectionReadyTimeoutMs: 15000,
+  connectionPollIntervalMs: 400,
+  connectionOverallTimeoutMs: 20000,
+  connectionHealthRequestTimeoutMs: 3000,
+};
+
+function defaultSshTunnelRuntime(): SshTunnelRuntime {
+  return {
+    spawn,
+    createServer: net.createServer.bind(net) as typeof net.createServer,
+    connect: net.connect.bind(net) as SshTunnelRuntime["connect"],
+    request: http.request.bind(http) as SshTunnelRuntime["request"],
+    setTimeout: globalThis.setTimeout.bind(globalThis) as typeof setTimeout,
+    clearTimeout: globalThis.clearTimeout.bind(
+      globalThis,
+    ) as typeof clearTimeout,
+    now: () => Date.now(),
+  };
+}
+
+let sshTunnelRuntime = defaultSshTunnelRuntime();
+let sshTunnelTiming: SshTunnelTiming = { ...DEFAULT_SSH_TUNNEL_TIMING };
+
 let tunnelProcess: ChildProcess | null = null;
 let activeConfig: SshConfig | null = null;
 let tunnelRunning = false;
+
+export function __setSshTunnelRuntimeForTests(
+  runtime: Partial<SshTunnelRuntime>,
+  timing: Partial<SshTunnelTiming> = {},
+): void {
+  sshTunnelRuntime = { ...sshTunnelRuntime, ...runtime };
+  sshTunnelTiming = { ...sshTunnelTiming, ...timing };
+}
+
+export function __resetSshTunnelForTests(): void {
+  stopSshTunnel();
+  sshTunnelRuntime = defaultSshTunnelRuntime();
+  sshTunnelTiming = { ...DEFAULT_SSH_TUNNEL_TIMING };
+}
 
 export function getSshTunnelUrl(): string | null {
   if (!activeConfig || !tunnelRunning) return null;
@@ -28,9 +108,12 @@ export function isSshTunnelActive(): boolean {
   return tunnelRunning && activeConfig !== null;
 }
 
-function checkTunnelHealth(port: number, timeoutMs = 3000): Promise<boolean> {
+function checkTunnelHealth(
+  port: number,
+  timeoutMs = sshTunnelTiming.healthRequestTimeoutMs,
+): Promise<boolean> {
   return new Promise((resolve) => {
-    const req = http.request(
+    const req = sshTunnelRuntime.request(
       `http://127.0.0.1:${port}/health`,
       { method: "GET", timeout: timeoutMs },
       (res) => {
@@ -49,10 +132,18 @@ function checkTunnelHealth(port: number, timeoutMs = 3000): Promise<boolean> {
 }
 
 async function waitForHealth(port: number, timeoutMs: number): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() <= deadline) {
-    if (await checkTunnelHealth(port, 1500)) return;
-    await new Promise((resolve) => setTimeout(resolve, 500));
+  const deadline = sshTunnelRuntime.now() + timeoutMs;
+  while (sshTunnelRuntime.now() <= deadline) {
+    if (
+      await checkTunnelHealth(port, sshTunnelTiming.healthPollRequestTimeoutMs)
+    )
+      return;
+    await new Promise((resolve) =>
+      sshTunnelRuntime.setTimeout(
+        resolve,
+        sshTunnelTiming.healthPollIntervalMs,
+      ),
+    );
   }
   throw new Error(`SSH tunnel health check failed after ${timeoutMs}ms`);
 }
@@ -65,13 +156,13 @@ export async function isSshTunnelHealthy(): Promise<boolean> {
 
 function findFreePort(preferred: number): Promise<number> {
   return new Promise((resolve) => {
-    const server = net.createServer();
+    const server = sshTunnelRuntime.createServer();
     server.listen(preferred, "127.0.0.1", () => {
       const port = (server.address() as net.AddressInfo).port;
       server.close(() => resolve(port));
     });
     server.on("error", () => {
-      const fallback = net.createServer();
+      const fallback = sshTunnelRuntime.createServer();
       fallback.listen(0, "127.0.0.1", () => {
         const port = (fallback.address() as net.AddressInfo).port;
         fallback.close(() => resolve(port));
@@ -82,18 +173,21 @@ function findFreePort(preferred: number): Promise<number> {
 
 function waitForPort(port: number, timeoutMs: number): Promise<void> {
   return new Promise((resolve, reject) => {
-    const deadline = Date.now() + timeoutMs;
+    const deadline = sshTunnelRuntime.now() + timeoutMs;
     function attempt(): void {
-      const socket = net.connect(port, "127.0.0.1", () => {
+      const socket = sshTunnelRuntime.connect(port, "127.0.0.1", () => {
         socket.destroy();
         resolve();
       });
       socket.on("error", () => {
         socket.destroy();
-        if (Date.now() > deadline) {
+        if (sshTunnelRuntime.now() > deadline) {
           reject(new Error(`SSH tunnel not ready after ${timeoutMs}ms`));
         } else {
-          setTimeout(attempt, 400);
+          sshTunnelRuntime.setTimeout(
+            attempt,
+            sshTunnelTiming.portPollIntervalMs,
+          );
         }
       });
     }
@@ -133,39 +227,47 @@ export async function startSshTunnel(config: SshConfig): Promise<void> {
   activeConfig = { ...config, localPort };
   tunnelRunning = false;
 
-  tunnelProcess = spawn("ssh", buildSshArgs(config, localPort), {
-    stdio: "ignore",
-    detached: false,
-    ...HIDDEN_SUBPROCESS_OPTIONS,
-  });
+  tunnelProcess = sshTunnelRuntime.spawn(
+    "ssh",
+    buildSshArgs(config, localPort),
+    {
+      stdio: "ignore",
+      detached: false,
+      ...HIDDEN_SUBPROCESS_OPTIONS,
+    },
+  );
 
   tunnelProcess.on("exit", () => {
     tunnelProcess = null;
     // With ControlMaster=auto, the spawned SSH process exits immediately
     // after handing off to the master. The tunnel may still be alive via
     // the mux master, so check health before declaring it dead.
-    checkTunnelHealth(localPort, 2000).then((healthy) => {
-      if (!healthy) {
-        tunnelRunning = false;
-        activeConfig = null;
-      }
-    });
+    checkTunnelHealth(localPort, sshTunnelTiming.exitHealthTimeoutMs).then(
+      (healthy) => {
+        if (!healthy) {
+          tunnelRunning = false;
+          activeConfig = null;
+        }
+      },
+    );
   });
 
   tunnelProcess.on("error", () => {
     tunnelProcess = null;
-    checkTunnelHealth(localPort, 2000).then((healthy) => {
-      if (!healthy) {
-        tunnelRunning = false;
-        activeConfig = null;
-      }
-    });
+    checkTunnelHealth(localPort, sshTunnelTiming.exitHealthTimeoutMs).then(
+      (healthy) => {
+        if (!healthy) {
+          tunnelRunning = false;
+          activeConfig = null;
+        }
+      },
+    );
   });
 
   try {
-    await waitForPort(localPort, 12000);
+    await waitForPort(localPort, sshTunnelTiming.portReadyTimeoutMs);
     tunnelRunning = true;
-    await waitForHealth(localPort, 20000);
+    await waitForHealth(localPort, sshTunnelTiming.startupHealthTimeoutMs);
   } catch (err) {
     stopSshTunnel();
     throw err;
@@ -192,7 +294,7 @@ export function testSshConnection(config: SshConfig): Promise<boolean> {
       (localPort) =>
         new Promise<boolean>((resolve) => {
           const args = buildSshArgs(config, localPort);
-          const proc = spawn("ssh", args, {
+          const proc = sshTunnelRuntime.spawn("ssh", args, {
             stdio: "ignore",
             ...HIDDEN_SUBPROCESS_OPTIONS,
           });
@@ -207,14 +309,18 @@ export function testSshConnection(config: SshConfig): Promise<boolean> {
 
           proc.on("error", () => finish(false));
 
-          const timeout = setTimeout(() => finish(false), 20000);
+          const timeout = sshTunnelRuntime.setTimeout(
+            () => finish(false),
+            sshTunnelTiming.connectionOverallTimeoutMs,
+          );
 
           // Poll until tunnel port is reachable, then hit /health
-          const deadline = Date.now() + 15000;
+          const deadline =
+            sshTunnelRuntime.now() + sshTunnelTiming.connectionReadyTimeoutMs;
           async function poll(): Promise<void> {
             if (done) return;
             const portOpen = await new Promise<boolean>((res) => {
-              const s = net.connect(localPort, "127.0.0.1", () => {
+              const s = sshTunnelRuntime.connect(localPort, "127.0.0.1", () => {
                 s.destroy();
                 res(true);
               });
@@ -225,33 +331,42 @@ export function testSshConnection(config: SshConfig): Promise<boolean> {
             });
 
             if (!portOpen) {
-              if (Date.now() > deadline) {
-                clearTimeout(timeout);
+              if (sshTunnelRuntime.now() > deadline) {
+                sshTunnelRuntime.clearTimeout(timeout);
                 finish(false);
                 return;
               }
-              setTimeout(poll, 400);
+              sshTunnelRuntime.setTimeout(
+                poll,
+                sshTunnelTiming.connectionPollIntervalMs,
+              );
               return;
             }
 
             // Port is open — hit hermes /health
-            const req = http.request(
+            const req = sshTunnelRuntime.request(
               `http://127.0.0.1:${localPort}/health`,
-              { method: "GET", timeout: 3000 },
+              {
+                method: "GET",
+                timeout: sshTunnelTiming.connectionHealthRequestTimeoutMs,
+              },
               (res) => {
-                clearTimeout(timeout);
+                sshTunnelRuntime.clearTimeout(timeout);
                 finish(res.statusCode === 200);
                 res.resume();
               },
             );
             req.on("error", () => {
-              clearTimeout(timeout);
+              sshTunnelRuntime.clearTimeout(timeout);
               finish(false);
             });
             req.end();
           }
 
-          setTimeout(poll, 600);
+          sshTunnelRuntime.setTimeout(
+            poll,
+            sshTunnelTiming.connectionReadyDelayMs,
+          );
         }),
     )
     .catch(() => false);

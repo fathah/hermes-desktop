@@ -751,12 +751,17 @@ try {
     throw new Error(`quick-capture kind mismatch: ${kind}`);
   }
   await captureWin.getByRole("textbox").fill(QUICK_CAPTURE_TASK_TEXT);
-  await captureWin.getByRole("button", { name: "Save Task" }).click();
-  await captureWin.getByText(/On your list/).waitFor({ timeout: 10000 });
-  assertQuickCaptureTaskPersisted();
+  await captureWin.waitForTimeout(300);
   await captureWin.screenshot({
     path: join(OUT, "24-quick-capture-task.png"),
   });
+  await captureWin.getByRole("button", { name: "Save Task" }).click();
+  try {
+    await captureWin.getByText(/On your list/).waitFor({ timeout: 10000 });
+  } catch (err) {
+    if (!captureWin.isClosed()) throw err;
+  }
+  assertQuickCaptureTaskPersisted();
   shots.push("24-quick-capture-task");
   console.log("SHOT ok:", "24-quick-capture-task");
 } catch (e) {
