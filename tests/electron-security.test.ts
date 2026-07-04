@@ -99,7 +99,7 @@ describe("Electron main process hardening", () => {
 
   it("runs the Unix installer without a bash -c command string", () => {
     expect(installerSrc).toContain(
-      'spawn("bash", buildUnixInstallArgs(scriptPath),',
+      'spawn("bash", buildUnixInstallArgs(scriptPath, options),',
     );
     expect(installerSrc).not.toContain('spawn("bash", ["-c"');
   });

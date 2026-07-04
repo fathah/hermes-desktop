@@ -331,7 +331,9 @@ export function startGatewayDetailed(profile?: string): GatewayStartResult {
     stderrFd = -1;
   }
 
-  const cliArgs = resolved ? ["--profile", resolved, "gateway"] : ["gateway"];
+  const cliArgs = resolved
+    ? ["--profile", resolved, "gateway", "run"]
+    : ["gateway", "run"];
   let proc: ChildProcess;
   try {
     proc = gatewayProcessRuntime.spawn(HERMES_PYTHON, hermesCliArgs(cliArgs), {
@@ -415,25 +417,41 @@ function gatewayPidPath(profile?: string): string {
   return join(profileHome(resolveProfile(profile)), "gateway.pid");
 }
 
-function readPidFile(profile?: string): number | null {
-  return readPidFileEntry(profile)?.pid ?? null;
+function gatewayLockPath(profile?: string): string {
+  return join(profileHome(resolveProfile(profile)), "gateway.lock");
 }
 
-function readPidFileEntry(
-  profile?: string,
+function parseRuntimePid(raw: string): number | null {
+  try {
+    const parsed = raw.startsWith("{")
+      ? (JSON.parse(raw) as { pid?: unknown }).pid
+      : parseInt(raw, 10);
+    return typeof parsed === "number" && !isNaN(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function readRuntimeEntry(
+  path: string,
 ): { path: string; pid: number; raw: string } | null {
-  const path = gatewayPidPath(profile);
   if (!existsSync(path)) return null;
   try {
     const raw = readFileSync(path, "utf-8").trim();
-    const parsed = raw.startsWith("{")
-      ? JSON.parse(raw).pid
-      : parseInt(raw, 10);
-    const pid = typeof parsed === "number" && !isNaN(parsed) ? parsed : null;
+    const pid = parseRuntimePid(raw);
     return pid === null ? null : { path, pid, raw };
   } catch {
     return null;
   }
+}
+
+function readGatewayRuntimeEntry(
+  profile?: string,
+): { path: string; pid: number; raw: string } | null {
+  return (
+    readRuntimeEntry(gatewayPidPath(profile)) ??
+    readRuntimeEntry(gatewayLockPath(profile))
+  );
 }
 
 export function stopGateway(profile?: string, force = false): void {
@@ -446,10 +464,10 @@ export function stopGateway(profile?: string, force = false): void {
   }
   gatewayProcesses.delete(key);
 
-  const pid = readPidFile(profile);
-  if (pid) {
+  const runtimeEntry = readGatewayRuntimeEntry(profile);
+  if (runtimeEntry?.pid) {
     try {
-      process.kill(pid, "SIGTERM");
+      process.kill(runtimeEntry.pid, "SIGTERM");
     } catch {
       // already dead
     }
@@ -484,9 +502,9 @@ function isChildProcessAlive(proc: ChildProcess): boolean {
 export function isGatewayRunning(profile?: string): boolean {
   const proc = gatewayProcesses.get(profileKey(profile));
   if (proc && isChildProcessAlive(proc)) return true;
-  const pid = readPidFile(profile);
-  if (!pid) return false;
-  return pidIsAliveAs(pid, GATEWAY_IMAGE_PREFIXES);
+  const runtimeEntry = readGatewayRuntimeEntry(profile);
+  if (!runtimeEntry) return false;
+  return pidIsAliveAs(runtimeEntry.pid, GATEWAY_IMAGE_PREFIXES);
 }
 
 export function isApiReady(): boolean {
@@ -528,6 +546,19 @@ async function waitForApiServerStopped(
   const deadline = gatewayProcessRuntime.now() + timeoutMs;
   while (gatewayProcessRuntime.now() < deadline) {
     if (!(await isApiServerReady(profile))) return true;
+    await delay(pollMs);
+  }
+  return false;
+}
+
+async function waitForGatewayProcessStopped(
+  profile?: string,
+  timeoutMs = 5000,
+  pollMs = 250,
+): Promise<boolean> {
+  const deadline = gatewayProcessRuntime.now() + timeoutMs;
+  while (gatewayProcessRuntime.now() < deadline) {
+    if (!isGatewayRunning(profile)) return true;
     await delay(pollMs);
   }
   return false;
@@ -605,15 +636,20 @@ async function restartGatewayLocallyOnce(
     const key = profileKey(profile);
     const previousProcess = gatewayProcesses.get(key) ?? null;
     const previousStartedByApp = appStartedProfiles.has(key);
-    const previousPidEntry = readPidFileEntry(profile);
+    const previousPidEntry = readGatewayRuntimeEntry(profile);
 
     stopGateway(profile, true);
-    const stopped = await waitForApiServerStopped(
+    const processStopped = await waitForGatewayProcessStopped(
       profile,
       stopTimeoutMs,
       healthPollMs,
     );
-    if (!stopped) {
+    const apiStopped = await waitForApiServerStopped(
+      profile,
+      stopTimeoutMs,
+      healthPollMs,
+    );
+    if (!processStopped || !apiStopped) {
       console.error(
         `[gateway:${key}] Restart failed: gateway did not stop before restart`,
       );

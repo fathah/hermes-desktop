@@ -24,7 +24,10 @@ import { isValidNamedProfileName, profileHome } from "./utils";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 import { getApiUrl, getRemoteAuthHeader } from "./hermes";
 import { gatewayFetch } from "./security/network-policy";
-import { recordSkillCapability, removeSkillCapability } from "./capability-risk-store";
+import {
+  recordSkillCapability,
+  removeSkillCapability,
+} from "./capability-risk-store";
 import { getSharedDb } from "./db";
 
 export interface InstalledSkill {
@@ -108,7 +111,10 @@ function collectSkillsFromRoot(root: string): InstalledSkill[] {
                 if (!existsSync(subSkillFile)) continue;
 
                 try {
-                  const content = readFileSync(subSkillFile, "utf-8").slice(0, 4000);
+                  const content = readFileSync(subSkillFile, "utf-8").slice(
+                    0,
+                    4000,
+                  );
                   const meta = parseSkillFrontmatter(content);
                   skills.push({
                     name: meta.name || subEntry,
@@ -242,10 +248,20 @@ export function getSkillContent(skillPath: string): string {
  * Search the skill registry via the hermes CLI.
  */
 export function searchSkills(query: string): SkillSearchResult[] {
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) return [];
+
   try {
     const output = execFileSync(
       HERMES_PYTHON,
-      hermesCliArgs(["skills", "browse", "--query", query, "--json"]),
+      hermesCliArgs([
+        "skills",
+        "search",
+        trimmedQuery,
+        "--json",
+        "--limit",
+        "50",
+      ]),
       {
         cwd: HERMES_REPO,
         env: {
@@ -443,7 +459,10 @@ export function uninstallSkill(name: string, profile?: string): SkillCliResult {
   const targetSkill = [...installed, ...disabled].find(
     (s) =>
       s.name.toLowerCase() === name.toLowerCase() ||
-      s.path.split(/[\\/]+/).pop()?.toLowerCase() === name.toLowerCase() ||
+      s.path
+        .split(/[\\/]+/)
+        .pop()
+        ?.toLowerCase() === name.toLowerCase() ||
       slugify(s.name) === slugify(name),
   );
 

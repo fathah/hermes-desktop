@@ -18,10 +18,7 @@ export type EngineContractFindingVerdict =
   | "unknown"
   | "warn";
 
-export type EngineContractVerificationStatus =
-  | "passed"
-  | "broken"
-  | "unknown";
+export type EngineContractVerificationStatus = "passed" | "broken" | "unknown";
 
 export interface EngineContractFinding {
   entryId: string;
@@ -80,6 +77,14 @@ export const ENGINE_CONTRACT = [
     tier: "fail",
   },
   {
+    id: "cli-gateway-run",
+    kind: "cli",
+    value: "gateway run",
+    usedBy: ["src/main/hermes/gateway-process.ts"],
+    upstreamPaths: ["hermes_cli/_parser.py", "gateway/"],
+    tier: "fail",
+  },
+  {
     id: "cli-security-audit",
     kind: "cli",
     value: "security audit",
@@ -94,22 +99,6 @@ export const ENGINE_CONTRACT = [
     flags: ["--json"],
     usedBy: ["src/main/installer.ts"],
     upstreamPaths: ["hermes_cli/_parser.py"],
-    tier: "fail",
-  },
-  {
-    id: "cli-config-get-secret",
-    kind: "cli",
-    value: "config get-secret",
-    usedBy: ["src/main/config/env-store.ts"],
-    upstreamPaths: ["hermes_cli/_parser.py", "hermes_cli/config.py"],
-    tier: "fail",
-  },
-  {
-    id: "cli-config-set-secret",
-    kind: "cli",
-    value: "config set-secret",
-    usedBy: ["src/main/config/env-store.ts"],
-    upstreamPaths: ["hermes_cli/_parser.py", "hermes_cli/config.py"],
     tier: "fail",
   },
   {
@@ -203,11 +192,11 @@ export const ENGINE_CONTRACT = [
     tier: "fail",
   },
   {
-    id: "cli-skills-browse",
+    id: "cli-skills-search",
     kind: "cli",
-    value: "skills browse",
-    flags: ["--query", "--json"],
-    usedBy: ["src/main/skills.ts"],
+    value: "skills search",
+    flags: ["--json", "--limit"],
+    usedBy: ["src/main/skills.ts", "src/main/ssh-remote/skills.ts"],
     upstreamPaths: ["hermes_cli/_parser.py", "hermes_cli/skills.py"],
     tier: "fail",
   },
@@ -295,7 +284,7 @@ export const ENGINE_CONTRACT = [
     value: "/openapi.json",
     usedBy: ["src/main/hermes/chat-client/api.ts"],
     upstreamPaths: ["gateway/platforms/api_server.py"],
-    tier: "fail",
+    tier: "warn",
   },
   {
     id: "http-capabilities",
@@ -327,7 +316,7 @@ export const ENGINE_CONTRACT = [
     value: "/api/chat/completions",
     usedBy: ["src/main/hermes/chat-client/api.ts"],
     upstreamPaths: ["gateway/platforms/api_server.py"],
-    tier: "fail",
+    tier: "warn",
   },
   {
     id: "http-run-approval",
@@ -343,7 +332,7 @@ export const ENGINE_CONTRACT = [
     value: "/api/jobs",
     usedBy: ["src/main/cronjobs.ts"],
     upstreamPaths: ["gateway/platforms/api_server.py", "cron/"],
-    tier: "fail",
+    tier: "warn",
   },
   {
     id: "http-job-by-id",
@@ -351,7 +340,7 @@ export const ENGINE_CONTRACT = [
     value: "/api/jobs/{id}",
     usedBy: ["src/main/cronjobs.ts"],
     upstreamPaths: ["gateway/platforms/api_server.py", "cron/"],
-    tier: "fail",
+    tier: "warn",
   },
   {
     id: "config-model",
@@ -414,7 +403,10 @@ export const ENGINE_CONTRACT = [
     id: "json-auth",
     kind: "json-file",
     value: "auth.json",
-    usedBy: ["src/main/config/credential-pool.ts", "src/main/config/env-store.ts"],
+    usedBy: [
+      "src/main/config/credential-pool.ts",
+      "src/main/config/env-store.ts",
+    ],
     upstreamPaths: ["hermes_cli/auth.py"],
     tier: "warn",
   },

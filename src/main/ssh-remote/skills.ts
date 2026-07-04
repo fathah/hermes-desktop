@@ -123,10 +123,13 @@ export async function sshSearchSkills(
   config: SshConfig,
   query: string,
 ): Promise<SkillSearchResult[]> {
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) return [];
+
   try {
     const out = await sshExec(
       config,
-      `hermes skills browse --query ${shellQuote(query)} --json 2>/dev/null || echo "[]"`,
+      `hermes skills search ${shellQuote(trimmedQuery)} --json --limit 50 2>/dev/null || echo "[]"`,
     );
     const parsed = JSON.parse(out.trim() || "[]");
     if (Array.isArray(parsed)) {

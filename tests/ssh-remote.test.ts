@@ -24,6 +24,7 @@ vi.mock("../src/main/locale", () => ({
 
 import {
   buildRemoteHermesCmd,
+  sshSearchSkills,
   sshSetConfigValue,
   buildGatewayStartCommand,
   buildGatewayStopCommand,
@@ -173,6 +174,41 @@ describe("ssh memory provider discovery", () => {
     });
     expect(discoveryScript).toContain('"recall-sqlite"');
     expect(discoveryScript).toContain("memory.providers.recall-sqlite");
+  });
+});
+
+describe("ssh skill search", () => {
+  it("uses current query-based skills search CLI", async () => {
+    let remoteCommand = "";
+    mockSpawn.mockImplementation((_cmd: string, args: string[]) => {
+      remoteCommand = args.at(-1) || "";
+      return makeSshProcess(
+        JSON.stringify([
+          {
+            name: "research-scout",
+            description: "Finds sources",
+            category: "research",
+            source: "official",
+          },
+        ]),
+      );
+    });
+
+    const results = await sshSearchSkills(sshConfig, "research scout");
+
+    expect(remoteCommand).toContain(
+      "hermes skills search 'research scout' --json --limit 50",
+    );
+    expect(remoteCommand).not.toContain("skills browse --query");
+    expect(results).toEqual([
+      {
+        name: "research-scout",
+        description: "Finds sources",
+        category: "research",
+        source: "official",
+        installed: false,
+      },
+    ]);
   });
 });
 

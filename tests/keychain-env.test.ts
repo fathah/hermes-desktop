@@ -1,14 +1,5 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
 
-const mockExecFileSync = vi.fn();
-vi.mock("child_process", () => {
-  const fns = {
-    execFileSync: (file: string, args?: string[], options?: unknown) =>
-      mockExecFileSync(file, args, options),
-  };
-  return { ...fns, default: fns };
-});
-
 const mockFiles: Record<string, string> = {};
 const mockExistsSync = vi.fn((path: string) => !!mockFiles[path]);
 const mockReadFileSync = vi.fn((path: string) => mockFiles[path] || "");
@@ -56,28 +47,56 @@ vi.mock("../src/main/config/cache", () => ({
   invalidateCache: () => {},
 }));
 
+const mockIsSecretEncryptionAvailable = vi.fn(() => true);
+const mockEncryptSecret = vi.fn((value: string) => `encrypted:${value}`);
+const mockCanDecryptSecret = vi.fn((payload: string) =>
+  payload.startsWith("encrypted:"),
+);
+const mockDecryptSecret = vi.fn((payload: string) =>
+  payload.replace(/^encrypted:/, ""),
+);
+
+vi.mock("../src/main/config/secrets", () => ({
+  isSecretEncryptionAvailable: () => mockIsSecretEncryptionAvailable(),
+  encryptSecret: (value: string) => mockEncryptSecret(value),
+  canDecryptSecret: (payload: string) => mockCanDecryptSecret(payload),
+  decryptSecret: (payload: string) => mockDecryptSecret(payload),
+}));
+
 import { readEnv, setEnvValue } from "../src/main/config/env-store";
 
 describe("env-store keychain delegation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockExistsSync.mockImplementation((path: string) => !!mockFiles[path]);
+    mockReadFileSync.mockImplementation(
+      (path: string) => mockFiles[path] || "",
+    );
+    mockWriteFileSync.mockImplementation((path: string, data: string) => {
+      mockFiles[path] = data;
+    });
+    mockIsSecretEncryptionAvailable.mockReturnValue(true);
+    mockEncryptSecret.mockImplementation(
+      (value: string) => `encrypted:${value}`,
+    );
+    mockCanDecryptSecret.mockImplementation((payload: string) =>
+      payload.startsWith("encrypted:"),
+    );
+    mockDecryptSecret.mockImplementation((payload: string) =>
+      payload.replace(/^encrypted:/, ""),
+    );
     for (const key of Object.keys(mockFiles)) {
       delete mockFiles[key];
     }
   });
 
-  it("writes sensitive keys to the keychain and placeholders to the .env file", () => {
-    mockExecFileSync.mockReturnValue(Buffer.from("✓"));
-
+  it("writes sensitive keys to encrypted desktop storage and placeholders to the .env file", () => {
     // EMAIL_PASSWORD is a sensitive key
     setEnvValue("EMAIL_PASSWORD", "secret_pass", "default");
 
-    // Verify execFileSync was called with set-secret
-    expect(mockExecFileSync).toHaveBeenCalledWith(
-      "python",
-      ["config", "set-secret", "default", "EMAIL_PASSWORD", "secret_pass"],
-      expect.any(Object),
-    );
+    expect(
+      mockFiles["/mock/home/profiles/default/.env.secrets.json"],
+    ).toContain('"EMAIL_PASSWORD": "encrypted:secret_pass"');
 
     // Verify the file was written with the placeholder
     const envContent = mockFiles["/mock/home/profiles/default/.env"];
@@ -87,25 +106,20 @@ describe("env-store keychain delegation", () => {
   it("reads sensitive keys from the keychain when the placeholder __keychain__ is found", () => {
     mockFiles["/mock/home/profiles/default/.env"] =
       "EMAIL_PASSWORD=__keychain__\n";
-    mockExistsSync.mockReturnValue(true);
-    mockExecFileSync.mockReturnValue(Buffer.from("resolved_secret_password\n"));
+    mockFiles["/mock/home/profiles/default/.env.secrets.json"] = JSON.stringify(
+      {
+        version: 1,
+        secrets: { EMAIL_PASSWORD: "encrypted:resolved_secret_password" },
+      },
+    );
 
     const env = readEnv("default");
-
-    // Verify execFileSync was called with get-secret
-    expect(mockExecFileSync).toHaveBeenCalledWith(
-      "python",
-      ["config", "get-secret", "default", "EMAIL_PASSWORD"],
-      expect.any(Object),
-    );
 
     expect(env.EMAIL_PASSWORD).toBe("resolved_secret_password");
   });
 
   it("fails closed instead of writing sensitive plaintext if the keychain call fails", () => {
-    mockExecFileSync.mockImplementation(() => {
-      throw new Error("Keychain unavailable");
-    });
+    mockIsSecretEncryptionAvailable.mockReturnValue(false);
 
     expect(() =>
       setEnvValue("EMAIL_PASSWORD", "plain_backup_pass", "default"),
@@ -119,10 +133,8 @@ describe("env-store keychain delegation", () => {
     const consoleError = vi
       .spyOn(console, "error")
       .mockImplementation(() => {});
-    mockExecFileSync.mockImplementation(() => {
-      throw new Error(
-        "Command failed: python hermes config set-secret default OPENAI_API_KEY sk-test-log-secret",
-      );
+    mockEncryptSecret.mockImplementation(() => {
+      throw new Error("encrypt failed for sk-test-log-secret");
     });
 
     expect(() =>
@@ -139,35 +151,26 @@ describe("env-store keychain delegation", () => {
   });
 
   it("stores provider API keys in the keychain, not plaintext .env", () => {
-    mockExecFileSync.mockReturnValue(Buffer.from("✓"));
-
     setEnvValue("OPENAI_API_KEY", "sk-test-secret", "default");
 
-    expect(mockExecFileSync).toHaveBeenCalledWith(
-      "python",
-      ["config", "set-secret", "default", "OPENAI_API_KEY", "sk-test-secret"],
-      expect.any(Object),
-    );
+    expect(
+      mockFiles["/mock/home/profiles/default/.env.secrets.json"],
+    ).toContain('"OPENAI_API_KEY": "encrypted:sk-test-secret"');
     expect(mockFiles["/mock/home/profiles/default/.env"]).toContain(
       "OPENAI_API_KEY=__keychain__",
     );
   });
 
   it("clears sensitive keys without leaving a keychain placeholder", () => {
-    mockExecFileSync.mockReturnValue(Buffer.from("✓"));
-
     setEnvValue("OPENROUTER_API_KEY", "sk-or-test-secret", "default");
     setEnvValue("OPENROUTER_API_KEY", "", "default");
-
-    expect(mockExecFileSync).toHaveBeenLastCalledWith(
-      "python",
-      ["config", "set-secret", "default", "OPENROUTER_API_KEY", ""],
-      expect.any(Object),
-    );
 
     const envContent = mockFiles["/mock/home/profiles/default/.env"];
     expect(envContent).toContain("OPENROUTER_API_KEY=");
     expect(envContent).not.toContain("OPENROUTER_API_KEY=__keychain__");
     expect(envContent).not.toContain("sk-or-test-secret");
+    expect(
+      mockFiles["/mock/home/profiles/default/.env.secrets.json"],
+    ).not.toContain("sk-or-test-secret");
   });
 });

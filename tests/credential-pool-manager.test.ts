@@ -25,6 +25,26 @@ const { mockExecFileSync, mockSecrets } = vi.hoisted(() => ({
   mockSecrets: new Map<string, string>(),
 }));
 
+let encryptionAvailable = true;
+let failNextEncrypt = false;
+const safeStorageMock = {
+  isEncryptionAvailable: () => encryptionAvailable,
+  encryptString: (secret: string) => {
+    if (failNextEncrypt) {
+      failNextEncrypt = false;
+      throw new Error("keychain unavailable");
+    }
+    return Buffer.from(`encrypted:${secret}`, "utf-8");
+  },
+  decryptString: (buffer: Buffer) => {
+    const value = buffer.toString("utf-8");
+    if (!value.startsWith("encrypted:")) {
+      throw new Error("Decryption failed");
+    }
+    return value.slice("encrypted:".length);
+  },
+};
+
 vi.mock("child_process", () => {
   const fns = {
     execFileSync: mockExecFileSync,
@@ -49,6 +69,11 @@ async function freshConfig(home: string): Promise<{
 }> {
   vi.resetModules();
   process.env.HERMES_HOME = home;
+  (
+    globalThis as typeof globalThis & {
+      mockSafeStorage?: typeof safeStorageMock;
+    }
+  ).mockSafeStorage = safeStorageMock;
   const config = await import("../src/main/config");
   const manager = await import("../src/main/config/credential-pool-manager");
   return {
@@ -63,6 +88,8 @@ describe("CredentialPoolManager", () => {
   beforeEach(() => {
     mockExecFileSync.mockClear();
     mockSecrets.clear();
+    encryptionAvailable = true;
+    failNextEncrypt = false;
     mkdirSync(TEST_DIR, { recursive: true });
     // Write a base config.yaml so profilePaths doesn't throw
     writeFileSync(
@@ -73,6 +100,11 @@ describe("CredentialPoolManager", () => {
 
   afterEach(() => {
     delete process.env.HERMES_HOME;
+    delete (
+      globalThis as typeof globalThis & {
+        mockSafeStorage?: typeof safeStorageMock;
+      }
+    ).mockSafeStorage;
     vi.resetModules();
     rmSync(TEST_DIR, { recursive: true, force: true });
   });
@@ -146,9 +178,7 @@ describe("CredentialPoolManager", () => {
       await freshConfig(TEST_DIR);
     addCredentialPoolEntry("openai", "key-first", "First", "default");
     const before = getCredentialPool("default").openai[0].request_count;
-    mockExecFileSync.mockImplementationOnce(() => {
-      throw new Error("keychain unavailable");
-    });
+    failNextEncrypt = true;
 
     const selected = CredentialPoolManager.rotateKey("openai", "default");
     expect(selected).toBeNull();

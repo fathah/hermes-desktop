@@ -1,18 +1,16 @@
 import { readFileSync, existsSync } from "fs";
-import { execFileSync } from "child_process";
-import { homedir } from "os";
+import { join } from "path";
 import { escapeRegex, profilePaths, safeWriteFile } from "../utils";
 import { getCached, setCache, invalidateCache } from "./cache";
 import {
-  HERMES_PYTHON,
-  HERMES_REPO,
-  HERMES_HOME,
-  hermesCliArgs,
-  getEnhancedPath,
-} from "../installer";
-import { HIDDEN_SUBPROCESS_OPTIONS } from "../process-options";
+  canDecryptSecret,
+  decryptSecret,
+  encryptSecret,
+  isSecretEncryptionAvailable,
+} from "./secrets";
 
 const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const ENV_SECRET_SIDECAR = ".env.secrets.json";
 
 const SENSITIVE_ENV_KEYS = new Set([
   "API_SERVER_KEY",
@@ -60,7 +58,9 @@ function isSensitiveEnvKey(key: string): boolean {
   );
 }
 
-function keychainErrorSummary(err: unknown): Record<string, unknown> | string {
+function secretStoreErrorSummary(
+  err: unknown,
+): Record<string, unknown> | string {
   if (!err || typeof err !== "object") return typeof err;
   const detail = err as {
     code?: unknown;
@@ -81,6 +81,89 @@ function keychainErrorSummary(err: unknown): Record<string, unknown> | string {
     }
   }
   return Object.keys(summary).length ? summary : "redacted";
+}
+
+interface EnvSecretSidecar {
+  version: 1;
+  secrets: Record<string, string>;
+}
+
+function emptySecretSidecar(): EnvSecretSidecar {
+  return { version: 1, secrets: {} };
+}
+
+function envSecretFile(profile?: string): string {
+  return join(profilePaths(profile).home, ENV_SECRET_SIDECAR);
+}
+
+function readEnvSecretSidecar(
+  profile?: string,
+  strict = false,
+): EnvSecretSidecar {
+  const secretFile = envSecretFile(profile);
+  if (!existsSync(secretFile)) return emptySecretSidecar();
+
+  try {
+    const parsed = JSON.parse(readFileSync(secretFile, "utf-8")) as {
+      secrets?: unknown;
+    };
+    const rawSecrets =
+      parsed && typeof parsed.secrets === "object" && parsed.secrets !== null
+        ? parsed.secrets
+        : {};
+    const secrets: Record<string, string> = {};
+    for (const [key, value] of Object.entries(rawSecrets)) {
+      if (typeof value === "string") secrets[key] = value;
+    }
+    return { version: 1, secrets };
+  } catch (err) {
+    if (strict) {
+      throw err;
+    }
+    console.error(
+      "[SecretStore] Failed to read encrypted environment secret sidecar:",
+      secretStoreErrorSummary(err),
+    );
+    return emptySecretSidecar();
+  }
+}
+
+function readEnvSecret(key: string, profile?: string): string {
+  const payload = readEnvSecretSidecar(profile).secrets[key];
+  if (!payload) return "";
+  if (!isSecretEncryptionAvailable() || !canDecryptSecret(payload)) {
+    console.error(
+      `[SecretStore] Failed to decrypt ${key} from encrypted environment secret sidecar:`,
+      "redacted",
+    );
+    return "";
+  }
+  return decryptSecret(payload);
+}
+
+function encryptEnvSecret(key: string, value: string): string {
+  if (!isSecretEncryptionAvailable()) {
+    throw new Error("Secret encryption is unavailable.");
+  }
+
+  const payload = encryptSecret(value);
+  if (!payload || payload === value || !canDecryptSecret(payload)) {
+    throw new Error(`Encrypted payload for ${key} could not be verified.`);
+  }
+  return payload;
+}
+
+function writeEnvSecret(key: string, value: string, profile?: string): void {
+  const sidecar = readEnvSecretSidecar(profile, true);
+  if (value.trim()) {
+    sidecar.secrets[key] = encryptEnvSecret(key, value);
+  } else {
+    delete sidecar.secrets[key];
+  }
+  safeWriteFile(
+    envSecretFile(profile),
+    JSON.stringify(sidecar, null, 2) + "\n",
+  );
 }
 
 export function readEnv(profile?: string): Record<string, string> {
@@ -111,30 +194,11 @@ export function readEnv(profile?: string): Record<string, string> {
 
     if (value === "__keychain__") {
       try {
-        const activeProfile = profile || "default";
-        const args = hermesCliArgs([
-          "config",
-          "get-secret",
-          activeProfile,
-          key,
-        ]);
-        const output = execFileSync(HERMES_PYTHON, args, {
-          cwd: HERMES_REPO,
-          env: {
-            ...process.env,
-            PATH: getEnhancedPath(),
-            HOME: homedir(),
-            HERMES_HOME,
-          },
-          stdio: "pipe",
-          timeout: 10000,
-          ...HIDDEN_SUBPROCESS_OPTIONS,
-        });
-        value = output.toString().trim();
+        value = readEnvSecret(key, profile);
       } catch (err) {
         console.error(
-          `[Keychain] Failed to retrieve ${key} from OS Keychain:`,
-          keychainErrorSummary(err),
+          `[SecretStore] Failed to retrieve ${key} from encrypted environment secret sidecar:`,
+          secretStoreErrorSummary(err),
         );
         value = "";
       }
@@ -161,34 +225,15 @@ export function setEnvValue(
   let finalValue = value;
   if (isSensitiveEnvKey(key)) {
     try {
-      const activeProfile = profile || "default";
-      const args = hermesCliArgs([
-        "config",
-        "set-secret",
-        activeProfile,
-        key,
-        value,
-      ]);
-      execFileSync(HERMES_PYTHON, args, {
-        cwd: HERMES_REPO,
-        env: {
-          ...process.env,
-          PATH: getEnhancedPath(),
-          HOME: homedir(),
-          HERMES_HOME,
-        },
-        stdio: "ignore",
-        timeout: 10000,
-        ...HIDDEN_SUBPROCESS_OPTIONS,
-      });
+      writeEnvSecret(key, value, profile);
       finalValue = value.trim() ? "__keychain__" : "";
     } catch (err) {
       console.error(
-        `[Keychain] Failed to store ${key} in OS Keychain:`,
-        keychainErrorSummary(err),
+        `[SecretStore] Failed to store ${key} in encrypted environment secret sidecar:`,
+        secretStoreErrorSummary(err),
       );
       throw new Error(
-        `Failed to store sensitive environment variable ${key} in the OS Keychain; refusing to write plaintext.`,
+        `Failed to store sensitive environment variable ${key} in encrypted desktop storage; refusing to write plaintext.`,
       );
     }
   }

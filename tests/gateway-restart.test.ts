@@ -129,6 +129,10 @@ function profilePidFile(profile = "work"): string {
   return join(TEST_HOME, "profiles", profile, "gateway.pid");
 }
 
+function profileLockFile(profile = "work"): string {
+  return join(TEST_HOME, "profiles", profile, "gateway.lock");
+}
+
 describe("gateway restart recovery", () => {
   let originalFetch: typeof globalThis.fetch;
 
@@ -178,6 +182,26 @@ describe("gateway restart recovery", () => {
     expect(isGatewayRunning("work")).toBe(false);
   });
 
+  it("recognizes current Hermes gateway.lock runtime files", () => {
+    const gatewayPid = 424242;
+    aliveGatewayPids.add(gatewayPid);
+    writeFileSync(
+      profileLockFile(),
+      JSON.stringify({
+        pid: gatewayPid,
+        kind: "hermes-gateway",
+        argv: ["/tmp/hermes", "gateway", "run"],
+      }),
+      "utf-8",
+    );
+
+    expect(isGatewayRunning("work")).toBe(true);
+
+    aliveGatewayPids.delete(gatewayPid);
+
+    expect(isGatewayRunning("work")).toBe(false);
+  });
+
   it("reports spawn failures without tracking a gateway process", () => {
     spawnErrorRef.error = new Error("spawn boom");
 
@@ -215,6 +239,7 @@ describe("gateway restart recovery", () => {
       "--profile",
       "work",
       "gateway",
+      "run",
     ]);
   });
 
@@ -256,11 +281,13 @@ describe("gateway restart recovery", () => {
       "--profile",
       "work",
       "gateway",
+      "run",
     ]);
     expect(hermesCliArgsSpy).toHaveBeenNthCalledWith(4, [
       "--profile",
       "personal",
       "gateway",
+      "run",
     ]);
   });
 
@@ -276,6 +303,7 @@ describe("gateway restart recovery", () => {
       "--profile",
       "work",
       "gateway",
+      "run",
     ]);
   });
 

@@ -7,13 +7,22 @@ import {
   verifyEngineContract,
 } from "../src/main/engine-contract-verify";
 
-const cliSkillsBrowse: EngineContractEntry = {
-  id: "cli-skills-browse",
+const cliSkillsSearch: EngineContractEntry = {
+  id: "cli-skills-search",
   kind: "cli",
-  value: "skills browse",
-  flags: ["--query", "--json"],
+  value: "skills search",
+  flags: ["--json", "--limit"],
   usedBy: ["src/main/skills.ts"],
   upstreamPaths: ["hermes_cli/_parser.py"],
+  tier: "fail",
+};
+
+const cliGatewayRun: EngineContractEntry = {
+  id: "cli-gateway-run",
+  kind: "cli",
+  value: "gateway run",
+  usedBy: ["src/main/hermes/gateway-process.ts"],
+  upstreamPaths: ["hermes_cli/_parser.py", "gateway/"],
   tier: "fail",
 };
 
@@ -77,24 +86,28 @@ positional arguments:
 
     expect(
       parseHelpFlags(`
-usage: hermes skills browse [-h] [--query QUERY] [--json] [--yes]
+usage: hermes skills search [-h] [--source SOURCE] [--limit LIMIT] [--json] query
 `),
-    ).toEqual(new Set(["-h", "--query", "--json", "--yes"]));
+    ).toEqual(new Set(["-h", "--source", "--limit", "--json"]));
   });
 
   it("passes when fail-tier CLI commands, flags, and HTTP endpoints are present", async () => {
     const seen: string[][] = [];
     const result = await verifyEngineContract("work", {
       now: new Date("2026-07-03T00:00:00.000Z"),
-      entries: [cliSkillsBrowse, httpCapabilities, warnConfig],
+      entries: [cliSkillsSearch, cliGatewayRun, httpCapabilities, warnConfig],
       getCapabilityState: () => readyState(),
       runHelp: async (args) => {
         seen.push(args);
         const key = args.join(" ");
-        if (key === "") return "usage: hermes [-h] {skills}";
-        if (key === "skills") return "usage: hermes skills [-h] {browse}";
-        if (key === "skills browse") {
-          return "usage: hermes skills browse [-h] [--query QUERY] [--json]";
+        if (key === "") return "usage: hermes [-h] {skills,gateway}";
+        if (key === "skills") return "usage: hermes skills [-h] {search}";
+        if (key === "skills search") {
+          return "usage: hermes skills search [-h] [--json] [--limit LIMIT] query";
+        }
+        if (key === "gateway") return "usage: hermes gateway [-h] {run,start}";
+        if (key === "gateway run") {
+          return "usage: hermes gateway run [-h] [--replace] [--force]";
         }
         throw new Error(`unexpected help args: ${key}`);
       },
@@ -104,22 +117,43 @@ usage: hermes skills browse [-h] [--query QUERY] [--json] [--yes]
     expect(result.findings.map((finding) => finding.verdict)).toEqual([
       "passed",
       "passed",
+      "passed",
       "warn",
     ]);
-    expect(seen).toEqual([[], ["skills"], ["skills", "browse"]]);
+    expect(seen).toEqual([[], ["skills"], ["skills", "search"], ["gateway"]]);
+  });
+
+  it("treats a ready capability snapshot as proof of the capabilities endpoint", async () => {
+    const state = readyState();
+    state.snapshot.endpoints = {};
+
+    const result = await verifyEngineContract("work", {
+      now: new Date("2026-07-03T00:00:00.000Z"),
+      entries: [httpCapabilities],
+      getCapabilityState: () => state,
+      runHelp: async () => "",
+    });
+
+    expect(result.status).toBe("passed");
+    expect(result.findings).toEqual([
+      expect.objectContaining({
+        entryId: "http-capabilities",
+        verdict: "passed",
+      }),
+    ]);
   });
 
   it("breaks when a consumed CLI flag disappears", async () => {
     const result = await verifyEngineContract("work", {
       now: new Date("2026-07-03T00:00:00.000Z"),
-      entries: [cliSkillsBrowse, httpCapabilities],
+      entries: [cliSkillsSearch, httpCapabilities],
       getCapabilityState: () => readyState(),
       runHelp: async (args) => {
         const key = args.join(" ");
         if (key === "") return "usage: hermes [-h] {skills}";
-        if (key === "skills") return "usage: hermes skills [-h] {browse}";
-        if (key === "skills browse") {
-          return "usage: hermes skills browse [-h] [--query QUERY]";
+        if (key === "skills") return "usage: hermes skills [-h] {search}";
+        if (key === "skills search") {
+          return "usage: hermes skills search [-h] [--json] query";
         }
         return "";
       },
@@ -128,9 +162,9 @@ usage: hermes skills browse [-h] [--query QUERY] [--json] [--yes]
     expect(result.status).toBe("broken");
     expect(result.findings).toContainEqual(
       expect.objectContaining({
-        entryId: "cli-skills-browse",
+        entryId: "cli-skills-search",
         verdict: "broken",
-        detail: expect.stringContaining("--json"),
+        detail: expect.stringContaining("--limit"),
       }),
     );
   });

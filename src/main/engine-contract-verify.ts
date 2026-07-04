@@ -7,7 +7,12 @@ import {
 } from "../shared/engine-contract";
 import { getEngineCapabilityState } from "./config";
 import { recordEngineContractVerification } from "./config";
-import { HERMES_PYTHON, hermesCliArgs, HERMES_REPO, getEnhancedPath } from "./installer";
+import {
+  HERMES_PYTHON,
+  hermesCliArgs,
+  HERMES_REPO,
+  getEnhancedPath,
+} from "./installer";
 import { HERMES_HOME } from "./installer/paths";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 import { stripAnsi } from "./utils";
@@ -115,7 +120,11 @@ async function verifyCliEntry(
 
   const rootCommands = parseHelpSubcommands(await helpFor([]));
   if (!rootCommands.has(tokens[0])) {
-    return finding(entry, "broken", `Top-level command ${tokens[0]} is missing.`);
+    return finding(
+      entry,
+      "broken",
+      `Top-level command ${tokens[0]} is missing.`,
+    );
   }
 
   if (tokens.length > 1) {
@@ -133,7 +142,11 @@ async function verifyCliEntry(
     const flags = parseHelpFlags(await helpFor(tokens));
     const missing = entry.flags.filter((flag) => !flags.has(flag));
     if (missing.length > 0) {
-      return finding(entry, "broken", `Missing CLI flags: ${missing.join(", ")}.`);
+      return finding(
+        entry,
+        "broken",
+        `Missing CLI flags: ${missing.join(", ")}.`,
+      );
     }
   }
 
@@ -145,12 +158,22 @@ function verifyHttpEntry(
   options: VerifyEngineContractOptions,
   profile?: string,
 ): EngineContractFinding {
-  const state = (options.getCapabilityState || getEngineCapabilityState)(profile);
+  const state = (options.getCapabilityState || getEngineCapabilityState)(
+    profile,
+  );
   if (state.snapshot.status !== "ready") {
     return finding(
       entry,
       "unknown",
       "Engine capability snapshot is unavailable.",
+    );
+  }
+
+  if (entry.value === "/v1/capabilities") {
+    return finding(
+      entry,
+      "passed",
+      "HTTP endpoint /v1/capabilities produced the ready capability snapshot.",
     );
   }
 

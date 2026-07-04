@@ -193,6 +193,7 @@ describe("gateway process lifecycle", () => {
       "--profile",
       "work",
       "gateway",
+      "run",
     ]);
   });
 

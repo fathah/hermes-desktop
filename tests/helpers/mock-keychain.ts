@@ -5,8 +5,23 @@ export function createMockKeychain(): {
   install: () => void;
   reset: () => void;
   secrets: Map<string, string>;
+  setEncryptionAvailable: (available: boolean) => void;
 } {
   const secrets = new Map<string, string>();
+  let encryptionAvailable = true;
+
+  const safeStorageMock = {
+    isEncryptionAvailable: () => encryptionAvailable,
+    encryptString: (secret: string) =>
+      Buffer.from(`encrypted:${secret}`, "utf-8"),
+    decryptString: (buffer: Buffer) => {
+      const value = buffer.toString("utf-8");
+      if (!value.startsWith("encrypted:")) {
+        throw new Error("Decryption failed");
+      }
+      return value.slice("encrypted:".length);
+    },
+  };
 
   const runKeychainCommand = (_file: string, args?: string[]): Buffer => {
     const commandIndex =
@@ -38,12 +53,26 @@ export function createMockKeychain(): {
         const fns = { execFileSync };
         return { ...fns, default: fns };
       });
+      (
+        globalThis as typeof globalThis & {
+          mockSafeStorage?: typeof safeStorageMock;
+        }
+      ).mockSafeStorage = safeStorageMock;
     },
     reset: () => {
       secrets.clear();
+      encryptionAvailable = true;
       execFileSync.mockReset();
       execFileSync.mockImplementation(runKeychainCommand);
+      (
+        globalThis as typeof globalThis & {
+          mockSafeStorage?: typeof safeStorageMock;
+        }
+      ).mockSafeStorage = safeStorageMock;
     },
     secrets,
+    setEncryptionAvailable: (available: boolean) => {
+      encryptionAvailable = available;
+    },
   };
 }
