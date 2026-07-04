@@ -284,6 +284,16 @@ describe("runConfigHealthCheck", () => {
     expect(issue?.autoFixable).toBe(true);
   });
 
+  it("flags NON_ASCII_CREDENTIAL for API_SERVER_KEY smart-quote contamination", async () => {
+    writeConfig("model:\n  provider: auto\n  default: ''\n");
+    writeEnv("API_SERVER_KEY=secret”\n");
+    const { runConfigHealthCheck } = await freshHealth(TEST_DIR);
+    const report = runConfigHealthCheck();
+    const issue = report.issues.find((i) => i.code === "NON_ASCII_CREDENTIAL");
+    expect(issue).toBeDefined();
+    expect(issue?.context?.keys).toBe("API_SERVER_KEY");
+  });
+
   it("returns a report even when one check throws (broken check doesn't break audit)", async () => {
     writeConfig("model:\n  provider: auto\n");
     const { runConfigHealthCheck } = await freshHealth(TEST_DIR);

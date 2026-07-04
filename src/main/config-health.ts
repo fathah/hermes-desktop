@@ -328,7 +328,7 @@ function checkNonAsciiCredentials(profile?: string): ConfigHealthIssue[] {
   const env = readEnv(profile);
   const offenders: string[] = [];
   for (const [key, value] of Object.entries(env)) {
-    if (!/^[A-Z][A-Z0-9_]*(_API_KEY|_TOKEN|API_SERVER_KEY)$/.test(key)) {
+    if (!/^([A-Z][A-Z0-9_]*(_API_KEY|_TOKEN)|API_SERVER_KEY)$/.test(key)) {
       continue;
     }
     if (!value) continue;
