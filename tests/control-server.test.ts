@@ -59,9 +59,21 @@ vi.mock("../src/main/installer/paths", () => ({
 }));
 
 import {
+  renderCronScript,
   startControlServer,
   stopControlServer,
 } from "../src/main/control-server";
+
+describe("renderCronScript", () => {
+  it("writes structured desktop logs instead of raw console calls", () => {
+    const script = renderCronScript();
+
+    expect(script).not.toMatch(/\bconsole\.(log|warn|error|debug|info)\b/);
+    expect(script).toContain("desktop.log");
+    expect(script).toContain("writeCronLog('info'");
+    expect(script).toContain("writeCronLog('error'");
+  });
+});
 
 describe("Local Control Server Integration", () => {
   beforeEach(() => {

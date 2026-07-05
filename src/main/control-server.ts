@@ -822,14 +822,8 @@ function writeSpsHelper(binDir: string, port: number, tokenPath: string): void {
   chmodSync(helperPath, 0o755);
 }
 
-function writeCronScript(): void {
-  try {
-    const binDir = join(homedir(), ".hermes", "bin");
-    if (!existsSync(binDir)) {
-      mkdirSync(binDir, { recursive: true });
-    }
-    const cronPath = join(binDir, "hermes-cron.js");
-    const cronContent = `#!/usr/bin/env node
+export function renderCronScript(): string {
+  return `#!/usr/bin/env node
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
@@ -838,6 +832,32 @@ const os = require('os');
 const home = os.homedir();
 const hermesHome = path.join(home, '.hermes');
 const desktopJsonPath = path.join(hermesHome, 'desktop.json');
+
+function formatCronError(error) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  try {
+    const json = JSON.stringify(error);
+    if (json) return json;
+  } catch (err) {}
+  return String(error);
+}
+
+function writeCronLog(level, payload) {
+  try {
+    const logsDir = path.join(hermesHome, 'logs');
+    if (!fs.existsSync(logsDir)) {
+      fs.mkdirSync(logsDir, { recursive: true });
+    }
+    const line = JSON.stringify({
+      ts: new Date().toISOString(),
+      level,
+      scope: 'control-server.cron',
+      ...payload
+    }) + '\\n';
+    fs.appendFileSync(path.join(logsDir, 'desktop.log'), line, 'utf-8');
+  } catch (err) {}
+}
 
 let activeProfile = 'default';
 if (fs.existsSync(desktopJsonPath)) {
@@ -869,14 +889,21 @@ try {
         const lockFile = path.join('/tmp', \`hermes-routine-\${jobId}.lock\`);
         
         if (fs.existsSync(lockFile)) {
-          console.log(\`Job \${jobId} is currently locked. Skipping.\`);
+          writeCronLog('info', {
+            msg: 'job is currently locked; skipping',
+            jobId
+          });
           continue;
         }
 
         // Acquire lock
         fs.writeFileSync(lockFile, String(process.pid), 'utf-8');
 
-        console.log(\`[DAEMON] Triggering due job: "\${job.name}" (ID: \${jobId})\`);
+        writeCronLog('info', {
+          msg: 'triggering due job',
+          jobId,
+          jobName: job.name
+        });
         
         const pythonPath = process.platform === 'win32'
           ? path.join(hermesHome, 'venv', 'Scripts', 'python.exe')
@@ -897,7 +924,11 @@ try {
           }
         });
 
-        console.log(\`[DAEMON] Job \${jobId} finished with code \${res.status}\`);
+        writeCronLog('info', {
+          msg: 'job finished',
+          jobId,
+          status: res.status
+        });
 
         // Release lock
         try {
@@ -907,9 +938,22 @@ try {
     }
   }
 } catch (err) {
-  console.error('Error running background cron scheduler:', err);
+  writeCronLog('error', {
+    msg: 'error running background cron scheduler',
+    error: formatCronError(err)
+  });
 }
 `;
+}
+
+function writeCronScript(): void {
+  try {
+    const binDir = join(homedir(), ".hermes", "bin");
+    if (!existsSync(binDir)) {
+      mkdirSync(binDir, { recursive: true });
+    }
+    const cronPath = join(binDir, "hermes-cron.js");
+    const cronContent = renderCronScript();
     writeFileSync(cronPath, cronContent, "utf-8");
     chmodSync(cronPath, 0o755);
     log.info("control-server", {
