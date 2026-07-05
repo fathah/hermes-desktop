@@ -9,6 +9,7 @@ import {
   listRecentScreenshots,
 } from "../../recent-screenshots";
 import { requireLocalWorkspace } from "../connection-guards";
+import { normalizeIpcProfile } from "../validate";
 import type { SpsCaptureInput } from "../../../shared/sps-types";
 import type {
   SpsClipboardScreenshotImportInput,
@@ -18,21 +19,22 @@ import type {
 export function registerSpsCaptureIpc(): void {
   safeHandle(
     "sps-capture",
-    async (_event, input: SpsCaptureInput, profile?: string) => {
+    async (_event, input: SpsCaptureInput, profile?: unknown) => {
+      const safeProfile = normalizeIpcProfile(profile);
       const capture = { ...input };
       if (capture.source === "web" && capture.url) {
         const unfurled = await spsUnfurl(capture.url);
         capture.title = capture.title?.trim() || unfurled.title;
         capture.description = capture.description?.trim() || unfurled.desc;
       }
-      return writeSpsCapture(resolveSpsVaultDir(profile), capture);
+      return writeSpsCapture(resolveSpsVaultDir(safeProfile), capture);
     },
   );
   safeHandle(
     "sps-list-recent-screenshots",
-    async (_event, profile?: string) => {
+    async (_event, profile?: unknown) => {
       requireLocalWorkspace();
-      void profile;
+      normalizeIpcProfile(profile);
       const screenshots = await listRecentScreenshots();
       return screenshots.map(
         ({ id, originalName, modifiedAt, size, previewDataUrl }) => ({
@@ -50,10 +52,13 @@ export function registerSpsCaptureIpc(): void {
     async (
       _event,
       input?: SpsRecentScreenshotImportInput,
-      profile?: string,
+      profile?: unknown,
     ) => {
       requireLocalWorkspace();
-      return importRecentScreenshot(resolveSpsVaultDir(profile), input);
+      return importRecentScreenshot(
+        resolveSpsVaultDir(normalizeIpcProfile(profile)),
+        input,
+      );
     },
   );
   safeHandle(
@@ -61,12 +66,12 @@ export function registerSpsCaptureIpc(): void {
     async (
       _event,
       input?: SpsClipboardScreenshotImportInput,
-      profile?: string,
+      profile?: unknown,
     ) => {
       requireLocalWorkspace();
       const image = clipboard.readImage();
       return importClipboardScreenshot(
-        resolveSpsVaultDir(profile),
+        resolveSpsVaultDir(normalizeIpcProfile(profile)),
         image.isEmpty() ? Buffer.alloc(0) : image.toPNG(),
         input,
       );

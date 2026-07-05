@@ -68,6 +68,11 @@ import {
   recordMirrorFailure,
   readMirrorFailRecord,
 } from "../mirror-fail-counter";
+import {
+  assertIpcString,
+  assertPathInside,
+  normalizeIpcProfile,
+} from "./validate";
 
 // Record one failed vault-mirror write so the silent divergence surfaces in
 // Workspace settings. Machine-global (HERMES_HOME) — an operator signal, not
@@ -94,8 +99,8 @@ export async function closeObsidianWatcher(): Promise<void> {
   }
 }
 
-function spsVaultDirFor(profile?: string): string {
-  return resolveSpsVaultDir(profile);
+function spsVaultDirFor(profile?: unknown): string {
+  return resolveSpsVaultDir(normalizeIpcProfile(profile));
 }
 
 function openExternalUrl(rawUrl: unknown): void {
@@ -221,24 +226,27 @@ export function registerNotesIpc(
   });
 
   // Vault location settings
-  safeHandle("sps-get-vault-location", (_event, profile?: string) => {
+  safeHandle("sps-get-vault-location", (_event, profile?: unknown) => {
     requireLocalWorkspace();
-    return getVaultLocation(profile);
+    return getVaultLocation(normalizeIpcProfile(profile));
   });
 
   safeHandle(
     "sps-set-vault-location",
-    async (_event, dir: string, profile?: string) => {
+    async (_event, dir: unknown, profile?: unknown) => {
       requireLocalWorkspace();
-      const result = setVaultLocation(dir, profile);
+      const result = setVaultLocation(
+        assertIpcString(dir, "vault directory"),
+        normalizeIpcProfile(profile),
+      );
       if (result.ok) await closeAllNoteIndexes();
       return result;
     },
   );
 
-  safeHandle("sps-reset-vault-location", async (_event, profile?: string) => {
+  safeHandle("sps-reset-vault-location", async (_event, profile?: unknown) => {
     requireLocalWorkspace();
-    const location = resetVaultLocation(profile);
+    const location = resetVaultLocation(normalizeIpcProfile(profile));
     await closeAllNoteIndexes();
     return location;
   });
@@ -396,9 +404,11 @@ export function registerNotesIpc(
   // Markdown pages export
   safeHandle(
     "sps-export-page",
-    (_event, pageId: string, markdown: string, profile?: string) => {
+    (_event, pageId: unknown, markdown: string, profile?: unknown) => {
       const dir = spsVaultDirFor(profile);
-      return exportPageMarkdownTo(dir, pageId, markdown, noteMirrorFailure);
+      const safePageId = assertIpcString(pageId, "page id");
+      assertPathInside(dir, `${safePageId}.md`, "page id");
+      return exportPageMarkdownTo(dir, safePageId, markdown, noteMirrorFailure);
     },
   );
 
@@ -406,16 +416,23 @@ export function registerNotesIpc(
     "sps-export-row",
     (
       _event,
-      dbFolder: string,
-      rowId: string,
+      dbFolder: unknown,
+      rowId: unknown,
       markdown: string,
-      profile?: string,
+      profile?: unknown,
     ) => {
       const dir = spsVaultDirFor(profile);
+      const safeDbFolder = assertIpcString(dbFolder, "database folder");
+      const safeRowId = assertIpcString(rowId, "row id");
+      assertPathInside(
+        dir,
+        `${safeDbFolder}/${safeRowId}.md`,
+        "database row path",
+      );
       return exportRowMarkdownTo(
         dir,
-        dbFolder,
-        rowId,
+        safeDbFolder,
+        safeRowId,
         markdown,
         noteMirrorFailure,
       );
@@ -524,35 +541,56 @@ export function registerNotesIpc(
   );
   safeHandle(
     "sps-read-row",
-    (_event, dbFolder: string, rowId: string, profile?: string) => {
+    (_event, dbFolder: unknown, rowId: unknown, profile?: unknown) => {
       const dir = spsVaultDirFor(profile);
-      return readRowMarkdownFrom(dir, dbFolder, rowId);
+      const safeDbFolder = assertIpcString(dbFolder, "database folder");
+      const safeRowId = assertIpcString(rowId, "row id");
+      assertPathInside(
+        dir,
+        `${safeDbFolder}/${safeRowId}.md`,
+        "database row path",
+      );
+      return readRowMarkdownFrom(dir, safeDbFolder, safeRowId);
     },
   );
   safeHandle(
     "sps-delete-row",
-    (_event, dbFolder: string, rowId: string, profile?: string) => {
+    (_event, dbFolder: unknown, rowId: unknown, profile?: unknown) => {
       const dir = spsVaultDirFor(profile);
-      return deleteRowIn(dir, dbFolder, rowId);
+      const safeDbFolder = assertIpcString(dbFolder, "database folder");
+      const safeRowId = assertIpcString(rowId, "row id");
+      assertPathInside(
+        dir,
+        `${safeDbFolder}/${safeRowId}.md`,
+        "database row path",
+      );
+      return deleteRowIn(dir, safeDbFolder, safeRowId);
     },
   );
 
-  safeHandle("sps-delete-page", (_event, pageId: string, profile?: string) => {
-    const dir = spsVaultDirFor(profile);
-    return deletePageIn(dir, pageId);
-  });
+  safeHandle(
+    "sps-delete-page",
+    (_event, pageId: unknown, profile?: unknown) => {
+      const dir = spsVaultDirFor(profile);
+      const safePageId = assertIpcString(pageId, "page id");
+      assertPathInside(dir, `${safePageId}.md`, "page id");
+      return deletePageIn(dir, safePageId);
+    },
+  );
 
   safeHandle(
     "sps-delete-db-folder",
-    (_event, dbFolder: string, profile?: string) => {
+    (_event, dbFolder: unknown, profile?: unknown) => {
       const dir = spsVaultDirFor(profile);
-      return deleteDbFolderIn(dir, dbFolder);
+      const safeDbFolder = assertIpcString(dbFolder, "database folder");
+      assertPathInside(dir, safeDbFolder, "database folder");
+      return deleteDbFolderIn(dir, safeDbFolder);
     },
   );
 
   // Vault-as-authoritative-store manifest and backup
-  const spsVaultDir = (profile?: string): string => spsVaultDirFor(profile);
-  safeHandle("sps-vault-read", async (_event, profile?: string) => {
+  const spsVaultDir = (profile?: unknown): string => spsVaultDirFor(profile);
+  safeHandle("sps-vault-read", async (_event, profile?: unknown) => {
     const dir = spsVaultDir(profile);
     const [pages, manifest] = await Promise.all([
       readVaultPages(dir),
@@ -562,7 +600,7 @@ export function registerNotesIpc(
   });
   safeHandle(
     "sps-vault-write-manifest",
-    (_event, json: string, profile?: string) =>
+    (_event, json: string, profile?: unknown) =>
       writeVaultManifest(spsVaultDir(profile), json, noteMirrorFailure),
   );
   safeHandle(
@@ -570,11 +608,11 @@ export function registerNotesIpc(
     (
       _event,
       snapshot: { pages: Record<string, string>; manifest: string },
-      profile?: string,
+      profile?: unknown,
     ) => writeVaultSnapshot(spsVaultDir(profile), snapshot, noteMirrorFailure),
   );
-  safeHandle("sps-backup-workspace", (_event, profile?: string) =>
-    spsBackupWorkspace(profile),
+  safeHandle("sps-backup-workspace", (_event, profile?: unknown) =>
+    spsBackupWorkspace(normalizeIpcProfile(profile)),
   );
 
   // How many vault-mirror writes have silently failed (markdown drifting from the
@@ -588,24 +626,31 @@ export function registerNotesIpc(
     "sps-write-excalidraw",
     async (
       _event,
-      pageId: string,
-      assetId: string,
+      pageId: unknown,
+      assetId: unknown,
       sceneJson: string,
       svg: string,
-      profile?: string,
+      profile?: unknown,
     ) => {
       const dir = spsVaultDir(profile);
+      const safePageId = assertIpcString(pageId, "page id");
+      const safeAssetId = assertIpcString(assetId, "asset id");
+      assertPathInside(
+        dir,
+        `assets/${safePageId}/${safeAssetId}.excalidraw`,
+        "asset path",
+      );
       const okScene = await writeAssetTo(
         dir,
-        pageId,
-        `${assetId}.excalidraw`,
+        safePageId,
+        `${safeAssetId}.excalidraw`,
         sceneJson,
         noteMirrorFailure,
       );
       const okSvg = await writeAssetTo(
         dir,
-        pageId,
-        `${assetId}.excalidraw.svg`,
+        safePageId,
+        `${safeAssetId}.excalidraw.svg`,
         svg,
         noteMirrorFailure,
       );
@@ -614,11 +659,18 @@ export function registerNotesIpc(
   );
   safeHandle(
     "sps-read-excalidraw",
-    async (_event, pageId: string, assetId: string, profile?: string) => {
+    async (_event, pageId: unknown, assetId: unknown, profile?: unknown) => {
       const dir = spsVaultDir(profile);
+      const safePageId = assertIpcString(pageId, "page id");
+      const safeAssetId = assertIpcString(assetId, "asset id");
+      assertPathInside(
+        dir,
+        `assets/${safePageId}/${safeAssetId}.excalidraw`,
+        "asset path",
+      );
       const [scene, svg] = await Promise.all([
-        readAssetFrom(dir, pageId, `${assetId}.excalidraw`),
-        readAssetFrom(dir, pageId, `${assetId}.excalidraw.svg`),
+        readAssetFrom(dir, safePageId, `${safeAssetId}.excalidraw`),
+        readAssetFrom(dir, safePageId, `${safeAssetId}.excalidraw.svg`),
       ]);
       return { scene, svg };
     },
@@ -627,18 +679,34 @@ export function registerNotesIpc(
   // Assets Write / GC
   safeHandle(
     "sps-asset-write",
-    (_event, bytes: Uint8Array, ext: string, profile?: string) =>
-      writeAsset(spsVaultDirFor(profile), Buffer.from(bytes), ext),
+    (_event, bytes: Uint8Array, ext: unknown, profile?: unknown) =>
+      writeAsset(
+        spsVaultDirFor(profile),
+        Buffer.from(bytes),
+        assertIpcString(ext, "asset extension"),
+      ),
   );
-  safeHandle("sps-asset-exists", (_event, name: string, profile?: string) =>
-    assetExists(spsVaultDirFor(profile), name),
-  );
-  safeHandle("sps-asset-gc", (_event, referenced: string[], profile?: string) =>
-    gcAssets(spsVaultDirFor(profile), referenced),
+  safeHandle("sps-asset-exists", (_event, name: unknown, profile?: unknown) => {
+    const dir = spsVaultDirFor(profile);
+    const safeName = assertIpcString(name, "asset name");
+    assertPathInside(dir, `_assets/${safeName}`, "asset name");
+    return assetExists(dir, safeName);
+  });
+  safeHandle(
+    "sps-asset-gc",
+    (_event, referenced: unknown[], profile?: unknown) => {
+      const dir = spsVaultDirFor(profile);
+      const safeReferenced = referenced.map((name) => {
+        const safeName = assertIpcString(name, "asset name");
+        assertPathInside(dir, `_assets/${safeName}`, "asset name");
+        return safeName;
+      });
+      return gcAssets(dir, safeReferenced);
+    },
   );
 
   // Semantic Graph / txtai Integration
-  safeHandle("sps-semantic-index", async (_event, profile?: string) => {
+  safeHandle("sps-semantic-index", async (_event, profile?: unknown) => {
     requireLocalWorkspace();
     const vaultPath = spsVaultDirFor(profile);
     return semanticManager.index(vaultPath);
