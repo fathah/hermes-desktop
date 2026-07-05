@@ -38,15 +38,23 @@ import { listSessions } from "../sessions";
 import { summarizeSearch, summarizeSearchStream } from "../session-summary";
 import { listSkins } from "../skins";
 import { runSecurityAudit, getPromptSizeBreakdown } from "../installer";
+import { formatLogError, log } from "../log";
 
 function openExternalUrl(rawUrl: unknown): void {
   if (!isAllowedExternalUrl(rawUrl) && !isAllowedObsidianExternalUrl(rawUrl)) {
-    console.warn("[SECURITY] Blocked unsafe external URL");
+    log.warn("security", {
+      msg: "blocked unsafe external URL",
+      url: typeof rawUrl === "string" ? rawUrl : undefined,
+    });
     return;
   }
 
   shell.openExternal(rawUrl as string).catch((err) => {
-    console.error("[SECURITY] Failed to open external URL:", err);
+    log.error("security", {
+      msg: "failed to open external URL",
+      url: rawUrl as string,
+      error: formatLogError(err),
+    });
   });
 }
 
@@ -119,7 +127,13 @@ export function registerUtilityIpc(
               openExternalUrl(src);
             } else {
               shell.openPath(src).then((err) => {
-                if (err) console.error("[media] open failed:", err);
+                if (err) {
+                  log.error("media", {
+                    msg: "open failed",
+                    path: src,
+                    error: err,
+                  });
+                }
               });
             }
           },

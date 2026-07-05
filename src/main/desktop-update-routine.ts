@@ -4,6 +4,7 @@ import {
   recordDesktopUpdateRoutineResult,
   type DesktopUpdateRoutineResult,
 } from "./config";
+import { log } from "./log";
 
 interface UpdateCheckResult {
   updateInfo?: {
@@ -86,7 +87,10 @@ function loadAutoUpdater(): DesktopAutoUpdater | null {
     autoUpdater.autoDownload = false;
     return autoUpdater;
   } catch (err) {
-    console.error("[desktop-update-routine] Failed to load autoUpdater:", err);
+    log.error("desktop-update-routine", {
+      msg: "failed to load autoUpdater",
+      error: errorMessage(err),
+    });
     return null;
   }
 }

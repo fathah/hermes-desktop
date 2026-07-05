@@ -13,6 +13,7 @@ import { listInstalledSkills } from "./skills";
 import { readDesktopConfig, readEnv } from "./config";
 import { getApiUrl, getRemoteAuthHeader } from "./hermes";
 import { gatewayFetch, publicFetch } from "./security/network-policy";
+import { formatLogError, log } from "./log";
 
 let mainWindowGetter: (() => BrowserWindow | null) | null = null;
 
@@ -100,9 +101,12 @@ export async function triggerSelfHealing(
   logFilePath: string,
   profile: string,
 ): Promise<SelfHealingResult> {
-  console.log(
-    `[SELF-HEALING] Starting diagnosis for failed job "${jobName}" (${jobId})`,
-  );
+  log.info("self-healing", {
+    msg: "starting diagnosis for failed job",
+    jobId,
+    jobName,
+    profile,
+  });
   try {
     // 1. Read the last 200 lines of logs
     if (!existsSync(logFilePath)) {
@@ -264,9 +268,13 @@ export async function triggerSelfHealing(
       }
     }
 
-    console.log(
-      `[SELF-HEALING] Successfully self-healed "${parsed.fileToPatch}"!`,
-    );
+    log.info("self-healing", {
+      msg: "successfully self-healed",
+      jobId,
+      jobName,
+      profile,
+      filePatched: parsed.fileToPatch,
+    });
     return {
       success: true,
       explanation: parsed.explanation,
@@ -274,7 +282,13 @@ export async function triggerSelfHealing(
       diff: diffText,
     };
   } catch (err) {
-    console.error("[SELF-HEALING] Error during log triage:", err);
+    log.error("self-healing", {
+      msg: "error during log triage",
+      jobId,
+      jobName,
+      profile,
+      error: formatLogError(err),
+    });
     return { success: false, error: (err as Error).message };
   }
 }

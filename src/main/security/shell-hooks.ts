@@ -3,6 +3,7 @@ import { join } from "path";
 import { spawn } from "child_process";
 import { parse } from "yaml";
 import { profileHome, safeWriteFile } from "../utils";
+import { formatLogError, log } from "../log";
 
 export interface ShellHookSpec {
   event: string;
@@ -33,7 +34,11 @@ export class ShellHookManager {
         return config.hooks as ShellHookSpec[];
       }
     } catch (err) {
-      console.error(`[ShellHookManager] Failed to parse config hooks:`, err);
+      log.error("shell-hooks", {
+        msg: "failed to parse config hooks",
+        profile,
+        error: formatLogError(err),
+      });
     }
     return [];
   }
@@ -100,7 +105,12 @@ export class ShellHookManager {
         JSON.stringify(allowlist, null, 2),
       );
     } catch (err) {
-      console.error(`[ShellHookManager] Failed to write allowlist:`, err);
+      log.error("shell-hooks", {
+        msg: "failed to write allowlist",
+        profile,
+        event,
+        error: formatLogError(err),
+      });
     }
   }
 
@@ -159,10 +169,13 @@ export class ShellHookManager {
           return result; // return context injection
         }
       } catch (err) {
-        console.warn(
-          `[ShellHookManager] Hook execution failed for ${command}:`,
-          err,
-        );
+        log.warn("shell-hooks", {
+          msg: "hook execution failed",
+          command,
+          event,
+          profile,
+          error: formatLogError(err),
+        });
         if (event.startsWith("pre_")) {
           return {
             action: "block",

@@ -1,5 +1,6 @@
 import { getSharedDb } from "./db";
 import { getModelConfig } from "./config";
+import { formatLogError, log } from "./log";
 
 /**
  * Persist model/provider (and council group) metadata for the just-completed
@@ -50,6 +51,11 @@ export function saveAssistantMessageMetadata(opts: {
     `,
     ).run(lastMsg.id, finalModel, finalProvider, councilGroupId);
   } catch (err) {
-    console.error("[chat] Failed to save message metadata to DB:", err);
+    log.error("chat", {
+      msg: "failed to save message metadata to DB",
+      sessionId,
+      profile,
+      error: formatLogError(err),
+    });
   }
 }

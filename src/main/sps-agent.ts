@@ -45,7 +45,7 @@ import { getSpsNoteIndex } from "./note-index";
 import { createLearningProposal } from "./learning-proposals";
 import { safeFetch } from "./security/ssrf-guard";
 import { gatewayFetch } from "./security/network-policy";
-import { log } from "./log";
+import { formatLogError, log } from "./log";
 
 export { spsBackupWorkspace, spsLoad, spsSave } from "./sps-agent/persistence";
 
@@ -507,7 +507,11 @@ export async function spsAssistant(
             "When referencing the semantically related notes above, you MUST cite them using Obsidian wikilinks (e.g. [[Note Title]]).";
         }
       } catch (err) {
-        console.warn("[spsAssistant] GraphRAG retrieval failed:", err);
+        log.warn("sps-agent", {
+          msg: "GraphRAG retrieval failed",
+          profile,
+          error: formatLogError(err),
+        });
       }
     }
     const combinedGrounding = buildGroundingMessage(
@@ -771,15 +775,22 @@ Return ONLY a JSON array, with no other prose or markdown formatting (no code fe
                   }
                 }
               } catch (e) {
-                console.error(
-                  `[Ingest Concept Audit] Failed for page ${page.title}:`,
-                  e,
-                );
+                log.error("sps-agent", {
+                  msg: "ingest concept audit failed for page",
+                  pageTitle: page.title,
+                  pageId: page.pageId,
+                  profile,
+                  error: formatLogError(e),
+                });
               }
             }),
           );
         } catch (e) {
-          console.error("[Ingest Concept Audit] Background task failed:", e);
+          log.error("sps-agent", {
+            msg: "ingest concept audit background task failed",
+            profile,
+            error: formatLogError(e),
+          });
         }
       });
     }

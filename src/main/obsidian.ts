@@ -13,6 +13,7 @@ import chokidar, { type FSWatcher } from "chokidar";
 import { decryptSecret, encryptSecret } from "./config";
 import { profileHome, safeWriteFile } from "./utils";
 import { providerFetch } from "./security/network-policy";
+import { formatLogError, log } from "./log";
 
 export type ObsidianFileNode = {
   name: string;
@@ -299,10 +300,11 @@ export async function searchObsidian(
       snippet: hit.snippet,
     }));
   } catch (err) {
-    console.error(
-      "[obsidian] search failed, falling back to naive search:",
-      err,
-    );
+    log.error("obsidian", {
+      msg: "search failed; falling back to naive search",
+      profile,
+      error: formatLogError(err),
+    });
     const cleanNeedle = needle.toLowerCase();
     const files = await collectMarkdownFiles(root, root);
     const results: ObsidianSearchResult[] = [];

@@ -12,6 +12,7 @@
 import { shell } from "electron";
 import { gatewayChat } from "./gateway-chat";
 import type { ContactChannel } from "../shared/contacts";
+import { formatLogError, log } from "./log";
 
 function phoneDigits(value: string): string {
   return value.replace(/[^\d+]/g, "");
@@ -50,7 +51,11 @@ export async function openContactChannel(
     await shell.openExternal(url);
     return true;
   } catch (err) {
-    console.error("[contact-messaging] openExternal failed:", err);
+    log.error("contact-messaging", {
+      msg: "openExternal failed",
+      url,
+      error: formatLogError(err),
+    });
     return false;
   }
 }

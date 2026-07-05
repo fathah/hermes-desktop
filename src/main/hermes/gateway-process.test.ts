@@ -71,7 +71,10 @@ vi.mock("../process-options", () => ({
 }));
 
 vi.mock("../log", () => ({
+  formatLogError: (err: unknown) =>
+    err instanceof Error ? err.message : String(err),
   log: {
+    error: vi.fn(),
     warn: vi.fn(),
     info: vi.fn(),
   },

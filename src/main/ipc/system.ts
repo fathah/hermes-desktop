@@ -30,6 +30,7 @@ import {
   setDesktopUpdateRoutine,
   setHermesAgentUpdateRoutine,
 } from "../config";
+import { formatLogError, log } from "../log";
 import { runHermesAgentUpdateCheck } from "../hermes-agent-updates";
 import { runDesktopUpdateCheck } from "../desktop-update-routine";
 import {
@@ -84,7 +85,10 @@ try {
     autoUpdater = require("electron-updater").autoUpdater;
   }
 } catch (err) {
-  console.error("[updater] Failed to load autoUpdater:", err);
+  log.error("updater", {
+    msg: "failed to load autoUpdater",
+    error: formatLogError(err),
+  });
 }
 
 function isWindowsUnsignedAutoUpdateBlocked(): boolean {
@@ -229,7 +233,8 @@ export function registerSystemIpc(
     if (!sha) {
       return {
         success: false,
-        error: "No contract-verified Hermes Agent SHA is recorded for rollback.",
+        error:
+          "No contract-verified Hermes Agent SHA is recorded for rollback.",
       };
     }
 

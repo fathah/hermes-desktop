@@ -93,7 +93,7 @@ import {
 } from "./capability-risk";
 import { startControlServer, stopControlServer } from "./control-server";
 import { setMainWindowGetter } from "./self-healing";
-import { log } from "./log";
+import { formatLogError, log } from "./log";
 import { refreshEngineCapabilities } from "./engine-capabilities";
 import { redactExternalText } from "./external-context/redact";
 import {
@@ -239,18 +239,28 @@ function createTray(): void {
       toggleCaptureWindow();
     });
   } catch (err) {
-    console.error("[TRAY] Failed to create tray icon:", err);
+    log.error("main", {
+      msg: "failed to create tray icon",
+      error: formatLogError(err),
+    });
   }
 }
 
 function openExternalUrl(rawUrl: unknown): void {
   if (!isAllowedExternalUrl(rawUrl) && !isAllowedObsidianExternalUrl(rawUrl)) {
-    console.warn("[SECURITY] Blocked unsafe external URL");
+    log.warn("security", {
+      msg: "blocked unsafe external URL",
+      url: typeof rawUrl === "string" ? rawUrl : undefined,
+    });
     return;
   }
 
   shell.openExternal(rawUrl as string).catch((err) => {
-    console.error("[SECURITY] Failed to open external URL:", err);
+    log.error("security", {
+      msg: "failed to open external URL",
+      url: rawUrl as string,
+      error: formatLogError(err),
+    });
   });
 }
 
@@ -294,7 +304,10 @@ function getSavedWindowState(): WindowState {
       }
     }
   } catch (err) {
-    console.error("[WINDOW STATE] Failed to load window state:", err);
+    log.error("main", {
+      msg: "failed to load window state",
+      error: formatLogError(err),
+    });
   }
   return { width: 1100, height: 850 };
 }
@@ -326,7 +339,10 @@ function saveWindowState(win: BrowserWindow): void {
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     writeFileSync(statePath, JSON.stringify(state), "utf-8");
   } catch (err) {
-    console.error("[WINDOW STATE] Failed to save window state:", err);
+    log.error("main", {
+      msg: "failed to save window state",
+      error: formatLogError(err),
+    });
   }
 }
 
@@ -405,18 +421,24 @@ function createWindow(): void {
   });
 
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
-    console.error(
-      "[CRASH] Renderer process gone:",
-      details.reason,
-      details.exitCode,
-    );
+    log.error("renderer", {
+      msg: "renderer process gone",
+      reason: details.reason,
+      exitCode: details.exitCode,
+    });
   });
 
   mainWindow.webContents.on(
     "console-message",
     (_event, level, message, line, sourceId) => {
       if (level >= 2) {
-        console.error(`[RENDERER ERROR] ${message} (${sourceId}:${line})`);
+        log.error("renderer", {
+          msg: "renderer console error",
+          level,
+          message,
+          line,
+          sourceId,
+        });
       }
     },
   );
@@ -424,7 +446,11 @@ function createWindow(): void {
   mainWindow.webContents.on(
     "did-fail-load",
     (_event, errorCode, errorDescription) => {
-      console.error("[LOAD FAIL]", errorCode, errorDescription);
+      log.error("renderer", {
+        msg: "load failed",
+        errorCode,
+        errorDescription,
+      });
     },
   );
 
@@ -579,7 +605,11 @@ function setupIPC(): void {
           try {
             unlinkSync(tempPath);
           } catch (err) {
-            console.error("[QuickCapture] Failed to delete temp file:", err);
+            log.error("quick-capture", {
+              msg: "failed to delete temp file",
+              path: tempPath,
+              error: formatLogError(err),
+            });
           }
           const dir = spsVaultDirFor(profile);
           const name = await writeAsset(dir, buffer, "png");
@@ -590,7 +620,10 @@ function setupIPC(): void {
           return name;
         }
       } catch (err) {
-        console.error("[QuickCapture] screencapture failed or canceled", err);
+        log.error("quick-capture", {
+          msg: "screencapture failed or canceled",
+          error: formatLogError(err),
+        });
       }
       if (captureWindow && !captureWindow.isDestroyed()) {
         captureWindow.show();
@@ -729,9 +762,9 @@ function setupUpdater(): void {
     return;
   }
   if (isWindowsUnsignedAutoUpdateBlocked()) {
-    console.warn(
-      "[updater] Disabled on unsigned Windows builds; use manual updates.",
-    );
+    log.warn("updater", {
+      msg: "disabled on unsigned Windows builds; use manual updates",
+    });
     return;
   }
 
@@ -813,7 +846,10 @@ app.whenReady().then(() => {
     try {
       app.dock?.setIcon(icon);
     } catch (err) {
-      console.error("[DOCK] Failed to set dock icon:", err);
+      log.error("dock", {
+        msg: "failed to set dock icon",
+        error: formatLogError(err),
+      });
     }
   }
   electronApp.setAppUserModelId("com.nousresearch.hermes");
@@ -890,7 +926,10 @@ app.whenReady().then(() => {
   startScheduler();
   startCapabilityRiskScheduler();
   startControlServer().catch((err) => {
-    console.error("[CONTROL SERVER] Failed to auto-start:", err);
+    log.error("control-server", {
+      msg: "failed to auto-start",
+      error: formatLogError(err),
+    });
   });
 
   // Auto-start SSH tunnel if configured
@@ -904,7 +943,11 @@ app.whenReady().then(() => {
       const key = await sshReadRemoteApiKey(conn.ssh);
       setSshRemoteApiKey(key);
     })().catch((err) => {
-      console.error("[SSH TUNNEL] Failed to start on launch:", err);
+      log.error("ssh-tunnel", {
+        msg: "failed to start on launch",
+        host: conn.ssh.host,
+        error: formatLogError(err),
+      });
     });
   }
 

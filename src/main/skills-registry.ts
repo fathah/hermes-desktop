@@ -18,6 +18,7 @@ import {
   getEnhancedPath,
 } from "./installer";
 import { stripAnsi } from "./utils";
+import { formatLogError, log } from "./log";
 
 import type { SkillEntry } from "../shared/skills";
 export type { SkillEntry };
@@ -88,7 +89,11 @@ export async function registerLocalSkill(
     );
     return { success: true };
   } catch (err) {
-    console.error("[skills-registry] Failed to register skill:", err);
+    log.error("skills-registry", {
+      msg: "failed to register skill",
+      skillName: skill.name,
+      error: formatLogError(err),
+    });
     return { success: false, error: (err as Error).message };
   }
 }
@@ -129,7 +134,11 @@ export async function lookupLocalSkill(
   try {
     return db.prepare(sql).all(...params) as SkillEntry[];
   } catch (err) {
-    console.error("[skills-registry] lookup failed:", err);
+    log.error("skills-registry", {
+      msg: "lookup failed",
+      query,
+      error: formatLogError(err),
+    });
     return [];
   }
 }
@@ -178,7 +187,10 @@ export async function syncDiskSkillsToDb(
                   if (!existsSync(subSkillFile)) continue;
 
                   try {
-                    const content = readFileSync(subSkillFile, "utf-8").slice(0, 4000);
+                    const content = readFileSync(subSkillFile, "utf-8").slice(
+                      0,
+                      4000,
+                    );
                     const meta = parseSkillFrontmatter(content);
                     const name = meta.name || subEntry;
 
@@ -209,17 +221,19 @@ export async function syncDiskSkillsToDb(
                       dependencies,
                     });
                   } catch (subE) {
-                    console.error(
-                      `[skills-registry] Failed to read sub-skill folder: ${subEntryPath}`,
-                      subE,
-                    );
+                    log.error("skills-registry", {
+                      msg: "failed to read sub-skill folder",
+                      path: subEntryPath,
+                      error: formatLogError(subE),
+                    });
                   }
                 }
               } catch (e) {
-                console.error(
-                  `[skills-registry] Failed to scan sub-skills directory: ${entryPath}`,
-                  e,
-                );
+                log.error("skills-registry", {
+                  msg: "failed to scan sub-skills directory",
+                  path: entryPath,
+                  error: formatLogError(e),
+                });
               }
             }
             continue;
@@ -259,18 +273,20 @@ export async function syncDiskSkillsToDb(
               dependencies,
             });
           } catch (e) {
-            console.error(
-              `[skills-registry] Failed to read skill folder: ${entryPath}`,
-              e,
-            );
+            log.error("skills-registry", {
+              msg: "failed to read skill folder",
+              path: entryPath,
+              error: formatLogError(e),
+            });
           }
         }
       }
     } catch (err) {
-      console.error(
-        `[skills-registry] Error scanning skills directory: ${dir}`,
-        err,
-      );
+      log.error("skills-registry", {
+        msg: "error scanning skills directory",
+        path: dir,
+        error: formatLogError(err),
+      });
     }
   }
 
@@ -306,7 +322,10 @@ export async function syncDiskSkillsToDb(
     tx(foundSkills);
     return { success: true, count: foundSkills.length };
   } catch (err) {
-    console.error("[skills-registry] Transaction failed:", err);
+    log.error("skills-registry", {
+      msg: "transaction failed",
+      error: formatLogError(err),
+    });
     return { success: false, count: 0, error: (err as Error).message };
   }
 }
@@ -373,7 +392,12 @@ export async function scaffoldNewSkill(
 
     return { success: true, path: skillDir };
   } catch (err) {
-    console.error("[skills-registry] Scaffold failed:", err);
+    log.error("skills-registry", {
+      msg: "scaffold failed",
+      skillName: name,
+      profile,
+      error: formatLogError(err),
+    });
     return { success: false, error: (err as Error).message };
   }
 }

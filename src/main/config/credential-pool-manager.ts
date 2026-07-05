@@ -1,5 +1,6 @@
 import { getCredentialPool, setCredentialPool } from "./credential-pool";
 import { setEnvValue } from "./env-store";
+import { formatLogError, log } from "../log";
 
 export interface ExtendedCredentialEntry {
   id?: string;
@@ -128,10 +129,13 @@ export class CredentialPoolManager {
       setEnvValue(envKey, key, profile);
       return true;
     } catch (err) {
-      console.error(
-        `[CredentialPoolManager] Failed to write rotated env key:`,
-        err,
-      );
+      log.error("credential-pool-manager", {
+        msg: "failed to write rotated env key",
+        provider,
+        envKey,
+        profile,
+        error: formatLogError(err),
+      });
       return false;
     }
   }

@@ -29,6 +29,7 @@ import {
   removeSkillCapability,
 } from "./capability-risk-store";
 import { getSharedDb } from "./db";
+import { formatLogError, log } from "./log";
 
 export interface InstalledSkill {
   name: string;
@@ -472,7 +473,12 @@ export function uninstallSkill(name: string, profile?: string): SkillCliResult {
       rmSync(targetSkill.path, { recursive: true, force: true });
       localDeleted = true;
     } catch (e) {
-      console.error("[skills] Failed to delete local skill directory:", e);
+      log.error("skills", {
+        msg: "failed to delete local skill directory",
+        skillName: name,
+        path: targetSkill.path,
+        error: formatLogError(e),
+      });
     }
   }
 
@@ -481,7 +487,12 @@ export function uninstallSkill(name: string, profile?: string): SkillCliResult {
     try {
       removeSkillCapability(targetSkill.path, profile);
     } catch (e) {
-      console.error("[skills] Failed to remove skill capability:", e);
+      log.error("skills", {
+        msg: "failed to remove skill capability",
+        skillName: name,
+        path: targetSkill.path,
+        error: formatLogError(e),
+      });
     }
   }
 
@@ -495,7 +506,12 @@ export function uninstallSkill(name: string, profile?: string): SkillCliResult {
       );
     }
   } catch (e) {
-    console.error("[skills] Failed to remove skill database entry:", e);
+    log.error("skills", {
+      msg: "failed to remove skill database entry",
+      skillName: name,
+      path: targetSkill?.path,
+      error: formatLogError(e),
+    });
   }
 
   // 4. Run CLI uninstall

@@ -17,6 +17,7 @@ import {
   sshListCachedSessions,
 } from "../ssh-remote";
 import { registerDualHandler } from "./utility";
+import { formatLogError, log } from "../log";
 
 export function registerSessionsIpc(): void {
   // Sessions
@@ -43,7 +44,10 @@ export function registerSessionsIpc(): void {
       try {
         return syncSessionCache();
       } catch (error) {
-        console.error("sync-session-cache failed; using local cache", error);
+        log.error("sessions", {
+          msg: "sync-session-cache failed; using local cache",
+          error: formatLogError(error),
+        });
         return listCachedSessions(50);
       }
     },

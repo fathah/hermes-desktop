@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import { dirname } from "path";
 import { existsSync, mkdirSync } from "fs";
 import { activeStateDbPath } from "./utils";
+import { formatLogError, log } from "./log";
 
 let cachedDb: Database.Database | null = null;
 let cachedDbPath: string | null = null;
@@ -42,10 +43,11 @@ export function getSharedDb(readonly = true): Database.Database | null {
         initializeSkillsTable(cachedDb);
       }
     } catch (err) {
-      console.error(
-        "[db] Failed to open shared SQLite database connection:",
-        err,
-      );
+      log.error("db", {
+        msg: "failed to open shared SQLite database connection",
+        path: dbPath,
+        error: formatLogError(err),
+      });
       return null;
     }
   }
@@ -83,10 +85,10 @@ export function initializeMetadataTable(db: Database.Database): void {
       `,
     ).run();
   } catch (err) {
-    console.error(
-      "[db] Failed to initialize messages_metadata table/trigger:",
-      err,
-    );
+    log.error("db", {
+      msg: "failed to initialize messages_metadata table/trigger",
+      error: formatLogError(err),
+    });
   }
 }
 
@@ -110,7 +112,10 @@ export function initializeSkillsTable(db: Database.Database): void {
     initializeMetadataTable(db);
     initializeHealthRssTables(db);
   } catch (err) {
-    console.error("[db] Failed to initialize skills_registry table:", err);
+    log.error("db", {
+      msg: "failed to initialize skills_registry table",
+      error: formatLogError(err),
+    });
   }
 }
 
@@ -305,7 +310,10 @@ export function initializeHealthRssTables(db: Database.Database): void {
     `,
     ).run();
   } catch (err) {
-    console.error("[db] Failed to initialize Health & RSS tables:", err);
+    log.error("db", {
+      msg: "failed to initialize Health & RSS tables",
+      error: formatLogError(err),
+    });
   }
 }
 
@@ -314,7 +322,11 @@ export function closeSharedDb(): void {
     try {
       cachedDb.close();
     } catch (err) {
-      console.error("[db] Error closing shared database connection:", err);
+      log.error("db", {
+        msg: "error closing shared database connection",
+        path: cachedDbPath,
+        error: formatLogError(err),
+      });
     }
     cachedDb = null;
     cachedDbPath = null;

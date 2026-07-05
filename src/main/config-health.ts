@@ -37,6 +37,7 @@ import { HERMES_HOME } from "./installer";
 import { expectedEnvKeyForModel } from "./installer";
 import { expectedEnvKeyForUrl, isLocalBaseUrl } from "../shared/url-key-map";
 import { findSiblingHermesHomes } from "./wsl-detection";
+import { formatLogError, log } from "./log";
 
 import type {
   Severity,
@@ -80,9 +81,12 @@ export function runConfigHealthCheck(profile?: string): ConfigHealthReport {
         else report.summary.infos++;
       }
     } catch (err) {
-      // Swallow — a broken check never breaks the audit. Log to console
-      // so a developer can find it; users see only the empty result.
-      console.warn("[config-health] check threw:", err);
+      // Swallow — a broken check never breaks the audit. Log it so a developer
+      // can find it; users see only the empty result.
+      log.warn("config-health", {
+        msg: "check threw",
+        error: formatLogError(err),
+      });
     }
   }
 

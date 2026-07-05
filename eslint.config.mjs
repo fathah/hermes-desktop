@@ -74,6 +74,18 @@ export default defineConfig(
     },
   },
   {
+    files: ["src/main/**/*.{ts,tsx}"],
+    rules: {
+      "no-console": "error",
+    },
+  },
+  {
+    files: ["src/main/**/*.test.ts"],
+    rules: {
+      "no-console": "off",
+    },
+  },
+  {
     // Plain-JS build/smoke scripts (.mjs/.cjs/.js): explicit-function-return-type
     // is a TypeScript-only rule that cannot be satisfied without type annotations,
     // which aren't valid JavaScript. Other rules still apply.

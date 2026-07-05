@@ -17,6 +17,7 @@ import { listInstalledSkills, getSkillContent } from "./skills";
 import { profileKey } from "./hermes/gateway-process";
 import { recordSkillInjected, recordSkillLoaded } from "./skill-usage";
 import { readCapabilityRiskRegistry } from "./capability-risk-store";
+import { formatLogError, log } from "./log";
 
 /** Combined active-skill content above this many chars triggers a warning. */
 const SOFT_CAP_CHARS = 12_000;
@@ -155,7 +156,11 @@ export function buildActiveSkillsSystemMessage(
   try {
     return buildActiveSkillsSystemMessageInner(profile);
   } catch (err) {
-    console.error("[active-skills] failed to build system message:", err);
+    log.error("active-skills", {
+      msg: "failed to build system message",
+      profile,
+      error: formatLogError(err),
+    });
     return null;
   }
 }
@@ -184,10 +189,12 @@ function buildActiveSkillsSystemMessageInner(
   const content = `${preamble}\n\n${sections.join("\n\n---\n\n")}`;
 
   if (content.length > SOFT_CAP_CHARS) {
-    console.warn(
-      `[active-skills] loaded skill content is ${content.length} chars ` +
-        `(> ${SOFT_CAP_CHARS}); injected in full but this inflates every turn.`,
-    );
+    log.warn("active-skills", {
+      msg: "loaded skill content exceeds soft cap; injected in full",
+      profile,
+      contentLength: content.length,
+      softCapChars: SOFT_CAP_CHARS,
+    });
   }
 
   recordSkillInjected(injected, profile);

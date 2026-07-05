@@ -24,6 +24,7 @@ import {
   type NagAction,
   type NagTaskMeta,
 } from "../shared/tasks-dump";
+import { formatLogError, log } from "./log";
 
 interface IndexRow {
   path: string;
@@ -39,7 +40,11 @@ function notify(title: string, body: string): void {
   try {
     new Notification({ title, body }).show();
   } catch (err) {
-    console.error("[nag-engine] notification failed:", err);
+    log.error("nag-engine", {
+      msg: "notification failed",
+      title,
+      error: formatLogError(err),
+    });
   }
 }
 

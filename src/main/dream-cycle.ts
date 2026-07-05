@@ -6,6 +6,7 @@ import { resolveSpsVaultDir } from "./sps-storage";
 import { chatCompletionOnce } from "./hermes/chat-client";
 import { getActiveProfileNameSync } from "./utils";
 import { buildDailyBriefMarkdown, dailyBriefFileName } from "./daily-brief";
+import { formatLogError, log } from "./log";
 import YAML from "yaml";
 
 /**
@@ -40,9 +41,11 @@ ${content}`;
 export async function runDreamCycle(profile?: string): Promise<void> {
   const activeProfile = profile ?? getActiveProfileNameSync();
   const vaultDir = resolveSpsVaultDir(activeProfile);
-  console.log(
-    `[DREAM_CYCLE] Starting Dream Cycle in vault: ${vaultDir} (Profile: ${activeProfile})`,
-  );
+  log.info("dream-cycle", {
+    msg: "starting Dream Cycle",
+    vaultDir,
+    profile: activeProfile,
+  });
 
   try {
     const noteIndex = await getSpsNoteIndex(activeProfile);
@@ -66,7 +69,11 @@ export async function runDreamCycle(profile?: string): Promise<void> {
       let summary = props.summary as string | undefined;
 
       if (!summary) {
-        console.log(`[DREAM_CYCLE] Summarizing note: ${note.path}`);
+        log.info("dream-cycle", {
+          msg: "summarizing note",
+          path: note.path,
+          profile: activeProfile,
+        });
         try {
           summary = await generateSummary(note.title, body, activeProfile);
           props.summary = summary;
@@ -75,11 +82,18 @@ export async function runDreamCycle(profile?: string): Promise<void> {
           const yamlStr = YAML.stringify(props).trim();
           const updatedContent = `---\n${yamlStr}\n---\n${body.startsWith("\n") ? body : "\n" + body}`;
           await writeFile(absPath, updatedContent, "utf8");
-          console.log(
-            `[DREAM_CYCLE] Saved summary to frontmatter of: ${note.path}`,
-          );
+          log.info("dream-cycle", {
+            msg: "saved summary to frontmatter",
+            path: note.path,
+            profile: activeProfile,
+          });
         } catch (err) {
-          console.error(`[DREAM_CYCLE] Failed to summarize ${note.path}:`, err);
+          log.error("dream-cycle", {
+            msg: "failed to summarize note",
+            path: note.path,
+            profile: activeProfile,
+            error: formatLogError(err),
+          });
         }
       }
 
@@ -103,7 +117,10 @@ export async function runDreamCycle(profile?: string): Promise<void> {
       .map((n) => `- **${n.title}** (${n.path}): ${n.summary}`)
       .join("\n");
 
-    console.log(`[DREAM_CYCLE] Compiling Daily Brief...`);
+    log.info("dream-cycle", {
+      msg: "compiling Daily Brief",
+      profile: activeProfile,
+    });
 
     // 3. Generate Daily Brief via LLM
     const reportPrompt = `You are an AI Mentor gardening the agent's knowledge graph.
@@ -145,11 +162,19 @@ Do not include any extra text outside the Markdown content.`;
       buildDailyBriefMarkdown({ date: today, body: res.content }),
       "utf8",
     );
-    console.log(`[DREAM_CYCLE] Daily Brief saved to: ${reportPath}`);
+    log.info("dream-cycle", {
+      msg: "daily Brief saved",
+      path: reportPath,
+      profile: activeProfile,
+    });
 
     // Trigger index rebuild to pick up the new Daily Brief note
     await noteIndex.rebuild();
   } catch (err) {
-    console.error("[DREAM_CYCLE] Error in dream cycle run:", err);
+    log.error("dream-cycle", {
+      msg: "error in dream cycle run",
+      profile: activeProfile,
+      error: formatLogError(err),
+    });
   }
 }

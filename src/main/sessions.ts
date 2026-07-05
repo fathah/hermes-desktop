@@ -1,5 +1,6 @@
 import Database from "better-sqlite3";
 import { getSharedDb } from "./db";
+import { formatLogError, log } from "./log";
 import type { Attachment } from "../shared/attachments";
 import { isImageMime } from "../shared/attachments";
 import { clearStagedAttachments } from "./attachment-staging";
@@ -564,6 +565,12 @@ export function adoptCouncilResponse(
     });
     tx();
   } catch (err) {
-    console.error("[sessions] Failed to adopt council response:", err);
+    log.error("sessions", {
+      msg: "failed to adopt council response",
+      sessionId,
+      messageId,
+      councilGroupId,
+      error: formatLogError(err),
+    });
   }
 }

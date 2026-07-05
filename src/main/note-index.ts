@@ -24,7 +24,7 @@ import { basename, extname, join, relative, sep } from "path";
 import chokidar, { type FSWatcher } from "chokidar";
 import { resolveSpsVaultDir } from "./sps-storage";
 import { semanticManager } from "./semantic-index";
-import { log } from "./log";
+import { formatLogError, log } from "./log";
 import { extractSpsLinkEdges, maskSpsWikilinks } from "../shared/sps-wikilinks";
 import type { VaultLinkEdge } from "../shared/sps-types";
 import { parseYamlFrontmatterMarkdown } from "../shared/sps-frontmatter";
@@ -370,10 +370,10 @@ export class NoteIndex {
         this.ensuredPropIndexes.add(row.name);
       }
     } catch (err) {
-      console.error(
-        "[NoteIndex] failed to load existing expression indexes:",
-        err,
-      );
+      log.error("note-index", {
+        msg: "failed to load existing expression indexes",
+        error: formatLogError(err),
+      });
     }
   }
 
@@ -440,7 +440,10 @@ export class NoteIndex {
       }
       if (migrations.length > 0) this.db.exec(migrations.join(";"));
     } catch (err) {
-      console.error("[NoteIndex] failed to run links table migration:", err);
+      log.error("note-index", {
+        msg: "failed to run links table migration",
+        error: formatLogError(err),
+      });
     }
   }
 
@@ -661,10 +664,11 @@ export class NoteIndex {
       );
       this.ensuredPropIndexes.add(name);
     } catch (err) {
-      console.error(
-        `[NoteIndex] failed to create expression index for ${prop}:`,
-        err,
-      );
+      log.error("note-index", {
+        msg: "failed to create expression index",
+        prop,
+        error: formatLogError(err),
+      });
     }
   }
 

@@ -5,6 +5,7 @@ import { HERMES_HOME } from "./installer";
 import { safeWriteFile, profilePaths } from "./utils";
 import DEFAULT_MODELS from "./default-models";
 import { hostDerivedEnvKeyForUrl } from "../shared/url-key-map";
+import { formatLogError, log } from "./log";
 
 const MODELS_FILE = join(HERMES_HOME, "models.json");
 
@@ -151,7 +152,10 @@ function seedDefaults(profile?: string): SavedModel[] {
       }
     }
   } catch (e) {
-    console.error("Failed to load custom providers:", e);
+    log.error("models", {
+      msg: "failed to load custom providers",
+      error: formatLogError(e),
+    });
   }
   writeModels(models);
   return models;

@@ -3,6 +3,7 @@ import { join } from "path";
 import Database from "better-sqlite3";
 import { profileHome, safeWriteFile } from "./utils";
 import type { MemoryEntry, MemoryInfo } from "../shared/memory";
+import { formatLogError, log } from "./log";
 export type { MemoryEntry, MemoryInfo };
 
 const ENTRY_DELIMITER = "\n§\n";
@@ -80,7 +81,11 @@ function getSessionStats(profile?: string): {
       db.close();
     }
   } catch (err) {
-    console.error("[memory] getSessionStats failed:", err);
+    log.error("memory", {
+      msg: "getSessionStats failed",
+      profile,
+      error: formatLogError(err),
+    });
     return { totalSessions: 0, totalMessages: 0 };
   }
 }

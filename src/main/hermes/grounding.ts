@@ -6,6 +6,7 @@ import {
   type NoteSearchHit,
 } from "../note-index";
 import { semanticManager } from "../semantic-index";
+import { formatLogError, log } from "../log";
 
 function getNoteTitle(raw: string, relPath: string): string {
   const { props, body } = parseFrontmatter(raw);
@@ -219,7 +220,10 @@ export async function buildRetrievalSystemMessage(
         perQuery.push(semHits);
       }
     } catch (err) {
-      console.error("[Grounding] Local semantic search failed:", err);
+      log.error("grounding", {
+        msg: "local semantic search failed",
+        error: formatLogError(err),
+      });
     }
 
     const hitByPath = new Map<string, NoteSearchHit>();
@@ -253,7 +257,10 @@ export async function buildRetrievalSystemMessage(
     }
     return formatRetrievalSystemMessage(sources, opts.isRemote);
   } catch (err) {
-    console.error("ERROR IN buildRetrievalSystemMessage:", err);
+    log.error("grounding", {
+      msg: "error in buildRetrievalSystemMessage",
+      error: formatLogError(err),
+    });
     return null;
   }
 }

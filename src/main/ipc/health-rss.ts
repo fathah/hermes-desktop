@@ -6,6 +6,7 @@ import {
   fetchRssArticles,
   type ParsedRssArticle,
 } from "../rss-discovery";
+import { formatLogError, log } from "../log";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -686,7 +687,12 @@ export function registerHealthRssIpc(): void {
           feed.id,
         );
       } catch (err) {
-        console.error(`[RSS SYNC] Failed for feed ${feed.title}:`, err);
+        log.error("rss-sync", {
+          msg: "failed for feed",
+          feedId: feed.id,
+          feedTitle: feed.title,
+          error: formatLogError(err),
+        });
       }
     }
 

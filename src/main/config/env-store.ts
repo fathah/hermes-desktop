@@ -8,6 +8,7 @@ import {
   encryptSecret,
   isSecretEncryptionAvailable,
 } from "./secrets";
+import { formatLogError, log } from "../log";
 
 const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const ENV_SECRET_SIDECAR = ".env.secrets.json";
@@ -120,10 +121,11 @@ function readEnvSecretSidecar(
     if (strict) {
       throw err;
     }
-    console.error(
-      "[SecretStore] Failed to read encrypted environment secret sidecar:",
-      secretStoreErrorSummary(err),
-    );
+    log.error("secret-store", {
+      msg: "failed to read encrypted environment secret sidecar",
+      profile,
+      error: secretStoreErrorSummary(err),
+    });
     return emptySecretSidecar();
   }
 }
@@ -132,10 +134,12 @@ function readEnvSecret(key: string, profile?: string): string {
   const payload = readEnvSecretSidecar(profile).secrets[key];
   if (!payload) return "";
   if (!isSecretEncryptionAvailable() || !canDecryptSecret(payload)) {
-    console.error(
-      `[SecretStore] Failed to decrypt ${key} from encrypted environment secret sidecar:`,
-      "redacted",
-    );
+    log.error("secret-store", {
+      msg: "failed to decrypt encrypted environment secret sidecar entry",
+      key,
+      profile,
+      error: "redacted",
+    });
     return "";
   }
   return decryptSecret(payload);
@@ -196,10 +200,12 @@ export function readEnv(profile?: string): Record<string, string> {
       try {
         value = readEnvSecret(key, profile);
       } catch (err) {
-        console.error(
-          `[SecretStore] Failed to retrieve ${key} from encrypted environment secret sidecar:`,
-          secretStoreErrorSummary(err),
-        );
+        log.error("secret-store", {
+          msg: "failed to retrieve encrypted environment secret sidecar entry",
+          key,
+          profile,
+          error: secretStoreErrorSummary(err),
+        });
         value = "";
       }
     }
@@ -228,10 +234,12 @@ export function setEnvValue(
       writeEnvSecret(key, value, profile);
       finalValue = value.trim() ? "__keychain__" : "";
     } catch (err) {
-      console.error(
-        `[SecretStore] Failed to store ${key} in encrypted environment secret sidecar:`,
-        secretStoreErrorSummary(err),
-      );
+      log.error("secret-store", {
+        msg: "failed to store encrypted environment secret sidecar entry",
+        key,
+        profile,
+        error: secretStoreErrorSummary(err),
+      });
       throw new Error(
         `Failed to store sensitive environment variable ${key} in encrypted desktop storage; refusing to write plaintext.`,
       );
@@ -309,10 +317,11 @@ export function getKeychainKeys(profile?: string): string[] {
 
     return keychainKeys;
   } catch (err) {
-    console.error(
-      `[Keychain] Failed to read ${envFile} to resolve keychain keys:`,
-      err,
-    );
+    log.error("keychain", {
+      msg: "failed to read env file to resolve keychain keys",
+      path: envFile,
+      error: formatLogError(err),
+    });
     return [];
   }
 }

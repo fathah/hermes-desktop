@@ -19,6 +19,7 @@ import {
 } from "./cron-quality";
 import { gatewayFetch } from "./security/network-policy";
 import type { CronJob } from "../shared/cronjobs";
+import { formatLogError, log } from "./log";
 export type { CronJob };
 
 function jobsFilePath(profile?: string): string {
@@ -133,7 +134,10 @@ export async function listCronJobs(
       const qs = includeDisabled ? "?include_disabled=true" : "";
       const res = await remoteFetch(`/api/jobs${qs}`);
       if (!res.ok) {
-        console.error("[CRON] remote list failed:", await remoteJsonError(res));
+        log.error("cronjobs", {
+          msg: "remote list failed",
+          error: await remoteJsonError(res),
+        });
         return [];
       }
       const body = (await res.json()) as { jobs?: Record<string, unknown>[] };
@@ -147,7 +151,10 @@ export async function listCronJobs(
       }
       return jobs;
     } catch (err) {
-      console.error("[CRON] remote list error:", err);
+      log.error("cronjobs", {
+        msg: "remote list error",
+        error: formatLogError(err),
+      });
       return [];
     }
   }
@@ -170,7 +177,12 @@ export async function listCronJobs(
 
     return jobs;
   } catch (err) {
-    console.error("[CRON] Failed to read jobs file:", err);
+    log.error("cronjobs", {
+      msg: "failed to read jobs file",
+      profile,
+      path: filePath,
+      error: formatLogError(err),
+    });
     return [];
   }
 }

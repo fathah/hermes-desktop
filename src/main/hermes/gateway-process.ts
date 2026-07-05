@@ -39,7 +39,7 @@ import {
   type SupervisorState,
   type GatewayHealthStatus,
 } from "./gateway-supervisor";
-import { log, rotateGatewayStderrIfLarge } from "../log";
+import { formatLogError, log, rotateGatewayStderrIfLarge } from "../log";
 import type { GatewayStartResult } from "../../shared/gateway";
 
 export interface GatewayProcessRuntime {
@@ -263,9 +263,9 @@ export function startGatewayDetailed(profile?: string): GatewayStartResult {
   if (isRemoteMode()) {
     const error =
       "The local gateway can only be started in local mode. Switch to local mode, or start the gateway on the remote Hermes host.";
-    console.warn(
-      "[gateway] startGateway() called in remote/SSH mode — refusing local spawn",
-    );
+    log.warn("gateway", {
+      msg: "startGateway() called in remote/SSH mode; refusing local spawn",
+    });
     return { success: false, running: false, error };
   }
   ensureInitialized();
@@ -277,14 +277,14 @@ export function startGatewayDetailed(profile?: string): GatewayStartResult {
     const error =
       `Cannot start the gateway because the Hermes Python interpreter was not found at ${HERMES_PYTHON}. ` +
       "Install or repair Hermes Agent, then try again.";
-    console.error(`[gateway] ${error}`);
+    log.error("gateway", { msg: error, path: HERMES_PYTHON });
     return { success: false, running: false, error };
   }
   if (!existsSync(HERMES_REPO)) {
     const error =
       `Cannot start the gateway because the hermes-agent repository was not found at ${HERMES_REPO}. ` +
       "Install or repair Hermes Agent, then try again.";
-    console.error(`[gateway] ${error}`);
+    log.error("gateway", { msg: error, path: HERMES_REPO });
     return { success: false, running: false, error };
   }
 
@@ -353,7 +353,12 @@ export function startGatewayDetailed(profile?: string): GatewayStartResult {
     }
     const message = err instanceof Error ? err.message : String(err);
     const error = `Failed to start the gateway process: ${message}`;
-    console.error(`[gateway:${key}] ${error}`);
+    log.error("gateway", {
+      msg: "failed to start gateway process",
+      profileKey: key,
+      logPath,
+      error: message,
+    });
     return { success: false, running: false, error, logPath };
   }
 
@@ -366,10 +371,12 @@ export function startGatewayDetailed(profile?: string): GatewayStartResult {
   }
 
   proc.on("error", (err) => {
-    console.error(
-      `[gateway:${key}] Failed to spawn gateway process:`,
-      err.message,
-    );
+    log.error("gateway", {
+      msg: "failed to spawn gateway process",
+      profileKey: key,
+      logPath,
+      error: formatLogError(err),
+    });
     if (gatewayProcesses.get(key) === proc) gatewayProcesses.delete(key);
     appStartedProfiles.delete(key);
     invalidateApiCacheFor(profile);
@@ -377,10 +384,13 @@ export function startGatewayDetailed(profile?: string): GatewayStartResult {
 
   proc.on("close", (code, signal) => {
     if (code !== null && code !== 0) {
-      console.error(
-        `[gateway:${key}] Process exited with code ${code}${signal ? ` (signal: ${signal})` : ""}. ` +
-          `Check ${logPath} for details.`,
-      );
+      log.error("gateway", {
+        msg: "gateway process exited with non-zero code",
+        profileKey: key,
+        code,
+        signal,
+        logPath,
+      });
     }
     if (gatewayProcesses.get(key) === proc) gatewayProcesses.delete(key);
     appStartedProfiles.delete(key);
@@ -401,7 +411,11 @@ export function startGatewayDetailed(profile?: string): GatewayStartResult {
         if (ready) notifyGatewayReady(profile);
       })
       .catch((err) => {
-        console.warn("[hermes] post-spawn readiness probe failed:", err);
+        log.warn("gateway", {
+          msg: "post-spawn readiness probe failed",
+          profileKey: profileKey(profile),
+          error: formatLogError(err),
+        });
       });
   }, 3000);
 
@@ -650,9 +664,12 @@ async function restartGatewayLocallyOnce(
       healthPollMs,
     );
     if (!processStopped || !apiStopped) {
-      console.error(
-        `[gateway:${key}] Restart failed: gateway did not stop before restart`,
-      );
+      log.error("gateway", {
+        msg: "restart failed: gateway did not stop before restart",
+        profileKey: key,
+        processStopped,
+        apiStopped,
+      });
       restoreGatewayAfterRestartFailure(
         profile,
         previousProcess,
@@ -684,7 +701,11 @@ async function restartGatewayLocallyOnce(
     if (!ready) markGatewayRestartFailed(profile);
     return ready;
   } catch (err) {
-    console.error("[gateway] Restart failed:", (err as Error).message);
+    log.error("gateway", {
+      msg: "restart failed",
+      profileKey: profileKey(profile),
+      error: formatLogError(err),
+    });
     markGatewayRestartFailed(profile);
     return false;
   }
@@ -839,7 +860,11 @@ function broadcastGatewayHealth(status: GatewayHealthStatus): void {
   try {
     _healthBroadcaster?.(status);
   } catch (err) {
-    console.warn("[gateway] health broadcast failed:", err);
+    log.warn("gateway-supervisor", {
+      msg: "health broadcast failed",
+      status,
+      error: formatLogError(err),
+    });
   }
 }
 
@@ -847,7 +872,11 @@ function notifyGatewayReady(profile?: string): void {
   try {
     _gatewayReadyNotifier?.(profile);
   } catch (err) {
-    console.warn("[gateway] ready notifier failed:", err);
+    log.warn("gateway-supervisor", {
+      msg: "ready notifier failed",
+      profileKey: profileKey(profile),
+      error: formatLogError(err),
+    });
   }
 }
 

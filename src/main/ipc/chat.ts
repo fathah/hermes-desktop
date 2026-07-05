@@ -41,6 +41,7 @@ import {
   type IssueCode,
 } from "../config-health";
 import { getVoiceStatus, transcribeAudio, speakText } from "../voice";
+import { formatLogError, log } from "../log";
 import type { Attachment } from "../../shared/attachments";
 
 export const activeChatAborts = new Map<string, () => void>();
@@ -56,7 +57,10 @@ export function abortAllChats(): void {
     try {
       abort();
     } catch (e) {
-      console.error("[chat] Failed to abort chat:", e);
+      log.error("chat", {
+        msg: "failed to abort chat",
+        error: formatLogError(e),
+      });
     }
   }
   activeChatAborts.clear();
@@ -238,7 +242,12 @@ export function registerChatIpc(
               },
               profile,
             );
-            console.log(`[autonomy] auto-approved: ${req.command ?? req.id}`);
+            log.info("autonomy", {
+              msg: "auto-approved",
+              command: req.command,
+              runId: req.id,
+              profile: profile || "default",
+            });
             return true;
           }
           return false;

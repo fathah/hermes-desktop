@@ -18,7 +18,7 @@ import {
   serializeLockRecord,
   type LockRecord,
 } from "./scheduler-lock";
-import { log } from "./log";
+import { formatLogError, log } from "./log";
 import { getActiveProfileNameSync, profileHome } from "./utils";
 import { listCronJobs } from "./cronjobs";
 import { triggerSelfHealing } from "./self-healing";
@@ -62,10 +62,20 @@ export async function captureScreenshot(
       `routine-${jobId}-${timestamp}-error.png`,
     );
     writeFileSync(screenshotPath, pngBuffer);
-    console.log(`[SCHEDULER] Saved error screenshot to ${screenshotPath}`);
+    log.info("scheduler", {
+      msg: "saved error screenshot",
+      jobId,
+      profile,
+      path: screenshotPath,
+    });
     return screenshotPath;
   } catch (err) {
-    console.error("[SCHEDULER] Failed to capture screenshot:", err);
+    log.error("scheduler", {
+      msg: "failed to capture screenshot",
+      jobId,
+      profile,
+      error: formatLogError(err),
+    });
     return null;
   }
 }
@@ -142,7 +152,12 @@ function recordSkip(jobId: string, reason: string): void {
     };
     writeFileSync(skipsPath(), JSON.stringify(all, null, 2), "utf-8");
   } catch (err) {
-    console.error("[SCHEDULER] Failed to persist skip telemetry:", err);
+    log.error("scheduler", {
+      msg: "failed to persist skip telemetry",
+      jobId,
+      reason,
+      error: formatLogError(err),
+    });
   }
 }
 
@@ -220,13 +235,19 @@ export async function tickScheduler(profile?: string): Promise<void> {
     const currentHour = now.getHours();
     if (currentHour >= 3 && last3AmRunDate !== todayStr) {
       last3AmRunDate = todayStr;
-      console.log(
-        `[SCHEDULER] Triggering 3:00 AM local time Dream Cycle (Date: ${todayStr})`,
-      );
+      log.info("scheduler", {
+        msg: "triggering 3:00 AM local time Dream Cycle",
+        date: todayStr,
+        profile: activeProfile,
+      });
       void runDreamCycle(activeProfile);
     }
   } catch (err) {
-    console.error("[SCHEDULER] Error checking 3:00 AM Dream Cycle:", err);
+    log.error("scheduler", {
+      msg: "error checking 3:00 AM Dream Cycle",
+      profile: activeProfile,
+      error: formatLogError(err),
+    });
   }
 
   // Check 15 minutes of idle time Dream Cycle trigger
@@ -242,29 +263,46 @@ export async function tickScheduler(profile?: string): Promise<void> {
       const isIdleNow = idleTime >= 900; // 15 minutes
       if (isIdleNow && !wasIdle) {
         wasIdle = true;
-        console.log(
-          `[SCHEDULER] System idle for 15 minutes (idle time: ${idleTime}s). Triggering Dream Cycle.`,
-        );
+        log.info("scheduler", {
+          msg: "system idle threshold reached; triggering Dream Cycle",
+          idleTimeSeconds: idleTime,
+          profile: activeProfile,
+        });
         void runDreamCycle(activeProfile);
       } else if (!isIdleNow) {
         wasIdle = false;
       }
     }
   } catch (err) {
-    console.error("[SCHEDULER] Error checking idle Dream Cycle:", err);
+    log.error("scheduler", {
+      msg: "error checking idle Dream Cycle",
+      profile: activeProfile,
+      error: formatLogError(err),
+    });
   }
 
   void maybeRunHermesAgentUpdateRoutine(new Date(), activeProfile).catch(
     (err) => {
-      console.error("[SCHEDULER] Error checking Hermes Agent update:", err);
+      log.error("scheduler", {
+        msg: "error checking Hermes Agent update",
+        profile: activeProfile,
+        error: formatLogError(err),
+      });
     },
   );
   void maybeRunDesktopUpdateRoutine(new Date()).catch((err) => {
-    console.error("[SCHEDULER] Error checking Desktop update:", err);
+    log.error("scheduler", {
+      msg: "error checking Desktop update",
+      error: formatLogError(err),
+    });
   });
   void maybeRunHermesUpstreamWatchRoutine(new Date(), activeProfile).catch(
     (err) => {
-      console.error("[SCHEDULER] Error checking Hermes upstream watch:", err);
+      log.error("scheduler", {
+        msg: "error checking Hermes upstream watch",
+        profile: activeProfile,
+        error: formatLogError(err),
+      });
     },
   );
 
@@ -288,14 +326,21 @@ export async function tickScheduler(profile?: string): Promise<void> {
 
       // Check if job is due and not currently running
       if (nextRunTime <= now && !activeRuns.has(job.id)) {
-        console.log(
-          `[SCHEDULER] Triggering due job: "${job.name}" (ID: ${job.id})`,
-        );
+        log.info("scheduler", {
+          msg: "triggering due job",
+          jobId: job.id,
+          jobName: job.name,
+          profile: activeProfile,
+        });
         void runJobHeadless(job.id, job.name, activeProfile);
       }
     }
   } catch (err) {
-    console.error("[SCHEDULER] Error during tick:", err);
+    log.error("scheduler", {
+      msg: "error during tick",
+      profile: activeProfile,
+      error: formatLogError(err),
+    });
   }
 
   // Nag engine: chase overdue human tasks (throttled to ~60s).
@@ -306,7 +351,11 @@ export async function tickScheduler(profile?: string): Promise<void> {
       await nagTick(activeProfile);
     }
   } catch (err) {
-    console.error("[SCHEDULER] Error during nag tick:", err);
+    log.error("scheduler", {
+      msg: "error during nag tick",
+      profile: activeProfile,
+      error: formatLogError(err),
+    });
   }
 }
 
@@ -336,7 +385,13 @@ async function triageFailedJob(
           }
         }
       } catch (skillErr) {
-        console.error("[SCHEDULER Triage] Error loading skills:", skillErr);
+        log.error("scheduler", {
+          msg: "triage error loading skills",
+          jobId,
+          jobName,
+          profile,
+          error: formatLogError(skillErr),
+        });
       }
     }
 
@@ -346,7 +401,14 @@ async function triageFailedJob(
         logContent = readFileSync(logFilePath, "utf-8");
       }
     } catch (logReadErr) {
-      console.error("[SCHEDULER Triage] Error reading log file:", logReadErr);
+      log.error("scheduler", {
+        msg: "triage error reading log file",
+        jobId,
+        jobName,
+        profile,
+        logFilePath,
+        error: formatLogError(logReadErr),
+      });
     }
 
     const failureTriageSystemPrompt = `You are a site reliability and technical debugging assistant. A scheduled background routine/job in the Hermes workspace has failed.
@@ -399,10 +461,13 @@ Your output must be a single, concise explanation representing the study card bo
       }
     }
   } catch (err) {
-    console.error(
-      "[SCHEDULER Triage] Failure triage background task failed:",
-      err,
-    );
+    log.error("scheduler", {
+      msg: "failure triage background task failed",
+      jobId,
+      jobName,
+      profile,
+      error: formatLogError(err),
+    });
   }
 }
 
@@ -416,7 +481,12 @@ export async function runJobHeadless(
   profile: string,
 ): Promise<boolean> {
   if (activeRuns.has(jobId)) {
-    console.warn(`[SCHEDULER] Job "${jobName}" (${jobId}) is already running.`);
+    log.warn("scheduler", {
+      msg: "job is already running",
+      jobId,
+      jobName,
+      profile,
+    });
     return false;
   }
 
@@ -430,10 +500,14 @@ export async function runJobHeadless(
   );
   if (decision.type === "blocked") {
     recordSkip(jobId, "locked");
-    console.warn(
-      `[SCHEDULER] Job "${jobName}" (${jobId}) is locked by a live runner ` +
-        `(pid ${existingLock?.pid}). Skipping.`,
-    );
+    log.warn("scheduler", {
+      msg: "job is locked by a live runner; skipping",
+      jobId,
+      jobName,
+      profile,
+      lockFile,
+      pid: existingLock?.pid,
+    });
     return false;
   }
   if (decision.type === "steal") {
@@ -451,7 +525,14 @@ export async function runJobHeadless(
     const record: LockRecord = { pid: process.pid, startedAt: Date.now() };
     writeFileSync(lockFile, serializeLockRecord(record), "utf-8");
   } catch (err) {
-    console.error(`[SCHEDULER] Failed to create lockfile ${lockFile}:`, err);
+    log.error("scheduler", {
+      msg: "failed to create lockfile",
+      jobId,
+      jobName,
+      profile,
+      lockFile,
+      error: formatLogError(err),
+    });
   }
 
   // A clean acquisition means this job is healthy again — clear any stale skip
@@ -554,21 +635,34 @@ export async function runJobHeadless(
           // ignore
         }
 
-        console.log(
-          `[SCHEDULER] Job "${jobName}" finished with code ${code} in ${duration}ms`,
-        );
+        log.info("scheduler", {
+          msg: "job finished",
+          jobId,
+          jobName,
+          profile,
+          code,
+          durationMs: duration,
+        });
 
         if (code !== 0) {
-          console.error(
-            `[SCHEDULER] Job "${jobName}" (${jobId}) failed. Triggering Self-Healing Loop.`,
-          );
+          log.error("scheduler", {
+            msg: "job failed; triggering Self-Healing Loop",
+            jobId,
+            jobName,
+            profile,
+            code,
+            durationMs: duration,
+          });
           try {
             await captureScreenshot(jobId, profile);
           } catch (captureErr) {
-            console.error(
-              "[SCHEDULER] Error capturing screenshot:",
-              captureErr,
-            );
+            log.error("scheduler", {
+              msg: "error capturing screenshot",
+              jobId,
+              jobName,
+              profile,
+              error: formatLogError(captureErr),
+            });
           }
           void triageFailedJob(
             jobId,
@@ -599,11 +693,23 @@ export async function runJobHeadless(
           // ignore
         }
 
-        console.error(`[SCHEDULER] Spawn error running job "${jobName}":`, err);
+        log.error("scheduler", {
+          msg: "spawn error running job",
+          jobId,
+          jobName,
+          profile,
+          error: formatLogError(err),
+        });
         try {
           await captureScreenshot(jobId, profile);
         } catch (captureErr) {
-          console.error("[SCHEDULER] Error capturing screenshot:", captureErr);
+          log.error("scheduler", {
+            msg: "error capturing screenshot",
+            jobId,
+            jobName,
+            profile,
+            error: formatLogError(captureErr),
+          });
         }
         void triageFailedJob(
           jobId,
@@ -627,10 +733,13 @@ export async function runJobHeadless(
         // ignore
       }
 
-      console.error(
-        `[SCHEDULER] Failed to run job "${jobName}" headlessly:`,
-        err,
-      );
+      log.error("scheduler", {
+        msg: "failed to run job headlessly",
+        jobId,
+        jobName,
+        profile,
+        error: formatLogError(err),
+      });
       resolve(false);
     }
   });
@@ -643,18 +752,19 @@ export function startScheduler(config: Partial<SchedulerConfig> = {}): void {
   const currentConfig = getSchedulerConfig();
   const merged = { ...currentConfig, ...config };
   if (!merged.enabled) {
-    console.log("[SCHEDULER] Scheduler is disabled by configuration.");
+    log.info("scheduler", { msg: "scheduler is disabled by configuration" });
     return;
   }
 
   if (schedulerInterval) {
-    console.warn("[SCHEDULER] Scheduler is already running.");
+    log.warn("scheduler", { msg: "scheduler is already running" });
     return;
   }
 
-  console.log(
-    `[SCHEDULER] Starting background scheduler (tick every ${merged.tickIntervalMs}ms).`,
-  );
+  log.info("scheduler", {
+    msg: "starting background scheduler",
+    tickIntervalMs: merged.tickIntervalMs,
+  });
   schedulerInterval = setInterval(() => {
     void tickScheduler();
   }, merged.tickIntervalMs);
@@ -665,7 +775,7 @@ export function startScheduler(config: Partial<SchedulerConfig> = {}): void {
  */
 export function stopScheduler(): void {
   if (schedulerInterval) {
-    console.log("[SCHEDULER] Stopping background scheduler.");
+    log.info("scheduler", { msg: "stopping background scheduler" });
     clearInterval(schedulerInterval);
     schedulerInterval = null;
   }

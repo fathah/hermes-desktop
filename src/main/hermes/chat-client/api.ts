@@ -40,6 +40,7 @@ import {
   requestTimeoutForAttempt,
   retryDelayWithinDeadline,
 } from "./deadline";
+import { formatLogError, log } from "../../log";
 
 function isLocalGatewayRequestTimeout(
   errorText: string,
@@ -484,7 +485,10 @@ export function sendMessageViaApi(
         });
       }
     } catch (err) {
-      console.warn("[hermes] Pre-LLM hook failed:", err);
+      log.warn("hermes", {
+        msg: "pre-LLM hook failed",
+        error: formatLogError(err),
+      });
     }
 
     // 2. Smart Memory Shrinking (Context Compressor)
@@ -839,7 +843,10 @@ export function sendMessageViaApi(
       }
 
       const classification = ErrorDoctor.classify(errorText, statusCode);
-      console.log("[hermes] Error Doctor classification:", classification);
+      log.info("hermes", {
+        msg: "Error Doctor classification",
+        classification,
+      });
 
       if (classification.retryable && retryBudget > 0 && !hasContent) {
         if (requestTimeoutForAttempt(noContentDeadlineAt) <= 0) {
@@ -848,7 +855,9 @@ export function sendMessageViaApi(
         }
 
         if (classification.shouldCompress) {
-          console.log("[hermes] Memory overflow detected. Compacting budget.");
+          log.info("hermes", {
+            msg: "memory overflow detected; compacting budget",
+          });
           executeRequest(retryBudget - 1, 20000, selectedTransport);
           return;
         }
@@ -869,9 +878,11 @@ export function sendMessageViaApi(
           }
           const nextKey = CredentialPoolManager.rotateKey(provider, profile);
           if (nextKey) {
-            console.log(
-              "[hermes] Credential rotated successfully. Retrying request.",
-            );
+            log.info("hermes", {
+              msg: "credential rotated successfully; retrying request",
+              provider,
+              profile,
+            });
             executeRequest(
               retryBudget - 1,
               customBudgetChars,
@@ -890,9 +901,11 @@ export function sendMessageViaApi(
           finish(errorText);
           return;
         }
-        console.log(
-          `[hermes] Retrying request after delay of ${boundedDelay}ms...`,
-        );
+        log.info("hermes", {
+          msg: "retrying request after delay",
+          delayMs: boundedDelay,
+          retryBudget,
+        });
         setTimeout(() => {
           executeRequest(retryBudget - 1, customBudgetChars, selectedTransport);
         }, boundedDelay);

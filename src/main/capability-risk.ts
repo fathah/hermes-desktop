@@ -21,6 +21,7 @@ import type {
   CapabilityRiskSummary,
 } from "../shared/capability-risk";
 import { highestRiskStatus } from "../shared/capability-risk";
+import { formatLogError, log } from "./log";
 
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 let scheduler: ReturnType<typeof setInterval> | null = null;
@@ -241,7 +242,10 @@ export function startCapabilityRiskScheduler(): void {
   if (scheduler || startupTimer) return;
   const run = (): void => {
     void checkCapabilityRisks(getActiveProfileNameSync()).catch((err) => {
-      console.warn("[capability-risk] scheduled check failed:", err);
+      log.warn("capability-risk", {
+        msg: "scheduled check failed",
+        error: formatLogError(err),
+      });
     });
   };
   startupTimer = setTimeout(() => {

@@ -5,6 +5,7 @@ import {
   getModelConfig,
 } from "./config";
 import { getUsageStats } from "./usage-store";
+import { log } from "./log";
 
 export interface SpendingCapConfig {
   maxSpendingLimit: number; // in USD, default 10.0
@@ -54,9 +55,7 @@ export function setSpendingCapConfig(
  *
  * Returns an status object indicating if the query is blocked.
  */
-export async function enforceSpendingLimit(
-  profile?: string,
-): Promise<{
+export async function enforceSpendingLimit(profile?: string): Promise<{
   blocked: boolean;
   cost: number;
   limit: number;
@@ -94,9 +93,12 @@ export async function enforceSpendingLimit(
   }
 
   if (settings.spendingCapAction === "rotate-to-local") {
-    console.log(
-      `[SPENDING LIMIT] Cap of $${settings.maxSpendingLimit} exceeded (Current: $${totalCost.toFixed(4)}). Rotating to Ollama (local).`,
-    );
+    log.info("spending-limits", {
+      msg: "cap exceeded; rotating to Ollama",
+      cost: totalCost,
+      limit: settings.maxSpendingLimit,
+      profile,
+    });
     setModelConfig(
       "ollama",
       "qwen3.5:9b",
@@ -113,9 +115,12 @@ export async function enforceSpendingLimit(
   }
 
   if (settings.spendingCapAction === "rotate-to-gemini-free") {
-    console.log(
-      `[SPENDING LIMIT] Cap of $${settings.maxSpendingLimit} exceeded (Current: $${totalCost.toFixed(4)}). Rotating to Gemini (free).`,
-    );
+    log.info("spending-limits", {
+      msg: "cap exceeded; rotating to Gemini free tier",
+      cost: totalCost,
+      limit: settings.maxSpendingLimit,
+      profile,
+    });
     setModelConfig("google", "gemini-1.5-flash", "", profile);
     return {
       blocked: false,
@@ -127,9 +132,12 @@ export async function enforceSpendingLimit(
   }
 
   // Default action: block paid requests
-  console.warn(
-    `[SPENDING LIMIT] Cap of $${settings.maxSpendingLimit} exceeded (Current: $${totalCost.toFixed(4)}). Blocking paid request.`,
-  );
+  log.warn("spending-limits", {
+    msg: "cap exceeded; blocking paid request",
+    cost: totalCost,
+    limit: settings.maxSpendingLimit,
+    profile,
+  });
   return {
     blocked: true,
     cost: totalCost,

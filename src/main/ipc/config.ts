@@ -96,7 +96,7 @@ import {
 import { isAllowedExternalUrl } from "../security";
 import { isAllowedObsidianExternalUrl } from "../obsidian";
 import { refreshEngineCapabilities } from "../engine-capabilities";
-import { log } from "../log";
+import { formatLogError, log } from "../log";
 import { registerDualHandler } from "./utility";
 import {
   getSchedulerConfig,
@@ -119,12 +119,19 @@ import type { CouncilConfig } from "../../shared/council";
 
 function openExternalUrl(rawUrl: unknown): void {
   if (!isAllowedExternalUrl(rawUrl) && !isAllowedObsidianExternalUrl(rawUrl)) {
-    console.warn("[SECURITY] Blocked unsafe external URL");
+    log.warn("security", {
+      msg: "blocked unsafe external URL",
+      url: typeof rawUrl === "string" ? rawUrl : undefined,
+    });
     return;
   }
 
   shell.openExternal(rawUrl as string).catch((err) => {
-    console.error("[SECURITY] Failed to open external URL:", err);
+    log.error("security", {
+      msg: "failed to open external URL",
+      url: rawUrl as string,
+      error: formatLogError(err),
+    });
   });
 }
 
@@ -579,9 +586,7 @@ export function registerConfigIpc(): void {
     },
   );
   safeHandle("gateway-status", () => isConnectionGatewayRunning());
-  safeHandle("gateway-health-status", () =>
-    getConnectionGatewayHealthStatus(),
-  );
+  safeHandle("gateway-health-status", () => getConnectionGatewayHealthStatus());
 
   // Platform toggles
   registerDualHandler(

@@ -15,7 +15,7 @@ import {
   unlinkSync,
 } from "fs";
 import { join } from "path";
-import { HERMES_HOME } from "./installer";
+import { HERMES_HOME } from "./installer/paths";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 export type LogFields = Record<string, unknown>;
@@ -41,6 +41,18 @@ export function formatLogLine(
 /** Pure: rotate once the file reaches the byte ceiling. */
 export function shouldRotate(sizeBytes: number, maxBytes: number): boolean {
   return sizeBytes >= maxBytes;
+}
+
+export function formatLogError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  try {
+    const json = JSON.stringify(error);
+    if (json) return json;
+  } catch {
+    // fall back to String below
+  }
+  return String(error);
 }
 
 function isDev(): boolean {
@@ -108,6 +120,7 @@ function writeLine(
     // best-effort
   }
   if (isDev()) {
+    // eslint-disable-next-line no-console -- log.ts is the single dev-console mirror.
     const consoleFn = level === "debug" ? console.log : console[level];
     consoleFn(`[${scope}]`, payload);
   }

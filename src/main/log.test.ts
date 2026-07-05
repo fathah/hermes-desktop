@@ -3,9 +3,9 @@ import { describe, it, expect, vi } from "vitest";
 // Keep the logger's HERMES_HOME dependency from pulling the installer/electron
 // chain into this unit test — we only exercise the pure formatting + rotation
 // decision here.
-vi.mock("./installer", () => ({ HERMES_HOME: "/tmp/hermes-log-test" }));
+vi.mock("./installer/paths", () => ({ HERMES_HOME: "/tmp/hermes-log-test" }));
 
-import { formatLogLine, shouldRotate } from "./log";
+import { formatLogError, formatLogLine, shouldRotate } from "./log";
 
 describe("formatLogLine", () => {
   const ts = 1_700_000_000_000;
@@ -55,5 +55,16 @@ describe("shouldRotate", () => {
   it("is true at or above the threshold", () => {
     expect(shouldRotate(1000, 1000)).toBe(true);
     expect(shouldRotate(1001, 1000)).toBe(true);
+  });
+});
+
+describe("formatLogError", () => {
+  it("uses Error.message instead of serializing Error as an empty object", () => {
+    expect(formatLogError(new Error("disk full"))).toBe("disk full");
+  });
+
+  it("keeps string and JSON-serializable payloads readable", () => {
+    expect(formatLogError("plain failure")).toBe("plain failure");
+    expect(formatLogError({ code: "EACCES" })).toBe('{"code":"EACCES"}');
   });
 });

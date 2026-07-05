@@ -1,4 +1,7 @@
+import { formatLogError, log } from "../log";
+
 let safeStorage: typeof import("electron").safeStorage | undefined;
+
 try {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   safeStorage = require("electron").safeStorage;
@@ -26,7 +29,10 @@ export function encryptSecret(secret: string): string {
     try {
       return storage.encryptString(secret).toString("base64");
     } catch (err) {
-      console.error("[Security] Failed to encrypt secret:", err);
+      log.error("security", {
+        msg: "failed to encrypt secret",
+        error: formatLogError(err),
+      });
     }
   }
   return secret;

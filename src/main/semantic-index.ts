@@ -6,6 +6,7 @@ import { createInterface } from "readline";
 import { existsSync } from "fs";
 import { HERMES_PYTHON, getBundledScriptPath } from "./installer/paths";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
+import { formatLogError, log } from "./log";
 
 interface RequestPayload {
   cmd: string;
@@ -44,14 +45,18 @@ class SemanticGraphManager {
 
     const scriptPath = getBundledScriptPath("semantic_engine.py");
     if (!existsSync(scriptPath)) {
-      console.error(`[SemanticIndex] Script missing at: ${scriptPath}`);
+      log.error("semantic-index", {
+        msg: "script missing",
+        path: scriptPath,
+      });
       return;
     }
 
     if (!existsSync(HERMES_PYTHON)) {
-      console.error(
-        `[SemanticIndex] Python executable missing at: ${HERMES_PYTHON}`,
-      );
+      log.error("semantic-index", {
+        msg: "python executable missing",
+        path: HERMES_PYTHON,
+      });
       return;
     }
 
@@ -62,11 +67,17 @@ class SemanticGraphManager {
       });
 
       this.proc.on("error", (err) => {
-        console.error("[SemanticIndex] Subprocess failed to start:", err);
+        log.error("semantic-index", {
+          msg: "subprocess failed to start",
+          error: formatLogError(err),
+        });
       });
 
       this.proc.on("exit", (code) => {
-        console.warn(`[SemanticIndex] Subprocess exited with code: ${code}`);
+        log.warn("semantic-index", {
+          msg: "subprocess exited",
+          code,
+        });
         this.cleanupPending(new Error(`Subprocess exited with code ${code}`));
         this.proc = null;
       });
@@ -78,7 +89,10 @@ class SemanticGraphManager {
         });
       }
     } catch (err) {
-      console.error("[SemanticIndex] Failed to spawn python subprocess:", err);
+      log.error("semantic-index", {
+        msg: "failed to spawn python subprocess",
+        error: formatLogError(err),
+      });
     }
   }
 
@@ -117,7 +131,11 @@ class SemanticGraphManager {
         req.resolve(resp.result);
       }
     } catch (e) {
-      console.error("[SemanticIndex] Failed to parse output line:", e, line);
+      log.error("semantic-index", {
+        msg: "failed to parse output line",
+        line,
+        error: formatLogError(e),
+      });
     }
   }
 
@@ -162,8 +180,13 @@ class SemanticGraphManager {
     }
     this.indexDebounceTimer = setTimeout(() => {
       if (this.pendingVaultPath) {
-        this.index(this.pendingVaultPath).catch((err) => {
-          console.error("[SemanticIndex] Debounced indexing failed:", err);
+        const vaultPath = this.pendingVaultPath;
+        this.index(vaultPath).catch((err) => {
+          log.error("semantic-index", {
+            msg: "debounced indexing failed",
+            vaultPath,
+            error: formatLogError(err),
+          });
         });
         this.pendingVaultPath = null;
       }

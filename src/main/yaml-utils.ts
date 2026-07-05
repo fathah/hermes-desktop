@@ -1,4 +1,5 @@
 import { parseDocument, isScalar, isCollection, Scalar } from "yaml";
+import { formatLogError, log } from "./log";
 
 /**
  * Get a value from a YAML string at the specified dotted path.
@@ -34,7 +35,11 @@ export function getYamlValue(
 
     return String(node);
   } catch (err) {
-    console.error(`[yaml-utils] Error getting path ${dottedPath}:`, err);
+    log.error("yaml-utils", {
+      msg: "error getting path",
+      path: dottedPath,
+      error: formatLogError(err),
+    });
     return null;
   }
 }
@@ -97,7 +102,11 @@ export function setYamlValue(
     doc.setIn(path, typedValue);
     return doc.toString();
   } catch (err) {
-    console.error(`[yaml-utils] Error setting path ${dottedPath}:`, err);
+    log.error("yaml-utils", {
+      msg: "error setting path",
+      path: dottedPath,
+      error: formatLogError(err),
+    });
     return content;
   }
 }
@@ -115,7 +124,11 @@ export function deleteYamlValue(content: string, dottedPath: string): string {
     doc.deleteIn(path);
     return doc.toString();
   } catch (err) {
-    console.error(`[yaml-utils] Error deleting path ${dottedPath}:`, err);
+    log.error("yaml-utils", {
+      msg: "error deleting path",
+      path: dottedPath,
+      error: formatLogError(err),
+    });
     return content;
   }
 }

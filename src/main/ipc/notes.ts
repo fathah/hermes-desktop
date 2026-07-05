@@ -27,6 +27,7 @@ import {
   type ContactChannel,
 } from "../../shared/contacts";
 import { extractPdfToMarkdown } from "../pdf-extract";
+import { formatLogError, log } from "../log";
 import {
   getObsidianConfig,
   setObsidianConfig,
@@ -83,7 +84,11 @@ export async function closeObsidianWatcher(): Promise<void> {
     try {
       await obsidianWatcher.close();
     } catch (e) {
-      console.error("[notes] Failed to close obsidian watcher:", e);
+      log.error("notes", {
+        msg: "failed to close obsidian watcher",
+        profile: obsidianWatcherProfile,
+        error: formatLogError(e),
+      });
     }
     obsidianWatcher = null;
   }
@@ -95,12 +100,19 @@ function spsVaultDirFor(profile?: string): string {
 
 function openExternalUrl(rawUrl: unknown): void {
   if (!isAllowedExternalUrl(rawUrl) && !isAllowedObsidianExternalUrl(rawUrl)) {
-    console.warn("[SECURITY] Blocked unsafe external URL");
+    log.warn("security", {
+      msg: "blocked unsafe external URL",
+      url: typeof rawUrl === "string" ? rawUrl : undefined,
+    });
     return;
   }
 
   shell.openExternal(rawUrl as string).catch((err) => {
-    console.error("[SECURITY] Failed to open external URL:", err);
+    log.error("security", {
+      msg: "failed to open external URL",
+      url: rawUrl as string,
+      error: formatLogError(err),
+    });
   });
 }
 

@@ -4,8 +4,8 @@
  * The auto-updater previously ran with no logger, so a failed update — e.g.
  * issue #271, "after upgrading, clicking Restart doesn't relaunch the app" —
  * left no trace at all and was undiagnosable from a bug report. This writes
- * electron-updater's own log lines to `<userData>/logs/updater.log` (and
- * mirrors them to the main-process console), with no extra dependency.
+ * electron-updater's own log lines to `<userData>/logs/updater.log` and mirrors
+ * them to the shared desktop logger, with no extra dependency.
  *
  * The object satisfies electron-updater's `Logger` interface.
  */
@@ -18,6 +18,7 @@ import {
   writeFileSync,
 } from "fs";
 import { join } from "path";
+import { log } from "./log";
 
 // Rotate (truncate) the log once it passes this size — updater sessions are
 // short, so keeping only the most recent activity is enough to diagnose.
@@ -38,11 +39,14 @@ function logFilePath(): string {
 }
 
 function write(level: string, message?: unknown): void {
-  const text = typeof message === "string" ? message : JSON.stringify(message);
-  const tag = `[updater] ${text}`;
-  if (level === "error") console.error(tag);
-  else if (level === "warn") console.warn(tag);
-  else console.log(tag);
+  const text =
+    typeof message === "string"
+      ? message
+      : (JSON.stringify(message) ?? String(message));
+  if (level === "error") log.error("updater", { msg: text });
+  else if (level === "warn") log.warn("updater", { msg: text });
+  else if (level === "debug") log.debug("updater", { msg: text });
+  else log.info("updater", { msg: text });
 
   try {
     const file = logFilePath();

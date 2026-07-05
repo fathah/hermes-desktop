@@ -23,7 +23,7 @@ import { createCronJob } from "./cronjobs";
 import { getSpsNoteIndex } from "./note-index";
 import { resolveSpsVaultDir } from "./sps-storage";
 import { writeSpsCapture } from "./sps-capture";
-import { log } from "./log";
+import { formatLogError, log } from "./log";
 import {
   exportPageMarkdownTo,
   exportRowMarkdownTo,
@@ -646,9 +646,11 @@ function listenOnPort(port: number, maxAttempts = 10): Promise<number> {
     const onListening = (): void => {
       cleanup();
       currentPort = port;
-      console.log(
-        `[CONTROL SERVER] Running successfully on http://127.0.0.1:${port}`,
-      );
+      log.info("control-server", {
+        msg: "running successfully",
+        url: `http://127.0.0.1:${port}`,
+        port,
+      });
 
       // Save port and token back to desktop.json so external clients can auto-discover it
       const config = readDesktopConfig();
@@ -667,9 +669,11 @@ function listenOnPort(port: number, maxAttempts = 10): Promise<number> {
     const onError = (err: { code?: string }): void => {
       cleanup();
       if (err.code === "EADDRINUSE" && maxAttempts > 0) {
-        console.warn(
-          `[CONTROL SERVER] Port ${port} is in use, retrying on ${port + 1}...`,
-        );
+        log.warn("control-server", {
+          msg: "port in use; retrying",
+          port,
+          nextPort: port + 1,
+        });
         resolve(listenOnPort(port + 1, maxAttempts - 1));
       } else {
         reject(err);
@@ -800,9 +804,15 @@ function writeShellHelper(port: number, token: string): void {
     safeWriteFile(helperPath, renderShellHelperScript(port, tokenPath));
     chmodSync(helperPath, 0o755);
     writeSpsHelper(binDir, port, tokenPath);
-    console.log(`[CONTROL SERVER] Generated OS-native CLI tool: ${helperPath}`);
-  } catch {
-    console.error("[CONTROL SERVER] Failed to write hermes-ask shell helper");
+    log.info("control-server", {
+      msg: "generated OS-native CLI tool",
+      path: helperPath,
+    });
+  } catch (err) {
+    log.error("control-server", {
+      msg: "failed to write hermes-ask shell helper",
+      error: formatLogError(err),
+    });
   }
 }
 
@@ -902,9 +912,15 @@ try {
 `;
     writeFileSync(cronPath, cronContent, "utf-8");
     chmodSync(cronPath, 0o755);
-    console.log(`[CONTROL SERVER] Generated headless cron script: ${cronPath}`);
-  } catch {
-    console.error("[CONTROL SERVER] Failed to write hermes-cron script");
+    log.info("control-server", {
+      msg: "generated headless cron script",
+      path: cronPath,
+    });
+  } catch (err) {
+    log.error("control-server", {
+      msg: "failed to write hermes-cron script",
+      error: formatLogError(err),
+    });
   }
 }
 
@@ -1026,7 +1042,7 @@ ${envBlock}
  */
 export async function startControlServer(): Promise<number> {
   if (serverInstance) {
-    console.warn("[CONTROL SERVER] Server is already running.");
+    log.warn("control-server", { msg: "server is already running" });
     return currentPort;
   }
 
@@ -1038,7 +1054,10 @@ export async function startControlServer(): Promise<number> {
     const port = await listenOnPort(8645);
     return port;
   } catch (err) {
-    console.error("[CONTROL SERVER] Failed to start control server:", err);
+    log.error("control-server", {
+      msg: "failed to start control server",
+      error: formatLogError(err),
+    });
     serverInstance = null;
     throw err;
   }

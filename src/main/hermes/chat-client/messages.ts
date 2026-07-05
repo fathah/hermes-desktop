@@ -6,6 +6,7 @@ import type {
 } from "../../sse-parser";
 import { type Attachment, escapeXmlAttr } from "../../../shared/attachments";
 import { resolveProfile } from "../gateway-process";
+import { formatLogError, log } from "../../log";
 
 export interface ChatCallbacks {
   onChunk: (text: string) => void;
@@ -142,10 +143,10 @@ export async function buildSelfAwarenessSystemMessage(
 
     return { role: "system", content: sysMsg };
   } catch (err) {
-    console.error(
-      "[hermes] Failed to build self-awareness system message:",
-      err,
-    );
+    log.error("hermes", {
+      msg: "failed to build self-awareness system message",
+      error: formatLogError(err),
+    });
     return null;
   }
 }
