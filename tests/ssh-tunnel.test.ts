@@ -135,6 +135,11 @@ function createHarness(): RuntimeHarness {
   return { children, connectResults, healthStatuses, runtime };
 }
 
+async function flushAsyncLifecycle(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 describe("ssh tunnel lifecycle", () => {
   let harness: RuntimeHarness;
 
@@ -170,6 +175,17 @@ describe("ssh tunnel lifecycle", () => {
     );
   });
 
+  it("polls health until the tunnel becomes healthy during startup", async () => {
+    __setSshTunnelRuntimeForTests({}, { startupHealthTimeoutMs: 50 });
+    harness.healthStatuses.splice(0, harness.healthStatuses.length, 500, 200);
+
+    await startSshTunnel(config);
+
+    expect(harness.runtime.request).toHaveBeenCalledTimes(2);
+    expect(isSshTunnelActive()).toBe(true);
+    expect(getSshTunnelUrl()).toBe("http://127.0.0.1:18642");
+  });
+
   it("tears down the active child when the port never opens", async () => {
     harness.connectResults.splice(0, harness.connectResults.length, "closed");
 
@@ -200,6 +216,39 @@ describe("ssh tunnel lifecycle", () => {
     stopSshTunnel();
 
     expect(harness.children[0].killed).toBe(true);
+    expect(isSshTunnelActive()).toBe(false);
+    expect(getSshTunnelUrl()).toBeNull();
+  });
+
+  it("keeps an active tunnel when the child exits but health still passes", async () => {
+    await startSshTunnel(config);
+    harness.healthStatuses.push(200);
+
+    harness.children[0].emit("exit", 0, null);
+    await flushAsyncLifecycle();
+
+    expect(isSshTunnelActive()).toBe(true);
+    expect(getSshTunnelUrl()).toBe("http://127.0.0.1:18642");
+  });
+
+  it("clears active state when the child exits and health fails", async () => {
+    await startSshTunnel(config);
+    harness.healthStatuses.push(500);
+
+    harness.children[0].emit("exit", 1, null);
+    await flushAsyncLifecycle();
+
+    expect(isSshTunnelActive()).toBe(false);
+    expect(getSshTunnelUrl()).toBeNull();
+  });
+
+  it("clears active state when the child errors and health fails", async () => {
+    await startSshTunnel(config);
+    harness.healthStatuses.push(500);
+
+    harness.children[0].emit("error", new Error("ssh failed"));
+    await flushAsyncLifecycle();
+
     expect(isSshTunnelActive()).toBe(false);
     expect(getSshTunnelUrl()).toBeNull();
   });
