@@ -46,6 +46,7 @@ import { CommandPalette } from "./CommandPalette";
 
 const api = {
   getAppVersion: vi.fn(),
+  getHermesUpstreamWatchState: vi.fn(),
   spsExportRow: vi.fn(),
 };
 
@@ -62,6 +63,13 @@ beforeEach(() => {
   localStorage.setItem("hermes-desktop-last-seen-version", "0.5.3");
   installApi();
   api.getAppVersion.mockResolvedValue("0.5.4");
+  api.getHermesUpstreamWatchState.mockResolvedValue({
+    lastRunAt: null,
+    lastSeenCommit: null,
+    lastSeenRelease: null,
+    latestReportPath: null,
+    classifiedCounts: {},
+  });
   api.spsExportRow.mockResolvedValue(true);
   vi.spyOn(window, "getSelection").mockReturnValue({
     toString: () => "Selected proof that should become a draft angle.",
@@ -79,6 +87,49 @@ describe("CommandPalette", () => {
     render(<CommandPalette />);
 
     const [actionLabel] = await screen.findAllByText("What's new");
+
+    fireEvent.mouseDown(actionLabel);
+
+    expect(store.setSurface).toHaveBeenCalledWith("doc");
+  });
+
+  it("offers what's new for engine-only available update cards", async () => {
+    localStorage.setItem("hermes-desktop-last-seen-version", "0.5.4");
+    api.getHermesUpstreamWatchState.mockResolvedValue({
+      lastRunAt: "2026-07-03T12:00:00.000Z",
+      lastSeenCommit: "fed789",
+      lastSeenRelease: "v2026.7.3",
+      latestReportPath: "/tmp/upstream-watch/2026-07-03.md",
+      classifiedCounts: { "contract-risk": 1 },
+      anchorSha: "abc123",
+      pendingCommitCount: 2,
+      contractRiskCount: 1,
+      availableUpdate: {
+        range: "abc123..fed789",
+        anchorSha: "abc123",
+        headSha: "fed789",
+        generatedAt: "2026-07-03T12:00:00.000Z",
+        pendingCommitCount: 2,
+        contractRiskCount: 1,
+        cards: [
+          {
+            id: "engine-abc123-fed789-0",
+            source: "engine",
+            range: "abc123..fed789",
+            title: "Gateway update available",
+            body: "A pending Hermes Agent update changes gateway capability reporting.",
+            cta: "Review update",
+            action: { kind: "settings", view: "providers" },
+          },
+        ],
+      },
+    });
+    render(<CommandPalette />);
+
+    const [actionLabel] = await screen.findAllByText("What's new");
+    expect(
+      screen.getByText("Review 1 available Hermes Agent update."),
+    ).toBeInTheDocument();
 
     fireEvent.mouseDown(actionLabel);
 

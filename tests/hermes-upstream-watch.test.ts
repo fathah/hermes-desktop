@@ -218,6 +218,163 @@ describe("Hermes upstream watch", () => {
     expect(report).toContain("gateway/platforms/api_server.py");
   });
 
+  it("persists engine available-update cards for an anchored commit range", async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.endsWith("/compare/abc123...main")) {
+        return jsonResponse({
+          ahead_by: 2,
+          commits: [
+            {
+              sha: "def456",
+              commit: {
+                message: "feat: add gateway capability field",
+                author: { date: "2026-07-03T08:00:00Z" },
+              },
+              html_url:
+                "https://github.com/NousResearch/hermes-agent/commit/def456",
+            },
+            {
+              sha: "fed789",
+              commit: {
+                message: "fix: tighten provider stream handling",
+                author: { date: "2026-07-03T09:00:00Z" },
+              },
+              html_url:
+                "https://github.com/NousResearch/hermes-agent/commit/fed789",
+            },
+          ],
+          files: [
+            { filename: "gateway/platforms/api_server.py" },
+            { filename: "docs/README.md" },
+          ],
+        });
+      }
+      if (url.endsWith("/releases/latest")) {
+        return jsonResponse({ tag_name: "v2026.7.3", name: "Release" });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    });
+    const summarizeAvailableUpdate = vi.fn(async () => [
+      {
+        title: "Gateway update available",
+        body: "A pending Hermes Agent update changes gateway capability reporting.",
+        cta: "Review update",
+      },
+      {
+        title: "Provider streaming update",
+        body: "The available engine update includes provider stream handling fixes.",
+      },
+    ]);
+    const { runHermesUpstreamWatch } = await loadWatch();
+
+    const state = await runHermesUpstreamWatch("work", {
+      now: new Date("2026-07-03T12:00:00.000Z"),
+      fetchImpl,
+      installedSha: "abc123",
+      summarizeAvailableUpdate,
+    });
+
+    expect(summarizeAvailableUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        range: "abc123..fed789",
+        anchorSha: "abc123",
+        headSha: "fed789",
+        pendingCommitCount: 2,
+        contractRiskFiles: ["gateway/platforms/api_server.py"],
+      }),
+      "work",
+    );
+    expect(state.availableUpdate).toEqual(
+      expect.objectContaining({
+        range: "abc123..fed789",
+        anchorSha: "abc123",
+        headSha: "fed789",
+        pendingCommitCount: 2,
+        contractRiskCount: 1,
+      }),
+    );
+    expect(state.availableUpdate?.cards).toEqual([
+      expect.objectContaining({
+        source: "engine",
+        range: "abc123..fed789",
+        title: "Gateway update available",
+        body: "A pending Hermes Agent update changes gateway capability reporting.",
+        cta: "Review update",
+        action: { kind: "settings", view: "providers" },
+      }),
+      expect.objectContaining({
+        source: "engine",
+        range: "abc123..fed789",
+        title: "Provider streaming update",
+        cta: "Review update",
+      }),
+    ]);
+  });
+
+  it("keeps report generation fail-soft when engine card generation fails", async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.endsWith("/compare/abc123...main")) {
+        return jsonResponse({
+          ahead_by: 1,
+          commits: [
+            {
+              sha: "def456",
+              commit: {
+                message: "feat: update gateway contract",
+                author: { date: "2026-07-03T08:00:00Z" },
+              },
+            },
+          ],
+          files: [{ filename: "gateway/platforms/api_server.py" }],
+        });
+      }
+      if (url.endsWith("/releases/latest")) {
+        return jsonResponse({ tag_name: "v2026.7.3", name: "Release" });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    });
+    const { runHermesUpstreamWatch } = await loadWatch();
+
+    const state = await runHermesUpstreamWatch("work", {
+      now: new Date("2026-07-03T12:00:00.000Z"),
+      fetchImpl,
+      installedSha: "abc123",
+      summarizeAvailableUpdate: vi.fn(async () => {
+        throw new Error("gateway down");
+      }),
+    });
+
+    expect(state.lastSeenCommit).toBe("def456");
+    expect(state.availableUpdate).toBeUndefined();
+    expect(state.lastError).toBeUndefined();
+    expect(existsSync(state.latestReportPath!)).toBe(true);
+  });
+
+  it("does not generate engine cards for unanchored fallback reports", async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.endsWith("/commits/main")) {
+        return jsonResponse({ sha: "head123", commit: { message: "head" } });
+      }
+      if (url.endsWith("/releases/latest")) {
+        return jsonResponse({ tag_name: "v2026.6.19", name: "Release" });
+      }
+      return jsonResponse([]);
+    });
+    const summarizeAvailableUpdate = vi.fn(async () => [
+      { title: "Should not render", body: "No anchor means no update range." },
+    ]);
+    const { runHermesUpstreamWatch } = await loadWatch();
+
+    const state = await runHermesUpstreamWatch("work", {
+      now: new Date("2026-06-20T12:00:00.000Z"),
+      fetchImpl,
+      summarizeAvailableUpdate,
+    });
+
+    expect(summarizeAvailableUpdate).not.toHaveBeenCalled();
+    expect(state.availableUpdate).toBeUndefined();
+  });
+
   it("runs at most once per local day", async () => {
     const fetchImpl = vi.fn(async (url: string) => {
       if (url.endsWith("/commits/main")) {

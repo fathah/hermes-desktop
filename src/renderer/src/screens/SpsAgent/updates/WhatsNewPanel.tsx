@@ -1,7 +1,8 @@
 import { Icon } from "../components/Icon";
-import type {
-  ReleaseAffordance,
-  ReleaseAffordanceAction,
+import {
+  isEngineUpdateAffordance,
+  type ReleaseAffordanceAction,
+  type WhatsNewAffordance,
 } from "../../../../../shared/update-affordances";
 import { useWhatsNew } from "./useWhatsNew";
 
@@ -16,6 +17,14 @@ export function WhatsNewPanel({
 }: Props): React.JSX.Element | null {
   const { currentVersion, items, dismiss } = useWhatsNew();
   if (!currentVersion || items.length === 0) return null;
+  const engineCount = items.filter(isEngineUpdateAffordance).length;
+  const releaseCount = items.length - engineCount;
+  const title =
+    engineCount > 0 && releaseCount > 0
+      ? "What's new and available updates"
+      : engineCount > 0
+        ? "Hermes Agent update available"
+        : `What's new in v${currentVersion}`;
 
   if (variant === "compact") {
     return (
@@ -25,10 +34,10 @@ export function WhatsNewPanel({
       >
         <span className="home-affordance-title">
           <Icon name="sparkle" size={14} />
-          What&apos;s new in v{currentVersion}
+          {title}
         </span>
         <div className="home-affordance-actions" aria-label="What's new actions">
-          {items.map((item: ReleaseAffordance) => (
+          {items.map((item: WhatsNewAffordance) => (
             <button
               key={item.id}
               type="button"
@@ -56,9 +65,7 @@ export function WhatsNewPanel({
   return (
     <section className="ob-checklist whats-new-panel" aria-label="What's new">
       <div className="ob-checklist-head">
-        <span className="ob-checklist-title">
-          What&apos;s new in v{currentVersion}
-        </span>
+        <span className="ob-checklist-title">{title}</span>
         <button
           type="button"
           className="ob-checklist-dismiss"
@@ -70,9 +77,12 @@ export function WhatsNewPanel({
         </button>
       </div>
       <div className="ob-checklist-steps">
-        {items.map((item: ReleaseAffordance) => (
+        {items.map((item: WhatsNewAffordance) => (
           <article key={item.id} className="ob-step-card">
             <div className="ob-step-body">
+              {isEngineUpdateAffordance(item) && (
+                <div className="ob-step-desc">Available Hermes Agent update</div>
+              )}
               <div className="ob-step-title">{item.title}</div>
               <div className="ob-step-desc">{item.body}</div>
             </div>

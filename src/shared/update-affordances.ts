@@ -51,6 +51,33 @@ export interface ReleaseAffordance {
   requiresApi?: string;
 }
 
+export interface EngineUpdateAffordance {
+  id: string;
+  source: "engine";
+  range: string;
+  title: string;
+  body: string;
+  cta: string;
+  action: ReleaseAffordanceAction;
+}
+
+export interface EngineAvailableUpdate {
+  range: string;
+  anchorSha: string;
+  headSha: string;
+  generatedAt: string;
+  pendingCommitCount: number;
+  contractRiskCount: number;
+  cards: EngineUpdateAffordance[];
+}
+
+export type WhatsNewAffordance = ReleaseAffordance | EngineUpdateAffordance;
+
+export const ENGINE_AVAILABLE_UPDATE_ACTION: ReleaseAffordanceAction = {
+  kind: "settings",
+  view: "providers",
+};
+
 export const RELEASE_AFFORDANCES: ReleaseAffordance[] = [
   {
     id: "control-center-ai-readiness",
@@ -106,5 +133,32 @@ export function releaseAffordancesSince(
     (item) =>
       compareAppVersions(item.introducedIn, lastSeenVersion) > 0 &&
       compareAppVersions(item.introducedIn, currentVersion) <= 0,
+  );
+}
+
+export function isEngineUpdateAffordance(
+  item: WhatsNewAffordance,
+): item is EngineUpdateAffordance {
+  return "source" in item && item.source === "engine";
+}
+
+export function engineAffordancesForRange(
+  availableUpdate: EngineAvailableUpdate | null | undefined,
+  lastSeenRange: string | null,
+): EngineUpdateAffordance[] {
+  if (
+    !availableUpdate?.range ||
+    !Array.isArray(availableUpdate.cards) ||
+    availableUpdate.cards.length === 0 ||
+    availableUpdate.range === lastSeenRange
+  ) {
+    return [];
+  }
+  return availableUpdate.cards.filter(
+    (card) =>
+      card.source === "engine" &&
+      card.range === availableUpdate.range &&
+      !!card.title.trim() &&
+      !!card.body.trim(),
   );
 }

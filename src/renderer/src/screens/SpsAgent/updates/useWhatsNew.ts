@@ -1,24 +1,27 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   RELEASE_AFFORDANCES,
+  engineAffordancesForRange,
   releaseAffordancesSince,
-  type ReleaseAffordance,
+  type EngineAvailableUpdate,
   type ReleasePlatform,
+  type WhatsNewAffordance,
 } from "../../../../../shared/update-affordances";
 
 const LAST_SEEN_KEY = "hermes-desktop-last-seen-version";
+const ENGINE_LAST_SEEN_KEY = "hermes-engine-last-seen-update-range";
 
-function readLastSeen(): string | null {
+function readStoredValue(key: string): string | null {
   try {
-    return localStorage.getItem(LAST_SEEN_KEY);
+    return localStorage.getItem(key);
   } catch {
     return null;
   }
 }
 
-function writeLastSeen(version: string): void {
+function writeStoredValue(key: string, value: string): void {
   try {
-    localStorage.setItem(LAST_SEEN_KEY, version);
+    localStorage.setItem(key, value);
   } catch {
     /* localStorage may be unavailable in sandboxed renderers */
   }
@@ -26,11 +29,18 @@ function writeLastSeen(version: string): void {
 
 export function useWhatsNew(): {
   currentVersion: string | null;
-  items: ReleaseAffordance[];
+  items: WhatsNewAffordance[];
   dismiss: () => void;
 } {
   const [currentVersion, setCurrentVersion] = useState<string | null>(null);
-  const [lastSeen, setLastSeen] = useState<string | null>(() => readLastSeen());
+  const [lastSeen, setLastSeen] = useState<string | null>(() =>
+    readStoredValue(LAST_SEEN_KEY),
+  );
+  const [lastSeenEngineRange, setLastSeenEngineRange] = useState<string | null>(
+    () => readStoredValue(ENGINE_LAST_SEEN_KEY),
+  );
+  const [availableEngineUpdate, setAvailableEngineUpdate] =
+    useState<EngineAvailableUpdate | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -39,10 +49,24 @@ export function useWhatsNew(): {
       .then((version) => {
         if (cancelled) return;
         setCurrentVersion(version);
-        if (!readLastSeen()) {
-          writeLastSeen(version);
+        if (!readStoredValue(LAST_SEEN_KEY)) {
+          writeStoredValue(LAST_SEEN_KEY, version);
           setLastSeen(version);
         }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    window.hermesAPI
+      .getHermesUpstreamWatchState()
+      .then((state) => {
+        if (cancelled) return;
+        setAvailableEngineUpdate(state.availableUpdate ?? null);
       })
       .catch(() => {});
     return () => {
@@ -55,7 +79,7 @@ export function useWhatsNew(): {
     const platform = window.electron?.process?.platform as
       | ReleasePlatform
       | undefined;
-    return releaseAffordancesSince(
+    const releaseItems = releaseAffordancesSince(
       lastSeen,
       currentVersion,
       RELEASE_AFFORDANCES,
@@ -68,15 +92,38 @@ export function useWhatsNew(): {
       }
       return true;
     });
-  }, [currentVersion, lastSeen]);
+    const engineItems = engineAffordancesForRange(
+      availableEngineUpdate,
+      lastSeenEngineRange,
+    );
+    return [...releaseItems, ...engineItems];
+  }, [
+    availableEngineUpdate,
+    currentVersion,
+    lastSeen,
+    lastSeenEngineRange,
+  ]);
+
+  const visibleEngineRange = useMemo(() => {
+    const range = availableEngineUpdate?.range;
+    if (!range) return null;
+    return items.some((item) => "source" in item && item.source === "engine")
+      ? range
+      : null;
+  }, [availableEngineUpdate?.range, items]);
 
   return {
     currentVersion,
     items,
     dismiss: () => {
-      if (!currentVersion) return;
-      writeLastSeen(currentVersion);
-      setLastSeen(currentVersion);
+      if (currentVersion) {
+        writeStoredValue(LAST_SEEN_KEY, currentVersion);
+        setLastSeen(currentVersion);
+      }
+      if (visibleEngineRange) {
+        writeStoredValue(ENGINE_LAST_SEEN_KEY, visibleEngineRange);
+        setLastSeenEngineRange(visibleEngineRange);
+      }
     },
   };
 }

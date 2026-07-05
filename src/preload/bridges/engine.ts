@@ -102,58 +102,16 @@ export const engineBridge = {
       "rollback-engine",
       profile,
     )) as EngineBridgeApi["rollbackEngine"],
-  getHermesUpstreamWatchState: (
-    profile?: string,
-  ): Promise<{
-    lastRunAt: string | null;
-    lastSeenCommit: string | null;
-    lastSeenRelease: string | null;
-    latestReportPath: string | null;
-    classifiedCounts: Partial<
-      Record<
-        | "contract-risk"
-        | "runtime-required"
-        | "api-contract"
-        | "desktop-parity"
-        | "security"
-        | "cron-automation"
-        | "provider-model"
-        | "docs-only"
-        | "ignore",
-        number
-      >
-    >;
-    anchorSha?: string | null;
-    pendingCommitCount?: number;
-    contractRiskCount?: number;
-    lastError?: string;
-  }> => ipcRenderer.invoke("get-hermes-upstream-watch-state", profile),
-  runHermesUpstreamWatch: (
-    profile?: string,
-  ): Promise<{
-    lastRunAt: string | null;
-    lastSeenCommit: string | null;
-    lastSeenRelease: string | null;
-    latestReportPath: string | null;
-    classifiedCounts: Partial<
-      Record<
-        | "contract-risk"
-        | "runtime-required"
-        | "api-contract"
-        | "desktop-parity"
-        | "security"
-        | "cron-automation"
-        | "provider-model"
-        | "docs-only"
-        | "ignore",
-        number
-      >
-    >;
-    anchorSha?: string | null;
-    pendingCommitCount?: number;
-    contractRiskCount?: number;
-    lastError?: string;
-  }> => ipcRenderer.invoke("run-hermes-upstream-watch", profile),
+  getHermesUpstreamWatchState: ((profile?: string) =>
+    ipcRenderer.invoke(
+      "get-hermes-upstream-watch-state",
+      profile,
+    )) as EngineBridgeApi["getHermesUpstreamWatchState"],
+  runHermesUpstreamWatch: ((profile?: string) =>
+    ipcRenderer.invoke(
+      "run-hermes-upstream-watch",
+      profile,
+    )) as EngineBridgeApi["runHermesUpstreamWatch"],
   getEngineCapabilities: (profile?: string) =>
     ipcRenderer.invoke("get-engine-capabilities", profile),
   refreshEngineCapabilities: (profile?: string) =>

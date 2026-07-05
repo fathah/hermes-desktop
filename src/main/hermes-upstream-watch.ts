@@ -4,6 +4,12 @@ import { profileHome } from "./utils";
 import { publicFetch } from "./security/network-policy";
 import { getInstalledEngineSha } from "./installer";
 import { ENGINE_CONTRACT } from "../shared/engine-contract";
+import {
+  ENGINE_AVAILABLE_UPDATE_ACTION,
+  type EngineAvailableUpdate,
+  type EngineUpdateAffordance,
+} from "../shared/update-affordances";
+import { extractJson, gatewayChat } from "./gateway-chat";
 
 export type HermesUpstreamWatchCategory =
   | "contract-risk"
@@ -25,6 +31,7 @@ export interface HermesUpstreamWatchState {
   anchorSha?: string | null;
   pendingCommitCount?: number;
   contractRiskCount?: number;
+  availableUpdate?: EngineAvailableUpdate;
   lastError?: string;
 }
 
@@ -32,6 +39,7 @@ export interface HermesUpstreamWatchOptions {
   now?: Date;
   fetchImpl?: FetchLike;
   installedSha?: string | null;
+  summarizeAvailableUpdate?: EngineUpdateSummarizer;
 }
 
 interface FetchLikeResponse {
@@ -76,6 +84,31 @@ interface GitHubCompareResponse {
   commits?: GitHubCommit[];
   files?: Array<{ filename?: string }>;
 }
+
+interface EngineUpdateSummaryInput {
+  range: string;
+  anchorSha: string;
+  headSha: string;
+  pendingCommitCount: number;
+  contractRiskFiles: string[];
+  commits: Array<{
+    sha: string;
+    message: string;
+    date: string | null;
+    url: string | null;
+  }>;
+}
+
+interface EngineUpdateCardDraft {
+  title?: unknown;
+  body?: unknown;
+  cta?: unknown;
+}
+
+type EngineUpdateSummarizer = (
+  input: EngineUpdateSummaryInput,
+  profile?: string,
+) => Promise<EngineUpdateCardDraft[]>;
 
 const OWNER = "NousResearch";
 const REPO = "hermes-agent";
@@ -339,6 +372,123 @@ function shortSha(sha: string | null | undefined): string {
   return sha ? sha.slice(0, 7) : "unknown";
 }
 
+function boundedText(value: unknown, max: number): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.replace(/\s+/g, " ").trim();
+  if (!trimmed) return null;
+  return trimmed.slice(0, max);
+}
+
+function normalizeEngineCards(
+  drafts: EngineUpdateCardDraft[],
+  range: string,
+  anchorSha: string,
+  headSha: string,
+): EngineUpdateAffordance[] {
+  return drafts
+    .map((draft, index): EngineUpdateAffordance | null => {
+      const title = boundedText(draft.title, 80);
+      const body = boundedText(draft.body, 240);
+      if (!title || !body) return null;
+      return {
+        id: `engine-${shortSha(anchorSha)}-${shortSha(headSha)}-${index}`,
+        source: "engine",
+        range,
+        title,
+        body,
+        cta: boundedText(draft.cta, 40) || "Review update",
+        action: ENGINE_AVAILABLE_UPDATE_ACTION,
+      };
+    })
+    .filter((card): card is EngineUpdateAffordance => card !== null)
+    .slice(0, 3);
+}
+
+async function summarizeAvailableUpdateWithGateway(
+  input: EngineUpdateSummaryInput,
+  profile?: string,
+): Promise<EngineUpdateCardDraft[]> {
+  const commitSubjects = input.commits
+    .map((commit) => `- ${shortSha(commit.sha)} ${commit.message.split("\n")[0]}`)
+    .join("\n");
+  const riskFiles =
+    input.contractRiskFiles.length > 0
+      ? input.contractRiskFiles.map((file) => `- ${file}`).join("\n")
+      : "- none";
+  const text = await gatewayChat(
+    [
+      {
+        role: "system",
+        content:
+          "Summarize pending Hermes Agent updates for a desktop app what's-new panel. Return strict JSON only.",
+      },
+      {
+        role: "user",
+        content: [
+          `Commit range: ${input.range}`,
+          `Pending commits: ${input.pendingCommitCount}`,
+          "Commit subjects:",
+          commitSubjects || "- none",
+          "Contract-risk files:",
+          riskFiles,
+          "",
+          'Return {"cards":[{"title":"...","body":"...","cta":"Review update"}]} with 0 to 3 cards.',
+          "Cards must describe an available Hermes Agent update, not installed desktop features.",
+        ].join("\n"),
+      },
+    ],
+    500,
+    profile,
+  );
+  const parsed = extractJson(text);
+  if (Array.isArray(parsed)) return parsed as EngineUpdateCardDraft[];
+  if (
+    parsed &&
+    typeof parsed === "object" &&
+    Array.isArray((parsed as { cards?: unknown }).cards)
+  ) {
+    return (parsed as { cards: EngineUpdateCardDraft[] }).cards;
+  }
+  return [];
+}
+
+async function buildAvailableUpdate(
+  input: EngineUpdateSummaryInput,
+  generatedAt: string,
+  contractRiskCount: number,
+  summarize: EngineUpdateSummarizer,
+  profile?: string,
+): Promise<EngineAvailableUpdate | undefined> {
+  if (
+    !input.anchorSha ||
+    !input.headSha ||
+    input.anchorSha === input.headSha ||
+    input.pendingCommitCount <= 0
+  ) {
+    return undefined;
+  }
+  try {
+    const cards = normalizeEngineCards(
+      await summarize(input, profile),
+      input.range,
+      input.anchorSha,
+      input.headSha,
+    );
+    if (cards.length === 0) return undefined;
+    return {
+      range: input.range,
+      anchorSha: input.anchorSha,
+      headSha: input.headSha,
+      generatedAt,
+      pendingCommitCount: input.pendingCommitCount,
+      contractRiskCount,
+      cards,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 function writeReport(params: {
   profile?: string;
   now: Date;
@@ -417,6 +567,7 @@ export async function runHermesUpstreamWatch(
     let anchorSha: string | null = null;
     let pendingCommitCount = 0;
     let contractRiskCount = 0;
+    let availableUpdate: EngineAvailableUpdate | undefined;
 
     if (installedSha) {
       const compare = await fetchJson<GitHubCompareResponse>(
@@ -431,6 +582,31 @@ export async function runHermesUpstreamWatch(
       contractRiskCount = items.filter(
         (item) => item.category === "contract-risk",
       ).length;
+      const headSha = head.sha || null;
+      if (headSha) {
+        availableUpdate = await buildAvailableUpdate(
+          {
+            range: `${anchorSha}..${headSha}`,
+            anchorSha,
+            headSha,
+            pendingCommitCount,
+            contractRiskFiles: (compare.files || [])
+              .map((file) => file.filename || "")
+              .filter((file) => file && isContractRiskPath(file)),
+            commits: commits.map((commit) => ({
+              sha: commit.sha || "unknown",
+              message: commit.commit?.message || "",
+              date: commit.commit?.author?.date || null,
+              url: commit.html_url || null,
+            })),
+          },
+          now.toISOString(),
+          contractRiskCount,
+          options.summarizeAvailableUpdate ||
+            summarizeAvailableUpdateWithGateway,
+          profile,
+        );
+      }
     } else {
       const [latestHead, pathCommits] = await Promise.all([
         fetchJson<GitHubCommit>(fetchImpl, "/commits/main"),
@@ -471,6 +647,7 @@ export async function runHermesUpstreamWatch(
         anchorSha,
         pendingCommitCount,
         contractRiskCount,
+        availableUpdate,
       },
       profile,
     );

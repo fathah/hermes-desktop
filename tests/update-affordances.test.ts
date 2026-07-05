@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   RELEASE_AFFORDANCES,
   compareAppVersions,
+  engineAffordancesForRange,
   releaseAffordancesSince,
+  type EngineAvailableUpdate,
   type ReleaseAffordance,
 } from "../src/shared/update-affordances";
 
@@ -29,6 +31,26 @@ const fixtures: ReleaseAffordance[] = [
     action: { kind: "surface", surface: "deckStudio" },
   },
 ];
+
+const availableEngineUpdate: EngineAvailableUpdate = {
+  range: "abc123..fed789",
+  anchorSha: "abc123",
+  headSha: "fed789",
+  generatedAt: "2026-07-03T12:00:00.000Z",
+  pendingCommitCount: 2,
+  contractRiskCount: 1,
+  cards: [
+    {
+      id: "engine-abc123-fed789-0",
+      source: "engine",
+      range: "abc123..fed789",
+      title: "Gateway update available",
+      body: "A pending Hermes Agent update changes gateway capability reporting.",
+      cta: "Review update",
+      action: { kind: "settings", view: "providers" },
+    },
+  ],
+};
 
 describe("update affordances", () => {
   it("compares dotted app versions numerically", () => {
@@ -81,5 +103,32 @@ describe("update affordances", () => {
         `${affordance.id} introducedIn should not be after package version ${packageJson.version}`,
       ).toBeLessThanOrEqual(0);
     }
+  });
+
+  it("returns engine cards only for an unseen commit range", () => {
+    expect(engineAffordancesForRange(availableEngineUpdate, null)).toEqual(
+      availableEngineUpdate.cards,
+    );
+    expect(
+      engineAffordancesForRange(availableEngineUpdate, "abc123..def456"),
+    ).toEqual(availableEngineUpdate.cards);
+    expect(
+      engineAffordancesForRange(availableEngineUpdate, "abc123..fed789"),
+    ).toEqual([]);
+  });
+
+  it("drops malformed engine update ranges and cards", () => {
+    expect(
+      engineAffordancesForRange(
+        { ...availableEngineUpdate, range: "", cards: availableEngineUpdate.cards },
+        null,
+      ),
+    ).toEqual([]);
+    expect(
+      engineAffordancesForRange(
+        { ...availableEngineUpdate, cards: [] },
+        null,
+      ),
+    ).toEqual([]);
   });
 });

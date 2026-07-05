@@ -3,6 +3,7 @@ import type {
   ScheduledResearchItem,
 } from "../shared/scheduledResearch";
 import type { EngineContractVerificationResult } from "../shared/engine-contract";
+import type { EngineAvailableUpdate } from "../shared/update-affordances";
 
 export type { AppLocale } from "../shared/i18n/types";
 export type { Attachment } from "../shared/attachments";
@@ -56,6 +57,11 @@ export type {
   EngineContractFinding,
 } from "../shared/engine-contract";
 export type { EngineContractVerificationResult };
+export type {
+  EngineAvailableUpdate,
+  EngineUpdateAffordance,
+  WhatsNewAffordance,
+} from "../shared/update-affordances";
 export type {
   KanbanTask,
   KanbanBoard,
@@ -294,6 +300,7 @@ export type HermesUpstreamWatchState = {
   anchorSha?: string | null;
   pendingCommitCount?: number;
   contractRiskCount?: number;
+  availableUpdate?: EngineAvailableUpdate;
   lastError?: string;
 };
 

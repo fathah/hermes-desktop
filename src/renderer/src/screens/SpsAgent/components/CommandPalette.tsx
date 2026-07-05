@@ -15,6 +15,7 @@ import type { PageMeta, TreeNode } from "../types";
 import type { ContentIdea } from "../../../lib/content-studio";
 import { saveContentIdea } from "../content/contentStudioStorage";
 import { useWhatsNew } from "../updates/useWhatsNew";
+import { isEngineUpdateAffordance } from "../../../../../shared/update-affordances";
 
 interface ActionItem {
   kind: "action";
@@ -179,8 +180,20 @@ export function CommandPalette() {
     openContentStudioIdea(idea);
   }, [flash, meta, openContentStudioIdea, page]);
 
-  const actions: ActionItem[] = useMemo(
-    () => [
+  const actions: ActionItem[] = useMemo(() => {
+    const engineCount = whatsNew.items.filter(isEngineUpdateAffordance).length;
+    const releaseCount = whatsNew.items.length - engineCount;
+    const whatsNewDesc =
+      engineCount > 0 && releaseCount === 0
+        ? `Review ${engineCount} available Hermes Agent update${
+            engineCount === 1 ? "" : "s"
+          }.`
+        : engineCount > 0
+          ? `Review ${whatsNew.items.length} new capabilities and available updates.`
+          : `Review ${whatsNew.items.length} new capability${
+              whatsNew.items.length === 1 ? "" : "ies"
+            } in this update.`;
+    return [
       ...(whatsNew.items.length > 0
         ? [
             {
@@ -188,9 +201,7 @@ export function CommandPalette() {
               id: "whats-new",
               icon: "sparkle" as const,
               label: "What's new",
-              desc: `Review ${whatsNew.items.length} new capability${
-                whatsNew.items.length === 1 ? "" : "ies"
-              } in this update.`,
+              desc: whatsNewDesc,
               run: () => setSurface("doc"),
             },
           ]
@@ -554,31 +565,30 @@ export function CommandPalette() {
           useStore.getState().setTweaksOpen(true);
         },
       },
-    ],
-    [
-      t.dark,
-      t.sidebar,
-      openPanelTab,
-      setTweak,
-      setTemplatesOpen,
-      setTrashOpen,
-      resetWorkspace,
-      startNewChat,
-      setResearchOpen,
-      setExternalSessionsOpen,
-      setSurface,
-      openInboxImageCapture,
-      flash,
-      page,
-      meta,
-      docs,
-      tree,
-      processActiveObsidianNote,
-      importObsidianFolder,
-      saveSelectionAsContentIdea,
-      whatsNew.items.length,
-    ],
-  );
+    ];
+  }, [
+    t.dark,
+    t.sidebar,
+    openPanelTab,
+    setTweak,
+    setTemplatesOpen,
+    setTrashOpen,
+    resetWorkspace,
+    startNewChat,
+    setResearchOpen,
+    setExternalSessionsOpen,
+    setSurface,
+    openInboxImageCapture,
+    flash,
+    page,
+    meta,
+    docs,
+    tree,
+    processActiveObsidianNote,
+    importObsidianFolder,
+    saveSelectionAsContentIdea,
+    whatsNew.items,
+  ]);
 
   const pages = useMemo(() => flattenStoreTree(tree, meta), [tree, meta]);
 
