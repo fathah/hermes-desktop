@@ -36,8 +36,9 @@ Build installers: `build:mac` / `build:win` / `build:linux` / `build:rpm` (elect
 Three processes (electron-vite builds each separately — `electron.vite.config.ts`):
 
 - **`src/main/`** — Electron main process. Owns all privileged work: IPC handlers (`index.ts` is the
-  hub), the Hermes installer (`installer.ts`), gateway lifecycle + chat streaming (`hermes.ts`,
-  spawns the Python server, parses SSE via `sse-parser.ts`), SSH tunnels (`ssh-tunnel.ts`), config,
+  hub), the Hermes installer (`installer.ts`), gateway lifecycle (`src/main/hermes/gateway-process.ts`),
+  chat/completions (`src/main/hermes/chat-client/*`), retrieval grounding
+  (`src/main/hermes/grounding.ts`), SSE parsing (`sse-parser.ts`), SSH tunnels (`ssh-tunnel.ts`), config,
   profiles, models/providers, memory, skills, cronjobs. `better-sqlite3` is marked `external` here.
 - **`src/preload/`** — the secure renderer bridge (`contextBridge`). The renderer never touches
   Node/Electron directly; it calls `window.hermesAPI.*` which `ipcRenderer.invoke`s the main handlers.

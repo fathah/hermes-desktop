@@ -52,8 +52,8 @@ Ordered roughly by value.
 >
 > **UPDATE 2026-06-05 (c) — query expansion BUILT & shipped.** `buildRetrievalSystemMessage` now
 > generates synonym query variants (one cheap completion) and fuses them with the original
-> retrieval by reciprocal rank (`parseQueryVariants` / `fuseRankings` / `expandQueryVariants` in
-> `src/main/hermes.ts`, unit-tested). Measured: **clean synonym misses 0 → 80%**, controls
+> retrieval by reciprocal rank (`parseQueryVariants` / `fuseRankings` plus the internal
+> `expandQueryVariants` in `src/main/hermes/grounding.ts`, unit-tested). Measured: **clean synonym misses 0 → 80%**, controls
 > unaffected, but a **residual on hard semantic gaps** (RM-keys "safe"→"key cabinet": 0 → 20%) —
 > keyword expansion can't bridge a concept leap. **That residual is now the measured trigger for
 > embeddings** (the gate's condition is met for the hard-gap case). Remaining recall work: local
@@ -65,7 +65,7 @@ Ordered roughly by value.
 
 **Framing that must not be lost:** vector RAG is a _retrieval architecture_; RLM is an _inference/control strategy_. They sit on different axes — (A) **control:** one-shot retrieve-and-stuff vs. agentic navigate-and-recurse; (B) **search primitive:** keyword (FTS5) vs. vector vs. both. The decision is **agentic (RLM) on axis A**, keeping **keyword on axis B for now**. "RLM instead of vectors" really means: pick agentic control; don't build the vector subsystem yet.
 
-**Status today:** retrieval is FTS5 keyword, **one-shot**. `NoteIndex.search(text, limit, mode)` (`src/main/note-index.ts`, `"any"`/OR mode); `groundingTerms()` + `buildRetrievalSystemMessage()` (`src/main/hermes.ts`) inject a single system message; the SPS path `spsAssistant()` (`src/main/sps-agent.ts`) is `stream:false` and expects a **structured JSON** result — it does **not** run a tool loop.
+**Status today:** workspace grounding is still **one-shot**. `NoteIndex.search(text, limit, mode)` (`src/main/note-index.ts`, `"any"`/OR mode) feeds `groundingTerms()` + `buildRetrievalSystemMessage()` (`src/main/hermes/grounding.ts`), which inject a single system message; the chat path calls that from `src/main/hermes/chat-client/send.ts`; the SPS path `spsAssistant()` (`src/main/sps-agent.ts`) is `stream:false` and expects a **structured JSON** result — it does **not** run a tool loop.
 
 **What "do RLM" actually means here (the real work):**
 
@@ -94,8 +94,8 @@ Bet (to verify, not assert): with SOP/contract corpora (shared vocab, cross-refs
 
 ### 3. Remote / SSH grounding
 
-**Status:** grounding is **local-mode only** by construction — `buildRetrievalSystemMessage` is called only when `!isRemoteMode()` in both `src/main/hermes.ts` (chat) and `spsAssistant()` (`src/main/sps-agent.ts`).
-**Left:** in remote/SSH mode the vault lives on the desktop and the remote agent can't read those paths. Either inline retrieved excerpts into the request (no path handoff) or run retrieval on the desktop and ship results. Decide the transport before coding.
+**Status:** grounding transport is split by surface. The chat path calls `buildRetrievalSystemMessage` from `src/main/hermes/chat-client/send.ts` when workspace grounding is enabled and passes `{ isRemote: isRemoteMode() }`, so remote/SSH chat receives inline desktop excerpts instead of local file paths. `spsAssistant()` (`src/main/sps-agent.ts`) still gates grounding with `!isRemoteMode()`.
+**Left:** decide whether SPS remote/SSH should match chat's inline-excerpt transport or keep its local-only behavior.
 
 ### 4. "Sources" folder + scanned-PDF UX — ✅ DONE 2026-06-05
 
@@ -136,16 +136,12 @@ the Chat header controls (so the two stay in sync). Verified by the SPS smoke.
   `ChatHeader`, and `useChatActions` (Chat) all import from there, and the legacy
   `screens/Chat/lib/grounding.ts` is deleted. SPS no longer imports from Chat.
   Unit-tested in `tests/grounding-setting.test.ts`.
-- **`sps-agent → hermes` coupling — ⏸ DEFERRED (no longer cheap).** The "Optional"
-  plan was to extract `buildRetrievalSystemMessage`/`formatRetrievalSystemMessage`/
-  `groundingTerms` into `src/main/grounding.ts` and re-export from `hermes.ts`. Since
-  item 1's query expansion, `buildRetrievalSystemMessage` now depends on
-  `chatCompletionOnce` (the gateway HTTP plumbing, in `hermes.ts`), so a `grounding.ts`
-  would import back from `hermes.ts` — a cycle that does NOT achieve the goal
-  (`sps-agent` → `grounding` → `hermes` still pulls the heavy graph). Doing it right
-  now means also extracting the HTTP layer — a larger cross-cutting refactor, out of
-  scope for a "low-risk tech-debt" item. Revisit only if the heavy-graph import
-  becomes a measured problem.
+- **`sps-agent → hermes` coupling — partially reduced.** The helper extraction is
+  now done: `buildRetrievalSystemMessage`/`formatRetrievalSystemMessage`/
+  `groundingTerms` live in `src/main/hermes/grounding.ts`. Query expansion still
+  lazy-loads `chatCompletionOnce` from `src/main/hermes/chat-client/*`, so full
+  decoupling would mean removing or relocating that completion dependency. Revisit
+  only if this import shape becomes a measured problem.
 
 ### 9. KB dogfooding — the Phase-2 trigger evaluation ⟵ ✅ DONE 2026-06-05
 
