@@ -27,6 +27,7 @@ import { runDreamCycle } from "./dream-cycle";
 import { maybeRunHermesAgentUpdateRoutine } from "./hermes-agent-updates";
 import { maybeRunHermesUpstreamWatchRoutine } from "./hermes-upstream-watch";
 import { maybeRunDesktopUpdateRoutine } from "./desktop-update-routine";
+import { maybeRunAppLaunchSchedules } from "./app-launcher";
 import { getApiUrl, getRemoteAuthHeader } from "./hermes";
 import { gatewayFetch } from "./security/network-policy";
 import { createLearningProposal } from "./learning-proposals";
@@ -342,6 +343,14 @@ export async function tickScheduler(profile?: string): Promise<void> {
       error: formatLogError(err),
     });
   }
+
+  void maybeRunAppLaunchSchedules(new Date(), activeProfile).catch((err) => {
+    log.error("scheduler", {
+      msg: "error checking app launch schedules",
+      profile: activeProfile,
+      error: formatLogError(err),
+    });
+  });
 
   // Nag engine: chase overdue human tasks (throttled to ~60s).
   try {

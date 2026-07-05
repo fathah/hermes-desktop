@@ -135,6 +135,20 @@ describe("runShellAction (C1 shell allowlist + no-shell execFile)", () => {
     expect(execFileMock).not.toHaveBeenCalled();
   });
 
+  it("rejects launch-like shell commands; launcher targets use the reviewed API instead", async () => {
+    for (const cmd of [
+      "open /Applications/Slack.app",
+      "/usr/bin/open -b com.tinyspeck.slackmacgap",
+      "xdg-open https://example.com",
+      "start https://example.com",
+    ]) {
+      const res = await runShellAction(cmd, "/vault");
+      expect(res.success, `should reject: ${cmd}`).toBe(false);
+      expect(res.error).toMatch(/not allowed|unsafe|binary/i);
+    }
+    expect(execFileMock).not.toHaveBeenCalled();
+  });
+
   it("rejects mutating git subcommands even though git is allowlisted", async () => {
     for (const cmd of [
       "git push",

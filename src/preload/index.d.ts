@@ -1,4 +1,5 @@
 import type { AgentBridgeApi } from "./bridges/agent.types";
+import type { AppLauncherBridgeApi } from "./bridges/app-launcher.types";
 import type { ConfigBridgeApi } from "./bridges/config.types";
 import type { EngineBridgeApi } from "./bridges/engine.types";
 import type { ExternalContextBridgeApi } from "./bridges/external-context.types";
@@ -24,6 +25,7 @@ interface ElectronAPI {
 }
 
 type HermesAPI = AgentBridgeApi &
+  AppLauncherBridgeApi &
   ConfigBridgeApi &
   EngineBridgeApi &
   ExternalContextBridgeApi &

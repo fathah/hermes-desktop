@@ -871,11 +871,143 @@ if (fs.existsSync(desktopJsonPath)) {
 
 const profileDir = path.join(hermesHome, activeProfile);
 const jobsPath = path.join(profileDir, 'cron', 'jobs.json');
+const appLaunchProfileDir = activeProfile && activeProfile !== 'default'
+  ? path.join(hermesHome, 'profiles', activeProfile)
+  : hermesHome;
+const appLauncherPath = path.join(appLaunchProfileDir, 'sps-agent', 'app-launcher.json');
 
-if (!fs.existsSync(jobsPath)) {
-  process.exit(0);
+function writeAuditLog(action, command) {
+  try {
+    const logsDir = path.join(hermesHome, 'logs');
+    if (!fs.existsSync(logsDir)) {
+      fs.mkdirSync(logsDir, { recursive: true });
+    }
+    fs.appendFileSync(path.join(logsDir, 'audit.log'), JSON.stringify({
+      ts: Date.now(),
+      action,
+      command,
+      profile: activeProfile
+    }) + '\\n', 'utf-8');
+  } catch (err) {}
 }
 
+function appDayKey(d) {
+  return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+}
+
+function appWeekKey(d) {
+  const monday = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const dow = (monday.getDay() + 6) % 7;
+  monday.setDate(monday.getDate() - dow);
+  return appDayKey(monday);
+}
+
+function appPeriodKey(schedule, d) {
+  if (schedule.cadence === 'weekly') return appWeekKey(d);
+  if (schedule.cadence === 'monthly') return d.getFullYear() + '-' + (d.getMonth() + 1);
+  return appDayKey(d);
+}
+
+function appHasRunThisPeriod(schedule, nowDate) {
+  return !!schedule.lastRunAt &&
+    appPeriodKey(schedule, new Date(schedule.lastRunAt)) === appPeriodKey(schedule, nowDate);
+}
+
+function appInRunWindow(schedule, nowDate) {
+  if (nowDate.getHours() !== schedule.hour) return false;
+  if (schedule.cadence === 'weekly') return nowDate.getDay() === 1;
+  if (schedule.cadence === 'monthly') return nowDate.getDate() === 1;
+  return true;
+}
+
+function appMissedRunWindow(schedule, nowDate) {
+  if (!schedule.enabled || !schedule.runWhenClosed) return false;
+  if (appHasRunThisPeriod(schedule, nowDate)) return false;
+  if (schedule.cadence === 'weekly') {
+    return nowDate.getDay() > 1 ||
+      (nowDate.getDay() === 1 && nowDate.getHours() > schedule.hour);
+  }
+  if (schedule.cadence === 'monthly') {
+    return nowDate.getDate() > 1 ||
+      (nowDate.getDate() === 1 && nowDate.getHours() > schedule.hour);
+  }
+  return nowDate.getHours() > schedule.hour;
+}
+
+function saveAppLauncher(data) {
+  fs.writeFileSync(appLauncherPath, JSON.stringify(data, null, 2), 'utf-8');
+}
+
+function runAppLaunchSchedule(schedule, data, nowMs) {
+  const targets = Array.isArray(data.targets) ? data.targets : [];
+  let failed = '';
+
+  for (const targetId of schedule.targetIds || []) {
+    const target = targets.find((item) => item && item.id === targetId);
+    if (!target || target.enabled === false) {
+      failed = 'Launch target is unavailable.';
+      continue;
+    }
+    if (!target.locator || target.locator.kind !== 'macos-app') {
+      failed = 'Run while closed supports macOS app targets only.';
+      continue;
+    }
+    const args = target.locator.bundleId
+      ? ['-b', target.locator.bundleId]
+      : [target.locator.appPath];
+    const res = spawnSync('/usr/bin/open', args, { shell: false });
+    target.lastRunAt = Date.now();
+    target.lastStatus = res.error || res.status !== 0 ? 'failed' : 'ok';
+    if (target.lastStatus === 'failed') {
+      target.lastError = res.error ? formatCronError(res.error) : 'open exited with status ' + res.status;
+      failed = target.lastError;
+      writeAuditLog('app-launch.failure.scheduled', 'macos-app:' + target.label);
+    } else {
+      delete target.lastError;
+      writeAuditLog('app-launch.run.scheduled', 'macos-app:' + target.label);
+    }
+  }
+
+  schedule.lastRunAt = nowMs;
+  schedule.lastStatus = failed ? 'failed' : 'ok';
+  if (failed) schedule.lastError = failed;
+  else delete schedule.lastError;
+}
+
+function runAppLaunchSchedules(nowMs) {
+  if (process.platform !== 'darwin' || !fs.existsSync(appLauncherPath)) return;
+
+  try {
+    const data = JSON.parse(fs.readFileSync(appLauncherPath, 'utf-8'));
+    const schedules = Array.isArray(data.schedules) ? data.schedules : [];
+    const nowDate = new Date(nowMs);
+    let changed = false;
+
+    for (const schedule of schedules) {
+      if (!schedule || schedule.enabled !== true || schedule.runWhenClosed !== true) continue;
+      if (appInRunWindow(schedule, nowDate) && !appHasRunThisPeriod(schedule, nowDate)) {
+        runAppLaunchSchedule(schedule, data, nowMs);
+        writeAuditLog('app-launch.schedule.run.scheduled', schedule.label);
+        changed = true;
+      } else if (appMissedRunWindow(schedule, nowDate)) {
+        schedule.lastRunAt = nowMs;
+        schedule.lastStatus = 'skipped';
+        schedule.lastError = 'Scheduled hour passed before Hermes could run it.';
+        writeAuditLog('app-launch.schedule.skipped', schedule.label);
+        changed = true;
+      }
+    }
+
+    if (changed) saveAppLauncher(data);
+  } catch (err) {
+    writeCronLog('error', {
+      msg: 'error running app launch scheduler',
+      error: formatCronError(err)
+    });
+  }
+}
+
+if (fs.existsSync(jobsPath)) {
 try {
   const data = JSON.parse(fs.readFileSync(jobsPath, 'utf-8'));
   const jobs = data.jobs || [];
@@ -943,6 +1075,9 @@ try {
     error: formatCronError(err)
   });
 }
+}
+
+runAppLaunchSchedules(Date.now());
 `;
 }
 

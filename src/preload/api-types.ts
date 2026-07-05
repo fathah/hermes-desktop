@@ -140,6 +140,12 @@ export type {
 } from "../shared/external-context";
 export type { ProfileInfo } from "../shared/profiles";
 export type { CronJob } from "../shared/cronjobs";
+export type {
+  AppLaunchSchedule,
+  AppLaunchScheduleInput,
+  AppLaunchSchedulePatch,
+  AppLaunchTarget,
+} from "../shared/app-launcher";
 export type { SessionSummary } from "../shared/sessions";
 export type {
   MonitorDiscoveryInput,

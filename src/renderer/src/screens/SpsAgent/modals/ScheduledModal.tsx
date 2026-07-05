@@ -9,6 +9,7 @@ import { useStore } from "../store";
 import { Icon } from "../components/Icon";
 import { SpsModal } from "./SpsModal";
 import { commitChangeset } from "../inbox/ingestApply";
+import { AppLaunchSection } from "./app-launcher/AppLaunchSection";
 import {
   CADENCES,
   IMPORTANCE_THRESHOLDS,
@@ -24,6 +25,10 @@ import {
   type TelegramDeliveryStatus,
 } from "../../../../../shared/scheduledResearch";
 import type { CronJob } from "../../../../../shared/cronjobs";
+import type {
+  AppLaunchSchedule,
+  AppLaunchTarget,
+} from "../../../../../shared/app-launcher";
 
 type Schedule = Awaited<ReturnType<typeof window.hermesAPI.srList>>[number];
 type Pending = Awaited<
@@ -100,6 +105,10 @@ export function ScheduledModal() {
   // oversight only: see every agent job + stop/run it. Creation of new raw
   // cron jobs stays with the agent/CLI; research/digest scheduling is above.
   const [cronJobs, setCronJobs] = useState<CronJob[]>([]);
+  const [launchTargets, setLaunchTargets] = useState<AppLaunchTarget[]>([]);
+  const [launchSchedules, setLaunchSchedules] = useState<AppLaunchSchedule[]>(
+    [],
+  );
   const [skips, setSkips] = useState<Record<string, SkipInfo>>({});
   const [topic, setTopic] = useState("");
   const [cadence, setCadence] = useState<Cadence>("weekly");
@@ -130,20 +139,25 @@ export function ScheduledModal() {
   };
 
   const refresh = async () => {
-    const [s, p, cron, sk, telegram] = await Promise.all([
-      window.hermesAPI.srList(),
-      window.hermesAPI.srListPending(),
-      window.hermesAPI.listCronJobs(true).catch(() => [] as CronJob[]),
-      window.hermesAPI
-        .getSchedulerSkips()
-        .catch(() => ({}) as Record<string, SkipInfo>),
-      window.hermesAPI
-        .srTelegramStatus()
-        .catch(() => TELEGRAM_UNAVAILABLE_STATUS),
-    ]);
+    const [s, p, cron, sk, telegram, launchTargetsList, launchSchedulesList] =
+      await Promise.all([
+        window.hermesAPI.srList(),
+        window.hermesAPI.srListPending(),
+        window.hermesAPI.listCronJobs(true).catch(() => [] as CronJob[]),
+        window.hermesAPI
+          .getSchedulerSkips()
+          .catch(() => ({}) as Record<string, SkipInfo>),
+        window.hermesAPI
+          .srTelegramStatus()
+          .catch(() => TELEGRAM_UNAVAILABLE_STATUS),
+        window.hermesAPI.appLaunchListTargets().catch(() => []),
+        window.hermesAPI.appLaunchListSchedules().catch(() => []),
+      ]);
     setCronJobs(cron || []);
     setSkips(sk || {});
     setTelegramStatus(telegram);
+    setLaunchTargets(launchTargetsList || []);
+    setLaunchSchedules(launchSchedulesList || []);
     const applied = await autoApplyPending(p || [], s || []);
     if (applied) {
       const p2 = await window.hermesAPI.srListPending();
@@ -821,6 +835,13 @@ export function ScheduledModal() {
             })}
           </div>
         </div>
+
+        <AppLaunchSection
+          targets={launchTargets}
+          schedules={launchSchedules}
+          onRefresh={refresh}
+          flash={flash}
+        />
 
         {/* ── agent tasks (cron) — oversight of agent jobs ── */}
         {cronJobs.length > 0 && (

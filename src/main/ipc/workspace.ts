@@ -7,6 +7,7 @@ import { registerSessionsIpc } from "./sessions";
 import { registerMemoryIpc } from "./memory";
 import { registerSpsIpc } from "./sps";
 import { registerScheduledResearchIpc } from "./scheduled-research";
+import { registerAppLauncherIpc } from "./app-launcher";
 
 /**
  * Aggregator for the workspace-area IPC handlers. Each domain registers its
@@ -28,5 +29,6 @@ export function registerWorkspaceIpc(
   registerSessionsIpc();
   registerMemoryIpc();
   registerSpsIpc();
+  registerAppLauncherIpc();
   registerScheduledResearchIpc(mainWindowGetter);
 }

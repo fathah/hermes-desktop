@@ -21,7 +21,9 @@ import { ReviewQueueSurface } from "../review/ReviewQueueSurface";
 import { openSettings } from "../../../lib/openSettings";
 import { OperatorReadinessPanel } from "../../../components/OperatorReadinessPanel";
 import { cadenceLabel } from "../../../../../shared/scheduledResearch";
+import { appLaunchCadenceLabel } from "../../../../../shared/app-launcher";
 import type { CronJob } from "../../../../../shared/cronjobs";
+import type { AppLaunchSchedule } from "../../../../../shared/app-launcher";
 import type { OperatorReadinessAction } from "../../../../../shared/operator-readiness";
 
 type WorkTab = "tasks" | "delegated" | "scheduled" | "review";
@@ -54,6 +56,9 @@ function fmtCronTime(iso: string | null): string {
 function WorkScheduledPanel(): React.JSX.Element {
   const setScheduledOpen = useStore((s) => s.setScheduledOpen);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [launchSchedules, setLaunchSchedules] = useState<AppLaunchSchedule[]>(
+    [],
+  );
   const [cronJobs, setCronJobs] = useState<CronJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState("");
@@ -63,11 +68,13 @@ function WorkScheduledPanel(): React.JSX.Element {
     setLoading(true);
     setError("");
     try {
-      const [scheduleRows, cronRows] = await Promise.all([
+      const [scheduleRows, launchRows, cronRows] = await Promise.all([
         window.hermesAPI.srList(),
+        window.hermesAPI.appLaunchListSchedules().catch(() => []),
         window.hermesAPI.listCronJobs(true).catch(() => [] as CronJob[]),
       ]);
       setSchedules(scheduleRows || []);
+      setLaunchSchedules(launchRows || []);
       setCronJobs(cronRows || []);
     } catch (err) {
       setError(
@@ -103,6 +110,18 @@ function WorkScheduledPanel(): React.JSX.Element {
     }
   }
 
+  async function toggleLaunchSchedule(rule: AppLaunchSchedule): Promise<void> {
+    setBusyId(rule.id);
+    try {
+      await window.hermesAPI.appLaunchUpdateSchedule(rule.id, {
+        enabled: !rule.enabled,
+      });
+      await refresh();
+    } finally {
+      setBusyId("");
+    }
+  }
+
   return (
     <section className="work-rule-panel">
       <div className="work-rule-head">
@@ -121,7 +140,9 @@ function WorkScheduledPanel(): React.JSX.Element {
       {error && <div className="active-work-error">{error}</div>}
       {loading ? (
         <div className="ck-empty">Loading scheduled items...</div>
-      ) : schedules.length === 0 && cronJobs.length === 0 ? (
+      ) : schedules.length === 0 &&
+        launchSchedules.length === 0 &&
+        cronJobs.length === 0 ? (
         <div className="ck-empty">No scheduled items are active.</div>
       ) : (
         <div className="work-rule-list">
@@ -147,6 +168,30 @@ function WorkScheduledPanel(): React.JSX.Element {
                 className="cover-btn"
                 disabled={busyId === rule.id}
                 onClick={() => void toggleSchedule(rule)}
+              >
+                {rule.enabled ? "Pause" : "Resume"}
+              </button>
+            </article>
+          ))}
+          {launchSchedules.map((rule) => (
+            <article className="work-rule-row" key={rule.id}>
+              <div className="work-rule-main">
+                <strong>{rule.label}</strong>
+                <span>
+                  Launch recipe · {appLaunchCadenceLabel(rule.cadence, rule.hour)} ·
+                  last {fmtTime(rule.lastRunAt)}
+                </span>
+                <small>
+                  {rule.runWhenClosed ? "app-open and LaunchAgent" : "app-open"} ·{" "}
+                  {rule.enabled ? "enabled" : "paused"}
+                  {rule.lastStatus ? ` · ${rule.lastStatus}` : ""}
+                </small>
+                {rule.lastError && <small>{rule.lastError}</small>}
+              </div>
+              <button
+                className="cover-btn"
+                disabled={busyId === rule.id}
+                onClick={() => void toggleLaunchSchedule(rule)}
               >
                 {rule.enabled ? "Pause" : "Resume"}
               </button>

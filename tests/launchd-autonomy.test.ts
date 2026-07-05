@@ -133,7 +133,7 @@ vi.mock("../src/main/self-healing", () => ({
   triggerSelfHealing: () => {},
 }));
 
-import { manageLaunchAgent } from "../src/main/control-server";
+import { manageLaunchAgent, renderCronScript } from "../src/main/control-server";
 import { runJobHeadless } from "../src/main/scheduler";
 
 describe("launchd Daemon & File-based Single Flight Locking", () => {
@@ -184,6 +184,16 @@ describe("launchd Daemon & File-based Single Flight Locking", () => {
     );
 
     Object.defineProperty(process, "platform", { value: originalPlatform });
+  });
+
+  it("generated cron helper handles app launch schedules without shell interpolation", () => {
+    const script = renderCronScript();
+
+    expect(script).toContain("app-launcher.json");
+    expect(script).toContain("runWhenClosed");
+    expect(script).toContain("spawnSync('/usr/bin/open', args");
+    expect(script).toContain("shell: false");
+    expect(script).not.toContain("open ${");
   });
 
   it("should prevent duplicate runs when a live lock is held", async () => {

@@ -27,6 +27,16 @@ const api = vi.hoisted(() => ({
   spsAppendWikiLog: vi.fn(),
   openExternal: vi.fn(),
   onScheduledResearchUpdate: vi.fn(),
+  appLaunchListTargets: vi.fn(),
+  appLaunchPickMacApplication: vi.fn(),
+  appLaunchAddUrlTarget: vi.fn(),
+  appLaunchRemoveTarget: vi.fn(),
+  appLaunchRunTarget: vi.fn(),
+  appLaunchListSchedules: vi.fn(),
+  appLaunchCreateSchedule: vi.fn(),
+  appLaunchUpdateSchedule: vi.fn(),
+  appLaunchDeleteSchedule: vi.fn(),
+  appLaunchRunScheduleNow: vi.fn(),
 }));
 
 vi.mock("../store", () => ({
@@ -42,6 +52,7 @@ function installApi(): void {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  delete (window as unknown as { electron?: unknown }).electron;
   store.scheduledDraftTopic = null;
   installApi();
   api.srList.mockResolvedValue([]);
@@ -55,6 +66,16 @@ beforeEach(() => {
   });
   api.srCreate.mockResolvedValue({ ok: true, item: { id: "sr_1" } });
   api.onScheduledResearchUpdate.mockReturnValue(() => {});
+  api.appLaunchListTargets.mockResolvedValue([]);
+  api.appLaunchListSchedules.mockResolvedValue([]);
+  api.appLaunchPickMacApplication.mockResolvedValue({ ok: true });
+  api.appLaunchAddUrlTarget.mockResolvedValue({ ok: true });
+  api.appLaunchRemoveTarget.mockResolvedValue({ ok: true });
+  api.appLaunchRunTarget.mockResolvedValue({ ok: true });
+  api.appLaunchCreateSchedule.mockResolvedValue({ ok: true });
+  api.appLaunchUpdateSchedule.mockResolvedValue({ ok: true });
+  api.appLaunchDeleteSchedule.mockResolvedValue({ ok: true });
+  api.appLaunchRunScheduleNow.mockResolvedValue({ ok: true });
 });
 
 describe("ScheduledModal Telegram delivery UX", () => {
@@ -181,6 +202,187 @@ describe("ScheduledModal Telegram delivery UX", () => {
           topic: "AI agent launches",
           telegramPush: true,
           telegramMode: "summary-only",
+        }),
+      );
+    });
+  });
+
+  it("shows launch targets and schedules in the Launches section", async () => {
+    api.appLaunchListTargets.mockResolvedValue([
+      {
+        id: "target_1",
+        label: "Status",
+        enabled: true,
+        createdAt: 1,
+        updatedAt: 1,
+        lastRunAt: 0,
+        locator: { kind: "url", url: "https://status.example.com/" },
+      },
+    ]);
+    api.appLaunchListSchedules.mockResolvedValue([
+      {
+        id: "schedule_1",
+        label: "Morning status",
+        targetIds: ["target_1"],
+        cadence: "daily",
+        hour: 9,
+        enabled: true,
+        runWhenClosed: false,
+        createdAt: 1,
+        updatedAt: 1,
+        lastRunAt: 0,
+      },
+    ]);
+
+    render(<ScheduledModal />);
+
+    expect(await screen.findByText("Launches")).toBeInTheDocument();
+    expect(screen.getByText("Status")).toBeInTheDocument();
+    expect(screen.getByText("Morning status")).toBeInTheDocument();
+    expect(screen.getByText(/Daily · 09:00/i)).toBeInTheDocument();
+  });
+
+  it("creates URL launch targets and launch schedules from selected targets", async () => {
+    api.appLaunchListTargets.mockResolvedValue([
+      {
+        id: "target_1",
+        label: "Status",
+        enabled: true,
+        createdAt: 1,
+        updatedAt: 1,
+        locator: { kind: "url", url: "https://status.example.com/" },
+      },
+    ]);
+
+    render(<ScheduledModal />);
+
+    await screen.findByText("Status");
+    fireEvent.change(screen.getByPlaceholderText("URL label"), {
+      target: { value: "Docs" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("https://example.com"), {
+      target: { value: "https://docs.example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add URL" }));
+
+    await waitFor(() => {
+      expect(api.appLaunchAddUrlTarget).toHaveBeenCalledWith({
+        label: "Docs",
+        url: "https://docs.example.com",
+      });
+    });
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "" }));
+    fireEvent.change(screen.getByPlaceholderText("Launch schedule label"), {
+      target: { value: "Morning docs" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create schedule" }));
+
+    await waitFor(() => {
+      expect(api.appLaunchCreateSchedule).toHaveBeenCalledWith(
+        expect.objectContaining({
+          label: "Morning docs",
+          targetIds: ["target_1"],
+          cadence: "daily",
+          hour: 9,
+          runWhenClosed: false,
+        }),
+      );
+    });
+  });
+
+  it("runs, toggles, deletes, and renders launcher errors", async () => {
+    api.appLaunchListTargets.mockResolvedValue([
+      {
+        id: "target_1",
+        label: "Status",
+        enabled: true,
+        createdAt: 1,
+        updatedAt: 1,
+        locator: { kind: "url", url: "https://status.example.com/" },
+      },
+    ]);
+    api.appLaunchListSchedules.mockResolvedValue([
+      {
+        id: "schedule_1",
+        label: "Morning status",
+        targetIds: ["target_1"],
+        cadence: "daily",
+        hour: 9,
+        enabled: true,
+        runWhenClosed: false,
+        createdAt: 1,
+        updatedAt: 1,
+        lastRunAt: 0,
+      },
+    ]);
+    api.appLaunchRunScheduleNow.mockResolvedValueOnce({
+      ok: false,
+      error: "open failed",
+    });
+
+    render(<ScheduledModal />);
+
+    await screen.findByText("Morning status");
+    const runButtons = screen.getAllByRole("button", { name: "Run now" });
+    fireEvent.click(runButtons[1]);
+    expect(await screen.findByText("open failed")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    await waitFor(() => {
+      expect(api.appLaunchUpdateSchedule).toHaveBeenCalledWith("schedule_1", {
+        enabled: false,
+      });
+    });
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[1]);
+    await waitFor(() => {
+      expect(api.appLaunchDeleteSchedule).toHaveBeenCalledWith("schedule_1");
+    });
+  });
+
+  it("shows macOS picker and passes run-when-closed for launch schedules on macOS", async () => {
+    Object.defineProperty(window, "electron", {
+      configurable: true,
+      value: {
+        process: {
+          platform: "darwin",
+          versions: { chrome: "1", electron: "1", node: "1" },
+        },
+      },
+    });
+    api.appLaunchListTargets.mockResolvedValue([
+      {
+        id: "target_1",
+        label: "Calendar",
+        enabled: true,
+        createdAt: 1,
+        updatedAt: 1,
+        locator: { kind: "macos-app", appPath: "/Applications/Calendar.app" },
+      },
+    ]);
+
+    render(<ScheduledModal />);
+
+    await screen.findByText("Calendar");
+    fireEvent.click(screen.getByRole("button", { name: "Add macOS app" }));
+    await waitFor(() => {
+      expect(api.appLaunchPickMacApplication).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "" }));
+    fireEvent.change(screen.getByPlaceholderText("Launch schedule label"), {
+      target: { value: "Morning apps" },
+    });
+    fireEvent.click(screen.getByLabelText("Run while app is closed"));
+    fireEvent.click(screen.getByRole("button", { name: "Create schedule" }));
+
+    await waitFor(() => {
+      expect(api.appLaunchCreateSchedule).toHaveBeenCalledWith(
+        expect.objectContaining({
+          label: "Morning apps",
+          targetIds: ["target_1"],
+          runWhenClosed: true,
         }),
       );
     });

@@ -74,6 +74,8 @@ describe("MyWorkSurface operator readiness", () => {
       value: {
         getOperatorReadiness: vi.fn().mockResolvedValue(readinessReport()),
         srList: vi.fn().mockResolvedValue([]),
+        appLaunchListSchedules: vi.fn().mockResolvedValue([]),
+        appLaunchUpdateSchedule: vi.fn().mockResolvedValue({ ok: true }),
         listCronJobs: vi.fn().mockResolvedValue([]),
       },
     });
@@ -97,6 +99,8 @@ describe("MyWorkSurface operator readiness", () => {
   it("uses Scheduled vocabulary on the scheduled tab", async () => {
     const api = window.hermesAPI as unknown as {
       srList: ReturnType<typeof vi.fn>;
+      appLaunchListSchedules: ReturnType<typeof vi.fn>;
+      appLaunchUpdateSchedule: ReturnType<typeof vi.fn>;
       listCronJobs: ReturnType<typeof vi.fn>;
     };
     api.srList.mockResolvedValue([
@@ -112,6 +116,20 @@ describe("MyWorkSurface operator readiness", () => {
         createdAt: 1,
         lastRunAt: 0,
         lastChangeHash: "",
+      },
+    ]);
+    api.appLaunchListSchedules.mockResolvedValue([
+      {
+        id: "launch_1",
+        label: "Morning apps",
+        targetIds: ["target_1"],
+        cadence: "daily",
+        hour: 9,
+        enabled: true,
+        runWhenClosed: false,
+        createdAt: 1,
+        updatedAt: 1,
+        lastRunAt: 0,
       },
     ]);
     api.listCronJobs.mockResolvedValue([
@@ -145,7 +163,12 @@ describe("MyWorkSurface operator readiness", () => {
       screen.getByRole("button", { name: "Manage scheduled items" }),
     ).toBeInTheDocument();
     expect(screen.getByText(/Topic monitor ·/)).toBeInTheDocument();
+    expect(screen.getByText(/Launch recipe ·/)).toBeInTheDocument();
     expect(screen.getByText(/Agent job ·/)).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Pause" })[1]);
+    expect(api.appLaunchUpdateSchedule).toHaveBeenCalledWith("launch_1", {
+      enabled: false,
+    });
     expect(screen.queryByText(/Signal Brief/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/background jobs/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Manage rules/i)).not.toBeInTheDocument();

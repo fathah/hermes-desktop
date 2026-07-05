@@ -12,6 +12,7 @@ import { externalContextBridge } from "./bridges/external-context";
 import { healthRssBridge } from "./bridges/health-rss";
 import { substackRadarBridge } from "./bridges/substack-radar";
 import { sourceIntakeBridge } from "./bridges/source-intake";
+import { appLauncherBridge } from "./bridges/app-launcher";
 
 const electronAPI = {
   process: {
@@ -43,6 +44,7 @@ const hermesAPI = {
   ...healthRssBridge,
   ...substackRadarBridge,
   ...sourceIntakeBridge,
+  ...appLauncherBridge,
 };
 
 if (process.contextIsolated) {

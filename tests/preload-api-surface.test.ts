@@ -246,6 +246,26 @@ describe("New APIs from v0.8/v0.9 features", () => {
     expect(preloadTypes).toContain("TelegramDeliveryStatus");
   });
 
+  it("has local app launcher APIs", () => {
+    for (const method of [
+      "appLaunchListTargets",
+      "appLaunchPickMacApplication",
+      "appLaunchAddUrlTarget",
+      "appLaunchRemoveTarget",
+      "appLaunchRunTarget",
+      "appLaunchListSchedules",
+      "appLaunchCreateSchedule",
+      "appLaunchUpdateSchedule",
+      "appLaunchDeleteSchedule",
+      "appLaunchRunScheduleNow",
+    ]) {
+      expect(preloadMethods).toContain(method);
+      expect(typeMethods).toContain(method);
+    }
+    expect(preloadTypes).toContain("AppLaunchTarget");
+    expect(preloadTypes).toContain("AppLaunchSchedule");
+  });
+
   it("has Email Eyes monitor APIs", () => {
     for (const method of [
       "spsEmailMonitorGetConfig",
