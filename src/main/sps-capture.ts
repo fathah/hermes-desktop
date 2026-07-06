@@ -42,6 +42,10 @@ export function buildSpsCaptureMarkdown(input: SpsCaptureInput): string {
     props.triageConfidence = input.triageConfidence;
   if (input.emailAccount?.trim())
     props.emailAccount = input.emailAccount.trim();
+  if (input.emailAccountId?.trim())
+    props.emailAccountId = input.emailAccountId.trim();
+  if (input.emailFrom?.trim()) props.emailFrom = input.emailFrom.trim();
+  if (input.digest === true) props.digest = true;
   if (input.messageId?.trim()) props.messageId = input.messageId.trim();
   if (input.folder?.trim()) props.folder = input.folder.trim();
   if (typeof input.uid === "number") props.uid = input.uid;

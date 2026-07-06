@@ -38,7 +38,9 @@ export interface TriageEmailOptions {
 // other verdict is a hard rule the operator configured (block/allow/ignore) or a
 // confident heuristic (importance keyword / bulk mail), and must win outright.
 export function isBorderlineRuleVerdict(result: EmailTriageResult): boolean {
-  return result.capture && result.label === "archive";
+  // Digest captures are a decisive rule outcome (bulk mail rescued for the
+  // newsletter digest lane), not an inconclusive verdict — never LLM them.
+  return result.capture && result.label === "archive" && !result.digest;
 }
 
 // captureThreshold governs ONLY the uncertain lane. A borderline capture whose

@@ -12,6 +12,7 @@ import {
   DEFAULT_EMAIL_MONITOR_ACCOUNT,
   DEFAULT_EMAIL_MONITOR_CONFIG,
   applyEmailMonitorFeedback,
+  normalizeEmailAddress,
   normalizeEmailMonitorConfig,
   shouldMonitorFolder,
   type EmailMonitorAccount,
@@ -240,6 +241,15 @@ export async function handleParsedEmailMessage(
   }
 
   const writeCapture = deps.writeCapture ?? writeSpsCapture;
+  // Digest lane: bulk mail rescued by digestBulk, plus anything the final
+  // triage still ranks low-priority, is flagged so the inbox can fold it into
+  // one collapsed "Newsletters" card instead of individual rows.
+  const digest =
+    input.account.digestBulk === true &&
+    (triage.digest === true ||
+      triage.label === "archive" ||
+      triage.label === "ignore");
+  const emailFrom = normalizeEmailAddress(input.message.from);
   const capture = await writeCapture(deps.vaultDir, {
     source: "email",
     title: input.message.subject || "Email capture",
@@ -253,6 +263,9 @@ export async function handleParsedEmailMessage(
     triageReason: triage.reason,
     triageConfidence: triage.confidence,
     emailAccount: input.account.label,
+    emailAccountId: input.account.id,
+    ...(emailFrom ? { emailFrom } : {}),
+    ...(digest ? { digest } : {}),
     messageId: input.message.messageId,
     folder: input.folder,
     uid: input.uid,

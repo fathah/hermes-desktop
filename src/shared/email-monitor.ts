@@ -32,6 +32,9 @@ export interface EmailMonitorAccount {
   maxMessageBytes: number;
   maxAttachmentBytes: number;
   pollLimit: number;
+  // When on, bulk/low-priority mail (newsletters, list mail) is captured into
+  // a collapsed "Newsletters" digest lane instead of being skipped outright.
+  digestBulk: boolean;
 }
 
 export interface EmailMonitorConfig {
@@ -83,6 +86,10 @@ export interface EmailTriageResult {
   label: EmailTriageLabel;
   reason: string;
   confidence: number;
+  // True when this capture only exists because the account's digestBulk
+  // toggle rescued bulk mail for the digest lane. Digest verdicts are
+  // decisive rule outcomes — never LLM-borderline.
+  digest?: boolean;
 }
 
 export interface EmailMonitorFeedback {
@@ -137,6 +144,7 @@ export const DEFAULT_EMAIL_MONITOR_ACCOUNT: EmailMonitorAccount = {
   maxMessageBytes: DEFAULT_MAX_MESSAGE_BYTES,
   maxAttachmentBytes: DEFAULT_MAX_ATTACHMENT_BYTES,
   pollLimit: DEFAULT_POLL_LIMIT,
+  digestBulk: false,
 };
 
 export const DEFAULT_EMAIL_MONITOR_CONFIG: EmailMonitorConfig = {
@@ -250,6 +258,15 @@ export function classifyEmailCandidate(
   }
 
   if (isBulkMail(candidate)) {
+    if (normalized.digestBulk) {
+      return {
+        capture: true,
+        label: "archive",
+        confidence: 0.92,
+        reason: "Bulk mail captured for the newsletter digest.",
+        digest: true,
+      };
+    }
     return ignore("Skipped bulk mail without an important match.", 0.92);
   }
 
@@ -292,6 +309,17 @@ export function applyEmailMonitorFeedback(
         return {
           ...account,
           importanceKeywords: appendUnique(account.importanceKeywords, keyword),
+        };
+      }
+      // NOTE(deferred): per-sender priority tiers don't exist yet, so a
+      // sender-scoped "raise priority" (from a capture card) allowlists the
+      // sender — future mail is always captured. Upgrade path: a senderPriority
+      // map that feeds the triage label directly.
+      if (feedback.action === "raise-priority" && sender) {
+        return {
+          ...account,
+          allowSenders: appendUnique(account.allowSenders, sender),
+          blockSenders: account.blockSenders.filter((s) => s !== sender),
         };
       }
       return account;
@@ -355,6 +383,7 @@ function normalizeAccount(input: unknown): EmailMonitorAccount {
         positiveNumber(raw.pollLimit, DEFAULT_EMAIL_MONITOR_ACCOUNT.pollLimit),
       ),
     ),
+    digestBulk: raw.digestBulk === true,
   };
 }
 

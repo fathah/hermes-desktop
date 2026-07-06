@@ -115,6 +115,8 @@ describe("handleParsedEmailMessage", () => {
         title: "Bluebay roster change",
         triageLabel: "action",
         emailAccount: "Ops inbox",
+        emailAccountId: "ops",
+        emailFrom: "client@bluebay.example",
         messageId: "<msg-1@example.com>",
         folder: "INBOX",
         uid: 42,
@@ -129,6 +131,53 @@ describe("handleParsedEmailMessage", () => {
       }),
     );
     // A decisive rule verdict never consults the gateway.
+    expect(gatewayChat).not.toHaveBeenCalled();
+  });
+
+  it("captures bulk mail into the digest lane when digestBulk is on, without the LLM", async () => {
+    const writeCapture = vi
+      .fn()
+      .mockResolvedValue({ success: true, id: "cap-digest" });
+    const writeAsset = vi.fn();
+
+    const result = await handleParsedEmailMessage(
+      {
+        account: {
+          ...DEFAULT_EMAIL_MONITOR_ACCOUNT,
+          id: "ops",
+          label: "Ops inbox",
+          emailAddress: "ops@example.com",
+          digestBulk: true,
+        },
+        folder: "INBOX",
+        uid: 13,
+        message: {
+          from: "newsletter@example.com",
+          to: "ops@example.com",
+          subject: "Weekly deals",
+          messageId: "<bulk2@example.com>",
+          date: new Date("2026-06-25T09:00:00Z"),
+          text: "Marketing content",
+          headers: {
+            "list-unsubscribe": "<mailto:unsubscribe@example.com>",
+          },
+          attachments: [],
+        },
+      },
+      { vaultDir: "/tmp/vault", writeCapture, writeAsset },
+    );
+
+    expect(result.status).toBe("captured");
+    expect(writeCapture).toHaveBeenCalledWith(
+      "/tmp/vault",
+      expect.objectContaining({
+        triageLabel: "archive",
+        digest: true,
+        emailAccountId: "ops",
+        emailFrom: "newsletter@example.com",
+      }),
+    );
+    // Digest verdicts are decisive rule outcomes — never LLM-borderline.
     expect(gatewayChat).not.toHaveBeenCalled();
   });
 

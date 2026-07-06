@@ -34,6 +34,7 @@ import {
   setIngestIntervalMin,
 } from "./ingestPrefs";
 import { installVaultSkill } from "./vaultSkill";
+import { splitDigestRows } from "./digest";
 import { blk } from "../lib/ids";
 import { pageIdFromPath } from "../lib/pageId";
 import { pageFromMarkdown } from "../editor/pageMarkdown";
@@ -90,6 +91,42 @@ function schemaForCaptureKind(
   kind: SpsCaptureKind,
 ): SpsPageSchemaKey | undefined {
   return kind === "note" ? undefined : kind;
+}
+
+// Map the 5 triage labels onto the existing SPS chip variants (home.css) —
+// no new color tokens; dark mode comes with the .chip filter for free.
+const TRIAGE_CHIP_CLASS: Record<string, string> = {
+  urgent: "p-high",
+  action: "p-med",
+  knowledge: "s-review",
+  archive: "s-todo",
+  ignore: "s-todo",
+};
+
+const FEEDBACK_ACTIONS: Array<{
+  action: EmailMonitorFeedbackAction;
+  title: string;
+}> = [
+  { action: "always-capture-sender", title: "Always capture sender" },
+  { action: "raise-priority", title: "Raise priority" },
+  { action: "not-relevant", title: "Not relevant" },
+  { action: "ignore-sender", title: "Ignore sender" },
+];
+
+function feedbackConfirmation(
+  action: EmailMonitorFeedbackAction,
+  sender: string,
+): string {
+  switch (action) {
+    case "always-capture-sender":
+      return `Will always capture mail from ${sender}.`;
+    case "ignore-sender":
+      return `Will ignore mail from ${sender}.`;
+    case "not-relevant":
+      return `Marked not relevant — future mail from ${sender} is skipped.`;
+    case "raise-priority":
+      return `Raised priority for ${sender}.`;
+  }
 }
 
 interface ProposedPage {
@@ -226,6 +263,9 @@ export function InboxSurface({
   const [emailRuleSender, setEmailRuleSender] = useState("");
   const [emailBusy, setEmailBusy] = useState("");
   const [emailError, setEmailError] = useState("");
+  // Capture card whose "triage is wrong" menu is open (page id, "" = none).
+  const [feedbackMenuFor, setFeedbackMenuFor] = useState("");
+  const [digestOpen, setDigestOpen] = useState(false);
   // Account edits (add/remove/field/enable) are staged locally; "Save changes"
   // persists the whole config through spsEmailMonitorSaveConfig.
   const [emailDirty, setEmailDirty] = useState(false);
@@ -350,12 +390,15 @@ export function InboxSurface({
   };
 
   const visible = rows.filter((r) => !hidden.has(r.path));
+  // Digest captures render inside one collapsible "Newsletters" card; only the
+  // normal rows go through the virtualizer.
+  const { normal: nonDigest, digest: digestRows } = splitDigestRows(visible);
   const inboxVirtualizer = useVirtualizer({
-    count: visible.length,
+    count: nonDigest.length,
     getScrollElement: getScrollContainer,
     estimateSize: () => 112,
     overscan: 8,
-    getItemKey: (index) => visible[index]?.path ?? index,
+    getItemKey: (index) => nonDigest[index]?.path ?? index,
   });
 
   const reconcile = useCallback(() => {
@@ -821,6 +864,61 @@ export function InboxSurface({
     [emailRuleSender, profile],
   );
 
+  // Card-level "the triage was wrong" feedback: resolves the capture's account
+  // and sender from its frontmatter, so it works without the Sources tab ever
+  // having been opened (config is fetched lazily on first use).
+  const sendCaptureFeedback = useCallback(
+    async (
+      row: VaultRow,
+      action: EmailMonitorFeedbackAction,
+    ): Promise<void> => {
+      const id = pageIdFromPath(row.path);
+      const sender =
+        typeof row.props.emailFrom === "string"
+          ? row.props.emailFrom.trim()
+          : "";
+      setFeedbackMenuFor("");
+      if (!sender) {
+        flash("This capture has no sender recorded — use the Sources tab.");
+        return;
+      }
+      setRowBusy((prev) => ({ ...prev, [id]: "Updating email rules…" }));
+      try {
+        const config =
+          emailConfig ??
+          (await window.hermesAPI.spsEmailMonitorGetConfig(profile));
+        const propAccountId =
+          typeof row.props.emailAccountId === "string"
+            ? row.props.emailAccountId
+            : "";
+        // Pre-Slice-4 captures only carry the account label; fall back to it.
+        const labelMatch = config.accounts.find(
+          (account) => account.label === row.props.emailAccount,
+        );
+        const accountId = propAccountId || labelMatch?.id || "";
+        if (!accountId) {
+          flash("Could not match this capture to an email account.");
+          return;
+        }
+        const updated = await window.hermesAPI.spsEmailMonitorApplyFeedback(
+          { accountId, action, sender },
+          profile,
+        );
+        setEmailConfig(updated);
+        flash(feedbackConfirmation(action, sender));
+      } catch (e) {
+        flash(e instanceof Error ? e.message : String(e));
+      } finally {
+        setRowBusy((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+      }
+    },
+    [emailConfig, profile, flash],
+  );
+
   const runEmailMonitor = useCallback(async (): Promise<void> => {
     setEmailBusy("run");
     setEmailError("");
@@ -916,6 +1014,15 @@ export function InboxSurface({
   const renderInboxCard = (row: VaultRow): React.JSX.Element => {
     const id = pageIdFromPath(row.path);
     const isVisual = isVisualCaptureProps(row.props);
+    const isEmail = row.props.source === "email";
+    const triageLabel =
+      typeof row.props.triageLabel === "string" ? row.props.triageLabel : "";
+    const triageReason =
+      typeof row.props.triageReason === "string" ? row.props.triageReason : "";
+    const confidenceTitle =
+      typeof row.props.triageConfidence === "number"
+        ? `Confidence ${Math.round(row.props.triageConfidence * 100)}%`
+        : undefined;
     return (
       <div className="inbox-card">
         <div className="inbox-card-content">
@@ -926,6 +1033,14 @@ export function InboxSurface({
             <span className="inbox-source-capitalize">
               {String(row.props.source ?? "note")}
             </span>
+            {triageLabel && (
+              <span
+                className={`chip ${TRIAGE_CHIP_CLASS[triageLabel] ?? "s-todo"}`}
+                title={confidenceTitle}
+              >
+                {triageLabel}
+              </span>
+            )}
             <span>·</span>
             <span>{timeLabel(row.props.capturedAt)}</span>
             {typeof row.props.ocrStatus === "string" && (
@@ -935,6 +1050,24 @@ export function InboxSurface({
               </>
             )}
           </div>
+          {triageReason && (
+            <div className="inbox-row-status">{triageReason}</div>
+          )}
+          {feedbackMenuFor === id && (
+            <div className="inbox-teach-actions">
+              {FEEDBACK_ACTIONS.map(({ action, title }) => (
+                <button
+                  key={action}
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={Boolean(rowBusy[id])}
+                  onClick={() => void sendCaptureFeedback(row, action)}
+                >
+                  {title}
+                </button>
+              ))}
+            </div>
+          )}
           {rowBusy[id] && <div className="inbox-row-status">{rowBusy[id]}</div>}
           {teachResults[id] && (
             <div className="inbox-teach-result">
@@ -997,6 +1130,17 @@ export function InboxSurface({
               Teach this
             </button>
           </>
+        )}
+        {isEmail && (
+          <button
+            title="Triage is wrong…"
+            className="btn btn-ghost btn-sm inbox-card-action-btn"
+            onClick={() =>
+              setFeedbackMenuFor((prev) => (prev === id ? "" : id))
+            }
+          >
+            <Icon name="flag" size={15} />
+          </button>
         )}
         <button
           title="Mark processed"
@@ -1098,6 +1242,19 @@ export function InboxSurface({
                         }
                       />
                       Enabled (polls this account on the schedule)
+                    </label>
+                    <label className="inbox-flex-align-center-gap8-mb10-bold">
+                      <input
+                        type="checkbox"
+                        checked={account.digestBulk === true}
+                        onChange={(e) =>
+                          updateEmailAccount(index, {
+                            digestBulk: e.target.checked,
+                          })
+                        }
+                      />
+                      Capture newsletters into a digest (instead of skipping
+                      bulk mail)
                     </label>
                     <label className="settings-field-label">
                       Label
@@ -1615,11 +1772,35 @@ export function InboxSurface({
             </section>
           )}
 
+          {digestRows.length > 0 && (
+            <div className="inbox-card">
+              <div className="inbox-card-content">
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setDigestOpen((v) => !v)}
+                  title={
+                    digestOpen ? "Collapse newsletters" : "Expand newsletters"
+                  }
+                >
+                  {digestOpen ? "▾" : "▸"} Newsletters ({digestRows.length})
+                </button>
+                {digestOpen && (
+                  <ul className="inbox-card-list">
+                    {digestRows.map((row) => (
+                      <li key={row.path}>{renderInboxCard(row)}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
+
           {visible.length === 0 ? (
             <div className="inbox-empty-notice">
               Nothing waiting. Captures you add land here.
             </div>
-          ) : (
+          ) : nonDigest.length === 0 ? null : (
             <ul
               className={`inbox-card-list ${
                 getScrollContainer() ? "inbox-card-list-virtual" : ""
@@ -1632,7 +1813,7 @@ export function InboxSurface({
             >
               {getScrollContainer()
                 ? inboxVirtualizer.getVirtualItems().map((virtualRow) => {
-                    const row = visible[virtualRow.index];
+                    const row = nonDigest[virtualRow.index];
                     return (
                       <li
                         key={virtualRow.key}
@@ -1647,7 +1828,7 @@ export function InboxSurface({
                       </li>
                     );
                   })
-                : visible.map((row) => (
+                : nonDigest.map((row) => (
                     <li key={row.path}>{renderInboxCard(row)}</li>
                   ))}
             </ul>

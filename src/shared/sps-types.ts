@@ -344,6 +344,9 @@ export interface SpsCaptureInput {
   triageReason?: string;
   triageConfidence?: number;
   emailAccount?: string;
+  emailAccountId?: string;
+  emailFrom?: string;
+  digest?: boolean;
   messageId?: string;
   folder?: string;
   uid?: number;

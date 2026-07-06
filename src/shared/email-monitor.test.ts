@@ -131,6 +131,63 @@ describe("email monitor triage", () => {
     });
   });
 
+  it("captures bulk mail for the digest lane when digestBulk is on", () => {
+    const account = {
+      ...DEFAULT_EMAIL_MONITOR_CONFIG.accounts[0],
+      digestBulk: true,
+    };
+
+    const result = classifyEmailCandidate(
+      {
+        from: "newsletter@example.com",
+        subject: "Weekly deals",
+        headers: {
+          "list-unsubscribe": "<mailto:unsubscribe@example.com>",
+          precedence: "bulk",
+        },
+      },
+      account,
+    );
+
+    expect(result.capture).toBe(true);
+    expect(result.label).toBe("archive");
+    expect(result.digest).toBe(true);
+  });
+
+  it("still skips explicitly blocked senders even with digestBulk on", () => {
+    const account = {
+      ...DEFAULT_EMAIL_MONITOR_CONFIG.accounts[0],
+      digestBulk: true,
+      blockSenders: ["noise@example.com"],
+    };
+
+    const result = classifyEmailCandidate(
+      {
+        from: "Noisy <noise@example.com>",
+        subject: "Weekly deals",
+        headers: { "list-unsubscribe": "<mailto:x@example.com>" },
+      },
+      account,
+    );
+
+    expect(result.capture).toBe(false);
+    expect(result.digest).toBeUndefined();
+  });
+
+  it("normalizes digestBulk (default off, preserved when set)", () => {
+    const off = normalizeEmailMonitorConfig({
+      accounts: [{ id: "ops", emailAddress: "ops@example.com" }],
+    });
+    expect(off.accounts[0].digestBulk).toBe(false);
+
+    const on = normalizeEmailMonitorConfig({
+      accounts: [
+        { id: "ops", emailAddress: "ops@example.com", digestBulk: true },
+      ],
+    });
+    expect(on.accounts[0].digestBulk).toBe(true);
+  });
+
   it("turns feedback actions into account-level rules", () => {
     const config = normalizeEmailMonitorConfig({
       accounts: [
@@ -156,6 +213,35 @@ describe("email monitor triage", () => {
       sender: "Client <client@example.com>",
     });
     expect(captured.accounts[0].allowSenders).toContain("client@example.com");
+  });
+
+  it("raise-priority with a sender (no keyword) allowlists the sender", () => {
+    const config = normalizeEmailMonitorConfig({
+      accounts: [
+        {
+          id: "ops",
+          label: "Ops",
+          emailAddress: "ops@example.com",
+          imapHost: "imap.example.com",
+          blockSenders: ["vip@example.com"],
+        },
+      ],
+    });
+
+    const raised = applyEmailMonitorFeedback(config, {
+      accountId: "ops",
+      action: "raise-priority",
+      sender: "VIP <vip@example.com>",
+    });
+    expect(raised.accounts[0].allowSenders).toContain("vip@example.com");
+    expect(raised.accounts[0].blockSenders).not.toContain("vip@example.com");
+    // Keyword form is untouched by the sender fallback.
+    const keyword = applyEmailMonitorFeedback(config, {
+      accountId: "ops",
+      action: "raise-priority",
+      keyword: "handover",
+    });
+    expect(keyword.accounts[0].importanceKeywords).toContain("handover");
   });
 });
 

@@ -347,3 +347,113 @@ describe("InboxSurface visual captures", () => {
     });
   });
 });
+
+describe("InboxSurface email triage surface", () => {
+  function emailRow(
+    path: string,
+    title: string,
+    props: Record<string, unknown> = {},
+  ) {
+    return {
+      path,
+      title,
+      props: {
+        title,
+        source: "email",
+        status: "unprocessed",
+        capturedAt: Date.now(),
+        emailAccount: "Ops inbox",
+        emailAccountId: "ops",
+        emailFrom: "client@bluebay.example",
+        ...props,
+      },
+      mtime: 0,
+    };
+  }
+
+  it("renders the triage chip and reason line on an email capture card", async () => {
+    vaultState.rows = [
+      emailRow("_inbox/cap_1.md", "Bluebay roster change", {
+        triageLabel: "action",
+        triageReason: 'Matched important keyword "roster".',
+        triageConfidence: 0.78,
+      }),
+    ];
+    render(<InboxSurface />);
+
+    const chip = await screen.findByText("action");
+    expect(chip.className).toContain("chip");
+    expect(chip.className).toContain("p-med");
+    expect(chip).toHaveAttribute("title", "Confidence 78%");
+    expect(
+      screen.getByText(/matched important keyword "roster"/i),
+    ).toBeInTheDocument();
+  });
+
+  it("sends card-level feedback with the capture's account id and sender", async () => {
+    vaultState.rows = [
+      emailRow("_inbox/cap_1.md", "Bluebay roster change", {
+        triageLabel: "archive",
+      }),
+    ];
+    render(<InboxSurface />);
+
+    fireEvent.click(await screen.findByTitle(/triage is wrong/i));
+    fireEvent.click(screen.getByRole("button", { name: /^ignore sender$/i }));
+
+    await waitFor(() => {
+      expect(api.spsEmailMonitorApplyFeedback).toHaveBeenCalledWith(
+        {
+          accountId: "ops",
+          action: "ignore-sender",
+          sender: "client@bluebay.example",
+        },
+        "default",
+      );
+    });
+    expect(storeState.flash).toHaveBeenCalledWith(
+      expect.stringContaining("client@bluebay.example"),
+    );
+  });
+
+  it("falls back to the account-label lookup for pre-Slice-4 captures", async () => {
+    vaultState.rows = [
+      emailRow("_inbox/cap_old.md", "Old capture", {
+        emailAccountId: undefined,
+      }),
+    ];
+    render(<InboxSurface />);
+
+    fireEvent.click(await screen.findByTitle(/triage is wrong/i));
+    fireEvent.click(
+      screen.getByRole("button", { name: /^always capture sender$/i }),
+    );
+
+    await waitFor(() => {
+      expect(api.spsEmailMonitorApplyFeedback).toHaveBeenCalledWith(
+        expect.objectContaining({ accountId: "ops" }),
+        "default",
+      );
+    });
+  });
+
+  it("folds digest captures into a collapsible Newsletters card", async () => {
+    vaultState.rows = [
+      emailRow("_inbox/cap_1.md", "Roster change"),
+      emailRow("_inbox/cap_n1.md", "Newsletter one", { digest: true }),
+      emailRow("_inbox/cap_n2.md", "Newsletter two", { digest: true }),
+    ];
+    render(<InboxSurface />);
+
+    const toggle = await screen.findByRole("button", {
+      name: /newsletters \(2\)/i,
+    });
+    // Digest rows stay hidden until expanded; normal rows render as cards.
+    expect(screen.getByText("Roster change")).toBeInTheDocument();
+    expect(screen.queryByText("Newsletter one")).not.toBeInTheDocument();
+
+    fireEvent.click(toggle);
+    expect(screen.getByText("Newsletter one")).toBeInTheDocument();
+    expect(screen.getByText("Newsletter two")).toBeInTheDocument();
+  });
+});
