@@ -176,7 +176,12 @@ function handleCommandDispatch(
 
 /** Split "/name rest of args" into its name and trimmed argument string. */
 export function parseSlash(command: string): { name: string; arg: string } {
-  const m = command.replace(/^\/+/, "").match(/^(\S+)\s*(.*)$/);
+  // `s` (dotAll) flag so a multi-line argument is captured: without it `.`
+  // stops at the first newline and the whole match fails, so a valid command
+  // with a multi-line body (e.g. `/remember` a multi-line note) would parse to
+  // an empty name and be rejected as "empty slash command". Mirrors the sibling
+  // parser in slash/parseSlashCommand.ts, which already uses the flag.
+  const m = command.replace(/^\/+/, "").match(/^(\S+)\s*(.*)$/s);
   return m ? { name: m[1], arg: m[2].trim() } : { name: "", arg: "" };
 }
 

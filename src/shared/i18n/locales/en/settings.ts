@@ -48,6 +48,18 @@ export default {
     system: "System",
     hint: "Choose the interface font",
   },
+  hardwareAcceleration: {
+    label: "Hardware acceleration",
+    auto: "Auto",
+    on: "Always on",
+    off: "Always off",
+    hint: "Auto uses the GPU and falls back to software rendering for 24 hours after a GPU crash. Always on retries the GPU every launch; Always off keeps software rendering (the 3D office will be slow).",
+    envOverride:
+      "Overridden by the HERMES_DISABLE_GPU environment variable — this setting will have no effect until it is removed.",
+    restartToApply: "Takes effect after a restart.",
+    restartNow: "Restart now",
+    saveFailed: "Could not save the preference.",
+  },
   language: {
     label: "Language",
     english: "English",

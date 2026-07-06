@@ -15,3 +15,11 @@ Per-model storage (set in the Models add/edit dialog) survives switching between
 The context gauge resolves its window size as: config override (active model) → provider `/models` `context_length` → static heuristic.
 
 [[src/main/model-discovery.ts#getModelContextWindow]] consults [[src/main/config.ts#getModelContextLengthOverride]] first, returning it only when it targets the model being asked about (so a stale value can't leak onto a different model id), before falling through to the authoritative `/models` lookup and finally the renderer's substring heuristic.
+
+## Occupancy estimate when the provider omits usage
+
+The gauge's numerator resolves as: exact payload counts (`context_used`, else prompt tokens) → a chars/4 transcript estimate → the previous turn's value. Without the estimate the gauge went blank on providers that return no usage at all (#789).
+
+The gauge only renders when `contextTokens` is set (see `contextUsage` in [[src/renderer/src/screens/Chat/Chat.tsx]]), so on `message.complete` the transport fills it in even when `usageFromPayload` returns null. [[src/renderer/src/screens/Chat/hooks/useDashboardChatTransport.ts#estimateContextTokens]] sums the transcript's characters — bubbles, reasoning text, tool call args, and tool results all occupied the prompt loop — and excludes the just-completed assistant reply bubble, because `contextTokens` means prompt-side occupancy and the reply was generated output. The estimate is a floor: system prompt, tool schemas, and attachments aren't visible to the renderer.
+
+A failed turn with no usage record does not fabricate an estimate — nothing new entered the context, and the previous gauge value stays.

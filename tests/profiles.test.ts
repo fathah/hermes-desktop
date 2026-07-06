@@ -141,8 +141,8 @@ describe("listProfiles", () => {
   });
 
   it("rejects invalid profile names before invoking the Hermes CLI", () => {
-    expect(createProfile("../outside", true).success).toBe(false);
-    expect(createProfile("-flag", true).success).toBe(false);
+    expect(createProfile("../outside", null).success).toBe(false);
+    expect(createProfile("-flag", null).success).toBe(false);
     expect(deleteProfile("../outside").success).toBe(false);
     expect(() => setActiveProfile("../outside")).toThrow(
       "Profile names may contain lowercase letters",
@@ -162,7 +162,7 @@ describe("listProfiles", () => {
       throw err;
     });
 
-    const result = createProfile("test", true);
+    const result = createProfile("test", null);
 
     expect(result.success).toBe(false);
     expect(result.error).toContain("reserved");
@@ -181,7 +181,7 @@ describe("listProfiles", () => {
       throw err;
     });
 
-    const result = createProfile("test2", false);
+    const result = createProfile("test2", null);
 
     expect(result.success).toBe(false);
     expect(result.error).toBe(
@@ -192,11 +192,18 @@ describe("listProfiles", () => {
   it("allows slower cloned profile creation before timing out", () => {
     execFileSyncMock.mockReturnValue(Buffer.from(""));
 
-    expect(createProfile("slow-clone", true).success).toBe(true);
+    expect(createProfile("slow-clone", "default").success).toBe(true);
 
     expect(execFileSyncMock).toHaveBeenCalledWith(
       "/usr/bin/python3",
-      ["/dev/null", "profile", "create", "slow-clone", "--clone"],
+      [
+        "/dev/null",
+        "profile",
+        "create",
+        "slow-clone",
+        "--clone-from",
+        "default",
+      ],
       expect.objectContaining({ timeout: 30000 }),
     );
   });

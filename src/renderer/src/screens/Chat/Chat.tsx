@@ -35,10 +35,7 @@ import type { ContextUsage } from "./ContextGauge";
 import { contextWindowForModel } from "./contextWindows";
 import { QueuedMessages } from "./QueuedMessages";
 import { SLASH_COMMANDS, type SlashCommand } from "./slashCommands";
-import {
-  agentCommandsFromCatalog,
-  createSlashCatalog,
-} from "./slash/commandCatalog";
+import { reconcileSlashCatalog } from "./slash/commandCatalog";
 import {
   DESKTOP_SLASH_COMMANDS,
   LOCAL_DESKTOP_SLASH_COMMANDS,
@@ -628,12 +625,6 @@ function Chat({
     const desktopNames = new Set(
       desktopCommands.map((command) => command.name),
     );
-    const desktopAliases = new Set(
-      desktopCommands.flatMap((command) => command.aliases ?? []),
-    );
-    const discovered = agentCommandCatalog
-      ? agentCommandsFromCatalog(agentCommandCatalog)
-      : null;
     const fallbackAgentCommands: AgentSlashCommand[] = SLASH_COMMANDS.filter(
       (command) => !desktopNames.has(command.name.replace(/^\//, "")),
     ).map((command) => ({
@@ -645,42 +636,11 @@ function Chat({
       allowWhileBusy: true,
       supportsAttachments: false,
     }));
-    const desktopTargetAliases: AgentSlashCommand[] = Object.entries(
-      discovered?.aliases ?? {},
-    )
-      .filter(
-        ([alias, target]) =>
-          !desktopNames.has(alias) &&
-          !desktopAliases.has(alias) &&
-          desktopNames.has(target),
-      )
-      .map(([alias]) => ({
-        name: alias,
-        description: `Hermes Agent command /${alias}`,
-        category: "Hermes Agent",
-        source: "agent",
-        target: "agent",
-        allowWhileBusy: true,
-      }));
-    const agentCommands = [
-      ...(discovered?.commands ?? fallbackAgentCommands).filter(
-        (command) => !desktopNames.has(command.name),
-      ),
-      ...desktopTargetAliases,
-    ];
-    const aliases = Object.fromEntries(
-      Object.entries(discovered?.aliases ?? {}).filter(
-        ([alias, target]) =>
-          !desktopNames.has(alias) &&
-          !desktopAliases.has(alias) &&
-          !desktopNames.has(target),
-      ),
-    );
 
-    return createSlashCatalog({
-      agentCommands,
+    return reconcileSlashCatalog({
+      catalog: agentCommandCatalog,
       desktopCommands,
-      aliases,
+      fallbackAgentCommands,
     });
   }, [agentCommandCatalog]);
 
@@ -901,10 +861,15 @@ function Chat({
   );
 
   // Context-gauge data: the latest turn's prompt tokens vs the model's window.
+  // Denominator priority: gateway-reported context_max (authoritative — knows
+  // the actual model config) > provider /models catalogue > static heuristic.
   const contextUsage: ContextUsage | null = usage?.contextTokens
     ? {
         used: usage.contextTokens,
-        window: realContextWindow ?? contextWindowForModel(chatCurrentModel),
+        window:
+          usage.contextWindowTokens ??
+          realContextWindow ??
+          contextWindowForModel(chatCurrentModel),
         cacheReadTokens: usage.cacheReadTokens,
         cacheWriteTokens: usage.cacheWriteTokens,
       }

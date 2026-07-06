@@ -10,6 +10,16 @@ describe("parseSlash", () => {
     expect(parseSlash("/compact")).toEqual({ name: "compact", arg: "" });
     expect(parseSlash("/")).toEqual({ name: "", arg: "" });
   });
+
+  it("captures a multi-line argument instead of rejecting it", () => {
+    // Regression: without the dotAll flag the regex fails to match once the
+    // argument spans lines, so a valid command with a multi-line body parsed
+    // to an empty name and executeSlash reported "empty slash command".
+    expect(parseSlash("/remember line1\nline2")).toEqual({
+      name: "remember",
+      arg: "line1\nline2",
+    });
+  });
 });
 
 describe("executeSlash", () => {

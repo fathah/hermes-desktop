@@ -389,7 +389,12 @@ function checkNonAsciiCredentials(profile?: string): ConfigHealthIssue[] {
   const env = readEnv(profile);
   const offenders: string[] = [];
   for (const [key, value] of Object.entries(env)) {
-    if (!/^[A-Z][A-Z0-9_]*(_API_KEY|_TOKEN|API_SERVER_KEY)$/.test(key)) {
+    // The `API_SERVER_KEY` alternative could never match: the leading
+    // `[A-Z][A-Z0-9_]*` requires at least one character before it, but the key
+    // *is* that literal with nothing preceding it. Anchor it as a whole-key
+    // alternative so the audit also covers the remote-mode bearer token —
+    // exactly the value a user pastes and where a stray smart-quote lands.
+    if (!/^([A-Z][A-Z0-9_]*(_API_KEY|_TOKEN)|API_SERVER_KEY)$/.test(key)) {
       continue;
     }
     if (!value) continue;

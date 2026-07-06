@@ -168,6 +168,16 @@ describe("config-health audit - vault awareness", () => {
       const codes = report.issues.map((i) => i.code);
       expect(codes).not.toContain("MODEL_KEY_MISSING");
     });
+
+    it("flags a non-ASCII character in API_SERVER_KEY, not only *_API_KEY / *_TOKEN", () => {
+      // Regression: the audit regex could never match the literal
+      // API_SERVER_KEY, so a smart-quote pasted into the remote-mode bearer
+      // token went undetected while the upstream rejected auth.
+      mockedReadEnv.mockReturnValue({ API_SERVER_KEY: "secret”" });
+      const report = runConfigHealthCheck("default");
+      const codes = report.issues.map((i) => i.code);
+      expect(codes).toContain("NON_ASCII_CREDENTIAL");
+    });
   });
 
   describe("command provider - vault-only user", () => {

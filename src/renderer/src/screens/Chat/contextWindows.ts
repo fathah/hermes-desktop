@@ -18,6 +18,9 @@ const CONTEXT_WINDOWS: Array<[RegExp, number]> = [
   [/gpt-4o|gpt-4\.1|gpt-4-turbo|^o[1-4]|gpt-5/i, 128000],
   [/gpt-3\.5/i, 16385],
   // Anthropic
+  // Mythos-class named models (claude-fable-5, …) — 1M context. Must come
+  // before the generic /claude/ rule (first match wins).
+  [/claude-fable/i, 1000000],
   [/claude/i, 200000],
   // Google
   [/gemini-1\.5|gemini-2|gemini-3/i, 1048576],

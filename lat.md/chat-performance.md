@@ -18,6 +18,14 @@ The `auto` keyword in `contain-intrinsic-size` makes the browser remember each r
 
 The timestamp (`.chat-bubble-time`) used to overflow ~15px below the bubble and would be clipped. It now sits at `bottom: 1px` inside the row's `padding-bottom: 16px`, so it stays visible while still appearing just under the bubble.
 
+### Fullscreen overlays inside rows must portal to body
+
+Paint containment also makes each row a containing block for `position: fixed` descendants — a fullscreen overlay rendered inline inside a row gets trapped and clipped to the row's box instead of covering the viewport.
+
+The image zoom lightboxes in [[src/renderer/src/components/MediaImage.tsx]] and [[src/renderer/src/components/AttachmentChip.tsx]] hit exactly this: `.chat-image-preview-backdrop` is `position: fixed; inset: 0`, and rendered inline it appeared as a clipped strip inside the message row. Both now render through `createPortal(…, document.body)`. Any future overlay spawned from within a transcript row must do the same.
+
+Both lightboxes share [[src/renderer/src/hooks/useLightboxClose.ts#useLightboxClose]] for Escape handling. It listens in the capture phase and stops propagation because the lightbox is the topmost modal: other overlays (e.g. the FileViewer panel) bind document-level bubble-phase Escape listeners, and without the capture+stop one keypress would close both the lightbox and the panel behind it.
+
 ## Block flow, not a flex column
 
 The scroll container `.chat-messages` is block flow, not a flex column. A flex column measures each child to lay itself out, which defeats `content-visibility` and reports a wrong `scrollHeight`.

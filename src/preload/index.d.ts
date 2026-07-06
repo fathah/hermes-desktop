@@ -22,6 +22,7 @@ import type {
   MessagingPlatformUpdate,
 } from "../shared/messaging-platforms";
 import type { ChatToolEvent } from "../shared/chat-stream";
+import type { GpuPreferenceMode, GpuStatus } from "../shared/gpu";
 
 interface ElectronAPI {
   process: {
@@ -226,6 +227,10 @@ interface HermesAPI {
   validateHermesHome: (dir: string) => Promise<boolean>;
   adoptHermesHome: (dir: string) => Promise<boolean>;
   quitApp: () => Promise<void>;
+  getGpuStatus: () => Promise<GpuStatus>;
+  reenableGpu: () => Promise<boolean>;
+  setGpuPreference: (mode: GpuPreferenceMode) => Promise<boolean>;
+  relaunchApp: () => Promise<void>;
   onInstallProgress: (
     callback: (progress: InstallProgress) => void,
   ) => () => void;

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Crown, Move, RefreshCw, Users, X } from "lucide-react";
+import { Crown, Move, RefreshCw, TriangleAlert, Users, X } from "lucide-react";
+import type { GpuStatus } from "../../../../shared/gpu";
 import { useI18n } from "../../components/useI18n";
 import oneChatIcon from "../../assets/images/one-chat.svg";
 import OneChatModal from "./OneChatModal";
@@ -40,6 +41,12 @@ function Office({ visible }: OfficeProps): React.JSX.Element {
   // updated to match.
   const [devMode, setDevMode] = useState(false);
   const [devLog, setDevLog] = useState<string | null>(null);
+  // Software-rendering warning: the 3D office is the one surface that makes a
+  // SwiftShader fallback painfully visible (1 fps, CPU pegged), so this is
+  // where the user learns hardware acceleration is off and can recover.
+  const [gpuStatus, setGpuStatus] = useState<GpuStatus | null>(null);
+  const [gpuNoticeDismissed, setGpuNoticeDismissed] = useState(false);
+  const [reenabling, setReenabling] = useState(false);
 
   const setCeo = useCallback((id: string | null) => {
     setCeoId(id);
@@ -72,6 +79,29 @@ function Office({ visible }: OfficeProps): React.JSX.Element {
       void loadAgents();
     }
   }, [visible, loadAgents]);
+
+  // GPU state is fixed for the lifetime of the process (changing it requires a
+  // relaunch), so one fetch on first reveal is enough.
+  useEffect(() => {
+    if (!visible || gpuStatus !== null) return;
+    window.hermesAPI
+      .getGpuStatus()
+      .then(setGpuStatus)
+      .catch(() => {
+        // Older main processes without the handler: stay silent.
+      });
+  }, [visible, gpuStatus]);
+
+  const handleReenableGpu = useCallback(async () => {
+    setReenabling(true);
+    try {
+      // On success the app relaunches out from under us; reaching the catch or
+      // a `false` result means the env var blocks it (banner already says so).
+      await window.hermesAPI.reenableGpu();
+    } catch {
+      setReenabling(false);
+    }
+  }, []);
 
   // Background poll: re-read profiles while the tab is visible so a gateway
   // starting/stopping flips an agent's status (idle <-> working). The 3D
@@ -261,6 +291,78 @@ function Office({ visible }: OfficeProps): React.JSX.Element {
           devMode={devMode}
           onDevLog={setDevLog}
         />
+
+        {gpuStatus?.disabled && !gpuNoticeDismissed && (
+          <div
+            style={{
+              position: "absolute",
+              top: 16,
+              left: "50%",
+              transform: "translateX(-50%)",
+              maxWidth: 560,
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "10px 14px",
+              borderRadius: 10,
+              background: "rgba(20,24,33,0.92)",
+              border: "1px solid rgba(245,158,11,0.5)",
+              color: "#fbbf24",
+              fontSize: 13,
+              lineHeight: 1.4,
+              zIndex: 10,
+            }}
+          >
+            <TriangleAlert size={18} style={{ flex: "0 0 auto" }} />
+            <span>
+              {gpuStatus.reason === "env"
+                ? t("office.softwareRenderingEnvNotice")
+                : gpuStatus.reason === "preference"
+                  ? t("office.softwareRenderingPrefNotice")
+                  : t("office.softwareRenderingNotice")}
+            </span>
+            {gpuStatus.canReenable && (
+              <button
+                type="button"
+                onClick={() => void handleReenableGpu()}
+                disabled={reenabling}
+                style={{
+                  flex: "0 0 auto",
+                  padding: "6px 10px",
+                  borderRadius: 8,
+                  border: "1px solid rgba(245,158,11,0.6)",
+                  background: "rgba(245,158,11,0.16)",
+                  color: "#fbbf24",
+                  cursor: reenabling ? "default" : "pointer",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {t("office.reenableGpu")}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setGpuNoticeDismissed(true)}
+              title={t("office.dismissNotice")}
+              style={{
+                flex: "0 0 auto",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: 4,
+                borderRadius: 6,
+                border: "none",
+                background: "transparent",
+                color: "rgba(251,191,36,0.8)",
+                cursor: "pointer",
+              }}
+            >
+              <X size={15} />
+            </button>
+          </div>
+        )}
 
         {import.meta.env.DEV && devMode && (
           <div

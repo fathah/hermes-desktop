@@ -8,9 +8,12 @@ import {
   type SetStateAction,
 } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Mock } from "vitest";
 import type { DashboardRpcEvent } from "../dashboardGatewayClient";
 import { useDashboardChatTransport } from "./useDashboardChatTransport";
-import type { ActiveTurn, ChatMessage } from "../types";
+import type { ActiveTurn, ChatMessage, UsageState } from "../types";
+
+type SetUsageMock = Mock<(value: SetStateAction<UsageState | null>) => void>;
 
 const dashboardMock = vi.hoisted(() => ({
   close: vi.fn(),
@@ -70,11 +73,13 @@ function Harness({
   fallbackOnUnavailable = false,
   initialConnectionMode = "local",
   onDashboardUnavailable,
+  setUsage = vi.fn() as SetUsageMock,
 }: {
   api: HarnessApi;
   fallbackOnUnavailable?: boolean;
   initialConnectionMode?: "local" | "remote" | "ssh";
   onDashboardUnavailable?: (reason: string) => void;
+  setUsage?: SetUsageMock;
 }): null {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -105,7 +110,7 @@ function Harness({
     setIsLoading: vi.fn(),
     setMessages,
     setToolProgress: vi.fn(),
-    setUsage: vi.fn(),
+    setUsage,
     onDashboardUnavailable,
   });
 
@@ -452,5 +457,200 @@ describe("useDashboardChatTransport unavailable fallback (issue #667)", () => {
     });
     // Local dashboard may still be spawning, so each send re-checks.
     expect(startDashboard).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("useDashboardChatTransport messagesRef sync", () => {
+  beforeEach(() => {
+    dashboardMock.close.mockClear();
+    dashboardMock.connect.mockClear();
+    dashboardMock.instances.length = 0;
+    dashboardMock.onEvent = null;
+    dashboardMock.request.mockReset();
+    Object.defineProperty(window, "hermesAPI", {
+      configurable: true,
+      value: {
+        recordSessionContinuation: vi.fn(async () => true),
+        recordSessionLocalError: vi.fn(async () => true),
+        startDashboard: vi.fn(async () => ({
+          connection: { wsUrl: "ws://127.0.0.1:12345" },
+          running: true,
+        })),
+      },
+    });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // `background.complete` appends an agent bubble built from `messagesRef.current`,
+  // so it reads exactly the array the sync effect maintains — a clean probe for
+  // whether the ref adopted an external Chat-state change. It requires a live
+  // gateway client, so every test connects with one `send` first (which does not
+  // append a user bubble — Chat owns that).
+  const connect = async (api: HarnessApi): Promise<void> => {
+    dashboardMock.request.mockImplementation(async (method: string) => {
+      if (method === "session.create") {
+        return { session_id: "live-1", stored_session_id: "stored-1" };
+      }
+      return {};
+    });
+    await act(async () => {
+      await api.send?.("hello");
+    });
+    expect(dashboardMock.onEvent).toBeTypeOf("function");
+  };
+
+  const backgroundComplete = async (): Promise<void> => {
+    await act(async () => {
+      dashboardMock.onEvent?.({
+        payload: { task_id: "t1", text: "bg answer" },
+        type: "background.complete",
+      });
+    });
+  };
+
+  it("adopts an external clear so a new turn does not resurrect deleted messages (#757)", async () => {
+    const api: HarnessApi = {};
+    render(<Harness api={api} />);
+    await connect(api);
+
+    // Chat's `handleClear` empties the list without unmounting <Chat>. A length
+    // guard (`messages.length > ref.length`) would skip this and leave the ref
+    // pointing at the deleted turn, so the next event would append onto it.
+    await act(async () => {
+      api.setMessages?.([]);
+    });
+    await backgroundComplete();
+
+    expect(api.messages).toHaveLength(1);
+    expect(api.messages?.[0]?.id).toBe("bg-t1");
+  });
+
+  it("adopts a same-length in-place replacement (clarify resolve / edit)", async () => {
+    const api: HarnessApi = {};
+    render(<Harness api={api} />);
+    await connect(api);
+
+    // Same length, different content — mirrors `handleClarifyResolved` mapping a
+    // clarify card to resolved before the gateway resumes the turn.
+    await act(async () => {
+      api.setMessages?.([
+        { id: "u-edited", role: "user", content: "edited turn" },
+      ]);
+    });
+    await backgroundComplete();
+
+    expect(api.messages).toHaveLength(2);
+    expect(api.messages?.[0]?.id).toBe("u-edited");
+    expect(api.messages?.[1]?.id).toBe("bg-t1");
+  });
+});
+
+describe("useDashboardChatTransport context gauge estimate (no usage payload)", () => {
+  beforeEach(() => {
+    dashboardMock.close.mockClear();
+    dashboardMock.connect.mockClear();
+    dashboardMock.instances.length = 0;
+    dashboardMock.onEvent = null;
+    dashboardMock.request.mockReset();
+    dashboardMock.request.mockImplementation(async (method: string) => {
+      if (method === "session.create") {
+        return { session_id: "live-1", stored_session_id: "stored-1" };
+      }
+      return {};
+    });
+    Object.defineProperty(window, "hermesAPI", {
+      configurable: true,
+      value: {
+        recordSessionContinuation: vi.fn(async () => true),
+        recordSessionLocalError: vi.fn(async () => true),
+        startDashboard: vi.fn(async () => ({
+          connection: { wsUrl: "ws://127.0.0.1:12345" },
+          running: true,
+        })),
+      },
+    });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // Resolve the final usage object a setUsage((prev) => next) call produces.
+  const lastUsage = (setUsage: SetUsageMock): UsageState | null => {
+    expect(setUsage).toHaveBeenCalled();
+    const updater = setUsage.mock.calls.at(-1)?.[0];
+    if (typeof updater !== "function") {
+      throw new Error("setUsage was not called with an updater function");
+    }
+    return updater(null);
+  };
+
+  it("sets an estimated contextTokens when a successful completion has no usage", async () => {
+    const setUsage = vi.fn() as SetUsageMock;
+    const api: HarnessApi = {};
+    render(<Harness api={api} setUsage={setUsage} />);
+    await act(async () => {
+      await api.send?.("hello");
+    });
+
+    // Provider omitted usage entirely → usageFromPayload returns null. The
+    // gauge only renders when contextTokens is set, so the estimate must fill
+    // it in — this was the case the gauge went blank on (#789).
+    await act(async () => {
+      dashboardMock.onEvent?.({
+        payload: { status: "completed", final_response: "hi there" },
+        session_id: "live-1",
+        type: "message.complete",
+      });
+    });
+
+    const usage = lastUsage(setUsage);
+    expect(usage?.contextTokens).toBeGreaterThan(0);
+  });
+
+  it("prefers exact payload usage over the estimate", async () => {
+    const setUsage = vi.fn() as SetUsageMock;
+    const api: HarnessApi = {};
+    render(<Harness api={api} setUsage={setUsage} />);
+    await act(async () => {
+      await api.send?.("hello");
+    });
+
+    await act(async () => {
+      dashboardMock.onEvent?.({
+        payload: {
+          status: "completed",
+          final_response: "hi there",
+          usage: { input: 5000, output: 200, context_used: 45000 },
+        },
+        session_id: "live-1",
+        type: "message.complete",
+      });
+    });
+
+    const usage = lastUsage(setUsage);
+    expect(usage?.contextTokens).toBe(45000);
+  });
+
+  it("does not fabricate usage for a failed turn without usage", async () => {
+    const setUsage = vi.fn() as SetUsageMock;
+    const api: HarnessApi = {};
+    render(<Harness api={api} setUsage={setUsage} />);
+    await act(async () => {
+      await api.send?.("hello");
+    });
+
+    await act(async () => {
+      dashboardMock.onEvent?.({
+        payload: { status: "error", error: "Invalid API Key" },
+        session_id: "live-1",
+        type: "message.complete",
+      });
+    });
+
+    expect(setUsage).not.toHaveBeenCalled();
   });
 });

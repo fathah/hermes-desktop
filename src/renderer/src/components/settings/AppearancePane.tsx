@@ -1,14 +1,53 @@
+import { useEffect, useState } from "react";
 import { Check } from "lucide-react";
 import { useTheme } from "../ThemeProvider";
 import { useFont } from "../FontProvider";
 import { THEMES, FONT_OPTIONS } from "../../constants";
 import { useI18n } from "../useI18n";
+import type { GpuPreferenceMode, GpuStatus } from "../../../../shared/gpu";
 
-/** Theme, rounded corners, and interface font. */
+const GPU_MODES: GpuPreferenceMode[] = ["auto", "on", "off"];
+
+/** Theme, rounded corners, interface font, and hardware acceleration. */
 export default function AppearancePane(): React.JSX.Element {
   const { t } = useI18n();
   const { theme, setTheme, rounded, setRounded } = useTheme();
   const { font, setFont } = useFont();
+  // Hardware acceleration is fixed pre-ready, so a changed preference only
+  // applies after a relaunch; `savedPref` tracks what's on disk, `bootPref`
+  // what this process actually launched with (to decide the restart prompt).
+  const [gpuStatus, setGpuStatus] = useState<GpuStatus | null>(null);
+  const [savedPref, setSavedPref] = useState<GpuPreferenceMode | null>(null);
+  const [gpuSaveError, setGpuSaveError] = useState(false);
+
+  useEffect(() => {
+    window.hermesAPI
+      .getGpuStatus()
+      .then((status) => {
+        setGpuStatus(status);
+        setSavedPref(status.preference);
+      })
+      .catch(() => {
+        // Older main processes without the handler: hide the field.
+      });
+  }, []);
+
+  const selectGpuMode = (mode: GpuPreferenceMode): void => {
+    setGpuSaveError(false);
+    setSavedPref(mode);
+    window.hermesAPI
+      .setGpuPreference(mode)
+      .then((ok) => {
+        if (!ok) setGpuSaveError(true);
+      })
+      .catch(() => setGpuSaveError(true));
+  };
+
+  const gpuEnvForced = gpuStatus?.reason === "env";
+  const gpuRestartNeeded =
+    gpuStatus !== null &&
+    savedPref !== null &&
+    savedPref !== gpuStatus.bootPreference;
 
   return (
     <div className="settings-modal-pane">
@@ -88,6 +127,58 @@ export default function AppearancePane(): React.JSX.Element {
         </div>
         <div className="settings-field-hint">{t("settings.font.hint")}</div>
       </div>
+      {gpuStatus !== null && savedPref !== null && (
+        <div className="settings-field">
+          <label className="settings-field-label">
+            {t("settings.hardwareAcceleration.label")}
+          </label>
+          <div className="settings-theme-options">
+            {GPU_MODES.map((mode) => (
+              <button
+                key={mode}
+                className={`settings-theme-option ${savedPref === mode ? "active" : ""}`}
+                onClick={() => selectGpuMode(mode)}
+              >
+                {t(`settings.hardwareAcceleration.${mode}`)}
+              </button>
+            ))}
+          </div>
+          <div className="settings-field-hint">
+            {t("settings.hardwareAcceleration.hint")}
+          </div>
+          {gpuEnvForced && (
+            <div className="settings-field-hint">
+              {t("settings.hardwareAcceleration.envOverride")}
+            </div>
+          )}
+          {gpuSaveError && (
+            <div className="settings-field-hint" style={{ color: "#ef4444" }}>
+              {t("settings.hardwareAcceleration.saveFailed")}
+            </div>
+          )}
+          {gpuRestartNeeded && !gpuSaveError && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                marginTop: 8,
+              }}
+            >
+              <span className="settings-field-hint" style={{ margin: 0 }}>
+                {t("settings.hardwareAcceleration.restartToApply")}
+              </span>
+              <button
+                type="button"
+                className="settings-theme-option"
+                onClick={() => void window.hermesAPI.relaunchApp()}
+              >
+                {t("settings.hardwareAcceleration.restartNow")}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

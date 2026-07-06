@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Download, X } from "lucide-react";
+import { useLightboxClose } from "../hooks/useLightboxClose";
 import type { MediaToken } from "../screens/Chat/mediaUtils";
 import { useI18n } from "./useI18n";
 
@@ -42,6 +44,7 @@ export function MediaImage({
   );
   const [failed, setFailed] = useState(false);
   const [zoomed, setZoomed] = useState(false);
+  useLightboxClose(zoomed, () => setZoomed(false));
   const resolvedToken = { ...token, src: resolved ?? token.src };
   const onContextMenu = useMediaContextMenu(resolvedToken);
 
@@ -83,46 +86,53 @@ export function MediaImage({
         onContextMenu={onContextMenu}
         onError={() => setFailed(true)}
       />
-      {zoomed && (
-        <div
-          className="chat-image-preview-backdrop"
-          role="dialog"
-          aria-modal="true"
-          onClick={() => setZoomed(false)}
-        >
-          <img
-            className="chat-image-preview-image"
-            src={resolved}
-            alt={token.name}
-            onClick={(e) => e.stopPropagation()}
-            onContextMenu={onContextMenu}
-          />
+      {/* Portal to <body>: `.chat-message` rows use `content-visibility: auto`
+          (chat perf), whose implied paint containment makes the row a
+          containing block for `position: fixed` descendants — rendered
+          inline, the backdrop gets trapped and clipped inside the message
+          row instead of covering the viewport. */}
+      {zoomed &&
+        createPortal(
           <div
-            className="chat-image-preview-actions"
-            onClick={(e) => e.stopPropagation()}
+            className="chat-image-preview-backdrop"
+            role="dialog"
+            aria-modal="true"
+            onClick={() => setZoomed(false)}
           >
-            <button
-              className="chat-image-preview-btn"
-              onClick={() =>
-                window.hermesAPI.saveMediaFile(
-                  resolved ?? token.src,
-                  token.name,
-                )
-              }
+            <img
+              className="chat-image-preview-image"
+              src={resolved}
+              alt={token.name}
+              onClick={(e) => e.stopPropagation()}
+              onContextMenu={onContextMenu}
+            />
+            <div
+              className="chat-image-preview-actions"
+              onClick={(e) => e.stopPropagation()}
             >
-              <Download size={14} />
-              {t("chat.media.saveImage")}
-            </button>
-            <button
-              className="chat-image-preview-btn"
-              onClick={() => setZoomed(false)}
-              aria-label="Close"
-            >
-              <X size={14} />
-            </button>
-          </div>
-        </div>
-      )}
+              <button
+                className="chat-image-preview-btn"
+                onClick={() =>
+                  window.hermesAPI.saveMediaFile(
+                    resolved ?? token.src,
+                    token.name,
+                  )
+                }
+              >
+                <Download size={14} />
+                {t("chat.media.saveImage")}
+              </button>
+              <button
+                className="chat-image-preview-btn"
+                onClick={() => setZoomed(false)}
+                aria-label="Close"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>,
+          document.body,
+        )}
     </>
   );
 }
