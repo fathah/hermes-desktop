@@ -311,6 +311,88 @@ describe("Hermes upstream watch", () => {
     ]);
   });
 
+  it("keeps large compare reports bounded and path-classified", async () => {
+    const commits = Array.from({ length: 30 }, (_, index) => ({
+      sha: `sha${index}`,
+      commit: {
+        message:
+          index === 29
+            ? "security: rotate credentials everywhere"
+            : `feat: sample change ${index}`,
+        author: { date: "2026-07-03T08:00:00Z" },
+      },
+      html_url: `https://github.com/NousResearch/hermes-agent/commit/sha${index}`,
+    }));
+    const files = [
+      { filename: "gateway/platforms/api_server.py" },
+      { filename: "apps/desktop/main.ts" },
+      ...Array.from({ length: 298 }, (_, index) => ({
+        filename: `misc/file-${index}.py`,
+      })),
+    ];
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.endsWith("/compare/abc123...main")) {
+        return jsonResponse({
+          ahead_by: 1309,
+          commits,
+          files,
+        });
+      }
+      if (url.endsWith("/releases/latest")) {
+        return jsonResponse({ tag_name: "v2026.7.3", name: "Release" });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    });
+    const summarizeAvailableUpdate = vi.fn(async () => [
+      {
+        title: "Engine update available",
+        body: "A broad Hermes Agent update is available for review.",
+      },
+    ]);
+    const { runHermesUpstreamWatch } = await loadWatch();
+
+    const state = await runHermesUpstreamWatch("work", {
+      now: new Date("2026-07-03T12:00:00.000Z"),
+      fetchImpl,
+      installedSha: "abc123",
+      summarizeAvailableUpdate,
+    });
+
+    expect(state.pendingCommitCount).toBe(1309);
+    expect(state.classifiedCounts["contract-risk"]).toBe(1);
+    expect(state.classifiedCounts["desktop-parity"]).toBe(1);
+    expect(state.classifiedCounts.security || 0).toBe(0);
+    expect(state.classifiedCounts.ignore).toBe(298);
+    expect(summarizeAvailableUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pendingCommitCount: 1309,
+        returnedCommitCount: 30,
+        returnedFileCount: 300,
+        contractRiskFileCount: 1,
+        contractRiskFiles: ["gateway/platforms/api_server.py"],
+      }),
+      "work",
+    );
+    const summaryInput = summarizeAvailableUpdate.mock.calls[0][0];
+    expect(summaryInput.commits).toHaveLength(25);
+    expect(summaryInput.commits[0].message).toBe("feat: sample change 5");
+    expect(summaryInput.commits[24].message).toBe(
+      "security: rotate credentials everywhere",
+    );
+
+    const report = readFileSync(state.latestReportPath!, "utf-8");
+    expect(report).toContain(
+      "GitHub compare returned 30 of 1309 commits and 300 files",
+    );
+    expect(report).toContain("- misc/file-0.py");
+    expect(report).not.toContain(
+      "misc/file-0.py: security: rotate credentials everywhere",
+    );
+    expect(report).not.toContain(
+      "apps/desktop/main.ts: security: rotate credentials everywhere",
+    );
+  });
+
   it("keeps report generation fail-soft when engine card generation fails", async () => {
     const fetchImpl = vi.fn(async (url: string) => {
       if (url.endsWith("/compare/abc123...main")) {
@@ -345,7 +427,21 @@ describe("Hermes upstream watch", () => {
     });
 
     expect(state.lastSeenCommit).toBe("def456");
-    expect(state.availableUpdate).toBeUndefined();
+    expect(state.availableUpdate).toEqual(
+      expect.objectContaining({
+        range: "abc123..def456",
+        pendingCommitCount: 1,
+        contractRiskCount: 1,
+      }),
+    );
+    expect(state.availableUpdate?.cards).toEqual([
+      expect.objectContaining({
+        source: "engine",
+        title: "Hermes Agent update available",
+        body: expect.stringContaining("Upstream main is 1 commit ahead"),
+        cta: "Review update",
+      }),
+    ]);
     expect(state.lastError).toBeUndefined();
     expect(existsSync(state.latestReportPath!)).toBe(true);
   });

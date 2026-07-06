@@ -38,7 +38,7 @@ export function ipIsBlocked(addr: string): boolean {
  */
 export function guardedLookup(
   hostname: string,
-  _options: dns.LookupOptions,
+  options: dns.LookupOptions,
   callback: (
     err: NodeJS.ErrnoException | null,
     address: string | dns.LookupAddress[],
@@ -53,6 +53,10 @@ export function guardedLookup(
     const family = net.isIP(addr);
     if (!family || ipIsBlocked(addr)) {
       callback(new Error("blocked host"), "", 0);
+      return;
+    }
+    if (options.all) {
+      callback(null, [{ address: addr, family }]);
       return;
     }
     callback(null, addr, family);

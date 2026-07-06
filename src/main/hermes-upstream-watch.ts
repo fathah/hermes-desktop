@@ -90,6 +90,9 @@ interface EngineUpdateSummaryInput {
   anchorSha: string;
   headSha: string;
   pendingCommitCount: number;
+  returnedCommitCount: number;
+  returnedFileCount: number;
+  contractRiskFileCount: number;
   contractRiskFiles: string[];
   commits: Array<{
     sha: string;
@@ -114,6 +117,8 @@ const OWNER = "NousResearch";
 const REPO = "hermes-agent";
 const API_BASE = `https://api.github.com/repos/${OWNER}/${REPO}`;
 const REPORT_DIR = "upstream-watch";
+const MAX_SUMMARY_COMMITS = 25;
+const MAX_SUMMARY_RISK_FILES = 20;
 
 export const HERMES_UPSTREAM_WATCH_PATHS = [
   "apps/desktop",
@@ -345,24 +350,18 @@ function countCategories(
 }
 
 function normalizeCompareItems(raw: GitHubCompareResponse): NormalizedCommit[] {
-  const commits = raw.commits || [];
-  const latestCommit = commits[commits.length - 1];
-  const message = latestCommit?.commit?.message || "";
-  const sha = latestCommit?.sha || "unknown";
-  const date = latestCommit?.commit?.author?.date || null;
-  const url = latestCommit?.html_url || null;
   return (raw.files || [])
     .map((file) => file.filename || "")
     .filter(Boolean)
     .map((pathName) => ({
-      sha,
-      message,
-      date,
-      url,
+      sha: "",
+      message: "",
+      date: null,
+      url: null,
       path: pathName,
       category: classifyUpstreamWatchItem({
         path: pathName,
-        message,
+        message: "",
         contractAware: true,
       }),
     }));
@@ -404,12 +403,48 @@ function normalizeEngineCards(
     .slice(0, 3);
 }
 
+function fallbackEngineCards(
+  input: EngineUpdateSummaryInput,
+  contractRiskCount: number,
+): EngineUpdateAffordance[] {
+  const commits =
+    input.pendingCommitCount === 1
+      ? "1 commit"
+      : `${input.pendingCommitCount} commits`;
+  const risk =
+    contractRiskCount > 0
+      ? ` It touches ${contractRiskCount} file${contractRiskCount === 1 ? "" : "s"} mapped to desktop engine contracts.`
+      : "";
+  return normalizeEngineCards(
+    [
+      {
+        title: "Hermes Agent update available",
+        body: `Upstream main is ${commits} ahead of the installed Hermes Agent checkout.${risk} Review the generated upstream-watch report before updating.`,
+        cta: "Review update",
+      },
+    ],
+    input.range,
+    input.anchorSha,
+    input.headSha,
+  );
+}
+
 async function summarizeAvailableUpdateWithGateway(
   input: EngineUpdateSummaryInput,
   profile?: string,
 ): Promise<EngineUpdateCardDraft[]> {
+  const omittedCommitCount = Math.max(
+    0,
+    input.returnedCommitCount - input.commits.length,
+  );
+  const omittedRiskFileCount = Math.max(
+    0,
+    input.contractRiskFileCount - input.contractRiskFiles.length,
+  );
   const commitSubjects = input.commits
-    .map((commit) => `- ${shortSha(commit.sha)} ${commit.message.split("\n")[0]}`)
+    .map(
+      (commit) => `- ${shortSha(commit.sha)} ${commit.message.split("\n")[0]}`,
+    )
     .join("\n");
   const riskFiles =
     input.contractRiskFiles.length > 0
@@ -420,20 +455,23 @@ async function summarizeAvailableUpdateWithGateway(
       {
         role: "system",
         content:
-          "Summarize pending Hermes Agent updates for a desktop app what's-new panel. Return strict JSON only.",
+          "Summarize pending Hermes Agent updates for a desktop app what's-new panel. Return strict JSON only. Do not invent exact metrics, benchmarks, or installed desktop features.",
       },
       {
         role: "user",
         content: [
           `Commit range: ${input.range}`,
           `Pending commits: ${input.pendingCommitCount}`,
-          "Commit subjects:",
+          `GitHub compare returned commits: ${input.returnedCommitCount}`,
+          `GitHub compare returned files: ${input.returnedFileCount}`,
+          `Commit subject sample (${input.commits.length} shown${omittedCommitCount ? `, ${omittedCommitCount} omitted` : ""}):`,
           commitSubjects || "- none",
-          "Contract-risk files:",
+          `Contract-risk file sample (${input.contractRiskFiles.length} shown of ${input.contractRiskFileCount}${omittedRiskFileCount ? `, ${omittedRiskFileCount} omitted` : ""}):`,
           riskFiles,
           "",
           'Return {"cards":[{"title":"...","body":"...","cta":"Review update"}]} with 0 to 3 cards.',
           "Cards must describe an available Hermes Agent update, not installed desktop features.",
+          "Use broad capability themes when the compare response is sampled or capped.",
         ].join("\n"),
       },
     ],
@@ -467,26 +505,29 @@ async function buildAvailableUpdate(
   ) {
     return undefined;
   }
+  let cards: EngineUpdateAffordance[] = [];
   try {
-    const cards = normalizeEngineCards(
+    cards = normalizeEngineCards(
       await summarize(input, profile),
       input.range,
       input.anchorSha,
       input.headSha,
     );
-    if (cards.length === 0) return undefined;
-    return {
-      range: input.range,
-      anchorSha: input.anchorSha,
-      headSha: input.headSha,
-      generatedAt,
-      pendingCommitCount: input.pendingCommitCount,
-      contractRiskCount,
-      cards,
-    };
   } catch {
-    return undefined;
+    cards = [];
   }
+  if (cards.length === 0) {
+    cards = fallbackEngineCards(input, contractRiskCount);
+  }
+  return {
+    range: input.range,
+    anchorSha: input.anchorSha,
+    headSha: input.headSha,
+    generatedAt,
+    pendingCommitCount: input.pendingCommitCount,
+    contractRiskCount,
+    cards,
+  };
 }
 
 function writeReport(params: {
@@ -499,6 +540,8 @@ function writeReport(params: {
   anchorSha?: string | null;
   pendingCommitCount?: number;
   contractRiskCount?: number;
+  returnedCommitCount?: number;
+  returnedFileCount?: number;
 }): string {
   const dir = ensureWatchDir(params.profile);
   const reportPath = join(dir, `${isoDateKey(params.now)}.md`);
@@ -518,6 +561,14 @@ function writeReport(params: {
           `- Anchor: ${shortSha(params.anchorSha)}`,
           `- Pending commits: ${params.pendingCommitCount ?? 0}`,
           `- Contract-risk files: ${params.contractRiskCount ?? 0}`,
+          ...(typeof params.returnedCommitCount === "number" &&
+          typeof params.pendingCommitCount === "number" &&
+          (params.pendingCommitCount > params.returnedCommitCount ||
+            (params.returnedFileCount ?? 0) >= 300)
+            ? [
+                `- Note: GitHub compare returned ${params.returnedCommitCount} of ${params.pendingCommitCount} commits and ${params.returnedFileCount ?? 0} files. Path-filtered changes below are a compare response sample, not a complete per-commit changelog.`,
+              ]
+            : []),
         ]
       : []),
     `- Main: ${shortSha(headSha)}${params.head.html_url ? ` (${params.head.html_url})` : ""}`,
@@ -538,9 +589,14 @@ function writeReport(params: {
     if (items.length === 0) continue;
     lines.push(`### ${category}`, "");
     for (const item of items) {
-      lines.push(
-        `- ${shortSha(item.sha)} ${item.path}: ${item.message.split("\n")[0] || "(no message)"}${item.url ? ` (${item.url})` : ""}`,
-      );
+      const subject = item.message.split("\n")[0];
+      if (!subject) {
+        lines.push(`- ${item.path}`);
+      } else {
+        lines.push(
+          `- ${shortSha(item.sha)} ${item.path}: ${subject}${item.url ? ` (${item.url})` : ""}`,
+        );
+      }
     }
     lines.push("");
   }
@@ -561,12 +617,17 @@ export async function runHermesUpstreamWatch(
       options.installedSha !== undefined
         ? options.installedSha
         : await getInstalledEngineSha();
-    const release = await fetchJson<GitHubRelease>(fetchImpl, "/releases/latest");
+    const release = await fetchJson<GitHubRelease>(
+      fetchImpl,
+      "/releases/latest",
+    );
     let head: GitHubCommit;
     let items: NormalizedCommit[];
     let anchorSha: string | null = null;
     let pendingCommitCount = 0;
     let contractRiskCount = 0;
+    let returnedCommitCount: number | undefined;
+    let returnedFileCount: number | undefined;
     let availableUpdate: EngineAvailableUpdate | undefined;
 
     if (installedSha) {
@@ -575,25 +636,36 @@ export async function runHermesUpstreamWatch(
         compareEndpoint(installedSha),
       );
       const commits = compare.commits || [];
+      const files = compare.files || [];
       head = commits[commits.length - 1] || { sha: installedSha };
       items = normalizeCompareItems(compare);
       anchorSha = installedSha;
       pendingCommitCount = compare.ahead_by ?? commits.length;
+      returnedCommitCount = commits.length;
+      returnedFileCount = files.length;
       contractRiskCount = items.filter(
         (item) => item.category === "contract-risk",
       ).length;
       const headSha = head.sha || null;
       if (headSha) {
+        const contractRiskFiles = files
+          .map((file) => file.filename || "")
+          .filter((file) => file && isContractRiskPath(file));
+        const commitSample = commits.slice(-MAX_SUMMARY_COMMITS);
         availableUpdate = await buildAvailableUpdate(
           {
             range: `${anchorSha}..${headSha}`,
             anchorSha,
             headSha,
             pendingCommitCount,
-            contractRiskFiles: (compare.files || [])
-              .map((file) => file.filename || "")
-              .filter((file) => file && isContractRiskPath(file)),
-            commits: commits.map((commit) => ({
+            returnedCommitCount,
+            returnedFileCount,
+            contractRiskFileCount: contractRiskFiles.length,
+            contractRiskFiles: contractRiskFiles.slice(
+              0,
+              MAX_SUMMARY_RISK_FILES,
+            ),
+            commits: commitSample.map((commit) => ({
               sha: commit.sha || "unknown",
               message: commit.commit?.message || "",
               date: commit.commit?.author?.date || null,
@@ -636,6 +708,8 @@ export async function runHermesUpstreamWatch(
       anchorSha,
       pendingCommitCount,
       contractRiskCount,
+      returnedCommitCount,
+      returnedFileCount,
     });
     return writeState(
       {
