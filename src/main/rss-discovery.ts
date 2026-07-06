@@ -1,5 +1,6 @@
 import { DOMParser } from "@xmldom/xmldom";
 import { getSubstackFeedCandidates } from "../shared/substack";
+import { publicFetch } from "./security/network-policy";
 
 export type RssFetcher = (url: string, init?: RequestInit) => Promise<Response>;
 
@@ -168,7 +169,10 @@ export function parseRssArticles(xml: string): ParsedRssArticle[] {
 
 export async function fetchRssArticles(
   feedUrl: string,
-  fetcher: RssFetcher = fetch,
+  // Default to the SSRF-guarded fetcher (DNS-resolve + pin + reject private
+  // ranges, re-validated per redirect hop) so a user-added feed URL cannot make
+  // the app reach internal/localhost/metadata endpoints. See CLAUDE.md.
+  fetcher: RssFetcher = publicFetch,
 ): Promise<ParsedRssArticle[]> {
   const response = await fetcher(feedUrl, {
     headers: {
@@ -182,7 +186,7 @@ export async function fetchRssArticles(
 
 export async function discoverSubstackFeed(
   input: string,
-  fetcher: RssFetcher = fetch,
+  fetcher: RssFetcher = publicFetch,
   timeoutMs = 10000,
 ): Promise<SubstackDiscoveryResult> {
   const candidates = getSubstackFeedCandidates(input);

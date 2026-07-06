@@ -6,9 +6,32 @@ import {
   fetchRssArticles,
   type ParsedRssArticle,
 } from "../rss-discovery";
+import { isExplicitLocalOrPrivateUrl } from "../security/network-policy";
 import { formatLogError, log } from "../log";
 
 type JsonRecord = Record<string, unknown>;
+
+// Reject anything that isn't a public http(s) URL before it is stored and later
+// fetched. The guarded fetcher is the load-bearing SSRF defense, but keeping
+// non-web schemes and explicit localhost/private literals out of the feed store
+// stops them being persisted and retried in the first place.
+function assertStorableFeedUrl(url: unknown): void {
+  if (typeof url !== "string" || !url.trim()) {
+    throw new Error("Feed URL is required.");
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error("Feed URL is not a valid URL.");
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error("Feed URL must use http or https.");
+  }
+  if (isExplicitLocalOrPrivateUrl(url)) {
+    throw new Error("Feed URL must be a public address.");
+  }
+}
 
 export function addRssFeedRecord(feedData: JsonRecord | undefined): string {
   const db = getSharedDb(false);
@@ -16,6 +39,7 @@ export function addRssFeedRecord(feedData: JsonRecord | undefined): string {
 
   const id = randomUUID();
   const url = feedData?.url;
+  assertStorableFeedUrl(url);
   const title = feedData?.title || "Untitled Feed";
   const site_url = feedData?.site_url || "";
   const description = feedData?.description || "";
