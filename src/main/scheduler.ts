@@ -12,6 +12,8 @@ import { homedir } from "os";
 import { desktopCapturer, app, powerMonitor } from "electron";
 import { HERMES_HOME, HERMES_PYTHON, hermesCliArgs } from "./installer";
 import { nagTick } from "./nag-engine";
+import { runEmailMonitorNow, getEmailMonitorConfig } from "./email-monitor";
+import { emailMonitorHasActiveAccount } from "../shared/email-monitor";
 import {
   decideLockAcquisition,
   parseLockRecord,
@@ -226,6 +228,12 @@ let wasIdle = false;
 const NAG_TICK_THROTTLE_MS = 60_000;
 let lastNagTickMs = 0;
 
+// The email monitor polls IMAP on the scheduler tick but is throttled well
+// above the 10s tick so we don't hammer the mail server. It only fires when at
+// least one account is enabled with credentials.
+const EMAIL_TICK_THROTTLE_MS = 5 * 60_000;
+let lastEmailTickMs = 0;
+
 export async function tickScheduler(profile?: string): Promise<void> {
   const activeProfile = profile ?? getActiveProfileNameSync();
 
@@ -365,6 +373,34 @@ export async function tickScheduler(profile?: string): Promise<void> {
   } catch (err) {
     log.error("scheduler", {
       msg: "error during nag tick",
+      profile: activeProfile,
+      error: formatLogError(err),
+    });
+  }
+
+  // Email monitor: poll enabled IMAP accounts and capture triaged mail into the
+  // vault (throttled to ~5m, and skipped entirely when nothing is configured).
+  try {
+    const emailNow = Date.now();
+    const emailDue = emailNow - lastEmailTickMs >= EMAIL_TICK_THROTTLE_MS;
+    // Reserve the config read (JSON parse) for when the throttle actually opens,
+    // not every 10s tick.
+    const hasActiveAccount =
+      emailDue &&
+      emailMonitorHasActiveAccount(getEmailMonitorConfig(activeProfile));
+    if (hasActiveAccount) {
+      lastEmailTickMs = emailNow;
+      void runEmailMonitorNow(activeProfile).catch((err) => {
+        log.error("scheduler", {
+          msg: "error during email monitor run",
+          profile: activeProfile,
+          error: formatLogError(err),
+        });
+      });
+    }
+  } catch (err) {
+    log.error("scheduler", {
+      msg: "error checking email monitor",
       profile: activeProfile,
       error: formatLogError(err),
     });

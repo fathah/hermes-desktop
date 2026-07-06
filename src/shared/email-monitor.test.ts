@@ -3,6 +3,8 @@ import {
   DEFAULT_EMAIL_MONITOR_CONFIG,
   applyEmailMonitorFeedback,
   classifyEmailCandidate,
+  defaultPasswordEnvKey,
+  emailMonitorHasActiveAccount,
   normalizeEmailMonitorConfig,
   shouldMonitorFolder,
 } from "./email-monitor";
@@ -154,5 +156,71 @@ describe("email monitor triage", () => {
       sender: "Client <client@example.com>",
     });
     expect(captured.accounts[0].allowSenders).toContain("client@example.com");
+  });
+});
+
+describe("email monitor per-account password keys", () => {
+  it("keeps the shared EMAIL_PASSWORD for the first account only", () => {
+    expect(defaultPasswordEnvKey("amar@gmail.com", 0)).toBe("EMAIL_PASSWORD");
+    expect(defaultPasswordEnvKey("ops@bluebop.cafe", 1)).toBe(
+      "EMAIL_PASSWORD_OPS_BLUEBOP_CAFE",
+    );
+  });
+
+  it("gives each keyless account a distinct env key on normalize", () => {
+    const config = normalizeEmailMonitorConfig({
+      accounts: [
+        { id: "amar@gmail.com", imapHost: "imap.gmail.com" },
+        { id: "ops@bluebop.cafe", imapHost: "imap.example.com" },
+      ],
+    });
+    expect(config.accounts[0].passwordEnvKey).toBe("EMAIL_PASSWORD");
+    expect(config.accounts[1].passwordEnvKey).toBe(
+      "EMAIL_PASSWORD_OPS_BLUEBOP_CAFE",
+    );
+  });
+
+  it("preserves an explicitly-set passwordEnvKey", () => {
+    const config = normalizeEmailMonitorConfig({
+      accounts: [
+        {
+          id: "amar@gmail.com",
+          imapHost: "imap.gmail.com",
+          passwordEnvKey: "MY_CUSTOM_KEY",
+        },
+      ],
+    });
+    expect(config.accounts[0].passwordEnvKey).toBe("MY_CUSTOM_KEY");
+  });
+});
+
+describe("emailMonitorHasActiveAccount", () => {
+  const base = {
+    id: "a",
+    imapHost: "imap.example.com",
+    emailAddress: "a@example.com",
+  };
+
+  it("is true when an enabled account has host and address", () => {
+    const config = normalizeEmailMonitorConfig({
+      accounts: [{ ...base, enabled: true }],
+    });
+    expect(emailMonitorHasActiveAccount(config)).toBe(true);
+  });
+
+  it("is false when the only account is disabled", () => {
+    const config = normalizeEmailMonitorConfig({
+      accounts: [{ ...base, enabled: false }],
+    });
+    expect(emailMonitorHasActiveAccount(config)).toBe(false);
+  });
+
+  it("is false when an enabled account is missing its host", () => {
+    const config = normalizeEmailMonitorConfig({
+      accounts: [
+        { id: "a", emailAddress: "a@example.com", imapHost: "", enabled: true },
+      ],
+    });
+    expect(emailMonitorHasActiveAccount(config)).toBe(false);
   });
 });

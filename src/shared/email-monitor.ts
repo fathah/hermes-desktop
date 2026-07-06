@@ -148,16 +148,54 @@ export function shouldMonitorFolder(folder: string): boolean {
   return !!normalized && !JUNK_FOLDER_RE.test(normalized);
 }
 
+// Derive a distinct env var name that holds an account's IMAP password. The
+// first account keeps the historical shared "EMAIL_PASSWORD" for backward
+// compatibility (single-account env setups); every additional account gets a
+// per-account key so account #2+ can't silently read account #1's password.
+export function defaultPasswordEnvKey(
+  accountId: string,
+  index: number,
+): string {
+  if (index <= 0) return "EMAIL_PASSWORD";
+  const suffix = accountId
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return suffix ? `EMAIL_PASSWORD_${suffix}` : `EMAIL_PASSWORD_${index}`;
+}
+
 export function normalizeEmailMonitorConfig(
   input: unknown,
 ): EmailMonitorConfig {
   const raw = isRecord(input) ? input : {};
   const rawAccounts = Array.isArray(raw.accounts) ? raw.accounts : [];
+  const accounts = rawAccounts.length
+    ? rawAccounts.map(normalizeAccount)
+    : DEFAULT_EMAIL_MONITOR_CONFIG.accounts;
   return {
-    accounts: rawAccounts.length
-      ? rawAccounts.map(normalizeAccount)
-      : DEFAULT_EMAIL_MONITOR_CONFIG.accounts,
+    accounts: accounts.map((account, index) =>
+      account.passwordEnvKey
+        ? account
+        : {
+            ...account,
+            passwordEnvKey: defaultPasswordEnvKey(account.id, index),
+          },
+    ),
   };
+}
+
+// True when at least one account is switched on AND has the minimum IMAP
+// credentials to connect. The scheduler uses this to skip needless polling
+// (and connection churn) when nothing is configured to run.
+export function emailMonitorHasActiveAccount(
+  config: EmailMonitorConfig,
+): boolean {
+  return config.accounts.some(
+    (account) =>
+      account.enabled &&
+      Boolean(account.imapHost) &&
+      Boolean(account.emailAddress),
+  );
 }
 
 export function classifyEmailCandidate(

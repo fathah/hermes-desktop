@@ -630,7 +630,10 @@ function configFromEnv(profile?: string): EmailMonitorConfig {
         imapPort: server.port ?? DEFAULT_EMAIL_MONITOR_ACCOUNT.imapPort,
         secure: server.secure,
         passwordEnvKey: "EMAIL_PASSWORD",
-        enabled: false,
+        // Opt-in: the env-derived account only polls when the operator sets
+        // EMAIL_MONITOR_ENABLED=true. The GUI account manager (Slice 2) flips
+        // this per account; here it stays an explicit, documented switch.
+        enabled: env.EMAIL_MONITOR_ENABLED === "true",
       },
     ],
   });
