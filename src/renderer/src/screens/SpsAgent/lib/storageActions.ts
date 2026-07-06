@@ -45,6 +45,20 @@ export interface StorageToggleResult {
 export async function toggleStorageMode(
   ws: Workspace,
 ): Promise<StorageToggleResult> {
+  // MED-11: whole-workspace safety snapshot before changing the authoritative
+  // store. An explicit failure (null) refuses the toggle — a still-working
+  // state beats an unrecoverable one. An absent API (older preload, tests)
+  // falls through to the existing parity-gate + blob-backup protections.
+  const snapshot = await window.hermesAPI
+    ?.spsCreateBackup?.()
+    .catch(() => null);
+  if (snapshot === null) {
+    return {
+      ok: false,
+      mode: getStorageMode(),
+      message: "Refused: could not write a safety backup first.",
+    };
+  }
   if (getStorageMode() === "blob") {
     const res = await migrateToVault(ws);
     if (!res.ok) {

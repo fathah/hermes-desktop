@@ -9,6 +9,10 @@ import {
   getNoteIndexForRoot,
   closeAllNoteIndexes,
 } from "../src/main/note-index";
+import {
+  snapshotWorkspaceTo,
+  restoreSnapshotFrom,
+} from "../src/main/sps-backups";
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error("FAIL: " + msg);
@@ -385,6 +389,50 @@ async function main(): Promise<void> {
 
   await tli.close();
   await rm(tlroot, { recursive: true, force: true });
+
+  // ── MED-11: snapshot → mutate → restore → rebuild leaves pages searchable ──
+  console.log("\nBackups — snapshot/restore round-trip re-indexes:");
+  {
+    const wsRoot = await mkdtemp(join(tmpdir(), "sps-backup-verify-"));
+    const vaultDir = join(wsRoot, "vault");
+    await mkdir(vaultDir, { recursive: true });
+    const wsPaths = {
+      workspaceJson: join(wsRoot, "workspace.json"),
+      manifestJson: join(vaultDir, "_manifest.json"),
+      vaultDir,
+      excludeDirs: [join(wsRoot, "backups")],
+    };
+    await writeFile(wsPaths.workspaceJson, JSON.stringify({ __rev: 1 }));
+    await writeFile(wsPaths.manifestJson, JSON.stringify({ tree: [] }));
+    await writeFile(
+      join(vaultDir, "keepme.md"),
+      "# Keep Me\nA rare hovercraft full of eels.\n",
+    );
+
+    const snapDir = join(wsRoot, "backups", "1700000000000");
+    await snapshotWorkspaceTo(wsPaths, snapDir);
+
+    // Simulate the data-loss event: page deleted, junk page added.
+    await rm(join(vaultDir, "keepme.md"));
+    await writeFile(join(vaultDir, "intruder.md"), "# Intruder\n");
+
+    await restoreSnapshotFrom(snapDir, wsPaths);
+    const backupIndex = await NoteIndex.open(vaultDir);
+    await backupIndex.rebuild();
+
+    const restoredHits = backupIndex.search("hovercraft").map((h) => h.path);
+    assert(
+      restoredHits.includes("keepme.md"),
+      "restored page is searchable after rebuild",
+    );
+    const restoredPaths = backupIndex.query({}).map((n) => n.path);
+    assert(
+      !restoredPaths.includes("intruder.md"),
+      "post-snapshot page is gone after restore + rebuild",
+    );
+    await backupIndex.close();
+    await rm(wsRoot, { recursive: true, force: true });
+  }
 
   closeAllNoteIndexes();
   console.log("\nALL NOTE-INDEX CHECKS PASSED");

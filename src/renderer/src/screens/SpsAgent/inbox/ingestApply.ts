@@ -34,6 +34,8 @@ export async function commitChangeset(
   opts: CommitOptions = {},
 ): Promise<{ pages: number; memory: number }> {
   const api = window.hermesAPI;
+  // MED-11: best-effort snapshot before a bulk commit rewrites many pages.
+  await api?.spsCreateBackup?.().catch(() => null);
   let pages = 0;
   for (const page of cs.pages) {
     if (opts.skipPages?.has(page.pageId)) continue;

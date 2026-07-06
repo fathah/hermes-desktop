@@ -115,6 +115,12 @@ export async function spsSave(
   return { ...outcome, oversize };
 }
 
+/** Drop a profile's in-memory write queue (its cached revision) — used after a
+ *  snapshot restore so a late autosave can't clobber the restored blob. */
+export function resetWorkspaceWriteQueue(profile?: string): void {
+  writeQueues.delete(profile || getActiveProfileNameSync());
+}
+
 export async function spsBackupWorkspace(
   profile?: string,
 ): Promise<string | null> {

@@ -58,6 +58,12 @@ import {
   readAssetFrom,
 } from "../sps-vault";
 import { spsBackupWorkspace } from "../sps-agent";
+import { resetWorkspaceWriteQueue } from "../sps-agent/persistence";
+import {
+  createWorkspaceSnapshot,
+  listWorkspaceBackups,
+  restoreWorkspaceSnapshot,
+} from "../sps-backups";
 import { writeAsset, assetExists, gcAssets } from "../sps-assets";
 import { requireLocalWorkspace } from "./connection-guards";
 import { isAllowedExternalUrl } from "../security";
@@ -613,6 +619,34 @@ export function registerNotesIpc(
   );
   safeHandle("sps-backup-workspace", (_event, profile?: unknown) =>
     spsBackupWorkspace(normalizeIpcProfile(profile)),
+  );
+
+  // MED-11 — whole-workspace snapshot & restore (workspace.json + vault
+  // markdown + _manifest.json; the derived .note-index.db is never included).
+  safeHandle("sps-list-backups", (_event, profile?: unknown) =>
+    listWorkspaceBackups(normalizeIpcProfile(profile)),
+  );
+  safeHandle("sps-create-backup", (_event, profile?: unknown) =>
+    createWorkspaceSnapshot(normalizeIpcProfile(profile)),
+  );
+  safeHandle(
+    "sps-restore-backup",
+    async (_event, id: unknown, profile?: unknown) => {
+      requireLocalWorkspace();
+      const p = normalizeIpcProfile(profile);
+      const result = await restoreWorkspaceSnapshot(String(id ?? ""), p);
+      if (result.ok) {
+        // The in-memory write queue tracks the pre-restore revision — drop it
+        // so a late autosave can't clobber the restored blob.
+        resetWorkspaceWriteQueue(p);
+        const status = await (await getSpsNoteIndex(p)).rebuild();
+        mainWindowGetter()?.webContents.send("sps-index-rebuilt", {
+          profile: p,
+          status,
+        });
+      }
+      return result;
+    },
   );
 
   // How many vault-mirror writes have silently failed (markdown drifting from the

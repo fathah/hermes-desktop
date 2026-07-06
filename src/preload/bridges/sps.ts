@@ -423,9 +423,7 @@ export const spsBridge = {
       targetPath,
       profile,
     ),
-  spsPickLocalExpertPackExportPath: (
-    packId: string,
-  ): Promise<string | null> =>
+  spsPickLocalExpertPackExportPath: (packId: string): Promise<string | null> =>
     ipcRenderer.invoke("sps-pick-local-expert-pack-export-path", packId),
   spsEnableLocalExpertChecks: (
     packId: string,
@@ -610,6 +608,24 @@ export const spsBridge = {
     ipcRenderer.invoke("sps-vault-write-snapshot", snapshot, profile),
   spsBackupWorkspace: (profile?: string): Promise<string | null> =>
     ipcRenderer.invoke("sps-backup-workspace", profile),
+  spsListBackups: (
+    profile?: string,
+  ): Promise<
+    Array<{ id: string; createdAt: number; bytes: number; fileCount: number }>
+  > => ipcRenderer.invoke("sps-list-backups", profile),
+  spsCreateBackup: (
+    profile?: string,
+  ): Promise<{
+    id: string;
+    createdAt: number;
+    bytes: number;
+    fileCount: number;
+  } | null> => ipcRenderer.invoke("sps-create-backup", profile),
+  spsRestoreBackup: (
+    id: string,
+    profile?: string,
+  ): Promise<{ ok: boolean; error?: string; safetySnapshotId?: string }> =>
+    ipcRenderer.invoke("sps-restore-backup", id, profile),
   spsWriteExcalidraw: (
     pageId: string,
     assetId: string,

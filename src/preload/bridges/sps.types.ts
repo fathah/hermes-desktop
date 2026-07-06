@@ -336,9 +336,7 @@ export interface SpsBridgeApi {
     profile?: string,
   ) => Promise<Api.LocalExpertPackExportResult>;
 
-  spsPickLocalExpertPackExportPath: (
-    packId: string,
-  ) => Promise<string | null>;
+  spsPickLocalExpertPackExportPath: (packId: string) => Promise<string | null>;
 
   spsEnableLocalExpertChecks: (
     packId: string,
@@ -515,6 +513,24 @@ export interface SpsBridgeApi {
   ) => Promise<boolean>;
 
   spsBackupWorkspace: (profile?: string) => Promise<string | null>;
+
+  spsListBackups: (
+    profile?: string,
+  ) => Promise<
+    Array<{ id: string; createdAt: number; bytes: number; fileCount: number }>
+  >;
+
+  spsCreateBackup: (profile?: string) => Promise<{
+    id: string;
+    createdAt: number;
+    bytes: number;
+    fileCount: number;
+  } | null>;
+
+  spsRestoreBackup: (
+    id: string,
+    profile?: string,
+  ) => Promise<{ ok: boolean; error?: string; safetySnapshotId?: string }>;
 
   spsWriteExcalidraw: (
     pageId: string,

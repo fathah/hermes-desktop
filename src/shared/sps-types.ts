@@ -314,6 +314,22 @@ export type SpsCaptureKind =
   | "task"
   | "journal";
 
+/** One whole-workspace snapshot under <profileHome>/sps-agent/backups/. */
+export interface WorkspaceBackupInfo {
+  /** Snapshot id — the epoch-ms timestamp of creation, as a string. */
+  id: string;
+  createdAt: number;
+  bytes: number;
+  fileCount: number;
+}
+
+export interface WorkspaceRestoreResult {
+  ok: boolean;
+  error?: string;
+  /** The safety snapshot taken of the pre-restore state. */
+  safetySnapshotId?: string;
+}
+
 export interface SpsEmailCaptureAttachment {
   assetPath: string;
   originalName: string;

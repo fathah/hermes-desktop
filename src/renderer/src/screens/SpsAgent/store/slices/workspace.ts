@@ -676,6 +676,10 @@ export const createWorkspaceSlice: StateCreator<
     })),
 
   resetWorkspace: () => {
+    // MED-11: best-effort whole-workspace snapshot before the reset. The copy
+    // reads the on-disk artifacts, which still hold the pre-reset state until
+    // the debounced autosave fires, so firing it first-line is safe in practice.
+    void window.hermesAPI?.spsCreateBackup?.().catch(() => null);
     const oldIds = Object.keys(get().docs);
     clearWorkspace();
     const fresh = buildInitialWorkspace();
