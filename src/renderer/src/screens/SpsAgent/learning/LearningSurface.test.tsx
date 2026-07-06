@@ -54,9 +54,11 @@ const api = {
   spsGetLocalExpert: vi.fn(),
   spsInstallLocalExpert: vi.fn(),
   spsUninstallLocalExpert: vi.fn(),
+  spsPickLocalExpertPack: vi.fn(),
   spsPreviewLocalExpertPack: vi.fn(),
   spsImportLocalExpertPack: vi.fn(),
   spsExportLocalExpertPack: vi.fn(),
+  spsPickLocalExpertPackExportPath: vi.fn(),
   spsEnableLocalExpertChecks: vi.fn(),
   spsRunLocalExpertChecks: vi.fn(),
   spsCreateVaultProposal: vi.fn(),
@@ -309,6 +311,7 @@ beforeEach(() => {
     recordsSkipped: 12,
     recordsLeftInVault: true,
   });
+  api.spsPickLocalExpertPack.mockResolvedValue("/granted/excel.json");
   api.spsPreviewLocalExpertPack.mockResolvedValue({
     ok: true,
     canImport: true,
@@ -325,9 +328,12 @@ beforeEach(() => {
   api.spsExportLocalExpertPack.mockResolvedValue({
     ok: true,
     packId: "macos",
-    targetPath: "/tmp/macos.json",
+    targetPath: "/granted/exports/macos.json",
     packHash: "abc123",
   });
+  api.spsPickLocalExpertPackExportPath.mockResolvedValue(
+    "/granted/exports/macos.json",
+  );
   api.spsEnableLocalExpertChecks.mockResolvedValue({
     ok: true,
     packId: "macos",
@@ -755,25 +761,35 @@ describe("LearningSurface", () => {
     expect(screen.getByText(/Exact error text/)).toBeInTheDocument();
     expect(screen.getByText(/privacy-screen-recording/)).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Import pack path"), {
-      target: { value: "/tmp/excel.json" },
-    });
+    fireEvent.click(screen.getByText("Choose pack"));
+    await waitFor(() =>
+      expect(api.spsPickLocalExpertPack).toHaveBeenCalled(),
+    );
+    expect(screen.getByDisplayValue("/granted/excel.json")).toBeInTheDocument();
+
     fireEvent.click(screen.getByText("Preview import"));
     await waitFor(() =>
       expect(api.spsPreviewLocalExpertPack).toHaveBeenCalledWith(
-        "/tmp/excel.json",
+        "/granted/excel.json",
         "default",
       ),
     );
 
-    fireEvent.change(screen.getByLabelText("Export pack path"), {
-      target: { value: "/tmp/macos.json" },
-    });
+    fireEvent.click(screen.getByText("Choose export path"));
+    await waitFor(() =>
+      expect(api.spsPickLocalExpertPackExportPath).toHaveBeenCalledWith(
+        "macos",
+      ),
+    );
+    expect(
+      screen.getByDisplayValue("/granted/exports/macos.json"),
+    ).toBeInTheDocument();
+
     fireEvent.click(screen.getByText("Export pack"));
     await waitFor(() =>
       expect(api.spsExportLocalExpertPack).toHaveBeenCalledWith(
         "macos",
-        "/tmp/macos.json",
+        "/granted/exports/macos.json",
         "default",
       ),
     );

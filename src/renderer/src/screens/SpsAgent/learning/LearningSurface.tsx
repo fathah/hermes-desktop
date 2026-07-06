@@ -407,6 +407,13 @@ export function LearningSurface({
     void loadLocalExpertDetail(packId);
   }
 
+  async function pickExpertImportPack(): Promise<void> {
+    const selected = await run("pick-expert-import", () =>
+      window.hermesAPI.spsPickLocalExpertPack(),
+    );
+    if (selected) setExpertImportPath(selected);
+  }
+
   async function previewExpertImport(): Promise<void> {
     const source = expertImportPath.trim();
     if (!source) return;
@@ -435,6 +442,13 @@ export function LearningSurface({
     } else if (res) {
       setNotice(res.errors.join("; ") || "Could not import expert pack.");
     }
+  }
+
+  async function pickExpertExportPath(packId: string): Promise<void> {
+    const selected = await run("pick-expert-export", () =>
+      window.hermesAPI.spsPickLocalExpertPackExportPath(packId),
+    );
+    if (selected) setExpertExportPath(selected);
   }
 
   async function exportExpertPack(packId: string): Promise<void> {
@@ -675,11 +689,11 @@ export function LearningSurface({
           installExpert={installExpert}
           uninstallExpert={uninstallExpert}
           importPath={expertImportPath}
-          setImportPath={setExpertImportPath}
+          pickImportPack={pickExpertImportPack}
           previewImport={previewExpertImport}
           importPack={importExpertPack}
           exportPath={expertExportPath}
-          setExportPath={setExpertExportPath}
+          pickExportPath={pickExpertExportPath}
           exportPack={exportExpertPack}
           enableChecks={enableExpertChecks}
           runChecks={runExpertChecks}

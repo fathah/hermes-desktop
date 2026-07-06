@@ -79,6 +79,8 @@ describe("SPS IPC surface", () => {
       "sps-load",
       "sps-notebooklm-ensure-mcp",
       "sps-notebooklm-status",
+      "sps-pick-local-expert-pack",
+      "sps-pick-local-expert-pack-export-path",
       "sps-preview-local-expert-pack",
       "sps-register-deep-links",
       "sps-research-ensure-agent-tool",

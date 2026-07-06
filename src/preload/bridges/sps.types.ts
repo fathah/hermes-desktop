@@ -318,6 +318,8 @@ export interface SpsBridgeApi {
     profile?: string,
   ) => Promise<Api.InstallLocalExpertResult>;
 
+  spsPickLocalExpertPack: () => Promise<string | null>;
+
   spsPreviewLocalExpertPack: (
     filePath: string,
     profile?: string,
@@ -333,6 +335,10 @@ export interface SpsBridgeApi {
     targetPath: string,
     profile?: string,
   ) => Promise<Api.LocalExpertPackExportResult>;
+
+  spsPickLocalExpertPackExportPath: (
+    packId: string,
+  ) => Promise<string | null>;
 
   spsEnableLocalExpertChecks: (
     packId: string,

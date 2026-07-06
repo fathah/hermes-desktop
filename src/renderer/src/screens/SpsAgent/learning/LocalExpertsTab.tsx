@@ -28,11 +28,11 @@ export function LocalExpertsTab(props: {
   installExpert: (packId: string) => void;
   uninstallExpert: (packId: string) => void;
   importPath: string;
-  setImportPath: (value: string) => void;
+  pickImportPack: () => void;
   previewImport: () => void;
   importPack: () => void;
   exportPath: string;
-  setExportPath: (value: string) => void;
+  pickExportPath: (packId: string) => void;
   exportPack: (packId: string) => void;
   enableChecks: (packId: string) => void;
   runChecks: (packId: string) => void;
@@ -168,11 +168,18 @@ export function LocalExpertsTab(props: {
               <span>Import pack path</span>
               <input
                 value={props.importPath}
-                onChange={(event) => props.setImportPath(event.target.value)}
-                placeholder="/path/to/expert-pack.json"
+                readOnly
+                placeholder="Choose an expert-pack JSON file"
               />
             </label>
             <div className="learning-surface-inline-actions">
+              <button
+                className="btn btn-secondary btn-sm"
+                disabled={props.busy === "pick-expert-import"}
+                onClick={props.pickImportPack}
+              >
+                Choose pack
+              </button>
               <button
                 className="btn btn-secondary btn-sm"
                 disabled={
@@ -197,19 +204,28 @@ export function LocalExpertsTab(props: {
               <span>Export pack path</span>
               <input
                 value={props.exportPath}
-                onChange={(event) => props.setExportPath(event.target.value)}
-                placeholder="/path/to/exported-pack.json"
+                readOnly
+                placeholder="Choose where to export the pack JSON"
               />
             </label>
-            <button
-              className="btn btn-secondary btn-sm"
-              disabled={
-                !props.exportPath.trim() || props.busy === "export-expert"
-              }
-              onClick={() => props.exportPack(props.detail!.packId)}
-            >
-              Export pack
-            </button>
+            <div className="learning-surface-inline-actions">
+              <button
+                className="btn btn-secondary btn-sm"
+                disabled={props.busy === "pick-expert-export"}
+                onClick={() => props.pickExportPath(props.detail!.packId)}
+              >
+                Choose export path
+              </button>
+              <button
+                className="btn btn-secondary btn-sm"
+                disabled={
+                  !props.exportPath.trim() || props.busy === "export-expert"
+                }
+                onClick={() => props.exportPack(props.detail!.packId)}
+              >
+                Export pack
+              </button>
+            </div>
           </div>
 
           {props.checkRun && (

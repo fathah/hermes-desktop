@@ -400,6 +400,8 @@ export const spsBridge = {
     profile?: string,
   ): Promise<InstallLocalExpertResult> =>
     ipcRenderer.invoke("sps-uninstall-local-expert", packId, profile),
+  spsPickLocalExpertPack: (): Promise<string | null> =>
+    ipcRenderer.invoke("sps-pick-local-expert-pack"),
   spsPreviewLocalExpertPack: (
     filePath: string,
     profile?: string,
@@ -421,6 +423,10 @@ export const spsBridge = {
       targetPath,
       profile,
     ),
+  spsPickLocalExpertPackExportPath: (
+    packId: string,
+  ): Promise<string | null> =>
+    ipcRenderer.invoke("sps-pick-local-expert-pack-export-path", packId),
   spsEnableLocalExpertChecks: (
     packId: string,
     profile?: string,
