@@ -104,6 +104,17 @@ describe("New APIs from v0.8/v0.9 features", () => {
     expect(preloadMethods).toContain("discoverMemoryProviders");
     expect(typeMethods).toContain("discoverMemoryProviders");
   });
+
+  it("has dashboard transport probe APIs", () => {
+    expect(preloadMethods).toContain("dashboardStatus");
+    expect(typeMethods).toContain("dashboardStatus");
+    expect(preloadMethods).toContain("startDashboard");
+    expect(typeMethods).toContain("startDashboard");
+    expect(preloadMethods).toContain("stopDashboard");
+    expect(typeMethods).toContain("stopDashboard");
+    expect(preloadMethods).toContain("setConnectionChatTransports");
+    expect(typeMethods).toContain("setConnectionChatTransports");
+  });
 });
 
 // ─── Legacy APIs still present ──────────────────────────
@@ -133,6 +144,7 @@ describe("Legacy APIs preserved (backward compat)", () => {
     "onChatChunk",
     "onChatReasoningChunk",
     "onChatDone",
+    "onChatSessionStarted",
     "onChatToolProgress",
     "onChatUsage",
     "onChatError",
@@ -146,6 +158,8 @@ describe("Legacy APIs preserved (backward compat)", () => {
     // Sessions
     "listSessions",
     "getSessionMessages",
+    "recordSessionContinuation",
+    "recordSessionLocalError",
     "deleteSessions",
     // Profiles
     "listProfiles",
@@ -176,6 +190,7 @@ describe("Legacy APIs preserved (backward compat)", () => {
     "addModel",
     "removeModel",
     "updateModel",
+    "onModelLibraryChanged",
     // Credential pool
     "getCredentialPool",
     "setCredentialPool",

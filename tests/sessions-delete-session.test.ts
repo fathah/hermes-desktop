@@ -21,6 +21,20 @@ vi.mock("../src/main/installer", () => ({
   HERMES_HOME: TEST_HOME,
 }));
 
+vi.mock("../src/main/utils", () => ({
+  activeStateDbPath: () => DB_PATH,
+  profileHome: () => TEST_HOME,
+  getActiveProfileNameSync: () => "default",
+  safeWriteFile: (path: string, data: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require("fs");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const nodePath = require("path");
+    fs.mkdirSync(nodePath.dirname(path), { recursive: true });
+    fs.writeFileSync(path, data, "utf-8");
+  },
+}));
+
 // Simulate better-sqlite3 faithfully: readonly connections reject writes
 // with SQLITE_READONLY, just like the real native module.
 vi.mock("better-sqlite3", () => {
@@ -255,6 +269,7 @@ import {
   getSessionMessages,
   searchSessions,
 } from "../src/main/sessions";
+import { closeDbConnection } from "../src/main/db";
 
 function seedDb(
   sessions: Array<{
@@ -327,6 +342,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  closeDbConnection();
   if (existsSync(TEST_HOME)) {
     rmSync(TEST_HOME, { recursive: true, force: true });
   }

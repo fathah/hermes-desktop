@@ -1,6 +1,8 @@
 export type AppLocale =
   | "en"
+  | "ar"
   | "es"
+  | "he"
   | "id"
   | "ja"
   | "pl"

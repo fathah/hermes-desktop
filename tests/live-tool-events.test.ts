@@ -288,7 +288,10 @@ describe("upsertLiveToolEvent", () => {
       label: "terminal",
     });
 
-    expect(next[1]).toMatchObject({ status: "completed", args: "health check" });
+    expect(next[1]).toMatchObject({
+      status: "completed",
+      args: "health check",
+    });
     expect(next[2]).toMatchObject({
       status: "completed",
       args: "python generate_duck.py",

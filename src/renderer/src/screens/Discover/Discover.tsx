@@ -507,8 +507,20 @@ export default function Discover({
         })()}
 
       <div className="discover-header">
-        <h1 className="discover-title">{t("discover.title")}</h1>
-        <p className="discover-subtitle">{t("discover.subtitle")}</p>
+        <div>
+          <h1 className="discover-title">{t("discover.title")}</h1>
+          <p className="discover-subtitle">{t("discover.subtitle")}</p>
+        </div>
+        <a
+          href="https://github.com/hermesonehq/hermes-registry"
+          target="_blank"
+          rel="noreferrer"
+          className="btn btn-secondary btn-sm"
+          title="Open Registry on GitHub"
+        >
+          <ExternalLink size={14} />
+          Open Registry
+        </a>
       </div>
 
       <div className="discover-tabs">

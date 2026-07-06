@@ -117,10 +117,21 @@ exit 1
   };
 }
 
-async function showPasswordDialog(
+/**
+ * Show a hardened, modal password/secret prompt and resolve with the entered
+ * value (or null on cancel). CSP-locked (`default-src 'none'`), sandboxed,
+ * ephemeral data-URL — the value is never persisted. Reused by both the
+ * installer's sudo askpass bridge and the mid-turn gateway sudo/secret prompts
+ * (see `gatewayPrompt.ts`). `title` / `heading` default to the installer's
+ * wording so existing callers are unchanged.
+ */
+export async function showPasswordDialog(
   parent: BrowserWindow | null,
   prompt: string,
+  opts: { title?: string; heading?: string } = {},
 ): Promise<string | null> {
+  const title = opts.title ?? "Administrator Password Required";
+  const heading = opts.heading ?? "The installer needs your password";
   return new Promise((resolve) => {
     const win = new BrowserWindow({
       width: 460,
@@ -131,7 +142,7 @@ async function showPasswordDialog(
       minimizable: false,
       maximizable: false,
       fullscreenable: false,
-      title: "Administrator Password Required",
+      title,
       webPreferences: {
         preload: join(__dirname, "../preload/askpass.js"),
         nodeIntegration: false,
@@ -173,7 +184,7 @@ async function showPasswordDialog(
       event.preventDefault(),
     );
 
-    const html = buildDialogHtml(prompt);
+    const html = buildDialogHtml(prompt, heading);
     win.loadURL(
       "data:text/html;charset=UTF-8;base64," +
         Buffer.from(html).toString("base64"),
@@ -181,12 +192,15 @@ async function showPasswordDialog(
   });
 }
 
-function buildDialogHtml(prompt: string): string {
-  const safePrompt = prompt
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+function buildDialogHtml(prompt: string, heading: string): string {
+  const esc = (s: string): string =>
+    s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  const safePrompt = esc(prompt);
+  const safeHeading = esc(heading);
   return `<!doctype html>
 <html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'none'; img-src 'none'; connect-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
@@ -203,7 +217,7 @@ function buildDialogHtml(prompt: string): string {
   button:hover { opacity:0.9; }
 </style></head>
 <body>
-<div class="title">The installer needs your password</div>
+<div class="title">${safeHeading}</div>
 <div class="prompt">${safePrompt}</div>
 <input id="pw" type="password" autofocus autocomplete="off" />
 <div class="row">

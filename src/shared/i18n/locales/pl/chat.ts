@@ -9,6 +9,7 @@ export default {
     "Szybkie pytanie (/btw) — pytanie poboczne, które nie wpłynie na kontekst rozmowy",
   send: "Wyślij",
   custom: "Niestandardowy",
+  searchModels: "Szukaj modeli...",
   typeModelName: "Wpisz nazwę modelu...",
   emptyTitle: "Jak mogę dziś pomóc?",
   emptyHint:
@@ -86,6 +87,8 @@ export default {
   },
   queued:
     "{{count}} wiadomość/wiadomości w kolejce — zostaną wysłane po zakończeniu pracy agenta",
+  queuedCancel: "Usuń z kolejki",
+  copyMessage: "Kopiuj wiadomość",
   worktree: {
     loading: "Ładowanie",
     empty: "Folder jest pusty",

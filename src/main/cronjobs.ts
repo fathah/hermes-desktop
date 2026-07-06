@@ -12,6 +12,8 @@ import {
 } from "./hermes";
 import { getConnectionConfig } from "./config";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
+import { sshRunCron } from "./ssh-remote";
+import type { SshConfig } from "./ssh-tunnel";
 
 export interface CronJob {
   id: string;
@@ -64,6 +66,127 @@ function normalizeJob(job: Record<string, unknown>): CronJob | null {
     skills:
       (job.skills as string[]) || (job.skill ? [job.skill as string] : []),
     script: (job.script as string) || null,
+  };
+}
+
+function parseCronState(raw: string | undefined): CronJob["state"] {
+  const state = (raw || "").trim().toLowerCase();
+  if (state === "paused") return "paused";
+  if (state === "completed") return "completed";
+  return "active";
+}
+
+function parseRepeat(value: string | undefined): CronJob["repeat"] {
+  const raw = (value || "").trim();
+  if (!raw) return null;
+  if (raw === "∞" || raw.toLowerCase() === "infinite") {
+    return { times: null, completed: 0 };
+  }
+  const fraction = raw.match(/^(\d+)\s*\/\s*(\d+)$/);
+  if (fraction) {
+    return {
+      completed: Number(fraction[1]),
+      times: Number(fraction[2]),
+    };
+  }
+  const times = Number(raw);
+  return Number.isFinite(times) ? { times, completed: 0 } : null;
+}
+
+function splitCsvish(value: string | undefined): string[] {
+  const raw = (value || "").trim();
+  if (!raw) return [];
+  return raw
+    .split(/,\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function parseLastRun(value: string | undefined): {
+  last_run_at: string | null;
+  last_status: string | null;
+} {
+  const raw = (value || "").trim();
+  if (!raw) return { last_run_at: null, last_status: null };
+  const match = raw.match(/^(.+?)(?:\s{2,}(\S.*))?$/);
+  return {
+    last_run_at: match?.[1]?.trim() || raw,
+    last_status: match?.[2]?.trim() || null,
+  };
+}
+
+export function parseCronListOutput(output: string): CronJob[] {
+  const jobs: CronJob[] = [];
+  let current: {
+    id: string;
+    state: CronJob["state"];
+    fields: Record<string, string>;
+  } | null = null;
+
+  function flush(): void {
+    if (!current) return;
+    const lastRun = parseLastRun(current.fields["Last run"]);
+    const state = current.state;
+    const deliver = splitCsvish(current.fields.Deliver);
+    jobs.push({
+      id: current.id,
+      name: current.fields.Name || "(unnamed)",
+      schedule: current.fields.Schedule || "?",
+      prompt: current.fields.Prompt || "",
+      state,
+      enabled: state !== "paused",
+      next_run_at: current.fields["Next run"] || null,
+      last_run_at: lastRun.last_run_at,
+      last_status: lastRun.last_status,
+      last_error: current.fields.Error || null,
+      repeat: parseRepeat(current.fields.Repeat),
+      deliver: deliver.length > 0 ? deliver : ["local"],
+      skills: splitCsvish(current.fields.Skills),
+      script: current.fields.Script || null,
+    });
+    current = null;
+  }
+
+  for (const line of output.split(/\r?\n/)) {
+    const jobMatch = line.match(/^\s*([A-Za-z0-9_-]+)\s+\[([^\]]+)\]\s*$/);
+    if (jobMatch) {
+      flush();
+      current = {
+        id: jobMatch[1],
+        state: parseCronState(jobMatch[2]),
+        fields: {},
+      };
+      continue;
+    }
+
+    if (!current) continue;
+    const fieldMatch = line.match(/^\s{2,}([^:]+):\s*(.*)$/);
+    if (fieldMatch) {
+      current.fields[fieldMatch[1].trim()] = fieldMatch[2].trim();
+    }
+  }
+
+  flush();
+  return jobs;
+}
+
+function getSshCronConfig(profile?: string): SshConfig | null {
+  if (!profile || profile === "default" || !isRemoteMode()) return null;
+  const conn = getConnectionConfig();
+  return conn.mode === "ssh" && conn.ssh ? conn.ssh : null;
+}
+
+async function runNamedProfileSshCron(
+  args: string[],
+  profile?: string,
+): Promise<{ success: boolean; output: string; error?: string } | null> {
+  const ssh = getSshCronConfig(profile);
+  if (!ssh) return null;
+  const res = await sshRunCron(ssh, args, { profile, timeoutMs: 15000 });
+  return {
+    success: res.success,
+    output: res.stdout || "",
+    error: res.error,
   };
 }
 
@@ -137,6 +260,19 @@ export async function listCronJobs(
   includeDisabled = true,
   profile?: string,
 ): Promise<CronJob[]> {
+  const sshResult = await runNamedProfileSshCron(
+    includeDisabled ? ["list", "--all"] : ["list"],
+    profile,
+  );
+  if (sshResult) {
+    if (!sshResult.success) {
+      console.error("[CRON] remote SSH list failed:", sshResult.error);
+      return [];
+    }
+    const jobs = parseCronListOutput(sshResult.output);
+    return includeDisabled ? jobs : jobs.filter((job) => job.enabled);
+  }
+
   if (isRemoteMode()) {
     try {
       const qs = includeDisabled ? "?include_disabled=true" : "";
@@ -228,6 +364,16 @@ export async function createCronJob(
   deliver?: string,
   profile?: string,
 ): Promise<{ success: boolean; error?: string }> {
+  const args = ["create", schedule];
+  if (prompt) args.push(prompt);
+  if (name) args.push("--name", name);
+  if (deliver) args.push("--deliver", deliver);
+
+  const sshResult = await runNamedProfileSshCron(args, profile);
+  if (sshResult) {
+    return { success: sshResult.success, error: sshResult.error };
+  }
+
   if (isRemoteMode()) {
     try {
       const res = await remoteFetch("/api/jobs", {
@@ -249,11 +395,6 @@ export async function createCronJob(
     }
   }
 
-  const args = ["create", schedule];
-  if (prompt) args.push(prompt);
-  if (name) args.push("--name", name);
-  if (deliver) args.push("--deliver", deliver);
-
   const result = await runCronCommand(args, profile);
   return { success: result.success, error: result.error };
 }
@@ -263,6 +404,10 @@ export async function removeCronJob(
   profile?: string,
 ): Promise<{ success: boolean; error?: string }> {
   if (!jobId) return { success: false, error: "Missing job ID" };
+  const sshResult = await runNamedProfileSshCron(["remove", jobId], profile);
+  if (sshResult) {
+    return { success: sshResult.success, error: sshResult.error };
+  }
   if (isRemoteMode()) {
     try {
       const res = await remoteFetch(`/api/jobs/${encodeURIComponent(jobId)}`, {
@@ -283,7 +428,12 @@ export async function removeCronJob(
 async function remoteJobAction(
   jobId: string,
   action: "pause" | "resume" | "run",
+  profile?: string,
 ): Promise<{ success: boolean; error?: string }> {
+  const sshResult = await runNamedProfileSshCron([action, jobId], profile);
+  if (sshResult) {
+    return { success: sshResult.success, error: sshResult.error };
+  }
   try {
     const res = await remoteFetch(
       `/api/jobs/${encodeURIComponent(jobId)}/${action}`,
@@ -303,7 +453,7 @@ export async function pauseCronJob(
   profile?: string,
 ): Promise<{ success: boolean; error?: string }> {
   if (!jobId) return { success: false, error: "Missing job ID" };
-  if (isRemoteMode()) return remoteJobAction(jobId, "pause");
+  if (isRemoteMode()) return remoteJobAction(jobId, "pause", profile);
   const result = await runCronCommand(["pause", jobId], profile);
   return { success: result.success, error: result.error };
 }
@@ -313,7 +463,7 @@ export async function resumeCronJob(
   profile?: string,
 ): Promise<{ success: boolean; error?: string }> {
   if (!jobId) return { success: false, error: "Missing job ID" };
-  if (isRemoteMode()) return remoteJobAction(jobId, "resume");
+  if (isRemoteMode()) return remoteJobAction(jobId, "resume", profile);
   const result = await runCronCommand(["resume", jobId], profile);
   return { success: result.success, error: result.error };
 }
@@ -323,7 +473,7 @@ export async function triggerCronJob(
   profile?: string,
 ): Promise<{ success: boolean; error?: string }> {
   if (!jobId) return { success: false, error: "Missing job ID" };
-  if (isRemoteMode()) return remoteJobAction(jobId, "run");
+  if (isRemoteMode()) return remoteJobAction(jobId, "run", profile);
   const result = await runCronCommand(["run", jobId], profile);
   return { success: result.success, error: result.error };
 }

@@ -14,6 +14,7 @@ export function detectProviderFromUrl(rawUrl: string): string | null {
   if (/(^|\/\/)openrouter\.ai(\/|:|$)/.test(url)) return "openrouter";
   if (/(^|\/\/)api\.anthropic\.com(\/|:|$)/.test(url)) return "anthropic";
   if (/(^|\/\/)api\.openai\.com(\/|:|$)/.test(url)) return "openai";
+  if (/(^|\/\/)api\.aimlapi\.com(\/|:|$)/.test(url)) return "aimlapi";
   if (/(^|\/\/)generativelanguage\.googleapis\.com(\/|:|$)/.test(url))
     return "google";
   if (/(^|\/\/)api\.x\.ai(\/|:|$)/.test(url)) return "xai";

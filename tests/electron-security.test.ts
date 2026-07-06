@@ -11,7 +11,10 @@ import {
 } from "../src/main/security";
 
 const ROOT = join(__dirname, "..");
-const mainSrc = readFileSync(join(ROOT, "src/main/index.ts"), "utf-8");
+// Main-process window/security wiring lives in the startup module after the
+// app/ refactor; index.ts only bootstraps it via startMainProcess().
+const mainSrc = readFileSync(join(ROOT, "src/main/app/start.ts"), "utf-8");
+const menuSrc = readFileSync(join(ROOT, "src/main/app/menu.ts"), "utf-8");
 const preloadSrc = readFileSync(join(ROOT, "src/preload/index.ts"), "utf-8");
 const installerSrc = readFileSync(join(ROOT, "src/main/installer.ts"), "utf-8");
 
@@ -24,19 +27,44 @@ describe("Electron main process hardening", () => {
     expect(mainSrc).toContain("allowRunningInsecureContent: false");
   });
 
+  it("keeps a production diagnostics path for renderer DevTools", () => {
+    expect(mainSrc).toContain("HERMES_OPEN_DEVTOOLS");
+    expect(mainSrc).toContain("openDevTools({ mode: \"detach\" })");
+    expect(menuSrc).toContain("Toggle Developer Tools");
+    expect(menuSrc).toContain("toggleDevTools()");
+  });
+
+  it("loads the packaged renderer next to the bundled main output", () => {
+    expect(mainSrc).toContain(
+      'join(__dirname, "../renderer/index.html")',
+    );
+    expect(mainSrc).not.toContain(
+      'join(__dirname, "../../renderer/index.html")',
+    );
+  });
+
   it("blocks untrusted top-level navigation and webview attachment", () => {
     expect(mainSrc).toContain("setWindowOpenHandler((details) => {");
     expect(mainSrc).toContain('webContents.on("will-navigate"');
     expect(mainSrc).toContain('"will-attach-webview"');
     expect(mainSrc).toContain("isAllowedAppNavigationUrl(");
-    expect(mainSrc).toContain("isAllowedWebviewUrl(params.src)");
+    expect(mainSrc).toContain("isAllowedWebviewUrl(params.src");
     expect(mainSrc).toContain("hardenWebviewPreferences(webPreferences)");
   });
 
   it("keeps attached webviews constrained after initial attachment", () => {
     expect(mainSrc).toContain('app.on("web-contents-created"');
     expect(mainSrc).toContain('contents.getType() === "webview"');
-    expect(mainSrc).toContain("hardenAttachedWebContents(contents)");
+    expect(mainSrc).toContain(
+      "hardenAttachedWebContents(contents, isWebPreview)",
+    );
+  });
+
+  it("identifies the web preview webview by its dedicated session, not a spoofable attribute", () => {
+    // getLastWebPreferences is not a public Electron API and returns undefined;
+    // the preview must be recognized via its partition session instead.
+    expect(mainSrc).not.toContain("getLastWebPreferences");
+    expect(mainSrc).toContain('session.fromPartition("web-preview")');
   });
 
   it("routes shell.openExternal through the allowlist helper", () => {
@@ -129,14 +157,22 @@ describe("Electron app navigation policy", () => {
 });
 
 describe("Electron webview policy", () => {
-  it("allows only loopback HTTP URLs on app-controlled ports", () => {
+  it("allows loopback HTTP URLs on app-controlled ports and about:blank, and remote/local HTTPS URLs when permitted", () => {
     expect(isAllowedWebviewUrl("http://localhost:3000")).toBe(true);
     expect(isAllowedWebviewUrl("http://127.0.0.1:65535/path")).toBe(true);
     expect(isAllowedWebviewUrl("http://[::1]:3000")).toBe(true);
+    expect(isAllowedWebviewUrl("about:blank")).toBe(true);
+
+    // By default, HTTPS is blocked
+    expect(isAllowedWebviewUrl("https://localhost:3000")).toBe(false);
+    expect(isAllowedWebviewUrl("https://example.com/docs")).toBe(false);
+
+    // HTTPS is allowed when explicitly permitted
+    expect(isAllowedWebviewUrl("https://localhost:3000", true)).toBe(true);
+    expect(isAllowedWebviewUrl("https://example.com/docs", true)).toBe(true);
   });
 
-  it("blocks remote, privileged, and non-HTTP webview URLs", () => {
-    expect(isAllowedWebviewUrl("https://localhost:3000")).toBe(false);
+  it("blocks remote HTTP, invalid ports, and non-HTTP/HTTPS webview URLs", () => {
     expect(isAllowedWebviewUrl("http://example.com:3000")).toBe(false);
     expect(isAllowedWebviewUrl("http://localhost:80")).toBe(false);
     expect(isAllowedWebviewUrl("file:///C:/Users/me/page.html")).toBe(false);
@@ -178,6 +214,7 @@ describe("Electron webview policy", () => {
       }),
     };
 
+    // Default (non-preview) webview: only loopback HTTP is permitted.
     hardenAttachedWebContents(
       webContentsMock as unknown as Parameters<
         typeof hardenAttachedWebContents
@@ -201,5 +238,42 @@ describe("Electron webview policy", () => {
     const redirectedEvent = { preventDefault: vi.fn() };
     handlers.get("will-redirect")?.(redirectedEvent, "http://example.com:3000");
     expect(redirectedEvent.preventDefault).toHaveBeenCalled();
+
+    // A non-preview webview must still block remote HTTPS.
+    const httpsEvent = { preventDefault: vi.fn() };
+    handlers.get("will-navigate")?.(httpsEvent, "https://example.com/docs");
+    expect(httpsEvent.preventDefault).toHaveBeenCalled();
+  });
+
+  it("allows post-attachment navigation/redirects to remote HTTPS for the web preview webview", () => {
+    type NavigationHandler = (
+      event: { preventDefault: () => void },
+      url: string,
+    ) => void;
+    const handlers = new Map<string, NavigationHandler>();
+    const webContentsMock = {
+      setWindowOpenHandler: vi.fn(),
+      on: vi.fn((event: string, handler: NavigationHandler) => {
+        handlers.set(event, handler);
+      }),
+    };
+
+    // isWebPreview=true is supplied by the caller (index.ts decides this by
+    // comparing webContents.session against session.fromPartition).
+    hardenAttachedWebContents(
+      webContentsMock as unknown as Parameters<
+        typeof hardenAttachedWebContents
+      >[0],
+      true,
+    );
+
+    const navEvent = { preventDefault: vi.fn() };
+    handlers.get("will-navigate")?.(navEvent, "https://example.com/docs");
+    expect(navEvent.preventDefault).not.toHaveBeenCalled();
+
+    // google.com -> www.google.com style redirects must also be allowed.
+    const redirectEvent = { preventDefault: vi.fn() };
+    handlers.get("will-redirect")?.(redirectEvent, "https://www.google.com/");
+    expect(redirectEvent.preventDefault).not.toHaveBeenCalled();
   });
 });

@@ -1,14 +1,16 @@
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import {
+  activeStateDbPath,
   profileHome,
   getActiveProfileNameSync,
-  activeStateDbPath,
   safeWriteFile,
 } from "./utils";
 import Database from "better-sqlite3";
 import { t } from "../shared/i18n";
 import { getAppLocale } from "./locale";
+import { getDbConnection } from "./db";
+import { getSessionContextFolders } from "./session-context-folder-store";
 
 /**
  * The session cache lives alongside its own profile's data so profiles
@@ -31,6 +33,7 @@ export interface CachedSession {
   source: string;
   messageCount: number;
   model: string;
+  contextFolder: string | null;
 }
 
 interface CacheData {
@@ -73,7 +76,17 @@ function readCache(): CacheData {
   const file = cacheFilePath();
   try {
     if (!existsSync(file)) return { sessions: [], lastSync: 0 };
-    return JSON.parse(readFileSync(file, "utf-8"));
+    const parsed = JSON.parse(readFileSync(file, "utf-8")) as CacheData;
+    return {
+      lastSync: typeof parsed.lastSync === "number" ? parsed.lastSync : 0,
+      sessions: Array.isArray(parsed.sessions)
+        ? parsed.sessions.map((s) => ({
+            ...s,
+            contextFolder:
+              typeof s.contextFolder === "string" ? s.contextFolder : null,
+          }))
+        : [],
+    };
   } catch {
     return { sessions: [], lastSync: 0 };
   }
@@ -88,9 +101,19 @@ function writeCache(data: CacheData): void {
 }
 
 function getDb(): Database.Database | null {
-  const dbPath = activeStateDbPath();
-  if (!existsSync(dbPath)) return null;
-  return new Database(dbPath, { readonly: true });
+  return getDbConnection(true);
+}
+
+// Attach each session's linked folder in a single batched store read, so a
+// full sync stays a couple of queries rather than two per row. The result is
+// written into the JSON cache by `syncSessionCache`, which lets the renderer's
+// fast read path (`listCachedSessions`) stay DB-free.
+function attachContextFolders(sessions: CachedSession[]): CachedSession[] {
+  const folders = getSessionContextFolders(sessions.map((s) => s.id));
+  return sessions.map((session) => ({
+    ...session,
+    contextFolder: folders.get(session.id) ?? null,
+  }));
 }
 
 // Sync from hermes DB to local cache — only fetches new/updated sessions
@@ -163,6 +186,9 @@ export function syncSessionCache(): CachedSession[] {
         source: row.source,
         messageCount: row.message_count,
         model: row.model || "",
+        // Filled in below by the single batched `attachContextFolders` pass
+        // over the merged set, so we don't query the store once per new row.
+        contextFolder: null,
       });
     }
 
@@ -209,7 +235,7 @@ export function syncSessionCache(): CachedSession[] {
     const merged = new Map<string, CachedSession>();
     for (const s of cache.sessions) merged.set(s.id, s);
     for (const s of newSessions) merged.set(s.id, s);
-    const allSessions = Array.from(merged.values());
+    const allSessions = attachContextFolders(Array.from(merged.values()));
     allSessions.sort((a, b) => b.startedAt - a.startedAt);
 
     const updated: CacheData = {
@@ -220,12 +246,13 @@ export function syncSessionCache(): CachedSession[] {
     return updated.sessions;
   } catch {
     return cache.sessions;
-  } finally {
-    db.close();
   }
 }
 
-// Fast read from cache only (no DB access)
+// Fast read from cache only (no DB access). `contextFolder` is persisted into
+// the cache by `syncSessionCache`, and folder changes trigger a re-sync (the
+// renderer fires `hermes-session-context-folder-changed`), so the cached value
+// stays current without this path touching the DB.
 export function listCachedSessions(limit = 50, offset = 0): CachedSession[] {
   const cache = readCache();
   return cache.sessions.slice(offset, offset + limit);
@@ -238,6 +265,23 @@ export function updateSessionTitle(sessionId: string, title: string): void {
   if (idx >= 0) {
     cache.sessions[idx].title = title;
     writeCache(cache);
+  }
+  // Also persist in state.db so the rename survives cache rebuilds
+  try {
+    const dbPath = activeStateDbPath();
+    if (existsSync(dbPath)) {
+      const db = new Database(dbPath);
+      try {
+        db.prepare("UPDATE sessions SET title = ? WHERE id = ?").run(
+          title,
+          sessionId,
+        );
+      } finally {
+        db.close();
+      }
+    }
+  } catch {
+    // ignore DB errors — cache update above is the fast path
   }
 }
 

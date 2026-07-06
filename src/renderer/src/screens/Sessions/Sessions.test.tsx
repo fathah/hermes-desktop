@@ -31,19 +31,32 @@ function installHermesAPI(initialSessions: unknown[] = []): {
   searchSessions: ReturnType<typeof vi.fn>;
   deleteSession: ReturnType<typeof vi.fn>;
   deleteSessions: ReturnType<typeof vi.fn>;
+  emitConnectionConfigChanged: () => void;
 } {
+  let connectionConfigChanged: (() => void) | null = null;
   const api = {
     listCachedSessions: vi.fn().mockResolvedValue(initialSessions),
     syncSessionCache: vi.fn().mockResolvedValue(initialSessions),
     searchSessions: vi.fn().mockResolvedValue([]),
     deleteSession: vi.fn().mockResolvedValue(undefined),
     deleteSessions: vi.fn().mockResolvedValue({ requested: 0, deleted: 0 }),
+    onConnectionConfigChanged: vi.fn((callback: () => void) => {
+      connectionConfigChanged = callback;
+      return () => {
+        if (connectionConfigChanged === callback) {
+          connectionConfigChanged = null;
+        }
+      };
+    }),
   };
   Object.defineProperty(window, "hermesAPI", {
     configurable: true,
     value: api,
   });
-  return api;
+  return {
+    ...api,
+    emitConnectionConfigChanged: () => connectionConfigChanged?.(),
+  };
 }
 
 function sessionSearchResult(
@@ -142,6 +155,70 @@ describe("Sessions tab live refresh (#322)", () => {
       window.dispatchEvent(new Event("focus"));
     });
     expect(api.syncSessionCache.mock.calls.length).toBe(afterMount + 1);
+  });
+
+  it("keeps visible sessions when a quiet refresh transiently returns empty", async () => {
+    const api = installHermesAPI([
+      {
+        id: "ssh-session",
+        title: "SSH session",
+        startedAt: Math.floor(Date.now() / 1000),
+        source: "api_server",
+        messageCount: 3,
+        model: "deepseek-v4-pro",
+      },
+    ]);
+
+    render(<Sessions {...baseProps} visible={true} />);
+    await act(async () => {});
+    expect(screen.getByText("SSH session")).toBeTruthy();
+
+    api.syncSessionCache.mockResolvedValue([]);
+
+    await act(async () => {
+      vi.advanceTimersByTime(SESSIONS_REFRESH_MS);
+    });
+
+    expect(screen.getByText("SSH session")).toBeTruthy();
+    expect(screen.queryByText("sessions.empty")).toBeNull();
+  });
+
+  it("clears stale rows and reloads when the connection source changes", async () => {
+    vi.useRealTimers();
+    const api = installHermesAPI([
+      {
+        id: "local-session",
+        title: "Local session",
+        startedAt: Math.floor(Date.now() / 1000),
+        source: "desktop",
+        messageCount: 1,
+        model: "gpt-5.5",
+      },
+    ]);
+    render(<Sessions {...baseProps} visible={true} />);
+    await act(async () => {});
+    expect(screen.getByText("Local session")).toBeTruthy();
+
+    api.listCachedSessions.mockResolvedValue([]);
+    api.syncSessionCache.mockResolvedValue([
+      {
+        id: "remote-session",
+        title: "Remote session",
+        startedAt: Math.floor(Date.now() / 1000),
+        source: "tui",
+        messageCount: 2,
+        model: "deepseek-v4-pro",
+      },
+    ]);
+
+    await act(async () => {
+      api.emitConnectionConfigChanged();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Remote session")).toBeTruthy();
+    });
+    expect(screen.queryByText("Local session")).toBeNull();
   });
 
   it("renders sessions recovered by sync when the fast cache starts empty", async () => {
@@ -445,10 +522,7 @@ describe("Sessions tab — bulk delete selection (#490)", () => {
     });
 
     await waitFor(() => {
-      expect(api.deleteSessions).toHaveBeenCalledWith([
-        "sess-one",
-        "sess-two",
-      ]);
+      expect(api.deleteSessions).toHaveBeenCalledWith(["sess-one", "sess-two"]);
     });
     expect(api.deleteSession).not.toHaveBeenCalled();
   });

@@ -17,7 +17,7 @@ import { URL } from "url";
 import { execFile } from "child_process";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
-import { readEnv } from "./config";
+import { readEnv, getModelContextLengthOverride } from "./config";
 import { profileHome } from "./utils";
 import {
   expectedEnvKeyForModel,
@@ -158,7 +158,9 @@ async function fetchNousFreeModelIds(
     const authPath = join(profileHome(profile), "auth.json");
     if (!existsSync(authPath)) return [];
     const auth = JSON.parse(readFileSync(authPath, "utf-8")) as {
-      providers?: { nous?: { access_token?: string; inference_base_url?: string } };
+      providers?: {
+        nous?: { access_token?: string; inference_base_url?: string };
+      };
     };
     const token = (auth.providers?.nous?.access_token || "").trim();
     const base = (auth.providers?.nous?.inference_base_url || "").trim();
@@ -245,6 +247,12 @@ const _cache = new Map<string, CacheEntry>();
 // Parallel cache of free-model ids, keyed by provider. Cleared together
 // with the main cache via `_clearCache` for test isolation.
 const _freeCache = new Map<string, string[]>();
+// Parallel cache of per-model context-window sizes (tokens), keyed the same
+// way as `_cache` (provider|baseUrl) and populated from the `/models`
+// response when the provider advertises a `context_length` (OpenRouter and
+// many OpenAI-compatible gateways do). Drives authoritative context-gauge
+// sizing in the renderer; the static heuristic is only a fallback. Issue #597.
+const _ctxCache = new Map<string, Record<string, number>>();
 
 const LOCAL_NO_KEY_PROVIDERS = new Set([
   "lmstudio",
@@ -297,6 +305,68 @@ interface DiscoveryRawResponse {
   models?: Array<{ id?: string; name?: string }>;
 }
 
+interface RawModelMeta {
+  id?: string;
+  context_length?: number | string;
+  context_window?: number | string;
+  max_context_length?: number | string;
+  max_context_window_tokens?: number | string;
+  top_provider?: { context_length?: number | string };
+}
+
+function toPositiveInt(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return Math.floor(value);
+  }
+  if (typeof value === "string") {
+    const n = parseInt(value.trim(), 10);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
+}
+
+/** Pull a context-window size out of a single `/models` entry, trying the
+ *  field names different providers use (OpenRouter exposes both a top-level
+ *  `context_length` and a nested `top_provider.context_length`). */
+function extractContextLength(item: RawModelMeta): number | null {
+  return (
+    toPositiveInt(item.context_length) ??
+    toPositiveInt(item.context_window) ??
+    toPositiveInt(item.max_context_length) ??
+    toPositiveInt(item.max_context_window_tokens) ??
+    toPositiveInt(item.top_provider?.context_length)
+  );
+}
+
+/** Map of model id -> advertised context-window size from a `/models`
+ *  response body. Empty when the body is unparseable or carries no context
+ *  metadata (e.g. OpenAI / DeepSeek, which omit it). */
+function parseModelContextLengths(body: string): Record<string, number> {
+  let json: unknown;
+  try {
+    json = JSON.parse(body);
+  } catch {
+    return {};
+  }
+  if (!json || typeof json !== "object") return {};
+  const j = json as { data?: RawModelMeta[]; models?: RawModelMeta[] };
+  const arr = Array.isArray(j.data)
+    ? j.data
+    : Array.isArray(j.models)
+      ? j.models
+      : null;
+  if (!arr) return {};
+  const out: Record<string, number> = {};
+  for (const item of arr) {
+    if (!item || typeof item !== "object") continue;
+    const id = typeof item.id === "string" ? item.id.trim() : "";
+    if (!id) continue;
+    const ctx = extractContextLength(item);
+    if (ctx) out[id] = ctx;
+  }
+  return out;
+}
+
 function parseModelIds(body: string): string[] {
   let json: unknown;
   try {
@@ -341,6 +411,8 @@ function buildUrl(base: string): string {
 interface FetchModelsResult {
   models: string[];
   reachable: boolean;
+  /** Per-model context-window sizes parsed from the response, when present. */
+  contextLengths?: Record<string, number>;
 }
 
 function authHeaders(provider: string, apiKey: string): Record<string, string> {
@@ -401,7 +473,11 @@ function fetchModelsHttp(
           body += chunk;
         });
         res.on("end", () =>
-          resolve({ models: parseModelIds(body), reachable: true }),
+          resolve({
+            models: parseModelIds(body),
+            reachable: true,
+            contextLengths: parseModelContextLengths(body),
+          }),
         );
         res.on("error", () => resolve({ models: [], reachable: false }));
       },
@@ -502,14 +578,111 @@ export async function discoverProviderModels(
     return { models: [], status: "no-key", cached: false };
   }
 
-  const url = buildUrl(baseUrl);
-  const headers = authHeaders(lowerProvider, apiKey);
-  const result = await fetchModelsHttp(url, headers, 10_000);
+  const result = await fetchAndCacheModels(lowerProvider, baseUrl, apiKey);
   if (!result.reachable) {
     return { models: [], status: "error", cached: false };
   }
-  setCache(lowerProvider, baseUrl, result.models);
   return { models: result.models, status: "ok", cached: false };
+}
+
+/**
+ * Fetch a provider's `/models` over HTTP and populate BOTH caches together.
+ *
+ * `_ctxCache` is always written when the endpoint is reachable — even when no
+ * model advertises a `context_length` (OpenAI, DeepSeek) — so an empty map
+ * doubles as a "already fetched, none advertised" marker. That lets
+ * `getModelContextWindow` tell a genuine miss (don't re-fetch) from a
+ * never-fetched key, which is what was broken when the model picker had
+ * already populated `_cache` but not `_ctxCache` (issue #597 PR review).
+ */
+async function fetchAndCacheModels(
+  lowerProvider: string,
+  baseUrl: string,
+  apiKey: string,
+): Promise<FetchModelsResult> {
+  const url = buildUrl(baseUrl);
+  const headers = authHeaders(lowerProvider, apiKey);
+  const result = await fetchModelsHttp(url, headers, 10_000);
+  if (result.reachable) {
+    setCache(lowerProvider, baseUrl, result.models);
+    _ctxCache.set(
+      cacheKey(lowerProvider, baseUrl),
+      result.contextLengths ?? {},
+    );
+  }
+  return result;
+}
+
+/**
+ * Resolve the authoritative context-window size (in tokens) for a model by
+ * consulting the provider's `/models` catalogue. Returns null when the
+ * provider doesn't advertise it (OpenAI, DeepSeek, OAuth providers) or the
+ * model id isn't found, in which case the renderer falls back to the static
+ * heuristic in `contextWindows.ts`. Issue #597.
+ */
+// @lat: [[model-context#Model context window#Gauge resolution order]]
+export async function getModelContextWindow(
+  provider: string,
+  model: string,
+  baseUrlOverride: string | undefined,
+  apiKeyOverride: string | undefined,
+  profile: string | undefined,
+): Promise<number | null> {
+  const modelId = (model || "").trim();
+  if (!modelId) return null;
+  const lowerProvider = (provider || "").trim().toLowerCase();
+
+  // A manual `model.context_length` override in config.yaml wins over /models
+  // detection — it's what the user set explicitly and what the agent's
+  // auto-compaction threshold uses. Apply it ONLY when it targets the model
+  // being asked about (an exact match against the active `model.default`), so a
+  // stale value can't leak onto a different model id — including the case where
+  // `model.default` is absent (override.model === ""), which must NOT match.
+  // This is the primary fix for providers (qwen, etc.) that don't advertise
+  // `context_length`, leaving the gauge on its heuristic.
+  const override = getModelContextLengthOverride(profile);
+  if (override && override.model && override.model === modelId) {
+    return override.contextLength;
+  }
+
+  // OAuth/subscription and non-discoverable providers have no static-key
+  // `/models` endpoint to read `context_length` from — the renderer falls
+  // back to the heuristic for these. ("custom" is discoverable.)
+  if (
+    OAUTH_DISCOVERY_PROVIDERS.has(lowerProvider) ||
+    (NON_DISCOVERABLE_PROVIDERS.has(lowerProvider) &&
+      lowerProvider !== "custom")
+  ) {
+    return null;
+  }
+
+  const explicitBase = (baseUrlOverride || "").trim().replace(/\/+$/, "");
+  const baseUrl = explicitBase || canonicalBaseUrl(lowerProvider) || "";
+  if (!baseUrl) return null;
+  const key = cacheKey(lowerProvider, baseUrl);
+
+  const readCtx = (): number | null => _ctxCache.get(key)?.[modelId] ?? null;
+
+  const cached = readCtx();
+  if (cached) return cached;
+  // A present (even empty) ctx map means we've already fetched this
+  // catalogue, so a missing entry is authoritative — don't re-fetch. This
+  // also avoids hammering the endpoint for providers that omit the field.
+  if (_ctxCache.has(key)) return null;
+
+  // Not fetched yet (e.g. the model picker primed `_cache` but never the ctx
+  // map). Fetch directly here rather than via `discoverProviderModels`, whose
+  // `_cache`-hit early-return would skip the ctx fetch entirely.
+  const apiKey =
+    (apiKeyOverride || "").trim() ||
+    envApiKeyFor(lowerProvider, baseUrl, profile);
+  const canDiscoverWithoutKey =
+    LOCAL_NO_KEY_PROVIDERS.has(lowerProvider) ||
+    (lowerProvider === "custom" && isLoopbackBaseUrl(baseUrl));
+  if (!apiKey && !canDiscoverWithoutKey) return null;
+
+  await fetchAndCacheModels(lowerProvider, baseUrl, apiKey);
+  return readCtx();
 }
 
 /** Internal: exposed for tests / debugging only.  Production callers
@@ -517,4 +690,5 @@ export async function discoverProviderModels(
 export function _clearCache(): void {
   _cache.clear();
   _freeCache.clear();
+  _ctxCache.clear();
 }

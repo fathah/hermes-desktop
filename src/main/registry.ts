@@ -3,6 +3,7 @@ import { join } from "path";
 import { profileHome, safeWriteFile } from "./utils";
 import { installSkill, listInstalledSkills } from "./skills";
 import { createProfile } from "./profiles";
+import { writeSoul } from "./soul";
 import { listMcpServers } from "./installer";
 import type {
   RegistryKind,
@@ -11,6 +12,7 @@ import type {
   InstalledRegistry,
   RegistryDetail,
   RegistryDetailRow,
+  ModelRegistry,
 } from "../shared/registry";
 
 export type {
@@ -21,7 +23,7 @@ export type {
 
 /**
  * The "Discover" marketplace reads its catalog from a public GitHub repo:
- *   https://github.com/fathah/hermes-registry
+ *   https://github.com/hermesonehq/hermes-registry
  *
  * `index.json` is a flat list of entries, each with a `type`
  * (agent|mcp|skill|workflow) and a `path` to its folder in the repo. "Set up"
@@ -32,6 +34,7 @@ const REGISTRY_BRANCH = "main";
 const REGISTRY_RAW_BASE = `https://raw.githubusercontent.com/${REGISTRY_REPO}/refs/heads/${REGISTRY_BRANCH}`;
 const REGISTRY_REPO_BASE = `https://github.com/${REGISTRY_REPO}/tree/${REGISTRY_BRANCH}`;
 const INDEX_URL = `${REGISTRY_RAW_BASE}/index.json`;
+const MODELS_URL = `${REGISTRY_RAW_BASE}/models.json`;
 const TREE_URL = `https://api.github.com/repos/${REGISTRY_REPO}/git/trees/${REGISTRY_BRANCH}?recursive=1`;
 
 /** index.json entry shape. */
@@ -143,6 +146,45 @@ export async function fetchRegistry(
     return {
       ...EMPTY_CATALOG,
       error: err instanceof Error ? err.message : "Failed to load registry",
+    };
+  }
+}
+
+// Short-lived cache for the model catalog (models.json).
+let modelCache: { at: number; data: ModelRegistry } | null = null;
+
+/**
+ * Fetch the curated model catalog (models.json) from the registry. Network /
+ * parse failures resolve to an empty provider list (with `error` set) so the
+ * Models screen can render a graceful empty state.
+ */
+export async function fetchModelRegistry(
+  force = false,
+): Promise<ModelRegistry> {
+  if (!force && modelCache && Date.now() - modelCache.at < CACHE_TTL_MS) {
+    return modelCache.data;
+  }
+  try {
+    const res = await fetch(MODELS_URL, {
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) {
+      return { providers: [], error: `Registry returned ${res.status}` };
+    }
+    const raw = (await res.json()) as ModelRegistry;
+    const data: ModelRegistry = {
+      schemaVersion: raw.schemaVersion,
+      generated: raw.generated,
+      providerCount: raw.providerCount,
+      modelCount: raw.modelCount,
+      providers: Array.isArray(raw.providers) ? raw.providers : [],
+    };
+    modelCache = { at: Date.now(), data };
+    return data;
+  } catch (err) {
+    return {
+      providers: [],
+      error: err instanceof Error ? err.message : "Failed to load models",
     };
   }
 }
@@ -438,12 +480,37 @@ async function installWorkflow(
 }
 
 /**
+ * Install a registry agent as a new profile. Cloning alone copies the default
+ * persona, so the imported agent looked identical to default — the bug. We
+ * fetch the agent's entry markdown (AGENT.md per the manifest) from the
+ * registry and write it as the new profile's SOUL.md so the persona reflects
+ * the published agent.
+ */
+async function installAgent(item: RegistryItem): Promise<InstallResult> {
+  const created = createProfile(item.id, "default");
+  if (!created.success) return created;
+  if (item.path) {
+    const m = await fetchManifest(item.path);
+    const entry = m?.entry || "AGENT.md";
+    const md = await tryFetchText(`${item.path}/${entry}`);
+    if (md && !writeSoul(md, item.id)) {
+      return {
+        success: false,
+        error: "Failed to write agent persona (SOUL.md)",
+      };
+    }
+  }
+  return { success: true };
+}
+
+/**
  * Install/"set up" a catalog item into the active profile.
  *   - skill    → download the entry folder into <profile>/skills/<category>/<id>/
  *                (bundled skills, which carry `source` and no `path`, install
  *                via `hermes skills install <source>`)
  *   - mcp      → append the manifest's server to config.yaml `mcp_servers:`
- *   - agent    → create a cloned profile named after the agent
+ *   - agent    → clone a profile named after the agent and set its SOUL.md
+ *                from the agent's AGENT.md
  *   - workflow → download the entry folder into <profile>/workflows/<id>/
  */
 export async function installRegistryItem(
@@ -460,7 +527,7 @@ export async function installRegistryItem(
       case "mcps":
         return await installMcp(item, profile);
       case "agents":
-        return createProfile(item.id, true);
+        return await installAgent(item);
       case "workflows":
         return await installWorkflow(item, profile);
       default:

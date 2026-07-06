@@ -18,6 +18,8 @@ export default {
     "Tente um termo de pesquisa ou filtro de categoria diferente",
   installFailed: "Falha ao instalar a habilidade",
   uninstallFailed: "Falha ao desinstalar a habilidade",
+  uninstallConfirm: "Uninstall '{{name}}'?",
+  uninstallSuccess: "'{{name}}' uninstalled",
   removing: "Removendo...",
   uninstall: "Desinstalar",
   installedBadge: "Instalada",

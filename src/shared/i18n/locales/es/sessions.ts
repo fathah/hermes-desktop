@@ -14,6 +14,7 @@ export default {
   messages: "msg",
   messageSingular: "msg",
   delete: "Eliminar conversación",
+  rename: "Renombrar conversación",
   deleteConfirmTitle: "Eliminar conversación",
   deleteConfirm:
     "¿Eliminar esta conversación? Esta acción no se puede deshacer — los mensajes y el registro de la sesión se eliminarán permanentemente.",

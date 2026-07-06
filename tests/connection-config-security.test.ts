@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtempSync, rmSync } from "fs";
+import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import http from "http";
@@ -46,6 +46,9 @@ describe("connection config secret exposure", () => {
       mode: "remote",
       remoteUrl: "https://hermes.example",
       apiKey: "remote-secret",
+      remoteChatTransport: "dashboard",
+      sshChatTransport: "auto",
+      ssh: getConnectionConfig().ssh,
     });
 
     expect(getConnectionConfig().apiKey).toBe("remote-secret");
@@ -54,6 +57,8 @@ describe("connection config secret exposure", () => {
     expect(publicConfig).toMatchObject({
       mode: "remote",
       remoteUrl: "https://hermes.example",
+      remoteChatTransport: "dashboard",
+      sshChatTransport: "auto",
       hasApiKey: true,
       // Length is intentionally exposed so the renderer can render a
       // mask that matches the stored key's width. The secret itself
@@ -80,6 +85,28 @@ describe("connection config secret exposure", () => {
     ).toBe("");
   });
 
+  it("reads desktop config files written with a UTF-8 BOM", async () => {
+    const { getConnectionConfig } = await loadConnectionConfigModule();
+
+    writeFileSync(
+      join(testHome, "desktop.json"),
+      `\uFEFF${JSON.stringify({
+        connectionMode: "remote",
+        remoteUrl: "https://hermes.example",
+        remoteApiKey: "remote-secret",
+        remoteChatTransport: "dashboard",
+      })}`,
+      "utf-8",
+    );
+
+    expect(getConnectionConfig()).toMatchObject({
+      mode: "remote",
+      remoteUrl: "https://hermes.example",
+      apiKey: "remote-secret",
+      remoteChatTransport: "dashboard",
+    });
+  });
+
   it("uses the stored remote API key for main-process connection tests", async () => {
     const { setConnectionConfig } = await loadConnectionConfigModule();
     const { testRemoteConnection } = await import("../src/main/hermes");
@@ -96,6 +123,16 @@ describe("connection config secret exposure", () => {
         mode: "remote",
         remoteUrl: url,
         apiKey: "remote-secret",
+        remoteChatTransport: "auto",
+        sshChatTransport: "auto",
+        ssh: {
+          host: "",
+          port: 22,
+          username: "",
+          keyPath: "",
+          remotePort: 8642,
+          localPort: 18642,
+        },
       });
 
       await expect(testRemoteConnection(url)).resolves.toBe(true);
@@ -107,6 +144,59 @@ describe("connection config secret exposure", () => {
     }
   });
 
+  it("preserves remote settings when switching away from remote mode", async () => {
+    const {
+      getConnectionConfig,
+      resolveConnectionApiKeyUpdate,
+      setConnectionConfig,
+    } = await loadConnectionConfigModule();
+
+    const ssh = getConnectionConfig().ssh;
+    setConnectionConfig({
+      mode: "remote",
+      remoteUrl: "https://hermes.example",
+      apiKey: "remote-secret",
+      remoteChatTransport: "dashboard",
+      sshChatTransport: "auto",
+      ssh,
+    });
+
+    setConnectionConfig({
+      ...getConnectionConfig(),
+      mode: "local",
+      remoteUrl: "",
+      apiKey: "",
+    });
+
+    expect(getConnectionConfig()).toMatchObject({
+      mode: "local",
+      remoteUrl: "https://hermes.example",
+      apiKey: "remote-secret",
+      remoteChatTransport: "dashboard",
+    });
+
+    const localConfig = getConnectionConfig();
+    const restoredApiKey = resolveConnectionApiKeyUpdate(
+      localConfig,
+      "remote",
+      "https://hermes.example",
+      undefined,
+    );
+    setConnectionConfig({
+      ...localConfig,
+      mode: "remote",
+      remoteUrl: "https://hermes.example",
+      apiKey: restoredApiKey,
+    });
+
+    expect(getConnectionConfig()).toMatchObject({
+      mode: "remote",
+      remoteUrl: "https://hermes.example",
+      apiKey: "remote-secret",
+      remoteChatTransport: "dashboard",
+    });
+  });
+
   it("exposes SSH settings without exposing the stored remote API key", async () => {
     const { getPublicConnectionConfig, setConnectionConfig } =
       await loadConnectionConfigModule();
@@ -115,6 +205,8 @@ describe("connection config secret exposure", () => {
       mode: "ssh",
       remoteUrl: "",
       apiKey: "remote-secret",
+      remoteChatTransport: "auto",
+      sshChatTransport: "legacy",
       ssh: {
         host: "example.internal",
         port: 22,
@@ -127,6 +219,7 @@ describe("connection config secret exposure", () => {
 
     const publicConfig = getPublicConnectionConfig();
     expect(publicConfig.mode).toBe("ssh");
+    expect(publicConfig.sshChatTransport).toBe("legacy");
     expect(publicConfig.ssh.host).toBe("example.internal");
     expect("apiKey" in publicConfig).toBe(false);
     expect(JSON.stringify(publicConfig)).not.toContain("remote-secret");

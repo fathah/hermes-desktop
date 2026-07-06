@@ -1,12 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { join } from "path";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 
 /**
@@ -74,9 +68,9 @@ describe("checkSiblingHermesHomeDrift", () => {
 
     const { checkSiblingHermesHomeDrift } = await freshHealth();
     const issues = checkSiblingHermesHomeDrift();
-    expect(issues.filter((i) => i.code === "SIBLING_HERMES_HOME_DRIFT")).toEqual(
-      [],
-    );
+    expect(
+      issues.filter((i) => i.code === "SIBLING_HERMES_HOME_DRIFT"),
+    ).toEqual([]);
   });
 
   it("flags WSL-only env key as a warning + autoFixable (#384 shape)", async () => {
@@ -84,8 +78,12 @@ describe("checkSiblingHermesHomeDrift", () => {
     // Windows side .env doesn't have CUSTOM_API_KEY → desktop chat fails.
     writeWindowsEnv("");
     writeWslEnv("CUSTOM_API_KEY=sk-unsloth-test-1234567890\n");
-    writeWindowsConfig("model:\n  provider: custom\n  base_url: https://api.unsloth.ai/v1\n");
-    writeWslConfig("model:\n  provider: custom\n  base_url: https://api.unsloth.ai/v1\n");
+    writeWindowsConfig(
+      "model:\n  provider: custom\n  base_url: https://api.unsloth.ai/v1\n",
+    );
+    writeWslConfig(
+      "model:\n  provider: custom\n  base_url: https://api.unsloth.ai/v1\n",
+    );
 
     const { checkSiblingHermesHomeDrift } = await freshHealth();
     const issues = checkSiblingHermesHomeDrift();
@@ -167,9 +165,8 @@ describe("checkSiblingHermesHomeDrift", () => {
     }));
     process.env.HERMES_HOME = WIN_HOME;
     writeWindowsEnv("OPENAI_API_KEY=sk-test\n");
-    const { checkSiblingHermesHomeDrift } = await import(
-      "../src/main/config-health"
-    );
+    const { checkSiblingHermesHomeDrift } =
+      await import("../src/main/config-health");
     expect(checkSiblingHermesHomeDrift()).toEqual([]);
   });
 });

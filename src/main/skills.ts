@@ -4,6 +4,7 @@ import {
   readdirSync,
   readFileSync,
   realpathSync,
+  rmSync,
   statSync,
 } from "fs";
 import { isAbsolute, join, relative, resolve } from "path";
@@ -377,8 +378,10 @@ export function installSkill(
 }
 
 export function uninstallSkill(name: string, profile?: string): SkillCliResult {
+  // Try the CLI first (updates hub lock files, handles complex cases).
+  let cliResult: SkillCliResult | undefined;
   try {
-    const args = hermesCliArgs(["skills", "uninstall", name]);
+    const args = hermesCliArgs(["skills", "uninstall", name, "--yes"]);
     if (profile && profile !== "default") {
       args.splice(process.platform === "win32" ? 2 : 1, 0, "-p", profile);
     }
@@ -395,15 +398,50 @@ export function uninstallSkill(name: string, profile?: string): SkillCliResult {
       timeout: 30000,
       ...HIDDEN_SUBPROCESS_OPTIONS,
     });
-    // Same exit-0-on-failure shape as install (#310) — classify the
-    // captured output before claiming success.
-    return classifySkillCliOutput(stdout?.toString() ?? "");
+    cliResult = classifySkillCliOutput(stdout?.toString() ?? "");
   } catch (err) {
     const e = err as { stdout?: Buffer; stderr?: Buffer; message?: string };
     const msg = (e.stderr?.toString() || e.message || "").trim();
-    return {
+    cliResult = {
       success: false,
       error: msg || e.stdout?.toString()?.trim() || "Uninstall failed.",
     };
   }
+
+  // Direct filesystem cleanup: some skills (bundled ones, name-mismatches)
+  // aren't found by the CLI's uninstall but still live on disk. Walk the
+  // profile skills directory, find the matching skill, and rm -rf it.
+  const skillsDir = join(profileHome(profile), "skills");
+  if (existsSync(skillsDir)) {
+    try {
+      for (const category of readdirSync(skillsDir)) {
+        const categoryPath = join(skillsDir, category);
+        if (!statSync(categoryPath).isDirectory()) continue;
+        for (const entry of readdirSync(categoryPath)) {
+          const entryPath = join(categoryPath, entry);
+          if (!statSync(entryPath).isDirectory()) continue;
+
+          const skillFile = join(entryPath, "SKILL.md");
+          if (!existsSync(skillFile)) continue;
+
+          let skillName: string;
+          try {
+            const content = readFileSync(skillFile, "utf-8").slice(0, 4000);
+            skillName = parseSkillFrontmatter(content).name || entry;
+          } catch {
+            skillName = entry;
+          }
+
+          if (skillName === name || entry === name) {
+            rmSync(entryPath, { recursive: true, force: true });
+            return { success: true };
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return cliResult ?? { success: false, error: "Uninstall failed." };
 }

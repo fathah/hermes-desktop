@@ -347,17 +347,15 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
       <div className="gateway-page-header">
         <div>
           <h1 className="settings-header">{t("gateway.title")}</h1>
-          <p className="gateway-page-subtitle">
-            Manage the messaging platforms Hermes Agent can connect to.
-          </p>
+          <p className="gateway-page-subtitle">{t("gateway.subtitle")}</p>
         </div>
         <button
           className="btn btn-secondary btn-sm"
           onClick={() => void loadConfig()}
-          title="Refresh platform status"
+          title={t("gateway.refreshTooltip")}
         >
           <RefreshCw size={16} />
-          Refresh
+          {t("gateway.refresh")}
         </button>
       </div>
 
@@ -396,10 +394,7 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
               {gatewayError}
             </div>
           )}
-          <div className="settings-field-hint">
-            Configure platforms here. Saving changes restarts the gateway when
-            needed so adapters pick up the latest credentials.
-          </div>
+          <div className="settings-field-hint">{t("gateway.configHint")}</div>
         </div>
         {catalog?.message && (
           <div className="gateway-inline-warning">{catalog.message}</div>
@@ -474,7 +469,7 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search platforms or env vars"
+            placeholder={t("gateway.searchPlaceholder")}
           />
         </div>
       </div>
@@ -502,9 +497,7 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
           ))}
         </div>
         {filteredPlatforms.length === 0 && (
-          <div className="gateway-empty-state">
-            No messaging platforms match this search.
-          </div>
+          <div className="gateway-empty-state">{t("gateway.emptyState")}</div>
         )}
       </div>
     </div>
@@ -549,6 +542,7 @@ function PlatformCard({
   platform,
   visibleKeys,
 }: PlatformCardProps): React.JSX.Element {
+  const { t } = useI18n();
   const [modalOpen, setModalOpen] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [pendingRiskKey, setPendingRiskKey] = useState<string | null>(null);
@@ -566,8 +560,10 @@ function PlatformCard({
     platform.env_vars.some((field) =>
       clearedKeys.has(`${platform.id}:${field.key}`),
     );
-  const status = platformStateLabel(platform);
-  const detailsLabel = platform.configured ? "Details" : "Configure";
+  const status = platformStateLabel(platform, t);
+  const detailsLabel = platform.configured
+    ? t("gateway.details")
+    : t("gateway.configure");
 
   const closeModal = useCallback(() => {
     setModalOpen(false);
@@ -614,15 +610,29 @@ function PlatformCard({
             </span>
           </div>
         </div>
-        <label className="tools-toggle" title="Enable platform">
-          <input
-            type="checkbox"
-            checked={platform.enabled}
-            disabled={isBusy}
-            onChange={() => void onToggle(platform)}
-          />
-          <span className="tools-toggle-track" />
-        </label>
+        <div
+          className={`gateway-toggle-wrapper${!platform.configured && !platform.enabled ? " gateway-toggle-needs-setup" : ""}`}
+          title={
+            platform.configured || platform.enabled
+              ? t("gateway.enablePlatform")
+              : undefined
+          }
+          data-tooltip={
+            !platform.configured && !platform.enabled
+              ? t("gateway.setupFirst")
+              : undefined
+          }
+        >
+          <label className="tools-toggle">
+            <input
+              type="checkbox"
+              checked={platform.enabled}
+              disabled={isBusy || (!platform.configured && !platform.enabled)}
+              onChange={() => void onToggle(platform)}
+            />
+            <span className="tools-toggle-track" />
+          </label>
+        </div>
       </div>
 
       <div className="gateway-platform-actions">
@@ -631,20 +641,20 @@ function PlatformCard({
             <button
               className="btn-ghost gateway-icon-action"
               onClick={() => window.hermesAPI.openExternal(platform.docs_url)}
-              title="Open platform documentation"
+              title={t("gateway.docsTooltip")}
             >
               <ExternalLink size={15} />
-              Docs
+              {t("gateway.docs")}
             </button>
           )}
           <button
             className="btn-ghost gateway-icon-action"
             disabled={isBusy}
             onClick={() => void onTest(platform)}
-            title="Check whether this platform is configured and connected"
+            title={t("gateway.testTooltip")}
           >
             <TestTube2 size={15} />
-            Test
+            {t("gateway.test")}
           </button>
           <button
             className={`btn-ghost gateway-icon-action gateway-details-toggle${
@@ -661,9 +671,9 @@ function PlatformCard({
           {hasDraft && (
             <span
               className="gateway-unsaved-hint"
-              title="You have unsaved changes"
+              title={t("gateway.unsavedTooltip")}
             >
-              Unsaved
+              {t("gateway.unsaved")}
             </span>
           )}
         </div>
@@ -686,7 +696,7 @@ function PlatformCard({
             onClick={(event) => event.stopPropagation()}
             role="dialog"
             aria-modal="true"
-            aria-label={`Configure ${platform.name}`}
+            aria-label={`${t("gateway.configure")} ${platform.name}`}
           >
             <div className="gateway-modal-header">
               <div className="gateway-modal-title">
@@ -705,8 +715,8 @@ function PlatformCard({
                 type="button"
                 className="btn-ghost"
                 onClick={closeModal}
-                aria-label="Close"
-                title="Close"
+                aria-label={t("common.close")}
+                title={t("common.close")}
               >
                 <X size={18} />
               </button>
@@ -728,7 +738,7 @@ function PlatformCard({
                 <div className="gateway-modal-section">
                   <div className="gateway-section-heading-row">
                     <div className="gateway-detail-heading">
-                      Keys &amp; secrets
+                      {t("gateway.keysSecrets")}
                     </div>
                     {hasHideableAdvanced && (
                       <label className="gateway-advanced-toggle">
@@ -739,7 +749,7 @@ function PlatformCard({
                             setShowAdvanced(event.target.checked)
                           }
                         />
-                        Show advanced
+                        {t("gateway.showAdvanced")}
                       </label>
                     )}
                   </div>
@@ -749,7 +759,7 @@ function PlatformCard({
                       const isVisible = visibleKeys.has(key);
                       const isCleared = clearedKeys.has(key);
                       const placeholder = isCleared
-                        ? "Cleared when saved"
+                        ? t("gateway.clearedWhenSaved")
                         : field.redacted_value || field.prompt;
                       return (
                         <div
@@ -786,7 +796,9 @@ function PlatformCard({
                                   onToggleVisibility(platform.id, field.key)
                                 }
                                 title={
-                                  isVisible ? "Hide value" : "Show typed value"
+                                  isVisible
+                                    ? t("gateway.hideValue")
+                                    : t("gateway.showValue")
                                 }
                               >
                                 {isVisible ? (
@@ -800,7 +812,7 @@ function PlatformCard({
                               <button
                                 className="btn-ghost settings-toggle-btn"
                                 onClick={() => onClear(platform.id, field.key)}
-                                title="Clear saved value"
+                                title={t("gateway.clearSaved")}
                               >
                                 <Trash2 size={15} />
                               </button>
@@ -810,7 +822,7 @@ function PlatformCard({
                             {field.description}
                             {field.advanced && (
                               <span className="gateway-advanced-badge">
-                                Advanced
+                                {t("gateway.advanced")}
                               </span>
                             )}
                           </div>
@@ -823,7 +835,9 @@ function PlatformCard({
 
               {platform.toolsets?.length > 0 && (
                 <div className="gateway-capabilities">
-                  <div className="gateway-detail-heading">Capabilities</div>
+                  <div className="gateway-detail-heading">
+                    {t("gateway.capabilities")}
+                  </div>
                   <div className="gateway-capability-list">
                     {platform.toolsets.map((toolset) => (
                       <div
@@ -838,7 +852,7 @@ function PlatformCard({
                             <code>{toolset.key}</code>
                             {toolset.risk === "high" && (
                               <span className="gateway-risk-pill">
-                                High risk
+                                {t("gateway.highRisk")}
                               </span>
                             )}
                           </div>
@@ -848,7 +862,7 @@ function PlatformCard({
                         </div>
                         <label
                           className="tools-toggle"
-                          title={`${toolset.enabled ? "Disable" : "Enable"} ${toolset.label}`}
+                          title={`${toolset.enabled ? t("gateway.disable") : t("gateway.enable")} ${toolset.label}`}
                         >
                           <input
                             type="checkbox"
@@ -862,18 +876,16 @@ function PlatformCard({
                           <div className="gateway-risk-warning">
                             <AlertTriangle size={16} />
                             <div>
-                              <strong>Strong warning</strong>
+                              <strong>{t("gateway.strongWarning")}</strong>
                               <p>
-                                {toolset.label} lets this messaging platform
-                                drive sensitive local tools. Enable it only for
-                                trusted, private channels and known users.
+                                {t("gateway.riskDesc", { name: toolset.label })}
                               </p>
                               <div className="gateway-risk-actions">
                                 <button
                                   className="btn btn-secondary btn-sm"
                                   onClick={() => setPendingRiskKey(null)}
                                 >
-                                  Cancel
+                                  {t("common.cancel")}
                                 </button>
                                 <button
                                   className="btn btn-danger btn-sm"
@@ -883,7 +895,7 @@ function PlatformCard({
                                     void onToggleToolset(platform, toolset);
                                   }}
                                 >
-                                  Enable anyway
+                                  {t("gateway.enableAnyway")}
                                 </button>
                               </div>
                             </div>
@@ -903,11 +915,11 @@ function PlatformCard({
                 onClick={() => void onTest(platform)}
               >
                 <TestTube2 size={15} />
-                Test
+                {t("gateway.test")}
               </button>
               <div className="gateway-modal-footer-spacer" />
               <button className="btn btn-secondary btn-sm" onClick={closeModal}>
-                Close
+                {t("common.close")}
               </button>
               <button
                 className="btn btn-primary btn-sm gateway-save-button"
@@ -915,7 +927,7 @@ function PlatformCard({
                 onClick={() => void onSave(platform)}
               >
                 <Save size={15} />
-                Save
+                {t("common.save")}
               </button>
             </div>
           </div>
@@ -925,27 +937,38 @@ function PlatformCard({
   );
 }
 
-function platformStateLabel(platform: MessagingPlatformInfo): {
+function platformStateLabel(
+  platform: MessagingPlatformInfo,
+  t: (key: string) => string,
+): {
   icon: "ok" | "pending";
   label: string;
   tone: "ok" | "warn" | "muted" | "error";
 } {
   if (!platform.enabled) {
-    return { icon: "pending", label: "Disabled", tone: "muted" };
+    return {
+      icon: "pending",
+      label: t("gateway.states.disabled"),
+      tone: "muted",
+    };
   }
   if (!platform.configured) {
-    return { icon: "pending", label: "Needs setup", tone: "warn" };
+    return {
+      icon: "pending",
+      label: t("gateway.states.needsSetup"),
+      tone: "warn",
+    };
   }
   if (platform.state === "connected") {
-    return { icon: "ok", label: "Connected", tone: "ok" };
+    return { icon: "ok", label: t("gateway.states.connected"), tone: "ok" };
   }
   if (platform.error_message || platform.error_code) {
-    return { icon: "pending", label: "Error", tone: "error" };
+    return { icon: "pending", label: t("gateway.states.error"), tone: "error" };
   }
   if (!platform.gateway_running) {
-    return { icon: "pending", label: "Ready", tone: "muted" };
+    return { icon: "pending", label: t("gateway.states.ready"), tone: "muted" };
   }
-  return { icon: "ok", label: "Configured", tone: "ok" };
+  return { icon: "ok", label: t("gateway.states.configured"), tone: "ok" };
 }
 
 export default Gateway;

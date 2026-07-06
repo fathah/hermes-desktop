@@ -10,6 +10,7 @@ export type FurnitureType =
   | "executiveDesk"
   | "chair"
   | "couch"
+  | "sofaChair"
   | "beanbag"
   | "plant"
   | "whitePot"
@@ -95,18 +96,58 @@ const DESK_W = 100;
 const CHAIR_FOOTPRINT = 24;
 
 // ── CEO executive desk ─────────────────────────────────────────────────────
-// The CEO gets a prominent private office in the front-centre of the work area
-// (south, closest to the camera, on the rug), set apart from the employee grid
-// which fills the rows to the north, with surrounding decor (EXECUTIVE_DECOR).
+// The CEO gets a private glass-walled corner office in the south-west of the
+// work area (see CEO_OFFICE / GLASS_WALLS below), set apart from the employee
+// grid which fills the rows to the north, with surrounding decor
+// (EXECUTIVE_DECOR).
 //
 // NOTE: ceo_desk.glb is modelled with its origin at the footprint CENTRE
 // (unlike employee desk.glb, whose origin is a back corner), so CEO_DESK_X/Y is
 // the desk's centre point — not its top-left. The seat sits due north of that
 // centre, just clear of the desk's back edge: half the model depth (0.847 world
 // units × 0.85 desk scale ÷ 2 ÷ SCALE ≈ 20 canvas) plus a small clearance gap.
-const CEO_DESK_X = 470;
-const CEO_DESK_Y = 1180;
+const CEO_DESK_X = 300;
+const CEO_DESK_Y = 1390;
 const CEO_SEAT_BACK = 30;
+
+// ── CEO glass corner office (south-west of the work area) ──────────────────
+// The west and south sides are the building's perimeter walls; the north and
+// east sides are clear glass partitions. The doorway gap sits in the east
+// glass wall, on the straight walk-in line from the spawn point so agents
+// (which have no pathfinder) enter without clipping a pane.
+export const CEO_OFFICE = {
+  minX: 40,
+  maxX: 560,
+  minY: 1150,
+  maxY: 1790,
+  doorYMin: 1440,
+  doorYMax: 1620,
+};
+export const CEO_DOOR_Y = (CEO_OFFICE.doorYMin + CEO_OFFICE.doorYMax) / 2;
+
+export const GLASS_WALLS: WallSegment[] = [
+  {
+    id: "ceo-glass-north",
+    x: CEO_OFFICE.minX,
+    y: CEO_OFFICE.minY - PARTITION_THICKNESS / 2,
+    w: CEO_OFFICE.maxX - CEO_OFFICE.minX,
+    h: PARTITION_THICKNESS,
+  },
+  {
+    id: "ceo-glass-east-top",
+    x: CEO_OFFICE.maxX - PARTITION_THICKNESS / 2,
+    y: CEO_OFFICE.minY,
+    w: PARTITION_THICKNESS,
+    h: CEO_OFFICE.doorYMin - CEO_OFFICE.minY,
+  },
+  {
+    id: "ceo-glass-east-bottom",
+    x: CEO_OFFICE.maxX - PARTITION_THICKNESS / 2,
+    y: CEO_OFFICE.doorYMax,
+    w: PARTITION_THICKNESS,
+    h: CEO_OFFICE.maxY - CEO_OFFICE.doorYMax,
+  },
+];
 
 function buildEmployeeWorkstation(agentId: string, index: number): Workstation {
   const col = index % COLS;
@@ -181,34 +222,68 @@ export function buildWorkstations(
 }
 
 /**
- * Decorative furniture framing the CEO's private office, rendered only when a
- * CEO exists. A visitor couch sits in front of (south of) the desk facing it,
- * flanked by plants — turning the front-centre zone into a small lounge. The
- * desk itself also gets two flanking plants from the executive workstation.
+ * Decorative furniture inside the CEO's glass corner office, rendered only
+ * when a CEO exists: a visitor lounge (couch + two leather guest armchairs
+ * around the coffee table — the table itself is rendered in Office3D),
+ * greenery along the west wall and planters flanking the doorway. The desk
+ * also gets two flanking plants from the executive workstation.
  */
 export const EXECUTIVE_DECOR: FurniturePlacement[] = [
+  // Visitor couch facing the desk across the coffee table.
   {
     id: "ceo-couch",
     type: "couch",
     x: CEO_DESK_X - 30,
-    y: CEO_DESK_Y + 100,
+    y: CEO_DESK_Y + 140,
     facingDeg: 180,
     tint: "#2f3a4a",
   },
-
-  // White planters framing the front of the lounge (either side of the couch).
+  // Leather guest armchairs angled in toward the coffee table, pushed out
+  // far enough that the desk's flanking plants don't clip them.
   {
-    id: "ceo-whitepot-left",
-    type: "whitePot",
-    x: CEO_DESK_X - 75,
-    y: CEO_DESK_Y + 180,
+    id: "ceo-guest-chair-west",
+    type: "sofaChair",
+    x: CEO_DESK_X - 185,
+    y: CEO_DESK_Y + 80,
+    facingDeg: 115,
+    tint: "#6b4f3a",
+  },
+  {
+    id: "ceo-guest-chair-east",
+    type: "sofaChair",
+    x: CEO_DESK_X + 185,
+    y: CEO_DESK_Y + 80,
+    facingDeg: 245,
+    tint: "#6b4f3a",
+  },
+  // Greenery along the west (window) wall.
+  {
+    id: "ceo-plant-nw",
+    type: "plant",
+    x: CEO_OFFICE.minX + 35,
+    y: CEO_OFFICE.minY + 70,
     facingDeg: 0,
   },
   {
-    id: "ceo-whitepot-right",
+    id: "ceo-plant-sw",
+    type: "plant",
+    x: CEO_OFFICE.minX + 35,
+    y: CEO_OFFICE.maxY - 110,
+    facingDeg: 0,
+  },
+  // White planters just inside the glass door.
+  {
+    id: "ceo-whitepot-door-north",
     type: "whitePot",
-    x: CEO_DESK_X + 155,
-    y: CEO_DESK_Y + 180,
+    x: CEO_OFFICE.maxX - 60,
+    y: CEO_OFFICE.doorYMin - 60,
+    facingDeg: 0,
+  },
+  {
+    id: "ceo-whitepot-door-south",
+    type: "whitePot",
+    x: CEO_OFFICE.maxX - 60,
+    y: CEO_OFFICE.doorYMax + 20,
     facingDeg: 0,
   },
 ];

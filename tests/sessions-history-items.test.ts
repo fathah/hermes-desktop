@@ -9,6 +9,9 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import { join } from "path";
+import { tmpdir } from "os";
 import {
   expandRowsToHistory,
   dedupeSearchRowsBySession,
@@ -355,5 +358,148 @@ describe("expandRowsToHistory", () => {
     expect(
       "attachments" in merged[0] ? merged[0].attachments?.[0].dataUrl : "",
     ).toBe("data:image/png;base64,AAA=");
+  });
+
+  it("hides Hermes vision fallback text when restoring pasted-image prompts", () => {
+    const items = expandRowsToHistory([
+      row({
+        id: 20,
+        role: "user",
+        content:
+          "[The user attached an image but analysis failed.]\n" +
+          "[You can examine it with vision_analyze using image_url:\n" +
+          "C:\\Users\\pmos6\\image.png]\n\n" +
+          "what is this?",
+        timestamp: 1,
+      }),
+    ]);
+
+    const merged = mergeStoredPromptImageAttachments(items, new Map());
+
+    expect(merged[0]).toMatchObject({
+      kind: "user",
+      content: "what is this?",
+    });
+    expect("attachments" in merged[0]).toBe(false);
+  });
+
+  it("rehydrates a local image referenced by Hermes vision fallback text", () => {
+    const dir = mkdtempSync(join(tmpdir(), "hermes-session-image-"));
+    const imagePath = join(dir, "upload.png");
+    try {
+      writeFileSync(
+        imagePath,
+        Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lrVI6wAAAABJRU5ErkJggg==",
+          "base64",
+        ),
+      );
+
+      const items = expandRowsToHistory([
+        row({
+          id: 21,
+          role: "user",
+          content:
+            "[The user attached an image but analysis failed.]\n" +
+            `[You can examine it with vision_analyze using image_url: ${imagePath}]\n\n` +
+            "what is this?",
+          timestamp: 1,
+        }),
+      ]);
+
+      const merged = mergeStoredPromptImageAttachments(items, new Map());
+      const user = merged[0] as Extract<HistoryItem, { kind: "user" }>;
+
+      expect(user.content).toBe("what is this?");
+      expect(user.attachments).toHaveLength(1);
+      expect(user.attachments?.[0]).toMatchObject({
+        kind: "image",
+        name: "upload.png",
+        mime: "image/png",
+        path: imagePath,
+      });
+      expect(user.attachments?.[0].dataUrl).toMatch(/^data:image\/png;base64,/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rehydrates a local image referenced by Hermes successful vision preface", () => {
+    const dir = mkdtempSync(join(tmpdir(), "hermes-session-image-"));
+    const imagePath = join(dir, "upload.png");
+    try {
+      writeFileSync(
+        imagePath,
+        Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lrVI6wAAAABJRU5ErkJggg==",
+          "base64",
+        ),
+      );
+
+      const items = expandRowsToHistory([
+        row({
+          id: 22,
+          role: "user",
+          content:
+            "[The user attached an image:\n" +
+            "A bright bathroom scene with two yellow rubber ducks.]\n" +
+            `[You can examine it with vision_analyze using image_url: ${imagePath}]\n\n` +
+            "what is this?",
+          timestamp: 1,
+        }),
+      ]);
+
+      const merged = mergeStoredPromptImageAttachments(items, new Map());
+      const user = merged[0] as Extract<HistoryItem, { kind: "user" }>;
+
+      expect(user.content).toBe("what is this?");
+      expect(user.attachments).toHaveLength(1);
+      expect(user.attachments?.[0]).toMatchObject({
+        kind: "image",
+        name: "upload.png",
+        mime: "image/png",
+        path: imagePath,
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rehydrates a local image referenced by trailing desktop image marker", () => {
+    const dir = mkdtempSync(join(tmpdir(), "hermes-session-image-"));
+    const imagePath = join(dir, "upload.png");
+    try {
+      writeFileSync(
+        imagePath,
+        Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lrVI6wAAAABJRU5ErkJggg==",
+          "base64",
+        ),
+      );
+
+      const items = expandRowsToHistory([
+        row({
+          id: 23,
+          role: "user",
+          content: `what is this?\n\n[Image attached at: ${imagePath}]\n[screenshot]`,
+          timestamp: 1,
+        }),
+      ]);
+
+      const merged = mergeStoredPromptImageAttachments(items, new Map());
+      const user = merged[0] as Extract<HistoryItem, { kind: "user" }>;
+
+      expect(user.content).toBe("what is this?");
+      expect(user.attachments).toHaveLength(1);
+      expect(user.attachments?.[0]).toMatchObject({
+        kind: "image",
+        name: "upload.png",
+        mime: "image/png",
+        path: imagePath,
+      });
+      expect(user.attachments?.[0].dataUrl).toMatch(/^data:image\/png;base64,/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

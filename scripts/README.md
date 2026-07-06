@@ -29,6 +29,38 @@ or normal `npm run dev` workflows.
     drive the UI with DOM-aware selectors, evaluate IPC calls in the
     renderer, or read state from the running main process.
 
+## Full live visual regression suite
+
+For reconciliation work, use the reusable full-suite driver instead of
+assembling one-off snippets:
+
+```bash
+npm run test:live-visual
+```
+
+It attaches to the running Electron app over CDP and drives the visible
+Chat, Sessions, Models, model picker, and attachment controls for
+local, remote HTTP, and SSH. It covers:
+
+- valid prompt + restored session
+- bad -> good -> bad -> good in one session + restored session
+- add/remove model persistence + chat selector availability
+- pasted image display live + restored
+- generated image display live + restored
+- duplicate/missing-message checks for every restored transcript
+
+Reports and screenshots are written to
+`.sandbox/live-visual-regression/<run-id>/`.
+
+Useful flags:
+
+```bash
+node scripts/drive-live-regression-suite.js --modes=local,remote,ssh
+node scripts/drive-live-regression-suite.js --skip-generated
+node scripts/drive-live-regression-suite.js --paste-image=C:\path\to\image.png
+node scripts/drive-live-regression-suite.js --remote-url=http://127.0.0.1:19080 --remote-token=<token>
+```
+
 ## How the opt-in works
 
 `src/main/index.ts` reads `process.env.ENABLE_CDP` at startup and, when

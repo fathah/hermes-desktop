@@ -1,4 +1,8 @@
 import type { ChatMessage } from "./types";
+import {
+  displayTextForTranscript,
+  shouldCopyToTranscript,
+} from "./chatMessages";
 
 export type TranscriptFormat = "text" | "markdown";
 
@@ -15,11 +19,10 @@ export function buildChatTranscript(
   format: TranscriptFormat,
 ): string {
   return messages
-    .filter((m) => "content" in m && typeof m.content === "string")
+    .filter(shouldCopyToTranscript)
     .map((m) => {
-      const msg = m as { role: "user" | "agent"; content: string };
-      const speaker = msg.role === "user" ? "You" : "Hermes";
-      const content = msg.content.trim();
+      const speaker = m.role === "user" ? "You" : "Hermes";
+      const content = displayTextForTranscript(m);
       return format === "markdown"
         ? `**${speaker}:**\n\n${content}`
         : `${speaker}: ${content}`;

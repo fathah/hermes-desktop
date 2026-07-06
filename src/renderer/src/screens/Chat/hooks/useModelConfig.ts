@@ -1,7 +1,59 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PROVIDERS } from "../../../constants";
+import { useDiscoveredModels } from "../../../hooks/useDiscoveredModels";
 import { useI18n } from "../../../components/useI18n";
 import type { ModelGroup } from "../types";
+
+const OLLAMA_CLOUD_PROVIDER = "ollama-cloud";
+const OLLAMA_CLOUD_BASE_URL = "https://ollama.com/v1";
+
+/**
+ * Named providers (deepseek, groq, anthropic, …) have a hardcoded canonical
+ * base_url in hermes-agent's PROVIDER_REGISTRY, so a stored `baseUrl` on those
+ * entries can be stale and would misroute the request. Keep the baseUrl only
+ * for `custom` and `ollama-cloud` entries, where it is authoritative; clear it
+ * otherwise so the backend falls back to the provider's canonical URL. Shared
+ * by `selectModel` and the chat-screen session override so they can't drift.
+ */
+export function effectiveOverrideBaseUrl(
+  provider: string,
+  baseUrl: string,
+): string {
+  return provider === "custom" || provider === OLLAMA_CLOUD_PROVIDER
+    ? baseUrl
+    : "";
+}
+
+interface SavedModelForPicker {
+  provider: string;
+  model: string;
+  name: string;
+  baseUrl?: string;
+}
+
+function mergeLiveOllamaCloudModels(
+  savedModels: SavedModelForPicker[],
+  liveModels: string[],
+  liveStatus: string,
+): SavedModelForPicker[] {
+  if (liveStatus !== "ok" || liveModels.length === 0) {
+    return savedModels;
+  }
+
+  const liveEntries = Array.from(new Set(liveModels))
+    .sort()
+    .map((model) => ({
+      provider: OLLAMA_CLOUD_PROVIDER,
+      model,
+      name: `Ollama Cloud · ${model}`,
+      baseUrl: OLLAMA_CLOUD_BASE_URL,
+    }));
+
+  return [
+    ...savedModels.filter((model) => model.provider !== OLLAMA_CLOUD_PROVIDER),
+    ...liveEntries,
+  ];
+}
 
 interface UseModelConfigResult {
   currentModel: string;
@@ -14,12 +66,11 @@ interface UseModelConfigResult {
     provider: string,
     model: string,
     baseUrl: string,
+    options?: { persist?: boolean },
   ) => Promise<void>;
 }
 
-function groupModelsByProvider(
-  models: { provider: string; model: string; name: string; baseUrl?: string }[],
-): ModelGroup[] {
+function groupModelsByProvider(models: SavedModelForPicker[]): ModelGroup[] {
   const groupMap = new Map<string, ModelGroup>();
   for (const m of models) {
     if (!groupMap.has(m.provider)) {
@@ -45,16 +96,36 @@ export function useModelConfig(profile?: string): UseModelConfigResult {
   const [currentProvider, setCurrentProvider] = useState("auto");
   const [currentBaseUrl, setCurrentBaseUrl] = useState("");
   const [modelGroups, setModelGroups] = useState<ModelGroup[]>([]);
+  const [savedModels, setSavedModels] = useState<SavedModelForPicker[]>([]);
+  const loadSeqRef = useRef(0);
+
+  const ollamaCloudDiscovery = useDiscoveredModels({
+    provider: OLLAMA_CLOUD_PROVIDER,
+    profile,
+    enabled: true,
+  });
+
+  const modelsForPicker = useMemo(
+    () =>
+      mergeLiveOllamaCloudModels(
+        savedModels,
+        ollamaCloudDiscovery.models,
+        ollamaCloudDiscovery.status,
+      ),
+    [savedModels, ollamaCloudDiscovery.models, ollamaCloudDiscovery.status],
+  );
 
   const reload = useCallback(async (): Promise<void> => {
+    const seq = ++loadSeqRef.current;
     const [mc, savedModels] = await Promise.all([
       window.hermesAPI.getModelConfig(profile),
       window.hermesAPI.listModels(),
     ]);
+    if (seq !== loadSeqRef.current) return;
     setCurrentModel(mc.model);
     setCurrentProvider(mc.provider);
     setCurrentBaseUrl(mc.baseUrl);
-    setModelGroups(groupModelsByProvider(savedModels));
+    setSavedModels(savedModels);
   }, [profile]);
 
   // Initial load + reload whenever the profile changes (canonical
@@ -63,27 +134,62 @@ export function useModelConfig(profile?: string): UseModelConfigResult {
     reload();
   }, [reload]);
 
+  useEffect(() => {
+    setModelGroups(groupModelsByProvider(modelsForPicker));
+  }, [modelsForPicker]);
+
+  useEffect(() => {
+    return window.hermesAPI.onConnectionConfigChanged(() => {
+      setModelGroups([]);
+      void reload();
+    });
+  }, [reload]);
+
+  useEffect(() => {
+    return window.hermesAPI.onModelLibraryChanged(() => {
+      void reload();
+    });
+  }, [reload]);
+
   const selectModel = useCallback(
-    async (provider: string, model: string, baseUrl: string): Promise<void> => {
-      // Named providers (deepseek, groq, anthropic, …) have a hardcoded
-      // canonical base_url in `hermes-agent`'s PROVIDER_REGISTRY.  A stored
-      // model entry that carries a stale `baseUrl` from an earlier confused
-      // save (e.g. a deepseek-tagged entry whose baseUrl points at the codex
-      // endpoint) would route the request to the wrong host.  Drop the
-      // baseUrl whenever the entry isn't `custom`; the gateway falls back
-      // to the provider's canonical URL.
-      const effectiveBaseUrl = provider === "custom" ? baseUrl : "";
-      await window.hermesAPI.setModelConfig(
-        provider,
-        model,
-        effectiveBaseUrl,
-        profile,
-      );
+    async (
+      provider: string,
+      model: string,
+      baseUrl: string,
+      { persist = true }: { persist?: boolean } = {},
+    ): Promise<void> => {
+      const effectiveBaseUrl = effectiveOverrideBaseUrl(provider, baseUrl);
       setCurrentModel(model);
       setCurrentProvider(provider);
       setCurrentBaseUrl(effectiveBaseUrl);
+      // Session-only selection: update local state only, do not write to
+      // config.yaml so the global default model is preserved (issue #688).
+      // Advance the sequence counter so any in-flight reload() triggered by
+      // onConnectionConfigChanged / onModelLibraryChanged cannot clobber the
+      // session-scoped selection with the persisted value.
+      if (!persist) {
+        ++loadSeqRef.current;
+        return;
+      }
+      const seq = ++loadSeqRef.current;
+      try {
+        await window.hermesAPI.setModelConfig(
+          provider,
+          model,
+          effectiveBaseUrl,
+          profile,
+        );
+        const mc = await window.hermesAPI.getModelConfig(profile);
+        if (seq !== loadSeqRef.current) return;
+        setCurrentModel(mc.model);
+        setCurrentProvider(mc.provider);
+        setCurrentBaseUrl(mc.baseUrl);
+      } catch (err) {
+        if (seq === loadSeqRef.current) await reload();
+        throw err;
+      }
     },
-    [profile],
+    [profile, reload],
   );
 
   const displayModel = useMemo(

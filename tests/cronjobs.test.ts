@@ -63,3 +63,55 @@ describe("createCronJob", () => {
     expect(execFileSpy.mock.calls[0][1]).not.toContain("--");
   });
 });
+
+describe("parseCronListOutput", () => {
+  it("parses the Hermes cron list table used by SSH profiles", async () => {
+    const { parseCronListOutput } = await import("../src/main/cronjobs");
+
+    const jobs = parseCronListOutput(`
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         Scheduled Jobs                                  │
+└─────────────────────────────────────────────────────────────────────────┘
+
+  321a3a33703e [active]
+    Name:      daily-daegu-startup-grant-monitoring
+    Schedule:  0 9 * * *
+    Repeat:    ∞
+    Next run:  2026-06-25T09:00:00+09:00
+    Deliver:   origin
+    Workdir:   /workspaces/biz-office
+    Last run:  2026-06-24T09:16:46.248027+09:00  ok
+
+  85e1165b00eb [paused]
+    Name:      server-emergency-watchdog
+    Schedule:  every 10m
+    Repeat:    2/5
+    Next run:  2026-06-24T23:00:40.707549+09:00
+    Deliver:   discord:channel-123
+    Script:    server_emergency_watchdog.py
+    Mode:      no-agent (script stdout delivered directly)
+`);
+
+    expect(jobs).toHaveLength(2);
+    expect(jobs[0]).toMatchObject({
+      id: "321a3a33703e",
+      name: "daily-daegu-startup-grant-monitoring",
+      schedule: "0 9 * * *",
+      state: "active",
+      enabled: true,
+      next_run_at: "2026-06-25T09:00:00+09:00",
+      last_run_at: "2026-06-24T09:16:46.248027+09:00",
+      last_status: "ok",
+      repeat: { times: null, completed: 0 },
+      deliver: ["origin"],
+    });
+    expect(jobs[1]).toMatchObject({
+      id: "85e1165b00eb",
+      state: "paused",
+      enabled: false,
+      repeat: { times: 5, completed: 2 },
+      deliver: ["discord:channel-123"],
+      script: "server_emergency_watchdog.py",
+    });
+  });
+});

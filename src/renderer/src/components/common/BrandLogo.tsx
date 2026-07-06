@@ -38,6 +38,13 @@ import homeAssistantLogo from "../../assets/logos/home-assist.svg";
 import qqbotLogo from "../../assets/logos/qqbot.svg";
 import yuanbaoLogo from "../../assets/logos/yuanbao.svg";
 import apiLogo from "../../assets/logos/api.svg";
+import mimoLogo from "../../assets/logos/mimo.svg";
+import ollamaLogo from "../../assets/logos/ollama.svg";
+import lmstudioLogo from "../../assets/logos/lmstudio.svg";
+import vllmLogo from "../../assets/logos/vllm.svg";
+import atlascloudLogo from "../../assets/logos/atlascloud.svg";
+import atomicchatLogo from "../../assets/logos/atomicchat.svg";
+import qwenLogo from "../../assets/logos/qwen.svg";
 
 type BrandKey =
   | "claude"
@@ -54,6 +61,13 @@ type BrandKey =
   | "cerebras"
   | "fireworks"
   | "grok"
+  | "xiaomi"
+  | "ollama"
+  | "lmstudio"
+  | "vllm"
+  | "atlascloud"
+  | "atomicchat"
+  | "qwen"
   | "huggingface"
   | "mistral"
   | "opencode"
@@ -96,6 +110,13 @@ const LOGOS: Record<Exclude<BrandKey, "unknown">, string> = {
   cerebras: cerebrasLogo,
   fireworks: fireworksLogo,
   grok: grokLogo,
+  xiaomi: mimoLogo,
+  ollama: ollamaLogo,
+  lmstudio: lmstudioLogo,
+  vllm: vllmLogo,
+  atlascloud: atlascloudLogo,
+  atomicchat: atomicchatLogo,
+  qwen: qwenLogo,
   huggingface: huggingfaceLogo,
   mistral: mistralLogo,
   opencode: opencodeLogo,
@@ -130,10 +151,22 @@ function detectBrand(provider?: string, modelId?: string): BrandKey {
   if (/(gpt|openai)/.test(haystack)) return "openai";
   if (/nous/.test(haystack)) return "nous";
   if (/(moonshot|kimi)/.test(haystack)) return "moonshot";
+  // Check ollama and llama.cpp BEFORE the meta/llama rule: "ollama" contains
+  // the substring "llama", so the broad /(meta|llama)/ test would otherwise
+  // mis-tag Ollama (and llama.cpp) with the Meta logo.
+  if (/ollama/.test(haystack)) return "ollama";
+  if (/(llamacpp|llama[.\s-]?cpp)/.test(haystack)) return "api_server";
   if (/(meta|llama)/.test(haystack)) return "meta";
   if (/(nvidia|nemotron)/.test(haystack)) return "nvidia";
   if (/groq/.test(haystack)) return "groq";
   if (/(grok|xai)/.test(haystack)) return "grok";
+  if (/(xiaomi|mimo)/.test(haystack)) return "xiaomi";
+  if (/(atlascloud|atlas[\s-]?cloud)/.test(haystack)) return "atlascloud";
+  if (/(atomicchat|atomic[\s-]?chat)/.test(haystack)) return "atomicchat";
+  if (/(qwen|qwq|dashscope|alibaba|tongyi)/.test(haystack)) return "qwen";
+  if (/(lmstudio|lm[\s-]?studio)/.test(haystack)) return "lmstudio";
+  if (/vllm/.test(haystack)) return "vllm";
+  if (/aiml/.test(haystack)) return "api_server";
   if (/minimax/.test(haystack)) return "minimax";
   if (/(zai|z\.ai|glm|zhipu)/.test(haystack)) return "zai";
   if (/cerebras/.test(haystack)) return "cerebras";
@@ -166,6 +199,9 @@ function detectBrand(provider?: string, modelId?: string): BrandKey {
   if (/email/.test(haystack)) return "email";
   if (/sms/.test(haystack)) return "sms";
   if (/openrouter/.test(haystack)) return "openrouter";
+  // Lowest priority: a bare "local" provider (custom local server) gets the
+  // generic API mark rather than the unknown-robot fallback.
+  if (/\blocal\b/.test(haystack)) return "api_server";
   return "unknown";
 }
 

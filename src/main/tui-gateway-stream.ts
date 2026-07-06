@@ -11,7 +11,9 @@ function stringValue(value: unknown): string {
 }
 
 function numberValue(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 function resultText(payload: Record<string, unknown>): string {
@@ -75,22 +77,22 @@ export function gatewayCompletionSuffix(
   return "";
 }
 
-export function gatewayUsage(event: GatewayEvent):
-  | {
-      promptTokens: number;
-      completionTokens: number;
-      totalTokens: number;
-      cost?: number;
-      cacheReadTokens?: number;
-      cacheWriteTokens?: number;
-    }
-  | null {
+export function gatewayUsage(event: GatewayEvent): {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  cost?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+} | null {
   if (event.type !== "message.complete") return null;
   const usage = event.payload?.usage;
   if (!usage || typeof usage !== "object" || Array.isArray(usage)) return null;
   const u = usage as Record<string, unknown>;
   const promptTokens =
-    numberValue(u.input) ?? numberValue(u.prompt) ?? numberValue(u.prompt_tokens);
+    numberValue(u.input) ??
+    numberValue(u.prompt) ??
+    numberValue(u.prompt_tokens);
   const completionTokens =
     numberValue(u.output) ??
     numberValue(u.completion) ??
@@ -105,7 +107,9 @@ export function gatewayUsage(event: GatewayEvent):
     promptTokens: prompt,
     completionTokens: completion,
     totalTokens: totalTokens ?? prompt + completion,
-    ...(numberValue(u.cost_usd) != null ? { cost: numberValue(u.cost_usd) } : {}),
+    ...(numberValue(u.cost_usd) != null
+      ? { cost: numberValue(u.cost_usd) }
+      : {}),
     ...(numberValue(u.cache_read) != null
       ? { cacheReadTokens: numberValue(u.cache_read) }
       : {}),
@@ -121,7 +125,8 @@ export function gatewayToolEvent(event: GatewayEvent): ChatToolEvent | null {
   }
   const payload = event.payload || {};
   const name = stringValue(payload.name) || "tool";
-  const callId = stringValue(payload.tool_id) || `${event.session_id || "gateway"}:${name}`;
+  const callId =
+    stringValue(payload.tool_id) || `${event.session_id || "gateway"}:${name}`;
   const result = event.type === "tool.complete" ? resultText(payload) : "";
   return {
     callId,

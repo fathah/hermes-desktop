@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Crown, RefreshCw, Users, X } from "lucide-react";
+import { Crown, Move, RefreshCw, TriangleAlert, Users, X } from "lucide-react";
+import type { GpuStatus } from "../../../../shared/gpu";
 import { useI18n } from "../../components/useI18n";
 import oneChatIcon from "../../assets/images/one-chat.svg";
 import OneChatModal from "./OneChatModal";
@@ -35,6 +36,17 @@ function Office({ visible }: OfficeProps): React.JSX.Element {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [ceoId, setCeoId] = useState<string | null>(readStoredCeo);
   const [chatOpen, setChatOpen] = useState(false);
+  // Developer building-mover: click a building, then click ground to reposition
+  // it; positions are logged to the console so the cityPlan constants can be
+  // updated to match.
+  const [devMode, setDevMode] = useState(false);
+  const [devLog, setDevLog] = useState<string | null>(null);
+  // Software-rendering warning: the 3D office is the one surface that makes a
+  // SwiftShader fallback painfully visible (1 fps, CPU pegged), so this is
+  // where the user learns hardware acceleration is off and can recover.
+  const [gpuStatus, setGpuStatus] = useState<GpuStatus | null>(null);
+  const [gpuNoticeDismissed, setGpuNoticeDismissed] = useState(false);
+  const [reenabling, setReenabling] = useState(false);
 
   const setCeo = useCallback((id: string | null) => {
     setCeoId(id);
@@ -67,6 +79,29 @@ function Office({ visible }: OfficeProps): React.JSX.Element {
       void loadAgents();
     }
   }, [visible, loadAgents]);
+
+  // GPU state is fixed for the lifetime of the process (changing it requires a
+  // relaunch), so one fetch on first reveal is enough.
+  useEffect(() => {
+    if (!visible || gpuStatus !== null) return;
+    window.hermesAPI
+      .getGpuStatus()
+      .then(setGpuStatus)
+      .catch(() => {
+        // Older main processes without the handler: stay silent.
+      });
+  }, [visible, gpuStatus]);
+
+  const handleReenableGpu = useCallback(async () => {
+    setReenabling(true);
+    try {
+      // On success the app relaunches out from under us; reaching the catch or
+      // a `false` result means the env var blocks it (banner already says so).
+      await window.hermesAPI.reenableGpu();
+    } catch {
+      setReenabling(false);
+    }
+  }, []);
 
   // Background poll: re-read profiles while the tab is visible so a gateway
   // starting/stopping flips an agent's status (idle <-> working). The 3D
@@ -183,6 +218,38 @@ function Office({ visible }: OfficeProps): React.JSX.Element {
             <Users size={15} />
             {t("office.agentCount", { count: agents.length })}
           </span>
+          {import.meta.env.DEV && (
+            <button
+              type="button"
+              onClick={() =>
+                setDevMode((v) => {
+                  const next = !v;
+                  console.log(
+                    `[office] Move-buildings mode ${next ? "ON" : "OFF"} — click a building, then click the ground.`,
+                  );
+                  return next;
+                })
+              }
+              title="Developer: click a building then click the ground to move it (logs coordinates to the console)"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "6px 10px",
+                borderRadius: 8,
+                border: devMode
+                  ? "1px solid rgba(245,158,11,0.6)"
+                  : "1px solid var(--border, rgba(0,0,0,0.12))",
+                background: devMode ? "rgba(245,158,11,0.16)" : "transparent",
+                color: devMode ? "#fbbf24" : "var(--text-secondary)",
+                cursor: "pointer",
+                fontSize: 13,
+              }}
+            >
+              <Move size={14} />
+              {devMode ? "Moving buildings" : "Move buildings"}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => void loadAgents()}
@@ -221,12 +288,110 @@ function Office({ visible }: OfficeProps): React.JSX.Element {
           agents={positionedAgents}
           selectedId={selectedId}
           onSelectAgent={setSelectedId}
+          devMode={devMode}
+          onDevLog={setDevLog}
         />
+
+        {gpuStatus?.disabled && !gpuNoticeDismissed && (
+          <div
+            style={{
+              position: "absolute",
+              top: 16,
+              left: "50%",
+              transform: "translateX(-50%)",
+              maxWidth: 560,
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "10px 14px",
+              borderRadius: 10,
+              background: "rgba(20,24,33,0.92)",
+              border: "1px solid rgba(245,158,11,0.5)",
+              color: "#fbbf24",
+              fontSize: 13,
+              lineHeight: 1.4,
+              zIndex: 10,
+            }}
+          >
+            <TriangleAlert size={18} style={{ flex: "0 0 auto" }} />
+            <span>
+              {gpuStatus.reason === "env"
+                ? t("office.softwareRenderingEnvNotice")
+                : gpuStatus.reason === "preference"
+                  ? t("office.softwareRenderingPrefNotice")
+                  : t("office.softwareRenderingNotice")}
+            </span>
+            {gpuStatus.canReenable && (
+              <button
+                type="button"
+                onClick={() => void handleReenableGpu()}
+                disabled={reenabling}
+                style={{
+                  flex: "0 0 auto",
+                  padding: "6px 10px",
+                  borderRadius: 8,
+                  border: "1px solid rgba(245,158,11,0.6)",
+                  background: "rgba(245,158,11,0.16)",
+                  color: "#fbbf24",
+                  cursor: reenabling ? "default" : "pointer",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {t("office.reenableGpu")}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setGpuNoticeDismissed(true)}
+              title={t("office.dismissNotice")}
+              style={{
+                flex: "0 0 auto",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: 4,
+                borderRadius: 6,
+                border: "none",
+                background: "transparent",
+                color: "rgba(251,191,36,0.8)",
+                cursor: "pointer",
+              }}
+            >
+              <X size={15} />
+            </button>
+          </div>
+        )}
+
+        {import.meta.env.DEV && devMode && (
+          <div
+            style={{
+              position: "absolute",
+              left: 20,
+              bottom: 20,
+              maxWidth: 520,
+              padding: "10px 14px",
+              borderRadius: 10,
+              background: "rgba(20,24,33,0.92)",
+              color: "#fbbf24",
+              border: "1px solid rgba(245,158,11,0.5)",
+              fontSize: 12,
+              fontFamily: "monospace",
+              lineHeight: 1.5,
+              zIndex: 10,
+              userSelect: "text",
+            }}
+          >
+            {devLog ??
+              "Click a building to pick it up, then click empty ground to move it. Coordinates also log to DevTools console."}
+          </div>
+        )}
 
         <button
           type="button"
           onClick={() => setChatOpen(true)}
-          className="absolute bottom-5 right-5 w-[120px] h-11 rounded-lg border-none bg-black cursor-pointer flex items-center justify-center px-3 gap-2 z-10"
+          className="absolute bottom-5 right-5 w-30 h-11 rounded-lg border-none bg-black cursor-pointer flex items-center justify-center px-3 gap-2 z-10"
         >
           <img
             src={oneChatIcon}

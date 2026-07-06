@@ -7,6 +7,9 @@ export default {
   loadingShort: "Loading",
   saved: "Saved",
   save: "Save",
+  done: "Done",
+  edit: "Edit",
+  change: "Change",
   search: "Search",
   searchPlaceholder: "Search...",
   show: "Show",
@@ -47,4 +50,6 @@ export default {
   errorMessage: "An unexpected error occurred.",
   tryAgain: "Try Again",
   copied: "Copied!",
+  showMore: "Show more",
+  showLess: "Show less",
 } as const;

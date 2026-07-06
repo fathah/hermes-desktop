@@ -40,6 +40,7 @@ vi.mock("../src/main/installer", () => ({
 }));
 
 vi.mock("../src/main/config", () => ({
+  readDesktopConfig: () => ({}),
   getModelConfig: () => ({ model: "test-model", provider: "openrouter" }),
   readEnv: () => ({}),
   getConnectionConfig: () => ({

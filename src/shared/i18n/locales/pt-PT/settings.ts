@@ -6,9 +6,24 @@ export default {
     privacy: "Privacidade",
     credentialPool: "Pool de Credenciais",
   },
+  nav: {
+    groups: {
+      general: "Geral",
+      hermes: "Hermes One",
+    },
+    appearance: "Aparência",
+    language: "Idioma",
+    privacy: "Privacidade",
+    connection: "Ligação",
+    network: "Rede",
+    data: "Dados",
+    about: "Acerca e atualizações",
+    community: "Comunidade",
+    logs: "Registos e diagnóstico",
+  },
   analytics: {
     label: "Enviar análises de utilização anónimas",
-    hint: "Ajuda a melhorar o Hermes ao enviar dados de utilização anónimos e agregados para a instância PostHog do projecto (alojada na UE). Pode desactivar a qualquer momento.",
+    hint: "Ajuda a melhorar o Hermes ao enviar dados de utilização anónimos e agregados para o serviço de análise do projecto. Pode desactivar a qualquer momento.",
     disclosure: {
       uuid: "Um identificador aleatório por instalação guardado apenas neste dispositivo (sem nome, e-mail ou dados de conta).",
       platform:
@@ -16,7 +31,7 @@ export default {
       navigation:
         "Que ecrãs abre dentro da aplicação (ex.: Conversa, Sessões, Definições). Não é recolhido conteúdo de conversas, prompts, respostas do modelo nem conteúdo de ficheiros.",
       endpoint:
-        "Os dados são enviados para eu.i.posthog.com (nuvem PostHog da UE). As gravações de sessão e a captura automática de páginas visitadas estão desactivadas.",
+        "Os dados são enviados para o serviço de análise do Hermes (analytics.hermesone.org). As gravações de sessão e a captura automática de páginas visitadas estão desactivadas.",
       notCollected:
         "Nunca é recolhido: mensagens de conversa, caminhos de ficheiros, chaves de API, configuração do modelo, credenciais de conta.",
     },

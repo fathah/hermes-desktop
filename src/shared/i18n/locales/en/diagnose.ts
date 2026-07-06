@@ -18,7 +18,7 @@ export default {
   apiKeyModal: {
     title: "Set API Server Key",
     description:
-      "API_SERVER_KEY is required for the Hermes gateway to authenticate requests. Set it now to enable chat.",
+      "API_SERVER_KEY is required for the Hermes gateway to authenticate requests. Set it now to enable chat. If you keep secrets in a vault (KeePassXC, Bitwarden, etc.) and your Hermes `secrets.provider` is already pointing at it, this warning can be ignored — the provider serves the key directly.",
     label: "API Server Key",
     placeholder: "sk-… or any secret",
     autoGenerate: "Auto-generate",

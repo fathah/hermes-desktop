@@ -122,6 +122,16 @@ describe("parseMediaTokens (issue #299)", () => {
     });
   });
 
+  it("detects an inline POSIX path immediately before a markdown table delimiter", () => {
+    const segs = parseMediaTokens(
+      "| Location | Path |\n| Container | /opt/data/images/toy_duck.png|",
+    );
+    expect(media(segs)).toMatchObject({
+      source: "bare-path",
+      token: { src: "/opt/data/images/toy_duck.png", isImage: true },
+    });
+  });
+
   it("excludes trailing punctuation from an inline path", () => {
     const segs = parseMediaTokens(
       "The chart is at C:\\d\\chart.png, see above.",
@@ -134,6 +144,96 @@ describe("parseMediaTokens (issue #299)", () => {
     // `raw` is what MediaSegmentView renders until the file is verified.
     const segs = parseMediaTokens("file: /var/data/report.csv done");
     expect(media(segs).raw).toBe("/var/data/report.csv");
+  });
+
+  it("detects a labelled Windows image path inside inline code", () => {
+    const segs = parseMediaTokens(
+      "Done.\n\nFile: `C:\\Users\\pmos6\\Documents\\AI-Playground\\media\\toy_duck_bathtub.png`\nSize: 269,771 bytes",
+    );
+    expect(media(segs)).toMatchObject({
+      type: "media",
+      source: "bare-path",
+      raw: "`C:\\Users\\pmos6\\Documents\\AI-Playground\\media\\toy_duck_bathtub.png`",
+      token: {
+        src: "C:\\Users\\pmos6\\Documents\\AI-Playground\\media\\toy_duck_bathtub.png",
+        isImage: true,
+        isUrl: false,
+      },
+    });
+  });
+
+  it("detects a labelled Windows image path when the label is markdown-bold", () => {
+    const segs = parseMediaTokens(
+      "Image generated successfully.\n\n**File:** `C:\\Users\\pmos6\\Documents\\AI-Playground\\media\\toy_duck_bathtub.png` (345 KB)",
+    );
+    expect(media(segs)).toMatchObject({
+      type: "media",
+      source: "bare-path",
+      raw: "`C:\\Users\\pmos6\\Documents\\AI-Playground\\media\\toy_duck_bathtub.png`",
+      token: {
+        src: "C:\\Users\\pmos6\\Documents\\AI-Playground\\media\\toy_duck_bathtub.png",
+        isImage: true,
+        isUrl: false,
+      },
+    });
+  });
+
+  it("detects labelled generated output paths in code spans without matching arbitrary command snippets", () => {
+    const labelled = parseMediaTokens("Saved to: `/tmp/toy duck.png`");
+    expect(media(labelled)).toMatchObject({
+      source: "bare-path",
+      token: { src: "/tmp/toy duck.png", isImage: true },
+    });
+
+    const command = parseMediaTokens("Run `C:\\tmp\\x.png` to see it.");
+    expect(command.every((s) => s.type === "text")).toBe(true);
+  });
+
+  it("detects a generated artifact path in a folder-marked code span", () => {
+    const folder = "\uD83D\uDCC1";
+    const segs = parseMediaTokens(
+      `Done! Here's your image:\n\n${folder} \`C:\\Users\\pmos6\\Documents\\AI-Playground\\media\\toy_duck_bathtub.png\` -- 293 KB`,
+    );
+    expect(media(segs)).toMatchObject({
+      type: "media",
+      source: "bare-path",
+      raw: "`C:\\Users\\pmos6\\Documents\\AI-Playground\\media\\toy_duck_bathtub.png`",
+      token: {
+        src: "C:\\Users\\pmos6\\Documents\\AI-Playground\\media\\toy_duck_bathtub.png",
+        isImage: true,
+      },
+    });
+
+    const bold = parseMediaTokens(
+      `Done! Here's your image:\n\n${folder} **\`C:\\Users\\pmos6\\Documents\\AI-Playground\\media\\toy_duck_bathtub.png\`** -- 293 KB`,
+    );
+    expect(media(bold)).toMatchObject({
+      type: "media",
+      source: "bare-path",
+      raw: "`C:\\Users\\pmos6\\Documents\\AI-Playground\\media\\toy_duck_bathtub.png`",
+      token: {
+        src: "C:\\Users\\pmos6\\Documents\\AI-Playground\\media\\toy_duck_bathtub.png",
+        isImage: true,
+      },
+    });
+  });
+
+  it("detects a standalone generated artifact path in a code span", () => {
+    const segs = parseMediaTokens(
+      "Done! Here's your image:\n\n**`C:\\Users\\pmos6\\Documents\\AI-Playground\\media\\toy_duck_bathtub.png`** (316 KB)\n\nGenerated using DreamShaper 8.",
+    );
+    expect(media(segs)).toMatchObject({
+      type: "media",
+      source: "bare-path",
+      raw: "`C:\\Users\\pmos6\\Documents\\AI-Playground\\media\\toy_duck_bathtub.png`",
+      token: {
+        src: "C:\\Users\\pmos6\\Documents\\AI-Playground\\media\\toy_duck_bathtub.png",
+        isImage: true,
+      },
+    });
+
+    const command = parseMediaTokens("Run `C:\\tmp\\x.png` to see it.");
+    expect(command.every((s) => s.type === "text")).toBe(true);
   });
 
   // ── False-positive guards ──────────────────────────────
@@ -162,6 +262,86 @@ describe("parseMediaTokens (issue #299)", () => {
   it("does NOT detect a path inside an inline code span", () => {
     const segs = parseMediaTokens("Run `C:\\tmp\\x.png` to see it.");
     expect(segs.every((s) => s.type === "text")).toBe(true);
+  });
+
+  it("extracts an absolute path from a markdown image destination", () => {
+    const content =
+      "Here it is:\n\n![Toy Duck in Bathtub](/opt/data/images/duck_bathtub.png)\n\nDone.";
+    const segs = parseMediaTokens(content);
+
+    expect(media(segs)).toMatchObject({
+      type: "media",
+      source: "bare-path",
+      raw: "![Toy Duck in Bathtub](/opt/data/images/duck_bathtub.png)",
+      token: {
+        src: "/opt/data/images/duck_bathtub.png",
+        isImage: true,
+      },
+    });
+  });
+
+  it("extracts a Windows path from a markdown image destination", () => {
+    const content =
+      "![duck](C:\\Users\\pmos6\\Documents\\AI-Playground\\media\\toy_duck_bathtub.png)";
+    const segs = parseMediaTokens(content);
+
+    expect(media(segs)).toMatchObject({
+      type: "media",
+      source: "bare-path",
+      raw: content,
+      token: {
+        src: "C:\\Users\\pmos6\\Documents\\AI-Playground\\media\\toy_duck_bathtub.png",
+        isImage: true,
+      },
+    });
+  });
+
+  it("does not render the same image twice when markdown and file path repeat it", () => {
+    const src =
+      "C:\\Users\\pmos6\\Documents\\AI-Playground\\media\\toy_duck_bathtub.png";
+    const segs = parseMediaTokens(
+      `Here it is:\n![duck](${src})\nFile: \`${src}\``,
+    );
+    const mediaSegs = segs.filter((segment) => segment.type === "media");
+
+    expect(mediaSegs).toHaveLength(1);
+    expect(mediaSegs[0]).toMatchObject({
+      token: { src, isImage: true },
+    });
+    expect(
+      segs
+        .filter((segment) => segment.type === "text")
+        .map((segment) => segment.value)
+        .join(""),
+    ).toContain(src);
+  });
+
+  it("does not render a repeated path when a direct markdown image is already present", () => {
+    const dataUrl = "data:image/png;base64,iVBORw0KGgo=";
+    const src = "/opt/data/images/duck_bathtub.png";
+    const segs = parseMediaTokens(
+      `Here it is:\n![duck](${dataUrl})\nFile: \`${src}\``,
+    );
+    const mediaSegs = segs.filter((segment) => segment.type === "media");
+
+    expect(mediaSegs).toHaveLength(1);
+    expect(mediaSegs[0]).toMatchObject({
+      source: "media-token",
+      token: { src: dataUrl, isImage: true, isUrl: true },
+    });
+    expect(
+      segs
+        .filter((segment) => segment.type === "text")
+        .map((segment) => segment.value)
+        .join(""),
+    ).toContain(src);
+  });
+
+  it("does NOT extract a path from a markdown link destination", () => {
+    const content = "Open [the generated file](/opt/data/images/duck.png).";
+    const segs = parseMediaTokens(content);
+
+    expect(segs).toEqual([{ type: "text", value: content, start: 0 }]);
   });
 
   it("does NOT treat a bare URL line as a path", () => {

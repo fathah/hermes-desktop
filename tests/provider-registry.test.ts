@@ -19,6 +19,9 @@ describe("provider-registry", () => {
       expect(canonicalProviderBaseUrl("xiaomi")).toBe(
         "https://api.xiaomimimo.com/v1",
       );
+      expect(canonicalProviderBaseUrl("aimlapi")).toBe(
+        "https://api.aimlapi.com/v1",
+      );
       expect(canonicalProviderBaseUrl("together")).toBe(
         "https://api.together.xyz/v1",
       );
@@ -40,6 +43,9 @@ describe("provider-registry", () => {
       expect(canonicalProviderBaseUrl("openrouter")).toBe(
         "https://openrouter.ai/api/v1",
       );
+      expect(canonicalProviderBaseUrl("ollama-cloud")).toBe(
+        "https://ollama.com/v1",
+      );
     });
 
     it("returns default URLs for local OpenAI-compatible providers", () => {
@@ -52,9 +58,7 @@ describe("provider-registry", () => {
       expect(canonicalProviderBaseUrl("ollama")).toBe(
         "http://localhost:11434/v1",
       );
-      expect(canonicalProviderBaseUrl("vllm")).toBe(
-        "http://localhost:8000/v1",
-      );
+      expect(canonicalProviderBaseUrl("vllm")).toBe("http://localhost:8000/v1");
       expect(canonicalProviderBaseUrl("llamacpp")).toBe(
         "http://localhost:8080/v1",
       );
@@ -88,12 +92,14 @@ describe("provider-registry", () => {
       // prevent.
       const requiredBuiltins = [
         "groq",
+        "aimlapi",
         "deepseek",
         "together",
         "fireworks",
         "cerebras",
         "mistral",
         "xiaomi",
+        "ollama-cloud",
       ];
       for (const provider of requiredBuiltins) {
         expect(PROVIDER_BASE_URLS[provider]).toBeTruthy();

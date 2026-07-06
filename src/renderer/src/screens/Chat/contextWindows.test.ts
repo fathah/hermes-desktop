@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { contextWindowForModel, DEFAULT_CONTEXT_WINDOW } from "./contextWindows";
+import {
+  contextWindowForModel,
+  DEFAULT_CONTEXT_WINDOW,
+} from "./contextWindows";
 
 describe("contextWindowForModel", () => {
   it("maps Groq's Llama / GPT-OSS models to 131072", () => {
@@ -11,7 +14,10 @@ describe("contextWindowForModel", () => {
   it("maps known commercial families", () => {
     expect(contextWindowForModel("gpt-4o-mini")).toBe(128000);
     expect(contextWindowForModel("claude-sonnet-4-6")).toBe(200000);
-    expect(contextWindowForModel("deepseek-chat")).toBe(65536);
+    // DeepSeek V3.x is 128K, not 64K ("65.5k") or 1M — issue #597.
+    expect(contextWindowForModel("deepseek-chat")).toBe(131072);
+    expect(contextWindowForModel("deepseek-ai/deepseek-v4-pro")).toBe(131072);
+    expect(contextWindowForModel("moonshotai/Kimi-K2-Instruct")).toBe(262144);
   });
 
   it("is case-insensitive", () => {

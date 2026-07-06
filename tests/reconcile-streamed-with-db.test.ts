@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { reconcileStreamedWithDb } from "../src/renderer/src/screens/Chat/sessionHistory";
+import {
+  reconcileAfterDbRefresh,
+  reconcileStreamedWithDb,
+} from "../src/renderer/src/screens/Chat/sessionHistory";
 import type { ChatMessage } from "../src/renderer/src/screens/Chat/types";
 
 /**
@@ -46,10 +49,58 @@ const STREAMED_IMAGE_USER = (content: string, id = "u-img"): ChatMessage => ({
   ],
 });
 
+const STREAMED_TEXT_FILE_USER = (
+  content: string,
+  id = "u-file",
+): ChatMessage => ({
+  id,
+  role: "user",
+  content,
+  attachments: [
+    {
+      id: "file-1",
+      kind: "text-file",
+      name: "notes.txt",
+      mime: "text/plain",
+      size: 12,
+      text: "hello world\n",
+    },
+  ],
+});
+
+const DB_IMAGE_USER = (content: string, dbId = 10): ChatMessage => ({
+  id: `db-${dbId}`,
+  role: "user",
+  content,
+  attachments: [
+    {
+      id: `db-att-${dbId}-0`,
+      kind: "image",
+      name: "image.png",
+      mime: "image/png",
+      size: 46227,
+      dataUrl: "data:image/png;base64,AAA=",
+    },
+  ],
+});
+
 const STREAMED_AGENT = (content: string, id = "a-1"): ChatMessage => ({
   id,
   role: "agent",
   content,
+});
+
+const LOCAL_ERROR = (
+  error: string,
+  id = "error-1",
+  turnId?: string,
+): ChatMessage => ({
+  id,
+  role: "agent",
+  content: "",
+  error,
+  localOnly: true,
+  ...(turnId ? { turnId } : {}),
 });
 
 const STREAMED_REASONING = (text: string, id = "r-1"): ChatMessage => ({
@@ -104,6 +155,21 @@ const DB_TOOL_RESULT = (
   callId,
   name,
   content,
+});
+
+const LIVE_TOOL_CALL = (
+  callId: string,
+  name: string,
+  args: string,
+  id = `tool-call-${callId}`,
+): ChatMessage => ({
+  id,
+  kind: "tool_call",
+  role: "agent",
+  callId,
+  name,
+  args,
+  status: "running",
 });
 
 describe("reconcileStreamedWithDb", () => {
@@ -250,6 +316,219 @@ describe("reconcileStreamedWithDb", () => {
     expect(merged[1].id).toBe("error-1");
   });
 
+  it("keeps a failed local turn anchored before a later successful DB turn", () => {
+    const failedUser = STREAMED_USER("bad provider turn", "u-bad");
+    const goodUser = STREAMED_USER("good provider turn", "u-good");
+    const goodAnswer = STREAMED_AGENT("working response", "a-good");
+    const streamed: ChatMessage[] = [
+      failedUser,
+      LOCAL_ERROR("OpenRouter 403", "error-bad"),
+      goodUser,
+      goodAnswer,
+    ];
+    const db: ChatMessage[] = [
+      DB_USER("good provider turn", 1),
+      DB_AGENT("working response", 2),
+    ];
+
+    const merged = reconcileAfterDbRefresh(streamed, db);
+
+    expect(merged.map((m) => m.id)).toEqual([
+      "u-bad",
+      "error-bad",
+      "u-good",
+      "a-good",
+    ]);
+  });
+
+  it("does not duplicate a local error already loaded from a desktop continuation", () => {
+    const streamed: ChatMessage[] = [
+      STREAMED_USER("bad provider turn", "u-bad"),
+      LOCAL_ERROR("OpenRouter 401", "error-bad"),
+      STREAMED_USER("good provider turn", "u-good"),
+      STREAMED_AGENT("working response", "a-good"),
+    ];
+    const db: ChatMessage[] = [
+      DB_USER("bad provider turn", -10),
+      {
+        id: "db--11",
+        role: "agent",
+        content: "",
+        error: "OpenRouter 401",
+        localOnly: true,
+      },
+      DB_USER("good provider turn", 1),
+      DB_AGENT("working response", 2),
+    ];
+
+    const merged = reconcileAfterDbRefresh(streamed, db);
+
+    expect(merged.map((m) => m.id)).toEqual([
+      "db--10",
+      "db--11",
+      "u-good",
+      "a-good",
+    ]);
+    expect(merged.filter((m) => "error" in m && m.error)).toHaveLength(1);
+  });
+
+  it("preserves a local assistant error when the DB only has the failed user row", () => {
+    const streamed: ChatMessage[] = [
+      STREAMED_USER("bad provider turn", "u-bad"),
+      LOCAL_ERROR("OpenRouter 403", "error-bad"),
+    ];
+    const db: ChatMessage[] = [DB_USER("bad provider turn", 1)];
+
+    const merged = reconcileAfterDbRefresh(streamed, db);
+
+    expect(merged.map((m) => m.id)).toEqual(["db-1", "error-bad"]);
+  });
+
+  it("does not let a failed repeated prompt steal the later successful DB turn", () => {
+    const streamed: ChatMessage[] = [
+      { ...STREAMED_USER("hi", "u-failed"), turnId: "turn-failed" },
+      LOCAL_ERROR("OpenRouter 403", "error-failed", "turn-failed"),
+      { ...STREAMED_USER("hi", "u-good"), turnId: "turn-good" },
+      { ...STREAMED_AGENT("hello", "a-good"), turnId: "turn-good" },
+    ];
+    const db: ChatMessage[] = [DB_USER("hi", 1), DB_AGENT("hello", 2)];
+
+    const merged = reconcileAfterDbRefresh(streamed, db);
+
+    expect(merged.map((m) => m.id)).toEqual([
+      "u-failed",
+      "error-failed",
+      "u-good",
+      "a-good",
+    ]);
+  });
+
+  it("preserves DB-only reasoning, tools, and artifacts after a prior local failure", () => {
+    const streamed: ChatMessage[] = [
+      STREAMED_USER("use the bad provider", "u-failed"),
+      LOCAL_ERROR("OpenRouter 401: missing API key", "error-failed"),
+      STREAMED_USER("now use the working provider", "u-good"),
+      STREAMED_AGENT("The report is ready.", "a-good"),
+    ];
+    const dbToolResult: ChatMessage = {
+      id: "db-tr-4",
+      kind: "tool_result",
+      role: "agent",
+      callId: "call-report",
+      name: "write_file",
+      content: "wrote report.md",
+      attachments: [
+        {
+          id: "artifact-report",
+          kind: "file",
+          name: "report.md",
+          mime: "text/markdown",
+          size: 42,
+          path: "C:/tmp/report.md",
+        },
+      ],
+    };
+    const db: ChatMessage[] = [
+      DB_USER("now use the working provider", 1),
+      DB_REASONING("I should create a short report.", 2),
+      DB_TOOL_CALL("call-report", "write_file", '{"path":"report.md"}', 3),
+      dbToolResult,
+      DB_AGENT("The report is ready.", 5),
+    ];
+
+    const merged = reconcileAfterDbRefresh(streamed, db);
+
+    expect(merged.map((m) => m.id)).toEqual([
+      "u-failed",
+      "error-failed",
+      "u-good",
+      "db-r-2",
+      "db-tc-3-call-report",
+      "db-tr-4",
+      "a-good",
+    ]);
+    expect(merged[5]).toMatchObject({
+      kind: "tool_result",
+      attachments: [{ id: "artifact-report", name: "report.md" }],
+    });
+  });
+
+  it("anchors a DB-only recovery answer after the local recovery user when DB missed that user row", () => {
+    const streamed: ChatMessage[] = [
+      STREAMED_USER("bad provider turn", "u-failed"),
+      LOCAL_ERROR("OpenRouter 401: invalid API key", "error-failed"),
+      { ...STREAMED_USER("recovery turn", "u-recovery"), turnId: "turn-good" },
+    ];
+    const db: ChatMessage[] = [
+      DB_USER("bad provider turn", 1),
+      DB_AGENT("Recovered successfully.", 2),
+    ];
+
+    const merged = reconcileAfterDbRefresh(streamed, db, {
+      activeTurn: {
+        turnId: "turn-good",
+        userId: "u-recovery",
+        startIndex: 2,
+        status: "running",
+      },
+    });
+
+    expect(merged.map((m) => m.id)).toEqual([
+      "db-1",
+      "error-failed",
+      "u-recovery",
+      "db-2",
+    ]);
+  });
+
+  it("anchors a tool-heavy recovery turn when DB missed the active user row", () => {
+    const streamed: ChatMessage[] = [
+      STREAMED_USER("hi", "u-failed"),
+      LOCAL_ERROR("OpenRouter 401: invalid API key", "error-failed"),
+      {
+        ...STREAMED_USER("generate a toy duck", "u-duck"),
+        turnId: "turn-duck",
+      },
+      LIVE_TOOL_CALL("call-skill", "skill_view", "ai-playground-image-gen"),
+      LIVE_TOOL_CALL("call-run", "terminal", "python generate_duck.py"),
+      STREAMED_AGENT("Generated it with AI Playground.", "a-duck"),
+    ];
+    const db: ChatMessage[] = [
+      DB_USER("hi", 1),
+      DB_TOOL_CALL("call-skill", "skill_view", "ai-playground-image-gen", 2),
+      DB_TOOL_RESULT("call-skill", "skill_view", "skill loaded", 3),
+      DB_TOOL_CALL("call-run", "terminal", "python generate_duck.py", 4),
+      DB_TOOL_RESULT("call-run", "terminal", "saved=toy_duck.png", 5),
+      DB_AGENT("Generated it with AI Playground.", 6),
+    ];
+
+    const merged = reconcileAfterDbRefresh(streamed, db, {
+      activeTurn: {
+        turnId: "turn-duck",
+        userId: "u-duck",
+        startIndex: 2,
+        status: "running",
+      },
+    });
+
+    expect(merged.map((m) => m.id)).toEqual([
+      "db-1",
+      "error-failed",
+      "u-duck",
+      "tool-call-call-skill",
+      "db-tr-3",
+      "tool-call-call-run",
+      "db-tr-5",
+      "a-duck",
+    ]);
+    expect(
+      merged.filter((m) => "kind" in m && m.kind === "tool_call"),
+    ).toHaveLength(2);
+    expect(
+      merged.filter((m) => "kind" in m && m.kind === "tool_result"),
+    ).toHaveLength(2);
+  });
+
   it("handles an empty streamed array (cold session load)", () => {
     const db: ChatMessage[] = [
       DB_USER("hi", 1),
@@ -306,14 +585,13 @@ describe("reconcileStreamedWithDb", () => {
       "db-5",
     ]);
     expect(
-      merged.filter(
-        (m) => !("kind" in m) && m.content.includes(partB),
-      ),
+      merged.filter((m) => !("kind" in m) && m.content.includes(partB)),
     ).toHaveLength(1);
   });
 
   it("does not repeat long-chat tool-split turns during DB refresh", () => {
-    const turn2A = "I checked the current directory before running the command.";
+    const turn2A =
+      "I checked the current directory before running the command.";
     const turn2B = "The directory contains package.json and src.";
     const turn3A = "I will inspect the failing test next.";
     const turn3B = "The failing assertion is caused by duplicate rendering.";
@@ -368,10 +646,7 @@ describe("reconcileStreamedWithDb", () => {
       "Renderer-only warning: the provider closed the stream early.",
       "a-warning",
     );
-    const streamed: ChatMessage[] = [
-      STREAMED_USER("hi", "u-1"),
-      streamedOnly,
-    ];
+    const streamed: ChatMessage[] = [STREAMED_USER("hi", "u-1"), streamedOnly];
     const db: ChatMessage[] = [
       DB_USER("hi", 1),
       DB_AGENT("A different DB response.", 2),
@@ -380,7 +655,10 @@ describe("reconcileStreamedWithDb", () => {
 
     const merged = reconcileStreamedWithDb(streamed, db);
 
-    expect(merged[merged.length - 1]).toBe(streamedOnly);
+    // The unmatched streamed bubble should appear right after its
+    // preceding user message (u-1), preserving the streamed order
+    // rather than being forced to the bottom.
+    expect(merged[1]).toBe(streamedOnly);
   });
 
   it("does not drop a streamed answer that quotes assistant rows from different turns", () => {
@@ -520,7 +798,12 @@ describe("reconcileStreamedWithDb", () => {
       DB_USER("make an image", 60),
       DB_TOOL_CALL("call-skill", "skill_view", "ai-playground-image-gen", 61),
       DB_TOOL_RESULT("call-skill", "skill_view", "ok", 62),
-      DB_TOOL_CALL("call-code", "execute_code", "from hermes_tools import terminal", 63),
+      DB_TOOL_CALL(
+        "call-code",
+        "execute_code",
+        "from hermes_tools import terminal",
+        63,
+      ),
       DB_TOOL_RESULT("call-code", "execute_code", "ok", 64),
       DB_AGENT("Done.", 65),
     ];
@@ -535,6 +818,31 @@ describe("reconcileStreamedWithDb", () => {
       "db-tr-64",
       "a-1",
     ]);
+  });
+
+  it("matches legacy text-file DB wrappers to the optimistic attachment bubble", () => {
+    const streamed: ChatMessage[] = [
+      STREAMED_TEXT_FILE_USER("summarize the attachment", "u-file"),
+      STREAMED_AGENT("done", "a-file"),
+    ];
+    const db: ChatMessage[] = [
+      DB_USER(
+        'summarize the attachment\n\n<file name="notes.txt" mime="text/plain">\nhello world\n</file>',
+        570,
+      ),
+      DB_REASONING("The user attached a text file.", 571),
+      DB_AGENT("done", 571),
+    ];
+
+    const merged = reconcileStreamedWithDb(streamed, db);
+
+    expect(merged.map((m) => m.id)).toEqual(["u-file", "db-r-571", "a-file"]);
+    expect(
+      "attachments" in merged[0] ? merged[0].attachments?.[0].kind : "",
+    ).toBe("text-file");
+    expect("content" in merged[0] ? merged[0].content : "").toBe(
+      "summarize the attachment",
+    );
   });
 
   it("does not drop extra repeated same-name synthetic tools when DB has fewer canonical rows", () => {
@@ -568,11 +876,11 @@ describe("reconcileStreamedWithDb", () => {
 
     expect(merged.map((m) => m.id)).toEqual([
       "u-1",
+      "tool-call-live-tool:run-1:terminal:2",
       "db-tc-71-call-terminal-1",
       "a-1",
-      "tool-call-live-tool:run-1:terminal:2",
     ]);
-    expect(merged[3]).toMatchObject({
+    expect(merged[1]).toMatchObject({
       kind: "tool_call",
       name: "terminal",
       args: "npm run typecheck",
@@ -611,8 +919,193 @@ describe("reconcileStreamedWithDb", () => {
     expect(merged.map((m) => m.id)).toEqual([
       "u-1",
       "tool-call-call-terminal-1",
-      "a-1",
       "tool-call-live-tool:run-1:terminal:2",
+      "a-1",
     ]);
+  });
+
+  it("keeps an inline clarify card at its streamed position after reconcile (regression: PR #604 review)", () => {
+    // The clarify card is renderer-only — it never lands in state.db. During
+    // streaming the user saw: user → clarify card → agent answer. The DB only
+    // has the user + the post-answer agent content. Without repositioning, the
+    // card (no reconciliationKey) gets flushed to the suffix and renders BELOW
+    // the agent answer — the reverse of what the user saw.
+    const CLARIFY = (id: string, requestId: string): ChatMessage => ({
+      id,
+      kind: "clarify",
+      role: "agent",
+      requestId,
+      question: "Which environment?",
+      choices: ["staging", "production"],
+      resolved: true,
+      answer: "production",
+    });
+
+    const streamed: ChatMessage[] = [
+      STREAMED_USER("deploy it", "u-1"),
+      CLARIFY("clarify-r1", "r1"),
+      STREAMED_AGENT("Deploying to production.", "a-1"),
+    ];
+    const db: ChatMessage[] = [
+      DB_USER("deploy it", 1),
+      DB_AGENT("Deploying to production.", 2),
+    ];
+
+    const merged = reconcileStreamedWithDb(streamed, db);
+
+    // Card stays between the user message and the agent answer.
+    expect(merged.map((m) => m.id)).toEqual(["u-1", "clarify-r1", "a-1"]);
+  });
+
+  it("preserves a leading clarify card (no streamed predecessor)", () => {
+    const CLARIFY = (id: string, requestId: string): ChatMessage => ({
+      id,
+      kind: "clarify",
+      role: "agent",
+      requestId,
+      question: "Pick one",
+      choices: ["a", "b"],
+      resolved: true,
+      answer: "a",
+    });
+    const streamed: ChatMessage[] = [
+      CLARIFY("clarify-r1", "r1"),
+      STREAMED_AGENT("done", "a-1"),
+    ];
+    const db: ChatMessage[] = [DB_AGENT("done", 2)];
+
+    const merged = reconcileStreamedWithDb(streamed, db);
+
+    expect(merged.map((m) => m.id)).toEqual(["clarify-r1", "a-1"]);
+  });
+
+  it("keeps a continued restored image prompt before its answer when the DB snapshot briefly misses that user row", () => {
+    const answer =
+      "It's a cute yellow toy duck in a bathtub filled with blue bathwater.";
+    const streamed: ChatMessage[] = [
+      DB_USER("generate an image of a toy duck", 1),
+      DB_AGENT("Done - generated locally.", 2),
+      STREAMED_IMAGE_USER("what is this?", "u-img"),
+      STREAMED_AGENT(answer, "a-img"),
+    ];
+    const db: ChatMessage[] = [
+      DB_USER("generate an image of a toy duck", 1),
+      DB_AGENT("Done - generated locally.", 2),
+      DB_AGENT(answer, 3),
+    ];
+
+    const merged = reconcileAfterDbRefresh(streamed, db);
+
+    expect(merged.map((m) => m.id)).toEqual(["db-1", "db-2", "u-img", "a-img"]);
+    expect(
+      ("attachments" in merged[2] && merged[2].attachments) || [],
+    ).toHaveLength(1);
+  });
+
+  it("drops orphan duplicate pasted-image prompts once the DB has the canonical user row", () => {
+    const staleLocal1 = {
+      ...STREAMED_IMAGE_USER("what is this?", "user-old-1"),
+      attachments: [
+        {
+          id: "att-old-1",
+          kind: "image" as const,
+          name: "image.png",
+          mime: "image/png",
+          size: 46227,
+          dataUrl: "data:image/png;base64,AAA=",
+        },
+      ],
+    };
+    const staleLocal2 = {
+      ...STREAMED_IMAGE_USER("what is this?", "user-old-2"),
+      attachments: [
+        {
+          id: "att-old-2",
+          kind: "image" as const,
+          name: "image.png",
+          mime: "image/png",
+          size: 46227,
+          dataUrl: "data:image/png;base64,AAA=",
+        },
+      ],
+    };
+    const dbUser = DB_IMAGE_USER("what is this?\n[screenshot]", 444);
+    const dbReasoning = DB_REASONING("The image shows a bath toy.", 445);
+    const dbAnswer = DB_AGENT(
+      "It looks like a cute yellow rubber duck bath toy.",
+      446,
+    );
+    const streamed: ChatMessage[] = [
+      staleLocal1,
+      staleLocal2,
+      dbUser,
+      dbReasoning,
+      dbAnswer,
+    ];
+    const db: ChatMessage[] = [dbUser, dbReasoning, dbAnswer];
+
+    const merged = reconcileAfterDbRefresh(streamed, db);
+
+    expect(merged.map((m) => m.id)).toEqual(["db-444", "db-r-445", "db-446"]);
+  });
+
+  it("does not anchor a pasted-image active user when the DB already has the canonical attachment row", () => {
+    const localUser = {
+      ...STREAMED_IMAGE_USER("what is this?", "user-active-image"),
+      turnId: "turn-image",
+      attachments: [
+        {
+          id: "att-local-image",
+          kind: "image" as const,
+          name: "toy_duck_bathtub.png",
+          mime: "image/png",
+          size: 269771,
+          dataUrl: "data:image/png;base64,AAA=",
+        },
+      ],
+    };
+    const streamedAnswer = {
+      ...STREAMED_AGENT(
+        "It looks like a cute yellow duck in a bathtub.",
+        "agent-image",
+      ),
+      turnId: "turn-image",
+    };
+    const dbUser = {
+      ...DB_IMAGE_USER("what is this?\n[screenshot]", 450),
+      attachments: [
+        {
+          id: "db-att-450-0",
+          kind: "image" as const,
+          name: "toy_duck_bathtub.png",
+          mime: "image/png",
+          size: 269771,
+          dataUrl: "data:image/png;base64,AAA=",
+        },
+      ],
+    };
+    const dbAnswer = DB_AGENT(
+      "It looks like a cute yellow duck in a bathtub.",
+      451,
+    );
+
+    const merged = reconcileAfterDbRefresh(
+      [localUser, streamedAnswer],
+      [dbUser, dbAnswer],
+      {
+        activeTurn: {
+          turnId: "turn-image",
+          userId: "user-active-image",
+          startIndex: 0,
+          status: "running",
+        },
+      },
+    );
+
+    expect(merged.map((m) => m.id)).toEqual([
+      "user-active-image",
+      "agent-image",
+    ]);
+    expect(merged.filter((m) => m.id === "user-active-image")).toHaveLength(1);
   });
 });

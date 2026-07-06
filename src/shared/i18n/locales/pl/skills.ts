@@ -16,6 +16,8 @@ export default {
   noBrowseResultsHint: "Spróbuj innego hasła lub filtra kategorii",
   installFailed: "Nie udało się zainstalować umiejętności",
   uninstallFailed: "Nie udało się odinstalować umiejętności",
+  uninstallConfirm: "Uninstall '{{name}}'?",
+  uninstallSuccess: "'{{name}}' uninstalled",
   removing: "Usuwanie...",
   uninstall: "Odinstaluj",
   installedBadge: "Zainstalowana",

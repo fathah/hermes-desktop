@@ -11,6 +11,8 @@ function localConnection(): ConnectionConfig {
     mode: "local",
     remoteUrl: "",
     apiKey: "",
+    remoteChatTransport: "auto",
+    sshChatTransport: "auto",
     ssh: {
       host: "",
       port: 22,

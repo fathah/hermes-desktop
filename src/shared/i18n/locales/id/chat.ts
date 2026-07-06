@@ -9,6 +9,7 @@ export default {
     "Tanya Cepat (/btw) - pertanyaan sampingan yang tidak memengaruhi konteks percakapan",
   send: "Kirim",
   custom: "Kustom",
+  searchModels: "Cari model...",
   typeModelName: "Ketik nama model...",
   emptyTitle: "Apa yang bisa saya bantu hari ini?",
   emptyHint:
@@ -80,6 +81,8 @@ export default {
     persona: "Tampilkan persona saat ini",
     version: "Tampilkan versi Hermes",
   },
+  queuedCancel: "Batalkan pesan antrian",
+  copyMessage: "Salin pesan",
   worktree: {
     loading: "Memuat",
     empty: "Folder kosong",

@@ -8,6 +8,7 @@ export default {
   quickAskTitle: "Quick Ask (/btw) — 会話コンテキストに影響しないサイド質問",
   send: "送信",
   custom: "カスタム",
+  searchModels: "モデルを検索...",
   typeModelName: "モデル名を入力...",
   emptyTitle: "今日はどんなお手伝いを？",
   emptyHint: "コード生成、質問への回答、Web 検索など何でも頼んでください",
@@ -79,6 +80,8 @@ export default {
     persona: "現在のペルソナを表示",
     version: "Hermes バージョンを表示",
   },
+  queuedCancel: "キューから削除",
+  copyMessage: "メッセージをコピー",
   worktree: {
     loading: "読み込み中",
     empty: "フォルダは空です",

@@ -24,6 +24,7 @@ describe("URL_KEY_MAP", () => {
       "https://openrouter.ai/api/v1": "OPENROUTER_API_KEY",
       "https://api.anthropic.com/v1": "ANTHROPIC_API_KEY",
       "https://api.openai.com/v1": "OPENAI_API_KEY",
+      "https://api.aimlapi.com/v1": "AIMLAPI_API_KEY",
       "https://huggingface.co/api": "HF_TOKEN",
       "https://api.groq.com/openai/v1": "GROQ_API_KEY",
       "https://api.deepseek.com/v1": "DEEPSEEK_API_KEY",
@@ -32,6 +33,7 @@ describe("URL_KEY_MAP", () => {
       "https://api.cerebras.ai/v1": "CEREBRAS_API_KEY",
       "https://api.mistral.ai/v1": "MISTRAL_API_KEY",
       "https://api.perplexity.ai": "PERPLEXITY_API_KEY",
+      "https://api.atlascloud.ai/v1": "ATLASCLOUD_API_KEY",
     };
     for (const [url, envKey] of Object.entries(expected)) {
       expect(expectedEnvKeyForUrl(url)).toBe(envKey);

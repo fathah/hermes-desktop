@@ -1,5 +1,6 @@
 import Database from "better-sqlite3";
-import { existsSync } from "fs";
+import { basename, extname } from "path";
+import { existsSync, readFileSync, statSync } from "fs";
 import { activeStateDbPath } from "./utils";
 import type { Attachment } from "../shared/attachments";
 import { isImageMime, MAX_IMAGE_BYTES } from "../shared/attachments";
@@ -53,15 +54,100 @@ export function stripTrailingImagePlaceholders(text: string): string {
   }
 }
 
+const VISION_IMAGE_FALLBACK_RE =
+  /^\s*\[The user attached an image(?:\s+but analysis failed\.|:[\s\S]*?)\]\s*\[You can examine it with vision_analyze using image_url:\s*([\s\S]*?)\]\s*/i;
+
+const IMAGE_ATTACHED_AT_RE =
+  /(?:^|\r?\n)\s*\[Image attached at:\s*([\s\S]*?)\]\s*(?:\[(?:screenshot|image)\]\s*)*$/i;
+
+const IMAGE_MIME_BY_EXT: Record<string, string> = {
+  ".gif": "image/gif",
+  ".jpeg": "image/jpeg",
+  ".jpg": "image/jpeg",
+  ".png": "image/png",
+  ".webp": "image/webp",
+};
+
+function cleanFallbackImagePath(value: string): string {
+  return value
+    .replace(/\r?\n/g, "")
+    .trim()
+    .replace(/^["'`]+|["'`]+$/g, "");
+}
+
+export function extractLeadingVisionImageFallback(text: string): {
+  content: string;
+  imagePath: string | null;
+} {
+  const raw = text || "";
+  const match = VISION_IMAGE_FALLBACK_RE.exec(raw);
+  if (match) {
+    return {
+      content: raw.slice(match[0].length).trimStart(),
+      imagePath: cleanFallbackImagePath(match[1] || "") || null,
+    };
+  }
+
+  const attachedAt = IMAGE_ATTACHED_AT_RE.exec(raw);
+  if (attachedAt) {
+    return {
+      content: `${raw.slice(0, attachedAt.index)}${raw.slice(
+        attachedAt.index + attachedAt[0].length,
+      )}`.trim(),
+      imagePath: cleanFallbackImagePath(attachedAt[1] || "") || null,
+    };
+  }
+
+  return { content: raw, imagePath: null };
+}
+
+export function stripLeadingVisionImageFallback(text: string): string {
+  return extractLeadingVisionImageFallback(text).content;
+}
+
+export function attachmentFromLocalVisionImagePath(
+  filePath: string | null | undefined,
+  id: string,
+): Attachment | null {
+  if (!filePath || filePath.startsWith("data:")) return null;
+  const ext = extname(filePath).toLowerCase();
+  const mime = IMAGE_MIME_BY_EXT[ext];
+  if (!mime || !isImageMime(mime)) return null;
+
+  try {
+    const stat = statSync(filePath);
+    if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_IMAGE_BYTES) {
+      return null;
+    }
+    const data = readFileSync(filePath);
+    if (data.length <= 0 || data.length > MAX_IMAGE_BYTES) return null;
+    return {
+      id,
+      kind: "image",
+      name: basename(filePath) || `image${ext}`,
+      mime,
+      size: data.length,
+      dataUrl: `data:${mime};base64,${data.toString("base64")}`,
+      path: filePath,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function normalizedPromptText(text: string): string {
-  return stripTrailingImagePlaceholders(text).replace(/\s+/g, " ").trim();
+  return stripTrailingImagePlaceholders(stripLeadingVisionImageFallback(text))
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function hasTrailingImagePlaceholder(text: string): boolean {
   return /\[(?:screenshot|image)\]\s*$/i.test(text || "");
 }
 
-function parseImageDataUrl(dataUrl: string): { mime: string; data: Buffer } | null {
+function parseImageDataUrl(
+  dataUrl: string,
+): { mime: string; data: Buffer } | null {
   const match = /^data:([^;,]+);base64,(.*)$/s.exec(dataUrl || "");
   if (!match) return null;
   const mime = match[1].toLowerCase();

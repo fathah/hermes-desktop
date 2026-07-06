@@ -17,6 +17,8 @@ export default {
   noBrowseResultsHint: "Coba kata pencarian atau filter kategori lain",
   installFailed: "Gagal menginstal skill",
   uninstallFailed: "Gagal menghapus instalasi skill",
+  uninstallConfirm: "Uninstall '{{name}}'?",
+  uninstallSuccess: "'{{name}}' uninstalled",
   removing: "Menghapus...",
   uninstall: "Uninstall",
   installedBadge: "Terinstal",

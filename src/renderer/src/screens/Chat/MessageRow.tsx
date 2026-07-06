@@ -1,5 +1,8 @@
-import { memo, useMemo } from "react";
-import icon from "../../assets/icon.png";
+import { memo, useMemo, useState, useCallback, useEffect, useRef } from "react";
+import { formatDistanceToNowStrict } from "date-fns";
+import { Grid } from "react-loader-spinner";
+import { Copy, Check } from "lucide-react";
+import loadingGif from "../../assets/loadingo.gif";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
 import { AttachmentChip } from "../../components/AttachmentChip";
 import { MediaSegmentView } from "../../components/MediaImage";
@@ -10,6 +13,73 @@ import type { ChatBubbleMessage, ChatMessage } from "./types";
 export const APPROVAL_RE =
   /⚠️.*dangerous|requires? (your )?approval|\/approve.*\/deny|do you want (me )?to (proceed|continue|run|execute)/i;
 
+/**
+ * Coerce any DB, stream, or IPC timestamp value to valid epoch milliseconds.
+ * Handles seconds (< 1e12), ms, us (> 1e14), ns (> 1e17), and ISO strings.
+ */
+const MS_THRESHOLD = 1e12;
+const US_THRESHOLD = 1e14;
+const NS_THRESHOLD = 1e17;
+
+function coerceToEpochMs(raw: unknown): number {
+  if (typeof raw === "number") {
+    if (!Number.isFinite(raw) || raw <= 0) return 0;
+    if (raw < MS_THRESHOLD) return raw * 1000;
+    if (raw < US_THRESHOLD) return raw;
+    if (raw < NS_THRESHOLD) return Math.floor(raw / 1000);
+    return Math.floor(raw / 1_000_000);
+  }
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (!trimmed) return 0;
+    const num = Number(trimmed);
+    if (Number.isFinite(num) && num > 0) {
+      return coerceToEpochMs(num);
+    }
+    const parsed = new Date(trimmed).getTime();
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return 0;
+}
+
+// Earliest valid chat timestamp: Jan 1 2020 (1577836800000 ms).
+// Anything before 2020 (e.g. 0, 1 => Jan 1970 => "57 years ago") is bogus/dummy.
+const MIN_VALID_EPOCH_MS = 1_577_836_800_000;
+
+function isValidEpochMs(ms: number): boolean {
+  return (
+    Number.isFinite(ms) &&
+    ms >= MIN_VALID_EPOCH_MS &&
+    !isNaN(new Date(ms).getTime())
+  );
+}
+
+/**
+ * Relative "time ago" label for the hover-time element.
+ */
+function formatBubbleTime(ms: number): string | null {
+  try {
+    if (Date.now() - ms < 10_000 && Date.now() >= ms) return "just now";
+    return formatDistanceToNowStrict(ms, { addSuffix: true });
+  } catch {
+    return null;
+  }
+}
+
+/** Absolute timestamp for the tooltip and `<time dateTime>` value. */
+function formatBubbleTimeAbsolute(ms: number): string {
+  try {
+    return new Date(ms).toLocaleString(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+  } catch {
+    return "";
+  }
+}
+
 function isChatBubbleMessage(msg: ChatMessage): msg is ChatBubbleMessage {
   return (
     msg.kind === "user" ||
@@ -18,14 +88,116 @@ function isChatBubbleMessage(msg: ChatMessage): msg is ChatBubbleMessage {
   );
 }
 
+/**
+ * One full loop of `loadingo.gif`, in ms (119 frames × 40ms). Used to let the
+ * animation finish its current loop after generation stops instead of freezing
+ * mid-frame.
+ */
+const GIF_LOOP_MS = 4760;
+
+/**
+ * Captures the gif's first frame as a static PNG data URL, once, shared across
+ * every avatar instance. Idle avatars (past turns) render this frozen frame so
+ * the chat isn't full of perpetually-spinning gifs — only the in-flight turn's
+ * avatar runs the live animation.
+ */
+let frozenFramePromise: Promise<string> | null = null;
+function getFrozenFrame(): Promise<string> {
+  if (!frozenFramePromise) {
+    frozenFramePromise = new Promise<string>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return reject(new Error("no 2d context"));
+          // drawImage right after load captures frame 0 (not yet advanced).
+          ctx.drawImage(img, 0, 0);
+          resolve(canvas.toDataURL("image/png"));
+        } catch (err) {
+          reject(err as Error);
+        }
+      };
+      img.onerror = () => reject(new Error("failed to load loadingo.gif"));
+      img.src = loadingGif;
+    });
+  }
+  return frozenFramePromise;
+}
+
+/**
+ * Agent avatar. While `active` (the turn is generating) it plays the looping
+ * `loadingo.gif`. When `active` goes false it doesn't freeze instantly — it
+ * keeps animating until the end of the current loop, then swaps to a static
+ * frozen frame so the stop lands on a clean loop boundary.
+ */
 export const HermesAvatar = memo(function HermesAvatar({
   size = 30,
+  active = false,
 }: {
   size?: number;
+  /** True only for the avatar of the turn currently being generated. */
+  active?: boolean;
 }): React.JSX.Element {
+  const [frozenSrc, setFrozenSrc] = useState<string | null>(null);
+  const [playing, setPlaying] = useState(active);
+  // Re-keying the <img> on each play session restarts the gif from frame 0 so
+  // the loop clock below is accurate.
+  const [playKey, setPlayKey] = useState(0);
+  // Timestamp (performance.now) of the current play session's frame 0; set in
+  // the effect, never during render. 0 = not yet started.
+  const playStartRef = useRef(0);
+  const stopTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    getFrozenFrame()
+      .then((src) => {
+        if (!cancelled) setFrozenSrc(src);
+      })
+      .catch(() => {
+        /* fall back to the live gif if the snapshot can't be built */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (active) {
+      // (Re)start the animation immediately when generation begins.
+      if (stopTimer.current) clearTimeout(stopTimer.current);
+      if (!playing) {
+        setPlayKey((k) => k + 1);
+        playStartRef.current = performance.now();
+        setPlaying(true);
+      } else if (playStartRef.current === 0) {
+        // Mounted already playing (active on first render): anchor the loop clock.
+        playStartRef.current = performance.now();
+      }
+    } else if (playing) {
+      // Generation stopped: run out the rest of the current loop, then freeze.
+      const elapsed = (performance.now() - playStartRef.current) % GIF_LOOP_MS;
+      const remaining = GIF_LOOP_MS - elapsed;
+      if (stopTimer.current) clearTimeout(stopTimer.current);
+      stopTimer.current = setTimeout(() => setPlaying(false), remaining);
+    }
+    return () => {
+      if (stopTimer.current) clearTimeout(stopTimer.current);
+    };
+  }, [active, playing]);
+
   return (
     <div className="chat-avatar chat-avatar-agent">
-      <img src={icon} width={size} height={size} alt="" />
+      {playing ? (
+        <img key={playKey} src={loadingGif} width={size} height={size} alt="" />
+      ) : (
+        <img src={frozenSrc ?? loadingGif} width={size} height={size} alt="" />
+      )}
     </div>
   );
 });
@@ -60,6 +232,7 @@ export const MessageRow = memo(function MessageRow({
   showAvatar = true,
 }: MessageRowProps): React.JSX.Element {
   const { t } = useI18n();
+  const [copied, setCopied] = useState(false);
 
   // MessageRow is wrapped in memo() but still re-renders on any prop change
   // (e.g. isLoading toggling at the end of a stream), and `parseMediaTokens`
@@ -81,11 +254,26 @@ export const MessageRow = memo(function MessageRow({
     [msg.role, bubbleContent],
   );
 
+  const handleCopy = useCallback(async () => {
+    if (!bubbleContent) return;
+    try {
+      await window.hermesAPI.copyToClipboard(bubbleContent);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback: clipboard write may fail in some environments
+    }
+  }, [bubbleContent]);
+
   // Only chat bubble messages have content/attachments
   if (!isChatBubbleMessage(msg)) {
     return (
       <div className={`chat-message chat-message-${msg.role}`}>
-        {showAvatar ? <HermesAvatar /> : <AvatarSpacer />}
+        {showAvatar ? (
+          <HermesAvatar active={isLoading && isLast} />
+        ) : (
+          <AvatarSpacer />
+        )}
         <div className={`chat-bubble chat-bubble-${msg.role}`}>
           {/* Reasoning/tool messages handled separately */}
         </div>
@@ -95,10 +283,14 @@ export const MessageRow = memo(function MessageRow({
 
   const showApprovalBar =
     msg.role === "agent" &&
+    !msg.error &&
     !isLoading &&
     isLast &&
     APPROVAL_RE.test(msg.content);
   const hasAttachments = !!msg.attachments && msg.attachments.length > 0;
+  const epochMs = coerceToEpochMs(msg.timestamp);
+  const isTimeValid = isValidEpochMs(epochMs);
+  const bubbleTime = isTimeValid ? formatBubbleTime(epochMs) : null;
 
   return (
     <div
@@ -106,14 +298,31 @@ export const MessageRow = memo(function MessageRow({
         showAvatar ? "" : " chat-message--grouped"
       }`}
     >
-      {!showAvatar ? (
+      {/* User messages stand alone (right-aligned bubble, no avatar). Only the
+          agent turn carries an avatar; its continuation rows get a spacer. */}
+      {msg.role === "user" ? null : !showAvatar ? (
         <AvatarSpacer />
-      ) : msg.role === "user" ? (
-        <div className="chat-avatar chat-avatar-user">U</div>
       ) : (
-        <HermesAvatar />
+        <HermesAvatar active={isLoading && isLast} />
       )}
-      <div className={`chat-bubble chat-bubble-${msg.role}`}>
+      <div
+        className={`chat-bubble chat-bubble-${msg.role}${
+          msg.error ? " chat-bubble-error" : ""
+        }`}
+      >
+        {msg.content && !isLoading && !msg.isSlashLoader && (
+          <div className="chat-bubble-actions">
+            <button
+              type="button"
+              className="chat-bubble-copy"
+              onClick={handleCopy}
+              title={copied ? t("common.copied") : t("chat.copyMessage")}
+              aria-label={copied ? t("common.copied") : t("chat.copyMessage")}
+            >
+              {copied ? <Check size={14} /> : <Copy size={14} />}
+            </button>
+          </div>
+        )}
         {hasAttachments && (
           <div className="chat-message-attachments">
             {msg.attachments!.map((att) => (
@@ -121,7 +330,20 @@ export const MessageRow = memo(function MessageRow({
             ))}
           </div>
         )}
-        {msg.content &&
+        {msg.isSlashLoader ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Grid
+              visible={true}
+              height={13}
+              width={13}
+              radius={15}
+              color="#8b7cf6"
+              ariaLabel="running-command"
+            />
+            <span>{msg.content}</span>
+          </div>
+        ) : (
+          msg.content &&
           (msg.role === "agent" && segments
             ? segments.map((segment) =>
                 segment.type === "text" ? (
@@ -144,8 +366,23 @@ export const MessageRow = memo(function MessageRow({
                   />
                 ),
               )
-            : msg.content)}
+            : msg.content)
+        )}
+        {msg.error && (
+          <div className="chat-error-message" role="alert">
+            {msg.error}
+          </div>
+        )}
       </div>
+      {bubbleTime && isTimeValid && (
+        <time
+          className="chat-bubble-time"
+          dateTime={new Date(epochMs).toISOString()}
+          title={formatBubbleTimeAbsolute(epochMs)}
+        >
+          {bubbleTime}
+        </time>
+      )}
       {showApprovalBar && (
         <div className="chat-approval-bar">
           <button

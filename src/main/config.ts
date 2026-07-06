@@ -10,6 +10,19 @@ import {
   safeWriteFile,
 } from "./utils";
 import { getYamlPath } from "./yaml-path";
+// NOTE: ./secrets imports back into this module (getConfigValue / readEnv), so
+// this is a static import that closes a cycle (config -> secrets ->
+// commandProvider -> config). It is safe ONLY because BOTH sides defer all work
+// to call time: config.ts calls the three fns below inside function bodies, and
+// secrets/index.ts constructs its providers LAZILY (no `new` at module-init).
+// If you make secrets/index.ts construct a provider at module scope again, this
+// static import will throw "X is not a constructor" on load-order-dependent
+// paths. Keep provider construction lazy there, or make this import lazy here.
+import {
+  getSecretsProvider,
+  providerListSafe,
+  invalidateProviderListCache,
+} from "./secrets";
 import { canonicalProviderBaseUrl } from "./provider-registry";
 import {
   expectedEnvKeyForUrl,
@@ -27,16 +40,22 @@ export interface SshConnectionConfig {
   localPort: number;
 }
 
+export type RemoteChatTransport = "auto" | "dashboard" | "legacy";
+
 export interface ConnectionConfig {
   mode: "local" | "remote" | "ssh";
   remoteUrl: string;
   apiKey: string;
+  remoteChatTransport: RemoteChatTransport;
+  sshChatTransport: RemoteChatTransport;
   ssh: SshConnectionConfig;
 }
 
 export interface PublicConnectionConfig {
   mode: "local" | "remote" | "ssh";
   remoteUrl: string;
+  remoteChatTransport: RemoteChatTransport;
+  sshChatTransport: RemoteChatTransport;
   hasApiKey: boolean;
   // Length of the stored API key, exposed so the renderer can show a
   // mask that matches the real value's width. The secret itself never
@@ -51,11 +70,17 @@ function desktopConfigFile(): string {
   return join(HERMES_HOME, "desktop.json");
 }
 
+export function normalizeRemoteChatTransport(
+  value: unknown,
+): RemoteChatTransport {
+  return value === "dashboard" || value === "legacy" ? value : "auto";
+}
+
 export function readDesktopConfig(): Record<string, unknown> {
   try {
     const f = desktopConfigFile();
     if (!existsSync(f)) return {};
-    return JSON.parse(readFileSync(f, "utf-8"));
+    return JSON.parse(readFileSync(f, "utf-8").replace(/^\uFEFF/, ""));
   } catch {
     return {};
   }
@@ -75,6 +100,8 @@ export function getConnectionConfig(): ConnectionConfig {
     mode: (data.connectionMode as "local" | "remote" | "ssh") || "local",
     remoteUrl: (data.remoteUrl as string) || "",
     apiKey: (data.remoteApiKey as string) || "",
+    remoteChatTransport: normalizeRemoteChatTransport(data.remoteChatTransport),
+    sshChatTransport: normalizeRemoteChatTransport(data.sshChatTransport),
     ssh: {
       host: (ssh.host as string) || "",
       port: (ssh.port as number) || 22,
@@ -91,6 +118,8 @@ export function getPublicConnectionConfig(): PublicConnectionConfig {
   return {
     mode: config.mode,
     remoteUrl: config.remoteUrl,
+    remoteChatTransport: config.remoteChatTransport,
+    sshChatTransport: config.sshChatTransport,
     hasApiKey: config.apiKey.length > 0,
     apiKeyLength: config.apiKey.length,
     ssh: config.ssh,
@@ -100,8 +129,16 @@ export function getPublicConnectionConfig(): PublicConnectionConfig {
 export function setConnectionConfig(config: ConnectionConfig): void {
   const data = readDesktopConfig();
   data.connectionMode = config.mode;
-  data.remoteUrl = config.remoteUrl;
-  data.remoteApiKey = config.apiKey;
+  if (config.mode === "remote" || config.remoteUrl.trim()) {
+    data.remoteUrl = config.remoteUrl;
+  }
+  if (config.mode === "remote" || config.apiKey.trim()) {
+    data.remoteApiKey = config.apiKey;
+  }
+  data.remoteChatTransport = normalizeRemoteChatTransport(
+    config.remoteChatTransport,
+  );
+  data.sshChatTransport = normalizeRemoteChatTransport(config.sshChatTransport);
   if (config.mode === "ssh") {
     data.sshConfig = config.ssh;
   }
@@ -110,12 +147,12 @@ export function setConnectionConfig(config: ConnectionConfig): void {
 
 export function resolveConnectionApiKeyUpdate(
   existing: ConnectionConfig,
-  mode: "local" | "remote" | "ssh",
+  _mode: "local" | "remote" | "ssh",
   remoteUrl: string,
   apiKey?: string,
 ): string {
   if (apiKey !== undefined) return apiKey;
-  if (existing.mode === mode && existing.remoteUrl === remoteUrl) {
+  if (remoteUrl.trim() && existing.remoteUrl === remoteUrl) {
     return existing.apiKey;
   }
   return "";
@@ -144,6 +181,23 @@ function invalidateCache(prefix: string): void {
   for (const key of _cache.keys()) {
     if (key.startsWith(prefix)) _cache.delete(key);
   }
+}
+
+/**
+ * Drop all secrets-related cache entries (the parsed `env:*` views and the
+ * resolved `apiServerKey:*` values, every profile). Call after a vault
+ * rotation / secrets-add / secrets-inject so the next `getSecret` /
+ * `getApiServerKey` lookup re-resolves through the live provider instead of
+ * serving a value cached up to 5s ago (which can 401 against a rotated key).
+ * Does NOT spawn the provider — it only clears cached values.
+ */
+export function invalidateSecretsCache(): void {
+  invalidateCache("env:");
+  invalidateCache("apiServerKey:");
+  // Also drop the secrets-layer list() cache so a vault rotation is visible
+  // on the next provider read (S1: that cache is the helper-spawn rate floor,
+  // explicit invalidation is the one sanctioned way to bust it early).
+  invalidateProviderListCache();
 }
 
 export function readEnv(profile?: string): Record<string, string> {
@@ -667,6 +721,27 @@ export function getModelConfig(profile?: string): {
 }
 
 /**
+ * Read the active model's manual context-window override from config.yaml's
+ * `model.context_length`, paired with the active `model.default` so callers can
+ * confirm the override applies to the model they're asking about. Returns the
+ * parsed positive token count, or null when unset/invalid. Drives the context
+ * gauge ahead of provider `/models` detection (issue: 32k-instead-of-64k).
+ */
+export function getModelContextLengthOverride(
+  profile?: string,
+): { model: string; contextLength: number } | null {
+  const { configFile } = profilePaths(profile);
+  if (!existsSync(configFile)) return null;
+  const content = readFileSync(configFile, "utf-8");
+  const { children } = readTopLevelBlock(content, "model");
+  const raw = children.get("context_length")?.value;
+  if (!raw) return null;
+  const n = parseInt(raw.trim(), 10);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return { model: children.get("default")?.value || "", contextLength: n };
+}
+
+/**
  * Mirror of the runtime key-resolution fallback for OpenAI-compatible /
  * custom endpoints (see `sendMessageViaCli` in hermes.ts): the gateway tries
  * the URL-specific key, then `CUSTOM_API_KEY`, then `OPENAI_API_KEY`. Returns
@@ -703,6 +778,25 @@ export function customEndpointKeyResolvable(
   for (const k of candidates) {
     if ((env[k] ?? "").trim()) return true;
   }
+  // Vault-aware: a `command` provider with any of the fallback keys
+  // configured in the vault satisfies the requirement too — don't
+  // return false and trigger a cascade of "MODEL_KEY_MISSING" / "set up
+  // provider" warnings for a vault-only user. NOTE: ./secrets is already
+  // statically imported at the top of this file, so this lazy require does
+  // NOT break a cycle (the cycle is already established and safe because
+  // secrets constructs its providers lazily). It is required at call time
+  // only so a test that resets modules re-binds the current ./secrets;
+  // collapsing it to the top-level static import would work equally well.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- call-time require (see note above); not a cycle-break — ./secrets is already statically imported at the top of this file.
+    const secretsMod = require("./secrets") as typeof import("./secrets");
+    const resolved = secretsMod.resolvedSecretMap(profile);
+    for (const k of candidates) {
+      if ((resolved[k] ?? "").trim()) return true;
+    }
+  } catch {
+    // secrets module not loadable — env-only view is the best we can do
+  }
   return false;
 }
 
@@ -718,7 +812,13 @@ export function upsertBlockChild(
   blockName: string,
   key: string,
   value: string,
+  // Whether to wrap the value in double quotes. Default true (every existing
+  // caller writes string scalars). Pass false for numeric/boolean scalars
+  // like `model.context_length`, which must parse as a YAML number — not a
+  // quoted string — for strict consumers.
+  quote = true,
 ): string {
+  const rendered = quote ? `"${value}"` : value;
   const { children, blockBodyStart, childIndent } = readTopLevelBlock(
     content,
     blockName,
@@ -728,13 +828,13 @@ export function upsertBlockChild(
   if (existing) {
     return (
       content.slice(0, existing.valueStart) +
-      `"${value}"` +
+      rendered +
       content.slice(existing.valueEnd)
     );
   }
 
   if (blockBodyStart !== null) {
-    const insertion = `${childIndent}${key}: "${value}"\n`;
+    const insertion = `${childIndent}${key}: ${rendered}\n`;
     return (
       content.slice(0, blockBodyStart) +
       insertion +
@@ -747,7 +847,30 @@ export function upsertBlockChild(
   // bootstrapping a fresh config.yaml) skip the separator so we don't
   // leave a stray leading blank line.
   const sep = content === "" || content.endsWith("\n") ? "" : "\n";
-  return `${content}${sep}${blockName}:\n  ${key}: "${value}"\n`;
+  return `${content}${sep}${blockName}:\n  ${key}: ${rendered}\n`;
+}
+
+/**
+ * Remove a direct child `key` from a top-level YAML block, if present. Returns
+ * the content unchanged when the block or key is absent. Counterpart to
+ * `upsertBlockChild` — used to clear an override (e.g. `model.context_length`)
+ * so auto-detection resumes rather than leaving a stale value behind.
+ */
+export function removeBlockChild(
+  content: string,
+  blockName: string,
+  key: string,
+): string {
+  const { children } = readTopLevelBlock(content, blockName);
+  const existing = children.get(key);
+  if (!existing) return content;
+  // Derive the full `  key: value` line bounds from the value offsets the
+  // reader records, then drop the whole line (including its trailing newline)
+  // so the rest of the block stays intact.
+  const lineStart = content.lastIndexOf("\n", existing.valueStart - 1) + 1;
+  const nl = content.indexOf("\n", existing.valueEnd);
+  const lineEnd = nl === -1 ? content.length : nl + 1;
+  return content.slice(0, lineStart) + content.slice(lineEnd);
 }
 
 /**
@@ -808,11 +931,24 @@ function findModelBlockBody(
   return { start, end };
 }
 
+// @lat: [[model-context#Model context window#Storage and propagation]]
 export function setModelConfig(
   provider: string,
   model: string,
   baseUrl: string,
   profile?: string,
+  // Optional context-window override (tokens) mirrored into
+  // `model.context_length`. `undefined` leaves the key untouched (back-compat
+  // for callers that don't manage it); a positive number sets it; `null` or a
+  // non-positive number removes it (auto-detection / heuristic resumes).
+  contextLength?: number | null,
+  // Optional API-protocol override mirrored into `model.api_mode` (the agent's
+  // runtime-provider resolver reads it to pick the transport for
+  // custom/compatible endpoints). `undefined` leaves the key untouched
+  // (back-compat); a non-empty string (e.g. `"anthropic_messages"`,
+  // `"chat_completions"`) sets it; `null`/empty removes it so the agent
+  // re-detects the transport from the base URL.
+  apiMode?: string | null,
 ): void {
   invalidateCache(`mc:${profile || "default"}`);
   const { configFile } = profilePaths(profile);
@@ -923,12 +1059,57 @@ export function setModelConfig(
     content = content.replace(streamingRegex, "$1true");
   }
 
+  // Mirror the per-model context-window override into `model.context_length`,
+  // which both the desktop context gauge and the agent's auto-compaction
+  // threshold read. Skip entirely when `undefined` so existing callers that
+  // don't track it leave any user-set value alone.
+  if (contextLength !== undefined) {
+    if (typeof contextLength === "number" && contextLength > 0) {
+      content = upsertBlockChild(
+        content,
+        "model",
+        "context_length",
+        String(Math.floor(contextLength)),
+        false, // numeric scalar — write unquoted so YAML parses it as a number
+      );
+    } else {
+      content = removeBlockChild(content, "model", "context_length");
+    }
+  }
+
+  // Mirror the activated model's API-protocol override into `model.api_mode`.
+  // This MUST be rewritten on every switch: the gateway honors a persisted
+  // `model.api_mode` for custom/compatible providers, so a value left behind
+  // by a previously-active model would route the new endpoint over the wrong
+  // protocol — e.g. switching from an Anthropic-compatible endpoint
+  // (api_mode: anthropic_messages) to an OpenAI-compatible one would keep
+  // hitting /v1/messages and 404 / drop the connection (fathah/hermes-desktop
+  // — "connection lost switching OpenAI- and Anthropic-compatible models").
+  // Skip when `undefined` so callers that don't track it leave any user-set
+  // value alone; a non-empty string sets it; `null`/empty removes it so the
+  // agent auto-detects the transport from `base_url` again.
+  if (apiMode !== undefined) {
+    const trimmedMode = (apiMode || "").trim();
+    if (trimmedMode) {
+      content = upsertBlockChild(content, "model", "api_mode", trimmedMode);
+    } else {
+      content = removeBlockChild(content, "model", "api_mode");
+    }
+  }
+
   safeWriteFile(configFile, content);
 }
 
 export function getHermesHome(profile?: string): string {
   return profilePaths(profile).home;
 }
+
+/**
+ * `${providerId}:${profile}` pairs already warned about an unresolved
+ * API_SERVER_KEY — one diagnostic line per pair for the whole session, not one
+ * per chat message (getApiServerKey is a hot path).
+ */
+const warnedUnresolvedApiKey = new Set<string>();
 
 /**
  * Resolve the API server's shared secret. Honoured by the local hermes
@@ -972,14 +1153,45 @@ export function getApiServerKey(profile?: string): string {
   const cached = getCached<string>(cacheKey);
   if (cached !== undefined) return cached;
 
-  const envForProfile = readEnv(profile);
+  // Overlay the secrets provider's enumerable map BENEATH the `.env` file view,
+  // mirroring the process.env > .env > provider resolution order used
+  // everywhere else: a key is filled from the provider only when neither the
+  // `.env` file nor process.env already has it. A no-op for the default env
+  // provider (its list() IS the `.env` map); for a `command`-provider user this
+  // is what lets a vault-stored API_SERVER_KEY reach the 6-source resolver (as
+  // its canonical `envProfile` arm — deliberately NOT a 7th source, so the
+  // env-provider resolve-precedence policy is unchanged). Copy before
+  // overlaying: readEnv() returns a shared cached object that must not be
+  // mutated with provider values.
+  const envForProfile: Record<string, string> = { ...readEnv(profile) };
+  let providerId = "env";
+  try {
+    providerId = getSecretsProvider(profile).id;
+    let contributed = 0;
+    for (const [k, v] of Object.entries(providerListSafe(profile))) {
+      if (v && !envForProfile[k] && !(process.env[k] ?? "").trim()) {
+        envForProfile[k] = v;
+        contributed++;
+      }
+    }
+    // Visible under --enable-logging so an overlay user can see it happening.
+    console.debug(
+      `[secrets] API_SERVER_KEY overlay: provider=${providerId}, contributed ${contributed} keys`,
+    );
+  } catch {
+    // secrets module not available — fall through to the env-only view
+  }
   const sources: ApiKeySources = {
     configTopLevelProfile: getConfigValue("API_SERVER_KEY", profile),
     configTopLevelDefault:
       profile && profile !== "default"
         ? getConfigValue("API_SERVER_KEY")
         : null,
-    envProfile: envForProfile.API_SERVER_KEY ?? null,
+    // Prefer the .env file value, then a runtime-injected one (e.g. a vault that
+    // unseals API_SERVER_KEY into the process environment rather than writing it
+    // to .env). This is the env arm of the secrets-provider resolution order.
+    envProfile:
+      envForProfile.API_SERVER_KEY ?? process.env.API_SERVER_KEY ?? null,
     envDefault:
       profile && profile !== "default"
         ? (readEnv().API_SERVER_KEY ?? null)
@@ -991,6 +1203,18 @@ export function getApiServerKey(profile?: string): string {
         : null,
   };
   const { value, source } = resolveApiServerKeyWithSource(sources);
+
+  // Diagnostic for "why is the key missing": one line naming the active
+  // provider, rate-limited per (provider, profile) so the hot path can't spam.
+  if (!value) {
+    const warnKey = `${providerId}:${profile || "default"}`;
+    if (!warnedUnresolvedApiKey.has(warnKey)) {
+      warnedUnresolvedApiKey.add(warnKey);
+      console.warn(
+        `[secrets] API_SERVER_KEY not resolved (provider=${providerId}, env=${profile || "default"})`,
+      );
+    }
+  }
 
   // Migration on read — if we resolved the key from a non-canonical
   // location AND the canonical `.env` slot is empty for this profile,
@@ -1039,6 +1263,31 @@ export function getApiServerKey(profile?: string): string {
 
   setCache(cacheKey, value);
   return value;
+}
+
+/**
+ * Wire shape of the `get-api-server-key-status` IPC channel. `hasKey` is the
+ * stable, required field existing renderer code relies on; `providerId` and
+ * `checkedAt` are ADDITIVE optional extras so a follow-up Settings/Gateway UI
+ * can distinguish "key resolved via vault" vs ".env" vs "missing".
+ */
+export interface ApiServerKeyStatus {
+  hasKey: boolean;
+  providerId?: string;
+  checkedAt?: number;
+}
+
+export function getApiServerKeyStatus(profile?: string): ApiServerKeyStatus {
+  const key = getApiServerKey(profile);
+  const status: ApiServerKeyStatus = { hasKey: key.length > 0 };
+  try {
+    const providerId = getSecretsProvider(profile).id;
+    if (providerId !== undefined) status.providerId = providerId;
+  } catch {
+    // secrets module unavailable — keep the legacy hasKey-only shape
+  }
+  status.checkedAt = Date.now();
+  return status;
 }
 
 /**
@@ -1199,8 +1448,7 @@ const PLATFORM_RULES: Record<string, PlatformRule> = {
   telegram: { envCheck: (e) => !!e.TELEGRAM_BOT_TOKEN?.trim() },
   discord: { envCheck: (e) => !!e.DISCORD_BOT_TOKEN?.trim() },
   slack: {
-    envCheck: (e) =>
-      !!e.SLACK_BOT_TOKEN?.trim() && !!e.SLACK_APP_TOKEN?.trim(),
+    envCheck: (e) => !!e.SLACK_BOT_TOKEN?.trim() && !!e.SLACK_APP_TOKEN?.trim(),
   },
   whatsapp: {
     envCheck: (e) =>
@@ -1248,8 +1496,7 @@ const PLATFORM_RULES: Record<string, PlatformRule> = {
   },
   dingtalk: {
     envCheck: (e) =>
-      (!!e.DINGTALK_CLIENT_ID?.trim() &&
-        !!e.DINGTALK_CLIENT_SECRET?.trim()) ||
+      (!!e.DINGTALK_CLIENT_ID?.trim() && !!e.DINGTALK_CLIENT_SECRET?.trim()) ||
       (!!e.DINGTALK_APP_KEY?.trim() && !!e.DINGTALK_APP_SECRET?.trim()),
   },
   feishu: {
@@ -1339,10 +1586,6 @@ export function getPlatformEnabled(profile?: string): Record<string, boolean> {
     const envEnabled = rule.envCheck(env);
     const configKey = rule.configKey || platform;
     const override = content ? readPlatformOverride(content, configKey) : null;
-    // Python's rule: env-driven activation, config.yaml `enabled: false`
-    // can force-disable. An explicit `enabled: true` doesn't bypass a
-    // missing token (the Python gateway still requires the credential),
-    // so reflect that here too.
     result[platform] = envEnabled && override !== false;
   }
   return result;

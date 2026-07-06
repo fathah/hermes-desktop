@@ -14,6 +14,7 @@ export default {
   messages: "件",
   messageSingular: "件",
   delete: "会話を削除",
+  rename: "会話名を変更",
   deleteConfirmTitle: "会話を削除",
   deleteConfirm:
     "この会話を削除しますか？この操作は取り消せません — メッセージとセッション記録は完全に削除されます。",

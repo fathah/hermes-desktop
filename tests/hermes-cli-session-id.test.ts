@@ -10,39 +10,42 @@ const {
   apiRequests,
   apiRequestErrors,
   requestEvents,
-} =
-  vi.hoisted(() => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const path = require("path");
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const os = require("os");
-    return {
-      spawned: [] as Array<
-        EventEmitter & {
-          stdout: EventEmitter;
-          stderr: EventEmitter;
-          killed: boolean;
-          kill: ReturnType<typeof vi.fn>;
-          unref: ReturnType<typeof vi.fn>;
-        }
-      >,
-      TEST_HOME: path.join(
-        os.tmpdir(),
-        `hermes-cli-session-test-${Date.now()}`,
-      ),
-      TEST_REPO: path.join(
-        os.tmpdir(),
-        `hermes-cli-session-repo-${Date.now()}`,
-      ),
-      healthStatuses: [] as number[],
-      apiRequests: [] as Array<{
-        body: string;
-        headers: Record<string, string>;
-      }>,
-      apiRequestErrors: [] as string[],
-      requestEvents: [] as string[],
-    };
-  });
+  modelConfig,
+  profileEnv,
+} = vi.hoisted(() => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const path = require("path");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const os = require("os");
+  return {
+    spawned: [] as Array<
+      EventEmitter & {
+        stdout: EventEmitter;
+        stderr: EventEmitter;
+        killed: boolean;
+        kill: ReturnType<typeof vi.fn>;
+        unref: ReturnType<typeof vi.fn>;
+        spawnArgs?: string[];
+        spawnOptions?: { env?: Record<string, string> };
+      }
+    >,
+    TEST_HOME: path.join(os.tmpdir(), `hermes-cli-session-test-${Date.now()}`),
+    TEST_REPO: path.join(os.tmpdir(), `hermes-cli-session-repo-${Date.now()}`),
+    healthStatuses: [] as number[],
+    apiRequests: [] as Array<{
+      body: string;
+      headers: Record<string, string>;
+    }>,
+    apiRequestErrors: [] as string[],
+    requestEvents: [] as string[],
+    modelConfig: {
+      model: "test-model",
+      provider: "openrouter",
+      baseUrl: "",
+    },
+    profileEnv: {} as Record<string, string>,
+  };
+});
 
 vi.mock("http", () => ({
   default: {
@@ -198,26 +201,30 @@ vi.mock("https", () => ({
 
 vi.mock("child_process", () => ({
   default: {
-    spawn: vi.fn(() => {
+    spawn: vi.fn((_cmd: string, args?: string[], options?: unknown) => {
       const proc = Object.assign(new EventEmitter(), {
         stdout: new EventEmitter(),
         stderr: new EventEmitter(),
         killed: false,
         kill: vi.fn(),
         unref: vi.fn(),
+        spawnArgs: args,
+        spawnOptions: options,
       });
       proc.stderr.pipe = vi.fn();
       spawned.push(proc);
       return proc;
     }),
   },
-  spawn: vi.fn(() => {
+  spawn: vi.fn((_cmd: string, args?: string[], options?: unknown) => {
     const proc = Object.assign(new EventEmitter(), {
       stdout: new EventEmitter(),
       stderr: new EventEmitter(),
       killed: false,
       kill: vi.fn(),
       unref: vi.fn(),
+      spawnArgs: args,
+      spawnOptions: options,
     });
     proc.stderr.pipe = vi.fn();
     spawned.push(proc);
@@ -234,8 +241,9 @@ vi.mock("../src/main/installer", () => ({
 }));
 
 vi.mock("../src/main/config", () => ({
-  getModelConfig: () => ({ model: "test-model", provider: "openrouter" }),
-  readEnv: () => ({}),
+  getModelConfig: () => modelConfig,
+  getConfigValue: () => "",
+  readEnv: () => profileEnv,
   getApiServerKey: () => "",
   getConnectionConfig: () => ({ mode: "local" as const }),
 }));
@@ -282,6 +290,12 @@ describe("CLI fallback session id propagation", () => {
     apiRequests.length = 0;
     apiRequestErrors.length = 0;
     requestEvents.length = 0;
+    modelConfig.model = "test-model";
+    modelConfig.provider = "openrouter";
+    modelConfig.baseUrl = "";
+    for (const key of Object.keys(profileEnv)) {
+      delete profileEnv[key];
+    }
     rmSync(TEST_REPO, { recursive: true, force: true });
   });
 
@@ -309,6 +323,39 @@ describe("CLI fallback session id propagation", () => {
     });
 
     await expect(done).resolves.toBe("20260527_143413_10df4c");
+  });
+
+  it("runs AIML API through the CLI custom provider bridge", async () => {
+    modelConfig.model = "gpt-4o-mini";
+    modelConfig.provider = "aimlapi";
+    modelConfig.baseUrl = "https://api.aimlapi.com/v1";
+    profileEnv.AIMLAPI_API_KEY = "sk-aiml-test";
+
+    const done = new Promise<string | undefined>((resolve) => {
+      sendMessage("hi", {
+        onChunk: () => {},
+        onDone: resolve,
+        onError: () => {},
+      }).then(() => {
+        const proc = spawned[0];
+        proc.stdout.emit("data", Buffer.from("Hi there"));
+        proc.emit("close", 0);
+      });
+    });
+
+    await expect(done).resolves.toBeUndefined();
+
+    const proc = spawned[0];
+    expect(proc.spawnArgs).toEqual(
+      expect.arrayContaining(["-m", "gpt-4o-mini", "--provider", "custom"]),
+    );
+    expect(proc.spawnOptions?.env).toMatchObject({
+      AIMLAPI_API_KEY: "sk-aiml-test",
+      OPENAI_API_KEY: "sk-aiml-test",
+      OPENAI_BASE_URL: "https://api.aimlapi.com/v1",
+      CUSTOM_BASE_URL: "https://api.aimlapi.com/v1",
+      HERMES_INFERENCE_PROVIDER: "custom",
+    });
   });
 
   it("continues a CLI-created timestamp session over the API instead of minting a desk id", async () => {
@@ -524,17 +571,20 @@ describe("CLI fallback session id propagation", () => {
 
     apiRequestErrors.push("STATUS:401:Authentication failed");
     healthStatuses.push(503, 200);
+    const startedSessions: string[] = [];
 
     await expect(
       new Promise<string | undefined>((resolve, reject) => {
         sendMessage("bad key", {
           onChunk: () => {},
           onDone: resolve,
+          onSessionStarted: (sessionId) => startedSessions.push(sessionId),
           onError: reject,
         }).catch(reject);
       }),
     ).rejects.toThrow("Authentication failed");
 
+    expect(startedSessions).toEqual([]);
     expect(apiRequests).toHaveLength(2);
     expect(JSON.parse(apiRequests[1].body)).toMatchObject({
       messages: [{ role: "user", content: "bad key" }],

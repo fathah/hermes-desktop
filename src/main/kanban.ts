@@ -360,6 +360,32 @@ export async function archiveTask(
   return { success: res.success, error: res.error };
 }
 
+// Move a todo (or blocked) task to ready. The CLI refuses unless every parent
+// dependency is done/archived — same guard the dashboard's direct status write
+// applies — so a failure surfaces the unmet-dependency error rather than being
+// forced through. (No --force here, deliberately.)
+export async function promoteTask(
+  taskId: string,
+  profile?: string,
+): Promise<KanbanResult<void>> {
+  if (isRemoteOnlyMode()) return unsupportedInRemote();
+  const res = await runKanban(["promote", taskId], { profile });
+  return { success: res.success, error: res.error };
+}
+
+// Park a task in the Scheduled column (waiting on time, not human input).
+export async function scheduleTask(
+  taskId: string,
+  reason?: string,
+  profile?: string,
+): Promise<KanbanResult<void>> {
+  if (isRemoteOnlyMode()) return unsupportedInRemote();
+  const args = ["schedule", taskId];
+  if (reason) args.push(reason);
+  const res = await runKanban(args, { profile });
+  return { success: res.success, error: res.error };
+}
+
 export async function specifyTask(
   taskId: string,
   profile?: string,

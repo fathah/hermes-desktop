@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import toast from "react-hot-toast";
 import { Search, X, Download, Trash, Refresh } from "../../assets/icons";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
 import { useI18n } from "../../components/useI18n";
@@ -88,6 +89,7 @@ function Skills({
   }
 
   async function handleUninstall(name: string): Promise<void> {
+    if (!window.confirm(t("skills.uninstallConfirm", { name }))) return;
     setActionInProgress(name);
     setError("");
     const result = await window.hermesAPI.uninstallSkill(name, profile);
@@ -95,8 +97,11 @@ function Skills({
     if (result.success) {
       setDetailSkill(null);
       await loadInstalled();
+      toast.success(t("skills.uninstallSuccess", { name }));
     } else {
-      setError(result.error || t("skills.uninstallFailed"));
+      const msg = result.error || t("skills.uninstallFailed");
+      setError(msg);
+      toast.error(msg);
     }
   }
 

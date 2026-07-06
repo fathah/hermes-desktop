@@ -52,7 +52,9 @@ describe("messaging platform catalog", () => {
       { telegram: true },
       false,
     );
-    const telegram = response.platforms.find((platform) => platform.id === "telegram");
+    const telegram = response.platforms.find(
+      (platform) => platform.id === "telegram",
+    );
     expect(telegram?.configured).toBe(true);
     expect(telegram?.state).toBe("gateway_stopped");
     expect(
@@ -67,7 +69,9 @@ describe("messaging platform catalog", () => {
       { telegram: true },
       true,
     );
-    const telegram = response.platforms.find((platform) => platform.id === "telegram");
+    const telegram = response.platforms.find(
+      (platform) => platform.id === "telegram",
+    );
     expect(telegram?.state).toBe("configured");
 
     const result = testMessagingPlatformStatus(telegram!);
@@ -88,7 +92,9 @@ describe("messaging platform catalog", () => {
         },
       },
     );
-    const telegram = response.platforms.find((platform) => platform.id === "telegram");
+    const telegram = response.platforms.find(
+      (platform) => platform.id === "telegram",
+    );
     expect(telegram?.state).toBe("connected");
     expect(telegram?.updated_at).toBe("2026-06-03T11:43:05.691429+00:00");
     expect(testMessagingPlatformStatus(telegram!).ok).toBe(true);
@@ -107,12 +113,14 @@ describe("messaging platform catalog", () => {
       { dingtalk: true, email: true },
       false,
     );
-    expect(response.platforms.find((platform) => platform.id === "dingtalk")?.configured).toBe(
-      true,
-    );
-    expect(response.platforms.find((platform) => platform.id === "email")?.configured).toBe(
-      true,
-    );
+    expect(
+      response.platforms.find((platform) => platform.id === "dingtalk")
+        ?.configured,
+    ).toBe(true);
+    expect(
+      response.platforms.find((platform) => platform.id === "email")
+        ?.configured,
+    ).toBe(true);
   });
 
   it("rejects updates to env keys outside the selected platform", () => {
@@ -125,7 +133,9 @@ describe("messaging platform catalog", () => {
 
   it("returns actionable setup messages for incomplete platforms", () => {
     const response = buildMessagingPlatforms({}, { telegram: true }, true);
-    const telegram = response.platforms.find((platform) => platform.id === "telegram");
+    const telegram = response.platforms.find(
+      (platform) => platform.id === "telegram",
+    );
     expect(telegram).toBeTruthy();
     const result = testMessagingPlatformStatus(telegram!);
     expect(result.ok).toBe(false);
@@ -133,22 +143,21 @@ describe("messaging platform catalog", () => {
   });
 
   it("surfaces per-platform toolsets with explicit high-risk markers", () => {
-    const response = buildMessagingPlatforms(
-      {},
-      { telegram: true },
-      false,
-      { telegram: ["browser", "terminal"] },
+    const response = buildMessagingPlatforms({}, { telegram: true }, false, {
+      telegram: ["browser", "terminal"],
+    });
+    const telegram = response.platforms.find(
+      (platform) => platform.id === "telegram",
     );
-    const telegram = response.platforms.find((platform) => platform.id === "telegram");
-    expect(telegram?.toolsets.find((toolset) => toolset.key === "browser")?.enabled).toBe(
-      true,
-    );
-    expect(telegram?.toolsets.find((toolset) => toolset.key === "web")?.enabled).toBe(
-      false,
-    );
-    expect(telegram?.toolsets.find((toolset) => toolset.key === "terminal")?.risk).toBe(
-      "high",
-    );
+    expect(
+      telegram?.toolsets.find((toolset) => toolset.key === "browser")?.enabled,
+    ).toBe(true);
+    expect(
+      telegram?.toolsets.find((toolset) => toolset.key === "web")?.enabled,
+    ).toBe(false);
+    expect(
+      telegram?.toolsets.find((toolset) => toolset.key === "terminal")?.risk,
+    ).toBe("high");
   });
 
   it("rejects unknown messaging toolset updates", () => {

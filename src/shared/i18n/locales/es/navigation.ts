@@ -1,6 +1,12 @@
 export default {
   chat: "Chat",
+  newChat: "Nuevo chat",
   sessions: "Sesiones",
+  projects: "Proyectos",
+  chats: "Chats",
+  noChats: "Sin chats",
+  discover: "Descubrir",
+  pinned: "Fijados",
   agents: "Perfiles",
   office: "Office",
   models: "Modelos",

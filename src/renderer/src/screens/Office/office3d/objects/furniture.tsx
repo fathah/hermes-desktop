@@ -1,5 +1,5 @@
 import { useGLTF } from "@react-three/drei";
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import * as THREE from "three";
 import { SCALE } from "../core/constants";
 import { toWorld } from "../core/geometry";
@@ -8,6 +8,7 @@ import deskUrl from "../assets/desk.glb?url";
 import executiveDeskUrl from "../assets/ceo_desk.glb?url";
 import chairUrl from "../assets/chairDesk.glb?url";
 import couchUrl from "../assets/loungeSofa.glb?url";
+import sofaChairUrl from "../assets/sofa_chair.glb?url";
 import beanbagUrl from "../assets/loungeDesignChair.glb?url";
 import plantUrl from "../assets/pottedPlant.glb?url";
 import whitePotUrl from "../assets/white_pot.glb?url";
@@ -59,6 +60,18 @@ const FURNITURE_DEFS: Record<FurnitureType, FurnitureDef> = {
     tint: "#3d5575",
     footprint: [100, 40],
     castShadow: true,
+  },
+  // Upholstered guest armchair (sofa_chair.glb). Origin is at the model's
+  // footprint centre (same as how BankDecor places it directly). The raw
+  // model is bulky — at 1.5 it dwarfed the executive desk — so it's scaled
+  // to read as an armchair next to it.
+  sofaChair: {
+    url: sofaChairUrl,
+    scale: [0.9, 0.9, 0.9],
+    tint: "#4a5568",
+    footprint: [40, 40],
+    castShadow: true,
+    origin: "center",
   },
   beanbag: {
     url: beanbagUrl,
@@ -284,7 +297,7 @@ function ExecutiveWorkstation({
 }
 
 /** Render an arbitrary list of furniture placements (e.g. the rest room). */
-export function FurniturePieces({
+export const FurniturePieces = memo(function FurniturePieces({
   pieces,
 }: {
   pieces: FurniturePlacement[];
@@ -303,10 +316,10 @@ export function FurniturePieces({
       ))}
     </>
   );
-}
+});
 
 /** Render every workstation (a desk + its chair) in the work area. */
-export function Workstations({
+export const Workstations = memo(function Workstations({
   workstations,
 }: {
   workstations: Workstation[];
@@ -342,7 +355,7 @@ export function Workstations({
       )}
     </>
   );
-}
+});
 
 useGLTF.preload(deskUrl, false, false);
 useGLTF.preload(executiveDeskUrl, false, false);

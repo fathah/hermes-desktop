@@ -15,6 +15,8 @@ export default {
   noBrowseResultsHint: "试试其他搜索词或分类筛选",
   installFailed: "安装技能失败",
   uninstallFailed: "卸载技能失败",
+  uninstallConfirm: "Uninstall '{{name}}'?",
+  uninstallSuccess: "'{{name}}' uninstalled",
   removing: "移除中...",
   uninstall: "卸载",
   installedBadge: "已安装",

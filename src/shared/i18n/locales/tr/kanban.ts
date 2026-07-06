@@ -98,4 +98,9 @@ export default {
   errArchive: "Görev arşivlenemedi",
   errReclaim: "Geri alınamadı",
   errDispatch: "Dağıtım başarısız",
+
+  // Tooltips & buttons
+  hqBoardTooltip: "Claw3D genel merkez panosu (salt okunur ayna)",
+  dismissError: "Hatayı kapat",
+  closeTaskDetails: "Görev detaylarını kapat",
 } as const;

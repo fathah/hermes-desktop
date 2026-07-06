@@ -23,7 +23,6 @@ const { capturedRequests, makeMockRequest } = vi.hoisted(() => {
         capturedRequests.push({ url, options, body });
       },
       end: () => {},
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       on: (_event: string, _cb: () => void) => {},
       destroy: () => {},
     };
@@ -73,6 +72,7 @@ vi.mock("../src/main/installer", () => ({
 
 vi.mock("../src/main/config", () => ({
   getModelConfig: () => ({ model: "test-model", provider: "openrouter" }),
+  getConfigValue: () => "",
   readEnv: () => ({}),
   getConnectionConfig: () => ({
     mode: "remote" as const,

@@ -8,9 +8,9 @@ Scope: user
 MinimumOSVersion: 10.0.17763.0
 ReleaseDate: { { RELEASE_DATE } }
 Installers:
-  - Architecture: x64
-    InstallerUrl: { { INSTALLER_URL } }
-    InstallerSha256: { { INSTALLER_SHA256 } }
-    UpgradeBehavior: install
+- Architecture: x64
+  InstallerUrl: { { INSTALLER_URL } }
+  InstallerSha256: { { INSTALLER_SHA256 } }
+  UpgradeBehavior: install
 ManifestType: installer
-ManifestVersion: 1.6.0
+ManifestVersion: 1.12.0

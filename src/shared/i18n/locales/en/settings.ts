@@ -6,6 +6,32 @@ export default {
     privacy: "Privacy",
     credentialPool: "Credential Pool",
   },
+  nav: {
+    groups: {
+      general: "General",
+      hermes: "Hermes One",
+    },
+    appearance: "Appearance",
+    language: "Language",
+    privacy: "Privacy",
+    connection: "Connection",
+    network: "Network",
+    data: "Data",
+    about: "About & Updates",
+    community: "Community",
+    logs: "Logs & Diagnostics",
+  },
+  agentSubtitle: "The local AI engine",
+  desktopTitle: "Hermes One Desktop",
+  desktopSubtitle: "This desktop app",
+  statusUpToDate: "Up to date",
+  statusUpdateAvailable: "Update available",
+  statusUpdateReady: "Update ready",
+  checkForUpdates: "Check for updates",
+  checkingUpdates: "Checking…",
+  downloadUpdate: "Download update",
+  retry: "Retry",
+  onLatestVersion: "You're on the latest version.",
   theme: {
     label: "Theme",
     system: "System",
@@ -22,6 +48,18 @@ export default {
     system: "System",
     hint: "Choose the interface font",
   },
+  hardwareAcceleration: {
+    label: "Hardware acceleration",
+    auto: "Auto",
+    on: "Always on",
+    off: "Always off",
+    hint: "Auto uses the GPU and falls back to software rendering for 24 hours after a GPU crash. Always on retries the GPU every launch; Always off keeps software rendering (the 3D office will be slow).",
+    envOverride:
+      "Overridden by the HERMES_DISABLE_GPU environment variable — this setting will have no effect until it is removed.",
+    restartToApply: "Takes effect after a restart.",
+    restartNow: "Restart now",
+    saveFailed: "Could not save the preference.",
+  },
   language: {
     label: "Language",
     english: "English",
@@ -35,17 +73,7 @@ export default {
   },
   analytics: {
     label: "Send anonymous usage analytics",
-    hint: "Helps improve Hermes One by sending anonymous, aggregated usage data to the project's PostHog instance. You can turn this off at any time.",
-    disclosure: {
-      uuid: "A random per-install identifier stored only on this device (no name, email, or account info).",
-      platform: "Your operating system, Electron version, and Node.js version.",
-      navigation:
-        "Which screens you visit inside the app (e.g. Chat, Sessions, Settings). No chat content, prompts, model responses, or file contents are collected.",
-      endpoint:
-        "Data is sent to us.i.posthog.com (PostHog US cloud). Session recordings and pageview auto-capture are disabled.",
-      notCollected:
-        "Never collected: chat messages, file paths, API keys, model configuration, account credentials.",
-    },
+    hint: "Collected anonymously and used only to improve Hermes One — never your chats, files, prompts, or any personal data.",
   },
   notDetected: "Not detected",
   updatedSuccessfully: "Updated successfully!",
@@ -75,6 +103,8 @@ export default {
   discoveryError:
     "Couldn't reach the provider's model list — you can still type a model name",
   customBaseUrlHint: "OpenAI-compatible API endpoint",
+  compatApiKeyHint:
+    "Stored as {{envVar}} — required for remote endpoints, optional for localhost.",
   poolHint:
     "Add multiple API Keys for the same provider for automatic rotation and load balancing. Hermes will cycle through them.",
   add: "Add",
@@ -94,6 +124,9 @@ export default {
   updating: "Updating...",
   updateEngine: "Update Engine",
   latestVersion: "Already up to date",
+  autoUpgradeDesktop: "Auto-upgrade desktop app",
+  autoUpgradeDesktopHint:
+    "Automatically download new Hermes One releases from GitHub when the app starts. Turn this off to show the startup upgrade button without downloading until you click it.",
   runningDiagnosis: "Running diagnosis...",
   runDiagnosis: "Run Diagnosis",
   running: "Running...",
@@ -125,6 +158,71 @@ export default {
   serverConfigTitle: "Server Configuration",
   serverConfigHint:
     "You&apos;re connected to a remote Hermes server. Model selection, provider API keys, and credentials are managed on the server&apos;s <code>~/.hermes/.env</code> and <code>config.yaml</code>. Edit them on the host (e.g. <code>docker exec -it hermes vi /opt/data/.env</code>) and restart the container.",
-  connectionMode: "Mode",
+  connectionMode: "Connection Mode",
   switchedToLocal: "Switched to local mode",
+
+  // Community
+  communityTitle: "Community",
+  communityHint:
+    "Join our Discord channel to ask questions, report issues, and chat with other Hermes users.",
+  joinDiscord: "Join Discord Channel",
+  communityLinksHint:
+    "Connect with the Hermes One community, get help, and stay up to date.",
+  linkWebsite: "Website",
+  linkDiscord: "Discord",
+  linkX: "X",
+  linkTelegram: "Telegram",
+  supportTitle: "Support the developer",
+  supportHint:
+    "Hermes One is free and open source — if it helps you, consider supporting its development.",
+  supportKofi: "Support on Ko-fi",
+
+  // SSH & Server Config
+  modeSsh: "SSH Tunnel",
+  modeSshHint:
+    "Tunnel to a remote Hermes over SSH — no exposed ports or API keys needed.",
+  sessionDisabledTitle: "Session history disabled — API_SERVER_KEY not set",
+  sessionDisabledDesc:
+    "Without an API server key the gateway cannot authenticate session continuation requests. Messages will still send, but conversation history won't be preserved across restarts.",
+  generateKey: "Generate & save a key for me",
+  generating: "Generating…",
+  remoteEnvTitle: "Set API_SERVER_KEY on the remote server",
+  remoteEnvSshDesc:
+    "SSH mode: add API_SERVER_KEY=<your-key> to ~/.hermes/profiles/<profile>/.env on the remote host, then restart the gateway there.",
+  remoteEnvDesc:
+    "Remote mode: add API_SERVER_KEY=<your-key> to the .env on your remote Hermes server, then restart the gateway.",
+  sshHost: "SSH Host",
+  sshPort: "SSH Port",
+  sshUsername: "Username",
+  sshKeyPath: "Private Key Path",
+  sshKeyPathOptional: "(optional, defaults to ~/.ssh/id_rsa)",
+  sshRemotePort: "Remote Hermes Port",
+  sshRemotePortDefault: "(default 8642)",
+  sshHint:
+    "Make sure you can run ssh {{cmd}} without a password prompt. The first connection trusts the host key and stores it in ~/.ssh/known_hosts; SSH will fail closed if that key changes later.",
+  sshHintWelcome:
+    "Uses your system SSH. Make sure you can already run ssh {{cmd}} without a password prompt.",
+  testingSsh: "Testing SSH…",
+  testSsh: "Test SSH Connection",
+  connectSsh: "Connect via SSH",
+  sshTitle: "Connect via SSH",
+  sshSubtitle:
+    "Tunnel to a remote Hermes over SSH — no exposed ports or API keys needed.",
+  sshHostPlaceholder: "192.168.1.100 or myserver.local",
+  sshUsernamePlaceholder: "hermes",
+  sshErrorRequired: "Host and username are required.",
+  sshErrorConnection:
+    "Could not connect via SSH or reach Hermes on the remote. Make sure:\n• SSH key is correct (or default ~/.ssh/id_rsa works)\n• Hermes gateway is running on the remote\n• The remote port is correct (default 8642)",
+  sshErrorFailed: "SSH connection test failed: {{msg}}",
+  sshErrorFailedSimple: "SSH connection test failed.",
+  remoteErrorUrl: "Please enter a URL.",
+  remoteErrorConnection:
+    "Could not reach Hermes at this URL. Check the URL and API key.\n\nLeave the key empty if the server accepts unauthenticated requests (e.g. via SSH tunnel to localhost).",
+  remoteErrorFailed: "Connection test failed.",
+  sshSuccess: "SSH tunnel connected!",
+  sshErrorRequiredSimple: "Host and username are required",
+  remoteSuccess: "Connected successfully!",
+  remoteErrorRequiredSimple: "Please enter a URL",
+  remoteErrorFailedSimple: "Could not reach server",
+  apiGenerated: "API key generated — gateway restarting…",
 } as const;

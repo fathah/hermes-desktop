@@ -399,7 +399,10 @@ describe("model-discovery", () => {
                 id: "deepseek/deepseek-v4-flash:free",
                 pricing: { prompt: "0", completion: "0" },
               },
-              { id: "openrouter/owl-alpha", pricing: { prompt: "0.0", completion: "0.0" } },
+              {
+                id: "openrouter/owl-alpha",
+                pricing: { prompt: "0.0", completion: "0.0" },
+              },
               {
                 id: "anthropic/claude-opus-4.7",
                 pricing: { prompt: "0.000003", completion: "0.000015" },
@@ -459,8 +462,156 @@ describe("model-discovery", () => {
     await listen();
     // No auth.json planted in testHome — fetchNousFreeModelIds returns []
     const { discoverProviderModels } = await loadDiscovery();
-    const result = await discoverProviderModels("nous", undefined, undefined, undefined);
+    const result = await discoverProviderModels(
+      "nous",
+      undefined,
+      undefined,
+      undefined,
+    );
     expect(result.freeModels).toEqual([]);
     expect(result.status).toBe("ok");
+  });
+
+  // Issue #597 — the context gauge reads `getModelContextWindow`, which must
+  // resolve the advertised `context_length` even when `discoverProviderModels`
+  // has already populated the model cache (the common case once the model
+  // picker has loaded). The earlier implementation re-ran discovery, hit the
+  // model-cache early-return, and never filled the ctx cache — silently
+  // falling back to the heuristic.
+
+  it("getModelContextWindow resolves context_length after the model cache is already warm", async () => {
+    let calls = 0;
+    server = http.createServer((_req, res) => {
+      calls++;
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          data: [{ id: "big-model", context_length: 128000 }],
+        }),
+      );
+    });
+    await listen();
+
+    const { discoverProviderModels, getModelContextWindow } =
+      await loadDiscovery();
+
+    // Model picker primes `_cache` (and `_ctxCache`) in one call.
+    const disc = await discoverProviderModels(
+      "custom",
+      baseUrl,
+      "sk-test",
+      undefined,
+    );
+    expect(disc.models).toEqual(["big-model"]);
+
+    // Gauge query: must return the advertised window, not null. The warm
+    // ctx cache means no second HTTP round-trip is needed.
+    const ctx = await getModelContextWindow(
+      "custom",
+      "big-model",
+      baseUrl,
+      "sk-test",
+      undefined,
+    );
+    expect(ctx).toBe(128000);
+    expect(calls).toBe(1);
+  });
+
+  it("getModelContextWindow treats an empty ctx map as authoritative (no re-fetch)", async () => {
+    let calls = 0;
+    server = http.createServer((_req, res) => {
+      calls++;
+      res.writeHead(200, { "Content-Type": "application/json" });
+      // Provider advertises models but no `context_length`.
+      res.end(JSON.stringify({ data: [{ id: "m" }] }));
+    });
+    await listen();
+
+    const mod = await loadDiscovery();
+    await mod.discoverProviderModels("custom", baseUrl, "sk-test", undefined);
+    // The first response carried no context_length, so the ctx map is empty
+    // (present-but-empty) — that's treated as authoritative.
+    const ctx = await mod.getModelContextWindow(
+      "custom",
+      "m",
+      baseUrl,
+      "sk-test",
+      undefined,
+    );
+    expect(ctx).toBeNull();
+    // Only the discovery call should have hit the server — no re-fetch.
+    expect(calls).toBe(1);
+  });
+
+  // A manual `model.context_length` override in config.yaml must win over
+  // /models detection (and the heuristic) for the active model — the primary
+  // fix for providers like qwen that don't advertise context_length.
+  it("getModelContextWindow returns the config override for the active model", async () => {
+    writeFileSync(
+      join(testHome, "config.yaml"),
+      ["model:", '  default: "qwen-max"', '  context_length: "65536"', ""].join(
+        "\n",
+      ),
+    );
+    // qwen is non-discoverable, so without the override this would be null.
+    const { getModelContextWindow } = await loadDiscovery();
+    const ctx = await getModelContextWindow(
+      "qwen",
+      "qwen-max",
+      undefined,
+      undefined,
+      undefined,
+    );
+    expect(ctx).toBe(65536);
+  });
+
+  it("getModelContextWindow ignores the override for a non-active model id", async () => {
+    writeFileSync(
+      join(testHome, "config.yaml"),
+      ["model:", '  default: "qwen-max"', '  context_length: "65536"', ""].join(
+        "\n",
+      ),
+    );
+    const { getModelContextWindow } = await loadDiscovery();
+    // Different model id → override must not leak; qwen has no /models, → null.
+    const ctx = await getModelContextWindow(
+      "qwen",
+      "some-other-model",
+      undefined,
+      undefined,
+      undefined,
+    );
+    expect(ctx).toBeNull();
+  });
+
+  it("getModelContextWindow does not apply the override when model.default is absent", async () => {
+    // A hand-edited / partial config can carry context_length without a
+    // model.default. The override must NOT leak onto an arbitrary model id
+    // (regression: the old `override.model === ""` branch matched everything).
+    writeFileSync(
+      join(testHome, "config.yaml"),
+      ["model:", '  context_length: "65536"', ""].join("\n"),
+    );
+    const { getModelContextWindow } = await loadDiscovery();
+    const ctx = await getModelContextWindow(
+      "qwen",
+      "qwen-max",
+      undefined,
+      undefined,
+      undefined,
+    );
+    expect(ctx).toBeNull();
+  });
+
+  it("getModelContextWindow returns null for providers without a /models endpoint", async () => {
+    const { getModelContextWindow } = await loadDiscovery();
+    const ctx = await getModelContextWindow(
+      "openai-codex",
+      "gpt-5.5",
+      undefined,
+      "sk-x",
+      undefined,
+    );
+    expect(ctx).toBeNull();
   });
 });

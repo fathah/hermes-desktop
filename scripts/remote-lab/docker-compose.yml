@@ -1,0 +1,38 @@
+services:
+  agent:
+    image: ${HERMES_LAB_IMAGE:-nousresearch/hermes-agent:latest}
+    build:
+      context: ${HERMES_LAB_AGENT_REPO:?set HERMES_LAB_AGENT_REPO}
+    container_name: hermes-two-remote-lab-agent
+    restart: unless-stopped
+    volumes:
+      - ${HERMES_LAB_HOME:?set HERMES_LAB_HOME}:/opt/data
+    environment:
+      HERMES_HOME: /opt/data
+      HERMES_UID: "10000"
+      HERMES_GID: "10000"
+      HERMES_DASHBOARD: "true"
+      HERMES_DASHBOARD_HOST: 0.0.0.0
+      HERMES_DASHBOARD_PORT: "9119"
+      HERMES_DASHBOARD_INSECURE: "true"
+      HERMES_DASHBOARD_TUI: "1"
+      HERMES_DASHBOARD_SESSION_TOKEN: ${HERMES_LAB_TOKEN:?set HERMES_LAB_TOKEN}
+      API_SERVER_HOST: 0.0.0.0
+      API_SERVER_PORT: "8642"
+      API_SERVER_KEY: ${HERMES_LAB_TOKEN:?set HERMES_LAB_TOKEN}
+      COMFYUI_HOST: ${HERMES_LAB_COMFYUI_HOST:-http://host.docker.internal:49000}
+      OPENROUTER_API_KEY: ${HERMES_LAB_OPENROUTER_API_KEY:-}
+      AUXILIARY_VISION_PROVIDER: openrouter
+      AUXILIARY_VISION_MODEL: google/gemini-3-flash-preview
+    command: ["gateway", "run"]
+
+  proxy:
+    image: nginx:1.27-alpine
+    container_name: hermes-two-remote-lab-proxy
+    restart: unless-stopped
+    depends_on:
+      - agent
+    ports:
+      - "127.0.0.1:${HERMES_LAB_PROXY_PORT:-19080}:8080"
+    volumes:
+      - ${HERMES_LAB_NGINX_CONF:?set HERMES_LAB_NGINX_CONF}:/etc/nginx/conf.d/default.conf:ro

@@ -56,3 +56,37 @@ export interface RegistryDetail {
   description?: string;
   rows?: RegistryDetailRow[];
 }
+
+/**
+ * Model registry (models.json) types. Served from the hermes-registry repo and
+ * consumed by the Models screen to let users pick curated models.
+ */
+export interface RegistryModel {
+  name: string;
+  label?: string;
+  description?: string;
+  context?: number;
+  maxOutput?: number;
+  modalities?: { input?: string[]; output?: string[] };
+  capabilities?: string[];
+}
+
+export interface RegistryModelProvider {
+  id: string;
+  name: string;
+  description?: string;
+  homepage?: string;
+  docs?: string;
+  apiBase?: string;
+  envKey?: string;
+  models: RegistryModel[];
+}
+
+export interface ModelRegistry {
+  schemaVersion?: string;
+  generated?: string;
+  providerCount?: number;
+  modelCount?: number;
+  providers: RegistryModelProvider[];
+  error?: string;
+}

@@ -1,4 +1,4 @@
-import icon from "../../assets/icon.png";
+import icon from "../../assets/iconv2.png";
 
 function HermesLogo({ size = 32 }: { size?: number }): React.JSX.Element {
   return (

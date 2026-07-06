@@ -272,12 +272,12 @@ describe("writeOfficeFileIfChanged", () => {
     const dir = mkdtempSync(join(tmpdir(), "hermes-office-write-"));
     try {
       const file = join(dir, "settings.json");
-      writeFileSync(file, "{\"adapter\":\"openclaw\"}", "utf-8");
+      writeFileSync(file, '{"adapter":"openclaw"}', "utf-8");
 
-      const wrote = writeOfficeFileIfChanged(file, "{\"adapter\":\"hermes\"}");
+      const wrote = writeOfficeFileIfChanged(file, '{"adapter":"hermes"}');
 
       expect(wrote).toBe(true);
-      expect(readFileSync(file, "utf-8")).toBe("{\"adapter\":\"hermes\"}");
+      expect(readFileSync(file, "utf-8")).toBe('{"adapter":"hermes"}');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

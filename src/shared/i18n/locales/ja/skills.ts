@@ -16,6 +16,8 @@ export default {
   noBrowseResultsHint: "別の検索ワードまたはカテゴリフィルタを試してください",
   installFailed: "スキルのインストールに失敗しました",
   uninstallFailed: "スキルのアンインストールに失敗しました",
+  uninstallConfirm: "Uninstall '{{name}}'?",
+  uninstallSuccess: "'{{name}}' uninstalled",
   removing: "削除中...",
   uninstall: "アンインストール",
   installedBadge: "インストール済み",

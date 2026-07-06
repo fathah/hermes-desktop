@@ -1,12 +1,5 @@
-import {
-  useEffect,
-  useState,
-  useRef,
-  useCallback,
-  useMemo,
-  memo,
-} from "react";
-import { Plus, Search, X, ChatBubble, Trash } from "../../assets/icons";
+import { useEffect, useState, useRef, useCallback, useMemo, memo } from "react";
+import { Plus, Search, X, ChatBubble, Trash, Pencil } from "../../assets/icons";
 import { useI18n } from "../../components/useI18n";
 
 interface CachedSession {
@@ -132,6 +125,14 @@ const SessionCard = memo(function SessionCard({
   onClick,
   onDelete,
   deleteTitle,
+  onRename,
+  renameTitle,
+  isRenaming = false,
+  renameValue = "",
+  onRenameChange,
+  onRenameConfirm,
+  onRenameCancel,
+  renameInputRef,
   selectionMode = false,
   selected = false,
   onToggleSelected,
@@ -144,6 +145,14 @@ const SessionCard = memo(function SessionCard({
   // When provided, renders a trash icon button on the card. Closes #408.
   onDelete?: (id: string) => void;
   deleteTitle?: string;
+  onRename?: (id: string, title: string) => void;
+  renameTitle?: string;
+  isRenaming?: boolean;
+  renameValue?: string;
+  onRenameChange?: (value: string) => void;
+  onRenameConfirm?: () => void;
+  onRenameCancel?: () => void;
+  renameInputRef?: React.RefObject<HTMLInputElement | null>;
   selectionMode?: boolean;
   selected?: boolean;
   onToggleSelected?: (id: string) => void;
@@ -190,9 +199,31 @@ const SessionCard = memo(function SessionCard({
             />
           </label>
         )}
-        <span className="sessions-card-title">
-          {session.title || "New conversation"}
-        </span>
+        {isRenaming ? (
+          <input
+            ref={renameInputRef}
+            className="sessions-card-rename-input"
+            type="text"
+            value={renameValue}
+            onChange={(e) => onRenameChange?.(e.target.value)}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === "Enter") {
+                e.preventDefault();
+                onRenameConfirm?.();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                onRenameCancel?.();
+              }
+            }}
+            onBlur={() => onRenameConfirm?.()}
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : (
+          <span className="sessions-card-title">
+            {session.title || "New conversation"}
+          </span>
+        )}
         <span className="sessions-card-time">
           {showFullDate
             ? formatFullDate(session.startedAt)
@@ -211,7 +242,22 @@ const SessionCard = memo(function SessionCard({
             {formatModel(session.model)}
           </span>
         )}
-        {!selectionMode && onDelete && (
+        {!selectionMode && onRename && !isRenaming && (
+          <button
+            type="button"
+            className="sessions-card-rename"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRename(session.id, session.title);
+            }}
+            onKeyDown={(e) => e.stopPropagation()}
+            title={renameTitle}
+            aria-label={renameTitle}
+          >
+            <Pencil size={14} />
+          </button>
+        )}
+        {!selectionMode && onDelete && !isRenaming && (
           <button
             type="button"
             className="sessions-card-delete"
@@ -269,33 +315,55 @@ function Sessions({
   const [deletingBulk, setDeletingBulk] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchRequestId = useRef(0);
+  const loadRequestId = useRef(0);
   const searchRef = useRef<HTMLInputElement>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  // Rename state
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
+  const editingSessionIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    editingSessionIdRef.current = editingSessionId;
+  }, [editingSessionId]);
 
   // Quiet re-sync from state.db — refreshes the list WITHOUT flipping the
   // loading state, so it can run on a timer or on focus with no spinner flash.
   const refreshSessions = useCallback(async (): Promise<void> => {
+    const requestId = ++loadRequestId.current;
     const synced = await window.hermesAPI.syncSessionCache();
-    setSessions(synced.slice(0, 50));
+    if (loadRequestId.current !== requestId) return;
+    setSessions((prev) => {
+      if (synced.length === 0 && prev.length > 0) {
+        return prev;
+      }
+      return synced.slice(0, 50);
+    });
   }, []);
 
   const loadSessions = useCallback(async (): Promise<void> => {
+    const requestId = ++loadRequestId.current;
     setLoading(true);
     try {
-      const cached = await window.hermesAPI.listCachedSessions(50);
-      if (cached.length > 0) {
-        setSessions(cached);
-      }
-
       const synced = await window.hermesAPI.syncSessionCache();
+      if (loadRequestId.current !== requestId) return;
       setSessions(synced.slice(0, 50));
     } catch (error) {
       console.error("Failed to load sessions", error);
+      try {
+        const cached = await window.hermesAPI.listCachedSessions(50);
+        if (loadRequestId.current === requestId) {
+          setSessions(cached);
+        }
+      } catch (cacheError) {
+        console.error("Failed to load cached sessions", cacheError);
+      }
     } finally {
-      setLoading(false);
+      if (loadRequestId.current === requestId) {
+        setLoading(false);
+      }
     }
-    await refreshSessions();
-    setLoading(false);
-  }, [refreshSessions]);
+  }, []);
 
   useEffect(() => {
     loadSessions();
@@ -304,6 +372,76 @@ function Sessions({
   const handleDelete = useCallback((sessionId: string): void => {
     setPendingDeleteSessionId(sessionId);
   }, []);
+
+  const startRename = useCallback(
+    (sessionId: string, currentTitle: string): void => {
+      setEditingSessionId(sessionId);
+      setEditingTitle(currentTitle || "");
+      // Focus the input on the next tick after render
+      setTimeout(() => {
+        renameInputRef.current?.focus();
+        renameInputRef.current?.select();
+      }, 0);
+    },
+    [],
+  );
+
+  const cancelRename = useCallback((): void => {
+    setEditingSessionId(null);
+    setEditingTitle("");
+  }, []);
+
+  const confirmRename = useCallback(
+    async (sessionId: string, newTitle: string): Promise<void> => {
+      const trimmed = newTitle.trim();
+      if (!trimmed) {
+        cancelRename();
+        return;
+      }
+      // Capture old titles so we can roll back on failure.
+      let oldSessionTitle = "";
+      let oldSearchResultTitle = "";
+      // Optimistic update
+      setSessions((prev) => {
+        oldSessionTitle = prev.find((s) => s.id === sessionId)?.title ?? "";
+        return prev.map((s) =>
+          s.id === sessionId ? { ...s, title: trimmed } : s,
+        );
+      });
+      setSearchResults((prev) => {
+        oldSearchResultTitle =
+          prev.find((r) => r.sessionId === sessionId)?.title ?? "";
+        return prev.map((r) =>
+          r.sessionId === sessionId ? { ...r, title: trimmed } : r,
+        );
+      });
+      try {
+        await window.hermesAPI.updateSessionTitle(sessionId, trimmed);
+      } catch (err) {
+        console.error("Failed to rename session", sessionId, err);
+        // Rollback optimistic update
+        setSessions((prev) =>
+          prev.map((s) =>
+            s.id === sessionId ? { ...s, title: oldSessionTitle } : s,
+          ),
+        );
+        setSearchResults((prev) =>
+          prev.map((r) =>
+            r.sessionId === sessionId
+              ? { ...r, title: oldSearchResultTitle }
+              : r,
+          ),
+        );
+      }
+      // Guard: only clear editing state if the user hasn't started editing
+      // a different session while this request was in flight.
+      if (editingSessionIdRef.current === sessionId) {
+        setEditingSessionId(null);
+        setEditingTitle("");
+      }
+    },
+    [cancelRename],
+  );
 
   const cancelDelete = useCallback((): void => {
     if (deletingSessionId) return;
@@ -319,9 +457,7 @@ function Sessions({
       // backend deletion failed.
       setDeletingSessionId(sessionId);
       setSessions((prev) => prev.filter((s) => s.id !== sessionId));
-      setSearchResults((prev) =>
-        prev.filter((r) => r.sessionId !== sessionId),
-      );
+      setSearchResults((prev) => prev.filter((r) => r.sessionId !== sessionId));
       try {
         await window.hermesAPI.deleteSession(sessionId);
       } catch (err) {
@@ -423,6 +559,18 @@ function Sessions({
     }
   }, [visible, loadSessions]);
 
+  useEffect(() => {
+    const unsubscribe = window.hermesAPI.onConnectionConfigChanged(() => {
+      setSessions([]);
+      setSearchResults([]);
+      setSearchQuery("");
+      setSelectedSessionIds(new Set());
+      setIsSelectionMode(false);
+      void loadSessions();
+    });
+    return unsubscribe;
+  }, [loadSessions]);
+
   // While the Sessions tab is actually showing, periodically re-sync so
   // sessions created in the background — cron jobs, gateway platforms, or
   // another device writing the same state.db — surface even if the user
@@ -457,6 +605,8 @@ function Sessions({
     setIsSearching(true);
     searchTimer.current = setTimeout(async () => {
       try {
+        await window.hermesAPI.syncSessionCache().catch(() => []);
+        if (searchRequestId.current !== requestId) return;
         const results = await window.hermesAPI.searchSessions(query);
         if (searchRequestId.current !== requestId) return;
         setSearchResults(results);
@@ -501,11 +651,10 @@ function Sessions({
     if (!isSelectionMode) return;
     const visibleIds = new Set(visibleSessionIds);
     setSelectedSessionIds((prev) => {
-      const next = new Set(
-        Array.from(prev).filter((id) => visibleIds.has(id)),
-      );
+      const next = new Set(Array.from(prev).filter((id) => visibleIds.has(id)));
       return next.size === prev.size ? prev : next;
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSelectionMode, visibleSessionIdKey]);
 
   return (
@@ -612,97 +761,134 @@ function Sessions({
 
               return (
                 <div
-                key={`${r.sessionId}-${index}`}
-                role="button"
-                tabIndex={0}
-                className={`sessions-card ${
-                  currentSessionId === r.sessionId
-                    ? "sessions-card--active"
-                    : ""
-                } ${
-                  selectedSessionIds.has(r.sessionId)
-                    ? "sessions-card--selected"
-                    : ""
-                }`}
-                onClick={() => {
-                  if (isSelectionMode) {
-                    toggleSessionSelected(r.sessionId);
-                  } else {
-                    onResumeSession(r.sessionId);
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
+                  key={`${r.sessionId}-${index}`}
+                  role="button"
+                  tabIndex={0}
+                  className={`sessions-card ${
+                    currentSessionId === r.sessionId
+                      ? "sessions-card--active"
+                      : ""
+                  } ${
+                    selectedSessionIds.has(r.sessionId)
+                      ? "sessions-card--selected"
+                      : ""
+                  }`}
+                  onClick={() => {
                     if (isSelectionMode) {
                       toggleSessionSelected(r.sessionId);
                     } else {
                       onResumeSession(r.sessionId);
                     }
-                  }
-                }}
-              >
-                <div className="sessions-card-main">
-                  {isSelectionMode && (
-                    <label
-                      className="sessions-card-select"
-                      onClick={(e) => e.stopPropagation()}
-                    >
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      if (isSelectionMode) {
+                        toggleSessionSelected(r.sessionId);
+                      } else {
+                        onResumeSession(r.sessionId);
+                      }
+                    }
+                  }}
+                >
+                  <div className="sessions-card-main">
+                    {isSelectionMode && (
+                      <label
+                        className="sessions-card-select"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedSessionIds.has(r.sessionId)}
+                          onChange={() => toggleSessionSelected(r.sessionId)}
+                          aria-label={t("sessions.selectSession")}
+                        />
+                      </label>
+                    )}
+                    {editingSessionId === r.sessionId ? (
                       <input
-                        type="checkbox"
-                        checked={selectedSessionIds.has(r.sessionId)}
-                        onChange={() => toggleSessionSelected(r.sessionId)}
-                        aria-label={t("sessions.selectSession")}
+                        ref={renameInputRef}
+                        className="sessions-card-rename-input"
+                        type="text"
+                        value={editingTitle}
+                        onChange={(e) => setEditingTitle(e.target.value)}
+                        onKeyDown={(e) => {
+                          e.stopPropagation();
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            confirmRename(r.sessionId, editingTitle);
+                          } else if (e.key === "Escape") {
+                            e.preventDefault();
+                            cancelRename();
+                          }
+                        }}
+                        onBlur={() => confirmRename(r.sessionId, editingTitle)}
+                        onClick={(e) => e.stopPropagation()}
                       />
-                    </label>
-                  )}
-                  <span className="sessions-card-title">
-                    {r.title ||
-                      (snippetTitle
-                        ? highlightSnippet(snippetTitle)
-                        : fallbackTitle)}
-                  </span>
-                  <span className="sessions-card-time">
-                    {formatFullDate(r.startedAt)}
-                  </span>
-                </div>
-                {shouldShowSnippet && (
-                  <div className="sessions-result-snippet">
-                    {highlightSnippet(r.snippet)}
-                  </div>
-                )}
-                <div className="sessions-card-tags">
-                  <span className="sessions-tag sessions-tag--source">
-                    {r.source}
-                  </span>
-                  <span className="sessions-tag">
-                    {r.messageCount}{" "}
-                    {r.messageCount !== 1
-                      ? t("sessions.messages")
-                      : t("sessions.messageSingular")}
-                  </span>
-                  {r.model && (
-                    <span className="sessions-tag sessions-tag--model">
-                      {formatModel(r.model)}
+                    ) : (
+                      <span className="sessions-card-title">
+                        {r.title ||
+                          (snippetTitle
+                            ? highlightSnippet(snippetTitle)
+                            : fallbackTitle)}
+                      </span>
+                    )}
+                    <span className="sessions-card-time">
+                      {formatFullDate(r.startedAt)}
                     </span>
+                  </div>
+                  {shouldShowSnippet && (
+                    <div className="sessions-result-snippet">
+                      {highlightSnippet(r.snippet)}
+                    </div>
                   )}
-                  {!isSelectionMode && (
-                    <button
-                      type="button"
-                      className="sessions-card-delete"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(r.sessionId);
-                      }}
-                      onKeyDown={(e) => e.stopPropagation()}
-                      title={t("sessions.delete")}
-                      aria-label={t("sessions.delete")}
-                    >
-                      <Trash size={14} />
-                    </button>
-                  )}
+                  <div className="sessions-card-tags">
+                    <span className="sessions-tag sessions-tag--source">
+                      {r.source}
+                    </span>
+                    <span className="sessions-tag">
+                      {r.messageCount}{" "}
+                      {r.messageCount !== 1
+                        ? t("sessions.messages")
+                        : t("sessions.messageSingular")}
+                    </span>
+                    {r.model && (
+                      <span className="sessions-tag sessions-tag--model">
+                        {formatModel(r.model)}
+                      </span>
+                    )}
+                    {!isSelectionMode && editingSessionId !== r.sessionId && (
+                      <button
+                        type="button"
+                        className="sessions-card-rename"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          startRename(r.sessionId, r.title || "");
+                        }}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        title={t("sessions.rename")}
+                        aria-label={t("sessions.rename")}
+                      >
+                        <Pencil size={14} />
+                      </button>
+                    )}
+                    {!isSelectionMode && editingSessionId !== r.sessionId && (
+                      <button
+                        type="button"
+                        className="sessions-card-delete"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(r.sessionId);
+                        }}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        title={t("sessions.delete")}
+                        aria-label={t("sessions.delete")}
+                      >
+                        <Trash size={14} />
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
               );
             })}
           </div>
@@ -731,6 +917,14 @@ function Sessions({
                   onClick={() => onResumeSession(s.id)}
                   onDelete={handleDelete}
                   deleteTitle={t("sessions.delete")}
+                  onRename={startRename}
+                  renameTitle={t("sessions.rename")}
+                  isRenaming={editingSessionId === s.id}
+                  renameValue={editingTitle}
+                  onRenameChange={setEditingTitle}
+                  onRenameConfirm={() => confirmRename(s.id, editingTitle)}
+                  onRenameCancel={cancelRename}
+                  renameInputRef={renameInputRef}
                   selectionMode={isSelectionMode}
                   selected={selectedSessionIds.has(s.id)}
                   onToggleSelected={toggleSessionSelected}

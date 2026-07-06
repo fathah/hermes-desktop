@@ -1,5 +1,10 @@
 import { useState, useEffect, useCallback, memo } from "react";
-import { Folder, ChevronRight, ChevronDown, SquareTerminal } from "lucide-react";
+import {
+  Folder,
+  ChevronRight,
+  ChevronDown,
+  SquareTerminal,
+} from "lucide-react";
 import { getIconForFile, getSVGStringFromFileType } from "@wesbos/code-icons";
 import { FileViewer } from "./FileViewer";
 import { useI18n } from "../../components/useI18n";
@@ -12,6 +17,11 @@ interface FileEntry {
 interface WorktreePanelProps {
   folderPath: string;
 }
+
+const MIN_PANEL_WIDTH = 220;
+const WIDTH_STORAGE_KEY = "hermes:worktreePanelWidth";
+const maxPanelWidth = (): number =>
+  Math.max(MIN_PANEL_WIDTH, window.innerWidth - 360);
 
 interface TreeItemProps {
   entry: FileEntry;
@@ -42,6 +52,7 @@ function TreeItem({
   depth,
   onFileClick,
 }: TreeItemProps): React.JSX.Element {
+  const { t } = useI18n();
   const [isExpanded, setIsExpanded] = useState(false);
   const [children, setChildren] = useState<FileEntry[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -112,14 +123,14 @@ function TreeItem({
               className="worktree-loading"
               style={{ paddingLeft: paddingLeft + 12 }}
             >
-              Loading...
+              {t("chat.worktree.loading")}...
             </div>
           ) : children === null ? null : children.length === 0 ? (
             <div
               className="worktree-empty"
               style={{ paddingLeft: paddingLeft + 12 }}
             >
-              Empty folder
+              {t("chat.worktree.emptyFolder")}
             </div>
           ) : (
             children.map((child) => (
@@ -147,6 +158,41 @@ export const WorktreePanel = memo(function WorktreePanel({
   const [error, setError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [terminalError, setTerminalError] = useState<string | null>(null);
+  const [width, setWidth] = useState<number>(() => {
+    const saved = Number(localStorage.getItem(WIDTH_STORAGE_KEY));
+    return Number.isFinite(saved) && saved >= MIN_PANEL_WIDTH ? saved : 240;
+  });
+  const [isResizing, setIsResizing] = useState(false);
+
+  const startResize = (e: React.PointerEvent): void => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = width;
+    let nextWidth = startWidth;
+    setIsResizing(true);
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+
+    const onMove = (ev: PointerEvent): void => {
+      // Panel sits on the right edge, so dragging the handle left widens it.
+      const delta = startX - ev.clientX;
+      nextWidth = Math.min(
+        maxPanelWidth(),
+        Math.max(MIN_PANEL_WIDTH, startWidth + delta),
+      );
+      setWidth(nextWidth);
+    };
+    const onUp = (): void => {
+      setIsResizing(false);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+      localStorage.setItem(WIDTH_STORAGE_KEY, String(Math.round(nextWidth)));
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -158,7 +204,7 @@ export const WorktreePanel = memo(function WorktreePanel({
       const result = await window.hermesAPI.readDirectory(folderPath);
       if (cancelled) return;
       if (result === null) {
-        setError("Failed to load folder contents");
+        setError(t("chat.worktree.errorLoading"));
       } else {
         // Sort: directories first, then files, both alphabetically
         const sorted = result.sort((a, b) => {
@@ -189,7 +235,14 @@ export const WorktreePanel = memo(function WorktreePanel({
   };
 
   return (
-    <div className="worktree-panel">
+    <div className="worktree-panel" style={{ width }}>
+      <div
+        className={`worktree-resize-handle ${
+          isResizing ? "worktree-resize-handle-active" : ""
+        }`}
+        onPointerDown={startResize}
+        title="Drag to resize"
+      />
       <div className="worktree-header">
         <Folder size={16} className="worktree-header-icon" />
         <span className="worktree-header-title" title={folderPath}>
@@ -210,11 +263,13 @@ export const WorktreePanel = memo(function WorktreePanel({
       )}
       <div className="worktree-content">
         {isLoading ? (
-          <div className="worktree-loading">Loading...</div>
+          <div className="worktree-loading">
+            {t("chat.worktree.loading")}...
+          </div>
         ) : error ? (
           <div className="worktree-error">{error}</div>
         ) : entries === null || entries.length === 0 ? (
-          <div className="worktree-empty">Folder is empty</div>
+          <div className="worktree-empty">{t("chat.worktree.empty")}</div>
         ) : (
           entries.map((entry) => (
             <TreeItem

@@ -65,6 +65,28 @@ describe("dbItemsToChatMessages", () => {
     expect("attachments" in out[2] && out[2].attachments).toEqual(att);
   });
 
+  it("maps desktop continuation errors back to assistant error bubbles", () => {
+    const items: DbHistoryItem[] = [
+      {
+        kind: "assistant",
+        id: -1,
+        content: "",
+        error: "Invalid API Key",
+      },
+    ];
+
+    const out = dbItemsToChatMessages(items);
+
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({
+      id: "db--1",
+      role: "agent",
+      content: "",
+      error: "Invalid API Key",
+      localOnly: true,
+    });
+  });
+
   it("omits attachments when empty or missing (no spurious `attachments: []`)", () => {
     const items: DbHistoryItem[] = [
       { kind: "user", id: 1, content: "hi" },

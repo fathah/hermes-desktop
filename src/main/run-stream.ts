@@ -64,6 +64,10 @@ export function chatToolEventFromRunEvent(
         : "running";
   const runId = stringValue(event.run_id) || "run";
   const preview = stringValue(event.preview);
+  const result =
+    stringValue(event.result_text) ||
+    stringValue(event.output) ||
+    stringValue(event.result);
 
   return {
     callId: `${runId}:${name}`,
@@ -71,6 +75,7 @@ export function chatToolEventFromRunEvent(
     name,
     status,
     ...(preview ? { preview } : {}),
+    ...(result ? { result } : {}),
   };
 }
 

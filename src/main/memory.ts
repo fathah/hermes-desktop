@@ -2,10 +2,9 @@ import { existsSync, readFileSync, statSync } from "fs";
 import { join } from "path";
 import Database from "better-sqlite3";
 import { profileHome, safeWriteFile } from "./utils";
+import { parseMemoryLimitsConfig, type MemoryLimits } from "./memory-limits";
 
 const ENTRY_DELIMITER = "\n§\n";
-const MEMORY_CHAR_LIMIT = 2200;
-const USER_CHAR_LIMIT = 1375;
 
 export interface MemoryEntry {
   index: number;
@@ -37,6 +36,20 @@ function memoryPath(profile?: string): string {
 
 function userPath(profile?: string): string {
   return join(profileHome(profile), "memories", "USER.md");
+}
+
+function configPath(profile?: string): string {
+  return join(profileHome(profile), "config.yaml");
+}
+
+function readMemoryLimits(profile?: string): MemoryLimits {
+  try {
+    const filePath = configPath(profile);
+    if (!existsSync(filePath)) return parseMemoryLimitsConfig("");
+    return parseMemoryLimitsConfig(readFileSync(filePath, "utf-8"));
+  } catch {
+    return parseMemoryLimitsConfig("");
+  }
 }
 
 function readFileSafe(filePath: string): {
@@ -110,18 +123,19 @@ function getSessionStats(profile?: string): {
 export function readMemory(profile?: string): MemoryInfo {
   const memFile = readFileSafe(memoryPath(profile));
   const userFile = readFileSafe(userPath(profile));
+  const limits = readMemoryLimits(profile);
 
   return {
     memory: {
       ...memFile,
       entries: parseMemoryEntries(memFile.content),
       charCount: memFile.content.length,
-      charLimit: MEMORY_CHAR_LIMIT,
+      charLimit: limits.memoryCharLimit,
     },
     user: {
       ...userFile,
       charCount: userFile.content.length,
-      charLimit: USER_CHAR_LIMIT,
+      charLimit: limits.userCharLimit,
     },
     stats: getSessionStats(profile),
   };
@@ -140,11 +154,12 @@ export function addMemoryEntry(
     ...entries,
     { index: entries.length, content: content.trim() },
   ]);
+  const limits = readMemoryLimits(profile);
 
-  if (newContent.length > MEMORY_CHAR_LIMIT) {
+  if (newContent.length > limits.memoryCharLimit) {
     return {
       success: false,
-      error: `Would exceed memory limit (${newContent.length}/${MEMORY_CHAR_LIMIT} chars)`,
+      error: `Would exceed memory limit (${newContent.length}/${limits.memoryCharLimit} chars)`,
     };
   }
 
@@ -167,11 +182,12 @@ export function updateMemoryEntry(
 
   entries[index] = { ...entries[index], content: content.trim() };
   const newContent = serializeEntries(entries);
+  const limits = readMemoryLimits(profile);
 
-  if (newContent.length > MEMORY_CHAR_LIMIT) {
+  if (newContent.length > limits.memoryCharLimit) {
     return {
       success: false,
-      error: `Would exceed memory limit (${newContent.length}/${MEMORY_CHAR_LIMIT} chars)`,
+      error: `Would exceed memory limit (${newContent.length}/${limits.memoryCharLimit} chars)`,
     };
   }
 
@@ -195,10 +211,11 @@ export function writeUserProfile(
   content: string,
   profile?: string,
 ): { success: boolean; error?: string } {
-  if (content.length > USER_CHAR_LIMIT) {
+  const limits = readMemoryLimits(profile);
+  if (content.length > limits.userCharLimit) {
     return {
       success: false,
-      error: `Exceeds limit (${content.length}/${USER_CHAR_LIMIT} chars)`,
+      error: `Exceeds limit (${content.length}/${limits.userCharLimit} chars)`,
     };
   }
   writeFileSafe(userPath(profile), content);

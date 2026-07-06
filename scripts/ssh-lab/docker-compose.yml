@@ -1,0 +1,17 @@
+services:
+  ssh:
+    build:
+      context: .
+    container_name: hermes-two-ssh-lab
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${HERMES_SSH_LAB_PORT:-19022}:22"
+    volumes:
+      - ${HERMES_SSH_LAB_DIR:?set HERMES_SSH_LAB_DIR}:/lab:ro
+    networks:
+      - remote-lab
+
+networks:
+  remote-lab:
+    external: true
+    name: hermes-two-remote-lab_default

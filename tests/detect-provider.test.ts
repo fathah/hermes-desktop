@@ -15,6 +15,7 @@ describe("detectProviderFromUrl", () => {
       "anthropic",
     );
     expect(detectProviderFromUrl("https://api.openai.com/v1")).toBe("openai");
+    expect(detectProviderFromUrl("https://api.aimlapi.com/v1")).toBe("aimlapi");
     expect(
       detectProviderFromUrl("https://generativelanguage.googleapis.com/v1beta"),
     ).toBe("google");
@@ -41,9 +42,7 @@ describe("detectProviderFromUrl", () => {
     expect(detectProviderFromUrl("http://192.168.1.50:11434")).toBe("ollama");
     expect(detectProviderFromUrl("http://10.0.0.5:8000")).toBe("vllm");
     expect(detectProviderFromUrl("http://172.20.0.3:1234")).toBe("lmstudio");
-    expect(detectProviderFromUrl("http://hermes.local:8080")).toBe(
-      "llamacpp",
-    );
+    expect(detectProviderFromUrl("http://hermes.local:8080")).toBe("llamacpp");
   });
 
   it("identifies private-network and loopback addresses with unknown ports as custom", () => {
@@ -62,9 +61,9 @@ describe("detectProviderFromUrl", () => {
       detectProviderFromUrl("http://my-workstation.example.com:1234/v1"),
     ).toBe("lmstudio");
     // Atomic Chat
-    expect(
-      detectProviderFromUrl("http://atomic-box.example.com:1337/v1"),
-    ).toBe("atomicchat");
+    expect(detectProviderFromUrl("http://atomic-box.example.com:1337/v1")).toBe(
+      "atomicchat",
+    );
     // vLLM
     expect(detectProviderFromUrl("http://gpu-rig.example.com:8000")).toBe(
       "vllm",

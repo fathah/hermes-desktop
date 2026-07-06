@@ -86,8 +86,8 @@ jobs:
 
       - name: Build app
         env:
-          VITE_POSTHOG_KEY: ${{ secrets.VITE_POSTHOG_KEY }}
-          VITE_POSTHOG_HOST: ${{ secrets.VITE_POSTHOG_HOST }}
+          VITE_ANALYTICS_BASE_URL: ${{ vars.VITE_ANALYTICS_BASE_URL }}
+          VITE_ANALYTICS_API_KEY: ${{ secrets.VITE_ANALYTICS_API_KEY }}
         run: npm run build
 
       - name: Stage App Store Connect API key
@@ -138,10 +138,20 @@ jobs:
             dist/*.blockmap
 
   release_linux:
-    name: Build Linux
+    name: Build Linux (${{ matrix.arch }})
     needs: prepare
     if: needs.prepare.outputs.tag_exists == 'false'
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runs-on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runs-on: ubuntu-latest
+            targets: AppImage deb rpm
+          - arch: arm64
+            runs-on: ubuntu-24.04-arm
+            targets: AppImage
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -155,27 +165,40 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Rebuild native dependencies for target arch
+        run: npx electron-builder install-app-deps --arch=${{ matrix.arch }}
+
       - name: Build app
         env:
-          VITE_POSTHOG_KEY: ${{ secrets.VITE_POSTHOG_KEY }}
-          VITE_POSTHOG_HOST: ${{ secrets.VITE_POSTHOG_HOST }}
+          VITE_ANALYTICS_BASE_URL: ${{ vars.VITE_ANALYTICS_BASE_URL }}
+          VITE_ANALYTICS_API_KEY: ${{ secrets.VITE_ANALYTICS_API_KEY }}
         run: npm run build
 
       - name: Install rpmbuild
+        if: contains(matrix.targets, 'rpm')
         run: sudo apt-get update && sudo apt-get install -y rpm
 
       - name: Package Linux artifacts
-        run: npx electron-builder --linux AppImage deb rpm --publish never
+        run: npx electron-builder --linux ${{ matrix.targets }} --${{ matrix.arch }} --publish never
 
-      - name: Upload artifacts
+      - name: Upload x64 artifacts
+        if: matrix.arch == 'x64'
         uses: actions/upload-artifact@v4
         with:
-          name: linux-artifacts
+          name: linux-x64-artifacts
           path: |
             dist/*.AppImage
             dist/*.deb
             dist/*.rpm
             dist/latest-linux.yml
+
+      - name: Upload arm64 artifacts
+        if: matrix.arch == 'arm64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-arm64-artifacts
+          path: |
+            dist/*.AppImage
 
   release_windows:
     name: Build Windows
@@ -197,8 +220,8 @@ jobs:
 
       - name: Build app
         env:
-          VITE_POSTHOG_KEY: ${{ secrets.VITE_POSTHOG_KEY }}
-          VITE_POSTHOG_HOST: ${{ secrets.VITE_POSTHOG_HOST }}
+          VITE_ANALYTICS_BASE_URL: ${{ vars.VITE_ANALYTICS_BASE_URL }}
+          VITE_ANALYTICS_API_KEY: ${{ secrets.VITE_ANALYTICS_API_KEY }}
         run: npm run build
 
       - name: Package Windows artifacts
@@ -349,3 +372,26 @@ jobs:
             artifacts/latest.yml
             artifacts/latest-linux.yml
             artifacts/latest-mac.yml
+
+  rebuild_landing_page:
+    name: Rebuild landing page
+    needs: [prepare, publish]
+    # Only after a real release that actually published a new tag.
+    if: needs.prepare.outputs.is_dry_run == 'false' && needs.prepare.outputs.tag_exists == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for release to propagate
+        # Give GitHub's releases/latest API time to settle before the landing
+        # page rebuilds and re-fetches the latest version.
+        run: sleep 300
+
+      - name: Trigger landing page deploy
+        # SITE_DEPLOY_TOKEN is a fine-grained PAT with "Actions: read and write"
+        # on fathah/hermes-landing-page. The default GITHUB_TOKEN cannot dispatch
+        # workflows in another repository.
+        env:
+          GH_TOKEN: ${{ secrets.SITE_DEPLOY_TOKEN }}
+        run: |
+          gh workflow run deploy.yml \
+            --repo fathah/hermes-landing-page \
+            --ref main

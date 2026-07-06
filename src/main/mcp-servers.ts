@@ -212,8 +212,10 @@ function serverBlocks(lines: string[]): Array<{
   lines: string[];
   startOffset: number;
 }> {
-  const blocks: Array<{ name: string; lines: string[]; startOffset: number }> = [];
-  let current: { name: string; lines: string[]; startOffset: number } | null = null;
+  const blocks: Array<{ name: string; lines: string[]; startOffset: number }> =
+    [];
+  let current: { name: string; lines: string[]; startOffset: number } | null =
+    null;
 
   const pushCurrent = (): void => {
     if (!current) return;
@@ -291,9 +293,7 @@ function parseServerBlock(lines: string[]): {
 
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i];
-    const scalar = line.match(
-      /^ {4}([A-Za-z_][A-Za-z0-9_-]*)\s*:\s*(.*)$/,
-    );
+    const scalar = line.match(/^ {4}([A-Za-z_][A-Za-z0-9_-]*)\s*:\s*(.*)$/);
     if (!scalar) continue;
     const key = scalar[1];
     const raw = scalar[2] || "";
@@ -335,11 +335,13 @@ function parseServerBlock(lines: string[]): {
   return result;
 }
 
-function validateServerInput(input: McpServerInput): {
-  ok: true;
-  value: Required<Pick<McpServerInput, "name" | "type">> &
-    Omit<McpServerInput, "name" | "type">;
-} | { ok: false; error: string } {
+function validateServerInput(input: McpServerInput):
+  | {
+      ok: true;
+      value: Required<Pick<McpServerInput, "name" | "type">> &
+        Omit<McpServerInput, "name" | "type">;
+    }
+  | { ok: false; error: string } {
   const name = (input.name || "").trim();
   if (!SERVER_NAME_RE.test(name)) {
     return {
@@ -356,7 +358,10 @@ function validateServerInput(input: McpServerInput): {
   if (input.type === "http") {
     const url = (input.url || "").trim();
     if (!/^https?:\/\//i.test(url)) {
-      return { ok: false, error: "HTTP MCP servers need an http:// or https:// URL." };
+      return {
+        ok: false,
+        error: "HTTP MCP servers need an http:// or https:// URL.",
+      };
     }
     return {
       ok: true,
@@ -365,7 +370,8 @@ function validateServerInput(input: McpServerInput): {
   }
 
   const command = (input.command || "").trim();
-  if (!command) return { ok: false, error: "stdio MCP servers need a command." };
+  if (!command)
+    return { ok: false, error: "stdio MCP servers need a command." };
 
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(input.env || {})) {
@@ -425,8 +431,17 @@ export function upsertMcpServerInConfig(
   const lines = content ? content.split(/\r?\n/) : [];
 
   if (!block) {
-    const prefix = lines.length && lines[lines.length - 1] === "" ? lines.slice(0, -1) : lines;
-    return [...prefix, ...(prefix.length ? [""] : []), "mcp_servers:", ...rendered, ""].join("\n");
+    const prefix =
+      lines.length && lines[lines.length - 1] === ""
+        ? lines.slice(0, -1)
+        : lines;
+    return [
+      ...prefix,
+      ...(prefix.length ? [""] : []),
+      "mcp_servers:",
+      ...rendered,
+      "",
+    ].join("\n");
   }
 
   const nextBlockLines = ["mcp_servers:"];
@@ -444,15 +459,24 @@ export function upsertMcpServerInConfig(
     nextBlockLines.push("");
   }
 
-  lines.splice(block.startLine, block.endLine - block.startLine, ...nextBlockLines);
+  lines.splice(
+    block.startLine,
+    block.endLine - block.startLine,
+    ...nextBlockLines,
+  );
   return lines.join("\n");
 }
 
-export function removeMcpServerFromConfig(content: string, name: string): string {
+export function removeMcpServerFromConfig(
+  content: string,
+  name: string,
+): string {
   const block = findMcpBlock(content);
   if (!block) return content;
 
-  const remaining = serverBlocks(block.lines).filter((server) => server.name !== name);
+  const remaining = serverBlocks(block.lines).filter(
+    (server) => server.name !== name,
+  );
   const lines = content.split(/\r?\n/);
   if (remaining.length === serverBlocks(block.lines).length) return content;
 
@@ -493,7 +517,8 @@ export function setMcpServerEnabledInConfig(
         /^ {4}enabled\s*:/.test(line),
       );
       if (enabledIdx >= 0) {
-        lines[start + enabledIdx] = `    enabled: ${enabled ? "true" : "false"}`;
+        lines[start + enabledIdx] =
+          `    enabled: ${enabled ? "true" : "false"}`;
       } else {
         lines.splice(end, 0, `    enabled: ${enabled ? "true" : "false"}`);
       }
@@ -627,7 +652,9 @@ function isNotFoundError(err: unknown): boolean {
   );
 }
 
-function unsupportedMcpApiMessage(feature: "catalog" | "install" | "test"): string {
+function unsupportedMcpApiMessage(
+  feature: "catalog" | "install" | "test",
+): string {
   if (feature === "catalog") {
     return "MCP catalog is not available from this Hermes Agent gateway yet. Add a custom MCP server manually.";
   }
@@ -637,7 +664,9 @@ function unsupportedMcpApiMessage(feature: "catalog" | "install" | "test"): stri
   return "MCP server testing is not available from this Hermes Agent gateway yet.";
 }
 
-export async function listMcpServers(profile?: string): Promise<McpServerInfo[]> {
+export async function listMcpServers(
+  profile?: string,
+): Promise<McpServerInfo[]> {
   if (isRemoteMode()) {
     const data = await mcpApi<{ servers?: Record<string, unknown>[] }>(
       "/api/mcp/servers",
@@ -664,7 +693,8 @@ export async function addMcpServer(
           method: "POST",
           body: JSON.stringify({
             name: validated.value.name,
-            url: validated.value.type === "http" ? validated.value.url : undefined,
+            url:
+              validated.value.type === "http" ? validated.value.url : undefined,
             command:
               validated.value.type === "stdio"
                 ? validated.value.command
@@ -681,12 +711,21 @@ export async function addMcpServer(
 
     const existing = parseMcpServersFromConfig(readConfig(profile));
     if (existing.some((server) => server.name === validated.value.name)) {
-      return { success: false, error: `MCP server "${validated.value.name}" already exists.` };
+      return {
+        success: false,
+        error: `MCP server "${validated.value.name}" already exists.`,
+      };
     }
-    writeConfig(upsertMcpServerInConfig(readConfig(profile), validated.value), profile);
+    writeConfig(
+      upsertMcpServerInConfig(readConfig(profile), validated.value),
+      profile,
+    );
     return { success: true };
   } catch (err) {
-    return { success: false, error: (err as Error).message || "Failed to add MCP server." };
+    return {
+      success: false,
+      error: (err as Error).message || "Failed to add MCP server.",
+    };
   }
 }
 
@@ -696,15 +735,22 @@ export async function removeMcpServer(
 ): Promise<McpOperationResult> {
   try {
     if (isRemoteMode()) {
-      await mcpApi(`/api/mcp/servers/${encodeURIComponent(name)}`, {
-        method: "DELETE",
-      }, profile);
+      await mcpApi(
+        `/api/mcp/servers/${encodeURIComponent(name)}`,
+        {
+          method: "DELETE",
+        },
+        profile,
+      );
       return { success: true };
     }
     writeConfig(removeMcpServerFromConfig(readConfig(profile), name), profile);
     return { success: true };
   } catch (err) {
-    return { success: false, error: (err as Error).message || "Failed to remove MCP server." };
+    return {
+      success: false,
+      error: (err as Error).message || "Failed to remove MCP server.",
+    };
   }
 }
 
@@ -722,10 +768,16 @@ export async function setMcpServerEnabled(
       );
       return { success: true };
     }
-    writeConfig(setMcpServerEnabledInConfig(readConfig(profile), name, enabled), profile);
+    writeConfig(
+      setMcpServerEnabledInConfig(readConfig(profile), name, enabled),
+      profile,
+    );
     return { success: true };
   } catch (err) {
-    return { success: false, error: (err as Error).message || "Failed to update MCP server." };
+    return {
+      success: false,
+      error: (err as Error).message || "Failed to update MCP server.",
+    };
   }
 }
 
@@ -746,7 +798,11 @@ export async function testMcpServer(
       ok?: boolean;
       error?: string;
       tools?: Array<{ name: string; description: string }>;
-    }>(`/api/mcp/servers/${encodeURIComponent(name)}/test`, { method: "POST" }, profile);
+    }>(
+      `/api/mcp/servers/${encodeURIComponent(name)}/test`,
+      { method: "POST" },
+      profile,
+    );
     return {
       success: data.ok !== false,
       error: data.error,
@@ -756,13 +812,18 @@ export async function testMcpServer(
     if (isNotFoundError(err)) {
       return { success: false, error: unsupportedMcpApiMessage("test") };
     }
-    return { success: false, error: (err as Error).message || "Failed to test MCP server." };
+    return {
+      success: false,
+      error: (err as Error).message || "Failed to test MCP server.",
+    };
   }
 }
 
-export async function listMcpCatalog(
-  profile?: string,
-): Promise<{ entries: McpCatalogEntry[]; diagnostics: unknown[]; error?: string }> {
+export async function listMcpCatalog(profile?: string): Promise<{
+  entries: McpCatalogEntry[];
+  diagnostics: unknown[];
+  error?: string;
+}> {
   try {
     if (!isRemoteMode()) {
       const result = await runHermesMcpCli(["catalog"], profile);
@@ -829,7 +890,11 @@ export async function installMcpCatalogEntry(
       return { success: true };
     }
 
-    const data = await mcpApi<{ ok?: boolean; background?: boolean; action?: string }>(
+    const data = await mcpApi<{
+      ok?: boolean;
+      background?: boolean;
+      action?: string;
+    }>(
       "/api/mcp/catalog/install",
       {
         method: "POST",
@@ -846,6 +911,9 @@ export async function installMcpCatalogEntry(
     if (isNotFoundError(err)) {
       return { success: false, error: unsupportedMcpApiMessage("install") };
     }
-    return { success: false, error: (err as Error).message || "Failed to install MCP server." };
+    return {
+      success: false,
+      error: (err as Error).message || "Failed to install MCP server.",
+    };
   }
 }

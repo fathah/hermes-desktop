@@ -6,16 +6,31 @@ export default {
     privacy: "隱私",
     credentialPool: "憑證池",
   },
+  nav: {
+    groups: {
+      general: "一般",
+      hermes: "Hermes One",
+    },
+    appearance: "外觀",
+    language: "語言",
+    privacy: "隱私",
+    connection: "連線",
+    network: "網路",
+    data: "資料",
+    about: "關於與更新",
+    community: "社群",
+    logs: "記錄與診斷",
+  },
   analytics: {
     label: "傳送匿名使用情況分析",
-    hint: "透過向專案的 PostHog 執行個體（位於歐盟）傳送匿名、彙總的使用資料，協助改進 Hermes。您隨時可以關閉此功能。",
+    hint: "透過向專案的分析服務傳送匿名、彙總的使用資料，協助改進 Hermes。您隨時可以關閉此功能。",
     disclosure: {
       uuid: "僅儲存在本裝置上、每次安裝的隨機識別碼（不含姓名、電子郵件或帳戶資訊）。",
       platform: "您的作業系統、Electron 版本和 Node.js 版本。",
       navigation:
         "您在應用程式中開啟的畫面（例如聊天、工作階段、設定）。不會收集任何聊天內容、提示、模型回應或檔案內容。",
       endpoint:
-        "資料會傳送至 eu.i.posthog.com（PostHog 歐盟雲端）。工作階段錄製和頁面瀏覽自動擷取均已停用。",
+        "資料會傳送至 Hermes 分析服務（analytics.hermesone.org）。工作階段錄製和頁面瀏覽自動擷取均已停用。",
       notCollected:
         "絕不收集：聊天訊息、檔案路徑、API 金鑰、模型設定、帳戶憑證。",
     },

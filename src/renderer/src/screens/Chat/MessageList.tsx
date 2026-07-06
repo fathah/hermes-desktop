@@ -1,7 +1,13 @@
 import { memo, useMemo } from "react";
 import { HermesAvatar, MessageRow } from "./MessageRow";
 import { ReasoningRow, ToolActivityGroup } from "./HistoryRow";
-import type { ChatMessage, ToolCallMessage, ToolResultMessage } from "./types";
+import { ClarifyCard } from "./ClarifyCard";
+import type {
+  ChatMessage,
+  ClarifyMessage,
+  ToolCallMessage,
+  ToolResultMessage,
+} from "./types";
 
 function isToolRow(m: ChatMessage): m is ToolCallMessage | ToolResultMessage {
   const k = (m as { kind?: string }).kind;
@@ -14,6 +20,8 @@ interface MessageListProps {
   toolProgress: string | null;
   onApprove: () => void;
   onDeny: () => void;
+  /** Mark an inline clarify card resolved once the user answers/skips. */
+  onClarifyResolved: (requestId: string, answer: string) => void;
 }
 
 function TypingIndicator({
@@ -23,7 +31,7 @@ function TypingIndicator({
 }): React.JSX.Element {
   return (
     <div className="chat-message chat-message-agent">
-      <HermesAvatar />
+      <HermesAvatar active />
       <div className="chat-bubble chat-bubble-agent">
         {toolProgress ? (
           <div className="chat-tool-progress">{toolProgress}</div>
@@ -57,6 +65,7 @@ export const MessageList = memo(function MessageList({
   toolProgress,
   onApprove,
   onDeny,
+  onClarifyResolved,
 }: MessageListProps): React.JSX.Element {
   // Bubbles with empty content are still hidden (live-stream placeholders).
   // History rows pass through unconditionally.
@@ -64,7 +73,7 @@ export const MessageList = memo(function MessageList({
     () =>
       messages.filter((m) => {
         if (!isBubble(m)) return true;
-        return ((m.content as string) || "").trim().length > 0;
+        return !!m.error || ((m.content as string) || "").trim().length > 0;
       }),
     [messages],
   );
@@ -95,7 +104,7 @@ export const MessageList = memo(function MessageList({
       i--; // step back: the for-loop's i++ advances past the run
       rows.push(
         <ToolActivityGroup
-          key={group[0].id}
+          key={`${group[0].id}-${start}`}
           items={group}
           // Active (spinner) only while streaming and this run is trailing.
           active={isLoading && i === visibleMessages.length - 1}
@@ -119,6 +128,17 @@ export const MessageList = memo(function MessageList({
           // a completed "Thought".
           active={isLoading && i === visibleMessages.length - 1}
           showAvatar={showAvatar}
+        />,
+      );
+      continue;
+    }
+
+    if (k === "clarify") {
+      rows.push(
+        <ClarifyCard
+          key={msg.id}
+          msg={msg as ClarifyMessage}
+          onResolved={onClarifyResolved}
         />,
       );
       continue;

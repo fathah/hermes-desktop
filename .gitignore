@@ -25,6 +25,9 @@ pnpm-debug.log*
 # ESLint cache
 .eslintcache
 
+# Local isolated Hermes homes for development/tests
+.sandbox/
+
 # Electron packaging artifacts
 release/
 .claude/worktrees
@@ -37,3 +40,4 @@ release/
 # Local launcher scripts (user-specific, do not commit)
 /*.bat
 /*.ps1
+.mcp.json

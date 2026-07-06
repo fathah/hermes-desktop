@@ -17,6 +17,8 @@ export default {
   noBrowseResultsHint: "Farklı bir arama terimi veya kategori filtresi deneyin",
   installFailed: "Yetenek yüklenemedi",
   uninstallFailed: "Yetenek kaldırılamadı",
+  uninstallConfirm: "Uninstall '{{name}}'?",
+  uninstallSuccess: "'{{name}}' uninstalled",
   removing: "Kaldırılıyor...",
   uninstall: "Kaldır",
   installedBadge: "Yüklü",

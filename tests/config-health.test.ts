@@ -1,12 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { join } from "path";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 
 /**
@@ -70,9 +64,7 @@ describe("runConfigHealthCheck", () => {
   });
 
   it("flags API_SERVER_KEY_NON_CANONICAL when key lives in api_server.token only", async () => {
-    writeConfig(
-      ["api_server:", "  token: sk-nested-only", ""].join("\n"),
-    );
+    writeConfig(["api_server:", "  token: sk-nested-only", ""].join("\n"));
     // No .env file
     const { runConfigHealthCheck } = await freshHealth(TEST_DIR);
     const report = runConfigHealthCheck();
@@ -85,9 +77,7 @@ describe("runConfigHealthCheck", () => {
   });
 
   it("flags API_SERVER_KEY_MULTIPLE_VALUES when env and config disagree", async () => {
-    writeConfig(
-      ["api_server:", "  token: sk-yaml-value", ""].join("\n"),
-    );
+    writeConfig(["api_server:", "  token: sk-yaml-value", ""].join("\n"));
     writeEnv("API_SERVER_KEY=sk-different-env-value\n");
     const { runConfigHealthCheck } = await freshHealth(TEST_DIR);
     const report = runConfigHealthCheck();
@@ -145,7 +135,10 @@ describe("runConfigHealthCheck", () => {
         {
           version: 1,
           providers: {
-            nous: { access_token: "oauth-token", auth_type: "oauth_device_code" },
+            nous: {
+              access_token: "oauth-token",
+              auth_type: "oauth_device_code",
+            },
           },
         },
         null,
@@ -222,9 +215,7 @@ describe("runConfigHealthCheck", () => {
     writeEnv("OPENROUTER_API_KEY=sk-or-test“trailing\n");
     const { runConfigHealthCheck } = await freshHealth(TEST_DIR);
     const report = runConfigHealthCheck();
-    const issue = report.issues.find(
-      (i) => i.code === "NON_ASCII_CREDENTIAL",
-    );
+    const issue = report.issues.find((i) => i.code === "NON_ASCII_CREDENTIAL");
     expect(issue).toBeDefined();
     expect(issue?.autoFixable).toBe(true);
   });
@@ -355,13 +346,7 @@ describe("checkLegacyToolsetName", () => {
   });
 
   it("tolerates quoted entries and trailing comments", async () => {
-    writeConfig(
-      [
-        "toolsets:",
-        '  - "hermes"   # legacy alias',
-        "",
-      ].join("\n"),
-    );
+    writeConfig(["toolsets:", '  - "hermes"   # legacy alias', ""].join("\n"));
     const { checkLegacyToolsetName } = await freshHealth(TEST_DIR);
     const issues = checkLegacyToolsetName();
     expect(issues).toHaveLength(1);
@@ -418,13 +403,7 @@ describe("fixLegacyToolsetName", () => {
   });
 
   it("preserves quoting style and trailing comment when rewriting", async () => {
-    writeConfig(
-      [
-        "toolsets:",
-        '  - "hermes"   # legacy alias',
-        "",
-      ].join("\n"),
-    );
+    writeConfig(["toolsets:", '  - "hermes"   # legacy alias', ""].join("\n"));
     const { fixLegacyToolsetName } = await freshHealth(TEST_DIR);
     expect(fixLegacyToolsetName().ok).toBe(true);
     const after = readFileSync(join(TEST_DIR, "config.yaml"), "utf-8");

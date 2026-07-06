@@ -1,5 +1,12 @@
-import { describe, expect, it } from "vitest";
-import { toolActivityGroupTitle } from "../src/renderer/src/screens/Chat/HistoryRow";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("react-loader-spinner", () => ({
+  Grid: () => null,
+}));
+import {
+  orderToolActivityItems,
+  toolActivityGroupTitle,
+} from "../src/renderer/src/screens/Chat/HistoryRow";
 import type {
   ToolCallMessage,
   ToolResultMessage,
@@ -26,9 +33,9 @@ const result = (id: string, name: string): ToolResultMessage => ({
 
 describe("toolActivityGroupTitle", () => {
   it("keeps the tool name for a single call/result pair", () => {
-    expect(toolActivityGroupTitle([call("a", "terminal"), result("a", "terminal")])).toBe(
-      "terminal",
-    );
+    expect(
+      toolActivityGroupTitle([call("a", "terminal"), result("a", "terminal")]),
+    ).toBe("Terminal");
   });
 
   it("summarizes groups with more than one tool call", () => {
@@ -49,6 +56,54 @@ describe("toolActivityGroupTitle", () => {
         result("a", "terminal"),
         result("b", "terminal"),
       ]),
-    ).toBe("terminal");
+    ).toBe("Terminal");
+  });
+});
+
+describe("orderToolActivityItems", () => {
+  it("pairs batched DB tool results with their calls", () => {
+    const ordered = orderToolActivityItems([
+      call("a", "terminal"),
+      call("b", "terminal"),
+      result("a", "terminal"),
+      result("b", "terminal"),
+    ]);
+
+    expect(ordered.map((item) => item.id)).toEqual([
+      "tool-call-a",
+      "tool-result-a",
+      "tool-call-b",
+      "tool-result-b",
+    ]);
+  });
+
+  it("keeps already paired tool rows stable", () => {
+    const ordered = orderToolActivityItems([
+      call("a", "terminal"),
+      result("a", "terminal"),
+      call("b", "terminal"),
+      result("b", "terminal"),
+    ]);
+
+    expect(ordered.map((item) => item.id)).toEqual([
+      "tool-call-a",
+      "tool-result-a",
+      "tool-call-b",
+      "tool-result-b",
+    ]);
+  });
+
+  it("keeps unmatched result rows visible", () => {
+    const ordered = orderToolActivityItems([
+      call("a", "terminal"),
+      result("missing", "terminal"),
+      result("a", "terminal"),
+    ]);
+
+    expect(ordered.map((item) => item.id)).toEqual([
+      "tool-call-a",
+      "tool-result-a",
+      "tool-result-missing",
+    ]);
   });
 });

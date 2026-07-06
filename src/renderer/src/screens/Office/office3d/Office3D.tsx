@@ -1,35 +1,26 @@
-import {
-  Suspense,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
-import { OrbitControls, Environment, Lightformer } from "@react-three/drei";
+import { Suspense, useCallback, useMemo, useRef, useState } from "react";
+import { Canvas, type ThreeEvent } from "@react-three/fiber";
+import { OrbitControls } from "@react-three/drei";
 import { configureTextBuilder } from "troika-three-text";
 import * as THREE from "three";
-import { AgentModel } from "./objects/agents";
-import { RIGGED_EMPLOYEE_URL, RIGGED_MAN_URL } from "./objects/RiggedCharacter";
-import { Workstations, FurniturePieces } from "./objects/furniture";
+import { SceneEnvironment } from "./objects/SceneEnvironment";
+import { CityBackdrop, DistantSkyline } from "./objects/CityBackdrop";
+import { TrafficLayer } from "./objects/Traffic";
+import { BankSection, ConnectingStreet } from "./objects/Bank";
+import { CarShowroom } from "./objects/CarShowroom";
 import {
-  buildWorkstations,
-  REST_SEATS,
-  REST_FURNITURE,
-  EXECUTIVE_DECOR,
-  INTERIOR_WALLS,
-  DIVIDER_X,
-  DOOR_Y,
-  type Workstation,
-  type Seat,
-} from "./layout";
-import { WORLD_W, WORLD_H, WALK_SPEED, SCALE } from "./core/constants";
-import { toWorld } from "./core/geometry";
-import type { OfficeAgent, RenderAgent } from "./core/types";
+  Room,
+  InteriorWalls,
+  GlassWalls,
+  CeoOfficeExtras,
+} from "./objects/OfficeShell";
+import { Workstations, FurniturePieces } from "./objects/furniture";
+import { AgentsLayer } from "./objects/AgentsLayer";
+import { buildWorkstations, REST_FURNITURE, EXECUTIVE_DECOR } from "./layout";
+import { DAY_PALETTE } from "./core/palette";
+import { BANK_X, BANK_Z, SHOWROOM_X, SHOWROOM_Z } from "./core/cityPlan";
+import type { OfficeAgent } from "./core/types";
 import officeFontUrl from "../../../assets/fonts/Manrope-Medium.ttf";
-import { useTheme } from "../../../components/ThemeProvider";
-import { THEMES } from "../../../constants";
 
 // drei's <Text> (agent nameplates / speech bubbles, via troika) defaults to two
 // behaviours the renderer's strict CSP (`script-src`/`default-src 'self'`)
@@ -39,373 +30,12 @@ import { THEMES } from "../../../constants";
 // the app's Content-Security-Policy.
 configureTextBuilder({ useWorker: false, defaultFontURL: officeFontUrl });
 
-// Walking speed (canvas units / second) and arrival threshold.
-const WALK_UNITS_PER_SEC = 130;
-const ARRIVE_DISTANCE = 8;
-
-// The world's day/night look (floor, walls, lighting) is driven by the system
-// clock, NOT the app's UI theme — so future 3D worlds can reuse this same
-// time-of-day model. Only the canvas background follows the app theme.
-interface WorldPalette {
-  floor: string;
-  rug: string;
-  wallNS: string;
-  wallEW: string;
-  hemiSky: string;
-  hemiGround: string;
-  hemiIntensity: number;
-  ambient: number;
-  directional: number;
-  // Image-based-lighting (Lightformer environment) strength + warmth. With
-  // ACES tone mapping the punchier directional + soft IBL replace the old flat
-  // fill, so ambient/hemi are dialled down to avoid washing the scene out.
-  envIntensity: number;
-  keyColor: string;
-}
-
-const DAY_PALETTE: WorldPalette = {
-  floor: "#e7e2d8",
-  rug: "#cdd7e5",
-  wallNS: "#c9c2b4",
-  wallEW: "#d2ccbf",
-  hemiSky: "#ffffff",
-  hemiGround: "#b9b4a8",
-  hemiIntensity: 0.45,
-  ambient: 0.22,
-  directional: 2.0,
-  envIntensity: 0.75,
-  keyColor: "#fff4e2",
-};
-
-const NIGHT_PALETTE: WorldPalette = {
-  floor: "#262a31",
-  rug: "#313845",
-  wallNS: "#2f333b",
-  wallEW: "#363b44",
-  hemiSky: "#3a4150",
-  hemiGround: "#101216",
-  hemiIntensity: 0.3,
-  ambient: 0.14,
-  directional: 1.1,
-  envIntensity: 0.32,
-  keyColor: "#cdd6ff",
-};
-
-// Only the canvas background follows the app's light/dark theme.
-const THEME_BACKGROUND = { light: "#f3f1ec", dark: "#16181d" } as const;
-
-// Daytime: 06:00–17:59 local. Drives the day/night world palette.
-function isDaytime(date: Date = new Date()): boolean {
-  const hour = date.getHours();
-  return hour >= 6 && hour < 18;
-}
-
-type ControllerMode = "toSeat" | "seated";
-interface ControllerState {
-  mode: ControllerMode;
-  /** Which seat the agent is currently heading to / sitting at. */
-  goalKey: "desk" | "rest" | null;
-}
-
-function randomBetween(min: number, max: number): number {
-  return min + Math.random() * (max - min);
-}
-
-// Doorway waypoints just inside each room, so agents pass through the gap in
-// the partition instead of clipping the wall (we have no full pathfinder).
-function routeTarget(
-  ax: number,
-  finalX: number,
-  finalY: number,
-): { x: number; y: number } {
-  const onEast = ax > DIVIDER_X;
-  const targetEast = finalX > DIVIDER_X;
-  if (onEast === targetEast) return { x: finalX, y: finalY };
-  return { x: targetEast ? DIVIDER_X + 60 : DIVIDER_X - 60, y: DOOR_Y };
-}
-
-function makeRenderAgent(agent: OfficeAgent): RenderAgent {
-  // Spawn near the entrance (south edge); the controller routes the agent to
-  // its assigned desk from there.
-  const x = randomBetween(820, 1000);
-  const y = 1650;
-  return {
-    ...agent,
-    x,
-    y,
-    targetX: x,
-    targetY: y,
-    path: [],
-    facing: Math.PI,
-    frame: Math.floor(randomBetween(0, 240)),
-    walkSpeed: WALK_SPEED,
-    phaseOffset: randomBetween(0, Math.PI * 2),
-    state: "standing",
-  };
-}
-
-/**
- * Holds the live agent simulation. Each agent walks to its desk (gateway up)
- * or to a rest-room beanbag (gateway off) and sits. Positions are mutated
- * in-place on the refs each frame so avatars animate without React re-renders.
- */
-function AgentsLayer({
-  agents,
-  workstations,
-  selectedId,
-  onSelect,
-}: {
-  agents: OfficeAgent[];
-  workstations: Workstation[];
-  selectedId: string | null;
-  onSelect: (id: string) => void;
-}): React.JSX.Element {
-  const agentsRef = useRef<RenderAgent[]>([]) as React.MutableRefObject<
-    RenderAgent[]
-  >;
-  const lookupRef = useRef<Map<string, RenderAgent>>(new Map());
-  const controllerRef = useRef<Map<string, ControllerState>>(new Map());
-
-  const deskSeatByAgent = useMemo(() => {
-    const map = new Map<string, Seat>();
-    for (const w of workstations) {
-      map.set(w.agentId, { x: w.seatX, y: w.seatY, facing: w.seatFacing });
-    }
-    return map;
-  }, [workstations]);
-
-  // Assign each agent a rest-room beanbag (round-robin) for when its gateway
-  // is off.
-  const restSeatByAgent = useMemo(() => {
-    const map = new Map<string, Seat>();
-    if (REST_SEATS.length > 0) {
-      agents.forEach((agent, index) => {
-        map.set(agent.id, REST_SEATS[index % REST_SEATS.length]);
-      });
-    }
-    return map;
-  }, [agents]);
-
-  // Reconcile the simulation list whenever the set of agents changes, keeping
-  // existing agents' positions so they don't teleport on a profile refresh.
-  // This mutates simulation refs, so it must run as an effect (not in useMemo,
-  // which React may re-run arbitrarily and would reset live walk/controller
-  // state). useLayoutEffect runs synchronously before paint so the next
-  // useFrame always sees a consistent ref.
-  useLayoutEffect(() => {
-    const prev = lookupRef.current;
-    // Guard: if every agent already exists with the same status and position,
-    // nothing meaningful changed — keep the current simulation objects so
-    // agents don't teleport or reset their pose on a parent re-render.
-    let unchanged = agents.length === prev.size;
-    if (unchanged) {
-      for (const agent of agents) {
-        const existing = prev.get(agent.id);
-        const existingPos =
-          existing && "position" in existing
-            ? (existing as unknown as OfficeAgent).position
-            : undefined;
-        if (
-          !existing ||
-          existing.status !== agent.status ||
-          existingPos !== agent.position
-        ) {
-          unchanged = false;
-          break;
-        }
-      }
-    }
-    if (unchanged) return;
-
-    const next: RenderAgent[] = agents.map((agent) => {
-      const existing = prev.get(agent.id);
-      if (existing) {
-        return { ...existing, ...agent };
-      }
-      return makeRenderAgent(agent);
-    });
-    (agentsRef as React.MutableRefObject<RenderAgent[]>).current = next;
-    const lookup = new Map<string, RenderAgent>();
-    for (const a of next) lookup.set(a.id, a);
-    lookupRef.current = lookup;
-    // Drop controller state for removed agents.
-    const controller = controllerRef.current;
-    for (const id of [...controller.keys()]) {
-      if (!lookup.has(id)) controller.delete(id);
-    }
-  }, [agents]);
-
-  useFrame((_, delta) => {
-    const step = Math.min(delta, 0.05); // clamp big frame gaps
-    const liveAgents = (agentsRef as React.MutableRefObject<RenderAgent[]>)
-      .current;
-    for (const agent of liveAgents) {
-      // eslint-disable-next-line -- simulation state is intentionally mutated in-place each frame
-      agent.frame += step * 60;
-
-      // Working agents (gateway up) sit at their desk; everyone else rests in
-      // the rest room.
-      const working = agent.status === "working";
-      const goalKey: "desk" | "rest" = working ? "desk" : "rest";
-      const goal = working
-        ? deskSeatByAgent.get(agent.id)
-        : restSeatByAgent.get(agent.id);
-
-      let ctrl = controllerRef.current.get(agent.id);
-      if (!ctrl) {
-        ctrl = { mode: "toSeat", goalKey: null };
-        controllerRef.current.set(agent.id, ctrl);
-      }
-
-      if (!goal) {
-        agent.state = "standing";
-        continue;
-      }
-
-      // Gateway flipped (profile started/stopped) — head to the new seat.
-      if (ctrl.goalKey !== goalKey) {
-        ctrl.goalKey = goalKey;
-        ctrl.mode = "toSeat";
-      }
-
-      const moveToward = (tx: number, ty: number): boolean => {
-        const dx = tx - agent.x;
-        const dy = ty - agent.y;
-        const dist = Math.hypot(dx, dy);
-        if (dist <= ARRIVE_DISTANCE) {
-          agent.x = tx;
-          agent.y = ty;
-          return true;
-        }
-        const move = Math.min(dist, WALK_UNITS_PER_SEC * step);
-        agent.x += (dx / dist) * move;
-        agent.y += (dy / dist) * move;
-        agent.facing = Math.atan2(dx, dy);
-        agent.state = "walking";
-        return false;
-      };
-
-      if (ctrl.mode === "seated") {
-        agent.x = goal.x;
-        agent.y = goal.y;
-        agent.facing = goal.facing;
-        agent.state = "sitting";
-        continue;
-      }
-
-      // Heading to the seat, routing through the doorway when changing rooms.
-      const wp = routeTarget(agent.x, goal.x, goal.y);
-      const reachedFinal = wp.x === goal.x && wp.y === goal.y;
-      if (moveToward(wp.x, wp.y) && reachedFinal) {
-        agent.facing = goal.facing;
-        agent.state = "sitting";
-        ctrl.mode = "seated";
-      }
-    }
-  });
-
-  return (
-    <>
-      {agents.map((agent) => (
-        <AgentModel
-          key={agent.id}
-          agentId={agent.id}
-          name={agent.name}
-          // Nameplate shows the name only; the model/provider stays in the
-          // selection panel rather than cluttering the 3D head label.
-          subtitle={null}
-          status={agent.status}
-          color={agent.color}
-          appearance={agent.avatarProfile}
-          agentsRef={agentsRef}
-          agentLookupRef={lookupRef}
-          onClick={onSelect}
-          showSpeech={selectedId === agent.id}
-          speechText={selectedId === agent.id ? `Hi, I'm ${agent.name}` : null}
-          riggedModelUrl={
-            agent.position === "ceo" ? RIGGED_EMPLOYEE_URL : RIGGED_MAN_URL
-          }
-          riggedModelTint={agent.position === "ceo" ? null : agent.color}
-        />
-      ))}
-    </>
-  );
-}
-
-/** Floor, rug and perimeter walls — a clean, minimal office shell. */
-function Room({ palette }: { palette: WorldPalette }): React.JSX.Element {
-  const halfW = WORLD_W / 2;
-  const halfH = WORLD_H / 2;
-  const wallH = 2.4;
-  const wallT = 0.2;
-  return (
-    <group>
-      {/* Floor — slightly glossy so the IBL adds a soft sheen + grounding. */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
-        <planeGeometry args={[WORLD_W, WORLD_H]} />
-        <meshStandardMaterial
-          color={palette.floor}
-          roughness={0.78}
-          metalness={0}
-          envMapIntensity={0.6}
-        />
-      </mesh>
-      {/* Center rug for a bit of warmth (matte). */}
-      <mesh
-        rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, 0.01, 0]}
-        receiveShadow
-      >
-        <planeGeometry args={[WORLD_W * 0.42, WORLD_H * 0.42]} />
-        <meshStandardMaterial
-          color={palette.rug}
-          roughness={0.95}
-          metalness={0}
-          envMapIntensity={0.4}
-        />
-      </mesh>
-      {/* Walls */}
-      <mesh position={[0, wallH / 2, -halfH]}>
-        <boxGeometry args={[WORLD_W, wallH, wallT]} />
-        <meshStandardMaterial color={palette.wallNS} />
-      </mesh>
-      <mesh position={[0, wallH / 2, halfH]}>
-        <boxGeometry args={[WORLD_W, wallH, wallT]} />
-        <meshStandardMaterial color={palette.wallNS} />
-      </mesh>
-      <mesh position={[-halfW, wallH / 2, 0]}>
-        <boxGeometry args={[wallT, wallH, WORLD_H]} />
-        <meshStandardMaterial color={palette.wallEW} />
-      </mesh>
-      <mesh position={[halfW, wallH / 2, 0]}>
-        <boxGeometry args={[wallT, wallH, WORLD_H]} />
-        <meshStandardMaterial color={palette.wallEW} />
-      </mesh>
-    </group>
-  );
-}
-
-/** Interior partition walls (e.g. the work-area / rest-room divider). */
-function InteriorWalls({
-  palette,
-}: {
-  palette: WorldPalette;
-}): React.JSX.Element {
-  const wallH = 2.4;
-  return (
-    <group>
-      {INTERIOR_WALLS.map((wall) => {
-        const [cx, , cz] = toWorld(wall.x + wall.w / 2, wall.y + wall.h / 2);
-        return (
-          <mesh key={wall.id} position={[cx, wallH / 2, cz]} castShadow>
-            <boxGeometry args={[wall.w * SCALE, wallH, wall.h * SCALE]} />
-            <meshStandardMaterial color={palette.wallEW} />
-          </mesh>
-        );
-      })}
-    </group>
-  );
-}
+// Default camera look-at, hoisted to a stable reference. drei's OrbitControls
+// re-applies `target` whenever the prop identity changes, so a fresh tuple each
+// render would reset the focus point and wipe the user's pan/zoom on every
+// unrelated re-render (e.g. an agent status poll). (Value is the office's north
+// side — was BANK_Z / 2 when the bank sat north, pinned after it moved east.)
+const CAMERA_TARGET: [number, number, number] = [0, 0, -14.6];
 
 /**
  * The native, in-renderer 3D office. Replaces the old webview that pointed at a
@@ -416,14 +46,147 @@ export default function Office3D({
   agents,
   selectedId,
   onSelectAgent,
+  devMode = false,
+  onDevLog,
 }: {
   agents: OfficeAgent[];
   selectedId: string | null;
   onSelectAgent: (id: string | null) => void;
+  devMode?: boolean;
+  onDevLog?: (msg: string) => void;
 }): React.JSX.Element {
-  // Clicking the selected agent again clears the selection.
-  const handleSelect = (id: string): void => {
-    onSelectAgent(id === selectedId ? null : id);
+  // Clicking the selected agent again clears the selection. Memoized so agent
+  // status polling (which re-renders Office3D with a new `agents` array but an
+  // unchanged selection) doesn't hand AgentsLayer/AgentModel a fresh callback
+  // and defeat their React.memo.
+  const handleSelect = useCallback(
+    (id: string): void => {
+      onSelectAgent(id === selectedId ? null : id);
+    },
+    [selectedId, onSelectAgent],
+  );
+
+  const handlePointerMissed = useCallback(
+    (): void => onSelectAgent(null),
+    [onSelectAgent],
+  );
+
+  // The building-mover is a dev-only authoring aid. `import.meta.env.DEV` is a
+  // build-time literal (Vite replaces it: `true` in `electron-vite dev`,
+  // `false` in production builds). Using it *inline* at each JSX site below lets
+  // esbuild constant-fold and dead-code-eliminate every dev-only branch — the
+  // button, handlers, ground-plane catcher and helpers are all dropped from the
+  // production bundle, so they can't run or cost anything for end users.
+
+  // ── Developer building-mover ──────────────────────────────────────────────
+  // When devMode is on: click a building to "pick it up" (logs it + its current
+  // position), then click empty ground to drop it there (logs a paste-ready
+  // code line and moves it live so spacing is visible). Landmarks (bank /
+  // showroom) map to constants in cityPlan.ts; backdrop buildings map to an
+  // entry in BACKDROP_OVERRIDES (CityBackdrop.tsx).
+  type DevSel = {
+    id: string;
+    label: string;
+    kind: "landmark" | "backdrop";
+    base: [number, number, number];
+    hint: string;
+  };
+  const LANDMARKS: Record<"bank" | "showroom", DevSel> = {
+    bank: {
+      id: "bank",
+      label: "Bank",
+      kind: "landmark",
+      base: [BANK_X, 0, BANK_Z],
+      hint: "BANK_X / BANK_Z in cityPlan.ts",
+    },
+    showroom: {
+      id: "showroom",
+      label: "CarShowroom",
+      kind: "landmark",
+      base: [SHOWROOM_X, 0, SHOWROOM_Z],
+      hint: "SHOWROOM_X / SHOWROOM_Z in cityPlan.ts",
+    },
+  };
+  const [devSel, setDevSel] = useState<DevSel | null>(null);
+  const [devPos, setDevPos] = useState<
+    Record<string, [number, number, number]>
+  >({});
+
+  const posOf = (
+    id: string,
+    base: [number, number, number],
+  ): [number, number, number] => devPos[id] ?? base;
+
+  // Landmark click handler (bank / showroom groups). The select logic is
+  // inlined here (and in pickBackdrop) rather than shared, so that when the
+  // production build strips these dev-only handlers there is no lingering
+  // shared helper left referenced in the bundle.
+  const pickLandmark =
+    (meta: DevSel) =>
+    (e: ThreeEvent<MouseEvent>): void => {
+      if (!devMode) return;
+      e.stopPropagation();
+      const p = posOf(meta.id, meta.base);
+      setDevSel(meta);
+      const msg = `🏢 SELECTED ${meta.label} (${meta.id}) — current position [${p[0].toFixed(2)}, ${p[2].toFixed(2)}]. Now click empty ground to set its new spot.`;
+      console.log(msg);
+      onDevLog?.(msg);
+    };
+
+  // Backdrop building click handler (passed down into CityBackdrop). A plain
+  // arrow (not useCallback) so production DCE can drop it entirely — its only
+  // call site is gated by `import.meta.env.DEV` and folds to `undefined` in
+  // prod. CityBackdrop is memoized, but in prod it always receives a stable
+  // `undefined` here, so referential stability only matters in dev (where the
+  // extra re-render is harmless).
+  const pickBackdrop = (b: {
+    id: string;
+    label: string;
+    x: number;
+    z: number;
+  }): void => {
+    const meta: DevSel = {
+      id: b.id,
+      label: b.label,
+      kind: "backdrop",
+      base: [b.x, 0, b.z],
+      hint: "BACKDROP_OVERRIDES in CityBackdrop.tsx",
+    };
+    setDevSel(meta);
+    const msg = `🏢 SELECTED ${meta.label} (${meta.id}) — current position [${b.x.toFixed(2)}, ${b.z.toFixed(2)}]. Now click empty ground to set its new spot.`;
+    console.log(msg);
+    onDevLog?.(msg);
+  };
+
+  const dropAt = (e: ThreeEvent<MouseEvent>): void => {
+    if (!devMode || !devSel) return;
+    e.stopPropagation();
+    const { x, z } = e.point;
+    const rx = Math.round(x * 100) / 100;
+    const rz = Math.round(z * 100) / 100;
+    setDevPos((prev) => ({ ...prev, [devSel.id]: [rx, 0, rz] }));
+    // One-shot: drop ends this building's selection so the next ground click
+    // doesn't keep dragging it around. Click a building again to move it more.
+    const msg =
+      devSel.kind === "landmark"
+        ? `📍 MOVE ${devSel.label} → position={[${rx}, 0, ${rz}]}  (update ${devSel.hint}). Selection cleared — click another building.`
+        : `📍 MOVE ${devSel.label} → "${devSel.id}": [${rx}, ${rz}],  (paste into ${devSel.hint}). Selection cleared — click another building.`;
+    setDevSel(null);
+    console.log(msg);
+    onDevLog?.(msg);
+  };
+
+  // Keep the camera's focus point inside the city so panning (or
+  // zoom-to-cursor) can never strand the user in empty void off the map.
+  const controlsRef = useRef<React.ComponentRef<typeof OrbitControls>>(null);
+  const clampControlsTarget = (): void => {
+    const controls = controlsRef.current;
+    if (!controls) return;
+    const t = controls.target;
+    const x = THREE.MathUtils.clamp(t.x, -90, 90);
+    const y = THREE.MathUtils.clamp(t.y, 0, 12);
+    const z = THREE.MathUtils.clamp(t.z, -90, 90);
+    if (x !== t.x || y !== t.y || z !== t.z) t.set(x, y, z);
   };
 
   // The CEO (if any) gets a separate executive desk; everyone else grids up.
@@ -442,99 +205,73 @@ export default function Office3D({
     [agents, ceoId],
   );
 
-  // Only the background follows the app's light/dark theme.
-  const { resolved } = useTheme();
-  const background = useMemo(() => {
-    const def = THEMES.find((th) => th.id === resolved);
-    return def?.appearance === "light"
-      ? THEME_BACKGROUND.light
-      : THEME_BACKGROUND.dark;
-  }, [resolved]);
-
-  // The world's day/night look follows the system clock, re-checked each
-  // minute so the scene flips at dawn/dusk without a manual refresh.
-  const [daytime, setDaytime] = useState(() => isDaytime());
-  useEffect(() => {
-    const id = setInterval(() => setDaytime(isDaytime()), 60_000);
-    return () => clearInterval(id);
-  }, []);
-  const palette = daytime ? DAY_PALETTE : NIGHT_PALETTE;
+  const palette = DAY_PALETTE;
 
   return (
     <Canvas
       shadows="percentage"
       dpr={[1, 2]}
-      camera={{ position: [0, 22, 26], fov: 50 }}
+      // near=1 (instead of the 0.1 default) gives the depth buffer ~10× more
+      // precision at distance — without it the road decals z-fight the ground
+      // plane into flickering stripes when viewed from far away.
+      camera={{ position: [0, 38, 48], fov: 50, near: 1, far: 1000 }}
       gl={{
         antialias: true,
         toneMapping: THREE.ACESFilmicToneMapping,
         toneMappingExposure: 1.05,
       }}
-      onPointerMissed={() => onSelectAgent(null)}
+      onPointerMissed={handlePointerMissed}
       style={{ width: "100%", height: "100%" }}
     >
-      <color attach="background" args={[background]} />
-      {/* Soft image-based lighting baked once from in-scene Lightformers — no
-          external HDRI fetch, so it stays within the renderer's strict CSP. */}
-      <Environment frames={1} resolution={256} background={false}>
-        <Lightformer
-          form="rect"
-          intensity={palette.envIntensity}
-          color={palette.keyColor}
-          position={[0, 20, 0]}
-          rotation={[Math.PI / 2, 0, 0]}
-          scale={[36, 36, 1]}
-        />
-        <Lightformer
-          form="rect"
-          intensity={palette.envIntensity * 0.6}
-          color="#eaf0ff"
-          position={[0, 8, 24]}
-          rotation={[0, 0, 0]}
-          scale={[36, 14, 1]}
-        />
-        <Lightformer
-          form="rect"
-          intensity={palette.envIntensity * 0.4}
-          color="#ffffff"
-          position={[-24, 9, 0]}
-          rotation={[0, Math.PI / 2, 0]}
-          scale={[36, 14, 1]}
-        />
-        <Lightformer
-          form="rect"
-          intensity={palette.envIntensity * 0.4}
-          color="#ffffff"
-          position={[24, 9, 0]}
-          rotation={[0, -Math.PI / 2, 0]}
-          scale={[36, 14, 1]}
-        />
-      </Environment>
-      <hemisphereLight
-        args={[palette.hemiSky, palette.hemiGround, palette.hemiIntensity]}
+      <SceneEnvironment palette={palette} />
+      <DistantSkyline />
+      <CityBackdrop
+        devMode={import.meta.env.DEV && devMode}
+        moved={import.meta.env.DEV && devMode ? devPos : undefined}
+        onPick={import.meta.env.DEV && devMode ? pickBackdrop : undefined}
       />
-      <ambientLight intensity={palette.ambient} />
-      {/* Key light. The shadow camera is sized to the whole room (~32 world
-          units across) — the default ±5 frustum only covered the centre, so
-          most furniture cast no shadow before. */}
-      <directionalLight
-        position={[14, 26, 16]}
-        intensity={palette.directional}
-        color={palette.keyColor}
-        castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
-        shadow-bias={-0.0004}
-        shadow-normalBias={0.02}
-        shadow-camera-near={1}
-        shadow-camera-far={90}
-        shadow-camera-left={-20}
-        shadow-camera-right={20}
-        shadow-camera-top={20}
-        shadow-camera-bottom={-20}
-      />
+      <Suspense fallback={null}>
+        <TrafficLayer />
+      </Suspense>
+      <ConnectingStreet />
       <Room palette={palette} />
       <InteriorWalls palette={palette} />
+      {/* CEO glass corner office — only exists when there is a CEO. */}
+      {ceoId && (
+        <>
+          <GlassWalls />
+          <Suspense fallback={null}>
+            <CeoOfficeExtras />
+          </Suspense>
+        </>
+      )}
+      {import.meta.env.DEV && devMode ? (
+        <>
+          <group onClick={pickLandmark(LANDMARKS.bank)}>
+            <BankSection position={posOf("bank", LANDMARKS.bank.base)} />
+          </group>
+          <group onClick={pickLandmark(LANDMARKS.showroom)}>
+            <CarShowroom
+              position={posOf("showroom", LANDMARKS.showroom.base)}
+            />
+          </group>
+          {/* Invisible ground catcher: the second click lands here (buildings
+              stopPropagation on the first), giving the pick-then-drop flow. */}
+          <mesh
+            rotation={[-Math.PI / 2, 0, 0]}
+            position={[0, -0.05, 0]}
+            onClick={dropAt}
+          >
+            <planeGeometry args={[600, 600]} />
+            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+          </mesh>
+        </>
+      ) : (
+        <>
+          <BankSection />
+          <CarShowroom />
+        </>
+      )}
       <Suspense fallback={null}>
         <Workstations workstations={workstations} />
         <FurniturePieces pieces={REST_FURNITURE} />
@@ -547,12 +284,31 @@ export default function Office3D({
         onSelect={handleSelect}
       />
       <OrbitControls
+        ref={controlsRef}
         makeDefault
         enablePan
-        minDistance={8}
-        maxDistance={48}
+        // Inertial damping: motion eases out instead of stopping dead, which
+        // is most of the "controllable" feel.
+        enableDamping
+        dampingFactor={0.08}
+        // Gentler speeds — the raw defaults feel twitchy over a city-sized
+        // scene, especially zoom (multiplicative per wheel tick).
+        rotateSpeed={0.75}
+        panSpeed={0.9}
+        zoomSpeed={0.65}
+        // Map-style panning: dragging slides along the ground plane at
+        // constant height, instead of moving with the screen axes.
+        screenSpacePanning={false}
+        // Scrolling dives toward whatever the cursor points at — point at
+        // the bank or showroom and scroll to fly there.
+        zoomToCursor
+        minDistance={5}
+        maxDistance={130}
         maxPolarAngle={Math.PI / 2.15}
-        target={new THREE.Vector3(0, 0, 0)}
+        // Stable module-level reference — see CAMERA_TARGET above. A fresh
+        // array here would reset the controls' target and wipe any user pan.
+        target={CAMERA_TARGET}
+        onChange={clampControlsTarget}
       />
     </Canvas>
   );

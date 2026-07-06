@@ -15,7 +15,23 @@ export interface SavedModel {
   model: string;
   baseUrl: string;
   apiMode?: string | null;
+  /** Optional manual context-window override (tokens). When set, it's mirrored
+   *  into config.yaml's `model.context_length` on activation — fixing the
+   *  context gauge for providers that don't advertise `context_length` over
+   *  /models, and driving the agent's auto-compaction threshold. */
+  contextLength?: number;
   createdAt: number;
+}
+
+/** Coerce an arbitrary value to a positive integer token count, or undefined. */
+function normalizeContextLength(value: unknown): number | undefined {
+  const n =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? parseInt(value.trim(), 10)
+        : NaN;
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : undefined;
 }
 
 export function readModels(): SavedModel[] {
@@ -187,6 +203,7 @@ export function addModel(
   provider: string,
   model: string,
   baseUrl: string,
+  contextLength?: number,
 ): SavedModel {
   const models = readModels();
 
@@ -196,12 +213,14 @@ export function addModel(
   );
   if (existing) return existing;
 
+  const ctx = normalizeContextLength(contextLength);
   const entry: SavedModel = {
     id: randomUUID(),
     name,
     provider,
     model,
     baseUrl: baseUrl || "",
+    ...(ctx !== undefined ? { contextLength: ctx } : {}),
     createdAt: Date.now(),
   };
   models.push(entry);
@@ -219,12 +238,24 @@ export function removeModel(id: string): boolean {
 
 export function updateModel(
   id: string,
-  fields: Partial<Pick<SavedModel, "name" | "provider" | "model" | "baseUrl">>,
+  fields: Partial<
+    Pick<SavedModel, "name" | "provider" | "model" | "baseUrl">
+  > & { contextLength?: number | null },
 ): boolean {
   const models = readModels();
   const idx = models.findIndex((m) => m.id === id);
   if (idx === -1) return false;
-  models[idx] = { ...models[idx], ...fields };
+
+  // `contextLength` is handled out-of-band: a positive value sets the
+  // override, anything else (null / 0 / undefined-but-present) clears it.
+  const { contextLength, ...rest } = fields;
+  const next: SavedModel = { ...models[idx], ...rest };
+  if (contextLength !== undefined) {
+    const ctx = normalizeContextLength(contextLength);
+    if (ctx !== undefined) next.contextLength = ctx;
+    else delete next.contextLength;
+  }
+  models[idx] = next;
   writeModels(models);
   return true;
 }

@@ -4,7 +4,11 @@ interface CapacityBarProps {
   label: string;
 }
 
-export function CapacityBar({ used, limit, label }: CapacityBarProps): React.JSX.Element {
+export function CapacityBar({
+  used,
+  limit,
+  label,
+}: CapacityBarProps): React.JSX.Element {
   const pct = Math.min(100, Math.round((used / limit) * 100));
   const color =
     pct > 90 ? "var(--error)" : pct > 70 ? "var(--warning)" : "var(--success)";

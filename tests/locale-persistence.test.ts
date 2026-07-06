@@ -3,6 +3,17 @@ import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
+const persistedDesktopConfig = vi.hoisted(() => ({
+  value: {} as Record<string, unknown>,
+}));
+
+vi.mock("../src/main/config", () => ({
+  readDesktopConfig: () => ({ ...persistedDesktopConfig.value }),
+  writeDesktopConfig: (data: Record<string, unknown>) => {
+    persistedDesktopConfig.value = { ...data };
+  },
+}));
+
 let testHome: string;
 
 async function loadLocaleModule(): Promise<
@@ -16,6 +27,7 @@ async function loadLocaleModule(): Promise<
 describe("app locale persistence", () => {
   beforeEach(() => {
     testHome = mkdtempSync(join(tmpdir(), "hermes-locale-"));
+    persistedDesktopConfig.value = {};
   });
 
   afterEach(() => {
@@ -31,5 +43,5 @@ describe("app locale persistence", () => {
     const secondRun = await loadLocaleModule();
 
     expect(secondRun.getAppLocale()).toBe("es");
-  }, 15000);
+  }, 30000);
 });

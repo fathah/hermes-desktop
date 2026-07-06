@@ -25,6 +25,7 @@ export default {
     "Seçilen {{count}} oturum silinsin mi? Bu işlem geri alınamaz — mesajlar ve oturum kayıtları kalıcı olarak kaldırılacaktır.",
   deleteSelectedClose: "Toplu silme onayını kapat",
   delete: "Konuşmayı sil",
+  rename: "Konuşmayı yeniden adlandır",
   deleteConfirmTitle: "Konuşmayı sil",
   deleteConfirm:
     "Bu konuşma silinsin mi? Bu işlem geri alınamaz — hem mesajlar hem de oturum kaydı kalıcı olarak kaldırılacaktır.",

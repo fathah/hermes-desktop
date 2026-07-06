@@ -138,6 +138,7 @@ describe("setModelConfig — base_url substitution", () => {
     // not to weaken the assertion here.
     const provider_to_canonical: Record<string, string> = {
       deepseek: "https://api.deepseek.com/v1",
+      aimlapi: "https://api.aimlapi.com/v1",
       groq: "https://api.groq.com/openai/v1",
       mistral: "https://api.mistral.ai/v1",
       together: "https://api.together.xyz/v1",

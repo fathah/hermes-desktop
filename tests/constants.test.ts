@@ -5,6 +5,7 @@ import {
   GATEWAY_SECTIONS,
   SETTINGS_SECTIONS,
   LOCAL_PRESETS,
+  OPENAI_COMPATIBLE_BASE_URLS,
   THEME_OPTIONS,
 } from "../src/renderer/src/constants";
 
@@ -21,6 +22,7 @@ describe("PROVIDERS", () => {
   it("includes all v0.9.0 providers", () => {
     const values = PROVIDERS.options.map((o) => o.value);
     expect(values).toContain("openrouter");
+    expect(values).toContain("aimlapi");
     expect(values).toContain("anthropic");
     expect(values).toContain("openai");
     expect(values).toContain("openai-codex");
@@ -186,6 +188,7 @@ describe("SETTINGS_SECTIONS", () => {
     expect(allKeys).toContain("GOOGLE_API_KEY");
     expect(allKeys).toContain("XAI_API_KEY");
     expect(allKeys).toContain("XIAOMI_API_KEY");
+    expect(allKeys).toContain("AIMLAPI_API_KEY");
   });
 
   it("includes existing keys (backward compat)", () => {
@@ -211,6 +214,7 @@ describe("LOCAL_PRESETS", () => {
   it("has expected presets", () => {
     const ids = LOCAL_PRESETS.map((p) => p.id);
     expect(ids).toContain("lmstudio");
+    expect(ids).toContain("aimlapi");
     expect(ids).toContain("ollama");
     expect(ids).toContain("vllm");
     expect(ids).toContain("llamacpp");
@@ -221,6 +225,15 @@ describe("LOCAL_PRESETS", () => {
     for (const preset of LOCAL_PRESETS.filter((p) => p.group === "local")) {
       expect(options.has(preset.id)).toBe(true);
       expect(PROVIDERS.labels[preset.id]).toBeTruthy();
+    }
+  });
+
+  // Every preset chip routes through OPENAI_COMPATIBLE_BASE_URLS in the
+  // Providers picker; a missing entry collapses the picker and mis-saves the
+  // provider (regression: AtlasCloud/LM Studio fell through to native routing).
+  it("maps every preset id to an OpenAI-compatible base URL", () => {
+    for (const preset of LOCAL_PRESETS) {
+      expect(OPENAI_COMPATIBLE_BASE_URLS[preset.id]).toBeTruthy();
     }
   });
 });

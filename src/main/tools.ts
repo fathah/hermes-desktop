@@ -136,7 +136,9 @@ function localizeToolDefs(
  *       ...
  * We use line-by-line parsing to stay consistent with config.ts (no yaml dep).
  */
-function parsePlatformToolsets(configContent: string): Record<string, Set<string>> {
+function parsePlatformToolsets(
+  configContent: string,
+): Record<string, Set<string>> {
   const toolsets: Record<string, Set<string>> = {};
   const lines = configContent.split("\n");
 
@@ -191,16 +193,17 @@ function validatePlatformToolsetKey(platform: string): boolean {
   return /^[A-Za-z0-9_-]+$/.test(platform);
 }
 
-export function getPlatformToolsets(profile?: string): Record<string, string[]> {
+export function getPlatformToolsets(
+  profile?: string,
+): Record<string, string[]> {
   const configFile = join(profileHome(profile), "config.yaml");
   if (!existsSync(configFile)) return {};
   try {
     const content = readFileSync(configFile, "utf-8");
     return Object.fromEntries(
-      Object.entries(parsePlatformToolsets(content)).map(([platform, values]) => [
-        platform,
-        Array.from(values).sort(),
-      ]),
+      Object.entries(parsePlatformToolsets(content)).map(
+        ([platform, values]) => [platform, Array.from(values).sort()],
+      ),
     );
   } catch {
     return {};
@@ -262,14 +265,20 @@ function setPlatformToolsetEnabled(
 ): boolean {
   const configFile = join(profileHome(profile), "config.yaml");
   if (!existsSync(configFile)) return false;
-  if (!validatePlatformToolsetKey(platform) || !validatePlatformToolsetKey(key)) {
+  if (
+    !validatePlatformToolsetKey(platform) ||
+    !validatePlatformToolsetKey(key)
+  ) {
     return false;
   }
 
   try {
     const content = readFileSync(configFile, "utf-8");
     const parsed = parsePlatformToolsets(content);
-    const hasPlatformConfig = Object.prototype.hasOwnProperty.call(parsed, platform);
+    const hasPlatformConfig = Object.prototype.hasOwnProperty.call(
+      parsed,
+      platform,
+    );
     const currentEnabled = hasPlatformConfig
       ? new Set(parsed[platform])
       : new Set(defaultEnabled);

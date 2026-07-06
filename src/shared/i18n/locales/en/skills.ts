@@ -16,6 +16,8 @@ export default {
   noBrowseResultsHint: "Try a different search term or category filter",
   installFailed: "Failed to install skill",
   uninstallFailed: "Failed to uninstall skill",
+  uninstallConfirm: "Uninstall '{{name}}'?",
+  uninstallSuccess: "'{{name}}' uninstalled",
   removing: "Removing...",
   uninstall: "Uninstall",
   installedBadge: "Installed",

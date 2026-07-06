@@ -14,6 +14,7 @@ export default {
   messages: "wiad.",
   messageSingular: "wiad.",
   delete: "Usuń rozmowę",
+  rename: "Zmień nazwę rozmowy",
   deleteConfirmTitle: "Usuń rozmowę",
   deleteConfirm:
     "Usunąć tę rozmowę? Tego nie da się cofnąć — wiadomości i rekord sesji zostaną trwale usunięte.",

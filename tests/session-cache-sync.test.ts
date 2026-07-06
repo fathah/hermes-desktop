@@ -25,6 +25,24 @@ vi.mock("../src/main/installer", () => ({
   getEnhancedPath: () => process.env.PATH || "",
 }));
 
+vi.mock("../src/main/utils", () => ({
+  activeStateDbPath: () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const path = require("path");
+    return path.join(TEST_HOME, "state.db");
+  },
+  profileHome: () => TEST_HOME,
+  getActiveProfileNameSync: () => "default",
+  safeWriteFile: (path: string, data: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require("fs");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const nodePath = require("path");
+    fs.mkdirSync(nodePath.dirname(path), { recursive: true });
+    fs.writeFileSync(path, data, "utf-8");
+  },
+}));
+
 // Stub the i18n + locale modules so the cache code doesn't need the
 // renderer-side translation files at test time.
 vi.mock("../src/shared/i18n", () => ({
@@ -151,10 +169,25 @@ vi.mock("better-sqlite3", () => {
           .map((s) => ({ id: s.id, message_count: s.message_count }));
       }
 
+      // Context-folder batch read (issue #27). These tests never seed linked
+      // folders, so report none — `tableExists` returns false above, so this
+      // is only a defensive fallback if the lookup path ever changes.
+      if (this.sql.includes("desktop_session_context_folders")) {
+        return [];
+      }
+
       throw new Error(`Unhandled fake all SQL: ${this.sql}`);
     }
 
     get(...args: unknown[]): { content: string } | undefined {
+      // `tableExists` probes sqlite_master before reading context folders
+      // (issue #27). The desktop context-folder table is never created in
+      // these tests, so report it absent — sessions then resolve to a null
+      // contextFolder instead of throwing on an unhandled query.
+      if (this.sql.includes("sqlite_master")) {
+        return undefined;
+      }
+
       if (this.sql.includes("SELECT content FROM messages")) {
         const sessionId = String(args[0]);
         const match = this.store.messages
@@ -197,6 +230,7 @@ vi.mock("better-sqlite3", () => {
 
 import Database from "better-sqlite3";
 import { syncSessionCache } from "../src/main/session-cache";
+import { closeDbConnection } from "../src/main/db";
 
 const CACHE_FILE = join(TEST_HOME, "desktop", "sessions.json");
 const DB_PATH = join(TEST_HOME, "state.db");
@@ -259,6 +293,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  closeDbConnection();
   if (existsSync(TEST_HOME)) {
     rmSync(TEST_HOME, { recursive: true, force: true });
   }

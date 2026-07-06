@@ -11,11 +11,7 @@ describe("upsertLiveReasoningChunk", () => {
 
     const next = upsertLiveReasoningChunk(messages, "thinking", 100);
 
-    expect(next.map((m) => m.id)).toEqual([
-      "u-1",
-      "reasoning-100-2",
-      "a-1",
-    ]);
+    expect(next.map((m) => m.id)).toEqual(["u-1", "reasoning-100-2", "a-1"]);
     expect(next[1]).toMatchObject({
       kind: "reasoning",
       text: "thinking",

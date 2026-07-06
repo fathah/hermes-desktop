@@ -1,6 +1,12 @@
 export default {
   chat: "Sohbet",
+  newChat: "Yeni Sohbet",
   sessions: "Oturumlar",
+  projects: "Projeler",
+  chats: "Sohbetler",
+  noChats: "Sohbet yok",
+  pinned: "Sabitlenenler",
+  discover: "Keşfet",
   agents: "Profiller",
   office: "Ofis",
   models: "Modeller",
@@ -13,6 +19,6 @@ export default {
   kanban: "Kanban",
   gateway: "Gateway",
   settings: "Ayarlar",
-  collapseSidebar: "Collapse sidebar",
-  expandSidebar: "Expand sidebar",
+  collapseSidebar: "Kenar çubuğunu daralt",
+  expandSidebar: "Kenar çubuğunu genişlet",
 } as const;

@@ -14,6 +14,7 @@ export default {
   messages: "則訊息",
   messageSingular: "則訊息",
   delete: "刪除對話",
+  rename: "重新命名對話",
   deleteConfirmTitle: "刪除對話",
   deleteConfirm: "刪除此對話？此操作無法復原 — 訊息和工作階段記錄將永久移除。",
   deleteClose: "關閉刪除確認",

@@ -15,11 +15,11 @@ Description: |-
   with Hermes Agent — a self-improving AI assistant with tool use, multi-platform
   messaging, and a closed learning loop.
 Tags:
-  - ai
-  - agent
-  - desktop
-  - electron
-  - llm
+- ai
+- agent
+- desktop
+- electron
+- llm
 ReleaseNotesUrl: { { RELEASE_NOTES_URL } }
 ManifestType: defaultLocale
-ManifestVersion: 1.6.0
+ManifestVersion: 1.12.0

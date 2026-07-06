@@ -1,7 +1,8 @@
 import type { ChatToolEvent } from "../../../../shared/chat-stream";
 import type { ChatMessage, ToolCallMessage, ToolResultMessage } from "./types";
 
-const TOOL_PROGRESS_EMOJI_RE = /^(\p{Extended_Pictographic}|\p{Emoji_Presentation})\s+(.+)$/u;
+const TOOL_PROGRESS_EMOJI_RE =
+  /^(\p{Extended_Pictographic}|\p{Emoji_Presentation})\s+(.+)$/u;
 
 function toolProgressToNameAndPreview(progress: string): {
   emoji?: string;
@@ -156,11 +157,7 @@ function findToolResultIndex(
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
     if (msg.role === "user") break;
-    if (
-      "kind" in msg &&
-      msg.kind === "tool_result" &&
-      msg.callId === callId
-    ) {
+    if ("kind" in msg && msg.kind === "tool_result" && msg.callId === callId) {
       return i;
     }
   }

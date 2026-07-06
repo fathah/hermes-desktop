@@ -33,6 +33,14 @@ import { HERMES_HOME } from "./installer";
 import { expectedEnvKeyForModel } from "./installer";
 import { expectedEnvKeyForUrl, isLocalBaseUrl } from "../shared/url-key-map";
 import { findSiblingHermesHomes } from "./wsl-detection";
+// Audit checks must consult the secrets provider too — a vault-only user has
+// their keys in the provider's backing store, not in `.env`. Importing the
+// overlay helper (rather than calling readEnv directly) makes that explicit
+// and keeps the resolution order (process.env > .env > provider) consistent
+// with getApiServerKey() and transcribeAudio(). A failure of this import (e.g.
+// during a config-only smoke test) is fine — the audit degrades to the .env
+// view.
+import { resolvedSecretMap } from "./secrets";
 
 export type Severity = "error" | "warning" | "info";
 
@@ -103,7 +111,7 @@ export function runConfigHealthCheck(profile?: string): ConfigHealthReport {
     } catch (err) {
       // Swallow — a broken check never breaks the audit. Log to console
       // so a developer can find it; users see only the empty result.
-      // eslint-disable-next-line no-console
+
       console.warn("[config-health] check threw:", err);
     }
   }
@@ -150,6 +158,14 @@ export function autoFixIssue(
  * getApiServerKey() handles the first case automatically; this check
  * just surfaces it so users see it happened (and re-fires if the auto
  * migration failed for some reason).
+ *
+ * Vault-aware: a `command` provider with `API_SERVER_KEY` configured in
+ * the vault satisfies the "is the key set?" check. We still surface
+ * the .env view (so a user with a value in BOTH .env and the vault can
+ * see the .env one for migration purposes) but we do NOT fire the
+ * `EMPTY_API_SERVER_KEY` warning when the provider has the key — that
+ * warning would push the user to write the key back into .env, which
+ * defeats the point of vault-only mode.
  */
 function checkApiServerKeyPlacement(profile?: string): ConfigHealthIssue[] {
   const issues: ConfigHealthIssue[] = [];
@@ -159,9 +175,17 @@ function checkApiServerKeyPlacement(profile?: string): ConfigHealthIssue[] {
   const envKey = (env.API_SERVER_KEY ?? "").trim();
   const topLevel = (getConfigValue("API_SERVER_KEY", profile) ?? "").trim();
   const nested = (getConfigValue("api_server.token", profile) ?? "").trim();
+  // Fully-resolved view (process.env > .env > provider) — a vault-only user
+  // has a non-empty value here even when envKey is empty.
+  const resolved = resolvedSecretMap(profile);
+  const resolvedKey = (resolved.API_SERVER_KEY ?? "").trim();
 
   // Multiple values: if two or more non-empty locations disagree, that's
-  // ambiguous and the user has to resolve which one wins.
+  // ambiguous and the user has to resolve which one wins. Compare the
+  // .env view against config.yaml — a vault-only user is a single-value
+  // case (no .env entry, no config.yaml entry, vault holds the key), so
+  // we don't include the provider in the disagreement check. The point
+  // of the warning is to surface file-level ambiguity, not vault-vs-file.
   const values = [envKey, topLevel, nested].filter((v) => v !== "");
   const uniqueValues = new Set(values);
   if (uniqueValues.size > 1) {
@@ -204,9 +228,12 @@ function checkApiServerKeyPlacement(profile?: string): ConfigHealthIssue[] {
     });
   }
 
-  // Empty: no key at all, and the gateway is configured to require one.
+  // Empty: no key in any checked location AND the gateway is configured
+  // to require one. Skip if the vault (via the secrets provider) already
+  // has the key — for a vault-only user, the key IS configured and
+  // writing it back to .env would defeat the vault-first workflow.
   // We can't auto-fix this — the user has to provide a secret.
-  if (!envKey && !topLevel && !nested) {
+  if (!envKey && !topLevel && !nested && !resolvedKey) {
     // Only flag if a gateway run.py / api_server is actually configured.
     // For a fresh install with no setup yet, this would be noise.
     const configExists = existsSync(configFile);
@@ -234,6 +261,11 @@ function checkApiServerKeyPlacement(profile?: string): ConfigHealthIssue[] {
  * .env. This is the *most likely* cause of chat 401s — the user has
  * picked a model in the GUI but their key isn't where the gateway
  * expects to find it.
+ *
+ * Vault-aware: consult the secrets provider before flagging. A
+ * vault-only user with `NANO_GPT_API_KEY` (or similar) in their vault
+ * is NOT missing the key — the provider's resolvedSecretMap() is the
+ * authoritative "is the key configured?" view.
  */
 function checkActiveModelKeyPresence(profile?: string): ConfigHealthIssue[] {
   const mc = getModelConfig(profile);
@@ -248,6 +280,13 @@ function checkActiveModelKeyPresence(profile?: string): ConfigHealthIssue[] {
 
   const env = readEnv(profile);
   if ((env[expectedKey] ?? "").trim()) return [];
+
+  // Vault check: a `command` provider (or env-injecting vault) with this
+  // key configured satisfies the requirement — don't warn. This is the
+  // fix for the false "NANO_GPT_API_KEY is not set in .env" warning that
+  // a vault-only user would otherwise see on every chat start.
+  const resolved = resolvedSecretMap(profile);
+  if ((resolved[expectedKey] ?? "").trim()) return [];
 
   // OpenAI-compatible / custom endpoints resolve their key from a fallback
   // chain (URL key → CUSTOM_PROVIDER_<name>_KEY → CUSTOM_API_KEY →
@@ -350,11 +389,16 @@ function checkNonAsciiCredentials(profile?: string): ConfigHealthIssue[] {
   const env = readEnv(profile);
   const offenders: string[] = [];
   for (const [key, value] of Object.entries(env)) {
-    if (!/^[A-Z][A-Z0-9_]*(_API_KEY|_TOKEN|API_SERVER_KEY)$/.test(key)) {
+    // The `API_SERVER_KEY` alternative could never match: the leading
+    // `[A-Z][A-Z0-9_]*` requires at least one character before it, but the key
+    // *is* that literal with nothing preceding it. Anchor it as a whole-key
+    // alternative so the audit also covers the remote-mode bearer token —
+    // exactly the value a user pastes and where a stray smart-quote lands.
+    if (!/^([A-Z][A-Z0-9_]*(_API_KEY|_TOKEN)|API_SERVER_KEY)$/.test(key)) {
       continue;
     }
     if (!value) continue;
-    // eslint-disable-next-line no-control-regex
+
     if (/[^\x20-\x7e]/.test(value)) {
       offenders.push(key);
     }
@@ -456,7 +500,7 @@ function fixNonAsciiCredential(
   const cleaned: string[] = [];
   for (const key of keys) {
     const value = env[key] ?? "";
-    // eslint-disable-next-line no-control-regex
+
     const stripped = value.replace(/[^\x20-\x7e]/g, "");
     if (stripped !== value && stripped) {
       setEnvValue(key, stripped, profile);

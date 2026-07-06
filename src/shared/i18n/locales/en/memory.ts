@@ -10,6 +10,7 @@ export default {
   userProfile: "User Profile",
   entries: "{{count}} entries",
   addMemory: "Add Memory",
+  loadFailed: "Failed to load memory",
   addFailed: "Failed to add entry",
   updateFailed: "Failed to update entry",
   saveFailed: "Failed to save",

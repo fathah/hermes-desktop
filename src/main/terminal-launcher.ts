@@ -39,7 +39,9 @@ const LINUX_TERMINALS = [
 const execFileAsync = promisify(execFile);
 const windowsPackageLocationCache = new Map<string, Promise<string[]>>();
 
-function pathForPlatform(platform: NodeJS.Platform): typeof win32 | typeof posix {
+function pathForPlatform(
+  platform: NodeJS.Platform,
+): typeof win32 | typeof posix {
   return platform === "win32" ? win32 : posix;
 }
 
@@ -376,8 +378,8 @@ function resolveWindowsTerminal(
       getPackageInstallLocations,
     ),
   ];
-  const pwsh = pwshCandidates.find(
-    (candidate): candidate is string => Boolean(candidate && exists(candidate)),
+  const pwsh = pwshCandidates.find((candidate): candidate is string =>
+    Boolean(candidate && exists(candidate)),
   );
   if (pwsh) {
     return startCommand(pwsh, ["-NoExit", "-NoLogo"]);
@@ -461,8 +463,8 @@ async function resolveWindowsTerminalAsync(
     win32.join(programFilesX86, "PowerShell", "7", "pwsh.exe"),
     packagePwsh,
   ];
-  const pwsh = pwshCandidates.find(
-    (candidate): candidate is string => Boolean(candidate && exists(candidate)),
+  const pwsh = pwshCandidates.find((candidate): candidate is string =>
+    Boolean(candidate && exists(candidate)),
   );
   if (pwsh) {
     return startCommand(pwsh, ["-NoExit", "-NoLogo"]);
@@ -571,8 +573,10 @@ export async function resolveTerminalCommandAsync(
   const getPackageInstallLocations = options.getWindowsPackageInstallLocations
     ? (packageName: string, systemRoot: string): Promise<string[]> =>
         Promise.resolve(
-          options.getWindowsPackageInstallLocations?.(packageName, systemRoot) ||
-            [],
+          options.getWindowsPackageInstallLocations?.(
+            packageName,
+            systemRoot,
+          ) || [],
         )
     : defaultWindowsPackageInstallLocationsAsync;
 

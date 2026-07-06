@@ -1,15 +1,24 @@
 import Database from "better-sqlite3";
-import { existsSync } from "fs";
-import { activeStateDbPath } from "./utils";
 import type { Attachment } from "../shared/attachments";
 import { isImageMime } from "../shared/attachments";
 import { clearStagedAttachments } from "./attachment-staging";
 import { removeSessionFromCache } from "./session-cache";
+import { getDbConnection } from "./db";
 import {
+  attachmentFromLocalVisionImagePath,
   deletePromptImageAttachmentsForSession,
+  extractLeadingVisionImageFallback,
   loadPromptImageAttachments,
   stripTrailingImagePlaceholders,
 } from "./session-attachment-store";
+import {
+  deleteSessionContinuationForSession,
+  loadSessionContinuationItems,
+  loadSessionLocalErrors,
+  mergeSessionLocalErrors,
+} from "./session-continuation-store";
+import { deleteSessionContextFolderForSession } from "./session-context-folder-store";
+import { deleteSessionModelOverrideForSession } from "./session-model-override-store";
 
 // Sentinel prefix used by hermes-agent's hermes_state.py to mark
 // JSON-encoded multimodal content in the messages.content column.
@@ -57,6 +66,7 @@ export type HistoryItem =
       id: number;
       content: string;
       timestamp: number;
+      error?: string;
       attachments?: Attachment[];
     }
   | {
@@ -231,57 +241,64 @@ function highlightSessionMatch(
   return highlightTextMatch(fallbackSessionTitle(sessionId), query);
 }
 
+function decodeSearchSnippet(
+  raw: string | null,
+  messageId: number,
+  query: string,
+): string {
+  const decoded = decodeContent(raw || "", messageId).text;
+  const visible = stripTrailingImagePlaceholders(
+    extractLeadingVisionImageFallback(decoded).content,
+  );
+  return highlightTextMatch(visible || decoded || raw || "", query).slice(
+    0,
+    500,
+  );
+}
+
 function getDb(readonly = true): Database.Database | null {
-  // Open the active profile's session DB — named profiles keep their
-  // sessions under ~/.hermes/profiles/<name>/state.db (issue #311).
-  const dbPath = activeStateDbPath();
-  if (!existsSync(dbPath)) return null;
-  return new Database(dbPath, readonly ? { readonly: true } : {});
+  return getDbConnection(readonly);
 }
 
 export function listSessions(limit = 30, offset = 0): SessionSummary[] {
   const db = getDb();
   if (!db) return [];
 
-  try {
-    // Simple query without correlated subquery — titles come from session cache
-    const rows = db
-      .prepare(
-        `SELECT
-          s.id,
-          s.source,
-          s.started_at,
-          s.ended_at,
-          s.message_count,
-          s.model,
-          s.title
-        FROM sessions s
-        ORDER BY s.started_at DESC
-        LIMIT ? OFFSET ?`,
-      )
-      .all(limit, offset) as Array<{
-      id: string;
-      source: string;
-      started_at: number;
-      ended_at: number | null;
-      message_count: number;
-      model: string;
-      title: string | null;
-    }>;
+  // Simple query without correlated subquery — titles come from session cache
+  const rows = db
+    .prepare(
+      `SELECT
+        s.id,
+        s.source,
+        s.started_at,
+        s.ended_at,
+        s.message_count,
+        s.model,
+        s.title
+      FROM sessions s
+      ORDER BY s.started_at DESC
+      LIMIT ? OFFSET ?`,
+    )
+    .all(limit, offset) as Array<{
+    id: string;
+    source: string;
+    started_at: number;
+    ended_at: number | null;
+    message_count: number;
+    model: string;
+    title: string | null;
+  }>;
 
-    return rows.map((r) => ({
-      id: r.id,
-      source: r.source,
-      startedAt: r.started_at,
-      endedAt: r.ended_at,
-      messageCount: r.message_count,
-      model: r.model || "",
-      title: r.title,
-      preview: "",
-    }));
-  } finally {
-    db.close();
-  }
+  return rows.map((r) => ({
+    id: r.id,
+    source: r.source,
+    startedAt: r.started_at,
+    endedAt: r.ended_at,
+    messageCount: r.message_count,
+    model: r.model || "",
+    title: r.title,
+    preview: "",
+  }));
 }
 
 export function searchSessions(query: string, limit = 20): SearchResult[] {
@@ -369,8 +386,49 @@ export function searchSessions(query: string, limit = 20): SearchResult[] {
         }>)
       : [];
 
+    const messageRows = db
+      .prepare(
+        `SELECT
+          m.id as message_id,
+          m.content,
+          m.session_id,
+          s.title,
+          s.started_at,
+          s.source,
+          s.message_count,
+          s.model
+        FROM messages m
+        JOIN sessions s ON s.id = m.session_id
+        WHERE LOWER(COALESCE(m.content, '')) LIKE ? ESCAPE '\\'
+        ORDER BY s.started_at DESC, m.timestamp ASC, m.id ASC
+        LIMIT ?`,
+      )
+      .all(
+        `%${escapeLikePattern(trimmedQuery.toLocaleLowerCase())}%`,
+        Math.max(limit * 8, 50),
+      ) as Array<{
+      message_id: number;
+      content: string | null;
+      session_id: string;
+      title: string | null;
+      started_at: number;
+      source: string;
+      message_count: number;
+      model: string;
+    }>;
+
+    const messageMatches = messageRows.map((r) => ({
+      session_id: r.session_id,
+      title: r.title,
+      started_at: r.started_at,
+      source: r.source,
+      message_count: r.message_count,
+      model: r.model,
+      snippet: decodeSearchSnippet(r.content, r.message_id, trimmedQuery),
+    }));
+
     const uniqueRows = dedupeSearchRowsBySession(
-      [...titleMatches, ...ftsRows],
+      [...titleMatches, ...ftsRows, ...messageMatches],
       limit,
     );
     return uniqueRows.map((r) => ({
@@ -384,8 +442,6 @@ export function searchSessions(query: string, limit = 20): SearchResult[] {
     }));
   } catch {
     return [];
-  } finally {
-    db.close();
   }
 }
 
@@ -576,19 +632,37 @@ export function mergeStoredPromptImageAttachments(
   items: HistoryItem[],
   attachmentsByMessageId: Map<number, Attachment[]>,
 ): HistoryItem[] {
-  if (attachmentsByMessageId.size === 0) return items;
-
   return items.map((item) => {
     if (item.kind !== "user") return item;
+    const fallback = extractLeadingVisionImageFallback(item.content);
     const stored = attachmentsByMessageId.get(item.id);
-    if (!stored || stored.length === 0) return item;
+    const fallbackAttachment = attachmentFromLocalVisionImagePath(
+      fallback.imagePath,
+      `db-fallback-att-${item.id}-0`,
+    );
+    const nextContent = stripTrailingImagePlaceholders(fallback.content);
+    const nextAttachments =
+      item.attachments && item.attachments.length > 0
+        ? item.attachments
+        : stored && stored.length > 0
+          ? stored
+          : fallbackAttachment
+            ? [fallbackAttachment]
+            : undefined;
+
+    if (
+      nextContent === item.content &&
+      (!nextAttachments || nextAttachments === item.attachments)
+    ) {
+      return item;
+    }
+
     return {
       ...item,
-      content: stripTrailingImagePlaceholders(item.content),
-      attachments:
-        item.attachments && item.attachments.length > 0
-          ? item.attachments
-          : stored,
+      content: nextContent,
+      ...(nextAttachments && nextAttachments.length > 0
+        ? { attachments: nextAttachments }
+        : {}),
     };
   });
 }
@@ -597,26 +671,41 @@ export function getSessionMessages(sessionId: string): HistoryItem[] {
   const db = getDb();
   if (!db) return [];
 
-  try {
-    const rows = db
-      .prepare(
-        `SELECT id, role, content, timestamp,
-                tool_call_id, tool_calls, tool_name,
-                reasoning, reasoning_content, reasoning_details
-         FROM messages
-         WHERE session_id = ? AND role IN ('user', 'assistant', 'tool')
-         ORDER BY timestamp, id`,
-      )
-      .all(sessionId) as RawMessageRow[];
+  const rows = db
+    .prepare(
+      `SELECT id, role, content, timestamp,
+              tool_call_id, tool_calls, tool_name,
+              reasoning, reasoning_content, reasoning_details
+       FROM messages
+       WHERE session_id = ? AND role IN ('user', 'assistant', 'tool')
+       ORDER BY timestamp, id`,
+    )
+    .all(sessionId) as RawMessageRow[];
 
-    const items = expandRowsToHistory(rows);
-    return mergeStoredPromptImageAttachments(
-      items,
-      loadPromptImageAttachments(db, sessionId),
-    );
-  } finally {
-    db.close();
-  }
+  const items = expandRowsToHistory(rows);
+  const canonical = mergeStoredPromptImageAttachments(
+    items,
+    loadPromptImageAttachments(db, sessionId),
+  );
+  return applySessionLocalOverlays(sessionId, canonical, db);
+}
+
+export function applySessionLocalOverlays(
+  sessionId: string,
+  items: HistoryItem[],
+  existingDb?: Database.Database | null,
+): HistoryItem[] {
+  const db = existingDb ?? getDb();
+  if (!db) return items;
+  const canonical = mergeStoredPromptImageAttachments(
+    items,
+    loadPromptImageAttachments(db, sessionId),
+  );
+  const withLocalErrors = mergeSessionLocalErrors(
+    canonical,
+    loadSessionLocalErrors(db, sessionId),
+  );
+  return [...loadSessionContinuationItems(db, sessionId), ...withLocalErrors];
 }
 
 export interface DeleteSessionsResult {
@@ -637,8 +726,41 @@ function normalizeSessionIds(sessionIds: string[]): string[] {
   return normalized;
 }
 
+// sessions has a self-referential FK parent_session_id -> sessions.id (set by
+// the agent for subagent runs / branches). Cached after first lookup.
+let sessionsHasParentColumn: boolean | null = null;
+function hasParentSessionColumn(db: Database.Database): boolean {
+  if (sessionsHasParentColumn !== null) return sessionsHasParentColumn;
+  try {
+    sessionsHasParentColumn =
+      db
+        .prepare(
+          "SELECT 1 FROM pragma_table_info('sessions') WHERE name = 'parent_session_id'",
+        )
+        .get() != null;
+  } catch {
+    sessionsHasParentColumn = false;
+  }
+  return sessionsHasParentColumn;
+}
+
 function deleteSessionRows(db: Database.Database, sessionId: string): number {
   deletePromptImageAttachmentsForSession(db, sessionId);
+  deleteSessionContinuationForSession(db, sessionId);
+  // Unlink any child sessions first. better-sqlite3 enables
+  // PRAGMA foreign_keys=ON by default, so deleting a parent while a child
+  // still references it via parent_session_id throws "FOREIGN KEY constraint
+  // failed", which rolls back the whole delete transaction -> 0 rows deleted
+  // with no surfaced error (and a select-all batch deletes nothing, since one
+  // violation aborts the entire transaction). Detach children rather than
+  // cascade-delete so a session the user didn't select is never removed.
+  if (hasParentSessionColumn(db)) {
+    db.prepare(
+      "UPDATE sessions SET parent_session_id = NULL WHERE parent_session_id = ?",
+    ).run(sessionId);
+  }
+  deleteSessionContextFolderForSession(db, sessionId);
+  deleteSessionModelOverrideForSession(db, sessionId);
   db.prepare("DELETE FROM messages WHERE session_id = ?").run(sessionId);
   const result = db.prepare("DELETE FROM sessions WHERE id = ?").run(sessionId);
   return result.changes;
@@ -656,14 +778,10 @@ export function deleteSession(sessionId: string): void {
   const db = getDb(false);
 
   if (db) {
-    try {
-      const tx = db.transaction((sessionIdToDelete: string) => {
-        deleteSessionRows(db, sessionIdToDelete);
-      });
-      tx(id);
-    } finally {
-      db.close();
-    }
+    const tx = db.transaction((sessionIdToDelete: string) => {
+      deleteSessionRows(db, sessionIdToDelete);
+    });
+    tx(id);
   }
 
   cleanupDeletedSession(id);
@@ -676,16 +794,12 @@ export function deleteSessions(sessionIds: string[]): DeleteSessionsResult {
   const db = getDb(false);
 
   if (db) {
-    try {
-      const tx = db.transaction((idsToDelete: string[]) => {
-        for (const id of idsToDelete) {
-          deleted += deleteSessionRows(db, id);
-        }
-      });
-      tx(ids);
-    } finally {
-      db.close();
-    }
+    const tx = db.transaction((idsToDelete: string[]) => {
+      for (const id of idsToDelete) {
+        deleted += deleteSessionRows(db, id);
+      }
+    });
+    tx(ids);
   }
 
   for (const id of ids) {

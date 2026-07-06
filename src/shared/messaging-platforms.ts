@@ -140,8 +140,7 @@ export const MESSAGING_TOOLSET_DEFINITIONS: MessagingToolsetDefinition[] = [
   {
     key: "code_execution",
     label: "Code execution",
-    description:
-      "Run local code execution tools from the messaging platform.",
+    description: "Run local code execution tools from the messaging platform.",
     risk: "high",
   },
   {
@@ -389,7 +388,8 @@ const ENV_DEFINITIONS: Record<string, MessagingEnvDefinition> = {
   HASS_URL: {
     key: "HASS_URL",
     prompt: "Home Assistant URL",
-    description: "Home Assistant base URL, e.g. https://homeassistant.local:8123",
+    description:
+      "Home Assistant base URL, e.g. https://homeassistant.local:8123",
     url: "https://www.home-assistant.io/docs/authentication/",
   },
   HASS_TOKEN: {
@@ -647,7 +647,11 @@ export const MESSAGING_PLATFORM_CATALOG: MessagingPlatformDefinition[] = [
     name: "Telegram",
     description: "Run Hermes from Telegram DMs, groups, and topics.",
     docs_url: messagingDocs("telegram"),
-    env_vars: ["TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_USERS", "TELEGRAM_PROXY"],
+    env_vars: [
+      "TELEGRAM_BOT_TOKEN",
+      "TELEGRAM_ALLOWED_USERS",
+      "TELEGRAM_PROXY",
+    ],
     required_env: ["TELEGRAM_BOT_TOKEN"],
   },
   {
@@ -676,7 +680,11 @@ export const MESSAGING_PLATFORM_CATALOG: MessagingPlatformDefinition[] = [
     name: "Mattermost",
     description: "Connect Hermes to Mattermost channels and direct messages.",
     docs_url: messagingDocs("mattermost"),
-    env_vars: ["MATTERMOST_URL", "MATTERMOST_TOKEN", "MATTERMOST_ALLOWED_USERS"],
+    env_vars: [
+      "MATTERMOST_URL",
+      "MATTERMOST_TOKEN",
+      "MATTERMOST_ALLOWED_USERS",
+    ],
     required_env: ["MATTERMOST_URL", "MATTERMOST_TOKEN"],
   },
   {
@@ -690,12 +698,17 @@ export const MESSAGING_PLATFORM_CATALOG: MessagingPlatformDefinition[] = [
       "MATRIX_USER_ID",
       "MATRIX_ALLOWED_USERS",
     ],
-    required_env: ["MATRIX_HOMESERVER", "MATRIX_ACCESS_TOKEN", "MATRIX_USER_ID"],
+    required_env: [
+      "MATRIX_HOMESERVER",
+      "MATRIX_ACCESS_TOKEN",
+      "MATRIX_USER_ID",
+    ],
   },
   {
     id: "whatsapp",
     name: "WhatsApp",
-    description: "Use Hermes through the bundled WhatsApp bridge with QR-based auth.",
+    description:
+      "Use Hermes through the bundled WhatsApp bridge with QR-based auth.",
     docs_url: messagingDocs("whatsapp"),
     env_vars: [
       "WHATSAPP_ENABLED",
@@ -804,7 +817,12 @@ export const MESSAGING_PLATFORM_CATALOG: MessagingPlatformDefinition[] = [
     name: "WeCom (group bot)",
     description: "Send-only WeCom group bot via webhook.",
     docs_url: messagingDocs("wecom"),
-    env_vars: ["WECOM_BOT_ID", "WECOM_SECRET", "WECOM_CORP_ID", "WECOM_AGENT_ID"],
+    env_vars: [
+      "WECOM_BOT_ID",
+      "WECOM_SECRET",
+      "WECOM_CORP_ID",
+      "WECOM_AGENT_ID",
+    ],
     required_env: ["WECOM_BOT_ID"],
   },
   {
@@ -830,7 +848,12 @@ export const MESSAGING_PLATFORM_CATALOG: MessagingPlatformDefinition[] = [
     name: "WeChat (Official Account)",
     description: "Connect a WeChat Official Account.",
     docs_url: messagingDocs("weixin"),
-    env_vars: ["WEIXIN_ACCOUNT_ID", "WEIXIN_TOKEN", "WEIXIN_BASE_URL", "WEIXIN_BOT_TOKEN"],
+    env_vars: [
+      "WEIXIN_ACCOUNT_ID",
+      "WEIXIN_TOKEN",
+      "WEIXIN_BASE_URL",
+      "WEIXIN_BOT_TOKEN",
+    ],
     required_env: ["WEIXIN_ACCOUNT_ID", "WEIXIN_TOKEN"],
   },
   {
@@ -852,7 +875,8 @@ export const MESSAGING_PLATFORM_CATALOG: MessagingPlatformDefinition[] = [
   {
     id: "api_server",
     name: "API server",
-    description: "Expose Hermes as an OpenAI-compatible HTTP API for tools like Open WebUI.",
+    description:
+      "Expose Hermes as an OpenAI-compatible HTTP API for tools like Open WebUI.",
     docs_url: messagingDocs("open-webui"),
     env_vars: [
       "API_SERVER_ENABLED",
@@ -866,7 +890,8 @@ export const MESSAGING_PLATFORM_CATALOG: MessagingPlatformDefinition[] = [
   {
     id: "webhook",
     name: "Webhooks",
-    description: "Receive events from GitHub, GitLab, and other webhook sources.",
+    description:
+      "Receive events from GitHub, GitLab, and other webhook sources.",
     docs_url: messagingDocs("webhooks"),
     env_vars: ["WEBHOOK_ENABLED", "WEBHOOK_PORT", "WEBHOOK_SECRET"],
     required_env: [],
@@ -880,7 +905,9 @@ export function getMessagingPlatformIds(): string[] {
 export function getMessagingPlatformDefinition(
   platformId: string,
 ): MessagingPlatformDefinition | undefined {
-  return MESSAGING_PLATFORM_CATALOG.find((platform) => platform.id === platformId);
+  return MESSAGING_PLATFORM_CATALOG.find(
+    (platform) => platform.id === platformId,
+  );
 }
 
 export function getMessagingPlatformEnvKeys(platformId: string): Set<string> {
@@ -938,20 +965,26 @@ function buildMessagingPlatform(
     description: platform.description,
     docs_url: platform.docs_url,
     enabled: isEnabled,
-    error_code: gatewayRunning ? runtimeState?.error_code ?? null : null,
-    error_message: gatewayRunning ? runtimeState?.error_message ?? null : null,
+    error_code: gatewayRunning ? (runtimeState?.error_code ?? null) : null,
+    error_message: gatewayRunning
+      ? (runtimeState?.error_message ?? null)
+      : null,
     env_vars,
     gateway_running: gatewayRunning,
     id: platform.id,
     name: platform.name,
     state,
     toolsets: buildMessagingToolsets(enabledToolsets),
-    updated_at: gatewayRunning ? runtimeState?.updated_at ?? null : null,
+    updated_at: gatewayRunning ? (runtimeState?.updated_at ?? null) : null,
   };
 }
 
-function buildMessagingToolsets(enabledToolsets?: string[]): MessagingToolsetInfo[] {
-  const enabled = new Set(enabledToolsets ?? DEFAULT_MESSAGING_PLATFORM_TOOLSETS);
+function buildMessagingToolsets(
+  enabledToolsets?: string[],
+): MessagingToolsetInfo[] {
+  const enabled = new Set(
+    enabledToolsets ?? DEFAULT_MESSAGING_PLATFORM_TOOLSETS,
+  );
   return MESSAGING_TOOLSET_DEFINITIONS.map((toolset) => ({
     description: toolset.description,
     enabled: enabled.has(toolset.key),
@@ -968,8 +1001,10 @@ function isPlatformConfigured(
   const has = (key: string): boolean => !!(env[key] ?? "").trim();
   switch (platform.id) {
     case "bluebubbles":
-      return (has("BLUEBUBBLES_SERVER_URL") || has("BLUEBUBBLES_URL")) &&
-        has("BLUEBUBBLES_PASSWORD");
+      return (
+        (has("BLUEBUBBLES_SERVER_URL") || has("BLUEBUBBLES_URL")) &&
+        has("BLUEBUBBLES_PASSWORD")
+      );
     case "dingtalk":
       return (
         (has("DINGTALK_CLIENT_ID") && has("DINGTALK_CLIENT_SECRET")) ||
@@ -983,8 +1018,10 @@ function isPlatformConfigured(
         (has("EMAIL_SMTP_HOST") || has("EMAIL_SMTP_SERVER"))
       );
     case "signal":
-      return (has("SIGNAL_HTTP_URL") && has("SIGNAL_ACCOUNT")) ||
-        has("SIGNAL_PHONE_NUMBER");
+      return (
+        (has("SIGNAL_HTTP_URL") && has("SIGNAL_ACCOUNT")) ||
+        has("SIGNAL_PHONE_NUMBER")
+      );
     case "wecom":
       return (
         has("WECOM_BOT_ID") ||

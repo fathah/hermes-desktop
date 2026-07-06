@@ -9,6 +9,7 @@ export default {
     "Pregunta rápida (/btw) — una pregunta secundaria que no afectará el contexto de la conversación",
   send: "Enviar",
   custom: "Personalizado",
+  searchModels: "Buscar modelos...",
   typeModelName: "Escribe el nombre del modelo...",
   emptyTitle: "¿Cómo puedo ayudarte hoy?",
   emptyHint:
@@ -27,7 +28,8 @@ export default {
   toolResult: "Resultado de herramienta",
   newChat: "Nuevo chat (Cmd+N)",
   clearChat: "Borrar chat",
-  clearChatConfirm: "¿Borrar esta conversación? Esta acción no se puede deshacer.",
+  clearChatConfirm:
+    "¿Borrar esta conversación? Esta acción no se puede deshacer.",
   setContextFolder: "Establecer carpeta de contexto",
   contextFolderChip: "Elegir carpeta",
   contextFolderActive: "Carpeta de contexto: {{path}}",
@@ -39,7 +41,8 @@ export default {
   contextWindow: "Ventana de contexto",
   contextUsed: "{{pct}}% usado ({{left}}% restante)",
   contextTokens: "{{used}} / {{total}} tokens usados",
-  contextCache: "Caché: {{pct}}% de aciertos ({{read}} leídos / {{write}} escritos)",
+  contextCache:
+    "Caché: {{pct}}% de aciertos ({{read}} leídos / {{write}} escritos)",
   removeAttachment: "Quitar adjunto",
   dropToAttach: "Suelta los archivos para adjuntarlos",
   attachUnsupported: "{{name}}: tipo de archivo no admitido",
@@ -52,7 +55,8 @@ export default {
   attachRemoteModeBinary:
     "{{name}}: los adjuntos PDF/binarios requieren el modo local — las imágenes y los archivos de texto siguen funcionando.",
   validation: {
-    noModel: "No hay un modelo seleccionado. Elige uno en el selector de Chat a continuación.",
+    noModel:
+      "No hay un modelo seleccionado. Elige uno en el selector de Chat a continuación.",
     noProvider: "No hay un proveedor configurado para el modelo activo.",
     missingKey: "Falta {{key}}, requerida por el proveedor activo.",
     fixInProviders: "Configúrala en Proveedores →",
@@ -103,6 +107,8 @@ export default {
     version: "Mostrar la versión de Hermes",
   },
   queued: "{{count}} mensaje(s) en cola — se enviará cuando el agente termine",
+  queuedCancel: "Quitar de la cola",
+  copyMessage: "Copiar mensaje",
   worktree: {
     loading: "Cargando",
     empty: "La carpeta está vacía",
@@ -112,7 +118,8 @@ export default {
     open: "Abrir",
     openInEditor: "Abrir en el editor predeterminado",
     fileTruncated: "truncado",
-    fileTruncatedWarning: "El archivo es demasiado grande — mostrando solo los primeros 100KB",
+    fileTruncatedWarning:
+      "El archivo es demasiado grande — mostrando solo los primeros 100KB",
     openTerminal: "Abrir terminal aquí",
     openTerminalFailed: "No se pudo abrir una terminal para esta carpeta.",
   },

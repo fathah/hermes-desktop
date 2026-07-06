@@ -4,10 +4,11 @@ export default {
   noModel: "No model set",
   auto: "Auto",
   commandsTitle: "Commands",
-  typeMessage: "Type a message... (Shift+Enter for new line)",
+  typeMessage: "Ask anything",
   quickAskTitle:
     "Quick Ask (/btw) — side question that won't affect conversation context",
   send: "Send",
+  searchModels: "Search models...",
   custom: "Custom",
   typeModelName: "Type model name...",
   reasoningEffort: {
@@ -38,6 +39,14 @@ export default {
   suggestionAnalyze: "Analyze data",
   approve: "Approve",
   deny: "Deny",
+  clarify: {
+    defaultQuestion: "Hermes needs your input.",
+    placeholder: "Type your answer…  (Ctrl+Enter to send)",
+    send: "Send",
+    skip: "Skip — let Hermes decide",
+    skipped: "Skipped — Hermes decided",
+    error: "Couldn't deliver your answer — the turn may have ended. Try again.",
+  },
   thinking: "Thinking…",
   thought: "Thought",
   toolCall: "Tool call",
@@ -59,6 +68,8 @@ export default {
   contextCache: "Cache: {{pct}}% hit ({{read}} read / {{write}} write)",
   removeAttachment: "Remove attachment",
   dropToAttach: "Drop files to attach",
+  dashboardUnavailableFallback:
+    "Dashboard chat isn't available on this connection — using basic chat. Profile switching and session history are limited.",
   attachUnsupported: "{{name}}: file type not supported",
   attachImageTooLarge: "{{name}}: image too large (max 50 MB)",
   attachImageUncompressible:
@@ -120,6 +131,10 @@ export default {
     version: "Show Hermes version",
   },
   queued: "{{count}} message(s) queued — will send when the agent finishes",
+  queuedCount: "{{count}} queued",
+  queuedAttachment: "{{count}} attachment(s)",
+  queuedCancel: "Remove from queue",
+  copyMessage: "Copy message",
   worktree: {
     loading: "Loading",
     empty: "Folder is empty",
@@ -133,6 +148,22 @@ export default {
     fileTruncated: "truncated",
     fileTruncatedWarning: "File is too large — showing first 100KB only",
   },
+  folderPicker: {
+    title: "Choose working directory",
+    parent: "Go to parent folder",
+    open: "Open",
+    select: "Select folder",
+    empty: "No folders here",
+    unavailable:
+      "This connection cannot list folders here. Enter the remote path and select it.",
+  },
   showWorktree: "Show file explorer",
   hideWorktree: "Hide file explorer",
+  followUs: {
+    title: "Follow Us on X",
+    description:
+      "Stay up to date with the latest Hermes One features, tips, and updates. Follow us on X!",
+    follow: "Follow",
+    notNow: "Not Now",
+  },
 } as const;

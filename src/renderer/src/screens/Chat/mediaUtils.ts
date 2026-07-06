@@ -27,14 +27,21 @@ const BARE_PATH_EXT =
 // MEDIA: + optional whitespace + (quoted) | (bare non-whitespace run).
 const MEDIA_RE = /MEDIA:[ \t]*(?:`([^`\n]+)`|"([^"\n]+)"|'([^'\n]+)'|(\S+))/g;
 
+// Markdown image syntax with a raw local/remote filesystem or direct image
+// destination.
+// React-markdown normalizes Windows backslashes before our image component sees
+// them, so intercept these here and let MediaImage resolve them.
+const MARKDOWN_IMAGE_PATH_RE =
+  /!\[[^\]\n]*\]\(\s*(<[^>\n]+>|[^)\n]+?)(?:\s+["'][^)\n]*["'])?\s*\)/g;
+
 // Inline bare absolute path (no whitespace in the path). The negative
 // lookbehind blocks matches that start mid-token or inside a URL (`://`);
 // the lookahead requires the extension to be followed by whitespace,
-// sentence punctuation, or end-of-string.
+// markdown table punctuation, sentence punctuation, or end-of-string.
 const INLINE_PATH_RE = new RegExp(
   String.raw`(?<![\w/\\.:])((?:[A-Za-z]:[\\/]|\\\\|/|~[\\/])\S*?\.(?:` +
     BARE_PATH_EXT +
-    String.raw`))(?=[\s).,;:!?\]}>"']|$)`,
+    String.raw`))(?=[\s|).,;:!?\]}>"']|$)`,
   "gi",
 );
 
@@ -46,10 +53,64 @@ const ABS_PATH_LINE_RE = new RegExp(
   "i",
 );
 
+const BT = "`";
+
+// Common final-answer shape from agents/tools:
+//   File: `C:\path\image.png`
+//   Saved to: `/tmp/image.png`
+// Inline code is normally ignored to avoid false positives in commands, but
+// these labelled output fields are exactly where generated media paths appear.
+const LABELLED_CODE_PATH_RE = new RegExp(
+  String.raw`(?:^|[\n\r])([^\n\r]*?\b(?:file|path|saved(?:\s+(?:to|at))?|output|result|image)\s*:\s*)` +
+    String.raw`(?:[*_]{1,2})?\s*` +
+    BT +
+    String.raw`([^` +
+    BT +
+    String.raw`\n\r]+\.(?:` +
+    BARE_PATH_EXT +
+    String.raw`))` +
+    BT,
+  "gi",
+);
+
+// Some agents format generated artifacts as:
+//   [folder icon] `C:\path\image.png` -- 293 KB
+// There is no "File:" label, but the line is still clearly artifact metadata.
+// Keep this scoped to code spans on lines with output-ish words or a folder
+// marker so command snippets remain plain markdown.
+const OUTPUT_CODE_PATH_RE = new RegExp(
+  String.raw`(?:^|[\n\r])([^\n\r]*(?:\b(?:file|path|saved|output|result|image|location)\b|\uD83D\uDCC1)[^\n\r]*?)` +
+    String.raw`(?:[*_]{1,2})?\s*` +
+    BT +
+    String.raw`([^` +
+    BT +
+    String.raw`\n\r]+\.(?:` +
+    BARE_PATH_EXT +
+    String.raw`))` +
+    BT,
+  "gi",
+);
+
+// Some generated answers put the path alone in a code span after a preceding
+// sentence ("Done! Here's your image:"). A standalone absolute path in a code
+// span is artifact metadata, not a command snippet.
+const STANDALONE_CODE_PATH_RE = new RegExp(
+  String.raw`(?:^|[\n\r])(\s*(?:[*_]{1,2})?\s*)` +
+    BT +
+    String.raw`([^` +
+    BT +
+    String.raw`\n\r]+\.(?:` +
+    BARE_PATH_EXT +
+    String.raw`))` +
+    BT +
+    String.raw`(?:[*_]{1,2})?(?=\s*(?:$|[\n\r]|\([^)\n\r]*\)|[–—-]))`,
+  "gi",
+);
+
 export interface MediaToken {
   /** The resolved path or URL. */
   src: string;
-  /** True when `src` is an http(s) URL rather than a local path. */
+  /** True when `src` is a direct URL/data URI rather than a local path. */
   isUrl: boolean;
   /** True when the extension looks like a displayable image. */
   isImage: boolean;
@@ -87,6 +148,7 @@ interface Hit {
   token: MediaToken;
   raw: string;
   source: "media-token" | "bare-path";
+  origin?: "markdown-image";
 }
 
 function toToken(raw: string, wasQuoted: boolean): MediaToken | null {
@@ -94,9 +156,30 @@ function toToken(raw: string, wasQuoted: boolean): MediaToken | null {
   // Bare MEDIA: tokens may swallow trailing sentence punctuation.
   if (!wasQuoted) src = src.replace(/[).,;:!?\]}]+$/, "");
   if (!src) return null;
-  const isUrl = /^https?:\/\//i.test(src);
+  const isUrl = /^(?:https?:\/\/|data:image\/)/i.test(src);
   const name = src.split(/[\\/]/).filter(Boolean).pop() || src;
-  return { src, isUrl, isImage: IMAGE_EXT.test(src), name };
+  return {
+    src,
+    isUrl,
+    isImage: /^data:image\//i.test(src) || IMAGE_EXT.test(src),
+    name,
+  };
+}
+
+function isAbsoluteFileLike(src: string): boolean {
+  return /^(?:[A-Za-z]:[\\/]|\\\\|\/|~[\\/])/.test(src.trim());
+}
+
+function isDirectImageLike(src: string): boolean {
+  const trimmed = src.trim();
+  return /^(?:https?:\/\/|data:image\/)/i.test(trimmed);
+}
+
+function markdownDestination(raw: string): string {
+  const trimmed = raw.trim();
+  return trimmed.startsWith("<") && trimmed.endsWith(">")
+    ? trimmed.slice(1, -1).trim()
+    : trimmed;
 }
 
 /** Char ranges of ``` fenced blocks and `inline` code spans. */
@@ -114,6 +197,22 @@ function codeRanges(content: string): Array<[number, number]> {
   return ranges;
 }
 
+/** Char ranges of markdown link/image destinations: [label](destination). */
+function markdownDestinationRanges(content: string): Array<[number, number]> {
+  const ranges: Array<[number, number]> = [];
+  let m: RegExpExecArray | null;
+  const link =
+    /!?\[[^\]\n]*\]\(\s*(<[^>\n]+>|[^)\s\n]+)(?:\s+["'][^)\n]*["'])?\s*\)/g;
+  while ((m = link.exec(content)) !== null) {
+    const destination = m[1];
+    const relativeStart = m[0].indexOf(destination);
+    if (relativeStart < 0) continue;
+    const start = m.index + relativeStart;
+    ranges.push([start, start + destination.length]);
+  }
+  return ranges;
+}
+
 function inCode(index: number, ranges: Array<[number, number]>): boolean {
   return ranges.some(([s, e]) => index >= s && index < e);
 }
@@ -122,14 +221,44 @@ function overlaps(start: number, end: number, hits: Hit[]): boolean {
   return hits.some((h) => start < h.end && end > h.start);
 }
 
+function mediaDedupeKey(token: MediaToken): string {
+  if (!token.isImage) return "";
+  const src = token.src.trim();
+  return token.isUrl ? src : src.replace(/\\/g, "/").toLowerCase();
+}
+
 /**
  * Split agent content into ordered text / media segments. Text segments are
  * rendered as markdown; media segments as inline images or download chips.
  */
 export function parseMediaTokens(content: string): MediaSegment[] {
   const code = codeRanges(content);
+  const markdownDestinations = markdownDestinationRanges(content);
   const hits: Hit[] = [];
   let m: RegExpExecArray | null;
+
+  // 0) Markdown images: ![alt](C:\path\image.png), ![alt](/path),
+  // or direct image sources such as data:image/... . Direct markdown images
+  // otherwise render through AgentMarkdown while repeated artifact paths render
+  // through MediaSegmentView, producing duplicate visible images.
+  MARKDOWN_IMAGE_PATH_RE.lastIndex = 0;
+  while ((m = MARKDOWN_IMAGE_PATH_RE.exec(content)) !== null) {
+    if (inCode(m.index, code)) continue;
+    const rawDestination = m[1] ?? "";
+    const destination = markdownDestination(rawDestination);
+    const directImage = isDirectImageLike(destination);
+    if (!directImage && !isAbsoluteFileLike(destination)) continue;
+    const token = toToken(destination, true);
+    if (!token || !token.isImage) continue;
+    hits.push({
+      start: m.index,
+      end: m.index + m[0].length,
+      token,
+      raw: m[0],
+      source: directImage ? "media-token" : "bare-path",
+      origin: "markdown-image",
+    });
+  }
 
   // 1) Explicit MEDIA: tokens.
   MEDIA_RE.lastIndex = 0;
@@ -147,12 +276,86 @@ export function parseMediaTokens(content: string): MediaSegment[] {
     });
   }
 
+  // 1b) Labelled inline-code paths. This intentionally runs before the
+  // generic code-span exclusion below, but only for labels that look like
+  // generated output fields.
+  LABELLED_CODE_PATH_RE.lastIndex = 0;
+  while ((m = LABELLED_CODE_PATH_RE.exec(content)) !== null) {
+    const rawPath = m[2] ?? "";
+    const codeSpan = `${BT}${rawPath}${BT}`;
+    const relativeStart = m[0].lastIndexOf(codeSpan);
+    if (relativeStart < 0) continue;
+    const start = m.index + relativeStart;
+    const end = start + codeSpan.length;
+    if (overlaps(start, end, hits)) continue;
+    const token = toToken(rawPath, true);
+    if (token) {
+      hits.push({
+        start,
+        end,
+        token,
+        raw: codeSpan,
+        source: "bare-path",
+      });
+    }
+  }
+
+  // 1c) Artifact metadata lines with a path inside a code span but no colon
+  // label, e.g. a folder marker followed by `C:\path\image.png`.
+  OUTPUT_CODE_PATH_RE.lastIndex = 0;
+  while ((m = OUTPUT_CODE_PATH_RE.exec(content)) !== null) {
+    const rawPath = m[2] ?? "";
+    const codeSpan = `${BT}${rawPath}${BT}`;
+    const relativeStart = m[0].lastIndexOf(codeSpan);
+    if (relativeStart < 0) continue;
+    const start = m.index + relativeStart;
+    const end = start + codeSpan.length;
+    if (overlaps(start, end, hits)) continue;
+    const token = toToken(rawPath, true);
+    if (token) {
+      hits.push({
+        start,
+        end,
+        token,
+        raw: codeSpan,
+        source: "bare-path",
+      });
+    }
+  }
+
+  // 1d) Standalone absolute paths in code spans.
+  STANDALONE_CODE_PATH_RE.lastIndex = 0;
+  while ((m = STANDALONE_CODE_PATH_RE.exec(content)) !== null) {
+    const rawPath = m[2] ?? "";
+    const codeSpan = `${BT}${rawPath}${BT}`;
+    const relativeStart = m[0].lastIndexOf(codeSpan);
+    if (relativeStart < 0) continue;
+    const start = m.index + relativeStart;
+    const end = start + codeSpan.length;
+    if (overlaps(start, end, hits)) continue;
+    const token = toToken(rawPath, true);
+    if (token) {
+      hits.push({
+        start,
+        end,
+        token,
+        raw: codeSpan,
+        source: "bare-path",
+      });
+    }
+  }
+
   // 2) Inline bare absolute paths (no whitespace).
   INLINE_PATH_RE.lastIndex = 0;
   while ((m = INLINE_PATH_RE.exec(content)) !== null) {
     const start = m.index;
     const end = start + m[0].length;
-    if (inCode(start, code) || overlaps(start, end, hits)) continue;
+    if (
+      inCode(start, code) ||
+      inCode(start, markdownDestinations) ||
+      overlaps(start, end, hits)
+    )
+      continue;
     const token = toToken(m[1], true);
     if (token) {
       hits.push({ start, end, token, raw: m[1], source: "bare-path" });
@@ -168,7 +371,12 @@ export function parseMediaTokens(content: string): MediaSegment[] {
     if (!trimmed || !ABS_PATH_LINE_RE.test(trimmed)) continue;
     const start = lineStart + line.indexOf(trimmed);
     const end = start + trimmed.length;
-    if (inCode(start, code) || overlaps(start, end, hits)) continue;
+    if (
+      inCode(start, code) ||
+      inCode(start, markdownDestinations) ||
+      overlaps(start, end, hits)
+    )
+      continue;
     const token = toToken(trimmed, true);
     if (token) {
       hits.push({ start, end, token, raw: trimmed, source: "bare-path" });
@@ -176,10 +384,30 @@ export function parseMediaTokens(content: string): MediaSegment[] {
   }
 
   hits.sort((a, b) => a.start - b.start);
+  const seenImages = new Set<string>();
+  const hasDirectMarkdownImage = hits.some(
+    (hit) =>
+      hit.origin === "markdown-image" && hit.token.isImage && hit.token.isUrl,
+  );
+  const uniqueHits: Hit[] = [];
+  for (const hit of hits) {
+    if (
+      hasDirectMarkdownImage &&
+      hit.origin !== "markdown-image" &&
+      hit.token.isImage &&
+      !hit.token.isUrl
+    ) {
+      continue;
+    }
+    const key = mediaDedupeKey(hit.token);
+    if (key && seenImages.has(key)) continue;
+    if (key) seenImages.add(key);
+    uniqueHits.push(hit);
+  }
 
   const segments: MediaSegment[] = [];
   let last = 0;
-  for (const h of hits) {
+  for (const h of uniqueHits) {
     if (h.start > last) {
       segments.push({
         type: "text",
@@ -309,7 +537,12 @@ export function cleanLeakedToolTags(content: string): string {
  */
 export function describeImageSrc(src: string): MediaToken {
   const trimmed = src.trim();
-  const isUrl = /^https?:\/\//i.test(trimmed);
+  const isUrl = /^(?:https?:\/\/|data:image\/)/i.test(trimmed);
   const name = trimmed.split(/[\\/]/).filter(Boolean).pop() || trimmed;
-  return { src: trimmed, isUrl, isImage: IMAGE_EXT.test(trimmed), name };
+  return {
+    src: trimmed,
+    isUrl,
+    isImage: /^data:image\//i.test(trimmed) || IMAGE_EXT.test(trimmed),
+    name,
+  };
 }

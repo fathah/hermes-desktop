@@ -18,6 +18,8 @@ export default {
     "Tente um termo de pesquisa ou filtro de categoria diferente",
   installFailed: "Falha ao instalar a competência",
   uninstallFailed: "Falha ao desinstalar a competência",
+  uninstallConfirm: "Uninstall '{{name}}'?",
+  uninstallSuccess: "'{{name}}' uninstalled",
   removing: "A remover...",
   uninstall: "Desinstalar",
   installedBadge: "Instalada",

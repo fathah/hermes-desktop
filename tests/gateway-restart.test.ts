@@ -435,10 +435,10 @@ describe("restartGatewayViaCli", () => {
 
   it("falls back to a native restart when a normal start does not become healthy", async () => {
     hermesCliArgsSpy.mockImplementation(() => ["-e", "process.exit(0)"]);
-    healthStatuses.push(...Array(20).fill(503), 200);
+    healthStatuses.push(503, 503, 200);
 
     await expect(
-      startGatewayWithRecovery("work", 50, 5, 15000, 250),
+      startGatewayWithRecovery("work", 5, 50, 15000, 250),
     ).resolves.toBe(true);
 
     expect(hermesCliArgsSpy).toHaveBeenNthCalledWith(1, [

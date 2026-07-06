@@ -47,4 +47,13 @@ export default {
   ceo: "CEO",
   makeCeo: "Make CEO",
   removeCeo: "Remove as CEO",
+  // GPU fallback banner (software rendering after a GPU-process crash)
+  softwareRenderingNotice:
+    "Hardware acceleration is off after a GPU crash, so the 3D office is using slow software rendering.",
+  softwareRenderingEnvNotice:
+    "Hardware acceleration is disabled by HERMES_DISABLE_GPU, so the 3D office is using slow software rendering.",
+  softwareRenderingPrefNotice:
+    "Hardware acceleration is turned off in Settings → Appearance, so the 3D office is using slow software rendering.",
+  reenableGpu: "Re-enable GPU & restart",
+  dismissNotice: "Dismiss",
 } as const;

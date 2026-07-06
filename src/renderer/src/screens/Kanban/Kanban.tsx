@@ -90,15 +90,74 @@ interface KanbanTaskDetail {
   latest_summary: string | null;
 }
 
-// Column order. Labels are resolved at render via `kanban.status.<key>`.
-const COLUMNS: { key: string }[] = [
-  { key: "triage" },
-  { key: "todo" },
-  { key: "ready" },
-  { key: "running" },
-  { key: "blocked" },
-  { key: "done" },
+// Column order + status "tone" (drives the JIRA-style colored header dot via
+// `data-tone` in CSS). Mirrors the agent dashboard's BOARD_COLUMNS so a
+// `scheduled`/`review` task lands in its own lane instead of mis-bucketing
+// into To-do. Labels resolve at render via `kanban.status.<key>`.
+const COLUMNS: { key: string; tone: string }[] = [
+  { key: "triage", tone: "neutral" },
+  { key: "todo", tone: "todo" },
+  { key: "scheduled", tone: "scheduled" },
+  { key: "ready", tone: "ready" },
+  { key: "running", tone: "running" },
+  { key: "blocked", tone: "blocked" },
+  { key: "review", tone: "review" },
+  { key: "done", tone: "done" },
 ];
+
+// The archived column is appended only when the "show archived" toggle is on.
+const ARCHIVED_COLUMN = { key: "archived", tone: "archived" };
+
+// status key → tone, for surfaces (e.g. the detail drawer) that show a status
+// outside the column loop. Unknown statuses fall back to "neutral".
+const STATUS_TONE: Record<string, string> = Object.fromEntries(
+  [...COLUMNS, ARCHIVED_COLUMN].map((c) => [c.key, c.tone]),
+);
+
+// The `hermes kanban` CLI verb a drag from one column to another maps to.
+// Unlike the web dashboard — which writes the status column directly into
+// kanban.db and can therefore move a card anywhere — the desktop shells the
+// CLI, which only exposes lifecycle verbs. So a drag is allowed only when the
+// target column corresponds to a verb. `todo`, `triage`, and `review` have no
+// CLI verb to set them and thus cannot be drop targets here.
+type DragAction =
+  | "complete"
+  | "block"
+  | "unblock"
+  | "reclaim"
+  | "promote"
+  | "schedule"
+  | "archive";
+
+function dragAction(from: string, to: string): DragAction | null {
+  if (from === to) return null;
+  if (from === "archived") return null; // archived is terminal (no un-archive verb)
+  if (from === "done") return to === "archived" ? "archive" : null;
+  switch (to) {
+    case "done":
+      return "complete";
+    case "archived":
+      return "archive";
+    case "blocked":
+      return ["todo", "ready", "running", "scheduled", "review"].includes(from)
+        ? "block"
+        : null;
+    case "ready":
+      if (from === "blocked" || from === "scheduled") return "unblock";
+      if (from === "running") return "reclaim";
+      if (from === "todo") return "promote";
+      return null;
+    case "scheduled":
+      return ["todo", "ready", "blocked"].includes(from) ? "schedule" : null;
+    default:
+      // todo / triage / review — no CLI verb sets these.
+      return null;
+  }
+}
+
+function isValidDragTransition(from: string, to: string): boolean {
+  return dragAction(from, to) !== null;
+}
 
 const POLL_INTERVAL_MS = 6000;
 
@@ -127,6 +186,35 @@ function priorityLabel(p: number): string {
   return "";
 }
 
+// Selectable priority chips for the create-task modal. `value` is the numeric
+// priority the CLI takes; `tone` drives the colored bullet (matches the card
+// priority accents — p0=urgent/red, p1=high/amber, p2=low/blue, ""=normal).
+const PRIORITY_OPTIONS: { value: string; labelKey: string; tone: string }[] = [
+  { value: "0", labelKey: "kanban.priorityNormal", tone: "" },
+  { value: "1", labelKey: "kanban.priorityLow", tone: "p2" },
+  { value: "5", labelKey: "kanban.priorityHigh", tone: "p1" },
+  { value: "10", labelKey: "kanban.priorityUrgent", tone: "p0" },
+];
+
+// CSS tone key for the card's left priority accent. "" = no accent (normal).
+function priorityTone(p: number): string {
+  if (p >= 10) return "p0";
+  if (p >= 5) return "p1";
+  if (p > 0) return "p2";
+  return "";
+}
+
+// 1–2 char avatar initials for an assignee profile name (JIRA-style chip).
+function initials(name: string): string {
+  const parts = name
+    .replace(/[^a-zA-Z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/);
+  if (parts.length === 0 || !parts[0]) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+
 function ageLabel(createdAt: number | null): string {
   if (!createdAt) return "";
   const seconds = Math.max(0, Math.floor(Date.now() / 1000 - createdAt));
@@ -152,6 +240,7 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
   const [profileOptions, setProfileOptions] = useState<string[]>([]);
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   // When the Claw3D HQ virtual board is active we route reads to the
   // task-store JSON on the remote (via kanbanListClaw3dHqTasks) and hide all
@@ -203,7 +292,7 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
           wantHq
             ? Promise.resolve<TasksRes>({ success: true, data: [] })
             : window.hermesAPI.kanbanListTasks({
-                includeArchived: false,
+                includeArchived: showArchived,
                 profile,
               }),
           window.hermesAPI.kanbanListClaw3dHqTasks(),
@@ -262,12 +351,29 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
         if (!silent) setLoading(false);
       }
     },
-    [profile, activeBoardSlug, t],
+    [profile, activeBoardSlug, showArchived, t],
   );
 
   useEffect(() => {
     loadAll();
   }, [loadAll]);
+
+  // Refresh when the user returns to the app/tab. The gateway dispatcher
+  // mutates kanban.db out-of-band, so a board left open in the background
+  // can be stale; a focus/visibility refetch catches up immediately without
+  // waiting for the next 6s poll tick.
+  useEffect(() => {
+    if (visible === false) return;
+    const refresh = (): void => {
+      if (document.visibilityState === "visible") loadAll(true);
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [loadAll, visible]);
 
   // Persist the user's board choice across reloads. Skip the initial null
   // state (= "not yet decided") so we don't overwrite a previously-stored
@@ -315,11 +421,18 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
     };
   }, [detailTaskId, profile]);
 
+  // Visible columns: the canonical 8, plus a trailing archived lane when the
+  // toggle is on (backend only returns archived rows when includeArchived).
+  const renderedColumns = useMemo(
+    () => (showArchived ? [...COLUMNS, ARCHIVED_COLUMN] : COLUMNS),
+    [showArchived],
+  );
+
   const tasksByStatus = useMemo(() => {
     const grouped: Record<string, KanbanTask[]> = {};
-    for (const col of COLUMNS) grouped[col.key] = [];
+    for (const col of renderedColumns) grouped[col.key] = [];
     for (const task of tasks) {
-      const col = COLUMNS.some((c) => c.key === task.status)
+      const col = renderedColumns.some((c) => c.key === task.status)
         ? task.status
         : "todo";
       grouped[col] = grouped[col] || [];
@@ -333,7 +446,7 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
       });
     }
     return grouped;
-  }, [tasks]);
+  }, [tasks, renderedColumns]);
 
   function resetCreateForm(): void {
     setNewTitle("");
@@ -425,26 +538,8 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
   }
 
   async function handleMove(task: KanbanTask, target: string): Promise<void> {
-    if (task.status === target) return;
-    setActionBusy(task.id);
-    let res: { success: boolean; error?: string };
-    if (target === "done") {
-      res = await window.hermesAPI.kanbanCompleteTask(
-        task.id,
-        undefined,
-        profile,
-      );
-    } else if (target === "blocked") {
-      const reason = window.prompt(t("kanban.blockReasonPrompt")) || "";
-      res = await window.hermesAPI.kanbanBlockTask(
-        task.id,
-        reason || undefined,
-        profile,
-      );
-    } else if (target === "ready" && task.status === "blocked") {
-      res = await window.hermesAPI.kanbanUnblockTask(task.id, profile);
-    } else {
-      setActionBusy(null);
+    const action = dragAction(task.status, target);
+    if (!action) {
       setError(
         t("kanban.moveNotAllowed", {
           from: t(`kanban.status.${task.status}`),
@@ -452,6 +547,49 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
         }),
       );
       return;
+    }
+    setActionBusy(task.id);
+    let res: { success: boolean; error?: string };
+    switch (action) {
+      case "complete":
+        res = await window.hermesAPI.kanbanCompleteTask(
+          task.id,
+          undefined,
+          profile,
+        );
+        break;
+      case "archive":
+        res = await window.hermesAPI.kanbanArchiveTask(task.id, profile);
+        break;
+      case "block": {
+        const reason = window.prompt(t("kanban.blockReasonPrompt")) || "";
+        res = await window.hermesAPI.kanbanBlockTask(
+          task.id,
+          reason || undefined,
+          profile,
+        );
+        break;
+      }
+      case "unblock":
+        res = await window.hermesAPI.kanbanUnblockTask(task.id, profile);
+        break;
+      case "reclaim":
+        res = await window.hermesAPI.kanbanReclaimTask(
+          task.id,
+          "reclaimed from desktop",
+          profile,
+        );
+        break;
+      case "promote":
+        res = await window.hermesAPI.kanbanPromoteTask(task.id, profile);
+        break;
+      case "schedule":
+        res = await window.hermesAPI.kanbanScheduleTask(
+          task.id,
+          undefined,
+          profile,
+        );
+        break;
     }
     setActionBusy(null);
     if (!res.success) {
@@ -472,22 +610,13 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
     loadAll(true);
   }
 
-  function isValidDragTransition(from: string, to: string): boolean {
-    if (from === to) return false;
-    if (to === "done") return true;
-    if (
-      to === "blocked" &&
-      (from === "todo" || from === "ready" || from === "running")
-    )
-      return true;
-    if (to === "ready" && from === "blocked") return true;
-    return false;
-  }
-
   async function handleDrop(task: KanbanTask, target: string): Promise<void> {
     if (!isValidDragTransition(task.status, target)) return;
     if (target === "done") {
       if (!window.confirm(t("kanban.confirmMarkDone", { title: task.title })))
+        return;
+    } else if (target === "archived") {
+      if (!window.confirm(t("kanban.confirmArchive", { title: task.title })))
         return;
     }
     await handleMove(task, target);
@@ -560,7 +689,6 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
       <div className="kanban-header">
         <div>
           <h2 className="schedules-title">{t("kanban.title")}</h2>
-          <p className="schedules-subtitle">{t("kanban.subtitle")}</p>
         </div>
         <div className="schedules-header-actions">
           <button
@@ -574,6 +702,18 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
           </button>
           {!isHqActive && (
             <>
+              <button
+                className={`btn btn-secondary${
+                  showArchived ? " kanban-toggle-active" : ""
+                }`}
+                onClick={() => setShowArchived((v) => !v)}
+                disabled={actionBusy !== null}
+                data-tooltip={t("kanban.archivedTooltip")}
+              >
+                {showArchived
+                  ? t("kanban.hideArchived")
+                  : t("kanban.showArchived")}
+              </button>
               <button
                 className="btn btn-secondary"
                 onClick={handleDispatch}
@@ -624,7 +764,7 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
               }`}
               onClick={() => handleBoardSwitch(HQ_BOARD_SLUG)}
               disabled={actionBusy === "board-switch"}
-              title="Claw3D headquarters board (read-only mirror)"
+              title={t("kanban.hqBoardTooltip")}
             >
               {isHqActive && <span className="kanban-board-dot" />}
               <span>HQ (Claw3D)</span>
@@ -651,7 +791,7 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
           {error}
           <button
             className="btn-ghost"
-            title="Dismiss error"
+            title={t("kanban.dismissError")}
             onClick={() => setError("")}
           >
             <X size={14} />
@@ -667,7 +807,7 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
       )}
 
       <div className="kanban-columns">
-        {COLUMNS.map((col) => {
+        {renderedColumns.map((col) => {
           const colTasks = tasksByStatus[col.key] || [];
           const draggingTask = draggingTaskId
             ? tasks.find((t) => t.id === draggingTaskId)
@@ -678,6 +818,7 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
           return (
             <div
               key={col.key}
+              data-tone={col.tone}
               className={`kanban-column${
                 dragOverCol === col.key && canDropHere && !isHqActive
                   ? " kanban-column-drop"
@@ -701,6 +842,7 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
               }}
             >
               <div className="kanban-column-header">
+                <span className="kanban-column-dot" data-tone={col.tone} />
                 <span className="kanban-column-title">
                   {t(`kanban.status.${col.key}`)}
                 </span>
@@ -713,9 +855,11 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
                 {colTasks.map((task) => {
                   const prio = priorityLabel(task.priority);
                   const age = ageLabel(task.created_at);
+                  const skillCount = task.skills?.length || 0;
                   return (
                     <div
                       key={task.id}
+                      data-prio={priorityTone(task.priority) || undefined}
                       className={`kanban-card${
                         draggingTaskId === task.id
                           ? " kanban-card-dragging"
@@ -737,20 +881,56 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
                         setDetailTaskId(task.id);
                       }}
                     >
-                      <div className="kanban-card-title">{task.title}</div>
-                      <div className="kanban-card-meta">
+                      <div className="kanban-card-top">
+                        <span className="kanban-card-id">{task.id}</span>
+                        {task.status === "running" && (
+                          <span
+                            className="kanban-live-dot"
+                            title={t("kanban.status.running")}
+                          />
+                        )}
                         {prio && (
-                          <span className="kanban-pill kanban-pill-prio">
+                          <span
+                            className="kanban-pill kanban-pill-prio"
+                            data-prio={priorityTone(task.priority)}
+                          >
                             {prio}
                           </span>
                         )}
-                        {task.assignee && (
-                          <span className="kanban-pill">@{task.assignee}</span>
+                        {age && <span className="kanban-card-age">{age}</span>}
+                      </div>
+                      <div className="kanban-card-title">{task.title}</div>
+                      <div className="kanban-card-meta">
+                        {task.assignee ? (
+                          <span
+                            className="kanban-assignee"
+                            title={`@${task.assignee}`}
+                          >
+                            <span className="kanban-avatar">
+                              {initials(task.assignee)}
+                            </span>
+                            <span className="kanban-assignee-name">
+                              {task.assignee}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="kanban-assignee kanban-assignee-none">
+                            <span className="kanban-avatar kanban-avatar-none">
+                              ?
+                            </span>
+                          </span>
                         )}
                         {task.tenant && (
                           <span className="kanban-pill">{task.tenant}</span>
                         )}
-                        {age && <span className="kanban-pill-age">{age}</span>}
+                        {skillCount > 0 && (
+                          <span
+                            className="kanban-pill kanban-pill-skills"
+                            title={task.skills.join(", ")}
+                          >
+                            {skillCount} {skillCount === 1 ? "skill" : "skills"}
+                          </span>
+                        )}
                       </div>
                       <div className="kanban-card-actions">
                         {isHqActive && (
@@ -917,17 +1097,34 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
                 <label className="schedules-field-label">
                   {t("kanban.fieldPriority")}
                 </label>
-                <select
-                  className="input"
-                  aria-label="Priority"
-                  value={newPriority}
-                  onChange={(e) => setNewPriority(e.target.value)}
+                <div
+                  className="kanban-prio-chips"
+                  role="radiogroup"
+                  aria-label={t("kanban.fieldPriority")}
                 >
-                  <option value="0">{t("kanban.priorityNormal")}</option>
-                  <option value="1">{t("kanban.priorityLow")}</option>
-                  <option value="5">{t("kanban.priorityHigh")}</option>
-                  <option value="10">{t("kanban.priorityUrgent")}</option>
-                </select>
+                  {PRIORITY_OPTIONS.map((opt) => {
+                    const active = newPriority === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        data-prio={opt.tone || undefined}
+                        className={`kanban-prio-chip${
+                          active ? " kanban-prio-chip-active" : ""
+                        }`}
+                        onClick={() => setNewPriority(opt.value)}
+                      >
+                        <span
+                          className="kanban-prio-bullet"
+                          data-prio={opt.tone || undefined}
+                        />
+                        {t(opt.labelKey)}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               <div className="schedules-field">
                 <label className="schedules-field-label">
@@ -1064,11 +1261,11 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
 
       {detailTaskId && (
         <div
-          className="skills-detail-overlay"
+          className="kanban-drawer-overlay"
           onClick={() => setDetailTaskId(null)}
         >
           <div
-            className="schedules-modal kanban-detail-modal"
+            className="kanban-detail-drawer"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="schedules-modal-header">
@@ -1077,7 +1274,7 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
               </span>
               <button
                 className="btn-ghost"
-                title="Close task details"
+                title={t("kanban.closeTaskDetails")}
                 onClick={() => setDetailTaskId(null)}
               >
                 <X size={14} />
@@ -1088,7 +1285,11 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
               {detail && (
                 <>
                   <div className="kanban-detail-meta">
-                    <span className="kanban-pill">
+                    <span className="kanban-pill kanban-pill-status">
+                      <span
+                        className="kanban-column-dot"
+                        data-tone={STATUS_TONE[detail.task.status] || "neutral"}
+                      />
                       {t(`kanban.status.${detail.task.status}`)}
                     </span>
                     {detail.task.assignee && (

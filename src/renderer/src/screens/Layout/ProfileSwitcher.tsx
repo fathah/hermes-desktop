@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Bot, Check, ChevronDown, Settings } from "../../assets/icons";
+import { ChevronDown, Settings } from "../../assets/icons";
 import { useI18n } from "../../components/useI18n";
+import ProfileAvatar from "../../components/common/ProfileAvatar";
+import { useProfileModal } from "../../components/profile/ProfileModalContext";
 
 interface ProfileInfo {
   name: string;
@@ -9,6 +11,8 @@ interface ProfileInfo {
   model: string;
   skillCount: number;
   gatewayRunning: boolean;
+  color?: string;
+  avatar?: string | null;
 }
 
 interface ProfileSwitcherProps {
@@ -33,6 +37,7 @@ export default function ProfileSwitcher({
   compact = false,
 }: ProfileSwitcherProps): React.JSX.Element {
   const { t } = useI18n();
+  const { openProfile } = useProfileModal();
   const [open, setOpen] = useState(false);
   const [profiles, setProfiles] = useState<ProfileInfo[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -79,9 +84,7 @@ export default function ProfileSwitcher({
 
   const label =
     activeProfile === "default" ? t("common.appName") : activeProfile;
-  const activeRunning = profiles.find(
-    (p) => p.name === activeProfile,
-  )?.gatewayRunning;
+  const activeInfo = profiles.find((p) => p.name === activeProfile);
 
   async function handleSelect(name: string): Promise<void> {
     setOpen(false);
@@ -101,46 +104,100 @@ export default function ProfileSwitcher({
     >
       {open && (
         <div className="profile-menu" role="menu">
-          <div className="profile-menu-list">
-            {profiles.map((p) => {
-              const isActive = p.name === activeProfile;
-              const meta = [
-                p.model || t("agents.noModel"),
-                t("agents.skillsCount", { count: p.skillCount }),
-              ].join(" · ");
-              return (
-                <button
-                  key={p.name}
-                  className={`profile-menu-item ${isActive ? "active" : ""}`}
-                  role="menuitemradio"
-                  aria-checked={isActive}
-                  onClick={() => handleSelect(p.name)}
-                >
-                  <Bot
-                    size={16}
-                    className={`profile-icon ${
-                      p.gatewayRunning ? "running" : ""
-                    }`}
-                    aria-hidden
-                  />
-                  <span className="profile-menu-info">
-                    <span className="profile-menu-name">
-                      {p.name}
-                      {p.isDefault && (
-                        <span className="profile-menu-tag">
-                          {t("agents.defaultTag")}
-                        </span>
+          {(() => {
+            const active = profiles.find((p) => p.name === activeProfile);
+            const others = profiles.filter((p) => p.name !== activeProfile);
+            return (
+              <>
+                {active && (
+                  <button
+                    type="button"
+                    className="profile-menu-active-section"
+                    role="menuitem"
+                    title={t("agents.editAppearanceFor", { name: active.name })}
+                    onClick={() => {
+                      setOpen(false);
+                      openProfile(active.name, { onChanged: load });
+                    }}
+                  >
+                    <div className="profile-menu-avatar">
+                      <ProfileAvatar
+                        name={active.name}
+                        color={active.color}
+                        avatar={active.avatar}
+                        size={32}
+                      />
+                      {active.gatewayRunning && (
+                        <span className="profile-menu-avatar-dot" />
                       )}
+                    </div>
+                    <span className="profile-menu-info">
+                      <span className="profile-menu-name">
+                        {active.name}
+                        {active.isDefault && (
+                          <span className="profile-menu-tag">
+                            {t("agents.defaultTag")}
+                          </span>
+                        )}
+                      </span>
+                      <span className="profile-menu-meta">
+                        {[
+                          active.model || t("agents.noModel"),
+                          t("agents.skillsCount", { count: active.skillCount }),
+                        ].join(" · ")}
+                      </span>
                     </span>
-                    <span className="profile-menu-meta">{meta}</span>
-                  </span>
-                  {isActive && (
-                    <Check size={16} className="profile-menu-check" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
+                  </button>
+                )}
+                {others.length > 0 && (
+                  <>
+                    <div className="profile-menu-divider" />
+                    <div className="profile-menu-list">
+                      {others.map((p) => (
+                        <button
+                          key={p.name}
+                          className="profile-menu-item"
+                          role="menuitemradio"
+                          aria-checked={false}
+                          onClick={() => handleSelect(p.name)}
+                        >
+                          <ProfileAvatar
+                            name={p.name}
+                            color={p.color}
+                            avatar={p.avatar}
+                            size={20}
+                          />
+                          <span className="profile-menu-info">
+                            <span className="profile-menu-name">
+                              {p.name}
+                              {p.isDefault && (
+                                <span className="profile-menu-tag">
+                                  {t("agents.defaultTag")}
+                                </span>
+                              )}
+                              <span
+                                className={`profile-menu-gateway ${
+                                  p.gatewayRunning ? "active" : ""
+                                }`}
+                              />
+                            </span>
+                            <span className="profile-menu-meta">
+                              {[
+                                p.model || t("agents.noModel"),
+                                t("agents.skillsCount", {
+                                  count: p.skillCount,
+                                }),
+                              ].join(" · ")}
+                            </span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
+            );
+          })()}
           <button
             className="profile-menu-manage"
             role="menuitem"
@@ -162,10 +219,11 @@ export default function ProfileSwitcher({
         aria-haspopup="menu"
         aria-expanded={open}
       >
-        <Bot
-          size={16}
-          className={`profile-icon ${activeRunning ? "running" : ""}`}
-          aria-hidden
+        <ProfileAvatar
+          name={activeProfile}
+          color={activeInfo?.color}
+          avatar={activeInfo?.avatar}
+          size={compact ? 22 : 18}
         />
         {!compact && <span className="profile-switcher-name">{label}</span>}
         {!compact && (

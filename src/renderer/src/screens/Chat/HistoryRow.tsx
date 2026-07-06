@@ -1,7 +1,9 @@
 import { memo, useState } from "react";
-import { Brain, ChevronRight, Spinner, Wrench } from "../../assets/icons";
+import { Grid } from "react-loader-spinner";
+import { Brain, ChevronRight, Wrench } from "../../assets/icons";
 import { useI18n } from "../../components/useI18n";
 import { AttachmentChip } from "../../components/AttachmentChip";
+import { ToolGlyph, humanizeToolName } from "../../components/toolMeta";
 import { HermesAvatar, AvatarSpacer } from "./MessageRow";
 import type {
   Attachment,
@@ -27,14 +29,13 @@ export const ReasoningRow = memo(function ReasoningRow({
 }): React.JSX.Element {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
-  const lineCount = msg.text.split("\n").length;
   return (
     <div
       className={`chat-message chat-message-agent chat-message-history${
         showAvatar ? "" : " chat-message--grouped"
       }`}
     >
-      {showAvatar ? <HermesAvatar /> : <AvatarSpacer />}
+      {showAvatar ? <HermesAvatar active={active} /> : <AvatarSpacer />}
       <div
         className={`chat-reasoning-group${
           active ? " chat-reasoning-group--active" : ""
@@ -46,23 +47,28 @@ export const ReasoningRow = memo(function ReasoningRow({
           aria-expanded={open}
           onClick={() => setOpen((o) => !o)}
         >
-          <ChevronRight
-            size={14}
-            className={`chat-reasoning-group-chevron${
-              open ? " chat-reasoning-group-chevron--open" : ""
-            }`}
-          />
           {active ? (
-            <Spinner size={13} className="chat-reasoning-group-spinner" />
+            <Grid
+              visible={true}
+              height={13}
+              width={13}
+              radius={15}
+              color="#8b7cf6"
+              ariaLabel="thinking-loading"
+              wrapperClass="chat-reasoning-group-spinner"
+            />
           ) : (
             <Brain size={13} className="chat-reasoning-group-icon" />
           )}
           <span className="chat-reasoning-group-title">
             {active ? t("chat.thinking") : t("chat.thought")}
           </span>
-          <span className="chat-reasoning-group-meta">
-            {lineCount} {lineCount === 1 ? "line" : "lines"}
-          </span>
+          <ChevronRight
+            size={14}
+            className={`chat-reasoning-group-chevron${
+              open ? " chat-reasoning-group-chevron--open" : ""
+            }`}
+          />
         </button>
         <div
           className={`chat-tool-collapse${
@@ -110,7 +116,50 @@ function isToolCall(msg: ToolItem): msg is ToolCallMessage {
 export function toolActivityGroupTitle(items: ToolItem[]): string {
   const toolCallCount = items.filter(isToolCall).length;
   if (toolCallCount > 1) return `${toolCallCount} tools called`;
-  return items[items.length - 1]?.name ?? "tool";
+  const name = items[items.length - 1]?.name;
+  return name ? humanizeToolName(name) : "Tool";
+}
+
+/** The single tool name in a group, or null when the group spans several. */
+function singleToolName(items: ToolItem[]): string | null {
+  if (items.filter(isToolCall).length > 1) return null;
+  return items[items.length - 1]?.name ?? null;
+}
+
+export function orderToolActivityItems(items: ToolItem[]): ToolItem[] {
+  const callIds = new Set(
+    items
+      .filter(isToolCall)
+      .map((item) => item.callId)
+      .filter(Boolean),
+  );
+  const resultsByCallId = new Map<string, ToolResultMessage[]>();
+  for (const item of items) {
+    if (isToolCall(item) || !item.callId) continue;
+    const bucket = resultsByCallId.get(item.callId) ?? [];
+    bucket.push(item);
+    resultsByCallId.set(item.callId, bucket);
+  }
+
+  const emittedResults = new Set<ToolResultMessage>();
+  const ordered: ToolItem[] = [];
+  for (const item of items) {
+    if (isToolCall(item)) {
+      ordered.push(item);
+      for (const result of resultsByCallId.get(item.callId) ?? []) {
+        ordered.push(result);
+        emittedResults.add(result);
+      }
+      continue;
+    }
+
+    if (emittedResults.has(item)) continue;
+    if (item.callId && callIds.has(item.callId)) continue;
+    ordered.push(item);
+    emittedResults.add(item);
+  }
+
+  return ordered;
 }
 
 function resultMeta(msg: ToolResultMessage): string {
@@ -124,19 +173,14 @@ function itemDetail(msg: ToolItem): string {
   return isToolCall(msg) ? summariseArgs(msg.args) : resultMeta(msg);
 }
 
-function itemTone(msg: ToolItem): "call" | "result" | "failed" {
-  if (!isToolCall(msg)) return "result";
-  return msg.status === "failed" ? "failed" : "call";
-}
-
 const ToolActivityItem = memo(function ToolActivityItem({
   msg,
 }: {
   msg: ToolItem;
 }): React.JSX.Element {
-  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const call = isToolCall(msg);
+  const failed = call && msg.status === "failed";
   const hasAttachments =
     !call && !!msg.attachments && msg.attachments.length > 0;
 
@@ -154,13 +198,16 @@ const ToolActivityItem = memo(function ToolActivityItem({
             open ? " chat-tool-item-chevron--open" : ""
           }`}
         />
-        <span
-          className={`chat-tool-item-dot chat-tool-item-dot--${itemTone(msg)}`}
+        <ToolGlyph
+          toolName={msg.name}
+          size={13}
+          className={`chat-tool-item-glyph${
+            failed ? " chat-tool-item-glyph--failed" : ""
+          }`}
         />
-        <span className="chat-tool-item-kind">
-          {call ? t("chat.toolCall") : t("chat.toolResult")}
+        <span className="chat-tool-item-name">
+          {humanizeToolName(msg.name)}
         </span>
-        <span className="chat-tool-item-name">{msg.name}</span>
         <span className="chat-tool-item-detail">{itemDetail(msg)}</span>
       </button>
       <div
@@ -202,9 +249,10 @@ export const ToolActivityGroup = memo(function ToolActivityGroup({
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const last = items[items.length - 1];
-  const count = items.length;
   const detail = itemDetail(last);
   const title = toolActivityGroupTitle(items);
+  const soloTool = singleToolName(items);
+  const orderedItems = orderToolActivityItems(items);
 
   return (
     <div
@@ -212,7 +260,7 @@ export const ToolActivityGroup = memo(function ToolActivityGroup({
         showAvatar ? "" : " chat-message--grouped"
       }`}
     >
-      {showAvatar ? <HermesAvatar /> : <AvatarSpacer />}
+      {showAvatar ? <HermesAvatar active={active} /> : <AvatarSpacer />}
       <div
         className={`chat-tool-group${active ? " chat-tool-group--active" : ""}`}
       >
@@ -222,30 +270,41 @@ export const ToolActivityGroup = memo(function ToolActivityGroup({
           aria-expanded={open}
           onClick={() => setOpen((o) => !o)}
         >
+          {active ? (
+            <Grid
+              visible={true}
+              height={13}
+              width={13}
+              radius={15}
+              color="#4aa8ff"
+              ariaLabel="tool-loading"
+              wrapperClass="chat-tool-group-spinner"
+            />
+          ) : soloTool ? (
+            <ToolGlyph
+              toolName={soloTool}
+              size={13}
+              className="chat-tool-group-icon"
+            />
+          ) : (
+            <Wrench size={13} className="chat-tool-group-icon" />
+          )}
+          <span className="chat-tool-group-name">{title}</span>
+          {detail && <span className="chat-tool-group-detail">{detail}</span>}
           <ChevronRight
             size={14}
             className={`chat-tool-group-chevron${
               open ? " chat-tool-group-chevron--open" : ""
             }`}
           />
-          {active ? (
-            <Spinner size={13} className="chat-tool-group-spinner" />
-          ) : (
-            <Wrench size={13} className="chat-tool-group-icon" />
-          )}
-          <span className="chat-tool-group-name">{title}</span>
-          {detail && <span className="chat-tool-group-detail">{detail}</span>}
-          <span className="chat-tool-group-count">
-            {count} {count === 1 ? "step" : "steps"}
-          </span>
         </button>
         <div
           className={`chat-tool-collapse${open ? " chat-tool-collapse--open" : ""}`}
         >
           <div className="chat-tool-collapse-inner">
             <div className="chat-tool-group-items">
-              {items.map((it) => (
-                <ToolActivityItem key={it.id} msg={it} />
+              {orderedItems.map((it, index) => (
+                <ToolActivityItem key={`${it.id}-${index}`} msg={it} />
               ))}
             </div>
           </div>

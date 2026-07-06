@@ -6,6 +6,11 @@ import { ASKPASS_SUBMIT_CHANNEL } from "../src/shared/askpass";
 const ROOT = join(__dirname, "..");
 const askpassMainSrc = readFileSync(join(ROOT, "src/main/askpass.ts"), "utf-8");
 const sudoCredsSrc = readFileSync(join(ROOT, "src/main/sudoCreds.ts"), "utf-8");
+const gatewayPromptSrc = readFileSync(
+  join(ROOT, "src/main/gatewayPrompt.ts"),
+  "utf-8",
+);
+const hermesSrc = readFileSync(join(ROOT, "src/main/hermes.ts"), "utf-8");
 const askpassPreloadSrc = readFileSync(
   join(ROOT, "src/preload/askpass.ts"),
   "utf-8",
@@ -90,5 +95,38 @@ describe("askpass Electron hardening", () => {
   it("builds the dedicated askpass preload entry", () => {
     expect(electronViteConfigSrc).toContain("src/preload/index.ts");
     expect(electronViteConfigSrc).toContain("src/preload/askpass.ts");
+  });
+});
+
+describe("gateway sudo/secret prompt handling", () => {
+  it("collects sudo/secret via the hardened askpass modal, not the chat transcript", () => {
+    // Reuses the shared hardened dialog rather than a bespoke window.
+    expect(gatewayPromptSrc).toContain(
+      'import { showPasswordDialog } from "./askpass"',
+    );
+    expect(gatewayPromptSrc).toContain("showPasswordDialog(");
+    // Sensitive values must never be rendered as a chat message / clarify card.
+    expect(gatewayPromptSrc).not.toMatch(/onClarify|ClarifyMessage|safeSend/);
+  });
+
+  it("never logs or persists the collected secret", () => {
+    expect(gatewayPromptSrc).not.toMatch(/console\.(log|warn|error|info)/);
+    expect(gatewayPromptSrc).not.toMatch(/writeFile|appendFile|setEnvValue/);
+  });
+
+  it("forwards answers with the gateway's exact respond shapes", () => {
+    // sudo.respond carries `password`; secret.respond carries `value`.
+    expect(hermesSrc).toContain('"sudo.respond"');
+    expect(hermesSrc).toContain('"secret.respond"');
+    expect(hermesSrc).toContain("password: answer");
+    expect(hermesSrc).toContain("value: answer");
+    // Both keyed by request_id, mirroring clarify.respond.
+    expect(hermesSrc).toContain("request_id: requestId, password");
+    expect(hermesSrc).toContain("request_id: requestId, value");
+  });
+
+  it("maps cancel to an empty answer (safe skip), never blocking the turn", () => {
+    // showPasswordDialog resolves null on cancel; the prompt helpers coerce to "".
+    expect(gatewayPromptSrc).toContain('return value ?? "";');
   });
 });
