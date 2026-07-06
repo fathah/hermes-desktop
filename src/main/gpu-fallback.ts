@@ -1,6 +1,7 @@
 import { app } from "electron";
-import { existsSync, writeFileSync, mkdirSync, rmSync } from "fs";
+import { existsSync, writeFileSync, mkdirSync, rmSync, readFileSync } from "fs";
 import { join } from "path";
+import type { GpuPreferenceMode, GpuStatus } from "../shared/gpu";
 
 // One-shot command-line sentinel carried across an automatic relaunch. It lets
 // the relaunched process start with GPU disabled even when the flag file could
@@ -50,38 +51,122 @@ function flagPath(): string {
   return cachedFlagPath;
 }
 
+// How long a crash-persisted flag stays authoritative. A GPU crash is often
+// transient — a driver update mid-session, a remote-desktop virtual adapter
+// that's since been removed, or a Chromium blocklist gap for a brand-new GPU
+// (a user's RTX 5060 Ti was stuck on SwiftShader for over a week because the
+// flag never expired). After this window the flag is treated as stale: it is
+// cleared on launch and hardware acceleration is retried. If the GPU process
+// still crashes, the crash guard persists a fresh flag and relaunches GPU-off,
+// so a chronically broken machine pays at most one crash+relaunch per window
+// instead of the user being silently stuck on software rendering forever.
+const GPU_FLAG_TTL_MS = 24 * 60 * 60 * 1000;
+
+// Explicit user preference from Settings → Appearance. Stored beside the crash
+// flag because it must be readable synchronously before app-ready — the only
+// point where hardware acceleration can still be disabled. Renderer-side
+// settings storage initializes far too late for that.
+let cachedPrefPath: string | null = null;
+
+function prefPath(): string {
+  if (!cachedPrefPath) {
+    cachedPrefPath = join(app.getPath("userData"), "gpu-preference.json");
+  }
+  return cachedPrefPath;
+}
+
+// Captured on the boot path (applyGpuPreferences) so the Settings pane can
+// tell a pending preference change apart from the state actually in effect.
+let bootPreference: GpuPreferenceMode | null = null;
+
+/** The persisted Settings preference; malformed/missing files mean "auto". */
+export function getGpuPreference(): GpuPreferenceMode {
+  try {
+    const raw = JSON.parse(readFileSync(prefPath(), "utf-8")) as {
+      mode?: unknown;
+    };
+    if (raw.mode === "on" || raw.mode === "off") return raw.mode;
+  } catch {
+    // Missing or corrupt preference file — fall through to the default.
+  }
+  return "auto";
+}
+
+/** Persist the Settings preference. Takes effect on the next launch. */
+export function setGpuPreference(mode: GpuPreferenceMode): boolean {
+  try {
+    const dir = app.getPath("userData");
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    writeFileSync(prefPath(), JSON.stringify({ mode }), "utf-8");
+    return true;
+  } catch (err) {
+    console.error("[GPU] Failed to persist gpu preference:", err);
+    return false;
+  }
+}
+
+/** Timestamp persisted in the flag file, or null when the file is missing or
+ *  its content doesn't parse as a date (hand-created/truncated files). */
+function flagWrittenAt(): Date | null {
+  try {
+    const raw = readFileSync(flagPath(), "utf-8").trim();
+    const parsed = new Date(raw);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  } catch {
+    return null;
+  }
+}
+
+/** True when the persisted flag exists but is past its TTL (or unreadable —
+ *  self-healing beats staying stuck on software rendering). */
+function isFlagStale(): boolean {
+  const writtenAt = flagWrittenAt();
+  if (!writtenAt) return true;
+  return Date.now() - writtenAt.getTime() > GPU_FLAG_TTL_MS;
+}
+
 /**
  * True when hardware acceleration should be disabled. Precedence:
  *   1. HERMES_DISABLE_GPU=0/false — force-enable, overrides everything else.
  *   2. HERMES_DISABLE_GPU=1/true  — force-disable.
- *   3. the relaunch sentinel arg  — a prior crash relaunched us GPU-off.
- *   4. the persisted disable-gpu.flag from a previous crash.
+ *   3. the relaunch sentinel arg  — a prior crash relaunched us GPU-off. This
+ *      outranks a "force on" preference so a crash still breaks the loop for
+ *      the current session even when the user insists on hardware rendering.
+ *   4. the Settings preference — "off" disables, "on" ignores any crash flag.
+ *   5. the persisted disable-gpu.flag from a previous crash, while fresh
+ *      (within GPU_FLAG_TTL_MS). A stale flag no longer disables the GPU.
  */
 export function isGpuDisabled(): boolean {
   const env = gpuEnvOverride();
   if (env === "off") return false;
   if (env === "on") return true;
   if (process.argv.includes(GPU_DISABLE_ARG)) return true;
+  const pref = getGpuPreference();
+  if (pref === "off") return true;
+  if (pref === "on") return false;
   if (!shouldHonorPersistedGpuFlag()) return false;
   try {
-    return existsSync(flagPath());
+    return existsSync(flagPath()) && !isFlagStale();
   } catch {
     return false;
   }
 }
 
-/** Remove the persisted disable-gpu flag, if present. Best-effort. */
-function clearGpuFlag(): void {
+/** Remove the persisted disable-gpu flag, if present. Best-effort. Returns
+ *  true when the flag is gone (removed or never existed). */
+function clearGpuFlag(why: string): boolean {
   try {
     if (existsSync(flagPath())) {
       rmSync(flagPath(), { force: true });
       console.warn(
-        "[GPU] HERMES_DISABLE_GPU override — cleared persisted disable-gpu.flag; " +
+        `[GPU] ${why} — cleared persisted disable-gpu.flag; ` +
           "hardware acceleration re-enabled.",
       );
     }
+    return true;
   } catch (err) {
     console.error("[GPU] Failed to clear disable-gpu flag:", err);
+    return false;
   }
 }
 
@@ -91,10 +176,20 @@ function clearGpuFlag(): void {
  * throws and the command-line switches are ignored.
  */
 export function applyGpuPreferences(): void {
+  bootPreference ??= getGpuPreference();
   // An explicit force-enable should also wipe any persisted flag so the
   // choice sticks on future launches, not just this one.
   if (gpuEnvOverride() === "off" || !shouldHonorPersistedGpuFlag()) {
-    clearGpuFlag();
+    clearGpuFlag("HERMES_DISABLE_GPU override");
+  } else if (
+    gpuEnvOverride() !== "on" &&
+    existsSync(flagPath()) &&
+    isFlagStale()
+  ) {
+    // The crash that justified software rendering is old news. Delete the
+    // flag and retry hardware acceleration; installGpuCrashGuard re-arms on
+    // this launch and will re-persist a fresh flag if the GPU still crashes.
+    clearGpuFlag("Persisted flag expired, retrying hardware acceleration");
   }
   if (!isGpuDisabled()) return;
   console.warn(
@@ -127,6 +222,85 @@ function persistGpuDisabled(): boolean {
   }
 }
 
+export function getGpuStatus(): GpuStatus {
+  const preference = getGpuPreference();
+  // Outside the real boot path (tests, or callers before applyGpuPreferences)
+  // the current file content is the best available boot approximation.
+  const boot = bootPreference ?? preference;
+  if (!isGpuDisabled()) {
+    return {
+      disabled: false,
+      reason: null,
+      flagWrittenAt: null,
+      canReenable: false,
+      preference,
+      bootPreference: boot,
+    };
+  }
+  if (gpuEnvOverride() === "on") {
+    return {
+      disabled: true,
+      reason: "env",
+      flagWrittenAt: null,
+      canReenable: false,
+      preference,
+      bootPreference: boot,
+    };
+  }
+  if (process.argv.includes(GPU_DISABLE_ARG)) {
+    return {
+      disabled: true,
+      reason: "sentinel",
+      flagWrittenAt: flagWrittenAt()?.toISOString() ?? null,
+      canReenable: true,
+      preference,
+      bootPreference: boot,
+    };
+  }
+  if (preference === "off") {
+    // The user's own Settings choice — informational only; changing it lives
+    // in Settings, not in the Office banner's one-click recovery.
+    return {
+      disabled: true,
+      reason: "preference",
+      flagWrittenAt: null,
+      canReenable: false,
+      preference,
+      bootPreference: boot,
+    };
+  }
+  return {
+    disabled: true,
+    reason: "flag",
+    flagWrittenAt: flagWrittenAt()?.toISOString() ?? null,
+    canReenable: true,
+    preference,
+    bootPreference: boot,
+  };
+}
+
+/** Relaunch without the GPU-off sentinel so the next process re-derives GPU
+ *  state from env/preference/flag alone (used after a preference change). */
+export function relaunchApp(): void {
+  const args = process.argv.slice(1).filter((a) => a !== GPU_DISABLE_ARG);
+  app.relaunch({ args });
+  app.exit(0);
+}
+
+/**
+ * User-initiated recovery: delete the persisted flag and relaunch without the
+ * GPU-off sentinel so the next process tries hardware acceleration again. If
+ * the GPU still crashes, the crash guard writes a fresh flag — no crash loop.
+ * Returns false (and does nothing) when the env var forces GPU off, since a
+ * relaunch would inherit it.
+ */
+export function reenableGpuAndRelaunch(): boolean {
+  if (gpuEnvOverride() === "on") return false;
+  clearGpuFlag("User requested hardware acceleration");
+  relaunchApp();
+  return true;
+}
+
 /**
  * Watch for fatal GPU process crashes. When the GPU process dies abnormally
  * (the symptom on machines with virtual display adapters), persist the
@@ -152,8 +326,12 @@ export function installGpuCrashGuard(): void {
       `[GPU] GPU process gone (reason=${details.reason}, exitCode=${details.exitCode}). ` +
         "Disabling hardware acceleration and relaunching with software rendering.",
     );
-    const persisted = persistGpuDisabled();
-    if (!persisted) {
+    // A "force on" preference means the user overrules persistent fallback:
+    // the sentinel still rescues this session, but no flag is written, so the
+    // next launch honors their choice and tries hardware acceleration again.
+    const forcedOn = getGpuPreference() === "on";
+    const persisted = forcedOn ? false : persistGpuDisabled();
+    if (!forcedOn && !persisted) {
       console.error(
         "[GPU] Could not persist disable-gpu.flag (read-only/locked filesystem?). " +
           "Relaunching with a one-shot switch; hardware acceleration may need to be " +

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { usageFromPayload } from "./useDashboardChatTransport";
+import {
+  estimateContextTokens,
+  usageFromPayload,
+} from "./useDashboardChatTransport";
+import type { ChatMessage } from "../types";
 
 describe("usageFromPayload", () => {
   it("reads the Hermes gateway snake-case keys (input/prompt/context_used)", () => {
@@ -84,5 +88,70 @@ describe("usageFromPayload", () => {
         usage: { input: 0, output: 0, total: 0, context_used: 0 },
       }),
     ).toBeNull();
+  });
+});
+
+describe("estimateContextTokens", () => {
+  const chars = (n: number): string => "x".repeat(n);
+
+  it("estimates chars/4 excluding the just-completed assistant reply", () => {
+    // 400 user chars + 200 reply chars; the reply was generated output, not
+    // prompt occupancy, so only the user side counts: 400 / 4 = 100.
+    const messages: ChatMessage[] = [
+      { id: "u1", role: "user", content: chars(400) },
+      { id: "a1", role: "agent", content: chars(200) },
+    ];
+    expect(estimateContextTokens(messages)).toBe(100);
+  });
+
+  it("keeps earlier assistant replies — only the last bubble is excluded", () => {
+    // Turn 1's reply is part of turn 2's prompt: (400 + 200 + 400) / 4 = 250.
+    const messages: ChatMessage[] = [
+      { id: "u1", role: "user", content: chars(400) },
+      { id: "a1", role: "agent", content: chars(200) },
+      { id: "u2", role: "user", content: chars(400) },
+      { id: "a2", role: "agent", content: chars(200) },
+    ];
+    expect(estimateContextTokens(messages)).toBe(250);
+  });
+
+  it("counts reasoning/tool sub-rows and excludes the bubble, not a sub-row", () => {
+    // Tool args, tool output, and reasoning all occupied the prompt loop.
+    // The trailing tool_result has role "agent" too — the exclusion must
+    // land on the reply bubble (200), not on whichever agent row happens to
+    // be last-by-role. (400 + 100 + (20+80) + 300) / 4 = 225.
+    const messages: ChatMessage[] = [
+      { id: "u1", role: "user", content: chars(400) },
+      { id: "r1", kind: "reasoning", role: "agent", text: chars(100) },
+      {
+        id: "tc1",
+        kind: "tool_call",
+        role: "agent",
+        callId: "c1",
+        name: chars(20),
+        args: chars(80),
+      },
+      { id: "a1", role: "agent", content: chars(200) },
+      {
+        id: "tr1",
+        kind: "tool_result",
+        role: "agent",
+        callId: "c1",
+        name: "t",
+        content: chars(300),
+      },
+    ];
+    expect(estimateContextTokens(messages)).toBe(225);
+  });
+
+  it("never returns a negative estimate", () => {
+    const messages: ChatMessage[] = [
+      { id: "a1", role: "agent", content: chars(200) },
+    ];
+    expect(estimateContextTokens(messages)).toBe(0);
+  });
+
+  it("returns 0 for an empty transcript so the gauge stays hidden", () => {
+    expect(estimateContextTokens([])).toBe(0);
   });
 });

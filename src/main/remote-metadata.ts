@@ -1,21 +1,8 @@
 import http from "http";
 import https from "https";
-import type { RemoteSessionConfig } from "./remote-sessions";
+import { dashboardApiUrl, type RemoteSessionConfig } from "./remote-sessions";
 
 type RemoteRecord = Record<string, unknown>;
-
-function normalizeRemoteDashboardBaseUrl(value: string): string {
-  const raw = value.trim();
-  if (!raw) throw new Error("Remote Hermes dashboard URL is not configured.");
-  const url = new URL(raw);
-  url.hash = "";
-  url.search = "";
-  url.pathname = url.pathname.replace(/\/+$/, "");
-  if (url.pathname === "/v1" || url.pathname === "/api") {
-    url.pathname = "";
-  }
-  return url.toString().replace(/\/+$/, "");
-}
 
 function asRecord(value: unknown): RemoteRecord {
   return value && typeof value === "object" ? (value as RemoteRecord) : {};
@@ -27,8 +14,11 @@ function stringValue(value: unknown): string {
 
 function remoteStatus(config: RemoteSessionConfig): Promise<RemoteRecord> {
   return new Promise((resolve, reject) => {
-    const base = normalizeRemoteDashboardBaseUrl(config.remoteUrl);
-    const parsed = new URL("/api/status", `${base}/`);
+    // Shared builder from remote-sessions so /api/status carries the same
+    // `?profile=` scoping as every other dashboard request — on the unified
+    // SSH machine dashboard an unscoped status reads the DEFAULT profile's
+    // hermes home/version instead of the requested one.
+    const parsed = new URL(dashboardApiUrl(config, "/api/status"));
     const client = parsed.protocol === "https:" ? https : http;
     const token = config.apiKey.trim();
     const req = client.request(

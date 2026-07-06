@@ -132,3 +132,67 @@ export function agentCommandsFromCatalog(
 
   return { commands, aliases };
 }
+
+export interface ReconcileSlashCatalogOptions {
+  catalog: AgentCommandsCatalogResponse | null;
+  desktopCommands: SlashCommandDefinition[];
+  fallbackAgentCommands: AgentSlashCommand[];
+}
+
+// Merges the backend-provided agent command catalog with the app's own desktop
+// commands into a single conflict-free catalog. Desktop commands are authored
+// in-repo and win deterministically over anything the backend exposes; the
+// backend catalog is untrusted runtime data, so a collision there must never
+// crash the app. createSlashCatalog still throws on a genuine desktop-vs-desktop
+// authoring conflict — that guard is intentionally preserved.
+export function reconcileSlashCatalog({
+  catalog,
+  desktopCommands,
+  fallbackAgentCommands,
+}: ReconcileSlashCatalogOptions): SlashCommandCatalog {
+  const desktopNames = new Set(desktopCommands.map((command) => command.name));
+  const desktopAliases = new Set(
+    desktopCommands.flatMap((command) => command.aliases ?? []),
+  );
+  const discovered = catalog ? agentCommandsFromCatalog(catalog) : null;
+
+  const desktopTargetAliases: AgentSlashCommand[] = Object.entries(
+    discovered?.aliases ?? {},
+  )
+    .filter(
+      ([alias, target]) =>
+        !desktopNames.has(alias) &&
+        !desktopAliases.has(alias) &&
+        desktopNames.has(target),
+    )
+    .map(([alias]) => ({
+      name: alias,
+      description: `Hermes Agent command /${alias}`,
+      category: "Hermes Agent",
+      source: "agent",
+      target: "agent",
+      allowWhileBusy: true,
+    }));
+
+  const agentCommands = [
+    ...(discovered?.commands ?? fallbackAgentCommands).filter(
+      // Exclude any backend command whose name collides with a desktop command
+      // name OR a desktop alias. Missing the desktop-alias check let a backend
+      // command squat an alias name (e.g. `/commands`, aliased to `/help`) so
+      // createSlashCatalog threw `Duplicate slash command alias` on startup.
+      (command) =>
+        !desktopNames.has(command.name) && !desktopAliases.has(command.name),
+    ),
+    ...desktopTargetAliases,
+  ];
+  const aliases = Object.fromEntries(
+    Object.entries(discovered?.aliases ?? {}).filter(
+      ([alias, target]) =>
+        !desktopNames.has(alias) &&
+        !desktopAliases.has(alias) &&
+        !desktopNames.has(target),
+    ),
+  );
+
+  return createSlashCatalog({ agentCommands, desktopCommands, aliases });
+}

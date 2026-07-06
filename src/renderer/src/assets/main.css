@@ -8262,6 +8262,18 @@ body {
   border-radius: var(--radius-lg);
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
   overflow: hidden;
+  /* Chrome UI, not content: drag-selecting highlights nav labels and field
+     captions, which looks broken. Copyable content opts back in below. */
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.settings-modal input,
+.settings-modal textarea,
+.settings-modal pre,
+.settings-modal code {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .settings-modal-header {
@@ -12930,6 +12942,47 @@ body {
     transform: scale(1) translateY(0);
     filter: blur(0);
   }
+}
+
+/* Escape hatch shown on the splash when a remote/SSH connection is taking too
+   long, so a stuck "Starting SSH tunnel…" never traps the user. */
+.splash-escape {
+  position: absolute;
+  bottom: 76px;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  animation: splashFadeIn 0.6s ease-out forwards;
+}
+
+.splash-escape-hint {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 12px;
+  letter-spacing: 0.3px;
+}
+
+.splash-escape button {
+  appearance: none;
+  cursor: pointer;
+  padding: 7px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 13px;
+  letter-spacing: 0.2px;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.splash-escape button:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.4);
 }
 
 /* ========================================================================

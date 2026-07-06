@@ -180,21 +180,28 @@ describe("ssh gateway commands (issue #285)", () => {
     }
   });
 
-  it("start prefers systemd, falling back to nohup only without a unit", () => {
+  it("start prefers systemd, falling back to a venv-probed nohup only without a unit", () => {
     const cmd = buildGatewayStartCommand();
     expect(cmd).toContain("systemctl start hermes.service");
     expect(cmd).toContain("sudo -n systemctl start hermes.service");
     // The nohup fallback must live in the else branch — never alongside
-    // systemd, where it would strand the unit in a restart crash-loop.
-    expect(cmd).toContain("nohup hermes gateway start");
+    // systemd, where it would strand the unit in a restart crash-loop — and it
+    // resolves the CLI via the venv/launcher probe (not bare `hermes`) so it
+    // works when `hermes` is not on the non-interactive SSH PATH.
+    expect(cmd).toContain("nohup");
+    expect(cmd).toContain("venv/bin/hermes");
+    expect(cmd).toContain("$HOME/.hermes/gateway.log");
     expect(systemdBranch(cmd)).not.toContain("nohup");
+    expect(systemdBranch(cmd)).not.toContain("venv/bin/hermes");
   });
 
-  it("stop routes through systemd, else hermes gateway stop", () => {
+  it("stop routes through systemd, else a venv-probed gateway stop", () => {
     const cmd = buildGatewayStopCommand();
     expect(cmd).toContain("systemctl stop hermes.service");
-    expect(cmd).toContain("hermes gateway stop");
-    expect(systemdBranch(cmd)).not.toContain("hermes gateway stop");
+    // Resolves the CLI via the venv/launcher probe (not bare `hermes`); the
+    // recorded-pid kill remains the last resort in the else branch.
+    expect(cmd).toContain("venv/bin/hermes");
+    expect(systemdBranch(cmd)).not.toContain("venv/bin/hermes");
     expect(systemdBranch(cmd)).not.toContain("kill");
   });
 

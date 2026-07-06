@@ -11,6 +11,7 @@ import {
 import { extname } from "path";
 import { randomUUID } from "crypto";
 import { readdir, readFile, stat } from "fs/promises";
+import { getActiveProfileNameSync } from "../utils";
 import type { Attachment } from "../../shared/attachments";
 import type { SessionModelOverride } from "../../shared/model-override";
 import type { AppLocale } from "../../shared/i18n/types";
@@ -44,6 +45,13 @@ import {
   mediaFileExists,
 } from "../media";
 import { openTerminalInDirectory } from "../terminal-launcher";
+import {
+  getGpuStatus,
+  reenableGpuAndRelaunch,
+  setGpuPreference,
+  relaunchApp,
+} from "../gpu-fallback";
+import type { GpuPreferenceMode } from "../../shared/gpu";
 import {
   checkInstallStatus,
   verifyInstall,
@@ -95,9 +103,7 @@ import {
   testRemoteConnection,
   restartGateway,
   notifyProfileSwitched,
-  ensureSshTunnelIfNeeded,
   setSshRemoteApiKey,
-  getRemoteAuthHeader,
   resolvePendingClarify,
 } from "../hermes";
 import {
@@ -112,7 +118,6 @@ import {
   stopSshTunnel,
   testSshConnection,
   isSshTunnelActive,
-  isSshTunnelHealthy,
 } from "../ssh-tunnel";
 import {
   getClaw3dStatus,
@@ -334,6 +339,10 @@ import {
   sshGatewayStatus,
   sshStartGateway,
   sshStopGateway,
+  sshEnsureDashboard,
+  sshEnsureApiServerKey,
+  sshWaitGatewayApiReady,
+  resetSshDashboardAvailability,
   sshReadRemoteApiKey,
   sshResolveApiServerPort,
   sshReadDirectory,
@@ -370,19 +379,93 @@ async function getSshDashboardSessionConfig(
 ): Promise<RemoteSessionBridgeConfig> {
   if (conn.mode !== "ssh" || !conn.ssh)
     throw new Error("SSH connection is not configured.");
-  if (!(await sshGatewayStatus(conn.ssh, profile)))
-    await sshStartGateway(conn.ssh, profile);
-  const remotePort = await sshResolveApiServerPort(conn.ssh, profile);
-  await ensureSshTunnel({ ...conn.ssh, remotePort });
-  const remoteUrl = getSshTunnelUrl();
-  const apiKey = conn.apiKey.trim() || (await sshReadRemoteApiKey(conn.ssh));
-  if (!remoteUrl) throw new Error("SSH tunnel is not active.");
-  if (!apiKey.trim())
+  // Start the UNIFIED machine `hermes dashboard` on the remote and tunnel to it.
+  // It serves /api/* + the /api/ws chat WS for EVERY profile (scoped via
+  // ?profile=, see RemoteSessionConfig.profile), NOT /v1 — chat over /v1 is the
+  // gateway api_server (prepareSshTunnel gateway branch). All profiles share one
+  // dashboard port + token so the single global SSH tunnel never thrashes. The
+  // /api/* routes are gated by the dashboard session token (the api_server key is
+  // rejected there). Returns null when the remote can't run the dashboard (no
+  // web dist); we throw so callers fall back to legacy.
+  const dash = await sshEnsureDashboard(conn.ssh, profile);
+  if (!dash)
     throw new Error(
-      "SSH dashboard sessions need a configured dashboard token or API_SERVER_KEY on the remote Hermes host.",
+      "Hermes dashboard is unavailable on this SSH remote (needs Node + the dashboard web dist).",
     );
-  setSshRemoteApiKey(apiKey);
-  return { remoteUrl, apiKey };
+  await ensureSshTunnel({ ...conn.ssh, remotePort: dash.port });
+  const remoteUrl = getSshTunnelUrl();
+  if (!remoteUrl) throw new Error("SSH tunnel is not active.");
+  setSshRemoteApiKey(dash.token);
+  // The tunnel + token are the shared machine dashboard's; scope data to the
+  // requested profile via `?profile=` (handled in dashboardApiUrl).
+  return { remoteUrl, apiKey: dash.token, profile };
+}
+
+// Most session/metadata IPC calls don't carry a profile, but the unified SSH
+// machine dashboard serves EVERY profile — an unscoped request silently
+// returns the DEFAULT profile's data (wrong session list / transcript for a
+// named-profile user). Fall back to the locally persisted active profile so
+// `dashboardApiUrl` appends `?profile=` ("default" needs no param and is
+// skipped there; explicit params like `profile=all` are never overridden).
+function activeSshProfile(profile?: string): string {
+  return profile?.trim() || getActiveProfileNameSync();
+}
+
+/**
+ * Establish the SSH tunnel to the correct endpoint and cache the matching
+ * credential — the remote dashboard (/api/* + chat WS; dashboard-token auth)
+ * when available, else the gateway api_server (/v1; api_server-key auth) —
+ * the dashboard is NOT a /v1 superset, the two are disjoint. EVERY SSH
+ * tunnel entry point routes through this so they never target different ports
+ * on the single global tunnel and thrash it (each `startSshTunnel` first calls
+ * `stopSshTunnel`, so a 9119↔8642 flip-flop yields "SSH tunnel is not active").
+ */
+async function prepareSshTunnel(
+  conn: ConnectionConfig,
+  profile?: string,
+): Promise<void> {
+  if (conn.mode !== "ssh" || !conn.ssh) return;
+  const dash =
+    conn.sshChatTransport === "legacy"
+      ? null
+      : await sshEnsureDashboard(conn.ssh, profile);
+  if (dash) {
+    await ensureSshTunnel({ ...conn.ssh, remotePort: dash.port });
+    setSshRemoteApiKey(dash.token);
+    return;
+  }
+  // Gateway /v1 path — the no-build chat transport used when the remote has no
+  // dashboard web dist (gateway-only installs) or when transport is "legacy".
+  // SSH mode, unlike local mode, never provisioned the remote api_server, so a
+  // fresh server had no /v1 endpoint at all (no API_SERVER_KEY → api_server
+  // refuses to bind; API_SERVER_ENABLED unset → gateway never loads it). Ensure
+  // both, then tunnel to the api_server and use that key.
+  const { key, created } = await sshEnsureApiServerKey(conn.ssh, profile);
+  const remotePort = await sshResolveApiServerPort(conn.ssh, profile);
+  const running = await sshGatewayStatus(conn.ssh, profile);
+  let apiReady = true;
+  if (!running) {
+    // Down → start it. (A cold tunnel must not take over a healthy gateway,
+    // hence the status check; but a stopped gateway must be started.)
+    await sshStartGateway(conn.ssh, profile);
+    apiReady = await sshWaitGatewayApiReady(conn.ssh, remotePort);
+  } else if (created) {
+    // Up, but predates the key/enable we just wrote, so its api_server isn't
+    // bound. Restart so it picks up the new env, then wait for /health.
+    await sshStopGateway(conn.ssh, profile);
+    await sshStartGateway(conn.ssh, profile);
+    apiReady = await sshWaitGatewayApiReady(conn.ssh, remotePort);
+  }
+  // A false readiness result must FAIL setup — opening the tunnel and caching
+  // the key anyway reports success while /v1 isn't bound, so the first chat
+  // hits a confusing connection error later instead of a clear one here.
+  if (!apiReady)
+    throw new Error(
+      `Remote gateway api_server did not become ready on port ${remotePort} ` +
+        "(/health never answered). Check the gateway logs on the remote and retry.",
+    );
+  await ensureSshTunnel({ ...conn.ssh, remotePort });
+  setSshRemoteApiKey(key);
 }
 
 async function withSshDashboardSessions<T>(
@@ -415,22 +498,28 @@ async function withSshDashboardModelLibrary<T>(
   if (conn.mode !== "ssh" || !conn.ssh)
     throw new Error("SSH connection is not configured.");
   if (conn.sshChatTransport === "legacy") return legacyOperation();
-  const compat = await ensureSshDashboardCompatibility(conn.ssh);
-  if (!compat.ok) {
-    console.warn(
-      "[ssh-model-library] Dashboard model-library compatibility check failed",
-      compat.error ? compat.detail + ": " + compat.error : compat.detail,
+  try {
+    // getSshDashboardSessionConfig starts the remote dashboard (which natively
+    // serves /api/model/*) and tunnels to it — no gateway web_server patch /
+    // restart dance needed.
+    return await dashboardOperation(
+      await getSshDashboardSessionConfig(conn, profile),
     );
-  } else if (compat.applied) {
-    try {
-      await sshStopGateway(conn.ssh);
-    } catch (err) {
-      console.warn("[ssh-model-library] Failed to stop patched gateway", err);
+  } catch (err) {
+    // Auto transport degrades to the legacy CLI/file path when the dashboard
+    // can't be reached — e.g. a gateway-only remote that can't run the
+    // dashboard (no Node / no web dist). A forced "dashboard" transport
+    // rethrows so the failure is visible.
+    if (conn.sshChatTransport === "auto") {
+      console.warn(
+        "[ssh-model-library] Dashboard unavailable; " +
+          "falling back to legacy SSH transport",
+        err,
+      );
+      return legacyOperation();
     }
-    stopSshTunnel();
-    await sshStartGateway(conn.ssh, profile);
+    throw err;
   }
-  return dashboardOperation(await getSshDashboardSessionConfig(conn, profile));
 }
 
 async function withRemoteDashboard<T>(
@@ -555,6 +644,18 @@ export function registerIpcHandlers(context: IpcContext): void {
   });
   ipcMain.handle("quit-app", () => app.quit());
 
+  // GPU fallback visibility: lets the Office tab explain SwiftShader slowness
+  // and offer a one-click recovery instead of silently rendering 3D on the CPU.
+  ipcMain.handle("get-gpu-status", () => getGpuStatus());
+  ipcMain.handle("reenable-gpu", () => reenableGpuAndRelaunch());
+  // Settings → Appearance hardware-acceleration preference. Validated here
+  // because the renderer is untrusted for main-process file writes.
+  ipcMain.handle("set-gpu-preference", (_event, mode: GpuPreferenceMode) => {
+    if (mode !== "auto" && mode !== "on" && mode !== "off") return false;
+    return setGpuPreference(mode);
+  });
+  ipcMain.handle("relaunch-app", () => relaunchApp());
+
   // Hermes engine info
   ipcMain.handle("get-hermes-version", async () => {
     const conn = getConnectionConfig();
@@ -564,6 +665,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         conn,
         (config) => remoteGetHermesVersion(config),
         () => sshGetHermesVersion(conn.ssh),
+        activeSshProfile(),
       );
     return getHermesVersion();
   });
@@ -575,6 +677,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         conn,
         (config) => remoteGetHermesVersion(config),
         () => sshGetHermesVersion(conn.ssh),
+        activeSshProfile(),
       );
     clearVersionCache();
     return getHermesVersion();
@@ -610,7 +713,9 @@ export function registerIpcHandlers(context: IpcContext): void {
         }
         await sshStartGateway(conn.ssh);
         await startSshTunnel(conn.ssh);
-        const key = conn.apiKey.trim() || (await sshReadRemoteApiKey(conn.ssh));
+        // Authoritative SSH credential is the remote API_SERVER_KEY (see
+        // getSshDashboardSessionConfig); conn.apiKey is remote-mode-only.
+        const key = (await sshReadRemoteApiKey(conn.ssh)).trim();
         setSshRemoteApiKey(key);
         return { success: true };
       }
@@ -784,6 +889,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         conn,
         (config) => remoteGetHermesHome(config),
         () => sshGetHermesHome(conn.ssh, profile),
+        activeSshProfile(profile),
       );
     return getHermesHome(profile);
   });
@@ -801,6 +907,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         conn,
         (config) => remoteGetModelConfig(config),
         () => sshGetModelConfig(conn.ssh!, profile),
+        activeSshProfile(profile),
       );
     return getModelConfig(profile);
   });
@@ -869,6 +976,7 @@ export function registerIpcHandlers(context: IpcContext): void {
             }
             return true;
           },
+          activeSshProfile(profile),
         );
       }
       const prev = getModelConfig(profile);
@@ -1016,6 +1124,7 @@ export function registerIpcHandlers(context: IpcContext): void {
           apiKey,
         ),
       });
+      resetSshDashboardAvailability();
       notifyConnectionConfigChanged();
       return true;
     },
@@ -1030,6 +1139,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         remoteChatTransport: normalizeRemoteChatTransport(remoteChatTransport),
         sshChatTransport: normalizeRemoteChatTransport(sshChatTransport),
       });
+      resetSshDashboardAvailability();
       notifyConnectionConfigChanged();
       return true;
     },
@@ -1052,6 +1162,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         mode: "ssh",
         ssh: { host, port, username, keyPath, remotePort, localPort },
       });
+      resetSshDashboardAvailability();
       notifyConnectionConfigChanged();
       return true;
     },
@@ -1085,15 +1196,11 @@ export function registerIpcHandlers(context: IpcContext): void {
   ipcMain.handle("start-ssh-tunnel", async () => {
     const conn = getConnectionConfig();
     if (conn.mode !== "ssh") return false;
-    if (conn.ssh && !(await sshGatewayStatus(conn.ssh))) {
-      await sshStartGateway(conn.ssh);
-    }
-    await ensureSshTunnel(conn.ssh);
-    // Cache the remote API key so chat auth works through the tunnel
-    if (conn.ssh) {
-      const key = conn.apiKey.trim() || (await sshReadRemoteApiKey(conn.ssh));
-      setSshRemoteApiKey(key);
-    }
+    // Route through the shared preparer so this targets the SAME endpoint
+    // (dashboard 9119, else gateway api_server) as every other SSH path — a
+    // bare ensureSshTunnel(conn.ssh) here would tunnel to the gateway port and
+    // fight the dashboard tunnel.
+    await prepareSshTunnel(conn);
     return true;
   });
 
@@ -1133,23 +1240,12 @@ export function registerIpcHandlers(context: IpcContext): void {
         startGateway(profile);
       }
 
-      await ensureSshTunnelIfNeeded();
       const conn = getConnectionConfig();
       if (conn.mode === "ssh" && conn.ssh) {
-        const gatewayRunning = await sshGatewayStatus(conn.ssh, profile);
-        const tunnelHealthy = await isSshTunnelHealthy();
-        const remotePort = await sshResolveApiServerPort(conn.ssh, profile);
-        if (!gatewayRunning || !tunnelHealthy) {
-          await sshStartGateway(conn.ssh, profile);
-        }
-        await ensureSshTunnel({ ...conn.ssh, remotePort });
-        // Always ensure the API key is cached — the key may not have been
-        // read yet if the app-launch auto-start failed silently (#212).
-        if (!getRemoteAuthHeader().Authorization) {
-          const key =
-            conn.apiKey.trim() || (await sshReadRemoteApiKey(conn.ssh));
-          setSshRemoteApiKey(key);
-        }
+        // Tunnel to the dashboard (/api/* + chat WS; NOT /v1) and cache its
+        // token, else the gateway api_server (/v1) — via the shared preparer
+        // so all SSH paths agree on one tunnel target.
+        await prepareSshTunnel(conn, profile);
       }
 
       // Abort only a prior run under the SAME runId (a re-send in the same
@@ -1629,6 +1725,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         conn,
         (config) => remoteListSessions(config, limit, offset),
         () => sshListSessions(conn.ssh, limit, offset),
+        activeSshProfile(),
       );
     return listSessions(limit, offset);
   });
@@ -1650,6 +1747,7 @@ export function registerIpcHandlers(context: IpcContext): void {
           sshGetSessionMessages(conn.ssh, sessionId).then((items) =>
             applySessionLocalOverlays(sessionId, items),
           ),
+        activeSshProfile(),
       );
     return getSessionMessages(sessionId);
   });
@@ -1722,8 +1820,11 @@ export function registerIpcHandlers(context: IpcContext): void {
     const conn = getConnectionConfig();
     if (conn.mode === "remote") return remoteDeleteSession(conn, sessionId);
     if (conn.mode === "ssh" && conn.ssh)
-      return withSshDashboardSessions(conn, (config) =>
-        remoteDeleteSession(config, sessionId),
+      return withSshDashboardSessions(
+        conn,
+        (config) => remoteDeleteSession(config, sessionId),
+        undefined,
+        activeSshProfile(),
       );
     return deleteSession(sessionId);
   });
@@ -1733,8 +1834,11 @@ export function registerIpcHandlers(context: IpcContext): void {
     const conn = getConnectionConfig();
     if (conn.mode === "remote") return remoteDeleteSessions(conn, ids);
     if (conn.mode === "ssh" && conn.ssh)
-      return withSshDashboardSessions(conn, (config) =>
-        remoteDeleteSessions(config, ids),
+      return withSshDashboardSessions(
+        conn,
+        (config) => remoteDeleteSessions(config, ids),
+        undefined,
+        activeSshProfile(),
       );
     return deleteSessions(ids);
   });
@@ -1742,7 +1846,15 @@ export function registerIpcHandlers(context: IpcContext): void {
   // Profiles
   ipcMain.handle("list-profiles", async () => {
     const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh) return sshListProfiles(conn.ssh);
+    if (conn.mode === "ssh" && conn.ssh) {
+      // The desktop's active profile is the LOCAL selection (persisted in
+      // ~/.hermes/active_profile by set-active-profile), not whatever the remote
+      // CLI last marked active. Override isActive so the UI highlights the
+      // profile the user actually selected — and it survives relaunches.
+      const active = getActiveProfileNameSync();
+      const list = await sshListProfiles(conn.ssh);
+      return list.map((p) => ({ ...p, isActive: p.name === active }));
+    }
     return listProfiles();
   });
   ipcMain.handle(
@@ -1760,18 +1872,26 @@ export function registerIpcHandlers(context: IpcContext): void {
       return sshDeleteProfile(conn.ssh, name);
     return deleteProfile(name);
   });
-  ipcMain.handle("set-active-profile", (_event, name: string) => {
-    if (getConnectionConfig().mode !== "ssh") {
-      setActiveProfile(name);
-      // The desktop now follows this profile: chat/health resolve their URL
-      // from the active profile's own port. Drop the cached health flag so the
-      // next check probes the new gateway rather than the previous profile's.
-      notifyProfileSwitched();
-      // Bring the activated profile's own gateway up if it isn't already —
-      // without stopping any other profile's gateway (their bots stay online).
-      if (!isRemoteMode() && !isGatewayRunning(name)) {
-        startGateway(name);
+  ipcMain.handle("set-active-profile", async (_event, name: string) => {
+    // Persist the selection LOCALLY in every mode (incl. SSH) — the desktop
+    // tracks "which profile is active" via the local ~/.hermes/active_profile,
+    // so without this an SSH session forgot the choice and reset to `default`
+    // on every relaunch. Then drop the cached health flag so the next check
+    // probes the newly-active profile's gateway, not the previous one's.
+    setActiveProfile(name);
+    notifyProfileSwitched();
+    // Bring the activated profile's own gateway up if it isn't already —
+    // without stopping any other profile's gateway (their bots stay online).
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" && conn.ssh) {
+      // Per-profile gateway lives on the remote; start it over SSH. (Previously
+      // SSH was skipped entirely, so selecting/Chatting a profile in the Agents
+      // page never started its gateway and the status spun on "Starting…".)
+      if (!(await sshGatewayStatus(conn.ssh, name))) {
+        await sshStartGateway(conn.ssh, name);
       }
+    } else if (!isRemoteMode() && !isGatewayRunning(name)) {
+      startGateway(name);
     }
     return true;
   });
@@ -1943,6 +2063,7 @@ export function registerIpcHandlers(context: IpcContext): void {
           conn,
           (config) => remoteListCachedSessions(config, limit, offset),
           () => sshListCachedSessions(conn.ssh, limit, offset),
+          activeSshProfile(),
         );
       return listCachedSessions(limit, offset);
     },
@@ -1955,6 +2076,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         conn,
         (config) => remoteListCachedSessions(config, 50),
         () => sshListCachedSessions(conn.ssh, 50),
+        activeSshProfile(),
       );
     try {
       return syncSessionCache();
@@ -1970,8 +2092,11 @@ export function registerIpcHandlers(context: IpcContext): void {
       if (conn.mode === "remote")
         return remoteUpdateSessionTitle(conn, sessionId, title);
       if (conn.mode === "ssh" && conn.ssh)
-        return withSshDashboardSessions(conn, (config) =>
-          remoteUpdateSessionTitle(config, sessionId, title),
+        return withSshDashboardSessions(
+          conn,
+          (config) => remoteUpdateSessionTitle(config, sessionId, title),
+          undefined,
+          activeSshProfile(),
         );
       return updateSessionTitle(sessionId, title);
     },
@@ -1986,6 +2111,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         conn,
         (config) => remoteSearchSessions(config, query, limit),
         () => sshSearchSessions(conn.ssh, query, limit),
+        activeSshProfile(),
       );
     return searchSessions(query, limit);
   });
@@ -2046,6 +2172,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         conn,
         (config) => remoteListModels(config),
         () => sshListModels(conn.ssh!),
+        getActiveProfileNameSync(),
       );
     }
     return listModels();
@@ -2076,6 +2203,7 @@ export function registerIpcHandlers(context: IpcContext): void {
           conn,
           (config) => remoteAddModel(config, name, provider, model, baseUrl),
           () => sshAddModel(conn.ssh!, name, provider, model, baseUrl),
+          getActiveProfileNameSync(),
         );
       } else {
         addedModel = addModel(name, provider, model, baseUrl, contextLength);
@@ -2099,6 +2227,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         conn,
         (config) => remoteRemoveModel(config, id),
         () => sshRemoveModel(conn.ssh!, id),
+        getActiveProfileNameSync(),
       );
     } else {
       removed = removeModel(id);
@@ -2130,6 +2259,7 @@ export function registerIpcHandlers(context: IpcContext): void {
           conn,
           (config) => remoteUpdateModel(config, id, fields),
           () => sshUpdateModel(conn.ssh!, id, fields),
+          getActiveProfileNameSync(),
         );
       } else {
         updated = updateModel(

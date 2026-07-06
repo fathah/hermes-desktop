@@ -18,6 +18,11 @@ import { isImageMime, MAX_IMAGE_BYTES } from "../shared/attachments";
 export interface RemoteSessionConfig {
   remoteUrl: string;
   apiKey: string;
+  /** When set (and not "default"), every dashboard request is scoped to this
+   *  profile via `?profile=`. The SSH transport uses ONE unified machine
+   *  dashboard for all profiles (see ensureDashboardInner), so per-profile data
+   *  correctness comes from this query param rather than a per-profile server. */
+  profile?: string;
 }
 
 type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
@@ -43,9 +48,22 @@ function normalizeRemoteDashboardBaseUrl(value: string): string {
   return url.toString().replace(/\/+$/, "");
 }
 
-function dashboardApiUrl(config: RemoteSessionConfig, path: string): string {
+// Exported so every dashboard request — including remote-metadata's /api/status
+// probe — shares ONE URL builder and gets the same `?profile=` scoping.
+export function dashboardApiUrl(
+  config: RemoteSessionConfig,
+  path: string,
+): string {
   const base = normalizeRemoteDashboardBaseUrl(config.remoteUrl);
-  return new URL(path, `${base}/`).toString();
+  const url = new URL(path, `${base}/`);
+  // Scope to the requested profile on the unified machine dashboard, unless the
+  // path already carries an explicit profile (e.g. the sessions list uses
+  // `profile=all`). "default"/empty needs no param.
+  const profile = config.profile?.trim();
+  if (profile && profile !== "default" && !url.searchParams.has("profile")) {
+    url.searchParams.set("profile", profile);
+  }
+  return url.toString();
 }
 
 export function remoteRequestJson<T>(

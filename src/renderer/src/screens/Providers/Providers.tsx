@@ -109,6 +109,12 @@ function Providers({
   // the latest value when flushing pending debounces (a closure over
   // `env` directly would capture a stale snapshot).
   const envRef = useRef<Record<string, string>>({});
+  // True while config.yaml holds a custom/OpenAI-compatible endpoint. Lets
+  // the autosave guard tell apart "opened Local / Others but no URL picked
+  // yet" (skip the write) from "cleared a configured Base URL" (persist the
+  // clear — otherwise the UI shows an empty endpoint while config.yaml keeps
+  // the old one and chat silently continues on the stale provider).
+  const persistedCustomUrl = useRef(false);
 
   const loadConfig = useCallback(async (): Promise<void> => {
     const [envData, mc, pool] = await Promise.all([
@@ -120,6 +126,8 @@ function Providers({
     setModelProvider(displayProviderFromConfig(mc.provider, mc.baseUrl));
     setModelName(mc.model);
     setModelBaseUrl(mc.baseUrl);
+    persistedCustomUrl.current =
+      mc.provider === "custom" && Boolean(mc.baseUrl?.trim());
     setCredPool(pool);
 
     requestAnimationFrame(() => {
@@ -141,6 +149,8 @@ function Providers({
       setModelProvider(displayProviderFromConfig(mc.provider, mc.baseUrl));
       setModelName(mc.model);
       setModelBaseUrl(mc.baseUrl);
+      persistedCustomUrl.current =
+        mc.provider === "custom" && Boolean(mc.baseUrl?.trim());
       requestAnimationFrame(() => {
         modelLoaded.current = true;
       });
@@ -156,12 +166,27 @@ function Providers({
     // host-derives the API key.
     const configProvider =
       modelProvider in OPENAI_COMPATIBLE_BASE_URLS ? "custom" : modelProvider;
+    // Don't persist an incomplete custom selection. Opening "Local / Others"
+    // sets provider=custom before the user picks a preset/URL; saving custom
+    // with an empty base_url would clobber config.yaml with a dead endpoint.
+    // Wait until a base URL exists (a preset click or a typed URL) — UNLESS
+    // config.yaml already holds a custom endpoint: then the empty field is the
+    // user deliberately clearing it, and skipping the write would leave the UI
+    // (empty) and config.yaml (old URL) disagreeing after navigation/relaunch.
+    if (
+      configProvider === "custom" &&
+      !modelBaseUrl.trim() &&
+      !persistedCustomUrl.current
+    )
+      return;
     await window.hermesAPI.setModelConfig(
       configProvider,
       modelName,
       modelBaseUrl,
       profile,
     );
+    persistedCustomUrl.current =
+      configProvider === "custom" && Boolean(modelBaseUrl.trim());
     setModelSaved(true);
     setTimeout(() => setModelSaved(false), 2000);
   }, [modelProvider, modelName, modelBaseUrl, profile]);
@@ -296,13 +321,24 @@ function Providers({
 
   // Select a provider from the card grid / preset chips / (legacy) dropdown.
   // Native ids clear base_url (the gateway hardcodes it); OpenAI-compatible ids
-  // autofill their endpoint and persist as `custom` (see saveModelConfig); the
-  // `local`/`custom` sentinel seeds a localhost placeholder.
+  // autofill their endpoint and persist as `custom` (see saveModelConfig). The
+  // `local`/`custom` sentinel only opens the preset group — it must NOT seed a
+  // base URL: the preset chips mark "active" by `modelBaseUrl === preset.baseUrl`,
+  // so seeding LM Studio's localhost URL would light it up as selected (and the
+  // autosave would persist it) before the user has actually picked a provider.
   function selectProvider(id: string): void {
+    // Picking a provider means the user is actively configuring — keep the
+    // editor open until they click Done. Without this, selecting a provider
+    // while the grid was open because nothing was configured yet (provider
+    // "auto") flips `isConfigured` true with `editingProvider` still false, so
+    // `showEditor` collapses the form mid-edit — e.g. clicking "Local / Others"
+    // closed it before the custom base URL / API key could be entered.
+    setEditingProvider(true);
     if (id === "custom" || id === "local") {
       // The "local" card has no provider id of its own — it routes as custom.
+      // Leave base_url untouched: empty stays empty (nothing preselected) while
+      // an already-chosen preset/custom URL is preserved when re-opening.
       setModelProvider("custom");
-      if (!modelBaseUrl) setModelBaseUrl("http://localhost:1234/v1");
     } else if (id in OPENAI_COMPATIBLE_BASE_URLS) {
       setModelProvider(id);
       setModelBaseUrl(OPENAI_COMPATIBLE_BASE_URLS[id]);
