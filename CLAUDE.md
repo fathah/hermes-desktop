@@ -31,6 +31,14 @@ node scripts/sps-smoke.mjs                      # Playwright-Electron UI smoke (
 
 Build installers: `build:mac` / `build:win` / `build:linux` / `build:rpm` (electron-builder).
 
+## Working method — load the skill first
+
+Before any non-trivial change, load `.claude/skills/hermes-dev-workflow/SKILL.md`. It carries the
+working method: problem decomposition, the verification ladder keyed by change type, git/worktree
+discipline, output structure, and the pitfall catalog
+(`.claude/skills/hermes-dev-workflow/PITFALLS.md` — failure signatures → causes → fixes from real
+incidents). CLAUDE.md states WHAT the invariants are; the skill states HOW to work.
+
 ## Architecture
 
 Three processes (electron-vite builds each separately — `electron.vite.config.ts`):
@@ -71,31 +79,27 @@ into `screens/SpsAgent/styles/` and confined to a `.sps-scope` container by `scr
 (so its global `:root`/`body`/`*` rules don't leak into the Hermes renderer). Theme/layout switches are
 pure attribute swaps on the scope element. The integrated renderer at
 `src/renderer/src/screens/SpsAgent/` is canonical. The archived standalone Vite app at
-`archive/sps-agent-standalone/` is historical reference material only, and
-`sps-agent-prototype/` remains design context when present.
+`archive/sps-agent-standalone/` is historical reference material only.
 
 ## Conventions that bite if missed
 
-- **Preload API parity is enforced.** Every method must appear in BOTH `src/preload/index.ts` and
+One-line invariants; full failure signatures and fixes live in
+`.claude/skills/hermes-dev-workflow/PITFALLS.md`.
+
+- **Preload API parity is enforced:** every method in BOTH `src/preload/index.ts` and
   `src/preload/index.d.ts`, or `tests/preload-api-surface.test.ts` fails.
-- **`better-sqlite3` is compiled for Electron's node ABI, not vitest's.** Any code that _opens_ the
-  index cannot run under vitest. Split: pure logic + IPC-mocked hooks/components → vitest (jsdom);
-  anything that opens the index → `npm run verify:note-index` (runs under `ELECTRON_RUN_AS_NODE=1`);
-  renderer UI → the Playwright-Electron smoke harness `scripts/sps-smoke.mjs`.
-- **Two TS projects, two typechecks.** `tsconfig.node.json` (main+preload) and `tsconfig.web.json`
-  (renderer) — run `npm run typecheck` (both) before claiming type safety.
-- **SSRF hardening is load-bearing** in `src/main/security/ssrf-guard.ts` (external HTTP fetchers pin the validated IP and
-  re-validate every redirect hop). Don't loosen the IP-pinning lookup when editing unfurl/fetch code.
+- **`better-sqlite3` is compiled for Electron's node ABI, not vitest's:** code that _opens_ the index
+  runs under `npm run verify:note-index`, never vitest; renderer UI → `scripts/sps-smoke.mjs`.
+- **Two TS projects, two typechecks:** `npm run typecheck` runs both (`tsconfig.node.json` +
+  `tsconfig.web.json`); passing one proves nothing about the other.
+- **SSRF hardening is load-bearing** (`src/main/security/ssrf-guard.ts`): don't loosen the IP-pinning
+  lookup or per-redirect re-validation when editing unfurl/fetch code.
 - **Full verification gate** (from `docs/STORAGE.md`) before shipping substrate changes: both
   typechecks → eslint touched files → `vitest run` → `verify:note-index` → `npm run build`.
 - **Keep PRs small and single-purpose** (CONTRIBUTING.md); don't bundle formatting sweeps with logic.
-- Husky `pre-commit`/`pre-push` only run lint+tests on `release`/`release/*` branches — feature
-  branches are NOT gated by the hook, so run checks manually.
-- **Each git worktree needs its OWN `node_modules` — run `bash scripts/setup-worktree.sh` (or
-  `npm ci`) after creating one. Do NOT symlink `node_modules` to another tree:** native modules
-  (`better-sqlite3`) plus a concurrent session's `npm install` in the other tree will corrupt your
-  build mid-flight and surface as phantom "cannot find module" typecheck errors in files you never
-  touched.
+- **Husky only gates `release`/`release/*`** — feature branches are ungated; run checks manually.
+- **Each git worktree needs its OWN `node_modules`** — `bash scripts/setup-worktree.sh` (or `npm ci`)
+  after creating one; never symlink to another tree.
 
 ## Related directories
 
