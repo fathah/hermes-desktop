@@ -97,5 +97,13 @@ export interface ToolsmiscBridgeApi {
     lines?: number,
   ) => Promise<{ content: string; path: string }>;
 
+  // Diagnostics (MED-10) — local errors-only sink
+
+  systemOpenLogs: () => Promise<string>;
+
+  systemReadErrorLog: (lines?: number) => Promise<string[]>;
+
+  systemClearErrorLog: () => Promise<boolean>;
+
   // SPS Agent workspace
 }

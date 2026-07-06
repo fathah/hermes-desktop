@@ -823,6 +823,42 @@ if (process.env.ENABLE_CDP === "1") {
   );
 }
 
+// MED-10 — durable local diagnostics: route uncaught failures into the
+// errors-only sink (<HERMES_HOME>/logs/hermes-errors.jsonl) that the
+// Diagnostics panel reads. Local file only; nothing leaves the machine.
+// Registering an uncaughtException listener replaces Electron's error dialog
+// with a durable record + continue, which is the desired headless behavior
+// for a long-lived tray-style app.
+process.on("uncaughtException", (err) => {
+  log.error("crash", {
+    msg: "uncaughtException",
+    error: formatLogError(err),
+    stack: err instanceof Error ? err.stack : undefined,
+  });
+});
+process.on("unhandledRejection", (reason) => {
+  log.error("crash", {
+    msg: "unhandledRejection",
+    error: formatLogError(reason),
+    stack: reason instanceof Error ? reason.stack : undefined,
+  });
+});
+app.on("render-process-gone", (_event, _webContents, details) => {
+  log.error("crash", {
+    msg: "render-process-gone",
+    reason: details.reason,
+    exitCode: details.exitCode,
+  });
+});
+app.on("child-process-gone", (_event, details) => {
+  log.error("crash", {
+    msg: "child-process-gone",
+    type: details.type,
+    reason: details.reason,
+    exitCode: details.exitCode,
+  });
+});
+
 // Single instance: a second launch must not spin up a parallel app. Acquire the
 // lock; if another instance already holds it, focus its window and quit this one.
 const gotSingleInstanceLock = app.requestSingleInstanceLock();

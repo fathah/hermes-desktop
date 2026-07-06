@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, shell } from "electron";
 import { safeHandle } from "./safe-handle";
 import {
   checkInstallStatus,
@@ -30,7 +30,13 @@ import {
   setDesktopUpdateRoutine,
   setHermesAgentUpdateRoutine,
 } from "../config";
-import { formatLogError, log } from "../log";
+import {
+  clearErrorLog,
+  formatLogError,
+  hermesLogDir,
+  log,
+  readErrorLogTail,
+} from "../log";
 import { runHermesAgentUpdateCheck } from "../hermes-agent-updates";
 import { runDesktopUpdateCheck } from "../desktop-update-routine";
 import {
@@ -356,6 +362,21 @@ export function registerSystemIpc(
 
   // Log viewer
   registerDualHandler("read-logs", readLogs, sshReadLogs);
+
+  // MED-10 — Diagnostics over the local errors-only sink. Read-only + local:
+  // nothing here sends data anywhere.
+  safeHandle("system-open-logs", () => shell.openPath(hermesLogDir()));
+  safeHandle("system-read-error-log", (_event, lines?: unknown) => {
+    const limit =
+      typeof lines === "number" && Number.isFinite(lines) && lines > 0
+        ? Math.min(Math.floor(lines), 2000)
+        : 300;
+    return readErrorLogTail(limit);
+  });
+  safeHandle("system-clear-error-log", () => {
+    clearErrorLog();
+    return true;
+  });
 
   // Auto-updater handlers
   const isPortableBuild = !!process.env.PORTABLE_EXECUTABLE_DIR;

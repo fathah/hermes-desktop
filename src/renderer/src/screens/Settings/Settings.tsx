@@ -25,6 +25,7 @@ import CapabilitySummary from "./CapabilitySummary";
 import McpServersManager from "./McpServersManager";
 import ResearchReachSummary from "./ResearchReachSummary";
 import WorkspaceBackups from "./WorkspaceBackups";
+import Diagnostics from "./Diagnostics";
 import { HealthSurface } from "../SpsAgent/health/HealthSurface";
 import { getDevMode, setDevMode } from "../../lib/devMode";
 import type { SettingsSection } from "./settingsSections";
@@ -877,6 +878,9 @@ function Settings({
 
       {/* Workspace Backups Section (MED-11) */}
       <WorkspaceBackups profile={profile} />
+
+      {/* Diagnostics Section (MED-10) */}
+      <Diagnostics />
 
       {/* Security Audit Section */}
       <div className="settings-section" data-section-tab="troubleshooting">

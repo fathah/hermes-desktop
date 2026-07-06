@@ -13,6 +13,8 @@ import {
   statSync,
   renameSync,
   unlinkSync,
+  readFileSync,
+  writeFileSync,
 } from "fs";
 import { join } from "path";
 import { HERMES_HOME } from "./installer/paths";
@@ -24,6 +26,33 @@ const DESKTOP_LOG_MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 const DESKTOP_LOG_KEEP = 3; // desktop.log + .1 .2 .3
 const GATEWAY_STDERR_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 const GATEWAY_STDERR_KEEP = 2;
+// MED-10 — the errors-only local sink behind the Diagnostics panel. Nothing
+// leaves the machine; the file is machine-global (like external-context.db)
+// and disposable.
+const ERROR_LOG_MAX_BYTES = 2 * 1024 * 1024; // 2 MB
+const ERROR_LOG_KEEP = 2; // hermes-errors.jsonl + .1 .2
+
+// Obvious secret shapes scrubbed before an error record hits disk: bearer
+// tokens, sk-/ghp-style API keys, and password/token/key JSON fields.
+const SECRET_PATTERNS: Array<[RegExp, string]> = [
+  [/Bearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, "Bearer [redacted]"],
+  [/\b(sk|ghp|gho|xoxb|xoxp|AKIA)[A-Za-z0-9_-]{10,}\b/g, "[redacted-key]"],
+  // Quotes may be escaped (\") when the secret sits inside a nested
+  // JSON-serialized string on the log line — match both forms.
+  [
+    /((?:\\?")(?:password|passwd|secret|token|apiKey|api_key|authorization)(?:\\?")\s*:\s*(?:\\?"))(?:[^"\\]|\\[^"])*(\\?")/gi,
+    "$1[redacted]$2",
+  ],
+];
+
+/** Pure: scrub obvious secret shapes from one serialized log line. */
+export function scrubSecrets(line: string): string {
+  let scrubbed = line;
+  for (const [pattern, replacement] of SECRET_PATTERNS) {
+    scrubbed = scrubbed.replace(pattern, replacement);
+  }
+  return scrubbed;
+}
 
 /** Pure: render one JSON-lines record. A string payload becomes { msg }, an
  *  object payload is spread as structured fields. */
@@ -102,6 +131,64 @@ function rotateNumbered(basePath: string, keep: number): void {
   }
 }
 
+export function hermesErrorLogPath(): string {
+  return join(logDir(), "hermes-errors.jsonl");
+}
+
+export function hermesLogDir(): string {
+  return logDir();
+}
+
+let _errBytesWritten = -1; // -1 = size not measured yet
+
+function appendErrorRecord(line: string): void {
+  // The whole body is best-effort: never let logging crash a caller (even
+  // resolving the path can throw under partial test mocks of installer/paths).
+  try {
+    const path = hermesErrorLogPath();
+    if (_errBytesWritten < 0) {
+      try {
+        _errBytesWritten = existsSync(path) ? statSync(path).size : 0;
+      } catch {
+        _errBytesWritten = 0;
+      }
+    }
+    if (shouldRotate(_errBytesWritten, ERROR_LOG_MAX_BYTES)) {
+      rotateNumbered(path, ERROR_LOG_KEEP);
+      _errBytesWritten = 0;
+    }
+    const scrubbed = scrubSecrets(line);
+    appendFileSync(path, scrubbed);
+    _errBytesWritten += Buffer.byteLength(scrubbed);
+  } catch {
+    // best-effort — never let logging crash a caller
+  }
+}
+
+/** Last `maxLines` records of the error sink (newest last), for Diagnostics. */
+export function readErrorLogTail(maxLines: number): string[] {
+  try {
+    const raw = readFileSync(hermesErrorLogPath(), "utf-8");
+    const lines = raw.split("\n").filter(Boolean);
+    return lines.slice(Math.max(0, lines.length - maxLines));
+  } catch {
+    return [];
+  }
+}
+
+export function clearErrorLog(): void {
+  try {
+    writeFileSync(hermesErrorLogPath(), "");
+    _errBytesWritten = 0;
+    for (let i = 1; i <= ERROR_LOG_KEEP; i++) {
+      const rotated = `${hermesErrorLogPath()}.${i}`;
+      if (existsSync(rotated)) unlinkSync(rotated);
+    }
+  } catch {
+    // best-effort
+  }
+}
+
 function writeLine(
   level: LogLevel,
   scope: string,
@@ -119,6 +206,9 @@ function writeLine(
   } catch {
     // best-effort
   }
+  // MED-10: error/warn records also land in the errors-only sink that the
+  // Diagnostics panel reads. Local file only — nothing leaves the machine.
+  if (level === "error" || level === "warn") appendErrorRecord(line);
   if (isDev()) {
     // eslint-disable-next-line no-console -- log.ts is the single dev-console mirror.
     const consoleFn = level === "debug" ? console.log : console[level];

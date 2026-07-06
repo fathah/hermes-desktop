@@ -107,4 +107,11 @@ export const toolsmiscBridge = {
     lines?: number,
   ): Promise<{ content: string; path: string }> =>
     ipcRenderer.invoke("read-logs", logFile, lines),
+
+  // Diagnostics (MED-10) — local errors-only sink
+  systemOpenLogs: (): Promise<string> => ipcRenderer.invoke("system-open-logs"),
+  systemReadErrorLog: (lines?: number): Promise<string[]> =>
+    ipcRenderer.invoke("system-read-error-log", lines),
+  systemClearErrorLog: (): Promise<boolean> =>
+    ipcRenderer.invoke("system-clear-error-log"),
 } satisfies ToolsmiscBridgeApi;
