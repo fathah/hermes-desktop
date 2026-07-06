@@ -14,9 +14,13 @@ import {
   mirrorAllPages,
 } from "../lib/persistence";
 import { getStorageMode } from "../lib/storageMode";
-import { readVaultWorkspace, saveVaultPage } from "../lib/vaultStore";
+import {
+  readVaultWorkspace,
+  saveVaultPage,
+  deleteVaultPages,
+} from "../lib/vaultStore";
 import { gcOrphanAssets } from "../lib/assets";
-import type { Workspace } from "../types";
+import type { Block, PageMeta, Workspace } from "../types";
 import type { Store } from "./storeTypes";
 import { createWorkspaceSlice } from "./slices/workspace";
 import { createCommentsSlice } from "./slices/comments";
@@ -84,6 +88,41 @@ function snapshotWorkspace(s: Store): Workspace {
   };
 }
 
+// MED-8: what the markdown mirror last saw, per page. Zustand updates are
+// immutable, so reference inequality on docs[id]/meta[id] reliably means "this
+// page changed since it was last mirrored" — the subscriber mirrors exactly
+// those pages (background commits included: OKF import, wiki-ingest, land
+// reports), not just the one that is open. Seeded by the hydrate-time
+// mirrorAllPages pass so the first post-hydrate edit diffs correctly.
+let mirroredDocs: Record<string, Block[]> = {};
+let mirroredMeta: Record<string, PageMeta | undefined> = {};
+
+function seedMirrored(s: Store): void {
+  mirroredDocs = { ...s.docs };
+  mirroredMeta = { ...s.meta };
+}
+
+function mirrorChangedPages(s: Store): void {
+  for (const pageId of Object.keys(s.docs)) {
+    const docChanged = s.docs[pageId] !== mirroredDocs[pageId];
+    const metaChanged = s.meta[pageId] !== mirroredMeta[pageId];
+    if (!docChanged && !metaChanged) continue;
+    mirrorPage(pageId, s.meta[pageId] ?? {}, s.docs[pageId] ?? []);
+    mirroredDocs[pageId] = s.docs[pageId];
+    mirroredMeta[pageId] = s.meta[pageId];
+  }
+  // Pages gone from docs were permanently deleted (trash keeps its docs) —
+  // drop their mirror files so search/backlinks stop resurrecting them.
+  const removed = Object.keys(mirroredDocs).filter((id) => !(id in s.docs));
+  if (removed.length) {
+    void deleteVaultPages(removed);
+    for (const id of removed) {
+      delete mirroredDocs[id];
+      delete mirroredMeta[id];
+    }
+  }
+}
+
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 useStore.subscribe(
   // a stable-ish projection: identity of the persisted fields
@@ -102,7 +141,7 @@ useStore.subscribe(
         void saveWorkspace(ws).then((res) =>
           useStore.getState().reportSaveResult(res),
         );
-        mirrorPage(s.page, s.meta[s.page] ?? {}, s.docs[s.page] ?? []); // mirror
+        mirrorChangedPages(s); // mirror every changed page (MED-8)
       }
     }, 350);
   },
@@ -142,8 +181,10 @@ export async function hydrateWorkspace(): Promise<void> {
   const ws = await loadWorkspace();
   if (!ws || !ws.docs || !ws.tree) return;
   applyWorkspace(ws);
-  // Materialize the markdown substrate for every page once on load (S2b).
+  // Materialize the markdown substrate for every page once on load (S2b),
+  // and seed the MED-8 diff-mirror so later saves only export changed pages.
   mirrorAllPages(snapshotWorkspace(useStore.getState()));
+  seedMirrored(useStore.getState());
   // Reclaim vault assets no page references any more (best-effort).
   gcOrphanAssets(useStore.getState().docs);
 }

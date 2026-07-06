@@ -440,8 +440,10 @@ export const createWorkspaceSlice: StateCreator<
 
   ingestCommitPage: (page) => {
     // Commit one proposed wiki page through the canonical store path so it shows
-    // in BOTH storage modes (the editor materializes it; autosave mirrors it to
-    // the vault as <pageId>.md, which is what [[wikilinks]] resolve to).
+    // in BOTH storage modes. In blob mode the autosave diff-mirror (MED-8,
+    // store/index.ts) exports every changed page — including this one, even
+    // when it is not the open page — to the vault as <pageId>.md, which is
+    // what [[wikilinks]] resolve to.
     // Parse the FULL frontmatter meta (tags, aliases, source, ingestedAt, cover,
     // custom properties…), not just the blocks — the OKF importer translates all
     // of it into frontmatter and it must survive the commit (MED-5 data loss).
