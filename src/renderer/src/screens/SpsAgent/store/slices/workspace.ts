@@ -442,36 +442,53 @@ export const createWorkspaceSlice: StateCreator<
     // Commit one proposed wiki page through the canonical store path so it shows
     // in BOTH storage modes (the editor materializes it; autosave mirrors it to
     // the vault as <pageId>.md, which is what [[wikilinks]] resolve to).
-    const { blocks } = pageFromMarkdown(page.markdown);
+    // Parse the FULL frontmatter meta (tags, aliases, source, ingestedAt, cover,
+    // custom properties…), not just the blocks — the OKF importer translates all
+    // of it into frontmatter and it must survive the commit (MED-5 data loss).
+    const { meta: parsedMeta, blocks } = pageFromMarkdown(page.markdown);
     const docBlocks = blocks.length ? blocks : [blk("p", "")];
     const exists = !!get().docs[page.pageId] || !!get().meta[page.pageId];
     if (exists) {
       get().setPageDoc(page.pageId, docBlocks);
-      set((s) => ({
-        meta: {
-          ...s.meta,
-          [page.pageId]: {
-            ...s.meta[page.pageId],
-            icon: s.meta[page.pageId]?.icon || "📝",
-            cover: s.meta[page.pageId]?.cover ?? null,
-            title: page.title,
+      set((s) => {
+        const prior = s.meta[page.pageId];
+        return {
+          meta: {
+            ...s.meta,
+            [page.pageId]: {
+              ...prior,
+              ...parsedMeta,
+              icon: parsedMeta.icon || prior?.icon || "📝",
+              cover: parsedMeta.cover ?? prior?.cover ?? null,
+              // Caller's title is the display title of record.
+              title: page.title,
+            },
           },
-        },
-      }));
+        };
+      });
       return page.pageId;
     }
     const parent = get().ensureWikiFolder();
-    return get().makePageWithId(
+    const createdId = get().makePageWithId(
       page.pageId,
       {
-        icon: "📝",
+        icon: parsedMeta.icon || "📝",
         title: page.title,
-        source: "ingest",
-        ingestedAt: Date.now(),
+        source: parsedMeta.source ?? "ingest",
+        ingestedAt: parsedMeta.ingestedAt ?? Date.now(),
       },
       docBlocks,
       parent,
     );
+    // makePageWithId only models icon/title/source/ingestedAt; layer the richer
+    // frontmatter fields (tags, aliases, cover, properties, journal…) on top.
+    set((s) => ({
+      meta: {
+        ...s.meta,
+        [createdId]: { ...s.meta[createdId], ...parsedMeta, title: page.title },
+      },
+    }));
+    return createdId;
   },
 
   importResearchWork: async (work: WorkDetail) => {
