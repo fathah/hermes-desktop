@@ -232,7 +232,10 @@ export async function tickScheduler(profile?: string): Promise<void> {
   // Check 3:00 AM local time Dream Cycle trigger
   try {
     const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
+    // Use a LOCAL calendar-date key to match the local getHours() gate. Mixing a
+    // UTC date (toISOString) with a local hour double-fires the "once daily"
+    // Dream Cycle east of UTC+3 (e.g. IST) when the UTC day rolls over after 03:00 local.
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     const currentHour = now.getHours();
     if (currentHour >= 3 && last3AmRunDate !== todayStr) {
       last3AmRunDate = todayStr;
@@ -534,14 +537,20 @@ export async function runJobHeadless(
     const record: LockRecord = { pid: process.pid, startedAt: Date.now() };
     writeFileSync(lockFile, serializeLockRecord(record), "utf-8");
   } catch (err) {
+    // Without a durable lock the cross-process / crash-recovery "at most one
+    // runner" guarantee is gone. Skip this run rather than execute unguarded,
+    // and surface it via skip telemetry so a persistent lock-dir problem is
+    // visible instead of silently degrading to no protection.
     log.error("scheduler", {
-      msg: "failed to create lockfile",
+      msg: "failed to create lockfile — skipping run to avoid an unguarded concurrent execution",
       jobId,
       jobName,
       profile,
       lockFile,
       error: formatLogError(err),
     });
+    recordSkip(jobId, "lock-write-failed");
+    return false;
   }
 
   // A clean acquisition means this job is healthy again — clear any stale skip
