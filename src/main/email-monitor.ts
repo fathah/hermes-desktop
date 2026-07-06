@@ -32,6 +32,10 @@ interface EmailMonitorStore {
   config?: EmailMonitorConfig;
   status?: EmailMonitorStatus;
   cursors?: Record<string, Record<string, number>>;
+  // Per account/folder IMAP UIDVALIDITY. When the server reassigns UIDs
+  // (mailbox rebuild/migration) this value changes and the stored cursor is no
+  // longer meaningful, so the folder must be re-baselined instead of stalling.
+  validities?: Record<string, Record<string, number>>;
 }
 
 export interface ParsedEmailAttachment {
@@ -134,9 +138,10 @@ export async function runEmailMonitorNow(
   const store = readEmailMonitorStore(profile);
   const config = store.config ?? configFromEnv(profile);
   const cursors = store.cursors ?? {};
+  const validities = store.validities ?? {};
   const status = hydrateStatus(config, store.status, true);
   runningProfiles.add(key);
-  writeEmailMonitorStore(profile, { config, cursors, status });
+  writeEmailMonitorStore(profile, { config, cursors, validities, status });
 
   let captured = 0;
   let skipped = 0;
@@ -158,7 +163,7 @@ export async function runEmailMonitorNow(
       }
 
       accountStatus.state = "running";
-      const result = await pollAccount(account, profile, cursors);
+      const result = await pollAccount(account, profile, cursors, validities);
       captured += result.captured;
       skipped += result.skipped;
       errors += result.errors;
@@ -172,7 +177,12 @@ export async function runEmailMonitorNow(
   } finally {
     runningProfiles.delete(key);
     const settled = hydrateStatus(config, status, false);
-    writeEmailMonitorStore(profile, { config, cursors, status: settled });
+    writeEmailMonitorStore(profile, {
+      config,
+      cursors,
+      validities,
+      status: settled,
+    });
   }
 
   const finalStatus = getEmailMonitorStatus(profile);
@@ -265,6 +275,7 @@ async function pollAccount(
   account: EmailMonitorAccount,
   profile: string | undefined,
   cursors: NonNullable<EmailMonitorStore["cursors"]>,
+  validities: NonNullable<EmailMonitorStore["validities"]>,
 ): Promise<{
   captured: number;
   skipped: number;
@@ -303,17 +314,27 @@ async function pollAccount(
   });
 
   const accountCursors = (cursors[account.id] ??= {});
+  const accountValidities = (validities[account.id] ??= {});
   try {
     await client.connect();
     for (const folder of account.folders) {
-      await pollFolder(
-        client,
-        account,
-        folder,
-        accountCursors,
-        result,
-        profile,
-      );
+      // Isolate each folder: a renamed/deleted folder throws on mailboxOpen, and
+      // without this guard it would abort the loop and starve every folder listed
+      // after it for the whole run.
+      try {
+        await pollFolder(
+          client,
+          account,
+          folder,
+          accountCursors,
+          accountValidities,
+          result,
+          profile,
+        );
+      } catch (e) {
+        result.errors += 1;
+        result.lastError = e instanceof Error ? e.message : String(e);
+      }
     }
   } catch (e) {
     result.errors += 1;
@@ -333,6 +354,7 @@ async function pollFolder(
   account: EmailMonitorAccount,
   folder: string,
   accountCursors: Record<string, number>,
+  accountValidities: Record<string, number>,
   result: {
     captured: number;
     skipped: number;
@@ -348,17 +370,39 @@ async function pollFolder(
   }
 
   const mailbox = await client.mailboxOpen(folder, { readOnly: true });
-  const previousUid = accountCursors[folder] ?? 0;
+
+  // UIDVALIDITY guard: if the server reassigned UIDs since we last polled, the
+  // stored cursor points into a defunct UID epoch. Left alone this silently
+  // stalls the folder forever (search from a stale-high cursor returns nothing
+  // and never resets). Detect the change and re-baseline the folder.
+  const currentValidity =
+    mailbox.uidValidity != null ? Number(mailbox.uidValidity) : 0;
+  const storedValidity = accountValidities[folder];
+  let previousUid = accountCursors[folder] ?? 0;
+  if (
+    currentValidity > 0 &&
+    storedValidity != null &&
+    storedValidity !== currentValidity
+  ) {
+    previousUid = 0;
+    accountCursors[folder] = 0;
+  }
+  if (currentValidity > 0) accountValidities[folder] = currentValidity;
+
   const uidNext = mailbox.uidNext || 1;
   const startUid =
     previousUid > 0
       ? previousUid + 1
       : Math.max(1, uidNext - account.pollLimit);
   const found = await client.search({ uid: `${startUid}:*` }, { uid: true });
+  // Process the OLDEST unseen messages first, capped at pollLimit. The cursor
+  // then advances only as far as the messages we actually fetched, so any
+  // backlog beyond pollLimit is drained on subsequent runs instead of being
+  // silently skipped (which the previous `.slice(-pollLimit)` did).
   const uids = (Array.isArray(found) ? found : [])
     .filter((uid) => uid > previousUid)
     .sort((a, b) => a - b)
-    .slice(-account.pollLimit);
+    .slice(0, account.pollLimit);
 
   if (!uids.length) {
     if (previousUid === 0 && uidNext > 1) accountCursors[folder] = uidNext - 1;
@@ -529,6 +573,7 @@ function readEmailMonitorStore(profile?: string): EmailMonitorStore {
   const fallback = {
     config: configFromEnv(profile),
     cursors: {},
+    validities: {},
     status: undefined,
   };
   if (!existsSync(path)) return fallback;
@@ -538,6 +583,7 @@ function readEmailMonitorStore(profile?: string): EmailMonitorStore {
     return {
       config,
       cursors: normalizeCursors(parsed.cursors),
+      validities: normalizeCursors(parsed.validities),
       status: hydrateStatus(config, parsed.status, isProfileRunning(profile)),
     };
   } catch {
@@ -556,6 +602,7 @@ function writeEmailMonitorStore(
         config: normalizeEmailMonitorConfig(store.config),
         status: store.status,
         cursors: normalizeCursors(store.cursors),
+        validities: normalizeCursors(store.validities),
       },
       null,
       2,

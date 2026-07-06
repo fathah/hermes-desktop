@@ -178,14 +178,14 @@ export function classifyEmailCandidate(
   }
 
   const ignored = normalized.ignoredKeywords.find((keyword) =>
-    lowerHaystack.includes(keyword.toLowerCase()),
+    matchesKeyword(lowerHaystack, keyword),
   );
   if (ignored) return ignore(`Matched ignored keyword "${ignored}".`, 0.9);
 
   const allowlistedSender = normalized.allowSenders.includes(sender);
   const allowlistedDomain = domain && normalized.allowDomains.includes(domain);
   const important = normalized.importanceKeywords.find((keyword) =>
-    lowerHaystack.includes(keyword.toLowerCase()),
+    matchesKeyword(lowerHaystack, keyword),
   );
 
   if (allowlistedSender || allowlistedDomain) {
@@ -198,10 +198,10 @@ export function classifyEmailCandidate(
     };
   }
 
-  if (isBulkMail(candidate)) {
-    return ignore("Skipped bulk mail without an important match.", 0.92);
-  }
-
+  // Importance is checked BEFORE bulk-mail suppression: a genuine incident /
+  // alert that also carries bulk headers (e.g. Auto-Submitted from a monitoring
+  // system) must still be captured, not silently dropped. Keeping this ahead of
+  // isBulkMail also makes the "without an important match" reason below truthful.
   if (important) {
     return {
       capture: true,
@@ -209,6 +209,10 @@ export function classifyEmailCandidate(
       confidence: 0.78,
       reason: `Matched important keyword "${important}".`,
     };
+  }
+
+  if (isBulkMail(candidate)) {
+    return ignore("Skipped bulk mail without an important match.", 0.92);
   }
 
   return {
@@ -386,6 +390,20 @@ function isBulkMail(candidate: EmailMonitorCandidate): boolean {
   }
   const sender = normalizeEmailAddress(candidate.from);
   return sender.startsWith("no-reply@") || sender.startsWith("noreply@");
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Whole-word match so a keyword like "site" does not fire on "website" and
+// "incident" does not fire on "coincidentally". Multi-word keywords (e.g.
+// "code amber") are matched verbatim between word boundaries.
+function matchesKeyword(lowerHaystack: string, keyword: string): boolean {
+  const trimmed = keyword.trim().toLowerCase();
+  if (!trimmed) return false;
+  const re = new RegExp(`\\b${escapeRegExp(trimmed)}\\b`);
+  return re.test(lowerHaystack);
 }
 
 function labelForKeyword(keyword: string): EmailTriageLabel {

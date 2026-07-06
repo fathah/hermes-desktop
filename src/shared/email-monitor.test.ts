@@ -57,6 +57,38 @@ describe("email monitor triage", () => {
     expect(result.reason).toContain("allowlisted sender");
   });
 
+  it("does not fire an importance keyword on a substring (whole-word match)", () => {
+    // "coincidentally" contains the substring "incident" but is not the word.
+    const result = classifyEmailCandidate(
+      {
+        from: "sam@example.com",
+        subject: "Coincidentally, I'll be traveling next week",
+        headers: {},
+      },
+      DEFAULT_EMAIL_MONITOR_CONFIG.accounts[0],
+    );
+
+    expect(result.label).not.toBe("urgent");
+    expect(result.reason).not.toContain("important keyword");
+  });
+
+  it("captures a genuine incident alert even when it carries bulk headers", () => {
+    // Monitoring/alerting systems commonly set Auto-Submitted; importance must
+    // win over the bulk-mail gate rather than being silently dropped.
+    const result = classifyEmailCandidate(
+      {
+        from: "alerts@monitoring.example",
+        subject: "Incident: site alarm triggered",
+        headers: { "auto-submitted": "auto-generated" },
+      },
+      DEFAULT_EMAIL_MONITOR_CONFIG.accounts[0],
+    );
+
+    expect(result.capture).toBe(true);
+    expect(result.label).toBe("urgent");
+    expect(result.reason).toContain("important keyword");
+  });
+
   it("captures uncertain mail for review with a low confidence reason", () => {
     const result = classifyEmailCandidate(
       {
