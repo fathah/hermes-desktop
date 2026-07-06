@@ -237,6 +237,23 @@ export async function triggerSelfHealing(
     }
 
     const originalContent = readFileSync(targetFilePath, "utf-8");
+
+    // Snapshot the pre-patch file so a wrong LLM patch can be reverted. The
+    // audit log only records the NEW content, so without this backup there is no
+    // path back to the last human-written version. If the backup can't be
+    // written, refuse to patch — a still-broken job beats an unrecoverable one.
+    const backupPath = `${targetFilePath}.selfheal-bak-${Date.now()}`;
+    try {
+      writeFileSync(backupPath, originalContent, "utf-8");
+    } catch (err) {
+      return {
+        success: false,
+        error: `Refused: could not write pre-patch backup (${
+          err instanceof Error ? err.message : String(err)
+        }).`,
+      };
+    }
+
     writeFileSync(targetFilePath, parsed.patchedContent, "utf-8");
 
     // Generate plain-text diff preview
@@ -251,7 +268,7 @@ export async function triggerSelfHealing(
       filePatched: parsed.fileToPatch,
       patchedContent: parsed.patchedContent,
       explanation: parsed.explanation,
-      detail: `Self-healed ${parsed.fileToPatch}: ${parsed.explanation}`,
+      detail: `Self-healed ${parsed.fileToPatch} (backup: ${backupPath}): ${parsed.explanation}`,
     });
 
     // 6. Notify frontend UI
