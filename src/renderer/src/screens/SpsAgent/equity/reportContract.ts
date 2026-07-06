@@ -8,8 +8,8 @@
 // `null` so callers fall back to plain markdown rendering.
 
 import { parse as parseYaml } from "yaml";
+import { splitSpsFrontmatter } from "../../../../../shared/sps-frontmatter";
 
-const FRONTMATTER_RE = /^---\n([\s\S]*?)\n---\n?/;
 const REPORT_MARKER = "india-equity-research";
 
 export interface EquityScores {
@@ -99,19 +99,18 @@ function asArray<T>(value: unknown): T[] {
  */
 export function parseEquityReport(markdown: string): EquityReport | null {
   if (!markdown) return null;
-  const match = markdown.match(FRONTMATTER_RE);
-  if (!match) return null;
+  const { frontmatter, body } = splitSpsFrontmatter(markdown);
+  if (frontmatter === null) return null;
 
   let front: Record<string, unknown>;
   try {
-    front = asRecord(parseYaml(match[1]));
+    front = asRecord(parseYaml(frontmatter));
   } catch {
     return null;
   }
 
   if (front.hermes_report !== REPORT_MARKER) return null;
 
-  const body = markdown.slice(match[0].length);
   const sectorHeatmapRaw = asRecord(front.sector_heatmap);
   const dcfRaw = asRecord(front.dcf_sensitivity);
 

@@ -1,5 +1,12 @@
+// control-server.ts — the localhost control/automation HTTP server.
+//
+// NOTE(deferred): this file multiplexes ~13 endpoints (control, calendar feed,
+// captures, context packs…) behind one router. That is a structural
+// observation, not a bug — splitting into per-domain routers is a separate,
+// larger change (audit 2026-07-06, LOW/A4).
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { randomBytes } from "crypto";
+import { timingSafeTokenEqual } from "./security";
 import {
   writeFileSync,
   mkdirSync,
@@ -74,15 +81,18 @@ function ensureCalendarFeedToken(): string {
 function hasBearerControlToken(req: IncomingMessage): boolean {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) return false;
-  return authHeader.substring(7).trim() === authToken;
+  return timingSafeTokenEqual(authHeader.substring(7).trim(), authToken);
 }
 
 function isCalendarAuthorized(req: IncomingMessage, url: URL): boolean {
   if (hasBearerControlToken(req)) return true;
-  if (url.searchParams.get("feedToken") === calendarFeedToken) return true;
+  if (
+    timingSafeTokenEqual(url.searchParams.get("feedToken"), calendarFeedToken)
+  )
+    return true;
   // Compatibility for existing calendar subscriptions. Keep this calendar-only:
   // general control endpoints still require the Authorization header below.
-  return url.searchParams.get("token") === authToken;
+  return timingSafeTokenEqual(url.searchParams.get("token"), authToken);
 }
 
 function getICalDates(dueStr: string): { start: string; end: string } | null {

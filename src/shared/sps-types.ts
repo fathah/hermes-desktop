@@ -103,8 +103,7 @@ export interface SpsBaseViewConfig {
 
 export type SpsImportSource =
   | { kind: "okf-bundle"; path: string }
-  | { kind: "markdown-folder"; path: string }
-  | { kind: "document-folder"; path: string };
+  | { kind: "markdown-folder"; path: string };
 
 export interface SpsImportPlanItem {
   sourcePath: string;

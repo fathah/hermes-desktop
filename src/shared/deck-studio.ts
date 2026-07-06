@@ -1,4 +1,5 @@
 import { parse, stringify } from "yaml";
+import { splitSpsFrontmatter } from "./sps-frontmatter";
 
 // Shared by main export/IPC, preload types, and renderer UI. Keep this module
 // outside renderer-only lib even though nearby Content Studio code is renderer-local.
@@ -405,7 +406,6 @@ export const DECK_TEMPLATE_RECIPES: Record<
   },
 };
 
-const FRONTMATTER_RE = /^---\n([\s\S]*?)\n---\n?/;
 const JSON_FENCE_RE = /```json\n([\s\S]*?)\n```/;
 
 function isDeckThemeId(value: unknown): value is DeckThemeId {
@@ -1000,9 +1000,7 @@ export function serializeDeckProjectMarkdown(project: DeckProject): string {
 }
 
 export function parseDeckProjectMarkdown(markdown: string): DeckProject {
-  const body = FRONTMATTER_RE.test(markdown)
-    ? markdown.slice(FRONTMATTER_RE.exec(markdown)?.[0].length ?? 0)
-    : markdown;
+  const { body } = splitSpsFrontmatter(markdown);
   const json = JSON_FENCE_RE.exec(body)?.[1];
   if (!json) {
     throw new Error("Deck project markdown is missing a JSON deck body.");
@@ -1048,9 +1046,9 @@ export function rowToDeckProject(
 export function parseDeckProjectFrontmatter(
   markdown: string,
 ): Record<string, unknown> {
-  const match = FRONTMATTER_RE.exec(markdown);
-  if (!match) return {};
-  const parsed = parse(match[1]) as unknown;
+  const { frontmatter } = splitSpsFrontmatter(markdown);
+  if (frontmatter === null) return {};
+  const parsed = parse(frontmatter) as unknown;
   return parsed && typeof parsed === "object"
     ? (parsed as Record<string, unknown>)
     : {};

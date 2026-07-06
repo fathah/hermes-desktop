@@ -24,6 +24,10 @@ export function wrapFrontmatterLines(
   return `---\n${lines.join("\n")}\n---${afterMarker}${body}`;
 }
 
+// INTENTIONAL (audit 2026-07-06, A3): the editor serializes frontmatter values
+// as JSON scalars (this parser) while the note-index reads them as YAML — the
+// two value grammars deliberately coexist; reconciling them is a substrate-
+// format decision deferred to its own pass.
 export function parseJsonScalarFrontmatter(
   frontmatter: string,
 ): Record<string, unknown> {

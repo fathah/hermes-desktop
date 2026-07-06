@@ -6,7 +6,7 @@ import type {
   VaultHealthNoteSnapshot,
   VaultHealthReport,
 } from "../shared/sps-types";
-import YAML from "yaml";
+import { parseYamlFrontmatterMarkdown } from "../shared/sps-frontmatter";
 
 export interface VaultHealthSnapshot {
   notes: VaultHealthNoteSnapshot[];
@@ -144,7 +144,7 @@ async function readVaultNoteSnapshots(
   for (const rel of paths) {
     try {
       const raw = await readFile(join(vaultDir, rel), "utf-8");
-      const { props, body } = parseFrontmatter(raw);
+      const { props, body } = parseYamlFrontmatterMarkdown(raw);
       out.push({
         path: rel,
         title: deriveTitle({ path: rel, title: "", props, mtime: 0 }, body),
@@ -189,26 +189,6 @@ interface NoteRecord {
   title: string;
   props: Record<string, unknown>;
   mtime: number;
-}
-
-function parseFrontmatter(raw: string): {
-  props: Record<string, unknown>;
-  body: string;
-} {
-  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(raw);
-  if (!match) return { props: {}, body: raw };
-  try {
-    const parsed = YAML.parse(match[1]);
-    return {
-      props:
-        parsed && typeof parsed === "object" && !Array.isArray(parsed)
-          ? (parsed as Record<string, unknown>)
-          : {},
-      body: raw.slice(match[0].length),
-    };
-  } catch {
-    return { props: {}, body: raw.slice(match[0].length) };
-  }
 }
 
 function aliases(props: Record<string, unknown>): string[] {

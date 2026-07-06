@@ -6,8 +6,8 @@
 // non-scorecard markdown.
 
 import { parse as parseYaml } from "yaml";
+import { splitSpsFrontmatter } from "../../../../../shared/sps-frontmatter";
 
-const FRONTMATTER_RE = /^---\n([\s\S]*?)\n---\n?/;
 const MARKER = "india-equity-calibration";
 
 export interface HitBucket {
@@ -94,11 +94,11 @@ export function parseCalibrationScorecard(
   markdown: string,
 ): CalibrationScorecard | null {
   if (!markdown) return null;
-  const match = markdown.match(FRONTMATTER_RE);
-  if (!match) return null;
+  const { frontmatter, body } = splitSpsFrontmatter(markdown);
+  if (frontmatter === null) return null;
   let front: Record<string, unknown>;
   try {
-    front = asRecord(parseYaml(match[1]));
+    front = asRecord(parseYaml(frontmatter));
   } catch {
     return null;
   }
@@ -113,7 +113,7 @@ export function parseCalibrationScorecard(
     byRating: buckets(front.by_rating),
     byConfidence: buckets(front.by_confidence),
     calls: asArray<unknown>(front.calls).map(call),
-    bodyMarkdown: markdown.slice(match[0].length),
+    bodyMarkdown: body,
   };
 }
 

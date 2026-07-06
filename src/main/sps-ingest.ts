@@ -12,7 +12,7 @@
 // Kept free of better-sqlite3 imports so it runs under vitest (jsdom/node).
 import { promises as fs } from "fs";
 import { join } from "path";
-import YAML from "yaml";
+import { parseYamlFrontmatterMarkdown } from "../shared/sps-frontmatter";
 import { DEFAULT_WIKI_SCHEMA } from "../shared/wikiSchema";
 import type { VaultLinkEdge } from "../shared/sps-types";
 
@@ -143,26 +143,6 @@ export function buildIngestMessages(
 
 // ── read-only I/O (fs only — vitest-safe) ─────────────────────────────────────
 
-/** Split YAML frontmatter from a markdown body (local copy to avoid importing
- *  the sqlite-backed note-index module). Never throws. */
-function parseFrontmatter(raw: string): {
-  props: Record<string, unknown>;
-  body: string;
-} {
-  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(raw);
-  if (!match) return { props: {}, body: raw };
-  try {
-    const parsed = YAML.parse(match[1]);
-    const props =
-      parsed && typeof parsed === "object" && !Array.isArray(parsed)
-        ? (parsed as Record<string, unknown>)
-        : {};
-    return { props, body: raw.slice(match[0].length) };
-  } catch {
-    return { props: {}, body: raw.slice(match[0].length) };
-  }
-}
-
 /** Read the wiki schema page body, or the default if it doesn't exist yet. */
 export async function readWikiSchema(vaultDir: string): Promise<string> {
   try {
@@ -170,7 +150,7 @@ export async function readWikiSchema(vaultDir: string): Promise<string> {
       join(vaultDir, `${WIKI_SCHEMA_PAGE_ID}.md`),
       "utf-8",
     );
-    const { body } = parseFrontmatter(raw);
+    const { body } = parseYamlFrontmatterMarkdown(raw);
     return body.trim() || DEFAULT_WIKI_SCHEMA;
   } catch {
     return DEFAULT_WIKI_SCHEMA;
@@ -197,7 +177,7 @@ export async function readUnprocessedCaptures(
     } catch {
       continue;
     }
-    const { props, body } = parseFrontmatter(raw);
+    const { props, body } = parseYamlFrontmatterMarkdown(raw);
     if (props.status !== "unprocessed") continue;
     captures.push({
       id: name.replace(/\.md$/, ""),
@@ -586,7 +566,7 @@ export async function readPageDigests(
     } catch {
       continue;
     }
-    const { props, body } = parseFrontmatter(raw);
+    const { props, body } = parseYamlFrontmatterMarkdown(raw);
     const pageId = stripMdExt(name);
     const title = typeof props.title === "string" ? props.title : pageId;
     digests.push({
@@ -731,7 +711,7 @@ export async function ensureIndexCoverage(vaultDir: string): Promise<void> {
       } catch {
         continue;
       }
-      const { props, body } = parseFrontmatter(raw);
+      const { props, body } = parseYamlFrontmatterMarkdown(raw);
       const pageId = stripMdExt(name);
       const title = typeof props.title === "string" ? props.title : pageId;
       entries.push({ pageId, title, summary: firstLineSummary(body) });

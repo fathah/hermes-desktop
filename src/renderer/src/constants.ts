@@ -764,12 +764,6 @@ export const GATEWAY_SECTIONS: SectionDef[] = [
         hint: "constants.emailImapHint",
       },
       {
-        key: "EMAIL_SMTP_SERVER",
-        label: "constants.emailSmtpServer",
-        type: "text",
-        hint: "constants.emailSmtpHint",
-      },
-      {
         key: "EMAIL_ADDRESS",
         label: "constants.emailAddress",
         type: "text",
@@ -941,12 +935,7 @@ export const GATEWAY_PLATFORMS: PlatformDef[] = [
     key: "email",
     label: "constants.platformEmail",
     description: "constants.platformEmailDesc",
-    fields: [
-      "EMAIL_IMAP_SERVER",
-      "EMAIL_SMTP_SERVER",
-      "EMAIL_ADDRESS",
-      "EMAIL_PASSWORD",
-    ],
+    fields: ["EMAIL_IMAP_SERVER", "EMAIL_ADDRESS", "EMAIL_PASSWORD"],
   },
   {
     key: "sms",

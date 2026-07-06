@@ -7,8 +7,8 @@
 // camelCased view, return null for non-basket markdown so callers fall back.
 
 import { parse as parseYaml } from "yaml";
+import { splitSpsFrontmatter } from "../../../../../shared/sps-frontmatter";
 
-const FRONTMATTER_RE = /^---\n([\s\S]*?)\n---\n?/;
 const BASKET_MARKER = "india-equity-basket";
 
 export interface BasketRow {
@@ -96,12 +96,12 @@ function parseRow(raw: unknown): BasketRow {
  */
 export function parseBasketBoard(markdown: string): BasketBoard | null {
   if (!markdown) return null;
-  const match = markdown.match(FRONTMATTER_RE);
-  if (!match) return null;
+  const { frontmatter, body } = splitSpsFrontmatter(markdown);
+  if (frontmatter === null) return null;
 
   let front: Record<string, unknown>;
   try {
-    front = asRecord(parseYaml(match[1]));
+    front = asRecord(parseYaml(frontmatter));
   } catch {
     return null;
   }
@@ -124,7 +124,7 @@ export function parseBasketBoard(markdown: string): BasketBoard | null {
     rows: asArray<unknown>(front.rows).map(parseRow),
     summary,
     dataGaps: asArray<string>(front.data_gaps),
-    bodyMarkdown: markdown.slice(match[0].length),
+    bodyMarkdown: body,
   };
 }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { redactSensitiveData } from "./security";
+import { redactSensitiveData, timingSafeTokenEqual } from "./security";
 import { join } from "path";
 import { existsSync, mkdirSync, rmSync } from "fs";
 import { tmpdir } from "os";
@@ -100,5 +100,29 @@ describe("getApiServerKey secure fallback", () => {
     // Verify it was NOT migrated/copied to .env as plaintext
     const envFile = join(TEST_DIR, ".env");
     expect(existsSync(envFile)).toBe(false);
+  });
+});
+
+describe("timingSafeTokenEqual (audit A5)", () => {
+  it("accepts only the exact token", () => {
+    expect(timingSafeTokenEqual("secret-token", "secret-token")).toBe(true);
+    expect(timingSafeTokenEqual("secret-tokeN", "secret-token")).toBe(false);
+    expect(timingSafeTokenEqual("secret-token-x", "secret-token")).toBe(false);
+  });
+
+  it("rejects empty/absent candidates and empty expected values", () => {
+    expect(timingSafeTokenEqual(null, "secret")).toBe(false);
+    expect(timingSafeTokenEqual(undefined, "secret")).toBe(false);
+    expect(timingSafeTokenEqual("", "secret")).toBe(false);
+    // An unset expected token must never match anything.
+    expect(timingSafeTokenEqual("", "")).toBe(false);
+    expect(timingSafeTokenEqual("anything", "")).toBe(false);
+  });
+
+  it("handles length mismatches without throwing", () => {
+    expect(() =>
+      timingSafeTokenEqual("short", "a-much-longer-token"),
+    ).not.toThrow();
+    expect(timingSafeTokenEqual("short", "a-much-longer-token")).toBe(false);
   });
 });

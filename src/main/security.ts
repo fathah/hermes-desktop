@@ -1,5 +1,6 @@
 import type { WebContents, WebPreferences } from "electron";
 import { pathToFileURL } from "url";
+import { createHash, timingSafeEqual } from "crypto";
 
 const EXTERNAL_PROTOCOLS = new Set(["https:", "http:", "mailto:"]);
 const LOCAL_WEBVIEW_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
@@ -80,6 +81,18 @@ export function hardenAttachedWebContents(webContents: WebContents): void {
  * Redact sensitive data patterns (e.g. API keys, bearer tokens, private keys)
  * from text blocks to prevent credential leaks in logs and UI transcripts.
  */
+/** Constant-time token compare (audit LOW/A5). Hashing both sides first gives
+ *  equal-length buffers, so no length-mismatch early return leaks timing. */
+export function timingSafeTokenEqual(
+  candidate: string | null | undefined,
+  expected: string,
+): boolean {
+  if (!candidate || !expected) return false;
+  const candidateHash = createHash("sha256").update(candidate).digest();
+  const expectedHash = createHash("sha256").update(expected).digest();
+  return timingSafeEqual(candidateHash, expectedHash);
+}
+
 export function redactSensitiveData(text: string): string {
   if (typeof text !== "string" || !text) return text;
 
