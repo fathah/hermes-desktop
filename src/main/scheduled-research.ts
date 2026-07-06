@@ -826,21 +826,31 @@ export async function drainCronBriefs(
     }
     if (!fresh.length) continue;
     fresh.sort((a, b) => a.mtime - b.mtime);
+    // Advance the cursor only across the contiguous prefix of briefs we actually
+    // handled. A transient merge/read failure (gateway hiccup, parse error) must
+    // hold the cursor at the last good brief so the failed one is retried next
+    // run — advancing past it unconditionally permanently loses that brief even
+    // though the file still exists on disk.
+    let watermark = since;
+    let stalled = false;
     for (const f of fresh) {
       let content: string;
       try {
         content = await fs.readFile(join(dir, f.name), "utf-8");
       } catch {
+        stalled = true;
         continue;
       }
       const brief = parseCronBrief(content);
       if (!brief) {
         recordHistory(item.id, "no-change", "[SILENT] cron run", profile);
+        if (!stalled) watermark = f.mtime;
         continue;
       }
       try {
         const r = await mergeBriefAndQueue(item, brief, getWindow, profile);
         recordHistory(item.id, r.outcome, r.summary, profile);
+        if (!stalled) watermark = f.mtime;
       } catch (err) {
         recordHistory(
           item.id,
@@ -848,16 +858,17 @@ export async function drainCronBriefs(
           err instanceof Error ? err.message : "merge failed",
           profile,
         );
+        stalled = true;
       }
     }
-    // Mark drained up to the newest file we saw (re-load: mergeBriefAndQueue
-    // re-saved the registry via stampHash).
-    const newest = fresh[fresh.length - 1].mtime;
-    const reg2 = loadRegistry(profile);
-    const it2 = reg2.schedules.find((s) => s.id === item.id);
-    if (it2) {
-      it2.lastDrainedAt = newest;
-      saveRegistry(reg2, profile);
+    if (watermark > since) {
+      // Re-load: mergeBriefAndQueue re-saved the registry via stampHash.
+      const reg2 = loadRegistry(profile);
+      const it2 = reg2.schedules.find((s) => s.id === item.id);
+      if (it2) {
+        it2.lastDrainedAt = watermark;
+        saveRegistry(reg2, profile);
+      }
     }
   }
 }
