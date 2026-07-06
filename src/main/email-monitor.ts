@@ -7,11 +7,11 @@ import { profileHome, safeWriteFile } from "./utils";
 import { writeAsset as writeVaultAsset } from "./sps-assets";
 import { writeSpsCapture } from "./sps-capture";
 import { resolveSpsVaultDir } from "./sps-storage";
+import { triageEmailCandidate } from "./email-triage";
 import {
   DEFAULT_EMAIL_MONITOR_ACCOUNT,
   DEFAULT_EMAIL_MONITOR_CONFIG,
   applyEmailMonitorFeedback,
-  classifyEmailCandidate,
   normalizeEmailMonitorConfig,
   shouldMonitorFolder,
   type EmailMonitorAccount,
@@ -72,6 +72,8 @@ export type EmailMonitorMessageResult =
 
 interface HandleParsedEmailMessageDeps {
   vaultDir: string;
+  /** Profile whose gateway the LLM triage layer calls; undefined = default. */
+  profile?: string;
   writeCapture?: typeof writeSpsCapture;
   writeAsset?: typeof writeVaultAsset;
 }
@@ -200,7 +202,7 @@ export async function handleParsedEmailMessage(
   input: HandleParsedEmailMessageInput,
   deps: HandleParsedEmailMessageDeps,
 ): Promise<EmailMonitorMessageResult> {
-  const triage = classifyEmailCandidate(
+  const triage = await triageEmailCandidate(
     {
       from: input.message.from,
       subject: input.message.subject,
@@ -208,6 +210,7 @@ export async function handleParsedEmailMessage(
       bodyPreview: input.message.text,
     },
     input.account,
+    { profile: deps.profile },
   );
 
   if (!triage.capture) {
@@ -426,6 +429,7 @@ async function pollFolder(
       vaultDir,
       accountCursors,
       result,
+      profile,
     );
   }
 }
@@ -443,6 +447,7 @@ async function handleFetchedMessage(
     skippedReasons: Record<string, number>;
     lastError?: string;
   },
+  profile?: string,
 ): Promise<void> {
   if (
     typeof message.size === "number" &&
@@ -479,7 +484,7 @@ async function handleFetchedMessage(
       uid: message.uid,
       message: parsedToMessage(parsed),
     },
-    { vaultDir },
+    { vaultDir, profile },
   );
 
   if (handled.status === "captured") {

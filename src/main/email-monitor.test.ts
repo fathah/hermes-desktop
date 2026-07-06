@@ -1,10 +1,28 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// email-monitor now routes borderline mail through ./email-triage → ./gateway-chat.
+// Mock the gateway wrapper so the real ./hermes (Electron) module never loads
+// under vitest, and so the borderline tests below can script the LLM verdict.
+vi.mock("./gateway-chat", () => ({
+  gatewayChat: vi.fn(),
+  extractJson: (t: string) => {
+    try {
+      return JSON.parse(t);
+    } catch {
+      return null;
+    }
+  },
+}));
+
+import { gatewayChat } from "./gateway-chat";
 import {
   DEFAULT_EMAIL_MONITOR_ACCOUNT,
   handleParsedEmailMessage,
 } from "./email-monitor";
 
 describe("handleParsedEmailMessage", () => {
+  beforeEach(() => vi.mocked(gatewayChat).mockReset());
+
   it("counts skipped bulk mail without writing an inbox capture", async () => {
     const writeCapture = vi.fn();
     const writeAsset = vi.fn();
@@ -110,5 +128,92 @@ describe("handleParsedEmailMessage", () => {
         ],
       }),
     );
+    // A decisive rule verdict never consults the gateway.
+    expect(gatewayChat).not.toHaveBeenCalled();
+  });
+
+  it("routes borderline mail through the LLM and captures the resolved label", async () => {
+    const writeCapture = vi
+      .fn()
+      .mockResolvedValue({ success: true, id: "cap2" });
+    vi.mocked(gatewayChat).mockResolvedValue(
+      JSON.stringify({
+        capture: true,
+        label: "action",
+        reason: "A personal request that needs a reply.",
+        confidence: 0.82,
+      }),
+    );
+
+    const result = await handleParsedEmailMessage(
+      {
+        account: {
+          ...DEFAULT_EMAIL_MONITOR_ACCOUNT,
+          id: "ops",
+          label: "Ops inbox",
+          emailAddress: "ops@example.com",
+          // Non-matching keywords so the message stays borderline (archive).
+          importanceKeywords: ["zzz-no-match"],
+        },
+        folder: "INBOX",
+        uid: 7,
+        message: {
+          from: "Ravi Menon <ravi@example.net>",
+          subject: "Are you free next week?",
+          date: new Date("2026-06-25T10:00:00Z"),
+          text: "Wanted to grab a coffee and catch up sometime next week.",
+          headers: {},
+          attachments: [],
+        },
+      },
+      { vaultDir: "/tmp/vault", writeCapture },
+    );
+
+    expect(gatewayChat).toHaveBeenCalledTimes(1);
+    if (result.status !== "captured") throw new Error("Expected capture.");
+    expect(result.triageLabel).toBe("action");
+    expect(writeCapture).toHaveBeenCalledWith(
+      "/tmp/vault",
+      expect.objectContaining({
+        triageLabel: "action",
+        triageReason: "A personal request that needs a reply.",
+        triageConfidence: 0.82,
+      }),
+    );
+  });
+
+  it("drops borderline mail below the account captureThreshold", async () => {
+    const writeCapture = vi.fn();
+    vi.mocked(gatewayChat).mockResolvedValue(
+      JSON.stringify({ capture: true, label: "archive", confidence: 0.3 }),
+    );
+
+    const result = await handleParsedEmailMessage(
+      {
+        account: {
+          ...DEFAULT_EMAIL_MONITOR_ACCOUNT,
+          id: "ops",
+          label: "Ops inbox",
+          emailAddress: "ops@example.com",
+          importanceKeywords: ["zzz-no-match"],
+          captureThreshold: 0.45,
+        },
+        folder: "INBOX",
+        uid: 8,
+        message: {
+          from: "Ravi Menon <ravi@example.net>",
+          subject: "Are you free next week?",
+          date: new Date("2026-06-25T10:00:00Z"),
+          text: "Wanted to grab a coffee and catch up sometime next week.",
+          headers: {},
+          attachments: [],
+        },
+      },
+      { vaultDir: "/tmp/vault", writeCapture },
+    );
+
+    if (result.status !== "skipped") throw new Error("Expected skip.");
+    expect(result.reason).toContain("threshold");
+    expect(writeCapture).not.toHaveBeenCalled();
   });
 });
