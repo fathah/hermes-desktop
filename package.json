@@ -114,6 +114,11 @@
     "nanoid@3.3.3": "^3.3.12",
     "minimatch@^10.0.0": {
       "brace-expansion": "5.0.6"
+    },
+    "lodash-es": "^4.18.1",
+    "nanoid@4.0.2": "^5.1.16",
+    "@wesbos/code-icons": {
+      "vite": "^7.3.6"
     }
   },
   "optionalDependencies": {
