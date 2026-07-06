@@ -68,8 +68,10 @@ describe("Electron main process hardening", () => {
   it("disables packaged Windows auto-update while Windows builds are unsigned", () => {
     expect(mainSrc).toContain("isWindowsUnsignedAutoUpdateBlocked()");
     expect(mainSrc).toContain('process.platform === "win32"');
+    // The updater warning moved from console.log to the structured logger.
+    expect(mainSrc).toContain('log.warn("updater"');
     expect(mainSrc).toContain(
-      "[updater] Disabled on unsigned Windows builds; use manual updates.",
+      "disabled on unsigned Windows builds; use manual updates",
     );
     expect(systemIpcSrc).toContain("isWindowsUnsignedAutoUpdateBlocked()");
     expect(systemIpcSrc).toContain('process.platform === "win32"');

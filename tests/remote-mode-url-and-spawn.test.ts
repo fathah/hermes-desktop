@@ -251,9 +251,11 @@ describe("Cron SSH fallback", () => {
     const jobs = await listCronJobs();
 
     expect(jobs).toEqual([]);
+    // cronjobs.ts logs through the structured logger, whose dev mirror calls
+    // console.error("[<scope>]", payload).
     expect(consoleErrorSpy).toHaveBeenCalledWith(
-      "[CRON] remote list error:",
-      expect.any(Error),
+      "[cronjobs]",
+      expect.objectContaining({ msg: "remote list error" }),
     );
     consoleErrorSpy.mockRestore();
     expect(fetchSpy).toHaveBeenCalledTimes(1);

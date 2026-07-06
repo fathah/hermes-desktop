@@ -12,17 +12,20 @@ const { TEST_HOME } = vi.hoisted(() => {
   };
 });
 
-let isEncryptionAvailableMock = true;
+// The electron mock factory is hoisted above every import (including the
+// transitive src/main/installer/paths load), so anything it closes over must
+// be hoisted too or it hits the temporal dead zone.
+const encryptionState = vi.hoisted(() => ({ available: true }));
 
-const safeStorageMock = {
-  isEncryptionAvailable: () => isEncryptionAvailableMock,
+const safeStorageMock = vi.hoisted(() => ({
+  isEncryptionAvailable: () => encryptionState.available,
   encryptString: (str: string) => Buffer.from(`encrypted:${str}`, "utf-8"),
   decryptString: (buf: Buffer) => {
     const value = buf.toString("utf-8");
     if (!value.startsWith("encrypted:")) throw new Error("decrypt failed");
     return value.replace("encrypted:", "");
   },
-};
+}));
 
 type ObsidianConfigTestGlobal = typeof globalThis & {
   mockSafeStorage?: typeof safeStorageMock;
@@ -30,6 +33,11 @@ type ObsidianConfigTestGlobal = typeof globalThis & {
 
 vi.mock("electron", () => ({
   safeStorage: safeStorageMock,
+  // installer/paths reads app.getPath("userData") at module load.
+  app: {
+    getPath: () => TEST_HOME,
+    getAppPath: () => TEST_HOME,
+  },
 }));
 
 vi.mock("../src/main/installer", () => ({
@@ -43,7 +51,7 @@ vi.mock("../src/main/installer", () => ({
 import { getObsidianConfig, setObsidianConfig } from "../src/main/obsidian";
 
 beforeEach(() => {
-  isEncryptionAvailableMock = true;
+  encryptionState.available = true;
   (globalThis as ObsidianConfigTestGlobal).mockSafeStorage = safeStorageMock;
   mkdirSync(TEST_HOME, { recursive: true });
 });
