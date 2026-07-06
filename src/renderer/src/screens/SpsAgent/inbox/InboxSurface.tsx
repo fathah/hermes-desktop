@@ -48,9 +48,14 @@ import {
 } from "../../../../../shared/visual-capture";
 import type { SpsRecentScreenshotCandidate } from "../../../../../shared/recent-screenshots";
 import type {
+  EmailMonitorAccount,
   EmailMonitorConfig,
   EmailMonitorFeedbackAction,
   EmailMonitorStatus,
+} from "../../../../../shared/email-monitor";
+import {
+  DEFAULT_EMAIL_MONITOR_ACCOUNT,
+  defaultPasswordEnvKey,
 } from "../../../../../shared/email-monitor";
 import { assetUrl } from "../lib/assets";
 import { getScrollContainer } from "../lib/scroll";
@@ -221,6 +226,9 @@ export function InboxSurface({
   const [emailRuleSender, setEmailRuleSender] = useState("");
   const [emailBusy, setEmailBusy] = useState("");
   const [emailError, setEmailError] = useState("");
+  // Account edits (add/remove/field/enable) are staged locally; "Save changes"
+  // persists the whole config through spsEmailMonitorSaveConfig.
+  const [emailDirty, setEmailDirty] = useState(false);
 
   // Load curator settings from vault
   useEffect(() => {
@@ -273,6 +281,7 @@ export function InboxSurface({
       ]);
       setEmailConfig(config);
       setEmailStatus(status);
+      setEmailDirty(false);
     } catch (e) {
       setEmailError(e instanceof Error ? e.message : String(e));
     }
@@ -826,6 +835,69 @@ export function InboxSurface({
     }
   }, [profile]);
 
+  // Patch a single staged account by list index (new accounts share the empty
+  // id until save, so index — not id — is the stable editing handle here).
+  const updateEmailAccount = useCallback(
+    (index: number, patch: Partial<EmailMonitorAccount>): void => {
+      setEmailConfig((prev) => {
+        if (!prev) return prev;
+        const accounts = prev.accounts.map((account, i) =>
+          i === index ? { ...account, ...patch } : account,
+        );
+        return { ...prev, accounts };
+      });
+      setEmailDirty(true);
+    },
+    [],
+  );
+
+  const addEmailAccount = useCallback((): void => {
+    setEmailConfig((prev) => {
+      const base = prev ?? { accounts: [] };
+      const account: EmailMonitorAccount = {
+        ...DEFAULT_EMAIL_MONITOR_ACCOUNT,
+        // Empty id → normalizeEmailMonitorConfig derives it from the address on
+        // save; empty key → a distinct per-account password key is assigned.
+        id: "",
+        label: "New account",
+        emailAddress: "",
+        username: "",
+        imapHost: "",
+        passwordEnvKey: "",
+        enabled: false,
+      };
+      return { ...base, accounts: [...base.accounts, account] };
+    });
+    setEmailDirty(true);
+  }, []);
+
+  const removeEmailAccount = useCallback((index: number): void => {
+    setEmailConfig((prev) => {
+      if (!prev) return prev;
+      const accounts = prev.accounts.filter((_, i) => i !== index);
+      return { ...prev, accounts };
+    });
+    setEmailDirty(true);
+  }, []);
+
+  const saveEmailConfig = useCallback(async (): Promise<void> => {
+    if (!emailConfig) return;
+    setEmailBusy("save");
+    setEmailError("");
+    try {
+      const saved = await window.hermesAPI.spsEmailMonitorSaveConfig(
+        emailConfig,
+        profile,
+      );
+      setEmailConfig(saved);
+      setEmailDirty(false);
+    } catch (e) {
+      setEmailError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setEmailBusy("");
+    }
+  }, [emailConfig, profile]);
+
   const toggleSkipMem = (i: number): void =>
     setSkipMem((prev) => {
       const next = new Set(prev);
@@ -953,6 +1025,22 @@ export function InboxSurface({
           <span className="flex-grow" />
           <button
             type="button"
+            className="btn btn-ghost btn-sm"
+            disabled={Boolean(emailBusy)}
+            onClick={() => addEmailAccount()}
+          >
+            Add account
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            disabled={!emailDirty || Boolean(emailBusy)}
+            onClick={() => void saveEmailConfig()}
+          >
+            {emailBusy === "save" ? "Saving..." : "Save changes"}
+          </button>
+          <button
+            type="button"
             className="btn btn-primary btn-sm"
             disabled={emailBusy === "run"}
             onClick={() => void runEmailMonitor()}
@@ -962,25 +1050,33 @@ export function InboxSurface({
         </div>
 
         {emailError && <div className="inbox-error">{emailError}</div>}
+        {emailDirty && (
+          <div className="inbox-row-status">
+            Unsaved account changes — click “Save changes” to apply.
+          </div>
+        )}
 
         {accounts.length === 0 ? (
           <div className="inbox-empty-notice">
-            No email accounts configured.
+            No email accounts configured. Click “Add account” to connect one.
           </div>
         ) : (
           <ul className="inbox-card-list">
-            {accounts.map((account) => {
-              const accountStatus = emailStatus?.accounts.find(
-                (status) => status.accountId === account.id,
+            {accounts.map((account, index) => {
+              const accountStatus = account.id
+                ? emailStatus?.accounts.find(
+                    (status) => status.accountId === account.id,
+                  )
+                : undefined;
+              const derivedKey = defaultPasswordEnvKey(
+                account.emailAddress || account.id,
+                index,
               );
               return (
-                <li key={account.id} className="inbox-card">
+                <li key={index} className="inbox-card">
                   <div className="inbox-card-content">
-                    <div className="inbox-card-title">{account.label}</div>
                     <div className="inbox-card-meta">
-                      <span>{account.emailAddress || account.imapHost}</span>
-                      <span>·</span>
-                      <span>{accountStatus?.state ?? "idle"}</span>
+                      <span>{accountStatus?.state ?? "not saved"}</span>
                       <span>·</span>
                       <span>{accountStatus?.captured ?? 0} captured</span>
                       <span>·</span>
@@ -991,48 +1087,145 @@ export function InboxSurface({
                         {accountStatus.lastError}
                       </div>
                     )}
+                    <label className="inbox-flex-align-center-gap8-mb10-bold">
+                      <input
+                        type="checkbox"
+                        checked={account.enabled}
+                        onChange={(e) =>
+                          updateEmailAccount(index, {
+                            enabled: e.target.checked,
+                          })
+                        }
+                      />
+                      Enabled (polls this account on the schedule)
+                    </label>
                     <label className="settings-field-label">
-                      Sender rule
+                      Label
                       <input
                         className="inbox-input"
-                        value={emailRuleSender}
-                        onChange={(e) => setEmailRuleSender(e.target.value)}
-                        placeholder="person@example.com or keyword"
+                        value={account.label}
+                        onChange={(e) =>
+                          updateEmailAccount(index, { label: e.target.value })
+                        }
+                        placeholder="Work inbox"
                       />
                     </label>
+                    <label className="settings-field-label">
+                      Email address
+                      <input
+                        className="inbox-input"
+                        value={account.emailAddress}
+                        onChange={(e) =>
+                          updateEmailAccount(index, {
+                            emailAddress: e.target.value,
+                            username: e.target.value,
+                          })
+                        }
+                        placeholder="you@example.com"
+                      />
+                    </label>
+                    <label className="settings-field-label">
+                      IMAP host
+                      <input
+                        className="inbox-input"
+                        value={account.imapHost}
+                        onChange={(e) =>
+                          updateEmailAccount(index, {
+                            imapHost: e.target.value,
+                          })
+                        }
+                        placeholder="imap.gmail.com"
+                      />
+                    </label>
+                    <label className="settings-field-label">
+                      IMAP port
+                      <input
+                        className="inbox-input"
+                        type="number"
+                        value={account.imapPort ?? 993}
+                        onChange={(e) =>
+                          updateEmailAccount(index, {
+                            imapPort: Number(e.target.value) || 993,
+                          })
+                        }
+                        placeholder="993"
+                      />
+                    </label>
+                    <label className="settings-field-label">
+                      Password env var
+                      <input
+                        className="inbox-input"
+                        value={account.passwordEnvKey ?? ""}
+                        onChange={(e) =>
+                          updateEmailAccount(index, {
+                            passwordEnvKey: e.target.value,
+                          })
+                        }
+                        placeholder={derivedKey}
+                      />
+                    </label>
+                    {accountStatus && (
+                      <>
+                        <label className="settings-field-label">
+                          Sender rule
+                          <input
+                            className="inbox-input"
+                            value={emailRuleSender}
+                            onChange={(e) => setEmailRuleSender(e.target.value)}
+                            placeholder="person@example.com or keyword"
+                          />
+                        </label>
+                        <div className="inbox-btn-group">
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            disabled={Boolean(emailBusy)}
+                            onClick={() =>
+                              void applyEmailFeedback(
+                                account.id,
+                                "always-capture-sender",
+                              )
+                            }
+                          >
+                            Always capture sender
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            disabled={Boolean(emailBusy)}
+                            onClick={() =>
+                              void applyEmailFeedback(
+                                account.id,
+                                "ignore-sender",
+                              )
+                            }
+                          >
+                            Ignore sender
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            disabled={Boolean(emailBusy)}
+                            onClick={() =>
+                              void applyEmailFeedback(
+                                account.id,
+                                "raise-priority",
+                              )
+                            }
+                          >
+                            Raise priority
+                          </button>
+                        </div>
+                      </>
+                    )}
                     <div className="inbox-btn-group">
                       <button
                         type="button"
-                        className="btn btn-secondary btn-sm"
-                        disabled={Boolean(emailBusy)}
-                        onClick={() =>
-                          void applyEmailFeedback(
-                            account.id,
-                            "always-capture-sender",
-                          )
-                        }
-                      >
-                        Always capture sender
-                      </button>
-                      <button
-                        type="button"
                         className="btn btn-ghost btn-sm"
                         disabled={Boolean(emailBusy)}
-                        onClick={() =>
-                          void applyEmailFeedback(account.id, "ignore-sender")
-                        }
+                        onClick={() => removeEmailAccount(index)}
                       >
-                        Ignore sender
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm"
-                        disabled={Boolean(emailBusy)}
-                        onClick={() =>
-                          void applyEmailFeedback(account.id, "raise-priority")
-                        }
-                      >
-                        Raise priority
+                        Remove account
                       </button>
                     </div>
                   </div>

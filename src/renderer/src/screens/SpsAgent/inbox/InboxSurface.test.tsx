@@ -56,6 +56,7 @@ const api = {
   spsEmailMonitorGetStatus: vi.fn(),
   spsEmailMonitorRunNow: vi.fn(),
   spsEmailMonitorApplyFeedback: vi.fn(),
+  spsEmailMonitorSaveConfig: vi.fn(),
 };
 
 function installApi(): void {
@@ -145,6 +146,9 @@ beforeEach(() => {
   api.spsEmailMonitorApplyFeedback.mockResolvedValue({
     accounts: [],
   });
+  api.spsEmailMonitorSaveConfig.mockImplementation((config: unknown) =>
+    Promise.resolve(config),
+  );
 });
 
 afterEach(() => {
@@ -159,7 +163,7 @@ describe("InboxSurface visual captures", () => {
     fireEvent.click(screen.getByRole("button", { name: /sources/i }));
 
     expect(await screen.findByText(/email sources/i)).toBeInTheDocument();
-    expect(await screen.findByText("Ops inbox")).toBeInTheDocument();
+    expect(await screen.findByDisplayValue("Ops inbox")).toBeInTheDocument();
     expect(screen.getByText(/1 captured/i)).toBeInTheDocument();
     expect(screen.getByText(/2 skipped/i)).toBeInTheDocument();
 
@@ -184,6 +188,75 @@ describe("InboxSurface visual captures", () => {
     await waitFor(() => {
       expect(api.spsEmailMonitorRunNow).toHaveBeenCalledWith("default");
     });
+  });
+
+  it("toggles an account's enabled flag and persists on Save changes", async () => {
+    render(<InboxSurface />);
+    fireEvent.click(screen.getByRole("button", { name: /sources/i }));
+
+    const toggle = await screen.findByLabelText(/enabled/i);
+    expect(toggle).toBeChecked();
+
+    // Save is inert until an edit dirties the config.
+    expect(
+      screen.getByRole("button", { name: /save changes/i }),
+    ).toBeDisabled();
+
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(api.spsEmailMonitorSaveConfig).toHaveBeenCalledTimes(1);
+    });
+    const savedConfig = api.spsEmailMonitorSaveConfig.mock.calls[0][0] as {
+      accounts: Array<{ id: string; enabled: boolean }>;
+    };
+    expect(savedConfig.accounts[0]).toMatchObject({
+      id: "ops",
+      enabled: false,
+    });
+  });
+
+  it("adds a new account, edits it, and saves both accounts", async () => {
+    render(<InboxSurface />);
+    fireEvent.click(screen.getByRole("button", { name: /sources/i }));
+    await screen.findByDisplayValue("Ops inbox");
+
+    fireEvent.click(screen.getByRole("button", { name: /add account/i }));
+
+    const addressInputs = screen.getAllByPlaceholderText(/you@example.com/i);
+    expect(addressInputs).toHaveLength(2);
+    fireEvent.change(addressInputs[1], {
+      target: { value: "cafe@bluebop.cafe" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(api.spsEmailMonitorSaveConfig).toHaveBeenCalledTimes(1);
+    });
+    const savedConfig = api.spsEmailMonitorSaveConfig.mock.calls[0][0] as {
+      accounts: Array<{ emailAddress: string }>;
+    };
+    expect(savedConfig.accounts).toHaveLength(2);
+    expect(savedConfig.accounts[1].emailAddress).toBe("cafe@bluebop.cafe");
+  });
+
+  it("removes an account and persists the smaller config", async () => {
+    render(<InboxSurface />);
+    fireEvent.click(screen.getByRole("button", { name: /sources/i }));
+    await screen.findByDisplayValue("Ops inbox");
+
+    fireEvent.click(screen.getByRole("button", { name: /remove account/i }));
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(api.spsEmailMonitorSaveConfig).toHaveBeenCalledTimes(1);
+    });
+    const savedConfig = api.spsEmailMonitorSaveConfig.mock.calls[0][0] as {
+      accounts: unknown[];
+    };
+    expect(savedConfig.accounts).toHaveLength(0);
   });
 
   it("opens image capture mode from the first-run checklist intent", async () => {
