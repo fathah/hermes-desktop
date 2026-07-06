@@ -46,4 +46,12 @@ export default {
   ceo: "CEO",
   makeCeo: "Сделать CEO",
   removeCeo: "Убрать роль CEO",
+  softwareRenderingNotice:
+    "Аппаратное ускорение отключено после сбоя GPU, поэтому 3D-офис использует медленный программный рендеринг.",
+  softwareRenderingEnvNotice:
+    "Аппаратное ускорение отключено через HERMES_DISABLE_GPU, поэтому 3D-офис использует медленный программный рендеринг.",
+  softwareRenderingPrefNotice:
+    "Аппаратное ускорение отключено в Настройки → Внешний вид, поэтому 3D-офис использует медленный программный рендеринг.",
+  reenableGpu: "Снова включить GPU и перезапустить",
+  dismissNotice: "Скрыть",
 } as const;

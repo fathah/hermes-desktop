@@ -18,7 +18,7 @@ export default {
   apiKeyModal: {
     title: "Задать API Server Key",
     description:
-      "API_SERVER_KEY нужен, чтобы Hermes gateway мог аутентифицировать запросы. Задайте его сейчас, чтобы включить чат.",
+      "API_SERVER_KEY нужен, чтобы Hermes gateway мог аутентифицировать запросы. Задайте его сейчас, чтобы включить чат. Если вы храните секреты в vault (KeePassXC, Bitwarden и т. п.) и Hermes `secrets.provider` уже указывает на него, это предупреждение можно игнорировать — provider передаст ключ напрямую.",
     label: "API Server Key",
     placeholder: "sk-... или любой секрет",
     autoGenerate: "Сгенерировать",
