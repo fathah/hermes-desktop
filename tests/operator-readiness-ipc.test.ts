@@ -47,6 +47,9 @@ vi.mock("../src/main/scheduler", () => ({
 
 vi.mock("../src/main/config", () => ({
   getDesktopUpdateRoutine: mocks.getDesktopUpdateRoutine,
+}));
+
+vi.mock("../src/main/engine-update-state", () => ({
   getHermesAgentUpdateRoutine: mocks.getHermesAgentUpdateRoutine,
 }));
 
@@ -105,9 +108,8 @@ describe("operator readiness main aggregation", () => {
   });
 
   it("aggregates existing main-process truth sources into a shared readiness report", async () => {
-    const { getOperatorReadiness } = await import(
-      "../src/main/operator-readiness"
-    );
+    const { getOperatorReadiness } =
+      await import("../src/main/operator-readiness");
 
     const report = await getOperatorReadiness("work");
 
@@ -122,9 +124,9 @@ describe("operator readiness main aggregation", () => {
     expect(report.items.find((item) => item.id === "scheduler")?.summary).toBe(
       "3 scheduled job skips recorded.",
     );
-    expect(report.items.find((item) => item.id === "desktop-update")?.status).toBe(
-      "attention",
-    );
+    expect(
+      report.items.find((item) => item.id === "desktop-update")?.status,
+    ).toBe("attention");
     expect(report.items.find((item) => item.id === "storage")?.summary).toBe(
       "1 storage warning reported.",
     );
@@ -139,9 +141,8 @@ describe("operator readiness main aggregation", () => {
   });
 
   it("registers the get-operator-readiness IPC handler", async () => {
-    const { registerOperatorReadinessIpc } = await import(
-      "../src/main/ipc/operator-readiness"
-    );
+    const { registerOperatorReadinessIpc } =
+      await import("../src/main/ipc/operator-readiness");
 
     registerOperatorReadinessIpc();
 

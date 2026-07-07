@@ -519,10 +519,7 @@ function Layout({
             {remoteMode ? (
               <RemoteNotice feature="AI Setup" />
             ) : (
-              <Providers
-                profile={activeProfile}
-                visible={view === "aiSetup"}
-              />
+              <Providers profile={activeProfile} visible={view === "aiSetup"} />
             )}
           </div>
         )}

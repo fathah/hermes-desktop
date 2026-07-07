@@ -71,21 +71,45 @@ describe("Sidebar", () => {
   it("shows the core loop by default", () => {
     render(<Sidebar />);
 
+    fireEvent.click(screen.getByText("Cockpit"));
     fireEvent.click(screen.getByText("Capture"));
     fireEvent.click(screen.getByText("Work"));
     fireEvent.click(screen.getByText("Assistant"));
 
     expect(screen.getByText("Workspace packs")).toBeTruthy();
     expect(screen.queryByText("Content Studio")).toBeNull();
+    expect(store.setSurface).toHaveBeenCalledWith("cockpit");
     expect(store.setSurface).toHaveBeenCalledWith("inbox");
     expect(store.setSurface).toHaveBeenCalledWith("work");
     expect(store.setSurface).toHaveBeenCalledWith("chats");
   });
 
+  it("exposes operator surfaces without pack opt-in", () => {
+    render(<Sidebar />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Journal" }));
+    fireEvent.click(screen.getByRole("button", { name: "Active Work" }));
+    fireEvent.click(screen.getByRole("button", { name: "Memory" }));
+
+    expect(store.setSurface).toHaveBeenCalledWith("journal");
+    expect(store.setSurface).toHaveBeenCalledWith("activeWork");
+    expect(store.setSurface).toHaveBeenCalledWith("memory");
+  });
+
   it("labels primary rail actions for icon-only mode", () => {
     render(<Sidebar />);
 
-    for (const label of ["Search", "Home", "Capture", "Work", "Assistant"]) {
+    for (const label of [
+      "Search",
+      "Home",
+      "Cockpit",
+      "Capture",
+      "Work",
+      "Assistant",
+      "Journal",
+      "Active Work",
+      "Memory",
+    ]) {
       const button = screen.getByRole("button", { name: label });
       expect(button.getAttribute("title")).toBe(label);
       expect(button.getAttribute("aria-label")).toBe(label);

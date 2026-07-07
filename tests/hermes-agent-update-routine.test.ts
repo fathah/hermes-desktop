@@ -44,6 +44,7 @@ describe("Hermes Agent update routine state", () => {
 
     expect(state.enabled).toBe(true);
     expect(state.autoApply).toBe(false);
+    expect(state.engineUpdateChannel).toBe("release");
     expect(state.timezone).toBe("America/New_York");
     expect(state.schedule).toBe("0 4 * * *");
     expect(state.nextCheckAt).toBe("2026-06-20T08:00:00.000Z");
@@ -54,24 +55,45 @@ describe("Hermes Agent update routine state", () => {
     expect(state.autoApplySuppressedSha).toBeNull();
   });
 
-  it("persists per-profile settings without sharing auto-apply", async () => {
+  it("persists per-profile settings without sharing auto-apply or channel", async () => {
     const { getHermesAgentUpdateRoutine, setHermesAgentUpdateRoutine } =
       await freshConfig(TEST_DIR);
 
-    setHermesAgentUpdateRoutine({ autoApply: true }, "work");
+    setHermesAgentUpdateRoutine(
+      { autoApply: true, engineUpdateChannel: "main" },
+      "work",
+    );
 
-    expect(
-      getHermesAgentUpdateRoutine(
-        "work",
-        new Date("2026-06-20T23:00:00.000Z"),
-      ).autoApply,
-    ).toBe(true);
-    expect(
-      getHermesAgentUpdateRoutine(
-        "personal",
-        new Date("2026-06-20T23:00:00.000Z"),
-      ).autoApply,
-    ).toBe(false);
+    const workState = getHermesAgentUpdateRoutine(
+      "work",
+      new Date("2026-06-20T23:00:00.000Z"),
+    );
+    const personalState = getHermesAgentUpdateRoutine(
+      "personal",
+      new Date("2026-06-20T23:00:00.000Z"),
+    );
+
+    expect(workState.autoApply).toBe(true);
+    expect(workState.engineUpdateChannel).toBe("main");
+    expect(personalState.autoApply).toBe(false);
+    expect(personalState.engineUpdateChannel).toBe("release");
+  });
+
+  it("ignores invalid persisted update channels", async () => {
+    const { getHermesAgentUpdateRoutine, setHermesAgentUpdateRoutine } =
+      await freshConfig(TEST_DIR);
+
+    setHermesAgentUpdateRoutine({ engineUpdateChannel: "main" }, "work");
+    setHermesAgentUpdateRoutine(
+      { engineUpdateChannel: "invalid" as "main" },
+      "work",
+    );
+
+    const state = getHermesAgentUpdateRoutine(
+      "work",
+      new Date("2026-06-20T23:00:00.000Z"),
+    );
+    expect(state.engineUpdateChannel).toBe("main");
   });
 
   it("persists contract-break suppression until explicit acknowledgement", async () => {
@@ -97,9 +119,7 @@ describe("Hermes Agent update routine state", () => {
     expect(suppressed.autoApply).toBe(true);
     expect(suppressed.autoApplySuppressed).toBe(true);
     expect(suppressed.autoApplySuppressionReason).toBe("contract-broken");
-    expect(suppressed.autoApplySuppressedAt).toBe(
-      "2026-06-20T23:05:00.000Z",
-    );
+    expect(suppressed.autoApplySuppressedAt).toBe("2026-06-20T23:05:00.000Z");
     expect(suppressed.autoApplySuppressedSha).toBe(
       "def4567890abcdef1234567890abcdef12345678",
     );

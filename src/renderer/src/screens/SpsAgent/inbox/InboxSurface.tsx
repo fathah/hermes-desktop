@@ -15,6 +15,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { Icon } from "../components/Icon";
 import { useStore } from "../store";
 import { useVaultQuery, type VaultRow } from "../hooks/useNoteIndex";
+import { rowFromMarkdown, rowToMarkdown } from "../editor/rowMarkdown";
 import {
   buildCapture,
   withStatus,
@@ -31,6 +32,7 @@ import {
   getAutoApply,
   setAutoApply,
   getIngestIntervalMin,
+  refreshSpsAutomationPrefs,
   setIngestIntervalMin,
 } from "./ingestPrefs";
 import { installVaultSkill } from "./vaultSkill";
@@ -112,6 +114,8 @@ const FEEDBACK_ACTIONS: Array<{
   { action: "not-relevant", title: "Not relevant" },
   { action: "ignore-sender", title: "Ignore sender" },
 ];
+
+const TASKS_DB_FOLDER = "tasks";
 
 function feedbackConfirmation(
   action: EmailMonitorFeedbackAction,
@@ -195,6 +199,53 @@ function assistantReplyText(result: unknown): string {
   return typeof result === "string" ? result : JSON.stringify(result, null, 2);
 }
 
+function stringProp(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function emailCaptureTitle(row: VaultRow): string {
+  return (
+    stringProp(row.props.title) ||
+    row.title.trim() ||
+    "Email follow-up"
+  ).slice(0, 120);
+}
+
+function buildEmailReplyUrl(row: VaultRow): string | null {
+  const to = stringProp(row.props.emailFrom);
+  if (!to) return null;
+  const title = emailCaptureTitle(row);
+  const subject = /^re:/i.test(title) ? title : `Re: ${title}`;
+  const capturedAt = timeLabel(row.props.capturedAt);
+  const params = new URLSearchParams({
+    subject,
+    body: [
+      "",
+      "",
+      "---",
+      `From SPS email capture${capturedAt ? ` (${capturedAt})` : ""}: ${title}`,
+    ].join("\n"),
+  });
+  return `mailto:${encodeURIComponent(to)}?${params.toString()}`;
+}
+
+function buildEmailTaskDetail(row: VaultRow, captureBody: string): string {
+  return [
+    stringProp(row.props.emailFrom)
+      ? `From: ${stringProp(row.props.emailFrom)}`
+      : "",
+    stringProp(row.props.emailAccount)
+      ? `Account: ${stringProp(row.props.emailAccount)}`
+      : "",
+    stringProp(row.props.messageId)
+      ? `Message-ID: ${stringProp(row.props.messageId)}`
+      : "",
+    captureBody.trim(),
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 export function InboxSurface({
   profile = "default",
 }: InboxSurfaceProps): React.JSX.Element {
@@ -239,6 +290,18 @@ export function InboxSurface({
   const [skipMem, setSkipMem] = useState<Set<number>>(new Set());
   const [autoApply, setAutoApplyState] = useState(() => getAutoApply());
   const [intervalMin, setIntervalMin] = useState(() => getIngestIntervalMin());
+
+  useEffect(() => {
+    let cancelled = false;
+    void refreshSpsAutomationPrefs(profile).then((prefs) => {
+      if (cancelled) return;
+      setAutoApplyState(prefs.autoApply);
+      setIntervalMin(prefs.ingestIntervalMin);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [profile]);
 
   // Curation settings fields
   const [threshold, setThreshold] = useState(0.45);
@@ -919,6 +982,120 @@ export function InboxSurface({
     [emailConfig, profile, flash],
   );
 
+  const draftEmailReply = useCallback(
+    async (row: VaultRow): Promise<void> => {
+      const id = pageIdFromPath(row.path);
+      const url = buildEmailReplyUrl(row);
+      if (!url) {
+        flash("This capture has no sender address.");
+        return;
+      }
+      setRowBusy((prev) => ({ ...prev, [id]: "Opening reply draft..." }));
+      setError("");
+      try {
+        await window.hermesAPI.openExternal(url);
+        flash("Draft reply opened.");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setRowBusy((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+      }
+    },
+    [flash],
+  );
+
+  const createTaskFromEmail = useCallback(
+    async (row: VaultRow): Promise<void> => {
+      const api = window.hermesAPI;
+      const id = pageIdFromPath(row.path);
+      if (
+        !api?.spsReadRow ||
+        !api.spsExportRow ||
+        !api.spsClassifyTask ||
+        !api.spsRouteTask
+      ) {
+        setError("Task capture is unavailable.");
+        return;
+      }
+      setRowBusy((prev) => ({ ...prev, [id]: "Creating task..." }));
+      setError("");
+      try {
+        const current = await api.spsReadRow(INBOX_FOLDER, id, profile);
+        if (current == null) throw new Error("Could not read this capture.");
+        const { body: captureBody } = rowFromMarkdown(current);
+        const titleText = emailCaptureTitle(row);
+        const detail = buildEmailTaskDetail(row, captureBody);
+        const taskText = [titleText, detail].filter(Boolean).join("\n\n");
+        const rowId = `task-${Date.now().toString(36)}-${Math.random()
+          .toString(36)
+          .slice(2, 8)}`;
+        const draft = rowToMarkdown(
+          {
+            title: titleText,
+            status: "inbox",
+            source: "email",
+            captureId: id,
+          },
+          detail,
+        );
+        const saved = await api.spsExportRow(
+          TASKS_DB_FOLDER,
+          rowId,
+          draft,
+          profile,
+        );
+        if (!saved) throw new Error("Could not create the task row.");
+
+        const triage = await api.spsClassifyTask(taskText, profile);
+        const outcome = await api.spsRouteTask(
+          { rowId, title: titleText, body: detail, triage },
+          profile,
+        );
+        const props: Record<string, unknown> = {
+          title: titleText,
+          status: outcome.status,
+          route: outcome.route,
+          source: "email",
+          captureId: id,
+        };
+        if (triage.assigneeId) {
+          props.assigneeId = triage.assigneeId;
+          props.who = triage.assigneeId;
+        }
+        if (triage.due) props.due = triage.due;
+        if (outcome.delegatedTo) props.delegatedTo = outcome.delegatedTo;
+        await api.spsExportRow(
+          TASKS_DB_FOLDER,
+          rowId,
+          rowToMarkdown(props, detail),
+          profile,
+        );
+        await api.spsExportRow(
+          INBOX_FOLDER,
+          id,
+          withStatus(current, "processed"),
+          profile,
+        );
+        setHidden((prev) => new Set(prev).add(row.path));
+        flash("Created task from email.");
+        reconcile();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setRowBusy((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+      }
+    },
+    [profile, flash, reconcile],
+  );
+
   const runEmailMonitor = useCallback(async (): Promise<void> => {
     setEmailBusy("run");
     setEmailError("");
@@ -1132,15 +1309,34 @@ export function InboxSurface({
           </>
         )}
         {isEmail && (
-          <button
-            title="Triage is wrong…"
-            className="btn btn-ghost btn-sm inbox-card-action-btn"
-            onClick={() =>
-              setFeedbackMenuFor((prev) => (prev === id ? "" : id))
-            }
-          >
-            <Icon name="flag" size={15} />
-          </button>
+          <>
+            <button
+              title="Draft reply"
+              className="btn btn-ghost btn-sm inbox-card-action-btn"
+              disabled={Boolean(rowBusy[id])}
+              onClick={() => void draftEmailReply(row)}
+            >
+              <Icon name="send" size={15} />
+            </button>
+            <button
+              title="Create task"
+              className="btn btn-ghost btn-sm inbox-card-action-btn"
+              disabled={Boolean(rowBusy[id])}
+              onClick={() => void createTaskFromEmail(row)}
+            >
+              <Icon name="list" size={15} />
+            </button>
+            <button
+              title="Triage is wrong…"
+              className="btn btn-ghost btn-sm inbox-card-action-btn"
+              disabled={Boolean(rowBusy[id])}
+              onClick={() =>
+                setFeedbackMenuFor((prev) => (prev === id ? "" : id))
+              }
+            >
+              <Icon name="flag" size={15} />
+            </button>
+          </>
         )}
         <button
           title="Mark processed"
@@ -1648,7 +1844,7 @@ export function InboxSurface({
                 type="checkbox"
                 checked={autoApply}
                 onChange={(e) => {
-                  setAutoApply(e.target.checked);
+                  setAutoApply(e.target.checked, profile);
                   setAutoApplyState(e.target.checked);
                 }}
               />
@@ -1661,7 +1857,7 @@ export function InboxSurface({
                 value={intervalMin}
                 onChange={(e) => {
                   const m = Number(e.target.value);
-                  setIngestIntervalMin(m);
+                  setIngestIntervalMin(m, profile);
                   setIntervalMin(m);
                 }}
               >
@@ -1673,7 +1869,7 @@ export function InboxSurface({
             </label>
             {intervalMin > 0 && !autoApply && (
               <span className="inbox-schedule-hint">
-                enable auto-apply for scheduled runs to land
+                enable auto-apply for scheduled runs
               </span>
             )}
           </div>

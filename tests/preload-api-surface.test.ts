@@ -161,6 +161,28 @@ describe("New APIs from v0.8/v0.9 features", () => {
     expect(preloadTypes).toContain("OperatorReadinessReport");
   });
 
+  it("has routines status API", () => {
+    expect(preloadMethods).toContain("getRoutinesStatus");
+    expect(typeMethods).toContain("getRoutinesStatus");
+    expect(preloadTypes).toContain("RoutinesStatusReport");
+  });
+
+  it("has SPS automation prefs API", () => {
+    expect(preloadMethods).toContain("getSpsAutomationPrefs");
+    expect(preloadMethods).toContain("setSpsAutomationPrefs");
+    expect(typeMethods).toContain("getSpsAutomationPrefs");
+    expect(typeMethods).toContain("setSpsAutomationPrefs");
+    expect(preloadTypes).toContain("SpsAutomationPrefs");
+  });
+
+  it("has owner notification prefs API", () => {
+    expect(preloadMethods).toContain("getOwnerNotificationPrefs");
+    expect(preloadMethods).toContain("setOwnerNotificationPrefs");
+    expect(typeMethods).toContain("getOwnerNotificationPrefs");
+    expect(typeMethods).toContain("setOwnerNotificationPrefs");
+    expect(preloadTypes).toContain("OwnerNotificationPrefs");
+  });
+
   it("has obsidian APIs", () => {
     for (const method of [
       "getObsidianConfig",

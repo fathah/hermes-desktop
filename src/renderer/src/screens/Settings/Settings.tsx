@@ -9,6 +9,12 @@ import {
   type AppZoomSettings,
 } from "../../../../shared/app-zoom";
 import {
+  DEFAULT_OWNER_NOTIFICATION_PREFS,
+  OWNER_NOTIFICATION_EVENTS,
+  type OwnerNotificationPrefs,
+  type OwnerNotificationPrefsPatch,
+} from "../../../../shared/owner-notifications";
+import {
   Check,
   Download,
   Upload,
@@ -39,6 +45,16 @@ type DesktopUpdateRoutineState = Awaited<
 type DesktopUpdateRoutineResult = NonNullable<
   DesktopUpdateRoutineState["lastResult"]
 >;
+
+const OWNER_EVENT_LABELS: Record<
+  (typeof OWNER_NOTIFICATION_EVENTS)[number],
+  string
+> = {
+  brief: "Briefs",
+  nag: "Nags",
+  alert: "Alerts",
+  update: "Updates",
+};
 
 // Build a mask string the same width as the stored API key so the
 // "saved" state of the input looks like a key, not a constant blob.
@@ -152,6 +168,8 @@ function Settings({
   // Automation prefs (M2): scoped auto-approve + completion chime
   const [autoApprove, setAutoApproveState] = useState(false);
   const [completionSound, setCompletionSoundState] = useState(false);
+  const [ownerNotifications, setOwnerNotifications] =
+    useState<OwnerNotificationPrefs>(DEFAULT_OWNER_NOTIFICATION_PREFS);
   const [appZoom, setAppZoom] = useState<AppZoomSettings>(() =>
     appZoomSettingsFor(APP_ZOOM_DEFAULT),
   );
@@ -189,19 +207,28 @@ function Settings({
 
   const loadConfig = useCallback(async (): Promise<void> => {
     // Load fast config first (cached in main process)
-    const [home, aVersion, conn, keyStatus, zoomSettings, desktopRoutine] =
-      await Promise.all([
-        window.hermesAPI.getHermesHome(profile),
-        window.hermesAPI.getAppVersion(),
-        window.hermesAPI.getConnectionConfig(),
-        window.hermesAPI.getApiServerKeyStatus(profile),
-        window.hermesAPI.getAppZoomSettings(),
-        window.hermesAPI.getDesktopUpdateRoutine(),
-      ]);
+    const [
+      home,
+      aVersion,
+      conn,
+      keyStatus,
+      zoomSettings,
+      desktopRoutine,
+      ownerNotificationPrefs,
+    ] = await Promise.all([
+      window.hermesAPI.getHermesHome(profile),
+      window.hermesAPI.getAppVersion(),
+      window.hermesAPI.getConnectionConfig(),
+      window.hermesAPI.getApiServerKeyStatus(profile),
+      window.hermesAPI.getAppZoomSettings(),
+      window.hermesAPI.getDesktopUpdateRoutine(),
+      window.hermesAPI.getOwnerNotificationPrefs(profile),
+    ]);
     setHermesHome(home);
     setAppVersion(aVersion);
     setDesktopUpdateRoutineState(desktopRoutine);
     setAppZoom(zoomSettings);
+    setOwnerNotifications(ownerNotificationPrefs);
     setConnMode(conn.mode);
     setConnRemoteUrl(conn.remoteUrl);
     setConnHasApiKey(conn.hasApiKey);
@@ -270,6 +297,33 @@ function Settings({
       setAppZoomSaving(false);
     }
   }, []);
+
+  const updateOwnerNotifications = useCallback(
+    async (patch: OwnerNotificationPrefsPatch): Promise<void> => {
+      setOwnerNotifications((current) => ({
+        ...current,
+        channels: { ...current.channels, ...patch.channels },
+        events: { ...current.events, ...patch.events },
+        targets: { ...current.targets, ...patch.targets },
+        quietHours: { ...current.quietHours, ...patch.quietHours },
+        rateLimitMinutes:
+          patch.rateLimitMinutes !== undefined
+            ? patch.rateLimitMinutes
+            : current.rateLimitMinutes,
+      }));
+      try {
+        setOwnerNotifications(
+          await window.hermesAPI.setOwnerNotificationPrefs(patch, profile),
+        );
+      } catch (err) {
+        console.error("Failed to update owner notification prefs:", err);
+        setOwnerNotifications(
+          await window.hermesAPI.getOwnerNotificationPrefs(profile),
+        );
+      }
+    },
+    [profile],
+  );
 
   function getConnectionApiKeyForSave(): string | undefined {
     // Mask sentinel in the field means "the secret is still server-side
@@ -1390,6 +1444,183 @@ function Settings({
           <div className="settings-field-hint">
             Play a system chime when My Assistant finishes — the cue for which
             of several parallel runs just landed.
+          </div>
+        </div>
+        <div className="settings-field">
+          <div className="settings-field-label">Owner notifications</div>
+          <div className="settings-field-hint">
+            Profile-scoped delivery for briefs, nags, alerts, and updates.
+          </div>
+          <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+            {[
+              ["macos", "macOS notifications"],
+              ["telegram", "Telegram DM"],
+              ["email", "Email"],
+              ["whatsapp", "WhatsApp"],
+            ].map(([channel, label]) => (
+              <label
+                key={channel}
+                className="settings-field-label"
+                style={{ display: "flex", alignItems: "center", gap: 8 }}
+              >
+                <input
+                  type="checkbox"
+                  checked={
+                    ownerNotifications.channels[
+                      channel as keyof OwnerNotificationPrefs["channels"]
+                    ]
+                  }
+                  onChange={(e) =>
+                    void updateOwnerNotifications({
+                      channels: { [channel]: e.target.checked },
+                    })
+                  }
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gap: 10,
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              marginTop: 12,
+            }}
+          >
+            <label className="settings-field-label">
+              Telegram chat id
+              <input
+                className="input"
+                value={ownerNotifications.targets.telegramChatId}
+                onChange={(e) =>
+                  void updateOwnerNotifications({
+                    targets: { telegramChatId: e.target.value },
+                  })
+                }
+              />
+            </label>
+            <label className="settings-field-label">
+              Delivery email
+              <input
+                className="input"
+                type="email"
+                value={ownerNotifications.targets.emailAddress}
+                onChange={(e) =>
+                  void updateOwnerNotifications({
+                    targets: { emailAddress: e.target.value },
+                  })
+                }
+              />
+            </label>
+            <label className="settings-field-label">
+              WhatsApp target
+              <input
+                className="input"
+                value={ownerNotifications.targets.whatsappTarget}
+                onChange={(e) =>
+                  void updateOwnerNotifications({
+                    targets: { whatsappTarget: e.target.value },
+                  })
+                }
+              />
+            </label>
+          </div>
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "8px 14px",
+              marginTop: 12,
+            }}
+          >
+            {OWNER_NOTIFICATION_EVENTS.map((event) => (
+              <label
+                key={event}
+                className="settings-field-label"
+                style={{ display: "flex", alignItems: "center", gap: 6 }}
+              >
+                <input
+                  type="checkbox"
+                  checked={ownerNotifications.events[event]}
+                  onChange={(e) =>
+                    void updateOwnerNotifications({
+                      events: { [event]: e.target.checked },
+                    })
+                  }
+                />
+                {OWNER_EVENT_LABELS[event]}
+              </label>
+            ))}
+          </div>
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "10px 12px",
+              marginTop: 12,
+              alignItems: "end",
+            }}
+          >
+            <label
+              className="settings-field-label"
+              style={{ display: "flex", alignItems: "center", gap: 6 }}
+            >
+              <input
+                type="checkbox"
+                checked={ownerNotifications.quietHours.enabled}
+                onChange={(e) =>
+                  void updateOwnerNotifications({
+                    quietHours: { enabled: e.target.checked },
+                  })
+                }
+              />
+              Quiet hours
+            </label>
+            <label className="settings-field-label">
+              Start
+              <input
+                className="input"
+                type="time"
+                value={ownerNotifications.quietHours.start}
+                onChange={(e) =>
+                  void updateOwnerNotifications({
+                    quietHours: { start: e.target.value },
+                  })
+                }
+              />
+            </label>
+            <label className="settings-field-label">
+              End
+              <input
+                className="input"
+                type="time"
+                value={ownerNotifications.quietHours.end}
+                onChange={(e) =>
+                  void updateOwnerNotifications({
+                    quietHours: { end: e.target.value },
+                  })
+                }
+              />
+            </label>
+            <label className="settings-field-label">
+              Rate limit minutes
+              <input
+                className="input"
+                type="number"
+                min={0}
+                step={1}
+                value={ownerNotifications.rateLimitMinutes}
+                onChange={(e) =>
+                  void updateOwnerNotifications({
+                    rateLimitMinutes: Math.max(
+                      0,
+                      parseInt(e.target.value, 10) || 0,
+                    ),
+                  })
+                }
+              />
+            </label>
           </div>
         </div>
         <div className="settings-field">

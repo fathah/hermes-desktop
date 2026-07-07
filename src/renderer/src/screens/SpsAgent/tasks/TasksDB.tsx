@@ -57,19 +57,23 @@ export function TasksDB({ block, update, onOpenTask }: Props) {
     setRows((rs) =>
       rs.map((r) =>
         r.id === id
-          ? { ...r, status: order[(order.indexOf(r.status) + 1) % order.length] }
+          ? {
+              ...r,
+              status: order[(order.indexOf(r.status) + 1) % order.length],
+            }
           : r,
       ),
     );
   };
   const addRow = (template?: "quick" | "project" | "routine") => {
-    const defaultStatus: StatusKey = kanbanPreset === "personal" ? "inbox" : "todo";
+    const defaultStatus: StatusKey =
+      kanbanPreset === "personal" ? "inbox" : "todo";
     let templateProps: Partial<Task> = {};
     if (template === "quick") {
       templateProps = {
         title: "New Quick Win",
         prio: "low",
-        custom: { label: "Quick Win" }
+        custom: { label: "Quick Win" },
       };
     } else if (template === "project") {
       templateProps = {
@@ -78,9 +82,17 @@ export function TasksDB({ block, update, onOpenTask }: Props) {
         custom: { label: "Project" },
         desc: "Definition of Done:\n",
         checklist: [
-          { id: uid("item"), text: "Prerequisite: What do I need to buy/find?", checked: false },
-          { id: uid("item"), text: "Action Step: First micro-task (15 min)", checked: false }
-        ]
+          {
+            id: uid("item"),
+            text: "Prerequisite: What do I need to buy/find?",
+            checked: false,
+          },
+          {
+            id: uid("item"),
+            text: "Action Step: First micro-task (15 min)",
+            checked: false,
+          },
+        ],
       };
     } else if (template === "routine") {
       templateProps = {
@@ -89,9 +101,17 @@ export function TasksDB({ block, update, onOpenTask }: Props) {
         custom: { label: "Routine" },
         desc: "Links/Resources:\n",
         checklist: [
-          { id: uid("item"), text: "SOP Step 1: Start process", checked: false },
-          { id: uid("item"), text: "SOP Step 2: Complete routine", checked: false }
-        ]
+          {
+            id: uid("item"),
+            text: "SOP Step 1: Start process",
+            checked: false,
+          },
+          {
+            id: uid("item"),
+            text: "SOP Step 2: Complete routine",
+            checked: false,
+          },
+        ],
       };
     } else {
       templateProps = {
@@ -150,12 +170,20 @@ export function TasksDB({ block, update, onOpenTask }: Props) {
             onClick={() => setViewMenuOpen(!viewMenuOpen)}
             title="Switch Database View"
           >
-            <Icon name={VIEWS.find(([v]) => v === view)?.[2] || VIEWS[0][2]} size={15} />
-            <span>{VIEWS.find(([v]) => v === view)?.[1] || VIEWS[0][1]} View</span>
+            <Icon
+              name={VIEWS.find(([v]) => v === view)?.[2] || VIEWS[0][2]}
+              size={15}
+            />
+            <span>
+              {VIEWS.find(([v]) => v === view)?.[1] || VIEWS[0][1]} View
+            </span>
             <span className="db-view-chevron">▾</span>
           </button>
           {viewMenuOpen && (
-            <div className="db-template-menu left-align" onMouseLeave={() => setViewMenuOpen(false)}>
+            <div
+              className="db-template-menu left-align"
+              onMouseLeave={() => setViewMenuOpen(false)}
+            >
               {VIEWS.map(([v, label, icon]) => (
                 <div
                   key={v}
@@ -220,18 +248,25 @@ export function TasksDB({ block, update, onOpenTask }: Props) {
             <Icon name="dots" size={15} />
           </button>
           {moreMenuOpen && (
-            <div className="db-template-menu right-align" onMouseLeave={() => setMoreMenuOpen(false)}>
+            <div
+              className="db-template-menu right-align"
+              onMouseLeave={() => setMoreMenuOpen(false)}
+            >
               <div
                 className="db-template-item"
                 onClick={() => {
                   update({
-                    kanbanPreset: kanbanPreset === "standard" ? "personal" : "standard",
+                    kanbanPreset:
+                      kanbanPreset === "standard" ? "personal" : "standard",
                   });
                   setMoreMenuOpen(false);
                 }}
               >
                 <Icon name="board" size={14} />
-                <span>Layout: {kanbanPreset === "personal" ? "Personal" : "Standard"}</span>
+                <span>
+                  Layout:{" "}
+                  {kanbanPreset === "personal" ? "Personal" : "Standard"}
+                </span>
               </div>
               <div
                 className="db-template-item"
@@ -257,17 +292,44 @@ export function TasksDB({ block, update, onOpenTask }: Props) {
             ▾
           </button>
           {menuOpen && (
-            <div className="db-template-menu" onMouseLeave={() => setMenuOpen(false)}>
-              <div className="db-template-item" onClick={() => { addRow(); setMenuOpen(false); }}>
+            <div
+              className="db-template-menu"
+              onMouseLeave={() => setMenuOpen(false)}
+            >
+              <div
+                className="db-template-item"
+                onClick={() => {
+                  addRow();
+                  setMenuOpen(false);
+                }}
+              >
                 📄 Blank Task
               </div>
-              <div className="db-template-item" onClick={() => { addRow("quick"); setMenuOpen(false); }}>
+              <div
+                className="db-template-item"
+                onClick={() => {
+                  addRow("quick");
+                  setMenuOpen(false);
+                }}
+              >
                 ⚡ Quick Win
               </div>
-              <div className="db-template-item" onClick={() => { addRow("project"); setMenuOpen(false); }}>
+              <div
+                className="db-template-item"
+                onClick={() => {
+                  addRow("project");
+                  setMenuOpen(false);
+                }}
+              >
                 🏗️ Deep Work / Project
               </div>
-              <div className="db-template-item" onClick={() => { addRow("routine"); setMenuOpen(false); }}>
+              <div
+                className="db-template-item"
+                onClick={() => {
+                  addRow("routine");
+                  setMenuOpen(false);
+                }}
+              >
                 🔁 Routine / Habit
               </div>
             </div>

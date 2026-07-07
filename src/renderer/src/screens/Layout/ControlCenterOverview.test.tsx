@@ -185,7 +185,9 @@ describe("ControlCenterOverview", () => {
     const panel = await screen.findByRole("region", {
       name: "Operator readiness",
     });
-    expect(within(panel).getByText("Ready with follow-up work")).toBeInTheDocument();
+    expect(
+      within(panel).getByText("Ready with follow-up work"),
+    ).toBeInTheDocument();
     expect(window.hermesAPI.getOperatorReadiness).toHaveBeenCalledWith(
       "default",
     );

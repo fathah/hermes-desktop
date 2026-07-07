@@ -17,6 +17,11 @@ import type { ExternalSource } from "../../../../../shared/external-context";
 import type { ResearchReachIntent } from "../../../../../shared/research-reach";
 import type { ContentIdea } from "../../../lib/content-studio";
 import type { DeckGenerationInput } from "../../../../../shared/deck-studio";
+import type {
+  ApprovalChoice,
+  ApprovalState,
+  PendingApproval,
+} from "../../../lib/approval";
 
 export type RightTab =
   | "assistant"
@@ -336,6 +341,9 @@ export interface Conversation {
 export interface AssistantSlice {
   conversations: Conversation[];
   activeConvId: string;
+  workApprovals: ApprovalState;
+  workApprovalTimeout: number;
+  workApprovalNow: number;
   /** Tab management — open / switch / close conversations. */
   newConversation: () => void;
   selectConversation: (id: string) => void;
@@ -352,6 +360,10 @@ export interface AssistantSlice {
   runPlan: (idea: string, opts?: { planForThePlan?: boolean }) => void;
   /** `/work` — execute the plan on the current page (Milestone 1C). */
   runWork: () => void;
+  enqueueWorkApproval: (req: PendingApproval) => void;
+  respondWorkApproval: (id: string, choice: ApprovalChoice) => void;
+  tickWorkApprovalTimeouts: (now: number) => void;
+  setWorkApprovalTimeout: (seconds: number) => void;
   decideProposal: (proposalId: string, accept: boolean) => void;
   applyDbAction: (messageId: string, action: DbAction) => void;
   dismissDbAction: (messageId: string) => void;
@@ -423,6 +435,12 @@ export type WidgetKind =
   | "today"
   | "agent"
   | "guide"
+  | "operatorTasks"
+  | "operatorInbox"
+  | "operatorBrief"
+  | "operatorApprovals"
+  | "operatorUpdates"
+  | "equityAlerts"
   | "pulse"
   | "piping";
 

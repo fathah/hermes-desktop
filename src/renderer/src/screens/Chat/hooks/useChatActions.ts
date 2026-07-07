@@ -1,8 +1,3 @@
-// Several callbacks below read non-reactive refs/helpers, so the React Compiler
-// can't preserve their hand-written dependency arrays. Correcting the deps would
-// change when each callback is recreated — a behavioural change we won't make in
-// this admin Chat screen, which is slated for removal. Keep the manual deps.
-/* eslint-disable react-hooks/preserve-manual-memoization */
 import { useCallback, useEffect, useRef } from "react";
 import type { ChatInputHandle } from "../ChatInput";
 import type {
@@ -298,6 +293,7 @@ export function useChatActions({
       onSessionStarted,
       sendToAgent,
       setIsLoading,
+      setMessages,
       onCompactRequested,
     ],
   );

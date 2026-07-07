@@ -53,9 +53,7 @@ export type {
   EngineCapabilitySnapshot,
   EngineCapabilityState,
 } from "../shared/engine-capabilities";
-export type {
-  EngineContractFinding,
-} from "../shared/engine-contract";
+export type { EngineContractFinding } from "../shared/engine-contract";
 export type { EngineContractVerificationResult };
 export type {
   EngineAvailableUpdate,
@@ -75,6 +73,17 @@ export type {
 } from "../shared/active-work";
 export type { ConfigHealthReport } from "../shared/config-health";
 export type { OperatorReadinessReport } from "../shared/operator-readiness";
+export type { RoutinesStatusReport } from "../shared/routines-status";
+export type {
+  SpsAutomationPrefs,
+  SpsAutomationPrefsPatch,
+} from "../shared/sps-automation";
+export type {
+  OwnerNotificationChannel,
+  OwnerNotificationEvent,
+  OwnerNotificationPrefs,
+  OwnerNotificationPrefsPatch,
+} from "../shared/owner-notifications";
 export type { EquityBasket, EquityAlert } from "../shared/equity";
 export type { PublicConnectionConfig } from "../shared/connection";
 export type { ChatReadiness } from "../shared/validation";
@@ -243,12 +252,16 @@ export type HermesAgentUpdateRoutineResult = {
   upstreamHead?: string;
   behindBy?: number;
   changelog?: string;
+  updateChannel?: "release" | "main";
+  releaseTag?: string;
+  releaseSha?: string;
   contract?: EngineContractVerificationResult;
 };
 
 export type HermesAgentUpdateRoutineState = {
   enabled: boolean;
   autoApply: boolean;
+  engineUpdateChannel: "release" | "main";
   schedule: string;
   timezone: string;
   lastCheckedAt: string | null;

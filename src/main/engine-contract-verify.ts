@@ -5,8 +5,10 @@ import {
   type EngineContractFinding,
   type EngineContractVerificationResult,
 } from "../shared/engine-contract";
-import { getEngineCapabilityState } from "./config";
-import { recordEngineContractVerification } from "./config";
+import {
+  getEngineCapabilityState,
+  recordEngineContractVerification,
+} from "./engine-update-state";
 import {
   HERMES_PYTHON,
   hermesCliArgs,

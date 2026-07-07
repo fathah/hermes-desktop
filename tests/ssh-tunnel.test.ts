@@ -136,8 +136,9 @@ function createHarness(): RuntimeHarness {
 }
 
 async function flushAsyncLifecycle(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
+  for (let i = 0; i < 10; i += 1) {
+    await Promise.resolve();
+  }
 }
 
 describe("ssh tunnel lifecycle", () => {
@@ -155,6 +156,9 @@ describe("ssh tunnel lifecycle", () => {
       connectionReadyTimeoutMs: 5,
       connectionPollIntervalMs: 1,
       connectionOverallTimeoutMs: 5,
+      reconnectInitialBackoffMs: 1,
+      reconnectMaxBackoffMs: 1,
+      reconnectMaxAttempts: 1,
     });
   });
 
@@ -251,6 +255,18 @@ describe("ssh tunnel lifecycle", () => {
 
     expect(isSshTunnelActive()).toBe(false);
     expect(getSshTunnelUrl()).toBeNull();
+  });
+
+  it("reconnects with backoff when the child exits and health fails", async () => {
+    await startSshTunnel(config);
+    harness.healthStatuses.push(500, 200);
+
+    harness.children[0].emit("exit", 1, null);
+    await flushAsyncLifecycle();
+
+    expect(harness.children).toHaveLength(2);
+    expect(isSshTunnelActive()).toBe(true);
+    expect(getSshTunnelUrl()).toBe("http://127.0.0.1:18642");
   });
 
   it("reuses an active healthy tunnel instead of spawning another one", async () => {

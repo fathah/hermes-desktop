@@ -41,12 +41,16 @@ type AgentUpdateRoutineResult = {
   upstreamHead?: string;
   behindBy?: number;
   changelog?: string;
+  updateChannel?: "release" | "main";
+  releaseTag?: string;
+  releaseSha?: string;
   contract?: EngineContractVerificationResult;
 };
 
 type AgentUpdateRoutineState = {
   enabled: boolean;
   autoApply: boolean;
+  engineUpdateChannel: "release" | "main";
   schedule: string;
   timezone: string;
   lastCheckedAt: string | null;
@@ -523,7 +527,11 @@ function Providers({
   }
 
   async function handleAgentUpdateSetting(
-    settings: Partial<{ enabled: boolean; autoApply: boolean }>,
+    settings: Partial<{
+      enabled: boolean;
+      autoApply: boolean;
+      engineUpdateChannel: "release" | "main";
+    }>,
   ): Promise<void> {
     const updated = await window.hermesAPI.setHermesAgentUpdateRoutine(
       settings,
@@ -1268,6 +1276,27 @@ function Providers({
               />
               <span>{t("providers.agentUpdates.autoApply")}</span>
             </label>
+            <label className="provider-update-channel">
+              <span>{t("providers.agentUpdates.channel")}</span>
+              <select
+                className="input"
+                value={agentUpdateRoutine?.engineUpdateChannel ?? "release"}
+                onChange={(event) =>
+                  void handleAgentUpdateSetting({
+                    engineUpdateChannel: event.currentTarget.value as
+                      | "release"
+                      | "main",
+                  })
+                }
+              >
+                <option value="release">
+                  {t("providers.agentUpdates.channelRelease")}
+                </option>
+                <option value="main">
+                  {t("providers.agentUpdates.channelMain")}
+                </option>
+              </select>
+            </label>
             <button
               type="button"
               className="btn btn-secondary btn-sm provider-update-run"
@@ -1318,8 +1347,8 @@ function Providers({
                 {agentUpdateRoutine?.autoApplySuppressed
                   ? t("providers.agentUpdates.autoApplyPausedMode")
                   : agentUpdateRoutine?.autoApply
-                  ? t("providers.agentUpdates.autoApplyMode")
-                  : t("providers.agentUpdates.notifyOnly")}
+                    ? t("providers.agentUpdates.autoApplyMode")
+                    : t("providers.agentUpdates.notifyOnly")}
               </strong>
             </div>
             <div>
@@ -1457,7 +1486,9 @@ function Providers({
                   )}
                 </strong>
               ) : (
-                <strong>{t("providers.engineCapabilities.noVerification")}</strong>
+                <strong>
+                  {t("providers.engineCapabilities.noVerification")}
+                </strong>
               )}
             </div>
             <div>
@@ -1466,7 +1497,9 @@ function Providers({
             </div>
             <div>
               <span>{t("providers.engineCapabilities.contractFindings")}</span>
-              <strong>{formatEngineContractFindings(engineVerification)}</strong>
+              <strong>
+                {formatEngineContractFindings(engineVerification)}
+              </strong>
             </div>
           </div>
           {engineContractMessage && (

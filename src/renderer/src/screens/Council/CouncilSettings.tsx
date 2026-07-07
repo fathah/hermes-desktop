@@ -134,7 +134,9 @@ export default function CouncilSettings({
             />
             <span>
               Enable council mode
-              <small>Use configured seat prompts when multiple models run.</small>
+              <small>
+                Use configured seat prompts when multiple models run.
+              </small>
             </span>
           </label>
           <label className="settings-field council-settings-check">
@@ -181,7 +183,10 @@ export default function CouncilSettings({
         <div className="settings-section-title">Seats</div>
         <div className="council-seat-list">
           {config.seats.map((seat, index) => (
-            <div className="settings-platform-card council-seat-card" key={seat.id}>
+            <div
+              className="settings-platform-card council-seat-card"
+              key={seat.id}
+            >
               <div className="settings-platform-header">
                 <div className="settings-platform-info">
                   <span className="settings-platform-label">{seat.name}</span>

@@ -24,6 +24,17 @@ import {
   type EngineCapabilityState,
 } from "../../shared/engine-capabilities";
 import type { EngineContractVerificationResult } from "../../shared/engine-contract";
+import type {
+  SpsAutomationPrefs,
+  SpsAutomationPrefsPatch,
+} from "../../shared/sps-automation";
+import {
+  DEFAULT_OWNER_NOTIFICATION_PREFS,
+  OWNER_NOTIFICATION_CHANNELS,
+  OWNER_NOTIFICATION_EVENTS,
+  type OwnerNotificationPrefs,
+  type OwnerNotificationPrefsPatch,
+} from "../../shared/owner-notifications";
 
 // `desktop.json` — app-level, desktop-owned config (connection mode, encrypted
 // remote/api-server keys, and the desktop-enforced UX toggles below).
@@ -125,6 +136,172 @@ export function setAutoApprove(enabled: boolean, profile?: string): void {
   writeDesktopConfig(data);
 }
 
+const SPS_AUTOMATION_CONFIG_KEY = "spsAutomationByProfile";
+
+const DEFAULT_SPS_AUTOMATION_PREFS: SpsAutomationPrefs = {
+  autoApply: false,
+  ingestIntervalMin: 0,
+  lintIntervalMin: 0,
+};
+
+function intervalMinutes(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return 0;
+  }
+  return Math.floor(value);
+}
+
+function normalizeSpsAutomationPrefs(value: unknown): SpsAutomationPrefs {
+  const raw = value && typeof value === "object" ? value : {};
+  const data = raw as Record<string, unknown>;
+  return {
+    autoApply: data.autoApply === true,
+    ingestIntervalMin: intervalMinutes(data.ingestIntervalMin),
+    lintIntervalMin: intervalMinutes(data.lintIntervalMin),
+  };
+}
+
+function spsAutomationMap(
+  data: Record<string, unknown>,
+): Record<string, unknown> {
+  const raw = data[SPS_AUTOMATION_CONFIG_KEY];
+  return raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+}
+
+export function getSpsAutomationPrefs(profile?: string): SpsAutomationPrefs {
+  const data = readDesktopConfig();
+  const stored = spsAutomationMap(data)[autoApproveKey(profile)];
+  return normalizeSpsAutomationPrefs(stored);
+}
+
+export function setSpsAutomationPrefs(
+  patch: SpsAutomationPrefsPatch,
+  profile?: string,
+): SpsAutomationPrefs {
+  const data = readDesktopConfig();
+  const map = spsAutomationMap(data);
+  const key = autoApproveKey(profile);
+  const next = normalizeSpsAutomationPrefs({
+    ...DEFAULT_SPS_AUTOMATION_PREFS,
+    ...normalizeSpsAutomationPrefs(map[key]),
+    ...patch,
+  });
+  map[key] = next;
+  data[SPS_AUTOMATION_CONFIG_KEY] = map;
+  writeDesktopConfig(data);
+  return next;
+}
+
+const OWNER_NOTIFICATION_PREFS_KEY = "ownerNotificationPrefsByProfile";
+
+function ownerNotificationPrefsMap(
+  data: Record<string, unknown>,
+): Record<string, unknown> {
+  const raw = data[OWNER_NOTIFICATION_PREFS_KEY];
+  return raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function timeValue(value: unknown, fallback: string): string {
+  const raw = stringValue(value);
+  return /^\d{2}:\d{2}$/.test(raw) ? raw : fallback;
+}
+
+function normalizeOwnerNotificationPrefs(
+  value: unknown,
+): OwnerNotificationPrefs {
+  const raw = value && typeof value === "object" ? value : {};
+  const data = raw as Record<string, unknown>;
+  const rawChannels =
+    data.channels && typeof data.channels === "object"
+      ? (data.channels as Record<string, unknown>)
+      : {};
+  const rawEvents =
+    data.events && typeof data.events === "object"
+      ? (data.events as Record<string, unknown>)
+      : {};
+  const rawTargets =
+    data.targets && typeof data.targets === "object"
+      ? (data.targets as Record<string, unknown>)
+      : {};
+  const rawQuietHours =
+    data.quietHours && typeof data.quietHours === "object"
+      ? (data.quietHours as Record<string, unknown>)
+      : {};
+  const channels = { ...DEFAULT_OWNER_NOTIFICATION_PREFS.channels };
+  for (const channel of OWNER_NOTIFICATION_CHANNELS) {
+    if (typeof rawChannels[channel] === "boolean") {
+      channels[channel] = rawChannels[channel];
+    }
+  }
+  const events = { ...DEFAULT_OWNER_NOTIFICATION_PREFS.events };
+  for (const event of OWNER_NOTIFICATION_EVENTS) {
+    if (typeof rawEvents[event] === "boolean") {
+      events[event] = rawEvents[event];
+    }
+  }
+  return {
+    channels,
+    events,
+    targets: {
+      telegramChatId: stringValue(rawTargets.telegramChatId),
+      emailAddress: stringValue(rawTargets.emailAddress),
+      whatsappTarget: stringValue(rawTargets.whatsappTarget),
+    },
+    quietHours: {
+      enabled: rawQuietHours.enabled === true,
+      start: timeValue(
+        rawQuietHours.start,
+        DEFAULT_OWNER_NOTIFICATION_PREFS.quietHours.start,
+      ),
+      end: timeValue(
+        rawQuietHours.end,
+        DEFAULT_OWNER_NOTIFICATION_PREFS.quietHours.end,
+      ),
+    },
+    rateLimitMinutes:
+      data.rateLimitMinutes === undefined
+        ? DEFAULT_OWNER_NOTIFICATION_PREFS.rateLimitMinutes
+        : intervalMinutes(data.rateLimitMinutes),
+  };
+}
+
+export function getOwnerNotificationPrefs(
+  profile?: string,
+): OwnerNotificationPrefs {
+  const data = readDesktopConfig();
+  const stored = ownerNotificationPrefsMap(data)[autoApproveKey(profile)];
+  return normalizeOwnerNotificationPrefs(stored);
+}
+
+export function setOwnerNotificationPrefs(
+  patch: OwnerNotificationPrefsPatch,
+  profile?: string,
+): OwnerNotificationPrefs {
+  const data = readDesktopConfig();
+  const map = ownerNotificationPrefsMap(data);
+  const key = autoApproveKey(profile);
+  const current = normalizeOwnerNotificationPrefs(map[key]);
+  const next = normalizeOwnerNotificationPrefs({
+    ...current,
+    channels: { ...current.channels, ...patch.channels },
+    events: { ...current.events, ...patch.events },
+    targets: { ...current.targets, ...patch.targets },
+    quietHours: { ...current.quietHours, ...patch.quietHours },
+    rateLimitMinutes:
+      patch.rateLimitMinutes !== undefined
+        ? patch.rateLimitMinutes
+        : current.rateLimitMinutes,
+  });
+  map[key] = next;
+  data[OWNER_NOTIFICATION_PREFS_KEY] = map;
+  writeDesktopConfig(data);
+  return next;
+}
+
 const COUNCIL_CONFIG_KEY = "councilConfigByProfile";
 
 function councilConfigMap(
@@ -214,12 +391,18 @@ export interface HermesAgentUpdateRoutineResult {
   upstreamHead?: string;
   behindBy?: number;
   changelog?: string;
+  updateChannel?: HermesAgentUpdateChannel;
+  releaseTag?: string;
+  releaseSha?: string;
   contract?: EngineContractVerificationResult;
 }
+
+export type HermesAgentUpdateChannel = "release" | "main";
 
 export interface HermesAgentUpdateRoutineSettings {
   enabled: boolean;
   autoApply: boolean;
+  engineUpdateChannel: HermesAgentUpdateChannel;
 }
 
 export interface HermesAgentUpdateRoutineState extends HermesAgentUpdateRoutineSettings {
@@ -251,8 +434,9 @@ function profileConfigKey(profile?: string): string {
 
 const ENGINE_CAPABILITIES_KEY = "engineCapabilitiesByProfile";
 
-interface StoredEngineCapabilityState
-  extends Partial<Omit<EngineCapabilityState, "snapshot">> {
+interface StoredEngineCapabilityState extends Partial<
+  Omit<EngineCapabilityState, "snapshot">
+> {
   snapshot?: EngineCapabilitySnapshot;
 }
 
@@ -286,7 +470,8 @@ function normalizeStoredEngineCapabilityState(
           ...fallback.snapshot,
           ...stored.snapshot,
           features:
-            stored.snapshot.features && typeof stored.snapshot.features === "object"
+            stored.snapshot.features &&
+            typeof stored.snapshot.features === "object"
               ? stored.snapshot.features
               : {},
           endpoints:
@@ -301,7 +486,9 @@ function normalizeStoredEngineCapabilityState(
     installedSha:
       typeof stored.installedSha === "string" ? stored.installedSha : null,
     lastVerifiedSha:
-      typeof stored.lastVerifiedSha === "string" ? stored.lastVerifiedSha : null,
+      typeof stored.lastVerifiedSha === "string"
+        ? stored.lastVerifiedSha
+        : null,
     lastVerification:
       stored.lastVerification && typeof stored.lastVerification === "object"
         ? (stored.lastVerification as EngineContractVerificationResult)
@@ -369,6 +556,12 @@ function hermesAgentUpdateMap(
     : {};
 }
 
+function normalizeHermesAgentUpdateChannel(
+  value: unknown,
+): HermesAgentUpdateChannel {
+  return value === "main" ? "main" : "release";
+}
+
 function localTimezone(): string {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || "local";
@@ -427,6 +620,9 @@ export function getHermesAgentUpdateRoutine(
   return {
     enabled: stored.enabled !== false,
     autoApply: stored.autoApply === true,
+    engineUpdateChannel: normalizeHermesAgentUpdateChannel(
+      stored.engineUpdateChannel,
+    ),
     schedule: HERMES_AGENT_UPDATE_SCHEDULE,
     timezone: localTimezone(),
     lastCheckedAt: stored.lastCheckedAt || lastResult?.checkedAt || null,
@@ -435,11 +631,13 @@ export function getHermesAgentUpdateRoutine(
     autoApplySuppressed: autoApplySuppressionReason !== null,
     autoApplySuppressionReason,
     autoApplySuppressedAt:
-      autoApplySuppressionReason && typeof stored.autoApplySuppressedAt === "string"
+      autoApplySuppressionReason &&
+      typeof stored.autoApplySuppressedAt === "string"
         ? stored.autoApplySuppressedAt
         : null,
     autoApplySuppressedSha:
-      autoApplySuppressionReason && typeof stored.autoApplySuppressedSha === "string"
+      autoApplySuppressionReason &&
+      typeof stored.autoApplySuppressedSha === "string"
         ? stored.autoApplySuppressedSha
         : null,
   };
@@ -453,6 +651,11 @@ export function setHermesAgentUpdateRoutine(
   const key = profileConfigKey(profile);
   const map = hermesAgentUpdateMap(data);
   const prev = map[key] || {};
+  const nextChannel =
+    settings.engineUpdateChannel === "release" ||
+    settings.engineUpdateChannel === "main"
+      ? settings.engineUpdateChannel
+      : undefined;
   map[key] = {
     ...prev,
     ...(typeof settings.enabled === "boolean"
@@ -461,6 +664,7 @@ export function setHermesAgentUpdateRoutine(
     ...(typeof settings.autoApply === "boolean"
       ? { autoApply: settings.autoApply }
       : {}),
+    ...(nextChannel ? { engineUpdateChannel: nextChannel } : {}),
   };
   data[HERMES_AGENT_UPDATE_KEY] = map;
   writeDesktopConfig(data);

@@ -21,19 +21,29 @@ import {
   type LockRecord,
 } from "./scheduler-lock";
 import { formatLogError, log } from "./log";
-import { getActiveProfileNameSync, profileHome } from "./utils";
+import { getActiveProfileNameSync, profileHome, safeWriteFile } from "./utils";
 import { listCronJobs } from "./cronjobs";
 import { triggerSelfHealing } from "./self-healing";
-import { readDesktopConfig, writeDesktopConfig } from "./config";
+import {
+  getSpsAutomationPrefs,
+  readDesktopConfig,
+  writeDesktopConfig,
+} from "./config";
 import { runDreamCycle } from "./dream-cycle";
 import { maybeRunHermesAgentUpdateRoutine } from "./hermes-agent-updates";
 import { maybeRunHermesUpstreamWatchRoutine } from "./hermes-upstream-watch";
 import { maybeRunDesktopUpdateRoutine } from "./desktop-update-routine";
 import { maybeRunAppLaunchSchedules } from "./app-launcher";
+import { ensureOwnerCriticalCronJobs } from "./owner-routines";
+import { ensureOwnerMobileWorkspaceSkill } from "./mobile-workspace-skill";
+import { spsIngestInbox, spsLintWiki } from "./sps-agent";
+import type { IngestChangeset } from "./sps-ingest";
+import { createVaultProposal, listVaultProposals } from "./vault-review-queue";
 import { getApiUrl, getRemoteAuthHeader } from "./hermes";
 import { gatewayFetch } from "./security/network-policy";
 import { createLearningProposal } from "./learning-proposals";
 import { listInstalledSkills, getSkillContent } from "./skills";
+import type { VaultProposalInput } from "../shared/sps-types";
 
 export async function captureScreenshot(
   jobId: string,
@@ -153,7 +163,7 @@ function recordSkip(jobId: string, reason: string): void {
       lastSkipAt: Date.now(),
       lastReason: reason,
     };
-    writeFileSync(skipsPath(), JSON.stringify(all, null, 2), "utf-8");
+    safeWriteFile(skipsPath(), JSON.stringify(all, null, 2));
   } catch (err) {
     log.error("scheduler", {
       msg: "failed to persist skip telemetry",
@@ -169,7 +179,7 @@ function clearSkip(jobId: string): void {
     const all = getSchedulerSkips();
     if (all[jobId]) {
       delete all[jobId];
-      writeFileSync(skipsPath(), JSON.stringify(all, null, 2), "utf-8");
+      safeWriteFile(skipsPath(), JSON.stringify(all, null, 2));
     }
   } catch {
     // best-effort
@@ -233,6 +243,180 @@ let lastNagTickMs = 0;
 // least one account is enabled with credentials.
 const EMAIL_TICK_THROTTLE_MS = 5 * 60_000;
 let lastEmailTickMs = 0;
+
+const SPS_LINT_STALE_DAYS = 30;
+const spsAutomationLastRun = new Map<string, number>();
+const spsAutomationActiveRuns = new Set<string>();
+
+function spsAutomationKey(profile: string, kind: "ingest" | "lint"): string {
+  return `${profile}:${kind}`;
+}
+
+function shouldRunSpsAutomation(
+  profile: string,
+  kind: "ingest" | "lint",
+  intervalMin: number,
+  nowMs: number,
+): boolean {
+  if (intervalMin <= 0) return false;
+  const key = spsAutomationKey(profile, kind);
+  const lastRun = spsAutomationLastRun.get(key) ?? 0;
+  return nowMs - lastRun >= intervalMin * 60_000;
+}
+
+function changesetToVaultProposalInput(
+  changeset: IngestChangeset,
+  source: VaultProposalInput["source"],
+  title: string,
+): VaultProposalInput {
+  return {
+    source,
+    title,
+    summary: changeset.summary,
+    operations: [
+      ...changeset.pages.map((page) => ({
+        id: `page-${page.pageId}`,
+        kind: "upsert-page" as const,
+        pageId: page.pageId,
+        title: page.title,
+        markdown: page.markdown,
+      })),
+      ...changeset.captures.map((capture) => ({
+        id: `capture-${capture.id}`,
+        kind: "mark-capture" as const,
+        captureId: capture.id,
+        status: capture.status,
+      })),
+      ...changeset.memory.map((body, index) => ({
+        id: `memory-${index}`,
+        kind: "add-memory" as const,
+        body,
+      })),
+    ],
+  };
+}
+
+function hasProposalWork(changeset: IngestChangeset): boolean {
+  return (
+    changeset.pages.length > 0 ||
+    changeset.captures.length > 0 ||
+    changeset.memory.length > 0
+  );
+}
+
+async function runSpsAutomationJob(
+  profile: string,
+  kind: "ingest" | "lint",
+  run: () => Promise<void>,
+): Promise<void> {
+  const key = spsAutomationKey(profile, kind);
+  if (spsAutomationActiveRuns.has(key)) {
+    return;
+  }
+  spsAutomationActiveRuns.add(key);
+  try {
+    await run();
+  } catch (err) {
+    log.error("scheduler", {
+      msg: `scheduled SPS ${kind} failed`,
+      profile,
+      error: formatLogError(err),
+    });
+  } finally {
+    spsAutomationActiveRuns.delete(key);
+  }
+}
+
+async function runScheduledSpsIngest(profile: string): Promise<void> {
+  const pending = await listVaultProposals(profile);
+  if (
+    pending.some(
+      (proposal) =>
+        proposal.status === "pending" && proposal.source === "inbox",
+    )
+  ) {
+    return;
+  }
+  const result = await spsIngestInbox(profile);
+  if (!result.ok || !result.changeset) {
+    log.warn("scheduler", {
+      msg: "scheduled SPS ingest did not produce a changeset",
+      profile,
+      error: result.error,
+    });
+    return;
+  }
+  if (!hasProposalWork(result.changeset)) {
+    return;
+  }
+  await createVaultProposal(
+    changesetToVaultProposalInput(
+      result.changeset,
+      "inbox",
+      "Scheduled inbox ingest",
+    ),
+    profile,
+  );
+}
+
+async function runScheduledSpsLint(profile: string): Promise<void> {
+  const pending = await listVaultProposals(profile);
+  if (
+    pending.some(
+      (proposal) =>
+        proposal.status === "pending" && proposal.source === "health",
+    )
+  ) {
+    return;
+  }
+  const result = await spsLintWiki(profile, { staleDays: SPS_LINT_STALE_DAYS });
+  if (!result.ok) {
+    log.warn("scheduler", {
+      msg: "scheduled SPS lint failed",
+      profile,
+      error: result.error,
+    });
+    return;
+  }
+  if (!result.changeset || result.changeset.pages.length === 0) {
+    return;
+  }
+  await createVaultProposal(
+    changesetToVaultProposalInput(
+      result.changeset,
+      "health",
+      "Scheduled vault health fixes",
+    ),
+    profile,
+  );
+}
+
+function maybeRunSpsAutomation(now: Date, profile: string): void {
+  const prefs = getSpsAutomationPrefs(profile);
+  const nowMs = now.getTime();
+  if (
+    prefs.autoApply &&
+    shouldRunSpsAutomation(profile, "ingest", prefs.ingestIntervalMin, nowMs)
+  ) {
+    const key = spsAutomationKey(profile, "ingest");
+    spsAutomationLastRun.set(key, nowMs);
+    void runSpsAutomationJob(profile, "ingest", () =>
+      runScheduledSpsIngest(profile),
+    );
+  }
+  if (shouldRunSpsAutomation(profile, "lint", prefs.lintIntervalMin, nowMs)) {
+    const key = spsAutomationKey(profile, "lint");
+    spsAutomationLastRun.set(key, nowMs);
+    void runSpsAutomationJob(profile, "lint", () =>
+      runScheduledSpsLint(profile),
+    );
+  }
+}
+
+export function __resetSpsAutomationSchedulerForTests(): void {
+  spsAutomationLastRun.clear();
+  spsAutomationActiveRuns.clear();
+}
 
 export async function tickScheduler(profile?: string): Promise<void> {
   const activeProfile = profile ?? getActiveProfileNameSync();
@@ -317,6 +501,29 @@ export async function tickScheduler(profile?: string): Promise<void> {
       });
     },
   );
+  void ensureOwnerCriticalCronJobs(activeProfile).catch((err) => {
+    log.error("scheduler", {
+      msg: "error bootstrapping owner-critical cron jobs",
+      profile: activeProfile,
+      error: formatLogError(err),
+    });
+  });
+  try {
+    const mobileSkill = ensureOwnerMobileWorkspaceSkill(activeProfile);
+    if (mobileSkill.error) {
+      log.error("scheduler", {
+        msg: "error bootstrapping owner mobile workspace skill",
+        profile: activeProfile,
+        error: mobileSkill.error,
+      });
+    }
+  } catch (err) {
+    log.error("scheduler", {
+      msg: "error bootstrapping owner mobile workspace skill",
+      profile: activeProfile,
+      error: formatLogError(err),
+    });
+  }
 
   try {
     const jobs = await listCronJobs(true, activeProfile);
@@ -401,6 +608,16 @@ export async function tickScheduler(profile?: string): Promise<void> {
   } catch (err) {
     log.error("scheduler", {
       msg: "error checking email monitor",
+      profile: activeProfile,
+      error: formatLogError(err),
+    });
+  }
+
+  try {
+    maybeRunSpsAutomation(new Date(), activeProfile);
+  } catch (err) {
+    log.error("scheduler", {
+      msg: "error checking SPS automation",
       profile: activeProfile,
       error: formatLogError(err),
     });

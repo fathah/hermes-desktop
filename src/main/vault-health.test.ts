@@ -46,7 +46,9 @@ describe("buildVaultHealthReportFromSnapshot", () => {
         links: [{ source: "alpha.md", target: "beta.md", type: "link" }],
         mechanical: {
           orphans: ["lonely.md"],
-          brokenLinks: [{ source: "alpha.md", target: "missing", type: "link" }],
+          brokenLinks: [
+            { source: "alpha.md", target: "missing", type: "link" },
+          ],
           stale: [],
         },
       },

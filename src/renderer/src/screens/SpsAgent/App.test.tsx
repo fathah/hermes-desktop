@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 
 const store = vi.hoisted(() => ({
@@ -34,13 +34,6 @@ vi.mock("./store", () => {
 
 vi.mock("./hooks/useHotkeys", () => ({ useHotkeys: vi.fn() }));
 vi.mock("./lib/scroll", () => ({ setScrollContainer: vi.fn() }));
-vi.mock("./inbox/ingestApply", () => ({ runAutoIngest: vi.fn() }));
-vi.mock("./inbox/ingestPrefs", () => ({
-  getAutoApply: vi.fn(() => false),
-  getIngestIntervalMin: vi.fn(() => 0),
-  getLintIntervalMin: vi.fn(() => 0),
-  INGEST_PREFS_EVENT: "sps-ingest-prefs",
-}));
 vi.mock("../../lib/openSettings", () => ({ openSettings: vi.fn() }));
 
 vi.mock("./sidebar/Sidebar", () => ({ Sidebar: () => <aside>Sidebar</aside> }));
@@ -56,7 +49,9 @@ vi.mock("./shell/DocHeader", () => ({
 vi.mock("./editor/Editor", () => ({
   Editor: () => <div data-testid="editor">Editor</div>,
 }));
-vi.mock("./panel/RightPanel", () => ({ RightPanel: () => <aside>Panel</aside> }));
+vi.mock("./panel/RightPanel", () => ({
+  RightPanel: () => <aside>Panel</aside>,
+}));
 vi.mock("./shell/Overlays", () => ({ Overlays: () => null }));
 vi.mock("./components/Toast", () => ({ Toast: () => null }));
 vi.mock("./components/SaveStatus", () => ({ SaveStatus: () => null }));
@@ -146,8 +141,13 @@ beforeEach(() => {
   });
 });
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe("SpsAgent App doc surface", () => {
   it("keeps onboarding and what's-new affordances in one compact strip before the document", () => {
+    const intervalSpy = vi.spyOn(window, "setInterval");
     const { container } = render(<App />);
 
     const strip = container.querySelector(".home-affordance-strip");
@@ -167,8 +167,9 @@ describe("SpsAgent App doc surface", () => {
     expect(componentCalls.whatsNew).toHaveBeenCalledWith(
       expect.objectContaining({ variant: "compact" }),
     );
-    expect(container.querySelectorAll(".doc-scroll > .ob-checklist")).toHaveLength(
-      0,
-    );
+    expect(
+      container.querySelectorAll(".doc-scroll > .ob-checklist"),
+    ).toHaveLength(0);
+    expect(intervalSpy).not.toHaveBeenCalled();
   });
 });

@@ -46,11 +46,7 @@ export function groupCouncilTurns(messages: ChatMessage[]): ChatMessage[] {
 
   for (const msg of messages) {
     const bubble = msg as ChatBubbleMessage;
-    if (
-      msg.role === "agent" &&
-      !("kind" in msg) &&
-      bubble.councilGroupId
-    ) {
+    if (msg.role === "agent" && !("kind" in msg) && bubble.councilGroupId) {
       const gId = bubble.councilGroupId;
       const turnId = gId.startsWith("council-turn-")
         ? gId
@@ -60,10 +56,7 @@ export function groupCouncilTurns(messages: ChatMessage[]): ChatMessage[] {
       const modelKey = `${provider}:${model}`;
       const messageId = Number(String(msg.id).replace(/^db-/, "")) || msg.id;
 
-      if (
-        currentCouncilTurn &&
-        currentCouncilTurn.id === turnId
-      ) {
+      if (currentCouncilTurn && currentCouncilTurn.id === turnId) {
         currentCouncilTurn.responses[modelKey] = {
           modelLabel: model,
           provider,

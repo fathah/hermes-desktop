@@ -9,6 +9,7 @@ import { randomBytes } from "crypto";
 import { timingSafeTokenEqual } from "./security";
 import {
   writeFileSync,
+  readFileSync,
   mkdirSync,
   existsSync,
   chmodSync,
@@ -177,6 +178,27 @@ function writeJson(
   res.end(JSON.stringify(payload));
 }
 
+function profileStateDir(profile: string): string {
+  return profile && profile !== "default"
+    ? join(HERMES_HOME, "profiles", profile)
+    : HERMES_HOME;
+}
+
+function readClosedAppGatewayState(
+  profile: string,
+): Record<string, unknown> | null {
+  const statePath = join(profileStateDir(profile), "closed-app-gateway.json");
+  if (!existsSync(statePath)) return null;
+  try {
+    const parsed = JSON.parse(readFileSync(statePath, "utf-8")) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Handle incoming HTTP requests securely.
  */
@@ -289,6 +311,7 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
         connectionMode: conn.mode,
         gatewayRunning,
         controlPort: currentPort,
+        closedAppGateway: readClosedAppGatewayState(profile),
       }),
     );
     return;
@@ -836,12 +859,14 @@ export function renderCronScript(): string {
   return `#!/usr/bin/env node
 const fs = require('fs');
 const path = require('path');
-const { spawnSync } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const os = require('os');
 
 const home = os.homedir();
 const hermesHome = path.join(home, '.hermes');
+const hermesRepo = path.join(hermesHome, 'hermes-agent');
 const desktopJsonPath = path.join(hermesHome, 'desktop.json');
+const curlPath = fs.existsSync('/usr/bin/curl') ? '/usr/bin/curl' : 'curl';
 
 function formatCronError(error) {
   if (error instanceof Error) return error.message;
@@ -870,9 +895,10 @@ function writeCronLog(level, payload) {
 }
 
 let activeProfile = 'default';
+let desktopConfig = {};
 if (fs.existsSync(desktopJsonPath)) {
   try {
-    const desktopConfig = JSON.parse(fs.readFileSync(desktopJsonPath, 'utf-8'));
+    desktopConfig = JSON.parse(fs.readFileSync(desktopJsonPath, 'utf-8'));
     if (desktopConfig.activeProfile) {
       activeProfile = desktopConfig.activeProfile;
     }
@@ -885,6 +911,240 @@ const appLaunchProfileDir = activeProfile && activeProfile !== 'default'
   ? path.join(hermesHome, 'profiles', activeProfile)
   : hermesHome;
 const appLauncherPath = path.join(appLaunchProfileDir, 'sps-agent', 'app-launcher.json');
+const closedAppGatewayStatePath = path.join(appLaunchProfileDir, 'closed-app-gateway.json');
+
+function readClosedAppGatewayState() {
+  try {
+    if (!fs.existsSync(closedAppGatewayStatePath)) return {};
+    const parsed = JSON.parse(fs.readFileSync(closedAppGatewayStatePath, 'utf-8'));
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (err) {
+    return {};
+  }
+}
+
+function writeClosedAppGatewayState(patch) {
+  try {
+    if (!fs.existsSync(appLaunchProfileDir)) {
+      fs.mkdirSync(appLaunchProfileDir, { recursive: true });
+    }
+    const prev = readClosedAppGatewayState();
+    const next = {
+      ...prev,
+      ...patch,
+      profile: activeProfile,
+      lastCheckedAt: new Date().toISOString()
+    };
+    fs.writeFileSync(closedAppGatewayStatePath, JSON.stringify(next, null, 2), 'utf-8');
+  } catch (err) {
+    writeCronLog('error', {
+      msg: 'failed to persist closed-app gateway state',
+      error: formatCronError(err)
+    });
+  }
+}
+
+function readProfileGatewayPort() {
+  const configPath = path.join(appLaunchProfileDir, 'config.yaml');
+  if (!fs.existsSync(configPath)) return 8642;
+  try {
+    const raw = fs.readFileSync(configPath, 'utf-8');
+    const match = raw.match(/api_server:[\\s\\S]*?\\n\\s*port:\\s*['"]?(\\d+)/i);
+    if (match) {
+      const port = parseInt(match[1], 10);
+      if (port > 0 && port < 65536) return port;
+    }
+  } catch (err) {}
+  return 8642;
+}
+
+function curlOk(args) {
+  try {
+    const res = spawnSync(curlPath, args, {
+      encoding: 'utf-8',
+      shell: false,
+      timeout: 5000
+    });
+    return !res.error && res.status === 0;
+  } catch (err) {
+    return false;
+  }
+}
+
+function desktopControlStateAvailable() {
+  const port = Number(desktopConfig.controlServerPort || 0);
+  const token = typeof desktopConfig.controlServerToken === 'string'
+    ? desktopConfig.controlServerToken
+    : '';
+  if (!port || !token) return false;
+  return curlOk([
+    '-fsS',
+    '--max-time',
+    '2',
+    '-H',
+    'Authorization: Bearer ' + token,
+    'http://127.0.0.1:' + port + '/state'
+  ]);
+}
+
+function gatewayHealthOk(port) {
+  return curlOk([
+    '-fsS',
+    '--max-time',
+    '2',
+    'http://127.0.0.1:' + port + '/health'
+  ]);
+}
+
+function loadEnvFile(filePath, targetEnv) {
+  if (!fs.existsSync(filePath)) return;
+  try {
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    for (const line of raw.split(/\\r?\\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const idx = trimmed.indexOf('=');
+      if (idx <= 0) continue;
+      const key = trimmed.slice(0, idx).trim();
+      let value = trimmed.slice(idx + 1).trim();
+      if ((value.startsWith('"') && value.endsWith('"')) ||
+          (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
+      if (key) targetEnv[key] = value;
+    }
+  } catch (err) {}
+}
+
+function startGatewayProcess(port) {
+  const pythonPath = process.platform === 'win32'
+    ? path.join(hermesRepo, 'venv', 'Scripts', 'python.exe')
+    : path.join(hermesRepo, 'venv', 'bin', 'python');
+  const hermesScript = process.platform === 'win32'
+    ? path.join(hermesRepo, 'venv', 'Scripts', 'hermes.exe')
+    : path.join(hermesRepo, 'hermes');
+  if (!fs.existsSync(pythonPath) || !fs.existsSync(hermesRepo)) {
+    return {
+      ok: false,
+      error: 'Hermes Agent install is missing the Python runtime or repository.'
+    };
+  }
+
+  const runArgs = [hermesScript];
+  if (activeProfile && activeProfile !== 'default') {
+    runArgs.push('--profile', activeProfile);
+  }
+  runArgs.push('gateway', 'run');
+
+  const gatewayEnv = {
+    ...process.env,
+    HOME: home,
+    HERMES_HOME: hermesHome,
+    API_SERVER_ENABLED: 'true',
+    API_SERVER_PORT: String(port),
+    FAZM_HEADLESS: '1'
+  };
+  loadEnvFile(path.join(appLaunchProfileDir, '.env'), gatewayEnv);
+
+  try {
+    const logsDir = path.join(appLaunchProfileDir, 'logs');
+    if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
+    const logFd = fs.openSync(path.join(logsDir, 'gateway-closed-app.log'), 'a');
+    const child = spawn(pythonPath, runArgs, {
+      cwd: hermesRepo,
+      env: gatewayEnv,
+      stdio: ['ignore', 'ignore', logFd],
+      detached: true,
+      shell: false
+    });
+    child.unref();
+    try {
+      fs.closeSync(logFd);
+    } catch (err) {}
+    return { ok: true, pid: child.pid || null };
+  } catch (err) {
+    return { ok: false, error: formatCronError(err) };
+  }
+}
+
+function ensureGatewayWhenClosed(nowMs) {
+  if (desktopControlStateAvailable()) {
+    writeClosedAppGatewayState({
+      status: 'managed-by-desktop',
+      message: 'Desktop control server is active; launchd skipped gateway keepalive.'
+    });
+    return;
+  }
+
+  if ((desktopConfig.connectionMode || 'local') !== 'local') {
+    writeClosedAppGatewayState({
+      status: 'unsupported-connection-mode',
+      message: 'Closed-app gateway keepalive only manages local gateway mode.'
+    });
+    return;
+  }
+
+  const port = readProfileGatewayPort();
+  if (gatewayHealthOk(port)) {
+    const prev = readClosedAppGatewayState();
+    const outageStartedAt = prev.outageStartedAt ? Date.parse(prev.outageStartedAt) : 0;
+    writeClosedAppGatewayState({
+      status: 'healthy',
+      port,
+      lastHealthyAt: new Date(nowMs).toISOString(),
+      outageStartedAt: null,
+      lastOutageMs: outageStartedAt ? Math.max(0, nowMs - outageStartedAt) : prev.lastOutageMs || 0,
+      message: 'Gateway health check passed while the desktop was closed.'
+    });
+    return;
+  }
+
+  const prev = readClosedAppGatewayState();
+  const recentRestartAt = prev.lastRestartAt ? Date.parse(prev.lastRestartAt) : 0;
+  const outageStartedAt = prev.outageStartedAt || new Date(nowMs).toISOString();
+  if (recentRestartAt && nowMs - recentRestartAt < 120000) {
+    writeClosedAppGatewayState({
+      status: 'waiting-for-restart',
+      port,
+      outageStartedAt,
+      message: 'Gateway is still unhealthy shortly after a launchd restart attempt.'
+    });
+    return;
+  }
+
+  const result = startGatewayProcess(port);
+  if (result.ok) {
+    writeClosedAppGatewayState({
+      status: 'restarted',
+      port,
+      outageStartedAt,
+      lastRestartAt: new Date(nowMs).toISOString(),
+      lastRestartPid: result.pid,
+      message: 'Gateway was unhealthy while the desktop was closed; launchd started it.'
+    });
+    writeCronLog('warn', {
+      msg: 'closed-app gateway was unhealthy; started gateway',
+      profile: activeProfile,
+      port,
+      pid: result.pid
+    });
+  } else {
+    writeClosedAppGatewayState({
+      status: 'restart-failed',
+      port,
+      outageStartedAt,
+      lastRestartAt: new Date(nowMs).toISOString(),
+      lastError: result.error,
+      message: 'Gateway was unhealthy while the desktop was closed and launchd could not start it.'
+    });
+    writeCronLog('error', {
+      msg: 'closed-app gateway restart failed',
+      profile: activeProfile,
+      port,
+      error: result.error
+    });
+  }
+}
 
 function writeAuditLog(action, command) {
   try {
@@ -1087,7 +1347,9 @@ try {
 }
 }
 
-runAppLaunchSchedules(Date.now());
+const cronNow = Date.now();
+ensureGatewayWhenClosed(cronNow);
+runAppLaunchSchedules(cronNow);
 `;
 }
 

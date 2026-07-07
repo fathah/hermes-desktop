@@ -55,7 +55,10 @@ describe("patchPagePropertiesMarkdown", () => {
 describe("updatePageProperties", () => {
   it("patches the page file in the vault", async () => {
     const vaultDir = tempRoot();
-    writeFileSync(join(vaultDir, "Project.md"), "---\ntitle: Project\n---\nBody");
+    writeFileSync(
+      join(vaultDir, "Project.md"),
+      "---\ntitle: Project\n---\nBody",
+    );
 
     const ok = await updatePageProperties(vaultDir, "Project", {
       status: "active",

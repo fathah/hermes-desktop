@@ -10,6 +10,7 @@ export default {
   send: "Send",
   custom: "Custom",
   typeModelName: "Type model name...",
+  moaUnavailable: "Requires a newer Hermes Agent engine",
   emptyTitle: "How can I help you today?",
   emptyHint: "Ask me to write code, answer questions, search the web, and more",
   suggestionSearch: "Search the web",

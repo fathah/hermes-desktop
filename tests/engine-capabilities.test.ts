@@ -39,7 +39,9 @@ async function freshConfig(): Promise<typeof import("../src/main/config")> {
   return await import("../src/main/config");
 }
 
-async function freshInstaller(): Promise<typeof import("../src/main/installer")> {
+async function freshInstaller(): Promise<
+  typeof import("../src/main/installer")
+> {
   vi.resetModules();
   return await import("../src/main/installer");
 }
@@ -61,9 +63,11 @@ afterEach(() => {
 
 describe("engine capability payload normalization", () => {
   it("preserves the installed engine's feature values and endpoint descriptors", async () => {
-    const { normalizeEngineCapabilitiesPayload } = await import(
-      "../src/shared/engine-capabilities"
-    );
+    const {
+      engineSupportsMixtureOfAgents,
+      engineSupportsSlashCommand,
+      normalizeEngineCapabilitiesPayload,
+    } = await import("../src/shared/engine-capabilities");
 
     const normalized = normalizeEngineCapabilitiesPayload({
       object: "hermes.api_server.capabilities",
@@ -93,6 +97,43 @@ describe("engine capability payload normalization", () => {
         path: "/v1/chat/completions",
       },
     });
+
+    expect(
+      engineSupportsMixtureOfAgents({
+        status: "ready",
+        fetchedAt: "2026-07-07T00:00:00.000Z",
+        mode: "local",
+        engineSha: "sha",
+        features: { mixture_of_agents: true },
+        endpoints: {},
+      }),
+    ).toBe(true);
+    expect(
+      engineSupportsSlashCommand(
+        {
+          status: "ready",
+          fetchedAt: "2026-07-07T00:00:00.000Z",
+          mode: "local",
+          engineSha: "sha",
+          features: { slash_commands: "/goal,/learn,/journey" },
+          endpoints: {},
+        },
+        "learn",
+      ),
+    ).toBe(true);
+    expect(
+      engineSupportsSlashCommand(
+        {
+          status: "unknown",
+          fetchedAt: null,
+          mode: "local",
+          engineSha: null,
+          features: { slash_commands: "/goal" },
+          endpoints: {},
+        },
+        "goal",
+      ),
+    ).toBe(false);
   });
 });
 
@@ -148,10 +189,8 @@ describe("installed engine SHA capture", () => {
 describe("engine capability state", () => {
   it("persists capability snapshots per profile", async () => {
     resetHome();
-    const {
-      getEngineCapabilityState,
-      recordEngineCapabilitySnapshot,
-    } = await freshConfig();
+    const { getEngineCapabilityState, recordEngineCapabilitySnapshot } =
+      await freshConfig();
 
     recordEngineCapabilitySnapshot(
       {

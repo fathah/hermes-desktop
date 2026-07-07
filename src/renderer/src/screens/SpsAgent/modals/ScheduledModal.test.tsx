@@ -140,6 +140,31 @@ describe("ScheduledModal Telegram delivery UX", () => {
     expect(screen.queryByText(/background jobs/i)).not.toBeInTheDocument();
   });
 
+  it("shows the last persistent monitor error", async () => {
+    api.srList.mockResolvedValue([
+      {
+        id: "sr_1",
+        kind: "research",
+        topic: "AI agent launches",
+        pageId: "ai-agent-launches",
+        cadence: "weekly",
+        hour: 8,
+        autoApply: false,
+        enabled: true,
+        createdAt: 1,
+        lastRunAt: 0,
+        lastError: "gateway 503: offline",
+        lastChangeHash: "",
+        sourceIntent: "web",
+        sourcePlan: [],
+      },
+    ]);
+
+    render(<ScheduledModal />);
+
+    expect(await screen.findByText("gateway 503: offline")).toBeInTheDocument();
+  });
+
   it("disables Telegram push and opens setup docs when Telegram is unavailable", async () => {
     render(<ScheduledModal />);
 

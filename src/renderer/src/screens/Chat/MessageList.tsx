@@ -184,6 +184,7 @@ export const MessageList = memo(function MessageList({
   const lastBubble = [...messages].reverse().find(isBubble);
   const lastMessageIsAgent = !!lastBubble && lastBubble.role === "agent";
 
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual is intentionally left outside React Compiler memoization.
   const rowVirtualizer = useVirtualizer({
     count: groupedMessages.length,
     getScrollElement: () => scrollRef?.current ?? null,

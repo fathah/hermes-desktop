@@ -106,20 +106,29 @@ export const ModelPicker = memo(function ModelPicker({
                 return (
                   <div
                     key={`${m.provider}:${m.model}`}
-                    className="chat-model-option-wrapper"
+                    className={`chat-model-option-wrapper ${
+                      m.disabled ? "disabled" : ""
+                    }`}
                   >
                     <button
                       className={`chat-model-option ${active ? "active" : ""}`}
                       onClick={() => select(m.provider, m.model, m.baseUrl)}
+                      disabled={m.disabled}
+                      title={
+                        m.disabledReasonKey ? t(m.disabledReasonKey) : undefined
+                      }
                       type="button"
                     >
                       <span className="chat-model-option-label">{m.label}</span>
-                      <span className="chat-model-option-id">{m.model}</span>
+                      <span className="chat-model-option-id">
+                        {m.disabledReasonKey ? t(m.disabledReasonKey) : m.model}
+                      </span>
                     </button>
                     <div
                       className="chat-model-option-checkbox-container"
                       onClick={(e) => {
                         e.stopPropagation();
+                        if (m.disabled) return;
                         onToggleCouncilModel(
                           m.provider,
                           m.model,
@@ -132,6 +141,7 @@ export const ModelPicker = memo(function ModelPicker({
                         type="checkbox"
                         className="chat-model-option-checkbox"
                         checked={isSelectedInCouncil}
+                        disabled={m.disabled}
                         onChange={() => {}}
                         title="Add to Council of LLMs"
                       />

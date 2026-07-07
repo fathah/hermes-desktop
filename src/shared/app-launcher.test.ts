@@ -22,9 +22,7 @@ function target(patch: Partial<AppLaunchTarget> = {}): AppLaunchTarget {
   };
 }
 
-function schedule(
-  patch: Partial<AppLaunchSchedule> = {},
-): AppLaunchSchedule {
+function schedule(patch: Partial<AppLaunchSchedule> = {}): AppLaunchSchedule {
   return {
     id: "schedule-1",
     label: "Morning apps",
@@ -138,9 +136,9 @@ describe("isAppLaunchScheduleDue", () => {
     expect(isAppLaunchScheduleDue(schedule({ enabled: false }), now)).toBe(
       false,
     );
-    expect(
-      isAppLaunchScheduleDue(schedule({ cadence: "weekly" }), now),
-    ).toBe(false);
+    expect(isAppLaunchScheduleDue(schedule({ cadence: "weekly" }), now)).toBe(
+      false,
+    );
     expect(
       isAppLaunchScheduleDue(
         schedule({

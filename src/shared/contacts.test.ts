@@ -101,6 +101,7 @@ describe("parsePersonFrontmatter", () => {
         { nope: true },
       ],
       email: "p@x.com",
+      followUpAt: "2026-07-09",
       organization: "  ",
     });
     expect(fm.aliases).toEqual(["Wife", "P"]);
@@ -110,6 +111,7 @@ describe("parsePersonFrontmatter", () => {
       { text: "son's name is Haresh" },
     ]);
     expect(fm.email).toBe("p@x.com");
+    expect(fm.followUpAt).toBe("2026-07-09");
     expect(fm.organization).toBeUndefined(); // blank trimmed away
   });
 });
@@ -127,12 +129,14 @@ describe("personToRowProps", () => {
     const props = personToRowProps("Priya", {
       tags: ["family"],
       phone: "123",
+      followUpAt: "2026-07-09",
     });
     expect(props).toMatchObject({
       title: "Priya",
       schema: "person",
       tags: ["family"],
       phone: "123",
+      followUpAt: "2026-07-09",
     });
     expect(props).not.toHaveProperty("email");
   });

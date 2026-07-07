@@ -36,6 +36,10 @@ export const URL_KEY_MAP: ReadonlyArray<UrlKeyMapping> = [
   { pattern: /api\.cerebras\.ai/i, envKey: "CEREBRAS_API_KEY" },
   { pattern: /api\.mistral\.ai/i, envKey: "MISTRAL_API_KEY" },
   { pattern: /api\.perplexity\.ai/i, envKey: "PERPLEXITY_API_KEY" },
+  {
+    pattern: /aiplatform\.googleapis\.com/i,
+    envKey: "GOOGLE_APPLICATION_CREDENTIALS",
+  },
 ];
 
 export const CUSTOM_API_KEY_ENV = "CUSTOM_API_KEY";

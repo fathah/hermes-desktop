@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildDailyBriefMarkdown,
+  dailyBriefDeliveryBody,
   dailyBriefFileName,
   extractOptedInDailyBrief,
 } from "./daily-brief";
@@ -33,5 +34,20 @@ describe("daily brief capsules", () => {
 
     expect(extractOptedInDailyBrief(review)).toBe("");
     expect(extractOptedInDailyBrief(include)).toContain("Review me first.");
+  });
+
+  it("summarizes markdown into a compact delivery body", () => {
+    const markdown = buildDailyBriefMarkdown({
+      date: new Date("2026-06-26T12:00:00.000Z"),
+      body: [
+        "# Daily Brief - 2026-06-26",
+        "",
+        "Review **open loops** in [Inbox](sps://inbox).",
+      ].join("\n"),
+    });
+
+    expect(dailyBriefDeliveryBody(markdown)).toBe(
+      "Daily Brief - 2026-06-26 Review open loops in Inbox.",
+    );
   });
 });

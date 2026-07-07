@@ -24,6 +24,8 @@ export interface ConfigBridgeApi {
     profile?: string,
   ) => Promise<Api.OperatorReadinessReport>;
 
+  getRoutinesStatus: (profile?: string) => Promise<Api.RoutinesStatusReport>;
+
   rerunConfigHealth: (profile?: string) => Promise<Api.ConfigHealthReport>;
 
   autofixConfigIssue: (
@@ -96,6 +98,22 @@ export interface ConfigBridgeApi {
   getAutoApprove: (profile?: string) => Promise<boolean>;
 
   setAutoApprove: (enabled: boolean, profile?: string) => Promise<void>;
+
+  getSpsAutomationPrefs: (profile?: string) => Promise<Api.SpsAutomationPrefs>;
+
+  setSpsAutomationPrefs: (
+    patch: Api.SpsAutomationPrefsPatch,
+    profile?: string,
+  ) => Promise<Api.SpsAutomationPrefs>;
+
+  getOwnerNotificationPrefs: (
+    profile?: string,
+  ) => Promise<Api.OwnerNotificationPrefs>;
+
+  setOwnerNotificationPrefs: (
+    patch: Api.OwnerNotificationPrefsPatch,
+    profile?: string,
+  ) => Promise<Api.OwnerNotificationPrefs>;
 
   getCompletionSound: () => Promise<boolean>;
 

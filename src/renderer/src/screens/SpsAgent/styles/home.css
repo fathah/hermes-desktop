@@ -1314,6 +1314,79 @@
   border: 1px dashed var(--hair);
   border-radius: 12px;
 }
+.sps-scope .ck-inline-error {
+  color: var(--danger-fg);
+  background: var(--danger-bg);
+  border: 1px solid color-mix(in srgb, var(--danger-fg) 24%, transparent);
+  border-radius: 7px;
+  padding: 9px 10px;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.sps-scope .ck-operator-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sps-scope .ck-operator-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.sps-scope .ck-operator-summary.compact {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 10px;
+}
+.sps-scope .ck-operator-number {
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--tx-1);
+  line-height: 1;
+}
+.sps-scope .ck-operator-label {
+  color: var(--tx-3);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.sps-scope .ck-operator-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sps-scope .ck-operator-chips span,
+.sps-scope .ck-status-pill {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid var(--hair);
+  background: var(--sunk);
+  color: var(--tx-2);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.sps-scope .ck-status-pill.ok {
+  border-color: color-mix(in srgb, var(--ok-fg) 30%, var(--hair));
+  color: var(--ok-fg);
+  background: var(--ok-bg);
+}
+.sps-scope .ck-status-pill.warn {
+  border-color: color-mix(in srgb, var(--warn-fg) 30%, var(--hair));
+  color: var(--warn-fg);
+  background: var(--warn-bg);
+}
+.sps-scope .ck-status-pill.danger {
+  border-color: color-mix(in srgb, var(--danger-fg) 30%, var(--hair));
+  color: var(--danger-fg);
+  background: var(--danger-bg);
+}
+.sps-scope .ck-operator-row {
+  border: 1px solid transparent;
+}
 /* widgets */
 .sps-scope .ck-quick {
   display: grid;

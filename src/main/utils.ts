@@ -8,6 +8,9 @@ import {
   unlinkSync,
   writeFileSync,
   chmodSync,
+  openSync,
+  fsyncSync,
+  closeSync,
   promises as fs,
 } from "fs";
 import { HERMES_HOME } from "./installer";
@@ -193,6 +196,40 @@ export function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function fsyncPathSync(path: string): void {
+  const fd = openSync(path, "r");
+  try {
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function fsyncDirectorySync(dir: string): void {
+  try {
+    fsyncPathSync(dir);
+  } catch {
+    // Directory fsync is not supported on every platform/filesystem.
+  }
+}
+
+async function fsyncPath(path: string): Promise<void> {
+  const handle = await fs.open(path, "r");
+  try {
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
+
+async function fsyncDirectory(dir: string): Promise<void> {
+  try {
+    await fsyncPath(dir);
+  } catch {
+    // Directory fsync is not supported on every platform/filesystem.
+  }
+}
+
 /**
  * Write a file, creating parent directories if they don't exist.
  * Prevents ENOENT crashes when ~/.hermes has been deleted or doesn't exist yet.
@@ -211,13 +248,15 @@ export function safeWriteFile(filePath: string, content: string): void {
   let tempWritten = false;
   try {
     writeFileSync(tempPath, content, "utf-8");
+    tempWritten = true;
     try {
       chmodSync(tempPath, 0o600);
     } catch {
       // Ignore chmod failures on filesystems that do not support Unix-like permissions (e.g. FAT32)
     }
-    tempWritten = true;
+    fsyncPathSync(tempPath);
     renameSync(tempPath, filePath);
+    fsyncDirectorySync(dir);
   } catch (err) {
     if (tempWritten) {
       try {
@@ -251,13 +290,15 @@ export async function safeWriteFileAsync(
   let tempWritten = false;
   try {
     await fs.writeFile(tempPath, content, "utf-8");
+    tempWritten = true;
     try {
       await fs.chmod(tempPath, 0o600);
     } catch {
       // Ignore chmod failures on filesystems that do not support Unix-like permissions (e.g. FAT32)
     }
-    tempWritten = true;
+    await fsyncPath(tempPath);
     await fs.rename(tempPath, filePath);
+    await fsyncDirectory(dir);
   } catch (err) {
     if (tempWritten) {
       try {

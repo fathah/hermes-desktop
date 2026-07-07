@@ -69,12 +69,8 @@ jobs:
       - name: Test
         run: npm test
 
-      # Lint is informational for now — the codebase has a large backlog of
-      # prettier/line-ending warnings (no errors). Surfaced but not gating,
-      # so a warning backlog doesn't block merges.
       - name: Lint
         run: npm run lint
-        continue-on-error: true
 
   verify-smoke:
     if: github.event_name != 'pull_request'

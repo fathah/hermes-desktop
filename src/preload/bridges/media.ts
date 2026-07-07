@@ -187,17 +187,23 @@ export const mediaBridge = {
   /** Gateway requested approval for a dangerous command (idea B1). The
    *  renderer renders an approval card and replies via `respondApproval`. */
   onChatApprovalRequest: (
-    callback: (req: {
-      id: string;
-      command?: string;
-      toolName?: string;
-      patternKey?: string;
-      description?: string;
-      sessionKey?: string;
-    }) => void,
+    callback: (
+      req: {
+        id: string;
+        command?: string;
+        toolName?: string;
+        patternKey?: string;
+        description?: string;
+        sessionKey?: string;
+      },
+      runId?: string,
+    ) => void,
   ): (() => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, req: unknown): void =>
-      callback(req as Parameters<typeof callback>[0]);
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      req: unknown,
+      runId?: string,
+    ): void => callback(req as Parameters<typeof callback>[0], runId);
     ipcRenderer.on("chat-approval-request", handler);
     return () => ipcRenderer.removeListener("chat-approval-request", handler);
   },

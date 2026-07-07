@@ -57,7 +57,7 @@ const OAUTH_PROVIDERS = new Set([
 // NOUS_API_KEY in .env or an OAuth/credential-pool entry in auth.json.
 // Issue #367 — silent misconfiguration when a user picked Nous Portal
 // from the dropdown but had nothing set up.
-const NO_KEY_PROVIDERS = new Set(["auto"]);
+const NO_KEY_PROVIDERS = new Set(["auto", "vertex"]);
 
 /**
  * Synchronous readiness check against the desktop's own config —

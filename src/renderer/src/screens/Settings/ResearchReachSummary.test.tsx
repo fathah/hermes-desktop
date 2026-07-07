@@ -103,7 +103,9 @@ describe("ResearchReachSummary", () => {
     });
 
     render(<ResearchReachSummary active={true} />);
-    fireEvent.click(await screen.findByRole("button", { name: /preview setup/i }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: /preview setup/i }),
+    );
 
     expect(api.runResearchReachSafeInstall).toHaveBeenCalled();
     expect(

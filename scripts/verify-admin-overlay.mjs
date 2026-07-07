@@ -165,10 +165,7 @@ const groupCount = await win.$$eval(
   ".sidebar-nav-group-header",
   (els) => els.length,
 );
-const subnavCount = await win.$$eval(
-  ".settings-subnav",
-  (els) => els.length,
-);
+const subnavCount = await win.$$eval(".settings-subnav", (els) => els.length);
 if (groupCount !== 3) {
   throw new Error(`Expected 3 Control Center nav groups, got ${groupCount}`);
 }

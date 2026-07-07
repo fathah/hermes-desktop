@@ -9,7 +9,9 @@ function statusLabel(status: string): string {
   return "Unavailable";
 }
 
-function channelDetail(channel: ResearchReachStatus["channels"][number]): string {
+function channelDetail(
+  channel: ResearchReachStatus["channels"][number],
+): string {
   const backend = channel.activeBackend || channel.backends[0] || "No backend";
   const risk =
     channel.risk === "login" || channel.risk === "cookie" || channel.needsLogin
@@ -78,7 +80,9 @@ function ResearchReachSummary({
   if (!active) return null;
 
   async function showInstructions(): Promise<void> {
-    setInstructions(await window.hermesAPI.getResearchReachInstallInstructions());
+    setInstructions(
+      await window.hermesAPI.getResearchReachInstallInstructions(),
+    );
   }
 
   async function runSafeInstall(): Promise<void> {

@@ -84,7 +84,10 @@ function useIdentity(): Identity {
         const active = rows.find((r) => r.isActive) ?? rows[0];
         if (!active || cancelled) return;
         const name = active.name;
-        const pretty = name === "default" ? "SPS Agent" : name.charAt(0).toUpperCase() + name.slice(1);
+        const pretty =
+          name === "default"
+            ? "SPS Agent"
+            : name.charAt(0).toUpperCase() + name.slice(1);
         const user = name === "default" ? "Default" : pretty;
         const initial = name === "default" ? "S" : pretty.charAt(0) || "H";
         setIdentity({
@@ -272,6 +275,17 @@ export function Sidebar() {
           <span className="nav-label">Home</span>
         </button>
 
+        <button
+          type="button"
+          className={`nav-item ${surface === "cockpit" ? "active" : ""}`}
+          onClick={() => openSurface("cockpit")}
+          title="Cockpit"
+          aria-label="Cockpit"
+        >
+          <Icon name="board" size={17} />
+          <span className="nav-label">Cockpit</span>
+        </button>
+
         <div className={`nav-item ${surface === "inbox" ? "active" : ""}`}>
           <button
             type="button"
@@ -369,7 +383,11 @@ export function Sidebar() {
                   <span className="tree-toggle leaf"></span>No pages
                 </div>
               )}
-              <button type="button" className="nav-item pl-12" onClick={newPage}>
+              <button
+                type="button"
+                className="nav-item pl-12"
+                onClick={newPage}
+              >
                 <Icon name="plus" size={14} />
                 <span className="nav-label">Add page</span>
               </button>
@@ -397,11 +415,8 @@ export function Sidebar() {
               () => openSurface("learning"),
               surface === "learning",
             ) ?? renderPackToggle("learning", "Learning")}
-            {renderPackNav(
-              "research",
-              "Deep Research",
-              "doc",
-              () => setResearchOpen(true),
+            {renderPackNav("research", "Deep Research", "doc", () =>
+              setResearchOpen(true),
             ) ?? renderPackToggle("research", "Research")}
             {packs.research && (
               <button
@@ -475,6 +490,36 @@ export function Sidebar() {
         <div className="sec sec-static mt-12">
           <span className="sec-label">More</span>
         </div>
+        <button
+          type="button"
+          className={`nav-item ${surface === "journal" ? "active" : ""}`}
+          onClick={() => openSurface("journal")}
+          title="Journal"
+          aria-label="Journal"
+        >
+          <Icon name="calendar" size={17} />
+          <span className="nav-label">Journal</span>
+        </button>
+        <button
+          type="button"
+          className={`nav-item ${surface === "activeWork" ? "active" : ""}`}
+          onClick={() => openSurface("activeWork")}
+          title="Active Work"
+          aria-label="Active Work"
+        >
+          <Icon name="flag" size={17} />
+          <span className="nav-label">Active Work</span>
+        </button>
+        <button
+          type="button"
+          className={`nav-item ${surface === "memory" ? "active" : ""}`}
+          onClick={() => openSurface("memory")}
+          title="Memory"
+          aria-label="Memory"
+        >
+          <Icon name="sparkle" size={17} />
+          <span className="nav-label">Memory</span>
+        </button>
         <button
           type="button"
           className="nav-item"

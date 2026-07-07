@@ -7,10 +7,30 @@ const SCRATCHPAD_PAGE_ID = "dashboard_scratchpad";
 const RECENT_LIMIT = 5;
 
 const SCHEDULE_EVENTS = [
-  { time: "09:00 AM", title: "Inbox Ingestion & Capture Review", desc: "Process captured links, notes, and PDF extracts with My Assistant.", icon: "inbox" as const },
-  { time: "11:30 AM", title: "Deep Work: EU AI Act Risk Assessment", desc: "Review compliance checklist blocks and align risk metrics.", icon: "board" as const },
-  { time: "02:00 PM", title: "Weekly Goals Sync & Focus Session", desc: "Refactor OKRs, check progress, and clear blocker tasks.", icon: "sparkle" as const },
-  { time: "04:30 PM", title: "AI Co-Author Document Refactoring", desc: "Summarize notes and run AI cleanups on active scratchpads.", icon: "wand" as const },
+  {
+    time: "09:00 AM",
+    title: "Inbox Ingestion & Capture Review",
+    desc: "Process captured links, notes, and PDF extracts with My Assistant.",
+    icon: "inbox" as const,
+  },
+  {
+    time: "11:30 AM",
+    title: "Deep Work: EU AI Act Risk Assessment",
+    desc: "Review compliance checklist blocks and align risk metrics.",
+    icon: "board" as const,
+  },
+  {
+    time: "02:00 PM",
+    title: "Weekly Goals Sync & Focus Session",
+    desc: "Refactor OKRs, check progress, and clear blocker tasks.",
+    icon: "sparkle" as const,
+  },
+  {
+    time: "04:30 PM",
+    title: "AI Co-Author Document Refactoring",
+    desc: "Summarize notes and run AI cleanups on active scratchpads.",
+    icon: "wand" as const,
+  },
 ];
 
 const MARKET_INDEXES = [
@@ -21,9 +41,21 @@ const MARKET_INDEXES = [
 ];
 
 const NEWS_ARTICLES = [
-  { category: "Tech", title: "AI Alignment Audits Gain Traction in Local-First Frameworks", time: "12m ago" },
-  { category: "Productivity", title: "Why Evernote's Borderless Re-design Split the Community", time: "1h ago" },
-  { category: "Business", title: "Open-Access Academic Repositories Shift toward Markdown Formats", time: "3h ago" },
+  {
+    category: "Tech",
+    title: "AI Alignment Audits Gain Traction in Local-First Frameworks",
+    time: "12m ago",
+  },
+  {
+    category: "Productivity",
+    title: "Why Evernote's Borderless Re-design Split the Community",
+    time: "1h ago",
+  },
+  {
+    category: "Business",
+    title: "Open-Access Academic Repositories Shift toward Markdown Formats",
+    time: "3h ago",
+  },
 ];
 
 const WEATHER_INFO = {
@@ -48,7 +80,7 @@ export function Dashboard() {
   const setPageDoc = useStore((s) => s.setPageDoc);
   const setTemplatesOpen = useStore((s) => s.setTemplatesOpen);
   const setOpenTask = useStore((s) => s.setOpenTask);
-  
+
   // Scratchpad logic
   const scratchpadDoc = useStore((s) => s.docs[SCRATCHPAD_PAGE_ID]);
   const [scratchText, setScratchText] = useState("");
@@ -89,7 +121,9 @@ export function Dashboard() {
       if (stored) {
         const ids = JSON.parse(stored) as string[];
         // Validate existence in current meta
-        const valid = ids.filter((id) => id in meta && id !== SCRATCHPAD_PAGE_ID);
+        const valid = ids.filter(
+          (id) => id in meta && id !== SCRATCHPAD_PAGE_ID,
+        );
         setRecents(valid.slice(0, RECENT_LIMIT));
       }
     } catch {
@@ -108,7 +142,9 @@ export function Dashboard() {
         setPinned(valid);
       } else {
         // Seed first 2 pages in workspace if none pinned
-        const keys = Object.keys(meta).filter((k) => k !== SCRATCHPAD_PAGE_ID && k !== "home").slice(0, 2);
+        const keys = Object.keys(meta)
+          .filter((k) => k !== SCRATCHPAD_PAGE_ID && k !== "home")
+          .slice(0, 2);
         setPinned(keys);
         localStorage.setItem("sps-pinned-pages", JSON.stringify(keys));
       }
@@ -153,39 +189,48 @@ export function Dashboard() {
         due: "",
         est: "",
       };
-      
+
       const nextBlocks = [...homeBlocks];
       nextBlocks[dbIndex] = {
         ...dbBlock,
         rows: [...(dbBlock.rows || []), newTaskRow],
       };
-      
+
       useStore.getState().setPageDoc("home", nextBlocks);
       setOpenTask(newTaskRow);
       useStore.getState().flash("Task created on Wiki Home");
     } else {
-      useStore.getState().flash("No task database found on Wiki Home", { tone: "warn" });
+      useStore
+        .getState()
+        .flash("No task database found on Wiki Home", { tone: "warn" });
     }
   };
 
   const handleNewGoal = () => {
     const goalsPageId = "okr";
     const goalsExists = goalsPageId in meta;
-    
+
     const newGoalId = useStore.getState().makePage(
       { icon: "🎯", title: "New Goal" },
       [
-        { id: uid("blk"), type: "callout", text: "Goal details go here...", emoji: "🎯" },
+        {
+          id: uid("blk"),
+          type: "callout",
+          text: "Goal details go here...",
+          emoji: "🎯",
+        },
         { id: uid("blk"), type: "h2", text: "Definition of Success" },
         { id: uid("blk"), type: "todo", text: "Key Result 1", done: false },
-        { id: uid("blk"), type: "todo", text: "Key Result 2", done: false }
+        { id: uid("blk"), type: "todo", text: "Key Result 2", done: false },
       ],
-      goalsExists ? goalsPageId : null
+      goalsExists ? goalsPageId : null,
     );
-    
+
     selectPage(newGoalId);
     setSurface("doc");
-    useStore.getState().flash(goalsExists ? "Goal created under Goals" : "Goal created at root");
+    useStore
+      .getState()
+      .flash(goalsExists ? "Goal created under Goals" : "Goal created at root");
   };
 
   // Get dynamic greeting
@@ -208,12 +253,8 @@ export function Dashboard() {
       {/* Welcome Header */}
       <header className="dashboard-header-row">
         <div className="dashboard-header-left">
-          <h1 className="dashboard-title">
-            {getGreeting()}, User
-          </h1>
-          <div className="dashboard-subtitle">
-            {todayStr}
-          </div>
+          <h1 className="dashboard-title">{getGreeting()}, User</h1>
+          <div className="dashboard-subtitle">{todayStr}</div>
         </div>
 
         {/* Quick actions panel */}
@@ -236,7 +277,10 @@ export function Dashboard() {
       {/* Workspace Cards Section (Scratchpad, Pinned, Recents) */}
       <div className="dashboard-workspace-section">
         {/* Scratch Pad Post-it Card */}
-        <section className="dashboard-card postit-card" onClick={() => setIsEditingScratchpad(true)}>
+        <section
+          className="dashboard-card postit-card"
+          onClick={() => setIsEditingScratchpad(true)}
+        >
           <div className="postit-header">
             <Icon name="comment" size={14} />
             <h2 className="postit-title">Scratch Pad</h2>
@@ -273,7 +317,9 @@ export function Dashboard() {
                     className="dashboard-item-button"
                     onClick={() => jumpToPage(id)}
                   >
-                    <span className="dashboard-item-icon">{meta[id]?.icon || "📄"}</span>
+                    <span className="dashboard-item-icon">
+                      {meta[id]?.icon || "📄"}
+                    </span>
                     <span className="dashboard-item-label">
                       {meta[id]?.title || "Untitled"}
                     </span>
@@ -311,11 +357,17 @@ export function Dashboard() {
                   className="dashboard-item-clickable"
                   onClick={() => jumpToPage(id)}
                 >
-                  <span className="dashboard-item-icon">{meta[id]?.icon || "📄"}</span>
+                  <span className="dashboard-item-icon">
+                    {meta[id]?.icon || "📄"}
+                  </span>
                   <span className="dashboard-item-label">
                     {meta[id]?.title || "Untitled"}
                   </span>
-                  <Icon name="chevR" size={12} className="dashboard-item-chevron" />
+                  <Icon
+                    name="chevR"
+                    size={12}
+                    className="dashboard-item-chevron"
+                  />
                 </button>
               ))
             )}
@@ -327,15 +379,22 @@ export function Dashboard() {
       <h2 className="dashboard-section-title">My Day & Insights</h2>
       <div className="dashboard-widgets-section">
         {/* Schedule Compact Widget */}
-        <div className="compact-widget schedule-widget" onClick={() => setShowScheduleModal(true)}>
+        <div
+          className="compact-widget schedule-widget"
+          onClick={() => setShowScheduleModal(true)}
+        >
           <div className="widget-header">
             <Icon name="calendar" size={16} />
             <span>Today&apos;s Schedule</span>
           </div>
           <div className="widget-body">
             <div className="compact-event-row">
-              <span className="compact-event-time">{SCHEDULE_EVENTS[0].time}</span>
-              <span className="compact-event-title">{SCHEDULE_EVENTS[0].title}</span>
+              <span className="compact-event-time">
+                {SCHEDULE_EVENTS[0].time}
+              </span>
+              <span className="compact-event-title">
+                {SCHEDULE_EVENTS[0].title}
+              </span>
             </div>
             <div className="compact-event-upcoming">
               Next: {SCHEDULE_EVENTS[1].title}
@@ -344,7 +403,10 @@ export function Dashboard() {
         </div>
 
         {/* Weather Compact Widget */}
-        <div className="compact-widget weather-widget" onClick={() => setShowWeatherModal(true)}>
+        <div
+          className="compact-widget weather-widget"
+          onClick={() => setShowWeatherModal(true)}
+        >
           <div className="widget-header">
             <Icon name="sun" size={16} />
             <span>Weather</span>
@@ -352,14 +414,19 @@ export function Dashboard() {
           <div className="widget-body weather-compact-body">
             <div className="weather-compact-temp-row">
               <span className="weather-compact-temp">{WEATHER_INFO.temp}</span>
-              <span className="weather-compact-cond">{WEATHER_INFO.condition}</span>
+              <span className="weather-compact-cond">
+                {WEATHER_INFO.condition}
+              </span>
             </div>
             <span className="weather-compact-loc">{WEATHER_INFO.location}</span>
           </div>
         </div>
 
         {/* Markets Compact Widget */}
-        <div className="compact-widget markets-widget" onClick={() => setShowMarketsModal(true)}>
+        <div
+          className="compact-widget markets-widget"
+          onClick={() => setShowMarketsModal(true)}
+        >
           <div className="widget-header">
             <Icon name="table" size={16} />
             <span>Markets</span>
@@ -367,28 +434,40 @@ export function Dashboard() {
           <div className="widget-body markets-compact-body">
             <div className="market-ticker-row">
               <span className="ticker-name">S&P 500</span>
-              <span className="ticker-badge positive">{MARKET_INDEXES[0].change}</span>
+              <span className="ticker-badge positive">
+                {MARKET_INDEXES[0].change}
+              </span>
             </div>
             <div className="market-ticker-row">
               <span className="ticker-name">BTC</span>
-              <span className="ticker-badge positive">{MARKET_INDEXES[3].change}</span>
+              <span className="ticker-badge positive">
+                {MARKET_INDEXES[3].change}
+              </span>
             </div>
           </div>
         </div>
 
         {/* News Compact Widget */}
-        <div className="compact-widget news-widget" onClick={() => setShowNewsModal(true)}>
+        <div
+          className="compact-widget news-widget"
+          onClick={() => setShowNewsModal(true)}
+        >
           <div className="widget-header">
             <Icon name="doc" size={16} />
             <span>Tech News</span>
           </div>
           <div className="widget-body news-compact-body">
-            <span className="news-compact-headline">{NEWS_ARTICLES[0].title}</span>
+            <span className="news-compact-headline">
+              {NEWS_ARTICLES[0].title}
+            </span>
           </div>
         </div>
 
         {/* Sports Compact Widget */}
-        <div className="compact-widget sports-widget" onClick={() => setShowSportsModal(true)}>
+        <div
+          className="compact-widget sports-widget"
+          onClick={() => setShowSportsModal(true)}
+        >
           <div className="widget-header">
             <Icon name="heart" size={16} />
             <span>Sports</span>
@@ -404,8 +483,14 @@ export function Dashboard() {
 
       {/* Scratch Pad Editor Modal */}
       {isEditingScratchpad && (
-        <div className="scratchpad-modal-overlay" onClick={() => setIsEditingScratchpad(false)}>
-          <div className="scratchpad-modal-content" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="scratchpad-modal-overlay"
+          onClick={() => setIsEditingScratchpad(false)}
+        >
+          <div
+            className="scratchpad-modal-content"
+            onClick={(e) => e.stopPropagation()}
+          >
             <header className="scratchpad-modal-header">
               <div className="scratchpad-modal-title-row">
                 <Icon name="comment" size={16} />
@@ -413,7 +498,11 @@ export function Dashboard() {
               </div>
               <div className="scratchpad-modal-meta">
                 <span className="save-indicator">Saved to disk</span>
-                <button className="scratchpad-modal-close" onClick={() => setIsEditingScratchpad(false)} title="Close editor">
+                <button
+                  className="scratchpad-modal-close"
+                  onClick={() => setIsEditingScratchpad(false)}
+                  title="Close editor"
+                >
                   <Icon name="x" size={14} />
                 </button>
               </div>
@@ -426,7 +515,10 @@ export function Dashboard() {
               autoFocus
             />
             <footer className="scratchpad-modal-footer">
-              <button className="scratchpad-modal-done-btn" onClick={() => setIsEditingScratchpad(false)}>
+              <button
+                className="scratchpad-modal-done-btn"
+                onClick={() => setIsEditingScratchpad(false)}
+              >
                 Done
               </button>
             </footer>
@@ -436,25 +528,51 @@ export function Dashboard() {
 
       {/* Schedule Detail Modal */}
       {showScheduleModal && (
-        <div className="scratchpad-modal-overlay" onClick={() => setShowScheduleModal(false)}>
-          <div className="scratchpad-modal-content" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="scratchpad-modal-overlay"
+          onClick={() => setShowScheduleModal(false)}
+        >
+          <div
+            className="scratchpad-modal-content"
+            onClick={(e) => e.stopPropagation()}
+          >
             <header className="scratchpad-modal-header">
               <div className="scratchpad-modal-title-row">
                 <Icon name="calendar" size={18} />
-                <h3 className="scratchpad-modal-title">Today&apos;s Schedule</h3>
+                <h3 className="scratchpad-modal-title">
+                  Today&apos;s Schedule
+                </h3>
               </div>
-              <button className="scratchpad-modal-close" onClick={() => setShowScheduleModal(false)} title="Close schedule">
+              <button
+                className="scratchpad-modal-close"
+                onClick={() => setShowScheduleModal(false)}
+                title="Close schedule"
+              >
                 <Icon name="x" size={14} />
               </button>
             </header>
-            <div className="scroll scratchpad-modal-textarea" style={{ padding: "20px" }}>
-              <div className="dashboard-schedule-list" style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <div
+              className="scroll scratchpad-modal-textarea"
+              style={{ padding: "20px" }}
+            >
+              <div
+                className="dashboard-schedule-list"
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "12px",
+                }}
+              >
                 {SCHEDULE_EVENTS.map((evt, idx) => (
                   <div key={idx} className="dashboard-schedule-event">
                     <span className="event-time">{evt.time}</span>
                     <div className="event-details">
                       <div className="event-title-row">
-                        <Icon name={evt.icon} size={14} className="event-icon" />
+                        <Icon
+                          name={evt.icon}
+                          size={14}
+                          className="event-icon"
+                        />
                         <span className="event-title">{evt.title}</span>
                       </div>
                       <span className="event-desc">{evt.desc}</span>
@@ -464,7 +582,10 @@ export function Dashboard() {
               </div>
             </div>
             <footer className="scratchpad-modal-footer">
-              <button className="scratchpad-modal-done-btn" onClick={() => setShowScheduleModal(false)}>
+              <button
+                className="scratchpad-modal-done-btn"
+                onClick={() => setShowScheduleModal(false)}
+              >
                 Done
               </button>
             </footer>
@@ -474,34 +595,88 @@ export function Dashboard() {
 
       {/* Weather Detail Modal */}
       {showWeatherModal && (
-        <div className="scratchpad-modal-overlay" onClick={() => setShowWeatherModal(false)}>
-          <div className="scratchpad-modal-content" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="scratchpad-modal-overlay"
+          onClick={() => setShowWeatherModal(false)}
+        >
+          <div
+            className="scratchpad-modal-content"
+            onClick={(e) => e.stopPropagation()}
+          >
             <header className="scratchpad-modal-header">
               <div className="scratchpad-modal-title-row">
                 <Icon name="sun" size={18} />
                 <h3 className="scratchpad-modal-title">Weather Details</h3>
               </div>
-              <button className="scratchpad-modal-close" onClick={() => setShowWeatherModal(false)} title="Close weather">
+              <button
+                className="scratchpad-modal-close"
+                onClick={() => setShowWeatherModal(false)}
+                title="Close weather"
+              >
                 <Icon name="x" size={14} />
               </button>
             </header>
-            <div className="scratchpad-modal-textarea" style={{ padding: "24px" }}>
-              <div className="weather-grid" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                <div className="weather-temp-row" style={{ display: "flex", alignItems: "center", gap: "20px" }}>
-                  <span className="weather-temp" style={{ fontSize: "48px", fontWeight: "700" }}>{WEATHER_INFO.temp}</span>
-                  <div className="weather-cond-col" style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                    <span className="weather-cond" style={{ fontSize: "16px", fontWeight: "600" }}>{WEATHER_INFO.condition}</span>
-                    <span className="weather-loc" style={{ opacity: 0.7 }}>{WEATHER_INFO.location}</span>
+            <div
+              className="scratchpad-modal-textarea"
+              style={{ padding: "24px" }}
+            >
+              <div
+                className="weather-grid"
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "16px",
+                }}
+              >
+                <div
+                  className="weather-temp-row"
+                  style={{ display: "flex", alignItems: "center", gap: "20px" }}
+                >
+                  <span
+                    className="weather-temp"
+                    style={{ fontSize: "48px", fontWeight: "700" }}
+                  >
+                    {WEATHER_INFO.temp}
+                  </span>
+                  <div
+                    className="weather-cond-col"
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "4px",
+                    }}
+                  >
+                    <span
+                      className="weather-cond"
+                      style={{ fontSize: "16px", fontWeight: "600" }}
+                    >
+                      {WEATHER_INFO.condition}
+                    </span>
+                    <span className="weather-loc" style={{ opacity: 0.7 }}>
+                      {WEATHER_INFO.location}
+                    </span>
                   </div>
                 </div>
-                <div className="weather-metrics" style={{ display: "flex", gap: "24px", marginTop: "12px", fontSize: "14px", opacity: 0.8 }}>
+                <div
+                  className="weather-metrics"
+                  style={{
+                    display: "flex",
+                    gap: "24px",
+                    marginTop: "12px",
+                    fontSize: "14px",
+                    opacity: 0.8,
+                  }}
+                >
                   <span>Humidity: {WEATHER_INFO.humidity}</span>
                   <span>Wind: {WEATHER_INFO.wind}</span>
                 </div>
               </div>
             </div>
             <footer className="scratchpad-modal-footer">
-              <button className="scratchpad-modal-done-btn" onClick={() => setShowWeatherModal(false)}>
+              <button
+                className="scratchpad-modal-done-btn"
+                onClick={() => setShowWeatherModal(false)}
+              >
                 Done
               </button>
             </footer>
@@ -511,27 +686,63 @@ export function Dashboard() {
 
       {/* Markets Detail Modal */}
       {showMarketsModal && (
-        <div className="scratchpad-modal-overlay" onClick={() => setShowMarketsModal(false)}>
-          <div className="scratchpad-modal-content" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="scratchpad-modal-overlay"
+          onClick={() => setShowMarketsModal(false)}
+        >
+          <div
+            className="scratchpad-modal-content"
+            onClick={(e) => e.stopPropagation()}
+          >
             <header className="scratchpad-modal-header">
               <div className="scratchpad-modal-title-row">
                 <Icon name="table" size={18} />
                 <h3 className="scratchpad-modal-title">Market Indexes</h3>
               </div>
-              <button className="scratchpad-modal-close" onClick={() => setShowMarketsModal(false)} title="Close markets">
+              <button
+                className="scratchpad-modal-close"
+                onClick={() => setShowMarketsModal(false)}
+                title="Close markets"
+              >
                 <Icon name="x" size={14} />
               </button>
             </header>
-            <div className="scroll scratchpad-modal-textarea" style={{ padding: "20px" }}>
+            <div
+              className="scroll scratchpad-modal-textarea"
+              style={{ padding: "20px" }}
+            >
               <div className="dashboard-markets-list">
-                <table className="market-table" style={{ width: "100%", borderCollapse: "collapse" }}>
+                <table
+                  className="market-table"
+                  style={{ width: "100%", borderCollapse: "collapse" }}
+                >
                   <tbody>
                     {MARKET_INDEXES.map((idx, index) => (
-                      <tr key={index} className="market-row" style={{ borderBottom: "1px solid var(--hair-soft)" }}>
-                        <td className="market-name" style={{ padding: "12px 8px", fontWeight: "600" }}>{idx.name}</td>
-                        <td className="market-val" style={{ padding: "12px 8px", textAlign: "right", fontWeight: "700" }}>{idx.val}</td>
+                      <tr
+                        key={index}
+                        className="market-row"
+                        style={{ borderBottom: "1px solid var(--hair-soft)" }}
+                      >
+                        <td
+                          className="market-name"
+                          style={{ padding: "12px 8px", fontWeight: "600" }}
+                        >
+                          {idx.name}
+                        </td>
+                        <td
+                          className="market-val"
+                          style={{
+                            padding: "12px 8px",
+                            textAlign: "right",
+                            fontWeight: "700",
+                          }}
+                        >
+                          {idx.val}
+                        </td>
                         <td style={{ padding: "12px 8px", textAlign: "right" }}>
-                          <span className={`pct-badge ${idx.positive ? "pos" : "neg"}`}>
+                          <span
+                            className={`pct-badge ${idx.positive ? "pos" : "neg"}`}
+                          >
                             {idx.change}
                           </span>
                         </td>
@@ -542,7 +753,10 @@ export function Dashboard() {
               </div>
             </div>
             <footer className="scratchpad-modal-footer">
-              <button className="scratchpad-modal-done-btn" onClick={() => setShowMarketsModal(false)}>
+              <button
+                className="scratchpad-modal-done-btn"
+                onClick={() => setShowMarketsModal(false)}
+              >
                 Done
               </button>
             </footer>
@@ -552,32 +766,82 @@ export function Dashboard() {
 
       {/* News Detail Modal */}
       {showNewsModal && (
-        <div className="scratchpad-modal-overlay" onClick={() => setShowNewsModal(false)}>
-          <div className="scratchpad-modal-content" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="scratchpad-modal-overlay"
+          onClick={() => setShowNewsModal(false)}
+        >
+          <div
+            className="scratchpad-modal-content"
+            onClick={(e) => e.stopPropagation()}
+          >
             <header className="scratchpad-modal-header">
               <div className="scratchpad-modal-title-row">
                 <Icon name="doc" size={18} />
-                <h3 className="scratchpad-modal-title">Productivity & Tech News</h3>
+                <h3 className="scratchpad-modal-title">
+                  Productivity & Tech News
+                </h3>
               </div>
-              <button className="scratchpad-modal-close" onClick={() => setShowNewsModal(false)} title="Close news">
+              <button
+                className="scratchpad-modal-close"
+                onClick={() => setShowNewsModal(false)}
+                title="Close news"
+              >
                 <Icon name="x" size={14} />
               </button>
             </header>
-            <div className="scroll scratchpad-modal-textarea" style={{ padding: "20px" }}>
-              <div className="dashboard-news-list" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            <div
+              className="scroll scratchpad-modal-textarea"
+              style={{ padding: "20px" }}
+            >
+              <div
+                className="dashboard-news-list"
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "16px",
+                }}
+              >
                 {NEWS_ARTICLES.map((article, index) => (
-                  <div key={index} className="news-item" style={{ padding: "12px", borderRadius: "8px", background: "var(--sunk)", border: "1px solid var(--hair-soft)" }}>
-                    <div className="news-header-row" style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+                  <div
+                    key={index}
+                    className="news-item"
+                    style={{
+                      padding: "12px",
+                      borderRadius: "8px",
+                      background: "var(--sunk)",
+                      border: "1px solid var(--hair-soft)",
+                    }}
+                  >
+                    <div
+                      className="news-header-row"
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        marginBottom: "6px",
+                      }}
+                    >
                       <span className="news-badge">{article.category}</span>
                       <span className="news-time">{article.time}</span>
                     </div>
-                    <span className="news-title" style={{ fontSize: "14px", fontWeight: "600", lineHeight: "1.4" }}>{article.title}</span>
+                    <span
+                      className="news-title"
+                      style={{
+                        fontSize: "14px",
+                        fontWeight: "600",
+                        lineHeight: "1.4",
+                      }}
+                    >
+                      {article.title}
+                    </span>
                   </div>
                 ))}
               </div>
             </div>
             <footer className="scratchpad-modal-footer">
-              <button className="scratchpad-modal-done-btn" onClick={() => setShowNewsModal(false)}>
+              <button
+                className="scratchpad-modal-done-btn"
+                onClick={() => setShowNewsModal(false)}
+              >
                 Done
               </button>
             </footer>
@@ -587,31 +851,92 @@ export function Dashboard() {
 
       {/* Sports Detail Modal */}
       {showSportsModal && (
-        <div className="scratchpad-modal-overlay" onClick={() => setShowSportsModal(false)}>
-          <div className="scratchpad-modal-content" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="scratchpad-modal-overlay"
+          onClick={() => setShowSportsModal(false)}
+        >
+          <div
+            className="scratchpad-modal-content"
+            onClick={(e) => e.stopPropagation()}
+          >
             <header className="scratchpad-modal-header">
               <div className="scratchpad-modal-title-row">
                 <Icon name="heart" size={18} />
                 <h3 className="scratchpad-modal-title">Sports Feed</h3>
               </div>
-              <button className="scratchpad-modal-close" onClick={() => setShowSportsModal(false)} title="Close sports">
+              <button
+                className="scratchpad-modal-close"
+                onClick={() => setShowSportsModal(false)}
+                title="Close sports"
+              >
                 <Icon name="x" size={14} />
               </button>
             </header>
-            <div className="scratchpad-modal-textarea" style={{ padding: "24px" }}>
-              <div className="sports-feed-container" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                <div className="sports-game-row" style={{ display: "flex", justifyContent: "space-between", fontSize: "16px", fontWeight: "600" }}>
+            <div
+              className="scratchpad-modal-textarea"
+              style={{ padding: "24px" }}
+            >
+              <div
+                className="sports-feed-container"
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "16px",
+                }}
+              >
+                <div
+                  className="sports-game-row"
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    fontSize: "16px",
+                    fontWeight: "600",
+                  }}
+                >
                   <span className="sports-teams">{SPORTS_GAME.teams}</span>
-                  <span className="sports-status" style={{ fontSize: "12px", textTransform: "uppercase", opacity: 0.6 }}>{SPORTS_GAME.status}</span>
+                  <span
+                    className="sports-status"
+                    style={{
+                      fontSize: "12px",
+                      textTransform: "uppercase",
+                      opacity: 0.6,
+                    }}
+                  >
+                    {SPORTS_GAME.status}
+                  </span>
                 </div>
-                <div className="sports-score-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--sunk)", border: "1px solid var(--hair-soft)", padding: "16px 20px", borderRadius: "8px" }}>
-                  <span className="sports-score" style={{ fontSize: "28px", fontWeight: "700" }}>{SPORTS_GAME.score}</span>
-                  <span className="sports-winner" style={{ fontSize: "14px", opacity: 0.8 }}>Winner: {SPORTS_GAME.winner}</span>
+                <div
+                  className="sports-score-row"
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    background: "var(--sunk)",
+                    border: "1px solid var(--hair-soft)",
+                    padding: "16px 20px",
+                    borderRadius: "8px",
+                  }}
+                >
+                  <span
+                    className="sports-score"
+                    style={{ fontSize: "28px", fontWeight: "700" }}
+                  >
+                    {SPORTS_GAME.score}
+                  </span>
+                  <span
+                    className="sports-winner"
+                    style={{ fontSize: "14px", opacity: 0.8 }}
+                  >
+                    Winner: {SPORTS_GAME.winner}
+                  </span>
                 </div>
               </div>
             </div>
             <footer className="scratchpad-modal-footer">
-              <button className="scratchpad-modal-done-btn" onClick={() => setShowSportsModal(false)}>
+              <button
+                className="scratchpad-modal-done-btn"
+                onClick={() => setShowSportsModal(false)}
+              >
                 Done
               </button>
             </footer>

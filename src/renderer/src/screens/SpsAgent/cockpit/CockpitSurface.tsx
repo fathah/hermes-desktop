@@ -14,6 +14,14 @@ import { blk } from "../lib/ids";
 import { openSettings } from "../../../lib/openSettings";
 import { OperatorReadinessPanel } from "../../../components/OperatorReadinessPanel";
 import type { OperatorReadinessAction } from "../../../../../shared/operator-readiness";
+import {
+  EngineUpdatesWidget,
+  EquityAlertsWidget,
+  MorningBriefWidget,
+  OperatorInboxWidget,
+  OperatorTasksWidget,
+  PendingApprovalsWidget,
+} from "./OperatorWidgets";
 
 const WIDGET_META: Record<WidgetKind, { title: string; icon: IconName }> = {
   quick: { title: "Quick actions", icon: "wand" },
@@ -25,6 +33,12 @@ const WIDGET_META: Record<WidgetKind, { title: string; icon: IconName }> = {
   today: { title: "Today", icon: "calendar" },
   agent: { title: "Assistant status", icon: "code" },
   guide: { title: "Operator guide", icon: "checkbox" },
+  operatorTasks: { title: "Overdue tasks & nags", icon: "flag" },
+  operatorInbox: { title: "Inbox triage", icon: "inbox" },
+  operatorBrief: { title: "Morning brief", icon: "calendar" },
+  operatorApprovals: { title: "Pending approvals", icon: "checkbox" },
+  operatorUpdates: { title: "Engine & updates", icon: "refresh" },
+  equityAlerts: { title: "Equity alerts", icon: "sparkle" },
   pulse: { title: "Pulse Dashboard", icon: "sparkle" },
   piping: { title: "Piping Console", icon: "wand" },
 };
@@ -186,6 +200,18 @@ function Widget({ kind }: { kind: WidgetKind }) {
       return <AgentStatus />;
     case "guide":
       return <OperatorGuideWidget />;
+    case "operatorTasks":
+      return <OperatorTasksWidget />;
+    case "operatorInbox":
+      return <OperatorInboxWidget />;
+    case "operatorBrief":
+      return <MorningBriefWidget />;
+    case "operatorApprovals":
+      return <PendingApprovalsWidget />;
+    case "operatorUpdates":
+      return <EngineUpdatesWidget />;
+    case "equityAlerts":
+      return <EquityAlertsWidget />;
     case "pulse":
       return <PulseWidget />;
     case "piping":

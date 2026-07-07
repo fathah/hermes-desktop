@@ -1,6 +1,7 @@
 import type * as Api from "../api-types";
 import type {
   ContactChannel,
+  ContactChannelContext,
   MacContactsStatus,
   MacSyncResult,
 } from "../../shared/contacts";
@@ -475,7 +476,11 @@ export interface SpsBridgeApi {
 
   spsAckNag: (rowId: string, profile?: string) => Promise<void>;
 
-  spsOpenContactChannel: (channel: ContactChannel) => Promise<boolean>;
+  spsOpenContactChannel: (
+    channel: ContactChannel,
+    context?: ContactChannelContext,
+    profile?: string,
+  ) => Promise<boolean>;
 
   macContactsStatus: () => Promise<MacContactsStatus>;
 

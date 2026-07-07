@@ -70,7 +70,9 @@ describe("OperatorReadinessPanel", () => {
     expect(
       await screen.findByText("Ready with follow-up work"),
     ).toBeInTheDocument();
-    expect(screen.getByText("2 pending vault proposals need review.")).toBeInTheDocument();
+    expect(
+      screen.getByText("2 pending vault proposals need review."),
+    ).toBeInTheDocument();
     expect(window.hermesAPI.getOperatorReadiness).toHaveBeenCalledWith(
       "default",
     );

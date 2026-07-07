@@ -686,6 +686,7 @@ export async function runScheduledResearch(
     if (!hasUsableSources(brief)) {
       outcome = "no-sources";
       summary = "No web sources returned.";
+      stampRun(item.id, profile);
       return { outcome, summary };
     }
     const r = await mergeBriefAndQueue(item, brief, getWindow, profile);
@@ -695,7 +696,7 @@ export async function runScheduledResearch(
   } catch (err) {
     outcome = "error";
     summary = err instanceof Error ? err.message : "run failed";
-    stampRun(item.id, profile);
+    stampRun(item.id, profile, summary);
     return { outcome, summary };
   } finally {
     recordHistory(item.id, outcome, summary, profile);
@@ -767,7 +768,7 @@ export async function runDigest(
   } catch (err) {
     outcome = "error";
     summary = err instanceof Error ? err.message : "digest failed";
-    stampRun(item.id, profile);
+    stampRun(item.id, profile, summary);
     return { outcome, summary };
   } finally {
     recordHistory(item.id, outcome, summary, profile);
@@ -852,12 +853,9 @@ export async function drainCronBriefs(
         recordHistory(item.id, r.outcome, r.summary, profile);
         if (!stalled) watermark = f.mtime;
       } catch (err) {
-        recordHistory(
-          item.id,
-          "error",
-          err instanceof Error ? err.message : "merge failed",
-          profile,
-        );
+        const message = err instanceof Error ? err.message : "merge failed";
+        recordHistory(item.id, "error", message, profile);
+        stampRun(item.id, profile, message);
         stalled = true;
       }
     }
@@ -884,14 +882,20 @@ function stampHash(
   if (!found) return;
   found.lastRunAt = Date.now();
   found.lastChangeHash = hash;
+  delete found.lastError;
   saveRegistry(reg, profile);
 }
 
-function stampRun(id: string, profile?: string): void {
+function stampRun(id: string, profile?: string, lastError?: string): void {
   const reg = loadRegistry(profile);
   const found = reg.schedules.find((s) => s.id === id);
   if (!found) return;
   found.lastRunAt = Date.now();
+  if (lastError) {
+    found.lastError = lastError;
+  } else {
+    delete found.lastError;
+  }
   saveRegistry(reg, profile);
 }
 

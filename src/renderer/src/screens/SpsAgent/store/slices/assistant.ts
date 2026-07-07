@@ -25,6 +25,12 @@ import {
 import { TASKS } from "../../data/seed";
 import { commitChangeset } from "../../inbox/ingestApply";
 import { buildResearchReachPromptHint } from "../../../../../../shared/research-reach";
+import {
+  enqueueApproval,
+  initApprovalState,
+  remainingSeconds,
+  resolveApproval,
+} from "../../../../lib/approval";
 import type { AgentMessage } from "../../assistant/types";
 import type { Block } from "../../types";
 import type { Store, AssistantSlice, Conversation } from "../storeTypes";
@@ -106,6 +112,9 @@ export const createAssistantSlice: StateCreator<
   return {
     conversations: [seed],
     activeConvId: seed.id,
+    workApprovals: initApprovalState(),
+    workApprovalTimeout: 0,
+    workApprovalNow: Date.now(),
 
     // ── tabs ──
     newConversation: () =>
@@ -369,6 +378,15 @@ export const createAssistantSlice: StateCreator<
       addMsg(convId, { id: uid("m"), role: "user", text: [userLabel] });
       maybeTitle(convId, `Work: ${meta.title}`);
       setConvThinking(convId, true);
+      set({ workApprovals: initApprovalState() });
+      window.hermesAPI
+        .getConfig("approval.timeout_seconds", undefined)
+        .then((v) =>
+          get().setWorkApprovalTimeout(
+            Math.max(0, parseInt(v || "0", 10) || 0),
+          ),
+        )
+        .catch(() => get().setWorkApprovalTimeout(0));
 
       const botId = uid("m");
       addMsg(convId, { id: botId, role: "bot", text: [""] });
@@ -411,6 +429,10 @@ export const createAssistantSlice: StateCreator<
             });
           }
           render();
+        }),
+        window.hermesAPI.onChatApprovalRequest((req, rid) => {
+          if (rid !== runId) return;
+          get().enqueueWorkApproval(req);
         }),
         window.hermesAPI.onChatApprovalAuto((req, rid) => {
           if (rid !== runId) return;
@@ -489,6 +511,66 @@ export const createAssistantSlice: StateCreator<
         setConvThinking(convId, false);
       }
     },
+
+    enqueueWorkApproval: (req) => {
+      set((s) => {
+        const { state, autoResponse } = enqueueApproval(s.workApprovals, {
+          ...req,
+          enqueuedAt: req.enqueuedAt ?? Date.now(),
+        });
+        if (autoResponse) {
+          void window.hermesAPI.respondApproval(
+            autoResponse.id,
+            autoResponse.choice,
+            undefined,
+          );
+        }
+        return { workApprovals: state };
+      });
+    },
+
+    respondWorkApproval: (id, choice) => {
+      set((s) => {
+        const { state, response } = resolveApproval(
+          s.workApprovals,
+          id,
+          choice,
+        );
+        void window.hermesAPI.respondApproval(
+          response.id,
+          response.choice,
+          undefined,
+        );
+        return { workApprovals: state };
+      });
+    },
+
+    tickWorkApprovalTimeouts: (now) => {
+      set((s) => {
+        if (s.workApprovalTimeout <= 0 || s.workApprovals.queue.length === 0) {
+          return { workApprovalNow: now };
+        }
+        let next = s.workApprovals;
+        for (const req of s.workApprovals.queue) {
+          if (
+            remainingSeconds(req.enqueuedAt, now, s.workApprovalTimeout) !== 0
+          ) {
+            continue;
+          }
+          const { state, response } = resolveApproval(next, req.id, "deny");
+          next = state;
+          void window.hermesAPI.respondApproval(
+            response.id,
+            response.choice,
+            undefined,
+          );
+        }
+        return { workApprovalNow: now, workApprovals: next };
+      });
+    },
+
+    setWorkApprovalTimeout: (seconds) =>
+      set({ workApprovalTimeout: Math.max(0, seconds) }),
 
     decideProposal: (pid, accept) => {
       get().setBlocks((bs) => {

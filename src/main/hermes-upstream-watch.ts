@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync } from "fs";
 import { join } from "path";
-import { profileHome } from "./utils";
+import { profileHome, safeWriteFile } from "./utils";
 import { publicFetch } from "./security/network-policy";
 import { getInstalledEngineSha } from "./installer";
 import { ENGINE_CONTRACT } from "../shared/engine-contract";
@@ -235,7 +235,7 @@ function writeState(
   profile?: string,
 ): HermesUpstreamWatchState {
   ensureWatchDir(profile);
-  writeFileSync(statePath(profile), `${JSON.stringify(state, null, 2)}\n`);
+  safeWriteFile(statePath(profile), `${JSON.stringify(state, null, 2)}\n`);
   return state;
 }
 
@@ -601,7 +601,7 @@ function writeReport(params: {
     lines.push("");
   }
 
-  writeFileSync(reportPath, `${lines.join("\n").trim()}\n`);
+  safeWriteFile(reportPath, `${lines.join("\n").trim()}\n`);
   return reportPath;
 }
 

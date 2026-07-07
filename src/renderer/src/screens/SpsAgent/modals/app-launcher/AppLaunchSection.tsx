@@ -269,7 +269,9 @@ export function AppLaunchSection({
           <select
             className="cover-btn"
             value={cadence}
-            onChange={(event) => setCadence(event.target.value as AppLaunchCadence)}
+            onChange={(event) =>
+              setCadence(event.target.value as AppLaunchCadence)
+            }
           >
             {APP_LAUNCH_CADENCES.map((item) => (
               <option key={item} value={item}>
@@ -344,9 +346,7 @@ export function AppLaunchSection({
                   {schedule.lastStatus && ` · ${schedule.lastStatus}`}
                 </small>
                 {schedule.lastError && (
-                  <small
-                    style={{ color: "var(--rd, #d66)", display: "block" }}
-                  >
+                  <small style={{ color: "var(--rd, #d66)", display: "block" }}>
                     {schedule.lastError}
                   </small>
                 )}
@@ -381,8 +381,7 @@ export function AppLaunchSection({
                 onClick={() =>
                   void runAction(
                     schedule.id,
-                    () =>
-                      window.hermesAPI.appLaunchRunScheduleNow(schedule.id),
+                    () => window.hermesAPI.appLaunchRunScheduleNow(schedule.id),
                     `Ran "${schedule.label}"`,
                   )
                 }

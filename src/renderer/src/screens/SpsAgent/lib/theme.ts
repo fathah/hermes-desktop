@@ -25,7 +25,7 @@ export const TWEAK_DEFAULTS: Tweaks = {
   width: "comfortable",
   density: "comfortable",
   bodyfont: "sans",
-  homeSurface: "doc",
+  homeSurface: "cockpit",
 };
 
 export const ACCENTS = ["#C79400", "#1B4F8A", "#A1202C", "#1F6B3A", "#5A3A8A"];

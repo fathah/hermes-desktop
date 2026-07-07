@@ -1,8 +1,17 @@
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, describe, expect, it } from "vitest";
-import { applyMarkdownImportPlan, createMarkdownImportPlan } from "./sps-import";
+import {
+  applyMarkdownImportPlan,
+  createMarkdownImportPlan,
+} from "./sps-import";
 
 const roots: string[] = [];
 
@@ -44,7 +53,9 @@ describe("createMarkdownImportPlan", () => {
       targetPageId: "Project-Atlas",
       status: "create",
     });
-    expect(() => readFileSync(join(vaultDir, "Project-Atlas.md"), "utf-8")).toThrow();
+    expect(() =>
+      readFileSync(join(vaultDir, "Project-Atlas.md"), "utf-8"),
+    ).toThrow();
   });
 
   it("reports conflicts and skipped unsafe Markdown names", async () => {
@@ -82,7 +93,8 @@ describe("applyMarkdownImportPlan", () => {
     const vaultDir = join(root, "vault");
     mkdirSync(sourceDir, { recursive: true });
     mkdirSync(vaultDir, { recursive: true });
-    const markdown = "---\ntags:\n  - research\n---\n# Project Atlas\n[[Source]]\n";
+    const markdown =
+      "---\ntags:\n  - research\n---\n# Project Atlas\n[[Source]]\n";
     writeFileSync(join(sourceDir, "Project Atlas.md"), markdown);
 
     const plan = await createMarkdownImportPlan({
@@ -98,7 +110,9 @@ describe("applyMarkdownImportPlan", () => {
       conflicts: 0,
       skipped: 0,
     });
-    expect(readFileSync(join(vaultDir, "imported", "Project-Atlas.md"), "utf-8")).toBe(markdown);
+    expect(
+      readFileSync(join(vaultDir, "imported", "Project-Atlas.md"), "utf-8"),
+    ).toBe(markdown);
   });
 
   it("does not overwrite conflicts or honor unsafe target paths", async () => {
@@ -129,6 +143,8 @@ describe("applyMarkdownImportPlan", () => {
       conflicts: 1,
       skipped: 1,
     });
-    expect(readFileSync(join(vaultDir, "Existing.md"), "utf-8")).toBe("# original\n");
+    expect(readFileSync(join(vaultDir, "Existing.md"), "utf-8")).toBe(
+      "# original\n",
+    );
   });
 });

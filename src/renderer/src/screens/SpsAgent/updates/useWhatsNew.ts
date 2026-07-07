@@ -97,12 +97,7 @@ export function useWhatsNew(): {
       lastSeenEngineRange,
     );
     return [...releaseItems, ...engineItems];
-  }, [
-    availableEngineUpdate,
-    currentVersion,
-    lastSeen,
-    lastSeenEngineRange,
-  ]);
+  }, [availableEngineUpdate, currentVersion, lastSeen, lastSeenEngineRange]);
 
   const visibleEngineRange = useMemo(() => {
     const range = availableEngineUpdate?.range;

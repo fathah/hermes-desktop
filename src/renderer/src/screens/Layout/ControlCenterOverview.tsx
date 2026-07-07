@@ -173,7 +173,8 @@ function ControlCenterOverview({
       : [
           {
             title: "AI Setup",
-            description: "Connect the provider and model that power My Assistant.",
+            description:
+              "Connect the provider and model that power My Assistant.",
             action: "Open AI Setup",
             view: "aiSetup" as const,
           },
@@ -201,7 +202,8 @@ function ControlCenterOverview({
       : [
           {
             title: "Connected Apps",
-            description: "Let My Assistant communicate through approved channels.",
+            description:
+              "Let My Assistant communicate through approved channels.",
             action: "Open Connected Apps",
             view: "connectedApps" as const,
           },

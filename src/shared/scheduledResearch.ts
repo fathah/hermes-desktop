@@ -112,6 +112,8 @@ export interface ScheduledResearchItem {
   createdAt: number;
   /** Epoch ms of the last completed run (0 = never run). */
   lastRunAt: number;
+  /** Last persistent run-level failure, cleared by the next non-error run. */
+  lastError?: string;
   /** Hash of the last committed brief — a cheap dedupe gate. */
   lastChangeHash: string;
   /** v2: the paired Hermes gateway cron job that runs this app-closed. Empty

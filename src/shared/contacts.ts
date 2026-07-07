@@ -35,6 +35,14 @@ export interface ContactChannel {
   value: string;
 }
 
+/** Optional context for logging a channel hand-off against a contact row. */
+export interface ContactChannelContext {
+  personId?: string;
+  personName?: string;
+  followUpAt?: string;
+  note?: string;
+}
+
 /** One episodic memory about a contact. `when`/`source` are provenance. */
 export interface ContactFragment {
   text: string;
@@ -52,6 +60,7 @@ export interface PersonFrontmatter {
   organization?: string;
   tags?: string[];
   fragments?: ContactFragment[];
+  followUpAt?: string;
 }
 
 /** A resolved person: page id + display name + frontmatter. */
@@ -154,6 +163,9 @@ export function parsePersonFrontmatter(
       : {}),
     ...(asString(props.organization)
       ? { organization: asString(props.organization) }
+      : {}),
+    ...(asString(props.followUpAt)
+      ? { followUpAt: asString(props.followUpAt) }
       : {}),
   };
 }
@@ -327,6 +339,7 @@ export function personToRowProps(
   if (fm.telegramChatId) props.telegramChatId = fm.telegramChatId;
   if (fm.whatsappPhone) props.whatsappPhone = fm.whatsappPhone;
   if (fm.organization) props.organization = fm.organization;
+  if (fm.followUpAt) props.followUpAt = fm.followUpAt;
   return props;
 }
 

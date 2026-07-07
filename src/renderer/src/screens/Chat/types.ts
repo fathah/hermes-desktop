@@ -102,6 +102,8 @@ export interface ModelGroup {
     model: string;
     label: string;
     baseUrl: string;
+    disabled?: boolean;
+    disabledReasonKey?: string;
   }[];
 }
 

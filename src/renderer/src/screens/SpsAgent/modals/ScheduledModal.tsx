@@ -755,6 +755,18 @@ export function ScheduledModal() {
                       {" · review-first"}
                       {!s.enabled ? " · paused" : ""}
                     </small>
+                    {s.lastError && (
+                      <small
+                        role="status"
+                        style={{
+                          color: "var(--error)",
+                          display: "block",
+                          marginTop: 4,
+                        }}
+                      >
+                        {s.lastError}
+                      </small>
+                    )}
                     {plan.length > 0 && (
                       <div style={{ marginTop: 6 }}>
                         {plan.map((source) => (

@@ -19,7 +19,7 @@
 // on-demand expression indexes.
 import Database from "better-sqlite3";
 import type { Dirent } from "fs";
-import { mkdir, readdir, readFile, stat } from "fs/promises";
+import { mkdir, readdir, readFile, stat, unlink } from "fs/promises";
 import { basename, extname, join, relative, sep } from "path";
 import chokidar, { type FSWatcher } from "chokidar";
 import { resolveSpsVaultDir } from "./sps-storage";
@@ -108,6 +108,11 @@ function extractInlineTags(body: string): string[] {
   return [...tags];
 }
 const INDEX_DB_FILE = ".note-index.db";
+const INDEX_DB_SIDE_FILES = [
+  INDEX_DB_FILE,
+  `${INDEX_DB_FILE}-wal`,
+  `${INDEX_DB_FILE}-shm`,
+];
 
 // Wiki META pages (Karpathy LLM-Wiki): the LLM-maintained catalog, the
 // append-only evolution log, and the schema. They are intentionally link-free
@@ -277,6 +282,38 @@ function safeProp(prop: string): string | null {
   return /^[A-Za-z0-9_.]+$/.test(prop) ? prop : null;
 }
 
+function errorCode(error: unknown): string | null {
+  if (!error || typeof error !== "object" || !("code" in error)) return null;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" ? code : null;
+}
+
+function isRecoverableIndexOpenError(error: unknown): boolean {
+  const code = errorCode(error);
+  if (
+    code !== null &&
+    (code === "SQLITE_NOTADB" || code.startsWith("SQLITE_CORRUPT"))
+  ) {
+    return true;
+  }
+
+  const message = formatLogError(error).toLowerCase();
+  return (
+    message.includes("file is not a database") ||
+    message.includes("database disk image is malformed")
+  );
+}
+
+async function deleteIndexFiles(root: string): Promise<void> {
+  for (const file of INDEX_DB_SIDE_FILES) {
+    try {
+      await unlink(join(root, file));
+    } catch (err) {
+      if (errorCode(err) !== "ENOENT") throw err;
+    }
+  }
+}
+
 // ── the index ─────────────────────────────────────────────────────────────────
 
 export class NoteIndex {
@@ -379,10 +416,45 @@ export class NoteIndex {
 
   /** Open (or create) the index for a workspace root and do an initial scan. */
   static async open(root: string): Promise<NoteIndex> {
-    const idx = new NoteIndex(root, join(root, INDEX_DB_FILE));
-    const count = idx.count("notes");
-    if (count === 0) await idx.rebuild();
-    return idx;
+    const dbPath = join(root, INDEX_DB_FILE);
+    try {
+      return await NoteIndex.openFresh(root, dbPath);
+    } catch (err) {
+      if (!isRecoverableIndexOpenError(err)) throw err;
+      log.warn("note-index", {
+        msg: "derived SQLite index is corrupt; deleting and rebuilding from markdown",
+        root,
+        error: formatLogError(err),
+      });
+      await deleteIndexFiles(root);
+      return NoteIndex.openFresh(root, dbPath);
+    }
+  }
+
+  private static async openFresh(
+    root: string,
+    dbPath: string,
+  ): Promise<NoteIndex> {
+    let idx: NoteIndex | null = null;
+    try {
+      idx = new NoteIndex(root, dbPath);
+      const count = idx.count("notes");
+      if (count === 0) await idx.rebuild();
+      return idx;
+    } catch (err) {
+      if (idx) {
+        try {
+          await idx.close();
+        } catch (closeErr) {
+          log.warn("note-index", {
+            msg: "failed to close index after open failure",
+            root,
+            error: formatLogError(closeErr),
+          });
+        }
+      }
+      throw err;
+    }
   }
 
   private ensureSchema(): void {
@@ -1092,6 +1164,9 @@ export async function getNoteIndexForRoot(root: string): Promise<NoteIndex> {
       return idx;
     })();
     instances.set(root, pending);
+    pending.catch(() => {
+      if (instances.get(root) === pending) instances.delete(root);
+    });
   }
   return pending;
 }

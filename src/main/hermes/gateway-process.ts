@@ -13,15 +13,18 @@ import { join } from "path";
 import { homedir } from "os";
 import http from "node:http";
 import https from "node:https";
-import { getSshTunnelUrl } from "../ssh-tunnel";
+import { getSshTunnelUrl, startSshTunnel } from "../ssh-tunnel";
 import {
   HERMES_HOME,
   HERMES_REPO,
   HERMES_PYTHON,
+  getInstalledEngineSha,
   hermesCliArgs,
   getEnhancedPath,
 } from "../installer";
 import { getConnectionConfig, getApiServerKey, readEnv } from "../config";
+import { getEngineCapabilityState } from "../engine-update-state";
+import { verifyAndRecordEngineContract } from "../engine-contract-verify";
 import { gatewayFetch } from "../security/network-policy";
 import {
   pidIsAliveAs,
@@ -30,17 +33,23 @@ import {
   normalizeProfileName,
   getActiveProfileNameSync,
 } from "../utils";
-import { getProfilePort } from "../gateway-ports";
+import { getProfilePort, resolveProfilePort } from "../gateway-ports";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "../process-options";
 import {
   decideSupervisorAction,
   initialSupervisorState,
   DEFAULT_SUPERVISOR_CONFIG,
+  type SupervisorDecision,
   type SupervisorState,
   type GatewayHealthStatus,
 } from "./gateway-supervisor";
 import { formatLogError, log, rotateGatewayStderrIfLarge } from "../log";
 import type { GatewayStartResult } from "../../shared/gateway";
+import {
+  unknownEngineCapabilitySnapshot,
+  type EngineCapabilityState,
+} from "../../shared/engine-capabilities";
+import type { EngineContractVerificationResult } from "../../shared/engine-contract";
 
 export interface GatewayProcessRuntime {
   spawn: typeof spawn;
@@ -127,9 +136,10 @@ export function getChatTransportCacheGeneration(): number {
 }
 
 export async function isApiServerReady(profile?: string): Promise<boolean> {
-  const url = `${getApiUrl(profile)}/health`;
+  let url = "";
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
   try {
+    url = `${getApiUrl(profile)}/health`;
     const controller = new AbortController();
     timeoutId = gatewayProcessRuntime.setTimeout(
       () => controller.abort(),
@@ -259,6 +269,142 @@ function setApiCacheFor(profile: string | undefined, value: boolean): void {
   }
 }
 
+export interface GatewayEngineContractGateResult {
+  ready: boolean;
+  status: "not-needed" | "passed" | "unknown" | "broken";
+  currentSha: string | null;
+  lastVerifiedSha: string | null;
+  message?: string;
+  verification?: EngineContractVerificationResult;
+}
+
+function sameSha(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): boolean {
+  return Boolean(a && b && a.toLowerCase() === b.toLowerCase());
+}
+
+function shortSha(sha: string | null | undefined): string {
+  return sha ? sha.slice(0, 12) : "unknown";
+}
+
+function currentShaCapabilityState(
+  state: EngineCapabilityState,
+  currentSha: string,
+): EngineCapabilityState {
+  if (sameSha(state.installedSha, currentSha)) return state;
+  return {
+    ...state,
+    installedSha: currentSha,
+    snapshot: unknownEngineCapabilitySnapshot(
+      "local",
+      currentSha,
+      "Capability snapshot was captured for a different engine SHA.",
+    ),
+  };
+}
+
+export async function verifyGatewayEngineContractBeforeReady(
+  profile?: string,
+): Promise<GatewayEngineContractGateResult> {
+  const state = getEngineCapabilityState(profile);
+  const currentSha = await getInstalledEngineSha();
+  const lastVerifiedSha = state.lastVerifiedSha;
+
+  if (!currentSha) {
+    return {
+      ready: true,
+      status: "unknown",
+      currentSha,
+      lastVerifiedSha,
+      message:
+        "Could not determine the installed Hermes Agent SHA before gateway launch; treating contract status as unknown.",
+    };
+  }
+
+  if (lastVerifiedSha && sameSha(currentSha, lastVerifiedSha)) {
+    return {
+      ready: true,
+      status: "not-needed",
+      currentSha,
+      lastVerifiedSha,
+    };
+  }
+
+  try {
+    const verification = await verifyAndRecordEngineContract(profile, {
+      getCapabilityState: () => currentShaCapabilityState(state, currentSha),
+    });
+    if (verification.status === "broken") {
+      const rollbackText = lastVerifiedSha
+        ? ` Roll back to the last verified engine SHA ${shortSha(lastVerifiedSha)} if needed.`
+        : " No contract-verified rollback SHA is recorded.";
+      return {
+        ready: false,
+        status: "broken",
+        currentSha,
+        lastVerifiedSha,
+        verification,
+        message:
+          "Hermes Agent contract verification failed before gateway launch." +
+          rollbackText,
+      };
+    }
+    return {
+      ready: true,
+      status: verification.status,
+      currentSha,
+      lastVerifiedSha,
+      verification,
+      message:
+        verification.status === "unknown"
+          ? "Hermes Agent contract verification is unknown; gateway launch can continue with compatibility warnings."
+          : undefined,
+    };
+  } catch (err) {
+    return {
+      ready: true,
+      status: "unknown",
+      currentSha,
+      lastVerifiedSha,
+      message: `Hermes Agent contract verification could not complete before gateway launch: ${formatLogError(err)}.`,
+    };
+  }
+}
+
+async function markGatewayReadyIfContractAllows(
+  profile?: string,
+): Promise<boolean> {
+  const gate = await verifyGatewayEngineContractBeforeReady(profile);
+  if (!gate.ready) {
+    setApiCacheFor(profile, false);
+    log.error("gateway", {
+      msg: "gateway contract gate blocked ready state",
+      profileKey: profileKey(profile),
+      currentSha: gate.currentSha,
+      lastVerifiedSha: gate.lastVerifiedSha,
+      message: gate.message,
+    });
+    broadcastGatewayHealth("unhealthy");
+    return false;
+  }
+
+  if (gate.status === "unknown") {
+    log.warn("gateway", {
+      msg: "gateway contract gate status unknown",
+      profileKey: profileKey(profile),
+      currentSha: gate.currentSha,
+      lastVerifiedSha: gate.lastVerifiedSha,
+      message: gate.message,
+    });
+  }
+
+  setApiCacheFor(profile, true);
+  notifyGatewayReady(profile);
+  return true;
+}
+
 export function startGatewayDetailed(profile?: string): GatewayStartResult {
   if (isRemoteMode()) {
     const error =
@@ -291,8 +437,29 @@ export function startGatewayDetailed(profile?: string): GatewayStartResult {
   const resolved = resolveProfile(profile);
   const key = profileKey(profile);
 
+  const portResolution = resolveProfilePort(profile);
+  const port = portResolution.port;
   ensureApiServerConfig(profile);
-  const port = getProfilePort(profile);
+  const portRelocation = portResolution.relocated
+    ? {
+        profile: portResolution.profile ?? key,
+        oldPort: portResolution.previousPort ?? port,
+        newPort: port,
+        reason: portResolution.reason ?? "configured port was reassigned",
+        nextAction:
+          portResolution.nextAction ??
+          `Restart the ${portResolution.profile ?? key} gateway so it binds to port ${port}.`,
+      }
+    : undefined;
+  if (portRelocation) {
+    log.warn("gateway", {
+      msg: "profile gateway port relocated",
+      profileKey: key,
+      oldPort: portRelocation.oldPort,
+      newPort: portRelocation.newPort,
+      nextAction: portRelocation.nextAction,
+    });
+  }
 
   const gatewayEnv: Record<string, string> = {
     ...(process.env as Record<string, string>),
@@ -359,7 +526,7 @@ export function startGatewayDetailed(profile?: string): GatewayStartResult {
       logPath,
       error: message,
     });
-    return { success: false, running: false, error, logPath };
+    return { success: false, running: false, error, logPath, port };
   }
 
   if (stderrFd >= 0) {
@@ -406,9 +573,13 @@ export function startGatewayDetailed(profile?: string): GatewayStartResult {
     if (profileKey(profile) !== profileKey(undefined)) return;
     // LOW-4: don't let a rejection here become an unhandled promise rejection.
     isApiServerReady(profile)
-      .then((ready) => {
-        apiServerAvailable = ready;
-        if (ready) notifyGatewayReady(profile);
+      .then(async (ready) => {
+        if (!ready) {
+          setApiCacheFor(profile, false);
+          return;
+        }
+        const allowed = await markGatewayReadyIfContractAllows(profile);
+        if (!allowed) stopGateway(profile, true);
       })
       .catch((err) => {
         log.warn("gateway", {
@@ -419,7 +590,7 @@ export function startGatewayDetailed(profile?: string): GatewayStartResult {
       });
   }, 3000);
 
-  return { success: true, running: true, logPath };
+  return { success: true, running: true, logPath, port, portRelocation };
 }
 
 export function startGateway(profile?: string): boolean {
@@ -686,9 +857,13 @@ async function restartGatewayLocallyOnce(
         profile,
         healthPollMs,
       );
-      setApiCacheFor(profile, alreadyReady);
-      if (alreadyReady) notifyGatewayReady(profile);
-      return alreadyReady;
+      if (!alreadyReady) {
+        setApiCacheFor(profile, false);
+        return false;
+      }
+      const allowed = await markGatewayReadyIfContractAllows(profile);
+      if (!allowed) markGatewayRestartFailed(profile);
+      return allowed;
     }
 
     const ready = await waitForApiServerReady(
@@ -696,10 +871,14 @@ async function restartGatewayLocallyOnce(
       profile,
       healthPollMs,
     );
-    setApiCacheFor(profile, ready);
-    if (ready) notifyGatewayReady(profile);
-    if (!ready) markGatewayRestartFailed(profile);
-    return ready;
+    if (!ready) {
+      setApiCacheFor(profile, false);
+      markGatewayRestartFailed(profile);
+      return false;
+    }
+    const allowed = await markGatewayReadyIfContractAllows(profile);
+    if (!allowed) markGatewayRestartFailed(profile);
+    return allowed;
   } catch (err) {
     log.error("gateway", {
       msg: "restart failed",
@@ -763,9 +942,9 @@ export async function startGatewayWithRecovery(
   if (isGatewayRunning(profile)) {
     const healthy = await isApiServerReady(profile);
     if (healthy) {
-      setApiCacheFor(profile, true);
-      notifyGatewayReady(profile);
-      return true;
+      const allowed = await markGatewayReadyIfContractAllows(profile);
+      if (!allowed) markGatewayRestartFailed(profile);
+      return allowed;
     }
     return restartGateway(
       profile,
@@ -784,9 +963,9 @@ export async function startGatewayWithRecovery(
     healthPollMs,
   );
   if (ready) {
-    setApiCacheFor(profile, true);
-    notifyGatewayReady(profile);
-    return true;
+    const allowed = await markGatewayReadyIfContractAllows(profile);
+    if (!allowed) markGatewayRestartFailed(profile);
+    return allowed;
   }
 
   return restartGateway(
@@ -820,7 +999,7 @@ function ensureInitialized(): void {
 // (bounded attempts) -> a persistent visible "down" state. It never restarts under
 // an open interactive stream.
 
-const SUPERVISOR_INTERVAL_MS = 30000;
+const SUPERVISOR_INTERVAL_MS = 10000;
 
 let _supervisorState: SupervisorState = initialSupervisorState();
 let _healthBroadcaster: ((status: GatewayHealthStatus) => void) | null = null;
@@ -880,18 +1059,96 @@ function notifyGatewayReady(profile?: string): void {
   }
 }
 
+function publishSupervisorDecision(
+  decision: SupervisorDecision,
+  profile?: string,
+): void {
+  _supervisorState = decision.state;
+
+  if (decision.statusChanged) {
+    log.info("gateway-supervisor", {
+      msg: "health changed",
+      status: decision.state.status,
+      consecutiveFailures: decision.state.consecutiveFailures,
+      restartAttempts: decision.state.restartAttempts,
+    });
+    broadcastGatewayHealth(decision.state.status);
+    if (decision.state.status === "healthy") notifyGatewayReady(profile);
+  }
+}
+
+function setRemoteSupervisorStatus(
+  status: GatewayHealthStatus,
+  profile?: string,
+): void {
+  const nextState: SupervisorState = {
+    status,
+    consecutiveFailures: status === "healthy" ? 0 : 1,
+    restartAttempts: 0,
+  };
+  const decision: SupervisorDecision = {
+    action: { type: "none" },
+    state: nextState,
+    statusChanged: _supervisorState.status !== status,
+  };
+  publishSupervisorDecision(decision, profile);
+}
+
 function scheduleSupervisedRestart(backoffMs: number): void {
   gatewayProcessRuntime.setTimeout(() => {
     // Re-check the guards at fire time — conditions may have changed during backoff.
-    if (isRemoteMode()) return;
     if (isStreamOpen()) return;
+    const conn = getConnectionConfig();
+    if (conn.mode === "remote") return;
+    if (conn.mode === "ssh") {
+      if (!conn.ssh.host) return;
+      void startSshTunnel(conn.ssh).catch((err) => {
+        log.warn("gateway-supervisor", {
+          msg: "ssh tunnel recovery failed",
+          error: formatLogError(err),
+        });
+      });
+      return;
+    }
     void restartGateway();
   }, backoffMs);
 }
 
 async function runSupervisorTick(): Promise<void> {
-  // Only ever supervise a local managed gateway.
-  if (isRemoteMode()) return;
+  const conn = getConnectionConfig();
+
+  if (conn.mode === "remote") {
+    const healthy = conn.remoteUrl ? await isApiServerReady() : false;
+    apiServerAvailable = healthy;
+    setRemoteSupervisorStatus(healthy ? "healthy" : "down");
+    return;
+  }
+
+  if (conn.mode === "ssh") {
+    if (!conn.ssh.host) {
+      apiServerAvailable = false;
+      setRemoteSupervisorStatus("down");
+      return;
+    }
+
+    const healthy = await isApiServerReady();
+    apiServerAvailable = healthy;
+    const decision = decideSupervisorAction(
+      _supervisorState,
+      { healthy, streamOpen: isStreamOpen() },
+      DEFAULT_SUPERVISOR_CONFIG,
+    );
+    publishSupervisorDecision(decision);
+    if (decision.action.type === "restart") {
+      log.warn("gateway-supervisor", {
+        msg: "scheduling ssh tunnel recovery",
+        backoffMs: decision.action.backoffMs,
+        attempt: decision.state.restartAttempts,
+      });
+      scheduleSupervisedRestart(decision.action.backoffMs);
+    }
+    return;
+  }
 
   // Nothing to supervise until a gateway has been started (or is running). Reset
   // to a clean baseline so a later start begins fresh.
@@ -912,18 +1169,7 @@ async function runSupervisorTick(): Promise<void> {
     { healthy, streamOpen },
     DEFAULT_SUPERVISOR_CONFIG,
   );
-  _supervisorState = decision.state;
-
-  if (decision.statusChanged) {
-    log.info("gateway-supervisor", {
-      msg: "health changed",
-      status: decision.state.status,
-      consecutiveFailures: decision.state.consecutiveFailures,
-      restartAttempts: decision.state.restartAttempts,
-    });
-    broadcastGatewayHealth(decision.state.status);
-    if (decision.state.status === "healthy") notifyGatewayReady();
-  }
+  publishSupervisorDecision(decision);
   if (decision.action.type === "restart") {
     log.warn("gateway-supervisor", {
       msg: "scheduling auto-restart",

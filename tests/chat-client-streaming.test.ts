@@ -180,6 +180,34 @@ describe("sendMessageViaApi terminal-state safety", () => {
     expect(h.counters.doneCalls).toBe(1);
   });
 
+  it("calls a terminal error exactly once when aborted mid-stream", async () => {
+    let openResponse: http.ServerResponse | null = null;
+    responder = (_req, res) => {
+      openResponse = res;
+      res.writeHead(200, { "Content-Type": "text/event-stream" });
+      res.write('data: {"choices":[{"delta":{"content":"partial"}}]}\n\n');
+    };
+    const h = callbacks();
+    const handle = sendMessageViaApi("hi", h.cb);
+
+    await vi.waitFor(() => {
+      expect(h.chunks.join("")).toContain("partial");
+    });
+
+    handle.abort();
+    handle.abort();
+    openResponse?.end("data: [DONE]\n\n");
+
+    const outcome = await Promise.race([
+      h.doneP.then(() => "terminal"),
+      new Promise((resolve) => setTimeout(() => resolve("timeout"), 50)),
+    ]);
+
+    expect(outcome).toBe("terminal");
+    expect(h.errors).toEqual(["Chat request aborted."]);
+    expect(h.counters.doneCalls).toBe(0);
+  });
+
   it("HIGH-1: probe fallback resolves (does not hang) when it cannot reach the model", async () => {
     // Stream connects, ends with zero content and no error → triggers probeRealError().
     // The probe request hits a connection reset → must finish with an error, never hang.

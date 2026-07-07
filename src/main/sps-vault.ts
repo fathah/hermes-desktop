@@ -312,12 +312,7 @@ export async function writeVaultSnapshot(
   }
 
   for (const [pageId, markdown] of Object.entries(snapshot.pages)) {
-    const ok = await exportPageMarkdownTo(
-      vaultDir,
-      pageId,
-      markdown,
-      onError,
-    );
+    const ok = await exportPageMarkdownTo(vaultDir, pageId, markdown, onError);
     if (!ok) return false;
   }
 

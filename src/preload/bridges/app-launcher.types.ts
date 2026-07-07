@@ -3,9 +3,7 @@ import type * as Api from "../api-types";
 type AppLaunchResult<T> = { ok: boolean; item?: T; error?: string };
 
 export interface AppLauncherBridgeApi {
-  appLaunchListTargets: (
-    profile?: string,
-  ) => Promise<Api.AppLaunchTarget[]>;
+  appLaunchListTargets: (profile?: string) => Promise<Api.AppLaunchTarget[]>;
 
   appLaunchPickMacApplication: (
     profile?: string,

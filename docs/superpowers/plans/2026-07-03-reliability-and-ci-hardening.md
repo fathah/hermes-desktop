@@ -35,19 +35,19 @@ Only `gateway-supervisor.test.ts` (145-ln module) exists. The spawn/health-poll/
 
 ## Task 4: CI runs all three test tiers
 
-`.github/workflows/ci.yml` currently runs only typecheck + vitest. The SQLite tier (`verify:note-index`, `verify:external-context`) and UI tier (Playwright smokes) never run automatically.
+`.github/workflows/ci.yml` now runs fast PR checks plus a non-PR `verify-smoke` tier for build, Electron-ABI verification, external-context verification, and SPS smoke.
 
-- [ ] **Step 1:** Add a second job (nightly `schedule:` + on push to `main`; keep PR CI fast) that runs: `npm ci` → `npm run build` → `npm run verify:note-index` → `npm run verify:external-context` → `node scripts/sps-smoke.mjs`. Linux runner needs a virtual display for Electron: use `xvfb-run -a`.
-- [ ] **Step 2:** Ensure the smokes' env expectations hold headless (throwaway `HERMES_HOME`, `HERMES_EC_*_ROOT` overrides — see CLAUDE.md External Context Bridge notes; smoke needs `onboardingCompleted` seeded).
+- [x] **Step 1:** Add a second job (nightly `schedule:` + on push to `main`; keep PR CI fast) that runs: `npm ci` → `npm run build` → `npm run verify:note-index` → `npm run verify:external-context` → `node scripts/sps-smoke.mjs`. Linux runner needs a virtual display for Electron: use `xvfb-run -a`.
+- [x] **Step 2:** Ensure the smokes' env expectations hold headless (throwaway `HERMES_HOME`, `HERMES_EC_*_ROOT` overrides — see CLAUDE.md External Context Bridge notes; smoke needs `onboardingCompleted` seeded).
 - [ ] **Step 3:** Trigger the job once (push to main or `workflow_dispatch`) and confirm green before relying on it.
 
 ## Task 5: Settle the lint gate
 
-Lint currently runs with `continue-on-error: true` ("large backlog of prettier/line-ending warnings"). A permanently non-gating check is worse than none.
+Lint now gates CI after the formatting backlog was cleared.
 
-- [ ] **Step 1:** `npm run lint` — capture the warning/error inventory. If it is dominated by formatting, run the formatter across the tree in ONE dedicated commit (no logic changes mixed in — CONTRIBUTING.md rule).
-- [ ] **Step 2:** Fix or explicitly disable (with a comment) whatever remains.
-- [ ] **Step 3:** Remove `continue-on-error: true` from ci.yml. Full `npm test` + typecheck to confirm the formatting sweep broke nothing.
+- [x] **Step 1:** `npm run lint` — capture the warning/error inventory. If it is dominated by formatting, run the formatter across the tree in ONE dedicated commit (no logic changes mixed in — CONTRIBUTING.md rule).
+- [x] **Step 2:** Fix or explicitly disable (with a comment) whatever remains.
+- [x] **Step 3:** Remove `continue-on-error: true` from ci.yml. Full `npm test` + typecheck to confirm the formatting sweep broke nothing.
 
 ## Task 6: Subprocess timeout audit
 

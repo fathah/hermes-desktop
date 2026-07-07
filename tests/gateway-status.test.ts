@@ -64,9 +64,8 @@ describe("connection gateway status", () => {
 
   it("reports local gateway health from a real /health probe", async () => {
     mocks.isApiServerReady.mockResolvedValue(true);
-    const { getConnectionGatewayStatus } = await import(
-      "../src/main/gateway-status"
-    );
+    const { getConnectionGatewayStatus } =
+      await import("../src/main/gateway-status");
 
     await expect(getConnectionGatewayStatus("work")).resolves.toEqual({
       running: true,
@@ -77,9 +76,8 @@ describe("connection gateway status", () => {
 
   it("does not leave local status healthy after a failed probe", async () => {
     mocks.isGatewayRunning.mockReturnValue(true);
-    const { getConnectionGatewayStatus } = await import(
-      "../src/main/gateway-status"
-    );
+    const { getConnectionGatewayStatus } =
+      await import("../src/main/gateway-status");
 
     await expect(getConnectionGatewayStatus()).resolves.toEqual({
       running: true,
@@ -95,9 +93,8 @@ describe("connection gateway status", () => {
       apiKey: "remote-secret",
     };
     mocks.testRemoteConnection.mockResolvedValue(true);
-    const { getConnectionGatewayStatus } = await import(
-      "../src/main/gateway-status"
-    );
+    const { getConnectionGatewayStatus } =
+      await import("../src/main/gateway-status");
 
     await expect(getConnectionGatewayStatus()).resolves.toEqual({
       running: true,
@@ -119,9 +116,8 @@ describe("connection gateway status", () => {
       },
     };
     mocks.sshGatewayStatus.mockResolvedValue(true);
-    const { getConnectionGatewayStatus } = await import(
-      "../src/main/gateway-status"
-    );
+    const { getConnectionGatewayStatus } =
+      await import("../src/main/gateway-status");
 
     await expect(getConnectionGatewayStatus()).resolves.toEqual({
       running: true,

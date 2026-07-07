@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PROVIDERS } from "../../../constants";
 import { useI18n } from "../../../components/useI18n";
+import {
+  engineSupportsMixtureOfAgents,
+  type EngineCapabilityState,
+} from "../../../../../shared/engine-capabilities";
 import type { ModelGroup } from "../types";
 
 interface UseModelConfigResult {
@@ -39,6 +43,28 @@ function groupModelsByProvider(
   return Array.from(groupMap.values());
 }
 
+export function filterModelGroupsByEngineCapabilities(
+  groups: ModelGroup[],
+  engineState: EngineCapabilityState | null,
+): ModelGroup[] {
+  const supportsMoa = engineSupportsMixtureOfAgents(engineState?.snapshot);
+  return groups
+    .map((group) => {
+      if (group.provider !== "moa") return group;
+      return supportsMoa
+        ? group
+        : {
+            ...group,
+            models: group.models.map((model) => ({
+              ...model,
+              disabled: true,
+              disabledReasonKey: "chat.moaUnavailable",
+            })),
+          };
+    })
+    .filter((group) => group.models.length > 0);
+}
+
 export function useModelConfig(profile?: string): UseModelConfigResult {
   const { t } = useI18n();
   const [currentModel, setCurrentModel] = useState("");
@@ -47,14 +73,20 @@ export function useModelConfig(profile?: string): UseModelConfigResult {
   const [modelGroups, setModelGroups] = useState<ModelGroup[]>([]);
 
   const reload = useCallback(async (): Promise<void> => {
-    const [mc, savedModels] = await Promise.all([
+    const [mc, savedModels, engineState] = await Promise.all([
       window.hermesAPI.getModelConfig(profile),
       window.hermesAPI.listModels(),
+      window.hermesAPI.getEngineCapabilities(profile).catch(() => null),
     ]);
     setCurrentModel(mc.model);
     setCurrentProvider(mc.provider);
     setCurrentBaseUrl(mc.baseUrl);
-    setModelGroups(groupModelsByProvider(savedModels));
+    setModelGroups(
+      filterModelGroupsByEngineCapabilities(
+        groupModelsByProvider(savedModels),
+        engineState,
+      ),
+    );
   }, [profile]);
 
   // Initial load + reload whenever the profile changes (canonical

@@ -18,7 +18,9 @@ const STATUS_LABEL: Record<OperatorReadinessStatus, string> = {
   blocked: "Blocked",
 };
 
-function visibleItems(report: OperatorReadinessReport): OperatorReadinessItem[] {
+function visibleItems(
+  report: OperatorReadinessReport,
+): OperatorReadinessItem[] {
   const needsWork = report.items.filter((item) => item.status !== "ready");
   return needsWork.length ? needsWork : report.items.slice(0, 3);
 }
@@ -78,7 +80,9 @@ export function OperatorReadinessPanel({
             {visibleItems(report).map((item) => (
               <div className="operator-readiness-item" key={item.id}>
                 <div>
-                  <span className={`operator-readiness-dot is-${item.status}`} />
+                  <span
+                    className={`operator-readiness-dot is-${item.status}`}
+                  />
                   <strong>{item.title}</strong>
                   <p>{item.summary}</p>
                 </div>

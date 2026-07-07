@@ -13,6 +13,8 @@ const {
   spawnErrorRef,
   lifecycleEvents,
   hermesCliArgsSpy,
+  sshTunnelStarts,
+  engineSha,
 } = vi.hoisted(() => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const path = require("path");
@@ -22,7 +24,19 @@ const {
   return {
     TEST_HOME: path.join(os.tmpdir(), `hermes-gateway-restart-${Date.now()}`),
     TEST_REPO: path.join(os.tmpdir(), `hermes-gateway-repo-${Date.now()}`),
-    connModeRef: { mode: "local" as "local" | "remote" | "ssh" },
+    connModeRef: {
+      mode: "local" as "local" | "remote" | "ssh",
+      remoteUrl: "",
+      apiKey: "",
+      ssh: {
+        host: "",
+        port: 22,
+        username: "",
+        keyPath: "",
+        remotePort: 8642,
+        localPort: 18642,
+      },
+    },
     healthStatuses: [] as number[],
     aliveGatewayPids: new Set<number>(),
     spawned: [] as Array<
@@ -40,6 +54,8 @@ const {
       "/dev/null",
       ...(extra || []),
     ]),
+    sshTunnelStarts: [] as unknown[],
+    engineSha: "1111111111111111111111111111111111111111",
   };
 });
 
@@ -76,21 +92,45 @@ vi.mock("../src/main/installer", () => ({
   HERMES_REPO: TEST_REPO,
   hermesCliArgs: hermesCliArgsSpy,
   getEnhancedPath: () => process.env.PATH || "",
+  getInstalledEngineSha: () => Promise.resolve(engineSha),
 }));
 
 vi.mock("../src/main/config", () => ({
   getApiServerKey: () => "",
   readEnv: (profile?: string) => ({ TEST_PROFILE_KEY: profile || "default" }),
-  getConnectionConfig: () => ({ mode: connModeRef.mode }),
+  getConnectionConfig: () => connModeRef,
   getConfigValue: () => "",
   setConfigValue: vi.fn(),
+}));
+
+vi.mock("../src/main/engine-update-state", () => ({
+  getEngineCapabilityState: () => ({
+    installedSha: engineSha,
+    lastVerifiedSha: engineSha,
+    lastVerification: null,
+    snapshot: {
+      status: "ready",
+      fetchedAt: "2026-07-07T00:00:00.000Z",
+      mode: "local",
+      engineSha,
+      features: {},
+      endpoints: {},
+    },
+  }),
+}));
+
+vi.mock("../src/main/engine-contract-verify", () => ({
+  verifyAndRecordEngineContract: vi.fn(),
 }));
 
 vi.mock("../src/main/ssh-tunnel", () => ({
   getSshTunnelUrl: () => null,
   isSshTunnelActive: () => false,
   isSshTunnelHealthy: () => Promise.resolve(false),
-  startSshTunnel: () => Promise.resolve(),
+  startSshTunnel: vi.fn((config: unknown) => {
+    sshTunnelStarts.push(config);
+    return Promise.resolve();
+  }),
 }));
 
 vi.mock("../src/main/utils", () => ({
@@ -116,14 +156,21 @@ vi.mock("../src/main/process-options", () => ({
 }));
 
 import {
+  getGatewayHealthStatus,
   isGatewayRunning,
   restartGateway,
+  setGatewayHealthBroadcaster,
   startGateway,
   startGatewayDetailed,
   startGatewayWithRecovery,
+  startHealthPolling,
   stopGateway,
   stopHealthPolling,
 } from "../src/main/hermes";
+import {
+  __resetGatewayProcessForTests,
+  __setGatewayProcessRuntimeForTests,
+} from "../src/main/hermes/gateway-process";
 
 function profilePidFile(profile = "work"): string {
   return join(TEST_HOME, "profiles", profile, "gateway.pid");
@@ -313,5 +360,92 @@ describe("gateway restart recovery", () => {
     await expect(restartGateway("work")).resolves.toBe(false);
     await expect(startGatewayWithRecovery("work")).resolves.toBe(false);
     expect(spawned).toHaveLength(0);
+  });
+});
+
+describe("remote gateway supervision", () => {
+  let intervalTick: (() => void) | null = null;
+  let broadcasts: string[] = [];
+
+  beforeEach(() => {
+    __resetGatewayProcessForTests();
+    connModeRef.mode = "local";
+    connModeRef.remoteUrl = "";
+    connModeRef.apiKey = "";
+    connModeRef.ssh = {
+      host: "",
+      port: 22,
+      username: "",
+      keyPath: "",
+      remotePort: 8642,
+      localPort: 18642,
+    };
+    healthStatuses.length = 0;
+    sshTunnelStarts.length = 0;
+    broadcasts = [];
+    intervalTick = null;
+    __setGatewayProcessRuntimeForTests({
+      gatewayFetch: vi.fn(async () => {
+        const status = healthStatuses.shift() ?? 503;
+        return { status, ok: status === 200 } as Response;
+      }),
+      setInterval: ((callback: () => void) => {
+        intervalTick = callback;
+        return 1 as unknown as ReturnType<typeof setInterval>;
+      }) as typeof setInterval,
+      clearInterval: vi.fn() as typeof clearInterval,
+      setTimeout: ((callback: () => void) => {
+        callback();
+        return 1 as unknown as ReturnType<typeof setTimeout>;
+      }) as typeof setTimeout,
+      clearTimeout: vi.fn() as typeof clearTimeout,
+      now: () => 0,
+    });
+    setGatewayHealthBroadcaster((status) => broadcasts.push(status));
+  });
+
+  afterEach(() => {
+    stopHealthPolling();
+    __resetGatewayProcessForTests();
+  });
+
+  async function runTick(): Promise<void> {
+    intervalTick?.();
+    await Promise.resolve();
+    await Promise.resolve();
+  }
+
+  it("broadcasts remote URL failures as down", async () => {
+    connModeRef.mode = "remote";
+    connModeRef.remoteUrl = "http://127.0.0.1:8642";
+    healthStatuses.push(503);
+
+    startHealthPolling();
+    await runTick();
+
+    expect(getGatewayHealthStatus()).toBe("down");
+    expect(broadcasts).toEqual(["down"]);
+  });
+
+  it("surfaces SSH failures as recovering and restarts the tunnel", async () => {
+    connModeRef.mode = "ssh";
+    connModeRef.ssh = {
+      host: "remote.example",
+      port: 22,
+      username: "alice",
+      keyPath: "/tmp/id_ed25519",
+      remotePort: 8642,
+      localPort: 18642,
+    };
+    healthStatuses.push(503, 503, 503);
+
+    startHealthPolling();
+    await runTick();
+    await runTick();
+    await runTick();
+
+    expect(getGatewayHealthStatus()).toBe("recovering");
+    expect(broadcasts).toEqual(["unhealthy", "recovering"]);
+    expect(sshTunnelStarts).toEqual([connModeRef.ssh]);
   });
 });

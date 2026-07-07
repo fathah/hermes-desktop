@@ -14,6 +14,15 @@ const PORT_RANGE_START = 8643;
 const PORT_RANGE_END = 8742;
 const API_SERVER_PORT_PATH = "platforms.api_server.extra.port";
 
+export interface ProfilePortResolution {
+  port: number;
+  profile: string | undefined;
+  relocated: boolean;
+  previousPort?: number;
+  reason?: string;
+  nextAction?: string;
+}
+
 function listNamedProfiles(): string[] {
   const dir = join(HERMES_HOME, "profiles");
   if (!existsSync(dir)) return [];
@@ -82,24 +91,51 @@ function allocateFreePort(profile: string): number {
  * without touching the file.
  */
 export function getProfilePort(profile?: string): number {
+  return resolveProfilePort(profile).port;
+}
+
+export function resolveProfilePort(profile?: string): ProfilePortResolution {
   const name = normalizeProfileName(profile); // undefined => default
-  if (!name) return DEFAULT_API_SERVER_PORT;
+  if (!name) {
+    return {
+      port: DEFAULT_API_SERVER_PORT,
+      profile: undefined,
+      relocated: false,
+    };
+  }
 
   const configured = readConfiguredPort(name);
   if (configured !== null) {
     const collides =
       configured === DEFAULT_API_SERVER_PORT ||
       portsInUse(name).has(configured);
-    if (!collides) return configured;
+    if (!collides) {
+      return {
+        port: configured,
+        profile: name,
+        relocated: false,
+      };
+    }
     const port = allocateFreePort(name);
     // setConfigValue replaces the existing nested value in place — the common
     // case here is a profile cloned from default that carries port 8642.
     setConfigValue(API_SERVER_PORT_PATH, String(port), name);
-    return port;
+    return {
+      port,
+      profile: name,
+      relocated: true,
+      previousPort: configured,
+      reason: "configured port conflicts with another profile",
+      nextAction: `Restart the ${name} gateway so it binds to port ${port}.`,
+    };
   }
 
   // No port (and possibly no api_server block) yet. ensureApiServerConfig
   // writes the block using this same value; the spawn also passes it via
   // API_SERVER_PORT, which the gateway honours when config omits the port.
-  return allocateFreePort(name);
+  return {
+    port: allocateFreePort(name),
+    profile: name,
+    relocated: false,
+  };
 }

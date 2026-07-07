@@ -333,6 +333,7 @@ const PROVIDER_ENV_KEYS: Record<string, string> = {
   openai: "OPENAI_API_KEY",
   anthropic: "ANTHROPIC_API_KEY",
   google: "GEMINI_API_KEY",
+  vertex: "GOOGLE_APPLICATION_CREDENTIALS",
 };
 
 export function resolveProviderEnvKey(provider: string): string | null {

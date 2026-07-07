@@ -108,7 +108,10 @@ function aiAction(readiness: ChatReadiness): OperatorReadinessAction {
       target: { kind: "settings", view: "connectedApps" },
     };
   }
-  if (readiness.fixLocation === "setup" || readiness.fixLocation === "providers") {
+  if (
+    readiness.fixLocation === "setup" ||
+    readiness.fixLocation === "providers"
+  ) {
     return {
       label: "Open AI Setup",
       target: { kind: "settings", view: "aiSetup" },
@@ -282,7 +285,11 @@ export function summarizeOperatorReadiness(
       "Desktop updates",
       facts.desktopUpdateRoutine,
     ),
-    routineItem("agent-update", "Hermes Agent updates", facts.agentUpdateRoutine),
+    routineItem(
+      "agent-update",
+      "Hermes Agent updates",
+      facts.agentUpdateRoutine,
+    ),
     {
       id: "storage",
       title: "Storage writes",

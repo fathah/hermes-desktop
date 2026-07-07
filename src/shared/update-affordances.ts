@@ -1,3 +1,8 @@
+import {
+  engineSupportsSlashCommand,
+  type EngineCapabilityState,
+} from "./engine-capabilities";
+
 export type ReleaseSurfaceTarget =
   | "doc"
   | "dashboard"
@@ -28,12 +33,7 @@ export type ReleaseAffordanceAction =
   | { kind: "surface"; surface: ReleaseSurfaceTarget }
   | {
       kind: "settings";
-      view:
-        | "overview"
-        | "providers"
-        | "settings"
-        | "gateway"
-        | "connectedApps";
+      view: "overview" | "providers" | "settings" | "gateway" | "connectedApps";
     }
   | {
       kind: "modal";
@@ -161,4 +161,57 @@ export function engineAffordancesForRange(
       !!card.title.trim() &&
       !!card.body.trim(),
   );
+}
+
+export function engineCapabilityAffordances(
+  state: EngineCapabilityState | null | undefined,
+): EngineUpdateAffordance[] {
+  const snapshot = state?.snapshot;
+  const range = state?.installedSha
+    ? `capabilities:${state.installedSha}`
+    : "capabilities:unknown";
+  const candidates: Array<{
+    id: string;
+    command: string;
+    title: string;
+    body: string;
+    cta: string;
+  }> = [
+    {
+      id: "engine-feature-goal-contracts",
+      command: "goal",
+      title: "/goal completion contracts",
+      body: "Hermes Agent can now judge standing-goal completion against evidence instead of stopping on assertion.",
+      cta: "Open provider settings",
+    },
+    {
+      id: "engine-feature-learn-command",
+      command: "learn",
+      title: "/learn skill creation",
+      body: "Hermes Agent can distill a reusable skill from a workflow, directory, or URL when the installed engine advertises /learn.",
+      cta: "Open provider settings",
+    },
+    {
+      id: "engine-feature-journey-command",
+      command: "journey",
+      title: "/journey learning timeline",
+      body: "Hermes Agent can show the memories and skills it has accumulated when the installed engine advertises /journey.",
+      cta: "Open provider settings",
+    },
+  ];
+  return candidates
+    .filter((candidate) =>
+      engineSupportsSlashCommand(snapshot, candidate.command),
+    )
+    .map(
+      (candidate): EngineUpdateAffordance => ({
+        id: candidate.id,
+        source: "engine",
+        range,
+        title: candidate.title,
+        body: candidate.body,
+        cta: candidate.cta,
+        action: ENGINE_AVAILABLE_UPDATE_ACTION,
+      }),
+    );
 }

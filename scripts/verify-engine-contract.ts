@@ -3,8 +3,12 @@ import { verifyEngineContract } from "../src/main/engine-contract-verify";
 async function main(): Promise<void> {
   const profile = process.env.HERMES_PROFILE || undefined;
   const result = await verifyEngineContract(profile);
-  const broken = result.findings.filter((finding) => finding.verdict === "broken");
-  const unknown = result.findings.filter((finding) => finding.verdict === "unknown");
+  const broken = result.findings.filter(
+    (finding) => finding.verdict === "broken",
+  );
+  const unknown = result.findings.filter(
+    (finding) => finding.verdict === "unknown",
+  );
 
   console.log(
     JSON.stringify(

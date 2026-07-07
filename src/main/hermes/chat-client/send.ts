@@ -9,7 +9,7 @@ import {
   startGatewayWithRecovery,
   startHealthPolling,
 } from "../gateway-process";
-import { sendMessageViaApi } from "./api";
+import { CHAT_REQUEST_ABORTED_MESSAGE, sendMessageViaApi } from "./api";
 import { sendMessageViaCli } from "./cli";
 import {
   buildSelfAwarenessSystemMessage,
@@ -125,6 +125,7 @@ async function sendMessageViaApiWithLocalRecovery(
     },
     onError: (error) => {
       if (settled) return;
+      if (recovering && error === CHAT_REQUEST_ABORTED_MESSAGE) return;
       if (isLocalApiTransportError(error)) {
         void recoverAndRetry(error);
         return;

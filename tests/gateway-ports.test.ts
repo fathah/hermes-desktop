@@ -41,6 +41,7 @@ vi.mock("fs", () => {
 import {
   getProfilePort,
   DEFAULT_API_SERVER_PORT,
+  resolveProfilePort,
 } from "../src/main/gateway-ports";
 
 describe("getProfilePort", () => {
@@ -71,6 +72,20 @@ describe("getProfilePort", () => {
       "8643",
       "coder",
     );
+  });
+
+  it("reports relocation details for cloned profile port conflicts", () => {
+    dirEntries.push("coder");
+    configuredPorts.set("coder", "8642");
+
+    expect(resolveProfilePort("coder")).toEqual({
+      port: 8643,
+      profile: "coder",
+      relocated: true,
+      previousPort: 8642,
+      reason: "configured port conflicts with another profile",
+      nextAction: "Restart the coder gateway so it binds to port 8643.",
+    });
   });
 
   it("keeps an already-unique configured port and does not rewrite it", () => {

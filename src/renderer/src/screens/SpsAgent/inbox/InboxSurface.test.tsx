@@ -42,6 +42,7 @@ vi.mock("../store", () => ({
 }));
 
 const api = {
+  openExternal: vi.fn(),
   readObsidianFile: vi.fn(),
   writeObsidianFile: vi.fn(),
   spsExportRow: vi.fn(),
@@ -49,6 +50,8 @@ const api = {
   spsReadFileBytes: vi.fn(),
   spsAssetWrite: vi.fn(),
   spsReadRow: vi.fn(),
+  spsClassifyTask: vi.fn(),
+  spsRouteTask: vi.fn(),
   spsTeachCapture: vi.fn(),
   spsFileAnswer: vi.fn(),
   spsListRecentScreenshots: vi.fn(),
@@ -81,6 +84,7 @@ beforeEach(() => {
   );
   installApi();
   api.readObsidianFile.mockResolvedValue(null);
+  api.openExternal.mockResolvedValue(undefined);
   api.writeObsidianFile.mockResolvedValue(true);
   api.spsExportRow.mockResolvedValue(true);
   api.spsPickImage.mockResolvedValue("/tmp/biology-page.png");
@@ -101,6 +105,16 @@ beforeEach(() => {
   api.spsTeachCapture.mockResolvedValue({
     kind: "chat",
     reply: ["## Answers\n\n1. Worked answer with pedagogy."],
+  });
+  api.spsClassifyTask.mockResolvedValue({
+    route: "human",
+    nagCadence: "daily",
+    assigneeId: "you",
+  });
+  api.spsRouteTask.mockResolvedValue({
+    route: "human",
+    status: "todo",
+    dispatched: false,
   });
   api.spsListRecentScreenshots.mockResolvedValue([]);
   api.spsEmailMonitorGetConfig.mockResolvedValue({
@@ -414,6 +428,69 @@ describe("InboxSurface email triage surface", () => {
     expect(storeState.flash).toHaveBeenCalledWith(
       expect.stringContaining("client@bluebay.example"),
     );
+  });
+
+  it("opens a draft reply for email captures", async () => {
+    vaultState.rows = [emailRow("_inbox/cap_1.md", "Bluebay roster change")];
+    render(<InboxSurface />);
+
+    fireEvent.click(await screen.findByTitle(/draft reply/i));
+
+    await waitFor(() => {
+      expect(api.openExternal).toHaveBeenCalledWith(
+        expect.stringMatching(
+          /^mailto:client%40bluebay\.example\?subject=Re%3A\+Bluebay\+roster\+change/,
+        ),
+      );
+    });
+    expect(storeState.flash).toHaveBeenCalledWith("Draft reply opened.");
+  });
+
+  it("turns an email capture into a routed task and marks the capture processed", async () => {
+    vaultState.rows = [emailRow("_inbox/cap_1.md", "Bluebay roster change")];
+    api.spsReadRow.mockResolvedValueOnce(
+      [
+        "---",
+        'title: "Bluebay roster change"',
+        'source: "email"',
+        'status: "unprocessed"',
+        "---",
+        "",
+        "Please update the Friday gate roster.",
+      ].join("\n"),
+    );
+    render(<InboxSurface />);
+
+    fireEvent.click(await screen.findByTitle(/create task/i));
+
+    await waitFor(() => {
+      expect(api.spsRouteTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Bluebay roster change",
+          body: expect.stringContaining(
+            "Please update the Friday gate roster.",
+          ),
+        }),
+        "default",
+      );
+    });
+    expect(api.spsClassifyTask).toHaveBeenCalledWith(
+      expect.stringContaining("Please update the Friday gate roster."),
+      "default",
+    );
+    const taskWrites = api.spsExportRow.mock.calls.filter(
+      (call) => call[0] === "tasks",
+    );
+    expect(taskWrites).toHaveLength(2);
+    expect(String(taskWrites[1][2])).toContain('source: "email"');
+    expect(String(taskWrites[1][2])).toContain('captureId: "cap_1"');
+    expect(api.spsExportRow).toHaveBeenCalledWith(
+      "_inbox",
+      "cap_1",
+      expect.stringContaining('status: "processed"'),
+      "default",
+    );
+    expect(storeState.flash).toHaveBeenCalledWith("Created task from email.");
   });
 
   it("falls back to the account-label lookup for pre-Slice-4 captures", async () => {

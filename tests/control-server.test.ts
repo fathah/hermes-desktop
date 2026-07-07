@@ -7,6 +7,15 @@ vi.mock("fs", () => {
   const fns = {
     existsSync: () => true,
     mkdirSync: () => {},
+    readFileSync: (path: string) => {
+      if (path.includes("closed-app-gateway.json")) {
+        return JSON.stringify({
+          status: "restarted",
+          lastOutageMs: 3600000,
+        });
+      }
+      return "{}";
+    },
     writeFileSync: (...args: unknown[]) => mockWriteFileSync(...args),
     chmodSync: (...args: unknown[]) => mockChmodSync(...args),
   };
@@ -126,6 +135,10 @@ describe("Local Control Server Integration", () => {
     const data = (await res.json()) as Record<string, unknown>;
     expect(data.profile).toBe("test-profile");
     expect(data.controlPort).toBe(port);
+    expect(data.closedAppGateway).toMatchObject({
+      status: "restarted",
+      lastOutageMs: 3600000,
+    });
   });
 
   it("should reject unauthorized requests", async () => {

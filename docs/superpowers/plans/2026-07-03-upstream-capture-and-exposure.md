@@ -15,6 +15,43 @@
 - Pure logic → vitest; anything opening the SQLite index or needing Electron ABI → a `verify:*` script; renderer UI → Playwright smoke. Both typechecks (`npm run typecheck`) before claiming type safety.
 - Keep commits small and single-purpose.
 
+## Status refresh — 2026-07-07
+
+This plan is retained as historical implementation context. Source has moved
+past several unchecked boxes below; use this refresh before treating the older
+checkboxes as current truth.
+
+Shipped in current source:
+
+- Installed SHA and capability snapshots: `src/main/installer.ts`
+  (`getInstalledEngineSha()`), `src/main/engine-capabilities.ts`,
+  `src/shared/engine-capabilities.ts`, `src/renderer/src/hooks/useEngineCapabilities.ts`,
+  `src/preload/bridges/engine.ts`, and `tests/engine-capabilities.test.ts`.
+- Contract manifest and drift guard: `src/shared/engine-contract.ts` and
+  `tests/engine-contract-drift.test.ts`.
+- Contract verifier: `src/main/engine-contract-verify.ts`,
+  `scripts/verify-engine-contract.sh`, `scripts/verify-engine-contract.ts`,
+  `tests/engine-contract-verify.test.ts`, and the `verify:engine-contract`
+  npm script.
+- Update safety gate and rollback plumbing: `src/main/hermes-agent-updates.ts`,
+  `src/main/installer.ts` (`rollbackEngineTo()`), `src/main/ipc/system.ts`
+  (`rollback-engine`, `verify-engine-contract`, engine-capability handlers),
+  `src/preload/bridges/engine.ts`, `tests/hermes-agent-update-check.test.ts`,
+  and `tests/hermes-agent-update-routine.test.ts`.
+- Upstream watch anchoring and contract-risk reporting: `src/main/hermes-upstream-watch.ts`
+  and `tests/hermes-upstream-watch.test.ts`.
+
+Still open in the newer roadmap:
+
+- Release-channel default updates (`release` by default, `main` as an explicit
+  fast channel).
+- Live install-script refresh with sanity-checked fallback to bundled snapshots.
+- Pre-launch compatibility gate for manually changed local engine checkouts.
+- A unified engine-update-state owner that consolidates update routine,
+  capability, verification, and upstream-watch state.
+- Broader local-mode UI capability gating using engine snapshot plus connection
+  capability matrix.
+
 ---
 
 ## Phase 1 — Installed-SHA anchor + engine capability snapshot

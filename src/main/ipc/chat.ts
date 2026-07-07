@@ -40,6 +40,7 @@ import {
   readConfigFixLog,
   type IssueCode,
 } from "../config-health";
+import { getRoutinesStatus } from "../routines-status";
 import { getVoiceStatus, transcribeAudio, speakText } from "../voice";
 import { formatLogError, log } from "../log";
 import type { Attachment } from "../../shared/attachments";
@@ -123,6 +124,10 @@ export function registerChatIpc(
 
   safeHandle("get-config-fix-log", (_event, maxEntries?: number) => {
     return readConfigFixLog(maxEntries);
+  });
+
+  safeHandle("get-routines-status", (_event, profile?: string) => {
+    return getRoutinesStatus(profile);
   });
 
   // Chat sending and abortion

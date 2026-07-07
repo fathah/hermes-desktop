@@ -5394,6 +5394,11 @@ body {
   background: var(--bg-hover);
 }
 
+.chat-model-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
 .chat-model-option.active {
   background: var(--accent-subtle);
   color: var(--accent-text);
@@ -5974,6 +5979,21 @@ body {
 
 .provider-update-toggle input {
   margin: 0;
+}
+
+.provider-update-channel {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.provider-update-channel .input {
+  min-height: 30px;
+  min-width: 116px;
+  padding: 4px 8px;
 }
 
 .provider-update-run {

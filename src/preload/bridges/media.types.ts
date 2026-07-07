@@ -83,14 +83,17 @@ export interface MediaBridgeApi {
   ) => () => void;
 
   onChatApprovalRequest: (
-    callback: (req: {
-      id: string;
-      command?: string;
-      toolName?: string;
-      patternKey?: string;
-      description?: string;
-      sessionKey?: string;
-    }) => void,
+    callback: (
+      req: {
+        id: string;
+        command?: string;
+        toolName?: string;
+        patternKey?: string;
+        description?: string;
+        sessionKey?: string;
+      },
+      runId?: string,
+    ) => void,
   ) => () => void;
 
   onChatApprovalAuto: (

@@ -22,14 +22,16 @@ import {
   type InstallProgress,
 } from "../installer";
 import {
-  acknowledgeHermesAgentUpdateContractBreak,
   getConnectionConfig,
   getDesktopUpdateRoutine,
+  setDesktopUpdateRoutine,
+} from "../config";
+import {
+  acknowledgeHermesAgentUpdateContractBreak,
   getEngineCapabilityState,
   getHermesAgentUpdateRoutine,
-  setDesktopUpdateRoutine,
   setHermesAgentUpdateRoutine,
-} from "../config";
+} from "../engine-update-state";
 import {
   clearErrorLog,
   formatLogError,
@@ -202,7 +204,11 @@ export function registerSystemIpc(
     "set-hermes-agent-update-routine",
     (
       _event,
-      settings: Partial<{ enabled: boolean; autoApply: boolean }>,
+      settings: Partial<{
+        enabled: boolean;
+        autoApply: boolean;
+        engineUpdateChannel: "release" | "main";
+      }>,
       profile?: string,
     ) => setHermesAgentUpdateRoutine(settings, profile),
   );

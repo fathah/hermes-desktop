@@ -25,7 +25,9 @@ function proposalId(): string {
   return `vp_${Date.now()}_${randomBytes(4).toString("hex")}`;
 }
 
-function opStatus(status: VaultOperationStatus | undefined): VaultOperationStatus {
+function opStatus(
+  status: VaultOperationStatus | undefined,
+): VaultOperationStatus {
   return status ?? "pending";
 }
 
@@ -63,7 +65,10 @@ function readStore(path: string): VaultProposal[] {
   }
 }
 
-async function writeStore(path: string, proposals: VaultProposal[]): Promise<void> {
+async function writeStore(
+  path: string,
+  proposals: VaultProposal[],
+): Promise<void> {
   await writeFile(path, JSON.stringify(proposals, null, 2), "utf-8");
 }
 
@@ -142,7 +147,12 @@ export async function markVaultProposalCommitted(
   operationIds?: string[],
   profile?: string,
 ): Promise<VaultProposal | null> {
-  return updateProposalStatusIn(profileHome(profile), id, "committed", operationIds);
+  return updateProposalStatusIn(
+    profileHome(profile),
+    id,
+    "committed",
+    operationIds,
+  );
 }
 
 export function writeVaultProposalStoreSync(

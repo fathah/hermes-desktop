@@ -49,9 +49,11 @@ function councilArtifactBlocks(turn: CouncilTurnMessage): Block[] {
     blocks.push(blk("h3", r.seatName || r.modelLabel));
     blocks.push(blk("p", `${r.provider}/${r.model}`));
     if (r.verdict) blocks.push(blk("p", `Verdict: ${r.verdict}`));
-    if (r.toolProgress) blocks.push(blk("p", `Tool activity: ${r.toolProgress}`));
+    if (r.toolProgress)
+      blocks.push(blk("p", `Tool activity: ${r.toolProgress}`));
     if (r.approval) blocks.push(blk("p", r.approval));
-    if (r.reasoning) blocks.push(blk("toggle", r.reasoning, { collapsed: true }));
+    if (r.reasoning)
+      blocks.push(blk("toggle", r.reasoning, { collapsed: true }));
     blocks.push(blk("p", r.error ? `Error: ${r.error}` : r.content));
   }
 

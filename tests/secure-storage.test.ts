@@ -139,4 +139,80 @@ describe("desktop.json secret fields", () => {
     expect(raw).not.toContain("legacy-openalex-key");
     expect(readDesktopConfig().openalexApiKey).toBe("legacy-openalex-key");
   });
+
+  it("stores SPS automation prefs per profile with normalized intervals", async () => {
+    const { getSpsAutomationPrefs, setSpsAutomationPrefs } =
+      await freshConfig(testDir);
+
+    expect(getSpsAutomationPrefs("work")).toEqual({
+      autoApply: false,
+      ingestIntervalMin: 0,
+      lintIntervalMin: 0,
+    });
+
+    setSpsAutomationPrefs(
+      { autoApply: true, ingestIntervalMin: 15.8, lintIntervalMin: -1 },
+      "work",
+    );
+
+    expect(getSpsAutomationPrefs("work")).toEqual({
+      autoApply: true,
+      ingestIntervalMin: 15,
+      lintIntervalMin: 0,
+    });
+    expect(getSpsAutomationPrefs("default")).toEqual({
+      autoApply: false,
+      ingestIntervalMin: 0,
+      lintIntervalMin: 0,
+    });
+  });
+
+  it("stores owner notification prefs per profile with safe defaults", async () => {
+    const { getOwnerNotificationPrefs, setOwnerNotificationPrefs } =
+      await freshConfig(testDir);
+
+    expect(getOwnerNotificationPrefs("work")).toMatchObject({
+      channels: {
+        macos: true,
+        telegram: false,
+        email: false,
+        whatsapp: false,
+      },
+      targets: {
+        telegramChatId: "",
+        emailAddress: "",
+        whatsappTarget: "",
+      },
+      rateLimitMinutes: 10,
+    });
+
+    setOwnerNotificationPrefs(
+      {
+        channels: { telegram: true, macos: false },
+        targets: {
+          telegramChatId: " 12345 ",
+          emailAddress: " owner@example.com ",
+        },
+        quietHours: { enabled: true, start: "21:30", end: "06:15" },
+        rateLimitMinutes: 2.8,
+      },
+      "work",
+    );
+
+    expect(getOwnerNotificationPrefs("work")).toMatchObject({
+      channels: {
+        macos: false,
+        telegram: true,
+        email: false,
+        whatsapp: false,
+      },
+      targets: {
+        telegramChatId: "12345",
+        emailAddress: "owner@example.com",
+      },
+      quietHours: { enabled: true, start: "21:30", end: "06:15" },
+      rateLimitMinutes: 2,
+    });
+    expect(getOwnerNotificationPrefs("default").channels.macos).toBe(true);
+  });
 });

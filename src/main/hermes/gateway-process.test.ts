@@ -4,27 +4,71 @@ import { join } from "path";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import type { ChildProcess } from "child_process";
 
-const { TEST_HOME, TEST_REPO, connModeRef, hermesCliArgsSpy } = vi.hoisted(
-  () => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const path = require("path");
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const os = require("os");
+const {
+  TEST_HOME,
+  TEST_REPO,
+  connModeRef,
+  hermesCliArgsSpy,
+  installedEngineShaRef,
+  engineCapabilityStateRef,
+  portResolutionRef,
+  verifyEngineContractMock,
+} = vi.hoisted(() => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const path = require("path");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const os = require("os");
 
-    return {
-      TEST_HOME: path.join(os.tmpdir(), `hermes-gateway-process-${Date.now()}`),
-      TEST_REPO: path.join(
-        os.tmpdir(),
-        `hermes-gateway-process-repo-${Date.now()}`,
-      ),
-      connModeRef: { mode: "local" as "local" | "remote" | "ssh" },
-      hermesCliArgsSpy: vi.fn((extra?: string[]) => [
-        "/dev/null",
-        ...(extra || []),
-      ]),
-    };
-  },
-);
+  return {
+    TEST_HOME: path.join(os.tmpdir(), `hermes-gateway-process-${Date.now()}`),
+    TEST_REPO: path.join(
+      os.tmpdir(),
+      `hermes-gateway-process-repo-${Date.now()}`,
+    ),
+    connModeRef: { mode: "local" as "local" | "remote" | "ssh" },
+    installedEngineShaRef: {
+      value: "1111111111111111111111111111111111111111" as string | null,
+    },
+    engineCapabilityStateRef: {
+      value: {
+        installedSha: "1111111111111111111111111111111111111111",
+        lastVerifiedSha: "1111111111111111111111111111111111111111",
+        lastVerification: null,
+        snapshot: {
+          status: "ready" as const,
+          fetchedAt: "2026-07-07T00:00:00.000Z",
+          mode: "local" as const,
+          engineSha: "1111111111111111111111111111111111111111",
+          features: {},
+          endpoints: {},
+        },
+      },
+    },
+    hermesCliArgsSpy: vi.fn((extra?: string[]) => [
+      "/dev/null",
+      ...(extra || []),
+    ]),
+    verifyEngineContractMock: vi.fn().mockResolvedValue({
+      checkedAt: "2026-07-07T00:00:00.000Z",
+      status: "passed",
+      findings: [],
+    }),
+    portResolutionRef: {
+      value: {
+        port: 18642,
+        profile: undefined as string | undefined,
+        relocated: false,
+      } as {
+        port: number;
+        profile: string | undefined;
+        relocated: boolean;
+        previousPort?: number;
+        reason?: string;
+        nextAction?: string;
+      },
+    },
+  };
+});
 
 vi.mock("../installer", () => ({
   HERMES_HOME: TEST_HOME,
@@ -32,6 +76,7 @@ vi.mock("../installer", () => ({
   HERMES_REPO: TEST_REPO,
   hermesCliArgs: hermesCliArgsSpy,
   getEnhancedPath: () => process.env.PATH || "",
+  getInstalledEngineSha: () => Promise.resolve(installedEngineShaRef.value),
 }));
 
 vi.mock("../config", () => ({
@@ -40,8 +85,17 @@ vi.mock("../config", () => ({
   readEnv: (profile?: string) => ({ TEST_PROFILE_KEY: profile || "default" }),
 }));
 
+vi.mock("../engine-update-state", () => ({
+  getEngineCapabilityState: () => engineCapabilityStateRef.value,
+}));
+
+vi.mock("../engine-contract-verify", () => ({
+  verifyAndRecordEngineContract: verifyEngineContractMock,
+}));
+
 vi.mock("../ssh-tunnel", () => ({
   getSshTunnelUrl: () => null,
+  startSshTunnel: vi.fn(),
 }));
 
 vi.mock("../utils", () => ({
@@ -63,7 +117,8 @@ vi.mock("../utils", () => ({
 }));
 
 vi.mock("../gateway-ports", () => ({
-  getProfilePort: () => 18642,
+  getProfilePort: () => portResolutionRef.value.port,
+  resolveProfilePort: () => portResolutionRef.value,
 }));
 
 vi.mock("../process-options", () => ({
@@ -88,7 +143,10 @@ import {
   restartGateway,
   setGatewayReadyNotifier,
   startGateway,
+  startGatewayDetailed,
   startGatewayWithRecovery,
+  startHealthPolling,
+  verifyGatewayEngineContractBeforeReady,
   type GatewayProcessRuntime,
 } from "./gateway-process";
 
@@ -168,6 +226,31 @@ describe("gateway process lifecycle", () => {
     mkdirSync(join(TEST_HOME, "profiles", "work"), { recursive: true });
     mkdirSync(TEST_REPO, { recursive: true });
     connModeRef.mode = "local";
+    installedEngineShaRef.value = "1111111111111111111111111111111111111111";
+    engineCapabilityStateRef.value = {
+      installedSha: "1111111111111111111111111111111111111111",
+      lastVerifiedSha: "1111111111111111111111111111111111111111",
+      lastVerification: null,
+      snapshot: {
+        status: "ready",
+        fetchedAt: "2026-07-07T00:00:00.000Z",
+        mode: "local",
+        engineSha: "1111111111111111111111111111111111111111",
+        features: {},
+        endpoints: {},
+      },
+    };
+    verifyEngineContractMock.mockClear();
+    verifyEngineContractMock.mockResolvedValue({
+      checkedAt: "2026-07-07T00:00:00.000Z",
+      status: "passed",
+      findings: [],
+    });
+    portResolutionRef.value = {
+      port: 18642,
+      profile: undefined,
+      relocated: false,
+    };
     hermesCliArgsSpy.mockClear();
     harness = createHarness();
     __setGatewayProcessRuntimeForTests(harness.runtime);
@@ -198,6 +281,104 @@ describe("gateway process lifecycle", () => {
       "gateway",
       "run",
     ]);
+  });
+
+  it("polls gateway health every 10 seconds", () => {
+    startHealthPolling();
+
+    expect(harness.runtime.setInterval).toHaveBeenCalledWith(
+      expect.any(Function),
+      10000,
+    );
+  });
+
+  it("returns named-profile port relocation details from start", () => {
+    portResolutionRef.value = {
+      port: 18643,
+      profile: "work",
+      relocated: true,
+      previousPort: 8642,
+      reason: "configured port conflicts with another profile",
+      nextAction: "Restart the work gateway so it binds to port 18643.",
+    };
+
+    expect(startGatewayDetailed("work")).toMatchObject({
+      success: true,
+      running: true,
+      port: 18643,
+      portRelocation: {
+        profile: "work",
+        oldPort: 8642,
+        newPort: 18643,
+        nextAction: "Restart the work gateway so it binds to port 18643.",
+      },
+    });
+  });
+
+  it("verifies a changed engine SHA before recovery reports ready", async () => {
+    installedEngineShaRef.value = "2222222222222222222222222222222222222222";
+    engineCapabilityStateRef.value = {
+      ...engineCapabilityStateRef.value,
+      installedSha: "1111111111111111111111111111111111111111",
+      lastVerifiedSha: "1111111111111111111111111111111111111111",
+    };
+    harness.healthStatuses.push(200);
+
+    await expect(startGatewayWithRecovery("work", 5, 1, 5, 1)).resolves.toBe(
+      true,
+    );
+
+    expect(verifyEngineContractMock).toHaveBeenCalledWith(
+      "work",
+      expect.objectContaining({ getCapabilityState: expect.any(Function) }),
+    );
+    const options = verifyEngineContractMock.mock.calls[0][1];
+    expect(options.getCapabilityState("work").snapshot.status).toBe("unknown");
+    expect(harness.readyProfiles).toEqual(["work"]);
+  });
+
+  it("blocks ready state and stops the gateway when changed engine verification is broken", async () => {
+    installedEngineShaRef.value = "2222222222222222222222222222222222222222";
+    engineCapabilityStateRef.value = {
+      ...engineCapabilityStateRef.value,
+      installedSha: "1111111111111111111111111111111111111111",
+      lastVerifiedSha: "1111111111111111111111111111111111111111",
+    };
+    verifyEngineContractMock.mockResolvedValue({
+      checkedAt: "2026-07-07T00:00:00.000Z",
+      status: "broken",
+      findings: [
+        {
+          entryId: "gateway",
+          kind: "cli",
+          value: "gateway",
+          tier: "fail",
+          verdict: "broken",
+          detail: "Top-level command gateway is missing.",
+        },
+      ],
+    });
+    harness.healthStatuses.push(200);
+
+    await expect(startGatewayWithRecovery("work", 5, 1, 5, 1)).resolves.toBe(
+      false,
+    );
+
+    expect(verifyEngineContractMock).toHaveBeenCalledOnce();
+    expect(harness.readyProfiles).toEqual([]);
+    expect(harness.children[0].killed).toBe(true);
+  });
+
+  it("treats an unreadable installed engine SHA as unknown rather than broken", async () => {
+    installedEngineShaRef.value = null;
+
+    const result = await verifyGatewayEngineContractBeforeReady("work");
+
+    expect(result).toMatchObject({
+      ready: true,
+      status: "unknown",
+    });
+    expect(verifyEngineContractMock).not.toHaveBeenCalled();
   });
 
   it("cleans up spawned children when gateway health never becomes ready", async () => {

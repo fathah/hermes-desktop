@@ -36,6 +36,7 @@ describe("expectedEnvKeyForModel — provider-name lookup", () => {
     ["zai", "GLM_API_KEY"],
     ["kimi", "KIMI_API_KEY"],
     ["kimi-coding", "KIMI_API_KEY"],
+    ["vertex", "GOOGLE_APPLICATION_CREDENTIALS"],
   ])("maps provider %s → %s", (provider, expected) => {
     expect(expectedEnvKeyForModel(provider, "")).toBe(expected);
   });
@@ -199,7 +200,11 @@ describe("checkInstallStatus — configured provider key gate", () => {
       ].join("\n"),
       "utf-8",
     );
-    writeFileSync(join(home, ".env"), "OMNIROUTE_TOKEN=sk-omni-test\n", "utf-8");
+    writeFileSync(
+      join(home, ".env"),
+      "OMNIROUTE_TOKEN=sk-omni-test\n",
+      "utf-8",
+    );
 
     const { checkInstallStatus } = await freshInstaller(home);
 

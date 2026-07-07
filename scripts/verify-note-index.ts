@@ -199,6 +199,61 @@ async function main(): Promise<void> {
   await closeAllNoteIndexes();
   await rm(vault, { recursive: true, force: true });
 
+  // ── Self-healing: corrupt derived SQLite state is discarded and rebuilt.
+  console.log("\nSelf-healing — corrupt cache rebuilds from markdown:");
+  {
+    const corruptRoot = await mkdtemp(join(tmpdir(), "note-index-corrupt-"));
+    await writeFile(
+      join(corruptRoot, "survivor.md"),
+      "# Survivor\nStill here.\n",
+    );
+    await writeFile(join(corruptRoot, ".note-index.db"), "not sqlite");
+    await writeFile(join(corruptRoot, ".note-index.db-wal"), "stale wal");
+    await writeFile(join(corruptRoot, ".note-index.db-shm"), "stale shm");
+
+    const healed = await NoteIndex.open(corruptRoot);
+    eq(
+      healed.search("Survivor").map((hit) => hit.path),
+      ["survivor.md"],
+      "corrupt note index self-heals by rebuilding from markdown",
+    );
+    await healed.close();
+    await rm(corruptRoot, { recursive: true, force: true });
+  }
+
+  // ── Cache hygiene: a rejected lazy-open promise must not poison the root.
+  console.log("\nSelf-healing — failed lazy open can retry:");
+  {
+    const retryParent = await mkdtemp(join(tmpdir(), "note-index-retry-"));
+    const retryRoot = join(retryParent, "vault");
+    await writeFile(retryRoot, "I am a file, not a directory.");
+    let failed = false;
+    try {
+      await getNoteIndexForRoot(retryRoot);
+    } catch {
+      failed = true;
+    }
+    assert(
+      failed,
+      "first lazy open fails when the root path is not a directory",
+    );
+
+    await rm(retryRoot, { force: true });
+    await mkdir(retryRoot, { recursive: true });
+    await writeFile(
+      join(retryRoot, "retry.md"),
+      "# Retry\nThe vault recovered.\n",
+    );
+    const retried = await getNoteIndexForRoot(retryRoot);
+    eq(
+      retried.search("recovered").map((hit) => hit.path),
+      ["retry.md"],
+      "failed lazy open is evicted so the next call can recover",
+    );
+    await closeAllNoteIndexes();
+    await rm(retryParent, { recursive: true, force: true });
+  }
+
   // ── Obsidian-first links: aliases, embeds, block refs, and canonical relations.
   console.log("\nObsidian links — aliases, embeds, block refs, relations:");
   const oroot = await mkdtemp(join(tmpdir(), "note-index-obsidian-"));

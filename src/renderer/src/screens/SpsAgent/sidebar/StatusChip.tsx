@@ -112,12 +112,7 @@ export function StatusChip(): React.JSX.Element | null {
     const unsubscribe = window.hermesAPI.onGatewayHealthChanged?.((change) => {
       setStatus((prev) =>
         prev
-          ? buildStatus(
-              prev.label,
-              prev.profile,
-              prev.hasApiKey,
-              change.status,
-            )
+          ? buildStatus(prev.label, prev.profile, prev.hasApiKey, change.status)
           : prev,
       );
     });

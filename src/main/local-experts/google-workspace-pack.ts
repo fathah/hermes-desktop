@@ -200,13 +200,7 @@ export const GOOGLE_DOCS_EDITORS_LOCAL_EXPERT_PACK: LocalExpertPack = {
           "https://support.google.com/a/answer/6089179?hl=en",
         ],
         lastVerified: "2026-06-18",
-        tags: [
-          "admin",
-          "policy",
-          "sharing",
-          "apps-script",
-          "marketplace",
-        ],
+        tags: ["admin", "policy", "sharing", "apps-script", "marketplace"],
         commonQuestions: [
           "Admin policy blocks external sharing or Apps Script access. What evidence should I collect?",
           "How can I tell whether this is a user permission issue or an organization policy?",

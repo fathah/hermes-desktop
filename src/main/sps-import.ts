@@ -23,7 +23,10 @@ export interface MarkdownImportPlanInput {
 export async function createMarkdownImportPlan(
   input: MarkdownImportPlanInput,
 ): Promise<SpsImportPlan> {
-  const files = await collectMarkdownFiles(input.source.path, input.source.path);
+  const files = await collectMarkdownFiles(
+    input.source.path,
+    input.source.path,
+  );
   const targetFolder = normalizeTargetFolder(input.targetFolder);
   const items: SpsImportPlanItem[] = [];
 
@@ -154,12 +157,18 @@ function pageIdFromMarkdownPath(path: string): string {
 }
 
 function normalizeTargetFolder(folder?: string): string | undefined {
-  const clean = folder?.trim().replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  const clean = folder
+    ?.trim()
+    .replace(/\\/g, "/")
+    .replace(/^\/+|\/+$/g, "");
   if (!clean) return undefined;
   if (
     clean
       .split("/")
-      .some((segment) => !PAGE_ID_RE.test(segment) || segment === "." || segment === "..")
+      .some(
+        (segment) =>
+          !PAGE_ID_RE.test(segment) || segment === "." || segment === "..",
+      )
   ) {
     return undefined;
   }
@@ -175,7 +184,10 @@ function isSafeTargetPath(path: string): boolean {
   if (!PAGE_ID_RE.test(file.slice(0, -3))) return false;
   return parts
     .slice(0, -1)
-    .every((segment) => PAGE_ID_RE.test(segment) && segment !== "." && segment !== "..");
+    .every(
+      (segment) =>
+        PAGE_ID_RE.test(segment) && segment !== "." && segment !== "..",
+    );
 }
 
 async function pathExists(path: string): Promise<boolean> {

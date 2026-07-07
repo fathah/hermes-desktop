@@ -6,6 +6,7 @@ import { resolveSpsVaultDir } from "./sps-storage";
 import { chatCompletionOnce } from "./hermes/chat-client";
 import { getActiveProfileNameSync } from "./utils";
 import { buildDailyBriefMarkdown, dailyBriefFileName } from "./daily-brief";
+import { deliverDailyBrief } from "./daily-brief-delivery";
 import { formatLogError, log } from "./log";
 import YAML from "yaml";
 
@@ -156,12 +157,12 @@ Do not include any extra text outside the Markdown content.`;
     const today = new Date();
     const reportName = dailyBriefFileName(today);
     const reportPath = join(vaultDir, reportName);
+    const briefMarkdown = buildDailyBriefMarkdown({
+      date: today,
+      body: res.content,
+    });
 
-    await writeFile(
-      reportPath,
-      buildDailyBriefMarkdown({ date: today, body: res.content }),
-      "utf8",
-    );
+    await writeFile(reportPath, briefMarkdown, "utf8");
     log.info("dream-cycle", {
       msg: "daily Brief saved",
       path: reportPath,
@@ -170,6 +171,15 @@ Do not include any extra text outside the Markdown content.`;
 
     // Trigger index rebuild to pick up the new Daily Brief note
     await noteIndex.rebuild();
+    try {
+      await deliverDailyBrief(briefMarkdown, today, activeProfile);
+    } catch (err) {
+      log.error("dream-cycle", {
+        msg: "daily brief owner delivery failed",
+        profile: activeProfile,
+        error: formatLogError(err),
+      });
+    }
   } catch (err) {
     log.error("dream-cycle", {
       msg: "error in dream cycle run",

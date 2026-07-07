@@ -16,7 +16,9 @@ describe("buildContextPackMarkdown", () => {
           { path: "Decision-Log.md", title: "Decision Log", body: "links in" },
         ],
         outgoing: [{ path: "Source-A.md", title: "Source A", body: "source" }],
-        tasks: [{ path: "tasks/t1.md", title: "Follow up", body: "- [ ] Call" }],
+        tasks: [
+          { path: "tasks/t1.md", title: "Follow up", body: "- [ ] Call" },
+        ],
         unresolvedQuestions: ["Which owner signs off?"],
       },
       { maxBytes: 10_000 },

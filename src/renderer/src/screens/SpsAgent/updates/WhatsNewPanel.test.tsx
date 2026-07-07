@@ -69,7 +69,9 @@ describe("WhatsNewPanel", () => {
       await screen.findByText("Control Center AI readiness"),
     ).toBeInTheDocument();
     expect(container.querySelector(".ob-checklist")).toBeInTheDocument();
-    expect(screen.getByText("Intentional narrow workspace")).toBeInTheDocument();
+    expect(
+      screen.getByText("Intentional narrow workspace"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Readable SPS dark theme")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Open Control Center" }),
@@ -125,9 +127,7 @@ describe("WhatsNewPanel", () => {
       <WhatsNewPanel onRunAction={vi.fn()} variant="compact" />,
     );
 
-    expect(
-      await screen.findByText("What's new in v0.5.4"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("What's new in v0.5.4")).toBeInTheDocument();
     expect(container.querySelector(".ob-checklist")).toBeNull();
     expect(
       container.querySelector(".home-affordance-updates"),

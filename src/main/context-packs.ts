@@ -51,25 +51,33 @@ export async function buildContextPack(
   profile?: string,
 ): Promise<SpsContextPackResult> {
   const vaultDir = resolveSpsVaultDir(profile);
-  const pagePath = input.pageId.endsWith(".md") ? input.pageId : `${input.pageId}.md`;
+  const pagePath = input.pageId.endsWith(".md")
+    ? input.pageId
+    : `${input.pageId}.md`;
   const root = await readNote(vaultDir, pagePath);
   if (!root) throw new Error(`Page not found: ${input.pageId}`);
   const index = await getSpsNoteIndex(profile);
-  const backlinks = input.includeBacklinks === false
-    ? []
-    : await readMany(vaultDir, index.backlinks(pagePath));
-  const outgoing = input.includeSources === false
-    ? []
-    : await readMany(
-        vaultDir,
-        index.links().filter((edge) => edge.source === pagePath).map((edge) => edge.target),
-      );
-  const tasks = input.includeTasks === false
-    ? []
-    : await readMany(
-        vaultDir,
-        index.query({ scope: "tasks", limit: 50 }).map((row) => row.path),
-      );
+  const backlinks =
+    input.includeBacklinks === false
+      ? []
+      : await readMany(vaultDir, index.backlinks(pagePath));
+  const outgoing =
+    input.includeSources === false
+      ? []
+      : await readMany(
+          vaultDir,
+          index
+            .links()
+            .filter((edge) => edge.source === pagePath)
+            .map((edge) => edge.target),
+        );
+  const tasks =
+    input.includeTasks === false
+      ? []
+      : await readMany(
+          vaultDir,
+          index.query({ scope: "tasks", limit: 50 }).map((row) => row.path),
+        );
   const result = buildContextPackMarkdown(
     {
       pageId: input.pageId,
@@ -98,7 +106,10 @@ function renderNote(label: string, note: ContextPackNote): string {
 
 function renderNotes(label: string, notes: ContextPackNote[]): string {
   if (notes.length === 0) return `## ${label}\nNone.`;
-  return [`## ${label}`, ...notes.map((note) => renderNote(note.title, note))].join("\n\n");
+  return [
+    `## ${label}`,
+    ...notes.map((note) => renderNote(note.title, note)),
+  ].join("\n\n");
 }
 
 function uniquePaths(notes: ContextPackNote[]): string[] {
@@ -115,7 +126,8 @@ function clampMarkdown(
   const suffix = "\n\n[truncated]\n";
   const budget = Math.max(0, maxBytes - Buffer.byteLength(suffix, "utf-8"));
   let clipped = markdown;
-  while (Buffer.byteLength(clipped, "utf-8") > budget) clipped = clipped.slice(0, -1);
+  while (Buffer.byteLength(clipped, "utf-8") > budget)
+    clipped = clipped.slice(0, -1);
   return { markdown: `${clipped}${suffix}`, includedPaths, truncated: true };
 }
 
@@ -123,7 +135,9 @@ async function readMany(
   vaultDir: string,
   paths: string[],
 ): Promise<ContextPackNote[]> {
-  const notes = await Promise.all(paths.map((path) => readNote(vaultDir, path)));
+  const notes = await Promise.all(
+    paths.map((path) => readNote(vaultDir, path)),
+  );
   return notes.filter((note): note is ContextPackNote => note !== null);
 }
 
@@ -133,9 +147,10 @@ async function readNote(
 ): Promise<ContextPackNote | null> {
   try {
     const raw = await readFile(join(vaultDir, path), "utf-8");
-    const title = /^---[\s\S]*?title:\s*"?([^"\n]+)"?[\s\S]*?---/.exec(raw)?.[1]
-      || /^#\s+(.+)$/m.exec(raw)?.[1]
-      || path.replace(/\.md$/, "");
+    const title =
+      /^---[\s\S]*?title:\s*"?([^"\n]+)"?[\s\S]*?---/.exec(raw)?.[1] ||
+      /^#\s+(.+)$/m.exec(raw)?.[1] ||
+      path.replace(/\.md$/, "");
     const body = raw.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
     return { path, title: title.trim(), body };
   } catch {

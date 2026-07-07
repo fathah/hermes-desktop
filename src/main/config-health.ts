@@ -35,6 +35,7 @@ import {
 } from "./config/yaml-config";
 import { HERMES_HOME } from "./installer";
 import { expectedEnvKeyForModel } from "./installer";
+import { providerDoesNotNeedApiKey } from "./providers";
 import { expectedEnvKeyForUrl, isLocalBaseUrl } from "../shared/url-key-map";
 import { findSiblingHermesHomes } from "./wsl-detection";
 import { formatLogError, log } from "./log";
@@ -221,6 +222,7 @@ function checkActiveModelKeyPresence(profile?: string): ConfigHealthIssue[] {
   const mc = getModelConfig(profile);
   if (!mc.provider || mc.provider === "auto") return [];
   if (!mc.model) return [];
+  if (providerDoesNotNeedApiKey(mc.provider)) return [];
 
   // Local/private URLs commonly run without a provider API key.
   if (isLocalBaseUrl(mc.baseUrl)) return [];

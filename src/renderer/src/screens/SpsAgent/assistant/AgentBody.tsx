@@ -12,6 +12,7 @@ import {
 } from "../../../lib/grounding";
 import { useChatSkills, slugifySkill } from "../../../lib/useChatSkills";
 import { ActiveSkillChips } from "../../../components/ActiveSkillChips";
+import { ApprovalQueue } from "../../Chat/ApprovalQueue";
 import { contextChipLabel } from "./contextChip";
 import type { AgentMessage } from "./types";
 
@@ -57,6 +58,11 @@ export function AgentBody() {
   const onApplyConfig = useStore((s) => s.applyConfigAction);
   const fileAnswerToWiki = useStore((s) => s.fileAnswerToWiki);
   const flash = useStore((s) => s.flash);
+  const workApprovals = useStore((s) => s.workApprovals);
+  const workApprovalTimeout = useStore((s) => s.workApprovalTimeout);
+  const workApprovalNow = useStore((s) => s.workApprovalNow);
+  const respondWorkApproval = useStore((s) => s.respondWorkApproval);
+  const tickWorkApprovalTimeouts = useStore((s) => s.tickWorkApprovalTimeouts);
 
   const [val, setVal] = useState("");
   // Trust chips are dismissable per-message (the user can hide "used your …").
@@ -66,6 +72,7 @@ export function AgentBody() {
   const [filed, setFiled] = useState<Set<string>>(new Set());
   const bodyRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual is intentionally left outside React Compiler memoization.
   const messageVirtualizer = useVirtualizer({
     count: messages.length,
     getScrollElement: () => bodyRef.current,
@@ -150,6 +157,17 @@ export function AgentBody() {
     if (bodyRef.current)
       bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
   }, [messages, thinking]);
+
+  useEffect(() => {
+    if (workApprovalTimeout <= 0 || workApprovals.queue.length === 0) return;
+    const tick = (): void => tickWorkApprovalTimeouts(Date.now());
+    const handle = setInterval(tick, 1000);
+    return () => clearInterval(handle);
+  }, [
+    tickWorkApprovalTimeouts,
+    workApprovalTimeout,
+    workApprovals.queue.length,
+  ]);
 
   const clearComposer = (): void => {
     setVal("");
@@ -536,6 +554,12 @@ export function AgentBody() {
             </div>
           </div>
         )}
+        <ApprovalQueue
+          state={workApprovals}
+          onRespond={respondWorkApproval}
+          timeoutSeconds={workApprovalTimeout}
+          now={workApprovalNow}
+        />
         {messages.length <= 1 && !thinking && (
           <div className="chips" style={{ marginTop: 2 }}>
             <button

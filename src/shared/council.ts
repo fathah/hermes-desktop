@@ -130,8 +130,7 @@ function normalizeSeat(
       stringOrDefault(record.rolePrompt, fallback.rolePrompt).trim() ||
       fallback.rolePrompt,
     rubric:
-      stringOrDefault(record.rubric, fallback.rubric).trim() ||
-      fallback.rubric,
+      stringOrDefault(record.rubric, fallback.rubric).trim() || fallback.rubric,
     provider: stringOrDefault(record.provider, fallback.provider).trim(),
     model: stringOrDefault(record.model, fallback.model).trim(),
     baseUrl: stringOrDefault(record.baseUrl, fallback.baseUrl).trim(),
@@ -245,7 +244,9 @@ export function parseCouncilVerdict(text: string): {
   verdict?: CouncilVerdict;
   rationale?: string;
 } {
-  const match = text.match(/^\s*Verdict:\s*(endorse|challenge|reject|abstain)\b(.*)$/im);
+  const match = text.match(
+    /^\s*Verdict:\s*(endorse|challenge|reject|abstain)\b(.*)$/im,
+  );
   if (!match) return {};
   const verdict = match[1].toLowerCase() as CouncilVerdict;
   const rationale = match[2]?.trim();

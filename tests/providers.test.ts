@@ -11,6 +11,10 @@ describe("providerDoesNotNeedApiKey", () => {
     expect(providerDoesNotNeedApiKey("qwen-oauth")).toBe(true);
   });
 
+  it("treats Vertex AI as no-key because it uses ADC or service-account credentials", () => {
+    expect(providerDoesNotNeedApiKey("vertex")).toBe(true);
+  });
+
   it("keeps API-key providers gated", () => {
     expect(providerDoesNotNeedApiKey("openai")).toBe(false);
     expect(providerDoesNotNeedApiKey("anthropic")).toBe(false);

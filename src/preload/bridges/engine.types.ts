@@ -51,7 +51,11 @@ export interface EngineBridgeApi {
   ) => Promise<Api.HermesAgentUpdateRoutineState>;
 
   setHermesAgentUpdateRoutine: (
-    settings: Partial<{ enabled: boolean; autoApply: boolean }>,
+    settings: Partial<{
+      enabled: boolean;
+      autoApply: boolean;
+      engineUpdateChannel: "release" | "main";
+    }>,
     profile?: string,
   ) => Promise<Api.HermesAgentUpdateRoutineState>;
 

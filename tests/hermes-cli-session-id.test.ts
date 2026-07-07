@@ -10,6 +10,7 @@ const {
   apiRequests,
   apiRequestErrors,
   requestEvents,
+  engineSha,
 } = vi.hoisted(() => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const path = require("path");
@@ -36,6 +37,7 @@ const {
     }>,
     apiRequestErrors: [] as string[],
     requestEvents: [] as string[],
+    engineSha: "1111111111111111111111111111111111111111",
   };
 });
 
@@ -161,6 +163,7 @@ vi.mock("../src/main/installer", () => ({
   hermesCliArgs: (extra?: string[]) => ["/dev/null", ...(extra || [])],
   getEnhancedPath: () => process.env.PATH || "",
   getHermesVersion: () => Promise.resolve("1.0.0"),
+  getInstalledEngineSha: () => Promise.resolve(engineSha),
 }));
 
 vi.mock("../src/main/config", () => ({
@@ -169,6 +172,26 @@ vi.mock("../src/main/config", () => ({
   getApiServerKey: () => "",
   getConnectionConfig: () => ({ mode: "local" as const }),
   readDesktopConfig: () => ({}),
+}));
+
+vi.mock("../src/main/engine-update-state", () => ({
+  getEngineCapabilityState: () => ({
+    installedSha: engineSha,
+    lastVerifiedSha: engineSha,
+    lastVerification: null,
+    snapshot: {
+      status: "ready",
+      fetchedAt: "2026-07-07T00:00:00.000Z",
+      mode: "local",
+      engineSha,
+      features: {},
+      endpoints: {},
+    },
+  }),
+}));
+
+vi.mock("../src/main/engine-contract-verify", () => ({
+  verifyAndRecordEngineContract: vi.fn(),
 }));
 
 vi.mock("../src/main/ssh-tunnel", () => ({

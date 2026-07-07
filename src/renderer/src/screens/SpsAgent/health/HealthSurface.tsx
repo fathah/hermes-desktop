@@ -10,7 +10,12 @@ import { Icon } from "../components/Icon";
 import { useStore } from "../store";
 import { pageIdFromPath } from "../lib/pageId";
 import { commitChangeset } from "../inbox/ingestApply";
-import { getLintIntervalMin, setLintIntervalMin } from "../inbox/ingestPrefs";
+import {
+  getLintIntervalMin,
+  refreshSpsAutomationPrefs,
+  setLintIntervalMin,
+} from "../inbox/ingestPrefs";
+import { RoutinesStatusPanel } from "./RoutinesStatusPanel";
 import type {
   VaultHealthReport,
   VaultLinkEdge,
@@ -48,6 +53,7 @@ export function HealthSurface({
   const setSurface = useStore((s) => s.setSurface);
   const ingestCommitPage = useStore((s) => s.ingestCommitPage);
   const flash = useStore((s) => s.flash);
+  const pendingApprovals = useStore((s) => s.workApprovals.queue.length);
   const [report, setReport] = useState<VaultHealthReport | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -85,6 +91,16 @@ export function HealthSurface({
   useEffect(() => {
     run();
   }, [run]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void refreshSpsAutomationPrefs(profile).then((prefs) => {
+      if (!cancelled) setLintEvery(prefs.lintIntervalMin);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [profile]);
 
   const runDeep = useCallback(async () => {
     setDeepBusy(true);
@@ -208,14 +224,14 @@ export function HealthSurface({
           <label
             className="health-sec-hint"
             style={{ display: "flex", alignItems: "center", gap: 4 }}
-            title="Run deep lint automatically while the app is open; it only notifies, never auto-edits."
+            title="Run deep lint automatically; it queues reviewable fixes and never auto-edits."
           >
             Auto
             <select
               value={lintEvery}
               onChange={(e) => {
                 const m = Number(e.target.value);
-                setLintIntervalMin(m);
+                setLintIntervalMin(m, profile);
                 setLintEvery(m);
               }}
             >
@@ -275,6 +291,11 @@ export function HealthSurface({
       )}
 
       {error && <div className="health-error">{error}</div>}
+
+      <RoutinesStatusPanel
+        profile={profile}
+        pendingApprovals={pendingApprovals}
+      />
 
       {report && total === 0 && !error && (
         <div className="health-empty">

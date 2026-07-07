@@ -9,6 +9,9 @@ describe("resolveProviderEnvKey (MED-2 allowlist)", () => {
     expect(resolveProviderEnvKey("openai")).toBe("OPENAI_API_KEY");
     expect(resolveProviderEnvKey("anthropic")).toBe("ANTHROPIC_API_KEY");
     expect(resolveProviderEnvKey("google")).toBe("GEMINI_API_KEY");
+    expect(resolveProviderEnvKey("vertex")).toBe(
+      "GOOGLE_APPLICATION_CREDENTIALS",
+    );
   });
 
   it("is case- and whitespace-insensitive", () => {

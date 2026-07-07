@@ -27,6 +27,10 @@ import {
   setPlatformEnabled,
   getAutoApprove,
   setAutoApprove,
+  getSpsAutomationPrefs,
+  setSpsAutomationPrefs,
+  getOwnerNotificationPrefs,
+  setOwnerNotificationPrefs,
   getCompletionSound,
   setCompletionSound,
   getOnboardingCompleted,
@@ -116,6 +120,8 @@ import {
   setAppZoomFactor,
 } from "../app-zoom";
 import type { CouncilConfig } from "../../shared/council";
+import type { SpsAutomationPrefsPatch } from "../../shared/sps-automation";
+import type { OwnerNotificationPrefsPatch } from "../../shared/owner-notifications";
 
 function openExternalUrl(rawUrl: unknown): void {
   if (!isAllowedExternalUrl(rawUrl) && !isAllowedObsidianExternalUrl(rawUrl)) {
@@ -643,6 +649,22 @@ export function registerConfigIpc(): void {
   );
   safeHandle("set-auto-approve", (_event, enabled: boolean, profile?: string) =>
     setAutoApprove(enabled, profile),
+  );
+  safeHandle("get-sps-automation-prefs", (_event, profile?: string) =>
+    getSpsAutomationPrefs(profile),
+  );
+  safeHandle(
+    "set-sps-automation-prefs",
+    (_event, patch: SpsAutomationPrefsPatch, profile?: string) =>
+      setSpsAutomationPrefs(patch, profile),
+  );
+  safeHandle("get-owner-notification-prefs", (_event, profile?: string) =>
+    getOwnerNotificationPrefs(profile),
+  );
+  safeHandle(
+    "set-owner-notification-prefs",
+    (_event, patch: OwnerNotificationPrefsPatch, profile?: string) =>
+      setOwnerNotificationPrefs(patch, profile),
   );
   safeHandle("get-completion-sound", () => getCompletionSound());
   safeHandle("set-completion-sound", (_event, enabled: boolean) =>

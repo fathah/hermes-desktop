@@ -69,7 +69,10 @@ describe("operator readiness summary", () => {
     ]);
     expect(report.items[0]).toMatchObject({
       id: "ai",
-      action: { label: "Open AI Setup", target: { kind: "settings", view: "aiSetup" } },
+      action: {
+        label: "Open AI Setup",
+        target: { kind: "settings", view: "aiSetup" },
+      },
     });
     expect(report.items.find((item) => item.id === "gateway")).toMatchObject({
       action: {
@@ -106,13 +109,22 @@ describe("operator readiness summary", () => {
     });
     expect(report.items.find((item) => item.id === "review")).toMatchObject({
       summary: "3 pending vault proposals need review.",
-      action: { label: "Open Review Queue", target: { kind: "surface", surface: "review" } },
+      action: {
+        label: "Open Review Queue",
+        target: { kind: "surface", surface: "review" },
+      },
     });
     expect(report.items.find((item) => item.id === "scheduler")).toMatchObject({
-      action: { label: "Open Scheduled", target: { kind: "modal", modal: "scheduled" } },
+      action: {
+        label: "Open Scheduled",
+        target: { kind: "modal", modal: "scheduled" },
+      },
     });
     expect(report.items.find((item) => item.id === "vault")).toMatchObject({
-      action: { label: "Open Vault Health", target: { kind: "surface", surface: "health" } },
+      action: {
+        label: "Open Vault Health",
+        target: { kind: "surface", surface: "health" },
+      },
     });
   });
 });

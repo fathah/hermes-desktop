@@ -9,6 +9,7 @@ export const PROVIDERS_WITHOUT_API_KEYS = new Set([
   "qwen-oauth",
   "google-gemini-cli",
   "minimax-oauth",
+  "vertex",
 ]);
 
 export function providerDoesNotNeedApiKey(provider: string): boolean {

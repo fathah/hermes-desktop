@@ -75,7 +75,9 @@ function localGatewayPort() {
     if (url.port) return Number(url.port);
     return url.protocol === "https:" ? 443 : 80;
   } catch {
-    console.log("LIVE_GATEWAY_INVALID_URL: SPS_GATEWAY_URL must be a valid URL");
+    console.log(
+      "LIVE_GATEWAY_INVALID_URL: SPS_GATEWAY_URL must be a valid URL",
+    );
     process.exit(1);
   }
 }
@@ -440,7 +442,10 @@ try {
   await win.locator(".modal").waitFor({ timeout: 8000 });
   await expectText("Scheduled");
   await expectText("Smoke skipped job");
-  await win.getByText(/skipped 2/i).first().waitFor({ timeout: 8000 });
+  await win
+    .getByText(/skipped 2/i)
+    .first()
+    .waitFor({ timeout: 8000 });
   check(true, "scheduled skip visibility is rendered");
   await shot("04-work-scheduled-skips");
   await win.keyboard.press("Escape").catch(() => {});

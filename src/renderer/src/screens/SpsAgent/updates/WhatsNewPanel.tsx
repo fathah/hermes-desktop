@@ -36,7 +36,10 @@ export function WhatsNewPanel({
           <Icon name="sparkle" size={14} />
           {title}
         </span>
-        <div className="home-affordance-actions" aria-label="What's new actions">
+        <div
+          className="home-affordance-actions"
+          aria-label="What's new actions"
+        >
           {items.map((item: WhatsNewAffordance) => (
             <button
               key={item.id}
@@ -81,7 +84,9 @@ export function WhatsNewPanel({
           <article key={item.id} className="ob-step-card">
             <div className="ob-step-body">
               {isEngineUpdateAffordance(item) && (
-                <div className="ob-step-desc">Available Hermes Agent update</div>
+                <div className="ob-step-desc">
+                  Available Hermes Agent update
+                </div>
               )}
               <div className="ob-step-title">{item.title}</div>
               <div className="ob-step-desc">{item.body}</div>

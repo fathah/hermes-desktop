@@ -8,6 +8,8 @@ import type { ConfigFixLogEntry } from "../api-types";
 import type { ConfigHealthReport } from "../../shared/config-health";
 import type { PublicConnectionConfig } from "../../shared/connection";
 import type { CouncilConfig } from "../../shared/council";
+import type { SpsAutomationPrefsPatch } from "../../shared/sps-automation";
+import type { OwnerNotificationPrefsPatch } from "../../shared/owner-notifications";
 import type { ConfigBridgeApi } from "./config.types";
 
 export const configBridge = {
@@ -47,6 +49,8 @@ export const configBridge = {
     ipcRenderer.invoke("get-config-health", profile),
   getOperatorReadiness: (profile?: string) =>
     ipcRenderer.invoke("get-operator-readiness", profile),
+  getRoutinesStatus: (profile?: string) =>
+    ipcRenderer.invoke("get-routines-status", profile),
   rerunConfigHealth: (profile?: string): Promise<ConfigHealthReport> =>
     ipcRenderer.invoke("rerun-config-health", profile),
   autofixConfigIssue: (
@@ -146,6 +150,16 @@ export const configBridge = {
     ipcRenderer.invoke("get-auto-approve", profile),
   setAutoApprove: (enabled: boolean, profile?: string): Promise<void> =>
     ipcRenderer.invoke("set-auto-approve", enabled, profile),
+  getSpsAutomationPrefs: (profile?: string) =>
+    ipcRenderer.invoke("get-sps-automation-prefs", profile),
+  setSpsAutomationPrefs: (patch: SpsAutomationPrefsPatch, profile?: string) =>
+    ipcRenderer.invoke("set-sps-automation-prefs", patch, profile),
+  getOwnerNotificationPrefs: (profile?: string) =>
+    ipcRenderer.invoke("get-owner-notification-prefs", profile),
+  setOwnerNotificationPrefs: (
+    patch: OwnerNotificationPrefsPatch,
+    profile?: string,
+  ) => ipcRenderer.invoke("set-owner-notification-prefs", patch, profile),
   /** Completion-chime toggle (M2C). */
   getCompletionSound: (): Promise<boolean> =>
     ipcRenderer.invoke("get-completion-sound"),

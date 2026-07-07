@@ -173,7 +173,16 @@ export function TaskDrawer({ task, onClose }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [task.id, isFolderBacked, dbFolder, rowId]);
+  }, [
+    task.id,
+    task.prio,
+    task.status,
+    task.title,
+    task.who,
+    isFolderBacked,
+    dbFolder,
+    rowId,
+  ]);
 
   // General persistence dispatcher
   const saveChanges = async (
@@ -397,7 +406,19 @@ export function TaskDrawer({ task, onClose }: Props) {
                           }}
                           title={`Message ${assignee?.name ?? ""} via ${CHANNEL_LABEL[channel.kind]}`}
                           onClick={() =>
-                            void window.hermesAPI.spsOpenContactChannel(channel)
+                            void window.hermesAPI.spsOpenContactChannel(
+                              channel,
+                              assignee
+                                ? {
+                                    personId: assignee.id,
+                                    personName: assignee.name,
+                                    followUpAt: due.trim() || undefined,
+                                    note: title.trim()
+                                      ? `Task: ${title.trim()}`
+                                      : undefined,
+                                  }
+                                : undefined,
+                            )
                           }
                         >
                           {CHANNEL_LABEL[channel.kind]}

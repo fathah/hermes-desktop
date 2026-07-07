@@ -1,13 +1,7 @@
 // sps-storage.test.ts — the pure vault-location decision logic (no fs/profile
 // coupling). The I/O wrappers are exercised by the app + the note-index proof.
 import { describe, expect, it } from "vitest";
-import {
-  mkdirSync,
-  mkdtempSync,
-  realpathSync,
-  rmSync,
-  symlinkSync,
-} from "fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { chooseVaultDir, isValidVaultDirInput } from "./sps-storage";

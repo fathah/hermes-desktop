@@ -7,6 +7,7 @@ const mockListInstalledSkills = vi.fn(() => []);
 const mockGetActiveProfileNameSync = vi.fn(() => "test-profile");
 const mockProfileHome = vi.fn(() => "/tmp/hermes-test-profile");
 const mockSend = vi.fn();
+const filesInMemory = new Map<string, string>();
 
 vi.mock("../src/main/config", () => ({
   readDesktopConfig: () => mockReadDesktopConfig(),
@@ -34,10 +35,12 @@ vi.mock("../src/main/utils", () => ({
   getActiveProfileNameSync: () => mockGetActiveProfileNameSync(),
   profileHome: (p: string) => mockProfileHome(p),
   profilePaths: () => ({}),
+  safeWriteFile: (p: string, content: string) => {
+    filesInMemory.set(p, content);
+  },
 }));
 
 // Mock filesystem read/write
-const filesInMemory = new Map<string, string>();
 vi.mock("fs", () => {
   const fns = {
     existsSync: (p: string) => {
@@ -164,6 +167,53 @@ describe("Self-Healing Loop", () => {
         filePatched: "test_script.py",
       }),
     );
+  });
+
+  it("records self-healing audit history through safe writes", async () => {
+    const ledgerFile = "/tmp/hermes-test-profile/logs/config-fixes.log";
+    filesInMemory.set(
+      ledgerFile,
+      `${JSON.stringify({
+        issueCode: "SELF_HEALING_REMEDIATION",
+        jobId: "job-1",
+        patchedContent: "print('old')",
+      })}\n`,
+    );
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                explanation: "Fixing a bug in script",
+                fileToPatch: "test_script.py",
+                patchedContent: "print('new')",
+              }),
+            },
+          },
+        ],
+      }),
+    });
+
+    const res = await triggerSelfHealing(
+      "job-1",
+      "Test Job",
+      "/tmp/hermes-test-profile/logs/routines/routine-job-1.log",
+      "test-profile",
+    );
+
+    expect(res.success).toBe(true);
+    const lines = filesInMemory.get(ledgerFile)?.trim().split("\n") ?? [];
+    expect(lines).toHaveLength(2);
+    expect(JSON.parse(lines[0])).toMatchObject({
+      patchedContent: "print('old')",
+    });
+    expect(JSON.parse(lines[1])).toMatchObject({
+      issueCode: "SELF_HEALING_REMEDIATION",
+      action: "autofix",
+      patchedContent: "print('new')",
+    });
   });
 
   it("should reject patch if target file escapes profile directory (traversal guard)", async () => {

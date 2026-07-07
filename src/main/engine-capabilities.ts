@@ -1,8 +1,8 @@
+import { getConnectionConfig } from "./config";
 import {
-  getConnectionConfig,
   getEngineCapabilityState as getStoredEngineCapabilityState,
   recordEngineCapabilitySnapshot,
-} from "./config";
+} from "./engine-update-state";
 import { getInstalledEngineSha } from "./installer";
 import { fetchJsonProbe } from "./hermes/chat-client/api";
 import { getApiUrl, getRemoteAuthHeader } from "./hermes/gateway-process";
@@ -34,9 +34,7 @@ function unknownSnapshot(
   };
 }
 
-export function getEngineCapabilities(
-  profile?: string,
-): EngineCapabilityState {
+export function getEngineCapabilities(profile?: string): EngineCapabilityState {
   return getStoredEngineCapabilityState(profile);
 }
 

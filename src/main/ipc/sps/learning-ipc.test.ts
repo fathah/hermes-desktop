@@ -187,9 +187,7 @@ describe("SPS learning IPC path validation", () => {
       "work",
     );
 
-    expect(assertGrantedDirectoryPathMock).toHaveBeenCalledWith(
-      "/tmp/exports",
-    );
+    expect(assertGrantedDirectoryPathMock).toHaveBeenCalledWith("/tmp/exports");
     expect(exportLocalExpertPackMock).toHaveBeenCalledWith(
       "macos",
       "/granted/exports/macos.json",

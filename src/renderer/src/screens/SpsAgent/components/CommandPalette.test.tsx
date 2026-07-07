@@ -149,7 +149,9 @@ describe("CommandPalette", () => {
       ),
     );
     const markdown = String(api.spsExportRow.mock.calls.at(-1)?.[2] ?? "");
-    expect(markdown).toContain("Selected proof that should become a draft angle.");
+    expect(markdown).toContain(
+      "Selected proof that should become a draft angle.",
+    );
     expect(markdown).toContain('capturedFrom: "workspace-selection"');
     expect(store.openContentStudioIdea).toHaveBeenCalledWith(
       expect.objectContaining({

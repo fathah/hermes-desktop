@@ -23,6 +23,7 @@ import { setupAskpass } from "./askpass";
 import { precacheSudoCredentials } from "./sudoCreds";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 import { isLocalBaseUrl } from "../shared/url-key-map";
+import { publicFetch } from "./security/network-policy";
 
 // Re-exports of paths and env
 export {
@@ -125,6 +126,7 @@ const PROVIDER_ENV_KEYS: Record<string, string> = {
   nvidia: "NVIDIA_API_KEY",
   nous: "NOUS_API_KEY",
   "nous-api": "NOUS_API_KEY",
+  vertex: "GOOGLE_APPLICATION_CREDENTIALS",
 };
 
 const URL_TO_ENV_KEY: Array<[RegExp, string]> = [
@@ -141,6 +143,7 @@ const URL_TO_ENV_KEY: Array<[RegExp, string]> = [
   [/api\.cerebras\.ai/i, "CEREBRAS_API_KEY"],
   [/api\.mistral\.ai/i, "MISTRAL_API_KEY"],
   [/api\.perplexity\.ai/i, "PERPLEXITY_API_KEY"],
+  [/aiplatform\.googleapis\.com/i, "GOOGLE_APPLICATION_CREDENTIALS"],
 ];
 
 export function expectedEnvKeyForModel(
@@ -571,6 +574,125 @@ export interface InstallScriptOptions {
   commit?: string;
 }
 
+export type InstallScriptName = "install.sh" | "install.ps1";
+
+export interface ResolvedInstallScript {
+  path: string;
+  source: "live" | "bundled";
+  reason?: string;
+  cleanup?: () => void;
+}
+
+interface ResolveInstallScriptOptions {
+  bundledPath?: string;
+  fetchImpl?: typeof publicFetch;
+  tempDir?: string;
+  timeoutMs?: number;
+  emit?: (message: string) => void;
+}
+
+const INSTALL_SCRIPT_MAX_BYTES = 512 * 1024;
+const INSTALL_SCRIPT_MIN_BYTES = 128;
+const INSTALL_SCRIPT_URLS: Record<InstallScriptName, string> = {
+  "install.sh": "https://hermes-agent.nousresearch.com/install.sh",
+  "install.ps1": "https://hermes-agent.nousresearch.com/install.ps1",
+};
+
+export function validateInstallScriptContent(
+  scriptName: InstallScriptName,
+  content: string,
+): string | null {
+  const byteLength = Buffer.byteLength(content, "utf8");
+  if (byteLength === 0) return "empty-response";
+  if (byteLength < INSTALL_SCRIPT_MIN_BYTES) return "script-too-small";
+  if (byteLength > INSTALL_SCRIPT_MAX_BYTES) return "script-too-large";
+
+  if (scriptName === "install.sh") {
+    const firstLine = content.split(/\r?\n/, 1)[0]?.trim() || "";
+    if (!firstLine.startsWith("#!") || !/sh\b|bash\b/.test(firstLine)) {
+      return "missing-shell-shebang";
+    }
+    return null;
+  }
+
+  if (!/^\s*#/m.test(content) || !/\bparam\s*\(/i.test(content)) {
+    return "missing-powershell-header";
+  }
+  if (!/\$ErrorActionPreference\s*=/.test(content)) {
+    return "missing-powershell-error-action";
+  }
+  return null;
+}
+
+function stagedInstallScriptPath(
+  scriptName: InstallScriptName,
+  dir: string,
+): string {
+  const suffix = scriptName === "install.ps1" ? "ps1" : "sh";
+  return join(
+    dir,
+    `hermes-live-${scriptName.replace(".", "-")}-${randomBytes(6).toString("hex")}.${suffix}`,
+  );
+}
+
+export async function resolveInstallScriptPath(
+  scriptName: InstallScriptName,
+  options: ResolveInstallScriptOptions = {},
+): Promise<ResolvedInstallScript> {
+  const bundledPath = options.bundledPath || getBundledScriptPath(scriptName);
+  const fetchImpl = options.fetchImpl || publicFetch;
+  const tempDir = options.tempDir || tmpdir();
+  const url = INSTALL_SCRIPT_URLS[scriptName];
+
+  const fallback = (reason: string): ResolvedInstallScript => {
+    options.emit?.(
+      `Using bundled ${scriptName}; live install script refresh unavailable (${reason}).\n`,
+    );
+    return { path: bundledPath, source: "bundled", reason };
+  };
+
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(),
+    options.timeoutMs ?? 10000,
+  );
+  try {
+    const response = await fetchImpl(url, {
+      signal: controller.signal,
+      headers: {
+        Accept: "text/plain",
+        "User-Agent": "hermes-desktop-installer",
+      },
+    });
+    if (!response.ok) {
+      return fallback(`http-${response.status}`);
+    }
+
+    const content = await response.text();
+    const invalidReason = validateInstallScriptContent(scriptName, content);
+    if (invalidReason) return fallback(invalidReason);
+
+    const path = stagedInstallScriptPath(scriptName, tempDir);
+    writeFileSync(path, content, { encoding: "utf8", mode: 0o700 });
+    options.emit?.(`Using latest upstream ${scriptName}.\n`);
+    return {
+      path,
+      source: "live",
+      cleanup: () => {
+        try {
+          unlinkSync(path);
+        } catch {
+          /* best-effort */
+        }
+      },
+    };
+  } catch (err) {
+    return fallback(err instanceof Error ? err.message : String(err));
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export function buildUnixInstallArgs(
   scriptPath: string,
   options: InstallScriptOptions = {},
@@ -704,24 +826,29 @@ export async function runInstall(
   }
 
   try {
+    const installScript = await resolveInstallScriptPath("install.sh", {
+      emit,
+    });
     return await new Promise<void>((resolve, reject) => {
       const home = homedir();
 
-      const scriptPath = getBundledScriptPath("install.sh");
-
       const basePath = getEnhancedPath();
-      const proc = spawn("bash", buildUnixInstallArgs(scriptPath, options), {
-        cwd: home,
-        env: {
-          ...process.env,
-          PATH: askpass ? `${askpass.pathPrepend}:${basePath}` : basePath,
-          HOME: home,
-          TERM: "dumb",
-          ...(askpass?.env ?? {}),
+      const proc = spawn(
+        "bash",
+        buildUnixInstallArgs(installScript.path, options),
+        {
+          cwd: home,
+          env: {
+            ...process.env,
+            PATH: askpass ? `${askpass.pathPrepend}:${basePath}` : basePath,
+            HOME: home,
+            TERM: "dumb",
+            ...(askpass?.env ?? {}),
+          },
+          stdio: ["ignore", "pipe", "pipe"],
+          ...HIDDEN_SUBPROCESS_OPTIONS,
         },
-        stdio: ["ignore", "pipe", "pipe"],
-        ...HIDDEN_SUBPROCESS_OPTIONS,
-      });
+      );
 
       proc.stdout?.on("data", (data: Buffer) => {
         emit(stripAnsi(data.toString()));
@@ -754,6 +881,8 @@ export async function runInstall(
       proc.on("error", (err) => {
         reject(new Error(`Failed to start installer: ${err.message}`));
       });
+    }).finally(() => {
+      installScript.cleanup?.();
     });
   } finally {
     askpass?.cleanup();
@@ -800,16 +929,16 @@ async function runInstallWindows(
   const home = homedir();
   const hermesHome = HERMES_HOME;
   const installDir = HERMES_REPO;
+  const installScript = await resolveInstallScriptPath("install.ps1", { emit });
 
   const wrapperPath = join(
     tmpdir(),
     `hermes-install-${randomBytes(6).toString("hex")}.ps1`,
   );
 
-  const scriptPath = getBundledScriptPath("install.ps1");
   const wrapperScript = [
     "$ErrorActionPreference = 'Stop'",
-    `$localScript = ${psQuote(scriptPath)}`,
+    `$localScript = ${psQuote(installScript.path)}`,
     `$installer = Join-Path $env:TEMP ("hermes-install-script-" + [guid]::NewGuid().ToString() + ".ps1")`,
     "$text = [System.IO.File]::ReadAllText($localScript)",
     "[System.IO.File]::WriteAllText($installer, $text, (New-Object System.Text.UTF8Encoding $true))",
@@ -823,6 +952,7 @@ async function runInstallWindows(
   try {
     writeFileSync(wrapperPath, wrapperScript, { encoding: "utf8" });
   } catch (err) {
+    installScript.cleanup?.();
     throw new Error(
       `Failed to stage Windows installer: ${(err as Error).message}`,
     );
@@ -855,6 +985,15 @@ async function runInstallWindows(
       },
     );
 
+    const cleanup = (): void => {
+      try {
+        unlinkSync(wrapperPath);
+      } catch {
+        /* best-effort */
+      }
+      installScript.cleanup?.();
+    };
+
     proc.stdout?.on("data", (data: Buffer) => {
       emit(stripAnsi(data.toString()));
     });
@@ -864,11 +1003,7 @@ async function runInstallWindows(
     });
 
     proc.on("close", (code) => {
-      try {
-        unlinkSync(wrapperPath);
-      } catch {
-        /* best-effort */
-      }
+      cleanup();
       if (code === 0) {
         emit("\nInstallation complete!\n");
         resolve();
@@ -889,11 +1024,7 @@ async function runInstallWindows(
     });
 
     proc.on("error", (err) => {
-      try {
-        unlinkSync(wrapperPath);
-      } catch {
-        /* best-effort */
-      }
+      cleanup();
       const hint =
         (err as NodeJS.ErrnoException).code === "ENOENT"
           ? " PowerShell was not found. Reinstall Windows PowerShell or run the installer manually from a terminal."

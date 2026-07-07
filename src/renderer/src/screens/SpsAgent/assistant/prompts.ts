@@ -40,7 +40,7 @@ export function aiActionLabel(kind: AiActionKind, selection: string): string {
 export function buildAiActionPrompt(
   kind: AiActionKind,
   selection: string,
-  ): string {
+): string {
   const target = selection.trim();
   switch (kind) {
     case "tldr":

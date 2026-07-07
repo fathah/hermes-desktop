@@ -22,6 +22,7 @@ async function loadUpdateCheck(
     gatewayRunning?: boolean;
     restartResult?: boolean;
     restartError?: Error;
+    channel?: "release" | "main";
   } = {},
 ): Promise<typeof import("../src/main/hermes-agent-updates")> {
   vi.resetModules();
@@ -56,6 +57,7 @@ async function loadUpdateCheck(
     runHermesUpdate: options.runUpdateError
       ? vi.fn().mockRejectedValue(options.runUpdateError)
       : vi.fn().mockResolvedValue(undefined),
+    rollbackEngineTo: vi.fn().mockResolvedValue(undefined),
   }));
   vi.doMock("../src/main/hermes", () => ({
     isGatewayRunning: vi.fn(() => options.gatewayRunning ?? false),
@@ -74,6 +76,12 @@ async function loadUpdateCheck(
       findings: [],
     }),
   }));
+
+  const config = await import("../src/main/config");
+  config.setHermesAgentUpdateRoutine(
+    { engineUpdateChannel: options.channel ?? "main" },
+    "work",
+  );
 
   return await import("../src/main/hermes-agent-updates");
 }
@@ -142,6 +150,107 @@ describe("Hermes Agent update check safety status", () => {
     expect(result.phase).toBe("update");
     expect(result.reason).toBe("dirty-repo");
     expect(result.restartStatus).toBe("not-needed");
+  });
+
+  it("reports current when the release-channel SHA is already installed", async () => {
+    const releaseSha = "2222222222222222222222222222222222222222";
+    const { runHermesAgentUpdateCheck } = await loadUpdateCheck(
+      {
+        available: true,
+        localHead: "1111111111111111111111111111111111111111",
+        upstreamHead: "main-head",
+      },
+      { channel: "release" },
+    );
+    const installer = await import("../src/main/installer");
+    const resolveLatestRelease = vi.fn().mockResolvedValue({
+      tag: "v2026.7.7",
+      sha: releaseSha,
+      url: "https://github.com/NousResearch/hermes-agent/releases/tag/v2026.7.7",
+    });
+
+    const result = await runHermesAgentUpdateCheck("work", {
+      now: new Date("2026-06-20T22:35:00.000Z"),
+      getInstalledSha: vi.fn().mockResolvedValue(releaseSha),
+      resolveLatestRelease,
+    });
+
+    expect(result.status).toBe("current");
+    expect(result.reason).toBe("already-current");
+    expect(result.updateChannel).toBe("release");
+    expect(result.releaseTag).toBe("v2026.7.7");
+    expect(result.releaseSha).toBe(releaseSha);
+    expect(result.upstreamHead).toBe(releaseSha);
+    expect(installer.checkHermesUpdate).not.toHaveBeenCalled();
+    expect(installer.runHermesUpdate).not.toHaveBeenCalled();
+  });
+
+  it("applies release-channel updates by checking out the latest release SHA", async () => {
+    const oldSha = "1111111111111111111111111111111111111111";
+    const releaseSha = "2222222222222222222222222222222222222222";
+    const { runHermesAgentUpdateCheck } = await loadUpdateCheck(
+      {
+        available: true,
+        localHead: oldSha,
+        upstreamHead: "main-head",
+      },
+      { channel: "release" },
+    );
+    const installer = await import("../src/main/installer");
+    const resolveLatestRelease = vi.fn().mockResolvedValue({
+      tag: "v2026.7.7",
+      sha: releaseSha,
+      url: "https://github.com/NousResearch/hermes-agent/releases/tag/v2026.7.7",
+    });
+
+    const result = await runHermesAgentUpdateCheck("work", {
+      now: new Date("2026-06-20T22:35:00.000Z"),
+      autoApply: true,
+      getInstalledSha: vi.fn().mockResolvedValue(oldSha),
+      resolveLatestRelease,
+    });
+
+    expect(result.status).toBe("updated");
+    expect(result.reason).toBe("updated");
+    expect(result.updateChannel).toBe("release");
+    expect(result.releaseTag).toBe("v2026.7.7");
+    expect(result.releaseSha).toBe(releaseSha);
+    expect(result.localHead).toBe(oldSha);
+    expect(result.upstreamHead).toBe(releaseSha);
+    expect(installer.rollbackEngineTo).toHaveBeenCalledWith(
+      releaseSha,
+      expect.any(Function),
+    );
+    expect(installer.runHermesUpdate).not.toHaveBeenCalled();
+  });
+
+  it("keeps the hermes update command on the main channel", async () => {
+    const oldSha = "1111111111111111111111111111111111111111";
+    const newSha = "2222222222222222222222222222222222222222";
+    const { runHermesAgentUpdateCheck } = await loadUpdateCheck(
+      {
+        available: true,
+        localHead: oldSha,
+        upstreamHead: newSha,
+        behindBy: 1,
+      },
+      { channel: "main" },
+    );
+    const installer = await import("../src/main/installer");
+
+    const result = await runHermesAgentUpdateCheck("work", {
+      now: new Date("2026-06-20T22:35:00.000Z"),
+      autoApply: true,
+      getInstalledSha: vi.fn().mockResolvedValue(oldSha),
+    });
+
+    expect(result.status).toBe("updated");
+    expect(result.updateChannel).toBe("main");
+    expect(result.upstreamHead).toBe(newSha);
+    expect(installer.runHermesUpdate).toHaveBeenCalledWith(
+      expect.any(Function),
+    );
+    expect(installer.rollbackEngineTo).not.toHaveBeenCalled();
   });
 
   it("records update failures without hiding the check result", async () => {

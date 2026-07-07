@@ -1,14 +1,7 @@
-import {
-  existsSync,
-  readFileSync,
-  writeFileSync,
-  mkdirSync,
-  readdirSync,
-  statSync,
-} from "fs";
+import { existsSync, readFileSync, mkdirSync, readdirSync, statSync } from "fs";
 import { join, resolve, basename } from "path";
 import type { BrowserWindow } from "electron";
-import { profileHome } from "./utils";
+import { profileHome, safeWriteFile } from "./utils";
 import { listInstalledSkills } from "./skills";
 import { readDesktopConfig, readEnv } from "./config";
 import { getApiUrl, getRemoteAuthHeader } from "./hermes";
@@ -244,7 +237,7 @@ export async function triggerSelfHealing(
     // written, refuse to patch — a still-broken job beats an unrecoverable one.
     const backupPath = `${targetFilePath}.selfheal-bak-${Date.now()}`;
     try {
-      writeFileSync(backupPath, originalContent, "utf-8");
+      safeWriteFile(backupPath, originalContent);
     } catch (err) {
       return {
         success: false,
@@ -254,7 +247,7 @@ export async function triggerSelfHealing(
       };
     }
 
-    writeFileSync(targetFilePath, parsed.patchedContent, "utf-8");
+    safeWriteFile(targetFilePath, parsed.patchedContent);
 
     // Generate plain-text diff preview
     const diffText = generateSimpleDiff(originalContent, parsed.patchedContent);
@@ -591,8 +584,9 @@ function logTriageFix(profile: string, entry: unknown): void {
     const logDir = join(profileHome(profile), "logs");
     if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
     const logFile = join(logDir, "config-fixes.log");
+    const existing = existsSync(logFile) ? readFileSync(logFile, "utf-8") : "";
     const line = JSON.stringify(entry) + "\n";
-    writeFileSync(logFile, line, { flag: "a", encoding: "utf-8" });
+    safeWriteFile(logFile, `${existing}${line}`);
   } catch {
     /* ignore */
   }

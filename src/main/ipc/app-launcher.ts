@@ -28,8 +28,10 @@ export function registerAppLauncherIpc(): void {
     (_event, input: { label: string; url: string }, profile?: string) =>
       addUrlLaunchTarget(input, profile),
   );
-  safeHandle("app-launch-remove-target", (_event, id: string, profile?: string) =>
-    removeAppLaunchTarget(id, profile),
+  safeHandle(
+    "app-launch-remove-target",
+    (_event, id: string, profile?: string) =>
+      removeAppLaunchTarget(id, profile),
   );
   safeHandle("app-launch-run-target", (_event, id: string, profile?: string) =>
     runAppLaunchTarget(id, profile),
@@ -44,12 +46,8 @@ export function registerAppLauncherIpc(): void {
   );
   safeHandle(
     "app-launch-update-schedule",
-    (
-      _event,
-      id: string,
-      patch: AppLaunchSchedulePatch,
-      profile?: string,
-    ) => updateAppLaunchSchedule(id, patch, profile),
+    (_event, id: string, patch: AppLaunchSchedulePatch, profile?: string) =>
+      updateAppLaunchSchedule(id, patch, profile),
   );
   safeHandle(
     "app-launch-delete-schedule",

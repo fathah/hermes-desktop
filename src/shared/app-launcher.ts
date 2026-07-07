@@ -133,7 +133,8 @@ export function validateLaunchScheduleInput(
   for (const targetId of input.targetIds) {
     const target = byId.get(targetId);
     if (!target) return "Launch schedule references an unknown target.";
-    if (!target.enabled) return "Launch schedules can only use enabled targets.";
+    if (!target.enabled)
+      return "Launch schedules can only use enabled targets.";
   }
   return null;
 }
@@ -159,7 +160,11 @@ function periodKey(cadence: AppLaunchCadence, d: Date): string {
   return ymd(d);
 }
 
-function isRunWindow(cadence: AppLaunchCadence, hour: number, now: Date): boolean {
+function isRunWindow(
+  cadence: AppLaunchCadence,
+  hour: number,
+  now: Date,
+): boolean {
   if (now.getHours() !== hour) return false;
   if (cadence === "weekly") return now.getDay() === 1;
   if (cadence === "monthly") return now.getDate() === 1;

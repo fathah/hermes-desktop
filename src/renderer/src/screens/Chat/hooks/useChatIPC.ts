@@ -279,7 +279,10 @@ export function useChatIPC({
                       ...m,
                       responses: {
                         ...m.responses,
-                        [modelKey]: { ...resp, toolProgress: tool ?? undefined },
+                        [modelKey]: {
+                          ...resp,
+                          toolProgress: tool ?? undefined,
+                        },
                       },
                     };
                   }

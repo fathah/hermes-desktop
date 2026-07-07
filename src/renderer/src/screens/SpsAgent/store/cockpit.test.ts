@@ -11,6 +11,17 @@ afterEach(() => {
 });
 
 describe("cockpit persistence", () => {
+  it("seeds operator widgets first for a new cockpit", () => {
+    expect(loadCockpit().slice(0, 6)).toEqual([
+      { kind: "operatorTasks", span: 2 },
+      { kind: "operatorInbox", span: 1 },
+      { kind: "operatorBrief", span: 1 },
+      { kind: "operatorApprovals", span: 1 },
+      { kind: "operatorUpdates", span: 2 },
+      { kind: "equityAlerts", span: 1 },
+    ]);
+  });
+
   it("round-trips and falls back to defaults on garbage", () => {
     const layout: CockpitWidget[] = [
       { kind: "ask", span: 2 },

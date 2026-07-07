@@ -30,13 +30,6 @@ import { CockpitSurface } from "./cockpit/CockpitSurface";
 import { InboxSurface } from "./inbox/InboxSurface";
 import { HealthSurface } from "./health/HealthSurface";
 import { ReviewQueueSurface } from "./review/ReviewQueueSurface";
-import { runAutoIngest } from "./inbox/ingestApply";
-import {
-  getAutoApply,
-  getIngestIntervalMin,
-  getLintIntervalMin,
-  INGEST_PREFS_EVENT,
-} from "./inbox/ingestPrefs";
 import { ObsidianEditor } from "./editor/ObsidianEditor";
 import { PersonalHealthDashboard } from "./health/PersonalHealthDashboard";
 import { RssReaderDashboard } from "./research/RssReaderDashboard";
@@ -117,79 +110,6 @@ export function App() {
     }
   }, [narrowWorkspace, panelOpen, setPanelOpen, surface]);
 
-  // Scheduled in-app ingest: while the app is open and auto-apply is on, run the
-  // ingest loop every N minutes (0 = off). Reconfigures live on a prefs change.
-  // (Truly headless scheduling needs the deferred direct-write agent mode.)
-  useEffect(() => {
-    let timer: ReturnType<typeof setInterval> | null = null;
-    const configure = (): void => {
-      if (timer) {
-        clearInterval(timer);
-        timer = null;
-      }
-      const min = getIngestIntervalMin();
-      if (min <= 0) return;
-      timer = setInterval(
-        () => {
-          if (!getAutoApply()) return;
-          const commitPage = useStore.getState().ingestCommitPage;
-          void runAutoIngest(commitPage).then((res) => {
-            if (res.ok && (res.pages || res.memory)) {
-              useStore
-                .getState()
-                .flash(
-                  `Auto-filed ${res.pages} page${res.pages === 1 ? "" : "s"}`,
-                );
-            }
-          });
-        },
-        min * 60 * 1000,
-      );
-    };
-    configure();
-    window.addEventListener(INGEST_PREFS_EVENT, configure);
-    return () => {
-      if (timer) clearInterval(timer);
-      window.removeEventListener(INGEST_PREFS_EVENT, configure);
-    };
-  }, []);
-
-  // Scheduled in-app deep-lint: every N minutes (0 = off), run the LLM lint and
-  // NOTIFY when it finds semantic issues. Notify-only by design — a background
-  // pass never auto-edits existing pages; the user reviews fixes in Vault health.
-  useEffect(() => {
-    let timer: ReturnType<typeof setInterval> | null = null;
-    const configure = (): void => {
-      if (timer) {
-        clearInterval(timer);
-        timer = null;
-      }
-      const min = getLintIntervalMin();
-      if (min <= 0) return;
-      timer = setInterval(
-        () => {
-          void window.hermesAPI.spsLintWiki?.(30).then((res) => {
-            if (res?.ok && res.findings.length > 0) {
-              const n = res.findings.length;
-              useStore
-                .getState()
-                .flash(
-                  `Vault lint: ${n} issue${n === 1 ? "" : "s"} found — open Vault health to review`,
-                );
-            }
-          });
-        },
-        min * 60 * 1000,
-      );
-    };
-    configure();
-    window.addEventListener(INGEST_PREFS_EVENT, configure);
-    return () => {
-      if (timer) clearInterval(timer);
-      window.removeEventListener(INGEST_PREFS_EVENT, configure);
-    };
-  }, []);
-
   // Track recently visited pages
   useEffect(() => {
     if (page && page !== "dashboard_scratchpad" && page !== "home") {
@@ -198,7 +118,10 @@ export function App() {
         const list: string[] = stored ? JSON.parse(stored) : [];
         const filtered = list.filter((id) => id !== page);
         filtered.unshift(page);
-        localStorage.setItem("sps-recent-visited-pages", JSON.stringify(filtered.slice(0, 10)));
+        localStorage.setItem(
+          "sps-recent-visited-pages",
+          JSON.stringify(filtered.slice(0, 10)),
+        );
       } catch (err) {
         console.error("Failed to track visited page:", err);
       }

@@ -25,6 +25,7 @@ import {
   PERSON_FOLDER,
   personRefFrom,
   type ContactChannel,
+  type ContactChannelContext,
 } from "../../shared/contacts";
 import { extractPdfToMarkdown } from "../pdf-extract";
 import { formatLogError, log } from "../log";
@@ -537,8 +538,14 @@ export function registerNotesIpc(
     removeNagRecord(rowId, profile),
   );
   // Hand off to the native app (Mail/Messages/WhatsApp) for a contact channel.
-  safeHandle("sps-open-contact-channel", (_event, channel: ContactChannel) =>
-    openContactChannel(channel),
+  safeHandle(
+    "sps-open-contact-channel",
+    (
+      _event,
+      channel: ContactChannel,
+      context?: ContactChannelContext,
+      profile?: string,
+    ) => openContactChannel(channel, undefined, context, profile),
   );
   // Mac/iPhone contacts sync (optional native module; degrades if absent).
   safeHandle("mac-contacts-status", () => getMacContactsStatus());

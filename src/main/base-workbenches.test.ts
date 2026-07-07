@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { createBaseProposalInput, getBaseWorkbenchRecipe } from "./base-workbenches";
+import {
+  createBaseProposalInput,
+  getBaseWorkbenchRecipe,
+} from "./base-workbenches";
 
 describe("base workbenches", () => {
   it("creates a reviewable Base page proposal from a built-in recipe", () => {

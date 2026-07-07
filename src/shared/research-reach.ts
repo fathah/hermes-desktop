@@ -111,10 +111,14 @@ const CATEGORIES: Record<string, ResearchReachChannelCategory> = {
 };
 
 const SETUP_COPY: Record<string, string> = {
-  exa_search: "Connect Exa through mcporter outside Hermes before relying on semantic search coverage.",
-  github: "Sign in with gh auth login for private repositories and higher rate limits.",
-  reddit: "Connect a login-backed Reddit reader outside Hermes before relying on Reddit coverage.",
-  twitter: "Configure a Twitter/X backend outside Hermes before relying on Twitter/X coverage.",
+  exa_search:
+    "Connect Exa through mcporter outside Hermes before relying on semantic search coverage.",
+  github:
+    "Sign in with gh auth login for private repositories and higher rate limits.",
+  reddit:
+    "Connect a login-backed Reddit reader outside Hermes before relying on Reddit coverage.",
+  twitter:
+    "Configure a Twitter/X backend outside Hermes before relying on Twitter/X coverage.",
   web: "No setup required.",
 };
 

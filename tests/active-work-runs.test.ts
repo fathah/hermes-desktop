@@ -99,9 +99,7 @@ describe("active work runs sidecar", () => {
       { source: "kanban", title: "Task", goal: "Do task", taskId: "t_123" },
       PROFILE,
     );
-    expect(await activeWorkRuns.getActiveWorkRun(run.id, PROFILE)).toEqual(
-      run,
-    );
+    expect(await activeWorkRuns.getActiveWorkRun(run.id, PROFILE)).toEqual(run);
     expect(await activeWorkRuns.getActiveWorkRun("nope", PROFILE)).toBeNull();
   });
 });

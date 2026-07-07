@@ -18,4 +18,12 @@ export interface GatewayStartResult {
   alreadyRunning?: boolean;
   error?: string;
   logPath?: string;
+  port?: number;
+  portRelocation?: {
+    profile: string;
+    oldPort: number;
+    newPort: number;
+    reason: string;
+    nextAction: string;
+  };
 }

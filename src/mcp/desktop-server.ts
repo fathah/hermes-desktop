@@ -87,7 +87,8 @@ const TOOLS = [
         },
         save: {
           type: "boolean",
-          description: "When true, also save the pack under vault/_context-packs/.",
+          description:
+            "When true, also save the pack under vault/_context-packs/.",
         },
       },
       required: ["pageId"],
@@ -133,18 +134,21 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       };
     } else if (name === "build_context_pack") {
       const { port, token } = getControlServerConfig();
-      const response = await fetch(`http://127.0.0.1:${port}/sps/context-pack`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+      const response = await fetch(
+        `http://127.0.0.1:${port}/sps/context-pack`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            pageId: a.pageId,
+            maxBytes: a.maxBytes,
+            save: a.save,
+          }),
         },
-        body: JSON.stringify({
-          pageId: a.pageId,
-          maxBytes: a.maxBytes,
-          save: a.save,
-        }),
-      });
+      );
 
       if (!response.ok) {
         const errText = await response.text();

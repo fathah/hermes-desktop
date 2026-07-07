@@ -47,6 +47,9 @@ export interface SshTunnelTiming {
   connectionPollIntervalMs: number;
   connectionOverallTimeoutMs: number;
   connectionHealthRequestTimeoutMs: number;
+  reconnectInitialBackoffMs: number;
+  reconnectMaxBackoffMs: number;
+  reconnectMaxAttempts: number;
 }
 
 const DEFAULT_SSH_TUNNEL_TIMING: SshTunnelTiming = {
@@ -62,6 +65,9 @@ const DEFAULT_SSH_TUNNEL_TIMING: SshTunnelTiming = {
   connectionPollIntervalMs: 400,
   connectionOverallTimeoutMs: 20000,
   connectionHealthRequestTimeoutMs: 3000,
+  reconnectInitialBackoffMs: 1000,
+  reconnectMaxBackoffMs: 30000,
+  reconnectMaxAttempts: 5,
 };
 
 function defaultSshTunnelRuntime(): SshTunnelRuntime {
@@ -83,7 +89,11 @@ let sshTunnelTiming: SshTunnelTiming = { ...DEFAULT_SSH_TUNNEL_TIMING };
 
 let tunnelProcess: ChildProcess | null = null;
 let activeConfig: SshConfig | null = null;
+let desiredConfig: SshConfig | null = null;
 let tunnelRunning = false;
+let tunnelGeneration = 0;
+let reconnectAttempts = 0;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function __setSshTunnelRuntimeForTests(
   runtime: Partial<SshTunnelRuntime>,
@@ -220,66 +230,129 @@ function buildSshArgs(config: SshConfig, localPort: number): string[] {
   ];
 }
 
-export async function startSshTunnel(config: SshConfig): Promise<void> {
-  stopSshTunnel();
+function clearReconnectTimer(): void {
+  if (reconnectTimer) {
+    sshTunnelRuntime.clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+}
+
+function stopActiveTunnelProcess(): void {
+  const proc = tunnelProcess;
+  tunnelProcess = null;
+  tunnelRunning = false;
+  activeConfig = null;
+  tunnelGeneration += 1;
+
+  if (proc && !proc.killed) {
+    proc.kill("SIGTERM");
+  }
+}
+
+function reconnectBackoffMs(attempt: number): number {
+  const raw =
+    sshTunnelTiming.reconnectInitialBackoffMs * 2 ** Math.max(0, attempt - 1);
+  return Math.min(raw, sshTunnelTiming.reconnectMaxBackoffMs);
+}
+
+function scheduleReconnect(): void {
+  if (!desiredConfig || reconnectTimer) return;
+  if (reconnectAttempts >= sshTunnelTiming.reconnectMaxAttempts) return;
+
+  reconnectAttempts += 1;
+  const config = desiredConfig;
+  const backoffMs = reconnectBackoffMs(reconnectAttempts);
+  reconnectTimer = sshTunnelRuntime.setTimeout(() => {
+    reconnectTimer = null;
+    if (!desiredConfig) return;
+    void launchSshTunnel(config, false).catch(() => {
+      if (desiredConfig) scheduleReconnect();
+    });
+  }, backoffMs);
+}
+
+async function handleTunnelProcessEnded(
+  proc: ChildProcess,
+  localPort: number,
+  generation: number,
+): Promise<void> {
+  if (tunnelProcess === proc) tunnelProcess = null;
+
+  // With ControlMaster=auto, the spawned SSH process may exit immediately
+  // after handing off to the master. The tunnel may still be alive via
+  // the mux master, so check health before declaring it dead.
+  const healthy = await checkTunnelHealth(
+    localPort,
+    sshTunnelTiming.exitHealthTimeoutMs,
+  );
+  if (generation !== tunnelGeneration) return;
+  if (healthy) return;
+
+  tunnelRunning = false;
+  activeConfig = null;
+  scheduleReconnect();
+}
+
+async function launchSshTunnel(
+  config: SshConfig,
+  clearDesiredOnFailure: boolean,
+): Promise<void> {
+  stopActiveTunnelProcess();
 
   const localPort = await findFreePort(config.localPort || 18642);
+  const generation = ++tunnelGeneration;
   activeConfig = { ...config, localPort };
   tunnelRunning = false;
 
-  tunnelProcess = sshTunnelRuntime.spawn(
-    "ssh",
-    buildSshArgs(config, localPort),
-    {
-      stdio: "ignore",
-      detached: false,
-      ...HIDDEN_SUBPROCESS_OPTIONS,
-    },
-  );
+  const proc = sshTunnelRuntime.spawn("ssh", buildSshArgs(config, localPort), {
+    stdio: "ignore",
+    detached: false,
+    ...HIDDEN_SUBPROCESS_OPTIONS,
+  });
+  tunnelProcess = proc;
 
-  tunnelProcess.on("exit", () => {
-    tunnelProcess = null;
-    // With ControlMaster=auto, the spawned SSH process exits immediately
-    // after handing off to the master. The tunnel may still be alive via
-    // the mux master, so check health before declaring it dead.
-    checkTunnelHealth(localPort, sshTunnelTiming.exitHealthTimeoutMs).then(
-      (healthy) => {
-        if (!healthy) {
-          tunnelRunning = false;
-          activeConfig = null;
-        }
-      },
-    );
+  proc.on("exit", () => {
+    void handleTunnelProcessEnded(proc, localPort, generation);
   });
 
-  tunnelProcess.on("error", () => {
-    tunnelProcess = null;
-    checkTunnelHealth(localPort, sshTunnelTiming.exitHealthTimeoutMs).then(
-      (healthy) => {
-        if (!healthy) {
-          tunnelRunning = false;
-          activeConfig = null;
-        }
-      },
-    );
+  proc.on("error", () => {
+    void handleTunnelProcessEnded(proc, localPort, generation);
   });
 
   try {
     await waitForPort(localPort, sshTunnelTiming.portReadyTimeoutMs);
-    tunnelRunning = true;
     await waitForHealth(localPort, sshTunnelTiming.startupHealthTimeoutMs);
+    tunnelRunning = true;
+    reconnectAttempts = 0;
   } catch (err) {
-    stopSshTunnel();
+    if (tunnelGeneration === generation) {
+      tunnelGeneration += 1;
+      tunnelRunning = false;
+      activeConfig = null;
+      if (tunnelProcess === proc) tunnelProcess = null;
+    }
+    if (!proc.killed) proc.kill("SIGTERM");
+    if (clearDesiredOnFailure) {
+      desiredConfig = null;
+      clearReconnectTimer();
+      reconnectAttempts = 0;
+    }
     throw err;
   }
 }
 
+export async function startSshTunnel(config: SshConfig): Promise<void> {
+  desiredConfig = { ...config };
+  reconnectAttempts = 0;
+  clearReconnectTimer();
+  await launchSshTunnel(config, true);
+}
+
 export function stopSshTunnel(): void {
-  if (tunnelProcess && !tunnelProcess.killed) {
-    tunnelProcess.kill("SIGTERM");
-  }
-  tunnelRunning = false;
-  activeConfig = null;
+  desiredConfig = null;
+  reconnectAttempts = 0;
+  clearReconnectTimer();
+  stopActiveTunnelProcess();
 }
 
 export async function ensureSshTunnel(config: SshConfig): Promise<void> {

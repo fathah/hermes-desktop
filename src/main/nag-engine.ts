@@ -13,6 +13,7 @@ import { Notification } from "electron";
 import { getSpsNoteIndex } from "./note-index";
 import { listNagRecords, removeNagRecord, setNagRecord } from "./tasks-dump";
 import { sendTelegramViaGateway } from "./contact-messaging";
+import { deliverOwnerNotification } from "./owner-delivery";
 import {
   PERSON_FOLDER,
   parsePersonFrontmatter,
@@ -58,6 +59,29 @@ function resolveChannel(
   return preferredChannel(parsePersonFrontmatter(row.props ?? {}));
 }
 
+async function deliverOwnerNag(
+  action: NagAction,
+  profile?: string,
+): Promise<void> {
+  try {
+    await deliverOwnerNotification(
+      {
+        event: "nag",
+        title: "Overdue task needs action",
+        body: action.title,
+        dedupeKey: `nag:${action.rowId}:${action.tier}`,
+      },
+      profile,
+    );
+  } catch (err) {
+    log.error("nag-engine", {
+      msg: "owner nag delivery failed",
+      rowId: action.rowId,
+      error: formatLogError(err),
+    });
+  }
+}
+
 async function fireNag(
   action: NagAction,
   personRows: IndexRow[],
@@ -70,6 +94,7 @@ async function fireNag(
   }
   // channel tier: nag me (the default), plus opt-in auto-send to the assignee.
   notify("⏰ Overdue — needs action", action.title);
+  await deliverOwnerNag(action, profile);
   if (!action.autoSend) return;
   const channel = resolveChannel(action.assigneeId, personRows);
   if (channel?.kind === "telegram") {

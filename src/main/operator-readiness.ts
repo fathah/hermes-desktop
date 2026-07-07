@@ -1,5 +1,6 @@
 import { HERMES_HOME } from "./installer";
-import { getDesktopUpdateRoutine, getHermesAgentUpdateRoutine } from "./config";
+import { getDesktopUpdateRoutine } from "./config";
+import { getHermesAgentUpdateRoutine } from "./engine-update-state";
 import { runConfigHealthCheck } from "./config-health";
 import { getConnectionGatewayHealthStatus } from "./gateway-status";
 import { readMirrorFailRecord } from "./mirror-fail-counter";
@@ -15,7 +16,9 @@ import {
 } from "../shared/operator-readiness";
 import type { VaultHealthReport } from "../shared/sps-types";
 
-function vaultSummary(report: VaultHealthReport): OperatorReadinessVaultSummary {
+function vaultSummary(
+  report: VaultHealthReport,
+): OperatorReadinessVaultSummary {
   return {
     orphans: report.orphans.length,
     brokenLinks: report.brokenLinks.length,

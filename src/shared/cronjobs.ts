@@ -2,6 +2,8 @@
 // Producer: src/main/cronjobs.ts. Contract: src/preload/index.d.ts.
 // Consumer: the renderer Schedules screen.
 
+export const LOCAL_CRON_DELIVERY_TARGET = "local";
+
 export interface CronJob {
   id: string;
   name: string;

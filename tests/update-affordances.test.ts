@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   RELEASE_AFFORDANCES,
   compareAppVersions,
+  engineCapabilityAffordances,
   engineAffordancesForRange,
   releaseAffordancesSince,
   type EngineAvailableUpdate,
@@ -78,11 +79,7 @@ describe("update affordances", () => {
       "sps-dark-theme-legibility",
     ]);
     expect(ids).not.toEqual(
-      expect.arrayContaining([
-        "capture-pdf",
-        "work-review",
-        "desktop-updates",
-      ]),
+      expect.arrayContaining(["capture-pdf", "work-review", "desktop-updates"]),
     );
     expect(RELEASE_AFFORDANCES.map((a) => a.action)).toEqual([
       { kind: "settings", view: "overview" },
@@ -120,15 +117,41 @@ describe("update affordances", () => {
   it("drops malformed engine update ranges and cards", () => {
     expect(
       engineAffordancesForRange(
-        { ...availableEngineUpdate, range: "", cards: availableEngineUpdate.cards },
+        {
+          ...availableEngineUpdate,
+          range: "",
+          cards: availableEngineUpdate.cards,
+        },
         null,
       ),
     ).toEqual([]);
     expect(
-      engineAffordancesForRange(
-        { ...availableEngineUpdate, cards: [] },
-        null,
-      ),
+      engineAffordancesForRange({ ...availableEngineUpdate, cards: [] }, null),
     ).toEqual([]);
+  });
+
+  it("creates engine feature cards only when capabilities advertise the slash commands", () => {
+    const cards = engineCapabilityAffordances({
+      installedSha: "new-sha",
+      lastVerifiedSha: "new-sha",
+      lastVerification: null,
+      snapshot: {
+        status: "ready",
+        fetchedAt: "2026-07-07T00:00:00.000Z",
+        mode: "local",
+        engineSha: "new-sha",
+        features: {
+          slash_commands: "/goal,/learn,/journey",
+        },
+        endpoints: {},
+      },
+    });
+
+    expect(cards.map((card) => card.id)).toEqual([
+      "engine-feature-goal-contracts",
+      "engine-feature-learn-command",
+      "engine-feature-journey-command",
+    ]);
+    expect(engineCapabilityAffordances(null)).toEqual([]);
   });
 });

@@ -29,6 +29,12 @@ const mockMaybeRunHermesAgentUpdateRoutine = vi.fn();
 const mockMaybeRunHermesUpstreamWatchRoutine = vi.fn();
 const mockMaybeRunDesktopUpdateRoutine = vi.fn();
 const mockMaybeRunAppLaunchSchedules = vi.fn();
+const mockEnsureOwnerCriticalCronJobs = vi.fn();
+const mockEnsureOwnerMobileWorkspaceSkill = vi.fn();
+const mockSpsIngestInbox = vi.fn();
+const mockSpsLintWiki = vi.fn();
+const mockCreateVaultProposal = vi.fn();
+const mockListVaultProposals = vi.fn();
 
 vi.mock("child_process", () => {
   const fns = {
@@ -120,9 +126,53 @@ vi.mock("../src/main/app-launcher", () => ({
     mockMaybeRunAppLaunchSchedules(now, profile),
 }));
 
+vi.mock("../src/main/owner-routines", () => ({
+  ensureOwnerCriticalCronJobs: (profile?: string): Promise<unknown> =>
+    mockEnsureOwnerCriticalCronJobs(profile),
+}));
+
+vi.mock("../src/main/mobile-workspace-skill", () => ({
+  ensureOwnerMobileWorkspaceSkill: (profile?: string): unknown =>
+    mockEnsureOwnerMobileWorkspaceSkill(profile),
+}));
+
+vi.mock("../src/main/sps-agent", () => ({
+  spsIngestInbox: (profile?: string): Promise<unknown> =>
+    mockSpsIngestInbox(profile),
+  spsLintWiki: (
+    profile?: string,
+    opts?: { staleDays?: number },
+  ): Promise<unknown> => mockSpsLintWiki(profile, opts),
+}));
+
+vi.mock("../src/main/vault-review-queue", () => ({
+  createVaultProposal: (input: unknown, profile?: string): Promise<unknown> =>
+    mockCreateVaultProposal(input, profile),
+  listVaultProposals: (profile?: string): Promise<unknown> =>
+    mockListVaultProposals(profile),
+}));
+
 vi.mock("../src/main/config", () => ({
   readDesktopConfig: () => mockReadDesktopConfig(),
   writeDesktopConfig: (c: unknown) => mockWriteDesktopConfig(c),
+  getSpsAutomationPrefs: (profile?: string) => {
+    const data = mockReadDesktopConfig();
+    const map = (data as Record<string, unknown>).spsAutomationByProfile as
+      | Record<string, unknown>
+      | undefined;
+    const prefs = map?.[profile || "test-profile"] as
+      | Record<string, unknown>
+      | undefined;
+    return {
+      autoApply: prefs?.autoApply === true,
+      ingestIntervalMin:
+        typeof prefs?.ingestIntervalMin === "number"
+          ? prefs.ingestIntervalMin
+          : 0,
+      lintIntervalMin:
+        typeof prefs?.lintIntervalMin === "number" ? prefs.lintIntervalMin : 0,
+    };
+  },
 }));
 
 // The nag engine is its own unit (see scheduler-nag.test.ts); stub it here so
@@ -136,15 +186,48 @@ import {
   getSchedulerConfig,
   setSchedulerConfig,
   captureScreenshot,
+  __resetSpsAutomationSchedulerForTests,
 } from "../src/main/scheduler";
 
 describe("Scheduler Service", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    __resetSpsAutomationSchedulerForTests();
+    mockReadDesktopConfig.mockReturnValue({});
+    mockListCronJobs.mockResolvedValue([]);
     mockMaybeRunHermesAgentUpdateRoutine.mockResolvedValue(null);
     mockMaybeRunHermesUpstreamWatchRoutine.mockResolvedValue(null);
     mockMaybeRunDesktopUpdateRoutine.mockResolvedValue(null);
     mockMaybeRunAppLaunchSchedules.mockResolvedValue([]);
+    mockEnsureOwnerCriticalCronJobs.mockResolvedValue({
+      created: [],
+      existing: [],
+      failed: [],
+    });
+    mockEnsureOwnerMobileWorkspaceSkill.mockReturnValue({
+      created: false,
+      existing: true,
+      path: "/tmp/hermes-test-profile/skills/workspace/sps-workspace-mobile",
+    });
+    mockSpsIngestInbox.mockResolvedValue({
+      ok: true,
+      captureCount: 0,
+      changeset: {
+        summary: "Nothing to file",
+        pages: [],
+        captures: [],
+        memory: [],
+      },
+    });
+    mockSpsLintWiki.mockResolvedValue({
+      ok: true,
+      findings: [],
+      mechanical: { orphans: [], brokenLinks: [], stale: [] },
+      pagesScanned: 0,
+      pagesDropped: 0,
+    });
+    mockCreateVaultProposal.mockResolvedValue({ id: "vp-1" });
+    mockListVaultProposals.mockResolvedValue([]);
   });
 
   it("should get default scheduler config", () => {
@@ -246,6 +329,241 @@ describe("Scheduler Service", () => {
 
     expect(mockMaybeRunAppLaunchSchedules).toHaveBeenCalledWith(
       expect.any(Date),
+      "test-profile",
+    );
+  });
+
+  it("bootstraps the owner mobile workspace skill on scheduler ticks", async () => {
+    mockListCronJobs.mockResolvedValueOnce([]);
+
+    await tickScheduler("test-profile");
+
+    expect(mockEnsureOwnerMobileWorkspaceSkill).toHaveBeenCalledWith(
+      "test-profile",
+    );
+  });
+
+  it("runs scheduler-owned SPS ingest when enabled and due", async () => {
+    mockReadDesktopConfig.mockReturnValue({
+      spsAutomationByProfile: {
+        "test-profile": {
+          autoApply: true,
+          ingestIntervalMin: 15,
+          lintIntervalMin: 0,
+        },
+      },
+    });
+    mockSpsIngestInbox.mockResolvedValueOnce({
+      ok: true,
+      captureCount: 1,
+      changeset: {
+        summary: "Filed capture",
+        pages: [
+          {
+            op: "create",
+            pageId: "source-note",
+            title: "Source Note",
+            markdown: "# Source Note",
+          },
+        ],
+        captures: [{ id: "cap-1", status: "processed" }],
+        memory: ["Remember this"],
+      },
+    });
+
+    await tickScheduler("test-profile");
+
+    expect(mockSpsIngestInbox).toHaveBeenCalledWith("test-profile");
+    await vi.waitFor(() => expect(mockCreateVaultProposal).toHaveBeenCalled());
+    expect(mockCreateVaultProposal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: "inbox",
+        title: "Scheduled inbox ingest",
+        summary: "Filed capture",
+        operations: expect.arrayContaining([
+          expect.objectContaining({
+            kind: "upsert-page",
+            pageId: "source-note",
+          }),
+          expect.objectContaining({
+            kind: "mark-capture",
+            captureId: "cap-1",
+          }),
+          expect.objectContaining({ kind: "add-memory" }),
+        ]),
+      }),
+      "test-profile",
+    );
+  });
+
+  it("does not run scheduled SPS ingest when interval or auto-apply is disabled", async () => {
+    mockReadDesktopConfig.mockReturnValue({
+      spsAutomationByProfile: {
+        "test-profile": {
+          autoApply: false,
+          ingestIntervalMin: 15,
+          lintIntervalMin: 0,
+        },
+      },
+    });
+
+    await tickScheduler("test-profile");
+
+    expect(mockSpsIngestInbox).not.toHaveBeenCalled();
+
+    mockReadDesktopConfig.mockReturnValue({
+      spsAutomationByProfile: {
+        "test-profile": {
+          autoApply: true,
+          ingestIntervalMin: 0,
+          lintIntervalMin: 0,
+        },
+      },
+    });
+
+    await tickScheduler("test-profile");
+
+    expect(mockSpsIngestInbox).not.toHaveBeenCalled();
+  });
+
+  it("throttles scheduled SPS ingest between ticks", async () => {
+    mockReadDesktopConfig.mockReturnValue({
+      spsAutomationByProfile: {
+        "test-profile": {
+          autoApply: true,
+          ingestIntervalMin: 15,
+          lintIntervalMin: 0,
+        },
+      },
+    });
+
+    await tickScheduler("test-profile");
+    await tickScheduler("test-profile");
+
+    expect(mockSpsIngestInbox).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips scheduled SPS ingest when an inbox proposal is already pending", async () => {
+    mockReadDesktopConfig.mockReturnValue({
+      spsAutomationByProfile: {
+        "test-profile": {
+          autoApply: true,
+          ingestIntervalMin: 15,
+          lintIntervalMin: 0,
+        },
+      },
+    });
+    mockListVaultProposals.mockResolvedValueOnce([
+      { id: "vp-existing", status: "pending", source: "inbox" },
+    ]);
+
+    await tickScheduler("test-profile");
+
+    expect(mockSpsIngestInbox).not.toHaveBeenCalled();
+    expect(mockCreateVaultProposal).not.toHaveBeenCalled();
+  });
+
+  it("prevents double-runs while scheduled SPS ingest is still active", async () => {
+    __resetSpsAutomationSchedulerForTests();
+    mockReadDesktopConfig.mockReturnValue({
+      spsAutomationByProfile: {
+        "test-profile": {
+          autoApply: true,
+          ingestIntervalMin: 0.001,
+          lintIntervalMin: 0,
+        },
+      },
+    });
+    let resolveIngest:
+      | ((value: {
+          ok: boolean;
+          captureCount: number;
+          changeset: {
+            summary: string;
+            pages: unknown[];
+            captures: unknown[];
+            memory: unknown[];
+          };
+        }) => void)
+      | null = null;
+    const pending = new Promise<{
+      ok: boolean;
+      captureCount: number;
+      changeset: {
+        summary: string;
+        pages: unknown[];
+        captures: unknown[];
+        memory: unknown[];
+      };
+    }>((resolve) => {
+      resolveIngest = resolve;
+    });
+    mockSpsIngestInbox.mockReturnValue(pending);
+
+    await tickScheduler("test-profile");
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    await tickScheduler("test-profile");
+
+    expect(mockSpsIngestInbox).toHaveBeenCalledTimes(1);
+    resolveIngest?.({
+      ok: true,
+      captureCount: 0,
+      changeset: {
+        summary: "Nothing to file",
+        pages: [],
+        captures: [],
+        memory: [],
+      },
+    });
+    await pending;
+  });
+
+  it("runs scheduler-owned SPS lint and queues reviewable fixes", async () => {
+    mockReadDesktopConfig.mockReturnValue({
+      spsAutomationByProfile: {
+        "test-profile": {
+          autoApply: false,
+          ingestIntervalMin: 0,
+          lintIntervalMin: 60,
+        },
+      },
+    });
+    mockSpsLintWiki.mockResolvedValueOnce({
+      ok: true,
+      findings: [{ kind: "stale", page: "old.md", note: "Needs update" }],
+      changeset: {
+        summary: "Refresh stale note",
+        pages: [
+          {
+            op: "update",
+            pageId: "old",
+            title: "Old",
+            markdown: "# Old\n\nUpdated.",
+          },
+        ],
+        captures: [],
+        memory: [],
+      },
+      mechanical: { orphans: [], brokenLinks: [], stale: [] },
+      pagesScanned: 1,
+      pagesDropped: 0,
+    });
+
+    await tickScheduler("test-profile");
+
+    expect(mockSpsLintWiki).toHaveBeenCalledWith("test-profile", {
+      staleDays: 30,
+    });
+    await vi.waitFor(() => expect(mockCreateVaultProposal).toHaveBeenCalled());
+    expect(mockCreateVaultProposal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: "health",
+        title: "Scheduled vault health fixes",
+        summary: "Refresh stale note",
+        operations: [
+          expect.objectContaining({ kind: "upsert-page", pageId: "old" }),
+        ],
+      }),
       "test-profile",
     );
   });

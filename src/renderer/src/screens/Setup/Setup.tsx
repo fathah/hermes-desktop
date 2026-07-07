@@ -138,9 +138,7 @@ function Setup({
             <ArrowRight
               size={12}
               style={{
-                transform: showAdvancedProviders
-                  ? "rotate(90deg)"
-                  : undefined,
+                transform: showAdvancedProviders ? "rotate(90deg)" : undefined,
               }}
             />
           </button>
@@ -164,9 +162,7 @@ function Setup({
               >
                 <BrandLogo provider={p.id} size={24} matchTheme={true} />
                 <div className="setup-provider-name">{t(p.name)}</div>
-                {p.tag && (
-                  <div className="setup-provider-tag">{t(p.tag)}</div>
-                )}
+                {p.tag && <div className="setup-provider-tag">{t(p.tag)}</div>}
               </button>
             ))}
         </div>

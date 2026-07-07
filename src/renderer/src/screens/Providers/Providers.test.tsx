@@ -58,6 +58,7 @@ describe("Providers", () => {
       getHermesAgentUpdateRoutine: vi.fn().mockResolvedValue({
         enabled: true,
         autoApply: false,
+        engineUpdateChannel: "release",
         schedule: "0 4 * * *",
         timezone: "America/New_York",
         lastCheckedAt: "2026-06-19T08:00:00.000Z",
@@ -157,6 +158,7 @@ describe("Providers", () => {
       setHermesAgentUpdateRoutine: vi.fn().mockResolvedValue({
         enabled: true,
         autoApply: false,
+        engineUpdateChannel: "release",
         schedule: "0 4 * * *",
         timezone: "America/New_York",
         lastCheckedAt: null,
@@ -175,6 +177,7 @@ describe("Providers", () => {
       acknowledgeHermesAgentUpdateContractBreak: vi.fn().mockResolvedValue({
         enabled: true,
         autoApply: true,
+        engineUpdateChannel: "release",
         schedule: "0 4 * * *",
         timezone: "America/New_York",
         lastCheckedAt: "2026-06-20T08:00:00.000Z",
@@ -327,6 +330,7 @@ describe("Providers", () => {
     api.getHermesAgentUpdateRoutine.mockResolvedValue({
       enabled: true,
       autoApply: true,
+      engineUpdateChannel: "release",
       schedule: "0 4 * * *",
       timezone: "America/New_York",
       lastCheckedAt: "2026-06-20T08:00:00.000Z",
@@ -345,13 +349,13 @@ describe("Providers", () => {
     renderProviders();
 
     expect(
-      await screen.findByText(/Auto-apply is paused after a broken engine contract/),
+      await screen.findByText(
+        /Auto-apply is paused after a broken engine contract/,
+      ),
     ).toBeInTheDocument();
     expect(screen.getByText("Paused")).toBeInTheDocument();
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /resume auto-apply/i }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /resume auto-apply/i }));
 
     await waitFor(() => {
       expect(
@@ -408,7 +412,9 @@ describe("Providers", () => {
         expect.stringContaining("reinstalls Python dependencies"),
       );
       expect(api.rollbackEngine).toHaveBeenCalledWith("work");
-      expect(screen.getByText(/Hermes Agent rolled back to abc123d/)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Hermes Agent rolled back to abc123d/),
+      ).toBeInTheDocument();
     });
   });
 
