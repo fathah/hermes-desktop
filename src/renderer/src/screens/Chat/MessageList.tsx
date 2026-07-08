@@ -109,11 +109,32 @@ export const MessageList = memo(function MessageList({
     [messages],
   );
 
+  // The newest *visible* bubble carries the last-row marker (active avatar
+  // while streaming, approval bar after). Keying this off the bubble — rather
+  // than "is literally the trailing row" — keeps the approval controls when
+  // reasoning/tool rows trail the bubble that asked for approval.
+  let lastVisibleBubbleIndex = -1;
+  for (let i = visibleMessages.length - 1; i >= 0; i--) {
+    if (isBubble(visibleMessages[i])) {
+      lastVisibleBubbleIndex = i;
+      break;
+    }
+  }
+  const lastVisibleBubbleId =
+    lastVisibleBubbleIndex >= 0
+      ? visibleMessages[lastVisibleBubbleIndex].id
+      : undefined;
+
   // Window: render only the trailing rows; earlier ones collapse behind a
-  // "show earlier" button. The cut is nudged back to the start of a tool run
-  // so a ToolActivityGroup is never split in half.
+  // "show earlier" button. The cut is clamped so the newest bubble is never
+  // sliced out (a long trailing run of reasoning/tool rows must not window
+  // away the bubble that owns the approval bar), then nudged back to the
+  // start of a tool run so a ToolActivityGroup is never split in half.
   const windowLimit = TRANSCRIPT_WINDOW + extraRows;
   let windowStart = Math.max(0, visibleMessages.length - windowLimit);
+  if (lastVisibleBubbleIndex >= 0 && windowStart > lastVisibleBubbleIndex) {
+    windowStart = lastVisibleBubbleIndex;
+  }
   while (windowStart > 0 && isToolRow(visibleMessages[windowStart])) {
     windowStart--;
   }
@@ -135,18 +156,6 @@ export const MessageList = memo(function MessageList({
     }
   }
   const lastMessageIsAgent = !!lastBubble && lastBubble.role === "agent";
-
-  // The newest *visible* bubble carries the last-row marker (active avatar
-  // while streaming, approval bar after). Keying this off the bubble — rather
-  // than "is literally the trailing row" — keeps the approval controls when
-  // reasoning/tool rows trail the bubble that asked for approval.
-  let lastVisibleBubbleId: string | undefined;
-  for (let i = visibleMessages.length - 1; i >= 0; i--) {
-    if (isBubble(visibleMessages[i])) {
-      lastVisibleBubbleId = visibleMessages[i].id;
-      break;
-    }
-  }
 
   // Render plan: bubble/reasoning rows pass through one-to-one, but a
   // contiguous run of tool_call/tool_result rows folds into a single

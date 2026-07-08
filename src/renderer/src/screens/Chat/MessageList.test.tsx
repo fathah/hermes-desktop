@@ -173,6 +173,31 @@ describe("MessageList windowing", () => {
     expect(bubbles[bubbles.length - 1].dataset.islast).toBe("1");
   });
 
+  it("never windows away the newest bubble behind a long trailing run", () => {
+    // Greptile round 2: when more than a full window of reasoning/tool rows
+    // trails the newest bubble, the naive cut slices that bubble out while
+    // lastVisibleBubbleId still points at it — no rendered row gets isLast
+    // and the approval bar vanishes. The cut must clamp to the bubble.
+    const reasoning = Array.from(
+      { length: TRANSCRIPT_WINDOW + 20 },
+      (_, i) =>
+        ({
+          id: `r${i}`,
+          kind: "reasoning",
+          role: "agent",
+          text: `step ${i}`,
+        }) as ChatMessage,
+    );
+    renderList([bubble("u1"), bubble("a1", "agent"), ...reasoning]);
+
+    // The newest bubble is still rendered and still carries the marker.
+    const marked = screen
+      .getAllByTestId("bubble")
+      .filter((b) => b.dataset.islast === "1");
+    expect(marked).toHaveLength(1);
+    expect(marked[0].textContent).toBe("a1");
+  });
+
   it("does not fake a new turn at the window cut", () => {
     // Agent turn: one bubble followed by many reasoning rows, so the cut
     // lands inside the turn. The first visible (reasoning) row must NOT get
@@ -217,4 +242,5 @@ describe("MessageList windowing", () => {
     // Expansion budget must not carry over.
     expect(screen.getAllByTestId("bubble")).toHaveLength(TRANSCRIPT_WINDOW);
   });
+
 });
