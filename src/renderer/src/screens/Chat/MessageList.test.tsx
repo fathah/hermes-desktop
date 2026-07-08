@@ -17,16 +17,46 @@ vi.mock("../../components/useI18n", () => ({
 // tests the windowing/grouping plan only.
 vi.mock("./MessageRow", () => ({
   HermesAvatar: () => <div data-testid="avatar" />,
-  MessageRow: ({ msg }: { msg: { id: string } }) => (
-    <div data-testid="bubble">{msg.id}</div>
+  MessageRow: ({
+    msg,
+    isLast,
+    showAvatar,
+  }: {
+    msg: { id: string };
+    isLast: boolean;
+    showAvatar: boolean;
+  }) => (
+    <div
+      data-testid="bubble"
+      data-islast={isLast ? "1" : "0"}
+      data-avatar={showAvatar ? "1" : "0"}
+    >
+      {msg.id}
+    </div>
   ),
 }));
 vi.mock("./HistoryRow", () => ({
-  ReasoningRow: ({ msg }: { msg: { id: string } }) => (
-    <div data-testid="reasoning">{msg.id}</div>
+  ReasoningRow: ({
+    msg,
+    showAvatar,
+  }: {
+    msg: { id: string };
+    showAvatar: boolean;
+  }) => (
+    <div data-testid="reasoning" data-avatar={showAvatar ? "1" : "0"}>
+      {msg.id}
+    </div>
   ),
-  ToolActivityGroup: ({ items }: { items: { id: string }[] }) => (
-    <div data-testid="tool-group">{items.map((i) => i.id).join(",")}</div>
+  ToolActivityGroup: ({
+    items,
+    showAvatar,
+  }: {
+    items: { id: string }[];
+    showAvatar: boolean;
+  }) => (
+    <div data-testid="tool-group" data-avatar={showAvatar ? "1" : "0"}>
+      {items.map((i) => i.id).join(",")}
+    </div>
   ),
 }));
 vi.mock("./ClarifyCard", () => ({
@@ -55,8 +85,8 @@ function toolCall(id: string): ChatMessage {
   } as ChatMessage;
 }
 
-function renderList(messages: ChatMessage[]): void {
-  render(
+function renderList(messages: ChatMessage[]): ReturnType<typeof render> {
+  return render(
     <MessageList
       messages={messages}
       isLoading={false}
@@ -127,5 +157,64 @@ describe("MessageList windowing", () => {
     renderList(messages);
     expect(screen.getAllByTestId("bubble")).toHaveLength(1);
     expect(screen.getByTestId("tool-group")).toBeTruthy();
+  });
+
+  it("keeps the last-bubble marker when tool/reasoning rows trail it", () => {
+    // Approval prompts live in the newest bubble; tool rows may stream after
+    // it. The marker (approval bar / active avatar) must stay on the bubble.
+    const messages: ChatMessage[] = [
+      bubble("u1"),
+      bubble("a1", "agent"),
+      toolCall("t1"),
+      toolCall("t2"),
+    ];
+    renderList(messages);
+    const bubbles = screen.getAllByTestId("bubble");
+    expect(bubbles[bubbles.length - 1].dataset.islast).toBe("1");
+  });
+
+  it("does not fake a new turn at the window cut", () => {
+    // Agent turn: one bubble followed by many reasoning rows, so the cut
+    // lands inside the turn. The first visible (reasoning) row must NOT get
+    // an avatar — the hidden row above the cut has the same role.
+    const head = [bubble("u0"), bubble("a0", "agent")];
+    const reasoning = Array.from(
+      { length: TRANSCRIPT_WINDOW + 10 },
+      (_, i) =>
+        ({
+          id: `r${i}`,
+          kind: "reasoning",
+          role: "agent",
+          text: `step ${i}`,
+        }) as ChatMessage,
+    );
+    renderList([...head, ...reasoning, bubble("a1", "agent")]);
+    const reasoningRows = screen.getAllByTestId("reasoning");
+    // First visible row sits mid-turn (hidden prev row is agent too).
+    expect(reasoningRows[0].dataset.avatar).toBe("0");
+  });
+
+  it("resets expansion when the conversation changes", () => {
+    const total = TRANSCRIPT_WINDOW * 2 + 10;
+    const chatA = Array.from({ length: total }, (_, i) => bubble(`a${i}`));
+    const { rerender } = renderList(chatA);
+
+    fireEvent.click(screen.getByRole("button"));
+    expect(screen.getAllByTestId("bubble")).toHaveLength(TRANSCRIPT_WINDOW * 2);
+
+    // Same mounted component, different conversation (new first-message id).
+    const chatB = Array.from({ length: total }, (_, i) => bubble(`b${i}`));
+    rerender(
+      <MessageList
+        messages={chatB}
+        isLoading={false}
+        toolProgress={null}
+        onApprove={vi.fn()}
+        onDeny={vi.fn()}
+        onClarifyResolved={vi.fn()}
+      />,
+    );
+    // Expansion budget must not carry over.
+    expect(screen.getAllByTestId("bubble")).toHaveLength(TRANSCRIPT_WINDOW);
   });
 });

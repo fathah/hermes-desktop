@@ -1,4 +1,5 @@
 export default {
+  showEarlierMessages: "Mostrar {{count}} mensagens anteriores",
   title: "Novo Chat",
   sessionTitle: "Sessão {{id}}",
   noModel: "Nenhum modelo definido",

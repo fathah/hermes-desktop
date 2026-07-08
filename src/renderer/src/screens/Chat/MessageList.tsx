@@ -86,6 +86,18 @@ export const MessageList = memo(function MessageList({
   // what the user chose to reveal.
   const [extraRows, setExtraRows] = useState(0);
 
+  // Reset the expansion when the component is reused for a different
+  // conversation (same mounted screen, new session/clear): otherwise a large
+  // expanded budget carries over and re-mounts hundreds of rows in the next
+  // long chat. The first message id is stable within a conversation
+  // (transcripts are append-only), so it works as the conversation identity.
+  const conversationId = messages[0]?.id;
+  const [prevConversationId, setPrevConversationId] = useState(conversationId);
+  if (conversationId !== prevConversationId) {
+    setPrevConversationId(conversationId);
+    setExtraRows(0);
+  }
+
   // Bubbles with empty content are still hidden (live-stream placeholders).
   // History rows pass through unconditionally.
   const visibleMessages = useMemo(
@@ -109,6 +121,11 @@ export const MessageList = memo(function MessageList({
   const windowedMessages =
     windowStart > 0 ? visibleMessages.slice(windowStart) : visibleMessages;
 
+  // The row hidden just above the window cut. Avatar grouping consults it so
+  // a continuation row at the cut doesn't masquerade as a new turn.
+  const beforeWindow: ChatMessage | undefined =
+    windowStart > 0 ? visibleMessages[windowStart - 1] : undefined;
+
   // Last bubble without cloning the array on every streaming delta.
   let lastBubble: ChatMessage | undefined;
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -119,6 +136,18 @@ export const MessageList = memo(function MessageList({
   }
   const lastMessageIsAgent = !!lastBubble && lastBubble.role === "agent";
 
+  // The newest *visible* bubble carries the last-row marker (active avatar
+  // while streaming, approval bar after). Keying this off the bubble — rather
+  // than "is literally the trailing row" — keeps the approval controls when
+  // reasoning/tool rows trail the bubble that asked for approval.
+  let lastVisibleBubbleId: string | undefined;
+  for (let i = visibleMessages.length - 1; i >= 0; i--) {
+    if (isBubble(visibleMessages[i])) {
+      lastVisibleBubbleId = visibleMessages[i].id;
+      break;
+    }
+  }
+
   // Render plan: bubble/reasoning rows pass through one-to-one, but a
   // contiguous run of tool_call/tool_result rows folds into a single
   // ToolActivityGroup (collapsed by default) instead of one bubble per call.
@@ -127,8 +156,10 @@ export const MessageList = memo(function MessageList({
     const msg = windowedMessages[i];
     // One avatar per turn: show it only on the first row of a contiguous run
     // of same-role rows. The agent turn's thinking/tool rows + answer bubble
-    // share one avatar; the continuation rows render a spacer.
-    const prev = windowedMessages[i - 1];
+    // share one avatar; the continuation rows render a spacer. At the window
+    // cut, the hidden row above the cut is consulted so a mid-turn cut does
+    // not fake a new turn.
+    const prev = i === 0 ? beforeWindow : windowedMessages[i - 1];
     const showAvatar = !prev || prev.role !== msg.role;
 
     if (isToolRow(msg)) {
@@ -140,16 +171,15 @@ export const MessageList = memo(function MessageList({
         i++;
       }
       i--; // step back: the for-loop's i++ advances past the run
+      const groupPrev =
+        start === 0 ? beforeWindow : windowedMessages[start - 1];
       rows.push(
         <ToolActivityGroup
           key={`${group[0].id}-${windowStart + start}`}
           items={group}
           // Active (spinner) only while streaming and this run is trailing.
           active={isLoading && i === windowedMessages.length - 1}
-          showAvatar={
-            !windowedMessages[start - 1] ||
-            windowedMessages[start - 1].role !== "agent"
-          }
+          showAvatar={!groupPrev || groupPrev.role !== "agent"}
         />,
       );
       continue;
@@ -187,7 +217,9 @@ export const MessageList = memo(function MessageList({
       <MessageRow
         key={msg.id}
         msg={bubble}
-        isLast={i === windowedMessages.length - 1}
+        // Last-bubble marker (approval bar, active avatar) belongs to the
+        // newest visible bubble even when reasoning/tool rows trail it.
+        isLast={msg.id === lastVisibleBubbleId}
         isLoading={isLoading}
         onApprove={onApprove}
         onDeny={onDeny}
