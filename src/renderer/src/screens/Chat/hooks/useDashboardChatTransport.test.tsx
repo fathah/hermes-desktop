@@ -654,3 +654,135 @@ describe("useDashboardChatTransport context gauge estimate (no usage payload)", 
     expect(setUsage).not.toHaveBeenCalled();
   });
 });
+
+describe("useDashboardChatTransport delta coalescing", () => {
+  beforeEach(() => {
+    dashboardMock.close.mockClear();
+    dashboardMock.connect.mockClear();
+    dashboardMock.instances.length = 0;
+    dashboardMock.onEvent = null;
+    dashboardMock.request.mockReset();
+    dashboardMock.request.mockImplementation(async (method: string) => {
+      if (method === "session.create") {
+        return { session_id: "live-1", stored_session_id: "stored-1" };
+      }
+      return {};
+    });
+    Object.defineProperty(window, "hermesAPI", {
+      configurable: true,
+      value: {
+        recordSessionContinuation: vi.fn(async () => true),
+        recordSessionLocalError: vi.fn(async () => true),
+        startDashboard: vi.fn(async () => ({
+          connection: { wsUrl: "ws://127.0.0.1:12345" },
+          running: true,
+        })),
+      },
+    });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("coalesces a burst of message.delta into one commit without losing text", async () => {
+    // Capture rAF callbacks so the frame boundary is under test control.
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      frames.push(cb);
+      return frames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", () => undefined);
+
+    const api: HarnessApi = {};
+    render(<Harness api={api} />);
+    await act(async () => {
+      await api.send?.("hello");
+    });
+
+    // A burst of deltas inside one frame: transcript state must not commit yet
+    // (schedule exactly one frame callback), but no delta text may be lost.
+    await act(async () => {
+      dashboardMock.onEvent?.({
+        payload: {},
+        session_id: "live-1",
+        type: "message.start",
+      });
+      for (const chunk of ["a", "b", "c", "d", "e"]) {
+        dashboardMock.onEvent?.({
+          payload: { text: chunk },
+          session_id: "live-1",
+          type: "message.delta",
+        });
+      }
+    });
+    expect(frames).toHaveLength(1);
+
+    // Frame fires → exactly one commit carrying the full accumulated text.
+    await act(async () => {
+      frames[0](0);
+    });
+    // The streamed bubble is the trailing message (the harness may add a
+    // model-mismatch error bubble before it — unrelated to coalescing).
+    const last = api.messages?.[api.messages.length - 1] as
+      | { role?: string; content?: string }
+      | undefined;
+    expect(last?.role).toBe("agent");
+    expect(last?.content).toBe("abcde");
+  });
+
+  it("message.complete flushes immediately, superseding a pending frame", async () => {
+    const frames: FrameRequestCallback[] = [];
+    const cancelled: number[] = [];
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      frames.push(cb);
+      return frames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", (h: number) => {
+      cancelled.push(h);
+    });
+
+    const api: HarnessApi = {};
+    render(<Harness api={api} />);
+    await act(async () => {
+      await api.send?.("hello");
+    });
+
+    await act(async () => {
+      dashboardMock.onEvent?.({
+        payload: {},
+        session_id: "live-1",
+        type: "message.start",
+      });
+      dashboardMock.onEvent?.({
+        payload: { text: "partial" },
+        session_id: "live-1",
+        type: "message.delta",
+      });
+      // Terminal event arrives before the frame: it must commit synchronously
+      // and cancel the queued flush.
+      dashboardMock.onEvent?.({
+        payload: { text: "partial and done" },
+        session_id: "live-1",
+        type: "message.complete",
+      });
+    });
+
+    expect(cancelled).toHaveLength(1);
+    const last = api.messages?.[api.messages.length - 1] as
+      | { role?: string; content?: string }
+      | undefined;
+    expect(last?.role).toBe("agent");
+    expect(last?.content).toBe("partial and done");
+
+    // A stale frame firing later must not resurrect the pre-complete state.
+    await act(async () => {
+      frames.forEach((cb) => cb(0));
+    });
+    const lastAfter = api.messages?.[api.messages.length - 1] as
+      | { content?: string }
+      | undefined;
+    expect(lastAfter?.content).toBe("partial and done");
+  });
+});

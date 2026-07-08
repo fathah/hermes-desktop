@@ -923,6 +923,16 @@ export function useDashboardChatTransport({
     DesktopSessionContinuationItem[]
   >([]);
   const lastSyncedCwdRef = useRef<string | null>(null);
+  // Delta coalescing: streaming events arrive many times per second, and each
+  // `setMessages` costs a full transcript reconciliation. Deltas are applied
+  // to `messagesRef` synchronously (no data loss — the ref stays the source of
+  // truth), but the React commit is batched to one per animation frame. The
+  // guard array pins what the scheduled flush is allowed to publish: if some
+  // other actor (new user turn, clear, clarify) replaced the ref meanwhile, it
+  // already called `setMessages` itself and the stale flush must not overwrite
+  // that newer state.
+  const deltaFlushHandleRef = useRef<number | null>(null);
+  const deltaFlushArrayRef = useRef<ChatMessage[] | null>(null);
 
   useEffect(() => {
     // `messagesRef` is the synchronous source of truth for `handleGatewayEvent`:
@@ -940,6 +950,23 @@ export function useDashboardChatTransport({
       messagesRef.current = messages;
     }
   }, [messages]);
+
+  useEffect(() => {
+    // Cancel any pending coalesced flush on unmount/teardown. The guard in
+    // the flush callback already makes a stale run harmless; this just avoids
+    // setState-after-unmount warnings.
+    return () => {
+      if (deltaFlushHandleRef.current !== null) {
+        const cancel =
+          typeof cancelAnimationFrame === "function"
+            ? cancelAnimationFrame
+            : clearTimeout;
+        cancel(deltaFlushHandleRef.current);
+        deltaFlushHandleRef.current = null;
+        deltaFlushArrayRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (hermesSessionId === storedSessionIdRef.current) return;
@@ -975,6 +1002,42 @@ export function useDashboardChatTransport({
 
   const handleGatewayEvent = useCallback(
     (event: DashboardStreamEvent): void => {
+      // Coalesced commit for high-frequency streaming events. `messagesRef`
+      // is updated synchronously per event; the `setMessages` commit rides
+      // one animation frame. Terminal events flush immediately.
+      const scheduleDeltaFlush = (next: ChatMessage[]): void => {
+        deltaFlushArrayRef.current = next;
+        if (deltaFlushHandleRef.current !== null) return;
+        const raf =
+          typeof requestAnimationFrame === "function"
+            ? requestAnimationFrame
+            : (cb: FrameRequestCallback): number =>
+                setTimeout(() => cb(0), 16) as unknown as number;
+        deltaFlushHandleRef.current = raf(() => {
+          deltaFlushHandleRef.current = null;
+          const pending = deltaFlushArrayRef.current;
+          deltaFlushArrayRef.current = null;
+          // Only publish if the ref still holds what we queued — otherwise a
+          // non-delta path (user turn, clear, clarify) has taken over and
+          // already committed newer state.
+          if (pending !== null && messagesRef.current === pending) {
+            setMessages(pending);
+          }
+        });
+      };
+      const flushDeltasNow = (next: ChatMessage[]): void => {
+        deltaFlushArrayRef.current = null;
+        if (deltaFlushHandleRef.current !== null) {
+          const cancel =
+            typeof cancelAnimationFrame === "function"
+              ? cancelAnimationFrame
+              : clearTimeout;
+          cancel(deltaFlushHandleRef.current);
+          deltaFlushHandleRef.current = null;
+        }
+        setMessages(next);
+      };
+
       const runtimeSessionId = runtimeSessionIdRef.current;
       if (
         event.session_id &&
@@ -1032,7 +1095,21 @@ export function useDashboardChatTransport({
           )
         : next.messages;
       messagesRef.current = nextMessages;
-      setMessages(nextMessages);
+      // High-frequency stream events coalesce into one commit per frame;
+      // lifecycle events (start/complete/clarify/tool boundaries) commit
+      // immediately so dependent state (isLoading, toolProgress, approval
+      // cards) can't observe a stale transcript.
+      const isCoalescableDelta =
+        event.type === "message.delta" ||
+        event.type === "thinking.delta" ||
+        event.type === "reasoning.delta" ||
+        event.type === "tool.progress" ||
+        event.type === "tool.generating";
+      if (isCoalescableDelta) {
+        scheduleDeltaFlush(nextMessages);
+      } else {
+        flushDeltasNow(nextMessages);
+      }
 
       if (event.type === "message.complete") {
         if (failed) {
