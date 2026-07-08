@@ -1,4 +1,10 @@
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  cleanup,
+  act,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // MessageList pulls translations through useI18n (i18next provider). Stub it
@@ -243,4 +249,39 @@ describe("MessageList windowing", () => {
     expect(screen.getAllByTestId("bubble")).toHaveLength(TRANSCRIPT_WINDOW);
   });
 
+  it("auto-expands when the top marker enters the viewport", () => {
+    // jsdom has no IntersectionObserver; install a controllable stub.
+    let trigger: (() => void) | undefined;
+    class ObserverStub {
+      private cb: IntersectionObserverCallback;
+      constructor(cb: IntersectionObserverCallback) {
+        this.cb = cb;
+      }
+      observe(): void {
+        trigger = () =>
+          this.cb(
+            [{ isIntersecting: true } as IntersectionObserverEntry],
+            this as unknown as IntersectionObserver,
+          );
+      }
+      disconnect(): void {
+        trigger = undefined;
+      }
+    }
+    vi.stubGlobal("IntersectionObserver", ObserverStub);
+    try {
+      const total = TRANSCRIPT_WINDOW + 40;
+      const messages = Array.from({ length: total }, (_, i) => bubble(`m${i}`));
+      renderList(messages);
+      expect(screen.getAllByTestId("bubble")).toHaveLength(TRANSCRIPT_WINDOW);
+
+      // Simulate the marker scrolling into view (Claude-style infinite load).
+      act(() => trigger?.());
+      expect(screen.getAllByTestId("bubble")).toHaveLength(total);
+      // Everything revealed — marker gone.
+      expect(screen.queryByRole("button")).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });

@@ -1,4 +1,12 @@
-import { memo, useMemo, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { HermesAvatar, MessageRow } from "./MessageRow";
 import { ReasoningRow, ToolActivityGroup } from "./HistoryRow";
 import { ClarifyCard } from "./ClarifyCard";
@@ -98,6 +106,50 @@ export const MessageList = memo(function MessageList({
     setExtraRows(0);
   }
 
+  // ── Scroll-driven expansion (infinite history) ────────────────────────────
+  // Scrolling to the top marker reveals the next window automatically; the
+  // button remains as a fallback (keyboard users, jsdom, old engines).
+  const earlierMarkerRef = useRef<HTMLDivElement | null>(null);
+  // Scroll-position snapshot taken just before rows are prepended, so the
+  // content the user is reading doesn't jump when the window grows.
+  const scrollAdjustRef = useRef<{
+    container: HTMLElement;
+    scrollHeight: number;
+    scrollTop: number;
+  } | null>(null);
+
+  const expandEarlier = useCallback(() => {
+    const container = earlierMarkerRef.current?.closest(
+      ".chat-messages",
+    ) as HTMLElement | null;
+    if (container) {
+      scrollAdjustRef.current = {
+        container,
+        scrollHeight: container.scrollHeight,
+        scrollTop: container.scrollTop,
+      };
+    }
+    setExtraRows((n) => n + TRANSCRIPT_WINDOW);
+  }, []);
+
+  // Restore the viewport after the newly revealed rows commit (pre-paint, so
+  // there is no visible flicker): keep the previously-visible content where
+  // it was by offsetting scrollTop by the height the new rows added.
+  useLayoutEffect(() => {
+    const adjust = scrollAdjustRef.current;
+    if (!adjust) return;
+    scrollAdjustRef.current = null;
+    const { container, scrollHeight, scrollTop } = adjust;
+    container.scrollTop = scrollTop + (container.scrollHeight - scrollHeight);
+  }, [extraRows]);
+
+  // Auto-expand when the marker approaches the viewport (Claude-style).
+  // rootMargin preloads one step before the user actually hits the top, so
+  // scrolling up feels continuous. After each expansion the restored scroll
+  // position pushes the marker back out of view, naturally re-arming the
+  // observer for the next step. (Effect lives below, after the window math
+  // determines whether hidden rows exist.)
+
   // Bubbles with empty content are still hidden (live-stream placeholders).
   // History rows pass through unconditionally.
   const visibleMessages = useMemo(
@@ -141,6 +193,25 @@ export const MessageList = memo(function MessageList({
   const hiddenCount = windowStart;
   const windowedMessages =
     windowStart > 0 ? visibleMessages.slice(windowStart) : visibleMessages;
+
+  // Observe the top marker while rows are hidden (see comment block above).
+  const hasEarlier = hiddenCount > 0;
+  useEffect(() => {
+    const marker = earlierMarkerRef.current;
+    if (!marker || !hasEarlier) return;
+    if (typeof IntersectionObserver === "undefined") return; // jsdom/old engines
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) expandEarlier();
+      },
+      {
+        root: marker.closest(".chat-messages"),
+        rootMargin: "300px 0px 0px 0px",
+      },
+    );
+    observer.observe(marker);
+    return () => observer.disconnect();
+  }, [hasEarlier, expandEarlier]);
 
   // The row hidden just above the window cut. Avatar grouping consults it so
   // a continuation row at the cut doesn't masquerade as a new turn.
@@ -240,11 +311,11 @@ export const MessageList = memo(function MessageList({
   return (
     <>
       {hiddenCount > 0 && (
-        <div className="chat-transcript-earlier">
+        <div className="chat-transcript-earlier" ref={earlierMarkerRef}>
           <button
             type="button"
             className="chat-transcript-earlier-btn"
-            onClick={() => setExtraRows((n) => n + TRANSCRIPT_WINDOW)}
+            onClick={expandEarlier}
           >
             {t("chat.showEarlierMessages", { count: hiddenCount })}
           </button>
