@@ -48,6 +48,7 @@ export default {
     error: "Couldn't deliver your answer — the turn may have ended. Try again.",
   },
   thinking: "Thinking…",
+  showEarlierMessages: "Show {{count}} earlier messages",
   thought: "Thought",
   toolCall: "Tool call",
   toolResult: "Tool result",
