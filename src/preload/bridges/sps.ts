@@ -87,6 +87,12 @@ import type {
   EmailMonitorStatus,
 } from "../../shared/email-monitor";
 import type {
+  LiveNoteInput,
+  LiveNoteItem,
+  LiveNotePending,
+  LiveNoteRunResult,
+} from "../../shared/liveNotes";
+import type {
   EquityAlert,
   EquityBasket,
   NotebookLmMcpStatus,
@@ -196,6 +202,72 @@ export const spsBridge = {
     profile?: string,
   ): Promise<EmailMonitorConfig> =>
     ipcRenderer.invoke("sps-email-monitor-apply-feedback", feedback, profile),
+  spsLiveNoteList: (profile?: string): Promise<LiveNoteItem[]> =>
+    ipcRenderer.invoke("sps-live-note-list", profile),
+  spsLiveNoteGet: (
+    pageId: string,
+    profile?: string,
+  ): Promise<LiveNoteItem | null> =>
+    ipcRenderer.invoke("sps-live-note-get", pageId, profile),
+  spsLiveNoteUpsert: (
+    input: LiveNoteInput,
+    profile?: string,
+  ): Promise<{ ok: boolean; item?: LiveNoteItem; error?: string }> =>
+    ipcRenderer.invoke("sps-live-note-upsert", input, profile),
+  spsLiveNoteSetActive: (
+    pageId: string,
+    active: boolean,
+    profile?: string,
+  ): Promise<{ ok: boolean; item?: LiveNoteItem; error?: string }> =>
+    ipcRenderer.invoke("sps-live-note-set-active", pageId, active, profile),
+  spsLiveNoteDelete: (
+    pageId: string,
+    profile?: string,
+  ): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke("sps-live-note-delete", pageId, profile),
+  spsLiveNoteRun: (
+    pageId: string,
+    profile?: string,
+  ): Promise<LiveNoteRunResult> =>
+    ipcRenderer.invoke("sps-live-note-run", pageId, profile),
+  spsLiveNoteListPending: (profile?: string): Promise<LiveNotePending[]> =>
+    ipcRenderer.invoke("sps-live-note-list-pending", profile),
+  spsLiveNoteDismissPending: (
+    id: string,
+    profile?: string,
+  ): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke("sps-live-note-dismiss-pending", id, profile),
+  spsLiveNoteAckApplied: (
+    pendingId: string,
+    liveNoteId: string,
+    summary: string,
+    profile?: string,
+  ): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(
+      "sps-live-note-ack-applied",
+      pendingId,
+      liveNoteId,
+      summary,
+      profile,
+    ),
+  onLiveNotePending: (cb: (payload: unknown) => void): (() => void) => {
+    const handler = (_: unknown, payload: unknown): void => {
+      cb(payload);
+    };
+    ipcRenderer.on("live-note-pending", handler);
+    return (): void => {
+      ipcRenderer.removeListener("live-note-pending", handler);
+    };
+  },
+  onLiveNoteRunStatus: (cb: (payload: unknown) => void): (() => void) => {
+    const handler = (_: unknown, payload: unknown): void => {
+      cb(payload);
+    };
+    ipcRenderer.on("live-note-run-status", handler);
+    return (): void => {
+      ipcRenderer.removeListener("live-note-run-status", handler);
+    };
+  },
   spsFileAnswer: (
     question: string,
     answer: string,

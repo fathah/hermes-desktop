@@ -199,6 +199,14 @@ export type {
   EmailMonitorStatus,
 } from "../shared/email-monitor";
 export type {
+  LiveNoteInput,
+  LiveNoteItem,
+  LiveNotePending,
+  LiveNoteRunResult,
+  LiveNoteTriggers,
+  LiveNoteEventMatch,
+} from "../shared/liveNotes";
+export type {
   SubstackRadarAddApprovedFeedsInput,
   SubstackRadarAddApprovedFeedsResult,
   SubstackRadarRun,

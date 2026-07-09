@@ -26,6 +26,7 @@ import { listCronJobs } from "./cronjobs";
 import { triggerSelfHealing } from "./self-healing";
 import { readDesktopConfig, writeDesktopConfig } from "./config";
 import { runDreamCycle } from "./dream-cycle";
+import { tickLiveNotes } from "./live-notes";
 import { maybeRunHermesAgentUpdateRoutine } from "./hermes-agent-updates";
 import { maybeRunHermesUpstreamWatchRoutine } from "./hermes-upstream-watch";
 import { maybeRunDesktopUpdateRoutine } from "./desktop-update-routine";
@@ -373,6 +374,17 @@ export async function tickScheduler(profile?: string): Promise<void> {
   } catch (err) {
     log.error("scheduler", {
       msg: "error during nag tick",
+      profile: activeProfile,
+      error: formatLogError(err),
+    });
+  }
+
+  // Live Notes: time triggers (cron / daily windows) while the app is open.
+  try {
+    await tickLiveNotes(activeProfile);
+  } catch (err) {
+    log.error("scheduler", {
+      msg: "error during live-notes tick",
       profile: activeProfile,
       error: formatLogError(err),
     });

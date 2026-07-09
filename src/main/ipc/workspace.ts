@@ -28,7 +28,7 @@ export function registerWorkspaceIpc(
   registerSkillsIpc();
   registerSessionsIpc();
   registerMemoryIpc();
-  registerSpsIpc();
+  registerSpsIpc(mainWindowGetter);
   registerAppLauncherIpc();
   registerScheduledResearchIpc(mainWindowGetter);
 }

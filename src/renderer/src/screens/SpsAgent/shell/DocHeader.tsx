@@ -101,7 +101,13 @@ const MOOD_LABELS: Record<string, string> = {
   "❤️": "Loved",
 };
 
-export function DocHeader({ children }: { children?: ReactNode }) {
+export function DocHeader({
+  children,
+  onOpenLiveNote,
+}: {
+  children?: ReactNode;
+  onOpenLiveNote?: () => void;
+}) {
   const page = useStore((s) => s.page);
   const pmeta = useStore(selectPmeta);
   const blocks = useStore(selectCurrentBlocks);
@@ -111,6 +117,7 @@ export function DocHeader({ children }: { children?: ReactNode }) {
   const setResearchOpen = useStore((s) => s.setResearchOpen);
 
   const [lintErrors, setLintErrors] = useState<HealthErrors | null>(null);
+  const isLiveNote = pmeta.properties?.kind === "live-note";
 
   // Empty page = no title and no real content (0–1 empty blocks). Mirror
   // Notion's empty-state launcher here, above the editor body.
@@ -216,6 +223,25 @@ export function DocHeader({ children }: { children?: ReactNode }) {
               {pmeta.title}
             </div>
             {lintErrors && <HealthBadge errors={lintErrors} />}
+            {onOpenLiveNote && (
+              <button
+                type="button"
+                className="cover-btn"
+                title={
+                  isLiveNote ? "Live note settings" : "Make this note live"
+                }
+                onClick={onOpenLiveNote}
+                style={{
+                  marginLeft: 8,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                }}
+              >
+                <Icon name="sparkle" size={13} />
+                {isLiveNote ? "Live" : "Live…"}
+              </button>
+            )}
           </div>
           {pmeta.journal ? (
             <div className="jr-entry-header">

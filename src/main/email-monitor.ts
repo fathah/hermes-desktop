@@ -8,6 +8,7 @@ import { writeAsset as writeVaultAsset } from "./sps-assets";
 import { writeSpsCapture } from "./sps-capture";
 import { resolveSpsVaultDir } from "./sps-storage";
 import { triageEmailCandidate } from "./email-triage";
+import { enqueueLiveNotesForEmailEvent } from "./live-notes";
 import {
   DEFAULT_EMAIL_MONITOR_ACCOUNT,
   DEFAULT_EMAIL_MONITOR_CONFIG,
@@ -279,6 +280,17 @@ export async function handleParsedEmailMessage(
       triageLabel: triage.label,
     };
   }
+
+  // Best-effort: wake matching Live Notes. Never throw into the IMAP path.
+  enqueueLiveNotesForEmailEvent({
+    subject: input.message.subject || "",
+    bodyPreview: input.message.text || "",
+    from: emailFrom || input.message.from || "",
+    triageLabel: triage.label,
+    digest,
+    captureId: capture.id,
+    profile: deps.profile,
+  });
 
   return {
     status: "captured",

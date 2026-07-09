@@ -8,6 +8,8 @@ import { setScrollContainer } from "./lib/scroll";
 import { Sidebar } from "./sidebar/Sidebar";
 import { Topbar } from "./shell/Topbar";
 import { DocHeader } from "./shell/DocHeader";
+import { LiveNotePanel } from "./live-notes/LiveNotePanel";
+import { drainLiveNotePending } from "./live-notes/pendingDrain";
 import { Editor } from "./editor/Editor";
 import { RightPanel } from "./panel/RightPanel";
 import { Overlays } from "./shell/Overlays";
@@ -72,6 +74,7 @@ export function App() {
   const docScrollRef = useRef<HTMLDivElement>(null);
   const [narrowWorkspace, setNarrowWorkspace] = useState(isNarrowWorkspace);
   const wasNarrowRef = useRef(narrowWorkspace);
+  const [liveNoteOpen, setLiveNoteOpen] = useState(false);
 
   const runReleaseAffordance = (action: ReleaseAffordanceAction): void => {
     if (action.kind === "surface") {
@@ -98,6 +101,30 @@ export function App() {
   useEffect(() => {
     setScrollContainer(docScrollRef.current);
     return () => setScrollContainer(null);
+  }, []);
+
+  // Live Notes: drain pending body proposals on open and when main pushes.
+  useEffect(() => {
+    const drain = (): void => {
+      void drainLiveNotePending({
+        commitPage: useStore.getState().ingestCommitPage,
+        activePageId: useStore.getState().page,
+      }).then((res) => {
+        if (res.applied > 0) {
+          useStore
+            .getState()
+            .flash(
+              `Live note updated (${res.applied} page${res.applied === 1 ? "" : "s"})`,
+            );
+        }
+      });
+    };
+    drain();
+    const api = window.hermesAPI;
+    const unsub = api?.onLiveNotePending?.(drain);
+    return () => {
+      unsub?.();
+    };
   }, []);
 
   useEffect(() => {
@@ -227,10 +254,15 @@ export function App() {
                     variant="compact"
                   />
                 </div>
-                <DocHeader>
+                <DocHeader onOpenLiveNote={() => setLiveNoteOpen(true)}>
                   {/* distinct key so the editor remounts (clean refs) on page switch */}
                   <Editor key={`ed-${page}`} />
                 </DocHeader>
+                <LiveNotePanel
+                  open={liveNoteOpen}
+                  onClose={() => setLiveNoteOpen(false)}
+                  pageId={page}
+                />
               </div>
             </>
           ) : surface === "dashboard" ? (

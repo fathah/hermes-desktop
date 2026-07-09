@@ -108,6 +108,52 @@ export interface SpsBridgeApi {
     profile?: string,
   ) => Promise<Api.EmailMonitorConfig>;
 
+  spsLiveNoteList: (profile?: string) => Promise<Api.LiveNoteItem[]>;
+
+  spsLiveNoteGet: (
+    pageId: string,
+    profile?: string,
+  ) => Promise<Api.LiveNoteItem | null>;
+
+  spsLiveNoteUpsert: (
+    input: Api.LiveNoteInput,
+    profile?: string,
+  ) => Promise<{ ok: boolean; item?: Api.LiveNoteItem; error?: string }>;
+
+  spsLiveNoteSetActive: (
+    pageId: string,
+    active: boolean,
+    profile?: string,
+  ) => Promise<{ ok: boolean; item?: Api.LiveNoteItem; error?: string }>;
+
+  spsLiveNoteDelete: (
+    pageId: string,
+    profile?: string,
+  ) => Promise<{ ok: boolean; error?: string }>;
+
+  spsLiveNoteRun: (
+    pageId: string,
+    profile?: string,
+  ) => Promise<Api.LiveNoteRunResult>;
+
+  spsLiveNoteListPending: (profile?: string) => Promise<Api.LiveNotePending[]>;
+
+  spsLiveNoteDismissPending: (
+    id: string,
+    profile?: string,
+  ) => Promise<{ ok: boolean }>;
+
+  spsLiveNoteAckApplied: (
+    pendingId: string,
+    liveNoteId: string,
+    summary: string,
+    profile?: string,
+  ) => Promise<{ ok: boolean }>;
+
+  onLiveNotePending: (cb: (payload: unknown) => void) => () => void;
+
+  onLiveNoteRunStatus: (cb: (payload: unknown) => void) => () => void;
+
   spsFileAnswer: (
     question: string,
     answer: string,
