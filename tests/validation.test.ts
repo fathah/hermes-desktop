@@ -84,6 +84,28 @@ describe("validateChatReadiness", () => {
     expect(validateChatReadiness()).toEqual({ ok: true });
   });
 
+  it("uses the chat picker model override instead of blocking on an empty persisted model", async () => {
+    writeConfig(
+      [
+        "model:",
+        "  provider: alibaba",
+        "  default: ''",
+        "  base_url: https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "",
+      ].join("\n"),
+    );
+    writeEnv("DASHSCOPE_API_KEY=sk-dashscope-test\n");
+    const { validateChatReadiness } = await freshValidation(TEST_DIR);
+
+    expect(
+      validateChatReadiness(undefined, {
+        provider: "alibaba",
+        model: "qwen3.7-plus",
+        baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      }),
+    ).toEqual({ ok: true });
+  });
+
   it("treats whitespace-only key value as missing", async () => {
     writeConfig(
       [
