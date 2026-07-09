@@ -3992,7 +3992,7 @@ body {
 .chat-bubble-actions {
   position: absolute;
   top: 6px;
-  right: 8px;
+  inset-inline-end: 8px;
   display: flex;
   gap: 4px;
   opacity: 0;
