@@ -657,7 +657,6 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             style={{ display: "none" }}
             onChange={handleFileInputChange}
           />
-          {/* @lat: [[chat-direction]] */}
           <textarea
             ref={inputRef}
             className="chat-input"

@@ -305,7 +305,6 @@ export const MessageRow = memo(function MessageRow({
       ) : (
         <HermesAvatar active={isLoading && isLast} />
       )}
-      {/* @lat: [[chat-direction]] */}
       <div
         className={`chat-bubble chat-bubble-${msg.role}${
           msg.error ? " chat-bubble-error" : ""

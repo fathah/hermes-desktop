@@ -124,7 +124,6 @@ describe("ChatInput — slash command palette", () => {
 });
 
 describe("chat bidirectional text rendering", () => {
-  // @lat: [[chat-direction]]
   it("lets the prompt textarea pick direction from user text", () => {
     const { textarea } = renderInput();
 
