@@ -33,6 +33,9 @@ function App(): React.JSX.Element {
   const [splashStatus, setSplashStatus] = useState<string | undefined>(
     undefined,
   );
+  const [setupProfile, setSetupProfile] = useState<string | undefined>(
+    undefined,
+  );
   const isMac = window.electron?.process?.platform === "darwin";
   // Bumped on every runInstallCheck so a superseded run (e.g. the user hit
   // "Switch to local mode" while an SSH tunnel attempt was still in flight)
@@ -72,6 +75,7 @@ function App(): React.JSX.Element {
       } else {
         setSplashStatus("Checking local install…");
         const status = await window.hermesAPI.checkInstall();
+        setSetupProfile(status.activeProfile || "default");
         if (!status.installed) {
           next = "welcome";
         } else if (!status.hasApiKey) {
@@ -223,6 +227,7 @@ function App(): React.JSX.Element {
         return (
           <Setup
             onComplete={() => setScreen("main")}
+            profile={setupProfile}
             verifyWarning={verifyWarning}
             onReinstall={handleVerifyReinstall}
             onDismissVerifyWarning={handleDismissVerifyWarning}
