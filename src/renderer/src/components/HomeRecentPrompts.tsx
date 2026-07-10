@@ -7,16 +7,25 @@ interface RecentPrompt {
   timestamp: number;
 }
 
+interface WorkflowPresetSource {
+  id: string;
+  label: string;
+}
+
 interface HomeRecentPromptsProps {
   prompts: RecentPrompt[];
+  presets: WorkflowPresetSource[];
   onRecall: (prompt: RecentPrompt) => void;
   onRerun: (prompt: RecentPrompt) => void;
+  onSaveWorkflow: (presetId: string, prompt: RecentPrompt) => void;
 }
 
 export default function HomeRecentPrompts({
   prompts,
+  presets,
   onRecall,
   onRerun,
+  onSaveWorkflow,
 }: HomeRecentPromptsProps): React.JSX.Element | null {
   if (prompts.length === 0) return null;
 
@@ -36,6 +45,11 @@ export default function HomeRecentPrompts({
               <button className="content-launcher-pin active" onClick={() => onRerun(prompt)}>
                 Rerun
               </button>
+              {presets.slice(0, 2).map((preset) => (
+                <button key={preset.id} className="content-launcher-pin" onClick={() => onSaveWorkflow(preset.id, prompt)}>
+                  Save {preset.label.slice(0, 10)}
+                </button>
+              ))}
             </div>
           </div>
         ))}

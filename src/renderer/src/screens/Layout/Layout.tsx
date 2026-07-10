@@ -20,6 +20,7 @@ import HomePresets from "../../components/HomePresets";
 import HomeRecentPrompts from "../../components/HomeRecentPrompts";
 import HomeResume from "../../components/HomeResume";
 import HomeTaskQueue from "../../components/HomeTaskQueue";
+import HomeWorkflowCombos from "../../components/HomeWorkflowCombos";
 import hermeslogo from "../../assets/hermes.png";
 import {
   ChatBubble,
@@ -107,6 +108,15 @@ interface RecentPrompt {
   timestamp: number;
 }
 
+interface WorkflowPreset {
+  id: string;
+  label: string;
+  presetId: string;
+  promptText: string;
+  profile: string;
+  createdAt: number;
+}
+
 interface TaskQueueItem {
   id: string;
   title: string;
@@ -119,6 +129,7 @@ interface SectionPrefs {
   resume: boolean;
   prompts: boolean;
   queue: boolean;
+  workflows: boolean;
   dashboard: boolean;
   launchers: boolean;
   events: boolean;
@@ -159,6 +170,7 @@ const STORAGE_KEYS = {
   sectionPrefs: "hcc-os-shell-section-prefs",
   compactMode: "hcc-os-shell-compact-mode",
   sectionOrder: "hcc-os-shell-section-order",
+  workflowPresets: "hcc-os-shell-workflow-presets",
 } as const;
 
 const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string; eyebrow: string }[] = [
@@ -355,6 +367,7 @@ function readStoredSectionPrefs(): SectionPrefs {
     resume: true,
     prompts: true,
     queue: true,
+    workflows: true,
     dashboard: true,
     launchers: true,
     events: true,
@@ -378,7 +391,7 @@ function readStoredCompactMode(): boolean {
 }
 
 function defaultSectionOrder(): HomeSectionKey[] {
-  return ["dashboard", "launchers", "resume", "presets", "prompts", "queue", "events"];
+  return ["dashboard", "launchers", "resume", "presets", "prompts", "workflows", "queue", "events"];
 }
 
 function readStoredSectionOrder(): HomeSectionKey[] {
@@ -393,6 +406,27 @@ function readStoredSectionOrder(): HomeSectionKey[] {
     return [...valid, ...missing];
   } catch {
     return fallback;
+  }
+}
+
+function readStoredWorkflowPresets(): WorkflowPreset[] {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEYS.workflowPresets);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter(
+          (item): item is WorkflowPreset =>
+            typeof item?.id === "string" &&
+            typeof item?.label === "string" &&
+            typeof item?.presetId === "string" &&
+            typeof item?.promptText === "string" &&
+            typeof item?.profile === "string" &&
+            typeof item?.createdAt === "number",
+        )
+      : [];
+  } catch {
+    return [];
   }
 }
 
@@ -430,6 +464,7 @@ function Layout(): React.JSX.Element {
   const [sectionPrefs, setSectionPrefs] = useState<SectionPrefs>(() => readStoredSectionPrefs());
   const [compactMode, setCompactMode] = useState<boolean>(() => readStoredCompactMode());
   const [sectionOrder, setSectionOrder] = useState<HomeSectionKey[]>(() => readStoredSectionOrder());
+  const [workflowPresets, setWorkflowPresets] = useState<WorkflowPreset[]>(() => readStoredWorkflowPresets());
 
   useEffect(() => {
     window.hermesAPI.isRemoteMode().then(setRemoteMode);
@@ -624,10 +659,11 @@ function Layout(): React.JSX.Element {
       window.localStorage.setItem(STORAGE_KEYS.sectionPrefs, JSON.stringify(sectionPrefs));
       window.localStorage.setItem(STORAGE_KEYS.compactMode, compactMode ? "true" : "false");
       window.localStorage.setItem(STORAGE_KEYS.sectionOrder, JSON.stringify(sectionOrder));
+      window.localStorage.setItem(STORAGE_KEYS.workflowPresets, JSON.stringify(workflowPresets.slice(0, 6)));
     } catch {
       /* ignore */
     }
-  }, [compactMode, sectionOrder, sectionPrefs]);
+  }, [compactMode, sectionOrder, sectionPrefs, workflowPresets]);
 
   const rememberAction = useCallback((actionId: string) => {
     setRecentActionIds((prev) => [actionId, ...prev.filter((item) => item !== actionId)].slice(0, 10));
@@ -1008,6 +1044,69 @@ function Layout(): React.JSX.Element {
     [pushEvent],
   );
 
+  const runWorkflowPreset = useCallback(
+    (workflow: WorkflowPreset) => {
+      const preset = workspacePresets.find((item) => item.id === workflow.presetId);
+      if (preset) {
+        applyWorkspacePreset(preset);
+      } else {
+        setActiveProfile(workflow.profile);
+      }
+      setMessages([
+        {
+          id: `workflow-${Date.now()}`,
+          role: "user",
+          content: workflow.promptText,
+        },
+      ]);
+      setCurrentSessionId(null);
+      setView("chat");
+      pushEvent("Workflow loaded", `Loaded ${workflow.label}`, "success");
+      setTaskQueue((prev) => [
+        {
+          id: `${Date.now()}`,
+          title: workflow.label,
+          detail: workflow.promptText.slice(0, 88),
+          status: "pending" as const,
+        },
+        ...prev,
+      ].slice(0, 6));
+    },
+    [applyWorkspacePreset, pushEvent, workspacePresets],
+  );
+
+  const saveWorkflowPreset = useCallback(
+    (presetId: string, prompt: RecentPrompt) => {
+      const preset = workspacePresets.find((item) => item.id === presetId);
+      if (!preset) return;
+      const label = `${preset.label} + ${prompt.text.slice(0, 32)}`;
+      setWorkflowPresets((prev) => [
+        {
+          id: `${Date.now()}`,
+          label,
+          presetId,
+          promptText: prompt.text,
+          profile: preset.profile,
+          createdAt: Date.now(),
+        },
+        ...prev.filter((item) => !(item.presetId === presetId && item.promptText === prompt.text)),
+      ].slice(0, 6));
+      pushEvent("Workflow saved", `Saved ${label}`, "success");
+    },
+    [pushEvent, workspacePresets],
+  );
+
+  const deleteWorkflowPreset = useCallback(
+    (workflowId: string) => {
+      const workflow = workflowPresets.find((item) => item.id === workflowId);
+      setWorkflowPresets((prev) => prev.filter((item) => item.id !== workflowId));
+      if (workflow) {
+        pushEvent("Workflow removed", `Removed ${workflow.label}`, "warning");
+      }
+    },
+    [pushEvent, workflowPresets],
+  );
+
   const toggleTaskQueueItem = useCallback((taskId: string) => {
     setTaskQueue((prev) =>
       prev.map((task) =>
@@ -1203,6 +1302,7 @@ function Layout(): React.JSX.Element {
               ["resume", "resume"],
               ["prompts", "prompts"],
               ["queue", "queue"],
+              ["workflows", "workflows"],
               ["dashboard", "dashboard"],
               ["launchers", "launchers"],
               ["events", "events"],
@@ -1278,11 +1378,22 @@ function Layout(): React.JSX.Element {
                   <HomeRecentPrompts
                     key={sectionKey}
                     prompts={recentPrompts}
+                    presets={workspacePresets}
                     onRecall={(prompt) => {
                       setView("chat");
                       pushEvent("Recent prompt recalled", `Prompt from ${prompt.profile} brought back into focus`, "info");
                     }}
                     onRerun={rerunRecentPrompt}
+                    onSaveWorkflow={saveWorkflowPreset}
+                  />
+                ) : null;
+              case "workflows":
+                return sectionPrefs.workflows ? (
+                  <HomeWorkflowCombos
+                    key={sectionKey}
+                    workflows={workflowPresets}
+                    onRunWorkflow={runWorkflowPreset}
+                    onDeleteWorkflow={deleteWorkflowPreset}
                   />
                 ) : null;
               case "queue":
