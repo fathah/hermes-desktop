@@ -304,6 +304,13 @@ select {
   gap: 8px;
 }
 
+.content-quick-settings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.content-quick-toggle,
 .content-widget-toggle,
 .content-event-dismiss {
   padding: 6px 10px;
@@ -315,7 +322,16 @@ select {
   cursor: pointer;
 }
 
-.content-widget-toggle.active {
+.content-quick-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-radius: 18px;
+}
+
+.content-widget-toggle.active,
+.content-quick-toggle.active {
   color: #93c5fd;
   border-color: rgba(125, 211, 252, 0.24);
 }

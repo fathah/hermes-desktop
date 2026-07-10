@@ -67,6 +67,13 @@ interface DashboardMetric {
   detail: string;
 }
 
+interface QuickToggle {
+  key: string;
+  label: string;
+  enabled: boolean;
+  onToggle: () => void;
+}
+
 interface ToastItem {
   id: string;
   title: string;
@@ -206,6 +213,8 @@ function Layout(): React.JSX.Element {
   const [connectionMode, setConnectionMode] = useState<"local" | "remote">("local");
   const [remoteHealthy, setRemoteHealthy] = useState<boolean | null>(null);
   const [providerLabel, setProviderLabel] = useState("unknown");
+  const [platformEnabled, setPlatformEnabled] = useState<Record<string, boolean>>({});
+  const [quickSettingsOpen, setQuickSettingsOpen] = useState(false);
 
   useEffect(() => {
     window.hermesAPI.isRemoteMode().then(setRemoteMode);
@@ -213,12 +222,13 @@ function Layout(): React.JSX.Element {
 
   useEffect(() => {
     const refreshOperationalState = async (): Promise<void> => {
-      const [gateway, profiles, modelConfig, cronJobs, connectionConfig] = await Promise.all([
+      const [gateway, profiles, modelConfig, cronJobs, connectionConfig, platforms] = await Promise.all([
         window.hermesAPI.gatewayStatus(),
         window.hermesAPI.listProfiles(),
         window.hermesAPI.getModelConfig(activeProfile),
         window.hermesAPI.listCronJobs(undefined, activeProfile),
         window.hermesAPI.getConnectionConfig(),
+        window.hermesAPI.getPlatformEnabled(activeProfile),
       ]);
 
       setGatewayRunning(gateway);
@@ -227,6 +237,7 @@ function Layout(): React.JSX.Element {
       setProviderLabel(modelConfig.provider || "unknown");
       setScheduleCount(cronJobs.length);
       setConnectionMode(connectionConfig.mode);
+      setPlatformEnabled(platforms);
 
       if (connectionConfig.mode === "remote") {
         const ok = await window.hermesAPI.testRemoteConnection(
@@ -361,6 +372,33 @@ function Layout(): React.JSX.Element {
       return [...prev, widget];
     });
   }, []);
+
+  const togglePlatform = useCallback(
+    async (platform: string) => {
+      const nextEnabled = !platformEnabled[platform];
+      await window.hermesAPI.setPlatformEnabled(platform, nextEnabled, activeProfile);
+      setPlatformEnabled((prev) => ({ ...prev, [platform]: nextEnabled }));
+      pushEvent(
+        `${platform} ${nextEnabled ? "enabled" : "disabled"}`,
+        `Gateway delivery for ${platform} was ${nextEnabled ? "enabled" : "disabled"}`,
+        nextEnabled ? "success" : "warning",
+      );
+    },
+    [activeProfile, platformEnabled, pushEvent],
+  );
+
+  const toggleConnectionMode = useCallback(async () => {
+    const nextMode = connectionMode === "local" ? "remote" : "local";
+    const config = await window.hermesAPI.getConnectionConfig();
+    await window.hermesAPI.setConnectionConfig(nextMode, config.remoteUrl, config.apiKey);
+    setConnectionMode(nextMode);
+    setRemoteMode(nextMode === "remote");
+    pushEvent(
+      `Connection switched to ${nextMode}`,
+      `HCC OS shell moved into ${nextMode} runtime mode`,
+      "info",
+    );
+  }, [connectionMode, pushEvent]);
 
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
   const [updateState, setUpdateState] = useState<
@@ -587,8 +625,39 @@ function Layout(): React.JSX.Element {
         value: providerLabel,
         detail: `Model ${modelLabel.split("/").pop() || modelLabel}`,
       },
+      {
+        key: "platforms",
+        label: "Gateway Platforms",
+        value: `${Object.values(platformEnabled).filter(Boolean).length} active`,
+        detail: Object.entries(platformEnabled)
+          .filter(([, enabled]) => enabled)
+          .map(([name]) => name)
+          .join(", ") || "No platform delivery enabled",
+      },
     ],
-    [connectionMode, modelLabel, providerLabel, remoteHealthy],
+    [connectionMode, modelLabel, platformEnabled, providerLabel, remoteHealthy],
+  );
+
+  const quickToggles = useMemo<QuickToggle[]>(
+    () => [
+      {
+        key: "connection-mode",
+        label: connectionMode === "local" ? "Switch to remote mode" : "Switch to local mode",
+        enabled: connectionMode === "remote",
+        onToggle: () => {
+          void toggleConnectionMode();
+        },
+      },
+      ...Object.entries(platformEnabled).map(([platform, enabled]) => ({
+        key: `platform:${platform}`,
+        label: `Gateway ${platform}`,
+        enabled,
+        onToggle: () => {
+          void togglePlatform(platform);
+        },
+      })),
+    ],
+    [connectionMode, platformEnabled, toggleConnectionMode, togglePlatform],
   );
 
   const currentViewLabel = NAV_ITEMS.find((item) => item.view === view)?.labelKey;
@@ -679,7 +748,28 @@ function Layout(): React.JSX.Element {
                 {widget}
               </button>
             ))}
+            <button
+              className={`content-widget-toggle ${quickSettingsOpen ? "active" : ""}`}
+              onClick={() => setQuickSettingsOpen((prev) => !prev)}
+            >
+              quick settings
+            </button>
           </div>
+
+          {quickSettingsOpen && (
+            <div className="content-quick-settings">
+              {quickToggles.map((toggle) => (
+                <button
+                  key={toggle.key}
+                  className={`content-quick-toggle ${toggle.enabled ? "active" : ""}`}
+                  onClick={toggle.onToggle}
+                >
+                  <span>{toggle.label}</span>
+                  <span>{toggle.enabled ? "On" : "Off"}</span>
+                </button>
+              ))}
+            </div>
+          )}
 
           <div className="content-dashboard-grid">
             {dashboardMetrics.map((metric) => (
