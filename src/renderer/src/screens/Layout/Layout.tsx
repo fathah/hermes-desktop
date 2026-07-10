@@ -484,6 +484,31 @@ function Layout(): React.JSX.Element {
     pushEvent("Workspace preset saved", `Saved ${preset.label}`, "success");
   }, [activeProfile, pushEvent, view]);
 
+  const renameWorkspacePreset = useCallback(
+    (presetId: string) => {
+      const current = workspacePresets.find((preset) => preset.id === presetId);
+      if (!current) return;
+      const nextLabel = window.prompt("Rename preset", current.label)?.trim();
+      if (!nextLabel) return;
+      setWorkspacePresets((prev) =>
+        prev.map((preset) => (preset.id === presetId ? { ...preset, label: nextLabel } : preset)),
+      );
+      pushEvent("Workspace preset renamed", `Renamed preset to ${nextLabel}`, "info");
+    },
+    [pushEvent, workspacePresets],
+  );
+
+  const deleteWorkspacePreset = useCallback(
+    (presetId: string) => {
+      const current = workspacePresets.find((preset) => preset.id === presetId);
+      setWorkspacePresets((prev) => prev.filter((preset) => preset.id !== presetId));
+      if (current) {
+        pushEvent("Workspace preset deleted", `Removed ${current.label}`, "warning");
+      }
+    },
+    [pushEvent, workspacePresets],
+  );
+
   const applyWorkspacePreset = useCallback(
     (preset: WorkspacePreset) => {
       setActiveProfile(preset.profile);
@@ -492,6 +517,14 @@ function Layout(): React.JSX.Element {
       pushEvent("Workspace preset applied", `Loaded ${preset.label}`, "success");
     },
     [pushEvent],
+  );
+
+  const applyWorkspacePresetById = useCallback(
+    (presetId: string) => {
+      const preset = workspacePresets.find((item) => item.id === presetId);
+      if (preset) applyWorkspacePreset(preset);
+    },
+    [applyWorkspacePreset, workspacePresets],
   );
 
   const togglePinnedSession = useCallback((session: PinnedSession) => {
@@ -880,17 +913,32 @@ function Layout(): React.JSX.Element {
           {workspacePresets.length > 0 && (
             <div className="content-presets-row">
               {workspacePresets.map((preset) => (
-                <button
-                  key={preset.id}
-                  className="content-preset-card"
-                  onClick={() => applyWorkspacePreset(preset)}
-                >
-                  <span className="content-pinned-card-kicker">Preset</span>
-                  <span className="content-pinned-card-title">{preset.label}</span>
-                  <span className="content-pinned-card-meta">
-                    {preset.profile} · {preset.view}
-                  </span>
-                </button>
+                <div key={preset.id} className="content-launcher-card-wrap">
+                  <button
+                    className="content-preset-card"
+                    onClick={() => applyWorkspacePreset(preset)}
+                  >
+                    <span className="content-pinned-card-kicker">Preset</span>
+                    <span className="content-pinned-card-title">{preset.label}</span>
+                    <span className="content-pinned-card-meta">
+                      {preset.profile} · {preset.view}
+                    </span>
+                  </button>
+                  <div className="content-preset-actions">
+                    <button
+                      className="content-launcher-pin"
+                      onClick={() => renameWorkspacePreset(preset.id)}
+                    >
+                      Rename
+                    </button>
+                    <button
+                      className="content-launcher-pin"
+                      onClick={() => deleteWorkspacePreset(preset.id)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
               ))}
             </div>
           )}
@@ -1068,8 +1116,17 @@ function Layout(): React.JSX.Element {
                 title: session.title,
               }))}
               recentActionIds={recentActionIds}
+              presets={workspacePresets.map((preset) => ({
+                id: preset.id,
+                label: preset.label,
+                view: preset.view,
+                profile: preset.profile,
+              }))}
               onResumeRecentSession={(sessionId) => {
                 void handleResumeRecentSession(sessionId);
+              }}
+              onApplyPreset={(presetId) => {
+                applyWorkspacePresetById(presetId);
               }}
             />
             {booting && (

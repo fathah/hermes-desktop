@@ -510,6 +510,11 @@ select {
   gap: 8px;
 }
 
+.content-preset-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .content-launcher-pin {
   align-self: flex-start;
   padding: 6px 10px;

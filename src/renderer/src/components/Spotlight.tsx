@@ -34,6 +34,13 @@ interface SpotlightRecentSession {
   title: string;
 }
 
+interface SpotlightPreset {
+  id: string;
+  label: string;
+  view: string;
+  profile: string;
+}
+
 interface SpotlightProps {
   open: boolean;
   activeProfile: string;
@@ -44,7 +51,9 @@ interface SpotlightProps {
   onSearchSessions: () => void;
   recentSessions: SpotlightRecentSession[];
   recentActionIds: string[];
+  presets: SpotlightPreset[];
   onResumeRecentSession: (sessionId: string) => void;
+  onApplyPreset: (presetId: string) => void;
 }
 
 const ICON_MAP = {
@@ -71,7 +80,9 @@ function Spotlight({
   onSearchSessions,
   recentSessions,
   recentActionIds,
+  presets,
   onResumeRecentSession,
+  onApplyPreset,
 }: SpotlightProps): React.JSX.Element | null {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -166,15 +177,30 @@ function Spotlight({
       },
     }));
 
-    return [...recentSessionActions, ...actionItems, ...viewActions];
+    const presetActions: SpotlightAction[] = presets.map((preset, index) => ({
+      id: `preset:${preset.id}`,
+      label: preset.label,
+      hint: `Apply preset for ${preset.profile} · ${preset.view}`,
+      category: "Preset",
+      match: `${preset.label} ${preset.profile} ${preset.view} preset workspace`.toLowerCase(),
+      rank: 88 - index,
+      onSelect: () => {
+        onApplyPreset(preset.id);
+        onClose();
+      },
+    }));
+
+    return [...recentSessionActions, ...presetActions, ...actionItems, ...viewActions];
   }, [
     activeProfile,
+    onApplyPreset,
     onClose,
     onNavigate,
     onNewChat,
     onResumeRecentSession,
     onSearchSessions,
     onSnapWindow,
+    presets,
     recentActionIds,
     recentSessions,
   ]);
@@ -312,6 +338,19 @@ function Spotlight({
               >
                 <History size={13} />
                 <span>{session.title || "Untitled session"}</span>
+              </button>
+            ))}
+            {presets.slice(0, 2).map((preset) => (
+              <button
+                key={preset.id}
+                className="spotlight-recent-pill"
+                onClick={() => {
+                  onApplyPreset(preset.id);
+                  onClose();
+                }}
+              >
+                <PanelLeft size={13} />
+                <span>{preset.label}</span>
               </button>
             ))}
           </div>
