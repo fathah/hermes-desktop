@@ -14,6 +14,8 @@ import {
   Settings as SettingsIcon,
   X,
   ArrowRight,
+  PanelLeft,
+  ScanSearch,
 } from "lucide-react";
 
 interface SpotlightAction {
@@ -31,6 +33,8 @@ interface SpotlightProps {
   onClose: () => void;
   onNavigate: (view: string) => void;
   onNewChat: () => void;
+  onSnapWindow: () => Promise<void>;
+  onSearchSessions: () => void;
 }
 
 const ICON_MAP = {
@@ -53,6 +57,8 @@ function Spotlight({
   onClose,
   onNavigate,
   onNewChat,
+  onSnapWindow,
+  onSearchSessions,
 }: SpotlightProps): React.JSX.Element | null {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -101,15 +107,70 @@ function Spotlight({
           onClose();
         },
       },
+      {
+        id: "action:snap-window",
+        label: "Snap Window to Edge",
+        hint: "Apply HCC OS edge alignment to the current shell window",
+        category: "Window",
+        match: "snap window edge align shell window".toLowerCase(),
+        onSelect: async () => {
+          await onSnapWindow();
+          onClose();
+        },
+      },
+      {
+        id: "action:search-sessions",
+        label: "Jump to Session Search",
+        hint: "Open Sessions and browse recent runs",
+        category: "Actions",
+        match: "search sessions history recent runs".toLowerCase(),
+        onSelect: () => {
+          onSearchSessions();
+          onClose();
+        },
+      },
       ...viewActions,
     ];
-  }, [activeProfile, onClose, onNavigate, onNewChat]);
+  }, [activeProfile, onClose, onNavigate, onNewChat, onSearchSessions, onSnapWindow]);
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     if (!normalized) return actions;
     return actions.filter((action) => action.match.includes(normalized));
   }, [actions, query]);
+
+  const quickActions = useMemo(
+    () => [
+      {
+        key: "new-chat",
+        label: "New Chat",
+        icon: Sparkles,
+        onClick: () => {
+          onNewChat();
+          onClose();
+        },
+      },
+      {
+        key: "session-search",
+        label: "Sessions",
+        icon: ScanSearch,
+        onClick: () => {
+          onSearchSessions();
+          onClose();
+        },
+      },
+      {
+        key: "snap-window",
+        label: "Snap",
+        icon: PanelLeft,
+        onClick: async () => {
+          await onSnapWindow();
+          onClose();
+        },
+      },
+    ],
+    [onClose, onNewChat, onSearchSessions, onSnapWindow],
+  );
 
   useEffect(() => {
     if (selectedIndex >= filtered.length) {
@@ -180,6 +241,16 @@ function Spotlight({
           <span className="spotlight-meta-copy">Profile: {activeProfile}</span>
           <span className="spotlight-meta-copy">⌘/Ctrl + P</span>
         </div>
+        <div className="spotlight-quick-actions">
+          {quickActions.map(({ key, label, icon: Icon, onClick }) => (
+            <button key={key} className="spotlight-quick-action" onClick={() => void onClick()}>
+              <span className="spotlight-quick-action-icon">
+                <Icon size={14} />
+              </span>
+              <span>{label}</span>
+            </button>
+          ))}
+        </div>
         <div className="spotlight-results">
           {filtered.length === 0 ? (
             <div className="spotlight-empty">No matches for that query.</div>
@@ -194,7 +265,7 @@ function Spotlight({
                   key={action.id}
                   className={`spotlight-result ${selectedIndex === index ? "active" : ""}`}
                   onMouseEnter={() => setSelectedIndex(index)}
-                  onClick={action.onSelect}
+                  onClick={() => void action.onSelect()}
                 >
                   <span className="spotlight-result-icon">
                     <Icon size={15} />

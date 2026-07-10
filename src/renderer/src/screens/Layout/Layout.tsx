@@ -46,6 +46,18 @@ type View =
   | "gateway"
   | "settings";
 
+interface LauncherCard {
+  key: string;
+  label: string;
+  description: string;
+  onClick: () => void;
+}
+
+const STORAGE_KEYS = {
+  shellView: "hcc-os-shell-view",
+  shellProfile: "hcc-os-shell-profile",
+} as const;
+
 const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string; eyebrow: string }[] = [
   { view: "chat", icon: ChatBubble, labelKey: "navigation.chat", eyebrow: "Live" },
   { view: "sessions", icon: Clock, labelKey: "navigation.sessions", eyebrow: "Recall" },
@@ -61,13 +73,32 @@ const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string; eyebrow: stri
   { view: "settings", icon: SettingsIcon, labelKey: "navigation.settings", eyebrow: "Config" },
 ];
 
+function readStoredView(): View {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEYS.shellView);
+    if (!raw) return "chat";
+    const valid = NAV_ITEMS.some((item) => item.view === raw);
+    return valid ? (raw as View) : "chat";
+  } catch {
+    return "chat";
+  }
+}
+
+function readStoredProfile(): string {
+  try {
+    return window.localStorage.getItem(STORAGE_KEYS.shellProfile) || "default";
+  } catch {
+    return "default";
+  }
+}
+
 function Layout(): React.JSX.Element {
   const { t } = useI18n();
-  const [view, setView] = useState<View>("chat");
+  const [view, setView] = useState<View>(() => readStoredView());
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const [activeProfile, setActiveProfile] = useState("default");
-  const [officeVisited, setOfficeVisited] = useState(false);
+  const [activeProfile, setActiveProfile] = useState(() => readStoredProfile());
+  const [officeVisited, setOfficeVisited] = useState(() => readStoredView() === "office");
   const [remoteMode, setRemoteMode] = useState(false);
   const [spotlightOpen, setSpotlightOpen] = useState(false);
   const [booting, setBooting] = useState(true);
@@ -75,6 +106,22 @@ function Layout(): React.JSX.Element {
   useEffect(() => {
     window.hermesAPI.isRemoteMode().then(setRemoteMode);
   }, [view]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(STORAGE_KEYS.shellView, view);
+    } catch {
+      /* ignore */
+    }
+  }, [view]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(STORAGE_KEYS.shellProfile, activeProfile);
+    } catch {
+      /* ignore */
+    }
+  }, [activeProfile]);
 
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
   const [updateState, setUpdateState] = useState<
@@ -121,12 +168,20 @@ function Layout(): React.JSX.Element {
     setView(nextView as View);
   }, []);
 
+  const handleSearchSessions = useCallback(() => {
+    setView("sessions");
+  }, []);
+
+  const handleSnapWindow = useCallback(async () => {
+    await window.hermesAPI.snapWindowToEdge();
+  }, []);
+
   useEffect(() => {
     const cleanupNewChat = window.hermesAPI.onMenuNewChat(() => {
       handleNewChat();
     });
     const cleanupSearch = window.hermesAPI.onMenuSearchSessions(() => {
-      setView("sessions");
+      handleSearchSessions();
     });
     const cleanupSpotlight = window.hermesAPI.onSpotlightToggle(() => {
       setSpotlightOpen((prev) => !prev);
@@ -141,7 +196,7 @@ function Layout(): React.JSX.Element {
       cleanupSpotlight();
       cleanupBoot();
     };
-  }, [handleNewChat]);
+  }, [handleNewChat, handleSearchSessions]);
 
   const handleSelectProfile = useCallback((name: string) => {
     setActiveProfile(name);
@@ -160,6 +215,34 @@ function Layout(): React.JSX.Element {
     setCurrentSessionId(sessionId);
     setView("chat");
   }, []);
+
+  const launcherCards = useCallback((): LauncherCard[] => {
+    const cards: LauncherCard[] = [
+      {
+        key: "new-chat",
+        label: "Start a new chat",
+        description: "Reset the shell into a fresh operator thread.",
+        onClick: handleNewChat,
+      },
+      {
+        key: "resume-sessions",
+        label: "Resume recent sessions",
+        description: "Jump into recall and continue prior runs.",
+        onClick: handleSearchSessions,
+      },
+      {
+        key: "snap-window",
+        label: "Align the window",
+        description: "Use HCC OS snap-to-edge placement right now.",
+        onClick: () => {
+          void handleSnapWindow();
+        },
+      },
+    ];
+    return cards;
+  }, [handleNewChat, handleSearchSessions, handleSnapWindow]);
+
+  const currentViewLabel = NAV_ITEMS.find((item) => item.view === view)?.labelKey;
 
   return (
     <div className="layout-shell">
@@ -228,15 +311,22 @@ function Layout(): React.JSX.Element {
             <div>
               <div className="content-topbar-kicker">Workspace shell</div>
               <div className="content-topbar-title">
-                {NAV_ITEMS.find((item) => item.view === view)?.labelKey
-                  ? t(NAV_ITEMS.find((item) => item.view === view)!.labelKey)
-                  : "Hermes"}
+                {currentViewLabel ? t(currentViewLabel) : "Hermes"}
               </div>
             </div>
             <div className="content-topbar-badges">
               <span className="content-badge">{remoteMode ? "Remote mode" : "Local mode"}</span>
               <span className="content-badge">Profile {activeProfile}</span>
             </div>
+          </div>
+
+          <div className="content-launcher-row">
+            {launcherCards().map((card) => (
+              <button key={card.key} className="content-launcher-card" onClick={card.onClick}>
+                <span className="content-launcher-card-label">{card.label}</span>
+                <span className="content-launcher-card-description">{card.description}</span>
+              </button>
+            ))}
           </div>
 
           <div className="content-panel">
@@ -246,6 +336,8 @@ function Layout(): React.JSX.Element {
               onClose={() => setSpotlightOpen(false)}
               onNavigate={handleNavigate}
               onNewChat={handleNewChat}
+              onSnapWindow={handleSnapWindow}
+              onSearchSessions={handleSearchSessions}
             />
             {booting && (
               <div className="boot-sequence-overlay">
