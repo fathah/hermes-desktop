@@ -1044,6 +1044,113 @@ button:active {
   padding: 24px 16px;
 }
 
+.welcome-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 40px 24px;
+  text-align: center;
+  gap: 16px;
+}
+
+.welcome-title {
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -0.05em;
+}
+
+.welcome-subtitle {
+  max-width: 620px;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+.welcome-note {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.welcome-button,
+.welcome-recheck-btn {
+  min-width: 260px;
+  justify-content: center;
+}
+
+.welcome-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(420px, 100%);
+  color: var(--text-muted);
+}
+
+.welcome-divider::before,
+.welcome-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.14), transparent);
+}
+
+.welcome-remote-card,
+.welcome-terminal-option {
+  width: min(520px, 100%);
+  padding: 20px;
+  border-radius: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 24px 54px rgba(7, 17, 31, 0.24);
+  backdrop-filter: blur(24px);
+  text-align: left;
+}
+
+.welcome-terminal-box,
+.welcome-remote-input {
+  width: 100%;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.welcome-remote-input {
+  padding: 12px 14px;
+  color: var(--text-primary);
+}
+
+.welcome-terminal-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.welcome-remote-label,
+.welcome-terminal-label,
+.welcome-remote-hint,
+.welcome-remote-error {
+  font-size: 13px;
+}
+
+.welcome-remote-label,
+.welcome-terminal-label {
+  color: var(--text-secondary);
+}
+
+.welcome-remote-hint {
+  color: var(--text-muted);
+  margin-top: 10px;
+}
+
+.welcome-remote-error {
+  color: #ffb4b4;
+  margin-top: 10px;
+}
 .settings-surface,
 .tools-container {
   display: flex;
