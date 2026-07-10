@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import Chat, { ChatMessage } from "../Chat/Chat";
 import Sessions from "../Sessions/Sessions";
 import Agents from "../Agents/Agents";
@@ -467,6 +467,8 @@ function Layout(): React.JSX.Element {
   const [compactMode, setCompactMode] = useState<boolean>(() => readStoredCompactMode());
   const [sectionOrder, setSectionOrder] = useState<HomeSectionKey[]>(() => readStoredSectionOrder());
   const [workflowPresets, setWorkflowPresets] = useState<WorkflowPreset[]>(() => readStoredWorkflowPresets());
+  const startupWorkflowAppliedRef = useRef(false);
+  const skipStartupWorkflowRef = useRef(false);
 
   useEffect(() => {
     window.hermesAPI.isRemoteMode().then(setRemoteMode);
@@ -917,6 +919,8 @@ function Layout(): React.JSX.Element {
       setSpotlightOpen((prev) => !prev);
     });
     const cleanupBoot = window.hermesAPI.onBootSequence(() => {
+      startupWorkflowAppliedRef.current = false;
+      skipStartupWorkflowRef.current = false;
       setBooting(true);
       window.setTimeout(() => setBooting(false), 2200);
     });
@@ -1047,7 +1051,7 @@ function Layout(): React.JSX.Element {
   );
 
   const runWorkflowPreset = useCallback(
-    (workflow: WorkflowPreset) => {
+    (workflow: WorkflowPreset, options?: { silent?: boolean }) => {
       const preset = workspacePresets.find((item) => item.id === workflow.presetId);
       if (preset) {
         applyWorkspacePreset(preset);
@@ -1063,7 +1067,9 @@ function Layout(): React.JSX.Element {
       ]);
       setCurrentSessionId(null);
       setView("chat");
-      pushEvent("Workflow loaded", `Loaded ${workflow.label}`, "success");
+      if (!options?.silent) {
+        pushEvent("Workflow loaded", `Loaded ${workflow.label}`, "success");
+      }
       setTaskQueue((prev) => [
         {
           id: `${Date.now()}`,
@@ -1076,6 +1082,23 @@ function Layout(): React.JSX.Element {
     },
     [applyWorkspacePreset, pushEvent, workspacePresets],
   );
+
+  useEffect(() => {
+    if (skipStartupWorkflowRef.current || startupWorkflowAppliedRef.current || booting) return;
+    const startupWorkflow = workflowPresets.find((item) => item.startup);
+    if (!startupWorkflow) return;
+    startupWorkflowAppliedRef.current = true;
+    runWorkflowPreset(startupWorkflow, { silent: true });
+    pushEvent("Startup workflow loaded", `Boot armed ${startupWorkflow.label}`, "success");
+    setToasts((prev) => [
+      {
+        id: `${Date.now()}-startup-workflow`,
+        title: `Startup workflow: ${startupWorkflow.label}`,
+        tone: "success" as const,
+      },
+      ...prev,
+    ].slice(0, 4));
+  }, [booting, pushEvent, runWorkflowPreset, workflowPresets]);
 
   const saveWorkflowPreset = useCallback(
     (presetId: string, prompt: RecentPrompt) => {
@@ -1126,6 +1149,9 @@ function Layout(): React.JSX.Element {
 
   const setStartupWorkflowPreset = useCallback(
     (workflowId: string | null) => {
+      if (workflowId === null) {
+        skipStartupWorkflowRef.current = true;
+      }
       setWorkflowPresets((prev) =>
         prev.map((item) => ({
           ...item,
