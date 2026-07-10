@@ -308,6 +308,27 @@ select {
   gap: 8px;
 }
 
+.content-section-order-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.content-order-btn {
+  padding: 6px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(10, 16, 28, 0.55);
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.content-order-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 .content-quick-settings {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

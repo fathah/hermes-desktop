@@ -124,6 +124,8 @@ interface SectionPrefs {
   events: boolean;
 }
 
+type HomeSectionKey = keyof SectionPrefs;
+
 interface ToastItem {
   id: string;
   title: string;
@@ -156,6 +158,7 @@ const STORAGE_KEYS = {
   taskQueue: "hcc-os-shell-task-queue",
   sectionPrefs: "hcc-os-shell-section-prefs",
   compactMode: "hcc-os-shell-compact-mode",
+  sectionOrder: "hcc-os-shell-section-order",
 } as const;
 
 const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string; eyebrow: string }[] = [
@@ -374,6 +377,25 @@ function readStoredCompactMode(): boolean {
   }
 }
 
+function defaultSectionOrder(): HomeSectionKey[] {
+  return ["dashboard", "launchers", "resume", "presets", "prompts", "queue", "events"];
+}
+
+function readStoredSectionOrder(): HomeSectionKey[] {
+  const fallback = defaultSectionOrder();
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEYS.sectionOrder);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return fallback;
+    const valid = parsed.filter((item): item is HomeSectionKey => fallback.includes(item as HomeSectionKey));
+    const missing = fallback.filter((item) => !valid.includes(item));
+    return [...valid, ...missing];
+  } catch {
+    return fallback;
+  }
+}
+
 function Layout(): React.JSX.Element {
   const { t } = useI18n();
   const [view, setView] = useState<View>(() => readStoredView());
@@ -407,6 +429,7 @@ function Layout(): React.JSX.Element {
   const [taskQueue, setTaskQueue] = useState<TaskQueueItem[]>(() => readStoredTaskQueue());
   const [sectionPrefs, setSectionPrefs] = useState<SectionPrefs>(() => readStoredSectionPrefs());
   const [compactMode, setCompactMode] = useState<boolean>(() => readStoredCompactMode());
+  const [sectionOrder, setSectionOrder] = useState<HomeSectionKey[]>(() => readStoredSectionOrder());
 
   useEffect(() => {
     window.hermesAPI.isRemoteMode().then(setRemoteMode);
@@ -600,10 +623,11 @@ function Layout(): React.JSX.Element {
     try {
       window.localStorage.setItem(STORAGE_KEYS.sectionPrefs, JSON.stringify(sectionPrefs));
       window.localStorage.setItem(STORAGE_KEYS.compactMode, compactMode ? "true" : "false");
+      window.localStorage.setItem(STORAGE_KEYS.sectionOrder, JSON.stringify(sectionOrder));
     } catch {
       /* ignore */
     }
-  }, [compactMode, sectionPrefs]);
+  }, [compactMode, sectionOrder, sectionPrefs]);
 
   const rememberAction = useCallback((actionId: string) => {
     setRecentActionIds((prev) => [actionId, ...prev.filter((item) => item !== actionId)].slice(0, 10));
@@ -1003,6 +1027,18 @@ function Layout(): React.JSX.Element {
     setSectionPrefs((prev) => ({ ...prev, [key]: !prev[key] }));
   }, []);
 
+  const moveSection = useCallback((key: HomeSectionKey, direction: "up" | "down") => {
+    setSectionOrder((prev) => {
+      const index = prev.indexOf(key);
+      if (index === -1) return prev;
+      const nextIndex = direction === "up" ? index - 1 : index + 1;
+      if (nextIndex < 0 || nextIndex >= prev.length) return prev;
+      const next = [...prev];
+      [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+      return next;
+    });
+  }, []);
+
   const shellContentClassName = compactMode ? "content-shell compact-mode" : "content-shell";
 
   const healthDiagnostics = useMemo(
@@ -1170,15 +1206,29 @@ function Layout(): React.JSX.Element {
               ["dashboard", "dashboard"],
               ["launchers", "launchers"],
               ["events", "events"],
-            ] as const).map(([key, label]) => (
-              <button
-                key={key}
-                className={`content-widget-toggle ${sectionPrefs[key] ? "active" : ""}`}
-                onClick={() => toggleSection(key)}
-              >
-                {label}
-              </button>
-            ))}
+            ] as const).map(([key, label]) => {
+              const index = sectionOrder.indexOf(key);
+              return (
+                <span key={key} className="content-section-order-chip">
+                  <button
+                    className={`content-widget-toggle ${sectionPrefs[key] ? "active" : ""}`}
+                    onClick={() => toggleSection(key)}
+                  >
+                    {label}
+                  </button>
+                  <button className="content-order-btn" onClick={() => moveSection(key, "up")} disabled={index <= 0}>
+                    ↑
+                  </button>
+                  <button
+                    className="content-order-btn"
+                    onClick={() => moveSection(key, "down")}
+                    disabled={index === -1 || index >= sectionOrder.length - 1}
+                  >
+                    ↓
+                  </button>
+                </span>
+              );
+            })}
             <button
               className={`content-widget-toggle ${quickSettingsOpen ? "active" : ""}`}
               onClick={() => setQuickSettingsOpen((prev) => !prev)}
@@ -1205,65 +1255,81 @@ function Layout(): React.JSX.Element {
             </div>
           )}
 
-          {sectionPrefs.presets && (
-            <HomePresets
-              presets={workspacePresets}
-              startupPresetId={startupPresetId}
-              onApplyPreset={applyWorkspacePreset}
-              onSetStartupPreset={setStartupPreset}
-              onRenamePreset={renameWorkspacePreset}
-              onDeletePreset={deleteWorkspacePreset}
-            />
-          )}
-
-          {sectionPrefs.resume && <HomeResume lastSession={lastSession} onResume={handleResumeRecentSession} />}
-
-          {sectionPrefs.prompts && (
-            <HomeRecentPrompts
-              prompts={recentPrompts}
-              onRecall={(prompt) => {
-                setView("chat");
-                pushEvent("Recent prompt recalled", `Prompt from ${prompt.profile} brought back into focus`, "info");
-              }}
-              onRerun={rerunRecentPrompt}
-            />
-          )}
-
-          {sectionPrefs.queue && (
-            <HomeTaskQueue
-              tasks={taskQueue}
-              onToggleTask={toggleTaskQueueItem}
-              onClearCompleted={clearCompletedTasks}
-            />
-          )}
-
-          {sectionPrefs.dashboard && (
-            <HomeDashboard
-              metrics={dashboardMetrics}
-              health={healthDiagnostics}
-              onNavigateMetric={(metricKey) => {
-                if (metricKey === "gateway") handleNavigate("gateway");
-                if (metricKey === "profiles") handleNavigate("agents");
-                if (metricKey === "model") handleNavigate("models");
-                if (metricKey === "schedules") handleNavigate("schedules");
-              }}
-            />
-          )}
-
-          {sectionPrefs.launchers && (
-            <HomeLaunchers
-              pinnedCards={pinnedCards}
-              launcherCards={launcherCards}
-              pinnedActionIds={pinnedActionIds}
-              pinnedSessions={pinnedSessions}
-              recentSessions={recentSessions}
-              onTogglePinnedAction={togglePinnedAction}
-              onResumeRecentSession={handleResumeRecentSession}
-              onTogglePinnedSession={togglePinnedSession}
-            />
-          )}
-
-          {sectionPrefs.events && <HomeEvents events={events} onDismissEvent={dismissEvent} />}
+          {sectionOrder.map((sectionKey) => {
+            switch (sectionKey) {
+              case "presets":
+                return sectionPrefs.presets ? (
+                  <HomePresets
+                    key={sectionKey}
+                    presets={workspacePresets}
+                    startupPresetId={startupPresetId}
+                    onApplyPreset={applyWorkspacePreset}
+                    onSetStartupPreset={setStartupPreset}
+                    onRenamePreset={renameWorkspacePreset}
+                    onDeletePreset={deleteWorkspacePreset}
+                  />
+                ) : null;
+              case "resume":
+                return sectionPrefs.resume ? (
+                  <HomeResume key={sectionKey} lastSession={lastSession} onResume={handleResumeRecentSession} />
+                ) : null;
+              case "prompts":
+                return sectionPrefs.prompts ? (
+                  <HomeRecentPrompts
+                    key={sectionKey}
+                    prompts={recentPrompts}
+                    onRecall={(prompt) => {
+                      setView("chat");
+                      pushEvent("Recent prompt recalled", `Prompt from ${prompt.profile} brought back into focus`, "info");
+                    }}
+                    onRerun={rerunRecentPrompt}
+                  />
+                ) : null;
+              case "queue":
+                return sectionPrefs.queue ? (
+                  <HomeTaskQueue
+                    key={sectionKey}
+                    tasks={taskQueue}
+                    onToggleTask={toggleTaskQueueItem}
+                    onClearCompleted={clearCompletedTasks}
+                  />
+                ) : null;
+              case "dashboard":
+                return sectionPrefs.dashboard ? (
+                  <HomeDashboard
+                    key={sectionKey}
+                    metrics={dashboardMetrics}
+                    health={healthDiagnostics}
+                    onNavigateMetric={(metricKey) => {
+                      if (metricKey === "gateway") handleNavigate("gateway");
+                      if (metricKey === "profiles") handleNavigate("agents");
+                      if (metricKey === "model") handleNavigate("models");
+                      if (metricKey === "schedules") handleNavigate("schedules");
+                    }}
+                  />
+                ) : null;
+              case "launchers":
+                return sectionPrefs.launchers ? (
+                  <HomeLaunchers
+                    key={sectionKey}
+                    pinnedCards={pinnedCards}
+                    launcherCards={launcherCards}
+                    pinnedActionIds={pinnedActionIds}
+                    pinnedSessions={pinnedSessions}
+                    recentSessions={recentSessions}
+                    onTogglePinnedAction={togglePinnedAction}
+                    onResumeRecentSession={handleResumeRecentSession}
+                    onTogglePinnedSession={togglePinnedSession}
+                  />
+                ) : null;
+              case "events":
+                return sectionPrefs.events ? (
+                  <HomeEvents key={sectionKey} events={events} onDismissEvent={dismissEvent} />
+                ) : null;
+              default:
+                return null;
+            }
+          })}
 
           <div className="content-toast-stack">
             {toasts.map((toast) => (
