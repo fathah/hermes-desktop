@@ -93,6 +93,13 @@ interface LastSessionSnapshot {
   startedAt: number;
 }
 
+interface RecentPrompt {
+  id: string;
+  text: string;
+  profile: string;
+  timestamp: number;
+}
+
 interface ToastItem {
   id: string;
   title: string;
@@ -121,6 +128,7 @@ const STORAGE_KEYS = {
   pinnedSessions: "hcc-os-shell-pinned-sessions",
   lastSession: "hcc-os-shell-last-session",
   startupPreset: "hcc-os-shell-startup-preset",
+  recentPrompts: "hcc-os-shell-recent-prompts",
 } as const;
 
 const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string; eyebrow: string }[] = [
@@ -273,6 +281,25 @@ function readStoredStartupPreset(): string | null {
   }
 }
 
+function readStoredRecentPrompts(): RecentPrompt[] {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEYS.recentPrompts);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter(
+          (item): item is RecentPrompt =>
+            typeof item?.id === "string" &&
+            typeof item?.text === "string" &&
+            typeof item?.profile === "string" &&
+            typeof item?.timestamp === "number",
+        )
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 function Layout(): React.JSX.Element {
   const { t } = useI18n();
   const [view, setView] = useState<View>(() => readStoredView());
@@ -302,6 +329,7 @@ function Layout(): React.JSX.Element {
   const [pinnedSessions, setPinnedSessions] = useState<PinnedSession[]>(() => readStoredPinnedSessions());
   const [lastSession, setLastSession] = useState<LastSessionSnapshot | null>(() => readStoredLastSession());
   const [startupPresetId, setStartupPresetId] = useState<string | null>(() => readStoredStartupPreset());
+  const [recentPrompts, setRecentPrompts] = useState<RecentPrompt[]>(() => readStoredRecentPrompts());
 
   useEffect(() => {
     window.hermesAPI.isRemoteMode().then(setRemoteMode);
@@ -468,6 +496,17 @@ function Layout(): React.JSX.Element {
       /* ignore */
     }
   }, [startupPresetId]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        STORAGE_KEYS.recentPrompts,
+        JSON.stringify(recentPrompts.slice(0, 8)),
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [recentPrompts]);
 
   const rememberAction = useCallback((actionId: string) => {
     setRecentActionIds((prev) => [actionId, ...prev.filter((item) => item !== actionId)].slice(0, 10));
@@ -1054,6 +1093,27 @@ function Layout(): React.JSX.Element {
             </div>
           )}
 
+          {recentPrompts.length > 0 && (
+            <div className="content-presets-row">
+              {recentPrompts.slice(0, 3).map((prompt) => (
+                <button
+                  key={prompt.id}
+                  className="content-preset-card"
+                  onClick={() => {
+                    setView("chat");
+                    pushEvent("Recent prompt recalled", `Prompt from ${prompt.profile} brought back into focus`, "info");
+                  }}
+                >
+                  <span className="content-pinned-card-kicker">Recent prompt</span>
+                  <span className="content-pinned-card-title">{prompt.text.slice(0, 72)}</span>
+                  <span className="content-pinned-card-meta">
+                    {prompt.profile} · {new Date(prompt.timestamp).toLocaleString()}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="content-dashboard-grid">
             {dashboardMetrics.map((metric) => (
               <button
@@ -1269,6 +1329,17 @@ function Layout(): React.JSX.Element {
                 sessionId={currentSessionId}
                 profile={activeProfile}
                 onNewChat={handleNewChat}
+                onPromptSent={(text: string) => {
+                  setRecentPrompts((prev) => [
+                    {
+                      id: `${Date.now()}`,
+                      text,
+                      profile: activeProfile,
+                      timestamp: Date.now(),
+                    },
+                    ...prev.filter((item) => item.text !== text),
+                  ].slice(0, 8));
+                }}
               />
             </div>
             {view === "sessions" &&

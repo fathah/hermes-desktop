@@ -206,15 +206,17 @@ interface ChatProps {
   profile?: string;
   onSessionStarted?: () => void;
   onNewChat?: () => void;
+  onPromptSent?: (text: string) => void;
 }
 
 function Chat({
   messages,
   setMessages,
   sessionId,
-  profile,
+  profile = "default",
   onSessionStarted,
   onNewChat,
+  onPromptSent,
 }: ChatProps): React.JSX.Element {
   const { t } = useI18n();
   const [input, setInput] = useState("");
@@ -506,6 +508,7 @@ function Chat({
       );
       if (isLocal) {
         if (cmd !== "/new" && cmd !== "/clear") {
+          onPromptSent?.(text);
           setMessages((prev) => [
             ...prev,
             { id: `user-${Date.now()}`, role: "user", content: text },
@@ -517,6 +520,7 @@ function Chat({
     }
 
     setIsLoading(true);
+    onPromptSent?.(text);
     setMessages((prev) => [
       ...prev,
       { id: `user-${Date.now()}`, role: "user", content: text },
