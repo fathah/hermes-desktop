@@ -60,10 +60,18 @@ interface RecentShellSession {
   startedAt: number;
 }
 
+interface DashboardMetric {
+  key: string;
+  label: string;
+  value: string;
+  detail: string;
+}
+
 const STORAGE_KEYS = {
   shellView: "hcc-os-shell-view",
   shellProfile: "hcc-os-shell-profile",
   recentActions: "hcc-os-shell-recent-actions",
+  pinnedActions: "hcc-os-shell-pinned-actions",
 } as const;
 
 const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string; eyebrow: string }[] = [
@@ -111,6 +119,17 @@ function readStoredRecentActions(): string[] {
   }
 }
 
+function readStoredPinnedActions(): string[] {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEYS.pinnedActions);
+    if (!raw) return ["action:new-chat", "action:search-sessions"];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((item) => typeof item === "string") : [];
+  } catch {
+    return ["action:new-chat", "action:search-sessions"];
+  }
+}
+
 function Layout(): React.JSX.Element {
   const { t } = useI18n();
   const [view, setView] = useState<View>(() => readStoredView());
@@ -123,6 +142,11 @@ function Layout(): React.JSX.Element {
   const [booting, setBooting] = useState(true);
   const [recentSessions, setRecentSessions] = useState<RecentShellSession[]>([]);
   const [recentActionIds, setRecentActionIds] = useState<string[]>(() => readStoredRecentActions());
+  const [pinnedActionIds, setPinnedActionIds] = useState<string[]>(() => readStoredPinnedActions());
+  const [gatewayRunning, setGatewayRunning] = useState(false);
+  const [profileCount, setProfileCount] = useState(0);
+  const [modelLabel, setModelLabel] = useState("Not set");
+  const [scheduleCount, setScheduleCount] = useState(0);
 
   useEffect(() => {
     window.hermesAPI.isRemoteMode().then(setRemoteMode);
@@ -138,7 +162,14 @@ function Layout(): React.JSX.Element {
         })),
       );
     });
-  }, []);
+
+    void window.hermesAPI.gatewayStatus().then(setGatewayRunning);
+    void window.hermesAPI.listProfiles().then((profiles) => setProfileCount(profiles.length));
+    void window.hermesAPI
+      .getModelConfig(activeProfile)
+      .then((config) => setModelLabel(config.model || "Not set"));
+    void window.hermesAPI.listCronJobs(undefined, activeProfile).then((jobs) => setScheduleCount(jobs.length));
+  }, [activeProfile]);
 
   useEffect(() => {
     try {
@@ -167,8 +198,27 @@ function Layout(): React.JSX.Element {
     }
   }, [recentActionIds]);
 
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        STORAGE_KEYS.pinnedActions,
+        JSON.stringify(pinnedActionIds.slice(0, 8)),
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [pinnedActionIds]);
+
   const rememberAction = useCallback((actionId: string) => {
     setRecentActionIds((prev) => [actionId, ...prev.filter((item) => item !== actionId)].slice(0, 10));
+  }, []);
+
+  const togglePinnedAction = useCallback((actionId: string) => {
+    setPinnedActionIds((prev) =>
+      prev.includes(actionId)
+        ? prev.filter((item) => item !== actionId)
+        : [actionId, ...prev].slice(0, 8),
+    );
   }, []);
 
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
@@ -284,8 +334,10 @@ function Layout(): React.JSX.Element {
 
   const launcherCards = useMemo<LauncherCard[]>(() => {
     const rankBoost = (id: string, base: number): number => {
-      const idx = recentActionIds.indexOf(id);
-      return idx === -1 ? base : base + Math.max(0, 6 - idx);
+      const recentIdx = recentActionIds.indexOf(id);
+      const pinBoost = pinnedActionIds.includes(id) ? 20 : 0;
+      const recentBoost = recentIdx === -1 ? 0 : Math.max(0, 6 - recentIdx);
+      return base + pinBoost + recentBoost;
     };
 
     return [
@@ -313,7 +365,51 @@ function Layout(): React.JSX.Element {
         },
       },
     ].sort((a, b) => b.rank - a.rank);
-  }, [handleNewChat, handleSearchSessions, handleSnapWindow, recentActionIds]);
+  }, [handleNewChat, handleSearchSessions, handleSnapWindow, pinnedActionIds, recentActionIds]);
+
+  const pinnedCards = useMemo(
+    () =>
+      launcherCards.filter((card) =>
+        pinnedActionIds.includes(
+          card.key === "new-chat"
+            ? "action:new-chat"
+            : card.key === "resume-sessions"
+              ? "action:search-sessions"
+              : "action:snap-window",
+        ),
+      ),
+    [launcherCards, pinnedActionIds],
+  );
+
+  const dashboardMetrics = useMemo<DashboardMetric[]>(
+    () => [
+      {
+        key: "gateway",
+        label: "Gateway",
+        value: gatewayRunning ? "Online" : "Offline",
+        detail: gatewayRunning ? "Delivery bridge ready" : "Start platform bridge",
+      },
+      {
+        key: "profiles",
+        label: "Profiles",
+        value: String(profileCount),
+        detail: "Installed operator profiles",
+      },
+      {
+        key: "model",
+        label: "Model",
+        value: modelLabel.split("/").pop() || modelLabel,
+        detail: `Profile ${activeProfile}`,
+      },
+      {
+        key: "schedules",
+        label: "Schedules",
+        value: String(scheduleCount),
+        detail: "Automation jobs configured",
+      },
+    ],
+    [activeProfile, gatewayRunning, modelLabel, profileCount, scheduleCount],
+  );
 
   const currentViewLabel = NAV_ITEMS.find((item) => item.view === view)?.labelKey;
 
@@ -393,13 +489,61 @@ function Layout(): React.JSX.Element {
             </div>
           </div>
 
-          <div className="content-launcher-row">
-            {launcherCards.map((card) => (
-              <button key={card.key} className="content-launcher-card" onClick={card.onClick}>
-                <span className="content-launcher-card-label">{card.label}</span>
-                <span className="content-launcher-card-description">{card.description}</span>
+          <div className="content-dashboard-grid">
+            {dashboardMetrics.map((metric) => (
+              <button
+                key={metric.key}
+                className="content-dashboard-card"
+                onClick={() => {
+                  if (metric.key === "gateway") handleNavigate("gateway");
+                  if (metric.key === "profiles") handleNavigate("agents");
+                  if (metric.key === "model") handleNavigate("models");
+                  if (metric.key === "schedules") handleNavigate("schedules");
+                }}
+              >
+                <span className="content-dashboard-card-label">{metric.label}</span>
+                <span className="content-dashboard-card-value">{metric.value}</span>
+                <span className="content-dashboard-card-detail">{metric.detail}</span>
               </button>
             ))}
+          </div>
+
+          {pinnedCards.length > 0 && (
+            <div className="content-pinned-row">
+              {pinnedCards.map((card) => (
+                <button key={card.key} className="content-pinned-card" onClick={card.onClick}>
+                  <span className="content-pinned-card-kicker">Pinned</span>
+                  <span className="content-pinned-card-title">{card.label}</span>
+                  <span className="content-pinned-card-meta">{card.description}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="content-launcher-row">
+            {launcherCards.map((card) => {
+              const actionId =
+                card.key === "new-chat"
+                  ? "action:new-chat"
+                  : card.key === "resume-sessions"
+                    ? "action:search-sessions"
+                    : "action:snap-window";
+              const pinned = pinnedActionIds.includes(actionId);
+              return (
+                <div key={card.key} className="content-launcher-card-wrap">
+                  <button className="content-launcher-card" onClick={card.onClick}>
+                    <span className="content-launcher-card-label">{card.label}</span>
+                    <span className="content-launcher-card-description">{card.description}</span>
+                  </button>
+                  <button
+                    className={`content-launcher-pin ${pinned ? "active" : ""}`}
+                    onClick={() => togglePinnedAction(actionId)}
+                  >
+                    {pinned ? "Unpin" : "Pin"}
+                  </button>
+                </div>
+              );
+            })}
           </div>
 
           {recentSessions.length > 0 && (
