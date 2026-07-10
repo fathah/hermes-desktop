@@ -46,19 +46,19 @@ type View =
   | "gateway"
   | "settings";
 
-const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string }[] = [
-  { view: "chat", icon: ChatBubble, labelKey: "navigation.chat" },
-  { view: "sessions", icon: Clock, labelKey: "navigation.sessions" },
-  { view: "agents", icon: Users, labelKey: "navigation.agents" },
-  { view: "office", icon: Building, labelKey: "navigation.office" },
-  { view: "models", icon: Layers, labelKey: "navigation.models" },
-  { view: "skills", icon: Puzzle, labelKey: "navigation.skills" },
-  { view: "soul", icon: Sparkles, labelKey: "navigation.soul" },
-  { view: "memory", icon: Brain, labelKey: "navigation.memory" },
-  { view: "tools", icon: Wrench, labelKey: "navigation.tools" },
-  { view: "schedules", icon: Timer, labelKey: "navigation.schedules" },
-  { view: "gateway", icon: Signal, labelKey: "navigation.gateway" },
-  { view: "settings", icon: SettingsIcon, labelKey: "navigation.settings" },
+const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string; eyebrow: string }[] = [
+  { view: "chat", icon: ChatBubble, labelKey: "navigation.chat", eyebrow: "Live" },
+  { view: "sessions", icon: Clock, labelKey: "navigation.sessions", eyebrow: "Recall" },
+  { view: "agents", icon: Users, labelKey: "navigation.agents", eyebrow: "Profiles" },
+  { view: "office", icon: Building, labelKey: "navigation.office", eyebrow: "Workspace" },
+  { view: "models", icon: Layers, labelKey: "navigation.models", eyebrow: "Inference" },
+  { view: "skills", icon: Puzzle, labelKey: "navigation.skills", eyebrow: "Playbooks" },
+  { view: "soul", icon: Sparkles, labelKey: "navigation.soul", eyebrow: "Persona" },
+  { view: "memory", icon: Brain, labelKey: "navigation.memory", eyebrow: "Recall" },
+  { view: "tools", icon: Wrench, labelKey: "navigation.tools", eyebrow: "Runtime" },
+  { view: "schedules", icon: Timer, labelKey: "navigation.schedules", eyebrow: "Automation" },
+  { view: "gateway", icon: Signal, labelKey: "navigation.gateway", eyebrow: "Delivery" },
+  { view: "settings", icon: SettingsIcon, labelKey: "navigation.settings", eyebrow: "Config" },
 ];
 
 function Layout(): React.JSX.Element {
@@ -67,19 +67,15 @@ function Layout(): React.JSX.Element {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [activeProfile, setActiveProfile] = useState("default");
-  // Lazy mount: only render Office after first visit, then keep mounted
   const [officeVisited, setOfficeVisited] = useState(false);
-  // Remote mode — many screens show "not available" instead of empty data
   const [remoteMode, setRemoteMode] = useState(false);
   const [spotlightOpen, setSpotlightOpen] = useState(false);
   const [booting, setBooting] = useState(true);
 
-  // Re-check remote mode on tab switch (picks up Settings changes)
   useEffect(() => {
     window.hermesAPI.isRemoteMode().then(setRemoteMode);
   }, [view]);
 
-  // Auto-update state
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
   const [updateState, setUpdateState] = useState<
     "available" | "downloading" | "ready" | null
@@ -91,11 +87,9 @@ function Layout(): React.JSX.Element {
       setUpdateVersion(info.version);
       setUpdateState("available");
     });
-    const cleanupProgress = window.hermesAPI.onUpdateDownloadProgress(
-      (info) => {
-        setDownloadPercent(info.percent);
-      },
-    );
+    const cleanupProgress = window.hermesAPI.onUpdateDownloadProgress((info) => {
+      setDownloadPercent(info.percent);
+    });
     const cleanupDownloaded = window.hermesAPI.onUpdateDownloaded(() => {
       setUpdateState("ready");
     });
@@ -116,7 +110,6 @@ function Layout(): React.JSX.Element {
   }
 
   const handleNewChat = useCallback(() => {
-    // Abort any in-flight chat before clearing
     window.hermesAPI.abortChat();
     setMessages([]);
     setCurrentSessionId(null);
@@ -128,7 +121,6 @@ function Layout(): React.JSX.Element {
     setView(nextView as View);
   }, []);
 
-  // Listen for menu IPC events (Cmd+N, Cmd+K from app menu)
   useEffect(() => {
     const cleanupNewChat = window.hermesAPI.onMenuNewChat(() => {
       handleNewChat();
@@ -170,171 +162,187 @@ function Layout(): React.JSX.Element {
   }, []);
 
   return (
-    <div className="layout">
-      <aside className="sidebar">
-        <div className="sidebar-brand">
-          <img src={hermeslogo} height={30} alt="" />
-        </div>
-
-        <nav className="sidebar-nav">
-          {NAV_ITEMS.map(({ view: v, icon: Icon, labelKey }) => (
-            <button
-              key={v}
-              className={`sidebar-nav-item ${view === v ? "active" : ""}`}
-              onClick={() => {
-                handleNavigate(v);
-              }}
-            >
-              <Icon size={16} />
-              {t(labelKey)}
-            </button>
-          ))}
-        </nav>
-
-        <div className="sidebar-footer">
-          {updateState && (
-            <button className="sidebar-update-btn" onClick={handleUpdate}>
-              <Download size={13} />
-              {updateState === "available" && (
-                <span>
-                  {t("common.updateAvailable", { version: updateVersion })}
-                </span>
-              )}
-              {updateState === "downloading" && (
-                <span>
-                  {t("common.downloading", { percent: downloadPercent })}
-                </span>
-              )}
-              {updateState === "ready" && (
-                <span>{t("common.restartToUpdate")}</span>
-              )}
-            </button>
-          )}
-          <div className="sidebar-footer-text">
-            {activeProfile === "default" ? t("common.appName") : activeProfile}
-          </div>
-        </div>
-      </aside>
-
-      <main className="content">
-        <Spotlight
-          open={spotlightOpen}
-          activeProfile={activeProfile}
-          onClose={() => setSpotlightOpen(false)}
-          onNavigate={handleNavigate}
-          onNewChat={handleNewChat}
-        />
-        {booting && (
-          <div className="boot-sequence-overlay">
-            <div className="boot-sequence-panel">
-              <div className="boot-sequence-kicker">HCC OS</div>
-              <div className="boot-sequence-title">Booting workspace shell</div>
-              <div className="boot-sequence-progress">
-                <span className="boot-sequence-bar" />
-              </div>
-              <div className="boot-sequence-copy">Hydrating panels, tools, and profile context…</div>
+    <div className="layout-shell">
+      <div className="layout-shell-backdrop" />
+      <div className="layout-frame">
+        <aside className="sidebar">
+          <div className="sidebar-brand-card">
+            <div className="sidebar-brand-mark">
+              <img src={hermeslogo} height={30} alt="" />
+            </div>
+            <div className="sidebar-brand-copy">
+              <div className="sidebar-brand-kicker">HCC OS</div>
+              <div className="sidebar-brand-name">Hermes Desktop</div>
             </div>
           </div>
-        )}
-        <div
-          style={{
-            display: view === "chat" ? "flex" : "none",
-            flex: 1,
-            flexDirection: "column",
-            overflow: "hidden",
-          }}
-        >
-          <Chat
-            messages={messages}
-            setMessages={setMessages}
-            sessionId={currentSessionId}
-            profile={activeProfile}
-            onNewChat={handleNewChat}
-          />
-        </div>
-        {view === "sessions" &&
-          (remoteMode ? (
-            <RemoteNotice feature="Sessions" />
-          ) : (
-            <Sessions
-              onResumeSession={handleResumeSession}
-              onNewChat={handleNewChat}
-              currentSessionId={currentSessionId}
-            />
-          ))}
-        {view === "agents" &&
-          (remoteMode ? (
-            <RemoteNotice feature="Profiles" />
-          ) : (
-            <Agents
-              activeProfile={activeProfile}
-              onSelectProfile={handleSelectProfile}
-              onChatWith={(name: string) => {
-                handleSelectProfile(name);
-                setView("chat");
-              }}
-            />
-          ))}
-        {officeVisited && (
-          <div
-            style={{
-              display: view === "office" ? "flex" : "none",
-              flex: 1,
-              flexDirection: "column",
-              overflow: "hidden",
-            }}
-          >
-            <Office visible={view === "office"} />
+
+          <button className="sidebar-launcher" onClick={() => setSpotlightOpen(true)}>
+            <span className="sidebar-launcher-label">Open spotlight</span>
+            <span className="sidebar-launcher-shortcut">⌘/Ctrl + P</span>
+          </button>
+
+          <nav className="sidebar-nav">
+            {NAV_ITEMS.map(({ view: v, icon: Icon, labelKey, eyebrow }) => (
+              <button
+                key={v}
+                className={`sidebar-nav-item ${view === v ? "active" : ""}`}
+                onClick={() => {
+                  handleNavigate(v);
+                }}
+              >
+                <span className="sidebar-nav-item-icon">
+                  <Icon size={16} />
+                </span>
+                <span className="sidebar-nav-item-copy">
+                  <span className="sidebar-nav-item-label">{t(labelKey)}</span>
+                  <span className="sidebar-nav-item-eyebrow">{eyebrow}</span>
+                </span>
+              </button>
+            ))}
+          </nav>
+
+          <div className="sidebar-footer">
+            {updateState && (
+              <button className="sidebar-update-btn" onClick={handleUpdate}>
+                <Download size={13} />
+                {updateState === "available" && (
+                  <span>{t("common.updateAvailable", { version: updateVersion })}</span>
+                )}
+                {updateState === "downloading" && (
+                  <span>{t("common.downloading", { percent: downloadPercent })}</span>
+                )}
+                {updateState === "ready" && <span>{t("common.restartToUpdate")}</span>}
+              </button>
+            )}
+            <div className="sidebar-footer-meta">
+              <div className="sidebar-footer-kicker">Active profile</div>
+              <div className="sidebar-footer-text">
+                {activeProfile === "default" ? t("common.appName") : activeProfile}
+              </div>
+            </div>
           </div>
-        )}
-        {view === "models" && <Models />}
-        {view === "skills" &&
-          (remoteMode ? (
-            <RemoteNotice feature="Skills" />
-          ) : (
-            <Skills profile={activeProfile} />
-          ))}
-        {view === "soul" &&
-          (remoteMode ? (
-            <RemoteNotice feature="Persona" />
-          ) : (
-            <Soul profile={activeProfile} />
-          ))}
-        {view === "memory" &&
-          (remoteMode ? (
-            <RemoteNotice feature="Memory" />
-          ) : (
-            <Memory profile={activeProfile} />
-          ))}
-        {view === "tools" &&
-          (remoteMode ? (
-            <RemoteNotice feature="Tools" />
-          ) : (
-            <Tools profile={activeProfile} />
-          ))}
-        {view === "schedules" &&
-          (remoteMode ? (
-            <RemoteNotice feature="Schedules" />
-          ) : (
-            <Schedules profile={activeProfile} />
-          ))}
-        {view === "gateway" &&
-          (remoteMode ? (
-            <RemoteNotice feature="Gateway" />
-          ) : (
-            <Gateway profile={activeProfile} />
-          ))}
-        <div
-          style={{
-            display: view === "settings" ? "flex" : "none",
-            flex: 1,
-            flexDirection: "column",
-            overflow: "hidden",
-          }}
-        >
-          <Settings profile={activeProfile} visible={view === "settings"} />
-        </div>
-      </main>
+        </aside>
+
+        <main className="content-shell">
+          <div className="content-topbar">
+            <div>
+              <div className="content-topbar-kicker">Workspace shell</div>
+              <div className="content-topbar-title">
+                {NAV_ITEMS.find((item) => item.view === view)?.labelKey
+                  ? t(NAV_ITEMS.find((item) => item.view === view)!.labelKey)
+                  : "Hermes"}
+              </div>
+            </div>
+            <div className="content-topbar-badges">
+              <span className="content-badge">{remoteMode ? "Remote mode" : "Local mode"}</span>
+              <span className="content-badge">Profile {activeProfile}</span>
+            </div>
+          </div>
+
+          <div className="content-panel">
+            <Spotlight
+              open={spotlightOpen}
+              activeProfile={activeProfile}
+              onClose={() => setSpotlightOpen(false)}
+              onNavigate={handleNavigate}
+              onNewChat={handleNewChat}
+            />
+            {booting && (
+              <div className="boot-sequence-overlay">
+                <div className="boot-sequence-panel">
+                  <div className="boot-sequence-kicker">HCC OS</div>
+                  <div className="boot-sequence-title">Booting workspace shell</div>
+                  <div className="boot-sequence-progress">
+                    <span className="boot-sequence-bar" />
+                  </div>
+                  <div className="boot-sequence-copy">
+                    Hydrating panels, tools, and profile context…
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div
+              style={{
+                display: view === "chat" ? "flex" : "none",
+                flex: 1,
+                flexDirection: "column",
+                overflow: "hidden",
+              }}
+            >
+              <Chat
+                messages={messages}
+                setMessages={setMessages}
+                sessionId={currentSessionId}
+                profile={activeProfile}
+                onNewChat={handleNewChat}
+              />
+            </div>
+            {view === "sessions" &&
+              (remoteMode ? (
+                <RemoteNotice feature="Sessions" />
+              ) : (
+                <Sessions
+                  onResumeSession={handleResumeSession}
+                  onNewChat={handleNewChat}
+                  currentSessionId={currentSessionId}
+                />
+              ))}
+            {view === "agents" &&
+              (remoteMode ? (
+                <RemoteNotice feature="Profiles" />
+              ) : (
+                <Agents
+                  activeProfile={activeProfile}
+                  onSelectProfile={handleSelectProfile}
+                  onChatWith={(name: string) => {
+                    handleSelectProfile(name);
+                    setView("chat");
+                  }}
+                />
+              ))}
+            {officeVisited && (
+              <div
+                style={{
+                  display: view === "office" ? "flex" : "none",
+                  flex: 1,
+                  flexDirection: "column",
+                  overflow: "hidden",
+                }}
+              >
+                <Office visible={view === "office"} />
+              </div>
+            )}
+            {view === "models" && <Models />}
+            {view === "skills" &&
+              (remoteMode ? <RemoteNotice feature="Skills" /> : <Skills profile={activeProfile} />)}
+            {view === "soul" &&
+              (remoteMode ? <RemoteNotice feature="Persona" /> : <Soul profile={activeProfile} />)}
+            {view === "memory" &&
+              (remoteMode ? <RemoteNotice feature="Memory" /> : <Memory profile={activeProfile} />)}
+            {view === "tools" &&
+              (remoteMode ? <RemoteNotice feature="Tools" /> : <Tools profile={activeProfile} />)}
+            {view === "schedules" &&
+              (remoteMode ? (
+                <RemoteNotice feature="Schedules" />
+              ) : (
+                <Schedules profile={activeProfile} />
+              ))}
+            {view === "gateway" &&
+              (remoteMode ? <RemoteNotice feature="Gateway" /> : <Gateway profile={activeProfile} />)}
+            <div
+              style={{
+                display: view === "settings" ? "flex" : "none",
+                flex: 1,
+                flexDirection: "column",
+                overflow: "hidden",
+              }}
+            >
+              <Settings profile={activeProfile} visible={view === "settings"} />
+            </div>
+          </div>
+        </main>
+      </div>
     </div>
   );
 }

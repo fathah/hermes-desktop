@@ -1,10 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, Sparkles, Clock, Users, Building, Layers, Puzzle, Brain, Wrench, Timer, Signal, Settings as SettingsIcon, X } from "lucide-react";
+import {
+  Search,
+  Sparkles,
+  Clock,
+  Users,
+  Building,
+  Layers,
+  Puzzle,
+  Brain,
+  Wrench,
+  Timer,
+  Signal,
+  Settings as SettingsIcon,
+  X,
+  ArrowRight,
+} from "lucide-react";
 
 interface SpotlightAction {
   id: string;
   label: string;
   hint: string;
+  category: string;
   match: string;
   onSelect: () => void;
 }
@@ -31,7 +47,13 @@ const ICON_MAP = {
   settings: SettingsIcon,
 } as const;
 
-function Spotlight({ open, activeProfile, onClose, onNavigate, onNewChat }: SpotlightProps): React.JSX.Element | null {
+function Spotlight({
+  open,
+  activeProfile,
+  onClose,
+  onNavigate,
+  onNewChat,
+}: SpotlightProps): React.JSX.Element | null {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
 
@@ -44,22 +66,23 @@ function Spotlight({ open, activeProfile, onClose, onNavigate, onNewChat }: Spot
 
   const actions = useMemo<SpotlightAction[]>(() => {
     const viewActions: SpotlightAction[] = [
-      ["chat", "Open Chat", "Jump into the active conversation workspace"],
-      ["sessions", "Open Sessions", "Browse and resume session history"],
-      ["agents", "Open Agents", "Switch or manage Hermes profiles"],
-      ["office", "Open Office", "Launch the visual office workspace"],
-      ["models", "Open Models", "Review saved model presets"],
-      ["skills", "Open Skills", "Browse installed skills"],
-      ["memory", "Open Memory", "Inspect persistent memory"],
-      ["tools", "Open Tools", "Toggle tool availability"],
-      ["schedules", "Open Schedules", "Manage cron jobs"],
-      ["gateway", "Open Gateway", "Configure platform delivery"],
-      ["settings", "Open Settings", "Adjust provider and app settings"],
-    ].map(([view, label, hint]) => ({
+      ["chat", "Open Chat", "Jump into the active conversation workspace", "Workspace"],
+      ["sessions", "Open Sessions", "Browse and resume session history", "Workspace"],
+      ["agents", "Open Agents", "Switch or manage Hermes profiles", "Profiles"],
+      ["office", "Open Office", "Launch the visual office workspace", "Workspace"],
+      ["models", "Open Models", "Review saved model presets", "Systems"],
+      ["skills", "Open Skills", "Browse installed skills", "Systems"],
+      ["memory", "Open Memory", "Inspect persistent memory", "Systems"],
+      ["tools", "Open Tools", "Toggle tool availability", "Systems"],
+      ["schedules", "Open Schedules", "Manage cron jobs", "Operations"],
+      ["gateway", "Open Gateway", "Configure platform delivery", "Operations"],
+      ["settings", "Open Settings", "Adjust provider and app settings", "Operations"],
+    ].map(([view, label, hint, category]) => ({
       id: `view:${view}`,
       label,
       hint,
-      match: `${label} ${hint} ${view}`.toLowerCase(),
+      category,
+      match: `${label} ${hint} ${view} ${category}`.toLowerCase(),
       onSelect: () => {
         onNavigate(view);
         onClose();
@@ -71,7 +94,8 @@ function Spotlight({ open, activeProfile, onClose, onNavigate, onNewChat }: Spot
         id: "action:new-chat",
         label: "Start New Chat",
         hint: `Clear current thread and stay on ${activeProfile}`,
-        match: `new chat clear conversation ${activeProfile}`.toLowerCase(),
+        category: "Actions",
+        match: `new chat clear conversation ${activeProfile} actions`.toLowerCase(),
         onSelect: () => {
           onNewChat();
           onClose();
@@ -103,12 +127,16 @@ function Spotlight({ open, activeProfile, onClose, onNavigate, onNewChat }: Spot
       }
       if (event.key === "ArrowDown") {
         event.preventDefault();
-        setSelectedIndex((prev) => (filtered.length ? (prev + 1) % filtered.length : 0));
+        setSelectedIndex((prev) =>
+          filtered.length ? (prev + 1) % filtered.length : 0,
+        );
         return;
       }
       if (event.key === "ArrowUp") {
         event.preventDefault();
-        setSelectedIndex((prev) => (filtered.length ? (prev - 1 + filtered.length) % filtered.length : 0));
+        setSelectedIndex((prev) =>
+          filtered.length ? (prev - 1 + filtered.length) % filtered.length : 0,
+        );
         return;
       }
       if (event.key === "Enter") {
@@ -125,9 +153,12 @@ function Spotlight({ open, activeProfile, onClose, onNavigate, onNewChat }: Spot
   return (
     <div className="spotlight-overlay" onClick={onClose}>
       <div className="spotlight-panel" onClick={(event) => event.stopPropagation()}>
+        <div className="spotlight-panel-glow" />
         <div className="spotlight-header">
           <div className="spotlight-search-shell">
-            <Search size={16} />
+            <div className="spotlight-search-icon-wrap">
+              <Search size={16} />
+            </div>
             <input
               autoFocus
               className="spotlight-input"
@@ -136,16 +167,27 @@ function Spotlight({ open, activeProfile, onClose, onNavigate, onNewChat }: Spot
               placeholder="Search views, commands, and workflows"
             />
           </div>
-          <button className="spotlight-close" onClick={onClose} aria-label="Close spotlight">
+          <button
+            className="spotlight-close"
+            onClick={onClose}
+            aria-label="Close spotlight"
+          >
             <X size={16} />
           </button>
+        </div>
+        <div className="spotlight-meta-row">
+          <span className="spotlight-chip">HCC OS</span>
+          <span className="spotlight-meta-copy">Profile: {activeProfile}</span>
+          <span className="spotlight-meta-copy">⌘/Ctrl + P</span>
         </div>
         <div className="spotlight-results">
           {filtered.length === 0 ? (
             <div className="spotlight-empty">No matches for that query.</div>
           ) : (
             filtered.map((action, index) => {
-              const view = action.id.startsWith("view:") ? (action.id.split(":")[1] as keyof typeof ICON_MAP) : "chat";
+              const view = action.id.startsWith("view:")
+                ? (action.id.split(":")[1] as keyof typeof ICON_MAP)
+                : "chat";
               const Icon = ICON_MAP[view] ?? Sparkles;
               return (
                 <button
@@ -154,10 +196,18 @@ function Spotlight({ open, activeProfile, onClose, onNavigate, onNewChat }: Spot
                   onMouseEnter={() => setSelectedIndex(index)}
                   onClick={action.onSelect}
                 >
-                  <span className="spotlight-result-icon"><Icon size={15} /></span>
+                  <span className="spotlight-result-icon">
+                    <Icon size={15} />
+                  </span>
                   <span className="spotlight-result-copy">
+                    <span className="spotlight-result-topline">
+                      <span className="spotlight-result-category">{action.category}</span>
+                    </span>
                     <span className="spotlight-result-label">{action.label}</span>
                     <span className="spotlight-result-hint">{action.hint}</span>
+                  </span>
+                  <span className="spotlight-result-arrow">
+                    <ArrowRight size={15} />
                   </span>
                 </button>
               );
