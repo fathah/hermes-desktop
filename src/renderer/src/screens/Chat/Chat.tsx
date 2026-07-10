@@ -877,10 +877,14 @@ function Chat({
     <div className="chat-container">
       <div className="chat-header">
         <div className="chat-header-left">
+          <div className="chat-header-kicker">HCC OS conversation lane</div>
           <div className="chat-header-title">
             {sessionId
               ? t("chat.sessionTitle", { id: sessionId.slice(-6) })
               : t("chat.title")}
+          </div>
+          <div className="chat-header-subtitle">
+            Native operator chat with workflow continuity and model controls.
           </div>
           {usage && (
             <span

@@ -299,7 +299,13 @@ function Office({ visible }: { visible?: boolean }): React.JSX.Element {
     <div className="office-ready">
       <div className="office-toolbar">
         <div className="office-toolbar-left">
-          <h1 className="office-toolbar-title">{t("office.title")}</h1>
+          <div className="office-toolbar-copy">
+            <div className="office-toolbar-kicker">HCC OS office lane</div>
+            <h1 className="office-toolbar-title">{t("office.title")}</h1>
+            <div className="office-toolbar-subtitle">
+              Embedded operator workspace for Claw3D service, logs, and runtime controls.
+            </div>
+          </div>
           <span
             className={`office-status-dot ${running ? "running" : "stopped"}`}
           />
