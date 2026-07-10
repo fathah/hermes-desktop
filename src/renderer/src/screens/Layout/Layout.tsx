@@ -67,6 +67,12 @@ interface DashboardMetric {
   detail: string;
 }
 
+interface ToastItem {
+  id: string;
+  title: string;
+  tone: "info" | "success" | "warning" | "error";
+}
+
 interface EventItem {
   id: string;
   title: string;
@@ -196,6 +202,10 @@ function Layout(): React.JSX.Element {
   const [scheduleCount, setScheduleCount] = useState(0);
   const [events, setEvents] = useState<EventItem[]>(() => readStoredEvents());
   const [visibleWidgets, setVisibleWidgets] = useState<DashboardWidgetKey[]>(() => readStoredWidgets());
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [connectionMode, setConnectionMode] = useState<"local" | "remote">("local");
+  const [remoteHealthy, setRemoteHealthy] = useState<boolean | null>(null);
+  const [providerLabel, setProviderLabel] = useState("unknown");
 
   useEffect(() => {
     window.hermesAPI.isRemoteMode().then(setRemoteMode);
@@ -203,17 +213,30 @@ function Layout(): React.JSX.Element {
 
   useEffect(() => {
     const refreshOperationalState = async (): Promise<void> => {
-      const [gateway, profiles, modelConfig, cronJobs] = await Promise.all([
+      const [gateway, profiles, modelConfig, cronJobs, connectionConfig] = await Promise.all([
         window.hermesAPI.gatewayStatus(),
         window.hermesAPI.listProfiles(),
         window.hermesAPI.getModelConfig(activeProfile),
         window.hermesAPI.listCronJobs(undefined, activeProfile),
+        window.hermesAPI.getConnectionConfig(),
       ]);
 
       setGatewayRunning(gateway);
       setProfileCount(profiles.length);
       setModelLabel(modelConfig.model || "Not set");
+      setProviderLabel(modelConfig.provider || "unknown");
       setScheduleCount(cronJobs.length);
+      setConnectionMode(connectionConfig.mode);
+
+      if (connectionConfig.mode === "remote") {
+        const ok = await window.hermesAPI.testRemoteConnection(
+          connectionConfig.remoteUrl,
+          connectionConfig.apiKey,
+        );
+        setRemoteHealthy(ok);
+      } else {
+        setRemoteHealthy(null);
+      }
     };
 
     void window.hermesAPI.listCachedSessions(6).then((sessions) => {
@@ -309,6 +332,12 @@ function Layout(): React.JSX.Element {
       },
       ...prev,
     ].slice(0, 12));
+
+    const toastId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setToasts((prev) => [...prev, { id: toastId, title, tone }].slice(-4));
+    window.setTimeout(() => {
+      setToasts((prev) => prev.filter((toast) => toast.id !== toastId));
+    }, 3200);
   }, []);
 
   const togglePinnedAction = useCallback((actionId: string) => {
@@ -518,7 +547,7 @@ function Layout(): React.JSX.Element {
           key: "model",
           label: "Model",
           value: modelLabel.split("/").pop() || modelLabel,
-          detail: `Profile ${activeProfile}`,
+          detail: `Provider ${providerLabel}`,
         },
         {
           key: "schedules",
@@ -527,7 +556,39 @@ function Layout(): React.JSX.Element {
           detail: "Automation jobs configured",
         },
       ].filter((metric) => visibleWidgets.includes(metric.key as DashboardWidgetKey)),
-    [activeProfile, gatewayRunning, modelLabel, profileCount, scheduleCount, visibleWidgets],
+    [gatewayRunning, modelLabel, profileCount, providerLabel, scheduleCount, visibleWidgets],
+  );
+
+  const healthDiagnostics = useMemo(
+    () => [
+      {
+        key: "connection",
+        label: "Connection",
+        value:
+          connectionMode === "remote"
+            ? remoteHealthy === null
+              ? "Checking"
+              : remoteHealthy
+                ? "Healthy"
+                : "Unreachable"
+            : "Local",
+        detail:
+          connectionMode === "remote"
+            ? remoteHealthy
+              ? "Remote gateway reachable"
+              : remoteHealthy === false
+                ? "Remote gateway failed ping"
+                : "Testing remote endpoint"
+            : "Running on local Hermes runtime",
+      },
+      {
+        key: "provider",
+        label: "Provider",
+        value: providerLabel,
+        detail: `Model ${modelLabel.split("/").pop() || modelLabel}`,
+      },
+    ],
+    [connectionMode, modelLabel, providerLabel, remoteHealthy],
   );
 
   const currentViewLabel = NAV_ITEMS.find((item) => item.view === view)?.labelKey;
@@ -639,6 +700,16 @@ function Layout(): React.JSX.Element {
             ))}
           </div>
 
+          <div className="content-health-grid">
+            {healthDiagnostics.map((item) => (
+              <div key={item.key} className="content-health-card">
+                <span className="content-health-card-label">{item.label}</span>
+                <span className="content-health-card-value">{item.value}</span>
+                <span className="content-health-card-detail">{item.detail}</span>
+              </div>
+            ))}
+          </div>
+
           {pinnedCards.length > 0 && (
             <div className="content-pinned-row">
               {pinnedCards.map((card) => (
@@ -728,6 +799,14 @@ function Layout(): React.JSX.Element {
                 ))
               )}
             </div>
+          </div>
+
+          <div className="content-toast-stack">
+            {toasts.map((toast) => (
+              <div key={toast.id} className={`content-toast tone-${toast.tone}`}>
+                {toast.title}
+              </div>
+            ))}
           </div>
 
           <div className="content-panel">
