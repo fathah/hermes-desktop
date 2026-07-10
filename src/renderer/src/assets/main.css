@@ -15,7 +15,8 @@
   --radius-sm: 14px;
   --radius-md: 22px;
   --radius-lg: 32px;
-  --transition: 180ms ease;
+  --transition: 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  --shadow-hover: 0 18px 40px rgba(8, 14, 32, 0.22);
 }
 
 html,
@@ -41,6 +42,25 @@ input,
 textarea,
 select {
   font: inherit;
+  transition:
+    transform var(--transition),
+    box-shadow var(--transition),
+    border-color var(--transition),
+    background-color var(--transition),
+    color var(--transition),
+    opacity var(--transition);
+}
+
+button {
+  transform: translateY(0);
+}
+
+button:hover {
+  box-shadow: var(--shadow-hover);
+}
+
+button:active {
+  transform: translateY(1px) scale(0.995);
 }
 
 .app {
@@ -57,6 +77,8 @@ select {
 .drag-region {
   height: 28px;
   -webkit-app-region: drag;
+  opacity: 0.72;
+  backdrop-filter: blur(12px);
 }
 
 .layout-shell {
@@ -220,6 +242,7 @@ select {
   background: rgba(255, 255, 255, 0.09);
   color: var(--text-primary);
   border-color: rgba(255, 255, 255, 0.1);
+  transform: translateY(-1px);
 }
 
 .sidebar-nav-item.active {
@@ -815,6 +838,12 @@ select {
   cursor: pointer;
 }
 
+.spotlight-quick-action:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.14);
+}
+
 .spotlight-quick-action-copy {
   display: flex;
   flex-direction: column;
@@ -1061,6 +1090,16 @@ select {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
+.settings-platform-card:hover,
+.tools-card:hover,
+.memory-entry-card:hover,
+.models-card:hover,
+.models-modal:hover,
+.settings-hermes-info:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
 .settings-section,
 .settings-platform-card,
 .settings-hermes-info,
@@ -1158,6 +1197,16 @@ select {
   border-radius: 24px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(255, 255, 255, 0.1);
+}
+
+.chat-input-wrapper:focus-within,
+.chat-model-dropdown,
+.models-modal,
+.slash-menu {
+  border-color: rgba(124, 199, 255, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 20px 48px rgba(7, 17, 31, 0.32);
 }
 
 .chat-input {
