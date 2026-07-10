@@ -74,6 +74,18 @@ interface QuickToggle {
   onToggle: () => void;
 }
 
+interface WorkspacePreset {
+  id: string;
+  label: string;
+  view: View;
+  profile: string;
+}
+
+interface PinnedSession {
+  id: string;
+  title: string;
+}
+
 interface ToastItem {
   id: string;
   title: string;
@@ -98,6 +110,8 @@ const STORAGE_KEYS = {
   pinnedActions: "hcc-os-shell-pinned-actions",
   eventCenter: "hcc-os-shell-event-center",
   widgetPrefs: "hcc-os-shell-widget-prefs",
+  presets: "hcc-os-shell-presets",
+  pinnedSessions: "hcc-os-shell-pinned-sessions",
 } as const;
 
 const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string; eyebrow: string }[] = [
@@ -190,6 +204,41 @@ function readStoredWidgets(): DashboardWidgetKey[] {
   }
 }
 
+function readStoredPresets(): WorkspacePreset[] {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEYS.presets);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter(
+          (item): item is WorkspacePreset =>
+            typeof item?.id === "string" &&
+            typeof item?.label === "string" &&
+            typeof item?.view === "string" &&
+            typeof item?.profile === "string",
+        )
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function readStoredPinnedSessions(): PinnedSession[] {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEYS.pinnedSessions);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter(
+          (item): item is PinnedSession =>
+            typeof item?.id === "string" && typeof item?.title === "string",
+        )
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 function Layout(): React.JSX.Element {
   const { t } = useI18n();
   const [view, setView] = useState<View>(() => readStoredView());
@@ -215,6 +264,8 @@ function Layout(): React.JSX.Element {
   const [providerLabel, setProviderLabel] = useState("unknown");
   const [platformEnabled, setPlatformEnabled] = useState<Record<string, boolean>>({});
   const [quickSettingsOpen, setQuickSettingsOpen] = useState(false);
+  const [workspacePresets, setWorkspacePresets] = useState<WorkspacePreset[]>(() => readStoredPresets());
+  const [pinnedSessions, setPinnedSessions] = useState<PinnedSession[]>(() => readStoredPinnedSessions());
 
   useEffect(() => {
     window.hermesAPI.isRemoteMode().then(setRemoteMode);
@@ -328,6 +379,28 @@ function Layout(): React.JSX.Element {
     }
   }, [visibleWidgets]);
 
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        STORAGE_KEYS.presets,
+        JSON.stringify(workspacePresets),
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [workspacePresets]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        STORAGE_KEYS.pinnedSessions,
+        JSON.stringify(pinnedSessions),
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [pinnedSessions]);
+
   const rememberAction = useCallback((actionId: string) => {
     setRecentActionIds((prev) => [actionId, ...prev.filter((item) => item !== actionId)].slice(0, 10));
   }, []);
@@ -399,6 +472,36 @@ function Layout(): React.JSX.Element {
       "info",
     );
   }, [connectionMode, pushEvent]);
+
+  const saveWorkspacePreset = useCallback(() => {
+    const preset: WorkspacePreset = {
+      id: `${Date.now()}`,
+      label: `${view} · ${activeProfile}`,
+      view,
+      profile: activeProfile,
+    };
+    setWorkspacePresets((prev) => [preset, ...prev].slice(0, 8));
+    pushEvent("Workspace preset saved", `Saved ${preset.label}`, "success");
+  }, [activeProfile, pushEvent, view]);
+
+  const applyWorkspacePreset = useCallback(
+    (preset: WorkspacePreset) => {
+      setActiveProfile(preset.profile);
+      setView(preset.view);
+      if (preset.view === "office") setOfficeVisited(true);
+      pushEvent("Workspace preset applied", `Loaded ${preset.label}`, "success");
+    },
+    [pushEvent],
+  );
+
+  const togglePinnedSession = useCallback((session: PinnedSession) => {
+    setPinnedSessions((prev) =>
+      prev.some((item) => item.id === session.id)
+        ? prev.filter((item) => item.id !== session.id)
+        : [session, ...prev].slice(0, 8),
+    );
+    pushEvent("Pinned sessions updated", `Session ${session.title} preference changed`, "info");
+  }, [pushEvent]);
 
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
   const [updateState, setUpdateState] = useState<
@@ -754,6 +857,9 @@ function Layout(): React.JSX.Element {
             >
               quick settings
             </button>
+            <button className="content-widget-toggle active" onClick={saveWorkspacePreset}>
+              save preset
+            </button>
           </div>
 
           {quickSettingsOpen && (
@@ -766,6 +872,24 @@ function Layout(): React.JSX.Element {
                 >
                   <span>{toggle.label}</span>
                   <span>{toggle.enabled ? "On" : "Off"}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {workspacePresets.length > 0 && (
+            <div className="content-presets-row">
+              {workspacePresets.map((preset) => (
+                <button
+                  key={preset.id}
+                  className="content-preset-card"
+                  onClick={() => applyWorkspacePreset(preset)}
+                >
+                  <span className="content-pinned-card-kicker">Preset</span>
+                  <span className="content-pinned-card-title">{preset.label}</span>
+                  <span className="content-pinned-card-meta">
+                    {preset.profile} · {preset.view}
+                  </span>
                 </button>
               ))}
             </div>
@@ -812,6 +936,22 @@ function Layout(): React.JSX.Element {
             </div>
           )}
 
+          {pinnedSessions.length > 0 && (
+            <div className="content-pinned-row">
+              {pinnedSessions.map((session) => (
+                <button
+                  key={session.id}
+                  className="content-pinned-card"
+                  onClick={() => void handleResumeRecentSession(session.id)}
+                >
+                  <span className="content-pinned-card-kicker">Pinned session</span>
+                  <span className="content-pinned-card-title">{session.title}</span>
+                  <span className="content-pinned-card-meta">One-click resume</span>
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="content-launcher-row">
             {launcherCards.map((card) => {
               const actionId =
@@ -840,19 +980,34 @@ function Layout(): React.JSX.Element {
 
           {recentSessions.length > 0 && (
             <div className="content-recents-row">
-              {recentSessions.map((session) => (
-                <button
-                  key={session.id}
-                  className="content-recent-card"
-                  onClick={() => void handleResumeRecentSession(session.id)}
-                >
-                  <span className="content-recent-card-kicker">Recent session</span>
-                  <span className="content-recent-card-title">{session.title}</span>
-                  <span className="content-recent-card-meta">
-                    {new Date(session.startedAt * 1000).toLocaleDateString()} · Resume
-                  </span>
-                </button>
-              ))}
+              {recentSessions.map((session) => {
+                const pinned = pinnedSessions.some((item) => item.id === session.id);
+                return (
+                  <div key={session.id} className="content-launcher-card-wrap">
+                    <button
+                      className="content-recent-card"
+                      onClick={() => void handleResumeRecentSession(session.id)}
+                    >
+                      <span className="content-recent-card-kicker">Recent session</span>
+                      <span className="content-recent-card-title">{session.title}</span>
+                      <span className="content-recent-card-meta">
+                        {new Date(session.startedAt * 1000).toLocaleDateString()} · Resume
+                      </span>
+                    </button>
+                    <button
+                      className={`content-launcher-pin ${pinned ? "active" : ""}`}
+                      onClick={() =>
+                        togglePinnedSession({
+                          id: session.id,
+                          title: session.title,
+                        })
+                      }
+                    >
+                      {pinned ? "Unpin" : "Pin"}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
 

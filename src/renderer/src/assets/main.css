@@ -310,6 +310,15 @@ select {
   gap: 10px;
 }
 
+.content-presets-row,
+.content-pinned-row,
+.content-recents-row,
+.content-launcher-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .content-quick-toggle,
 .content-widget-toggle,
 .content-event-dismiss {
@@ -390,14 +399,6 @@ select {
 .content-recent-card-meta {
   font-size: 12px;
   color: var(--text-secondary);
-}
-
-.content-pinned-row,
-.content-recents-row,
-.content-launcher-row {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
 }
 
 .content-event-center {
