@@ -5,7 +5,7 @@ import { useI18n } from "../../components/useI18n";
 import oneChatIcon from "../../assets/images/one-chat.svg";
 import OneChatModal from "./OneChatModal";
 import Office3D from "./office3d/Office3D";
-import { profilesToOfficeAgents } from "./office3d/agents";
+import { officeAgentsChanged, profilesToOfficeAgents } from "./office3d/agents";
 import type { OfficeAgent } from "./office3d/core/types";
 
 interface OfficeProps {
@@ -113,18 +113,7 @@ function Office({ visible }: OfficeProps): React.JSX.Element {
       const profiles = await window.hermesAPI.listProfiles();
       const next = profilesToOfficeAgents(profiles);
       setAgents((prev) => {
-        const prevById = new Map(prev.map((a) => [a.id, a]));
-        const changed =
-          next.length !== prev.length ||
-          next.some((a) => {
-            const before = prevById.get(a.id);
-            return (
-              !before ||
-              before.status !== a.status ||
-              before.gatewayRunning !== a.gatewayRunning
-            );
-          });
-        return changed ? next : prev;
+        return officeAgentsChanged(prev, next) ? next : prev;
       });
     } catch {
       // Transient IPC failures are ignored; the next tick retries.

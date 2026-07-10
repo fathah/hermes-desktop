@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import { HERMES_HOME } from "./installer";
 import { safeWriteFile, profilePaths } from "./utils";
 import { hostDerivedEnvKeyForUrl } from "./host-derived-env";
+import { customProviderEnvKey } from "../shared/url-key-map";
 import DEFAULT_MODELS from "./default-models";
 
 const MODELS_FILE = join(HERMES_HOME, "models.json");
@@ -20,6 +21,12 @@ export interface SavedModel {
    *  context gauge for providers that don't advertise `context_length` over
    *  /models, and driving the agent's auto-compaction threshold. */
   contextLength?: number;
+  /** Display name of the custom provider this model belongs to (only set for
+   *  user-added named custom providers). Groups a provider's models together in
+   *  the UI and, crucially, keys its API key: the runtime resolves
+   *  `customProviderEnvKey(providerLabel)` so every model under one provider
+   *  shares that provider's key rather than the shared `CUSTOM_API_KEY`. */
+  providerLabel?: string;
   createdAt: number;
 }
 
@@ -146,10 +153,7 @@ function seedDefaults(profile?: string): SavedModel[] {
           // profile env vars at spawn, so the host-derived form has
           // to live in .env (not just be set at chat-time) for the
           // long-running gateway flow to work on the new engine.
-          const customPrefixKey =
-            "CUSTOM_PROVIDER_" +
-            cp.name.replace(/[^A-Za-z0-9]/g, "_").toUpperCase() +
-            "_KEY";
+          const customPrefixKey = customProviderEnvKey(cp.name);
           const namesToWrite: string[] = [customPrefixKey];
           const hostKey = hostDerivedEnvKeyForUrl(cp.baseUrl);
           // Don't shadow real OPENAI / ANTHROPIC keys via this path —
@@ -204,12 +208,19 @@ export function addModel(
   model: string,
   baseUrl: string,
   contextLength?: number,
+  providerLabel?: string,
 ): SavedModel {
   const models = readModels();
 
-  // Dedup: if same model ID + provider exists, return existing
+  // Dedup: same model ID + provider + base URL. Base URL is part of the key so
+  // the same model id can live under two different custom endpoints.
+  const norm = (u: string): string =>
+    (u || "").trim().replace(/\/+$/, "").toLowerCase();
   const existing = models.find(
-    (m) => m.model === model && m.provider === provider,
+    (m) =>
+      m.model === model &&
+      m.provider === provider &&
+      norm(m.baseUrl) === norm(baseUrl),
   );
   if (existing) return existing;
 
@@ -221,6 +232,7 @@ export function addModel(
     model,
     baseUrl: baseUrl || "",
     ...(ctx !== undefined ? { contextLength: ctx } : {}),
+    ...(providerLabel ? { providerLabel } : {}),
     createdAt: Date.now(),
   };
   models.push(entry);

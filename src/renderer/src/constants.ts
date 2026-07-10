@@ -12,6 +12,26 @@ export interface SectionDef {
   items: FieldDef[];
 }
 
+export const DASHSCOPE_ENDPOINTS = [
+  {
+    id: "cn",
+    name: "constants.dashscopeChinaEndpoint",
+    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  },
+  {
+    id: "intl",
+    name: "constants.dashscopeIntlEndpoint",
+    baseUrl: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+  },
+] as const;
+
+// UI-picker default only (mainland-first for the DashScope user base).
+// Deliberately NOT the agent's canonical default, which is the intl
+// endpoint — mirrored in main's PROVIDER_BASE_URLS (provider-registry.ts)
+// and used to fill an empty base_url on save. The picker writes base_url
+// explicitly, so this default never overrides a config silently.
+export const DEFAULT_DASHSCOPE_BASE_URL = DASHSCOPE_ENDPOINTS[0].baseUrl;
+
 // ── Providers ───────────────────────────────────────────
 
 export const PROVIDERS = {
@@ -43,7 +63,7 @@ export const PROVIDERS = {
     { value: "huggingface", label: "Hugging Face" },
     { value: "nvidia", label: "NVIDIA NIM" },
     { value: "zai", label: "Z.ai / GLM" },
-    { value: "qwen", label: "Qwen" },
+    { value: "alibaba", label: "Alibaba DashScope" },
     { value: "minimax", label: "MiniMax" },
     { value: "nous", label: "constants.nousName" },
     // Local OpenAI-compatible servers. Keep these explicit so users
@@ -86,7 +106,7 @@ export const PROVIDERS = {
     huggingface: "Hugging Face",
     nvidia: "NVIDIA NIM",
     zai: "Z.ai / GLM",
-    qwen: "Qwen",
+    alibaba: "Alibaba DashScope",
     minimax: "MiniMax",
     nous: "constants.nousName",
     lmstudio: "constants.lmstudio",
@@ -103,6 +123,21 @@ export const PROVIDERS = {
   } as Record<string, string>,
 
   setup: [
+    {
+      // Hermes One's own inference gateway — shown first. OpenAI-compatible, so
+      // it routes through `custom` + base_url (like the `openai` card); the key
+      // is stored/host-derived as HERMESONE_API_KEY (see url-key-map.ts).
+      id: "hermesone",
+      name: "Hermes One",
+      desc: "Hermes One Inference — pay-per-token with AI Credits",
+      tag: "Recommended",
+      envKey: "HERMESONE_API_KEY",
+      url: "https://console.hermesone.org/credits",
+      placeholder: "hs-live-...",
+      configProvider: "custom",
+      baseUrl: "https://inference.hermesone.org/v1",
+      needsKey: true,
+    },
     {
       id: "openrouter",
       name: "constants.openrouterName",
@@ -178,6 +213,18 @@ export const PROVIDERS = {
       placeholder: "AIza...",
       configProvider: "google",
       baseUrl: "",
+      needsKey: true,
+    },
+    {
+      id: "alibaba",
+      name: "Alibaba DashScope",
+      desc: "constants.dashscopeDesc",
+      tag: "",
+      envKey: "DASHSCOPE_API_KEY",
+      url: "https://bailian.console.aliyun.com/?apiKey=1",
+      placeholder: "sk-...",
+      configProvider: "alibaba",
+      baseUrl: DEFAULT_DASHSCOPE_BASE_URL,
       needsKey: true,
     },
     {
@@ -289,6 +336,7 @@ export interface LocalPreset {
 // OPENAI_COMPATIBLE_BASE_URLS). Distinct from PROVIDERS.setup, which stays the
 // curated first-run set.
 export const PROVIDER_CARDS: { id: string; name: string }[] = [
+  { id: "hermesone", name: "Hermes One" },
   { id: "openrouter", name: "constants.openrouterName" },
   { id: "anthropic", name: "constants.anthropicName" },
   { id: "openai", name: "constants.openaiName" },
@@ -302,7 +350,7 @@ export const PROVIDER_CARDS: { id: string; name: string }[] = [
   { id: "zai", name: "Z.ai / GLM" },
   { id: "minimax", name: "MiniMax" },
   { id: "huggingface", name: "Hugging Face" },
-  { id: "qwen", name: "Qwen" },
+  { id: "alibaba", name: "Alibaba DashScope" },
   { id: "nous", name: "constants.nousName" },
   // "Local / Others" — this chip covers both local servers and any remote
   // OpenAI-compatible endpoint, so it isn't labelled just "Local".
@@ -323,6 +371,7 @@ export const PROVIDER_CARDS: { id: string; name: string }[] = [
 // picker routes it consistently (autofill base_url + persist as `custom`).
 // Keep this in sync with LOCAL_PRESETS below.
 export const OPENAI_COMPATIBLE_BASE_URLS: Record<string, string> = {
+  hermesone: "https://inference.hermesone.org/v1",
   openai: "https://api.openai.com/v1",
   aimlapi: "https://api.aimlapi.com/v1",
   mistral: "https://api.mistral.ai/v1",
@@ -430,6 +479,42 @@ export const LOCAL_PRESETS: LocalPreset[] = [
   },
 ];
 
+// How to persist a model saved "under" a given LLM-provider key. The env key
+// (a "LLM Providers" FieldDef `key`, e.g. HERMESONE_API_KEY) is the anchor the
+// UI has; a saved model needs a routing pair instead: native providers keep
+// their agent slug (the gateway hardcodes the base URL), while OpenAI-compatible
+// providers route as `provider: "custom"` + explicit `baseUrl` (host-derives the
+// key). We DERIVE the pair from the existing registries rather than re-listing
+// slugs: `PROVIDERS.setup` already carries `{envKey, configProvider, baseUrl}`
+// and `LOCAL_PRESETS` carries `{envKey, baseUrl}` (always custom-routed). This
+// keeps the per-provider Models manager saving entries exactly the way the
+// Models screen / Providers tab would. Unknown keys fall back to a bare `custom`
+// route so any provider can still hold models.
+export function providerRouteForEnvKey(
+  envKey: string,
+): { provider: string; baseUrl: string } {
+  // The setup array is a heterogeneous literal (not every entry carries
+  // configProvider/baseUrl), so read it through a partial shape.
+  type SetupRoute = {
+    id: string;
+    envKey?: string;
+    configProvider?: string;
+    baseUrl?: string;
+  };
+  const setup = (PROVIDERS.setup as ReadonlyArray<SetupRoute>).find(
+    (p) => p.envKey === envKey,
+  );
+  if (setup) {
+    return {
+      provider: setup.configProvider ?? setup.id,
+      baseUrl: setup.baseUrl ?? "",
+    };
+  }
+  const preset = LOCAL_PRESETS.find((p) => p.envKey === envKey);
+  if (preset) return { provider: "custom", baseUrl: preset.baseUrl ?? "" };
+  return { provider: "custom", baseUrl: "" };
+}
+
 // ── Theme ───────────────────────────────────────────────
 
 export type ThemeAppearance = "dark" | "light";
@@ -515,6 +600,15 @@ export const SETTINGS_SECTIONS: SectionDef[] = [
   {
     title: "constants.sectionLlmProviders",
     items: [
+      // Hermes One's own inference gateway — first-class + first in the list.
+      // Custom under the hood (routes as `custom` + inference.hermesone.org),
+      // keyed by HERMESONE_API_KEY via URL_KEY_MAP.
+      {
+        key: "HERMESONE_API_KEY",
+        label: "constants.hermesoneApiKey",
+        type: "password",
+        hint: "constants.hermesoneHint",
+      },
       {
         key: "OPENROUTER_API_KEY",
         label: "constants.openrouterApiKey",
@@ -562,6 +656,12 @@ export const SETTINGS_SECTIONS: SectionDef[] = [
         label: "constants.kimiApiKey",
         type: "password",
         hint: "constants.kimiHint",
+      },
+      {
+        key: "DASHSCOPE_API_KEY",
+        label: "constants.dashscopeApiKey",
+        type: "password",
+        hint: "constants.dashscopeHint",
       },
       {
         key: "MINIMAX_API_KEY",

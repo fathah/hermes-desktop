@@ -316,7 +316,16 @@ const PROVIDER_ENV_KEYS: Record<string, string> = {
   perplexity: "PERPLEXITY_API_KEY",
   huggingface: "HF_TOKEN",
   hf: "HF_TOKEN",
-  qwen: "QWEN_API_KEY",
+  // DashScope: `alibaba` is the canonical agent slug; the rest are the
+  // agent's own aliases for it (models.py PROVIDER_ALIASES) — including
+  // `qwen`, which every pre-#825 desktop config stored. Only `qwen-oauth`
+  // is the Qwen Portal OAuth provider.
+  alibaba: "DASHSCOPE_API_KEY",
+  dashscope: "DASHSCOPE_API_KEY",
+  qwen: "DASHSCOPE_API_KEY",
+  aliyun: "DASHSCOPE_API_KEY",
+  "alibaba-cloud": "DASHSCOPE_API_KEY",
+  "qwen-oauth": "QWEN_API_KEY",
   minimax: "MINIMAX_API_KEY",
   glm: "GLM_API_KEY",
   kimi: "KIMI_API_KEY",
@@ -351,6 +360,7 @@ const URL_TO_ENV_KEY: Array<[RegExp, string]> = [
   [/api\.mistral\.ai/i, "MISTRAL_API_KEY"],
   [/api\.perplexity\.ai/i, "PERPLEXITY_API_KEY"],
   [/api\.xiaomimimo\.com/i, "XIAOMI_API_KEY"],
+  [/dashscope(-intl)?\.aliyuncs\.com/i, "DASHSCOPE_API_KEY"],
 ];
 
 /**

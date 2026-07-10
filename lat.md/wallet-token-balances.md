@@ -10,6 +10,16 @@ Profile wallets are stored per-profile in `wallets.json` alongside profile metad
 
 Wallet metadata types live in [[src/shared/wallets.ts]]: `ProfileWallet` (public shape), `WalletMutationResult` (one-time recovery phrase on create/import), and `ImportWalletInput`.
 
+Local **creation/import is being retired** in favour of backend-provisioned wallets (see [[wallet-token-balances#Wallet Sync]]). The store's `createWallet`/`importWallet` and their IPC channels are retained for now, but the wallet pane no longer exposes a create/import UI.
+
+## Wallet Sync
+
+Wallets provisioned by the Hermes One backend for a profile's linked cloud agent are fetched and shown read-only alongside local ones, so the desktop stops minting wallets itself.
+
+[[src/main/wallet-sync.ts#syncWalletsForProfile]] finds the signed-in account ([[src/main/account-store.ts#findAccountProfile]]), resolves the profile's cloud agent id via [[src/main/agent-sync.ts#getLinkedAgentId]] — auto-running [[src/main/agent-sync.ts#syncAgents]] once when the profile has never synced — then GETs `/api/wallets?agentId=…` (bearer + `x-api-key` via [[src/main/hermes-account.ts#apiHeaders]]). Rows are mapped by the pure [[src/main/wallet-sync.ts#mapCloudWallet]] into the shared `WalletView`; rows without an EVM address are dropped. No wallet secret ever reaches the device — these are receive/tracked addresses, matching the backend `docs/agent-sync.md` "Wallets per agent" intent.
+
+The `wallet-sync` IPC channel (registered in [[src/main/ipc/register.ts#registerIpcHandlers]]) exposes it as `syncWallets` on `window.hermesAPI`. [[src/renderer/src/components/profile/ProfileWalletPane.tsx]] renders local (`wallets.json`) and cloud wallets in one list, each tagged with a Local/Cloud badge; delete is offered only for local wallets, copy/balance for both. Signed-out or never-synced profiles show a hint instead of an error.
+
 ## Token Balances
 
 On-chain balance reads for Base mainnet ERC-20 tokens, fetched via ethers v6 `JsonRpcProvider`.
@@ -35,5 +45,6 @@ Balance data is cached at module level (keyed by wallet address) so it survives 
 Vitest test suites for wallet store and balance reads.
 
 - [[src/main/wallet-store.test.ts]] — wallet CRUD, rename/delete, encryption, dedup, caps, and import error distinction (invalid phrase vs. secure-storage failure)
+- [[src/main/wallet-sync.test.ts]] — `mapCloudWallet` mapping (default name, addressless drop) and `syncWalletsForProfile` paths: signed-out, linked-agent fetch, auto-sync-then-fetch when unlinked, and HTTP error
 - [[src/main/wallet-balances.test.ts]] — formatTokenBalance edge cases and big-balance precision, `withTimeout`, getTokenBalances with mocked RPC including timeout handling
 - [[src/renderer/src/components/profile/ProfileWalletPane.test.tsx]] — balance-chip rendering: one symbol label per token, icon only for known tokens

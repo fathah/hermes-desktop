@@ -40,7 +40,7 @@ const NON_DISCOVERABLE_PROVIDERS = new Set<string>([
   "custom",
   "google",
   "xai",
-  "qwen",
+  "alibaba",
   "minimax",
   "kimi-coding",
 ]);

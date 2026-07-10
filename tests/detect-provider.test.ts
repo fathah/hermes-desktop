@@ -30,7 +30,12 @@ describe("detectProviderFromUrl", () => {
       detectProviderFromUrl(
         "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
       ),
-    ).toBe("qwen");
+    ).toBe("alibaba");
+    expect(
+      detectProviderFromUrl(
+        "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      ),
+    ).toBe("alibaba");
     expect(detectProviderFromUrl("https://api.minimax.chat/v1")).toBe(
       "minimax",
     );

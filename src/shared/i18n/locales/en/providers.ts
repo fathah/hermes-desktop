@@ -1,6 +1,41 @@
 export default {
   title: "Providers",
   subtitle: "Configure LLM providers, API keys, and credential pools",
+  model: {
+    select: "Select model",
+    emptyHint: "No model selected yet. Choose a configured provider and model.",
+    pickerTitle: "Select default model",
+    noModels: "No providers configured yet. Add one below first.",
+    noProviderModels: "No models found for this provider yet.",
+    use: "Use model",
+  },
+  keys: {
+    addProvider: "Add provider",
+    emptyHint: "No providers configured yet. Add one to get started.",
+    searchPlaceholder: "Search providers…",
+    allConfigured: "All providers are already configured.",
+    remove: "Remove provider",
+    custom: {
+      title: "Custom provider",
+      pickerHint: "Any OpenAI-compatible base URL",
+      namePlaceholder: "Name (e.g. ChatGPT Codex)",
+      baseUrlPlaceholder: "Base URL (e.g. https://api.example.com/v1)",
+      keyPlaceholder: "API key (optional)",
+      baseUrlNeeded: "Enter a name and base URL to add models.",
+    },
+    status: {
+      needsKey: "Add a key to connect",
+      verifying: "Verifying key…",
+      verified: "Connected · key verified",
+      connected: "Connected",
+      failed: "Couldn't verify key",
+    },
+  },
+  models: {
+    title: "Models",
+    empty: "No models yet.",
+    addPlaceholder: "Add another model ID…",
+  },
   oauth: {
     sectionTitle: "Subscription / OAuth Plans",
     sectionHint:
@@ -15,5 +50,23 @@ export default {
     geminiDesc: "Use your Google AI Pro / Gemini plan",
     minimaxDesc: "Use your MiniMax subscription",
     nousDesc: "Sign in with your Nous Portal subscription",
+  },
+  hermesAccount: {
+    sectionTitle: "Hermes One account",
+    sectionHint:
+      "Sign in to your Hermes One account to sync agents, workspaces, and wallets across devices.",
+    signIn: "Sign in to Hermes One",
+    signOut: "Sign out",
+    signedInAs: "Signed in as",
+    connected: "Connected · agents sync automatically",
+    modalTitle: "Sign in to Hermes One",
+    codeHint: "Approve in your browser. Make sure it shows the same code:",
+    waitingHint: "Waiting for approval…",
+    signedIn: "Signed in",
+    openBrowser: "Open browser again",
+    copyCode: "Copy code",
+    copied: "Copied",
+    successHint: "You're signed in. You can close this window.",
+    failed: "Sign-in failed.",
   },
 } as const;

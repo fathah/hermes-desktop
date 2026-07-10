@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { join } from "path";
-import { mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
+import { mkdirSync, writeFileSync, rmSync, existsSync, readFileSync } from "fs";
 
 const execFileSyncMock = vi.hoisted(() => vi.fn());
 
@@ -39,6 +39,7 @@ import {
   listProfiles,
   setActiveProfile,
 } from "../src/main/profiles";
+import { setProfileName } from "../src/main/profile-meta";
 
 const PROFILES_DIR = join(TEST_HOME, "profiles");
 
@@ -60,8 +61,9 @@ describe("listProfiles", () => {
     mkdirSync(empty, { recursive: true });
 
     const profiles = await listProfiles();
-    const fresh = profiles.find((p) => p.name === "fresh");
+    const fresh = profiles.find((p) => p.id === "fresh");
     expect(fresh).toBeDefined();
+    expect(fresh?.name).toBe("fresh");
     expect(fresh?.isDefault).toBe(false);
     expect(fresh?.hasEnv).toBe(false);
   });
@@ -72,7 +74,7 @@ describe("listProfiles", () => {
     writeFileSync(join(dir, ".env"), "OPENAI_API_KEY=x\n");
 
     const profiles = await listProfiles();
-    const found = profiles.find((p) => p.name === "env-only");
+    const found = profiles.find((p) => p.id === "env-only");
     expect(found).toBeDefined();
     expect(found?.hasEnv).toBe(true);
   });
@@ -86,7 +88,7 @@ describe("listProfiles", () => {
     );
 
     const profiles = await listProfiles();
-    const found = profiles.find((p) => p.name === "config-only");
+    const found = profiles.find((p) => p.id === "config-only");
     expect(found).toBeDefined();
     expect(found?.model).toBe("gpt-4o");
     expect(found?.provider).toBe("openai");
@@ -98,7 +100,7 @@ describe("listProfiles", () => {
 
     const profiles = await listProfiles();
     const dotProfiles = profiles.filter(
-      (p) => p.name.startsWith(".") || p.name === ".DS_Store",
+      (p) => p.id.startsWith(".") || p.id === ".DS_Store",
     );
     expect(dotProfiles).toHaveLength(0);
   });
@@ -107,7 +109,7 @@ describe("listProfiles", () => {
     writeFileSync(join(PROFILES_DIR, "stray.txt"), "stray");
 
     const profiles = await listProfiles();
-    expect(profiles.find((p) => p.name === "stray.txt")).toBeUndefined();
+    expect(profiles.find((p) => p.id === "stray.txt")).toBeUndefined();
   });
 
   it("ignores invalid profile directory names", async () => {
@@ -117,15 +119,50 @@ describe("listProfiles", () => {
     mkdirSync(join(PROFILES_DIR, "UpperCase"), { recursive: true });
 
     const profiles = await listProfiles();
-    expect(profiles.find((p) => p.name === "valid_profile-1")).toBeDefined();
-    expect(profiles.find((p) => p.name === "-flag")).toBeUndefined();
-    expect(profiles.find((p) => p.name === "has space")).toBeUndefined();
-    expect(profiles.find((p) => p.name === "UpperCase")).toBeUndefined();
+    expect(profiles.find((p) => p.id === "valid_profile-1")).toBeDefined();
+    expect(profiles.find((p) => p.id === "-flag")).toBeUndefined();
+    expect(profiles.find((p) => p.id === "has space")).toBeUndefined();
+    expect(profiles.find((p) => p.id === "UpperCase")).toBeUndefined();
   });
 
   it("returns the default profile even when ~/.hermes/profiles/ is empty", async () => {
     const profiles = await listProfiles();
     expect(profiles.find((p) => p.isDefault)).toBeDefined();
+  });
+
+  it("returns saved agent names while keeping profile ids internal", async () => {
+    writeFileSync(
+      join(TEST_HOME, "profile-meta.json"),
+      JSON.stringify({ name: "Hermes CN" }),
+    );
+    const namedDir = join(PROFILES_DIR, "work");
+    mkdirSync(namedDir, { recursive: true });
+    writeFileSync(
+      join(namedDir, "profile-meta.json"),
+      JSON.stringify({ name: "Work Agent" }),
+    );
+
+    const profiles = await listProfiles();
+    const def = profiles.find((p) => p.id === "default");
+    const work = profiles.find((p) => p.id === "work");
+
+    expect(def?.name).toBe("Hermes CN");
+    expect(work?.name).toBe("Work Agent");
+    expect(work?.id).toBe("work");
+  });
+
+  it("sets and clears an agent name", async () => {
+    expect(await setProfileName("default", "  Hello Agent  ")).toEqual({
+      success: true,
+    });
+    let profiles = await listProfiles();
+    expect(profiles.find((p) => p.id === "default")?.name).toBe("Hello Agent");
+
+    expect(await setProfileName("default", "   ")).toEqual({
+      success: true,
+    });
+    profiles = await listProfiles();
+    expect(profiles.find((p) => p.id === "default")?.name).toBe("default");
   });
 
   it("marks the active profile correctly", async () => {
@@ -134,20 +171,58 @@ describe("listProfiles", () => {
     writeFileSync(join(TEST_HOME, "active_profile"), "work\n");
 
     const profiles = await listProfiles();
-    const work = profiles.find((p) => p.name === "work");
+    const work = profiles.find((p) => p.id === "work");
     const def = profiles.find((p) => p.isDefault);
     expect(work?.isActive).toBe(true);
     expect(def?.isActive).toBe(false);
   });
 
   it("rejects invalid profile names before invoking the Hermes CLI", () => {
-    expect(createProfile("../outside", null).success).toBe(false);
-    expect(createProfile("-flag", null).success).toBe(false);
     expect(deleteProfile("../outside").success).toBe(false);
     expect(() => setActiveProfile("../outside")).toThrow(
       "Profile names may contain lowercase letters",
     );
     expect(execFileSyncMock).not.toHaveBeenCalled();
+  });
+
+  it("creates a safe profile id behind a user-facing agent name", async () => {
+    execFileSyncMock.mockReturnValue(Buffer.from(""));
+
+    const result = createProfile("  卢姐  ", null);
+
+    expect(result).toEqual({ success: true, id: "agent" });
+    expect(execFileSyncMock).toHaveBeenCalledWith(
+      "/usr/bin/python3",
+      ["/dev/null", "profile", "create", "agent"],
+      expect.objectContaining({ timeout: 30000 }),
+    );
+    const profiles = await listProfiles();
+    const created = profiles.find((p) => p.id === "agent");
+    expect(created?.name).toBe("卢姐");
+  });
+
+  it("keeps a successful CLI-created profile when metadata cannot be written", async () => {
+    execFileSyncMock.mockImplementation(() => {
+      mkdirSync(join(PROFILES_DIR, "agent", "profile-meta.json"), {
+        recursive: true,
+      });
+      return Buffer.from("");
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const result = createProfile("  卢姐  ", null);
+
+    expect(result).toEqual({ success: true, id: "agent" });
+    expect(existsSync(join(PROFILES_DIR, "agent"))).toBe(true);
+    expect(existsSync(join(PROFILES_DIR, "agent-2"))).toBe(false);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Created profile "agent" but failed to write profile metadata',
+      ),
+      expect.anything(),
+    );
+
+    warn.mockRestore();
   });
 
   it("surfaces Hermes Agent profile-create errors written to stdout", () => {
@@ -218,5 +293,71 @@ describe("listProfiles", () => {
       ["/dev/null", "profile", "delete", "slow-delete", "--yes"],
       expect.objectContaining({ timeout: 30000 }),
     );
+  });
+});
+
+describe("setActiveProfile persistence", () => {
+  const activeFile = join(TEST_HOME, "active_profile");
+
+  it("persists a remote-only profile even when the local CLI rejects it", () => {
+    // In SSH mode the selected profile lives on the REMOTE. The local
+    // `hermes profile use` validates against local profiles and raises
+    // FileNotFoundError for it; before the direct-write fallback that error
+    // was swallowed and ~/.hermes/active_profile never changed — so the
+    // selection reset to `default` on relaunch and activeSshProfile() scoped
+    // the unified SSH dashboard to the wrong profile.
+    execFileSyncMock.mockImplementation(() => {
+      throw new Error("Profile 'vps-agent' does not exist.");
+    });
+
+    setActiveProfile("vps-agent");
+
+    expect(readFileSync(activeFile, "utf-8").trim()).toBe("vps-agent");
+  });
+
+  it("persists even when there is no local hermes install at all", () => {
+    execFileSyncMock.mockImplementation(() => {
+      const err = new Error("spawn ENOENT") as Error & { code?: string };
+      err.code = "ENOENT";
+      throw err;
+    });
+
+    setActiveProfile("work");
+
+    expect(readFileSync(activeFile, "utf-8").trim()).toBe("work");
+  });
+
+  it("leaves the file alone when the CLI already persisted the selection", () => {
+    // Local mode: the CLI writes active_profile itself. The fallback must
+    // detect that via read-back and not double-write.
+    execFileSyncMock.mockImplementation(() => {
+      writeFileSync(activeFile, "work\n");
+      return Buffer.from("");
+    });
+
+    setActiveProfile("work");
+
+    expect(readFileSync(activeFile, "utf-8")).toBe("work\n");
+    expect(execFileSyncMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("persists switching back to default when the CLI fails", () => {
+    writeFileSync(activeFile, "work\n");
+    execFileSyncMock.mockImplementation(() => {
+      throw new Error("no local install");
+    });
+
+    setActiveProfile("default");
+
+    // Readers treat the literal "default" and a missing file identically.
+    expect(readFileSync(activeFile, "utf-8").trim()).toBe("default");
+  });
+
+  it("still rejects invalid names before touching CLI or file", () => {
+    expect(() => setActiveProfile("../outside")).toThrow(
+      "Profile names may contain lowercase letters",
+    );
+    expect(execFileSyncMock).not.toHaveBeenCalled();
+    expect(existsSync(activeFile)).toBe(false);
   });
 });

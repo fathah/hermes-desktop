@@ -3,6 +3,7 @@ import {
   Brain,
   Database,
   Plug,
+  Pencil,
   Puzzle,
   Settings,
   Signal,
@@ -24,6 +25,7 @@ import ProfileWalletPane from "./ProfileWalletPane";
 
 /** Mirrors the entry shape returned by `window.hermesAPI.listProfiles()`. */
 interface ProfileInfo {
+  id: string;
   name: string;
   path: string;
   isDefault: boolean;
@@ -39,7 +41,7 @@ interface ProfileInfo {
 }
 
 export interface ProfileModalProps {
-  /** Profile to view/edit (matches a `name` from `listProfiles`). */
+  /** Profile to view/edit (legacy prop name; value is the profile id). */
   name: string;
   open: boolean;
   onClose: () => void;
@@ -90,6 +92,7 @@ export default function ProfileModal({
   onChanged,
   onDeleted,
 }: ProfileModalProps): React.JSX.Element {
+  const id = name;
   const { t } = useI18n();
   const [profile, setProfile] = useState<ProfileInfo | null>(null);
   const [section, setSection] = useState<ProfileSection>("profile");
@@ -98,27 +101,44 @@ export default function ProfileModal({
   const [memoryLoading, setMemoryLoading] = useState(false);
   const [memoryError, setMemoryError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [nameEditing, setNameEditing] = useState(false);
+  const [nameSaving, setNameSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const skipNextNameBlurSaveRef = useRef(false);
+  const profileName = profile?.name;
 
   const load = useCallback(async (): Promise<void> => {
     try {
       const list = await window.hermesAPI.listProfiles();
-      setProfile(list.find((p) => p.name === name) ?? null);
+      setProfile(list.find((p) => p.id === id) ?? null);
     } catch {
       /* keep last-known profile */
     }
-  }, [name]);
+  }, [id]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (!profileName) return;
+    setNameDraft(profileName);
+  }, [profileName]);
+
+  useEffect(() => {
+    if (!nameEditing) return;
+    nameInputRef.current?.focus();
+    nameInputRef.current?.select();
+  }, [nameEditing]);
 
   const loadMemoryData = useCallback(async (): Promise<void> => {
     if (!profile) return;
     setMemoryLoading(true);
     setMemoryError("");
     try {
-      const data = await window.hermesAPI.readMemory(profile.name);
+      const data = await window.hermesAPI.readMemory(profile.id);
       setMemoryData(data as MemoryData);
     } catch {
       setMemoryError(t("memory.loadFailed"));
@@ -130,7 +150,7 @@ export default function ProfileModal({
   useEffect(() => {
     setMemoryData(null);
     setMemoryError("");
-  }, [name]);
+  }, [id]);
 
   useEffect(() => {
     if (section === "agentMemory" && profile && !memoryData && !memoryLoading) {
@@ -145,7 +165,7 @@ export default function ProfileModal({
 
   async function handlePickColor(color: string): Promise<void> {
     setProfile((cur) => (cur ? { ...cur, color } : cur));
-    const result = await window.hermesAPI.setProfileColor(name, color);
+    const result = await window.hermesAPI.setProfileColor(id, color);
     if (!result.success) setError(result.error || t("agents.appearanceFailed"));
     await afterMutation();
   }
@@ -158,7 +178,7 @@ export default function ProfileModal({
     if (!file) return;
     try {
       const dataUrl = await fileToAvatarDataUrl(file);
-      const result = await window.hermesAPI.setProfileAvatar(name, dataUrl);
+      const result = await window.hermesAPI.setProfileAvatar(id, dataUrl);
       if (!result.success)
         setError(result.error || t("agents.uploadImageFailed"));
     } catch {
@@ -168,17 +188,64 @@ export default function ProfileModal({
   }
 
   async function handleRemoveAvatar(): Promise<void> {
-    const result = await window.hermesAPI.removeProfileAvatar(name);
+    const result = await window.hermesAPI.removeProfileAvatar(id);
     if (!result.success) setError(result.error || t("agents.appearanceFailed"));
     await afterMutation();
+  }
+
+  async function handleSaveName(): Promise<void> {
+    if (!profile || nameSaving) return;
+    const currentName = profile.name;
+    if (skipNextNameBlurSaveRef.current) {
+      skipNextNameBlurSaveRef.current = false;
+      setNameDraft(currentName);
+      return;
+    }
+    if (nameDraft.trim() === currentName) {
+      setNameDraft(currentName);
+      setNameEditing(false);
+      return;
+    }
+    setNameSaving(true);
+    setError("");
+    try {
+      const result = await window.hermesAPI.setProfileName(
+        profile.id,
+        nameDraft,
+      );
+      if (!result.success) {
+        setError(result.error || t("common.updateFailed"));
+        setNameEditing(true);
+        return;
+      }
+      setNameEditing(false);
+      await afterMutation();
+    } catch {
+      setError(t("common.updateFailed"));
+      setNameEditing(true);
+    } finally {
+      setNameSaving(false);
+    }
+  }
+
+  function handleCancelNameEdit(): void {
+    if (!profile) return;
+    skipNextNameBlurSaveRef.current = true;
+    setNameDraft(profile.name);
+    setNameEditing(false);
+  }
+
+  function handleStartNameEdit(): void {
+    skipNextNameBlurSaveRef.current = false;
+    setNameEditing(true);
   }
 
   async function handleDelete(): Promise<void> {
     setConfirmDelete(false);
     setError("");
-    const result = await window.hermesAPI.deleteProfile(name);
+    const result = await window.hermesAPI.deleteProfile(id);
     if (result.success) {
-      onDeleted?.(name);
+      onDeleted?.(id);
       onChanged?.();
       onClose();
     } else {
@@ -226,6 +293,7 @@ export default function ProfileModal({
         },
       ]
     : [];
+  const agentName = profile?.name || id;
 
   return (
     <AppModal
@@ -242,7 +310,7 @@ export default function ProfileModal({
         <div className="profile-modal-header-main">
           {profile && (
             <ProfileAvatar
-              name={profile.name}
+              name={profile.id}
               color={profile.color}
               avatar={profile.avatar}
               size={28}
@@ -252,7 +320,7 @@ export default function ProfileModal({
             id="profile-modal-title"
             className="profile-modal-title"
           >
-            {profile ? profile.name : name}
+            {agentName}
           </AppModalTitle>
         </div>
         <button
@@ -289,7 +357,7 @@ export default function ProfileModal({
                 <div className="profile-modal-identity">
                   <div className="profile-modal-avatar-wrap">
                     <ProfileAvatar
-                      name={profile.name}
+                      name={profile.id}
                       color={profile.color}
                       avatar={profile.avatar}
                       size={96}
@@ -300,10 +368,53 @@ export default function ProfileModal({
                   </div>
                   <div className="profile-modal-identity-meta">
                     <div className="profile-modal-name-row">
-                      <span className="profile-modal-name">{profile.name}</span>
-                      {profile.isDefault && (
+                      {nameEditing ? (
+                        <input
+                          ref={nameInputRef}
+                          className="profile-modal-name-input"
+                          value={nameDraft}
+                          maxLength={80}
+                          placeholder={profile.name}
+                          aria-label={t("agents.nameLabel")}
+                          disabled={nameSaving}
+                          onChange={(e) => {
+                            setNameDraft(e.target.value);
+                            setError("");
+                          }}
+                          onBlur={() => {
+                            void handleSaveName();
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              e.currentTarget.blur();
+                            }
+                            if (e.key === "Escape") {
+                              e.preventDefault();
+                              handleCancelNameEdit();
+                            }
+                          }}
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          className="profile-modal-name-edit"
+                          onClick={handleStartNameEdit}
+                          aria-label={t("agents.nameLabel")}
+                          title={t("agents.nameLabel")}
+                        >
+                          <span className="profile-modal-name">
+                            {agentName}
+                          </span>
+                          <Pencil size={14} aria-hidden="true" />
+                        </button>
+                      )}
+                      {profile.id !== profile.name && (
+                        <span className="profile-modal-tag">{profile.id}</span>
+                      )}
+                      {nameSaving && (
                         <span className="profile-modal-tag">
-                          {t("agents.defaultTag")}
+                          {t("setup.saving")}
                         </span>
                       )}
                     </div>
@@ -371,7 +482,7 @@ export default function ProfileModal({
             {section === "persona" && (
               <div className="profile-modal-pane profile-modal-memory-pane">
                 <div className="memory-soul-tab">
-                  <Soul profile={profile.name} />
+                  <Soul profile={profile.id} />
                 </div>
               </div>
             )}
@@ -385,7 +496,7 @@ export default function ProfileModal({
                 ) : memoryData ? (
                   <MemoryEntries
                     entries={memoryData.memory.entries}
-                    profile={profile.name}
+                    profile={profile.id}
                     onRefresh={loadMemoryData}
                   />
                 ) : memoryError ? (
@@ -394,9 +505,7 @@ export default function ProfileModal({
               </div>
             )}
 
-            {section === "wallet" && (
-              <ProfileWalletPane profile={profile.name} />
-            )}
+            {section === "wallet" && <ProfileWalletPane profile={profile.id} />}
 
             {section === "advanced" && (
               <div className="profile-modal-pane">

@@ -2,7 +2,7 @@ import { execFileSync } from "child_process";
 import { join } from "path";
 import { homedir } from "os";
 import { promises as fs } from "fs";
-import { existsSync } from "fs";
+import { existsSync, mkdirSync, writeFileSync } from "fs";
 import {
   HERMES_HOME,
   HERMES_PYTHON,
@@ -14,6 +14,7 @@ import {
   isValidNamedProfileName,
   isValidProfileName,
   pidIsAliveAs,
+  profileHome,
   PROFILE_NAME_ERROR,
 } from "./utils";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
@@ -33,6 +34,9 @@ function commandErrorMessage(err: unknown): string {
 }
 
 export interface ProfileInfo {
+  /** Stable internal profile id used for CLI, paths, routing, and persistence. */
+  id: string;
+  /** User-facing agent/profile name. */
   name: string;
   path: string;
   isDefault: boolean;
@@ -47,6 +51,49 @@ export interface ProfileInfo {
   color: string;
   /** Avatar image as a data URL, or null when none is set. */
   avatar: string | null;
+}
+
+export interface CreateProfileResult {
+  success: boolean;
+  error?: string;
+  id?: string;
+}
+
+const MAX_PROFILE_NAME_LENGTH = 80;
+
+function normalizeAgentName(name: string): string {
+  return name.trim().replace(/\s+/g, " ").slice(0, MAX_PROFILE_NAME_LENGTH);
+}
+
+function slugBaseForAgentName(name: string): string {
+  const slug = normalizeAgentName(name)
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-+/g, "-")
+    .slice(0, 48)
+    .replace(/-+$/g, "");
+  if (!slug || slug === "default" || !isValidNamedProfileName(slug)) {
+    return "agent";
+  }
+  return slug;
+}
+
+function profileIdExists(id: string): boolean {
+  return id === "default" || existsSync(join(PROFILES_DIR, id));
+}
+
+export function profileIdForAgentName(agentName: string): string {
+  const base = slugBaseForAgentName(agentName);
+  if (!profileIdExists(base)) return base;
+  for (let i = 2; i < 1000; i += 1) {
+    const suffix = `-${i}`;
+    const candidate = `${base.slice(0, 64 - suffix.length)}${suffix}`;
+    if (!profileIdExists(candidate)) return candidate;
+  }
+  return `${base.slice(0, 55)}-${Date.now().toString(36)}`;
 }
 
 async function readProfileConfig(profilePath: string): Promise<{
@@ -148,7 +195,8 @@ export async function listProfiles(): Promise<ProfileInfo[]> {
   ]);
 
   profiles.push({
-    name: "default",
+    id: "default",
+    name: defaultMeta.name || "default",
     path: HERMES_HOME,
     isDefault: true,
     isActive: activeName === "default",
@@ -190,7 +238,8 @@ export async function listProfiles(): Promise<ProfileInfo[]> {
           ]);
 
         return {
-          name,
+          id: name,
+          name: meta.name || name,
           path: profilePath,
           isDefault: false,
           isActive: activeName === name,
@@ -220,13 +269,12 @@ export async function listProfiles(): Promise<ProfileInfo[]> {
 export function createProfile(
   name: string,
   cloneFrom: string | null,
-): { success: boolean; error?: string } {
-  if (name === "default") {
-    return { success: false, error: "Cannot create the default profile" };
+): CreateProfileResult {
+  const agentName = normalizeAgentName(name);
+  if (!agentName) {
+    return { success: false, error: "Agent name is required" };
   }
-  if (!isValidNamedProfileName(name)) {
-    return { success: false, error: PROFILE_NAME_ERROR };
-  }
+  const id = profileIdForAgentName(agentName);
   // `cloneFrom` may be "default" (not a "named" profile) or any valid named
   // profile; reject anything else so it can't reach the CLI as an argument.
   if (
@@ -237,12 +285,13 @@ export function createProfile(
     return { success: false, error: PROFILE_NAME_ERROR };
   }
 
+  // `--clone-from <source>` copies that profile's config/keys/skills and
+  // implies `--clone`; omitting it creates a fresh profile.
+  const args = cloneFrom
+    ? ["profile", "create", id, "--clone-from", cloneFrom]
+    : ["profile", "create", id];
+
   try {
-    // `--clone-from <source>` copies that profile's config/keys/skills and
-    // implies `--clone`; omitting it creates a fresh profile.
-    const args = cloneFrom
-      ? ["profile", "create", name, "--clone-from", cloneFrom]
-      : ["profile", "create", name];
     execFileSync(HERMES_PYTHON, hermesCliArgs(args), {
       cwd: join(HERMES_HOME, "hermes-agent"),
       env: {
@@ -255,10 +304,25 @@ export function createProfile(
       timeout: 30000,
       ...HIDDEN_SUBPROCESS_OPTIONS,
     });
-    return { success: true };
   } catch (err) {
     return { success: false, error: commandErrorMessage(err) };
   }
+
+  try {
+    mkdirSync(profileHome(id), { recursive: true });
+    writeFileSync(
+      join(profileHome(id), "profile-meta.json"),
+      JSON.stringify({ name: agentName }, null, 2),
+      "utf-8",
+    );
+  } catch (err) {
+    console.warn(
+      `Created profile "${id}" but failed to write profile metadata:`,
+      err,
+    );
+  }
+
+  return { success: true, id };
 }
 
 export function deleteProfile(name: string): {
@@ -313,6 +377,26 @@ export function setActiveProfile(name: string): void {
       ...HIDDEN_SUBPROCESS_OPTIONS,
     });
   } catch {
-    // ignore
+    // ignore — verified and repaired below
+  }
+
+  // The CLI validates against LOCAL profiles and raises when the name exists
+  // only on the SSH/remote host (or when there is no local install at all).
+  // That failure is swallowed above, so before this fallback the selection
+  // silently never persisted: ~/.hermes/active_profile kept its old value,
+  // every relaunch reset the UI to `default`, and activeSshProfile() scoped
+  // the unified SSH dashboard's data to the wrong profile. The desktop's
+  // source of truth is the local active_profile file (getActiveProfileNameSync),
+  // so when the CLI didn't move it, write it directly — `name` is already
+  // validated, and "default" is a plain value here (readers treat a missing
+  // file and the literal "default" identically).
+  if (getActiveProfileNameSync() !== name) {
+    try {
+      mkdirSync(HERMES_HOME, { recursive: true });
+      writeFileSync(join(HERMES_HOME, "active_profile"), `${name}\n`);
+    } catch {
+      // Filesystem write failed — nothing else to fall back to; the CLI
+      // attempt above already didn't persist it either.
+    }
   }
 }

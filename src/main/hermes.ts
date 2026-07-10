@@ -54,7 +54,10 @@ import { providerListSafe } from "./secrets";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 import { type Attachment, escapeXmlAttr } from "../shared/attachments";
 import { type SessionModelOverride } from "../shared/model-override";
-import { OPENAI_COMPAT_PROVIDERS } from "../shared/url-key-map";
+import {
+  OPENAI_COMPAT_PROVIDERS,
+  customProviderEnvKey,
+} from "../shared/url-key-map";
 import {
   chatToolEventFromPayload,
   chatToolProgressLabel,
@@ -2460,10 +2463,11 @@ function sendMessageViaCli(
         const models = readModels();
         const matching = models.find((m) => m.baseUrl === mc.baseUrl);
         if (matching) {
-          const envKey2 =
-            "CUSTOM_PROVIDER_" +
-            matching.name.replace(/[^A-Za-z0-9]/g, "_").toUpperCase() +
-            "_KEY";
+          // Key off the provider label (stable across all of a named custom
+          // provider's models) when present, else the model's own name.
+          const envKey2 = customProviderEnvKey(
+            matching.providerLabel || matching.name,
+          );
           resolvedKey = profileEnv[envKey2] || env[envKey2] || "";
         }
       } catch {

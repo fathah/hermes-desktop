@@ -1,20 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Check,
-  Copy,
-  KeyRound,
-  Plus,
-  Refresh,
-  Trash,
-  Wallet,
-  X,
-} from "../../assets/icons";
+import { Check, Copy, Refresh, Trash, Wallet, X } from "../../assets/icons";
 import etheriumIcon from "../../assets/icons/etherium.webp";
 import hdTokenIcon from "../../assets/icons/hdtoken.webp";
-import type {
-  ProfileWallet,
-  WalletMutationResult,
-} from "../../../../shared/wallets";
+import type { ProfileWallet, WalletView } from "../../../../shared/wallets";
 import { BASE_NETWORK_LABEL } from "../../../../shared/wallets";
 import type { TokenBalancesResponse } from "../../../../shared/tokens";
 import { AppModal, AppModalTitle } from "../modal/AppModal";
@@ -37,27 +25,27 @@ interface ProfileWalletPaneProps {
   profile: string;
 }
 
-type WalletMode = "create" | "import";
-
 function formatAddress(address: string): string {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
+/** Present a local wallet as the shared view model. */
+function localToView(wallet: ProfileWallet): WalletView {
+  return { ...wallet, source: "local" };
 }
 
 export default function ProfileWalletPane({
   profile,
 }: ProfileWalletPaneProps): React.JSX.Element {
   const { t } = useI18n();
-  const [wallets, setWallets] = useState<ProfileWallet[]>([]);
+  const [wallets, setWallets] = useState<WalletView[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState("");
-  const [modalOpen, setModalOpen] = useState(false);
-  const [mode, setMode] = useState<WalletMode>("create");
-  const [name, setName] = useState("");
-  const [recoveryPhrase, setRecoveryPhrase] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [created, setCreated] = useState<WalletMutationResult | null>(null);
+  // A non-fatal note about cloud wallets (signed out / not yet synced).
+  const [cloudNote, setCloudNote] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<ProfileWallet | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<WalletView | null>(null);
   const [balances, setBalances] = useState<Map<string, TokenBalancesResponse>>(
     () => new Map(),
   );
@@ -68,8 +56,16 @@ export default function ProfileWalletPane({
   /** Ref that tracks wallet ID → address so fetchBalances can update the cache. */
   const walletIdToAddress = useRef<Map<string, string>>(new Map());
 
+  /**
+   * Generation counter for loadWallets. Each call bumps it and captures its
+   * value; after an await, a run whose id no longer matches has been
+   * superseded (profile change, refresh, or post-delete reload) and must not
+   * apply its now-stale results over the newer run's.
+   */
+  const loadRunRef = useRef(0);
+
   /** Hydrate balances from the module-level cache after wallets load. */
-  function hydrateFromCache(walletList: ProfileWallet[]): void {
+  function hydrateFromCache(walletList: WalletView[]): void {
     const map = new Map<string, TokenBalancesResponse>();
     const addrMap = new Map<string, string>();
     for (const w of walletList) {
@@ -81,27 +77,37 @@ export default function ProfileWalletPane({
     setBalances(map);
   }
 
-  async function fetchBalances(walletList: ProfileWallet[]): Promise<void> {
-    setBalancesLoading(new Set(walletList.map((w) => w.id)));
+  async function fetchBalances(walletList: WalletView[]): Promise<void> {
+    if (walletList.length === 0) return;
+    // Functional updates only touch this call's ids, so the two concurrent
+    // fetches (local + cloud) can't clobber each other's loading spinners.
+    const ids = new Set(walletList.map((w) => w.id));
+    setBalancesLoading((prev) => new Set([...prev, ...ids]));
     const results = await Promise.allSettled(
       walletList.map(async (w) => {
         const response = await window.hermesAPI.getTokenBalances(w.address);
         return { walletId: w.id, address: w.address, response };
       }),
     );
-    const next = new Map(balances);
-    for (const result of results) {
-      if (result.status === "fulfilled") {
-        const { walletId, address, response } = result.value;
-        next.set(walletId, response);
-        balanceCache.set(address, response);
+    setBalances((prev) => {
+      const next = new Map(prev);
+      for (const result of results) {
+        if (result.status === "fulfilled") {
+          const { walletId, address, response } = result.value;
+          next.set(walletId, response);
+          balanceCache.set(address, response);
+        }
       }
-    }
-    setBalances(next);
-    setBalancesLoading(new Set());
+      return next;
+    });
+    setBalancesLoading((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.delete(id));
+      return next;
+    });
   }
 
-  async function refreshSingleBalance(wallet: ProfileWallet): Promise<void> {
+  async function refreshSingleBalance(wallet: WalletView): Promise<void> {
     setBalancesLoading((prev) => new Set(prev).add(wallet.id));
     try {
       const response = await window.hermesAPI.getTokenBalances(wallet.address);
@@ -123,37 +129,54 @@ export default function ProfileWalletPane({
   }
 
   const loadWallets = useCallback(async (): Promise<void> => {
+    const runId = ++loadRunRef.current;
+    const isStale = (): boolean => loadRunRef.current !== runId;
     setLoading(true);
     setError("");
+    setCloudNote("");
+    // Local wallets are on disk and show immediately; cloud wallets come from
+    // the backend for the profile's linked agent and stream in after.
+    let local: WalletView[] = [];
     try {
-      const loaded = await window.hermesAPI.listWallets(profile);
-      setWallets(loaded);
-      hydrateFromCache(loaded);
-      fetchBalances(loaded);
+      local = (await window.hermesAPI.listWallets(profile)).map(localToView);
     } catch {
-      setError(t("agents.walletLoadFailed"));
+      if (!isStale()) setError(t("agents.walletLoadFailed"));
+    }
+    // A newer load (profile switch / refresh) has superseded this one; don't
+    // overwrite its state with this profile's data.
+    if (isStale()) return;
+    setWallets(local);
+    hydrateFromCache(local);
+    void fetchBalances(local);
+    setLoading(false);
+
+    setSyncing(true);
+    try {
+      const result = await window.hermesAPI.syncWallets(profile);
+      if (isStale()) return;
+      if (result.status === "signed-out") {
+        setCloudNote(t("agents.walletSignInHint"));
+      } else if (result.status === "unlinked") {
+        setCloudNote(t("agents.walletSyncedHint"));
+      } else if (result.status === "error") {
+        setCloudNote(result.error || t("agents.walletLoadFailed"));
+      } else if (result.wallets.length > 0) {
+        // Cloud ids are backend uuids; no collision with local ids.
+        const merged = [...local, ...result.wallets];
+        setWallets(merged);
+        hydrateFromCache(merged);
+        void fetchBalances(result.wallets);
+      }
+    } catch {
+      if (!isStale()) setCloudNote(t("agents.walletLoadFailed"));
     } finally {
-      setLoading(false);
+      if (!isStale()) setSyncing(false);
     }
   }, [profile, t]);
 
   useEffect(() => {
     void loadWallets();
   }, [loadWallets]);
-
-  function resetModal(): void {
-    setMode("create");
-    setName("");
-    setRecoveryPhrase("");
-    setSubmitting(false);
-    setCreated(null);
-    setError("");
-  }
-
-  function openCreateModal(): void {
-    resetModal();
-    setModalOpen(true);
-  }
 
   async function copyText(value: string, key: string): Promise<void> {
     await window.hermesAPI.copyToClipboard(value);
@@ -163,33 +186,10 @@ export default function ProfileWalletPane({
     }, 1600);
   }
 
-  async function handleSubmit(): Promise<void> {
-    setSubmitting(true);
-    setError("");
-    try {
-      const result =
-        mode === "create"
-          ? await window.hermesAPI.createWallet(profile, name)
-          : await window.hermesAPI.importWallet({
-              profile,
-              name,
-              recoveryPhrase,
-            });
-      if (!result.success) {
-        setError(result.error || t("agents.walletCreateFailed"));
-        return;
-      }
-      setCreated(result);
-      await loadWallets();
-    } catch {
-      setError(t("agents.walletCreateFailed"));
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
   async function handleDelete(): Promise<void> {
-    if (!deleteTarget) return;
+    // Cloud wallets are backend-managed; only local ones have a deletable
+    // on-disk record (their delete button is the only way to open this modal).
+    if (!deleteTarget || deleteTarget.source !== "local") return;
     setError("");
     const result = await window.hermesAPI.deleteWallet(
       profile,
@@ -215,9 +215,13 @@ export default function ProfileWalletPane({
             {t("agents.walletNetwork", { network: BASE_NETWORK_LABEL })}
           </div>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={openCreateModal}>
-          <Plus size={15} />
-          {t("agents.walletCreate")}
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={() => void loadWallets()}
+          disabled={syncing}
+        >
+          <Refresh size={14} />
+          {syncing ? t("agents.walletSyncing") : t("agents.walletSync")}
         </button>
       </div>
 
@@ -228,14 +232,10 @@ export default function ProfileWalletPane({
       ) : wallets.length === 0 ? (
         <div className="profile-wallet-empty">
           <Wallet size={36} />
-          <span>{t("agents.walletEmpty")}</span>
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={openCreateModal}
-          >
-            <Plus size={15} />
-            {t("agents.walletCreate")}
-          </button>
+          <span>{t("agents.walletManagedEmpty")}</span>
+          {cloudNote && (
+            <span className="profile-wallet-empty-note">{cloudNote}</span>
+          )}
         </div>
       ) : (
         <div className="profile-wallet-list">
@@ -248,6 +248,13 @@ export default function ProfileWalletPane({
                 <div className="profile-wallet-meta">
                   <div className="profile-wallet-name-row">
                     <span className="profile-wallet-name">{wallet.name}</span>
+                    <span
+                      className={`profile-wallet-badge profile-wallet-badge-${wallet.source}`}
+                    >
+                      {wallet.source === "cloud"
+                        ? t("agents.walletSourceCloud")
+                        : t("agents.walletSourceLocal")}
+                    </span>
                     <span className="profile-wallet-network">
                       {BASE_NETWORK_LABEL}
                     </span>
@@ -313,149 +320,24 @@ export default function ProfileWalletPane({
                     ? t("agents.walletCopied")
                     : t("agents.walletCopyAddress")}
                 </button>
-                <button
-                  className="btn btn-danger-ghost btn-sm"
-                  onClick={() => setDeleteTarget(wallet)}
-                >
-                  <Trash size={14} />
-                </button>
+                {wallet.source === "local" && (
+                  <button
+                    className="btn btn-danger-ghost btn-sm"
+                    onClick={() => setDeleteTarget(wallet)}
+                  >
+                    <Trash size={14} />
+                  </button>
+                )}
               </div>
             </div>
           ))}
         </div>
       )}
 
+      {wallets.length > 0 && cloudNote && (
+        <div className="profile-wallet-note">{cloudNote}</div>
+      )}
       {error && <div className="agents-create-error">{error}</div>}
-
-      <AppModal
-        open={modalOpen}
-        onOpenChange={(open) => {
-          setModalOpen(open);
-          if (!open) resetModal();
-        }}
-        className="profile-wallet-modal"
-        overlayClassName="profile-wallet-modal-overlay"
-        labelledBy="profile-wallet-modal-title"
-      >
-        <div className="profile-wallet-modal-header">
-          <AppModalTitle
-            id="profile-wallet-modal-title"
-            className="profile-wallet-modal-title"
-          >
-            {created?.success
-              ? t("agents.walletRecoveryTitle")
-              : t("agents.walletCreateTitle")}
-          </AppModalTitle>
-          <button
-            className="profile-modal-close"
-            onClick={() => setModalOpen(false)}
-            aria-label={t("common.close")}
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        {created?.success && created.recoveryPhrase ? (
-          <div className="profile-wallet-modal-body">
-            <div className="profile-wallet-recovery">
-              <KeyRound size={22} />
-              <p>{t("agents.walletRecoveryInfo")}</p>
-              <div className="profile-wallet-phrase">
-                {created.recoveryPhrase.split(" ").map((word, index) => (
-                  <span key={`${word}-${index}`}>
-                    <strong>{index + 1}</strong>
-                    {word}
-                  </span>
-                ))}
-              </div>
-              <div className="profile-wallet-modal-actions">
-                <button
-                  className="btn btn-secondary"
-                  onClick={() =>
-                    copyText(created.recoveryPhrase || "", "recovery")
-                  }
-                >
-                  {copied === "recovery" ? (
-                    <Check size={16} />
-                  ) : (
-                    <Copy size={16} />
-                  )}
-                  {copied === "recovery"
-                    ? t("agents.walletCopied")
-                    : t("agents.walletCopyRecovery")}
-                </button>
-                <button
-                  className="btn btn-primary"
-                  onClick={() => setModalOpen(false)}
-                >
-                  {t("agents.walletDone")}
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="profile-wallet-modal-body">
-            <div className="profile-wallet-mode">
-              <button
-                className={mode === "create" ? "active" : ""}
-                onClick={() => setMode("create")}
-              >
-                {t("agents.walletCreateNew")}
-              </button>
-              <button
-                className={mode === "import" ? "active" : ""}
-                onClick={() => setMode("import")}
-              >
-                {t("agents.walletImportExisting")}
-              </button>
-            </div>
-
-            <label className="profile-wallet-field">
-              <span>{t("agents.walletName")}</span>
-              <input
-                className="input"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                placeholder={t("agents.walletNamePlaceholder")}
-              />
-            </label>
-
-            {mode === "import" && (
-              <label className="profile-wallet-field">
-                <span>{t("agents.walletRecoveryPhrase")}</span>
-                <textarea
-                  className="input profile-wallet-textarea"
-                  value={recoveryPhrase}
-                  onChange={(event) => setRecoveryPhrase(event.target.value)}
-                  placeholder={t("agents.walletRecoveryPlaceholder")}
-                />
-              </label>
-            )}
-
-            {error && <div className="agents-create-error">{error}</div>}
-
-            <div className="profile-wallet-modal-actions">
-              <button
-                className="btn btn-secondary"
-                onClick={() => setModalOpen(false)}
-              >
-                {t("common.cancel")}
-              </button>
-              <button
-                className="btn btn-primary"
-                onClick={handleSubmit}
-                disabled={
-                  submitting || (mode === "import" && !recoveryPhrase.trim())
-                }
-              >
-                {submitting
-                  ? t("agents.walletCreating")
-                  : t("agents.walletSave")}
-              </button>
-            </div>
-          </div>
-        )}
-      </AppModal>
 
       <AppModal
         open={deleteTarget !== null}

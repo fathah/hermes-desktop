@@ -6558,6 +6558,417 @@ body {
   color: var(--text-muted);
 }
 
+/* Configured-provider card (clickable → config modal) + Add tile */
+.provider-config-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+.provider-config-card:hover {
+  background: var(--bg-hover, var(--bg-secondary));
+  border-color: var(--text-muted);
+}
+.provider-config-card-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.provider-config-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.provider-config-card-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.provider-config-card-edit {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.provider-add-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  background: transparent;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.provider-add-card:hover {
+  border-color: var(--text-primary);
+  color: var(--text-primary);
+}
+
+/* Add-provider picker modal */
+.provider-picker-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: var(--text-muted);
+}
+.provider-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+  /* Fixed scroll region so the modal keeps a stable height as search filters
+     the list (it no longer shrinks down to one result). */
+  height: 44vh;
+  align-content: start;
+  overflow-y: auto;
+}
+.provider-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+.provider-picker-item:hover {
+  border-color: var(--text-muted);
+}
+.provider-picker-item-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.provider-picker-item-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.provider-picker-item-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.provider-remove-btn {
+  color: var(--danger, #c0392b);
+  margin-right: auto;
+}
+
+/* ===== Provider config modal (polished, scoped) ===== */
+.provider-modal {
+  width: 560px;
+  border-radius: var(--radius-xl);
+}
+.provider-modal .models-modal-header {
+  padding: 28px 32px 0;
+  border-bottom: none;
+}
+.provider-modal .models-modal-body {
+  padding: 24px 32px 8px;
+  gap: 0;
+}
+.provider-modal .models-modal-footer {
+  padding: 20px 32px 24px;
+  margin-top: 8px;
+}
+/* Rounder inputs + buttons inside this modal */
+.provider-modal .input {
+  padding: 13px 16px;
+  border-radius: var(--radius-lg);
+  font-size: 14px;
+}
+.provider-modal .btn {
+  border-radius: var(--radius-md);
+}
+
+/* Header: logo tile + title (scoped so it beats .models-modal-title) */
+.provider-modal .provider-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 20px;
+  font-weight: 700;
+}
+/* Understated remove action (reference shows it muted, not danger-red) */
+.provider-modal .provider-remove-btn {
+  color: var(--text-secondary);
+}
+.provider-modal .provider-remove-btn:hover {
+  color: var(--text-primary);
+}
+.provider-modal-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  flex-shrink: 0;
+}
+
+/* Key input row: leading icon + input + Show */
+.provider-key-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.provider-key-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.provider-key-row .input {
+  flex: 1;
+  min-width: 0;
+}
+.provider-key-row .settings-toggle-btn {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  padding: 6px 4px;
+}
+.provider-key-row .settings-toggle-btn:hover {
+  color: var(--text-primary);
+  background: transparent;
+}
+
+/* Custom-provider modal: hint shown before a base URL is entered */
+.provider-custom-hint {
+  margin-top: 20px;
+}
+
+/* Logo dropdown (model-picker provider select): brand logo inside the control
+   and in each option, since a native <select> can't render logos. */
+.logo-select {
+  position: relative;
+}
+.logo-select-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+.logo-select-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+.logo-select-chevron {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: transform 0.15s ease;
+}
+.logo-select.open .logo-select-chevron {
+  transform: rotate(180deg);
+}
+.logo-select-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+}
+.logo-select-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 11;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+.logo-select-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 14px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+.logo-select-option:hover {
+  background: var(--bg-hover);
+}
+.logo-select-option.active {
+  background: var(--bg-hover);
+  font-weight: 600;
+}
+
+/* Custom-provider modal: base URL + key as one connected control (no gap).
+   Inner inputs are borderless; a single divider separates the two rows. */
+.provider-key-group {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-lg);
+  background: var(--bg-primary);
+  overflow: hidden;
+}
+.provider-key-group:focus-within {
+  border-color: var(--border-focus);
+}
+.provider-key-group .provider-key-row {
+  padding: 4px 14px;
+}
+.provider-key-group .provider-key-row + .provider-key-row {
+  border-top: 1px solid var(--border);
+}
+.provider-key-group .provider-key-row .input {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* Key-status line under the input */
+.provider-key-status {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 16px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.provider-key-status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.provider-key-status-ok {
+  color: var(--success, #22c55e);
+}
+.provider-key-status-loading,
+.provider-key-status-muted {
+  color: var(--text-muted);
+}
+
+/* Models section */
+.provider-models {
+  margin-top: 28px;
+}
+.provider-models-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.provider-models-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.provider-models-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* Model pills */
+.provider-models-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.provider-model-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 3px 6px 3px 10px;
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+}
+.provider-model-chip-label {
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.provider-model-chip-del {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  border-radius: 50%;
+  transition: color 0.15s ease;
+}
+.provider-model-chip-del:hover {
+  color: var(--text-primary);
+}
+
+/* Add row */
+.provider-models-add {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+.provider-models-add .input {
+  flex: 1;
+  min-width: 0;
+}
+.provider-models-add-btn {
+  flex-shrink: 0;
+  gap: 5px;
+  padding-left: 20px;
+  padding-right: 20px;
+}
+
 .oauth-signin-btn {
   display: inline-flex;
   align-items: center;
@@ -6570,6 +6981,231 @@ body {
   font-size: 12px;
   color: var(--text-muted);
   margin: 0 0 10px;
+}
+
+/* Hermes account (device login) — section hint + summary row. */
+.settings-section-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0 0 12px;
+}
+
+/* Signed-in identity card: avatar · name/email/status · sign-out. */
+.hermes-account-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.hermes-account-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid var(--border-bright);
+}
+
+.hermes-account-avatar-letter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent-hover), var(--accent));
+}
+
+.hermes-account-who {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  /* Push the sign-out button to the card's right edge. */
+  margin-right: auto;
+}
+
+.hermes-account-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hermes-account-email {
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hermes-account-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--success);
+}
+
+.hermes-account-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 3px var(--success-bg);
+}
+
+/* Sign-in modal — device-login (RFC 8628) with a loader spinning around the
+   brand mark while awaiting browser approval. Uses .models-modal-overlay for
+   the backdrop. Theme-aware; matches the dark mock in the default theme. */
+.hermes-signin-modal {
+  position: relative;
+  width: 440px;
+  max-width: 92vw;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  padding: 40px 32px 0;
+  text-align: center;
+}
+
+.hermes-signin-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 8px;
+}
+.hermes-signin-close:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.hermes-signin-emblem {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  border: 1.5px solid var(--border-bright);
+}
+/* The spinning bright arc; the faint full ring is the emblem's own border. */
+.hermes-signin-ring {
+  position: absolute;
+  inset: -1.5px;
+  border-radius: 9999px;
+  border: 1.5px solid transparent;
+  border-top-color: var(--text-primary);
+  animation: hermes-signin-spin 0.9s linear infinite;
+}
+@keyframes hermes-signin-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* Success / error glyphs, tinted to the foreground colour. */
+.hermes-signin-bolt {
+  display: flex;
+  color: var(--text-primary);
+}
+/* The brand mark clipped to a disc; the logo is sized larger than this box so
+   the asset's built-in padding is cropped and the mark fills the emblem. */
+.hermes-signin-mark {
+  width: 76px;
+  height: 76px;
+  border-radius: 9999px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.hermes-signin-mark img {
+  border-radius: 0;
+}
+
+.hermes-signin-title {
+  margin: 24px 0 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+.hermes-signin-subtitle {
+  margin: 10px auto 0;
+  max-width: 300px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.hermes-signin-code {
+  margin-top: 26px;
+  font-size: 38px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--text-primary);
+  user-select: all;
+}
+.hermes-signin-copy {
+  margin: 16px auto 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+}
+.hermes-signin-copy:hover {
+  color: var(--text-primary);
+}
+
+.hermes-signin-footer {
+  margin: 30px -32px 0;
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.hermes-signin-footer-status {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.hermes-signin-cancel {
+  border: none;
+  background: none;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+.hermes-signin-cancel:hover {
+  opacity: 0.8;
 }
 
 /* Prominent outcome banner shown when the sign-in finishes — the raw
@@ -7798,6 +8434,21 @@ body {
   margin-top: 2px;
 }
 
+.agents-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agents-sync-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .agents-create-clone {
   display: flex;
   align-items: center;
@@ -8078,12 +8729,65 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-height: 36px;
+  flex-wrap: wrap;
 }
 
 .profile-modal-name {
   font-size: 18px;
   font-weight: 700;
   color: var(--text-primary);
+}
+
+.profile-modal-name-edit {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+  padding: 3px 6px;
+  margin-left: -6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  cursor: text;
+}
+
+.profile-modal-name-edit svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  opacity: 0;
+}
+
+.profile-modal-name-edit:hover,
+.profile-modal-name-edit:focus-visible {
+  background: var(--bg-tertiary);
+  border-color: var(--border);
+  outline: none;
+}
+
+.profile-modal-name-edit:hover svg,
+.profile-modal-name-edit:focus-visible svg {
+  color: var(--text-secondary);
+  opacity: 1;
+}
+
+.profile-modal-name-input {
+  width: min(360px, 52vw);
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 700;
+}
+
+.profile-modal-name-input:focus {
+  border-color: var(--accent);
+  outline: none;
 }
 
 .profile-modal-tag {
@@ -8783,6 +9487,39 @@ body {
   font-size: 11px;
   font-weight: 700;
   flex: 0 0 auto;
+}
+
+/* Origin badge: cloud (backend-managed) vs local (this device). */
+.profile-wallet-badge {
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  flex: 0 0 auto;
+}
+
+.profile-wallet-badge-cloud {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.profile-wallet-badge-local {
+  background: var(--bg-tertiary, var(--accent-subtle));
+  color: var(--text-muted);
+}
+
+.profile-wallet-empty-note,
+.profile-wallet-note {
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+  max-width: 340px;
+}
+
+.profile-wallet-note {
+  margin-top: 10px;
 }
 
 .profile-wallet-address {

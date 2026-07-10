@@ -8,6 +8,7 @@ import type {
   ImportWalletInput,
   ProfileWallet,
   WalletMutationResult,
+  WalletSyncResult,
 } from "../shared/wallets";
 import type { TokenBalancesResponse } from "../shared/tokens";
 import type {
@@ -16,6 +17,12 @@ import type {
   MessagingPlatformUpdate,
 } from "../shared/messaging-platforms";
 import type { ChatToolEvent } from "../shared/chat-stream";
+import type {
+  DeviceCodeInfo,
+  HermesAccount,
+  HermesAccountUser,
+} from "../shared/account";
+import type { AgentSyncResult, AgentSyncStatus } from "../shared/agent-sync";
 import type { GpuPreferenceMode, GpuStatus } from "../shared/gpu";
 
 /**
@@ -168,6 +175,50 @@ const hermesAPI = {
       callback(String(chunk));
     ipcRenderer.on("oauth-login-progress", handler);
     return () => ipcRenderer.removeListener("oauth-login-progress", handler);
+  },
+
+  // Hermes account sign-in (device authorization grant)
+  accountLogin: (
+    profile?: string,
+  ): Promise<{ success: boolean; user?: HermesAccountUser; error?: string }> =>
+    ipcRenderer.invoke("hermes-account-login", profile),
+  cancelAccountLogin: (): Promise<boolean> =>
+    ipcRenderer.invoke("hermes-account-login-cancel"),
+  onAccountLoginCode: (
+    callback: (info: DeviceCodeInfo) => void,
+  ): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, info: unknown): void =>
+      callback(info as DeviceCodeInfo);
+    ipcRenderer.on("hermes-account-login-code", handler);
+    return () =>
+      ipcRenderer.removeListener("hermes-account-login-code", handler);
+  },
+  onAccountLoginProgress: (callback: (chunk: string) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, chunk: unknown): void =>
+      callback(String(chunk));
+    ipcRenderer.on("hermes-account-login-progress", handler);
+    return () =>
+      ipcRenderer.removeListener("hermes-account-login-progress", handler);
+  },
+  getAccount: (profile?: string): Promise<HermesAccount | null> =>
+    ipcRenderer.invoke("hermes-account-get", profile),
+  accountLogout: (profile?: string): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke("hermes-account-logout", profile),
+
+  // Cloud agent sync (profiles ↔ signed-in Hermes One account)
+  syncAgents: (): Promise<AgentSyncResult> =>
+    ipcRenderer.invoke("agent-sync-run"),
+  getAgentSyncStatus: (): Promise<AgentSyncStatus> =>
+    ipcRenderer.invoke("agent-sync-status"),
+  onAgentSyncUpdated: (
+    callback: (result: AgentSyncResult) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      result: unknown,
+    ): void => callback(result as AgentSyncResult);
+    ipcRenderer.on("agent-sync-updated", handler);
+    return () => ipcRenderer.removeListener("agent-sync-updated", handler);
   },
 
   getLocale: (): Promise<AppLocale> => ipcRenderer.invoke("get-locale"),
@@ -761,6 +812,7 @@ const hermesAPI = {
   // Profiles
   listProfiles: (): Promise<
     Array<{
+      id: string;
       name: string;
       path: string;
       isDefault: boolean;
@@ -779,7 +831,7 @@ const hermesAPI = {
   createProfile: (
     name: string,
     cloneFrom: string | null,
-  ): Promise<{ success: boolean; error?: string }> =>
+  ): Promise<{ success: boolean; error?: string; id?: string }> =>
     ipcRenderer.invoke("create-profile", name, cloneFrom),
 
   deleteProfile: (
@@ -796,6 +848,12 @@ const hermesAPI = {
   ): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke("set-profile-color", name, color),
 
+  setProfileName: (
+    id: string,
+    name: string,
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("set-profile-name", id, name),
+
   setProfileAvatar: (
     name: string,
     dataUrl: string,
@@ -809,6 +867,10 @@ const hermesAPI = {
 
   listWallets: (profile?: string): Promise<ProfileWallet[]> =>
     ipcRenderer.invoke("list-wallets", profile),
+
+  // Cloud wallets from the backend for the profile's linked agent.
+  syncWallets: (profile?: string): Promise<WalletSyncResult> =>
+    ipcRenderer.invoke("wallet-sync", profile),
 
   createWallet: (
     profile?: string,
@@ -1005,6 +1067,7 @@ const hermesAPI = {
       provider: string;
       model: string;
       baseUrl: string;
+      providerLabel?: string;
       createdAt: number;
     }>
   > => ipcRenderer.invoke("list-models"),
@@ -1015,6 +1078,7 @@ const hermesAPI = {
     model: string,
     baseUrl: string,
     contextLength?: number,
+    providerLabel?: string,
   ): Promise<{
     id: string;
     name: string;
@@ -1022,6 +1086,7 @@ const hermesAPI = {
     model: string;
     baseUrl: string;
     contextLength?: number;
+    providerLabel?: string;
     createdAt: number;
   }> =>
     ipcRenderer.invoke(
@@ -1031,6 +1096,7 @@ const hermesAPI = {
       model,
       baseUrl,
       contextLength,
+      providerLabel,
     ),
 
   removeModel: (id: string): Promise<boolean> =>

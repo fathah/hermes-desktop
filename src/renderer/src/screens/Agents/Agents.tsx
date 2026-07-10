@@ -4,8 +4,13 @@ import ProfileAvatar from "../../components/common/ProfileAvatar";
 import { AppModal, AppModalTitle } from "../../components/modal/AppModal";
 import { useI18n } from "../../components/useI18n";
 import { useProfileModal } from "../../components/profile/ProfileModalContext";
+import type {
+  AgentSyncResult,
+  AgentSyncStatus,
+} from "../../../../shared/agent-sync";
 
 interface ProfileInfo {
+  id: string;
   name: string;
   path: string;
   isDefault: boolean;
@@ -77,7 +82,7 @@ function Agents({
         try {
           const list = await window.hermesAPI.listProfiles();
           setProfiles(list);
-          if (list.find((p) => p.name === name)?.gatewayRunning) {
+          if (list.find((p) => p.id === name)?.gatewayRunning) {
             settle();
             return;
           }
@@ -103,6 +108,82 @@ function Agents({
   // Cancel any in-flight gateway poll when the page unmounts.
   useEffect(() => stopGatewayPoll, [stopGatewayPoll]);
 
+  // Cloud sync: null while the signed-in state is still loading.
+  const [syncStatus, setSyncStatus] = useState<AgentSyncStatus | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const autoSyncedRef = useRef(false);
+
+  const refreshSyncStatus = useCallback(async (): Promise<void> => {
+    try {
+      setSyncStatus(await window.hermesAPI.getAgentSyncStatus());
+    } catch {
+      // Bridge unavailable (tests/old preload): leave the affordance hidden.
+    }
+  }, []);
+
+  const runSync = useCallback(async (): Promise<void> => {
+    setSyncing(true);
+    try {
+      const result = await window.hermesAPI.syncAgents();
+      setSyncStatus((s) => (s ? { ...s, lastResult: result } : s));
+      if (result.outcomes.some((o) => o.action === "created-local")) {
+        await loadProfiles();
+      }
+    } catch {
+      // Surfaced through lastResult on the next status refresh.
+    } finally {
+      setSyncing(false);
+      void refreshSyncStatus();
+    }
+  }, [loadProfiles, refreshSyncStatus]);
+
+  // Load the signed-in state once, then run one automatic pass per visit so
+  // console-side edits appear without a manual click.
+  useEffect(() => {
+    void (async () => {
+      try {
+        const status = await window.hermesAPI.getAgentSyncStatus();
+        setSyncStatus(status);
+        if (status.signedIn && !status.running && !autoSyncedRef.current) {
+          autoSyncedRef.current = true;
+          void runSync();
+        }
+      } catch {
+        // Bridge unavailable: leave the affordance hidden.
+      }
+    })();
+  }, [runSync]);
+
+  // Syncs triggered elsewhere (e.g. right after sign-in) refresh the list too.
+  useEffect(() => {
+    if (!window.hermesAPI.onAgentSyncUpdated) return undefined;
+    return window.hermesAPI.onAgentSyncUpdated((result: AgentSyncResult) => {
+      setSyncStatus((s) => (s ? { ...s, lastResult: result } : s));
+      if (result.outcomes.some((o) => o.action === "created-local")) {
+        void loadProfiles();
+      }
+    });
+  }, [loadProfiles]);
+
+  function syncSummary(result: AgentSyncResult): string {
+    if (result.status === "unauthorized") return t("agents.syncUnauthorized");
+    if (result.status === "error")
+      return result.error || t("agents.syncFailed");
+    const counts = { pushed: 0, pulled: 0, created: 0, errors: 0 };
+    for (const o of result.outcomes) {
+      if (o.action === "pushed" || o.action === "created-remote")
+        counts.pushed++;
+      else if (o.action === "pulled") counts.pulled++;
+      if (o.action === "created-local") counts.created++;
+      if (o.action === "error") counts.errors++;
+    }
+    if (counts.errors > 0)
+      return t("agents.syncErrors", { count: counts.errors });
+    if (counts.pushed + counts.pulled + counts.created === 0)
+      return t("agents.syncUpToDate");
+    return t("agents.syncSummary", counts);
+  }
+
   // Open the create modal, defaulting the clone source to the active profile.
   function openCreate(): void {
     setNewName("");
@@ -118,7 +199,7 @@ function Agents({
   }
 
   async function handleCreate(): Promise<void> {
-    const name = newName.trim().toLowerCase();
+    const name = newName.trim();
     if (!name) return;
     setCreating(true);
     setError("");
@@ -139,9 +220,7 @@ function Agents({
   async function handleSelect(name: string): Promise<void> {
     // Show "Starting…" only when this profile's gateway isn't already up, so
     // switching to an already-running profile doesn't flash a fake spinner.
-    const alreadyRunning = profiles.find(
-      (p) => p.name === name,
-    )?.gatewayRunning;
+    const alreadyRunning = profiles.find((p) => p.id === name)?.gatewayRunning;
     setStartingProfile(alreadyRunning ? null : name);
     await window.hermesAPI.setActiveProfile(name);
     onSelectProfile(name);
@@ -180,10 +259,44 @@ function Agents({
           <h2 className="agents-title">{t("agents.title")}</h2>
           <p className="agents-subtitle">{t("agents.subtitle")}</p>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={openCreate}>
-          <Plus size={14} />
-          {t("agents.newAgent")}
-        </button>
+        <div className="agents-header-actions">
+          {syncStatus && !syncStatus.signedIn && (
+            <span
+              className="agents-sync-hint"
+              title={t("agents.syncSignedOutHint")}
+            >
+              {t("agents.syncSignedOut")}
+            </span>
+          )}
+          {syncStatus?.signedIn && (
+            <span
+              className="agents-sync-hint"
+              title={
+                syncStatus.lastResult?.outcomes
+                  .flatMap((o) => o.warnings.map((w) => `${o.profile}: ${w}`))
+                  .join("\n") ||
+                (syncStatus.accountLabel ?? "")
+              }
+            >
+              {syncStatus.lastResult
+                ? syncSummary(syncStatus.lastResult)
+                : (syncStatus.accountLabel ?? "")}
+            </span>
+          )}
+          {syncStatus?.signedIn && (
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => void runSync()}
+              disabled={syncing}
+            >
+              {syncing ? t("agents.syncing") : t("agents.sync")}
+            </button>
+          )}
+          <button className="btn btn-primary btn-sm" onClick={openCreate}>
+            <Plus size={14} />
+            {t("agents.newAgent")}
+          </button>
+        </div>
       </div>
 
       {!showCreate && error && (
@@ -221,10 +334,7 @@ function Agents({
               placeholder={t("agents.namePlaceholder")}
               value={newName}
               onChange={(e) => {
-                const v = e.target.value
-                  .toLowerCase()
-                  .replace(/[^a-z0-9_-]/g, "");
-                setNewName(v);
+                setNewName(e.target.value);
                 setError("");
               }}
               onKeyDown={(e) => e.key === "Enter" && handleCreate()}
@@ -248,7 +358,7 @@ function Agents({
                 onChange={(e) => setCloneSource(e.target.value)}
               >
                 {profiles.map((p) => (
-                  <option key={p.name} value={p.name}>
+                  <option key={p.id} value={p.id}>
                     {p.name}
                   </option>
                 ))}
@@ -280,22 +390,22 @@ function Agents({
         </div>
         {profiles.map((p) => (
           <div
-            key={p.name}
-            className={`agents-row ${activeProfile === p.name ? "active" : ""}`}
-            onClick={() => handleSelect(p.name)}
+            key={p.id}
+            className={`agents-row ${activeProfile === p.id ? "active" : ""}`}
+            onClick={() => handleSelect(p.id)}
             role="button"
             tabIndex={0}
             onKeyDown={(e) => {
               // Only the row itself — not Enter bubbling up from the edit/chat
               // buttons — should switch the profile.
               if (e.key === "Enter" && e.target === e.currentTarget) {
-                handleSelect(p.name);
+                handleSelect(p.id);
               }
             }}
           >
             <div className="agents-cell-profile">
               <ProfileAvatar
-                name={p.name}
+                name={p.id}
                 color={p.color}
                 avatar={p.avatar}
                 size={36}
@@ -303,6 +413,7 @@ function Agents({
               <div className="agents-row-info">
                 <div className="agents-row-name">{p.name}</div>
                 <div className="agents-row-sub">
+                  {p.id !== p.name ? `${p.id} · ` : ""}
                   {providerLabel(p.provider)} ·{" "}
                   {t("agents.skillsCount", { count: p.skillCount })}
                 </div>
@@ -320,7 +431,7 @@ function Agents({
               )}
             </div>
             <div className="agents-cell-status">
-              {startingProfile === p.name && !p.gatewayRunning ? (
+              {startingProfile === p.id && !p.gatewayRunning ? (
                 <span className="agents-status-pill starting">
                   <span className="agents-status-spinner" />
                   {t("agents.starting")}
@@ -345,12 +456,16 @@ function Agents({
               <button
                 type="button"
                 className="agents-row-edit"
-                title={t("agents.editAppearance")}
-                aria-label={t("agents.editAppearance")}
+                title={t("agents.editAppearanceFor", {
+                  name: p.name,
+                })}
+                aria-label={t("agents.editAppearanceFor", {
+                  name: p.name,
+                })}
                 onClick={(e) => {
                   e.stopPropagation();
                   setError("");
-                  openProfile(p.name, {
+                  openProfile(p.id, {
                     onChanged: loadProfiles,
                     onDeleted: (n) => {
                       if (activeProfile === n) onSelectProfile("default");
@@ -364,7 +479,7 @@ function Agents({
                 className="btn btn-primary btn-sm"
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleChatWith(p.name);
+                  handleChatWith(p.id);
                 }}
               >
                 <ChatBubble size={13} />
