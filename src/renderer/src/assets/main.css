@@ -663,6 +663,57 @@ select {
   letter-spacing: 0.04em;
 }
 
+.spotlight-top-hit {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 18px;
+  width: calc(100% - 28px);
+  margin: 0 14px 14px;
+  padding: 16px 18px;
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(14, 22, 38, 0.96), rgba(20, 33, 61, 0.88));
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.spotlight-top-hit-copy,
+.spotlight-top-hit-side {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.spotlight-top-hit-kicker,
+.spotlight-top-hit-meta,
+.spotlight-top-hit-enter,
+.spotlight-result-meta {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.spotlight-top-hit-label {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.spotlight-top-hit-preview {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.spotlight-top-hit-side {
+  align-items: flex-end;
+  justify-content: space-between;
+  min-width: 110px;
+}
+
+.spotlight-top-hit-enter {
+  color: #93c5fd;
+}
+
 .spotlight-results {
   display: flex;
   flex-direction: column;

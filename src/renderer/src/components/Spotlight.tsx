@@ -26,6 +26,8 @@ interface SpotlightAction {
   category: string;
   match: string;
   rank: number;
+  preview: string;
+  meta: string;
   onSelect: () => void;
 }
 
@@ -119,6 +121,8 @@ function Spotlight({
       category,
       match: `${label} ${hint} ${view} ${category}`.toLowerCase(),
       rank: rankBoost(`view:${view}`, 30 - index),
+      preview: hint,
+      meta: `${category} · ${view}`,
       onSelect: () => {
         onNavigate(view);
         onClose();
@@ -133,6 +137,8 @@ function Spotlight({
         category: "Actions",
         match: `new chat clear conversation ${activeProfile} actions`.toLowerCase(),
         rank: rankBoost("action:new-chat", 80),
+        preview: `Fresh operator thread on profile ${activeProfile}. Clears the active conversation and resets workspace focus.`,
+        meta: `Actions · ${activeProfile}`,
         onSelect: () => {
           onNewChat();
           onClose();
@@ -145,6 +151,8 @@ function Spotlight({
         category: "Window",
         match: "snap window edge align shell window".toLowerCase(),
         rank: rankBoost("action:snap-window", 70),
+        preview: "Align the shell against the nearest display edge using the native snap-to-edge behavior.",
+        meta: "Window · layout",
         onSelect: async () => {
           await onSnapWindow();
           onClose();
@@ -157,6 +165,8 @@ function Spotlight({
         category: "Actions",
         match: "search sessions history recent runs".toLowerCase(),
         rank: rankBoost("action:search-sessions", 72),
+        preview: "Open the session browser to inspect history, restore old runs, and continue previous work.",
+        meta: "Actions · sessions",
         onSelect: () => {
           onSearchSessions();
           onClose();
@@ -171,6 +181,8 @@ function Spotlight({
       category: "Recent Session",
       match: `${session.title} recent session history resume`.toLowerCase(),
       rank: 95 - index,
+      preview: `Continue recent work from session ${session.title || "Untitled session"}. Restores chat context directly into the shell.`,
+      meta: "Recent Session · recall",
       onSelect: () => {
         onResumeRecentSession(session.id);
         onClose();
@@ -184,6 +196,8 @@ function Spotlight({
       category: "Preset",
       match: `${preset.label} ${preset.profile} ${preset.view} preset workspace`.toLowerCase(),
       rank: 88 - index,
+      preview: `Load preset ${preset.label} and switch the shell to ${preset.view} on profile ${preset.profile}.`,
+      meta: `Preset · ${preset.profile}`,
       onSelect: () => {
         onApplyPreset(preset.id);
         onClose();
@@ -212,6 +226,8 @@ function Spotlight({
       : actions.filter((action) => action.match.includes(normalized));
     return next.sort((a, b) => b.rank - a.rank);
   }, [actions, query]);
+
+  const topHit = filtered[0] ?? null;
 
   const quickActions = useMemo(
     () => [
@@ -355,6 +371,19 @@ function Spotlight({
             ))}
           </div>
         )}
+        {topHit && (
+          <button className="spotlight-top-hit" onClick={() => void topHit.onSelect()}>
+            <div className="spotlight-top-hit-copy">
+              <span className="spotlight-top-hit-kicker">Top hit</span>
+              <span className="spotlight-top-hit-label">{topHit.label}</span>
+              <span className="spotlight-top-hit-preview">{topHit.preview}</span>
+            </div>
+            <div className="spotlight-top-hit-side">
+              <span className="spotlight-top-hit-meta">{topHit.meta}</span>
+              <span className="spotlight-top-hit-enter">Enter ↵</span>
+            </div>
+          </button>
+        )}
         <div className="spotlight-results">
           {filtered.length === 0 ? (
             <div className="spotlight-empty">No matches for that query.</div>
@@ -380,6 +409,7 @@ function Spotlight({
                     </span>
                     <span className="spotlight-result-label">{action.label}</span>
                     <span className="spotlight-result-hint">{action.hint}</span>
+                    <span className="spotlight-result-meta">{action.meta}</span>
                   </span>
                   <span className="spotlight-result-arrow">
                     <ArrowRight size={15} />
