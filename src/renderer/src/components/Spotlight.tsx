@@ -416,9 +416,10 @@ function Spotlight({
           </button>
         </div>
         <div className="spotlight-meta-row">
-          <span className="spotlight-chip">HCC OS</span>
+          <span className="spotlight-chip spotlight-chip-brand">HCC OS</span>
           <span className="spotlight-meta-copy">Profile: {activeProfile}</span>
           <span className="spotlight-meta-copy">⌘/Ctrl + P</span>
+          <span className="spotlight-meta-copy">Operator palette</span>
         </div>
         <div className="spotlight-quick-actions">
           {quickActions.map(({ key, label, icon: Icon, onClick }) => (
@@ -426,7 +427,10 @@ function Spotlight({
               <span className="spotlight-quick-action-icon">
                 <Icon size={14} />
               </span>
-              <span>{label}</span>
+              <span className="spotlight-quick-action-copy">
+                <span className="spotlight-quick-action-label">{label}</span>
+                <span className="spotlight-quick-action-hint">Quick launch</span>
+              </span>
             </button>
           ))}
         </div>
@@ -442,7 +446,10 @@ function Spotlight({
                 }}
               >
                 <History size={13} />
-                <span>{session.title || "Untitled session"}</span>
+                <span className="spotlight-recent-pill-copy">
+                  <span className="spotlight-recent-pill-kicker">Session</span>
+                  <span>{session.title || "Untitled session"}</span>
+                </span>
               </button>
             ))}
             {presets.slice(0, 2).map((preset) => (
@@ -455,7 +462,10 @@ function Spotlight({
                 }}
               >
                 <PanelLeft size={13} />
-                <span>{preset.label}</span>
+                <span className="spotlight-recent-pill-copy">
+                  <span className="spotlight-recent-pill-kicker">Preset</span>
+                  <span>{preset.label}</span>
+                </span>
               </button>
             ))}
             {workflows.slice(0, 2).map((workflow) => (
@@ -468,7 +478,10 @@ function Spotlight({
                 }}
               >
                 <Sparkles size={13} />
-                <span>{workflow.label}</span>
+                <span className="spotlight-recent-pill-copy">
+                  <span className="spotlight-recent-pill-kicker">Workflow</span>
+                  <span>{workflow.label}</span>
+                </span>
               </button>
             ))}
           </div>
@@ -482,6 +495,7 @@ function Spotlight({
             </div>
             <div className="spotlight-top-hit-side">
               <span className="spotlight-top-hit-meta">{topHit.meta}</span>
+              <span className="spotlight-top-hit-category">{topHit.category}</span>
               <span className="spotlight-top-hit-enter">Enter ↵</span>
             </div>
           </button>
@@ -508,10 +522,10 @@ function Spotlight({
                   <span className="spotlight-result-copy">
                     <span className="spotlight-result-topline">
                       <span className="spotlight-result-category">{action.category}</span>
+                      <span className="spotlight-result-meta-inline">{action.meta}</span>
                     </span>
                     <span className="spotlight-result-label">{action.label}</span>
                     <span className="spotlight-result-hint">{action.hint}</span>
-                    <span className="spotlight-result-meta">{action.meta}</span>
                   </span>
                   <span className="spotlight-result-arrow">
                     <ArrowRight size={15} />
