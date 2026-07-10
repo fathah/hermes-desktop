@@ -298,6 +298,28 @@ select {
   gap: 12px;
 }
 
+.content-dashboard-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.content-widget-toggle,
+.content-event-dismiss {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(10, 16, 28, 0.55);
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.content-widget-toggle.active {
+  color: #93c5fd;
+  border-color: rgba(125, 211, 252, 0.24);
+}
+
 .content-dashboard-card {
   display: flex;
   flex-direction: column;
@@ -359,6 +381,12 @@ select {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.content-event-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .content-event-center-title,

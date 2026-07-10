@@ -75,11 +75,16 @@ interface EventItem {
   tone: "info" | "success" | "warning" | "error";
 }
 
+const DASHBOARD_WIDGETS = ["gateway", "profiles", "model", "schedules"] as const;
+type DashboardWidgetKey = (typeof DASHBOARD_WIDGETS)[number];
+
 const STORAGE_KEYS = {
   shellView: "hcc-os-shell-view",
   shellProfile: "hcc-os-shell-profile",
   recentActions: "hcc-os-shell-recent-actions",
   pinnedActions: "hcc-os-shell-pinned-actions",
+  eventCenter: "hcc-os-shell-event-center",
+  widgetPrefs: "hcc-os-shell-widget-prefs",
 } as const;
 
 const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string; eyebrow: string }[] = [
@@ -138,6 +143,40 @@ function readStoredPinnedActions(): string[] {
   }
 }
 
+function readStoredEvents(): EventItem[] {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEYS.eventCenter);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (item): item is EventItem =>
+        typeof item?.id === "string" &&
+        typeof item?.title === "string" &&
+        typeof item?.detail === "string" &&
+        typeof item?.timestamp === "number" &&
+        typeof item?.tone === "string",
+    );
+  } catch {
+    return [];
+  }
+}
+
+function readStoredWidgets(): DashboardWidgetKey[] {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEYS.widgetPrefs);
+    if (!raw) return [...DASHBOARD_WIDGETS];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [...DASHBOARD_WIDGETS];
+    const filtered = parsed.filter((item): item is DashboardWidgetKey =>
+      DASHBOARD_WIDGETS.includes(item as DashboardWidgetKey),
+    );
+    return filtered.length > 0 ? filtered : [...DASHBOARD_WIDGETS];
+  } catch {
+    return [...DASHBOARD_WIDGETS];
+  }
+}
+
 function Layout(): React.JSX.Element {
   const { t } = useI18n();
   const [view, setView] = useState<View>(() => readStoredView());
@@ -155,7 +194,8 @@ function Layout(): React.JSX.Element {
   const [profileCount, setProfileCount] = useState(0);
   const [modelLabel, setModelLabel] = useState("Not set");
   const [scheduleCount, setScheduleCount] = useState(0);
-  const [events, setEvents] = useState<EventItem[]>([]);
+  const [events, setEvents] = useState<EventItem[]>(() => readStoredEvents());
+  const [visibleWidgets, setVisibleWidgets] = useState<DashboardWidgetKey[]>(() => readStoredWidgets());
 
   useEffect(() => {
     window.hermesAPI.isRemoteMode().then(setRemoteMode);
@@ -232,6 +272,28 @@ function Layout(): React.JSX.Element {
     }
   }, [pinnedActionIds]);
 
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        STORAGE_KEYS.eventCenter,
+        JSON.stringify(events.slice(0, 20)),
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [events]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        STORAGE_KEYS.widgetPrefs,
+        JSON.stringify(visibleWidgets),
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [visibleWidgets]);
+
   const rememberAction = useCallback((actionId: string) => {
     setRecentActionIds((prev) => [actionId, ...prev.filter((item) => item !== actionId)].slice(0, 10));
   }, []);
@@ -255,6 +317,20 @@ function Layout(): React.JSX.Element {
         ? prev.filter((item) => item !== actionId)
         : [actionId, ...prev].slice(0, 8),
     );
+  }, []);
+
+  const dismissEvent = useCallback((eventId: string) => {
+    setEvents((prev) => prev.filter((event) => event.id !== eventId));
+  }, []);
+
+  const toggleWidget = useCallback((widget: DashboardWidgetKey) => {
+    setVisibleWidgets((prev) => {
+      if (prev.includes(widget)) {
+        const next = prev.filter((item) => item !== widget);
+        return next.length > 0 ? next : prev;
+      }
+      return [...prev, widget];
+    });
   }, []);
 
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
@@ -424,33 +500,34 @@ function Layout(): React.JSX.Element {
   );
 
   const dashboardMetrics = useMemo<DashboardMetric[]>(
-    () => [
-      {
-        key: "gateway",
-        label: "Gateway",
-        value: gatewayRunning ? "Online" : "Offline",
-        detail: gatewayRunning ? "Delivery bridge ready" : "Start platform bridge",
-      },
-      {
-        key: "profiles",
-        label: "Profiles",
-        value: String(profileCount),
-        detail: "Installed operator profiles",
-      },
-      {
-        key: "model",
-        label: "Model",
-        value: modelLabel.split("/").pop() || modelLabel,
-        detail: `Profile ${activeProfile}`,
-      },
-      {
-        key: "schedules",
-        label: "Schedules",
-        value: String(scheduleCount),
-        detail: "Automation jobs configured",
-      },
-    ],
-    [activeProfile, gatewayRunning, modelLabel, profileCount, scheduleCount],
+    () =>
+      [
+        {
+          key: "gateway",
+          label: "Gateway",
+          value: gatewayRunning ? "Online" : "Offline",
+          detail: gatewayRunning ? "Delivery bridge ready" : "Start platform bridge",
+        },
+        {
+          key: "profiles",
+          label: "Profiles",
+          value: String(profileCount),
+          detail: "Installed operator profiles",
+        },
+        {
+          key: "model",
+          label: "Model",
+          value: modelLabel.split("/").pop() || modelLabel,
+          detail: `Profile ${activeProfile}`,
+        },
+        {
+          key: "schedules",
+          label: "Schedules",
+          value: String(scheduleCount),
+          detail: "Automation jobs configured",
+        },
+      ].filter((metric) => visibleWidgets.includes(metric.key as DashboardWidgetKey)),
+    [activeProfile, gatewayRunning, modelLabel, profileCount, scheduleCount, visibleWidgets],
   );
 
   const currentViewLabel = NAV_ITEMS.find((item) => item.view === view)?.labelKey;
@@ -529,6 +606,18 @@ function Layout(): React.JSX.Element {
               <span className="content-badge">{remoteMode ? "Remote mode" : "Local mode"}</span>
               <span className="content-badge">Profile {activeProfile}</span>
             </div>
+          </div>
+
+          <div className="content-dashboard-toolbar">
+            {DASHBOARD_WIDGETS.map((widget) => (
+              <button
+                key={widget}
+                className={`content-widget-toggle ${visibleWidgets.includes(widget) ? "active" : ""}`}
+                onClick={() => toggleWidget(widget)}
+              >
+                {widget}
+              </button>
+            ))}
           </div>
 
           <div className="content-dashboard-grid">
@@ -619,12 +708,20 @@ function Layout(): React.JSX.Element {
                   <div key={event.id} className={`content-event-item tone-${event.tone}`}>
                     <div className="content-event-item-header">
                       <span className="content-event-item-title">{event.title}</span>
-                      <span className="content-event-item-time">
-                        {new Date(event.timestamp).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
+                      <div className="content-event-item-actions">
+                        <span className="content-event-item-time">
+                          {new Date(event.timestamp).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                        <button
+                          className="content-event-dismiss"
+                          onClick={() => dismissEvent(event.id)}
+                        >
+                          Dismiss
+                        </button>
+                      </div>
                     </div>
                     <div className="content-event-item-detail">{event.detail}</div>
                   </div>
