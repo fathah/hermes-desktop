@@ -84,4 +84,25 @@ export default {
   walletDeleteWarning:
     "Это навсегда уберёт кошелёк из Hermes. Убедитесь, что вы сохранили фразу восстановления — без неё восстановить кошелёк будет невозможно.",
   walletDeleteConfirmLabel: "Удалить кошелёк",
+  sync: "Синхронизация",
+  syncing: "Синхронизация...",
+  syncSignedOut: "Не синхронизировано",
+  syncSignedOutHint:
+    "Войдите в аккаунт Hermes One на странице «Провайдеры», чтобы сохранять резервные копии агентов в облаке.",
+  syncUpToDate: "Синхронизировано с вашим аккаунтом Hermes One",
+  syncSummary:
+    "Синхронизировано — отправлено: {{pushed}}, получено: {{pulled}}, создано: {{created}}",
+  syncErrors: "При синхронизации: ошибок — {{count}}",
+  syncUnauthorized:
+    "Срок действия сессии истек — войдите снова на странице «Провайдеры»",
+  syncFailed: "Синхронизация не удалась",
+  walletSync: "Обновить",
+  walletSyncing: "Синхронизация...",
+  walletSourceLocal: "Локально",
+  walletSourceCloud: "Облако",
+  walletManagedEmpty: "Кошельков пока нет",
+  walletSyncedHint:
+    "Кошельки управляются в вашем аккаунте Hermes One и появятся здесь после синхронизации этого агента.",
+  walletSignInHint:
+    "Войдите в аккаунт Hermes One на странице «Провайдеры», чтобы увидеть кошельки этого агента.",
 } as const;
