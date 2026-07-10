@@ -13,6 +13,13 @@ import Models from "../Models/Models";
 import Schedules from "../Schedules/Schedules";
 import RemoteNotice from "../../components/RemoteNotice";
 import Spotlight from "../../components/Spotlight";
+import HomeDashboard from "../../components/HomeDashboard";
+import HomeEvents from "../../components/HomeEvents";
+import HomeLaunchers from "../../components/HomeLaunchers";
+import HomePresets from "../../components/HomePresets";
+import HomeRecentPrompts from "../../components/HomeRecentPrompts";
+import HomeResume from "../../components/HomeResume";
+import HomeTaskQueue from "../../components/HomeTaskQueue";
 import hermeslogo from "../../assets/hermes.png";
 import {
   ChatBubble,
@@ -77,7 +84,7 @@ interface QuickToggle {
 interface WorkspacePreset {
   id: string;
   label: string;
-  view: View;
+  view: string;
   profile: string;
 }
 
@@ -105,6 +112,16 @@ interface TaskQueueItem {
   title: string;
   detail: string;
   status: "pending" | "done";
+}
+
+interface SectionPrefs {
+  presets: boolean;
+  resume: boolean;
+  prompts: boolean;
+  queue: boolean;
+  dashboard: boolean;
+  launchers: boolean;
+  events: boolean;
 }
 
 interface ToastItem {
@@ -137,6 +154,8 @@ const STORAGE_KEYS = {
   startupPreset: "hcc-os-shell-startup-preset",
   recentPrompts: "hcc-os-shell-recent-prompts",
   taskQueue: "hcc-os-shell-task-queue",
+  sectionPrefs: "hcc-os-shell-section-prefs",
+  compactMode: "hcc-os-shell-compact-mode",
 } as const;
 
 const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string; eyebrow: string }[] = [
@@ -327,6 +346,34 @@ function readStoredTaskQueue(): TaskQueueItem[] {
   }
 }
 
+function readStoredSectionPrefs(): SectionPrefs {
+  const fallback: SectionPrefs = {
+    presets: true,
+    resume: true,
+    prompts: true,
+    queue: true,
+    dashboard: true,
+    launchers: true,
+    events: true,
+  };
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEYS.sectionPrefs);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    return { ...fallback, ...(typeof parsed === "object" && parsed ? parsed : {}) };
+  } catch {
+    return fallback;
+  }
+}
+
+function readStoredCompactMode(): boolean {
+  try {
+    return window.localStorage.getItem(STORAGE_KEYS.compactMode) === "true";
+  } catch {
+    return false;
+  }
+}
+
 function Layout(): React.JSX.Element {
   const { t } = useI18n();
   const [view, setView] = useState<View>(() => readStoredView());
@@ -358,6 +405,8 @@ function Layout(): React.JSX.Element {
   const [startupPresetId, setStartupPresetId] = useState<string | null>(() => readStoredStartupPreset());
   const [recentPrompts, setRecentPrompts] = useState<RecentPrompt[]>(() => readStoredRecentPrompts());
   const [taskQueue, setTaskQueue] = useState<TaskQueueItem[]>(() => readStoredTaskQueue());
+  const [sectionPrefs, setSectionPrefs] = useState<SectionPrefs>(() => readStoredSectionPrefs());
+  const [compactMode, setCompactMode] = useState<boolean>(() => readStoredCompactMode());
 
   useEffect(() => {
     window.hermesAPI.isRemoteMode().then(setRemoteMode);
@@ -415,7 +464,7 @@ function Layout(): React.JSX.Element {
     const preset = workspacePresets.find((item) => item.id === startupPresetId);
     if (!preset) return;
     setActiveProfile(preset.profile);
-    setView(preset.view);
+    setView(preset.view as View);
     if (preset.view === "office") setOfficeVisited(true);
   }, [startupPresetId, workspacePresets]);
 
@@ -547,6 +596,15 @@ function Layout(): React.JSX.Element {
     }
   }, [taskQueue]);
 
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(STORAGE_KEYS.sectionPrefs, JSON.stringify(sectionPrefs));
+      window.localStorage.setItem(STORAGE_KEYS.compactMode, compactMode ? "true" : "false");
+    } catch {
+      /* ignore */
+    }
+  }, [compactMode, sectionPrefs]);
+
   const rememberAction = useCallback((actionId: string) => {
     setRecentActionIds((prev) => [actionId, ...prev.filter((item) => item !== actionId)].slice(0, 10));
   }, []);
@@ -658,7 +716,7 @@ function Layout(): React.JSX.Element {
   const applyWorkspacePreset = useCallback(
     (preset: WorkspacePreset) => {
       setActiveProfile(preset.profile);
-      setView(preset.view);
+      setView(preset.view as View);
       if (preset.view === "office") setOfficeVisited(true);
       pushEvent("Workspace preset applied", `Loaded ${preset.label}`, "success");
     },
@@ -941,6 +999,12 @@ function Layout(): React.JSX.Element {
     pushEvent("Completed tasks cleared", "Task queue removed finished operator follow-ups", "info");
   }, [pushEvent]);
 
+  const toggleSection = useCallback((key: keyof SectionPrefs) => {
+    setSectionPrefs((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
+  const shellContentClassName = compactMode ? "content-shell compact-mode" : "content-shell";
+
   const healthDiagnostics = useMemo(
     () => [
       {
@@ -1068,7 +1132,7 @@ function Layout(): React.JSX.Element {
           </div>
         </aside>
 
-        <main className="content-shell">
+        <main className={shellContentClassName}>
           <div className="content-topbar">
             <div>
               <div className="content-topbar-kicker">Workspace shell</div>
@@ -1090,6 +1154,29 @@ function Layout(): React.JSX.Element {
                 onClick={() => toggleWidget(widget)}
               >
                 {widget}
+              </button>
+            ))}
+            <button
+              className={`content-widget-toggle ${compactMode ? "active" : ""}`}
+              onClick={() => setCompactMode((prev) => !prev)}
+            >
+              compact mode
+            </button>
+            {([
+              ["presets", "presets"],
+              ["resume", "resume"],
+              ["prompts", "prompts"],
+              ["queue", "queue"],
+              ["dashboard", "dashboard"],
+              ["launchers", "launchers"],
+              ["events", "events"],
+            ] as const).map(([key, label]) => (
+              <button
+                key={key}
+                className={`content-widget-toggle ${sectionPrefs[key] ? "active" : ""}`}
+                onClick={() => toggleSection(key)}
+              >
+                {label}
               </button>
             ))}
             <button
@@ -1118,261 +1205,65 @@ function Layout(): React.JSX.Element {
             </div>
           )}
 
-          {workspacePresets.length > 0 && (
-            <div className="content-presets-row">
-              {workspacePresets.map((preset) => (
-                <div key={preset.id} className="content-launcher-card-wrap">
-                  <button
-                    className="content-preset-card"
-                    onClick={() => applyWorkspacePreset(preset)}
-                  >
-                    <span className="content-pinned-card-kicker">Preset</span>
-                    <span className="content-pinned-card-title">{preset.label}</span>
-                    <span className="content-pinned-card-meta">
-                      {preset.profile} · {preset.view}
-                    </span>
-                  </button>
-                  <div className="content-preset-actions">
-                    <button
-                      className={`content-launcher-pin ${startupPresetId === preset.id ? "active" : ""}`}
-                      onClick={() => setStartupPreset(startupPresetId === preset.id ? null : preset.id)}
-                    >
-                      {startupPresetId === preset.id ? "Startup preset" : "Set startup"}
-                    </button>
-                    <button
-                      className="content-launcher-pin"
-                      onClick={() => renameWorkspacePreset(preset.id)}
-                    >
-                      Rename
-                    </button>
-                    <button
-                      className="content-launcher-pin"
-                      onClick={() => deleteWorkspacePreset(preset.id)}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+          {sectionPrefs.presets && (
+            <HomePresets
+              presets={workspacePresets}
+              startupPresetId={startupPresetId}
+              onApplyPreset={applyWorkspacePreset}
+              onSetStartupPreset={setStartupPreset}
+              onRenamePreset={renameWorkspacePreset}
+              onDeletePreset={deleteWorkspacePreset}
+            />
           )}
 
-          {lastSession && (
-            <div className="content-resume-card-wrap">
-              <button
-                className="content-preset-card"
-                onClick={() => void handleResumeRecentSession(lastSession.id)}
-              >
-                <span className="content-pinned-card-kicker">Resume where you left off</span>
-                <span className="content-pinned-card-title">{lastSession.title}</span>
-                <span className="content-pinned-card-meta">
-                  {lastSession.profile} · {new Date(lastSession.startedAt * 1000).toLocaleString()}
-                </span>
-              </button>
-            </div>
+          {sectionPrefs.resume && <HomeResume lastSession={lastSession} onResume={handleResumeRecentSession} />}
+
+          {sectionPrefs.prompts && (
+            <HomeRecentPrompts
+              prompts={recentPrompts}
+              onRecall={(prompt) => {
+                setView("chat");
+                pushEvent("Recent prompt recalled", `Prompt from ${prompt.profile} brought back into focus`, "info");
+              }}
+              onRerun={rerunRecentPrompt}
+            />
           )}
 
-          {recentPrompts.length > 0 && (
-            <div className="content-presets-row">
-              {recentPrompts.slice(0, 3).map((prompt) => (
-                <div key={prompt.id} className="content-launcher-card-wrap">
-                  <button
-                    className="content-preset-card"
-                    onClick={() => {
-                      setView("chat");
-                      pushEvent("Recent prompt recalled", `Prompt from ${prompt.profile} brought back into focus`, "info");
-                    }}
-                  >
-                    <span className="content-pinned-card-kicker">Recent prompt</span>
-                    <span className="content-pinned-card-title">{prompt.text.slice(0, 72)}</span>
-                    <span className="content-pinned-card-meta">
-                      {prompt.profile} · {new Date(prompt.timestamp).toLocaleString()}
-                    </span>
-                  </button>
-                  <div className="content-preset-actions">
-                    <button className="content-launcher-pin active" onClick={() => rerunRecentPrompt(prompt)}>
-                      Rerun
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+          {sectionPrefs.queue && (
+            <HomeTaskQueue
+              tasks={taskQueue}
+              onToggleTask={toggleTaskQueueItem}
+              onClearCompleted={clearCompletedTasks}
+            />
           )}
 
-          {taskQueue.length > 0 && (
-            <div className="content-event-center">
-              <div className="content-event-center-header">
-                <span className="content-event-center-title">Task queue</span>
-                <button className="content-event-dismiss" onClick={clearCompletedTasks}>
-                  Clear done
-                </button>
-              </div>
-              <div className="content-event-list">
-                {taskQueue.map((task) => (
-                  <div key={task.id} className={`content-event-item tone-${task.status === "done" ? "success" : "info"}`}>
-                    <div>
-                      <div className="content-event-item-title">{task.title}</div>
-                      <div className="content-event-item-detail">{task.detail}</div>
-                    </div>
-                    <button className={`content-launcher-pin ${task.status === "done" ? "active" : ""}`} onClick={() => toggleTaskQueueItem(task.id)}>
-                      {task.status === "done" ? "Done" : "Mark done"}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
+          {sectionPrefs.dashboard && (
+            <HomeDashboard
+              metrics={dashboardMetrics}
+              health={healthDiagnostics}
+              onNavigateMetric={(metricKey) => {
+                if (metricKey === "gateway") handleNavigate("gateway");
+                if (metricKey === "profiles") handleNavigate("agents");
+                if (metricKey === "model") handleNavigate("models");
+                if (metricKey === "schedules") handleNavigate("schedules");
+              }}
+            />
           )}
 
-          <div className="content-dashboard-grid">
-            {dashboardMetrics.map((metric) => (
-              <button
-                key={metric.key}
-                className="content-dashboard-card"
-                onClick={() => {
-                  if (metric.key === "gateway") handleNavigate("gateway");
-                  if (metric.key === "profiles") handleNavigate("agents");
-                  if (metric.key === "model") handleNavigate("models");
-                  if (metric.key === "schedules") handleNavigate("schedules");
-                }}
-              >
-                <span className="content-dashboard-card-label">{metric.label}</span>
-                <span className="content-dashboard-card-value">{metric.value}</span>
-                <span className="content-dashboard-card-detail">{metric.detail}</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="content-health-grid">
-            {healthDiagnostics.map((item) => (
-              <div key={item.key} className="content-health-card">
-                <span className="content-health-card-label">{item.label}</span>
-                <span className="content-health-card-value">{item.value}</span>
-                <span className="content-health-card-detail">{item.detail}</span>
-              </div>
-            ))}
-          </div>
-
-          {pinnedCards.length > 0 && (
-            <div className="content-pinned-row">
-              {pinnedCards.map((card) => (
-                <button key={card.key} className="content-pinned-card" onClick={card.onClick}>
-                  <span className="content-pinned-card-kicker">Pinned</span>
-                  <span className="content-pinned-card-title">{card.label}</span>
-                  <span className="content-pinned-card-meta">{card.description}</span>
-                </button>
-              ))}
-            </div>
+          {sectionPrefs.launchers && (
+            <HomeLaunchers
+              pinnedCards={pinnedCards}
+              launcherCards={launcherCards}
+              pinnedActionIds={pinnedActionIds}
+              pinnedSessions={pinnedSessions}
+              recentSessions={recentSessions}
+              onTogglePinnedAction={togglePinnedAction}
+              onResumeRecentSession={handleResumeRecentSession}
+              onTogglePinnedSession={togglePinnedSession}
+            />
           )}
 
-          {pinnedSessions.length > 0 && (
-            <div className="content-pinned-row">
-              {pinnedSessions.map((session) => (
-                <button
-                  key={session.id}
-                  className="content-pinned-card"
-                  onClick={() => void handleResumeRecentSession(session.id)}
-                >
-                  <span className="content-pinned-card-kicker">Pinned session</span>
-                  <span className="content-pinned-card-title">{session.title}</span>
-                  <span className="content-pinned-card-meta">One-click resume</span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div className="content-launcher-row">
-            {launcherCards.map((card) => {
-              const actionId =
-                card.key === "new-chat"
-                  ? "action:new-chat"
-                  : card.key === "resume-sessions"
-                    ? "action:search-sessions"
-                    : "action:snap-window";
-              const pinned = pinnedActionIds.includes(actionId);
-              return (
-                <div key={card.key} className="content-launcher-card-wrap">
-                  <button className="content-launcher-card" onClick={card.onClick}>
-                    <span className="content-launcher-card-label">{card.label}</span>
-                    <span className="content-launcher-card-description">{card.description}</span>
-                  </button>
-                  <button
-                    className={`content-launcher-pin ${pinned ? "active" : ""}`}
-                    onClick={() => togglePinnedAction(actionId)}
-                  >
-                    {pinned ? "Unpin" : "Pin"}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-
-          {recentSessions.length > 0 && (
-            <div className="content-recents-row">
-              {recentSessions.map((session) => {
-                const pinned = pinnedSessions.some((item) => item.id === session.id);
-                return (
-                  <div key={session.id} className="content-launcher-card-wrap">
-                    <button
-                      className="content-recent-card"
-                      onClick={() => void handleResumeRecentSession(session.id)}
-                    >
-                      <span className="content-recent-card-kicker">Recent session</span>
-                      <span className="content-recent-card-title">{session.title}</span>
-                      <span className="content-recent-card-meta">
-                        {new Date(session.startedAt * 1000).toLocaleDateString()} · Resume
-                      </span>
-                    </button>
-                    <button
-                      className={`content-launcher-pin ${pinned ? "active" : ""}`}
-                      onClick={() =>
-                        togglePinnedSession({
-                          id: session.id,
-                          title: session.title,
-                        })
-                      }
-                    >
-                      {pinned ? "Unpin" : "Pin"}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          <div className="content-event-center">
-            <div className="content-event-center-header">
-              <span className="content-event-center-title">Event center</span>
-              <span className="content-event-center-count">{events.length} events</span>
-            </div>
-            <div className="content-event-list">
-              {events.length === 0 ? (
-                <div className="content-event-empty">No shell events yet.</div>
-              ) : (
-                events.map((event) => (
-                  <div key={event.id} className={`content-event-item tone-${event.tone}`}>
-                    <div className="content-event-item-header">
-                      <span className="content-event-item-title">{event.title}</span>
-                      <div className="content-event-item-actions">
-                        <span className="content-event-item-time">
-                          {new Date(event.timestamp).toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </span>
-                        <button
-                          className="content-event-dismiss"
-                          onClick={() => dismissEvent(event.id)}
-                        >
-                          Dismiss
-                        </button>
-                      </div>
-                    </div>
-                    <div className="content-event-item-detail">{event.detail}</div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
+          {sectionPrefs.events && <HomeEvents events={events} onDismissEvent={dismissEvent} />}
 
           <div className="content-toast-stack">
             {toasts.map((toast) => (
