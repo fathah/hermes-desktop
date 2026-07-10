@@ -1073,6 +1073,14 @@ button:active {
   color: var(--text-muted);
 }
 
+.welcome-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: min(520px, 100%);
+}
+
 .welcome-button,
 .welcome-recheck-btn {
   min-width: 260px;
@@ -1128,6 +1136,26 @@ button:active {
   justify-content: space-between;
   gap: 10px;
   padding: 12px 14px;
+}
+
+.welcome-copy-btn,
+.welcome-remote-row {
+  display: flex;
+  align-items: center;
+}
+
+.welcome-copy-btn {
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.welcome-remote-row {
+  width: 100%;
+  gap: 10px;
 }
 
 .welcome-remote-label,
