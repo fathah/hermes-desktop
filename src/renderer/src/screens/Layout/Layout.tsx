@@ -67,6 +67,14 @@ interface DashboardMetric {
   detail: string;
 }
 
+interface EventItem {
+  id: string;
+  title: string;
+  detail: string;
+  timestamp: number;
+  tone: "info" | "success" | "warning" | "error";
+}
+
 const STORAGE_KEYS = {
   shellView: "hcc-os-shell-view",
   shellProfile: "hcc-os-shell-profile",
@@ -147,12 +155,27 @@ function Layout(): React.JSX.Element {
   const [profileCount, setProfileCount] = useState(0);
   const [modelLabel, setModelLabel] = useState("Not set");
   const [scheduleCount, setScheduleCount] = useState(0);
+  const [events, setEvents] = useState<EventItem[]>([]);
 
   useEffect(() => {
     window.hermesAPI.isRemoteMode().then(setRemoteMode);
   }, [view]);
 
   useEffect(() => {
+    const refreshOperationalState = async (): Promise<void> => {
+      const [gateway, profiles, modelConfig, cronJobs] = await Promise.all([
+        window.hermesAPI.gatewayStatus(),
+        window.hermesAPI.listProfiles(),
+        window.hermesAPI.getModelConfig(activeProfile),
+        window.hermesAPI.listCronJobs(undefined, activeProfile),
+      ]);
+
+      setGatewayRunning(gateway);
+      setProfileCount(profiles.length);
+      setModelLabel(modelConfig.model || "Not set");
+      setScheduleCount(cronJobs.length);
+    };
+
     void window.hermesAPI.listCachedSessions(6).then((sessions) => {
       setRecentSessions(
         sessions.slice(0, 4).map((session) => ({
@@ -163,12 +186,12 @@ function Layout(): React.JSX.Element {
       );
     });
 
-    void window.hermesAPI.gatewayStatus().then(setGatewayRunning);
-    void window.hermesAPI.listProfiles().then((profiles) => setProfileCount(profiles.length));
-    void window.hermesAPI
-      .getModelConfig(activeProfile)
-      .then((config) => setModelLabel(config.model || "Not set"));
-    void window.hermesAPI.listCronJobs(undefined, activeProfile).then((jobs) => setScheduleCount(jobs.length));
+    void refreshOperationalState();
+    const interval = window.setInterval(() => {
+      void refreshOperationalState();
+    }, 15000);
+
+    return () => window.clearInterval(interval);
   }, [activeProfile]);
 
   useEffect(() => {
@@ -213,6 +236,19 @@ function Layout(): React.JSX.Element {
     setRecentActionIds((prev) => [actionId, ...prev.filter((item) => item !== actionId)].slice(0, 10));
   }, []);
 
+  const pushEvent = useCallback((title: string, detail: string, tone: EventItem["tone"] = "info") => {
+    setEvents((prev) => [
+      {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        title,
+        detail,
+        timestamp: Date.now(),
+        tone,
+      },
+      ...prev,
+    ].slice(0, 12));
+  }, []);
+
   const togglePinnedAction = useCallback((actionId: string) => {
     setPinnedActionIds((prev) =>
       prev.includes(actionId)
@@ -231,19 +267,21 @@ function Layout(): React.JSX.Element {
     const cleanupAvailable = window.hermesAPI.onUpdateAvailable((info) => {
       setUpdateVersion(info.version);
       setUpdateState("available");
+      pushEvent("Update available", `Version ${info.version} is ready to download`, "warning");
     });
     const cleanupProgress = window.hermesAPI.onUpdateDownloadProgress((info) => {
       setDownloadPercent(info.percent);
     });
     const cleanupDownloaded = window.hermesAPI.onUpdateDownloaded(() => {
       setUpdateState("ready");
+      pushEvent("Update downloaded", "Restart the shell to install the new build", "success");
     });
     return () => {
       cleanupAvailable();
       cleanupProgress();
       cleanupDownloaded();
     };
-  }, []);
+  }, [pushEvent]);
 
   async function handleUpdate(): Promise<void> {
     if (updateState === "available") {
@@ -256,11 +294,12 @@ function Layout(): React.JSX.Element {
 
   const handleNewChat = useCallback(() => {
     rememberAction("action:new-chat");
+    pushEvent("New chat started", `Profile ${activeProfile} opened a fresh operator thread`, "success");
     window.hermesAPI.abortChat();
     setMessages([]);
     setCurrentSessionId(null);
     setView("chat");
-  }, [rememberAction]);
+  }, [activeProfile, pushEvent, rememberAction]);
 
   const handleNavigate = useCallback(
     (nextView: string) => {
@@ -273,17 +312,20 @@ function Layout(): React.JSX.Element {
 
   const handleSearchSessions = useCallback(() => {
     rememberAction("action:search-sessions");
+    pushEvent("Session search opened", "Recent session recall is now in focus", "info");
     setView("sessions");
-  }, [rememberAction]);
+  }, [pushEvent, rememberAction]);
 
   const handleSnapWindow = useCallback(async () => {
     rememberAction("action:snap-window");
+    pushEvent("Window snapped", "HCC OS aligned the shell to the nearest screen edge", "info");
     await window.hermesAPI.snapWindowToEdge();
-  }, [rememberAction]);
+  }, [pushEvent, rememberAction]);
 
   const handleResumeRecentSession = useCallback(
     async (sessionId: string) => {
       rememberAction(`recent-session:${sessionId}`);
+      pushEvent("Recent session resumed", `Session ${sessionId.slice(0, 8)} is back in the shell`, "success");
       const dbMessages = await window.hermesAPI.getSessionMessages(sessionId);
       const chatMessages: ChatMessage[] = dbMessages.map((m) => ({
         id: `db-${m.id}`,
@@ -294,7 +336,7 @@ function Layout(): React.JSX.Element {
       setCurrentSessionId(sessionId);
       setView("chat");
     },
-    [rememberAction],
+    [pushEvent, rememberAction],
   );
 
   useEffect(() => {
@@ -563,6 +605,33 @@ function Layout(): React.JSX.Element {
               ))}
             </div>
           )}
+
+          <div className="content-event-center">
+            <div className="content-event-center-header">
+              <span className="content-event-center-title">Event center</span>
+              <span className="content-event-center-count">{events.length} events</span>
+            </div>
+            <div className="content-event-list">
+              {events.length === 0 ? (
+                <div className="content-event-empty">No shell events yet.</div>
+              ) : (
+                events.map((event) => (
+                  <div key={event.id} className={`content-event-item tone-${event.tone}`}>
+                    <div className="content-event-item-header">
+                      <span className="content-event-item-title">{event.title}</span>
+                      <span className="content-event-item-time">
+                        {new Date(event.timestamp).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </div>
+                    <div className="content-event-item-detail">{event.detail}</div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
 
           <div className="content-panel">
             <Spotlight

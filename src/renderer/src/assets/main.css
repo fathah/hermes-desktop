@@ -343,6 +343,63 @@ select {
   gap: 12px;
 }
 
+.content-event-center {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 24px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(10, 16, 28, 0.56);
+}
+
+.content-event-center-header,
+.content-event-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.content-event-center-title,
+.content-event-item-title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.content-event-center-count,
+.content-event-item-time,
+.content-event-item-detail,
+.content-event-empty {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.content-event-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.content-event-item {
+  padding: 12px 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.08);
+  background: rgba(8, 13, 24, 0.72);
+}
+
+.content-event-item.tone-success {
+  border-color: rgba(74, 222, 128, 0.22);
+}
+
+.content-event-item.tone-warning {
+  border-color: rgba(250, 204, 21, 0.22);
+}
+
+.content-event-item.tone-error {
+  border-color: rgba(248, 113, 113, 0.22);
+}
+
 .content-pinned-card,
 .content-recent-card,
 .content-launcher-card {
