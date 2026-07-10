@@ -43,6 +43,13 @@ interface SpotlightPreset {
   profile: string;
 }
 
+interface SpotlightWorkflow {
+  id: string;
+  label: string;
+  profile: string;
+  promptText: string;
+}
+
 interface SpotlightProps {
   open: boolean;
   activeProfile: string;
@@ -54,8 +61,10 @@ interface SpotlightProps {
   recentSessions: SpotlightRecentSession[];
   recentActionIds: string[];
   presets: SpotlightPreset[];
+  workflows: SpotlightWorkflow[];
   onResumeRecentSession: (sessionId: string) => void;
   onApplyPreset: (presetId: string) => void;
+  onRunWorkflow: (workflowId: string) => void;
 }
 
 const ICON_MAP = {
@@ -83,8 +92,10 @@ function Spotlight({
   recentSessions,
   recentActionIds,
   presets,
+  workflows,
   onResumeRecentSession,
   onApplyPreset,
+  onRunWorkflow,
 }: SpotlightProps): React.JSX.Element | null {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -189,6 +200,21 @@ function Spotlight({
       },
     }));
 
+    const workflowActions: SpotlightAction[] = workflows.map((workflow, index) => ({
+      id: `workflow:${workflow.id}`,
+      label: workflow.label,
+      hint: `Run workflow for ${workflow.profile}`,
+      category: "Workflow",
+      match: `${workflow.label} ${workflow.profile} ${workflow.promptText} workflow combo`.toLowerCase(),
+      rank: 92 - index,
+      preview: `Launch workflow ${workflow.label} with saved prompt and profile ${workflow.profile}.`,
+      meta: `Workflow · ${workflow.profile}`,
+      onSelect: () => {
+        onRunWorkflow(workflow.id);
+        onClose();
+      },
+    }));
+
     const presetActions: SpotlightAction[] = presets.map((preset, index) => ({
       id: `preset:${preset.id}`,
       label: preset.label,
@@ -204,7 +230,7 @@ function Spotlight({
       },
     }));
 
-    return [...recentSessionActions, ...presetActions, ...actionItems, ...viewActions];
+    return [...recentSessionActions, ...workflowActions, ...presetActions, ...actionItems, ...viewActions];
   }, [
     activeProfile,
     onApplyPreset,
@@ -212,11 +238,13 @@ function Spotlight({
     onNavigate,
     onNewChat,
     onResumeRecentSession,
+    onRunWorkflow,
     onSearchSessions,
     onSnapWindow,
     presets,
     recentActionIds,
     recentSessions,
+    workflows,
   ]);
 
   const filtered = useMemo(() => {
@@ -367,6 +395,19 @@ function Spotlight({
               >
                 <PanelLeft size={13} />
                 <span>{preset.label}</span>
+              </button>
+            ))}
+            {workflows.slice(0, 2).map((workflow) => (
+              <button
+                key={workflow.id}
+                className="spotlight-recent-pill"
+                onClick={() => {
+                  onRunWorkflow(workflow.id);
+                  onClose();
+                }}
+              >
+                <Sparkles size={13} />
+                <span>{workflow.label}</span>
               </button>
             ))}
           </div>

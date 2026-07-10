@@ -115,6 +115,7 @@ interface WorkflowPreset {
   promptText: string;
   profile: string;
   createdAt: number;
+  startup: boolean;
 }
 
 interface TaskQueueItem {
@@ -422,7 +423,8 @@ function readStoredWorkflowPresets(): WorkflowPreset[] {
             typeof item?.presetId === "string" &&
             typeof item?.promptText === "string" &&
             typeof item?.profile === "string" &&
-            typeof item?.createdAt === "number",
+            typeof item?.createdAt === "number" &&
+            typeof item?.startup === "boolean",
         )
       : [];
   } catch {
@@ -1088,6 +1090,7 @@ function Layout(): React.JSX.Element {
           promptText: prompt.text,
           profile: preset.profile,
           createdAt: Date.now(),
+          startup: false,
         },
         ...prev.filter((item) => !(item.presetId === presetId && item.promptText === prompt.text)),
       ].slice(0, 6));
@@ -1107,6 +1110,38 @@ function Layout(): React.JSX.Element {
     [pushEvent, workflowPresets],
   );
 
+  const renameWorkflowPreset = useCallback(
+    (workflowId: string) => {
+      const workflow = workflowPresets.find((item) => item.id === workflowId);
+      if (!workflow) return;
+      const nextLabel = window.prompt("Rename workflow", workflow.label)?.trim();
+      if (!nextLabel) return;
+      setWorkflowPresets((prev) =>
+        prev.map((item) => (item.id === workflowId ? { ...item, label: nextLabel } : item)),
+      );
+      pushEvent("Workflow renamed", `Renamed workflow to ${nextLabel}`, "info");
+    },
+    [pushEvent, workflowPresets],
+  );
+
+  const setStartupWorkflowPreset = useCallback(
+    (workflowId: string | null) => {
+      setWorkflowPresets((prev) =>
+        prev.map((item) => ({
+          ...item,
+          startup: workflowId !== null && item.id === workflowId,
+        })),
+      );
+      if (workflowId) {
+        const workflow = workflowPresets.find((item) => item.id === workflowId);
+        if (workflow) pushEvent("Workflow startup set", `Startup workflow ${workflow.label} armed`, "success");
+      } else {
+        pushEvent("Workflow startup cleared", "Workflow startup disabled", "warning");
+      }
+    },
+    [pushEvent, workflowPresets],
+  );
+
   const toggleTaskQueueItem = useCallback((taskId: string) => {
     setTaskQueue((prev) =>
       prev.map((task) =>
@@ -1121,6 +1156,24 @@ function Layout(): React.JSX.Element {
     setTaskQueue((prev) => prev.filter((task) => task.status !== "done"));
     pushEvent("Completed tasks cleared", "Task queue removed finished operator follow-ups", "info");
   }, [pushEvent]);
+
+  const openTaskQueueItem = useCallback(
+    (taskId: string) => {
+      const task = taskQueue.find((item) => item.id === taskId);
+      if (!task) return;
+      setMessages([
+        {
+          id: `task-${Date.now()}`,
+          role: "user",
+          content: task.detail,
+        },
+      ]);
+      setCurrentSessionId(null);
+      setView("chat");
+      pushEvent("Task opened", `Opened task ${task.title} in fresh draft`, "success");
+    },
+    [pushEvent, taskQueue],
+  );
 
   const toggleSection = useCallback((key: keyof SectionPrefs) => {
     setSectionPrefs((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -1393,7 +1446,9 @@ function Layout(): React.JSX.Element {
                     key={sectionKey}
                     workflows={workflowPresets}
                     onRunWorkflow={runWorkflowPreset}
+                    onRenameWorkflow={renameWorkflowPreset}
                     onDeleteWorkflow={deleteWorkflowPreset}
+                    onSetStartupWorkflow={setStartupWorkflowPreset}
                   />
                 ) : null;
               case "queue":
@@ -1402,6 +1457,7 @@ function Layout(): React.JSX.Element {
                     key={sectionKey}
                     tasks={taskQueue}
                     onToggleTask={toggleTaskQueueItem}
+                    onOpenTask={openTaskQueueItem}
                     onClearCompleted={clearCompletedTasks}
                   />
                 ) : null;
@@ -1470,11 +1526,21 @@ function Layout(): React.JSX.Element {
                 view: preset.view,
                 profile: preset.profile,
               }))}
+              workflows={workflowPresets.map((workflow) => ({
+                id: workflow.id,
+                label: workflow.label,
+                profile: workflow.profile,
+                promptText: workflow.promptText,
+              }))}
               onResumeRecentSession={(sessionId) => {
                 void handleResumeRecentSession(sessionId);
               }}
               onApplyPreset={(presetId) => {
                 applyWorkspacePresetById(presetId);
+              }}
+              onRunWorkflow={(workflowId) => {
+                const workflow = workflowPresets.find((item) => item.id === workflowId);
+                if (workflow) runWorkflowPreset(workflow);
               }}
             />
             {booting && (

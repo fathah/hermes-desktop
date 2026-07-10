@@ -7,18 +7,23 @@ interface WorkflowPreset {
   promptText: string;
   profile: string;
   createdAt: number;
+  startup: boolean;
 }
 
 interface HomeWorkflowCombosProps {
   workflows: WorkflowPreset[];
   onRunWorkflow: (workflow: WorkflowPreset) => void;
+  onRenameWorkflow: (workflowId: string) => void;
   onDeleteWorkflow: (workflowId: string) => void;
+  onSetStartupWorkflow: (workflowId: string | null) => void;
 }
 
 export default function HomeWorkflowCombos({
   workflows,
   onRunWorkflow,
+  onRenameWorkflow,
   onDeleteWorkflow,
+  onSetStartupWorkflow,
 }: HomeWorkflowCombosProps): React.JSX.Element | null {
   if (workflows.length === 0) return null;
 
@@ -37,6 +42,12 @@ export default function HomeWorkflowCombos({
             <div className="content-preset-actions">
               <button className="content-launcher-pin active" onClick={() => onRunWorkflow(workflow)}>
                 Run
+              </button>
+              <button className={`content-launcher-pin ${workflow.startup ? "active" : ""}`} onClick={() => onSetStartupWorkflow(workflow.startup ? null : workflow.id)}>
+                {workflow.startup ? "Startup workflow" : "Set startup"}
+              </button>
+              <button className="content-launcher-pin" onClick={() => onRenameWorkflow(workflow.id)}>
+                Rename
               </button>
               <button className="content-launcher-pin" onClick={() => onDeleteWorkflow(workflow.id)}>
                 Delete
