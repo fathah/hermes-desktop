@@ -118,11 +118,22 @@ interface WorkflowPreset {
   startup: boolean;
 }
 
+interface WorkflowRecall {
+  id: string;
+  label: string;
+  profile: string;
+  promptText: string;
+  startup: boolean;
+  ranAt: number;
+}
+
 interface TaskQueueItem {
   id: string;
   title: string;
   detail: string;
   status: "pending" | "done";
+  workflowId?: string;
+  workflowLabel?: string;
 }
 
 interface SectionPrefs {
@@ -172,6 +183,7 @@ const STORAGE_KEYS = {
   compactMode: "hcc-os-shell-compact-mode",
   sectionOrder: "hcc-os-shell-section-order",
   workflowPresets: "hcc-os-shell-workflow-presets",
+  lastWorkflow: "hcc-os-shell-last-workflow",
 } as const;
 
 const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string; eyebrow: string }[] = [
@@ -432,6 +444,25 @@ function readStoredWorkflowPresets(): WorkflowPreset[] {
   }
 }
 
+function readStoredLastWorkflow(): WorkflowRecall | null {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEYS.lastWorkflow);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed &&
+      typeof parsed.id === "string" &&
+      typeof parsed.label === "string" &&
+      typeof parsed.profile === "string" &&
+      typeof parsed.promptText === "string" &&
+      typeof parsed.startup === "boolean" &&
+      typeof parsed.ranAt === "number"
+      ? parsed
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function Layout(): React.JSX.Element {
   const { t } = useI18n();
   const [view, setView] = useState<View>(() => readStoredView());
@@ -467,6 +498,7 @@ function Layout(): React.JSX.Element {
   const [compactMode, setCompactMode] = useState<boolean>(() => readStoredCompactMode());
   const [sectionOrder, setSectionOrder] = useState<HomeSectionKey[]>(() => readStoredSectionOrder());
   const [workflowPresets, setWorkflowPresets] = useState<WorkflowPreset[]>(() => readStoredWorkflowPresets());
+  const [lastWorkflow, setLastWorkflow] = useState<WorkflowRecall | null>(() => readStoredLastWorkflow());
   const startupWorkflowAppliedRef = useRef(false);
   const skipStartupWorkflowRef = useRef(false);
 
@@ -668,6 +700,18 @@ function Layout(): React.JSX.Element {
       /* ignore */
     }
   }, [compactMode, sectionOrder, sectionPrefs, workflowPresets]);
+
+  useEffect(() => {
+    try {
+      if (lastWorkflow) {
+        window.localStorage.setItem(STORAGE_KEYS.lastWorkflow, JSON.stringify(lastWorkflow));
+      } else {
+        window.localStorage.removeItem(STORAGE_KEYS.lastWorkflow);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [lastWorkflow]);
 
   const rememberAction = useCallback((actionId: string) => {
     setRecentActionIds((prev) => [actionId, ...prev.filter((item) => item !== actionId)].slice(0, 10));
@@ -1067,6 +1111,14 @@ function Layout(): React.JSX.Element {
       ]);
       setCurrentSessionId(null);
       setView("chat");
+      setLastWorkflow({
+        id: workflow.id,
+        label: workflow.label,
+        profile: workflow.profile,
+        promptText: workflow.promptText,
+        startup: workflow.startup,
+        ranAt: Date.now(),
+      });
       if (!options?.silent) {
         pushEvent("Workflow loaded", `Loaded ${workflow.label}`, "success");
       }
@@ -1450,7 +1502,16 @@ function Layout(): React.JSX.Element {
                 ) : null;
               case "resume":
                 return sectionPrefs.resume ? (
-                  <HomeResume key={sectionKey} lastSession={lastSession} onResume={handleResumeRecentSession} />
+                  <HomeResume
+                    key={sectionKey}
+                    lastSession={lastSession}
+                    lastWorkflow={lastWorkflow}
+                    onResumeSession={handleResumeRecentSession}
+                    onResumeWorkflow={(workflowId) => {
+                      const workflow = workflowPresets.find((item) => item.id === workflowId);
+                      if (workflow) runWorkflowPreset(workflow);
+                    }}
+                  />
                 ) : null;
               case "prompts":
                 return sectionPrefs.prompts ? (
