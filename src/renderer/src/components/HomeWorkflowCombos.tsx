@@ -38,6 +38,7 @@ export default function HomeWorkflowCombos({
               <span className="content-pinned-card-meta">
                 {workflow.profile} · {new Date(workflow.createdAt).toLocaleString()}
               </span>
+              <span className="content-badge">{workflow.startup ? "Startup armed" : "On-demand"}</span>
             </button>
             <div className="content-preset-actions">
               <button className="content-launcher-pin active" onClick={() => onRunWorkflow(workflow)}>

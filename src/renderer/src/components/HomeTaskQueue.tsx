@@ -5,6 +5,7 @@ interface TaskQueueItem {
   title: string;
   detail: string;
   status: "pending" | "done";
+  workflowLabel?: string;
 }
 
 interface HomeTaskQueueProps {
@@ -37,6 +38,7 @@ export default function HomeTaskQueue({
             <button className="content-task-open" onClick={() => onOpenTask(task.id)}>
               <div className="content-event-item-title">{task.title}</div>
               <div className="content-event-item-detail">{task.detail}</div>
+              {task.workflowLabel && <div className="content-event-item-time">Workflow · {task.workflowLabel}</div>}
             </button>
             <button className={`content-launcher-pin ${task.status === "done" ? "active" : ""}`} onClick={() => onToggleTask(task.id)}>
               {task.status === "done" ? "Done" : "Mark done"}

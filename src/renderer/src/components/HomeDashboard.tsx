@@ -40,6 +40,7 @@ export default function HomeDashboard({
               <span className="content-dashboard-card-label">{metric.label}</span>
               <span className="content-dashboard-card-value">{metric.value}</span>
               <span className="content-dashboard-card-detail">{metric.detail}</span>
+              <span className="content-dashboard-card-arrow">Open</span>
             </button>
           ))}
         </div>

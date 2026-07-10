@@ -1128,6 +1128,8 @@ function Layout(): React.JSX.Element {
           title: workflow.label,
           detail: workflow.promptText.slice(0, 88),
           status: "pending" as const,
+          workflowId: workflow.id,
+          workflowLabel: workflow.label,
         },
         ...prev,
       ].slice(0, 6));
@@ -1235,7 +1237,7 @@ function Layout(): React.JSX.Element {
     pushEvent("Completed tasks cleared", "Task queue removed finished operator follow-ups", "info");
   }, [pushEvent]);
 
-  const openTaskQueueItem = useCallback(
+  const openTaskQueueDraft = useCallback(
     (taskId: string) => {
       const task = taskQueue.find((item) => item.id === taskId);
       if (!task) return;
@@ -1400,15 +1402,19 @@ function Layout(): React.JSX.Element {
 
         <main className={shellContentClassName}>
           <div className="content-topbar">
-            <div>
-              <div className="content-topbar-kicker">Workspace shell</div>
+            <div className="content-topbar-copy">
+              <div className="content-topbar-kicker">HCC OS native shell</div>
               <div className="content-topbar-title">
                 {currentViewLabel ? t(currentViewLabel) : "Hermes"}
+              </div>
+              <div className="content-topbar-subtitle">
+                Operator workspace with glass-native routing, workflows, and continuity.
               </div>
             </div>
             <div className="content-topbar-badges">
               <span className="content-badge">{remoteMode ? "Remote mode" : "Local mode"}</span>
               <span className="content-badge">Profile {activeProfile}</span>
+              <span className="content-badge">HCC OS theme</span>
             </div>
           </div>
 
@@ -1542,9 +1548,12 @@ function Layout(): React.JSX.Element {
                 return sectionPrefs.queue ? (
                   <HomeTaskQueue
                     key={sectionKey}
-                    tasks={taskQueue}
+                    tasks={taskQueue.map((task) => ({
+                      ...task,
+                      workflowLabel: task.workflowLabel,
+                    }))}
                     onToggleTask={toggleTaskQueueItem}
-                    onOpenTask={openTaskQueueItem}
+                    onOpenTask={openTaskQueueDraft}
                     onClearCompleted={clearCompletedTasks}
                   />
                 ) : null;

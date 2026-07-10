@@ -286,32 +286,47 @@ select {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 18px;
-  padding: 4px 6px 0;
+  gap: 22px;
+  padding: 10px 8px 4px;
+}
+
+.content-topbar-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .content-topbar-title {
-  font-size: 28px;
+  font-size: 32px;
   font-weight: 800;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.045em;
+}
+
+.content-topbar-subtitle {
+  max-width: 620px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  letter-spacing: 0.01em;
 }
 
 .content-topbar-badges {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+  align-items: center;
 }
 
 .content-dashboard-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+  gap: 14px;
 }
 
 .content-dashboard-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
+  padding: 2px 4px 10px;
 }
 
 .content-section-order-chip {
@@ -344,7 +359,8 @@ select {
 .content-home-section {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+  padding: 6px 0 0;
 }
 
 .content-shell.compact-mode .content-home-section {
@@ -356,15 +372,15 @@ select {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 0 2px;
+  padding: 0 4px;
 }
 
 .content-home-section-title {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   color: var(--text-secondary);
 }
 
@@ -377,7 +393,9 @@ select {
 .content-home-section-body {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .content-shell.compact-mode .content-home-section-body {
@@ -390,7 +408,7 @@ select {
 .content-launcher-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 14px;
 }
 
 .content-quick-toggle,
@@ -454,9 +472,9 @@ select {
 .content-dashboard-card-label,
 .content-pinned-card-kicker,
 .content-recent-card-kicker {
-  font-size: 11px;
+  font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   color: var(--text-secondary);
 }
 
@@ -464,7 +482,7 @@ select {
 .content-health-card-value,
 .content-pinned-card-title,
 .content-recent-card-title {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 700;
 }
 
@@ -474,6 +492,14 @@ select {
 .content-recent-card-meta {
   font-size: 12px;
   color: var(--text-secondary);
+}
+
+.content-dashboard-card-arrow {
+  margin-top: auto;
+  font-size: 11px;
+  color: var(--accent-text);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .content-event-center {
