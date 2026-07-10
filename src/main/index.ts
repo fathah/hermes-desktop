@@ -177,6 +177,9 @@ function createWindow(): void {
 
   mainWindow.on("ready-to-show", () => {
     mainWindow!.show();
+    mainWindow!.webContents.once("did-finish-load", () => {
+      mainWindow?.webContents.send("boot-sequence");
+    });
   });
 
   mainWindow.on("move", () => {
@@ -759,6 +762,14 @@ function buildMenu(): void {
           accelerator: "CmdOrCtrl+K",
           click: (): void => {
             mainWindow?.webContents.send("menu-search-sessions");
+          },
+        },
+        { type: "separator" },
+        {
+          label: "Spotlight",
+          accelerator: "CmdOrCtrl+P",
+          click: (): void => {
+            mainWindow?.webContents.send("menu-spotlight");
           },
         },
       ],

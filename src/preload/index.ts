@@ -1,6 +1,15 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { electronAPI } from "@electron-toolkit/preload";
 
+const attachIpcSignal = (
+  channel: string,
+  callback: () => void,
+): (() => void) => {
+  const handler = (): void => callback();
+  ipcRenderer.on(channel, handler);
+  return () => ipcRenderer.removeListener(channel, handler);
+};
+
 const hermesAPI = {
   // Installation
   checkInstall: (): Promise<{
@@ -523,6 +532,11 @@ const hermesAPI = {
     ipcRenderer.on("menu-search-sessions", handler);
     return () => ipcRenderer.removeListener("menu-search-sessions", handler);
   },
+
+  onSpotlightToggle: (callback: () => void): (() => void) =>
+    attachIpcSignal("menu-spotlight", callback),
+  onBootSequence: (callback: () => void): (() => void) =>
+    attachIpcSignal("boot-sequence", callback),
 
   // Cron Jobs
   listCronJobs: (

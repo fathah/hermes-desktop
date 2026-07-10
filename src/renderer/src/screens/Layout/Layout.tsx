@@ -12,6 +12,7 @@ import Office from "../Office/Office";
 import Models from "../Models/Models";
 import Schedules from "../Schedules/Schedules";
 import RemoteNotice from "../../components/RemoteNotice";
+import Spotlight from "../../components/Spotlight";
 import hermeslogo from "../../assets/hermes.png";
 import {
   ChatBubble,
@@ -70,6 +71,8 @@ function Layout(): React.JSX.Element {
   const [officeVisited, setOfficeVisited] = useState(false);
   // Remote mode — many screens show "not available" instead of empty data
   const [remoteMode, setRemoteMode] = useState(false);
+  const [spotlightOpen, setSpotlightOpen] = useState(false);
+  const [booting, setBooting] = useState(true);
 
   // Re-check remote mode on tab switch (picks up Settings changes)
   useEffect(() => {
@@ -120,6 +123,11 @@ function Layout(): React.JSX.Element {
     setView("chat");
   }, []);
 
+  const handleNavigate = useCallback((nextView: string) => {
+    if (nextView === "office") setOfficeVisited(true);
+    setView(nextView as View);
+  }, []);
+
   // Listen for menu IPC events (Cmd+N, Cmd+K from app menu)
   useEffect(() => {
     const cleanupNewChat = window.hermesAPI.onMenuNewChat(() => {
@@ -128,9 +136,18 @@ function Layout(): React.JSX.Element {
     const cleanupSearch = window.hermesAPI.onMenuSearchSessions(() => {
       setView("sessions");
     });
+    const cleanupSpotlight = window.hermesAPI.onSpotlightToggle(() => {
+      setSpotlightOpen((prev) => !prev);
+    });
+    const cleanupBoot = window.hermesAPI.onBootSequence(() => {
+      setBooting(true);
+      window.setTimeout(() => setBooting(false), 2200);
+    });
     return () => {
       cleanupNewChat();
       cleanupSearch();
+      cleanupSpotlight();
+      cleanupBoot();
     };
   }, [handleNewChat]);
 
@@ -165,8 +182,7 @@ function Layout(): React.JSX.Element {
               key={v}
               className={`sidebar-nav-item ${view === v ? "active" : ""}`}
               onClick={() => {
-                if (v === "office") setOfficeVisited(true);
-                setView(v);
+                handleNavigate(v);
               }}
             >
               <Icon size={16} />
@@ -201,6 +217,25 @@ function Layout(): React.JSX.Element {
       </aside>
 
       <main className="content">
+        <Spotlight
+          open={spotlightOpen}
+          activeProfile={activeProfile}
+          onClose={() => setSpotlightOpen(false)}
+          onNavigate={handleNavigate}
+          onNewChat={handleNewChat}
+        />
+        {booting && (
+          <div className="boot-sequence-overlay">
+            <div className="boot-sequence-panel">
+              <div className="boot-sequence-kicker">HCC OS</div>
+              <div className="boot-sequence-title">Booting workspace shell</div>
+              <div className="boot-sequence-progress">
+                <span className="boot-sequence-bar" />
+              </div>
+              <div className="boot-sequence-copy">Hydrating panels, tools, and profile context…</div>
+            </div>
+          </div>
+        )}
         <div
           style={{
             display: view === "chat" ? "flex" : "none",
