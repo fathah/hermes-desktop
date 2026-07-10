@@ -1350,11 +1350,15 @@ function Layout(): React.JSX.Element {
             <div className="sidebar-brand-copy">
               <div className="sidebar-brand-kicker">HCC OS</div>
               <div className="sidebar-brand-name">Hermes Desktop</div>
+              <div className="sidebar-brand-subtitle">Glass operator shell</div>
             </div>
           </div>
 
           <button className="sidebar-launcher" onClick={() => setSpotlightOpen(true)}>
-            <span className="sidebar-launcher-label">Open spotlight</span>
+            <span className="sidebar-launcher-copy">
+              <span className="sidebar-launcher-label">Open spotlight</span>
+              <span className="sidebar-launcher-subtitle">Jump across routes, workflows, and sessions</span>
+            </span>
             <span className="sidebar-launcher-shortcut">⌘/Ctrl + P</span>
           </button>
 
@@ -1395,6 +1399,9 @@ function Layout(): React.JSX.Element {
               <div className="sidebar-footer-kicker">Active profile</div>
               <div className="sidebar-footer-text">
                 {activeProfile === "default" ? t("common.appName") : activeProfile}
+              </div>
+              <div className="sidebar-footer-caption">
+                {remoteMode ? "Remote operator lane active" : "Local operator lane active"}
               </div>
             </div>
           </div>

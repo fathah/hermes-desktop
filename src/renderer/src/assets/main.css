@@ -73,7 +73,9 @@ select {
     radial-gradient(circle at 14% 18%, rgba(122, 182, 255, 0.26), transparent 24%),
     radial-gradient(circle at 86% 10%, rgba(228, 176, 255, 0.22), transparent 22%),
     radial-gradient(circle at 50% 92%, rgba(105, 146, 255, 0.18), transparent 28%),
+    radial-gradient(circle at 78% 68%, rgba(255, 255, 255, 0.08), transparent 20%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0));
+  filter: saturate(120%);
   pointer-events: none;
 }
 
@@ -82,15 +84,15 @@ select {
   z-index: 1;
   display: grid;
   grid-template-columns: 282px minmax(0, 1fr);
-  gap: 20px;
+  gap: 22px;
   height: calc(100vh - 40px);
 }
 
 .sidebar {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 18px;
+  gap: 18px;
+  padding: 20px;
   border-radius: 34px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background:
@@ -130,6 +132,11 @@ select {
   gap: 4px;
 }
 
+.sidebar-brand-subtitle {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
 .sidebar-brand-kicker,
 .content-topbar-kicker,
 .sidebar-footer-kicker,
@@ -155,17 +162,29 @@ select {
   justify-content: space-between;
   gap: 12px;
   width: 100%;
-  padding: 14px 15px;
-  border-radius: 22px;
+  padding: 16px 16px;
+  border-radius: 24px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.14), rgba(124, 199, 255, 0.08));
   color: var(--text-primary);
   cursor: pointer;
 }
 
+.sidebar-launcher-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+}
+
 .sidebar-launcher-label {
   font-size: 14px;
   font-weight: 600;
+}
+
+.sidebar-launcher-subtitle {
+  font-size: 11px;
+  color: var(--text-secondary);
 }
 
 .sidebar-launcher-shortcut {
@@ -177,7 +196,7 @@ select {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   overflow: auto;
   padding-right: 4px;
 }
@@ -187,9 +206,9 @@ select {
   align-items: center;
   gap: 12px;
   width: 100%;
-  padding: 14px 15px;
+  padding: 15px 16px;
   border: 1px solid transparent;
-  border-radius: 22px;
+  border-radius: 24px;
   background: transparent;
   color: var(--text-secondary);
   text-align: left;
@@ -213,8 +232,8 @@ select {
 }
 
 .sidebar-nav-item-icon {
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   border-radius: 16px;
   display: grid;
   place-items: center;
@@ -238,8 +257,8 @@ select {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 16px;
-  border-radius: 24px;
+  padding: 18px;
+  border-radius: 26px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.12);
 }
@@ -256,14 +275,19 @@ select {
   color: var(--text-primary);
 }
 
+.sidebar-footer-caption {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
 .sidebar-update-btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 11px 14px;
+  padding: 12px 14px;
   border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 18px;
+  border-radius: 20px;
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.22), rgba(124, 199, 255, 0.24));
   color: white;
   font-size: 12px;
@@ -274,7 +298,7 @@ select {
 .content-shell {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
   min-width: 0;
 }
 
