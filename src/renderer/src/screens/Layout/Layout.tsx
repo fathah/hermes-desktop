@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import Chat, { ChatMessage } from "../Chat/Chat";
 import Sessions from "../Sessions/Sessions";
 import Agents from "../Agents/Agents";
@@ -50,12 +50,20 @@ interface LauncherCard {
   key: string;
   label: string;
   description: string;
+  rank: number;
   onClick: () => void;
+}
+
+interface RecentShellSession {
+  id: string;
+  title: string;
+  startedAt: number;
 }
 
 const STORAGE_KEYS = {
   shellView: "hcc-os-shell-view",
   shellProfile: "hcc-os-shell-profile",
+  recentActions: "hcc-os-shell-recent-actions",
 } as const;
 
 const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string; eyebrow: string }[] = [
@@ -92,6 +100,17 @@ function readStoredProfile(): string {
   }
 }
 
+function readStoredRecentActions(): string[] {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEYS.recentActions);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((item) => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
 function Layout(): React.JSX.Element {
   const { t } = useI18n();
   const [view, setView] = useState<View>(() => readStoredView());
@@ -102,10 +121,24 @@ function Layout(): React.JSX.Element {
   const [remoteMode, setRemoteMode] = useState(false);
   const [spotlightOpen, setSpotlightOpen] = useState(false);
   const [booting, setBooting] = useState(true);
+  const [recentSessions, setRecentSessions] = useState<RecentShellSession[]>([]);
+  const [recentActionIds, setRecentActionIds] = useState<string[]>(() => readStoredRecentActions());
 
   useEffect(() => {
     window.hermesAPI.isRemoteMode().then(setRemoteMode);
   }, [view]);
+
+  useEffect(() => {
+    void window.hermesAPI.listCachedSessions(6).then((sessions) => {
+      setRecentSessions(
+        sessions.slice(0, 4).map((session) => ({
+          id: session.id,
+          title: session.title || "Untitled session",
+          startedAt: session.startedAt,
+        })),
+      );
+    });
+  }, []);
 
   useEffect(() => {
     try {
@@ -122,6 +155,21 @@ function Layout(): React.JSX.Element {
       /* ignore */
     }
   }, [activeProfile]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        STORAGE_KEYS.recentActions,
+        JSON.stringify(recentActionIds.slice(0, 10)),
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [recentActionIds]);
+
+  const rememberAction = useCallback((actionId: string) => {
+    setRecentActionIds((prev) => [actionId, ...prev.filter((item) => item !== actionId)].slice(0, 10));
+  }, []);
 
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
   const [updateState, setUpdateState] = useState<
@@ -157,24 +205,47 @@ function Layout(): React.JSX.Element {
   }
 
   const handleNewChat = useCallback(() => {
+    rememberAction("action:new-chat");
     window.hermesAPI.abortChat();
     setMessages([]);
     setCurrentSessionId(null);
     setView("chat");
-  }, []);
+  }, [rememberAction]);
 
-  const handleNavigate = useCallback((nextView: string) => {
-    if (nextView === "office") setOfficeVisited(true);
-    setView(nextView as View);
-  }, []);
+  const handleNavigate = useCallback(
+    (nextView: string) => {
+      rememberAction(`view:${nextView}`);
+      if (nextView === "office") setOfficeVisited(true);
+      setView(nextView as View);
+    },
+    [rememberAction],
+  );
 
   const handleSearchSessions = useCallback(() => {
+    rememberAction("action:search-sessions");
     setView("sessions");
-  }, []);
+  }, [rememberAction]);
 
   const handleSnapWindow = useCallback(async () => {
+    rememberAction("action:snap-window");
     await window.hermesAPI.snapWindowToEdge();
-  }, []);
+  }, [rememberAction]);
+
+  const handleResumeRecentSession = useCallback(
+    async (sessionId: string) => {
+      rememberAction(`recent-session:${sessionId}`);
+      const dbMessages = await window.hermesAPI.getSessionMessages(sessionId);
+      const chatMessages: ChatMessage[] = dbMessages.map((m) => ({
+        id: `db-${m.id}`,
+        role: m.role === "user" ? "user" : "agent",
+        content: m.content,
+      }));
+      setMessages(chatMessages);
+      setCurrentSessionId(sessionId);
+      setView("chat");
+    },
+    [rememberAction],
+  );
 
   useEffect(() => {
     const cleanupNewChat = window.hermesAPI.onMenuNewChat(() => {
@@ -204,43 +275,45 @@ function Layout(): React.JSX.Element {
     setCurrentSessionId(null);
   }, []);
 
-  const handleResumeSession = useCallback(async (sessionId: string) => {
-    const dbMessages = await window.hermesAPI.getSessionMessages(sessionId);
-    const chatMessages: ChatMessage[] = dbMessages.map((m) => ({
-      id: `db-${m.id}`,
-      role: m.role === "user" ? "user" : "agent",
-      content: m.content,
-    }));
-    setMessages(chatMessages);
-    setCurrentSessionId(sessionId);
-    setView("chat");
-  }, []);
+  const handleResumeSession = useCallback(
+    async (sessionId: string) => {
+      await handleResumeRecentSession(sessionId);
+    },
+    [handleResumeRecentSession],
+  );
 
-  const launcherCards = useCallback((): LauncherCard[] => {
-    const cards: LauncherCard[] = [
+  const launcherCards = useMemo<LauncherCard[]>(() => {
+    const rankBoost = (id: string, base: number): number => {
+      const idx = recentActionIds.indexOf(id);
+      return idx === -1 ? base : base + Math.max(0, 6 - idx);
+    };
+
+    return [
       {
         key: "new-chat",
         label: "Start a new chat",
         description: "Reset the shell into a fresh operator thread.",
+        rank: rankBoost("action:new-chat", 60),
         onClick: handleNewChat,
       },
       {
         key: "resume-sessions",
         label: "Resume recent sessions",
         description: "Jump into recall and continue prior runs.",
+        rank: rankBoost("action:search-sessions", 58),
         onClick: handleSearchSessions,
       },
       {
         key: "snap-window",
         label: "Align the window",
         description: "Use HCC OS snap-to-edge placement right now.",
+        rank: rankBoost("action:snap-window", 56),
         onClick: () => {
           void handleSnapWindow();
         },
       },
-    ];
-    return cards;
-  }, [handleNewChat, handleSearchSessions, handleSnapWindow]);
+    ].sort((a, b) => b.rank - a.rank);
+  }, [handleNewChat, handleSearchSessions, handleSnapWindow, recentActionIds]);
 
   const currentViewLabel = NAV_ITEMS.find((item) => item.view === view)?.labelKey;
 
@@ -321,13 +394,31 @@ function Layout(): React.JSX.Element {
           </div>
 
           <div className="content-launcher-row">
-            {launcherCards().map((card) => (
+            {launcherCards.map((card) => (
               <button key={card.key} className="content-launcher-card" onClick={card.onClick}>
                 <span className="content-launcher-card-label">{card.label}</span>
                 <span className="content-launcher-card-description">{card.description}</span>
               </button>
             ))}
           </div>
+
+          {recentSessions.length > 0 && (
+            <div className="content-recents-row">
+              {recentSessions.map((session) => (
+                <button
+                  key={session.id}
+                  className="content-recent-card"
+                  onClick={() => void handleResumeRecentSession(session.id)}
+                >
+                  <span className="content-recent-card-kicker">Recent session</span>
+                  <span className="content-recent-card-title">{session.title}</span>
+                  <span className="content-recent-card-meta">
+                    {new Date(session.startedAt * 1000).toLocaleDateString()} · Resume
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
 
           <div className="content-panel">
             <Spotlight
@@ -338,6 +429,14 @@ function Layout(): React.JSX.Element {
               onNewChat={handleNewChat}
               onSnapWindow={handleSnapWindow}
               onSearchSessions={handleSearchSessions}
+              recentSessions={recentSessions.map((session) => ({
+                id: session.id,
+                title: session.title,
+              }))}
+              recentActionIds={recentActionIds}
+              onResumeRecentSession={(sessionId) => {
+                void handleResumeRecentSession(sessionId);
+              }}
             />
             {booting && (
               <div className="boot-sequence-overlay">

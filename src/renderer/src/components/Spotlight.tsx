@@ -16,6 +16,7 @@ import {
   ArrowRight,
   PanelLeft,
   ScanSearch,
+  History,
 } from "lucide-react";
 
 interface SpotlightAction {
@@ -24,7 +25,13 @@ interface SpotlightAction {
   hint: string;
   category: string;
   match: string;
+  rank: number;
   onSelect: () => void;
+}
+
+interface SpotlightRecentSession {
+  id: string;
+  title: string;
 }
 
 interface SpotlightProps {
@@ -35,6 +42,9 @@ interface SpotlightProps {
   onNewChat: () => void;
   onSnapWindow: () => Promise<void>;
   onSearchSessions: () => void;
+  recentSessions: SpotlightRecentSession[];
+  recentActionIds: string[];
+  onResumeRecentSession: (sessionId: string) => void;
 }
 
 const ICON_MAP = {
@@ -59,6 +69,9 @@ function Spotlight({
   onNewChat,
   onSnapWindow,
   onSearchSessions,
+  recentSessions,
+  recentActionIds,
+  onResumeRecentSession,
 }: SpotlightProps): React.JSX.Element | null {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -71,6 +84,11 @@ function Spotlight({
   }, [open]);
 
   const actions = useMemo<SpotlightAction[]>(() => {
+    const rankBoost = (id: string, base: number): number => {
+      const idx = recentActionIds.indexOf(id);
+      return idx === -1 ? base : base + Math.max(0, 8 - idx);
+    };
+
     const viewActions: SpotlightAction[] = [
       ["chat", "Open Chat", "Jump into the active conversation workspace", "Workspace"],
       ["sessions", "Open Sessions", "Browse and resume session history", "Workspace"],
@@ -83,25 +101,27 @@ function Spotlight({
       ["schedules", "Open Schedules", "Manage cron jobs", "Operations"],
       ["gateway", "Open Gateway", "Configure platform delivery", "Operations"],
       ["settings", "Open Settings", "Adjust provider and app settings", "Operations"],
-    ].map(([view, label, hint, category]) => ({
+    ].map(([view, label, hint, category], index) => ({
       id: `view:${view}`,
       label,
       hint,
       category,
       match: `${label} ${hint} ${view} ${category}`.toLowerCase(),
+      rank: rankBoost(`view:${view}`, 30 - index),
       onSelect: () => {
         onNavigate(view);
         onClose();
       },
-    }));
+    } as SpotlightAction));
 
-    return [
+    const actionItems: SpotlightAction[] = [
       {
         id: "action:new-chat",
         label: "Start New Chat",
         hint: `Clear current thread and stay on ${activeProfile}`,
         category: "Actions",
         match: `new chat clear conversation ${activeProfile} actions`.toLowerCase(),
+        rank: rankBoost("action:new-chat", 80),
         onSelect: () => {
           onNewChat();
           onClose();
@@ -113,6 +133,7 @@ function Spotlight({
         hint: "Apply HCC OS edge alignment to the current shell window",
         category: "Window",
         match: "snap window edge align shell window".toLowerCase(),
+        rank: rankBoost("action:snap-window", 70),
         onSelect: async () => {
           await onSnapWindow();
           onClose();
@@ -124,19 +145,46 @@ function Spotlight({
         hint: "Open Sessions and browse recent runs",
         category: "Actions",
         match: "search sessions history recent runs".toLowerCase(),
+        rank: rankBoost("action:search-sessions", 72),
         onSelect: () => {
           onSearchSessions();
           onClose();
         },
       },
-      ...viewActions,
     ];
-  }, [activeProfile, onClose, onNavigate, onNewChat, onSearchSessions, onSnapWindow]);
+
+    const recentSessionActions: SpotlightAction[] = recentSessions.map((session, index) => ({
+      id: `recent-session:${session.id}`,
+      label: session.title || "Untitled session",
+      hint: "Resume this recent operator session",
+      category: "Recent Session",
+      match: `${session.title} recent session history resume`.toLowerCase(),
+      rank: 95 - index,
+      onSelect: () => {
+        onResumeRecentSession(session.id);
+        onClose();
+      },
+    }));
+
+    return [...recentSessionActions, ...actionItems, ...viewActions];
+  }, [
+    activeProfile,
+    onClose,
+    onNavigate,
+    onNewChat,
+    onResumeRecentSession,
+    onSearchSessions,
+    onSnapWindow,
+    recentActionIds,
+    recentSessions,
+  ]);
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    if (!normalized) return actions;
-    return actions.filter((action) => action.match.includes(normalized));
+    const next = !normalized
+      ? [...actions]
+      : actions.filter((action) => action.match.includes(normalized));
+    return next.sort((a, b) => b.rank - a.rank);
   }, [actions, query]);
 
   const quickActions = useMemo(
@@ -202,7 +250,7 @@ function Spotlight({
       }
       if (event.key === "Enter") {
         event.preventDefault();
-        filtered[selectedIndex]?.onSelect();
+        void filtered[selectedIndex]?.onSelect();
       }
     }
     window.addEventListener("keydown", handleKeyDown);
@@ -251,6 +299,23 @@ function Spotlight({
             </button>
           ))}
         </div>
+        {recentSessions.length > 0 && (
+          <div className="spotlight-recent-strip">
+            {recentSessions.slice(0, 3).map((session) => (
+              <button
+                key={session.id}
+                className="spotlight-recent-pill"
+                onClick={() => {
+                  onResumeRecentSession(session.id);
+                  onClose();
+                }}
+              >
+                <History size={13} />
+                <span>{session.title || "Untitled session"}</span>
+              </button>
+            ))}
+          </div>
+        )}
         <div className="spotlight-results">
           {filtered.length === 0 ? (
             <div className="spotlight-empty">No matches for that query.</div>
