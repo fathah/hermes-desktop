@@ -100,6 +100,13 @@ interface RecentPrompt {
   timestamp: number;
 }
 
+interface TaskQueueItem {
+  id: string;
+  title: string;
+  detail: string;
+  status: "pending" | "done";
+}
+
 interface ToastItem {
   id: string;
   title: string;
@@ -129,6 +136,7 @@ const STORAGE_KEYS = {
   lastSession: "hcc-os-shell-last-session",
   startupPreset: "hcc-os-shell-startup-preset",
   recentPrompts: "hcc-os-shell-recent-prompts",
+  taskQueue: "hcc-os-shell-task-queue",
 } as const;
 
 const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string; eyebrow: string }[] = [
@@ -300,6 +308,25 @@ function readStoredRecentPrompts(): RecentPrompt[] {
   }
 }
 
+function readStoredTaskQueue(): TaskQueueItem[] {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEYS.taskQueue);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter(
+          (item): item is TaskQueueItem =>
+            typeof item?.id === "string" &&
+            typeof item?.title === "string" &&
+            typeof item?.detail === "string" &&
+            (item?.status === "pending" || item?.status === "done"),
+        )
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 function Layout(): React.JSX.Element {
   const { t } = useI18n();
   const [view, setView] = useState<View>(() => readStoredView());
@@ -330,6 +357,7 @@ function Layout(): React.JSX.Element {
   const [lastSession, setLastSession] = useState<LastSessionSnapshot | null>(() => readStoredLastSession());
   const [startupPresetId, setStartupPresetId] = useState<string | null>(() => readStoredStartupPreset());
   const [recentPrompts, setRecentPrompts] = useState<RecentPrompt[]>(() => readStoredRecentPrompts());
+  const [taskQueue, setTaskQueue] = useState<TaskQueueItem[]>(() => readStoredTaskQueue());
 
   useEffect(() => {
     window.hermesAPI.isRemoteMode().then(setRemoteMode);
@@ -507,6 +535,17 @@ function Layout(): React.JSX.Element {
       /* ignore */
     }
   }, [recentPrompts]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        STORAGE_KEYS.taskQueue,
+        JSON.stringify(taskQueue.slice(0, 6)),
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [taskQueue]);
 
   const rememberAction = useCallback((actionId: string) => {
     setRecentActionIds((prev) => [actionId, ...prev.filter((item) => item !== actionId)].slice(0, 10));
@@ -862,6 +901,46 @@ function Layout(): React.JSX.Element {
     [gatewayRunning, modelLabel, profileCount, providerLabel, scheduleCount, visibleWidgets],
   );
 
+  const rerunRecentPrompt = useCallback(
+    (prompt: RecentPrompt) => {
+      setMessages([
+        {
+          id: `draft-${Date.now()}`,
+          role: "user",
+          content: prompt.text,
+        },
+      ]);
+      setCurrentSessionId(null);
+      setView("chat");
+      pushEvent("Recent prompt rerun", `Prompt from ${prompt.profile} moved into a fresh draft`, "success");
+      setTaskQueue((prev) => [
+        {
+          id: `${Date.now()}`,
+          title: "Follow up recent prompt",
+          detail: prompt.text.slice(0, 88),
+          status: "pending" as const,
+        },
+        ...prev,
+      ].slice(0, 6));
+    },
+    [pushEvent],
+  );
+
+  const toggleTaskQueueItem = useCallback((taskId: string) => {
+    setTaskQueue((prev) =>
+      prev.map((task) =>
+        task.id === taskId
+          ? { ...task, status: task.status === "pending" ? "done" : "pending" }
+          : task,
+      ),
+    );
+  }, []);
+
+  const clearCompletedTasks = useCallback(() => {
+    setTaskQueue((prev) => prev.filter((task) => task.status !== "done"));
+    pushEvent("Completed tasks cleared", "Task queue removed finished operator follow-ups", "info");
+  }, [pushEvent]);
+
   const healthDiagnostics = useMemo(
     () => [
       {
@@ -1096,21 +1175,51 @@ function Layout(): React.JSX.Element {
           {recentPrompts.length > 0 && (
             <div className="content-presets-row">
               {recentPrompts.slice(0, 3).map((prompt) => (
-                <button
-                  key={prompt.id}
-                  className="content-preset-card"
-                  onClick={() => {
-                    setView("chat");
-                    pushEvent("Recent prompt recalled", `Prompt from ${prompt.profile} brought back into focus`, "info");
-                  }}
-                >
-                  <span className="content-pinned-card-kicker">Recent prompt</span>
-                  <span className="content-pinned-card-title">{prompt.text.slice(0, 72)}</span>
-                  <span className="content-pinned-card-meta">
-                    {prompt.profile} · {new Date(prompt.timestamp).toLocaleString()}
-                  </span>
-                </button>
+                <div key={prompt.id} className="content-launcher-card-wrap">
+                  <button
+                    className="content-preset-card"
+                    onClick={() => {
+                      setView("chat");
+                      pushEvent("Recent prompt recalled", `Prompt from ${prompt.profile} brought back into focus`, "info");
+                    }}
+                  >
+                    <span className="content-pinned-card-kicker">Recent prompt</span>
+                    <span className="content-pinned-card-title">{prompt.text.slice(0, 72)}</span>
+                    <span className="content-pinned-card-meta">
+                      {prompt.profile} · {new Date(prompt.timestamp).toLocaleString()}
+                    </span>
+                  </button>
+                  <div className="content-preset-actions">
+                    <button className="content-launcher-pin active" onClick={() => rerunRecentPrompt(prompt)}>
+                      Rerun
+                    </button>
+                  </div>
+                </div>
               ))}
+            </div>
+          )}
+
+          {taskQueue.length > 0 && (
+            <div className="content-event-center">
+              <div className="content-event-center-header">
+                <span className="content-event-center-title">Task queue</span>
+                <button className="content-event-dismiss" onClick={clearCompletedTasks}>
+                  Clear done
+                </button>
+              </div>
+              <div className="content-event-list">
+                {taskQueue.map((task) => (
+                  <div key={task.id} className={`content-event-item tone-${task.status === "done" ? "success" : "info"}`}>
+                    <div>
+                      <div className="content-event-item-title">{task.title}</div>
+                      <div className="content-event-item-detail">{task.detail}</div>
+                    </div>
+                    <button className={`content-launcher-pin ${task.status === "done" ? "active" : ""}`} onClick={() => toggleTaskQueueItem(task.id)}>
+                      {task.status === "done" ? "Done" : "Mark done"}
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
