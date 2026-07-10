@@ -95,8 +95,13 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
   );
 
   return (
-    <div className="settings-container">
-      <h1 className="settings-header">{t("gateway.title")}</h1>
+    <div className="settings-container settings-surface">
+      <div className="settings-page-header">
+        <div>
+          <div className="settings-page-kicker">HCC OS gateway lane</div>
+          <h1 className="settings-header">{t("gateway.title")}</h1>
+        </div>
+      </div>
 
       <div className="settings-section">
         <div className="settings-section-title">

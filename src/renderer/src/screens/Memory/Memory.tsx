@@ -196,15 +196,17 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
   }
 
   return (
-    <div className="settings-container">
-      <div className="memory-header">
+    <div className="settings-container settings-surface">
+      <div className="memory-header settings-page-header">
         <div>
+          <div className="settings-page-kicker">HCC OS memory lane</div>
           <h1 className="settings-header" style={{ marginBottom: 4 }}>
             {t("memory.title")}
           </h1>
           <p className="memory-subtitle">{t("memory.subtitle")}</p>
         </div>
         <button className="btn btn-secondary btn-sm" onClick={loadData}>
+
           <Refresh size={13} />
         </button>
       </div>

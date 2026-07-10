@@ -1015,6 +1015,60 @@ select {
   padding: 24px 16px;
 }
 
+.settings-surface,
+.tools-container {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 10px 8px 4px;
+}
+
+.settings-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px;
+  border-radius: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.08));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.settings-page-kicker {
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 10px;
+  color: #8fb4ff;
+  margin-bottom: 6px;
+}
+
+.settings-section,
+.settings-platform-card,
+.tools-card,
+.memory-stat,
+.memory-capacity,
+.memory-entry-card,
+.memory-profile,
+.models-card,
+.models-search,
+.models-empty,
+.models-modal,
+.settings-hermes-info {
+  border-radius: 26px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.settings-section,
+.settings-platform-card,
+.settings-hermes-info,
+.models-search,
+.models-empty,
+.memory-profile {
+  padding: 18px;
+}
 .chat-container,
 .office-ready {
   display: flex;

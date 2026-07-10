@@ -125,9 +125,10 @@ function Models(): React.JSX.Element {
   }
 
   return (
-    <div className="settings-container">
-      <div className="models-header">
+    <div className="settings-container settings-surface">
+      <div className="models-header settings-page-header">
         <div>
+          <div className="settings-page-kicker">HCC OS models lane</div>
           <h1 className="settings-header" style={{ marginBottom: 4 }}>
             {t("models.title")}
           </h1>

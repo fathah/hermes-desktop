@@ -298,10 +298,13 @@ function Tools({ profile }: ToolsProps): React.JSX.Element {
   }
 
   return (
-    <div className="tools-container">
-      <div className="tools-header">
-        <h2 className="tools-title">{t("tools.title")}</h2>
-        <p className="tools-subtitle">启用或禁用代理在对话期间可使用的工具集</p>
+    <div className="tools-container settings-surface">
+      <div className="tools-header settings-page-header">
+        <div>
+          <div className="settings-page-kicker">HCC OS tools lane</div>
+          <h2 className="tools-title">{t("tools.title")}</h2>
+          <p className="tools-subtitle">启用或禁用代理在对话期间可使用的工具集</p>
+        </div>
       </div>
 
       <div className="tools-grid">

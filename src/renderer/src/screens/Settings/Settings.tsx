@@ -433,8 +433,13 @@ function Settings({
   const isCustomProvider = modelProvider === "custom";
 
   return (
-    <div className="settings-container">
-      <h1 className="settings-header">{t("settings.title")}</h1>
+    <div className="settings-container settings-surface">
+      <div className="settings-page-header">
+        <div>
+          <div className="settings-page-kicker">HCC OS control lane</div>
+          <h1 className="settings-header">{t("settings.title")}</h1>
+        </div>
+      </div>
 
       <div className="settings-section">
         <div className="settings-section-title">
