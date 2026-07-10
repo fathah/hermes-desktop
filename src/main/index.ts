@@ -5,10 +5,13 @@ import {
   ipcMain,
   Menu,
   Notification,
+  screen,
 } from "electron";
+
 import { join } from "path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import type { AppUpdater } from "electron-updater";
+
 import icon from "../../resources/icon.png?asset";
 import {
   checkInstallStatus,
@@ -118,6 +121,40 @@ process.on("unhandledRejection", (reason) => {
 let mainWindow: BrowserWindow | null = null;
 let currentChatAbort: (() => void) | null = null;
 
+const SNAP_THRESHOLD = 28;
+const SNAP_MARGIN = 10;
+
+function applySnapToEdge(window: BrowserWindow): void {
+  if (window.isMaximized() || window.isMinimized()) return;
+
+  const display = screen.getDisplayMatching(window.getBounds());
+  const workArea = display.workArea;
+  const bounds = window.getBounds();
+  let nextX = bounds.x;
+  let nextY = bounds.y;
+  let changed = false;
+
+  if (Math.abs(bounds.x - workArea.x) <= SNAP_THRESHOLD) {
+    nextX = workArea.x + SNAP_MARGIN;
+    changed = true;
+  } else if (Math.abs(bounds.x + bounds.width - (workArea.x + workArea.width)) <= SNAP_THRESHOLD) {
+    nextX = workArea.x + workArea.width - bounds.width - SNAP_MARGIN;
+    changed = true;
+  }
+
+  if (Math.abs(bounds.y - workArea.y) <= SNAP_THRESHOLD) {
+    nextY = workArea.y + SNAP_MARGIN;
+    changed = true;
+  } else if (Math.abs(bounds.y + bounds.height - (workArea.y + workArea.height)) <= SNAP_THRESHOLD) {
+    nextY = workArea.y + workArea.height - bounds.height - SNAP_MARGIN;
+    changed = true;
+  }
+
+  if (changed) {
+    window.setBounds({ ...bounds, x: nextX, y: nextY });
+  }
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1100,
@@ -140,6 +177,12 @@ function createWindow(): void {
 
   mainWindow.on("ready-to-show", () => {
     mainWindow!.show();
+  });
+
+  mainWindow.on("move", () => {
+    if (mainWindow) {
+      applySnapToEdge(mainWindow);
+    }
   });
 
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
@@ -419,7 +462,7 @@ function setupIPC(): void {
   });
   ipcMain.handle("gateway-status", () => isGatewayRunning());
 
-  // Platform toggles (config.yaml platforms section)
+  // Platform toggles
   ipcMain.handle("get-platform-enabled", (_event, profile?: string) =>
     getPlatformEnabled(profile),
   );
@@ -427,13 +470,18 @@ function setupIPC(): void {
     "set-platform-enabled",
     (_event, platform: string, enabled: boolean, profile?: string) => {
       setPlatformEnabled(platform, enabled, profile);
-      // Restart gateway so it picks up the new platform config
       if (isGatewayRunning()) {
         restartGateway(profile);
       }
       return true;
     },
   );
+
+  ipcMain.handle("snap-window-to-edge", () => {
+    if (!mainWindow) return false;
+    applySnapToEdge(mainWindow);
+    return true;
+  });
 
   // Sessions
   ipcMain.handle("list-sessions", (_event, limit?: number, offset?: number) => {

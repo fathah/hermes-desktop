@@ -101,6 +101,7 @@ interface HermesAPI {
     enabled: boolean,
     profile?: string,
   ) => Promise<boolean>;
+  snapWindowToEdge: () => Promise<boolean>;
 
   // Sessions
   listSessions: (

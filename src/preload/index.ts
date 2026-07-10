@@ -192,6 +192,8 @@ const hermesAPI = {
   ): Promise<boolean> =>
     ipcRenderer.invoke("set-platform-enabled", platform, enabled, profile),
 
+  snapWindowToEdge: (): Promise<boolean> => ipcRenderer.invoke("snap-window-to-edge"),
+
   // Sessions
   listSessions: (
     limit?: number,
