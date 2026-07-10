@@ -513,6 +513,11 @@ select {
 .content-preset-actions {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.content-resume-card-wrap {
+  display: flex;
 }
 
 .content-launcher-pin {

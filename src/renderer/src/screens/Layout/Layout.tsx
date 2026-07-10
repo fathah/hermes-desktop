@@ -86,6 +86,13 @@ interface PinnedSession {
   title: string;
 }
 
+interface LastSessionSnapshot {
+  id: string;
+  title: string;
+  profile: string;
+  startedAt: number;
+}
+
 interface ToastItem {
   id: string;
   title: string;
@@ -112,6 +119,8 @@ const STORAGE_KEYS = {
   widgetPrefs: "hcc-os-shell-widget-prefs",
   presets: "hcc-os-shell-presets",
   pinnedSessions: "hcc-os-shell-pinned-sessions",
+  lastSession: "hcc-os-shell-last-session",
+  startupPreset: "hcc-os-shell-startup-preset",
 } as const;
 
 const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string; eyebrow: string }[] = [
@@ -239,6 +248,31 @@ function readStoredPinnedSessions(): PinnedSession[] {
   }
 }
 
+function readStoredLastSession(): LastSessionSnapshot | null {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEYS.lastSession);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed &&
+      typeof parsed.id === "string" &&
+      typeof parsed.title === "string" &&
+      typeof parsed.profile === "string" &&
+      typeof parsed.startedAt === "number"
+      ? parsed
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function readStoredStartupPreset(): string | null {
+  try {
+    return window.localStorage.getItem(STORAGE_KEYS.startupPreset);
+  } catch {
+    return null;
+  }
+}
+
 function Layout(): React.JSX.Element {
   const { t } = useI18n();
   const [view, setView] = useState<View>(() => readStoredView());
@@ -266,6 +300,8 @@ function Layout(): React.JSX.Element {
   const [quickSettingsOpen, setQuickSettingsOpen] = useState(false);
   const [workspacePresets, setWorkspacePresets] = useState<WorkspacePreset[]>(() => readStoredPresets());
   const [pinnedSessions, setPinnedSessions] = useState<PinnedSession[]>(() => readStoredPinnedSessions());
+  const [lastSession, setLastSession] = useState<LastSessionSnapshot | null>(() => readStoredLastSession());
+  const [startupPresetId, setStartupPresetId] = useState<string | null>(() => readStoredStartupPreset());
 
   useEffect(() => {
     window.hermesAPI.isRemoteMode().then(setRemoteMode);
@@ -273,13 +309,14 @@ function Layout(): React.JSX.Element {
 
   useEffect(() => {
     const refreshOperationalState = async (): Promise<void> => {
-      const [gateway, profiles, modelConfig, cronJobs, connectionConfig, platforms] = await Promise.all([
+      const [gateway, profiles, modelConfig, cronJobs, connectionConfig, platforms, cachedSessions] = await Promise.all([
         window.hermesAPI.gatewayStatus(),
         window.hermesAPI.listProfiles(),
         window.hermesAPI.getModelConfig(activeProfile),
         window.hermesAPI.listCronJobs(undefined, activeProfile),
         window.hermesAPI.getConnectionConfig(),
         window.hermesAPI.getPlatformEnabled(activeProfile),
+        window.hermesAPI.listCachedSessions(6),
       ]);
 
       setGatewayRunning(gateway);
@@ -289,6 +326,13 @@ function Layout(): React.JSX.Element {
       setScheduleCount(cronJobs.length);
       setConnectionMode(connectionConfig.mode);
       setPlatformEnabled(platforms);
+      setRecentSessions(
+        cachedSessions.slice(0, 4).map((session) => ({
+          id: session.id,
+          title: session.title || "Untitled session",
+          startedAt: session.startedAt,
+        })),
+      );
 
       if (connectionConfig.mode === "remote") {
         const ok = await window.hermesAPI.testRemoteConnection(
@@ -301,15 +345,6 @@ function Layout(): React.JSX.Element {
       }
     };
 
-    void window.hermesAPI.listCachedSessions(6).then((sessions) => {
-      setRecentSessions(
-        sessions.slice(0, 4).map((session) => ({
-          id: session.id,
-          title: session.title || "Untitled session",
-          startedAt: session.startedAt,
-        })),
-      );
-    });
 
     void refreshOperationalState();
     const interval = window.setInterval(() => {
@@ -318,6 +353,15 @@ function Layout(): React.JSX.Element {
 
     return () => window.clearInterval(interval);
   }, [activeProfile]);
+
+  useEffect(() => {
+    if (!startupPresetId) return;
+    const preset = workspacePresets.find((item) => item.id === startupPresetId);
+    if (!preset) return;
+    setActiveProfile(preset.profile);
+    setView(preset.view);
+    if (preset.view === "office") setOfficeVisited(true);
+  }, [startupPresetId, workspacePresets]);
 
   useEffect(() => {
     try {
@@ -400,6 +444,30 @@ function Layout(): React.JSX.Element {
       /* ignore */
     }
   }, [pinnedSessions]);
+
+  useEffect(() => {
+    try {
+      if (lastSession) {
+        window.localStorage.setItem(STORAGE_KEYS.lastSession, JSON.stringify(lastSession));
+      } else {
+        window.localStorage.removeItem(STORAGE_KEYS.lastSession);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [lastSession]);
+
+  useEffect(() => {
+    try {
+      if (startupPresetId) {
+        window.localStorage.setItem(STORAGE_KEYS.startupPreset, startupPresetId);
+      } else {
+        window.localStorage.removeItem(STORAGE_KEYS.startupPreset);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [startupPresetId]);
 
   const rememberAction = useCallback((actionId: string) => {
     setRecentActionIds((prev) => [actionId, ...prev.filter((item) => item !== actionId)].slice(0, 10));
@@ -527,6 +595,21 @@ function Layout(): React.JSX.Element {
     [applyWorkspacePreset, workspacePresets],
   );
 
+  const setStartupPreset = useCallback(
+    (presetId: string | null) => {
+      setStartupPresetId(presetId);
+      if (presetId) {
+        const preset = workspacePresets.find((item) => item.id === presetId);
+        if (preset) {
+          pushEvent("Startup preset set", `Startup will load ${preset.label}`, "success");
+        }
+      } else {
+        pushEvent("Startup preset cleared", "Default startup continuity restored", "warning");
+      }
+    },
+    [pushEvent, workspacePresets],
+  );
+
   const togglePinnedSession = useCallback((session: PinnedSession) => {
     setPinnedSessions((prev) =>
       prev.some((item) => item.id === session.id)
@@ -604,18 +687,25 @@ function Layout(): React.JSX.Element {
   const handleResumeRecentSession = useCallback(
     async (sessionId: string) => {
       rememberAction(`recent-session:${sessionId}`);
-      pushEvent("Recent session resumed", `Session ${sessionId.slice(0, 8)} is back in the shell`, "success");
+      pushEvent("Recent session resumed", `Session ${sessionId.slice(0, 8)} is now active`, "success");
       const dbMessages = await window.hermesAPI.getSessionMessages(sessionId);
-      const chatMessages: ChatMessage[] = dbMessages.map((m) => ({
-        id: `db-${m.id}`,
-        role: m.role === "user" ? "user" : "agent",
-        content: m.content,
+      const chatMessages: ChatMessage[] = dbMessages.map((msg) => ({
+        id: `db-${msg.id}`,
+        role: msg.role === "user" ? "user" : "agent",
+        content: msg.content,
       }));
+      const title = dbMessages.find((msg) => msg.role === "user")?.content?.slice(0, 72) || "Untitled session";
       setMessages(chatMessages);
       setCurrentSessionId(sessionId);
       setView("chat");
+      setLastSession({
+        id: sessionId,
+        title,
+        profile: activeProfile,
+        startedAt: Math.floor(Date.now() / 1000),
+      });
     },
-    [pushEvent, rememberAction],
+    [activeProfile, pushEvent, rememberAction],
   );
 
   useEffect(() => {
@@ -926,6 +1016,12 @@ function Layout(): React.JSX.Element {
                   </button>
                   <div className="content-preset-actions">
                     <button
+                      className={`content-launcher-pin ${startupPresetId === preset.id ? "active" : ""}`}
+                      onClick={() => setStartupPreset(startupPresetId === preset.id ? null : preset.id)}
+                    >
+                      {startupPresetId === preset.id ? "Startup preset" : "Set startup"}
+                    </button>
+                    <button
                       className="content-launcher-pin"
                       onClick={() => renameWorkspacePreset(preset.id)}
                     >
@@ -940,6 +1036,21 @@ function Layout(): React.JSX.Element {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {lastSession && (
+            <div className="content-resume-card-wrap">
+              <button
+                className="content-preset-card"
+                onClick={() => void handleResumeRecentSession(lastSession.id)}
+              >
+                <span className="content-pinned-card-kicker">Resume where you left off</span>
+                <span className="content-pinned-card-title">{lastSession.title}</span>
+                <span className="content-pinned-card-meta">
+                  {lastSession.profile} · {new Date(lastSession.startedAt * 1000).toLocaleString()}
+                </span>
+              </button>
             </div>
           )}
 
