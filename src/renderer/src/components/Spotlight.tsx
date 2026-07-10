@@ -48,6 +48,7 @@ interface SpotlightWorkflow {
   label: string;
   profile: string;
   promptText: string;
+  startup: boolean;
 }
 
 interface SpotlightProps {
@@ -65,6 +66,8 @@ interface SpotlightProps {
   onResumeRecentSession: (sessionId: string) => void;
   onApplyPreset: (presetId: string) => void;
   onRunWorkflow: (workflowId: string) => void;
+  onSetStartupWorkflow: (workflowId: string | null) => void;
+  onSkipStartupWorkflowOnce: () => void;
 }
 
 const ICON_MAP = {
@@ -96,6 +99,8 @@ function Spotlight({
   onResumeRecentSession,
   onApplyPreset,
   onRunWorkflow,
+  onSetStartupWorkflow,
+  onSkipStartupWorkflowOnce,
 }: SpotlightProps): React.JSX.Element | null {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -183,6 +188,34 @@ function Spotlight({
           onClose();
         },
       },
+      {
+        id: "action:skip-startup-workflow",
+        label: "Skip Startup Workflow Once",
+        hint: "Disable the next startup workflow run for this boot cycle",
+        category: "Workflow Control",
+        match: "skip startup workflow once disable next boot workflow".toLowerCase(),
+        rank: rankBoost("action:skip-startup-workflow", 74),
+        preview: "Use this when you want to boot the shell without auto-loading the armed startup workflow.",
+        meta: "Workflow Control · boot",
+        onSelect: () => {
+          onSkipStartupWorkflowOnce();
+          onClose();
+        },
+      },
+      {
+        id: "action:clear-startup-workflow",
+        label: "Clear Startup Workflow",
+        hint: "Remove any workflow armed for startup",
+        category: "Workflow Control",
+        match: "clear startup workflow remove armed startup workflow".toLowerCase(),
+        rank: rankBoost("action:clear-startup-workflow", 73),
+        preview: "Drop startup workflow automation and restore manual launch only.",
+        meta: "Workflow Control · startup",
+        onSelect: () => {
+          onSetStartupWorkflow(null);
+          onClose();
+        },
+      },
     ];
 
     const recentSessionActions: SpotlightAction[] = recentSessions.map((session, index) => ({
@@ -203,14 +236,33 @@ function Spotlight({
     const workflowActions: SpotlightAction[] = workflows.map((workflow, index) => ({
       id: `workflow:${workflow.id}`,
       label: workflow.label,
-      hint: `Run workflow for ${workflow.profile}`,
-      category: "Workflow",
-      match: `${workflow.label} ${workflow.profile} ${workflow.promptText} workflow combo`.toLowerCase(),
-      rank: 92 - index,
-      preview: `Launch workflow ${workflow.label} with saved prompt and profile ${workflow.profile}.`,
-      meta: `Workflow · ${workflow.profile}`,
+      hint: workflow.startup ? `Run startup workflow for ${workflow.profile}` : `Run workflow for ${workflow.profile}`,
+      category: workflow.startup ? "Startup Workflow" : "Workflow",
+      match: `${workflow.label} ${workflow.profile} ${workflow.promptText} workflow combo ${workflow.startup ? "startup" : ""}`.toLowerCase(),
+      rank: workflow.startup ? 99 - index : 92 - index,
+      preview: workflow.startup
+        ? `Launch startup workflow ${workflow.label} with saved prompt and profile ${workflow.profile}.`
+        : `Launch workflow ${workflow.label} with saved prompt and profile ${workflow.profile}.`,
+      meta: workflow.startup ? `Startup Workflow · ${workflow.profile}` : `Workflow · ${workflow.profile}`,
       onSelect: () => {
         onRunWorkflow(workflow.id);
+        onClose();
+      },
+    }));
+
+    const startupWorkflowControlActions: SpotlightAction[] = workflows.map((workflow, index) => ({
+      id: `workflow-startup:${workflow.id}`,
+      label: workflow.startup ? `Startup armed: ${workflow.label}` : `Arm startup: ${workflow.label}`,
+      hint: workflow.startup ? "This workflow already runs at boot" : "Set this workflow to auto-run at boot",
+      category: "Workflow Control",
+      match: `${workflow.label} startup arm boot workflow ${workflow.profile}`.toLowerCase(),
+      rank: 91 - index,
+      preview: workflow.startup
+        ? `Startup automation already points at ${workflow.label}.`
+        : `Arm ${workflow.label} as the workflow that runs after the boot sequence finishes.`,
+      meta: workflow.startup ? "Workflow Control · armed" : "Workflow Control · arm startup",
+      onSelect: () => {
+        onSetStartupWorkflow(workflow.id);
         onClose();
       },
     }));
@@ -230,7 +282,14 @@ function Spotlight({
       },
     }));
 
-    return [...recentSessionActions, ...workflowActions, ...presetActions, ...actionItems, ...viewActions];
+    return [
+      ...recentSessionActions,
+      ...workflowActions,
+      ...startupWorkflowControlActions,
+      ...presetActions,
+      ...actionItems,
+      ...viewActions,
+    ];
   }, [
     activeProfile,
     onApplyPreset,
@@ -240,6 +299,8 @@ function Spotlight({
     onResumeRecentSession,
     onRunWorkflow,
     onSearchSessions,
+    onSetStartupWorkflow,
+    onSkipStartupWorkflowOnce,
     onSnapWindow,
     presets,
     recentActionIds,

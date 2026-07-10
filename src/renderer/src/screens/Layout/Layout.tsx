@@ -1557,6 +1557,7 @@ function Layout(): React.JSX.Element {
                 label: workflow.label,
                 profile: workflow.profile,
                 promptText: workflow.promptText,
+                startup: workflow.startup,
               }))}
               onResumeRecentSession={(sessionId) => {
                 void handleResumeRecentSession(sessionId);
@@ -1567,6 +1568,21 @@ function Layout(): React.JSX.Element {
               onRunWorkflow={(workflowId) => {
                 const workflow = workflowPresets.find((item) => item.id === workflowId);
                 if (workflow) runWorkflowPreset(workflow);
+              }}
+              onSetStartupWorkflow={(workflowId) => {
+                setStartupWorkflowPreset(workflowId);
+              }}
+              onSkipStartupWorkflowOnce={() => {
+                skipStartupWorkflowRef.current = true;
+                pushEvent("Startup workflow skipped", "Next startup workflow auto-run disabled for this boot cycle", "warning");
+                setToasts((prev) => [
+                  {
+                    id: `${Date.now()}-skip-startup-workflow`,
+                    title: "Startup workflow skipped once",
+                    tone: "warning" as const,
+                  },
+                  ...prev,
+                ].slice(0, 4));
               }}
             />
             {booting && (
