@@ -147,7 +147,7 @@ describe("chat bidirectional text rendering", () => {
     );
 
     expect(
-      screen.getByText("مرحبا Hermes (123)").closest(".chat-bubble"),
+      screen.getByText("مرحبا Hermes (123)", { selector: ".chat-bubble" }),
     ).toHaveAttribute("dir", "auto");
   });
 });
