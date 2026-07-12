@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
 import type { DashboardRpcEvent } from "../dashboardGatewayClient";
 import { useDashboardChatTransport } from "./useDashboardChatTransport";
+import { useTranscriptState } from "./useTranscriptState";
 import type { ActiveTurn, ChatMessage, UsageState } from "../types";
 
 type SetUsageMock = Mock<(value: SetStateAction<UsageState | null>) => void>;
@@ -81,7 +82,9 @@ function Harness({
   onDashboardUnavailable?: (reason: string) => void;
   setUsage?: SetUsageMock;
 }): null {
-  const [messages, setMessages] = useState<ChatMessage[]>([
+  // Same write-through transcript state Chat.tsx uses — the transport's
+  // coalescing contract requires setMessages and messagesRef to be paired.
+  const { messages, setMessages, messagesRef } = useTranscriptState([
     {
       id: "u-bad",
       role: "user",
@@ -102,7 +105,7 @@ function Harness({
     enabled: true,
     fallbackOnUnavailable,
     hermesSessionId: null,
-    messages,
+    messagesRef,
     model,
     profile: undefined,
     provider,
@@ -784,5 +787,65 @@ describe("useDashboardChatTransport delta coalescing", () => {
       | { content?: string }
       | undefined;
     expect(lastAfter?.content).toBe("partial and done");
+  });
+
+  it("keeps pending deltas when a functional writer lands mid-frame", async () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      frames.push(cb);
+      return frames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", () => undefined);
+
+    const api: HarnessApi = {};
+    render(<Harness api={api} />);
+    await act(async () => {
+      await api.send?.("hello");
+    });
+
+    await act(async () => {
+      dashboardMock.onEvent?.({
+        payload: {},
+        session_id: "live-1",
+        type: "message.start",
+      });
+      dashboardMock.onEvent?.({
+        payload: { text: "alpha" },
+        session_id: "live-1",
+        type: "message.delta",
+      });
+      dashboardMock.onEvent?.({
+        payload: { text: "beta" },
+        session_id: "live-1",
+        type: "message.delta",
+      });
+    });
+
+    // Before the coalesced frame commits, a functional writer (the `/btw`
+    // side-question path) appends a bubble. It must build on the streamed
+    // deltas held in the transcript ref — not fork from the stale committed
+    // state and drop them.
+    await act(async () => {
+      api.setMessages?.((prev) => [
+        ...prev,
+        { id: "side-q", role: "user", content: "btw question" } as ChatMessage,
+      ]);
+    });
+    const afterAppend = api.messages ?? [];
+    expect(afterAppend[afterAppend.length - 1]?.id).toBe("side-q");
+    expect(
+      (afterAppend[afterAppend.length - 2] as { content?: string }).content,
+    ).toBe("alphabeta");
+
+    // The pending frame then fires: it republishes the newest transcript and
+    // must never resurrect the pre-append snapshot.
+    await act(async () => {
+      frames.forEach((cb) => cb(0));
+    });
+    const afterFlush = api.messages ?? [];
+    expect(afterFlush[afterFlush.length - 1]?.id).toBe("side-q");
+    expect(
+      (afterFlush[afterFlush.length - 2] as { content?: string }).content,
+    ).toBe("alphabeta");
   });
 });

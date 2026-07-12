@@ -154,6 +154,43 @@ describe("MessageList windowing", () => {
     expect(group.textContent).toBe("t0,t1,t2,t3,t4");
   });
 
+  it("bounds the tool-run nudge so a long run cannot defeat the window cap", () => {
+    // A contiguous run of 300 tool rows straddles the cut. The nudge may walk
+    // back at most one window; beyond that the run is split rather than
+    // re-mounting the entire transcript (the #748 regression the cap exists
+    // to prevent).
+    const head = Array.from({ length: 40 }, (_, i) => bubble(`h${i}`));
+    const run = Array.from({ length: 300 }, (_, i) => toolCall(`t${i}`));
+    const tail = Array.from({ length: 97 }, (_, i) => bubble(`b${i}`));
+    renderList([...head, ...run, ...tail]);
+
+    // Naive cut = index 337 (inside the run); the bounded walk stops at 237.
+    const group = screen.getByTestId("tool-group");
+    expect(group.textContent!.startsWith("t197,")).toBe(true);
+    expect(group.textContent!.endsWith("t299")).toBe(true);
+    // Rendered rows stay bounded: split run tail (103 rows) + 97 bubbles.
+    expect(screen.getAllByTestId("bubble")).toHaveLength(97);
+    // The label counts hidden *bubbles* (40 head), not the 200 hidden rows.
+    expect(screen.getByText(/"count":40/)).toBeTruthy();
+  });
+
+  it("makes progress on every expansion even when the cut sits in a tool run", () => {
+    // Same shape as above: a click must reveal a full extra window below the
+    // current effective cut (not re-derive the same cut), so the run unwinds
+    // instead of the button becoming a no-op.
+    const head = Array.from({ length: 40 }, (_, i) => bubble(`h${i}`));
+    const run = Array.from({ length: 300 }, (_, i) => toolCall(`t${i}`));
+    const tail = Array.from({ length: 97 }, (_, i) => bubble(`b${i}`));
+    renderList([...head, ...run, ...tail]);
+
+    fireEvent.click(screen.getByRole("button"));
+    // The cut walked back past the run start into the head bubbles: the whole
+    // run is visible again and only head bubbles stay hidden.
+    const group = screen.getByTestId("tool-group");
+    expect(group.textContent!.startsWith("t0,")).toBe(true);
+    expect(screen.getByText(/"count":39/)).toBeTruthy();
+  });
+
   it("keeps empty streaming placeholders out but history rows in", () => {
     const messages: ChatMessage[] = [
       bubble("u1"),

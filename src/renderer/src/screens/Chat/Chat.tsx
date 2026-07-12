@@ -11,6 +11,7 @@ import { WorktreePanel } from "./WorktreePanel";
 import { RemoteFolderPicker } from "./RemoteFolderPicker";
 import { WebPreviewPanel } from "./WebPreviewPanel";
 import { useChatScroll } from "./hooks/useChatScroll";
+import { useTranscriptState } from "./hooks/useTranscriptState";
 import { useChatIPC } from "./hooks/useChatIPC";
 import { useChatActions, parseBackgroundCommand } from "./hooks/useChatActions";
 import {
@@ -122,9 +123,11 @@ function Chat({
   onTitleChange,
 }: ChatProps): React.JSX.Element {
   const { t } = useI18n();
-  const [messages, setMessages] = useState<ChatMessage[]>(
-    initialMessages ?? [],
-  );
+  // Write-through transcript state: `messagesRef` is the synchronous source
+  // of truth shared with the transports; see useTranscriptState for the
+  // invariants the streaming coalescing depends on.
+  const { messages, setMessages, messagesRef } =
+    useTranscriptState(initialMessages);
   const [isLoading, setIsLoading] = useState(false);
   useEffect(() => {
     onLoadingChange?.(runId, isLoading);
@@ -457,12 +460,8 @@ function Chat({
   }, [active]);
 
   // "Copy entire chat" context-menu items (issue #298) — serialise the whole
-  // conversation in the requested format and copy it. A ref keeps the latest
-  // messages without re-registering the IPC listener on every chunk.
-  const messagesRef = useRef(messages);
-  useEffect(() => {
-    messagesRef.current = messages;
-  });
+  // conversation in the requested format and copy it. The transcript ref keeps
+  // the latest messages without re-registering the IPC listener on every chunk.
   useEffect(() => {
     if (!active) return;
     return window.hermesAPI.onContextMenuCopyChat((format) => {
@@ -580,7 +579,7 @@ function Chat({
     enabled: dashboardChatEnabled,
     fallbackOnUnavailable: chatTransportPreference === "auto",
     hermesSessionId,
-    messages,
+    messagesRef,
     model: chatCurrentModel,
     modelBaseUrl: chatCurrentBaseUrl,
     profile,

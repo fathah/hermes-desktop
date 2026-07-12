@@ -85,7 +85,10 @@ interface UseDashboardChatTransportArgs {
   enabled: boolean;
   fallbackOnUnavailable: boolean;
   hermesSessionId: string | null;
-  messages: ChatMessage[];
+  /** Write-through transcript ref from useTranscriptState — the synchronous
+   *  source of truth this hook applies stream deltas to. Must be the same ref
+   *  the provided `setMessages` maintains, or coalesced deltas can be lost. */
+  messagesRef: React.MutableRefObject<ChatMessage[]>;
   model?: string;
   modelBaseUrl?: string;
   profile?: string;
@@ -889,7 +892,7 @@ export function useDashboardChatTransport({
   enabled,
   fallbackOnUnavailable,
   hermesSessionId,
-  messages,
+  messagesRef,
   model,
   modelBaseUrl,
   profile,
@@ -913,7 +916,6 @@ export function useDashboardChatTransport({
   const dashboardUnavailableRef = useRef(false);
   const runtimeSessionIdRef = useRef<string | null>(null);
   const storedSessionIdRef = useRef<string | null>(hermesSessionId);
-  const messagesRef = useRef<ChatMessage[]>(messages);
   const reasoningSegmentClosedRef = useRef(false);
   const appliedModelRef = useRef<string | null>(null);
   const recreateRuntimeSessionRef = useRef(false);
@@ -925,48 +927,56 @@ export function useDashboardChatTransport({
   const lastSyncedCwdRef = useRef<string | null>(null);
   // Delta coalescing: streaming events arrive many times per second, and each
   // `setMessages` costs a full transcript reconciliation. Deltas are applied
-  // to `messagesRef` synchronously (no data loss — the ref stays the source of
-  // truth), but the React commit is batched to one per animation frame. The
-  // guard array pins what the scheduled flush is allowed to publish: if some
-  // other actor (new user turn, clear, clarify) replaced the ref meanwhile, it
-  // already called `setMessages` itself and the stale flush must not overwrite
-  // that newer state.
+  // to `messagesRef` synchronously — the write-through ref from
+  // useTranscriptState is the source of truth every transcript writer builds
+  // on — while the React commit is batched to one per animation frame. The
+  // flush publishes whatever the ref holds at frame time, so a frame that
+  // fires after another writer took over simply republishes (or advances to)
+  // that newer state; it can never resurrect an older transcript. That
+  // one-way property is what previously required a pinned-array guard here,
+  // and it dropped chunks when a functional writer forked from a pre-delta
+  // commit (#757's coalesced twin).
   const deltaFlushHandleRef = useRef<number | null>(null);
-  const deltaFlushArrayRef = useRef<ChatMessage[] | null>(null);
 
-  useEffect(() => {
-    // `messagesRef` is the synchronous source of truth for `handleGatewayEvent`:
-    // it reads the ref, applies a stream delta, writes the ref back, then calls
-    // `setMessages`. Every `setMessages` in this hook stores that exact array in
-    // the ref, so when React finally commits our own push, `messages` is the
-    // very same reference and there is nothing to do. Re-syncing on that commit
-    // is what dropped streaming chunks (#757): a second delta could land on an
-    // older `messages` snapshot and reset the ref behind the deltas already
-    // applied. Skip when the identity matches (our push); adopt any other array,
-    // which can only come from Chat state changing underneath us — a new user
-    // turn (grows), `handleClear` (`setMessages([])`, shrinks), or a clarify
-    // card resolving in place (same length). A length check misses the last two.
-    if (messages !== messagesRef.current) {
-      messagesRef.current = messages;
-    }
-  }, [messages]);
-
-  useEffect(() => {
-    // Cancel any pending coalesced flush on unmount/teardown. The guard in
-    // the flush callback already makes a stale run harmless; this just avoids
-    // setState-after-unmount warnings.
-    return () => {
-      if (deltaFlushHandleRef.current !== null) {
-        const cancel =
-          typeof cancelAnimationFrame === "function"
-            ? cancelAnimationFrame
-            : clearTimeout;
-        cancel(deltaFlushHandleRef.current);
-        deltaFlushHandleRef.current = null;
-        deltaFlushArrayRef.current = null;
-      }
-    };
+  const cancelScheduledFlush = useCallback((): void => {
+    if (deltaFlushHandleRef.current === null) return;
+    const cancel =
+      typeof cancelAnimationFrame === "function"
+        ? cancelAnimationFrame
+        : clearTimeout;
+    cancel(deltaFlushHandleRef.current);
+    deltaFlushHandleRef.current = null;
   }, []);
+
+  // Coalesced commit for high-frequency streaming events; at most one
+  // `setMessages` per animation frame while a burst of deltas lands.
+  const scheduleDeltaFlush = useCallback((): void => {
+    if (deltaFlushHandleRef.current !== null) return;
+    const raf =
+      typeof requestAnimationFrame === "function"
+        ? requestAnimationFrame
+        : (cb: FrameRequestCallback): number =>
+            setTimeout(() => cb(0), 16) as unknown as number;
+    deltaFlushHandleRef.current = raf(() => {
+      deltaFlushHandleRef.current = null;
+      setMessages(messagesRef.current);
+    });
+  }, [setMessages, messagesRef]);
+
+  // Immediate commit for lifecycle events, superseding any pending frame.
+  const flushDeltasNow = useCallback(
+    (next: ChatMessage[]): void => {
+      cancelScheduledFlush();
+      setMessages(next);
+    },
+    [cancelScheduledFlush, setMessages],
+  );
+
+  useEffect(() => {
+    // Cancel any pending coalesced flush on unmount/teardown — just avoids a
+    // setState-after-unmount; nothing is lost, the ref stays the truth.
+    return cancelScheduledFlush;
+  }, [cancelScheduledFlush]);
 
   useEffect(() => {
     if (hermesSessionId === storedSessionIdRef.current) return;
@@ -1002,42 +1012,6 @@ export function useDashboardChatTransport({
 
   const handleGatewayEvent = useCallback(
     (event: DashboardStreamEvent): void => {
-      // Coalesced commit for high-frequency streaming events. `messagesRef`
-      // is updated synchronously per event; the `setMessages` commit rides
-      // one animation frame. Terminal events flush immediately.
-      const scheduleDeltaFlush = (next: ChatMessage[]): void => {
-        deltaFlushArrayRef.current = next;
-        if (deltaFlushHandleRef.current !== null) return;
-        const raf =
-          typeof requestAnimationFrame === "function"
-            ? requestAnimationFrame
-            : (cb: FrameRequestCallback): number =>
-                setTimeout(() => cb(0), 16) as unknown as number;
-        deltaFlushHandleRef.current = raf(() => {
-          deltaFlushHandleRef.current = null;
-          const pending = deltaFlushArrayRef.current;
-          deltaFlushArrayRef.current = null;
-          // Only publish if the ref still holds what we queued — otherwise a
-          // non-delta path (user turn, clear, clarify) has taken over and
-          // already committed newer state.
-          if (pending !== null && messagesRef.current === pending) {
-            setMessages(pending);
-          }
-        });
-      };
-      const flushDeltasNow = (next: ChatMessage[]): void => {
-        deltaFlushArrayRef.current = null;
-        if (deltaFlushHandleRef.current !== null) {
-          const cancel =
-            typeof cancelAnimationFrame === "function"
-              ? cancelAnimationFrame
-              : clearTimeout;
-          cancel(deltaFlushHandleRef.current);
-          deltaFlushHandleRef.current = null;
-        }
-        setMessages(next);
-      };
-
       const runtimeSessionId = runtimeSessionIdRef.current;
       if (
         event.session_id &&
@@ -1068,8 +1042,7 @@ export function useDashboardChatTransport({
             content: `${label}${body}`,
           },
         ];
-        messagesRef.current = appended;
-        setMessages(appended);
+        flushDeltasNow(appended);
         return;
       }
 
@@ -1106,7 +1079,7 @@ export function useDashboardChatTransport({
         event.type === "tool.progress" ||
         event.type === "tool.generating";
       if (isCoalescableDelta) {
-        scheduleDeltaFlush(nextMessages);
+        scheduleDeltaFlush();
       } else {
         flushDeltasNow(nextMessages);
       }
@@ -1186,6 +1159,9 @@ export function useDashboardChatTransport({
     [
       activeTurnRef,
       connectionMode,
+      flushDeltasNow,
+      messagesRef,
+      scheduleDeltaFlush,
       setIsLoading,
       setMessages,
       setToolProgress,
@@ -1515,15 +1491,7 @@ export function useDashboardChatTransport({
           const message = err instanceof Error ? err.message : String(err);
           const activeTurn = activeTurnRef.current;
           if (activeTurn) activeTurn.status = "failed";
-          setMessages((prev) => {
-            const failedMessages = markActiveTurnFailed(
-              prev,
-              message,
-              activeTurn,
-            );
-            messagesRef.current = failedMessages;
-            return failedMessages;
-          });
+          setMessages((prev) => markActiveTurnFailed(prev, message, activeTurn));
           activeTurnRef.current = null;
           setToolProgress(null);
           setIsLoading(false);
@@ -1563,15 +1531,10 @@ export function useDashboardChatTransport({
       const failActiveTurn = (message: string): true => {
         const activeTurn = activeTurnRef.current;
         if (activeTurn) activeTurn.status = "failed";
-        let failedMessages: ChatMessage[] | null = null;
-        setMessages((prev) => {
-          failedMessages = markActiveTurnFailed(prev, message, activeTurn);
-          messagesRef.current = failedMessages;
-          return failedMessages;
-        });
+        setMessages((prev) => markActiveTurnFailed(prev, message, activeTurn));
         const storedSessionId = storedSessionIdRef.current;
         const userContent = userContentById(
-          failedMessages ?? messagesRef.current,
+          messagesRef.current,
           activeTurn?.userId,
         );
         const recordLocalError = window.hermesAPI.recordSessionLocalError;

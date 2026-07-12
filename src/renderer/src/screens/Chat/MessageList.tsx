@@ -90,8 +90,10 @@ export const MessageList = memo(function MessageList({
 }: MessageListProps): React.JSX.Element {
   const { t } = useI18n();
   // Rows the user expanded beyond the default window. Kept as a count of
-  // *extra* rows (not an absolute index) so new streaming rows never shift
-  // what the user chose to reveal.
+  // *extra* rows (not an absolute index) so the mounted tree stays bounded:
+  // the window slides forward as new rows stream in, re-collapsing the oldest
+  // revealed rows rather than growing without limit. Native scroll anchoring
+  // keeps the viewport steady when rows unmount above it.
   const [extraRows, setExtraRows] = useState(0);
 
   // Reset the expansion when the component is reused for a different
@@ -118,6 +120,10 @@ export const MessageList = memo(function MessageList({
     scrollTop: number;
   } | null>(null);
 
+  // Rows currently rendered (windowed count), snapshotted each render so
+  // expandEarlier can derive the next budget from the *effective* cut.
+  const renderedCountRef = useRef(0);
+
   const expandEarlier = useCallback(() => {
     const container = earlierMarkerRef.current?.closest(
       ".chat-messages",
@@ -129,7 +135,10 @@ export const MessageList = memo(function MessageList({
         scrollTop: container.scrollTop,
       };
     }
-    setExtraRows((n) => n + TRANSCRIPT_WINDOW);
+    // Reveal exactly one window below the current effective cut. Deriving the
+    // budget from the rendered count (instead of incrementing it) guarantees
+    // every click makes progress even when the cut was nudged for a tool run.
+    setExtraRows(renderedCountRef.current);
   }, []);
 
   // Restore the viewport after the newly revealed rows commit (pre-paint, so
@@ -181,20 +190,43 @@ export const MessageList = memo(function MessageList({
   // "show earlier" button. The cut is clamped so the newest bubble is never
   // sliced out (a long trailing run of reasoning/tool rows must not window
   // away the bubble that owns the approval bar), then nudged back to the
-  // start of a tool run so a ToolActivityGroup is never split in half.
+  // start of a tool run so a ToolActivityGroup is never split in half. The
+  // nudge is bounded to one window: a pathological run of hundreds of
+  // contiguous tool rows splits at the bound instead of walking the cut all
+  // the way back and defeating the windowing cap.
   const windowLimit = TRANSCRIPT_WINDOW + extraRows;
   let windowStart = Math.max(0, visibleMessages.length - windowLimit);
   if (lastVisibleBubbleIndex >= 0 && windowStart > lastVisibleBubbleIndex) {
     windowStart = lastVisibleBubbleIndex;
   }
-  while (windowStart > 0 && isToolRow(visibleMessages[windowStart])) {
+  const nudgeFloor = Math.max(0, windowStart - TRANSCRIPT_WINDOW);
+  while (windowStart > nudgeFloor && isToolRow(visibleMessages[windowStart])) {
     windowStart--;
   }
   const hiddenCount = windowStart;
   const windowedMessages =
     windowStart > 0 ? visibleMessages.slice(windowStart) : visibleMessages;
+  renderedCountRef.current = windowedMessages.length;
+
+  // The button label counts hidden *messages* (user/agent bubbles), not raw
+  // rows — reasoning and tool rows would triple the number in agentic
+  // sessions. All-history heads (no hidden bubble at all) fall back to the
+  // row count rather than showing zero.
+  const hiddenMessageCount = useMemo(() => {
+    let n = 0;
+    for (let i = 0; i < windowStart; i++) {
+      if (isBubble(visibleMessages[i])) n++;
+    }
+    return n;
+  }, [visibleMessages, windowStart]);
 
   // Observe the top marker while rows are hidden (see comment block above).
+  // `extraRows` is a dependency on purpose: IntersectionObserver only reports
+  // *transitions*, so after an expansion whose revealed content is shorter
+  // than the rootMargin (e.g. 100 tool rows folding into one collapsed group)
+  // the marker never leaves the zone and a persistent observer would go
+  // silent. Recreating it re-delivers an initial entry, which keeps the
+  // auto-load going until the marker is genuinely out of range.
   const hasEarlier = hiddenCount > 0;
   useEffect(() => {
     const marker = earlierMarkerRef.current;
@@ -211,7 +243,7 @@ export const MessageList = memo(function MessageList({
     );
     observer.observe(marker);
     return () => observer.disconnect();
-  }, [hasEarlier, expandEarlier]);
+  }, [hasEarlier, extraRows, expandEarlier]);
 
   // The row hidden just above the window cut. Avatar grouping consults it so
   // a continuation row at the cut doesn't masquerade as a new turn.
@@ -317,7 +349,9 @@ export const MessageList = memo(function MessageList({
             className="chat-transcript-earlier-btn"
             onClick={expandEarlier}
           >
-            {t("chat.showEarlierMessages", { count: hiddenCount })}
+            {t("chat.showEarlierMessages", {
+              count: hiddenMessageCount > 0 ? hiddenMessageCount : hiddenCount,
+            })}
           </button>
         </div>
       )}
