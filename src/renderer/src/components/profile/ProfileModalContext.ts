@@ -1,11 +1,21 @@
 import { createContext, useContext } from "react";
 
+/** Left-nav sections of the profile modal. */
+export type ProfileSection =
+  | "profile"
+  | "persona"
+  | "agentMemory"
+  | "wallet"
+  | "advanced";
+
 /** Optional callbacks supplied by whoever opens the profile modal. */
 export interface OpenProfileOptions {
   /** Fired after any successful mutation so the opener can refresh its list. */
   onChanged?: () => void;
   /** Fired after the profile is deleted. */
   onDeleted?: (name: string) => void;
+  /** Section to show on open (e.g. the bank ATM jumps straight to "wallet"). */
+  initialSection?: ProfileSection;
 }
 
 export interface ProfileModalContextValue {

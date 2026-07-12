@@ -190,6 +190,25 @@ function TrafficLightGlb({
 const SKYLINE_COUNT = 110;
 const SKYLINE_UP = new THREE.Vector3(0, 1, 0);
 
+// Road corridors the skyline must keep clear: the roads run the full
+// ROAD_LEN (±300) out into the skyline band and traffic loops over ±160, so
+// a tower straddling a carriageway would have cars driving through it.
+const SKYLINE_X_ROAD_ZS = ROADS.filter((r) => r.axis === "x").map(
+  (r) => r.center,
+);
+const SKYLINE_Z_ROAD_XS = ROADS.filter((r) => r.axis === "z").map(
+  (r) => r.center,
+);
+
+/** True when a tower (conservative half-diagonal `rad`) clears every road. */
+function skylineClearOfRoads(px: number, pz: number, rad: number): boolean {
+  const need = rad + ROAD_WIDTH / 2 + 1.2;
+  return (
+    !SKYLINE_X_ROAD_ZS.some((c) => Math.abs(pz - c) < need) &&
+    !SKYLINE_Z_ROAD_XS.some((c) => Math.abs(px - c) < need)
+  );
+}
+
 export const DistantSkyline = memo(
   function DistantSkyline(): React.JSX.Element {
     const meshRef = useRef<THREE.InstancedMesh>(null);
@@ -203,20 +222,34 @@ export const DistantSkyline = memo(
       const scl = new THREE.Vector3();
       const color = new THREE.Color();
       for (let i = 0; i < SKYLINE_COUNT; i++) {
-        const angle = seededRandom(i * 3 + 1) * Math.PI * 2;
-        // Bias towards the outer edge so towers stack into a skyline wall.
-        const radius = 75 + Math.pow(seededRandom(i * 3 + 2), 0.7) * 190;
         const w = 5 + seededRandom(i * 3 + 3) * 12;
         const d = 5 + seededRandom(i * 5 + 4) * 12;
+        // Rotation is an arbitrary yaw, so use the half-diagonal as the
+        // footprint radius when testing road clearance.
+        const rad = Math.hypot(w, d) / 2;
+        // Deterministic rejection sampling: re-roll the polar position until
+        // the tower clears every road corridor. Corridors cover a small
+        // fraction of the band so a few attempts always land; the rare
+        // stubborn tower is dropped (scale 0) rather than left on a road.
+        let radius = 75;
+        let px = 0;
+        let pz = 0;
+        let placed = false;
+        for (let attempt = 0; attempt < 14 && !placed; attempt++) {
+          const s = i * 3 + attempt * 7919;
+          const angle = seededRandom(s + 1) * Math.PI * 2;
+          // Bias towards the outer edge so towers stack into a skyline wall.
+          radius = 75 + Math.pow(seededRandom(s + 2), 0.7) * 190;
+          px = Math.cos(angle) * radius;
+          pz = Math.sin(angle) * radius;
+          placed = skylineClearOfRoads(px, pz, rad);
+        }
         // Further rings grow taller so they stay visible over nearer ones.
         const h = 8 + seededRandom(i * 7 + 5) * 28 + (radius - 75) * 0.12;
         quat.setFromAxisAngle(SKYLINE_UP, seededRandom(i * 11 + 6) * Math.PI);
-        pos.set(
-          Math.cos(angle) * radius,
-          h / 2 - 0.1,
-          Math.sin(angle) * radius,
-        );
-        scl.set(w, h, d);
+        pos.set(px, h / 2 - 0.1, pz);
+        if (placed) scl.set(w, h, d);
+        else scl.setScalar(0);
         matrix.compose(pos, quat, scl);
         mesh.setMatrixAt(i, matrix);
         color.setHSL(215 / 360, 0.1, 0.36 + seededRandom(i * 13 + 7) * 0.22);

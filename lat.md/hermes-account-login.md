@@ -9,6 +9,7 @@ on the user's behalf.
 
 The backend serves the grant (see the backend's `lat.md/device-login.md`); this
 document covers the desktop half — the client, secure storage, IPC, and UI.
+The stored token's first consumer is [[agent-sync|cloud agent sync]].
 
 ## Device login client
 
@@ -20,9 +21,16 @@ can open and the modal can show it, then polls `/api/device/token` until the gra
 resolves. [[src/main/hermes-account.ts#cancelDeviceLogin]] stops an abandoned flow
 (single-flight, mirroring [[src/main/hermes-auth.ts#runHermesAuthLogin]]).
 
-The backend base URL is configurable via `HERMES_API_URL`, defaulting to the
-local Nitro dev server (`http://localhost:3002`) — see
-[[src/main/hermes-account.ts#getApiUrl]].
+The backend base URL resolves in [[src/main/hermes-account.ts#getApiUrl]]:
+runtime `HERMES_API_URL` (dev/user override) → build-time
+`MAIN_VITE_HERMES_API_URL` (baked in by the release workflow, same pattern as
+the renderer's `VITE_ANALYTICS_*`) → the local Nitro dev server
+(`http://localhost:3002`). An optional client key
+([[src/main/hermes-account.ts#getApiKey]], `MAIN_VITE_HERMES_API_KEY` /
+`HERMES_API_KEY`) is sent as `x-api-key` via
+[[src/main/hermes-account.ts#apiHeaders]] on all backend calls (device login
+and [[agent-sync|agent sync]]); the backend doesn't require it yet, and a key
+shipped in a desktop binary is extractable — abuse-limiting, not a secret.
 
 Each poll response is turned into the next action by the pure
 [[src/main/hermes-account.ts#interpretTokenResponse]]: `pending` keeps polling,
@@ -42,6 +50,10 @@ returns only the public profile (`apiUrl` + user), while
 [[src/main/account-store.ts#getAccessToken]] decrypts the token for authenticated
 backend calls, and [[src/main/account-store.ts#clearAccount]] signs out.
 
+Because the file lives under whichever profile was active at sign-in, app-wide
+consumers locate it with [[src/main/account-store.ts#findAccountProfile]]
+(default home first, then named profiles) — see [[agent-sync#Sync engine]].
+
 ## IPC and UI
 
 The main process exposes `hermes-account-login` (+ `-cancel`, `-get`, `-logout`)
@@ -52,11 +64,20 @@ progress/code events to the renderer. The preload bridge surfaces these as
 `accountLogin`, `getAccount`, etc. on `window.hermesAPI` ([[src/preload/index.ts]]),
 typed with the shared shapes in [[src/shared/account.ts]].
 
+The account is device-wide, so the `-get` handler resolves it through
+[[src/main/account-store.ts#findAccountProfile]] rather than the active
+profile — switching agents must not read as signed out just because
+`account.json` lives under the profile that was active at sign-in. Likewise
+`-logout` calls [[src/main/account-store.ts#clearAllAccounts]], which sweeps
+every profile home holding an account file (two sign-ins on different
+profiles leave two), so signing out signs the whole device out.
+
 In the renderer, [[src/renderer/src/components/HermesAccountModal.tsx]] shows the
 `user_code` to confirm and reports the result, and
 [[src/renderer/src/screens/Providers/Providers.tsx]] hosts the "Hermes One
-account" card that opens it and shows the signed-in identity with a Sign out
-action.
+account" card that opens it; once signed in it renders an identity card —
+avatar (or letter fallback), name/email, a "Connected" status line — with a
+Sign out action.
 
 ## Tests
 
@@ -65,5 +86,12 @@ Unit tests cover the two pieces that can break silently.
 [[src/main/account-store.test.ts]] round-trips the encrypted token, asserts the
 public shape never leaks it, and checks logout and the "secure storage
 unavailable" guard. [[src/main/hermes-account.test.ts]] exercises
-[[src/main/hermes-account.ts#interpretTokenResponse]] across every RFC branch and
-the `HERMES_API_URL` default/override.
+[[src/main/hermes-account.ts#interpretTokenResponse]] across every RFC branch,
+the base-URL resolution order (runtime override → baked build-time value →
+localhost default), and the conditional `x-api-key` header.
+
+### Signs out everywhere
+
+With accounts saved under both the default home and a named profile,
+`clearAllAccounts` removes every one — afterwards `findAccountProfile` is null
+and both profiles read as signed out.

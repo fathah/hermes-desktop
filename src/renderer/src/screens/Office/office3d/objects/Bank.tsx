@@ -1,16 +1,15 @@
-import { Suspense, memo, useEffect, useMemo, useRef } from "react";
-import { useFrame } from "@react-three/fiber";
+import { Suspense, memo, useMemo } from "react";
 import { useGLTF, useTexture } from "@react-three/drei";
 import * as THREE from "three";
-import { clone as SkeletonClone } from "three/examples/jsm/utils/SkeletonUtils.js";
 import atmGlbUrl from "../assets/atm.glb?url";
 import sofaGlbUrl from "../assets/loungeSofa.glb?url";
 import sofaChairGlbUrl from "../assets/sofa_chair.glb?url";
-import manGlbUrl from "../assets/man.glb?url";
 import baseBankLogoUrl from "../assets/images/base-bank.webp";
 import { WORLD_H } from "../core/constants";
-import { seededRandom } from "../core/rng";
 import { glbClone } from "../core/glb";
+import { CHARACTER_MODELS } from "../core/characters";
+import { Interactable } from "./Interactable";
+import { StaffPerson } from "./StaffPerson";
 import {
   BANK_W,
   BANK_D,
@@ -159,7 +158,13 @@ function BankGlbItem({
   );
 }
 
-function BankATMs(): React.JSX.Element {
+function BankATMs({
+  interactive = false,
+  onAtmActivate,
+}: {
+  interactive?: boolean;
+  onAtmActivate?: () => void;
+}): React.JSX.Element {
   const positions: Array<{ pos: [number, number, number]; rotY: number }> = [
     { pos: [-BANK_W / 2 + 1.2, 0, BANK_D / 2 - 2], rotY: Math.PI },
     { pos: [-BANK_W / 2 + 3.0, 0, BANK_D / 2 - 2], rotY: Math.PI },
@@ -169,14 +174,23 @@ function BankATMs(): React.JSX.Element {
   return (
     <group>
       {positions.map(({ pos, rotY }, i) => (
-        <BankGlbItem
+        <Interactable
           key={`atm-${i}`}
-          url={atmGlbUrl}
+          enabled={interactive && !!onAtmActivate}
+          label="ATM"
+          onActivate={() => onAtmActivate?.()}
           position={pos}
-          rotation={[0, rotY, 0]}
-          scale={[4.5, 4.5, 4.5]}
-          tint={null}
-        />
+          labelHeight={1.9}
+          ringRadius={0.75}
+        >
+          <BankGlbItem
+            url={atmGlbUrl}
+            position={[0, 0, 0]}
+            rotation={[0, rotY, 0]}
+            scale={[4.5, 4.5, 4.5]}
+            tint={null}
+          />
+        </Interactable>
       ))}
     </group>
   );
@@ -238,147 +252,52 @@ function BankDecor(): React.JSX.Element {
   );
 }
 
-interface BankPersonState {
-  x: number;
-  z: number;
-  facing: number;
-  walkSpeed: number;
-  path: Array<[number, number]>;
-  pathIndex: number;
-}
+// Teller uniforms — deliberately more sober than the customers' shirts.
+const TELLER_TINTS = ["#27496d", "#3a3f55", "#5c4a72"];
 
-function makeBankPeopleStates(count: number): BankPersonState[] {
-  const people: BankPersonState[] = [];
-  const waypoints: Array<[number, number]> = [
-    [0, BANK_D / 2 - 3],
-    [0, 0],
-    [-BANK_W / 2 + 3, 0],
-    [BANK_W / 2 - 3, 0],
-    [-BANK_W / 2 + 3, -BANK_D / 2 + 4],
-    [BANK_W / 2 - 3, -BANK_D / 2 + 4],
-    [-4, -BANK_D / 2 + 3],
-    [4, -BANK_D / 2 + 3],
-    [0, BANK_D / 2 - 5],
-    [-6, 2],
-    [6, -2],
-  ];
-  for (let i = 0; i < count; i++) {
-    const start = waypoints[i % waypoints.length];
-    const next = waypoints[(i + 1) % waypoints.length];
-    people.push({
-      x: start[0] + (seededRandom(i + 100) - 0.5) * 2,
-      z: start[1] + (seededRandom(i + 200) - 0.5) * 2,
-      facing: Math.atan2(next[0] - start[0], next[1] - start[1]),
-      walkSpeed: 0.8 + seededRandom(i + 400) * 0.6,
-      path: [start, next, waypoints[(i + 2) % waypoints.length]],
-      pathIndex: 0,
-    });
-  }
-  return people;
-}
-
-function BankManInstance({
-  state,
-  tint,
+/**
+ * Bank staff: one teller standing behind each counter station, facing the
+ * customers. In interior mode each teller is an Interactable — clicking one
+ * opens the bank's representative menu (account status, balances, new
+ * accounts) up in the Office screen.
+ */
+function BankTellers({
+  interactive = false,
+  label,
+  onTellerActivate,
 }: {
-  state: BankPersonState;
-  tint: string;
+  interactive?: boolean;
+  /** Hover label (pre-translated — i18n can't cross the Canvas). */
+  label?: string;
+  onTellerActivate?: () => void;
 }): React.JSX.Element {
-  const groupRef = useRef<THREE.Group>(null);
-  const { scene, animations } = useGLTF(manGlbUrl);
-
-  const { cloned, mixer, walkIdx, idleIdx, autoScale } = useMemo(() => {
-    const c = SkeletonClone(scene);
-    c.updateMatrixWorld(true);
-    const tintColor = new THREE.Color(tint);
-    c.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-        child.frustumCulled = false;
-        const isArr = Array.isArray(child.material);
-        const mats = isArr
-          ? (child.material as THREE.Material[])
-          : [child.material as THREE.Material];
-        const tinted = mats.map((m) => {
-          const src = m as THREE.MeshStandardMaterial;
-          const next = src.clone();
-          if (next instanceof THREE.MeshStandardMaterial && next.color) {
-            next.color.lerp(tintColor, 0.5);
-          }
-          return next;
-        });
-        child.material = isArr ? tinted : tinted[0];
-      }
-    });
-    const bbox = new THREE.Box3().setFromObject(c);
-    const size = new THREE.Vector3();
-    bbox.getSize(size);
-    const aScale = size.y > 0 ? 0.65 / size.y : 1;
-    const m = new THREE.AnimationMixer(c);
-    const names = animations.map((a) => a.name.toLowerCase());
-    const wIdx = names.findIndex((n) => n.includes("walk"));
-    const iIdx = names.findIndex((n) => n.includes("idle"));
-    return {
-      cloned: c,
-      mixer: m,
-      walkIdx: wIdx,
-      idleIdx: iIdx,
-      autoScale: aScale,
-    };
-  }, [scene, animations, tint]);
-
-  useEffect(() => {
-    const idx = walkIdx >= 0 ? walkIdx : idleIdx;
-    if (idx >= 0 && animations[idx]) {
-      mixer.clipAction(animations[idx], cloned).reset().play();
-    }
-    return () => {
-      mixer.stopAllAction();
-      mixer.uncacheRoot(cloned);
-    };
-  }, [mixer, cloned, animations, walkIdx, idleIdx]);
-
-  useFrame((_, delta) => {
-    mixer.update(Math.min(delta, 1 / 30));
-    if (!groupRef.current) return;
-    groupRef.current.position.set(state.x, 0, state.z);
-    groupRef.current.rotation.y = state.facing;
-    const step = Math.min(delta, 0.05);
-    const target = state.path[state.pathIndex];
-    if (!target) return;
-    const dx = target[0] - state.x;
-    const dz = target[1] - state.z;
-    const dist = Math.hypot(dx, dz);
-    if (dist < 0.5) {
-      state.pathIndex = (state.pathIndex + 1) % state.path.length;
-      return;
-    }
-    const move = state.walkSpeed * step;
-    state.x += (dx / dist) * move;
-    state.z += (dz / dist) * move;
-    state.facing = Math.atan2(dx, dz);
-  });
-
+  const counterW = 10;
+  const numStations = 3;
+  const stationW = counterW / numStations;
+  // The counter row sits at z = -BANK_D/2 + 2.5 and is 1.2 deep; tellers
+  // stand just north of it, facing south (+Z) toward the hall.
+  const tellerZ = -BANK_D / 2 + 2.5 - 1.4;
   return (
-    <group ref={groupRef}>
-      <primitive object={cloned} scale={autoScale * 1.45} />
-    </group>
-  );
-}
-
-function BankFakePeople({ count }: { count: number }): React.JSX.Element {
-  const states = useRef<BankPersonState[]>(makeBankPeopleStates(count));
-  return (
-    <>
-      {states.current.map((s, i) => (
-        <BankManInstance
-          key={`bfp-${i}`}
-          state={s}
-          tint={BANK_PALETTE.personShirt[i % BANK_PALETTE.personShirt.length]}
-        />
+    <group>
+      {Array.from({ length: numStations }).map((_, i) => (
+        <Interactable
+          key={`teller-${i}`}
+          enabled={interactive && !!onTellerActivate}
+          label={label ?? "Teller"}
+          onActivate={() => onTellerActivate?.()}
+          position={[-counterW / 2 + stationW * (i + 0.5), 0, tellerZ]}
+          labelHeight={2.1}
+          ringRadius={0.55}
+        >
+          <StaffPerson
+            position={[0, 0, 0]}
+            rotationY={0}
+            tint={TELLER_TINTS[i % TELLER_TINTS.length]}
+            model={CHARACTER_MODELS[i % CHARACTER_MODELS.length]}
+          />
+        </Interactable>
       ))}
-    </>
+    </group>
   );
 }
 
@@ -445,17 +364,31 @@ export const ConnectingStreet = memo(
 /** The complete bank building placed north of the office. */
 export const BankSection = memo(function BankSection({
   position = [BANK_X, 0, BANK_Z],
+  interactive = false,
+  onAtmActivate,
+  tellerLabel,
+  onTellerActivate,
 }: {
   position?: [number, number, number];
+  /** Interior mode: ATMs and tellers become hover/click interactables. */
+  interactive?: boolean;
+  onAtmActivate?: () => void;
+  /** Pre-translated teller hover label. */
+  tellerLabel?: string;
+  onTellerActivate?: () => void;
 } = {}): React.JSX.Element {
   return (
     <group position={position}>
       <BankShell />
       <BankCounterRow />
       <Suspense fallback={null}>
-        <BankATMs />
+        <BankATMs interactive={interactive} onAtmActivate={onAtmActivate} />
         <BankDecor />
-        <BankFakePeople count={8} />
+        <BankTellers
+          interactive={interactive}
+          label={tellerLabel}
+          onTellerActivate={onTellerActivate}
+        />
       </Suspense>
     </group>
   );
@@ -464,4 +397,3 @@ export const BankSection = memo(function BankSection({
 useGLTF.preload(atmGlbUrl, false, false);
 useGLTF.preload(sofaGlbUrl, false, false);
 useGLTF.preload(sofaChairGlbUrl, false, false);
-useGLTF.preload(manGlbUrl);

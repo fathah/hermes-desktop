@@ -19,6 +19,12 @@ export const WALK_SPEED = 0.3;
 export const WORKING_WALK_SPEED_MULTIPLIER = 3;
 export const WALK_ANIM_SPEED = 0.15;
 export const AGENT_SCALE = 1.75;
+// One canonical human height for every person in the world. Profile agents
+// end up at DEFAULT_AGENT_HEIGHT (0.65) × RiggedCharacter's 1.45 multiplier ×
+// AGENT_SCALE ≈ 1.65 world units; ambient NPCs (bank customers, staff) must
+// normalise to the same value or they read as a different species next to a
+// visiting agent.
+export const PERSON_WORLD_HEIGHT = 0.65 * 1.45 * AGENT_SCALE;
 export const BUMP_FREEZE_MS = 1500;
 export const BUMP_RECOVERY_MS = 1200;
 export const AGENT_RADIUS = 20;

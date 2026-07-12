@@ -1,11 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Crown, Move, RefreshCw, TriangleAlert, Users, X } from "lucide-react";
+import {
+  Crown,
+  DoorOpen,
+  LogOut,
+  Move,
+  RefreshCw,
+  TriangleAlert,
+  Users,
+  X,
+} from "lucide-react";
 import type { GpuStatus } from "../../../../shared/gpu";
 import { useI18n } from "../../components/useI18n";
+import { useProfileModal } from "../../components/profile/ProfileModalContext";
 import oneChatIcon from "../../assets/images/one-chat.svg";
 import OneChatModal from "./OneChatModal";
 import Office3D from "./office3d/Office3D";
-import { profilesToOfficeAgents } from "./office3d/agents";
+import RepInteractionPanel from "./RepInteractionPanel";
+import { officeAgentsChanged, profilesToOfficeAgents } from "./office3d/agents";
+import { getRepresentative } from "./office3d/interactions/registry";
+import type { ShowroomCar } from "./office3d/objects/CarShowroom";
+import type { BuildingId, OfficeLocation } from "./office3d/core/locations";
 import type { OfficeAgent } from "./office3d/core/types";
 
 interface OfficeProps {
@@ -36,6 +50,17 @@ function Office({ visible }: OfficeProps): React.JSX.Element {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [ceoId, setCeoId] = useState<string | null>(readStoredCeo);
   const [chatOpen, setChatOpen] = useState(false);
+  // Enterable buildings: clicking one in the city view focuses it (shows the
+  // Enter prompt); entering switches the whole screen to that interior and
+  // unmounts the rest of the city.
+  const [location, setLocation] = useState<OfficeLocation>("city");
+  const [focusedBuilding, setFocusedBuilding] = useState<BuildingId | null>(
+    null,
+  );
+  const [carCard, setCarCard] = useState<ShowroomCar | null>(null);
+  // Space-representative menu (bank tellers today): which rep's panel is open.
+  const [activeRepId, setActiveRepId] = useState<string | null>(null);
+  const { openProfile } = useProfileModal();
   // Developer building-mover: click a building, then click ground to reposition
   // it; positions are logged to the console so the cityPlan constants can be
   // updated to match.
@@ -113,18 +138,7 @@ function Office({ visible }: OfficeProps): React.JSX.Element {
       const profiles = await window.hermesAPI.listProfiles();
       const next = profilesToOfficeAgents(profiles);
       setAgents((prev) => {
-        const prevById = new Map(prev.map((a) => [a.id, a]));
-        const changed =
-          next.length !== prev.length ||
-          next.some((a) => {
-            const before = prevById.get(a.id);
-            return (
-              !before ||
-              before.status !== a.status ||
-              before.gatewayRunning !== a.gatewayRunning
-            );
-          });
-        return changed ? next : prev;
+        return officeAgentsChanged(prev, next) ? next : prev;
       });
     } catch {
       // Transient IPC failures are ignored; the next tick retries.
@@ -156,6 +170,56 @@ function Office({ visible }: OfficeProps): React.JSX.Element {
     if (loading) return;
     if (ceoId && !agents.some((a) => a.id === ceoId)) setCeo(null);
   }, [loading, agents, ceoId, setCeo]);
+
+  const enterBuilding = useCallback((building: BuildingId) => {
+    setLocation(building);
+    setFocusedBuilding(null);
+    setCarCard(null);
+    setActiveRepId(null);
+  }, []);
+
+  const exitToCity = useCallback(() => {
+    setLocation("city");
+    setCarCard(null);
+    setActiveRepId(null);
+  }, []);
+
+  // Escape backs out of an interior to the city view.
+  useEffect(() => {
+    if (!visible || location === "city") return;
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") exitToCity();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [visible, location, exitToCity]);
+
+  // Bank ATM → the profile modal's wallet section (the selected agent's
+  // wallet, falling back to the first profile).
+  const handleAtmActivate = useCallback(() => {
+    const profileName = selectedId ?? agents[0]?.id;
+    if (profileName) openProfile(profileName, { initialSection: "wallet" });
+  }, [selectedId, agents, openProfile]);
+
+  const handleCarActivate = useCallback(
+    (car: ShowroomCar) => setCarCard(car),
+    [],
+  );
+
+  // Bank teller → the representative menu (account status, balances, new
+  // accounts) for a chosen agent.
+  const handleTellerActivate = useCallback(() => {
+    setActiveRepId("bank-teller");
+  }, []);
+
+  const closeRepPanel = useCallback(() => setActiveRepId(null), []);
+  const activeRep = getRepresentative(activeRepId);
+
+  // Office desk → select its owner (opens the agent details sidebar).
+  const handleDeskActivate = useCallback(
+    (agentId: string) => setSelectedId(agentId),
+    [],
+  );
 
   // Tag each agent with its org position; the CEO drives the executive desk.
   const positionedAgents = useMemo<OfficeAgent[]>(
@@ -288,9 +352,141 @@ function Office({ visible }: OfficeProps): React.JSX.Element {
           agents={positionedAgents}
           selectedId={selectedId}
           onSelectAgent={setSelectedId}
+          location={location}
+          onFocusBuilding={setFocusedBuilding}
+          onAtmActivate={handleAtmActivate}
+          tellerLabel={t("office.repBankTeller")}
+          onTellerActivate={handleTellerActivate}
+          onCarActivate={handleCarActivate}
+          onDeskActivate={handleDeskActivate}
           devMode={devMode}
           onDevLog={setDevLog}
         />
+
+        {location === "city" && focusedBuilding && !devMode && (
+          <button
+            type="button"
+            onClick={() => enterBuilding(focusedBuilding)}
+            style={{
+              position: "absolute",
+              bottom: 24,
+              left: "50%",
+              transform: "translateX(-50%)",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "12px 20px",
+              borderRadius: 12,
+              border: "1px solid rgba(125,211,252,0.5)",
+              background: "rgba(20,24,33,0.94)",
+              color: "#7dd3fc",
+              cursor: "pointer",
+              fontSize: 14,
+              fontWeight: 600,
+              zIndex: 10,
+              boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+            }}
+          >
+            <DoorOpen size={17} />
+            {t(`office.enter_${focusedBuilding}`)}
+          </button>
+        )}
+
+        {location !== "city" && (
+          <button
+            type="button"
+            onClick={exitToCity}
+            title={t("office.exitToCity")}
+            style={{
+              position: "absolute",
+              top: 16,
+              left: 16,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "10px 14px",
+              borderRadius: 10,
+              border: "1px solid rgba(255,255,255,0.16)",
+              background: "rgba(20,24,33,0.92)",
+              color: "#fff",
+              cursor: "pointer",
+              fontSize: 13,
+              fontWeight: 600,
+              zIndex: 10,
+            }}
+          >
+            <LogOut size={15} />
+            {t("office.exitToCity")}
+          </button>
+        )}
+
+        {location === "showroom" && carCard && (
+          <div
+            style={{
+              position: "absolute",
+              left: 20,
+              bottom: 20,
+              width: 260,
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+              padding: "14px 16px",
+              borderRadius: 12,
+              background: "rgba(20,24,33,0.94)",
+              border: "1px solid rgba(255,255,255,0.12)",
+              color: "#fff",
+              zIndex: 10,
+              boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 8,
+              }}
+            >
+              <span style={{ fontWeight: 700, fontSize: 14 }}>
+                {carCard.name}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCarCard(null)}
+                title={t("office.close")}
+                style={{
+                  display: "inline-flex",
+                  padding: 4,
+                  borderRadius: 6,
+                  border: "none",
+                  background: "transparent",
+                  color: "rgba(255,255,255,0.7)",
+                  cursor: "pointer",
+                }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span
+                style={{
+                  width: 14,
+                  height: 14,
+                  borderRadius: 4,
+                  background: carCard.tint,
+                  border: "1px solid rgba(255,255,255,0.25)",
+                  flex: "0 0 auto",
+                }}
+              />
+              <span style={{ fontSize: 12, opacity: 0.7 }}>
+                {t("office.showroomCardColor")}
+              </span>
+            </div>
+            <span style={{ fontSize: 12, opacity: 0.6, lineHeight: 1.45 }}>
+              {t("office.showroomCardHint")}
+            </span>
+          </div>
+        )}
 
         {gpuStatus?.disabled && !gpuNoticeDismissed && (
           <div
@@ -406,7 +602,16 @@ function Office({ visible }: OfficeProps): React.JSX.Element {
           agents={positionedAgents}
         />
 
-        {selectedAgent && (
+        {activeRep && (
+          <RepInteractionPanel
+            rep={activeRep}
+            agents={positionedAgents}
+            initialAgentId={selectedId}
+            onClose={closeRepPanel}
+          />
+        )}
+
+        {selectedAgent && !activeRep && (
           <aside
             style={{
               position: "absolute",

@@ -58,6 +58,7 @@ export default {
     signIn: "Sign in to Hermes One",
     signOut: "Sign out",
     signedInAs: "Signed in as",
+    connected: "Connected · agents sync automatically",
     modalTitle: "Sign in to Hermes One",
     codeHint: "Approve in your browser. Make sure it shows the same code:",
     waitingHint: "Waiting for approval…",

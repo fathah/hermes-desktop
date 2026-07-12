@@ -106,6 +106,35 @@ export function openSessionRunTransition(
   return { activeRunId: run.runId, runs: [...runs, run] };
 }
 
+/**
+ * Chrome-style tab cycling: the run `delta` steps away from the active one,
+ * wrapping at both ends. Returns null when there is nothing to switch to.
+ */
+export function cycleRunId(
+  runs: ChatRun[],
+  activeRunId: string,
+  delta: 1 | -1,
+): string | null {
+  if (runs.length < 2) return null;
+  const idx = runs.findIndex((r) => r.runId === activeRunId);
+  if (idx === -1) return runs[0].runId;
+  return runs[(idx + delta + runs.length) % runs.length].runId;
+}
+
+/**
+ * Chrome-style ordinal jump: Cmd/Ctrl+1..8 select the Nth tab, 9 selects the
+ * last tab regardless of count. Returns null when the ordinal has no tab.
+ */
+export function runIdAtOrdinal(
+  runs: ChatRun[],
+  ordinal: number,
+): string | null {
+  if (runs.length === 0) return null;
+  if (ordinal === 9) return runs[runs.length - 1].runId;
+  const idx = ordinal - 1;
+  return idx >= 0 && idx < runs.length ? runs[idx].runId : null;
+}
+
 /** The first live run already bound to a given gateway session id, if any. */
 export function findRunBySession(
   runs: ChatRun[],

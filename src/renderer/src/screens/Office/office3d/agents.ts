@@ -6,6 +6,7 @@ import type { OfficeAgent } from "./core/types";
  * the office needs to render an agent are required here.
  */
 export interface OfficeProfileInput {
+  id?: string;
   name: string;
   /**
    * Unique, stable identifier for the profile (the on-disk profile path from
@@ -46,14 +47,14 @@ function hashName(name: string): number {
  * a running gateway reads as "working" (green), otherwise "idle" (amber).
  */
 export function profileToOfficeAgent(profile: OfficeProfileInput): OfficeAgent {
-  const seed = profile.name || "agent";
+  const id = profile.id || profile.name;
+  const seed = id || "agent";
+  const agentName = profile.name;
   const color = AGENT_COLORS[hashName(seed) % AGENT_COLORS.length];
-  // Use profile name as the stable id — it is unique within the system and
-  // is the valid identifier for gateway API calls.
-  const id = profile.name;
+  // Use the profile id as the stable identifier for routing/gateway calls.
   return {
     id,
-    name: profile.name,
+    name: agentName,
     subtitle: profile.model || profile.provider || null,
     status: profile.gatewayRunning ? "working" : "idle",
     color,
@@ -70,4 +71,24 @@ export function profilesToOfficeAgents(
   profiles: OfficeProfileInput[],
 ): OfficeAgent[] {
   return profiles.map(profileToOfficeAgent);
+}
+
+export function officeAgentsChanged(
+  previous: OfficeAgent[],
+  next: OfficeAgent[],
+): boolean {
+  if (next.length !== previous.length) return true;
+  const previousById = new Map(previous.map((agent) => [agent.id, agent]));
+  return next.some((agent) => {
+    const before = previousById.get(agent.id);
+    return (
+      !before ||
+      before.name !== agent.name ||
+      before.subtitle !== agent.subtitle ||
+      before.status !== agent.status ||
+      before.model !== agent.model ||
+      before.provider !== agent.provider ||
+      before.gatewayRunning !== agent.gatewayRunning
+    );
+  });
 }

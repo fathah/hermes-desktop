@@ -84,12 +84,17 @@ function LogoSelect<T extends { key: string }>({
         {active && (
           <BrandLogo provider={brandOf(active)} size={18} matchTheme={true} />
         )}
-        <span className="logo-select-value">{active ? labelOf(active) : ""}</span>
+        <span className="logo-select-value">
+          {active ? labelOf(active) : ""}
+        </span>
         <ChevronDown size={16} className="logo-select-chevron" aria-hidden />
       </button>
       {open && (
         <>
-          <div className="logo-select-backdrop" onClick={() => setOpen(false)} />
+          <div
+            className="logo-select-backdrop"
+            onClick={() => setOpen(false)}
+          />
           <div className="logo-select-menu">
             {options.map((o) => (
               <button
@@ -443,7 +448,7 @@ function Providers({
         byBrand.set(b, a);
       }
     }
-    const isSet = (k: string) => !!(env[k] && env[k].trim());
+    const isSet = (k: string): boolean => !!(env[k] && env[k].trim());
     const out: PickerProvider[] = [];
     const seen = new Set<string>();
     // 1) Keyed FieldDef providers, in FieldDef order (Hermes One first).
@@ -496,7 +501,9 @@ function Providers({
   const pickDiscovery = useDiscoveredModels({
     provider: activeProvider?.provider ?? "auto",
     baseUrl: activeProvider?.baseUrl || undefined,
-    apiKey: activeProvider ? env[activeProvider.keyEnv] || undefined : undefined,
+    apiKey: activeProvider
+      ? env[activeProvider.keyEnv] || undefined
+      : undefined,
     profile,
     enabled: modelPickerOpen && !!activeProvider,
   });
@@ -518,12 +525,11 @@ function Providers({
           m.model === modelName &&
           displayProviderFromConfig(m.provider, m.baseUrl) === modelProvider,
       );
-      const curKey =
-        cur?.providerLabel
-          ? `label:${cur.providerLabel}`
-          : cur
-            ? `brand:${displayProviderFromConfig(cur.provider, cur.baseUrl)}`
-            : "";
+      const curKey = cur?.providerLabel
+        ? `label:${cur.providerLabel}`
+        : cur
+          ? `brand:${displayProviderFromConfig(cur.provider, cur.baseUrl)}`
+          : "";
       if (pickerProviders.some((p) => p.key === curKey)) return curKey;
       return pickerProviders[0]?.key ?? "";
     });
@@ -576,9 +582,7 @@ function Providers({
     // Re-picking a model must not drop it to "" — the save-side canonical
     // fill would silently flip a mainland user to the intl endpoint (#825).
     const keepDashScopeUrl =
-      nextProvider === "alibaba" &&
-      modelProvider === "alibaba" &&
-      modelBaseUrl;
+      nextProvider === "alibaba" && modelProvider === "alibaba" && modelBaseUrl;
     setModelProvider(nextProvider);
     setModelName(saved.model);
     setModelBaseUrl(
@@ -623,16 +627,36 @@ function Providers({
               {t("providers.hermesAccount.sectionHint")}
             </p>
             {account ? (
-              <div className="hermes-account-summary">
-                <span className="hermes-account-identity">
-                  <User size={16} />
-                  <span>
-                    {t("providers.hermesAccount.signedInAs")}{" "}
-                    <strong>
-                      {account.user.email ||
-                        account.user.name ||
-                        account.user.id}
-                    </strong>
+              <div className="hermes-account-card">
+                {account.user.avatarUrl ? (
+                  <img
+                    className="hermes-account-avatar"
+                    src={account.user.avatarUrl}
+                    alt=""
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <span
+                    className="hermes-account-avatar hermes-account-avatar-letter"
+                    aria-hidden="true"
+                  >
+                    {(account.user.name || account.user.email || "?")
+                      .charAt(0)
+                      .toUpperCase()}
+                  </span>
+                )}
+                <span className="hermes-account-who">
+                  <span className="hermes-account-name">
+                    {account.user.name || account.user.email || account.user.id}
+                  </span>
+                  {account.user.name && account.user.email && (
+                    <span className="hermes-account-email">
+                      {account.user.email}
+                    </span>
+                  )}
+                  <span className="hermes-account-state">
+                    <span className="hermes-account-dot" aria-hidden="true" />
+                    {t("providers.hermesAccount.connected")}
                   </span>
                 </span>
                 <button
@@ -702,7 +726,6 @@ function Providers({
               </p>
             )}
           </div>
-
 
           {/* Provider configuration (keys + models). Placed above the
               credential pool: it's the primary, user-friendly surface for
@@ -937,8 +960,14 @@ function Providers({
           {/* Active-model picker: choose a configured provider → one of its
               configured models. The key is resolved automatically at runtime. */}
           {modelPickerOpen && (
-            <div className="models-modal-overlay" onClick={() => setModelPickerOpen(false)}>
-              <div className="models-modal provider-modal" onClick={(e) => e.stopPropagation()}>
+            <div
+              className="models-modal-overlay"
+              onClick={() => setModelPickerOpen(false)}
+            >
+              <div
+                className="models-modal provider-modal"
+                onClick={(e) => e.stopPropagation()}
+              >
                 <div className="models-modal-header">
                   <h2 className="models-modal-title provider-modal-title">
                     {t("providers.model.pickerTitle")}

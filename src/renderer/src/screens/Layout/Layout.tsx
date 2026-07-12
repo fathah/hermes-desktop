@@ -12,6 +12,8 @@ import {
   openSessionRunTransition,
   selectProfileRunTransition,
   findRunBySession,
+  cycleRunId,
+  runIdAtOrdinal,
   loadingSessionIds as deriveLoadingSessionIds,
 } from "./chatRuns";
 import { ActiveSessionsBar } from "./ActiveSessionsBar";
@@ -218,8 +220,7 @@ function Layout({
         if (cancelled) return;
         const map: Record<string, { color?: string; avatar?: string | null }> =
           {};
-        for (const p of list)
-          map[p.name] = { color: p.color, avatar: p.avatar };
+        for (const p of list) map[p.id] = { color: p.color, avatar: p.avatar };
         setProfileAppearance(map);
       })
       .catch(() => {
@@ -330,13 +331,13 @@ function Layout({
       .then((profiles) => {
         if (cancelled) return;
         const active = profiles.find((p) => p.isActive);
-        if (active && active.name !== "default") {
-          setActiveProfile(active.name);
+        if (active && active.id !== "default") {
+          setActiveProfile(active.id);
           // Re-home the initial pristine run onto the restored profile so the
           // first chat runs under the right agent (no session/turn yet).
           setRuns((prev) =>
             prev.length === 1 && !prev[0].sessionId && !prev[0].loading
-              ? [{ ...prev[0], profile: active.name }]
+              ? [{ ...prev[0], profile: active.id }]
               : prev,
           );
         }
@@ -538,6 +539,76 @@ function Layout({
     },
     [runs, activeRunId, activeProfile],
   );
+
+  // Chrome/iTerm-style tab shortcuts for the conversation tabs: Ctrl+Tab /
+  // Ctrl+Shift+Tab, Cmd/Ctrl+Shift+[ / ], Cmd/Ctrl+Option+←/→ and
+  // Cmd/Ctrl+Shift+←/→ cycle; Cmd/Ctrl+1..8 jump to the Nth tab and 9 to the
+  // last; Cmd/Ctrl+W closes the active tab. Matches on e.code so the
+  // shortcuts keep working while a CJK IME is active. Cmd+Shift+arrow is
+  // skipped inside editable fields where it means "select to line start/end".
+  useEffect(() => {
+    const isEditable = (t: EventTarget | null): boolean => {
+      if (!(t instanceof HTMLElement)) return false;
+      return (
+        t instanceof HTMLInputElement ||
+        t instanceof HTMLTextAreaElement ||
+        t.isContentEditable
+      );
+    };
+    const handleKey = (e: KeyboardEvent): void => {
+      const primary = e.metaKey || e.ctrlKey;
+      let target: string | null = null;
+      let matched = false;
+      if (primary && !e.shiftKey && !e.altKey && e.code === "KeyW") {
+        // Close the active conversation tab (iTerm/Chrome). handleCloseRun
+        // keeps at least one chat open, so the window itself never closes.
+        e.preventDefault();
+        handleCloseRun(activeRunId);
+        return;
+      }
+      if (e.ctrlKey && !e.metaKey && !e.altKey && e.code === "Tab") {
+        matched = true;
+        target = cycleRunId(runs, activeRunId, e.shiftKey ? -1 : 1);
+      } else if (
+        primary &&
+        e.shiftKey &&
+        !e.altKey &&
+        (e.code === "BracketRight" || e.code === "BracketLeft")
+      ) {
+        matched = true;
+        target = cycleRunId(
+          runs,
+          activeRunId,
+          e.code === "BracketRight" ? 1 : -1,
+        );
+      } else if (
+        primary &&
+        (e.code === "ArrowRight" || e.code === "ArrowLeft") &&
+        // Cmd+Option+arrow (Chrome macOS) or Cmd+Shift+arrow — the latter
+        // only outside editable fields, where it selects text instead.
+        ((e.altKey && !e.shiftKey) ||
+          (e.shiftKey && !e.altKey && !isEditable(e.target)))
+      ) {
+        matched = true;
+        target = cycleRunId(
+          runs,
+          activeRunId,
+          e.code === "ArrowRight" ? 1 : -1,
+        );
+      } else if (primary && !e.shiftKey && !e.altKey) {
+        const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
+        if (digit) {
+          matched = true;
+          target = runIdAtOrdinal(runs, Number(digit[1]));
+        }
+      }
+      if (!matched) return;
+      e.preventDefault();
+      if (target) handleActivateRun(target);
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [runs, activeRunId, handleActivateRun, handleCloseRun]);
 
   const handleResumeSession = useCallback(
     async (sessionId: string) => {

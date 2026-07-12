@@ -10,10 +10,44 @@ import { saveAccount, type AccountUser } from "./account-store";
 
 const DEFAULT_API_URL = "http://localhost:3002";
 
-/** Backend base URL — configurable via env, defaults to the local Nitro dev server. */
+/**
+ * Backend base URL. Runtime `HERMES_API_URL` wins (dev/user override), then the
+ * value baked in at build time (`MAIN_VITE_HERMES_API_URL`, injected by the
+ * release workflow — same pattern as the renderer's `VITE_ANALYTICS_*`), then
+ * the local Nitro dev server.
+ */
 export function getApiUrl(): string {
-  const raw = process.env.HERMES_API_URL?.trim();
-  return raw ? raw.replace(/\/+$/, "") : DEFAULT_API_URL;
+  const runtime = process.env.HERMES_API_URL?.trim();
+  if (runtime) return runtime.replace(/\/+$/, "");
+  const baked = (
+    import.meta.env.MAIN_VITE_HERMES_API_URL as string | undefined
+  )?.trim();
+  if (baked) return baked.replace(/\/+$/, "");
+  return DEFAULT_API_URL;
+}
+
+/**
+ * Optional client API key sent as `x-api-key` on backend calls. Baked in at
+ * build time (`MAIN_VITE_HERMES_API_KEY`) with a runtime `HERMES_API_KEY`
+ * override; empty when neither is set (the backend doesn't require it yet).
+ * Note a key shipped inside a desktop binary is extractable — it can rate-limit
+ * casual abuse, but it is not a real secret.
+ */
+export function getApiKey(): string {
+  return (
+    process.env.HERMES_API_KEY?.trim() ||
+    (import.meta.env.MAIN_VITE_HERMES_API_KEY as string | undefined)?.trim() ||
+    ""
+  );
+}
+
+/** Headers for backend API calls: content type plus the client key when set. */
+export function apiHeaders(json = true): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (json) headers["content-type"] = "application/json";
+  const key = getApiKey();
+  if (key) headers["x-api-key"] = key;
+  return headers;
 }
 
 /** A human label for this machine, shown on the browser approval page. */
@@ -143,11 +177,14 @@ export async function startDeviceLogin(
     // signing in (the backend also records the request IP).
     const codeRes = await fetch(`${apiUrl}/api/device/code`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: apiHeaders(),
       body: JSON.stringify({ device_name: deviceName() }),
     });
     if (!codeRes.ok) {
-      return { success: false, error: `Couldn't start sign-in (HTTP ${codeRes.status}).` };
+      return {
+        success: false,
+        error: `Couldn't start sign-in (HTTP ${codeRes.status}).`,
+      };
     }
     const code = (await codeRes.json()) as {
       device_code: string;
@@ -184,7 +221,7 @@ export async function startDeviceLogin(
       try {
         const tokRes = await fetch(`${apiUrl}/api/device/token`, {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: apiHeaders(),
           body: JSON.stringify({ device_code: code.device_code }),
         });
         const data = (await tokRes.json().catch(() => ({}))) as TokenResponse;
@@ -217,7 +254,10 @@ export async function startDeviceLogin(
 
     return { success: false, error: "Sign-in cancelled." };
   } catch (err) {
-    return { success: false, error: `Sign-in error: ${(err as Error).message}` };
+    return {
+      success: false,
+      error: `Sign-in error: ${(err as Error).message}`,
+    };
   } finally {
     activeLogin = null;
   }

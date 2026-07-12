@@ -237,7 +237,9 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
   const [detail, setDetail] = useState<KanbanTaskDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [remoteUnsupported, setRemoteUnsupported] = useState(false);
-  const [profileOptions, setProfileOptions] = useState<string[]>([]);
+  const [profileOptions, setProfileOptions] = useState<
+    { id: string; name: string }[]
+  >([]);
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -391,7 +393,7 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
   useEffect(() => {
     if (!showCreate) return;
     window.hermesAPI.listProfiles().then((profiles) => {
-      setProfileOptions(profiles.map((p) => p.name));
+      setProfileOptions(profiles.map((p) => ({ id: p.id, name: p.name })));
     });
   }, [showCreate]);
 
@@ -1086,9 +1088,9 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
                   onChange={(e) => setNewAssignee(e.target.value)}
                 >
                   <option value="">{t("kanban.assigneeNone")}</option>
-                  {profileOptions.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
+                  {profileOptions.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.name}
                     </option>
                   ))}
                 </select>

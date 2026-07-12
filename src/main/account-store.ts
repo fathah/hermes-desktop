@@ -1,8 +1,9 @@
 // @lat: [[hermes-account-login#Account store]]
 import { safeStorage } from "electron";
-import { existsSync, readFileSync, unlinkSync } from "fs";
+import { existsSync, readdirSync, readFileSync, unlinkSync } from "fs";
 import { join } from "path";
-import { profileHome, safeWriteFile } from "./utils";
+import { isValidProfileName, profileHome, safeWriteFile } from "./utils";
+import { HERMES_HOME } from "./installer";
 
 // Persists the Hermes account session obtained via device login (see
 // hermes-account.ts). The bearer access token is encrypted at rest with the OS
@@ -41,7 +42,9 @@ function readAccountFile(profile?: string): StoredAccount | null {
   const file = accountPath(profile);
   if (!existsSync(file)) return null;
   try {
-    const parsed = JSON.parse(readFileSync(file, "utf-8")) as Partial<StoredAccount>;
+    const parsed = JSON.parse(
+      readFileSync(file, "utf-8"),
+    ) as Partial<StoredAccount>;
     if (
       parsed &&
       parsed.version === 1 &&
@@ -96,6 +99,37 @@ export function saveAccount(
   safeWriteFile(accountPath(profile), JSON.stringify(stored, null, 2));
 }
 
+/**
+ * Find which profile home holds a stored account, app-wide. The device login
+ * saves `account.json` under whichever profile was active, but features like
+ * agent sync act on all profiles at once — they need the account wherever it
+ * lives. Checks the default home first, then each named profile (plain fs
+ * scan; deliberately avoids listProfiles(), which shells out to the CLI).
+ * Returns the profile name to pass to getAccount()/getAccessToken(), or null
+ * when signed out everywhere.
+ */
+export function findAccountProfile(): string | null {
+  if (readAccountFile(undefined)) return "default";
+  const profilesDir = join(HERMES_HOME, "profiles");
+  let names: string[];
+  try {
+    names = readdirSync(profilesDir);
+  } catch {
+    return null;
+  }
+  for (const name of names.sort()) {
+    // Stray dirs with names profileHome() would reject can't hold a profile.
+    if (!isValidProfileName(name) || name === "default") continue;
+    if (
+      existsSync(join(profilesDir, name, ACCOUNT_FILE)) &&
+      readAccountFile(name)
+    ) {
+      return name;
+    }
+  }
+  return null;
+}
+
 /** Sign out: remove the stored account for a profile. */
 export function clearAccount(profile?: string): void {
   const file = accountPath(profile);
@@ -104,5 +138,22 @@ export function clearAccount(profile?: string): void {
     unlinkSync(file);
   } catch {
     // Best-effort — the token is encrypted at rest regardless.
+  }
+}
+
+/**
+ * Sign out everywhere: the account is device-wide, so logout must remove
+ * `account.json` from whichever profile home(s) hold one — signing in on
+ * profile A and again on profile B leaves two files, and clearing only the
+ * active profile's would keep the device signed in. The seen-guard stops the
+ * sweep if a file can't be unlinked (clearAccount is best-effort).
+ */
+export function clearAllAccounts(): void {
+  const seen = new Set<string>();
+  let profile = findAccountProfile();
+  while (profile && !seen.has(profile)) {
+    seen.add(profile);
+    clearAccount(profile);
+    profile = findAccountProfile();
   }
 }

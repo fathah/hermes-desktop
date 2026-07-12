@@ -2,7 +2,10 @@ import { useState, useEffect, useRef } from "react";
 import { X, Check, Copy } from "../assets/icons";
 import { useI18n } from "./useI18n";
 import HermesLogo from "./common/HermesLogo";
-import type { DeviceCodeInfo, HermesAccountUser } from "../../../shared/account";
+import type {
+  DeviceCodeInfo,
+  HermesAccountUser,
+} from "../../../shared/account";
 
 interface HermesAccountModalProps {
   profile?: string;
@@ -35,7 +38,9 @@ function HermesAccountModal({
   onSignedInRef.current = onSignedIn;
 
   useEffect(() => {
-    const offCode = window.hermesAPI.onAccountLoginCode((info) => setCode(info));
+    const offCode = window.hermesAPI.onAccountLoginCode((info) =>
+      setCode(info),
+    );
     if (!startedRef.current) {
       startedRef.current = true;
       window.hermesAPI
@@ -44,6 +49,9 @@ function HermesAccountModal({
           if (res.success && res.user) {
             setStatus("success");
             onSignedInRef.current(res.user);
+            // First cloud-agent sync right at sign-in; the Agents screen
+            // hears about it via the agent-sync-updated event.
+            void window.hermesAPI.syncAgents?.().catch(() => {});
           } else {
             setStatus("error");
             setError(res.error || t("providers.hermesAccount.failed"));

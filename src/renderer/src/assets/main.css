@@ -7014,19 +7014,78 @@ body {
   margin: 0 0 12px;
 }
 
-.hermes-account-summary {
+/* Signed-in identity card: avatar · name/email/status · sign-out. */
+.hermes-account-card {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
+  padding: 12px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
 }
 
-.hermes-account-identity {
-  display: flex;
+.hermes-account-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid var(--border-bright);
+}
+
+.hermes-account-avatar-letter {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent-hover), var(--accent));
+}
+
+.hermes-account-who {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  /* Push the sign-out button to the card's right edge. */
+  margin-right: auto;
+}
+
+.hermes-account-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hermes-account-email {
+  font-size: 12px;
   color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hermes-account-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--success);
+}
+
+.hermes-account-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 3px var(--success-bg);
 }
 
 /* Sign-in modal — device-login (RFC 8628) with a loader spinning around the
@@ -8399,6 +8458,21 @@ body {
   margin-top: 2px;
 }
 
+.agents-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agents-sync-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .agents-create-clone {
   display: flex;
   align-items: center;
@@ -8679,12 +8753,65 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-height: 36px;
+  flex-wrap: wrap;
 }
 
 .profile-modal-name {
   font-size: 18px;
   font-weight: 700;
   color: var(--text-primary);
+}
+
+.profile-modal-name-edit {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+  padding: 3px 6px;
+  margin-left: -6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  cursor: text;
+}
+
+.profile-modal-name-edit svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  opacity: 0;
+}
+
+.profile-modal-name-edit:hover,
+.profile-modal-name-edit:focus-visible {
+  background: var(--bg-tertiary);
+  border-color: var(--border);
+  outline: none;
+}
+
+.profile-modal-name-edit:hover svg,
+.profile-modal-name-edit:focus-visible svg {
+  color: var(--text-secondary);
+  opacity: 1;
+}
+
+.profile-modal-name-input {
+  width: min(360px, 52vw);
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 700;
+}
+
+.profile-modal-name-input:focus {
+  border-color: var(--accent);
+  outline: none;
 }
 
 .profile-modal-tag {
@@ -9384,6 +9511,39 @@ body {
   font-size: 11px;
   font-weight: 700;
   flex: 0 0 auto;
+}
+
+/* Origin badge: cloud (backend-managed) vs local (this device). */
+.profile-wallet-badge {
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  flex: 0 0 auto;
+}
+
+.profile-wallet-badge-cloud {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.profile-wallet-badge-local {
+  background: var(--bg-tertiary, var(--accent-subtle));
+  color: var(--text-muted);
+}
+
+.profile-wallet-empty-note,
+.profile-wallet-note {
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+  max-width: 340px;
+}
+
+.profile-wallet-note {
+  margin-top: 10px;
 }
 
 .profile-wallet-address {

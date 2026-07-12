@@ -92,7 +92,12 @@ import {
   detectDeviceCode,
 } from "../hermes-auth";
 import { startDeviceLogin, cancelDeviceLogin } from "../hermes-account";
-import { getAccount, clearAccount } from "../account-store";
+import { syncAgents, getAgentSyncStatus } from "../agent-sync";
+import {
+  getAccount,
+  clearAllAccounts,
+  findAccountProfile,
+} from "../account-store";
 import {
   isRemoteMode,
   isRemoteOnlyMode,
@@ -232,6 +237,7 @@ import {
   setProfileColor,
   setProfileAvatar,
   removeProfileAvatar,
+  setProfileName,
 } from "../profile-meta";
 import {
   createWallet,
@@ -240,6 +246,8 @@ import {
   listWallets,
   renameWallet,
 } from "../wallet-store";
+import { syncWalletsForProfile } from "../wallet-sync";
+import { getWalletPortfolio, provisionAgentWallet } from "../wallet-actions";
 import { getTokenBalances } from "../wallet-balances";
 import type { ImportWalletInput } from "../../shared/wallets";
 import {
@@ -812,13 +820,29 @@ export function registerIpcHandlers(context: IpcContext): void {
     }),
   );
   ipcMain.handle("hermes-account-login-cancel", () => cancelDeviceLogin());
+  // The account is device-wide (one Hermes One login for the whole app), but
+  // account.json lives under whichever profile was active at sign-in. Resolve
+  // it app-wide so switching the active agent doesn't read as signed out, and
+  // sign out wherever the file lives.
   ipcMain.handle("hermes-account-get", (_event, profile?: string) =>
-    getAccount(profile),
+    getAccount(findAccountProfile() ?? profile),
   );
-  ipcMain.handle("hermes-account-logout", (_event, profile?: string) => {
-    clearAccount(profile);
+  ipcMain.handle("hermes-account-logout", () => {
+    clearAllAccounts();
     return { success: true };
   });
+
+  // Cloud agent sync — reconciles local profiles with the signed-in Hermes One
+  // account's cloud agents. `agent-sync-updated` tells the renderer to reload
+  // its profile list (pull-created profiles appear without a manual refresh).
+  ipcMain.handle("agent-sync-run", async (event) => {
+    const result = await syncAgents();
+    if (!event.sender.isDestroyed()) {
+      event.sender.send("agent-sync-updated", result);
+    }
+    return result;
+  });
+  ipcMain.handle("agent-sync-status", () => getAgentSyncStatus());
 
   // Configuration (profile-aware)
   ipcMain.handle("get-locale", () => getAppLocale());
@@ -1887,7 +1911,11 @@ export function registerIpcHandlers(context: IpcContext): void {
       // profile the user actually selected — and it survives relaunches.
       const active = getActiveProfileNameSync();
       const list = await sshListProfiles(conn.ssh);
-      return list.map((p) => ({ ...p, isActive: p.name === active }));
+      return list.map((p) => ({
+        ...p,
+        id: p.name,
+        isActive: p.name === active,
+      }));
     }
     return listProfiles();
   });
@@ -1935,6 +1963,16 @@ export function registerIpcHandlers(context: IpcContext): void {
   ipcMain.handle("set-profile-color", (_event, name: string, color: string) =>
     setProfileColor(name, color),
   );
+  ipcMain.handle("set-profile-name", (_event, id: string, name: string) => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" || conn.mode === "remote") {
+      return {
+        success: false,
+        error: "Agent renaming is only supported for local profiles",
+      };
+    }
+    return setProfileName(id, name);
+  });
   ipcMain.handle(
     "set-profile-avatar",
     (_event, name: string, dataUrl: string) => setProfileAvatar(name, dataUrl),
@@ -1964,6 +2002,21 @@ export function registerIpcHandlers(context: IpcContext): void {
     "delete-wallet",
     (_event, profile: string | undefined, id: string) =>
       deleteWallet(profile, id),
+  );
+  // Cloud wallets provisioned by the backend for the profile's linked agent.
+  // Read-only here; the desktop no longer mints wallets locally.
+  ipcMain.handle("wallet-sync", (_event, profile?: string) =>
+    syncWalletsForProfile(profile),
+  );
+  // Backend-driven wallet ops used by the Office's space representatives
+  // (bank tellers): balances and provisioning both live server-side.
+  ipcMain.handle(
+    "wallet-portfolio",
+    (_event, profile: string | undefined, walletId: string) =>
+      getWalletPortfolio(profile, walletId),
+  );
+  ipcMain.handle("wallet-provision", (_event, profile?: string) =>
+    provisionAgentWallet(profile),
   );
   ipcMain.handle("get-token-balances", (_event, address: string) =>
     getTokenBalances(address),

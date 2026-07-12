@@ -90,6 +90,48 @@ describe("account store", () => {
     expect(existsSync(join(mockState.hermesHome, "account.json"))).toBe(false);
   });
 
+  // @lat: [[agent-sync#Tests#Locates the account app-wide]]
+  it("finds the account wherever it was saved (default home first)", async () => {
+    const s = await store();
+    expect(s.findAccountProfile()).toBeNull();
+
+    // Saved under a named profile only.
+    s.saveAccount("work", {
+      apiUrl: "http://localhost:3002",
+      accessToken: "t1",
+      user,
+    });
+    expect(s.findAccountProfile()).toBe("work");
+
+    // The default home wins once it has an account too.
+    s.saveAccount("default", {
+      apiUrl: "http://localhost:3002",
+      accessToken: "t2",
+      user,
+    });
+    expect(s.findAccountProfile()).toBe("default");
+  });
+
+  // @lat: [[hermes-account-login#Tests#Signs out everywhere]]
+  it("clearAllAccounts signs out every profile holding an account", async () => {
+    const s = await store();
+    // Two sign-ins on different profiles leave two account files.
+    s.saveAccount("work", {
+      apiUrl: "http://localhost:3002",
+      accessToken: "t1",
+      user,
+    });
+    s.saveAccount("default", {
+      apiUrl: "http://localhost:3002",
+      accessToken: "t2",
+      user,
+    });
+    s.clearAllAccounts();
+    expect(s.findAccountProfile()).toBeNull();
+    expect(s.getAccount("work")).toBeNull();
+    expect(s.getAccount("default")).toBeNull();
+  });
+
   it("refuses to save when secure storage is unavailable", async () => {
     mockState.encryptionAvailable = false;
     const s = await store();

@@ -56,4 +56,38 @@ export default {
     "Hardware acceleration is turned off in Settings → Appearance, so the 3D office is using slow software rendering.",
   reenableGpu: "Re-enable GPU & restart",
   dismissNotice: "Dismiss",
+  // Enterable building interiors
+  enter_office: "Enter Office",
+  enter_bank: "Enter Bank",
+  enter_showroom: "Enter Showroom",
+  exitToCity: "Exit to city",
+  showroomCardColor: "Paint color",
+  showroomCardHint:
+    "Take a closer look around the showroom — buying cars for your agents is coming soon.",
+  // Space representatives (bank teller interaction menu)
+  repBankTeller: "Bank Teller",
+  spaceBank: "Bank",
+  repPanelAgentLabel: "Agent",
+  repPanelPickAgent: "Choose an agent…",
+  repActionCheckBalance: "Check balance",
+  repActionAccountStatus: "Check account status",
+  repActionCreateAccount: "Create account",
+  repActionSendMoney: "Send money to an agent",
+  repComingSoon: "Coming soon",
+  repLoading: "Working…",
+  repErrorGeneric: "Something went wrong. Please try again.",
+  repStatusSignedOut: "Sign in to your Hermes account to use the bank.",
+  repStatusUnlinked:
+    "This agent isn't linked to a cloud agent yet. Sign in and try again.",
+  repWalletsNone: "No accounts yet — create one to get started.",
+  repBadgeTransactable: "Transactable",
+  repBadgeReceiveOnly: "Receive-only",
+  repBalanceNoTransactable:
+    "This agent has no transactable account yet — create one first.",
+  repBalanceEmpty: "No token balances yet.",
+  repBalanceTotal: "Total",
+  repCreateSuccess: "Account created",
+  repCreateExists: "This agent already has a bank account.",
+  repStatusForeign:
+    "This agent is linked to a different Hermes One account.",
 } as const;

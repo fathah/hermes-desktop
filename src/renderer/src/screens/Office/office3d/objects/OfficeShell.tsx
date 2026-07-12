@@ -4,6 +4,7 @@ import * as THREE from "three";
 import woodenTableGlbUrl from "../assets/wooden_table.glb?url";
 import hermesHqLogoUrl from "../assets/images/hermes-one-hq.webp";
 import { WORLD_W, WORLD_H, SCALE } from "../core/constants";
+import { OFFICE_DOOR_X, OFFICE_DOOR_W } from "../core/cityPlan";
 import { toWorld } from "../core/geometry";
 import { glbClone, normalizeFootprint } from "../core/glb";
 import type { WorldPalette } from "../core/palette";
@@ -134,11 +135,31 @@ export const Room = memo(function Room({
       </mesh>
       {/* North wall — taller with windows */}
       <NorthWall palette={palette} />
-      {/* South / east / west walls */}
-      <mesh position={[0, wallH / 2, halfH]}>
-        <boxGeometry args={[WORLD_W, wallH, wallT]} />
-        <meshStandardMaterial color={palette.wallNS} />
-      </mesh>
+      {/* South wall — split around the entrance doorway (agents walk in and
+          out through this gap; the collision walls mirror it). */}
+      {(() => {
+        const doorMin = OFFICE_DOOR_X - OFFICE_DOOR_W / 2;
+        const doorMax = OFFICE_DOOR_X + OFFICE_DOOR_W / 2;
+        const westW = doorMin + halfW;
+        const eastW = halfW - doorMax;
+        return (
+          <>
+            <mesh position={[-halfW + westW / 2, wallH / 2, halfH]}>
+              <boxGeometry args={[westW, wallH, wallT]} />
+              <meshStandardMaterial color={palette.wallNS} />
+            </mesh>
+            <mesh position={[doorMax + eastW / 2, wallH / 2, halfH]}>
+              <boxGeometry args={[eastW, wallH, wallT]} />
+              <meshStandardMaterial color={palette.wallNS} />
+            </mesh>
+            {/* Header above the doorway so the gap reads as an entrance. */}
+            <mesh position={[OFFICE_DOOR_X, wallH - 0.25, halfH]}>
+              <boxGeometry args={[OFFICE_DOOR_W, 0.5, wallT]} />
+              <meshStandardMaterial color={palette.wallNS} />
+            </mesh>
+          </>
+        );
+      })()}
       <Suspense fallback={null}>
         <OfficeLogo />
       </Suspense>

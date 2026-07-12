@@ -25,6 +25,7 @@ vi.mock("../../components/profile/ProfileModalContext", () => ({
 import Agents from "./Agents";
 
 interface ProfileInfo {
+  id: string;
   name: string;
   path: string;
   isDefault: boolean;
@@ -39,6 +40,7 @@ interface ProfileInfo {
 
 function profile(name: string, isDefault = false): ProfileInfo {
   return {
+    id: name,
     name,
     path: isDefault ? "C:/hermes" : `C:/hermes/profiles/${name}`,
     isDefault,
@@ -100,6 +102,8 @@ describe("Agents profile creation", () => {
       target: { value: "test2" },
     });
     fireEvent.click(screen.getByText("agents.create"));
+
+    expect(api.createProfile).toHaveBeenCalledWith("test2", "default");
 
     // The create modal stays open on failure (so the user can retry), and its
     // clone-from <select> also lists profiles — so "test2" can appear both as
