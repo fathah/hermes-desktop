@@ -4,6 +4,8 @@ The in-chat (bottom) model picker selects a model for the **current conversation
 
 The override is held in renderer state on each `<Chat>` run ([[src/renderer/src/screens/Chat/Chat.tsx]]), persisted by session id, and sent with every message; it is cleared when the conversation is cleared/reset and is absent on a fresh chat, so new conversations start on the global default. This is distinct from the persisted [[model-context]] default that non-chat surfaces read.
 
+Pre-send readiness uses the same active override. [[src/renderer/src/screens/Chat/Chat.tsx#Chat]] passes the current picker `{provider, model, baseUrl}` into [[src/main/validation.ts#validateChatReadiness]], so a session-scoped pick does not keep showing "No model selected" just because the global `config.yaml` default is empty.
+
 ## Full identity, not just the model name
 
 The override is a `SessionModelOverride` (`{provider, model, baseUrl}`), not a bare model string — because switching across providers must change routing, not only the `model` field.

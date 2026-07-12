@@ -45,6 +45,12 @@ export interface ChatReadiness {
   expectedEnvKey?: string;
 }
 
+export interface ChatReadinessModelConfig {
+  provider?: string;
+  model?: string;
+  baseUrl?: string;
+}
+
 const OK: ChatReadiness = { ok: true };
 
 // Provider ids that authenticate ONLY via interactive OAuth login —
@@ -79,14 +85,20 @@ const NO_KEY_PROVIDERS = new Set(["auto"]);
  * Synchronous readiness check against the desktop's own config —
  * no network calls. Fast (single readEnv + getModelConfig).
  *
- * `profile` defaults to the active profile.
+ * `profile` defaults to the active profile. `override` is the chat-local model
+ * picker selection; when present it is the model that will actually be sent.
  */
-export function validateChatReadiness(profile?: string): ChatReadiness {
+export function validateChatReadiness(
+  profile?: string,
+  override?: ChatReadinessModelConfig,
+): ChatReadiness {
   try {
     const mc = getModelConfig(profile);
-    const provider = (mc.provider || "").trim().toLowerCase();
-    const model = (mc.model || "").trim();
-    const baseUrl = (mc.baseUrl || "").trim();
+    const provider = (override?.provider ?? mc.provider ?? "")
+      .trim()
+      .toLowerCase();
+    const model = (override?.model ?? mc.model ?? "").trim();
+    const baseUrl = (override?.baseUrl ?? mc.baseUrl ?? "").trim();
 
     // Provider="auto" lets hermes-agent pick a model at runtime based
     // on whatever keys are present in .env. No key-presence check
