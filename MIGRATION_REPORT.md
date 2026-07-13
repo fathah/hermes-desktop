@@ -72,3 +72,23 @@ The most significant change is removing Electron dependencies from the backend l
 
 ## Conclusion
 A partial migration to Wails or Tauri using a Sidecar architecture is completely feasible and bypasses the need to rewrite the extensive `src/main` backend codebase immediately. The primary engineering effort will be spent untangling the Electron IPC bindings, replacing them with a local REST/WebSocket API, and solving the sidecar packaging/lifecycle problems.
+
+## Addendum: Resource Usage & The "Why Electron?" Question
+
+### Sidecar vs. Electron Resource Usage
+Even though the Sidecar architecture relies on a Node.js background process, it will still result in a **drastically lighter and less resource-hungry application**.
+The vast majority of Electron's disk bloat and heavy RAM usage comes from bundling and executing an entire isolated instance of **Chromium**. An Electron app spawns multiple heavy processes (main process, GPU processes, renderer processes, etc.) just to render the UI.
+
+Wails and Tauri, conversely, use the native webview of the operating system (WebView2 on Windows, WKWebView on macOS, and WebKitGTK on Linux). Because these native webviews share resources directly with the OS, they are exceptionally lightweight.
+
+The Node.js runtime itself is relatively small (a ~40MB binary) and consumes very little memory when executing backend logic without rendering a UI. By migrating to Wails/Tauri with a Node sidecar, we eliminate the Chromium engine while keeping the backend logic identical.
+
+### Why Do People Still Use Electron?
+If Tauri and Wails are so much lighter, why does Electron remain the industry standard? There are three main trade-offs:
+
+1. **Consistent Rendering (The "Chromium" Factor):**
+   Electron guarantees that your UI looks and behaves exactly the same on Windows, macOS, and Linux because it ships the same Chromium browser to every user. With Wails and Tauri, you rely on the host OS's webview. This introduces the risk of cross-browser compatibility issues—CSS bugs might appear on Linux but not Windows, or specific JavaScript APIs might be missing on older macOS versions.
+2. **One Unified Language Stack:**
+   In Electron, the frontend, backend, and native OS integrations are entirely JavaScript/TypeScript. If you need deep OS integration, you simply use an npm package. With Tauri or Wails, complex OS integrations often require dropping down into Rust or Go. (Note: The Sidecar architecture mitigates this heavily for our specific use case).
+3. **Maturity and Ecosystem:**
+   Electron has been battle-tested for a decade. Features like auto-updating (`electron-updater`), crash reporting, and debugging tools are incredibly robust and have massive community support. Wails and Tauri are much newer, meaning you occasionally have to build custom solutions for features that Electron provides out-of-the-box.
