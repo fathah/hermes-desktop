@@ -29,10 +29,10 @@
 - Produces: `remoteDashboardRequestJson<T>(connection, path, options, profile?)` and `RemoteDashboardApiError`.
 - Consumes: `dashboardApiUrl`, `remoteRequestJson`, and `requestRemoteOAuthJson`.
 
-- [ ] Write token, OAuth, profile-scope, non-Remote, and status-normalization tests.
-- [ ] Run focused test and confirm missing-module RED failure.
-- [ ] Implement minimal client and structured error mapping.
-- [ ] Re-run focused test to GREEN.
+- [x] Write token, OAuth, profile-scope, non-Remote, and status-normalization tests.
+- [x] Run focused test and confirm missing-module RED failure.
+- [x] Implement minimal client and structured error mapping.
+- [x] Re-run focused test to GREEN.
 
 ### Task 2: Skills and Toolsets parity
 
@@ -49,11 +49,11 @@
 - Skills operations consume explicit `ConnectionConfig`.
 - Toolsets produce `ToolsetInfo[]` and boolean toggle result.
 
-- [ ] Write failing OAuth Skills and Toolset normalization/toggle tests.
-- [ ] Run focused tests and confirm RED failures.
-- [ ] Route Skills and Toolsets through shared client.
-- [ ] Remove completed Skills and Toolsets renderer gates.
-- [ ] Re-run focused tests and renderer typecheck.
+- [x] Write failing OAuth Skills and Toolset normalization/toggle tests.
+- [x] Run focused tests and confirm RED failures.
+- [x] Route Skills and Toolsets through shared client.
+- [x] Remove completed Skills and Toolsets renderer gates.
+- [x] Re-run focused tests and renderer typecheck.
 
 ### Task 3: Profiles parity
 
@@ -67,11 +67,11 @@
 **Interfaces:**
 - Produces remote list/create/delete/activate/Soul operations using existing `ProfileInfo` and `CreateProfileResult` contracts.
 
-- [ ] Write failing response-mapping, CRUD, active-profile, and Soul tests.
-- [ ] Run focused test and confirm RED.
-- [ ] Implement adapter and IPC routing.
-- [ ] Render Profiles in Remote mode with local-only actions hidden.
-- [ ] Re-run focused tests and renderer typecheck.
+- [x] Write failing response-mapping, CRUD, active-profile, and Soul tests.
+- [x] Run focused test and confirm RED.
+- [x] Implement adapter and IPC routing.
+- [x] Render Profiles in Remote mode with local-only actions hidden.
+- [x] Re-run focused tests and renderer typecheck.
 
 ### Task 4: Gateway parity
 
@@ -85,11 +85,11 @@
 **Interfaces:**
 - Produces status/start/stop/restart operations; lifecycle mutations report accepted request and renderer refreshes authoritative status.
 
-- [ ] Write failing profile-scoped status and lifecycle endpoint tests.
-- [ ] Run focused test and confirm RED.
-- [ ] Implement adapter and IPC routing.
-- [ ] Render Gateway in Remote mode with local-only controls hidden.
-- [ ] Re-run focused tests and renderer typecheck.
+- [x] Write failing profile-scoped status and lifecycle endpoint tests.
+- [x] Run focused test and confirm RED.
+- [x] Implement adapter and IPC routing.
+- [x] Render Gateway in Remote mode with local-only controls hidden.
+- [x] Re-run focused tests and renderer typecheck.
 
 ### Task 5: Fallthrough regression guards and documentation
 
@@ -101,8 +101,8 @@
 **Interfaces:**
 - Documents authenticated boundary, feature adapters, unsupported-version behavior, and no-local-fallback invariant.
 
-- [ ] Add negative tests proving direct Remote mode does not call local Skills, Toolsets, Profiles, or Gateway implementations.
-- [ ] Add lat.md architecture and test specifications with code references.
-- [ ] Run focused tests and both typechecks.
-- [ ] Run build, `lat check`, and `git diff --check`.
+- [ ] Add negative IPC tests proving direct Remote mode does not call local Skills, Toolsets, Profiles, or Gateway implementations.
+- [x] Add lat.md architecture and test specifications with code references.
+- [x] Run focused tests and both typechecks.
+- [x] Run build, `lat check`, and `git diff --check`.
 - [ ] Run full suite; distinguish new failures from recorded baseline failures.
