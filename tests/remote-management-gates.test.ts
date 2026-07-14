@@ -33,4 +33,12 @@ describe("remote management renderer gates", () => {
     );
     expect(layout).not.toContain('<RemoteNotice feature="Profiles" />');
   });
+
+  it("does not replace Gateway with a remote-mode notice", () => {
+    const layout = readFileSync(
+      join(root, "src/renderer/src/screens/Layout/Layout.tsx"),
+      "utf8",
+    );
+    expect(layout).not.toContain('<RemoteNotice feature="Gateway" />');
+  });
 });

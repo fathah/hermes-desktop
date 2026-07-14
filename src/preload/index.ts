@@ -730,12 +730,14 @@ const hermesAPI = {
     ipcRenderer.invoke("clarify-respond", { requestId, answer }),
 
   // Gateway
-  startGateway: (): Promise<GatewayStartResult> =>
-    ipcRenderer.invoke("start-gateway"),
-  stopGateway: (): Promise<boolean> => ipcRenderer.invoke("stop-gateway"),
+  startGateway: (profile?: string): Promise<GatewayStartResult> =>
+    ipcRenderer.invoke("start-gateway", profile),
+  stopGateway: (profile?: string): Promise<boolean> =>
+    ipcRenderer.invoke("stop-gateway", profile),
   restartGateway: (profile?: string): Promise<boolean> =>
     ipcRenderer.invoke("restart-gateway", profile),
-  gatewayStatus: (): Promise<boolean> => ipcRenderer.invoke("gateway-status"),
+  gatewayStatus: (profile?: string): Promise<boolean> =>
+    ipcRenderer.invoke("gateway-status", profile),
   dashboardStatus: (profile?: string): Promise<DashboardStatus> =>
     ipcRenderer.invoke("dashboard-status", profile),
   freshDashboardWsUrl: (profile?: string): Promise<string> =>
