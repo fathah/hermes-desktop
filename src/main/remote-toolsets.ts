@@ -28,8 +28,7 @@ export async function remoteGetToolsets(
     .map((row) => ({
       key: row.name,
       label: typeof row.label === "string" ? row.label : row.name,
-      description:
-        typeof row.description === "string" ? row.description : "",
+      description: typeof row.description === "string" ? row.description : "",
       enabled: row.enabled === true,
     }));
 }
