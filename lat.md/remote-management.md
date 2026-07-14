@@ -36,6 +36,8 @@ Missing or incompatible Agent endpoints fail within affected feature and never s
 
 OAuth authentication failures retain reauthentication semantics from [[remote-dashboard-oauth#Failure behavior]]. Network and server errors surface through existing feature error states.
 
+Remote status metadata uses [[src/main/remote-metadata.ts#remoteGetHermesHome]] through the same cookie-aware boundary, while SSH dashboard bridges retain token transport.
+
 ## Test specifications
 
 Focused tests protect authentication routing, adapter response mapping, mutations, and renderer feature gates.

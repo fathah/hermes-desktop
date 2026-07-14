@@ -986,7 +986,7 @@ export function registerIpcHandlers(context: IpcContext): void {
 
   ipcMain.handle("get-hermes-home", (_event, profile?: string) => {
     const conn = getConnectionConfig();
-    if (conn.mode === "remote") return remoteGetHermesHome(conn);
+    if (conn.mode === "remote") return remoteGetHermesHome(conn, profile);
     if (conn.mode === "ssh" && conn.ssh)
       return withSshDashboardSessions(
         conn,
