@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ArrowRight, ExternalLink, Check } from "../../assets/icons";
-import { PROVIDERS, LOCAL_PRESETS } from "../../constants";
+import { PROVIDERS, LOCAL_PRESETS, DASHSCOPE_ENDPOINTS } from "../../constants";
 import { useI18n } from "../../components/useI18n";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
 import BrandLogo from "../../components/common/BrandLogo";
@@ -30,6 +30,7 @@ function Setup({
 
   const provider = PROVIDERS.setup.find((p) => p.id === selectedProvider)!;
   const isLocal = selectedProvider === "local";
+  const isDashScope = selectedProvider === "alibaba";
 
   function applyLocalPreset(presetBaseUrl: string): void {
     setBaseUrl(presetBaseUrl);
@@ -50,7 +51,7 @@ function Setup({
       setError(t("setup.missingApiKey"));
       return;
     }
-    if (isLocal && !baseUrl.trim()) {
+    if ((isLocal || isDashScope) && !baseUrl.trim()) {
       setError(t("setup.missingServerUrl"));
       return;
     }
@@ -67,7 +68,8 @@ function Setup({
       }
 
       const configProvider = isLocal ? "custom" : provider.configProvider;
-      const configBaseUrl = isLocal ? baseUrl.trim() : provider.baseUrl;
+      const configBaseUrl =
+        isLocal || isDashScope ? baseUrl.trim() : provider.baseUrl;
       const configModel = modelName.trim() || "";
       await window.hermesAPI.setModelConfig(
         configProvider,
@@ -105,6 +107,9 @@ function Setup({
                 className={`setup-provider-card ${active ? "selected" : ""}`}
                 onClick={() => {
                   setSelectedProvider(p.id);
+                  if (p.id === "alibaba") {
+                    setBaseUrl(p.baseUrl);
+                  }
                   setError("");
                 }}
               >
@@ -235,7 +240,35 @@ function Setup({
             </>
           ) : provider.needsKey ? (
             <>
-              <label className="setup-label">
+              {isDashScope && (
+                <>
+                  <label className="setup-label">
+                    {t("constants.dashscopeEndpoint")}
+                  </label>
+                  <select
+                    className="input"
+                    value={baseUrl}
+                    onChange={(e) => {
+                      setBaseUrl(e.target.value);
+                      setError("");
+                    }}
+                  >
+                    {DASHSCOPE_ENDPOINTS.map((endpoint) => (
+                      <option key={endpoint.id} value={endpoint.baseUrl}>
+                        {t(endpoint.name)}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="setup-field-hint">
+                    {t("setup.customServerHint")}
+                  </div>
+                </>
+              )}
+
+              <label
+                className="setup-label"
+                style={isDashScope ? { marginTop: 16 } : undefined}
+              >
                 {t("setup.apiKeyLabel", { provider: t(provider.name) })}
               </label>
               <div className="setup-input-group">
@@ -303,7 +336,7 @@ function Setup({
             disabled={
               saving ||
               (provider.needsKey && !apiKey.trim()) ||
-              (isLocal && !baseUrl.trim())
+              ((isLocal || isDashScope) && !baseUrl.trim())
             }
             style={{ marginTop: isLocal ? 20 : 0 }}
           >

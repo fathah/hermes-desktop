@@ -31,6 +31,11 @@ describe("provider-registry", () => {
       expect(canonicalProviderBaseUrl("cerebras")).toBe(
         "https://api.cerebras.ai/v1",
       );
+      // Must stay the agent's own default (international) — a CN value here
+      // would be written into every empty-base_url alibaba config on save.
+      expect(canonicalProviderBaseUrl("alibaba")).toBe(
+        "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+      );
     });
 
     it("returns the canonical URL for the Big3 (openai / anthropic / openrouter)", () => {

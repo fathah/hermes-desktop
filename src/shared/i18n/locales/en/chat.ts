@@ -10,6 +10,9 @@ export default {
   send: "Send",
   searchModels: "Search models...",
   custom: "Custom",
+  allModels: "All models",
+  noModelsMatch: "No models match",
+  configure: "Configure",
   typeModelName: "Type model name...",
   reasoningEffort: {
     title: "Reasoning Level",

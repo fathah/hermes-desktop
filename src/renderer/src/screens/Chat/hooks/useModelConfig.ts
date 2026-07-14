@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { PROVIDERS } from "../../../constants";
+import { PROVIDERS, displayBrandFromConfig } from "../../../constants";
 import { useDiscoveredModels } from "../../../hooks/useDiscoveredModels";
 import { useI18n } from "../../../components/useI18n";
 import type { ModelGroup } from "../types";
@@ -73,14 +73,19 @@ interface UseModelConfigResult {
 function groupModelsByProvider(models: SavedModelForPicker[]): ModelGroup[] {
   const groupMap = new Map<string, ModelGroup>();
   for (const m of models) {
-    if (!groupMap.has(m.provider)) {
-      groupMap.set(m.provider, {
-        provider: m.provider,
-        providerLabel: PROVIDERS.labels[m.provider] || m.provider,
+    // Group by display brand so OpenAI-compatible providers stored as `custom`
+    // (Hermes One, Groq, …) show under their own header instead of the generic
+    // "OpenAI Compatible / Local" bucket. Each model keeps its raw provider +
+    // baseUrl below so selection/routing is unchanged.
+    const brand = displayBrandFromConfig(m.provider, m.baseUrl || "");
+    if (!groupMap.has(brand)) {
+      groupMap.set(brand, {
+        provider: brand,
+        providerLabel: PROVIDERS.labels[brand] || brand,
         models: [],
       });
     }
-    groupMap.get(m.provider)!.models.push({
+    groupMap.get(brand)!.models.push({
       provider: m.provider,
       model: m.model,
       label: m.name,

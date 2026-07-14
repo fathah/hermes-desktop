@@ -67,6 +67,10 @@ function installApi(): void {
     configurable: true,
     value: {
       listWallets: vi.fn().mockResolvedValue([WALLET]),
+      // No linked cloud agent in this test — local wallets only.
+      syncWallets: vi
+        .fn()
+        .mockResolvedValue({ status: "unlinked", wallets: [] }),
       getTokenBalances: vi.fn().mockResolvedValue(BALANCES),
       copyToClipboard: vi.fn().mockResolvedValue(undefined),
     },

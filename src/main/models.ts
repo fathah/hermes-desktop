@@ -4,23 +4,74 @@ import { randomUUID } from "crypto";
 import { HERMES_HOME } from "./installer";
 import { safeWriteFile, profilePaths } from "./utils";
 import { hostDerivedEnvKeyForUrl } from "./host-derived-env";
+import { customProviderEnvKey } from "../shared/url-key-map";
 import DEFAULT_MODELS from "./default-models";
 
 const MODELS_FILE = join(HERMES_HOME, "models.json");
+const MODEL_DEFS_FILE = join(HERMES_HOME, "model-definitions.json");
 
-export interface SavedModel {
+/**
+ * A persisted `models.json` row — a pure *attachment* of a model id to a
+ * provider/endpoint. Shared metadata (display name default, context window,
+ * capabilities) lives once in a {@link ModelDefinition} keyed by `model` id, so
+ * the same model id attached to two providers shares one definition instead of
+ * re-storing it per row. `name` is kept on the row because the runtime derives
+ * a custom-provider env key from `providerLabel || name` ([[src/main/hermes.ts]]),
+ * so it must remain resolvable from the raw store.
+ */
+export interface SavedModelRow {
   id: string;
   name: string;
   provider: string;
   model: string;
   baseUrl: string;
   apiMode?: string | null;
-  /** Optional manual context-window override (tokens). When set, it's mirrored
-   *  into config.yaml's `model.context_length` on activation — fixing the
-   *  context gauge for providers that don't advertise `context_length` over
-   *  /models, and driving the agent's auto-compaction threshold. */
-  contextLength?: number;
+  /** Display name of the custom provider this model belongs to (only set for
+   *  user-added named custom providers). Groups a provider's models together in
+   *  the UI and, crucially, keys its API key: the runtime resolves
+   *  `customProviderEnvKey(providerLabel)` so every model under one provider
+   *  shares that provider's key rather than the shared `CUSTOM_API_KEY`. */
+  providerLabel?: string;
   createdAt: number;
+}
+
+/**
+ * The public, read-time model shape: a {@link SavedModelRow} with its matching
+ * {@link ModelDefinition} merged on. Every consumer (`resolveLibraryModelEntry`,
+ * the chat/Providers pickers, the runtime spawn) sees this flat superset, so the
+ * definitions layer is transparent to them.
+ */
+export interface SavedModel extends SavedModelRow {
+  /** Optional manual context-window override (tokens), sourced from the shared
+   *  {@link ModelDefinition}. When set, it's mirrored into config.yaml's
+   *  `model.context_length` on activation — fixing the context gauge for
+   *  providers that don't advertise `context_length` over /models, and driving
+   *  the agent's auto-compaction threshold. */
+  contextLength?: number;
+  /** Model capabilities (e.g. "vision", "tools"), from the shared definition. */
+  capabilities?: string[];
+  /** Input/output modalities, from the shared definition. */
+  modalities?: { input?: string[]; output?: string[] };
+}
+
+/**
+ * Shared, per-model-id metadata. Defined once and merged onto every attachment
+ * of that model id, so context window / display name / capabilities are entered
+ * a single time and reused across providers. Stored in `model-definitions.json`;
+ * local-only (like the per-row context override it replaces — the remote/SSH
+ * library paths never carried it).
+ */
+export interface ModelDefinition {
+  /** Canonical model id — the key. */
+  model: string;
+  /** Preferred display name (used when an attachment row has none). */
+  name?: string;
+  /** Manual context-window override (tokens). */
+  contextLength?: number;
+  capabilities?: string[];
+  modalities?: { input?: string[]; output?: string[] };
+  createdAt: number;
+  updatedAt: number;
 }
 
 /** Coerce an arbitrary value to a positive integer token count, or undefined. */
@@ -34,7 +85,14 @@ function normalizeContextLength(value: unknown): number | undefined {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : undefined;
 }
 
-export function readModels(): SavedModel[] {
+/**
+ * Raw persisted attachment rows — a plain JSON read with no definition merge.
+ * Writers (`addModel`/`updateModel`/`removeModel`/`seedDefaults`/migration) use
+ * this so merged-only fields (`contextLength`, `capabilities`, …) are never
+ * written back onto a row. Legacy rows may still carry `contextLength`; it's
+ * hoisted out by {@link ensureModelDefinitionsMigrated} and otherwise ignored.
+ */
+export function readModelsRaw(): SavedModelRow[] {
   try {
     if (!existsSync(MODELS_FILE)) return [];
     return JSON.parse(readFileSync(MODELS_FILE, "utf-8"));
@@ -43,8 +101,146 @@ export function readModels(): SavedModel[] {
   }
 }
 
-function writeModels(models: SavedModel[]): void {
+/**
+ * Public read: raw rows with their matching {@link ModelDefinition} merged on.
+ * `contextLength` comes from the definition (source of truth); a row's own
+ * `name` is never overwritten (`row.name ?? def.name ?? id`) so the runtime's
+ * env-key derivation from `name` stays stable. Read-only — no writes here, so it
+ * is safe on the per-spawn runtime hot path ([[src/main/hermes.ts]] uses the raw
+ * store directly and doesn't need the merge, but callers via IPC do).
+ */
+export function readModels(): SavedModel[] {
+  const rows = readModelsRaw();
+  const defs = readModelDefinitions();
+  return rows.map((row) => {
+    const def = defs[row.model];
+    const merged: SavedModel = {
+      ...row,
+      name: row.name || def?.name || row.model,
+    };
+    if (def?.contextLength !== undefined)
+      merged.contextLength = def.contextLength;
+    if (def?.capabilities) merged.capabilities = def.capabilities;
+    if (def?.modalities) merged.modalities = def.modalities;
+    return merged;
+  });
+}
+
+function writeModels(models: SavedModelRow[]): void {
   safeWriteFile(MODELS_FILE, JSON.stringify(models, null, 2));
+}
+
+/** Read the definitions map (`{ [modelId]: ModelDefinition }`), tolerant of a
+ *  missing/corrupt file. */
+export function readModelDefinitions(): Record<string, ModelDefinition> {
+  try {
+    if (!existsSync(MODEL_DEFS_FILE)) return {};
+    const parsed = JSON.parse(readFileSync(MODEL_DEFS_FILE, "utf-8"));
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeModelDefinitions(defs: Record<string, ModelDefinition>): void {
+  safeWriteFile(MODEL_DEFS_FILE, JSON.stringify(defs, null, 2));
+}
+
+export function listModelDefinitions(): ModelDefinition[] {
+  return Object.values(readModelDefinitions());
+}
+
+export function getModelDefinition(model: string): ModelDefinition | null {
+  return readModelDefinitions()[model] ?? null;
+}
+
+/**
+ * Upsert a model definition (keyed by model id). A `contextLength` of `null`/`0`
+ * clears the override; other patch fields set when provided. Bumps `updatedAt`.
+ * Returns the resulting definition.
+ */
+export function setModelDefinition(
+  model: string,
+  patch: {
+    name?: string;
+    contextLength?: number | null;
+    capabilities?: string[];
+    modalities?: { input?: string[]; output?: string[] };
+  },
+): ModelDefinition {
+  const defs = readModelDefinitions();
+  const now = Date.now();
+  const prev = defs[model];
+  const next: ModelDefinition = prev
+    ? { ...prev, updatedAt: now }
+    : { model, createdAt: now, updatedAt: now };
+  if (patch.name !== undefined) next.name = patch.name.trim() || undefined;
+  if (patch.contextLength !== undefined) {
+    const ctx = normalizeContextLength(patch.contextLength);
+    if (ctx !== undefined) next.contextLength = ctx;
+    else delete next.contextLength;
+  }
+  if (patch.capabilities !== undefined)
+    next.capabilities = patch.capabilities.length
+      ? patch.capabilities
+      : undefined;
+  if (patch.modalities !== undefined) next.modalities = patch.modalities;
+  defs[model] = next;
+  writeModelDefinitions(defs);
+  return next;
+}
+
+export function removeModelDefinition(model: string): boolean {
+  const defs = readModelDefinitions();
+  if (!(model in defs)) return false;
+  delete defs[model];
+  writeModelDefinitions(defs);
+  return true;
+}
+
+/**
+ * One-time hoist of legacy per-row `contextLength` (and `name`) into shared
+ * definitions. For each raw row carrying a positive `contextLength`, upsert
+ * `defs[row.model]` keeping the larger context window (safer gauge/compaction
+ * value) and a first-wins name, then strip `contextLength` off the row. Merges
+ * into any existing definitions file and is idempotent — after it runs no row
+ * has `contextLength`, so a re-run hoists nothing.
+ */
+export function ensureModelDefinitionsMigrated(): void {
+  const rawRows = readModelsRaw() as Array<
+    SavedModelRow & { contextLength?: number }
+  >;
+  const legacy = rawRows.filter(
+    (r) => normalizeContextLength(r.contextLength) !== undefined,
+  );
+  if (legacy.length === 0) return;
+
+  const defs = readModelDefinitions();
+  const now = Date.now();
+  for (const row of legacy) {
+    const ctx = normalizeContextLength(row.contextLength)!;
+    const prev = defs[row.model];
+    defs[row.model] = {
+      model: row.model,
+      name:
+        prev?.name ??
+        (row.name && row.name !== row.model ? row.name : undefined),
+      contextLength: Math.max(prev?.contextLength ?? 0, ctx),
+      capabilities: prev?.capabilities,
+      modalities: prev?.modalities,
+      createdAt: prev?.createdAt ?? now,
+      updatedAt: now,
+    };
+  }
+  writeModelDefinitions(defs);
+
+  // Strip the now-redundant field from every row.
+  const stripped = rawRows.map((r) => {
+    const { contextLength: _drop, ...rest } = r;
+    void _drop;
+    return rest as SavedModelRow;
+  });
+  writeModels(stripped);
 }
 
 interface CustomProviderEntry {
@@ -104,8 +300,8 @@ function loadCustomProviders(profile?: string): CustomProviderEntry[] {
   return result;
 }
 
-function seedDefaults(profile?: string): SavedModel[] {
-  const models: SavedModel[] = DEFAULT_MODELS.map((m) => ({
+function seedDefaults(profile?: string): SavedModelRow[] {
+  const models: SavedModelRow[] = DEFAULT_MODELS.map((m) => ({
     id: randomUUID(),
     name: m.name,
     provider: m.provider,
@@ -146,10 +342,7 @@ function seedDefaults(profile?: string): SavedModel[] {
           // profile env vars at spawn, so the host-derived form has
           // to live in .env (not just be set at chat-time) for the
           // long-running gateway flow to work on the new engine.
-          const customPrefixKey =
-            "CUSTOM_PROVIDER_" +
-            cp.name.replace(/[^A-Za-z0-9]/g, "_").toUpperCase() +
-            "_KEY";
+          const customPrefixKey = customProviderEnvKey(cp.name);
           const namesToWrite: string[] = [customPrefixKey];
           const hostKey = hostDerivedEnvKeyForUrl(cp.baseUrl);
           // Don't shadow real OPENAI / ANTHROPIC keys via this path —
@@ -193,8 +386,13 @@ function seedDefaults(profile?: string): SavedModel[] {
 
 export function listModels(): SavedModel[] {
   if (!existsSync(MODELS_FILE)) {
-    return seedDefaults();
+    seedDefaults();
   }
+  // Hoist any legacy per-row context overrides into shared definitions before
+  // the merged read. This is the renderer-facing entry point (Providers screen),
+  // which already performs writes via seedDefaults; the runtime path uses
+  // readModels() directly and never triggers this migration write.
+  ensureModelDefinitionsMigrated();
   return readModels();
 }
 
@@ -204,32 +402,48 @@ export function addModel(
   model: string,
   baseUrl: string,
   contextLength?: number,
+  providerLabel?: string,
 ): SavedModel {
-  const models = readModels();
+  const models = readModelsRaw();
 
-  // Dedup: if same model ID + provider exists, return existing
-  const existing = models.find(
-    (m) => m.model === model && m.provider === provider,
-  );
-  if (existing) return existing;
-
+  // A context-window override is shared metadata keyed by model id — persist it
+  // to the definition, not onto this attachment row, so every provider serving
+  // this model id reuses it.
   const ctx = normalizeContextLength(contextLength);
-  const entry: SavedModel = {
+  if (ctx !== undefined) setModelDefinition(model, { contextLength: ctx });
+
+  // Dedup: same model ID + provider + base URL. Base URL is part of the key so
+  // the same model id can live under two different custom endpoints.
+  const norm = (u: string): string =>
+    (u || "").trim().replace(/\/+$/, "").toLowerCase();
+  const existing = models.find(
+    (m) =>
+      m.model === model &&
+      m.provider === provider &&
+      norm(m.baseUrl) === norm(baseUrl),
+  );
+  if (existing)
+    return {
+      ...existing,
+      ...(ctx !== undefined ? { contextLength: ctx } : {}),
+    };
+
+  const entry: SavedModelRow = {
     id: randomUUID(),
     name,
     provider,
     model,
     baseUrl: baseUrl || "",
-    ...(ctx !== undefined ? { contextLength: ctx } : {}),
+    ...(providerLabel ? { providerLabel } : {}),
     createdAt: Date.now(),
   };
   models.push(entry);
   writeModels(models);
-  return entry;
+  return { ...entry, ...(ctx !== undefined ? { contextLength: ctx } : {}) };
 }
 
 export function removeModel(id: string): boolean {
-  const models = readModels();
+  const models = readModelsRaw();
   const filtered = models.filter((m) => m.id !== id);
   if (filtered.length === models.length) return false;
   writeModels(filtered);
@@ -239,23 +453,23 @@ export function removeModel(id: string): boolean {
 export function updateModel(
   id: string,
   fields: Partial<
-    Pick<SavedModel, "name" | "provider" | "model" | "baseUrl">
+    Pick<SavedModelRow, "name" | "provider" | "model" | "baseUrl">
   > & { contextLength?: number | null },
 ): boolean {
-  const models = readModels();
+  const models = readModelsRaw();
   const idx = models.findIndex((m) => m.id === id);
   if (idx === -1) return false;
 
-  // `contextLength` is handled out-of-band: a positive value sets the
-  // override, anything else (null / 0 / undefined-but-present) clears it.
   const { contextLength, ...rest } = fields;
-  const next: SavedModel = { ...models[idx], ...rest };
-  if (contextLength !== undefined) {
-    const ctx = normalizeContextLength(contextLength);
-    if (ctx !== undefined) next.contextLength = ctx;
-    else delete next.contextLength;
-  }
+  const next: SavedModelRow = { ...models[idx], ...rest };
   models[idx] = next;
   writeModels(models);
+
+  // `contextLength` is shared metadata: route it to the definition keyed by the
+  // (possibly updated) model id, not onto the row. A positive value sets the
+  // override; anything else clears it.
+  if (contextLength !== undefined) {
+    setModelDefinition(next.model, { contextLength });
+  }
   return true;
 }

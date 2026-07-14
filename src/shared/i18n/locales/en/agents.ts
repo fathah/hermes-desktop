@@ -52,6 +52,7 @@ export default {
   sectionPersona: "Persona",
   sectionAgentMemory: "Agent Memory",
   sectionWallet: "Wallet",
+  sectionSync: "Sync",
   sectionAdvanced: "Advanced",
   defaultNotDeletable: "The default profile can't be deleted.",
   comingSoon: "Coming soon",
@@ -85,4 +86,45 @@ export default {
   walletDeleteWarning:
     "This will permanently remove this wallet from Hermes. Make sure you have backed up the recovery phrase — you won't be able to recover the wallet without it.",
   walletDeleteConfirmLabel: "Remove wallet",
+  sync: "Sync",
+  syncing: "Syncing…",
+  syncSignedOut: "Not synced",
+  syncSignedOutHint:
+    "Sign in to your Hermes One account on the Providers page to back agents up to the cloud.",
+  syncUpToDate: "Synced with your Hermes One account",
+  syncSummary: "Synced — {{pushed}} pushed, {{pulled}} pulled, {{created}} new",
+  syncErrors: "Sync finished with {{count}} error(s)",
+  syncUnauthorized: "Session expired — sign in again on the Providers page",
+  syncFailed: "Sync failed",
+  syncTitle: "Cloud sync",
+  syncPaneSubtitle:
+    "Back this agent up to your Hermes One account and pull changes made in the console.",
+  syncNow: "Sync now",
+  syncAccount: "Account",
+  syncLink: "Cloud agent",
+  syncLinked: "Linked",
+  syncNotLinked: "Not linked yet — sync to create it",
+  syncLastResult: "Last sync",
+  syncSignInHint:
+    "Sign in to your Hermes One account on the Providers page to sync this agent.",
+  syncAction: {
+    "up-to-date": "Up to date",
+    pushed: "Pushed to cloud",
+    pulled: "Pulled from cloud",
+    "created-remote": "Backed up to cloud",
+    "created-local": "Created from cloud",
+    unlinked: "Unlinked (cloud agent was deleted)",
+    error: "Sync error",
+  },
+  walletSync: "Refresh",
+  walletSyncing: "Syncing…",
+  walletSourceLocal: "Local",
+  walletSourceCloud: "Cloud",
+  walletManagedEmpty: "No wallets yet",
+  walletSyncedHint:
+    "Wallets are managed in your Hermes One account and appear here once this agent syncs.",
+  walletSignInHint:
+    "Sign in to your Hermes One account on the Providers page to see this agent's wallets.",
+  walletForeignHint:
+    "This agent is linked to a different Hermes One account, so its wallets stay untouched here.",
 } as const;

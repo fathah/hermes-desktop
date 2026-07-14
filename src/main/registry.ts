@@ -87,8 +87,12 @@ const EMPTY_CATALOG: RegistryCatalog = {
 };
 
 // Short-lived cache so flipping between Discover sub-tabs doesn't refetch.
+// Covers the raw.githubusercontent fetches (index + models), which are
+// CDN-backed and not subject to the api.github.com rate limit — so this stays
+// short to keep the catalog/model list fresh. The rate-limited git-tree fetch
+// caches separately for far longer (see TREE_CACHE_TTL_MS).
 let cache: { at: number; data: RegistryCatalog } | null = null;
-const CACHE_TTL_MS = 5 * 60 * 1000;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 min
 
 function authorName(author: IndexEntry["author"]): string | undefined {
   if (!author) return undefined;
@@ -333,13 +337,23 @@ interface TreeBlob {
   type: string;
 }
 let treeCache: { at: number; blobs: TreeBlob[] } | null = null;
+// The recursive git tree is fetched from api.github.com, which rate-limits
+// anonymous callers at 60 req/h (token auth below raises that ceiling). Cache
+// it far longer than the CDN-backed raw fetches to keep that pressure low.
+const TREE_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 /** All file paths under a folder, via the cached recursive git tree. */
 async function listFolderFiles(folder: string): Promise<string[]> {
-  if (!treeCache || Date.now() - treeCache.at >= CACHE_TTL_MS) {
-    const res = await fetch(TREE_URL, {
-      headers: { Accept: "application/vnd.github+json" },
-    });
+  if (!treeCache || Date.now() - treeCache.at >= TREE_CACHE_TTL_MS) {
+    // Use GITHUB_TOKEN / GH_TOKEN when available to avoid anonymous
+    // rate limits (60 req/h) on api.github.com.  Authenticated requests
+    // get 5 000 req/h instead.
+    const ghToken = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || "";
+    const headers: Record<string, string> = {
+      Accept: "application/vnd.github+json",
+    };
+    if (ghToken) headers.Authorization = `Bearer ${ghToken}`;
+    const res = await fetch(TREE_URL, { headers });
     if (!res.ok) throw new Error(`Tree fetch failed (${res.status})`);
     const json = (await res.json()) as { tree?: TreeBlob[] };
     treeCache = { at: Date.now(), blobs: json.tree ?? [] };

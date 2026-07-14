@@ -2,6 +2,7 @@ import { Bot } from "../../assets/icons";
 import claudeLogo from "../../assets/logos/claude-color.svg";
 import geminiLogo from "../../assets/logos/gemini-color.svg";
 import nousLogo from "../../assets/logos/nousresearch.svg";
+import hermesoneLogo from "../../assets/hermes-icon.svg";
 import openaiLogo from "../../assets/logos/openai.svg";
 import openrouterLogo from "../../assets/logos/openrouter.svg";
 import moonshotLogo from "../../assets/logos/moonshot.svg";
@@ -47,6 +48,7 @@ import atomicchatLogo from "../../assets/logos/atomicchat.svg";
 import qwenLogo from "../../assets/logos/qwen.svg";
 
 type BrandKey =
+  | "hermesone"
   | "claude"
   | "gemini"
   | "nous"
@@ -96,6 +98,7 @@ type BrandKey =
   | "unknown";
 
 const LOGOS: Record<Exclude<BrandKey, "unknown">, string> = {
+  hermesone: hermesoneLogo,
   claude: claudeLogo,
   gemini: geminiLogo,
   nous: nousLogo,
@@ -146,6 +149,9 @@ const LOGOS: Record<Exclude<BrandKey, "unknown">, string> = {
 
 function detectBrand(provider?: string, modelId?: string): BrandKey {
   const haystack = `${provider || ""} ${modelId || ""}`.toLowerCase();
+  // Match "hermesone" specifically — NOT bare "hermes", which would mis-tag
+  // Nous's Hermes-* models (served under the `nous` provider).
+  if (/hermes[-\s]?one/.test(haystack)) return "hermesone";
   if (/(claude|anthropic)/.test(haystack)) return "claude";
   if (/(gemini|google)/.test(haystack)) return "gemini";
   if (/(gpt|openai)/.test(haystack)) return "openai";

@@ -107,7 +107,7 @@ export default function Discover({
         skills: skills.map((s) => s.name),
         mcps: reg.mcps,
         workflows: reg.workflows,
-        agents: profiles.map((p) => p.name),
+        agents: profiles.map((p) => p.id),
       });
     } catch {
       /* leave as-is */

@@ -40,6 +40,13 @@ export type JanitorActor = {
 
 export type SceneActor = OfficeAgent | JanitorActor;
 
+/**
+ * Where an agent currently is. Drives interior-mode visibility: each interior
+ * view renders only the agents whose place matches it ("outside" = walking
+ * between buildings, so visible only in the city view).
+ */
+export type AgentPlace = "office" | "bank" | "showroom" | "outside";
+
 export type RenderAgent = SceneActor & {
   x: number;
   y: number;
@@ -50,6 +57,8 @@ export type RenderAgent = SceneActor & {
   frame: number;
   walkSpeed: number;
   phaseOffset: number;
+  /** Building the agent is currently in (defaults to the office). */
+  place?: AgentPlace;
   state:
     | "walking"
     | "sitting"

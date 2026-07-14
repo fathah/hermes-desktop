@@ -6,6 +6,7 @@ import {
   SETTINGS_SECTIONS,
   LOCAL_PRESETS,
   OPENAI_COMPATIBLE_BASE_URLS,
+  DASHSCOPE_ENDPOINTS,
   THEME_OPTIONS,
 } from "../src/renderer/src/constants";
 
@@ -30,7 +31,8 @@ describe("PROVIDERS", () => {
     expect(values).toContain("xai");
     expect(values).toContain("xiaomi");
     expect(values).toContain("nous");
-    expect(values).toContain("qwen");
+    expect(values).toContain("alibaba");
+    expect(values).toContain("qwen-oauth");
     expect(values).toContain("minimax");
     expect(values).toContain("lmstudio");
     expect(values).toContain("ollama");
@@ -72,6 +74,14 @@ describe("PROVIDERS", () => {
   it("no duplicate setup IDs", () => {
     const ids = PROVIDERS.setup.map((s) => s.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("offers DashScope setup through Alibaba with a mainland default", () => {
+    const dashscope = PROVIDERS.setup.find((s) => s.id === "alibaba");
+    expect(dashscope).toBeTruthy();
+    expect(dashscope?.configProvider).toBe("alibaba");
+    expect(dashscope?.envKey).toBe("DASHSCOPE_API_KEY");
+    expect(dashscope?.baseUrl).toBe(DASHSCOPE_ENDPOINTS[0].baseUrl);
   });
 });
 
@@ -235,6 +245,23 @@ describe("LOCAL_PRESETS", () => {
     for (const preset of LOCAL_PRESETS) {
       expect(OPENAI_COMPATIBLE_BASE_URLS[preset.id]).toBeTruthy();
     }
+  });
+});
+
+describe("DASHSCOPE_ENDPOINTS", () => {
+  it("offers mainland and international DashScope endpoints", () => {
+    expect(DASHSCOPE_ENDPOINTS).toEqual([
+      {
+        id: "cn",
+        name: "constants.dashscopeChinaEndpoint",
+        baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      },
+      {
+        id: "intl",
+        name: "constants.dashscopeIntlEndpoint",
+        baseUrl: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+      },
+    ]);
   });
 });
 

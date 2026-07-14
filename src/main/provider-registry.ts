@@ -26,6 +26,13 @@ export const PROVIDER_BASE_URLS: Record<string, string> = {
   cerebras: "https://api.cerebras.ai/v1",
   perplexity: "https://api.perplexity.ai",
   huggingface: "https://router.huggingface.co/v1",
+  // The agent's default is the INTERNATIONAL endpoint — this entry must
+  // mirror it: setModelConfig fills an empty base_url from this registry,
+  // so a CN value here would silently repoint existing intl users' keys at
+  // the mainland endpoint. The mainland-first choice lives in the UI picker
+  // (DASHSCOPE_ENDPOINTS in renderer constants), which writes base_url
+  // explicitly when the user selects it.
+  alibaba: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
   xiaomi: "https://api.xiaomimimo.com/v1",
   zai: "https://api.z.ai/api/paas/v4",
   anthropic: "https://api.anthropic.com/v1",

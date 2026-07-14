@@ -48,6 +48,7 @@ export function ProfileModalProvider({
           onExited={clearProfile}
           onChanged={open.opts?.onChanged}
           onDeleted={open.opts?.onDeleted}
+          initialSection={open.opts?.initialSection}
         />
       )}
     </ProfileModalContext.Provider>

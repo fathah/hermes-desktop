@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  cycleRunId,
   isScratchRun,
   mintRun,
   openSessionRunTransition,
+  runIdAtOrdinal,
   selectProfileRunTransition,
   type ChatRun,
 } from "./chatRuns";
@@ -126,5 +128,41 @@ describe("chat run profile transitions", () => {
 
     expect(next.activeRunId).toBe("run-saved");
     expect(next.runs).toEqual([active, saved]);
+  });
+});
+
+describe("chrome-style tab shortcuts", () => {
+  const three = [run("run-1", "a"), run("run-2", "b"), run("run-3", "c")];
+
+  it("cycles forward and backward with wrap-around", () => {
+    expect(cycleRunId(three, "run-1", 1)).toBe("run-2");
+    expect(cycleRunId(three, "run-3", 1)).toBe("run-1");
+    expect(cycleRunId(three, "run-1", -1)).toBe("run-3");
+    expect(cycleRunId(three, "run-2", -1)).toBe("run-1");
+  });
+
+  it("returns null when there is nothing to cycle to", () => {
+    expect(cycleRunId([], "run-x", 1)).toBeNull();
+    expect(cycleRunId([run("run-1", "a")], "run-1", 1)).toBeNull();
+  });
+
+  it("falls back to the first run when the active id is unknown", () => {
+    expect(cycleRunId(three, "run-gone", 1)).toBe("run-1");
+  });
+
+  it("selects the Nth tab by ordinal", () => {
+    expect(runIdAtOrdinal(three, 1)).toBe("run-1");
+    expect(runIdAtOrdinal(three, 3)).toBe("run-3");
+  });
+
+  it("maps 9 to the last tab regardless of count", () => {
+    expect(runIdAtOrdinal(three, 9)).toBe("run-3");
+    expect(runIdAtOrdinal([run("run-only", "a")], 9)).toBe("run-only");
+  });
+
+  it("returns null for ordinals without a tab", () => {
+    expect(runIdAtOrdinal(three, 4)).toBeNull();
+    expect(runIdAtOrdinal([], 1)).toBeNull();
+    expect(runIdAtOrdinal([], 9)).toBeNull();
   });
 });

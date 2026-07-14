@@ -91,6 +91,17 @@ import {
   cancelHermesAuthLogin,
   detectDeviceCode,
 } from "../hermes-auth";
+import { startDeviceLogin, cancelDeviceLogin } from "../hermes-account";
+import {
+  syncAgents,
+  getAgentSyncStatus,
+  getLinkedAgentId,
+} from "../agent-sync";
+import {
+  getAccount,
+  clearAllAccounts,
+  findAccountProfile,
+} from "../account-store";
 import {
   isRemoteMode,
   isRemoteOnlyMode,
@@ -193,6 +204,12 @@ import {
   remoteGetHermesVersion,
 } from "../remote-metadata";
 import {
+  remoteGetSkillContent,
+  remoteInstallSkill,
+  remoteListInstalledSkills,
+  remoteUninstallSkill,
+} from "../remote-skills";
+import {
   remoteAddModel,
   remoteGetModelConfig,
   remoteListModels,
@@ -205,6 +222,10 @@ import {
   addModel,
   removeModel,
   updateModel,
+  listModelDefinitions,
+  getModelDefinition,
+  setModelDefinition,
+  removeModelDefinition,
   type SavedModel,
 } from "../models";
 import { validateChatReadiness } from "../validation";
@@ -224,6 +245,7 @@ import {
   setProfileColor,
   setProfileAvatar,
   removeProfileAvatar,
+  setProfileName,
 } from "../profile-meta";
 import {
   createWallet,
@@ -232,6 +254,8 @@ import {
   listWallets,
   renameWallet,
 } from "../wallet-store";
+import { syncWalletsForProfile } from "../wallet-sync";
+import { getWalletPortfolio, provisionAgentWallet } from "../wallet-actions";
 import { getTokenBalances } from "../wallet-balances";
 import type { ImportWalletInput } from "../../shared/wallets";
 import {
@@ -785,6 +809,53 @@ export function registerIpcHandlers(context: IpcContext): void {
     );
   });
   ipcMain.handle("oauth-login-cancel", () => cancelHermesAuthLogin());
+
+  // Hermes account sign-in — OAuth 2.0 Device Authorization Grant against the
+  // Hermes backend. Streams progress to the renderer's modal, opens the browser
+  // approval page once the code is issued, and stores the encrypted session.
+  ipcMain.handle("hermes-account-login", (event, profile?: string) =>
+    startDeviceLogin(profile, {
+      onCode: (info) => {
+        if (event.sender.isDestroyed()) return;
+        // Show the code in the modal, then open the browser to approve it.
+        event.sender.send("hermes-account-login-code", info);
+        openExternalUrl(info.verificationUriComplete);
+      },
+      emit: (chunk) => {
+        if (event.sender.isDestroyed()) return;
+        event.sender.send("hermes-account-login-progress", chunk);
+      },
+    }),
+  );
+  ipcMain.handle("hermes-account-login-cancel", () => cancelDeviceLogin());
+  // The account is device-wide (one Hermes One login for the whole app), but
+  // account.json lives under whichever profile was active at sign-in. Resolve
+  // it app-wide so switching the active agent doesn't read as signed out, and
+  // sign out wherever the file lives.
+  ipcMain.handle("hermes-account-get", (_event, profile?: string) =>
+    getAccount(findAccountProfile() ?? profile),
+  );
+  ipcMain.handle("hermes-account-logout", () => {
+    clearAllAccounts();
+    return { success: true };
+  });
+
+  // Cloud agent sync — reconciles local profiles with the signed-in Hermes One
+  // account's cloud agents. `agent-sync-updated` tells the renderer to reload
+  // its profile list (pull-created profiles appear without a manual refresh).
+  ipcMain.handle("agent-sync-run", async (event) => {
+    const result = await syncAgents();
+    if (!event.sender.isDestroyed()) {
+      event.sender.send("agent-sync-updated", result);
+    }
+    return result;
+  });
+  ipcMain.handle("agent-sync-status", () => getAgentSyncStatus());
+  // The cloud agent id a profile is currently linked to (null when unlinked),
+  // for the per-profile Sync tab.
+  ipcMain.handle("agent-sync-linked-id", (_event, profile: string) =>
+    getLinkedAgentId(profile),
+  );
 
   // Configuration (profile-aware)
   ipcMain.handle("get-locale", () => getAppLocale());
@@ -1853,7 +1924,11 @@ export function registerIpcHandlers(context: IpcContext): void {
       // profile the user actually selected — and it survives relaunches.
       const active = getActiveProfileNameSync();
       const list = await sshListProfiles(conn.ssh);
-      return list.map((p) => ({ ...p, isActive: p.name === active }));
+      return list.map((p) => ({
+        ...p,
+        id: p.name,
+        isActive: p.name === active,
+      }));
     }
     return listProfiles();
   });
@@ -1901,6 +1976,16 @@ export function registerIpcHandlers(context: IpcContext): void {
   ipcMain.handle("set-profile-color", (_event, name: string, color: string) =>
     setProfileColor(name, color),
   );
+  ipcMain.handle("set-profile-name", (_event, id: string, name: string) => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "ssh" || conn.mode === "remote") {
+      return {
+        success: false,
+        error: "Agent renaming is only supported for local profiles",
+      };
+    }
+    return setProfileName(id, name);
+  });
   ipcMain.handle(
     "set-profile-avatar",
     (_event, name: string, dataUrl: string) => setProfileAvatar(name, dataUrl),
@@ -1930,6 +2015,21 @@ export function registerIpcHandlers(context: IpcContext): void {
     "delete-wallet",
     (_event, profile: string | undefined, id: string) =>
       deleteWallet(profile, id),
+  );
+  // Cloud wallets provisioned by the backend for the profile's linked agent.
+  // Read-only here; the desktop no longer mints wallets locally.
+  ipcMain.handle("wallet-sync", (_event, profile?: string) =>
+    syncWalletsForProfile(profile),
+  );
+  // Backend-driven wallet ops used by the Office's space representatives
+  // (bank tellers): balances and provisioning both live server-side.
+  ipcMain.handle(
+    "wallet-portfolio",
+    (_event, profile: string | undefined, walletId: string) =>
+      getWalletPortfolio(profile, walletId),
+  );
+  ipcMain.handle("wallet-provision", (_event, profile?: string) =>
+    provisionAgentWallet(profile),
   );
   ipcMain.handle("get-token-balances", (_event, address: string) =>
     getTokenBalances(address),
@@ -2014,11 +2114,17 @@ export function registerIpcHandlers(context: IpcContext): void {
     },
   );
 
-  // Skills
+  // Skills. Remote (HTTP) mode routes to the dashboard's /api/skills* —
+  // falling through to the local CLI there showed (and mutated) the LOCAL
+  // machine's skills while connected to a remote (#578's report). Bundled
+  // skills stay local in remote mode: that list is the shipped catalog, not
+  // per-machine state.
   ipcMain.handle("list-installed-skills", (_event, profile?: string) => {
     const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh)
       return sshListInstalledSkills(conn.ssh, profile);
+    if (conn.mode === "remote")
+      return remoteListInstalledSkills(activeSshProfile(profile));
     return listInstalledSkills(profile);
   });
   ipcMain.handle("list-bundled-skills", () => {
@@ -2030,6 +2136,8 @@ export function registerIpcHandlers(context: IpcContext): void {
     const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh)
       return sshGetSkillContent(conn.ssh, skillPath);
+    if (conn.mode === "remote")
+      return remoteGetSkillContent(skillPath, activeSshProfile());
     return getSkillContent(skillPath);
   });
   ipcMain.handle(
@@ -2038,6 +2146,8 @@ export function registerIpcHandlers(context: IpcContext): void {
       const conn = getConnectionConfig();
       if (conn.mode === "ssh" && conn.ssh)
         return sshInstallSkill(conn.ssh, identifier);
+      if (conn.mode === "remote")
+        return remoteInstallSkill(identifier, activeSshProfile(_profile));
       return installSkill(identifier, _profile);
     },
   );
@@ -2047,6 +2157,8 @@ export function registerIpcHandlers(context: IpcContext): void {
       const conn = getConnectionConfig();
       if (conn.mode === "ssh" && conn.ssh)
         return sshUninstallSkill(conn.ssh, name);
+      if (conn.mode === "remote")
+        return remoteUninstallSkill(name, activeSshProfile(_profile));
       return uninstallSkill(name, _profile);
     },
   );
@@ -2186,6 +2298,7 @@ export function registerIpcHandlers(context: IpcContext): void {
       model: string,
       baseUrl: string,
       contextLength?: number,
+      providerLabel?: string,
     ) => {
       const conn = getConnectionConfig();
       let addedModel: Awaited<ReturnType<typeof addModel>>;
@@ -2206,7 +2319,14 @@ export function registerIpcHandlers(context: IpcContext): void {
           getActiveProfileNameSync(),
         );
       } else {
-        addedModel = addModel(name, provider, model, baseUrl, contextLength);
+        addedModel = addModel(
+          name,
+          provider,
+          model,
+          baseUrl,
+          contextLength,
+          providerLabel,
+        );
       }
       notifyModelLibraryChanged();
       return addedModel;
@@ -2271,6 +2391,50 @@ export function registerIpcHandlers(context: IpcContext): void {
       return updated;
     },
   );
+
+  // Shared model definitions — per-model-id metadata (display name, context
+  // window, capabilities) reused across every provider that serves the model.
+  // Local-only, mirroring the existing scoping of the context-length override
+  // (the remote/SSH library paths never carried it); remote/ssh sessions get
+  // inert no-op results rather than an error.
+  ipcMain.handle("list-model-definitions", () => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "remote" || conn.mode === "ssh") return [];
+    return listModelDefinitions();
+  });
+  ipcMain.handle("get-model-definition", (_event, model: string) => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "remote" || conn.mode === "ssh") return null;
+    return getModelDefinition(model);
+  });
+  ipcMain.handle(
+    "set-model-definition",
+    (
+      _event,
+      model: string,
+      patch: {
+        name?: string;
+        contextLength?: number | null;
+        capabilities?: string[];
+        modalities?: { input?: string[]; output?: string[] };
+      },
+    ) => {
+      const conn = getConnectionConfig();
+      if (conn.mode === "remote" || conn.mode === "ssh") return null;
+      const def = setModelDefinition(model, patch);
+      // The gauge/picker read the merged model shape, so a definition change is
+      // a library change from the renderer's perspective.
+      notifyModelLibraryChanged();
+      return def;
+    },
+  );
+  ipcMain.handle("remove-model-definition", (_event, model: string) => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "remote" || conn.mode === "ssh") return false;
+    const removed = removeModelDefinition(model);
+    if (removed) notifyModelLibraryChanged();
+    return removed;
+  });
 
   // Claw3D
   ipcMain.handle("claw3d-status", () => getClaw3dStatus());
