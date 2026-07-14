@@ -25,9 +25,11 @@ import {
 } from "./secrets";
 import { canonicalProviderBaseUrl } from "./provider-registry";
 import {
+  customProviderEnvKey,
   expectedEnvKeyForUrl,
   OPENAI_COMPAT_PROVIDERS,
 } from "../shared/url-key-map";
+import { readModelsRaw } from "./models";
 
 // ── Connection Config (local / remote / ssh) ─────────────
 
@@ -775,10 +777,24 @@ export function customEndpointKeyResolvable(
     "CUSTOM_API_KEY",
     "OPENAI_API_KEY",
   ]);
+
+  // Provider-owned models may store a per-label key like CUSTOM_PROVIDER_<NAME>_KEY.
+  // Include those so the config-health audit does not flag a configured provider
+  // whose key lives under its own env var.
+  try {
+    const modelRows = readModelsRaw();
+    for (const row of modelRows) {
+      if (row.provider === "custom" && (row.baseUrl || "") === baseUrl && row.providerLabel) {
+        candidates.add(customProviderEnvKey(row.providerLabel));
+      }
+    }
+  } catch {
+    // models.json unreadable — the fallback chain above still applies
+  }
+
   for (const k of candidates) {
     if ((env[k] ?? "").trim()) return true;
   }
-  // Vault-aware: a `command` provider with any of the fallback keys
   // configured in the vault satisfies the requirement too — don't
   // return false and trigger a cascade of "MODEL_KEY_MISSING" / "set up
   // provider" warnings for a vault-only user. NOTE: ./secrets is already
