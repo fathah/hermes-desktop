@@ -3782,6 +3782,30 @@ body {
      comes from each row's own bottom margin/padding. */
 }
 
+/* "Show N earlier messages" — collapses the transcript head in long sessions
+   (windowing, the React-tree half of the #748 input-lag fix). */
+.chat-transcript-earlier {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0 16px;
+}
+
+.chat-transcript-earlier-btn {
+  border: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border-radius: 14px;
+  padding: 5px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.chat-transcript-earlier-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
 /* Empty state */
 .chat-empty {
   /* The scroll container is block flow now (see .chat-messages), so `flex: 1`

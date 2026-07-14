@@ -1,8 +1,37 @@
 # Chat message-list rendering performance
 
-Typing in the composer must stay fast no matter how long the conversation is. The transcript is not virtualized in JS, so the layout cost is bounded with CSS containment plus a single batched textarea measurement (issue #748).
+Typing must stay fast no matter how long the conversation is. Layout cost is bounded by CSS containment plus one batched textarea measurement; React-tree cost by transcript windowing and coalesced streaming commits (issue #748).
 
-The symptom this guards against: in conversations with many messages, each keystroke took up to ~2.6s with an empty JS profile — the cost was entirely in Chromium's layout engine, recalculating the whole transcript on every keystroke. CPU and memory were normal; new sessions were instant.
+The symptom this guards against: in conversations with many messages, each keystroke took up to ~2.6s with an empty JS profile — the cost was entirely in Chromium's layout engine, recalculating the whole transcript on every keystroke. CPU and memory were normal; new sessions were instant. CSS containment fixed the layout half; the React half (reconciling every row on every streaming delta) is fixed by the windowing and delta coalescing described below.
+
+## Transcript windowing
+
+Long transcripts mount only the newest [[src/renderer/src/screens/Chat/MessageList.tsx#TRANSCRIPT_WINDOW]] rows (100); earlier rows collapse behind a "Show N earlier messages" button, so per-delta reconciliation is O(window), not O(all rows).
+
+The window cut is computed per render in [[src/renderer/src/screens/Chat/MessageList.tsx]] with three constraints:
+
+- **Never slice out the newest bubble.** The newest visible bubble owns the last-row marker (active avatar, approval bar), so the cut clamps to its index even when a longer-than-window run of reasoning/tool rows trails it.
+- **Don't split a tool run — within a bound.** The cut nudges back to the start of a contiguous tool_call/tool_result run so a ToolActivityGroup isn't cut in half, but the walk is bounded to one window: a pathological run of hundreds of tool rows splits at the bound instead of re-mounting the whole transcript (which would silently defeat the cap for exactly the agentic sessions #748 targets).
+- **Don't fake a turn at the cut.** Avatar grouping consults the hidden row just above the cut (`beforeWindow`), so a mid-turn cut doesn't render a spurious avatar.
+
+Expansion is a count of extra rows, not an absolute index, so the mounted tree stays bounded while streaming: the window slides forward as rows append, re-collapsing the oldest revealed rows (native scroll anchoring keeps the viewport steady). Each button click derives its new budget from the current effective cut, guaranteeing progress even when the cut was nudged.
+
+### Scroll-driven auto-expansion
+
+Scrolling near the top marker auto-reveals the next window (IntersectionObserver, 300px top rootMargin); the button stays as a fallback. A pre-paint `scrollTop` adjustment keeps the content being read in place when rows are prepended.
+
+Two timing rules keep this correct:
+
+- The observer is recreated after every expansion (`extraRows` is an effect dependency). IntersectionObserver only reports *transitions*, so after revealing content shorter than the rootMargin (e.g. a tool run folding into one collapsed group) a persistent observer would go silent; re-observing delivers a fresh initial entry.
+- History loads scroll to the bottom **instantly**, not smoothly ([[src/renderer/src/screens/Chat/hooks/useChatScroll.ts#useChatScroll]]). A smooth multi-frame scroll from the top races the observer's first callback (the marker is still in view), and the expansion's scroll restore would abort the smooth scroll and strand the view mid-transcript.
+
+Windowing behavior is specified by [[src/renderer/src/screens/Chat/MessageList.test.tsx]].
+
+## Streaming delta coalescing
+
+Streaming events arrive many times per second and each `setMessages` costs a window reconciliation, so the dashboard transport applies deltas to the transcript ref synchronously and commits to React once per animation frame at most.
+
+See [[chat-commands#Streaming source-of-truth ref]] for the ownership rules that make this safe.
 
 ## Off-screen rows are skipped with content-visibility
 
