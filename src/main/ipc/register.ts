@@ -218,6 +218,10 @@ import {
   remoteUninstallSkill,
 } from "../remote-skills";
 import {
+  remoteGetToolsets,
+  remoteSetToolsetEnabled,
+} from "../remote-toolsets";
+import {
   remoteAddModel,
   remoteGetModelConfig,
   remoteListModels,
@@ -2173,6 +2177,7 @@ export function registerIpcHandlers(context: IpcContext): void {
     const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh)
       return sshGetToolsets(conn.ssh, profile);
+    if (conn.mode === "remote") return remoteGetToolsets(conn, profile);
     return getToolsets(profile);
   });
   ipcMain.handle(
@@ -2181,6 +2186,8 @@ export function registerIpcHandlers(context: IpcContext): void {
       const conn = getConnectionConfig();
       if (conn.mode === "ssh" && conn.ssh)
         return sshSetToolsetEnabled(conn.ssh, key, enabled, profile);
+      if (conn.mode === "remote")
+        return remoteSetToolsetEnabled(conn, key, enabled, profile);
       return setToolsetEnabled(key, enabled, profile);
     },
   );
@@ -2195,7 +2202,7 @@ export function registerIpcHandlers(context: IpcContext): void {
     if (conn.mode === "ssh" && conn.ssh)
       return sshListInstalledSkills(conn.ssh, profile);
     if (conn.mode === "remote")
-      return remoteListInstalledSkills(activeSshProfile(profile));
+      return remoteListInstalledSkills(conn, activeSshProfile(profile));
     return listInstalledSkills(profile);
   });
   ipcMain.handle("list-bundled-skills", () => {
@@ -2208,7 +2215,7 @@ export function registerIpcHandlers(context: IpcContext): void {
     if (conn.mode === "ssh" && conn.ssh)
       return sshGetSkillContent(conn.ssh, skillPath);
     if (conn.mode === "remote")
-      return remoteGetSkillContent(skillPath, activeSshProfile());
+      return remoteGetSkillContent(conn, skillPath, activeSshProfile());
     return getSkillContent(skillPath);
   });
   ipcMain.handle(
@@ -2218,7 +2225,11 @@ export function registerIpcHandlers(context: IpcContext): void {
       if (conn.mode === "ssh" && conn.ssh)
         return sshInstallSkill(conn.ssh, identifier);
       if (conn.mode === "remote")
-        return remoteInstallSkill(identifier, activeSshProfile(_profile));
+        return remoteInstallSkill(
+          conn,
+          identifier,
+          activeSshProfile(_profile),
+        );
       return installSkill(identifier, _profile);
     },
   );
@@ -2229,7 +2240,7 @@ export function registerIpcHandlers(context: IpcContext): void {
       if (conn.mode === "ssh" && conn.ssh)
         return sshUninstallSkill(conn.ssh, name);
       if (conn.mode === "remote")
-        return remoteUninstallSkill(name, activeSshProfile(_profile));
+        return remoteUninstallSkill(conn, name, activeSshProfile(_profile));
       return uninstallSkill(name, _profile);
     },
   );

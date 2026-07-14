@@ -951,11 +951,7 @@ function Layout({
 
         {visitedViews.has("skills") && (
           <div style={paneStyle("skills")}>
-            {remoteMode ? (
-              <RemoteNotice feature="Skills" />
-            ) : (
-              <Skills profile={activeProfile} />
-            )}
+            <Skills profile={activeProfile} />
           </div>
         )}
 
@@ -973,8 +969,6 @@ function Layout({
           <div style={paneStyle("tools")}>
             <Tools
               profile={activeProfile}
-              showPlatformToolsets={!remoteMode}
-              remoteMode={remoteMode}
               visible={view === "tools"}
               onBrowseSkills={() => focusDiscover("skills")}
               onBrowseMcps={() => focusDiscover("mcps")}
